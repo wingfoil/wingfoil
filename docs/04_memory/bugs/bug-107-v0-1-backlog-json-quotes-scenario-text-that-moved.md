@@ -2,7 +2,7 @@
 id: "bug-107-v0-1-backlog-json-quotes-scenario-text-that-moved"
 type: bug
 title: "The backlog JSON quotes P2.1 scenario text that `task-100` rewrote, and asserts a DNA shape retired two releases ago — in a file with one commit in its entire history"
-status: in-progress
+status: in-review
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
