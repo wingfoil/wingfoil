@@ -4,6 +4,18 @@
 **Source:** `01_user_story_map/` + `02_bdd/` + `03_sard/`
 **Generated:** 2026-06-26 · **Release reconciliation (sequencer source-of-truth):** 2026-06-29 — IDs kept stable, only `release`/partitions updated (see `../../02_requirements/X_vision-release-incoherence.md`)
 
+> **Status: frozen archive — not maintained.** `backlog.json`, `schema.json` and
+> `by-release/*.json` are the backlog as imported for v0.1 planning (one commit, `b9c4df0b`,
+> 2026-06-29) and are not edited afterwards. Task management has since switched over to
+> WingFoil Memory (`docs/design.md`, *Bootstrap phase → Switch-over*): the authoritative task
+> store is `docs/04_memory/`, and each `by-release/*.json` survives only as the seed a release's
+> `requirements:` field cites for `release-planning`'s `build-backlog` — a suggestion, not a
+> contract. Text quoted here (`acceptance_criteria`, DNA shapes, scenario steps) records what the
+> sources said **at import** and may have moved since: e.g. `TASK-023` quotes `P2.1-dna-set`
+> scenario 1 as it read before `task-100` rewrote it, and `TASK-025` names the `tech_stack` and
+> `conventions` DNA sections that `spec-002-dna-yaml-schema` retired in dna v1.1. For the current
+> contract, read the file `acceptance_criteria_full` points to.
+
 ---
 
 ## Purpose
