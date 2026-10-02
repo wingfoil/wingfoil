@@ -9,7 +9,7 @@
  * `adr` and `tech-spec` types carry the real machines from `.wingfoil/memory.yaml`.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CORE_MODULES } from '../../src/core';
@@ -212,8 +212,9 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
   describe('AC2: a supersedes: that cannot fire is refused before any write, exit 1', () => {
     async function expectRefused(pattern: RegExp, code?: string): Promise<void> {
       const before = head(repo);
-      const a = readFileSync(join(repo, ADR_A), 'utf-8');
-      const b = readFileSync(join(repo, ADR_B), 'utf-8');
+      const read = (path: string): string | null => (existsSync(join(repo, path)) ? readFileSync(join(repo, path), 'utf-8') : null);
+      const a = read(ADR_A);
+      const b = read(ADR_B);
       const result = await approve({ root: repo, positional: 'adr-2-new', options: { reason: 'ok' } });
       expect(result.ok).toBe(false);
       if (result.ok) return;
@@ -222,8 +223,8 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
       expect(result.error.message).toMatch(pattern);
       if (code !== undefined) expect(result.error.code).toBe(code);
       expect(head(repo)).toBe(before);
-      expect(readFileSync(join(repo, ADR_A), 'utf-8')).toBe(a);
-      expect(readFileSync(join(repo, ADR_B), 'utf-8')).toBe(b);
+      expect(read(ADR_A)).toBe(a);
+      expect(read(ADR_B)).toBe(b);
     }
 
     it('a missing id', async () => {
@@ -303,6 +304,25 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
       expect(gitOut(repo, ['rev-list', '--count', `${before}..HEAD`])).toBe('1');
       expect(readFileSync(join(repo, 'docs/tasks/task-1.md'), 'utf-8')).toMatch(/^status: backlog/m);
     });
+  });
+
+  it('a git failure between the two commits keeps the approve and says what is left to do, exit 1', async () => {
+    // A pre-commit hook that refuses any commit staging adr-1: the approve commit passes, the finalize fails.
+    const hook = join(repo, '.git', 'hooks', 'pre-commit');
+    writeFileSync(hook, '#!/bin/sh\ngit diff --cached --name-only | grep -q adr-1-old && { echo "hook says no" >&2; exit 1; }\nexit 0\n', {
+      mode: 0o755,
+    });
+    const before = head(repo);
+    const result = await approve({ root: repo, positional: 'adr-2-new', options: { reason: 'ok' } });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(gitOut(repo, ['rev-list', '--count', `${before}..HEAD`])).toBe('1');
+    const approveSha = head(repo);
+    expect(gitOut(repo, ['log', '-1', '--format=%s'])).toBe('wf(adr): approve adr-2-new [pending → accepted]');
+    expect(result.error.message).toContain(`adr-2-new was approved in ${approveSha}, but the commit moving adr-1-old to superseded failed`);
+    expect(result.error.message).toContain('wf(adr): finalize adr-1-old [accepted → superseded]');
+    expect(readFileSync(join(repo, ADR_A), 'utf-8')).toMatch(/^status: superseded/m);
   });
 
   it('decides from HEAD: an uncommitted supersedes: on B is neither read nor committed', async () => {

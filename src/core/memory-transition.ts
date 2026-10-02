@@ -28,6 +28,7 @@ import {
   loadMemoryDocumentSummary,
   loadMemoryDocumentSummaryAtRev,
   resolveStateMachine,
+  resolveSupersedeTarget,
   resolveTypeTransition,
   validateFrontmatterState,
   verifyDocumentEdit,
@@ -73,7 +74,25 @@ export interface PreparedMemoryTransition {
   readonly content: string;
   readonly from: string;
   readonly to: string;
+  /**
+   * The commit `HEAD` resolved to when this transition was decided — the one sha the machine, the
+   * document and `from` were read at. A follow-up decision in the same command (the `supersedes:`
+   * trigger, task-162) reads at this sha too, so the two cannot come from two commits.
+   */
+  readonly sha: string;
+  /**
+   * The document's frontmatter **as `HEAD` records it** — the copy a decision reads (task-247,
+   * `command-baseline` 1.4), where {@link frontmatter} is the working tree's content to commit.
+   */
+  readonly committedFrontmatter: Readonly<Record<string, unknown>>;
 }
+
+/**
+ * What a transition is resolved for: a verb, `amend` (the self-loop of the current state, task-127),
+ * or `supersede` — the `supersedes:` engine trigger, which is not a verb and whose only target is
+ * `superseded` (`resolveSupersedeTarget`, task-162).
+ */
+export type TransitionResolution = TransitionOp | 'amend' | 'supersede';
 
 /**
  * A second sentence for a refusal, appended **only** when the working tree's `memory.yaml` and the
@@ -207,7 +226,29 @@ export function prepareMemoryTransition(
         `the machine the repository records, not by a working tree (dl-080); commit '${MEMORY_YAML_PATH}' first, then retry.`,
     });
   }
+  return prepareMemoryTransitionAtRev(root, sha, memoryYaml, id, op);
+}
 
+/**
+ * The body of {@link prepareMemoryTransition}, at a sha and a committed `memory.yaml` the caller has
+ * already resolved: locate document `id` at `sha`, check the working tree carries the same element,
+ * and resolve `op` on its committed `status`. Every refusal {@link prepareMemoryTransition} documents
+ * past the `memory.yaml` read comes from here, unchanged.
+ *
+ * It exists so that a second decision in one command reads the same commit as the first: the
+ * `supersedes:` trigger (task-162) prepares the superseded element at the sha its superseding
+ * element's approve was decided at, with `op` `supersede`. With `expectedType`, a document of another
+ * type is refused (`VALIDATION`) before its own machine is consulted, since the caller's rule is about
+ * the type, not about that machine's states.
+ */
+export function prepareMemoryTransitionAtRev(
+  root: string,
+  sha: string,
+  memoryYaml: MemoryYaml,
+  id: string,
+  op: TransitionResolution,
+  expectedType?: string,
+): CoreResult<PreparedMemoryTransition> {
   let found: ReturnType<typeof findMemoryDocumentByIdAtRev>;
   try {
     found = findMemoryDocumentByIdAtRev(root, sha, memoryYaml, id);
@@ -281,6 +322,12 @@ export function prepareMemoryTransition(
   }
 
   const type = found.frontmatter.type;
+  if (expectedType !== undefined && type !== expectedType) {
+    return coreErr({
+      code: 'VALIDATION',
+      message: `${id}, which is a '${String(type)}', not an '${expectedType}': only an element of the same type can be ${op}d`,
+    });
+  }
   if (typeof type !== 'string' || memoryYaml.types[type] === undefined) {
     return coreErr({
       code: 'NOT_FOUND',
@@ -303,7 +350,12 @@ export function prepareMemoryTransition(
     validateFrontmatterState(machine, type, from, path);
     // `amend` moves no state (`dl-108`): its edge is the self-loop `[s → s]` in every state, so no
     // machine lookup can refuse it. Whether the TYPE may be amended is the verb's own check.
-    const to = op === 'amend' ? from : resolveTypeTransition(memoryYaml, type, from, op, path);
+    const to =
+      op === 'amend'
+        ? from
+        : op === 'supersede'
+          ? resolveSupersedeTarget(memoryYaml, type, from, path)
+          : resolveTypeTransition(memoryYaml, type, from, op, path);
     // Content from the working tree: what `submit` and `amend` commit, and what the other verbs'
     // unmodified-document guard compares with `HEAD`.
     const { frontmatter } = loadMemoryDocumentSummary(root, path);
@@ -318,7 +370,7 @@ export function prepareMemoryTransition(
       });
     }
     const content = readDocument(join(root, path));
-    return coreOk({ memoryYaml, id, type, path, frontmatter, content, from, to });
+    return coreOk({ memoryYaml, id, type, path, frontmatter, content, from, to, sha, committedFrontmatter: found.frontmatter });
   } catch (error) {
     if (!(error instanceof ValidationError)) throw error;
     const code = error.issues.some((issue) => issue.code === E_INVALID_TRANSITION) ? 'INVALID_TRANSITION' : 'VALIDATION';
@@ -435,6 +487,40 @@ export function verifyCommittedScope(
 }
 
 /**
+ * The pre-write half of {@link commitMemoryTransition} — its checks 1 to 3 (confinement, an
+ * unmodified working tree under `declared-fields-only` or no divergent stage under
+ * `carries-content`, and the rendering's post-condition), with nothing written. A command that makes
+ * more than one commit runs it on every document first, so a refusal of any of them leaves the
+ * repository as it was (the `supersedes:` trigger, task-162). {@link commitMemoryTransition} runs it
+ * again before its own write, so calling it first is never required for safety.
+ */
+export function checkMemoryTransition(
+  root: string,
+  prepared: PreparedMemoryTransition,
+  content: string,
+  expected: Readonly<Record<string, string | undefined>> = {},
+  scope: DocumentScope = 'declared-fields-only',
+): CoreResult<undefined> {
+  const owned = { status: prepared.to, ...expected };
+  const confined = requireConfinedWriteTarget(root, prepared.path, 'write');
+  if (!confined.ok) return confined;
+  const unmodified =
+    scope === 'declared-fields-only'
+      ? requireUnmodifiedDocument(root, prepared)
+      : requireNoDivergentStage(root, prepared.path, TRANSITION_CONTRACT);
+  if (!unmodified.ok) return unmodified;
+
+  const problems = verifyDocumentEdit(prepared.content, content, owned, 'declared-fields-only');
+  if (problems.length > 0) {
+    return coreErr({
+      code: 'VALIDATION',
+      message: `refusing to write ${prepared.path}: the rendered document failed its post-condition: ${problems.join('; ')}`,
+    });
+  }
+  return coreOk(undefined);
+}
+
+/**
  * Write `content` over the prepared document and commit exactly that one path with `message`,
  * returning the new commit's sha (`commitPaths`, task-018; scoped to that path even when other changes
  * are staged, bug-027). The commit's author is pinned to `prepared.identity` — the identity the
@@ -493,22 +579,9 @@ export function commitMemoryTransition(
   expected: Readonly<Record<string, string | undefined>> = {},
   scope: DocumentScope = 'declared-fields-only',
 ): CoreResult<string> {
+  const checked = checkMemoryTransition(root, prepared, content, expected, scope);
+  if (!checked.ok) return checked;
   const owned = { status: prepared.to, ...expected };
-  const confined = requireConfinedWriteTarget(root, prepared.path, 'write');
-  if (!confined.ok) return confined;
-  const unmodified =
-    scope === 'declared-fields-only'
-      ? requireUnmodifiedDocument(root, prepared)
-      : requireNoDivergentStage(root, prepared.path, TRANSITION_CONTRACT);
-  if (!unmodified.ok) return unmodified;
-
-  const problems = verifyDocumentEdit(prepared.content, content, owned, 'declared-fields-only');
-  if (problems.length > 0) {
-    return coreErr({
-      code: 'VALIDATION',
-      message: `refusing to write ${prepared.path}: the rendered document failed its post-condition: ${problems.join('; ')}`,
-    });
-  }
   writeDocument(join(root, prepared.path), content);
   const sha = commitPaths(root, [prepared.path], message, { author: prepared.identity });
 

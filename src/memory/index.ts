@@ -47,9 +47,11 @@ export {
   isArchivedStatus,
   isMachineEdge,
   resolveStateMachine,
+  resolveSupersedeTarget,
   resolveTransitionTarget,
   resolveTypeTransition,
   SUPERSEDED_STATE,
+  supersedesEdgeFrom,
   validateFrontmatterState,
 } from './state-machine';
 export type { TransitionOp } from './state-machine';

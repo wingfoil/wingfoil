@@ -82,7 +82,8 @@ import { requireCustomAsset } from './builtin-asset';
 import { requireConfinedTarget, requireConfinedWriteTarget } from './confinement';
 import { APPROVER_ROLE, requireApprovalAuthority } from './approval-authority';
 import { optionalReason, requireReason } from './require-reason';
-import { beginMemoryTransition, commitMemoryTransition } from './memory-transition';
+import { beginMemoryTransition, checkMemoryTransition, commitMemoryTransition } from './memory-transition';
+import { prepareSupersede, supersedeReason } from './memory-supersede';
 import { amendReservedFields, requireAmendableEdit, requireAmendableType, requireRequiredFieldsKept } from './memory-amend';
 import { resolveAddType } from './memory-add-type';
 import { committedScopeError, requireAbsentTarget, requireUnmodifiedTarget } from './write-guard';
@@ -1073,6 +1074,16 @@ export interface MemoryApproveParams {
   readonly options?: Readonly<Record<string, string>>;
 }
 
+/** One document's transition, as `memory approve` reports the one its `supersedes:` trigger fired. */
+export interface MemorySupersededResult {
+  readonly id: string;
+  /** Root-relative path of the superseded document. */
+  readonly path: string;
+  readonly from: string;
+  /** Always `superseded`. */
+  readonly to: string;
+}
+
 /** `memory approve` success shape: the document and the transition it went through. */
 export interface MemoryApproveResult {
   readonly id: string;
@@ -1080,6 +1091,11 @@ export interface MemoryApproveResult {
   readonly path: string;
   readonly from: string;
   readonly to: string;
+  /**
+   * Present only when the approval fired the `supersedes:` trigger (task-162): the element the
+   * approved one's `supersedes:` names, moved into `superseded` by a second, `finalize` commit.
+   */
+  readonly superseded?: MemorySupersededResult;
 }
 
 /**
@@ -1120,6 +1136,16 @@ export interface MemoryApproveResult {
  *    the rendered frontmatter first and refuses (exit 1, nothing written) unless `status` is the
  *    target and no other field's value moved — which is exactly spec-010's "only `status`" rule, so
  *    no extra `expected` entry is needed here.
+ * 8. **The `supersedes:` trigger** (task-162, `dl-065` Q1.1; {@link prepareSupersede}). When the target
+ *    is the `waiting` state whose forward edge leads to `superseded` (`adr` `accepted`, `tech-spec`
+ *    `approved`) and the document's committed `supersedes:` names an element, that element is
+ *    resolved at the same `HEAD` sha, and refused (exit `1`) when it is missing, of another type, not
+ *    in that state, or not writable as a status change. This runs after step 6 and before step 7's
+ *    write, and both documents pass `checkMemoryTransition` before either is written, so a refusal
+ *    leaves the repository as it was. The approve commit comes first; then a second commit, scoped
+ *    to the superseded document, `wf(<type>): finalize <A> [<state> → superseded]`, with a `Reason:`
+ *    citing the approve sha and no `Approver:` line (`spec-008` §2). The result reports both; its
+ *    `commit` is the approve's.
  */
 const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => {
   const { root, positional: id, options } = params as MemoryApproveParams;
@@ -1136,6 +1162,10 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
   const authorized = requireApprovalAuthority(root, type, prepared.value.identity);
   if (!authorized.ok) return authorized;
 
+  const supersede = prepareSupersede(root, prepared.value);
+  if (!supersede.ok) return supersede;
+  const superseded = supersede.value;
+
   const { name, email } = prepared.value.identity;
   const message = formatMemoryCommitMessage({
     type,
@@ -1145,9 +1175,67 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
     approver: { name, email, role: APPROVER_ROLE },
     reason,
   });
-  const committed = commitMemoryTransition(root, prepared.value, setFrontmatterField(content, 'status', to), message);
+  const rendered = setFrontmatterField(content, 'status', to);
+  if (superseded === null) {
+    const committed = commitMemoryTransition(root, prepared.value, rendered, message);
+    if (!committed.ok) return committed;
+    return coreOk({ id, path, from, to }, { sha: committed.value, message });
+  }
+
+  // Both documents are checked before either is written, so a refusal of the second leaves the first
+  // unwritten too (task-162).
+  const renderedSuperseded = setFrontmatterField(superseded.content, 'status', superseded.to);
+  for (const [document, text] of [
+    [prepared.value, rendered],
+    [superseded, renderedSuperseded],
+  ] as const) {
+    const checked = checkMemoryTransition(root, document, text);
+    if (!checked.ok) {
+      if (document !== superseded) return checked;
+      return coreErr({
+        ...checked.error,
+        message: `cannot approve ${id}: its supersedes: field names ${superseded.id}, which cannot be superseded: ${checked.error.message}`,
+      });
+    }
+  }
+  const committed = commitMemoryTransition(root, prepared.value, rendered, message);
   if (!committed.ok) return committed;
-  return coreOk({ id, path, from, to }, { sha: committed.value, message });
+
+  const finalizeMessage = formatMemoryCommitMessage({
+    type,
+    op: 'finalize',
+    ids: [superseded.id],
+    transition: { from: superseded.from, to: superseded.to },
+    reason: supersedeReason(id, committed.value),
+  });
+  let finalized: CoreResult<string>;
+  try {
+    finalized = commitMemoryTransition(root, superseded, renderedSuperseded, finalizeMessage);
+  } catch (error) {
+    finalized = coreErr({ code: 'IO', message: error instanceof Error ? error.message : String(error) });
+  }
+  if (!finalized.ok) {
+    // Reachable only when git itself fails between the two commits (a hook, a full disk): every
+    // refusal was checked above. The approve stays — rewriting a commit behind the user's back is
+    // worse (dl-035) — so say exactly what is left to do.
+    return coreErr({
+      ...finalized.error,
+      message:
+        `${id} was approved in ${committed.value}, but the commit moving ${superseded.id} to ${superseded.to} failed: ` +
+        `${finalized.error.message.trim()}. Its status is written in the working tree (${superseded.path}); commit that ` +
+        `file alone with the message: ${JSON.stringify(finalizeMessage)}`,
+    });
+  }
+  return coreOk(
+    {
+      id,
+      path,
+      from,
+      to,
+      superseded: { id: superseded.id, path: superseded.path, from: superseded.from, to: superseded.to },
+    },
+    { sha: committed.value, message },
+  );
 };
 
 /**
