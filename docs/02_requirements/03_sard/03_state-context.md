@@ -92,12 +92,18 @@
 
 ### REQ-STATE-08 — Default state-machine fallback
 
-* **Description:** A Memory type that does not declare its own `states` uses the default machine
-  `draft → pending → approved/rejected → deprecated`.
+* **Description:** A Memory type that does not declare its own `states` uses the default machine: the top-level
+  `defaults.states` block of `memory.yaml` when the file declares one, otherwise a built-in machine of the same value,
+  `sequence: [draft, pending, approved]` with `gates: { pending: { reject: draft } }`. So `submit` moves
+  `draft → pending`, `approve` moves `pending → approved`, `reject` sends `pending` back to `draft`, and `deprecate`
+  reaches `deprecated` from any state. There is no `rejected` status: the rejection reason lives in the reject
+  commit's `Reason:` block (P1.7). The encoding is `spec-001-memory-yaml-schema`'s, which retired the earlier
+  `draft → pending → approved/rejected → deprecated` machine.
 * **Rationale:** Reduce config friction for simple types.
 * **Fit Criterion:** A type defined without a `states` block accepts exactly the default transitions and rejects any
   transition outside them.
-* **Traceability:** Feature P1.13 (US-0A-04, BDD `p1-memory/P1.13-memory-element-schema.feature`).
+* **Traceability:** Feature P1.13 (US-0A-04, BDD `p1-memory/P1.13-memory-element-schema.feature`);
+  `spec-001-memory-yaml-schema` (the encoding, and the retired `rejected` status).
 
 ### REQ-STATE-09 — Context assembly determinism
 
