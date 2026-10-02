@@ -40,7 +40,7 @@ function quotedSectionsOfStep(feature: string, stepPattern: RegExp): string[] {
     .split('\n')
     .filter((line) => stepPattern.test(line));
   expect(lines).toHaveLength(1);
-  return [...lines[0].matchAll(/"([^"]+)"/g)].map((match) => match[1]).sort();
+  return [...(lines[0] ?? '').matchAll(/"([^"]+)"/g)].map((match) => match[1] ?? '').sort();
 }
 
 /** The text of the user story `storyId` in the story map, from its bullet to the next bullet or heading. */
