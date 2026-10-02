@@ -386,6 +386,11 @@ $ wingfoil memory add --type release --title "v0.2.3" --set kind=patch --set ver
 The workflow tokens `{workflow}`, `{phase}` and `{scope}` are given the same way. They are written
 to the frontmatter only where the type's template has a field of that name.
 
+Two tokens are never given with `--set`. `{date}` is the UTC date, as `YYYYMMDD`, of the add
+commit's author date: today, or the date in `GIT_AUTHOR_DATE` when that is set. The commit is
+recorded with the same date. `{author}` is the git author name, slugged like the title. The counter
+token `{n}` is padded to three digits; `{n:N}` pads to `N` digits instead, and `{n:1}` not at all.
+
 - **Commit:** `wf(<type>): add <id>`
 - **Errors:**
   - Exit `2`: a missing `--type` or `--title`. Also a `--set` with no `=`, a name that is not a field
