@@ -151,8 +151,9 @@ export type TransitionOp = 'submit' | 'approve' | 'reject' | 'deprecate';
  * block", and its `Then` names the machine by value — so its title ("uses the defaults block")
  * describes the common case rather than a precondition.
  *
- * **Why this value.** It is `spec-001`'s own worked `defaults` example, verbatim — not REQ-STATE-08's
- * literal `draft → pending → approved/rejected → deprecated` wording, which `spec-001` §Consequences
+ * **Why this value.** It is `spec-001`'s own worked `defaults` example, verbatim, and the machine
+ * REQ-STATE-08 names since task-153 reconciled it (`bug-052`) — not the earlier
+ * `draft → pending → approved/rejected → deprecated` wording, which `spec-001` §Consequences
  * deliberately superseded: the default machine "loses its `rejected` state" ("no document ever records
  * `status: rejected` again" — a `reject` from the `pending` gate lands straight back on `draft`), and
  * `deprecated` is the reserved implicit wildcard reachable from any state, never declared in a

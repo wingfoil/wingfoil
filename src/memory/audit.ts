@@ -34,7 +34,7 @@ import { parseYaml } from '../validation';
 
 import { parseApproverTrailerLine, parseReasonBlock } from './commit-message';
 import { getMemoryHistory } from './history';
-import type { StateMachine } from './schema';
+import { RESERVED_TYPE_NAMES, type StateMachine } from './schema';
 import { isMachineEdge } from './state-machine';
 import { walkGitLogFields } from './git-log';
 import { runGitRead, splitFrontmatter } from '../storage';
@@ -237,11 +237,11 @@ export type MemoryOperation = (typeof MEMORY_OPERATIONS)[number];
  * (`spec-008` §2): `wf(dna): set|add|update|remove …` (`dna` mutations), `wf(directive):
  * create|assign|remove …` and `wf(workflow): create|remove …` (`spec-017` §7.7–7.8). Their verbs are
  * not Memory operations even where the token coincides with one (`wf(dna): add <field>`), and their
- * subjects carry no transition. By convention no `memory.yaml` type takes one of these names. Nothing
- * enforces that yet (`src/memory/schema.ts` reserves no type name); a type that did would have
- * every commit of its own read as configuration.
+ * subjects carry no transition. No `memory.yaml` type may take one of these names: this list is the
+ * schema's {@link RESERVED_TYPE_NAMES} (`spec-001`, `bug-177`), which `MemoryYaml` refuses at load time,
+ * because a type that took one would have every commit of its own read as configuration.
  */
-export const CONFIGURATION_SCOPES: readonly string[] = Object.freeze(['directive', 'dna', 'workflow']);
+export const CONFIGURATION_SCOPES: readonly string[] = RESERVED_TYPE_NAMES;
 
 /**
  * A `wf({scope}): {token}` subject: the scope, and the verb token — everything after `: ` up to the
