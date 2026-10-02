@@ -2,7 +2,7 @@
 id: "bug-158-date-and-author-id-tokens-are-declared-but-not-implemented"
 type: bug
 title: "The `{date}` and `{author}` id tokens that `spec-001` declares are not implemented: `memory add` fails on them, and `--set` refuses them with a message saying the command fills them itself"
-status: in-progress
+status: in-review
 severity: "low"
 release-origin: "v0.2.2"
 release: "v0.3"
