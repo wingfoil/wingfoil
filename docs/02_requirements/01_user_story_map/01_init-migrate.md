@@ -20,7 +20,7 @@
   artifacts so that I can record decisions immediately. _(feat: P1.11)_
 * **[MVP · v0.1]** US-0A-04: As Morgan, I want to define Memory element types (pattern paths, allowed states, and
   transitions) in `.wingfoil/memory.yaml` so that I have coherent per-type state machines. _(feat: P1.13)_
-* **[MVP · v0.1]** US-0A-05: As Alex, I want a structured project map (modules, tech stack, conventions, team) in
+* **[MVP · v0.1]** US-0A-05: As Alex, I want a structured project map (modules, stacks, team, resource paths) in
   `.wingfoil/dna.yaml` so that humans and agents have shared anatomy. _(feat: P2.4)_
 
 ### Step 2 — Interactive setup wizard execution
@@ -30,7 +30,7 @@
 * **[MVP · v0.4]** US-0A-07: As Morgan, I want AI agent-assisted setup mode (natural conversation) so that I can adapt the
   template to my team context. _(feat: P5.4.5)_
 * **[MVP · v0.1]** US-0A-08: As Alex, I want to define/update project DNA with `wingfoil dna set` so that I can set initial
-  modules, stack, and conventions. _(feat: P2.1)_
+  modules, stacks, and team. _(feat: P2.1)_
 * **[MVP · v0.2]** US-0A-09: As Morgan, I want the wizard to install predefined directive templates (Code Quality,
   Testing, Code Review, Architecture, Security, Documentation) so that I start with sensible rules reducing friction. _(feat: P3.8)_
 * **[MVP · v0.3]** US-0A-10: As Alex, I want to choose a reference workflow template (Scrum / Kanban / Lean Inception /
@@ -89,14 +89,14 @@
 * **[MVP · v0.4]** US-0B-02: As Morgan, I want to initialize WingFoil on existing project with
   `wingfoil init --mode infer` so that I migrate without rewriting code structure. _(feat: P5.1.2)_
 * **[MVP · v0.4]** US-0B-03: As Morgan, I want `wingfoil dna infer` to scan the codebase and propose DNA structure (
-  which I approve/refine) so that DNA reflects real modules, stack, and conventions. _(feat: P2.3)_
+  which I approve/refine) so that DNA reflects real modules and stacks. _(feat: P2.3)_
 * **[MVP · v0.4]** US-0B-04: As Alex, I want to scan the project and import existing documents into Memory interactively
   with metadata extraction (`wingfoil memory import`) so that I reduce migration friction. _(feat: P1.4)_
 
 #### Edge cases (interruption / exception handling)
 
 * **[MVP · v0.4]** US-0B-E1: As Morgan, I want `wingfoil dna infer` to present its proposal for human approval and
-  refinement before writing so that misclassified structure or missed conventions are corrected and no wrong DNA is
+  refinement before writing so that misclassified structure or missed modules and stacks are corrected and no wrong DNA is
   committed. _(edge: Journey 0b — imperfect inference)_
 * **[MVP · v0.4]** US-0B-E2: As Morgan, I want directives inferred from git history flagged as drafts I can tighten or
   relax before activation so that overly permissive or restrictive rules never enforce silently. _(edge: Journey 0b —
