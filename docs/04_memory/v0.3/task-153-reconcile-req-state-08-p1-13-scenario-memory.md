@@ -2,7 +2,7 @@
 id: "task-153-reconcile-req-state-08-p1-13-scenario-memory"
 type: task
 title: "Reconcile REQ-STATE-08, the P1.13 scenario and `memory.yaml`'s annotations with `spec-001`, and ship the commented per-type example"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "fix"
 priority: "low"
