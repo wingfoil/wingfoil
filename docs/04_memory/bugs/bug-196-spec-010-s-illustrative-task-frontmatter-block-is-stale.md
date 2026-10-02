@@ -2,7 +2,7 @@
 id: bug-196-spec-010-s-illustrative-task-frontmatter-block-is-stale
 type: bug
 title: "spec-010's illustrative task frontmatter block is stale"
-status: in-progress
+status: in-review
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
