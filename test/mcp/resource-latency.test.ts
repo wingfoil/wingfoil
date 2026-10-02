@@ -16,9 +16,10 @@
  * `wingfoil://dna/show` (task-006's already-registered `dnaShow` CoreOperation) and
  * `wingfoil://memory/{type}/{id}` (task-011's conformant adapter over
  * `findMemoryDocumentByTypeAndId`, wrapping task-008's `listMemoryDocumentPaths` scan primitives).
+ *
+ * Timing goes through `test/core/helpers/latency.ts` (`sampleLatency` + `p95`, `RUNS = 25`), the one
+ * shape every latency budget in the suite is measured in (task-154).
  */
-import { performance } from 'perf_hooks';
-
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -26,12 +27,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CORE_MODULES } from '../../src/core';
 import { registerMemoryResources } from '../../src/mcp/memory-resource';
 import { registerCoreModules } from '../../src/mcp/registrar';
+import { P95_BUDGET_MS, p95, RUNS, sampleLatency } from '../core/helpers/latency';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 jest.setTimeout(60_000);
-
-const RUNS = 25; // ">= 20 timed runs" per the SARD measurement conditions.
-const P95_BUDGET_MS = 1000;
 
 const DNA_YAML = `
 version: 1.1
@@ -173,19 +172,6 @@ async function connectedClient(root: string): Promise<{ client: Client; server: 
   return { client, server };
 }
 
-async function timeAsync(fn: () => Promise<unknown>): Promise<number> {
-  const start = performance.now();
-  await fn();
-  return performance.now() - start;
-}
-
-/** p95 over `samples` — nearest-rank percentile: the `ceil(0.95 * n)`-th smallest value. */
-function p95(samples: readonly number[]): number {
-  const sorted = [...samples].sort((a, b) => a - b);
-  const index = Math.min(sorted.length, Math.ceil(0.95 * sorted.length)) - 1;
-  return sorted[Math.max(0, index)]!;
-}
-
 function mean(samples: readonly number[]): number {
   return samples.reduce((a, b) => a + b, 0) / samples.length;
 }
@@ -208,26 +194,18 @@ describe('REQ-PERF-04 — MCP resource fetch latency on a 1,000-Memory-document 
   afterAll(() => removeTempDir(root));
 
   it("`wingfoil://dna/show` resource fetch stays under 1000ms at p95 over >= 20 runs", async () => {
-    const samples: number[] = [];
-    for (let i = 0; i < RUNS; i += 1) {
-      samples.push(await timeAsync(() => client.readResource({ uri: 'wingfoil://dna/show' })));
-    }
+    const samples = await sampleLatency(RUNS, () => client.readResource({ uri: 'wingfoil://dna/show' }));
     expect(samples).toHaveLength(RUNS);
     expect(p95(samples)).toBeLessThan(P95_BUDGET_MS);
   });
 
   it('`wingfoil://memory/{type}/{id}` resource fetch (worst-case scan position) stays under 1000ms at p95 over >= 20 runs', async () => {
-    const samples: number[] = [];
     let lastText = '';
-    for (let i = 0; i < RUNS; i += 1) {
-      samples.push(
-        await timeAsync(async () => {
-          const result = await client.readResource({ uri: `wingfoil://memory/${worstCase.type}/${worstCase.id}` });
-          const content = result.contents[0];
-          lastText = content && 'text' in content ? content.text : '';
-        }),
-      );
-    }
+    const samples = await sampleLatency(RUNS, async () => {
+      const result = await client.readResource({ uri: `wingfoil://memory/${worstCase.type}/${worstCase.id}` });
+      const content = result.contents[0];
+      lastText = content && 'text' in content ? content.text : '';
+    });
     expect(samples).toHaveLength(RUNS);
     expect(p95(samples)).toBeLessThan(P95_BUDGET_MS);
     expect(lastText).toContain(`id: ${worstCase.id}`);
@@ -256,12 +234,11 @@ describe('REQ-PERF-04 — sustained agent session: no restart, no dropped connec
 
   it('sustains >= 200 fetches on a single, never-restarted connection with no error and no latency growth trend', async () => {
     const ROUNDS = 200;
-    const samples: number[] = [];
-    for (let i = 0; i < ROUNDS; i += 1) {
+    const samples = await sampleLatency(ROUNDS, (i) => {
       const doc = sampleDocs[i % sampleDocs.length]!;
       const uri = i % 3 === 0 ? 'wingfoil://dna/show' : `wingfoil://memory/${doc.type}/${doc.id}`;
-      samples.push(await timeAsync(() => client.readResource({ uri })));
-    }
+      return client.readResource({ uri });
+    });
     expect(samples).toHaveLength(ROUNDS);
 
     // No monotonic degradation across the session: the mean of the last 10% of fetches must not be

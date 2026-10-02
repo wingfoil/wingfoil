@@ -73,7 +73,13 @@ const LATENCY_HELPER_IMPORT = /from\s+['"][^'"]*helpers\/latency['"]/;
  * Files allowed to spawn and time (rule 2), each with the reason it does not reproduce bug-011.
  * An entry is a decision, not a convenience: it says why the measured number is about the code.
  */
-const EXEMPTIONS: Readonly<Record<string, string>> = {};
+const EXEMPTIONS: Readonly<Record<string, string>> = {
+  'cli/command-latency.test.ts':
+    "REQ-PERF-02's Fit Criterion is worded against the commands (bug-013). The file spawns a measured " +
+    'process-start floor and each command in the same run and budgets the per-run difference ' +
+    "(sampleMarginalLatency), so the asserted number is the command's cost over the spawn, not the " +
+    "spawn's wall-clock that bug-011 measured.",
+};
 
 /** What to do instead, named in every failure so a hit costs no lookup. */
 const REMEDY_CLOCK = `time through test/${LATENCY_HELPER} (sampleLatency or sampleMarginalLatency, then p95) instead of reading the clock here`;
