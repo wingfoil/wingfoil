@@ -2,7 +2,7 @@
 id: "bug-014-latency-guard-misses-imported-spawns"
 type: bug
 title: "The latency-placement guard enforces less than its own doc claims: a spawn reached through an imported helper is invisible to it"
-status: planned
+status: in-progress
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
