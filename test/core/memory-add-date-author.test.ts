@@ -107,6 +107,18 @@ describe('memory add — {date}, {author} and {n:N} (task-163; bug-158, bug-176)
       expect(first).toBe(utc);
     });
 
+    it('a GIT_AUTHOR_DATE git cannot parse fails the add (exit 1), writing nothing', async () => {
+      process.env.GIT_AUTHOR_DATE = 'not a date';
+      const before = gitOut(repo, ['rev-parse', 'HEAD']);
+      const result = await memoryAddFn()({ root: repo, options: { type: 'dated', title: 'x' } });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('IO');
+      expect(exitCodeForResult(result)).toBe(1);
+      expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
+      expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    });
+
     it('pins the add commit to that author date, so the id and the commit cannot disagree', async () => {
       const result = await memoryAddFn()({ root: repo, options: { type: 'dated', title: 'x' } });
       expect(result.ok).toBe(true);
