@@ -2,7 +2,7 @@
 id: "task-163-implement-date-author-id-tokens-edit-frontmatter-through"
 type: task
 title: "Implement the `{date}` and `{author}` id tokens and edit frontmatter through the shared setter"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "fix"
 priority: "low"
