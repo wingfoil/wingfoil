@@ -256,6 +256,70 @@ describe('scaffolded memory.yaml resolves a state machine for every declared typ
 });
 
 /**
+ * task-153 (`dl-072` (A) + S1) — the scaffold keeps the shared `defaults` machine and shows, commented
+ * out on `bug`, how a type declares its own. The example has to be a working override, not prose: this
+ * suite uncomments exactly those lines and feeds the result through the real `MemoryYaml` schema and
+ * the REQ-STATE-08 resolver.
+ */
+describe('scaffolded memory.yaml carries a commented per-type `states:` example on `bug` (dl-072 S1)', () => {
+  const scaffoldedMemoryYaml = (def: TemplateDefinition): string =>
+    templateScaffold(def).find((f) => f.path === '.wingfoil/memory.yaml')!.content;
+
+  /** The line index of the one commented `states:` key, and the commented lines nested under it. */
+  function exampleLines(lines: readonly string[]): { start: number; end: number } {
+    const starts = lines.flatMap((line, index) => (/^\s*# states:\s*$/.test(line) ? [index] : []));
+    expect(starts).toHaveLength(1);
+    const start = starts[0]!;
+    const indent = lines[start]!.indexOf('#');
+    let end = start + 1;
+    while (end < lines.length && lines[end]!.startsWith(`${' '.repeat(indent)}#   `)) end += 1;
+    return { start, end };
+  }
+
+  /** The scaffold with the example uncommented: `# ` removed from the `states:` line and its children. */
+  function uncommented(text: string): string {
+    const lines = text.split('\n');
+    const { start, end } = exampleLines(lines);
+    return lines.map((line, index) => (index >= start && index < end ? line.replace('# ', '') : line)).join('\n');
+  }
+
+  for (const def of TEMPLATES) {
+    it(`${def.name}: the example sits under \`bug\` and, commented, changes nothing (bug runs on defaults)`, () => {
+      const text = scaffoldedMemoryYaml(def);
+      const lines = text.split('\n');
+      const { start, end } = exampleLines(lines);
+      expect(end - start).toBeGreaterThan(1);
+      // The nearest type key above the example is `bug`.
+      const owner = lines.slice(0, start).reverse().find((line) => /^ {2}\S[^:]*:\s*$/.test(line));
+      expect(owner).toBe('  bug:');
+      const parsed = MemoryYaml.parse(loadYaml(text));
+      expect(parsed.types['bug']!.states).toBeUndefined();
+      expect(resolveStateMachine(parsed, 'bug')).toBe(parsed.defaults!.states);
+    });
+
+    it(`${def.name}: uncommented, the example loads without error and gives \`bug\` its own machine`, () => {
+      const result = MemoryYaml.safeParse(loadYaml(uncommented(scaffoldedMemoryYaml(def))));
+      expect(result.success ? [] : result.error.issues).toEqual([]);
+      const parsed = MemoryYaml.parse(loadYaml(uncommented(scaffoldedMemoryYaml(def))));
+      const machine = resolveStateMachine(parsed, 'bug');
+      expect(machine).toBe(parsed.types['bug']!.states);
+      expect(machine.sequence[0]).toBe('draft');
+      // Every forward edge of the example resolves through the real engine, and the other types keep
+      // the shared default.
+      let state = machine.sequence[0]!;
+      for (const next of machine.sequence.slice(1)) {
+        const op = machine.gates?.[state] ? 'approve' : 'submit';
+        expect([state, resolveTypeTransition(parsed, 'bug', state, op)]).toEqual([state, next]);
+        state = next;
+      }
+      for (const type of Object.keys(parsed.types).filter((t) => t !== 'bug')) {
+        expect([type, resolveStateMachine(parsed, type)]).toEqual([type, parsed.defaults!.states]);
+      }
+    });
+  }
+});
+
+/**
  * bug-006-init-directive-scaffold-schema-invalid (task-064) — the Directives half of the same defect
  * class as `bug-005` above, in the same generator: `templateScaffold`'s `directives/**\/*.md` output
  * must satisfy `DirectiveFrontmatter` (`src/directives/schema.ts`, the realization of the approved
