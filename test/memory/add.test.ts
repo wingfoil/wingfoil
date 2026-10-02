@@ -7,7 +7,16 @@
  * document render a pure function of (scaffold, id, title, tags) — no wall-clock, no randomness. The
  * sequence counter has its own suite since task-128: `test/memory/add-sequence.test.ts`.
  */
-import { hasNumericToken, parseTags, renderAddDocument, slugifyTitle, writtenFields } from '../../src/memory/add';
+import {
+  expandFieldTokens,
+  formatIdDate,
+  hasNumericToken,
+  identDate,
+  parseTags,
+  renderAddDocument,
+  slugifyTitle,
+  writtenFields,
+} from '../../src/memory/add';
 
 describe('slugifyTitle — deterministic, valid ID piece from a human title', () => {
   it('lowercases, collapses non-alphanumerics to single hyphens, and trims edges', () => {
@@ -146,5 +155,25 @@ describe('writtenFields — a context token is written only where the scaffold d
 describe('hasNumericToken — {n:N} (task-163, bug-176)', () => {
   it('detects {n:N} as a counter token', () => {
     expect(hasNumericToken('u-{n:1}')).toBe(true);
+  });
+});
+
+// task-163 (`bug-158`): the pure halves of `{date}` and `{author}`.
+describe('{date} and {author} helpers (task-163, bug-158)', () => {
+  it('identDate takes the <seconds> <offset> pair that ends a git ident line', () => {
+    expect(identDate('Ada <ada@example.invalid> 1790731800 -0200\n')).toBe('1790731800 -0200');
+    expect(() => identDate('Ada <ada@example.invalid>')).toThrow(/gave no author date/);
+  });
+
+  it('formatIdDate is the UTC calendar date of the instant, whatever the offset', () => {
+    expect(formatIdDate('1790731800 -0200')).toBe('20260930');
+    expect(formatIdDate('0 +0000')).toBe('19700101');
+  });
+
+  it('expandFieldTokens leaves {date}/{author} in place when no source is given, and fills them in spec-001 order', () => {
+    expect(expandFieldTokens('x-{date}-{author}-{kind}-{slug}-{n}', { kind: 'k' })).toBe('x-{date}-{author}-k-{slug}-{n}');
+    expect(
+      expandFieldTokens('x-{date}-{author}-{kind}-{slug}-{n}', { kind: 'k' }, { date: '1790731800 -0200', authorName: 'Ada L.' }),
+    ).toBe('x-20260930-ada-l-k-{slug}-{n}');
   });
 });

@@ -84,6 +84,7 @@ export {
   formatIdDate,
   hasNumericToken,
   highestSequenceNumber,
+  identDate,
   nextSequenceNumber,
   parseSetOptions,
   parseTags,

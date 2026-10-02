@@ -78,10 +78,19 @@ export function hasNumericToken(idPattern: string): boolean {
 export function readAuthorDate(root: string, identity: { readonly name: string; readonly email: string }): string {
   const answer = runGitRead(root, ['var', 'GIT_AUTHOR_IDENT'], {
     env: { GIT_AUTHOR_NAME: identity.name, GIT_AUTHOR_EMAIL: identity.email },
-  }).stdout.trim();
-  const date = /> (-?[0-9]+ [+-][0-9]{4})$/.exec(answer)?.[1];
+  }).stdout;
+  return identDate(answer);
+}
+
+/**
+ * The `<seconds> <offset>` date that ends a git ident line (`Name <email> 1790731800 -0200`). Pure.
+ *
+ * @throws {@link StorageError} `E_GIT_READ_FAILED` when the line does not end with one.
+ */
+export function identDate(ident: string): string {
+  const date = /> (-?[0-9]+ [+-][0-9]{4})$/.exec(ident.trim())?.[1];
   if (date === undefined) {
-    throw new StorageError(E_GIT_READ_FAILED, `git var GIT_AUTHOR_IDENT gave no author date: "${answer}"`);
+    throw new StorageError(E_GIT_READ_FAILED, `git var GIT_AUTHOR_IDENT gave no author date: "${ident.trim()}"`);
   }
   return date;
 }
@@ -361,10 +370,9 @@ export function expandFieldTokens(
     if (token === 'date' && sources.date !== undefined) return formatIdDate(sources.date);
     if (token === 'author' && sources.authorName !== undefined) {
       const author = slugifyTitle(sources.authorName);
-      if (author.length === 0) {
-        issues.push(fieldIssue(idPattern, `value for token {author} is empty once the git author name "${sources.authorName}" is slugged`));
-      }
-      return author.length === 0 ? whole : author;
+      if (author.length > 0) return author;
+      issues.push(fieldIssue(idPattern, `value for token {author} is empty once the git author name "${sources.authorName}" is slugged`));
+      return whole;
     }
     if (isNumericToken(token) || RESERVED_SET_NAMES.has(token)) return whole;
     const value = values[token];
