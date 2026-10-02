@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.8"
+version: "1.9"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -377,3 +377,42 @@ commit, right after the task's transition and on the task branch:
     and §8 still states the old bump rule.
   - **Fix share:** 27 open fix tasks of 95 open (28.4%), under the threshold.
   - **Next:** B4 (`146`, `148`, `149`, `151`, `152`, `155`, `168`, `247`).
+- **2026-10-02 — batch B4 `done`** (`task-146`, `148`, `149`, `151`, `152`, `155`, `168`, `247`).
+  - **Review.** Every task had an independent review: "approve" for `task-152`, "approve with fixes"
+    for the rest, every fix applied in-task. `task-168`'s fixes had a focused re-review.
+  - **Rate limit.** The developer agents of `146`, `152` and `247` were cut off mid-gate by an API
+    rate limit and resumed from their transcripts. Two of `task-152`'s commits were refused by the
+    permission classifier and made only after the approver authorized them.
+  - **Approver rulings:**
+    - `task-168`: `[]` counts as filled only on a field declared in `template.frontmatter.lists`
+      (a declared field, not a template comment). On any other required field a list or a mapping is
+      missing. `memory.yaml` goes to `2.0`, compared as a number, not `1.10`.
+    - Confirmed at the gate:
+      - `task-146`: the lock waits 15 minutes, then refuses.
+      - `task-148`: the `except kind for [...]` exemption form, and `kind: "minor"` in `seed-releases`.
+      - `task-149`: the entry-path spelling keeps the generic message.
+      - `task-151`: a new unlisted name fails even in warn mode. The scope is specs, ADRs and SARD.
+      - `task-152`: fixtures left behind are reported, never fatal.
+      - `task-247`: a document deleted in the working tree is refused, with a restore hint.
+  - **Amendments: 6 `memory amend`.**
+    - `task-148`: spec-003.
+    - `task-155`: spec-015.
+    - `task-168`: spec-001 and spec-010.
+    - `task-247`: spec-006 and spec-008.
+  - **Bugs closed:** bug-046, bug-047, bug-064, bug-065, bug-095, bug-147, bug-167 (not reproduced,
+    hypothesis guarded), bug-169, bug-170, bug-175, bug-181, bug-187, bug-197.
+  - **Merges,** in order 149 → 155 → 148 → 168 → 247 → 146 → 152 → 151.
+    - `task-152` conflicted with `task-146` on `jest.config.js`, `test/global-setup.cjs` and
+      `test/global-teardown.cjs` (both added a teardown).
+    - Resolved in the merge `45338809`: one teardown that sweeps this run's fixtures and releases
+      the `dist/` lock in a `finally`; both setup lines kept.
+    - `test/lint/coverage-parity.test.ts`'s child jest now drops `globalTeardown` as well as
+      `globalSetup`.
+    - `task-151` merged last, so its name check ran over the amended specs: 77 untriaged, 0 stale.
+  - **Gates on `main`** (`ea637c43`): 208 suites, 3522 tests, coverage 98.86 / 95.45 / 95.29 / 99.57.
+    lint, `docs:api` and both `tsc` exit 0; the e2e smoke is 19/19 ok.
+  - **Governance check over B4:** `--base 2159c018` gives 77 gated `wf()` commits, 0 findings, exit 0.
+  - **Pushed:** `2159c018..ea637c43`.
+  - **Follow-ups:** filed by `bug-ingest-rel-v0.3-w1b4-review-findings-plan`, triage pending.
+  - **Fix share:** 22 open fix tasks of 87 open (25.3%), under the threshold.
+  - **Next:** B5 (`153`, `154`, `158`, `159`, `162`, `163`).
