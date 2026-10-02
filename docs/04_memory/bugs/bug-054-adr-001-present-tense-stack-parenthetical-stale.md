@@ -2,7 +2,7 @@
 id: "bug-054-adr-001-present-tense-stack-parenthetical-stale"
 type: bug
 title: "adr-001:32 describes the current stack in the present tense as \"Node.js 18+ … per dna.yaml\", and dna.yaml now says 22.12+ — the one adr-010 hit that is a live description, not a historical record"
-status: planned
+status: in-progress
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
