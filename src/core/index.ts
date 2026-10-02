@@ -1176,26 +1176,24 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
     reason,
   });
   const rendered = setFrontmatterField(content, 'status', to);
-  if (superseded === null) {
-    const committed = commitMemoryTransition(root, prepared.value, rendered, message);
-    if (!committed.ok) return committed;
-    return coreOk({ id, path, from, to }, { sha: committed.value, message });
-  }
-
-  // Both documents are checked before either is written, so a refusal of the second leaves the first
-  // unwritten too (task-162).
-  const renderedSuperseded = setFrontmatterField(superseded.content, 'status', superseded.to);
-  const checkedApproved = checkMemoryTransition(root, prepared.value, rendered);
-  if (!checkedApproved.ok) return checkedApproved;
-  const checkedSuperseded = checkMemoryTransition(root, superseded, renderedSuperseded);
-  if (!checkedSuperseded.ok) {
-    return coreErr({
-      ...checkedSuperseded.error,
-      message: `cannot approve ${id}: its supersedes: field names ${superseded.id}, which cannot be superseded: ${checkedSuperseded.error.message}`,
-    });
+  let renderedSuperseded = '';
+  if (superseded !== null) {
+    // Both documents are checked before either is written, so a refusal of the second leaves the
+    // first unwritten too (task-162). The approved one is checked again by its own commit below.
+    renderedSuperseded = setFrontmatterField(superseded.content, 'status', superseded.to);
+    const checkedApproved = checkMemoryTransition(root, prepared.value, rendered);
+    if (!checkedApproved.ok) return checkedApproved;
+    const checkedSuperseded = checkMemoryTransition(root, superseded, renderedSuperseded);
+    if (!checkedSuperseded.ok) {
+      return coreErr({
+        ...checkedSuperseded.error,
+        message: `cannot approve ${id}: its supersedes: field names ${superseded.id}, which cannot be superseded: ${checkedSuperseded.error.message}`,
+      });
+    }
   }
   const committed = commitMemoryTransition(root, prepared.value, rendered, message);
   if (!committed.ok) return committed;
+  if (superseded === null) return coreOk({ id, path, from, to }, { sha: committed.value, message });
 
   const finalizeMessage = formatMemoryCommitMessage({
     type,
