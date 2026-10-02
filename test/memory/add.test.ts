@@ -7,7 +7,7 @@
  * document render a pure function of (scaffold, id, title, tags) — no wall-clock, no randomness. The
  * sequence counter has its own suite since task-128: `test/memory/add-sequence.test.ts`.
  */
-import { hasNumericToken, parseTags, renderAddDocument, slugifyTitle } from '../../src/memory/add';
+import { hasNumericToken, parseTags, renderAddDocument, slugifyTitle, writtenFields } from '../../src/memory/add';
 
 describe('slugifyTitle — deterministic, valid ID piece from a human title', () => {
   it('lowercases, collapses non-alphanumerics to single hyphens, and trims edges', () => {
@@ -110,5 +110,41 @@ tags: []
 
   it('throws when the scaffold has no frontmatter block', () => {
     expect(() => renderAddDocument('no frontmatter here', { id: 'x', title: 'Y' })).toThrow();
+  });
+});
+
+// task-163 (`bug-033`): `renderAddDocument` edits through `src/memory/frontmatter-edit.ts`'s shared
+// setter — top-level keys only, each edited line's inline comment kept.
+describe('renderAddDocument — top-level keys only, inline comments kept (task-163, bug-033)', () => {
+  it('fills the top-level title, not a nested one above it, and keeps every comment', () => {
+    const scaffold =
+      '---\nid: "{auto}"   # auto-generated\nmeta:\n  title: nested-keep-me\ntitle: ""   # REQUIRED\nstatus: draft  # auto-set\n---\n\nbody\n';
+    const out = renderAddDocument(scaffold, { id: 'task-001-x', title: 'X' });
+    expect(out).toBe(
+      '---\nid: task-001-x   # auto-generated\nmeta:\n  title: nested-keep-me\ntitle: "X"   # REQUIRED\nstatus: draft  # auto-set\n---\n\nbody\n',
+    );
+  });
+
+  it('keeps the comment on tags and on a --set field', () => {
+    const scaffold = '---\nid: ""\ntitle: ""\nstatus: draft\ntags: []   # optional\nkind: ""   # REQUIRED — minor | patch\n---\n';
+    const out = renderAddDocument(scaffold, { id: 'r-x', title: 'X', tags: ['a'], fields: [['kind', 'patch']] });
+    expect(out).toContain('tags: ["a"]   # optional\n');
+    expect(out).toContain('kind: "patch"   # REQUIRED — minor | patch\n');
+  });
+});
+
+describe('writtenFields — a context token is written only where the scaffold declares a TOP-LEVEL field (task-163)', () => {
+  it('does not count a nested key of the same name as a declaration', () => {
+    const scaffold = '---\nid: ""\nmeta:\n  scope: nested\nworkflow: ""\n---\n';
+    expect(writtenFields(scaffold, { scope: 'a/b', workflow: 'dev-loop', kind: 'x' })).toEqual([
+      ['kind', 'x'],
+      ['workflow', 'dev-loop'],
+    ]);
+  });
+});
+
+describe('hasNumericToken — {n:N} (task-163, bug-176)', () => {
+  it('detects {n:N} as a counter token', () => {
+    expect(hasNumericToken('u-{n:1}')).toBe(true);
   });
 });

@@ -267,12 +267,11 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
       expect(result.value.id).toBe('dl-001-retrospective-v0.2');
     });
 
-    it('{date} stays unsupported: it is not a field, so it still fails as a missing token', async () => {
+    it('{date} is no longer a missing token: it expands to an 8-digit date (task-163, bug-158)', async () => {
       const result = await memoryAddFn()({ root: repo, options: { type: 'dated', title: 'X' } });
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      expect(result.error.code).toBe('VALIDATION');
-      expect(result.error.message).toBe('missing value for token {date}');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.id).toMatch(/^d-[0-9]{8}-x$/);
     });
   });
 
@@ -323,7 +322,10 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
       [['n=3'], 'invalid flag value: --set cannot set "n": memory add fills it itself or through its own option'],
       [['id=x'], 'invalid flag value: --set cannot set "id": memory add fills it itself or through its own option'],
       [['title=x'], 'invalid flag value: --set cannot set "title": memory add fills it itself or through its own option'],
-      [['date=20260929'], 'invalid flag value: --set cannot set "date": memory add fills it itself or through its own option'],
+      [
+        ['date=20260929'],
+        'invalid flag value: --set cannot set "date": memory add fills {date} from the add commit\'s author date (GIT_AUTHOR_DATE, or the clock)',
+      ],
     ])('--set %j → %s', async (set, message) => {
       const before = head(repo);
       expect(await usageError(repo, { type: 'release-line', title: 'X', set })).toBe(message);
