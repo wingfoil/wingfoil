@@ -16,7 +16,10 @@
  *    to that one document.
  *
  * What happens in between (required-field checks, which fields change, the commit message) is the
- * verb's own business; see `memorySubmitFn` in `./index.ts`.
+ * verb's own business; see `memorySubmitFn` in `./index.ts`. One verb makes a second commit: an
+ * approve that fires the `supersedes:` trigger (task-162, `./memory-supersede.ts`) prepares the
+ * superseded element with {@link prepareMemoryTransitionAtRev} at the approve's own sha and runs
+ * {@link checkMemoryTransition} on both documents before either commit.
  */
 import { existsSync, lstatSync } from 'fs';
 import { join } from 'path';

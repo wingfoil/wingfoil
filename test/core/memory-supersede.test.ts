@@ -5,6 +5,9 @@
  * `superseded`, in a commit of its own: `wf({type}): finalize {A} [{t} → superseded]`, whose `Reason:`
  * cites the approve commit. Every refusal of either half runs before the first write (exit `1`).
  *
+ * BDD: `docs/02_requirements/02_bdd/features/p1-memory/P1.7-memory-approve.feature`, the two
+ * `supersedes:` scenarios (the AC1 and AC2 "a missing id" cases below).
+ *
  * Exercises the REAL, registered `memory.memoryApprove` `CoreFn` in a THROWAWAY temp git repo whose
  * `adr` and `tech-spec` types carry the real machines from `.wingfoil/memory.yaml`.
  */
@@ -323,6 +326,18 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
     expect(result.error.message).toContain(`adr-2-new was approved in ${approveSha}, but the commit moving adr-1-old to superseded failed`);
     expect(result.error.message).toContain('wf(adr): finalize adr-1-old [accepted → superseded]');
     expect(readFileSync(join(repo, ADR_A), 'utf-8')).toMatch(/^status: superseded/m);
+  });
+
+  it('an uncommitted edit of the approved element is refused as before, with the trigger firing at HEAD', async () => {
+    writeFileSync(join(repo, ADR_B), `${readFileSync(join(repo, ADR_B), 'utf-8')}\nan uncommitted paragraph\n`);
+    const before = head(repo);
+    const result = await approve({ root: repo, positional: 'adr-2-new', options: { reason: 'ok' } });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.error.message).toMatch(/^refusing to commit/);
+    expect(head(repo)).toBe(before);
+    expect(readFileSync(join(repo, ADR_A), 'utf-8')).toMatch(/^status: accepted/m);
   });
 
   it('decides from HEAD: an uncommitted supersedes: on B is neither read nor committed', async () => {

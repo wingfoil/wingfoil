@@ -409,7 +409,7 @@ export function resolveSupersedeTarget(
   memoryYaml: MemoryYaml,
   typeName: string,
   currentState: string,
-  filePath = '',
+  filePath: string,
 ): string {
   const machine = resolveStateMachine(memoryYaml, typeName);
   if (supersedesEdgeFrom(machine, currentState)) return SUPERSEDED_STATE;

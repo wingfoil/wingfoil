@@ -475,6 +475,23 @@ commit or stash them first.
   (`error: user not authorized to approve type 'task'`); the state is not a gate → exit `1`
   (`error: illegal transition draft -> approved for type 'task'`).
 
+Unreleased (v0.3): **`supersedes:`**. When an `adr` is approved into `accepted`, or a `tech-spec`
+into `approved`, and its `supersedes:` field names another element of the same type, that element
+moves to `superseded`. The move is a second commit, made right after the approve. It changes only
+that element's `status`:
+
+```
+wf(adr): finalize adr-1-old [accepted → superseded]
+
+Reason: superseded by adr-2-new (its supersedes: field), approved in <sha of the approve commit>.
+```
+
+The result then has a `superseded` entry (`id`, `path`, `from`, `to`). The approve is refused with
+exit `1`, and neither commit is written, when the named element does not exist, is of another type,
+is not `accepted` (`approved` for a `tech-spec`), or has uncommitted edits:
+`error: cannot approve adr-2-new: its supersedes: field names adr-9, which cannot be superseded: document not found: adr-9`.
+Leave `supersedes:` empty when nothing is replaced. A `superseded` element can still be deprecated.
+
 ### `wingfoil memory reject`
 
 Send a gated document back to its gate's reject target (default machine: `pending → draft`).

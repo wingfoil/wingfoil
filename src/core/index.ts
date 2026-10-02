@@ -1185,18 +1185,14 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
   // Both documents are checked before either is written, so a refusal of the second leaves the first
   // unwritten too (task-162).
   const renderedSuperseded = setFrontmatterField(superseded.content, 'status', superseded.to);
-  for (const [document, text] of [
-    [prepared.value, rendered],
-    [superseded, renderedSuperseded],
-  ] as const) {
-    const checked = checkMemoryTransition(root, document, text);
-    if (!checked.ok) {
-      if (document !== superseded) return checked;
-      return coreErr({
-        ...checked.error,
-        message: `cannot approve ${id}: its supersedes: field names ${superseded.id}, which cannot be superseded: ${checked.error.message}`,
-      });
-    }
+  const checkedApproved = checkMemoryTransition(root, prepared.value, rendered);
+  if (!checkedApproved.ok) return checkedApproved;
+  const checkedSuperseded = checkMemoryTransition(root, superseded, renderedSuperseded);
+  if (!checkedSuperseded.ok) {
+    return coreErr({
+      ...checkedSuperseded.error,
+      message: `cannot approve ${id}: its supersedes: field names ${superseded.id}, which cannot be superseded: ${checkedSuperseded.error.message}`,
+    });
   }
   const committed = commitMemoryTransition(root, prepared.value, rendered, message);
   if (!committed.ok) return committed;
@@ -1212,7 +1208,8 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
   try {
     finalized = commitMemoryTransition(root, superseded, renderedSuperseded, finalizeMessage);
   } catch (error) {
-    finalized = coreErr({ code: 'IO', message: error instanceof Error ? error.message : String(error) });
+    // `String` of an `Error` is its `name: message`, which keeps the failing git command's text.
+    finalized = coreErr({ code: 'IO', message: String(error) });
   }
   if (!finalized.ok) {
     // Reachable only when git itself fails between the two commits (a hook, a full disk): every
@@ -1364,8 +1361,9 @@ export interface MemoryDeprecateResult {
  * from a literal here — so this one function retires a `task` sitting in a `waiting` state, an
  * `accepted` `adr`, a terminal `decision-log`, and a type that falls back to `defaults.states`, with
  * no per-type branch. (`adr`/`tech-spec`'s `superseded` is NOT this verb's target: it is a `waiting`
- * edge fired by a later element's `supersedes:` field — see `SUPERSEDED_STATE` in
- * `src/memory/state-machine.ts` and this task's Execution Notes, decision D1.)
+ * edge fired by a later element's `supersedes:` field when that element is approved — see
+ * `SUPERSEDED_STATE` in `src/memory/state-machine.ts`, `./memory-supersede.ts` (task-162) and
+ * task-048's Execution Notes, decision D1. A `superseded` element can still be deprecated.)
  *
  * Order, every refusal before the single write:
  *

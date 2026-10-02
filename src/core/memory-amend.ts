@@ -26,7 +26,8 @@ import { coreErr, coreOk, type CoreResult } from './types';
  * - `release` belongs to `assign` (`element.set_release`, approver ruling 2026-10-01) — but only on a
  *   type whose committed scaffold declares it; see {@link amendReservedFields};
  * - `rejection_reason` belongs to `reject` (and is cleared by `submit`);
- * - `supersedes` is the trigger of the future `superseded` edge (`task-162`).
+ * - `supersedes` is the trigger of the `superseded` edge, read when the element is approved
+ *   (`src/core/memory-supersede.ts`, task-162).
  * The last three are the approver's ruling (b) at `task-127`'s review, 2026-10-01; the condition on
  * `release` is the approver's ruling of 2026-10-01 at `task-170` (`bug-166`, option (A)).
  */
