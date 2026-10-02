@@ -1,5 +1,5 @@
 Feature: P2.4 (US-0A-05) - Project DNA (structured config)
-  As Alex, I want a structured project map (modules, tech stack, team, conventions) in
+  As Alex, I want a structured project map (modules, stacks, team, resource paths) in
   .wingfoil/dna.yaml so humans and agents share one anatomy.
 
   Background:
@@ -8,7 +8,7 @@ Feature: P2.4 (US-0A-05) - Project DNA (structured config)
   Scenario: DNA file exists and is schema-valid after init
     When I validate ".wingfoil/dna.yaml"
     Then validation passes
-    And the file declares the sections "modules", "tech_stack", "team", "conventions"
+    And the file declares the sections "modules", "stacks", "team", "paths"
 
   Scenario: Agents read DNA as the authoritative project map
     Given ".wingfoil/dna.yaml" lists module "billing"

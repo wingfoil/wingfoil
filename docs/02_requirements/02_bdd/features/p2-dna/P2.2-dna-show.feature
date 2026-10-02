@@ -6,7 +6,7 @@ Feature: P2.2 (US-3-03) - wingfoil dna show
 
   Scenario: Display the full DNA
     When I run "wingfoil dna show"
-    Then the output includes tech stack, modules, conventions, and team sections
+    Then the output includes the sections "modules", "stacks", "team", "paths"
     And the query returns in under 1 second
 
   Scenario: Display a single DNA subtree
