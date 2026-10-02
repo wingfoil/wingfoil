@@ -170,10 +170,12 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
 
       const content = readFileSync(join(repo, result.value.path), 'utf-8');
       expect(content).toContain('id: patch-v0.2.3');
-      expect(content).toMatch(/^kind: "patch"$/m);
-      expect(content).toMatch(/^version: "v0.2.3"$/m);
-      expect(content).toMatch(/^release-line: "v1"$/m);
-      // A field no --set named keeps the scaffold's default, comment included.
+      expect(content).toMatch(/^kind: "patch"(?: +#.*)?$/m);
+      expect(content).toMatch(/^version: "v0.2.3"(?: +#.*)?$/m);
+      expect(content).toMatch(/^release-line: "v1"(?: +#.*)?$/m);
+      // A field no --set named keeps the scaffold's default, comment included; since task-163
+      // (`bug-033`) a field --set fills keeps its comment as well.
+      expect(content).toContain('kind: "patch"               # REQUIRED — "minor" or "patch"');
       expect(content).toContain('patch-of: ""           # optional');
     });
 
@@ -185,7 +187,7 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value.id).toBe('rl-v2');
-      expect(readFileSync(join(repo, result.value.path), 'utf-8')).toMatch(/^version: "v2"$/m);
+      expect(readFileSync(join(repo, result.value.path), 'utf-8')).toMatch(/^version: "v2"(?: +#.*)?$/m);
     });
 
     it('splits name from value at the FIRST "=" only', async () => {
@@ -290,8 +292,8 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
       expect(result.value.id).toBe('dev-loop-rel-v0.2.3-plan');
       expect(result.value.path).toBe('docs/plans/rl-v1/rel-v0.2.3/dev-loop-rel-v0.2.3-plan.md');
       const content = readFileSync(join(repo, result.value.path), 'utf-8');
-      expect(content).toMatch(/^workflow: "dev-loop"$/m);
-      expect(content).toMatch(/^phase: "rel-v0.2.3"$/m);
+      expect(content).toMatch(/^workflow: "dev-loop"(?: +#.*)?$/m);
+      expect(content).toMatch(/^phase: "rel-v0.2.3"(?: +#.*)?$/m);
       expect(content).not.toMatch(/^scope:/m);
     });
 

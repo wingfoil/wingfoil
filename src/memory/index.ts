@@ -81,17 +81,19 @@ export { writeMemoryEntry } from './entry';
 export type { MemoryEntryWrite } from './entry';
 export {
   expandFieldTokens,
+  formatIdDate,
   hasNumericToken,
   highestSequenceNumber,
   nextSequenceNumber,
   parseSetOptions,
   parseTags,
+  readAuthorDate,
   renderAddDocument,
   slugifyTitle,
   unknownSetNames,
   writtenFields,
 } from './add';
-export type { AddDocumentFields, ParsedSetOptions } from './add';
+export type { AddDocumentFields, IdTokenSources, ParsedSetOptions } from './add';
 export {
   formatMemoryCommitMessage,
   normalizeReason,

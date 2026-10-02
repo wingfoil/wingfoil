@@ -175,8 +175,20 @@ function toYamlScalar(value: string): string {
  * @throws `Error` when the document has no frontmatter block.
  */
 export function setFrontmatterField(content: string, key: string, value: string): string {
+  return setFrontmatterEntry(content, key, toYamlScalar(value));
+}
+
+/**
+ * {@link setFrontmatterField} for a value the caller has already serialized as ONE line of YAML — a
+ * flow sequence (`["a","b"]`), a JSON-quoted string, a plain token. The same top-level-only match,
+ * whole-entry replacement and inline-comment rule apply. `memory add` fills its scaffold through this
+ * (task-163, `bug-033`), so the add and the transition verbs edit a frontmatter line the same way.
+ *
+ * @throws `Error` when the document has no frontmatter block.
+ */
+export function setFrontmatterEntry(content: string, key: string, valueYaml: string): string {
   const { before, lines, after } = locateFrontmatter(content);
-  const entry = `${key}: ${toYamlScalar(value)}`;
+  const entry = `${key}: ${valueYaml}`;
   const index = findKeyLine(lines, key);
   if (index === -1) {
     // After the last NON-BLANK line, not simply last: trailing blank lines can belong to a
