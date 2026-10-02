@@ -32,3 +32,14 @@ Feature: P1.3 (US-4-01) - wingfoil memory add
     When I run "wingfoil memory add --type decision --title 'Use Redis'"
     Then the new document's id is "decision-006-use-redis"
     And the command exits with code 0
+
+  # spec-001 placeholder table, {date} and {author} rows (task-163; bug-158): both tokens take the
+  # values the add commit itself records, so the id and its commit cannot disagree.
+  Scenario: The {date} and {author} tokens come from the add commit's author date and name
+    Given the Memory type "decision" has the id pattern "decision-{date}-{author}-{slug}"
+    And the git author name is "Ada Lovelace"
+    And GIT_AUTHOR_DATE is "2026-09-29T23:30:00-02:00"
+    When I run "wingfoil memory add --type decision --title 'Use Redis'"
+    Then the new document's id is "decision-20260930-ada-lovelace-use-redis"
+    And the add commit's author is "Ada Lovelace" and its author date is that instant
+    And the command exits with code 0

@@ -26,7 +26,7 @@ const typeEntry = (name: string, idPattern: string): string => `  ${name}:
 
 const MEMORY_YAML = `version: 1
 types:
-${typeEntry('dated', 'bug-{date}-{slug}')}${typeEntry('twice', 'd-{date}-{date}')}${typeEntry('authored', 'by-{author}-{slug}')}${typeEntry('ordered', 'r-{date}-{author}-{kind}-{n}')}${typeEntry('padded', 'p-{n:2}-{slug}')}${typeEntry('unpadded', 'u-{n:1}')}${typeEntry('triple', 't-{nnn}')}`;
+${typeEntry('dated', 'bug-{date}-{slug}')}${typeEntry('twice', 'd-{date}-{date}')}${typeEntry('authored', 'by-{author}-{slug}')}${typeEntry('ordered', 'r-{date}-{author}-{kind}-{n}')}${typeEntry('padded', 'p-{n:2}-{slug}')}${typeEntry('unpadded', 'u-{n:1}')}${typeEntry('triple', 't-{nnn}')}${typeEntry('decision', 'decision-{date}-{author}-{slug}')}`;
 
 const PLAIN_TEMPLATE = `---
 id: ""
@@ -163,6 +163,17 @@ describe('memory add — {date}, {author} and {n:N} (task-163; bug-158, bug-176)
     if (!first.ok || !second.ok) return;
     expect(first.value.id).toBe('r-20260930-wingfoil-test-minor-001');
     expect(second.value.id).toBe('r-20260930-wingfoil-test-minor-002');
+  });
+
+  // BDD: `docs/02_requirements/02_bdd/features/p1-memory/P1.3-memory-add.feature`, scenario
+  // "The {date} and {author} tokens come from the add commit's author date and name".
+  it('BDD P1.3 — {date} and {author} come from the add commit author date and name', async () => {
+    process.env.GIT_AUTHOR_NAME = 'Ada Lovelace';
+    const result = await memoryAddFn()({ root: repo, options: { type: 'decision', title: 'Use Redis' } });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.id).toBe('decision-20260930-ada-lovelace-use-redis');
+    expect(gitOut(repo, ['log', '-1', '--format=%an|%at'])).toBe(`Ada Lovelace|${Date.parse(FIXED_DATE) / 1000}`);
   });
 
   describe('AC 2 — --set date / --set author are refused with a message that says where the value comes from', () => {
