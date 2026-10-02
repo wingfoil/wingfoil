@@ -2,7 +2,7 @@
 id: "task-159-remove-retired-conventions-section-requirements-bdd-steps"
 type: task
 title: "Remove the retired `conventions` section from requirements, BDD steps and the v0.1 backlog JSON"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "fix"
 priority: "low"
