@@ -2,7 +2,7 @@
 id: bug-177-no-memory.yaml-type-name-is-refused-for-colliding-with-a-configuration-commit-scope
 type: bug
 title: "No memory.yaml type name is refused for colliding with a configuration commit scope"
-status: planned
+status: in-progress
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
