@@ -220,6 +220,9 @@ That reads: `draft` → (`submit`) → `pending` → (`approve`) → `approved`,
 back to `draft`. `deprecated` is always reachable from any state with `memory deprecate` and is never
 listed.
 
+The `bug` type in the scaffold carries a commented-out `states:` block of its own. Uncomment it to see
+how a type overrides the default; the states in it are an example, not a recommendation.
+
 ### 5.2 Add your own type
 
 A `story` type with its own lifecycle — `ready` is a gate, the rest are plain steps:
@@ -252,6 +255,9 @@ status: draft
 
 <!-- As a <user>, I want <goal>, so that <benefit>. -->
 ```
+
+A type may not be named `directive`, `dna` or `workflow`: those names mark configuration commits
+(`wf(dna): …`), so `memory.yaml` fails validation if a type takes one.
 
 **Commit both files** before using the type. Until you do, `memory add --type story` fails and tells you
 the type is defined in the working tree but not committed.
