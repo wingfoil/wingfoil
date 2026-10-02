@@ -2,7 +2,7 @@
 id: "bug-053-spec-011-memory-yaml-row-stale-states-encoding"
 type: bug
 title: "spec-011's `memory.yaml` contract row still describes per-type `states` as `(values/initial/transitions)` — the encoding spec-001 retired — and never mentions `defaults`"
-status: planned
+status: in-progress
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
