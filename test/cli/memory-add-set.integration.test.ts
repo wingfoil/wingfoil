@@ -69,9 +69,10 @@ describe('wingfoil memory add --set (task-110, spec-008 §10)', () => {
     expect(run.status).toBe(0);
     expect(JSON.parse(run.stdout)).toEqual({ id: 'patch-v0.2.3', path: 'docs/memory/planning/v1/patch-v0.2.3.md' });
     const content = readFileSync(join(repo, 'docs/memory/planning/v1/patch-v0.2.3.md'), 'utf-8');
-    expect(content).toMatch(/^kind: "patch"$/m);
-    expect(content).toMatch(/^version: "v0.2.3"$/m);
-    expect(content).toMatch(/^release-line: "v1"$/m);
+    // Each filled line keeps the template's inline comment (task-163, `bug-033`).
+    expect(content).toMatch(/^kind: "patch" +# REQUIRED/m);
+    expect(content).toMatch(/^version: "v0.2.3" +# REQUIRED/m);
+    expect(content).toMatch(/^release-line: "v1" +# REQUIRED/m);
     expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe('wf(release): add patch-v0.2.3');
   });
 
