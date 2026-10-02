@@ -37,7 +37,7 @@
     "check:lockfile": "node scripts/check-lockfile-pins.cjs",
     "lint": "eslint .",
     "docs:api": "typedoc --options typedoc.json",
-    "test": "jest",
+    "test": "node scripts/run-tests.cjs",
     "test:coverage": "jest --coverage",
     "wingfoil": "node node_modules/wingfoil-released/dist/cli.js",
     "check:mcp": "node scripts/check-mcp-registration.cjs",

@@ -19,7 +19,10 @@
  *    combination is what reproduced bug-011: a wall-clock budget wrapped around a spawned
  *    `node dist/cli.js`, which measured Node startup and CPU contention from sibling jest workers
  *    rather than the query, and failed on an unmodified `main`. Every exemption must still name an
- *    existing file that really does both, so a stale one fails too.
+ *    existing file that really does both, so a stale one fails too, and the exempted files must be
+ *    exactly the suites `npm test` runs alone after the parallel run (`test/latency-suites.cjs`,
+ *    `scripts/run-tests.cjs`): a timed spawn is only about the code when jest's own workers are not
+ *    competing with it.
  *
  * **What it does not see.** The check reads one file at a time and follows no import other than the
  * two named above. A spawn reached through any other module is invisible to it: the git calls inside
@@ -47,6 +50,8 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, sep } from 'path';
+
+import { LATENCY_SUITES } from '../latency-suites.cjs';
 
 const TEST_ROOT = join(__dirname, '..');
 
@@ -166,5 +171,9 @@ describe('latency budgets: one clock, no timed spawn without a documented exempt
       expect({ relativePath, ...classify(relativePath) }).toMatchObject({ spawns: true, times: true });
       expect(reason.trim().length).toBeGreaterThan(0);
     }
+  });
+
+  it('the exempted files are exactly the suites that run alone, after the parallel run (test/latency-suites.cjs)', () => {
+    expect([...LATENCY_SUITES].sort()).toEqual(Object.keys(EXEMPTIONS).map((path) => `test/${path}`).sort());
   });
 });

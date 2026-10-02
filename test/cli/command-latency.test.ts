@@ -22,7 +22,13 @@
  * own p95 is not asserted: it is the machine's, not the command's.
  *
  * This file is the one documented exemption from `test/core/latency-budget-placement.test.ts`'s
- * spawn-plus-timing rule, and the exemption records why.
+ * spawn-plus-timing rule, and the exemption records why. Pairing with a floor does not cancel the
+ * load of the suite measuring it, though: inside jest's parallel run the floor itself ranged
+ * 664–2,180 ms and the marginal p95 crossed 1,000 ms with nothing in the commands changed. So this
+ * file runs **alone, after the parallel run** — it is listed in `test/latency-suites.cjs`, which
+ * `jest.config.js` ignores and `jest.latency.config.js` selects (one worker); `npm test`
+ * (`scripts/run-tests.cjs`) runs both passes. Run it by itself with `npx jest -c jest.latency.config.js`;
+ * `WINGFOIL_LATENCY_REPORT=1` prints the three distributions it measured.
  */
 import { runCliHarness, type SpawnedRun } from './helpers/spawn-cli';
 import { describeSamples, type MarginalLatencySamples, P95_BUDGET_MS, p95, RUNS, sampleMarginalLatency } from '../core/helpers/latency';
@@ -92,14 +98,14 @@ describe('REQ-PERF-02 — command-level p95, as marginal cost over a measured pr
     ({ index }) => {
       const marginal = measured.marginal[index]!;
       expect(marginal).toHaveLength(RUNS);
-      // The received object names all three distributions, so a failure says whether the command or
-      // the machine moved.
-      expect({
-        marginalUnderBudget: p95(marginal) < P95_BUDGET_MS,
-        marginal: describeSamples(marginal),
-        floor: describeSamples(measured.floor),
-        total: describeSamples(measured.total[index]!),
-      }).toMatchObject({ marginalUnderBudget: true });
+      // On failure the received string names all three distributions, so a red says whether the
+      // command or the machine moved.
+      const verdict =
+        p95(marginal) < P95_BUDGET_MS
+          ? 'within budget'
+          : `over budget: marginal ${describeSamples(marginal)}; floor ${describeSamples(measured.floor)}; ` +
+            `total ${describeSamples(measured.total[index]!)}`;
+      expect(verdict).toBe('within budget');
     },
   );
 
