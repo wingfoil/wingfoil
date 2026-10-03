@@ -8,7 +8,7 @@ kind: "fix"
 priority: "low"
 tags: ["v0.3", "core", "cli", "docs"]
 ref: "spec-008"
-bug: ["bug-152"]
+bug: ["bug-152", "bug-203"]
 depends_on: []
 tmpl_version: 260703
 ---
