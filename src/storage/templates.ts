@@ -181,12 +181,13 @@ const MEMORY_TYPES = ['adr', 'bug', 'decision-log', 'release', 'release-line', '
 /**
  * Whether `memory amend` may correct each scaffolded type (`spec-001`'s `amendable` key; `dl-108` A3;
  * approver ruling (c) at `task-127`'s review, 2026-10-01). It follows this repository's own
- * `.wingfoil/memory.yaml`: records whose content is routinely corrected are amendable; `adr` is not,
- * because a change to a decision is a new ADR; `release` and `release-line` are not, because their
+ * `.wingfoil/memory.yaml`: records whose content is routinely corrected are amendable. `adr` is too,
+ * for dated correction and Revision notes (approver ruling at `task-158`, 2026-10-02); a change to
+ * the decision itself is still a new ADR. `release` and `release-line` are not, because their
  * content is the roadmap, which the release workflow phases change.
  */
 const MEMORY_AMENDABLE: Readonly<Record<(typeof MEMORY_TYPES)[number], boolean>> = {
-  adr: false,
+  adr: true,
   bug: true,
   'decision-log': true,
   release: false,

@@ -85,7 +85,7 @@ id: "${ID}"
 type: adr
 title: "A decision"
 status: accepted
-sard_ref: ["REQ-SYS-01"]
+sard_ref: "REQ-SYS-01"
 tmpl_version: 260703
 ---
 

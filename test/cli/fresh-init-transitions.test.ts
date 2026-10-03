@@ -188,7 +188,7 @@ describe('a freshly `wingfoil init`-ed project runs every Memory transition verb
  * still a new ADR (`dl-108` A3).
  * Driven through the real `dist/cli.js`, like the suite above.
  */
-describe('a freshly `wingfoil init`-ed project can amend an approved tech-spec (task-127) and an accepted adr (task-158)', () => {
+describe('a freshly `wingfoil init`-ed project can amend an approved tech-spec (task-127) and an adr (task-158)', () => {
   for (const def of TEMPLATES) {
     it(`template ${def.name}`, () => {
       const repo = makeTempGitRepo();
@@ -220,7 +220,8 @@ describe('a freshly `wingfoil init`-ed project can amend an approved tech-spec (
         const adrAmended = wingfoil(repo, 'memory', 'amend', adr.id, '--reason', 'a correction note');
         expect([adrAmended.status, adrAmended.stderr]).toEqual([0, '']);
         expect(commitCount(repo) - adrBefore).toBe(1);
-        expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe(`wf(adr): amend ${adr.id} [accepted → accepted]`);
+        // The scaffold's `adr` runs the default machine, whose ratified state is `approved`.
+        expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe(`wf(adr): amend ${adr.id} [approved → approved]`);
       } finally {
         removeTempDir(repo);
       }

@@ -55,7 +55,7 @@
 # docs/03_backlog/; each `requirements:` points to its by-release backlog JSON) plus the initial `adr`
 # and `decision-log` content recorded by initial-design (under design/adrs/ and design/dls/).
 # The per-type `template.file:` scaffolds live alongside the config under .wingfoil/memory/templates/.
-version: 2.0                     # [AUTHORING] config-file format version (WingFoil convention); a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1
+version: 2.2                     # [AUTHORING] config-file format version (WingFoil convention); a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.2 at task-158 (adr amendable), after task-153's 2.1
 
 # Default machine used by any type that does not declare its own `states` block.
 # [SPEC: REQ-STATE-08] default machine: draft -> pending -> approved/rejected -> deprecated.
@@ -154,7 +154,7 @@ types:
       frontmatter:
         required: [ title, sard_ref ]
       file: "memory/templates/adr.md"
-    amendable: false     # [SPEC: dl-108 A3] a change to the decision is a new ADR
+    amendable: true      # key [SPEC: spec-001, dl-108 A3]; value: approver ruling 2026-10-02 (task-158) — dated correction and Revision notes are amendments ("facts that later evidence corrected, and dated revision notes", dl-108 A3); a change to the decision itself is still a new ADR
     states: # [SPEC] structure (P1.13 / REQ-SYS-04); [AUTHORING] ADR vocabulary+encoding (accepted/superseded lifecycle)
       sequence: [ draft, pending, accepted, superseded ]
       gates:
