@@ -6,9 +6,10 @@
 # element.set_state actions are validated against the type's graph.
 # `amendable` (dl-108 A3, spec-001, task-127) says whether `memory amend` may record a content
 # correction on a type's documents without a state change; absent means false. Values:
-# true for tech-spec, decision-log, service, task, bug and plan; false for adr (a change to the
-# decision is a new ADR, dl-108 A3), release and release-line (approver ruling, task-127 review,
-# 2026-10-01).
+# true for tech-spec, decision-log, service, task, bug and plan; false for release and release-line
+# (approver ruling, task-127 review, 2026-10-01). true for adr since the approver ruling of 2026-10-02
+# (task-158): dated correction and Revision notes only, since a change to the decision is a new ADR
+# (dl-108 A3).
 # Source: docs/01_vision/06_features.md, docs/02_requirements/.../P1.13-memory-element-schema.feature
 #          docs/02_requirements/03_sard/03_state-context.md (REQ-STATE-01, REQ-STATE-08)
 #

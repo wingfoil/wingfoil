@@ -162,8 +162,12 @@ Re-run: 2 suites, 24 tests passed.
   end of Process Notes naming `^22.20.4` (`task-087`), `task-155` and `spec-015` §1's Revision of
   2026-10-02. It also covers the other closed cascade leaves: `bug-046`/`bug-047` (task-155),
   `bug-048` (closed at v0.3 triage, `533760d8`). That is `bug-069`'s same-class point: all four
-  leaves are now closed, so no more stale sentences are left to accrue (`grep -H "^status:"
-  docs/04_memory/bugs/bug-04[6-9]*.md` → closed ×4).
+  leaves are now closed (`grep -H "^status:" docs/04_memory/bugs/bug-04[6-9]*.md` → closed ×4).
+  *Corrected at review (2026-10-02):* that did not cover every stale sentence. Two more were in
+  Consequences: the *Negative* "Six artefacts now disagree with the code" (the cascade merged at
+  `7bb95d6e`; `grep -n "22.12" README.md CLAUDE.md docs/01_vision/01_product-brief.md` → all
+  `22.12+`) and the second *Neutral* "remain `task-074`'s work" (`task-074` `done`). The Revision note
+  now has a bullet covering both.
 - AC2: `grep -n "Node.js 18+" adr-001` → `:32` (the corrected sentence), `:34`, `:37` (the note);
   `grep -n "\^18" adr-010` → `:195`, `:236` (the corrected sentences), `:269-271` (the note).
   `git diff -- docs/04_memory/design/adrs | grep "^[-+]status"` → nothing. Both ADRs are
@@ -180,4 +184,17 @@ HEAD, since amend reads `amendable` from HEAD:
 
 - `spec-001-memory-yaml-schema` — `--reason "adr becomes amendable for dated correction notes (approver ruling 2026-10-02, task-158): the amendable paragraph and the adr worked example follow memory.yaml 2.2, with a dated Revision note. A changed decision is still a new ADR, per dl-108 A3."`
 - `adr-001-git-backed-storage` — `--reason "Dated Correction note: the stack parenthetical's Node.js 18+ reads Node.js 22.12+, per adr-010 and spec-015 section 1. The storage decision is unchanged (bug-054, task-158)."`
-- `adr-010-node-22-runtime-floor` — `--reason "Dated Revision note: the Consequences and the closing list describe bug-046 to bug-049 as open. All four are closed: @types/node is ^22.20.4 (task-087), and the floor definition and the equality guard came with task-155 (spec-015 section 1, Revision 2026-10-02). The decision is unchanged (bug-069, task-158)."`
+- `adr-010-node-22-runtime-floor` — superseded at review by the updated reason under "review fixes" below. Was: `--reason "Dated Revision note: the Consequences and the closing list describe bug-046 to bug-049 as open. All four are closed: @types/node is ^22.20.4 (task-087), and the floor definition and the equality guard came with task-155 (spec-015 section 1, Revision 2026-10-02). The decision is unchanged (bug-069, task-158)."`
+
+### review fixes (2026-10-02, approve with fixes)
+
+1. The `.wingfoil/memory.yaml` header comment (lines 7–11) still listed `adr` as `false`. It now lists
+   `adr` as `true` since the 2026-10-02 ruling (`task-158`), keeping "a change to the decision is a
+   new ADR (`dl-108` A3)". Committed (config).
+2. The `adr-010` Revision note (pending amendment) gains the cascade/`task-074` bullet, and its lead
+   says "every element and action". The `--reason` below is updated.
+
+Re-run: `npx jest test/core/adr-amendable.test.ts test/core/memory-amend.test.ts test/cli/fresh-init-transitions.test.ts test/docs`
+→ 8 suites, 78 tests passed; `npm run lint` → 0; `npx tsc --noEmit -p tsconfig.json` → 0.
+
+Updated `--reason` for `adr-010-node-22-runtime-floor`: "Dated Revision note: the Consequences and the closing list describe bug-046 to bug-049, the cascade under Actions and task-074's share as open. All are closed or done: @types/node is ^22.20.4 (task-087), the floor definition and the equality guard came with task-155 (spec-015 section 1, Revision 2026-10-02), and the cascade merged at 7bb95d6e. The decision is unchanged (bug-069, task-158)."
