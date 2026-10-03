@@ -119,6 +119,18 @@ describe('memory add — {date}, {author} and {n:N} (task-163; bug-158, bug-176)
       expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
     });
 
+    // Review fix 1: git re-parses a bare `<seconds> <offset>` only from 9 digits of seconds up, so
+    // the pinned date is passed as `@<seconds> <offset>`, which git reads as a timestamp at any width.
+    it('pins an epoch date with few digits too (@0 +0000 → 19700101), leaving nothing staged', async () => {
+      process.env.GIT_AUTHOR_DATE = '@0 +0000';
+      const result = await memoryAddFn()({ root: repo, options: { type: 'dated', title: 'x' } });
+      expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.id).toBe('bug-19700101-x');
+      expect(gitOut(repo, ['log', '-1', '--format=%at'])).toBe('0');
+    });
+
     it('pins the add commit to that author date, so the id and the commit cannot disagree', async () => {
       const result = await memoryAddFn()({ root: repo, options: { type: 'dated', title: 'x' } });
       expect(result.ok).toBe(true);
