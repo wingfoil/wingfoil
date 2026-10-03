@@ -39,6 +39,7 @@
     "docs:api": "typedoc --options typedoc.json",
     "test": "node scripts/run-tests.cjs",
     "test:coverage": "jest --coverage",
+    "test:latency": "jest -c jest.latency.config.js",
     "wingfoil": "node node_modules/wingfoil-released/dist/cli.js",
     "check:mcp": "node scripts/check-mcp-registration.cjs",
     "check:governance": "node scripts/check-governance.cjs"

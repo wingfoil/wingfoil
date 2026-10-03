@@ -472,8 +472,8 @@ types:
     // REQ-PERF-02's own measurement conditions: p95 over 25 runs on the 1,000-Memory-document
     // reference repository. `test/core/latency-budget-placement.test.ts` keeps it from drifting back
     // across the process boundary. The command itself is timed in `test/cli/command-latency.test.ts`
-    // (task-154, `bug-013`) — as its cost over a measured process-start floor, run alone after the
-    // parallel suite — which is the guard's one documented exemption.
+    // (task-154, `bug-013`) — as its marginal cost over a measured process-start floor, run alone and
+    // only when asked for — which is the guard's one documented exemption.
     it('`memory search api` finds the "API design" document, exit 0 (BDD "Find a decision by keyword")', () => {
       const result = runCliInRoot(repo, 'memory', 'search', 'api', '--format', 'json');
       expect(result.status).toBe(0);

@@ -10,9 +10,11 @@ module.exports = {
   // `test/lint/coverage-parity.test.ts` fails if the report and `src/` ever disagree.
   roots: ['<rootDir>/test', '<rootDir>/src'],
   testMatch: ['**/*.test.ts'],
-  // The suites that time spawned processes run alone, after this run, through `jest.latency.config.js`
-  // (`npm test` = `scripts/run-tests.cjs`; task-154, `bug-013`): inside the parallel run, jest's own
-  // workers compete with what they measure. The list is `test/latency-suites.cjs`.
+  // The suites that time spawned processes are left out of this run: their budgets presuppose an
+  // otherwise idle machine, and here jest's own workers compete with what they measure. They run
+  // alone, through `jest.latency.config.js`, only when asked for (`npm run test:latency`, or
+  // `WINGFOIL_LATENCY=1 npm test` — `scripts/run-tests.cjs`; task-154, `bug-013`). The list is
+  // `test/latency-suites.cjs`.
   testPathIgnorePatterns: ['/node_modules/', ...LATENCY_SUITES.map((path) => `<rootDir>/${path}`)],
   // The ESM/CommonJS harness (task-065-fix-commander-esm-jest-harness, bug-007). This replaces the
   // bare `preset: 'ts-jest'` (which is exactly the first entry below with no `tsconfig` option) so

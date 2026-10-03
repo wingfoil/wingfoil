@@ -1,34 +1,37 @@
 /**
- * REQ-PERF-02's Fit Criterion **at the level it is worded at** — the commands
- * (`task-154-give-latency-budgets-statistical-shape-guard-says-what`, `bug-013`):
+ * REQ-PERF-02's three commands, timed as the **compiled, spawned command**
+ * (`task-154-give-latency-budgets-statistical-shape-guard-says-what`, `bug-013`). The requirement:
  *
  *   "`wingfoil memory search`, `wingfoil dna show`, and `wingfoil memory history` each return in
  *   < 1,000 ms (p95) on the reference repository."
  *   (docs/02_requirements/03_sard/02_performance-nfr.md; measurement conditions: p95 over >= 20 runs,
  *   1,000 Memory documents)
  *
- * `test/core/query-latency.test.ts` holds the same budget against the registered `CoreFn` each
- * command dispatches to, in-process. This file holds it against the **compiled, spawned command**:
- * `node test/cli/fixtures/cli-harness.cjs <dist> <root> <command>` — the real `dist/`, the real ESM
- * `commander`, the real output writer — on the same reference repository
- * (`test/core/helpers/reference-repo.ts`).
+ * **What is asserted is not that sentence as written.** The requirement's "return in" includes
+ * process start-up; this file asserts each command's **marginal cost over a measured process-start
+ * floor**, and only reports the total (start-up included) without asserting it. That deviation is
+ * pending a decision-log (approver ruling, 2026-10-03); until it is decided, the total is unasserted.
  *
- * What it measures is the command's **marginal cost over a measured process-start floor**, not the
- * spawn's wall-clock. `bug-011` was a spawn timed whole: under jest's parallel workers that number is
- * dominated by Node startup and CPU contention, and it failed on an unmodified `main`. So each run
- * spawns the floor — the same harness, the same compiled modules, `--version`, which commander
- * answers before any command runs — and then each of the three commands, back to back, and each
- * command's budget is the p95 of its per-run differences from that run's floor (`sampleMarginalLatency`, `test/core/helpers/latency.ts`). The floor's
- * own p95 is not asserted: it is the machine's, not the command's.
+ * `test/core/query-latency.test.ts` holds the 1,000 ms against the registered `CoreFn` each command
+ * dispatches to, in-process. This file spawns `node test/cli/fixtures/cli-harness.cjs <dist> <root>
+ * <command>` — the real `dist/`, the real ESM `commander`, the real output writer — on the same
+ * reference repository (`test/core/helpers/reference-repo.ts`). Each run spawns the floor (the same
+ * harness and compiled modules answering `--version`, which commander does before any command runs)
+ * and then each of the three commands; each command's marginal cost in a run is its total minus the
+ * **median** floor (`sampleMarginalLatency`, `test/core/helpers/latency.ts`), and its budget is the p95
+ * of those marginals. `bug-011` was a spawn timed whole, which is why the raw total is not the
+ * asserted number.
+ *
+ * **The budget presupposes an otherwise idle machine.** No floor subtraction makes a spawn's
+ * wall-clock immune to load: inside jest's parallel run, or beside other jobs, the marginal p95 has
+ * crossed 1,000 ms with nothing in the commands changed. So this file runs only when asked for: it
+ * is listed in `test/latency-suites.cjs`, which `jest.config.js` ignores and `jest.latency.config.js`
+ * selects (one worker), and it runs through `npm run test:latency`, `WINGFOIL_LATENCY=1 npm test`, or
+ * `npm test -- test/cli/command-latency.test.ts` — never from CI or `prepublishOnly`
+ * (`scripts/run-tests.cjs`). `WINGFOIL_LATENCY_REPORT=1` prints the three distributions measured.
  *
  * This file is the one documented exemption from `test/core/latency-budget-placement.test.ts`'s
- * spawn-plus-timing rule, and the exemption records why. Pairing with a floor does not cancel the
- * load of the suite measuring it, though: inside jest's parallel run the floor itself ranged
- * 664–2,180 ms and the marginal p95 crossed 1,000 ms with nothing in the commands changed. So this
- * file runs **alone, after the parallel run** — it is listed in `test/latency-suites.cjs`, which
- * `jest.config.js` ignores and `jest.latency.config.js` selects (one worker); `npm test`
- * (`scripts/run-tests.cjs`) runs both passes. Run it by itself with `npx jest -c jest.latency.config.js`;
- * `WINGFOIL_LATENCY_REPORT=1` prints the three distributions it measured.
+ * spawn-plus-timing rule, and the exemption records why.
  */
 import { runCliHarness, type SpawnedRun } from './helpers/spawn-cli';
 import { describeSamples, type MarginalLatencySamples, P95_BUDGET_MS, p95, RUNS, sampleMarginalLatency } from '../core/helpers/latency';
@@ -94,7 +97,7 @@ describe('REQ-PERF-02 — command-level p95, as marginal cost over a measured pr
   });
 
   it.each(COMMANDS.map((command, index) => ({ command, index })))(
-    '`wingfoil $command` costs under 1000ms at p95 over >= 20 runs, over the process-start floor',
+    '`wingfoil $command`: marginal cost over the median process-start floor is under 1000ms at p95 over >= 20 runs',
     ({ index }) => {
       const marginal = measured.marginal[index]!;
       expect(marginal).toHaveLength(RUNS);

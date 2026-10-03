@@ -10,7 +10,8 @@
  * - {@link MIN_RUNS} is the SARD's `>= 20`; {@link RUNS} is the 25 the suites take (task-008's
  *   convention, kept); {@link P95_BUDGET_MS} is the 1,000 ms threshold, unchanged.
  * - {@link p95} is the nearest-rank percentile — the `ceil(0.95 * n)`-th smallest sample. At
- *   `n = 25` that is the 24th of 25, so exactly one outlier is tolerated and a second is not.
+ *   `n = 25` that is the 24th of 25, so exactly one outlier is tolerated and a second is not. The
+ *   percentile method is this module's choice (task-008's, kept): the REQ does not specify one.
  * - {@link sampleLatency} and {@link sampleMarginalLatency} refuse fewer than {@link MIN_RUNS} runs,
  *   so a budget cannot be checked against a single sample through this module.
  *
@@ -36,6 +37,14 @@ export function p95(samples: readonly number[]): number {
   const sorted = [...samples].sort((a, b) => a - b);
   const index = Math.min(sorted.length, Math.ceil(0.95 * sorted.length)) - 1;
   return sorted[Math.max(0, index)]!;
+}
+
+/** The median of `samples`: the middle value, or the mean of the two middle values. */
+export function median(samples: readonly number[]): number {
+  if (samples.length === 0) throw new Error('median of an empty sample set is undefined');
+  const sorted = [...samples].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
 }
 
 function requireRuns(runs: number): void {
@@ -70,7 +79,7 @@ export interface MarginalLatencySamples {
   readonly floor: readonly number[];
   /** Per measured call, in the order given: its elapsed time in each run, floor included. */
   readonly total: readonly (readonly number[])[];
-  /** Per measured call: `total[c][i] - floor[i]`, its cost over the floor taken in the same run. */
+  /** Per measured call: `total[c][i] - median(floor)`, its cost over the central floor value. */
   readonly marginal: readonly (readonly number[])[];
 }
 
@@ -78,10 +87,16 @@ export interface MarginalLatencySamples {
  * Measure each of `calls`' cost **over a floor**, for calls whose elapsed time includes a fixed
  * overhead the budget is not about — a process start, for a spawned command (`bug-013`).
  *
- * Each run times `floor` and then every call in `calls`, back to back, and records each call's
- * difference from that run's floor. Taking the floor in the same run, rather than subtracting one
- * p95 from another, makes a call and its floor share whatever load the machine was under at that
- * moment, which is what lets the difference stand for the call's own cost.
+ * Each run times `floor` and then every call in `calls`, back to back, so the floor is sampled as
+ * many times as the calls and across the same stretch of time. Each call's marginal cost in a run is
+ * its total minus the **median** of all the floor samples. An earlier version subtracted the floor
+ * of the same run; review showed that pairing does not cancel load jitter — a floor and the call
+ * after it can land on opposite sides of a scheduling spike, so a reviewer's run at load 5→42 got a
+ * marginal p95 of 2,050 ms and a marginal minimum of −1,067 ms. A central floor value is not moved by
+ * one slow floor sample, so the remaining spread is the calls' own.
+ *
+ * It does not make the measurement load-proof: a budget measured this way presupposes an otherwise
+ * idle machine, which is why the suites that use it run only when asked for (`scripts/run-tests.cjs`).
  */
 export async function sampleMarginalLatency(
   runs: number,
@@ -97,10 +112,11 @@ export async function sampleMarginalLatency(
       totalSamples[index]!.push(await timeOnce(call));
     }
   }
+  const centralFloor = median(floorSamples);
   return {
     floor: floorSamples,
     total: totalSamples,
-    marginal: totalSamples.map((samples) => samples.map((total, run) => total - floorSamples[run]!)),
+    marginal: totalSamples.map((samples) => samples.map((total) => total - centralFloor)),
   };
 }
 

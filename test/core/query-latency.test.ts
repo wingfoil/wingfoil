@@ -43,7 +43,9 @@
  * against `wingfoil memory search`, `dna show` and `memory history`; this file times the operations
  * they dispatch to, which leaves out the compiled CLI's own dispatch and output. That level is
  * `test/cli/command-latency.test.ts` (task-154, `bug-013`): the same reference repository, the same
- * 1,000 ms at p95, measured as each spawned command's cost over a measured process-start floor.
+ * 1,000 ms at p95, asserted on each spawned command's marginal cost over a measured process-start
+ * floor — not on the total the requirement words, a deviation pending a decision-log — and run only
+ * when asked for, on an otherwise idle machine.
  *
  * `P1.10-memory-history.feature`'s "And the query returns in under 1 second" clause lands here for the
  * same reason and was never written anywhere else: `test/cli/program.integration.test.ts` owns P1.10's
@@ -141,7 +143,7 @@ describe('REQ-PERF-02 — DNA/Memory query latency on a 1,000-Memory-document re
   // dispatches to; the Thens are the two assertions below. Stronger than the spawn-wrapped assertion
   // it replaces on three axes — it measures the query rather than process startup, over 1,000
   // documents rather than 2, at p95 over 25 runs rather than a single sample — but not on the fourth:
-  // it no longer runs the command, which `test/cli/command-latency.test.ts` covers (bug-013). The threshold is
+  // it no longer runs the command; `test/cli/command-latency.test.ts` times that, opt-in (bug-013). The threshold is
   // untouched: 1,000 ms, exactly as the feature file and REQ-PERF-02 both state it.
   it('P1.5 "Find a decision by keyword": `memory search api` returns the "API design" document, in under 1000ms at p95 over >= 20 runs (task-067)', async () => {
     const fn = memorySearchFn();

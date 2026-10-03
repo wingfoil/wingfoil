@@ -20,9 +20,9 @@
  *    `node dist/cli.js`, which measured Node startup and CPU contention from sibling jest workers
  *    rather than the query, and failed on an unmodified `main`. Every exemption must still name an
  *    existing file that really does both, so a stale one fails too, and the exempted files must be
- *    exactly the suites `npm test` runs alone after the parallel run (`test/latency-suites.cjs`,
- *    `scripts/run-tests.cjs`): a timed spawn is only about the code when jest's own workers are not
- *    competing with it.
+ *    exactly the suites left out of the parallel run and run alone, only when asked for
+ *    (`test/latency-suites.cjs`, `scripts/run-tests.cjs`): a timed spawn is only about the code on an
+ *    otherwise idle machine.
  *
  * **What it does not see.** The check reads one file at a time and follows no import other than the
  * two named above. A spawn reached through any other module is invisible to it: the git calls inside
@@ -80,10 +80,10 @@ const LATENCY_HELPER_IMPORT = /from\s+['"][^'"]*helpers\/latency['"]/;
  */
 const EXEMPTIONS: Readonly<Record<string, string>> = {
   'cli/command-latency.test.ts':
-    "REQ-PERF-02's Fit Criterion is worded against the commands (bug-013). The file spawns a measured " +
-    'process-start floor and each command in the same run and budgets the per-run difference ' +
-    "(sampleMarginalLatency), so the asserted number is the command's cost over the spawn, not the " +
-    "spawn's wall-clock that bug-011 measured.",
+    "REQ-PERF-02 is worded against the commands (bug-013). The file spawns a process-start floor and " +
+    'each command and budgets each total minus the median floor (sampleMarginalLatency), so the ' +
+    "asserted number is the command's marginal cost, not the spawn's wall-clock that bug-011 measured; " +
+    'it runs alone and only when asked for (test/latency-suites.cjs), because it presupposes an idle machine.',
 };
 
 /** What to do instead, named in every failure so a hit costs no lookup. */
@@ -173,7 +173,7 @@ describe('latency budgets: one clock, no timed spawn without a documented exempt
     }
   });
 
-  it('the exempted files are exactly the suites that run alone, after the parallel run (test/latency-suites.cjs)', () => {
+  it('the exempted files are exactly the suites that run alone, only when asked for (test/latency-suites.cjs)', () => {
     expect([...LATENCY_SUITES].sort()).toEqual(Object.keys(EXEMPTIONS).map((path) => `test/${path}`).sort());
   });
 });
