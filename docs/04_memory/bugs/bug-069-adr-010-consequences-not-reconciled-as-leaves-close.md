@@ -2,7 +2,7 @@
 id: "bug-069-adr-010-consequences-not-reconciled-as-leaves-close"
 type: bug
 title: "adr-010's Consequences state in two places that `@types/node` is still pinned `^18.19.130`, and nothing reconciles an accepted ADR's Consequences as its cascade leaves close"
-status: in-progress
+status: in-review
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
