@@ -20,7 +20,8 @@ adr-001 states "Node.js 18+ … per dna.yaml" in the present tense; adr-010's Co
 ## Acceptance Criteria
 
 - (characterization) `adr-001:32` gains a dated Correction note (dl-001 precedent) naming dna.yaml's 22.12+ and adr-010; `adr-010:195-196,236` gain a Revision note naming `^22.20.4` (`package.json:70`).
-- (characterization) no status change; `grep -n "Node.js 18+\|still \`\^18\`"` hits only inside the correction notes.
+- (characterization) no status change; `grep -n "Node.js 18+"` on adr-001 and `grep -n "\^18"` on adr-010 hit only the sentences the notes correct (adr-001's stack parenthetical; adr-010's *Neutral* bullet `^18.19.130` and closing list) and the notes themselves. adr-010's other `Node.js 18+` hits are historical quotes and stay. *(AC amended at design, 2026-10-02: the original grep also hit those quotes and missed `^18.19.130`.)*
+- (red-first, approver ruling 2026-10-02) `adr` is `amendable: true` in `.wingfoil/memory.yaml` (version 2.2, after task-153's 2.1) and in the `wingfoil init` scaffold, so the two notes are committed with `memory amend`. `spec-001` records the change in a dated Revision note.
 
 ## Implementation Notes
 
@@ -93,3 +94,90 @@ may not take. So the edit is not made, and the task stops after design for an ap
   the text above is left as the record of 2026-09-21."
 
 **AC classification**: both remain characterization (documentation; no behaviour). No red phase.
+
+### design, resumed — approver ruling (2026-10-02): option 1
+
+The approver chose option 1. `adr` becomes `amendable: true` for dated correction and Revision notes,
+here and in the `wingfoil init` scaffold; a changed decision is still a new ADR (`dl-108` A3).
+`memory.yaml` goes to 2.2, after task-153's 2.1 (same batch; the coordinator resolves the version-line
+conflict at merge). The two ADR notes and the `spec-001` Revision note are pending amendments, left
+uncommitted for the coordinator's `memory amend`. AC2 is amended as found above, and AC3 records the
+ruling (approver to confirm the AC text at review).
+
+No code path hard-codes the refusal: `src/core/memory-amend.ts` `requireAmendableType` reads the
+committed entry (`grep -rn "'adr'" src --include=*.ts` → only `MEMORY_TYPES` and an unrelated
+`relevance.ts` link field). So the change is configuration plus the scaffold constant.
+
+AC classification:
+
+| AC | class | why |
+|----|-------|-----|
+| 1 — the two notes | characterization | documentation; pinned by the greps below |
+| 2 — no status change, greps | characterization | documentation |
+| 3 — `adr` amendable here and in the scaffold | red-first | the refusal existed; the tests fail on it |
+
+AC1 cites `package.json:70` for `@types/node`; it is line 71 today
+(`grep -n '"@types/node"' package.json` → `71`). The note cites no line offset (`dl-075`).
+
+### red
+
+`3873d3a7`. New `test/core/adr-amendable.test.ts`: this repository's `memory.yaml` declares `adr`
+`amendable: true`, keeps task-127's values on every other type, and is version ≥ 2.2; with that file,
+amending an `accepted` adr writes one `wf(adr): amend <id> [accepted → accepted]` commit.
+`test/cli/fresh-init-transitions.test.ts`: on a fresh Scrum and Kanban project the adr amend now
+succeeds instead of being refused. `test/core/memory-amend.test.ts`: its fixture mirrors this
+repository's file, so `adr` there declares `true`, a new adr-amend case is added, and the
+"declares amendable: false" refusal and the committed-not-working-tree case move to a `release` entry.
+That file stays green throughout: the core reads its fixture's config, so it pins behaviour that
+already exists.
+
+`npx jest test/core/adr-amendable.test.ts test/core/memory-amend.test.ts test/cli/fresh-init-transitions.test.ts`
+→ 5 failed, 52 passed. The failures were the two config assertions, the repo-config amend
+(`type 'adr' is not amendable`), and the two fresh-init templates.
+
+### green
+
+`d6617861`. `.wingfoil/memory.yaml` 2.0 → 2.2, `adr: amendable: true`, with the ruling in the
+comment. `src/storage/templates.ts` `MEMORY_AMENDABLE.adr = true`. The `doc-versioning` directive no
+longer says an `adr` is not edited in place (same class; it declares no `version:`, so no bump).
+`docs/cli-reference.md` `memory amend`: the scaffold's amendable list and the refusal example now use
+`release`. Two test corrections were found on the first green run: the repo-config test's `sard_ref`
+must be a string (a list on a required field not in `lists` is missing since task-168), and the
+scaffold's `adr` runs the default machine, so its amend reads `[approved → approved]`.
+Re-run: 2 suites, 24 tests passed.
+
+### refactor (gates run WITH the pending amendments in the working tree)
+
+- `npm run test:coverage` → exit 0, 209 suites / 3528 tests passed. All files: 98.86 % statements,
+  95.45 % branches, 95.29 % functions, 99.57 % lines. The only `src/` change is one boolean literal,
+  so coverage cannot regress. It includes `test/docs/name-resolvability.test.ts` (new backticked
+  names in the ADRs and `spec-001`) and `test/docs/cli-reference.test.ts`.
+- `npm run lint` → 0 · `npm run docs:api` → 0 · `npx tsc --noEmit -p tsconfig.json` → 0 ·
+  `npx tsc -p tsconfig.build.json --noEmit` → 0.
+
+### review (self, reviewer)
+
+- AC1: `adr-001` carries the dated Correction block below the Decision paragraph, naming
+  `dna.yaml`'s `22.12+`, `adr-010` and `spec-015` §1. `adr-010` carries a dated Revision note at the
+  end of Process Notes naming `^22.20.4` (`task-087`), `task-155` and `spec-015` §1's Revision of
+  2026-10-02. It also covers the other closed cascade leaves: `bug-046`/`bug-047` (task-155),
+  `bug-048` (closed at v0.3 triage, `533760d8`). That is `bug-069`'s same-class point: all four
+  leaves are now closed, so no more stale sentences are left to accrue (`grep -H "^status:"
+  docs/04_memory/bugs/bug-04[6-9]*.md` → closed ×4).
+- AC2: `grep -n "Node.js 18+" adr-001` → `:32` (the corrected sentence), `:34`, `:37` (the note);
+  `grep -n "\^18" adr-010` → `:195`, `:236` (the corrected sentences), `:269-271` (the note).
+  `git diff -- docs/04_memory/design/adrs | grep "^[-+]status"` → nothing. Both ADRs are
+  insertions only (24 lines).
+- AC3: as red/green above.
+- Agent docs: `CLAUDE.md` and `.wingfoil/README.md` say nothing about `adr` amendability
+  (`grep -n -i "amendable" CLAUDE.md .wingfoil/README.md` → nothing). Candidate `align-agent-docs`
+  finding: `CLAUDE.md` §5.1 lists five operations and never mentions `memory amend`.
+
+### Pending amendments (approver)
+
+Uncommitted in the worktree. Commit them with `memory amend` once `d6617861` (memory.yaml 2.2) is at
+HEAD, since amend reads `amendable` from HEAD:
+
+- `spec-001-memory-yaml-schema` — `--reason "adr becomes amendable for dated correction notes (approver ruling 2026-10-02, task-158): the amendable paragraph and the adr worked example follow memory.yaml 2.2, with a dated Revision note. A changed decision is still a new ADR, per dl-108 A3."`
+- `adr-001-git-backed-storage` — `--reason "Dated Correction note: the stack parenthetical's Node.js 18+ reads Node.js 22.12+, per adr-010 and spec-015 section 1. The storage decision is unchanged (bug-054, task-158)."`
+- `adr-010-node-22-runtime-floor` — `--reason "Dated Revision note: the Consequences and the closing list describe bug-046 to bug-049 as open. All four are closed: @types/node is ^22.20.4 (task-087), and the floor definition and the equality guard came with task-155 (spec-015 section 1, Revision 2026-10-02). The decision is unchanged (bug-069, task-158)."`
