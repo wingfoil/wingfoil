@@ -2,7 +2,7 @@
 id: bug-204-spec-004-spec-008-and-spec-015-name-paths-and-keys-that-do-not-exist
 type: bug
 title: "spec-004, spec-008 and spec-015 name paths and keys that do not exist"
-status: open
+status: triaged
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: ""            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
