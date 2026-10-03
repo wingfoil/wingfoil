@@ -4,7 +4,7 @@
  * the refusal of fewer than REQ-PERF's 20 runs, and the run-aligned shape of a marginal measurement.
  * Asserts nothing about elapsed values, so it reads no clock of its own and cannot flake on load.
  */
-import { describeSamples, MIN_RUNS, P95_BUDGET_MS, p95, RUNS, sampleLatency, sampleMarginalLatency } from './helpers/latency';
+import { describeSamples, median, MIN_RUNS, P95_BUDGET_MS, p95, RUNS, sampleLatency, sampleMarginalLatency } from './helpers/latency';
 
 describe('latency helper — REQ-PERF measurement conditions in code', () => {
   it('declares the SARD conditions: >= 20 runs, 25 taken, 1,000 ms budget', () => {
@@ -42,7 +42,13 @@ describe('latency helper — REQ-PERF measurement conditions in code', () => {
     samples.forEach((sample) => expect(sample).toBeGreaterThanOrEqual(0));
   });
 
-  it('sampleMarginalLatency takes the floor first in every run, then each call, and aligns the differences by run', async () => {
+  it('median is the middle sample, or the mean of the two middle ones', () => {
+    expect(median([5, 1, 3])).toBe(3);
+    expect(median([4, 1, 3, 2])).toBe(2.5);
+    expect(() => median([])).toThrow(/empty/);
+  });
+
+  it('sampleMarginalLatency takes the floor first in every run, then each call, and subtracts the MEDIAN floor from every total', async () => {
     const order: string[] = [];
     const measured = await sampleMarginalLatency(
       MIN_RUNS,
@@ -55,7 +61,7 @@ describe('latency helper — REQ-PERF measurement conditions in code', () => {
     expect(measured.total).toHaveLength(2);
     measured.marginal.forEach((marginal, call) => {
       expect(marginal).toHaveLength(MIN_RUNS);
-      marginal.forEach((value, run) => expect(value).toBeCloseTo(measured.total[call]![run]! - measured.floor[run]!, 9));
+      marginal.forEach((value, run) => expect(value).toBeCloseTo(measured.total[call]![run]! - median(measured.floor), 9));
     });
     await expect(sampleMarginalLatency(MIN_RUNS - 1, () => undefined, [])).rejects.toThrow(/>= 20 runs/);
   });
