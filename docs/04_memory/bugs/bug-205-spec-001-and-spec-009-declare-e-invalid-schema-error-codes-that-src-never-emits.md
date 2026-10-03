@@ -2,7 +2,7 @@
 id: bug-205-spec-001-and-spec-009-declare-e-invalid-schema-error-codes-that-src-never-emits
 type: bug
 title: "spec-001 and spec-009 declare E_INVALID_* schema error codes that src never emits"
-status: open
+status: triaged
 severity: "medium"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: ""            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
