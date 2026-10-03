@@ -91,10 +91,22 @@ tmpl_version: 260703
 
 - `grep -rn -i conventions docs/02_requirements/02_bdd/features/p2-dna/` → nothing;
   `grep -n -i conventions docs/02_requirements/01_user_story_map/01_init-migrate.md` → nothing.
-- Same class, outside this task's ACs and not edited (upstream vision, reported for the coordinator):
-  `docs/01_vision/01_product-brief.md:51` lists DNA as "Modules, tech stack, conventions, resource paths";
-  `docs/01_vision/05_journeys.md:52` "DNA reflects reality: actual modules, tech stack, conventions". US-0B-03
-  now diverges from the journey line it downcasts.
+- Same class, outside this task's ACs and not edited (upstream vision; the coordinator files a follow-up).
+  `grep -rn -i conventions docs/01_vision` finds six lines that describe the DNA with the retired section:
+  - `docs/01_vision/01_product-brief.md:51` — "Modules, tech stack, conventions, resource paths";
+  - `docs/01_vision/05_journeys.md:52` — "DNA reflects reality: actual modules, tech stack, conventions";
+  - `docs/01_vision/06_features.md:43` — P2 pillar intro, "(modules, tech stack, conventions, team structure …)";
+  - `docs/01_vision/06_features.md:50` — the canonical P2.4 feature row, "(modules, tech stack, team members,
+    conventions)";
+  - `docs/01_vision/08_mvp-canvas.md:30` — "Project DNA … (modules, tech stack, conventions)";
+  - `docs/01_vision/08_mvp-canvas.md:70` — "Tech stack, modules, conventions, team".
+  The remaining hits (persona pains, journeys 2–4, "team conventions" in the canvas) use "conventions" for the
+  team's rules — what directives now carry — and are not stale. US-0A-05 and US-0B-03 now diverge from the
+  vision lines they downcast until that follow-up lands.
+- Review fix (coordinator, 2026-10-03): the `00_index.md` header no longer attributes `by-release/*.json` to
+  `build-backlog`, which names neither it nor `requirements:` (`release-planning.yaml` build-backlog phase); the
+  field is required by `define-scope`'s check and `initial-design.yaml`'s, and the JSON was a starting
+  suggestion in `release-planning-rel-v0.2-plan`.
 
 ### Pending amendments (approver)
 
