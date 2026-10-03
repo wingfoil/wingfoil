@@ -220,8 +220,11 @@ That reads: `draft` → (`submit`) → `pending` → (`approve`) → `approved`,
 back to `draft`. `deprecated` is always reachable from any state with `memory deprecate` and is never
 listed.
 
-The `bug` type in the scaffold carries a commented-out `states:` block of its own. Uncomment it to see
-how a type overrides the default; the states in it are an example, not a recommendation.
+From v0.3, the `bug` type in the scaffold carries a commented-out `states:` block of its own. Uncomment
+it to see how a type overrides the default; the states in it are an example, not a recommendation.
+Commit the edited `memory.yaml` before running Memory commands: they read it as committed, not from
+your working tree. Existing `bug` documents whose status is not a state of the new machine (for
+example `pending` or `approved`) are no longer in a valid state once it applies.
 
 ### 5.2 Add your own type
 
@@ -256,8 +259,8 @@ status: draft
 <!-- As a <user>, I want <goal>, so that <benefit>. -->
 ```
 
-A type may not be named `directive`, `dna` or `workflow`: those names mark configuration commits
-(`wf(dna): …`), so `memory.yaml` fails validation if a type takes one.
+From v0.3, a type may not be named `directive`, `dna` or `workflow`: those names mark configuration
+commits (`wf(dna): …`), so `memory.yaml` fails validation if a type takes one.
 
 **Commit both files** before using the type. Until you do, `memory add --type story` fails and tells you
 the type is defined in the working tree but not committed.

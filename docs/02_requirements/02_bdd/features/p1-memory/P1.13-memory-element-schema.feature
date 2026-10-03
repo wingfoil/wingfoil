@@ -1,5 +1,5 @@
 Feature: P1.13 (US-0A-04) - Memory Element Schema (memory.yaml)
-  As Morgan, I want to define each element type (path pattern, states, transitions) in
+  As Morgan, I want to define each element type (path pattern, state machine: sequence, gates, waiting) in
   .wingfoil/memory.yaml so per-type state machines are enforced.
 
   Background:

@@ -122,5 +122,19 @@ configuration, not Memory`.
 
 Uncommitted in the worktree; the gates above ran with them.
 - `spec-001-memory-yaml-schema` — `--reason "Reserves the type names directive, dna and workflow (bug-177) and records that REQ-STATE-08 and its P1.13 scenario now name this spec's default machine, plus dl-072's scaffold shape (task-153)."`
-- `spec-010-memory-frontmatter-schema` — `--reason "The illustrative task frontmatter matches the task template and says it is an example (bug-196); the status rows use the sequence encoding, not states.initial or states.values (task-153)."`
-- `spec-011-storage-layout` — `--reason "The memory.yaml contract names the sequence/gates/waiting encoding, the defaults block and the init scaffold's shape (bug-053, dl-072); the dna.yaml contract drops conventions, which spec-002 removed (task-153)."`
+- `spec-010-memory-frontmatter-schema` — `--reason "The illustrative task frontmatter matches the task template and says it is an example (bug-196); the status rows use the sequence encoding, not states.initial or states.values, and state memory.add's initial status as the declared rule: the head of the type's own or default machine (task-153)."`
+- `spec-011-storage-layout` — `--reason "The memory.yaml contract names the sequence/gates/waiting encoding, the defaults block and the init scaffold's shape (bug-053, dl-072); the dna.yaml contract cell and the layout tree's dna.yaml line drop conventions, which spec-002 removed (task-153)."`
+
+### review fixes (2026-10-03, coordinator: approve with fixes; no re-submit)
+
+- F1: `spec-011`'s layout tree line for `dna.yaml` dropped `conventions` too (now `paths`); its Revision
+  note covers both places; `--reason` updated above.
+- F2: `docs/user-guide.md` §5.1/§5.2 paragraphs prefixed "From v0.3,"; the §5.1 one also says to commit
+  the edited `memory.yaml` (Memory commands read it at `HEAD`, task-247) and that `bug` documents in a
+  state outside the example machine (e.g. `pending`, `approved`) stop being in a valid state.
+- Nit: P1.13 feature header names the `sequence`/`gates`/`waiting` encoding.
+- `spec-010` `status` row: the initial status is stated as the declared rule — head of the type's own
+  machine, or of `defaults.states` (the built-in default when none is declared) — and says `memory.add`
+  writes `draft` literally today (`grep -n "'draft'" src/memory/add.ts` → line 204), tracked separately.
+- `npx jest test/docs test/memory/element-schema.test.ts test/storage/templates.test.ts` → 84 passed;
+  name-resolvability 0 stale entries, 77 untriaged (unchanged).
