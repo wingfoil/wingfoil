@@ -61,8 +61,9 @@ ACs need all three to change; the edits are **pending amendments** (below), left
    "system clock"; the `determinism` directive forbids wall-clock reads in context-building paths.
    `memory add` is a write path, but the date still reaches a durable id, so it is read **once**,
    through `git var GIT_AUTHOR_IDENT` (`readAuthorDate`, `src/memory/add.ts`): git answers with
-   `GIT_AUTHOR_DATE` when set, in any format git parses, otherwise the clock. The add commit is then
-   recorded with that same `<seconds> <offset>` (`GIT_AUTHOR_DATE` in the commit's env), so the id and
+   `GIT_AUTHOR_DATE` when set and parsable, otherwise the clock. The add commit is then recorded with
+   that same instant, passed as `@<seconds> <offset>` in the commit's `GIT_AUTHOR_DATE` (corrected at
+   review, fix 1: the bare pair is re-parsed by git only from 9 digits of seconds up), so the id and
    its commit cannot disagree and a run is reproducible by fixing one variable. This is the AC's
    "injectable seam": tests fix it with `GIT_AUTHOR_DATE`. The read happens only when the pattern
    has `{date}`. UTC is kept (`2026-09-29T23:30-02:00` → `20260930`).
@@ -170,9 +171,34 @@ Same-class search in the files touched: `git grep -n '\[ \\\\t\]\*' <rev> -- src
 hits at `243f8f05` (the private setter and `writtenFields`, both in `src/memory/add.ts`), none at
 `HEAD`, so no indentation-tolerant key match is left on the add path.
 
+### Review fixes (coordinator review, 2026-10-03: approve with fixes)
+
+1. **The pinned author date with few digits of seconds.** `readAuthorDate` returns git's bare
+   `<seconds> <offset>`, and the add commit was given it as `GIT_AUTHOR_DATE` unchanged; git re-parses
+   that form as a timestamp only from 9 digits of seconds up. With `GIT_AUTHOR_DATE='@0 +0000'` the id
+   was built (`bug-19700101-…`), then `git commit` died with `fatal: invalid date format: 0 +0000`,
+   exit 1, the new file left staged. Red-first: `memory-add-date-author.test.ts` "pins an epoch date
+   with few digits too (@0 +0000 → 19700101), leaving nothing staged" → `npx jest
+   test/core/memory-add-date-author.test.ts` 1 failed / 14 passed, the failure printing that `fatal:`.
+   Fix: the commit gets `@<seconds> <offset>` (`src/core/index.ts`) → 15 passed. Checked by hand with
+   the built CLI on a scratch repository (`bug-{date}-{author}-{n:2}`, `GIT_AUTHOR_DATE='@0 +0000'`) →
+   `bug-19700101-ada-01`, exit 0, `git status --porcelain` empty. Design decision 1's wording is
+   corrected (it said "any format git parses"). The other failure paths this task adds — an
+   unparsable `GIT_AUTHOR_DATE`, an author name that slugs to nothing — fail before anything is
+   written; the date one asserts `git status --porcelain` is empty.
+2. **`docs/cli-reference.md`**: the exit-1 list names the two new failures with their messages, and
+   `{date}` is "today (UTC)". The pending `spec-008` §10 amendment gains the same two rows. Messages
+   checked with the built CLI: `error: value for token {author} is empty once the git author name
+   "李明" is slugged` and `error: E_GIT_READ_FAILED: git var GIT_AUTHOR_IDENT failed in <root>: fatal:
+   invalid date format: not a date`, both exit 1.
+
+Gates after the fixes: `npx jest test/core/memory-add test/memory test/validation test/docs
+test/cli/memory-add-set.integration.test.ts` → 43 suites / 713 tests passed; `npm run -s lint`,
+`npm run -s docs:api`, both `tsc` → exit 0.
+
 **Pending amendments (approver)** — edited in the worktree, uncommitted, for `memory amend`:
 - `spec-001-memory-yaml-schema` — `--reason "task-163: the {date}, {author} and {n:N} placeholder rows state what memory add implements: {date} is the UTC date of the add commit's author date (GIT_AUTHOR_DATE or the clock), {author} the slugged author name, {n} pads to three digits and {n:N} to N; counter step 3 drops its not-implemented note (bug-158, bug-176)."`
-- `spec-008-cli-grammar` — `--reason "task-163: §10 gives --set date and --set author their own refusal messages, each naming where the value comes from, since memory add now fills both tokens (bug-158)."`
+- `spec-008-cli-grammar` — `--reason "task-163: §10 gives --set date and --set author their own refusal messages, each naming where the value comes from, since memory add now fills both tokens, and its error table gains the two exit-1 failures those tokens add: an author name that slugs to nothing and a GIT_AUTHOR_DATE git cannot parse (bug-158)."`
 - `spec-009-validation-strategy` — `--reason "task-163: §1's character-class bullet points to spec-001's {slug} row instead of restating the rule, which closes the spec-009 half of dl-107 Action 1 (bug-157)."`
 
 **Merge order.** `task-162` also edits `spec-001` and merges first; this amendment touches the
