@@ -2,7 +2,7 @@
 id: bug-210-docs-agents.md-lists-none-of-the-not-applicable-or-committed-at-head-refusals
 type: bug
 title: "docs/agents.md lists none of the not-applicable or committed-at-HEAD refusals"
-status: open
+status: triaged
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: ""            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
