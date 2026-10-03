@@ -328,7 +328,7 @@ export function prepareMemoryTransitionAtRev(
   if (expectedType !== undefined && type !== expectedType) {
     return coreErr({
       code: 'VALIDATION',
-      message: `${id}, which is a '${String(type)}', not an '${expectedType}': only an element of the same type can be ${op}d`,
+      message: `${id}, which is of type '${String(type)}', not of type '${expectedType}': only an element of the same type can be ${op}d`,
     });
   }
   if (typeof type !== 'string' || memoryYaml.types[type] === undefined) {

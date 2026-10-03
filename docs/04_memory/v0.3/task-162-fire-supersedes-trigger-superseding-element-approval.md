@@ -244,7 +244,7 @@ Not changed, on purpose:
 All five are approved tech-specs, left uncommitted in the worktree for `memory amend`:
 
 - `spec-001-memory-yaml-schema` — `--reason "task-162 (dl-065 Q1.1): the supersedes: trigger is stated after the deprecated-is-implicit paragraph: approving an element into the waiting state whose next state is superseded moves the element its committed supersedes: names, of the same type and in that state, to superseded in a commit of its own; Revision note dated 2026-10-02."`
-- `spec-010-memory-frontmatter-schema` — `--reason "task-162 (dl-065 Q2, Q3, Q1.1): the memory.deprecate row says the verb writes deprecated on every type, never superseded; the memory.approve row and a new paragraph say the supersedes: trigger writes superseded in a finalize commit, and that superseded to deprecated stays legal; Revision note dated 2026-10-02."`
+- `spec-010-memory-frontmatter-schema` — `--reason "task-162 (dl-065 Q2, Q3, Q1.1): the memory.deprecate row says the verb writes deprecated on every type, never superseded; the memory.approve row and a new paragraph say the supersedes: trigger writes superseded in a finalize commit, and that superseded to deprecated stays legal; the audit paragraph's exactly-one-commit sentence names the finalize commit that follows such an approve; Revision note dated 2026-10-02."`
 - `spec-008-cli-grammar` — `--reason "task-162 (dl-065 Q1.1): the finalize row names the supersedes: trigger as an emitter, and a paragraph gives the trigger's commit, with no Approver: line and a Reason: citing the approve sha; no verb is added; Revision note dated 2026-10-02."`
 - `spec-004-mcp-surface-contract` — `--reason "task-162 (dl-065 Q3, Q1.1): section 4.3 says state-transition verbs where it said approver-gated, in the bracket sentence and the dl-054 note, and item 2 names the one approve that makes two commits; Revision note dated 2026-10-02."`
 - `spec-006-core-domain-api` — `--reason "task-162 (dl-065 Q1.1): section 7 step 5 says where an approve's supersedes: trigger decides the superseded element (at step 3's commit, before any write) and that it gets a second commit; Revision note dated 2026-10-02."`
@@ -257,3 +257,31 @@ All five are approved tech-specs, left uncommitted in the worktree for `memory a
    before the first write.
 3. **D3**: on a type without a `superseded` edge, a non-empty `supersedes:` is not read rather than
    refused. `supersedes:` holds one id, and a list is refused.
+
+### Review fixes (coordinator review, APPROVE WITH FIXES)
+
+Not re-submitted; the task stays `in-review`.
+
+1. **`spec-010` disagreed with `spec-004`.** `spec-010`'s audit paragraph said every approve "is
+   exactly one commit", while the `spec-004` item 2 amendment names the two-commit approve. The
+   sentence now adds "(an approve that fires the `supersedes:` trigger is followed by its own
+   `finalize` commit, below)". The Revision note and the proposed `--reason` above say so. This is
+   still a pending amendment, left uncommitted.
+2. **Recovery after a git failure.** The message printed the `finalize` message JSON-escaped, with
+   literal `\n`, so it could not be pasted into git. It now ends with plain lines: `git commit --only
+   -F - -- <path> <<'EOF'`, the message, and `EOF`. The hook test now checks that the message carries
+   no `\n` escape. It then removes the hook, runs the printed command with `sh -c`, and asserts that
+   the resulting commit's message is the exact `finalize` message, that the commit holds only that
+   file, that the working tree is clean, and that `verifyTransitionConsistency` returns `[]`.
+   `docs/cli-reference.md` documents this one exit-`1` case that leaves the approve commit in place,
+   and shows the command.
+3. **Article in the type refusal.** "which is a 'tech-spec', not an 'adr'" read "not an 'tech-spec'"
+   the other way round. It is now "which is of type 'tech-spec', not of type 'adr'".
+4. **Same class, user docs.** `docs/cli-reference.md` now says `supersedes:` is read as committed, so
+   a successor that names an element which can no longer be superseded (for example a `deprecated`
+   one) is refused every time. The fix is reject to `draft`, edit `supersedes:`, then submit and
+   approve again.
+
+Gates: `npx jest test/docs test/core/memory- test/memory` → 49 suites / 857 tests passed. `npm run
+-s lint`, `npm run -s docs:api`, `npx tsc --noEmit -p tsconfig.json` and `npx tsc -p
+tsconfig.build.json --noEmit` all exit 0.

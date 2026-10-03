@@ -1217,8 +1217,9 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
       ...finalized.error,
       message:
         `${id} was approved in ${committed.value}, but the commit moving ${superseded.id} to ${superseded.to} failed: ` +
-        `${finalized.error.message.trim()}. Its status is written in the working tree (${superseded.path}); commit that ` +
-        `file alone with the message: ${JSON.stringify(finalizeMessage)}`,
+        `${finalized.error.message.trim()}. Its status is written in the working tree (${superseded.path}). ` +
+        `Complete the pair by committing that file alone, from the repository root:\n\n` +
+        `git commit --only -F - -- ${superseded.path} <<'EOF'\n${finalizeMessage}\nEOF`,
     });
   }
   return coreOk(

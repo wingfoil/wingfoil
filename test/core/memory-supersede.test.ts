@@ -239,7 +239,7 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
       writeFixtureFile(repo, 'docs/specs/spec-1-old.md', doc({ id: 'spec-1-old', type: 'tech-spec', status: 'approved' }));
       commitAll(repo, 'seed spec');
       reseedB('"spec-1-old"');
-      await expectRefused(/spec-1-old, which is a 'tech-spec', not an 'adr'/, 'VALIDATION');
+      await expectRefused(/spec-1-old, which is of type 'tech-spec', not of type 'adr'/, 'VALIDATION');
     });
 
     it.each(['draft', 'pending', 'superseded', 'deprecated'])('an element in %s, not accepted', async (status) => {
@@ -326,6 +326,19 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
     expect(result.error.message).toContain(`adr-2-new was approved in ${approveSha}, but the commit moving adr-1-old to superseded failed`);
     expect(result.error.message).toContain('wf(adr): finalize adr-1-old [accepted → superseded]');
     expect(readFileSync(join(repo, ADR_A), 'utf-8')).toMatch(/^status: superseded/m);
+
+    // The recovery is paste-ready: plain lines, no JSON escapes, and running it completes the pair.
+    expect(result.error.message).not.toContain('\\n');
+    const command = result.error.message.slice(result.error.message.indexOf('git commit --only -F - -- '));
+    expect(command.split('\n')[0]).toBe(`git commit --only -F - -- ${ADR_A} <<'EOF'`);
+    rmSync(hook);
+    execFileSync('sh', ['-c', command], { cwd: repo });
+    expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe(
+      `wf(adr): finalize adr-1-old [accepted → superseded]\n\nReason: superseded by adr-2-new (its supersedes: field), approved in ${approveSha}.`,
+    );
+    expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD'])).toBe(ADR_A);
+    expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    expect(verifyTransitionConsistency(repo, ADR_A)).toEqual([]);
   });
 
   it('an uncommitted edit of the approved element is refused as before, with the trigger firing at HEAD', async () => {
