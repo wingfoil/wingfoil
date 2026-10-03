@@ -2,7 +2,7 @@
 id: bug-203-color-no-color-and-no-color-have-no-effect-because-the-cli-emits-no-colour-at-all
 type: bug
 title: "--color, --no-color and NO_COLOR have no effect because the CLI emits no colour at all"
-status: triaged
+status: planned
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
