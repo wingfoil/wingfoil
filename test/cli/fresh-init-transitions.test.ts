@@ -182,11 +182,13 @@ describe('a freshly `wingfoil init`-ed project runs every Memory transition verb
 
 /**
  * task-127, approver ruling (c) of 2026-10-01: the `init` scaffold declares `amendable` per type —
- * `true` for `tech-spec`, `decision-log`, `task` and `bug`, `false` for `adr` (`dl-108` A3),
- * `release` and `release-line` — so `memory amend` works on a fresh project without hand edits.
+ * `true` for `tech-spec`, `decision-log`, `task` and `bug`, `false` for `release` and `release-line`
+ * — so `memory amend` works on a fresh project without hand edits. task-158 (approver ruling
+ * 2026-10-02): `adr` is `true` too, for dated correction and Revision notes; a changed decision is
+ * still a new ADR (`dl-108` A3).
  * Driven through the real `dist/cli.js`, like the suite above.
  */
-describe('a freshly `wingfoil init`-ed project can amend an approved tech-spec, and not an adr (task-127)', () => {
+describe('a freshly `wingfoil init`-ed project can amend an approved tech-spec (task-127) and an accepted adr (task-158)', () => {
   for (const def of TEMPLATES) {
     it(`template ${def.name}`, () => {
       const repo = makeTempGitRepo();
@@ -213,10 +215,12 @@ describe('a freshly `wingfoil init`-ed project can amend an approved tech-spec, 
         expect(git(repo, ['status', '--porcelain']).trim()).toBe('');
 
         const adr = drive('adr', 'approve');
-        writeFileSync(join(repo, adr.path), `${readFileSync(join(repo, adr.path), 'utf-8')}\nA change.\n`, 'utf-8');
-        const refused = wingfoil(repo, 'memory', 'amend', adr.id, '--reason', 'a change');
-        expect(refused.status).toBe(1);
-        expect(refused.stderr).toContain("type 'adr' is not amendable: its memory.yaml entry declares amendable: false");
+        writeFileSync(join(repo, adr.path), `${readFileSync(join(repo, adr.path), 'utf-8')}\n> **Correction (2026-10-02) — a fact.**\n`, 'utf-8');
+        const adrBefore = commitCount(repo);
+        const adrAmended = wingfoil(repo, 'memory', 'amend', adr.id, '--reason', 'a correction note');
+        expect([adrAmended.status, adrAmended.stderr]).toEqual([0, '']);
+        expect(commitCount(repo) - adrBefore).toBe(1);
+        expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe(`wf(adr): amend ${adr.id} [accepted → accepted]`);
       } finally {
         removeTempDir(repo);
       }
