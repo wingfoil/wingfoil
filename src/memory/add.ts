@@ -66,7 +66,8 @@ export function hasNumericToken(idPattern: string): boolean {
  * `<seconds> <offset>` pair (`1790731800 -0200`): `GIT_AUTHOR_DATE` when it is set, in any format git
  * accepts, otherwise the system clock — read ONCE, through `git var GIT_AUTHOR_IDENT` (task-163,
  * `bug-158`). `memory add` builds `{date}` from it ({@link formatIdDate}) and records the add commit
- * with this same author date, so the id and the commit cannot disagree, and a caller (a test, a
+ * with this same author date (passed back as `@<seconds> <offset>`: git reads a bare pair as a
+ * timestamp only from 9 digits of seconds up), so the id and the commit cannot disagree, and a caller (a test, a
  * replay) fixes the date the way it fixes any git author date.
  *
  * `identity` is passed to git as `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`: the identity was already

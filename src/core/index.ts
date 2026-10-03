@@ -732,7 +732,9 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
 
     const { path, sha } = writeMemoryEntry(root, pathPattern, pathValues, content, message, {
       author: identity.value,
-      ...(date === undefined ? {} : { env: { GIT_AUTHOR_DATE: date } }),
+      // `@`: git reads a bare `<seconds> <offset>` as a timestamp only from 9 digits of seconds up
+      // (`0 +0000` is "invalid date format"); `@<seconds> <offset>` is a timestamp at any width.
+      ...(date === undefined ? {} : { env: { GIT_AUTHOR_DATE: `@${date}` } }),
     });
     const leaked = committedScopeError(root, sha, targetPath, content);
     if (leaked) return leaked;
