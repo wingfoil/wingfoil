@@ -2,7 +2,7 @@
 id: bug-207-four-cli-suites-still-spawn-the-cli-through-a-local-spawnsync-instead-of-the-shared-spawn-cli-helper
 type: bug
 title: "Four CLI suites still spawn the CLI through a local spawnSync instead of the shared spawn-cli helper"
-status: open
+status: triaged
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: ""            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
