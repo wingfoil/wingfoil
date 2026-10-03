@@ -62,3 +62,11 @@ every axis"* was an overstatement precisely on this axis.
 
 - capture (`bug-ingest`): raised by `task-067`'s review; scheduled to `v0.3` on the approver's
   instruction, with the *"if possible"* caveat recorded in Notes above.
+- 2026-10-03, `task-154` review: `test/cli/command-latency.test.ts` spawns the three commands on
+  the reference repository. What it **asserts** is each command's marginal cost over a measured
+  process-start floor (total minus the median `--version` floor), at p95 over 25 runs, against
+  1,000 ms. The **total**, which is what the Fit Criterion words ("return in < 1,000 ms", start-up
+  included), is reported but not asserted. Resolution 1 is therefore applied only in part: the
+  deviation from the criterion as written is pending a decision-log (approver ruling, 2026-10-03).
+  The budget presupposes an otherwise idle machine, so the suite runs only when asked for (`npm run
+  test:latency`, or `WINGFOIL_LATENCY=1 npm test`), never from CI or `prepublishOnly`.
