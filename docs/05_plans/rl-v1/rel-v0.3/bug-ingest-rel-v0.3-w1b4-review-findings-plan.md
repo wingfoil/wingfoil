@@ -2,7 +2,7 @@
 id: bug-ingest-rel-v0.3-w1b4-review-findings-plan
 type: plan
 title: "Bug-ingest — rel-v0.3 wave 1 B4 review findings"
-status: active
+status: done
 version: "1.0"
 workflow: "bug-ingest"
 phase: "rel-v0.3-w1b4-review-findings"
@@ -69,3 +69,14 @@ re-run on `main` before filing; each bug's Steps to Reproduce give the command a
   id) vs working tree 2.0 ms / 24.8 ms; `readPathsAtRev` of all paths 118.6 ms (load average ≈ 5).
 - `bug-208` evidence also found 670 pre-`task-152` fixture directories (`wf-storage-clone-*`,
   `wf-storage-cwd-*`) in `/tmp` on this machine, which no sweep reaches.
+- **triage done (2026-10-03)**, on the approver's instruction, with the proposals accepted:
+
+  | Bug | Outcome |
+  |---|---|
+  | `bug-203` | `task-156` |
+  | `bug-204` | `task-165` |
+  | `bug-206` | `task-187` |
+  | `bug-210` | `triaged`, v0.3, no task: the release's `user-docs` phase |
+  | `bug-205`, `bug-207`, `bug-208`, `bug-209`, `bug-211` | `triaged`, v0.4, unabsorbed |
+
+  Each absorbing task names its bug through `memory amend`. Plan complete.
