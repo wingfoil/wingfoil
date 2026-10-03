@@ -8,7 +8,7 @@ kind: "feature"
 priority: "medium"
 tags: ["v0.3", "process", "docs", "testing", "parity"]
 ref: "dl-116"
-bug: []
+bug: ["bug-206"]
 depends_on: ["task-151-check-backticked-name-specs-adrs-requirements-resolves-head"]
 tmpl_version: 260703
 ---
