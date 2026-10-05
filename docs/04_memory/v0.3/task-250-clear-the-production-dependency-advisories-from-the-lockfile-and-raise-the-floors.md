@@ -49,9 +49,87 @@ and `fast-uri` (via `ajv`, fed the server's own schemas) are loaded.
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+### design (architect, 2026-10-05)
+
+- **depends_on:** none (`depends_on: []`), so no upstream Execution Notes to read (dl-015). Related, not a
+  dependency: `task-190` (`backlog`, B3) adds the scheduled audit run; it is given the named script this task
+  adds, `npm run check:audit`, so both call one command.
+- **Specs cited:** `spec-015-packaging-publishing` is `approved` (`grep -n "^status" docs/04_memory/design/specs/spec-015*.md`).
+  §1 names `@hono/node-server@1.19.14` (`>=18.14.1`) as the second package binding `engines.node` — a version the
+  lock refresh changes, so AC 3 needs a §1 edit (pending amendment, below).
+- **Gate design.** `npm audit` needs the registry's advisory database, so it cannot be a Jest assertion without
+  making the suite's verdict depend on the network and the day (determinism directive). The check is therefore
+  split: (1) the live gate, a named npm script `check:audit` = `npm audit --omit=dev --audit-level=high`, run by
+  `.github/workflows/ci.yml`'s packaging gate after `npm ci` (so a regression — including a newly published
+  advisory — fails the build); (2) an offline Jest suite, `test/cli/production-advisories.test.ts`, pinning the
+  script, its wiring in `ci.yml`, the direct floors, and the six `bug-223` packages' locked versions above their
+  advised ranges. Not added to `prepublishOnly` (publish.yml's tag gate also runs it, and `publish-pipeline.test.ts`
+  pins it exactly) nor to `check:lockfile` (offline by design, its header says it never runs npm). Approver to
+  confirm: whether publish.yml's `gate` should also run `check:audit` (not done: adr-009/publish pipeline scope).
+- **AC classification** (confirmed as authored):
+
+  | AC | Class | Why |
+  |---|---|---|
+  | 1 — audit exits 0, pinned by a check | red-first | `npm audit --omit=dev --audit-level=high` exited 1 on `c80167d6` (6 vulnerabilities, 3 moderate, 3 high); no script, no CI step existed. |
+  | 2 — floors exclude advised versions, lock refreshed, `check:lockfile`/overrides/full suite green | characterization | The floor and lock pins are new assertions (they went red, below), but the "stays green" half is pre-existing behaviour. |
+  | 3 — publish metadata tests green; spec-015 reflects version changes | characterization | `publish-metadata.test.ts` already recomputes `engines.node` from the tree. |
+
+### red (2026-10-05)
+
+- Commit `c062467d` `test(cli): task-250 — failing test: …` adds `test/cli/production-advisories.test.ts`.
+- `npx jest test/cli/production-advisories.test.ts` → `Tests: 10 failed, 10 total`: no `check:audit` script,
+  no `ci.yml` step, `js-yaml` floor `^4.3.0`, SDK floor `^1.29.0`, and all six lock entries inside their advised
+  ranges (`@hono/node-server 1.19.14`, `fast-uri 3.1.3`, `hono 4.12.27`, `ip-address 10.2.0`, `js-yaml 4.3.0`, `qs 6.15.3`).
+- Live half: `npm audit --omit=dev --audit-level=high; echo $?` → `6 vulnerabilities (3 moderate, 3 high)`, `1`.
+
+### green (2026-10-05)
+
+- Commit `c8e42ae3` `fix(deps): …`: `npm install js-yaml@^4.3.2 @modelcontextprotocol/sdk@^1.32.0` (npm 11.6.2),
+  then `npm update fast-uri ip-address hono @hono/node-server qs` for the transitive entries the SDK's ranges
+  already admitted fixed. Lock now: `js-yaml 4.3.2`, SDK `1.32.0`, `fast-uri 3.1.8`, `ip-address 10.7.3`,
+  `hono 4.13.13`, `@hono/node-server 2.1.3`, `qs 6.16.0` (`npm ls … --omit=dev`). Same commit: script
+  `check:audit`, the `ci.yml` step, and `test/cli/ci-workflow.test.ts`'s exact step list updated to
+  `['npm ci', 'npm run check:audit', 'npm run prepublishOnly']`.
+- `npm run -s check:audit; echo $?` → `0`. `npm audit --json | jq -c .metadata.vulnerabilities` (dev included) →
+  `{"moderate":2,"high":3,"total":5}`, all dev-only (`baseline-browser-mapping`, `brace-expansion`, `browserslist`,
+  a nested `js-yaml`, `markdown-it`) — out of this task's `--omit=dev` scope; reported as a candidate finding.
+- `npm run -s check:lockfile` → passes (2 overrides pins, 1 npm alias); the `@emnapi` entries survived the install.
+- `@hono/node-server` moved to the 2.x line (the SDK 1.32.0 declares `^1.19.9 || ^2.0.5`); its engines floor is
+  `>=20`, below `commander@15`'s `>=22.12.0`, so `engines.node` is unchanged (`publish-metadata.test.ts` green).
+- MCP SDK API impact (for `task-174`): none observed for what `src/` uses (`server/mcp.js`, `server/stdio.js`,
+  `types.js`): `npx tsc --noEmit -p tsconfig.json` exit 0 and every `test/mcp` suite green in `npm test`. No `src/`
+  change (`git diff c80167d6 --stat -- src` empty). Loaded at run time by `wingfoil mcp`: only `js-yaml` and
+  `fast-uri` of the six (`require.cache` probe after `npm run build`), both now at fixed versions.
+- Commit `0d03fe6d`: `publish.yml`'s Node-floor header named `@hono/node-server@1.19.14`/`>=18.14.1`; corrected to
+  `2.1.3`/`>=20` (same-class drift, `grep -rn 1.19.14 .github`). `npx jest test/cli/publish-pipeline.test.ts` → 23 passed.
+
+### refactor (2026-10-05)
+
+| Gate | Result |
+|---|---|
+| `npm test` | 219 suites, 3899 tests passed |
+| `npm run test:coverage` | 219 suites, 3899 passed; All files 98.88 stmts / 95.54 branches / 95.34 funcs / 99.58 lines (no `src/` change, so no regression vs main) |
+| `npm run lint` | exit 0 |
+| `npm run docs:api` | exit 0 |
+| `npx tsc --noEmit -p tsconfig.json` | exit 0 |
+| `npx tsc -p tsconfig.build.json --noEmit` | exit 0 |
+| `npm run check:lockfile` / `npm run check:audit` | pass / exit 0 |
+
+Gates run with the pending spec-015 amendment in the working tree. No BDD scenario covers dependency advisories
+(`grep -rli "audit\|advisor" docs/02_requirements/02_bdd/features` → none), so none was added.
+
+### review (self, reviewer, 2026-10-05)
+
+- AC 1 met: `check:audit` exits 0 on the committed lock; `ci.yml` runs it and `production-advisories.test.ts` +
+  `ci-workflow.test.ts` pin the wiring. AC 2 met: floors `^4.3.2` / `^1.32.0`, lock refreshed, `check:lockfile`,
+  `lockfile-peer-overrides.test.ts` and the full suite green. AC 3 met: `publish-metadata.test.ts` green; spec-015 §1
+  edited (pending amendment).
+- Same-class fix in touched files: the `publish.yml` header (above). Older Memory documents citing `1.19.14`/`1.29.0`
+  (`adr-010`, `dl-001`, `dl-039`, v0.2 tasks) are historical measurements, left as is.
+
+### Pending amendments (approver)
+
+- `spec-015-packaging-publishing` — §1 `engines.node` example updated to `@hono/node-server@2.1.3` (`>=20`) plus a dated
+  Revision note. Proposed `--reason`: "task-250 (bug-223) refreshed the lock: the MCP SDK 1.32.0 resolves
+  @hono/node-server 2.1.3, whose engines floor is >=20, so section 1 names that version; engines.node stays >=22.12.0,
+  still bound by commander@15."
