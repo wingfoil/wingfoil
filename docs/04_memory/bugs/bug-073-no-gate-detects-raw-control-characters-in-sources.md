@@ -2,7 +2,7 @@
 id: "bug-073-no-gate-detects-raw-control-characters-in-sources"
 type: bug
 title: "No gate detects a raw control character in a tracked text file: lint, both typechecks and the full suite all pass with a NUL byte embedded in a TypeScript source"
-status: planned
+status: in-progress
 severity: "medium"
 release-origin: "v0.2"
 release: "v0.3"
