@@ -8,7 +8,7 @@ kind: "feature"               # REQUIRED — feature | fix (dl-133 Q1 (b)): `fix
 priority: "medium"           # optional — high | medium | low
 tags: ["agents","documentation"]               # optional — additional labels, e.g. [architecture, backend]
 ref: "dl-137"                # optional — backlog item ID, e.g. "TASK-001"
-bug: []                # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
+bug: ["bug-236"]                # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
                        # by release-planning, and a bug ABSORBED into an existing task's Acceptance Criteria because that
                        # task already owns the ground. `bug.sync_state` iterates this list; a bug with no task naming it
                        # here never advances past `triaged` (only a reject to `closed`, dl-123). A single string is still accepted for documents predating dl-045.
