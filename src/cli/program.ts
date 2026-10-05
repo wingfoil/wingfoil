@@ -138,9 +138,11 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
   // (spec-008-cli-grammar §1, bug-001-cli-version-flag) — Commander handles it before any command.
   program.version(readPackageVersion());
   program
-    .option('--format <format>', 'output format (console|json|yaml)', 'console')
+    // Until P5.1.4 gives `console` a human rendering (`dl-043`), the help says what the default prints
+    // and that no output is coloured (spec-008 §2, task-156, `bug-152`, `bug-203`).
+    .option('--format <format>', 'output format (console|json|yaml); console prints indented JSON for now', 'console')
     .option('--verbose', 'emit diagnostic logs to stderr')
-    .option('--no-color', 'disable ANSI colors')
+    .option('--no-color', 'disable ANSI colors (accepted; no output is colored yet)')
     .option('--no-interactive', 'fail on missing args instead of prompting');
 
   // `wingfoil init` is a SPECIAL bootstrap command (task-029, P5.1.1): it runs BEFORE config exists,

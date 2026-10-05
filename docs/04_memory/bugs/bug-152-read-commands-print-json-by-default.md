@@ -2,7 +2,7 @@
 id: "bug-152-read-commands-print-json-by-default"
 type: bug
 title: "The default `console` output format falls back to pretty-printed JSON for every read command, so a human running a command with no `--format` sees JSON either way"
-status: planned
+status: closed
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"

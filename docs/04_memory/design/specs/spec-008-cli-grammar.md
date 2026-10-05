@@ -84,11 +84,11 @@ it. A flag a single command declares is not listed here: it is in §12.
 |-------------------|------------------------|-----------|---------------------------------------------------------------------------------------------------------|
 | `--help`, `-h`    | flag                   | —         | Print context-sensitive help (synopsis, args, flags, example) and exit `0`. Takes precedence over all other flags. |
 | `--version`       | flag                   | —         | Print CLI version and exit `0`. Takes precedence over all other flags except `--help`.                |
-| `--format <fmt>`  | `console\|json\|yaml`  | `console` | Output encoding. `console` for humans (colour, `✓`/`⚠`/`✗` prefixes); `json`/`yaml` for scripting/CI (REQ-INT-05). An unsupported value exits `2` with `error: invalid --format value "<value>"`. |
+| `--format <fmt>`  | `console\|json\|yaml`  | `console` | Output encoding. `console` for humans; `json`/`yaml` for scripting/CI (REQ-INT-05). **Today, on success, `console` prints the payload `json` prints, indented by two spaces, with no colour** (errors and warnings keep their §6 `error:`/`warning:` lines): its human rendering (colour, `✓`/`⚠`/`✗` prefixes) is P5.1.4's, and how it is built is `dl-043`'s decision, deferred to v0.4. That change will alter the default output, so a script passes `--format json`. An unsupported value exits `2` with `error: invalid --format value "<value>"`. |
 | `--reason <text>` | string                 | —         | **Required** on approval-gate commands (`memory approve`, `memory reject`, `memory amend`); optional elsewhere (e.g. `memory deprecate`). Recorded in the resulting git commit body (P1.7) as a `Reason:` **block** — the remainder of the `Reason:` line plus every following body line, up to (exclusive) git's trailing trailer paragraph or the end of the body — in the **declared normal form**, not as the raw argument (`dl-067-reason-trailer-contract`; see the Notes). Omitted where required exits `2` with `error: missing required argument: --reason` (ground-truth BDD `P1.7-memory-approve.feature`). |
 | `--reason` (unrecordable value) | —        | —         | A reason that cannot be recorded faithfully in the trailer is refused at the CLI boundary with exit `2`, before anything is read or written, on **every** verb that takes the flag — `memory deprecate` included, where the flag is optional but a declared-and-empty value is still a usage error (`dl-067` S2). Four cases, judged in this order on the declared normal form, each with its own message, none of them `missing required argument: --reason` (which answers the *omitted* case above): blank or whitespace-only → `error: invalid flag value: --reason must not be blank`; a C0 control character other than tab (`U+0009`) and newline (`U+000A`) → `error: invalid flag value: --reason must not contain a control character other than tab or newline (found U+XXXX)`, naming the first one by code point (`dl-078` (A); a carriage return is not refused, because the normal form has already turned it into a newline); a line starting with one of the **reserved trailer keys** `Approver:`, `Reason:` or `WingFoil-Version:`, in any letter case (git reads trailer keys case-insensitively) → `error: invalid flag value: --reason must not contain a line starting with "Approver:", "Reason:" or "WingFoil-Version:"` (`dl-111` Q1 (A) reserves the third); a final paragraph made entirely of `Key: value` lines → `error: invalid flag value: --reason must not end in a paragraph of "Key: value" lines; add a closing sentence after it, or fold those lines into prose` (`dl-070` S4). |
 | `--verbose`       | flag                   | `false`   | Emit diagnostic logs to stderr in plain text, even under `--format json`/`yaml`. Never alters stdout.  |
-| `--color` (negatable) | boolean flag        | `true`    | ANSI colour on stdout. Pass `--no-color` to disable; also disabled automatically when `NO_COLOR` is set to any non-empty string (https://no-color.org/) — an explicitly empty `NO_COLOR=` does **not** disable colour. |
+| `--color` (negatable) | boolean flag        | `true`    | ANSI colour on stdout. Pass `--no-color` to disable; also disabled automatically when `NO_COLOR` is set to any non-empty string (https://no-color.org/) — an explicitly empty `NO_COLOR=` does **not** disable colour. **Today no output is coloured** (see `--format`), so `--no-color` and `NO_COLOR` are accepted and change nothing; the rule above is the one the colour P5.1.4 adds must honour. Commander itself already honours `NO_COLOR` (it strips colour from its help, which has none) but not `--no-color`, so that rendering must read both. |
 | `--interactive` (negatable) | boolean flag  | `true`    | Whether missing required args may trigger a readline prompt in a TTY (§4). Pass `--no-interactive` to force immediate failure instead. |
 
 Notes:
@@ -252,9 +252,9 @@ import {Command} from 'commander'
 const program = new Command('wingfoil')
 
 program
-    .option('--format <format>', 'output format (console|json|yaml)', 'console')
+    .option('--format <format>', 'output format (console|json|yaml); console prints indented JSON for now', 'console')
     .option('--verbose', 'emit diagnostic logs to stderr')
-    .option('--no-color', 'disable ANSI colors')          // -> opts().color, default true
+    .option('--no-color', 'disable ANSI colors (accepted; no output is colored yet)') // -> opts().color, default true
     .option('--no-interactive', 'fail on missing args instead of prompting') // -> opts().interactive, default true
 
 const opts = program.opts()
@@ -276,6 +276,10 @@ Key rule: **never** declare a manual default on a `--no-*` option and **never** 
 `noInteractive` property — Commander derives `color`/`interactive` automatically from the flag's name,
 defaulting to `true`; only check `opts().color === false` / `opts().interactive === false` (or the
 truthy/negated form shown above).
+
+No command reads the colour check yet: no output is coloured until P5.1.4 (§2). The pattern governs
+how `--no-color` is registered today, and how it and `NO_COLOR` are read once `console` has a colour
+rendering.
 
 ### 4. Interactive-prompt rules
 
@@ -950,3 +954,15 @@ now a `stacks.technologies` entry (`spec-002` retired `tech_stack`), and the Con
 existed. The Process Notes keep `tech_stack.cli`, the key `dna.yaml` had when the spec was
 cross-checked. No exit code and no other
 rule changed. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-05, `task-156-state-what-format-console-prints-today-until`) — §2 states what
+`console` prints today and that the colour switches change nothing, per `bug-152` and `bug-203`.**
+The `--format` row promised colour and `✓`/`⚠`/`✗` prefixes, and the `--color` row a colour that
+`--no-color` and `NO_COLOR` turn off; on success the CLI prints `json`'s payload indented by two
+spaces (errors and warnings keep §6's `error:`/`warning:` lines), and writes no escape sequence. The
+approver's planning ruling of 2026-09-30 (R20) fixes this in the documents only and leaves the
+rendering to `dl-043`, deferred to v0.4 with P5.1.4. The two rows now say so, and keep the colour and
+`NO_COLOR` rules as the contract that rendering must honour; the `--color` row also notes that
+Commander honours `NO_COLOR` but not `--no-color`. §3 says
+nothing reads the colour check yet, and its example carries the `--help` text the CLI prints. No
+other section changed. Edited in place without a supersede or a state change (`dl-047`).
