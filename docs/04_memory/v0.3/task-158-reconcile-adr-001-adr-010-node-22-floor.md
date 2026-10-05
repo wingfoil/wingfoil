@@ -2,7 +2,7 @@
 id: "task-158-reconcile-adr-001-adr-010-node-22-floor"
 type: task
 title: "Reconcile adr-001 and adr-010 with the Node 22 floor"
-status: approved
+status: done
 release: "v0.3"
 kind: "fix"
 priority: "low"
