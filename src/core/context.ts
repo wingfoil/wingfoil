@@ -26,6 +26,8 @@ import { parseYaml } from '../validation';
 import { isRemovableCustomAssetPath } from './builtin-asset';
 import {
   DNA_YAML_PATH,
+  MEMORY_YAML_PATH,
+  ROLES_YAML_PATH,
   loadDirectivesAtRev,
   loadDnaYamlAtRev,
   loadMemoryYamlAtRev,
@@ -34,7 +36,7 @@ import {
 } from './loaders';
 import { DEFAULT_CONTEXT_LIMITS, selectRelevantMemoryDocuments, type ContextLimits, type RelevantMemoryDocument } from './relevance';
 import { resolveRevision, RevisionError } from './revision';
-import { coreErr, coreOk, type CoreResult } from './types';
+import { coreErr, coreOk, type CoreError, type CoreResult } from './types';
 
 /**
  * The outcome of {@link resolveRoleDirectives}: the resolved directive files **and** any operator
@@ -320,17 +322,36 @@ function canonicalize(text: string): string {
 }
 
 /**
+ * Why `value` cannot sit in the payload's header comment, or `undefined` when it can. The header is one
+ * line inside `<!-- … -->`: a line break would split it, and `-->` would close the comment early and
+ * let the rest of the value pass for payload content. Control characters are refused with them.
+ */
+function headerFieldProblem(name: string, value: string): string | undefined {
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(value) || value.includes('-->')) {
+    return `invalid ${name} ${JSON.stringify(value)}: it may hold no control character and no '-->'`;
+  }
+  return undefined;
+}
+
+/**
  * Render a context as `spec-012` §7's canonical Markdown payload — the bytes §8 holds identical across
  * builds. Fixed headings in a fixed order; frontmatter and DNA sections as YAML with sorted keys;
  * directive and document bodies verbatim; ids rather than paths; the header names only role, element
  * and the resolved sha. `warnings` are not rendered.
  *
  * @throws Error `invalid execution context: missing '<section>' section` when `context` does not
- *   validate ({@link validateExecutionContext}): a partial payload is never rendered.
+ *   validate ({@link validateExecutionContext}): a partial payload is never rendered. Error `invalid
+ *   role …` (or `element type`/`element id`) when a header field holds a control character or `-->`.
  */
 export function serializeExecutionContext(context: ExecutionContext): string {
   const valid = validateExecutionContext(context);
   if (!valid.ok) throw new Error(valid.error.message);
+  const unsafe =
+    headerFieldProblem('role', context.role) ??
+    headerFieldProblem('element type', context.element.type) ??
+    headerFieldProblem('element id', context.element.id);
+  if (unsafe !== undefined) throw new Error(unsafe);
 
   const { role, stateRef, element, dna, directives, memory } = context;
   // The header comment sits on the title's next line, as §7's template shows.
@@ -400,6 +421,38 @@ function stringField(frontmatter: Record<string, unknown>, key: string): string 
   return typeof value === 'string' ? value : undefined;
 }
 
+/** The pillar file whose absence at `stateRef` leaves each section unset, keyed by the refusal. */
+const ABSENT_PILLAR_FILE: Readonly<Record<string, string>> = {
+  [missingSection('element')]: MEMORY_YAML_PATH,
+  [missingSection('dna')]: DNA_YAML_PATH,
+  [missingSection('directives')]: ROLES_YAML_PATH,
+};
+
+function isPositiveInteger(value: unknown): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+/**
+ * A request the builder refuses before reading anything (`VALIDATION`): a role or element field that
+ * cannot sit in the payload header (`headerFieldProblem`), or limits that are not positive integers —
+ * `NaN`, a fraction, zero or a negative number would make §6's bounding meaningless.
+ */
+function requestProblem(request: ContextRequest): CoreError | undefined {
+  const header =
+    headerFieldProblem('role', request.role) ??
+    headerFieldProblem('element type', request.element.type) ??
+    headerFieldProblem('element id', request.element.id);
+  if (header !== undefined) return { code: 'VALIDATION', message: header };
+  const { limits } = request;
+  if (limits !== undefined && !(isPositiveInteger(limits.maxDocs) && isPositiveInteger(limits.maxBytes))) {
+    return {
+      code: 'VALIDATION',
+      message: `invalid context limits: maxDocs and maxBytes must be positive integers (got ${String(limits.maxDocs)}, ${String(limits.maxBytes)})`,
+    };
+  }
+  return undefined;
+}
+
 /**
  * Build the execution context for `request` — `spec-012`'s single public entry (§1), the context
  * `agent execute` (task-218) and the `{role}-session` Prompt (task-195) hand an agent.
@@ -419,13 +472,18 @@ function stringField(frontmatter: Record<string, unknown>, key: string): string 
  *
  * A pillar file the commit does not hold leaves its section unset, and step 5 refuses the context:
  * no `roles.yaml` → `missing 'directives'`, no `dna.yaml` → `missing 'dna'`, no `memory.yaml` →
- * `missing 'element'`.
+ * `missing 'element'`; the refusal's `details.cause` names the file (`no .wingfoil/roles.yaml at <sha>`).
+ * Before any read, a role or element field holding a control character or `-->`, or limits that are
+ * not positive integers, are refused as `VALIDATION`.
  *
  * Expected failures are returned, never thrown: a `stateRef` that is malformed or names no commit is
  * the `RevisionError`'s own `CoreError`. A document or pillar file that does not parse still throws
  * `ValidationError`, as every loader does.
  */
 export function assembleExecutionContext(root: string, request: ContextRequest): CoreResult<AssembledExecutionContext> {
+  const refused = requestProblem(request);
+  if (refused !== undefined) return coreErr(refused);
+
   let sha: string;
   try {
     sha = resolveRevision(root, request.stateRef);
@@ -455,7 +513,8 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   const frontmatter = element?.frontmatter ?? {};
 
   // `loadDnaYamlAtRev` validates; the raw text gives the declared section order, which the
-  // Zod-parsed object loses (schema keys come first there). `loadDnaYamlAtRev` is non-null whenever the raw read is: both read the same path at the same sha.
+  // Zod-parsed object loses (schema keys come first there). `loadDnaYamlAtRev` is non-null whenever
+  // the raw read is: both read the same path at the same sha.
   const dnaRaw = readPathAtRev(root, sha, DNA_YAML_PATH);
   const dna =
     dnaRaw === null
@@ -480,7 +539,13 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
     memory: relevant?.documents,
     warnings: resolution?.warnings ?? [],
   });
-  if (!validated.ok) return validated;
+  if (!validated.ok) {
+    // Every section the builder can leave unset is unset by an absent pillar file (an absent
+    // `memory.yaml` unsets `element` before `memory`), so the refusal always names one. The message
+    // stays P5.4.4's, verbatim.
+    const cause = `no ${ABSENT_PILLAR_FILE[validated.error.message]!} at ${sha}`;
+    return coreErr({ ...validated.error, details: { cause } });
+  }
 
   const context = validated.value;
   const notes = relevant?.note === undefined ? [] : [relevant.note];

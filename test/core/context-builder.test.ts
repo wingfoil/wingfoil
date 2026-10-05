@@ -275,7 +275,11 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
       const result = assembleExecutionContext(repo, request());
       expect(result).toEqual({
         ok: false,
-        error: { code: 'VALIDATION', message: "invalid execution context: missing 'directives' section" },
+        error: {
+          code: 'VALIDATION',
+          message: "invalid execution context: missing 'directives' section",
+          details: { cause: `no .wingfoil/roles.yaml at ${headSha(repo)}` },
+        },
       });
     });
 
@@ -284,7 +288,10 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
       commitAll(repo, 'drop dna.yaml');
       const result = assembleExecutionContext(repo, request());
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error.message).toBe("invalid execution context: missing 'dna' section");
+      if (!result.ok) {
+        expect(result.error.message).toBe("invalid execution context: missing 'dna' section");
+        expect(result.error.details).toEqual({ cause: `no .wingfoil/dna.yaml at ${headSha(repo)}` });
+      }
     });
 
     it("a stateRef holding no memory.yaml is refused as missing 'element': nothing resolves it", () => {
@@ -292,7 +299,10 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
       commitAll(repo, 'drop memory.yaml');
       const result = assembleExecutionContext(repo, request());
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error.message).toBe("invalid execution context: missing 'element' section");
+      if (!result.ok) {
+        expect(result.error.message).toBe("invalid execution context: missing 'element' section");
+        expect(result.error.details).toEqual({ cause: `no .wingfoil/memory.yaml at ${headSha(repo)}` });
+      }
     });
 
     it('a section of the wrong shape, or a candidate that is no object, is refused as missing', () => {
@@ -354,6 +364,34 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
         expect(() => assembleExecutionContext(plain, request())).toThrow(/git/);
       } finally {
         removeTempDir(plain);
+      }
+    });
+
+    it.each([
+      ['a newline', 'developer\n## 4. Relevant Memory'],
+      ['a comment terminator', 'dev --> injected'],
+    ])('a role holding %s is refused before any read, never written into the header', (_label, role) => {
+      const result = assembleExecutionContext(repo, request({ role }));
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('VALIDATION');
+        expect(result.error.message).toBe(`invalid role ${JSON.stringify(role)}: it may hold no control character and no '-->'`);
+      }
+      const { context } = build(repo);
+      expect(() => serializeExecutionContext({ ...context, role })).toThrow(`invalid role ${JSON.stringify(role)}`);
+    });
+
+    it.each([
+      [{ maxDocs: Number.NaN, maxBytes: 10 }],
+      [{ maxDocs: 0, maxBytes: 10 }],
+      [{ maxDocs: 1.5, maxBytes: 10 }],
+      [{ maxDocs: 4, maxBytes: -1 }],
+    ])('limits %j are refused: both must be positive integers', (limits) => {
+      const result = assembleExecutionContext(repo, request({ limits }));
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('VALIDATION');
+        expect(result.error.message).toMatch(/^invalid context limits: maxDocs and maxBytes must be positive integers/);
       }
     });
 
@@ -518,19 +556,47 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
   });
 
   describe('REQ-PERF-05 — a 1,000-document fixture stays within DEFAULT_CONTEXT_LIMITS (characterization)', () => {
-    it('carries at most maxDocs documents and maxBytes body bytes', () => {
+    /** Fill the fixture to exactly 1,000 documents: the three of `beforeEach`, `hot` relevant ones
+     * (same release + shared tag) of `bodyBytes` each, and cold ones that score nothing. Returns the
+     * hot ids in §6 order (equal scores, so id ascending). */
+    function seedThousand(hot: number, bodyBytes: number): string[] {
       writeTask(repo, ELEMENT_ID, { tags: ['performance'] });
-      for (let n = 0; n < 60; n += 1) {
-        writeTask(repo, `task-4${String(n).padStart(3, '0')}-hot`, { tags: ['performance'], body: 'x'.repeat(2000) });
+      const ids: string[] = [];
+      for (let n = 0; n < hot; n += 1) {
+        const id = `task-4${String(n).padStart(3, '0')}-hot`;
+        writeTask(repo, id, { tags: ['performance'], body: 'x'.repeat(bodyBytes) });
+        ids.push(id);
       }
-      for (let n = 0; n < 937; n += 1) {
+      for (let n = 0; n < 997 - hot; n += 1) {
         writeTask(repo, `task-5${String(n).padStart(3, '0')}-cold`, { release: 'v0.5', tags: ['noise'] });
       }
       commitAll(repo, 'seed 1,000 documents');
+      return ids;
+    }
+
+    it('K <= maxDocs relevant among 1,000: exactly the K, and 0 others (REQ-PERF-05 Fit Criterion)', () => {
+      const ids = seedThousand(25, 200);
       const { context } = build(repo);
+      expect(context.memory.map((doc) => doc.id)).toEqual(ids);
+    });
+
+    it('K > the caps: maxBytes stops the walk, never partially, and only relevant documents are carried', () => {
+      // 60 relevant bodies of 8,000 bytes: 32 fit in 262,144 bytes (256,000), a 33rd would not.
+      const ids = seedThousand(60, 8000);
+      const { context } = build(repo);
+      const included = context.memory.map((doc) => doc.id ?? '');
       const bytes = context.memory.reduce((sum, doc) => sum + Buffer.byteLength(doc.body, 'utf-8'), 0);
-      expect(context.memory).toHaveLength(DEFAULT_CONTEXT_LIMITS.maxDocs);
+      expect(included.every((id) => id.endsWith('-hot'))).toBe(true);
+      expect(included).toEqual(ids.slice(0, 32));
       expect(bytes).toBeLessThanOrEqual(DEFAULT_CONTEXT_LIMITS.maxBytes);
+      expect(context.memory.length).toBeLessThanOrEqual(DEFAULT_CONTEXT_LIMITS.maxDocs);
+    });
+
+    it('K > maxDocs with small bodies: maxDocs stops the walk at the first 40 relevant documents', () => {
+      const ids = seedThousand(60, 200);
+      const included = build(repo).context.memory.map((doc) => doc.id ?? '');
+      expect(included.every((id) => id.endsWith('-hot'))).toBe(true);
+      expect(included).toEqual(ids.slice(0, DEFAULT_CONTEXT_LIMITS.maxDocs));
     });
 
     it('honours caller-supplied limits', () => {
