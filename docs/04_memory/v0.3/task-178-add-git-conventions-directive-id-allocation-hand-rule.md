@@ -57,10 +57,11 @@ for the others). No tech-spec governs a custom directive's text; none is missing
 **Rulings taken here (approver to confirm).**
 1. **`scope: global` in the directive's frontmatter, against AC 3's literal "no `scope:`".** AC 3
    conditions the omission on "until task-144 rules on `bug-148`". `task-144` is `done` and `bug-148`
-   `closed` (`grep -n '^status:'` on both files): it ruled that every id `roles.yaml` lists in
-   `global:` must declare `scope: global`, and `test/core/directives-list.test.ts` "reports no warning
-   on this repository" pins it. Omitting the field would make that live test fail. All five other
-   global directives declare it (`grep -l '^scope:' .wingfoil/directives/custom/*.md` → 5 files).
+   `closed` (`grep -n '^status:'` on both files). task-144 settled that `roles.yaml` decides and
+   `scope` is an optional matching declaration (`src/core/directive-scope.ts` header, ruling R3: an
+   absent `scope` claims nothing), so dl-119's reason to omit it is gone; it is declared for
+   consistency with the five other global directives (`grep -l '^scope:' .wingfoil/directives/custom/*.md`
+   → 5 files before this task).
 2. **`code-quality`'s commit bullet stays where it is** (dl-119 Relations leaves the choice to this
    task). It is the P3.8 stand-in's generic rule and `dna.yaml` maps `process.commits` to it; the new
    directive cites it rather than moving or duplicating it.
@@ -151,3 +152,18 @@ rewritten" are all in §7. `dl-101` §1 items 1–5 are in §6 in order. Every c
 via `ls docs/04_memory/design/specs/`). No same-class drift found in the touched files.
 
 **Pending amendments (approver):** none.
+
+### review fixes (independent review: approve with fixes)
+
+- **F1** — design ruling 1 claimed task-144 requires `scope: global` on every global id and that
+  omitting it fails the live test. False: `src/core/directive-scope.ts` compares only a declared
+  `scope` (ruling R3), and the reviewer's scratch copy without the line listed with `warnings: []`.
+  Ruling 1 rewritten above: the field is kept for consistency, not because a check needs it.
+- **F2** — §8 cited `dl-111`, which decides the trailer, not how to amend. §8 and the header now cite
+  `bug-236-a-wingfoil-commit-amended-by-hand-with-a-separate-co-authored-by-paragraph-loses-its-wingfoil-version-trailer-and-reads-it-into-the-reason-block`
+  (on `main`, `git ls-tree --name-only main docs/04_memory/bugs/ | grep bug-236`; not yet on this
+  branch, it joins this task's `bug:` list at the gate) as the rule's source, with `dl-111`/`dl-067` as
+  the mechanism, and add two limits: only a commit not yet pushed (§2), never an `approve`/`reject`
+  commit (§7). No version bump: the directive was created on this branch (doc-versioning baseline is
+  main).
+- Re-run: on `11e82c61`, `npx jest test/directives/schema.test.ts test/core/directives-list.test.ts test/core/loaders.test.ts` → 102 passed; `npm run build && node dist/cli.js directives list --role approver` → exit 0, `directives/custom/git-conventions.md` listed; `node scripts/check-governance.cjs --base 0b297169` → exit 0, 0 findings. Task stays `in-review`.
