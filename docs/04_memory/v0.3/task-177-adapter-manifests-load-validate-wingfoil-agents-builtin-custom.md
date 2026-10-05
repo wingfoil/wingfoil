@@ -95,9 +95,9 @@ module's exported codes and the non-`HEAD` revision refusal (agent function cove
 Gates on `2c35af67`:
 - `npm run test:coverage` → **221 suites, 3979 passed**; All files **98.88 | 95.65 | 95.53 | 99.57**
   (stmts | branch | funcs | lines), against `main`'s last recorded figure in `task-160`'s notes,
-  `98.88 | 95.56 | 95.34 | 99.58`. Lines is 0.01 lower; that is rounding over a larger total, since
-  `src/agent` itself is 98.78 | 97.87 | 100 | 99.23. Its one uncovered line is `discovery.ts`'s
-  re-throw of a non-`RevisionError`.
+  `98.88 | 95.56 | 95.34 | 99.58`. Lines is 0.01 lower. That is a real, small dilution: `src/agent` is
+  98.78 | 97.87 | 100 | 99.23, below the global lines figure, and its one uncovered line is
+  `discovery.ts`'s defensive re-throw of a non-`RevisionError` (corrected at review, F5).
 - `npm test` → 3978 passed, 1 failed: `test/core/query-latency.test.ts`, a wall-clock test, while
   other worktrees ran jest. Re-run alone: `npx jest test/core/query-latency.test.ts` → **4/4 passed**.
 - `npm run lint` → 0; `npm run docs:api` → 0; `npx tsc --noEmit -p tsconfig.json` → 0;
@@ -143,6 +143,30 @@ Gates on `2c35af67`:
 **Same-class sweep.** No other place lists the nine modules: `grep -rn "nine\b" .wingfoil/README.md
 README.md docs/user-guide.md docs/agents.md` finds nothing. `CLAUDE.md` §1/§2/§4 still says nine modules;
 that is `align-agent-docs`'s, not changed here.
+
+### review fixes (independent review: APPROVE WITH FIXES)
+
+- **F1** (should-fix): the placeholder token class was `[a-z][a-z0-9_]*`, so `{Bootstrap}`, `{boot-strap}`
+  and `{bootstrap }` passed as literal argv. Every field except `mcp.template` now reads tokens with
+  `/\{([A-Za-z0-9_\- ]+)\}/g` and refuses unknown ones; `mcp.template` keeps the narrow class, because of
+  its JSON braces. Red `e9c4cd88`: one test per typo shape, plus `command: {Mcp_Command}` → 4 failed.
+  Green `0e9ccd1c`.
+- **F2** (should-fix): `loadAdapter`'s duplicate refusal had no `details`, and it named only the first
+  pair. It now goes through the `refuse` helper: the message names the first duplicated name, and every
+  duplicated name is a `details.issues` entry (file `HEAD:.wingfoil/agents`). Red `e9c4cd88` (two duplicate
+  pairs → 2 detail lines; failed); green `0e9ccd1c`.
+- **F4** (nit): `jest.config.js` `collectCoverageFrom` gains `'!src/agent/index.ts'`, the barrel convention
+  of task-122/bug-021 (`npx jest test/lint/coverage-scope.test.ts` passes). The coverage-only tests of
+  `ADAPTER_MANIFEST_FORMAT` and `placeholderIssues` are dropped; the issue-code test stays.
+- **F5** (nit): the coverage sentence in refactor is reworded (dilution, not rounding).
+
+Gates on `0e9ccd1c`:
+- `npm test` → **221 suites, 3982 passed**.
+- `npm run test:coverage` → 3980 passed, 2 failed, both in `test/mcp/resource-latency.test.ts` (a timed
+  test, under parallel load). Re-run alone: `npx jest test/mcp/resource-latency.test.ts` → 4/4 passed.
+  All files **98.88 | 95.65 | 95.48 | 99.57**; `src/agent` 98.67 | 97.95 | 100 | 99.21.
+- `npm run lint` → 0; `npm run docs:api` → 0; both `tsc` → 0; `node scripts/check-governance.cjs --base
+  c80167d6` → 0.
 
 ### Pending amendments (approver)
 
