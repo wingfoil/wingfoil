@@ -47,11 +47,19 @@ wingfoil mcp
   wrap a single `src/core` `CoreOperation`, it owns a process lifecycle. This keeps it off the
   operation-derived Tool/Resource registrar (`registerCoreModules`), which is correct — starting the
   server is not itself an MCP-exposed operation.
-- **Pre-flight root resolution.** Before connecting, `wingfoil mcp` resolves the project root
-  (`resolveProjectRoot`, `spec-011-storage-layout`). If the current directory is not inside an
-  initialized WingFoil project, it emits the standard `error: <reason>` line (`spec-008` §6) and exits
-  `1` (a user/logic error per `spec-008` §5's exit-code table), by symmetry with `wingfoil init`'s own
-  pre-flight root handling. It never starts a partially-wired server.
+- **Pre-flight.** Before connecting, `wingfoil mcp`:
+  1. resolves the project root (`resolveProjectRoot`, `spec-011-storage-layout`);
+  2. refuses a root with no `.wingfoil/` directory (`spec-011`'s `absent` state) with the shared
+     not-initialized reason `WingFoil not initialized (no .wingfoil/ directory at the project root):
+     run 'wingfoil init' first`, which names no path (`requireInitializedProject`, `bug-035`);
+  3. reads the DNA role set — `dna.yaml` `team.roles[].name`, in declaration order — that the Prompts
+     channel serves for the server's life (`spec-004` §3.1, `dl-049` (b)); a `dna.yaml` that cannot be
+     loaded refuses the start with the loader's reason and details.
+
+  On any failure it emits the standard `error: <reason>` line (`spec-008` §6) and exits `1` (a
+  user/logic error per `spec-008` §5's exit-code table), by symmetry with `wingfoil init`'s own
+  pre-flight root handling. It never starts a partially-wired server, and stdout carries nothing but
+  the protocol.
 
 ### 2. The stdio entry point (`src/mcp/server.ts`)
 
@@ -60,31 +68,46 @@ constructor and a thin un-testable transport seam (the same seam pattern `src/cl
 `commander` wiring and `init-command.ts`'s `createReadlinePrompt` already use):
 
 ```ts
-// Constructs a real McpServer and registers the v0.1 channel set on it. Pure and synchronous —
+// Constructs a real McpServer and registers its channel set (§3) on it. Pure and synchronous —
 // no transport, no stdio, no process side effects — so it is exercised end-to-end in tests over
 // the SDK's in-memory transport + a real Client, exactly like task-011's registrar tests.
-createMcpServer(options: { resolveRoot: () => string; name?: string; version?: string }): McpServer
+createMcpServer(options: {
+  resolveRoot: () => string;
+  roles: readonly string[];   // the DNA role set the pre-flight read (§1)
+  name?: string;
+  version?: string;
+}): McpServer
 
 // Constructs the server via createMcpServer, then connects it over a real StdioServerTransport.
 // The only un-unit-tested line is the `.connect(new StdioServerTransport())` seam.
 startMcpServer(options): Promise<McpServer>
 ```
 
-- The server identifies itself as `{ name: "wingfoil", version: <package.json version> }` — the version
-  read deterministically from the packaged `package.json` (`spec-008`/REQ-SYS-07, same source as
-  `wingfoil --version`), never a wall-clock or inferred value.
-- `resolveRoot` is invoked **per request** by the already-registered Resource handlers (task-011); the
-  server module itself performs no I/O at construction time beyond wiring handlers.
+- The server identifies itself as `{ name: "wingfoil", version: <package.json version> }` — the bare
+  semver read deterministically from the packaged `package.json` (`spec-008`/REQ-SYS-07), never a
+  wall-clock or inferred value. It is the `<semver>` half of what `wingfoil --version` prints: since
+  `task-192` (`dl-111`) the CLI prints the build stamp `<semver> (<sha>)`, and the server's identity
+  does not carry the `(<sha>)`.
+- `resolveRoot` is invoked **per request** by the registered Resource and Prompt handlers (task-011);
+  the server module itself performs no I/O at construction time beyond wiring handlers. The one
+  start-time read the server depends on, the DNA role set, happens before construction, in the
+  pre-flight of `wingfoil mcp` (§1, `dl-049` (b)), and arrives as `roles`.
 
-### 3. v0.1 channel scope — read-only Resources only
+### 3. Channel scope — read-only Resources and Prompts, an empty Tools channel
 
-For the v0.1 "read-only skeleton" milestone (`06_features.md` P5.2.1; `spec-004` §Consequences: "scoped
-to implementing §2 only"), `createMcpServer` registers **exactly** the read-only Resources channel and
-nothing else:
+`createMcpServer` registers exactly these channels (`spec-004` §1), and nothing that writes:
 
 ```ts
-registerReadOnlyResources(server, { resolveRoot });   // spec-004 §2 — Memory, DNA, Workflow Resources + write refusal
+registerReadOnlyResources(server, { resolveRoot });          // spec-004 §2 — Memory, DNA, Workflow Resources + write refusal (P5.2.1, v0.1)
+registerRolePrompts(server, { resolveRoot, roles });         // spec-004 §3 — one {role}-session Prompt per role (P5.2.2, v0.2)
+// the Tools channel, empty until P5.2.3 (v0.4):
+//   initialize advertises `tools: {}`; tools/list → { tools: [] };
+//   tools/call → an isError result "Tool <name> not found" (a Tool refusal, spec-004 §4.3 item 4)
 ```
+
+Neither the Prompts nor the Tools capability declares `listChanged`: the role set is fixed at start
+(§1), and the Tools list is empty. A client probing `tools/list` gets an empty list rather than a
+JSON-RPC `-32601` (`bug-151`).
 
 It does **not** call `registerCoreModules(server, CORE_MODULES, …)`. That registrar would advertise a
 mutating **Tool** for every `mutates: true` `CoreOperation` (as of task-025, `dnaSet` → the `dna.set`
@@ -95,7 +118,7 @@ read-only. The operation-derived read-only Resources it would also add (`wingfoi
 (`wingfoil://dna`, `wingfoil://dna/{section}`), so nothing read-only is lost by the omission.
 
 When Tools ship (P5.2.3, v0.4), the production server adds `registerCoreModules` alongside
-`registerReadOnlyResources`; when Prompts ship (P5.2.2, v0.2), it adds their registrar. The entry
+`registerReadOnlyResources`, in place of the empty Tools channel. The entry
 point (`wingfoil mcp` + `startMcpServer`) is unchanged by those additions — only the channel-set inside
 `createMcpServer` grows. This spec governs the entry point; `spec-004` governs each channel's contract.
 
@@ -128,3 +151,17 @@ identify-specs should check that the *process entry point* (not just the wire co
 spec. Authored by the task-030 DEV agent under the approver's standing authorization to author/adjust
 specs at the design gate; submitted `draft → pending` for the orchestrator to bless `pending → approved`
 (the DEV agent does not self-approve).
+
+**Revision (2026-10-05, `task-174-settle-mcp-prompts-contract-server-preflight-answer-tools`) — the
+pre-flight, the channel scope and the version sentence, per `dl-049` (b) and its editorial item,
+`bug-035` and `bug-151`.** §1's pre-flight checked only for a git root, so a root that never ran `init`
+started a server whose every read leaked a raw `ENOENT` with an absolute path; it now refuses that root
+with the shared not-initialized reason and reads the DNA role set the Prompts channel serves
+(`spec-004` §3.1 "derived from DNA at server start"). §2 drops "the v0.1 channel set", gains the
+`roles` option and names that start-time read as the one the server depends on, made before
+construction so `createMcpServer` still reads nothing. Its version sentence said "same source as
+`wingfoil --version`"; since `task-192` that command prints `<semver> (<sha>)`, and the server shares
+only the semver. §3 was titled "v0.1 channel scope — read-only Resources only" although Prompts ship
+since v0.2; it now lists the Resources, the Prompts and the empty Tools channel. No channel contract
+of `spec-004` changed here. Edited in place without a supersede or a state change, per `dl-047` (no
+`version:` field).
