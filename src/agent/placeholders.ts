@@ -29,10 +29,18 @@ export type AdapterPlaceholder = (typeof ADAPTER_PLACEHOLDERS)[number];
 export const E_ADAPTER_PLACEHOLDER = 'E_ADAPTER_PLACEHOLDER';
 
 /**
- * A `{name}` token. The name class is lower-case words joined by `_`, the shape of every §2.3 name, so
- * the braces of a JSON body in `mcp.template` (`{"mcpServers": …}`) are never read as a placeholder.
+ * A `{name}` token in `mcp.template`. The name class is lower-case words joined by `_`, the shape of
+ * every §2.3 name, so the braces of a JSON body (`{"mcpServers": …}`) are never read as a placeholder.
  */
-const TOKEN_RE = /\{([a-z][a-z0-9_]*)\}/g;
+const TEMPLATE_TOKEN_RE = /\{([a-z][a-z0-9_]*)\}/g;
+
+/**
+ * A `{name}` token in every other field (argv elements, scalars). Wider than {@link TEMPLATE_TOKEN_RE}
+ * (task-177 review F1): letters of either case, digits, `_`, `-` and spaces, so a misspelt placeholder
+ * (`{Bootstrap}`, `{boot-strap}`, `{bootstrap }`) is refused as unknown instead of reaching the agent
+ * as a literal argument. Quotes and colons stay outside the class: no argv field holds JSON.
+ */
+const FIELD_TOKEN_RE = /\{([A-Za-z0-9_\- ]+)\}/g;
 
 /** Where each placeholder is legal, as §2.3's "Legal in" column says it — the text of a refusal. */
 const LEGAL_IN: Readonly<Record<AdapterPlaceholder, string>> = {
@@ -48,9 +56,9 @@ const LEGAL_IN: Readonly<Record<AdapterPlaceholder, string>> = {
 /** The manifest as Pass 1 accepted it (defaults not yet applied; they change nothing checked here). */
 type ManifestInput = z.input<typeof AdapterManifest>;
 
-/** Every `{name}` token in `text`, in order of appearance. */
-function tokensOf(text: string): string[] {
-  return [...text.matchAll(TOKEN_RE)].map((match) => match[1]!);
+/** Every `{name}` token `pattern` finds in `text`, in order of appearance. */
+function tokensOf(text: string, pattern: RegExp): string[] {
+  return [...text.matchAll(pattern)].map((match) => match[1]!);
 }
 
 function isPlaceholder(name: string): name is AdapterPlaceholder {
@@ -59,7 +67,8 @@ function isPlaceholder(name: string): name is AdapterPlaceholder {
 
 /**
  * The issues of one string field. `legal` is the set of placeholders the field may hold;
- * `wholeElement` is true for an argv element, where a placeholder must be the entire element.
+ * `wholeElement` is true for an argv element, where a placeholder must be the entire element;
+ * `template` is true for `mcp.template` only, whose JSON braces call for the narrow token class.
  */
 function fieldIssues(
   value: string,
@@ -67,8 +76,9 @@ function fieldIssues(
   file: string,
   legal: ReadonlySet<AdapterPlaceholder>,
   wholeElement: boolean,
+  template = false,
 ): ValidationIssue[] {
-  const tokens = tokensOf(value);
+  const tokens = tokensOf(value, template ? TEMPLATE_TOKEN_RE : FIELD_TOKEN_RE);
   const issues: ValidationIssue[] = [];
   const issue = (message: string): void => {
     issues.push({ code: E_ADAPTER_PLACEHOLDER, path, file, message });
@@ -127,7 +137,7 @@ export function placeholderIssues(manifest: ManifestInput, file: string): Valida
     ...argvIssues(manifest.version_args, 'version_args', file, none),
     ...argvIssues(manifest.launch.interactive.args, 'launch.interactive.args', file, launch),
     ...argvIssues(manifest.launch.headless?.args, 'launch.headless.args', file, launch),
-    ...(manifest.mcp.template === undefined ? [] : fieldIssues(manifest.mcp.template, 'mcp.template', file, template, false)),
+    ...(manifest.mcp.template === undefined ? [] : fieldIssues(manifest.mcp.template, 'mcp.template', file, template, false, true)),
     ...argvIssues(manifest.session.assign_args, 'session.assign_args', file, sessionId),
     ...argvIssues(manifest.session.lookup_args, 'session.lookup_args', file, lookup),
     ...(manifest.session.field === undefined ? [] : fieldIssues(manifest.session.field, 'session.field', file, none, false)),

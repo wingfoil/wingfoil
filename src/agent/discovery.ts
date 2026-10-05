@@ -99,7 +99,7 @@ function render(issue: ValidationIssue): string {
  *
  * Refusals, each `adapter '<name>': …`:
  * - `VALIDATION` — `name` is not an id (`spec-009` §1); a name is in both directories (the first such
- *   name is the one named); the manifest is invalid (§3.7: the first issue in the message, every issue
+ *   name is the one named, and every duplicated name is a `dl-055` detail line); the manifest is invalid (§3.7: the first issue in the message, every issue
  *   a `dl-055` detail line with its file);
  * - `NOT_FOUND` — no `built-in/<name>.yaml` or `custom/<name>.yaml` at `rev` (at `HEAD`, a repository
  *   with no commit has no adapter);
@@ -108,10 +108,15 @@ function render(issue: ValidationIssue): string {
  * @param rev - Defaults to `HEAD` (`dl-080` (B)).
  */
 export function loadAdapter(root: string, name: string, rev = 'HEAD'): CoreResult<LoadedAdapter> {
-  const refuse = (code: 'VALIDATION' | 'NOT_FOUND', reason: string, issues?: readonly ValidationIssue[]): CoreResult<LoadedAdapter> =>
+  const refuse = (
+    code: 'VALIDATION' | 'NOT_FOUND',
+    reason: string,
+    issues?: readonly ValidationIssue[],
+    subject = name,
+  ): CoreResult<LoadedAdapter> =>
     coreErr({
       code,
-      message: `adapter '${name}': ${reason}`,
+      message: `adapter '${subject}': ${reason}`,
       ...(issues === undefined ? {} : { details: { issues: issues.map((issue) => ({ ...issue, detail: render(issue) })) } }),
     });
   if (!isIdPiece(name)) {
@@ -127,9 +132,11 @@ export function loadAdapter(root: string, name: string, rev = 'HEAD'): CoreResul
   }
   const entries = sha === null ? [] : entriesAtCommit(root, sha);
 
-  const [duplicate] = duplicateIssues(entries, `${rev}:${ADAPTERS_DIR_PATH}`);
-  if (duplicate !== undefined) {
-    return coreErr({ code: 'VALIDATION', message: `adapter '${duplicate.name}': ${duplicate.issue.message}` });
+  // Every duplicated name is a dl-055 detail line; the message names the first (task-177 review F2).
+  const duplicates = duplicateIssues(entries, `${rev}:${ADAPTERS_DIR_PATH}`);
+  if (duplicates.length > 0) {
+    const [first] = duplicates;
+    return refuse('VALIDATION', first!.issue.message, duplicates.map(({ issue }) => issue), first!.name);
   }
 
   const entry = entries.find((candidate) => candidate.name === name);

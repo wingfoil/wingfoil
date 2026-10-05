@@ -72,6 +72,7 @@ module.exports = {
   // file that is not a barrel (anything beyond re-exports, type-only statements and literal constants).
   collectCoverageFrom: [
     'src/**/*.ts',
+    '!src/agent/index.ts',
     '!src/cli/index.ts',
     '!src/directives/index.ts',
     '!src/dna/index.ts',
