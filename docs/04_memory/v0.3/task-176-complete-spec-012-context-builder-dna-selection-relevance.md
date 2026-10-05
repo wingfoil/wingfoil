@@ -201,13 +201,17 @@ Determinism: `grep -nE "Date\.now|new Date|Math\.random|process\.env" src/core/c
 
 ### Pending amendments (approver)
 
-- `spec-012-context-loader-relevance-filtering` (§4 bullets, §5's global enumeration + one dated
-  Revision note; no `version` field, so no bump, as the two earlier Revision notes did). Proposed
-  reason: `§4 named the conventions section spec-002 v1.1 removed and listed five paths categories where
-  the schema has six since task-138 added runs, and §5 enumerated four global directives where
-  roles.yaml binds five since task-133 bound security (dl-059). The bullets now match dna.yaml and
-  roles.yaml as they are; the selection rules, order and the §7 envelope are unchanged. Edited by
-  task-176, which implements §4.`
+- `spec-012-context-loader-relevance-filtering` (§4 bullets, §5's global enumeration, §6's
+  archived-default sentence, and two dated Revision notes; no `version` field, so no bump, as the
+  earlier Revision notes did). Proposed reason: `§4 named the conventions section spec-002 v1.1
+  removed, listed five paths categories where the schema has six since task-138 added runs, and
+  matched modules by name only, which never selected a tech-spec's path scope; it now matches by name
+  or path prefix and falls back to all modules with a diagnostic note (approver ruling D3,
+  2026-10-05). §5 enumerated four global directives where roles.yaml binds five since task-133 bound
+  security (dl-059). §6's task-171 sentence said the loader resolves the element through primitives
+  that exclude archived documents by default; the builder reads the whole snapshot at stateRef and
+  keeps archived content out itself, and the sentence now names the lookups that have the default.
+  The selection order and the §7 envelope are unchanged. Edited by task-176, which implements §4–§7.`
 - `spec-016-agent-execution` (one citation, line 70: `src/core/context.ts:267` → `src/core/context.ts`).
   Proposed reason: `The citation pinned assembleExecutionContext to a line offset that task-176's
   rewrite of src/core/context.ts made stale; it now names the file only, so it cannot drift again. The
@@ -243,3 +247,59 @@ Commit `c06119db`; the task stays `in-review`.
 | `src/core/context.ts` | 100 / 99.15 / 100 / 100; the one branch left is `withBodies`' `?? ''`, for a directive git has just listed |
 | `npm run lint` / `npm run docs:api` (0 warning lines) | exit 0 / exit 0 |
 | `npx tsc --noEmit -p tsconfig.json` / `npx tsc -p tsconfig.build.json --noEmit` | exit 0 / exit 0 |
+
+### approver ruling D3 (2026-10-05) — module matching
+
+Red `18e8574b` (`npx jest test/core/context-builder.test.ts -t "ruling D3"` → 5 failed), green
+`9fcc398a`, plus `bfb66651`/the pathless-module test. Each `modules:`/`scope:` entry is read by its
+leading token, which selects a module by `name`, or by `path` when equal to it or a prefix of it at a
+segment boundary. When the element names entries and none selects a module, every module is included
+and `no module matches the element's modules:/scope: (<entries>); all modules included` is recorded in
+`notes` (before the relevance note, §3 stage order), never in the payload. Order stays `dna.yaml`'s.
+Tests: path equality, path prefix at segment boundaries, a prose `scope:` led by a path, name + path
+together, a pathless module, nothing matching → all + note. The §4 amendment above carries the rule.
+
+### integration with task-171
+
+`git merge main` (`a350cdd0`, carrying task-171/250/249/185/177) → merge commit `2c03c504`; `npm ci`
+after it (task-250 changed the lockfile). Conflicts in `src/core/context.ts` and
+`test/core/context.test.ts` were resolved to this task's rewrite. 171's facts were folded in where
+they still hold:
+
+1. **Tolerant reads.** The builder passes `onDiagnostic` to `loadMemoryDocumentsAtRev`. A document
+   that does not parse is left out, and its `W_MEMORY_UNREADABLE` line (`formatDiagnostic`) rides the
+   `CoreResult` **`warnings`** channel (`coreOk`'s third argument), never the payload. I chose
+   `warnings` over `notes` because an unreadable file is a fact about the repository, not about the
+   context. It is the channel `memory search` already uses for the same diagnostic (task-171), and the
+   one each surface renders on stderr (task-169); `notes` stay the context's own diagnostics (§4 D3,
+   P5.3.3 sc. 3).
+2. **A subject that does not parse** → `NOT_FOUND` with `details.unreadable` listing those lines, so
+   it does not read as a bare "not found". An element that is absent while every file is readable
+   carries no `details`.
+3. **Tests.** The old "propagates a ValidationError" test is now "no longer aborts assembly", with the
+   warning asserted. New tests in `context-builder.test.ts` cover a malformed sibling (reported, not
+   in the payload), a malformed would-be-relevant document (reported, not silently dropped; the
+   readable relevant set is unchanged), a malformed subject (`NOT_FOUND` + details) and a clean build
+   (no `warnings` key).
+4. **Archived subject.** `loadMemoryDocumentsAtRev` takes `MemoryScanOptions` only, with no archived
+   default (`grep -n "MemoryTypeScanOptions" src/memory/query.ts` → the three type-scoped lookups). It
+   returns archived documents, so the builder keeps refusing an archived subject; the REQ-STATE-06
+   tests pass unchanged.
+5. **spec-012 §6.** 171's committed sentence said the loader resolves the element through primitives
+   that exclude archived documents by default, which is not how the builder reads. The pending
+   amendment corrects it and adds its own Revision note (reason above). The §4 example path was
+   reworded after `test/docs/name-resolvability.test.ts` flagged a non-existent path in it.
+
+**`main` `a350cdd0` does not build.** `npx tsc --noEmit` fails at `src/agent/discovery.ts:128`:
+task-177 calls `atHeadOr(read, fallback)`, task-171 changed it to `atHeadOr(root, read, fallback)`,
+and jest's `globalSetup` build then fails, so no suite runs on that commit (measured in a temporary
+detached worktree). Fixed here in `5afefa32`, a separate one-line commit, so it can be cherry-picked
+to `main` on its own.
+
+| Gate (branch `bfb66651`, pending amendments in the tree) | Result |
+|---|---|
+| `npm run test:coverage` | 228 suites / 4178 tests passed; 98.95 / 96.05 / 95.91 / 99.59; `src/core/context.ts` 100 / 99.21 / 100 / 100 (line 451, `withBodies`' `?? ''`) |
+| baseline: `main` `a350cdd0` + the one-line discovery fix, temporary detached worktree | 227 suites / 4113 tests; 98.92 / 95.89 / 95.65 / 99.58 — no regression |
+| `npm run lint` / `npm run docs:api` (0 warning lines) | exit 0 / exit 0 |
+| `npx tsc --noEmit -p tsconfig.json` / `npx tsc -p tsconfig.build.json --noEmit` | exit 0 / exit 0 |
+| `node scripts/check-governance.cjs --base c80167d6` | exit 0 |
