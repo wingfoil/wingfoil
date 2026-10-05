@@ -167,14 +167,36 @@ Each edit is in the worktree, uncommitted, for `memory amend` at the review gate
 
 - `spec-008-cli-grammar` — `--reason "task-165: §1 lists mcp among the flat commands and says what a bootstrap command is (dl-046 A(a), bug-028); the surplus-operand rule names the bootstrap commands (bug-179); §Context and Consequences name stacks.technologies and src/mcp (bug-204). Revision note 2026-10-05."`
 - `spec-005-cli-command-contract` — `--reason "task-165: §Context lists mcp among the flat commands (bug-028, dl-046). Revision note 2026-10-05."`
-- `spec-006-core-domain-api` — `--reason "task-165: §3's bootstrap table follows dl-046 A(a), B(a) and C: init and mcp rows not MCP-exposed, audit flat with Resource wingfoil://audit, self-named flat operations admitted and the paths rows renamed to the registered op (bug-028). Revision note 2026-10-05."`
+- `spec-006-core-domain-api` — `--reason "task-165: §3's bootstrap table follows dl-046 A(a), B(a) and C: init and mcp rows not MCP-exposed, audit flat with Resource wingfoil://audit, self-named flat operations admitted and the paths rows renamed to the registered op (bug-028); the paths row's MCP cell is marked as dl-040's, since the registrar derives wingfoil://paths. Revision note 2026-10-05."`
 - `spec-004-mcp-surface-contract` — `--reason "task-165: §4.2 states REQ-SYS-05's bootstrap exemption (dl-046 A(a)) and names workflows.yaml (bug-204). Revision note 2026-10-05."`
 - `spec-015-packaging-publishing` — `--reason "task-165: the staging script is named scripts/publish-staging.cjs in the scope field, §3 and the 2026-09-21 revision (bug-204). Revision note 2026-10-05."`
 
 ### Candidate findings (not filed)
 
-- `docs/01_vision/X_cli-cmds.md` (the command map `spec-008` §1 says it matches) has no `wingfoil mcp`
-  row.
-- `spec-006` §3's `paths` MCP cell (`wingfoil://dna/paths`) still differs from what the registrar
-  derives (`wingfoil://paths`); `dl-040` owns it.
-- user-docs: a CHANGELOG line for the `init`/`mcp` wording change.
+- user-docs: a CHANGELOG line for the `init`/`mcp` wording change (the coordinator files it).
+
+### review (independent)
+
+Verdict: **approve with fixes**, while the task is `in-review`; no re-submit. Fixed in `3183a92e` and in
+the pending `spec-006` amendment:
+
+1. `spec-006` §3's `paths` MCP cell `wingfoil://dna/paths` is known false (the registrar derives
+   `wingfoil://paths`, `deriveMcpResourceUri` in `src/mcp/registrar.ts`). It is now marked like the
+   `agentList`/`agentShow` rows: *(URI per `dl-040`; the registrar derives `wingfoil://paths`)*. The
+   Revision note and the proposed `--reason` say so.
+2. `docs/01_vision/X_cli-cmds.md` had no `mcp` row although `spec-008` §1 says its grammar matches that
+   map. Pillar 5 gains the row; the document goes to v1.4 (2026-10-05) with a revision entry.
+3. `CoreOperation.name`'s TSDoc (`src/core/registry.ts`) said only `{module}{Verb}`; it now admits the
+   self-named flat operation (`paths`), per `dl-046` C.
+4. The `wingfoil audit` allowlist entry had an ad-hoc reason. The header had no kind for "in a release's
+   `features:`, no task yet", so the allowlist gains one, `scheduledIn(release, feature)`, documented in
+   the header; the entry is `scheduledIn('minor-v0.4', 'P5.1.3')` (`minor-v0.4` `features:` lists
+   P5.1.3).
+
+Gates after the fixes: `npx jest test/docs test/cli/program.test.ts test/core/registry.test.ts` → 9
+suites / 84 tests pass, name-resolvability "0 stale allowlist entries"; `npm run lint`,
+`npm run docs:api`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` →
+exit 0.
+
+Follow-ups the coordinator files: the CHANGELOG line above; `--format bogus init extra` gives the
+surplus refusal, while derived commands check `--format` first (flag-check order).
