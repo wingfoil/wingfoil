@@ -117,6 +117,7 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
   // bug-179 (task-165): the two bootstrap commands are wired by hand outside `CORE_MODULES`, so the
   // sweep above cannot reach them; they refused a surplus at exit 2 in Commander's own wording
   // (`too many arguments for 'init'`). They now give the shared refusal, before the root is resolved.
+  // `P5.1.4-cli-ux.feature`'s "a bootstrap command refuses an operand in the same words" is this case.
   it.each([['init'], ['mcp']] as const)('`wingfoil %s extra` gives the shared refusal (bug-179)', (name) => {
     const before = snapshot(repo);
 

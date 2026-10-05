@@ -21,6 +21,12 @@ Feature: P5.1.4 (US-0A-14) - CLI UX Improvements
     And the message is "error: wingfoil memory approve takes one positional <id> (got 2 positionals)"
     And no commit is written
 
+  Scenario: Error - a bootstrap command refuses an operand in the same words
+    When I run "wingfoil init extra"
+    Then the CLI exits with code 2
+    And the message is "error: wingfoil init takes no positional (got 1 positional)"
+    And no commit is written
+
   Scenario: Error - errors use a consistent format with an exit code
     When any command fails with a user error
     Then the message follows the pattern "error: <reason>"
