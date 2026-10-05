@@ -65,7 +65,10 @@ elsewhere:
 - Character-class checks that reference another artefact's rule set — e.g. (`memory.yaml`)
   *"every literal character in a type's `id_pattern` (outside `{placeholder}` tokens) must be a
   member of `[a-z0-9-.]`"* — is Pass 2 because it enforces a rule owned by the shared ID
-  constants (below), not by the `id_pattern` field's own type (`string`).
+  constants (below), not by the `id_pattern` field's own type (`string`). The slug that fills a
+  `{slug}` token obeys the same character class; how a title is normalized into it (a `.` kept
+  between two alphanumerics, every other run outside `[a-z0-9]` collapsed to `-`) is stated once, in
+  `spec-001-memory-yaml-schema`'s `{slug}` row (`dl-107` S1 (a)), and is not repeated here.
 
 Each Pass-2 check either passes silently or throws a single mapped `E_*` error; the caller decides
 whether to keep collecting after the first Pass-2 failure or to stop.
@@ -260,3 +263,9 @@ contract. The error-code family names (`E_INVALID_<SCHEMA>_SCHEMA`, `E_INVALID_<
 `E_YAML_PARSE_ERROR`) and schema/spec ownership mapping were cross-checked against the current
 `docs/04_memory/design/specs/` catalog (spec-001/002/003/008) and
 `.wingfoil/dna.yaml`'s `tech_stack.validation: Zod`.
+
+**Revision (2026-10-02, `task-163-implement-date-author-id-tokens-edit-frontmatter-through`) — §1
+points to the `{slug}` rule.** `dl-107` Action 1 asked to amend a slug rule in §1, which held none
+(`bug-157`). The rule lives in `spec-001`'s `{slug}` row since `dl-107` was ratified; §1's
+character-class bullet now names that row instead of restating it, so the two specs cannot drift. No
+other section changed.
