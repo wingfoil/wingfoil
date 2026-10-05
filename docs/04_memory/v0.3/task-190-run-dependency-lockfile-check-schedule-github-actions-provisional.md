@@ -2,7 +2,7 @@
 id: "task-190-run-dependency-lockfile-check-schedule-github-actions-provisional"
 type: task
 title: "Run the dependency and lockfile check on a schedule in GitHub Actions (provisional cadence trigger)"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "low"
