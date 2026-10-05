@@ -108,7 +108,8 @@ grounds for the departure:
 2. **It is redundant with git, and the git-based design is already normative.** REQ-STATE-02
    requires state to be recomputable purely from Memory files at a given commit, with no
    `.wingfoil/state/` artifact needed for correctness; git itself already carries the audit
-   role (REQ-SEC-02) — every `memory.submit`/`approve`/`reject`/`deprecate` is exactly one commit,
+   role (REQ-SEC-02) — every `memory.submit`/`approve`/`reject`/`deprecate` is exactly one commit
+   (an approve that fires the `supersedes:` trigger is followed by its own `finalize` commit, below),
    and `memory.approve`/`memory.reject` commits carry the approver identity and reason as explicit
    `Approver:` / `Reason:` trailers in the commit body (REQ-SEC-04), with the timestamp supplied by the git
    commit itself. `wingfoil memory history` (P1.10) reconstructs the same audit trail F-04 wanted
@@ -121,9 +122,9 @@ grounds for the departure:
 |----------------------|-------------------------------------------------------------------------------|
 | `memory.add`         | `id` (from placeholder), `type`, `status: draft`, `tmpl_version`, any field the specific add action pins (e.g. `version` for a `release-line`); everything else stays at template defaults |
 | `memory.submit`      | `title`, all other required type-specific fields, `status` (→ the type's post-submit state), body content, and clears `rejection_reason` if present (removes the key) |
-| `memory.approve`     | `status` only (frontmatter); approver identity + reason live in the commit message, not frontmatter |
+| `memory.approve`     | `status` only (frontmatter); approver identity + reason live in the commit message, not frontmatter. When it fires the `supersedes:` trigger, the superseded element's `status` (→ `superseded`) changes too, in a `finalize` commit of its own (below) |
 | `memory.reject`      | `status` (frontmatter) and `rejection_reason` (set to the `--reason` text); approver identity + reason also live in the commit message per P1.7 — the frontmatter copy is a convenience, not a replacement |
-| `memory.deprecate`   | `status: deprecated` (or a type-specific deprecate-adjacent state first, e.g. `accepted → superseded`) |
+| `memory.deprecate`   | `status: deprecated` — for every type, `adr`/`tech-spec` included (`spec-001`'s implicit wildcard edge; never `superseded`) |
 | `memory.amend`       | the body and every frontmatter field **except** `status`, `id`, `type`, `release`, `rejection_reason` and `supersedes`, as the author edited them in the working tree; those six stay as committed (`release` only on a type whose scaffold committed at `HEAD` declares a `release` field), and past the type's initial state `title` and the required fields must stay non-empty (§ Validation rules). Only on a type whose `memory.yaml` entry declares `amendable: true` (`spec-001`); approver identity + reason live in the commit message, as for `memory.approve` (`dl-108`) |
 
 `memory.approve` changes **only** the `status` field and no other frontmatter field. `memory.reject`
@@ -140,6 +141,19 @@ the content and never `status`. It also leaves alone the fields other operations
   scaffold, `release` stays reserved;
 - `rejection_reason` is written by `memory.reject` and cleared by `memory.submit`;
 - `supersedes` is the trigger of the `superseded` edge.
+
+**Retiring a replaced element.** `memory.deprecate` writes `deprecated` on every type. `superseded`
+is a `waiting` edge (`spec-001`) and is never written by hand or by `deprecate`. It is written by the
+`supersedes:` trigger (`dl-065` Q1.1): when an `adr` is approved into `accepted`, or a `tech-spec`
+into `approved`, and its committed `supersedes:` names another element of the same type in that
+same state, the named element's `status` moves to `superseded`. That change is its own commit,
+`wf({type}): finalize {id} [{state} → superseded]` (`spec-008` §2). Its `Reason:` names the superseding
+element and the sha of its approve commit. It carries no `Approver:` line, because the decision is
+the approve's. Each of the two commits holds one document, so `memory history` reads each element's
+record from its own path. `supersedes` holds one element id, or is empty. A replaced element whose
+successor names nothing in `supersedes:` is retired with `deprecate` to `deprecated`, naming the
+replacement in the `Reason:`. A `superseded` element may still be deprecated: the wildcard edge is
+legal from any state (`dl-065` Q3; pinned by `test/core/memory-deprecate.test.ts`).
 
 ### Validation rules
 
@@ -245,3 +259,13 @@ field the type declares in `template.frontmatter.lists`, `[]` included. On any o
 a mapping is missing. The `release` scaffold leaves `features:` empty, so an untouched one still
 fails. The reader note on `n/a` is non-normative. Edited in place, with no supersede, no state change and no `version:`
 field (`dl-047`); pending the approver's sign-off at `task-168`'s review.
+
+**Revision (2026-10-02, `task-162-fire-supersedes-trigger-superseding-element-approval`) — the
+`memory.deprecate` row, and the `supersedes:` trigger.** `dl-065` (`ready`; Q2, Q3, Q1.1). The
+`memory.deprecate` row said the verb might write "a type-specific deprecate-adjacent state first, e.g.
+`accepted → superseded`". The verb never did, and `spec-001` forbids it. The row now says what the verb
+writes. The `memory.approve` row and the new paragraph "Retiring a replaced element" state what writes
+`superseded` now, and that `superseded → deprecated` stays legal. The audit paragraph's "exactly
+one commit" names the `finalize` commit that follows such an approve. Edited in place, with no supersede,
+no state change and no `version:` field (`dl-047`); pending the approver's sign-off at `task-162`'s
+review.
