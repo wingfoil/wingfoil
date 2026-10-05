@@ -20,6 +20,7 @@ import { join } from 'path';
 import { load } from 'js-yaml';
 
 import { MemoryYaml } from '../../src/memory/schema';
+import type { StateMachine } from '../../src/memory/schema';
 import {
   ARCHIVED_STATUSES,
   DEFAULT_STATE_MACHINE,
@@ -614,6 +615,10 @@ describe('isArchivedStatus — the shared archived-status predicate (dl-028, REQ
   });
 });
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 describe('resolveTypeTransition — the dl-032 illegal-transition contract (P1.6 sc.2, P5.2.3 sc.2)', () => {
   function expectContract(fn: () => unknown, message: string, detail: RegExp): void {
     try {
@@ -727,30 +732,72 @@ types:
       );
     });
 
-    // The rule is not a property of the cases above: for every registered type of this repository's
-    // own `memory.yaml`, every state and every refusable verb, a refusal prints `(none)` — and every
-    // legal call still returns its target (the refusal set is exactly "no edge of this verb here").
-    it('every refusal on every real type prints `<from> -> (none)`', () => {
+    it('the engine\'s approve-from-a-non-gate reason (spec-004 §4.3\'s example) rides as the exact detail — task `draft`', () => {
+      expectContract(
+        () => resolveTypeTransition(memoryYaml, 'task', 'draft', 'approve'),
+        "illegal transition draft -> (none) for type 'task'",
+        /^illegal `approve` from "draft": not a `gates` state — `approve` is only legal from a gate$/,
+      );
+    });
+
+    /**
+     * The reason the engine gives for refusing `op` from `state`, by category of the state — derived
+     * from the machine here, independently of the engine, so the sweep pins each category's text.
+     */
+    function expectedReason(machine: StateMachine, state: string, op: 'submit' | 'approve' | 'reject'): string {
+      const gate = (machine.gates ?? {})[state] !== undefined;
+      const waiting = (machine.waiting ?? []).includes(state);
+      const last = machine.sequence.indexOf(state) === machine.sequence.length - 1;
+      if (op === 'reject') return 'not a `gates` state — `reject` is only legal from a gate';
+      if (op === 'approve') {
+        if (!gate) return 'not a `gates` state — `approve` is only legal from a gate';
+        if (waiting) return 'both a `gates` and `waiting` state — its forward edge is verb-less (fires only via a Workflow action), not `approve`';
+        return 'a `gates` state with no next `sequence` entry to approve into';
+      }
+      if (gate) return 'a `gates` state — its forward edge requires `approve`, not `submit`';
+      if (waiting) return 'a `waiting` state — its forward edge fires only via a Workflow action, not `submit`';
+      expect(last).toBe(true); // the only other refusal of `submit` from a `sequence` member
+      return 'the last state in `sequence` — there is no forward edge';
+    }
+
+    // The rule is not a property of the cases above: on every type of this repository's own
+    // `memory.yaml`, of the `init`-shaped scaffold (REQ-STATE-08's default machine) and of bug-127's
+    // custom machine, for every state and every refusable verb, a refusal prints `<from> -> (none)`
+    // with its category's reason as the exact detail, and a legal call returns the engine's target.
+    it.each([
+      ['this repository', memoryYaml],
+      ['the init scaffold (REQ-STATE-08 default)', scaffold],
+      ['bug-127\'s custom machine', custom],
+    ])('every call on every type of %s: a refusal prints `<from> -> (none)`, a legal call returns its target', (_label, file) => {
       let refusals = 0;
-      for (const typeName of Object.keys(memoryYaml.types).sort()) {
-        const machine = resolveStateMachine(memoryYaml, typeName);
+      let legal = 0;
+      for (const typeName of Object.keys(file.types).sort()) {
+        const machine = resolveStateMachine(file, typeName);
         for (const state of machine.sequence) {
           for (const op of ['submit', 'approve', 'reject'] as const) {
+            let target: string | undefined;
             try {
-              resolveTransitionTarget(machine, state, op);
-              continue; // legal: nothing to print
+              target = resolveTransitionTarget(machine, state, op);
             } catch {
-              refusals += 1;
+              target = undefined;
             }
+            if (target !== undefined) {
+              legal += 1;
+              expect(resolveTypeTransition(file, typeName, state, op)).toBe(target);
+              continue;
+            }
+            refusals += 1;
             expectContract(
-              () => resolveTypeTransition(memoryYaml, typeName, state, op),
+              () => resolveTypeTransition(file, typeName, state, op),
               `illegal transition ${state} -> (none) for type '${typeName}'`,
-              new RegExp(`^illegal \`${op}\` from "${state}": `),
+              new RegExp(`^${escapeRegExp(`illegal \`${op}\` from "${state}": ${expectedReason(machine, state, op)}`)}$`),
             );
           }
         }
       }
-      expect(refusals).toBeGreaterThan(20); // vacuity guard: the sweep really exercised refusals
+      // Vacuity guards: the sweep really exercised both outcomes on this file.
+      expect(refusals).toBeGreaterThan(0);
+      expect(legal).toBeGreaterThan(0);
     });
   });
 
