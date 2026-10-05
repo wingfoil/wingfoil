@@ -279,6 +279,10 @@ describe('park — one hop along a declared returns edge (task-180)', () => {
   const selfLoop = f.task('t-4', 'backlog', `wf(task): park t-4 [backlog → backlog]${reason}`);
   f.task('t-5', 'in-progress', 'wf(task): add t-5');
   const noReason = f.task('t-5', 'backlog', 'wf(task): park t-5 [in-progress → backlog]');
+  f.task('t-6', 'backlog', 'wf(task): add t-6');
+  const forwardEdge = f.task('t-6', 'in-progress', `wf(task): park t-6 [backlog → in-progress]${reason}`);
+  f.task('t-7', 'in-review', 'wf(task): add t-7');
+  const rejectEdge = f.task('t-7', 'in-progress', `wf(task): park t-7 [in-review → in-progress]${reason}`);
   const report = checkGovernance(f.root);
 
   it('accepts a park along any declared returns edge, not only in-progress → backlog', () => {
@@ -288,6 +292,12 @@ describe('park — one hop along a declared returns edge (task-180)', () => {
 
   it('judges the hop against the machine: a park along no edge is a state finding', () => {
     expect(rulesOf(report, notAnEdge)).toEqual(['state']);
+  });
+
+  it('a park along an edge of the machine that is not a returns edge (forward, gate reject) is a state finding', () => {
+    expect(rulesOf(report, forwardEdge)).toEqual(['state']);
+    expect(rulesOf(report, rejectEdge)).toEqual(['state']);
+    expect(messagesOf(report, forwardEdge, 'state').join()).toMatch(/not a returns edge/);
   });
 
   it('a park that does not move is a bracket finding', () => {
