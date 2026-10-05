@@ -730,9 +730,10 @@ export const ROLES_YAML_PATH = '.wingfoil/roles.yaml' as const;
  * Load and validate `.wingfoil/roles.yaml` in isolation (task-037-role-task-scoped-context,
  * REQ-STATE-05's `directive-loader`, P3.2/P3.7 role → directive bindings) — the same shared two-pass
  * pipeline (`readDocument` + `parseYaml` + `runValidation`) every other pillar loader uses, so this
- * pillar's own validation never depends on another pillar's schema (REQ-SYS-02). Consumed by
- * `resolveRoleDirectives`/`assembleExecutionContext` (`./context.ts`) to resolve a role's assigned
- * directives.
+ * pillar's own validation never depends on another pillar's schema (REQ-SYS-02). The working-tree
+ * reader: `directives list` and the MCP role Prompts resolve a role's directives from it, while the
+ * execution context (`assembleExecutionContext`, `./context.ts`) reads {@link loadRolesYamlAtRev} at its
+ * `stateRef`.
  */
 export function loadRolesYaml(root: string): RolesYaml {
   const filePath = join(root, '.wingfoil', 'roles.yaml');

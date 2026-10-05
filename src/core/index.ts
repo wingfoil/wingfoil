@@ -126,7 +126,13 @@ export {
 } from './loaders';
 export { isWellFormedRevision, resolveRevision, RevisionError } from './revision';
 export type { DirectiveFile, WorkflowsLoadResult } from './loaders';
-export { assembleExecutionContext, resolveRoleDirectives, selectDirectivesById } from './context';
+export {
+  assembleExecutionContext,
+  resolveRoleDirectives,
+  selectDirectivesById,
+  serializeExecutionContext,
+  validateExecutionContext,
+} from './context';
 export {
   buildDirectiveListing,
   loadDirectiveListing,
@@ -135,10 +141,14 @@ export {
 } from './directives-list';
 export type { DirectiveListEntry, DirectiveListing } from './directives-list';
 export type {
+  AssembledExecutionContext,
+  ContextDirective,
+  ContextElementDocument,
+  ContextRequest,
   DirectiveSelection,
+  DnaSelection,
   ExecutionContext,
   ExecutionContextElement,
-  ExecutionContextInputs,
   RoleDirectiveResolution,
 } from './context';
 export * from './types';
@@ -162,6 +172,7 @@ export {
   DEFAULT_CONTEXT_LIMITS,
   filterRelevantMemoryDocuments,
   NO_RELEVANT_MEMORY_NOTE,
+  selectRelevantMemoryDocuments,
 } from './relevance';
 export type {
   ContextLimits,

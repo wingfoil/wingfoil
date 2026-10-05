@@ -34,7 +34,7 @@ import { requireCustomAsset } from '../../src/core/builtin-asset';
 import { assembleExecutionContext, resolveRoleDirectives } from '../../src/core/context';
 import { loadDirectiveListing } from '../../src/core/directives-list';
 import { initWingfoilProject } from '../../src/core/init';
-import { loadDirectives, loadDnaYaml, loadMemoryYaml, loadRolesYaml } from '../../src/core/loaders';
+import { loadDirectives, loadDnaYaml, loadRolesYaml } from '../../src/core/loaders';
 import { TEMPLATE_NAMES } from '../../src/storage';
 import { scanProjectSurface } from '../../src/validation';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -270,15 +270,16 @@ describe('dl-037 precedence over the real shipped built-ins (task-055 rule)', ()
       expect(developer.directives.find((d) => d.frontmatter.id === 'testing')?.frontmatter.name).toBe('Testing (team)');
       expect(developer.warnings).toEqual([expectedWarning]);
 
-      const context = assembleExecutionContext({
-        root: repo,
-        dna: loadDnaYaml(repo),
-        memoryYaml: loadMemoryYaml(repo),
-        directiveFiles: files,
-        rolesYaml: roles,
+      // task-176: the context is read at a `stateRef`, so the element must be committed there.
+      writeFixtureFile(repo, 'docs/memory/task/task-1-none.md', '---\nid: task-1-none\ntype: task\nstatus: backlog\n---\n');
+      commitAll(repo, 'add the element');
+      const assembled = assembleExecutionContext(repo, {
         role: 'developer',
         element: { type: 'task', id: 'task-1-none' },
+        stateRef: 'HEAD',
       });
+      if (!assembled.ok) throw new Error(assembled.error.message);
+      const { context } = assembled.value;
       expect(context.directives.find((d) => d.frontmatter.id === 'testing')?.frontmatter.name).toBe('Testing (team)');
       expect(context.warnings).toEqual([expectedWarning]);
     } finally {

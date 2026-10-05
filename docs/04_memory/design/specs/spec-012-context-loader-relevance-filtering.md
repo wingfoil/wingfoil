@@ -91,18 +91,26 @@ in the **fixed section order** of §7 regardless of completion order.
 
 DNA is small and fully declared, so selection is inclusion-by-category, not fuzzy matching:
 
-- Always include: `project`, `team` (roles/members), `conventions`.
-- Include the `modules[]` entries whose `name` appears in the element's `modules:`/`scope:` frontmatter;
-  if the element declares none, include **all** modules (deterministic superset, never a guess).
-- Always include the `paths:` query categories (`sources, tests, docs, config, governance`).
+- Always include: `project`, `team` (roles/members). The rules the former `conventions` section held
+  are directives since `spec-002` v1.1, and reach the context through §5.
+- Include the `modules[]` entries the element's `modules:`/`scope:` frontmatter selects. Each entry is
+  read by its leading token (`src/workflow — the engine` is `src/workflow`), which selects a module
+  whose `name` equals it, or whose `path` equals it or lies under it at a segment boundary (`src`
+  selects `src/core`, while a prefix that ends mid-segment selects nothing). If the element declares
+  none, include **all** modules (deterministic superset, never a guess); if it declares some and none
+  selects a module, include **all** modules too and record the note `no module matches the element's
+  modules:/scope: (<entries>); all modules included` among the build's diagnostics, never in the
+  payload.
+- Always include the `paths:` section whole, so every query category it declares is included
+  (`sources, tests, docs, config, governance`, and `runs` — `spec-016` §4.1).
 - Emit sections in the **declared order of `dna.yaml`** (source order is the canonical order).
 
 ### 5. Directive resolution (`directive-loader`)
 
 - Look up the request `role` in `roles.yaml`; collect its bound directives (P5.4.2, REQ-SYS-08 — bind by
   role, never by person).
-- Add the **global** directives applied to all roles (`doc-versioning, documentation, security-secrets,
-  claim-evidence`).
+- Add the **global** directives applied to all roles (`doc-versioning, documentation, security,
+  security-secrets, claim-evidence`).
 - Deduplicate by directive id; **sort the final list lexicographically by directive id** (stable,
   reproducible order — never rely on `roles.yaml` listing order or file-system enumeration order).
 - **Precedence when two directives share an id: `custom/` wins over `built-in/`** — a local
@@ -193,9 +201,12 @@ interface ContextLimits {
   excluded for the same reason as `deprecated`; the previously-listed `rejected` is dropped, as
   `spec-001-memory-yaml-schema` removed that status from every type's machine. Ratified by
   `dl-028-archived-states-excluded-from-context`; the shared predicate is `isArchivedStatus`. The
-  Memory scan primitives the loader resolves an element with exclude archived documents by default
-  and take an explicit `includeArchived` opt-in (`dl-038` option 1, `task-171`), so a consumer that
-  omits the filter fails closed.
+  type-scoped Memory lookups (`listMemoryDocumentsByType`, `findMemoryDocumentByTypeAndId` and its
+  `…AtRev` form) exclude archived documents by default and take an explicit `includeArchived` opt-in
+  (`dl-038` option 1, `task-171`), so a consumer that omits the filter fails closed. The context
+  builder does not rest on that default: it reads the whole snapshot at `stateRef`
+  (`loadMemoryDocumentsAtRev`), refuses an archived subject element itself, and drops archived
+  candidates here through `isArchivedStatus`.
 
 ### 7. Canonical serialized payload (`context-builder`)
 
@@ -306,3 +317,28 @@ resolution rules themselves — deduplicate by id, sort lexicographically, `cust
 default, per `task-171-make-memory-scan-primitives-fail-closed-archived-elements` (`dl-038` option 1).**
 `dl-038`'s Actions ask for the new default to be stated here. The excluded set and the predicate are
 unchanged. Edited in place without a supersede or a state change.
+
+**Revision (2026-10-05) — §4 brought in line with `dna.yaml` as it is, per
+`task-176-complete-spec-012-context-builder-dna-selection-relevance`.** §4 told the `dna-loader` to
+always include `conventions`, a section `spec-002` v1.1 removed (its rules moved to directives, which
+§5 already loads), and listed five `paths` categories where the schema has six since `task-138` added
+`runs` (`spec-016` §4.1; `src/dna/schema.ts` `Paths`). The bullet now names no removed section and
+includes the `paths` section whole. In the same pass, §5's global-directive enumeration gains
+`security`, which `roles.yaml` binds globally since
+`task-133-bind-builtin-security-directive-role-stop-tests-pinning` (`dl-059`) and which the enumeration
+therefore under-reported (`grep -n -A8 '^global' .wingfoil/roles.yaml`). Selection rules, order and the
+§7 envelope are untouched; the builder that implements them is `assembleExecutionContext`
+(`src/core/context.ts`). The modules bullet now also matches an entry by path, not only by name, per
+the approver's ruling D3 on this task (2026-10-05): a tech-spec's `scope:` is a path (`src/core`) or
+prose led by one, which a name-only match never selected, leaving such an element with no module at
+all. Edited in place without a supersede or a state change, as the two earlier Revision notes were.
+
+**Revision (2026-10-05) — §6's sentence on the archived default names the primitives that have it,
+per `task-176-complete-spec-012-context-builder-dna-selection-relevance`.** The sentence `task-171`
+added said the primitives "the loader resolves an element with" exclude archived documents by
+default. Since `task-176` the builder resolves the element from the commit's whole snapshot,
+`loadMemoryDocumentsAtRev`, which takes no `includeArchived` and returns archived documents
+(`grep -n "MemoryTypeScanOptions" src/memory/query.ts` lists the three lookups that do). It now names
+those lookups and says how the builder keeps archived content out instead: it refuses an archived
+subject and §6 drops archived candidates. The excluded set and the predicate are unchanged. Edited in
+place without a supersede or a state change.

@@ -68,7 +68,7 @@ that changes from task to task.
   `agent`, as every pillar's are (`spec-006` §3–§4). The CLI and MCP surfaces are derived from that
   registration (§8).
 - Context assembly is not re-implemented. `agent execute` calls the `spec-012`
-  context builder, whose entry today is `assembleExecutionContext` (`src/core/context.ts:267`).
+  context builder, whose entry today is `assembleExecutionContext` (`src/core/context.ts`).
   Step resolution is not re-implemented either: it is `spec-017`'s (workflow commands and state
   deduction, drafted in the same planning). `agent execute --next` consumes `NextResult.next`
   (`spec-017` §7.3, §8), and `agent list --waiting` consumes `StatusResult.open[].frontier`
