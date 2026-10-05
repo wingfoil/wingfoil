@@ -168,6 +168,67 @@ describe('scanText — dotenv-style-secret-line tolerates a line prefix (bug-037
   });
 });
 
+/**
+ * task-182 / `bug-190-the-dotenv-secret-pattern-misses-commented-readonly-declare-and-powershell-assignments`:
+ * after bug-037 the prefix still missed a commented-out credential line (the common `.env` leak shape),
+ * a list marker in front of `export`, the `readonly` and `declare` shell builtins, and PowerShell's
+ * `$env:` assignment. Values stay short, as above, so only the dotenv pattern can catch them.
+ */
+describe('scanText — dotenv-style-secret-line covers comment, readonly, declare and $env: prefixes (bug-190, spec-007 §2)', () => {
+  const blockingIds = (line: string): string[] =>
+    scanText(`${line}\n`, '.envrc.fixture').blocking.map((f) => f.patternId);
+
+  it.each([
+    ['a `#` comment', '# TOKEN=abcdef123'],
+    ['a `#` comment with no space', '#NPM_TOKEN=abcdef123'],
+    ['a list marker and `export`', '- export TOKEN=abcdef123'],
+    ['`readonly`', 'readonly API_KEY=abcdef123'],
+    ['`declare` with a flag', 'declare -x DB_PASSWORD=abcdef123'],
+    ['PowerShell `$env:`', '$env:API_TOKEN="abcdef123"'],
+  ])('blocks a credential line behind %s', (_prefix, line) => {
+    expect(blockingIds(line)).toContain('dotenv-style-secret-line');
+  });
+
+  it.each([
+    ['a comment naming an unrelated key', '# NODE_ENV=production'],
+    ['a comment with a YAML colon mapping', '# TOKEN: abc123'],
+    ['`readonly` on an unrelated key', 'readonly NODE_ENV=production'],
+    ['an empty `$env:` value', '$env:API_TOKEN='],
+  ])('does not match %s', (_what, line) => {
+    expect(blockingIds(line)).not.toContain('dotenv-style-secret-line');
+  });
+});
+
+/**
+ * task-182 / `bug-228-the-generic-api-key-assignment-secret-pattern-flags-prose-such-as-secret-scorecard-action-in-memory-documents`:
+ * a sentence whose colon follows a key word and precedes a hyphenated name of 16+ characters read as
+ * a key assignment. A value made only of lower-case words joined by hyphens is prose, not a key.
+ * The lines that must still block are given as (key, value) halves and joined at runtime, so this
+ * source file holds no secret-shaped literal (dl-122 S1).
+ */
+describe('scanText — generic-api-key-assignment does not read prose as a key (bug-228, spec-007 §2)', () => {
+  const blockingIds = (line: string): string[] =>
+    scanText(`${line}\n`, 'notes.md').blocking.map((f) => f.patternId);
+
+  it.each([
+    ['the sentence that failed the B6 gate', 'It does not make the scores secret: scorecard-action uploads them'],
+    ['a decision about a token', 'The refresh token: rotation-every-release is decided'],
+    ['a hyphenated passphrase in prose', 'the password: correct-horse-battery-staple'],
+  ])('does not block %s', (_what, line) => {
+    expect(blockingIds(line)).not.toContain('generic-api-key-assignment');
+  });
+
+  it.each([
+    ['a mixed-case value', 'client_secret: ', 'abcdefGHIJKLmnopQRST'],
+    ['a value with a digit', 'the password: ', 'correct-horse-battery-staple-9'],
+    ['a value with an underscore', 'token: ', 'abcd_efgh_ijkl_mnop'],
+    ['a lower-case run with no hyphen', 'secret: ', 'abcdefghijklmnopqrstuv'],
+    ['a capitalised key word', 'Client_Secret: ', 'abcdefGHIJKLmnopQRST'],
+  ])('still blocks %s', (_what, key, value) => {
+    expect(blockingIds(key + value)).toContain('generic-api-key-assignment');
+  });
+});
+
 describe('scanText — warn-severity pattern shapes (spec-007 §2)', () => {
   it('warns (not blocks) on a generic high-entropy string near a credential-shaped key', () => {
     const result = scanText('auth: fakeFAKEfakeFAKEfakeFAKEfakeFAKE1234\n', 'fixture.txt');
@@ -482,6 +543,52 @@ describe("REQ-SEC-08 Fit Criterion — this repository's own indexed (tracked + 
 
     expect(result.filesScanned).toBe(0);
     expect(result.blocking).toEqual([]);
+  });
+});
+
+/**
+ * dl-122 Q1 (b) / `security-secrets` S1 — a fixture that must match a secret pattern is built at
+ * runtime, never written as one source literal. This is the rule's check: the project's own scanner,
+ * run over every tracked (indexed) file under `test/`, finds no blocking match. `test/` is not the
+ * production scan surface (spec-007 §1, `SCAN_SURFACE_ROOTS`, unchanged — dl-073 (A) declined); it
+ * is the surface the rule applies to, chosen here. GitHub push protection rejected this repository's
+ * pushes over a literal in this very file (`bug-055`): every scanner reads every file.
+ *
+ * Like `scanProjectSurface`, it judges the git index, so an edit is seen once it is staged. A line
+ * that must stay literal uses a spec-007 §3 exclusion (an `<!-- example -->` fence, a placeholder
+ * value, a `.wingfoil/security-ignore` glob).
+ */
+describe('dl-122 S1 — no blocking secret-shaped literal in the tracked files under test/', () => {
+  const repoRoot = join(__dirname, '..', '..');
+  const TEST_SCAN_ROOTS = ['test'];
+
+  it('reads every tracked file under test/ (non-vacuity)', () => {
+    expect(scanProjectSurface(repoRoot, { surfaceRoots: TEST_SCAN_ROOTS }).filesScanned).toBeGreaterThan(100);
+  });
+
+  it('matches 0 blocking secret patterns across the tracked files under test/', () => {
+    // `toEqual([])` names each offending file, line and pattern on failure.
+    expect(scanProjectSurface(repoRoot, { surfaceRoots: TEST_SCAN_ROOTS }).blocking).toEqual([]);
+  });
+
+  describe('the same scan on a planted literal (the clean verdict above is a real discriminator)', () => {
+    let repo: string;
+    afterEach(() => removeTempDir(repo));
+
+    it('fails on a tracked test file that holds a secret-shaped literal', () => {
+      repo = makeTempGitRepo();
+      // The planted line is assembled here, so this file does not hold it (S1).
+      const planted = ['-----BEGIN RSA ', 'PRIVATE KEY-----'].join('');
+      writeFixtureFile(repo, 'test/planted.test.ts', `const pem = '${planted}';\n`);
+      writeFixtureFile(repo, 'test/clean.test.ts', 'const ok = 1;\n');
+      git(repo, ['add', '-A']);
+
+      const result = scanProjectSurface(repo, { surfaceRoots: TEST_SCAN_ROOTS });
+      expect(result.filesScanned).toBe(2);
+      expect(result.blocking.map((f) => [f.file, f.patternId])).toEqual([
+        ['test/planted.test.ts', 'private-key-pem'],
+      ]);
+    });
   });
 });
 
