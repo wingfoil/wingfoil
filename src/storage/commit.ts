@@ -18,6 +18,7 @@
  */
 import { execFileSync, spawnSync } from 'child_process';
 
+import { formatVersionTrailer, readBuildStamp } from './build-stamp';
 import { E_GIT_READ_FAILED, E_INVALID_REVISION, StorageError } from './errors';
 import { runGitRead, runGitReadBytes } from './git-read';
 import type { GitReadOptions } from './git-read';
@@ -72,11 +73,33 @@ function gitReadOptions(options: CommitOptions, accepted: readonly number[]): Gi
 }
 
 /**
+ * `message` with the build signature appended as a trailer paragraph of its own (task-192, `dl-111`):
+ * a blank line, then `WingFoil-Version: <semver> (<sha>)` ({@link readBuildStamp}).
+ *
+ * A separate final paragraph, never a line merged into the caller's body: git reads trailers from the
+ * message's final paragraph only, and so does `parseReasonBlock` (`src/memory/commit-message.ts`),
+ * whose `Reason:` block ends where that paragraph begins. Merged into an `Approver:`/`Reason:` body
+ * (what `git commit --trailer` would do, since that body is itself trailer-shaped), the signature would
+ * turn the whole body into the trailer block and cut a multi-line reason short. The caller's message
+ * is trimmed of trailing whitespace first, which `--cleanup=whitespace` would drop anyway.
+ */
+function stampedMessage(message: string): string {
+  return `${message.replace(/\s+$/, '')}\n\n${formatVersionTrailer(readBuildStamp())}`;
+}
+
+/**
  * Stage exactly `paths` (root-relative or absolute; each passed verbatim after `--` so a path that
  * looks like a flag is never misread) and create a single commit with `message` that contains **only**
  * those paths, returning the new commit's 40-hex sha. Other changes already staged in the index are
  * neither committed nor unstaged (bug-027) — this also holds for the first commit of an empty
  * repository (`wingfoil init`).
+ *
+ * **What the commit records is `message` plus the build signature** (task-192, `dl-111`): a final
+ * trailer paragraph `WingFoil-Version: <semver> (<sha>)` ({@link stampedMessage}), so every commit
+ * WingFoil writes says which build wrote it and a hand-written one carries no such line. The body is
+ * normalized by `--cleanup=whitespace`, pinned rather than inherited from `commit.cleanup`
+ * (`bug-051`). Callers keep returning their own `message` in `CoreResult.commit`; the signature is
+ * this primitive's, not the operation's.
  *
  * Determinism note (REQ-SYS-07): a git commit's sha necessarily incorporates the author/commit
  * timestamp, so two runs produce different shas — that is inherent to *creating* history and is not
@@ -100,7 +123,11 @@ export function commitPaths(
   const commitOptions: CommitOptions = options.author
     ? { ...options, env: { ...options.env, GIT_AUTHOR_NAME: options.author.name, GIT_AUTHOR_EMAIL: options.author.email } }
     : options;
-  runGit(root, ['commit', '--only', '--quiet', '-m', message, '--', ...paths], commitOptions);
+  // `--cleanup=whitespace` (bug-051): the body's normal form — trailing whitespace stripped, blank-line
+  // runs collapsed, a `#` line kept — is the tool's, whatever `commit.cleanup` the operator's or the
+  // repository's git config sets. Unpinned, `strip` deleted a reason line opening with `#` and
+  // `verbatim` kept what `dl-067` clause 3 declares removed.
+  runGit(root, ['commit', '--only', '--quiet', '--cleanup=whitespace', '-m', stampedMessage(message), '--', ...paths], commitOptions);
   return runGit(root, ['rev-parse', 'HEAD'], options).trim();
 }
 

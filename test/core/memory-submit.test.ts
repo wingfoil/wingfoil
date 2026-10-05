@@ -25,6 +25,7 @@ import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult, exitCodeForThrow } from '../../src/core/exit-code';
 import { UsageError } from '../../src/core/usage-error';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
 
 const MEMORY_YAML = `version: 1
 defaults:
@@ -118,7 +119,7 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
     // The transition is recorded in git: one new commit, subject only, scoped to the one file.
     expect(gitOut(repo, ['rev-list', '--count', `${before}..HEAD`])).toBe('1');
     expect(result.commit).toEqual({ sha: head(repo), message: 'wf(task): submit task-101' });
-    expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe('wf(task): submit task-101');
+    expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe(`wf(task): submit task-101${STAMP_TRAILER}`);
     expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD'])).toBe('docs/memory/v0.2/task-101.md');
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
   });

@@ -32,6 +32,7 @@ import { parseCommitReason } from '../../src/memory/audit';
 import { normalizeReason } from '../../src/memory/commit-message';
 import { splitFrontmatter } from '../../src/storage';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
 
 const MEMORY_YAML = `version: 1
 defaults:
@@ -187,7 +188,7 @@ describe('CORE_MODULES memory.memoryReject — P1.8 fit criteria', () => {
     // dl-054 + CLAUDE.md §5.1: bracketed subject, mandatory `Approver:` and `Reason:` body lines.
     expect(gitOut(repo, ['rev-list', '--count', `${before}..HEAD`])).toBe('1');
     expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe(
-      'wf(task): reject task-101 [pending → draft]\n\nApprover: WingFoil Test <wf-test@example.invalid> (approver)\nReason: tests missing',
+      `wf(task): reject task-101 [pending → draft]\n\nApprover: WingFoil Test <wf-test@example.invalid> (approver)\nReason: tests missing${STAMP_TRAILER}`,
     );
     expect(result.commit?.sha).toBe(head(repo));
     expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD'])).toBe('docs/memory/v0.2/task-101.md');

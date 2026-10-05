@@ -61,10 +61,9 @@ import { load as yamlLoad } from 'js-yaml';
 import { initWingfoilProject } from '../../src/core';
 import { renderCustomDirective } from '../../src/directives/create';
 import { makeTempGitRepo, removeTempDir, writeFixtureFile, commitAll } from '../storage/helpers/git-fixture';
+import { distBuildStamp, distStampTrailer } from './helpers/dist-stamp';
 import { CLI_FIXTURE_ROOT, DIST_DIR, runCliHarness, type SpawnedRun } from './helpers/spawn-cli';
 
-const REPO_ROOT = join(__dirname, '..', '..');
-const PKG_VERSION = (JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf-8')) as { version: string }).version;
 
 /** Spawn the real, compiled CLI wiring against a given project root and capture exit code/stdout/stderr. */
 function runCliInRoot(root: string, ...args: readonly string[]): SpawnedRun {
@@ -83,10 +82,11 @@ describe('program.ts — real commander wiring (compiled + spawned, out-of-proce
     expect(existsSync(join(DIST_DIR, 'cli', 'program.js'))).toBe(true);
   });
 
-  it('`--version` prints the package.json version to stdout and exits 0 (bug-001)', () => {
+  it('`--version` prints `<semver> (<sha>)` to stdout and exits 0 (bug-001, task-192)', () => {
     const result = runCli('--version');
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe(PKG_VERSION);
+    // `<semver> (<sha>)`, the sha from the build record dist/ was built with (task-192, dl-111 Action 3).
+    expect(result.stdout.trim()).toBe(distBuildStamp());
     expect(result.stderr).toBe('');
   });
 
@@ -703,7 +703,7 @@ paths:
           '',
           'Approver: WingFoil Test <wf-test@example.invalid> (approver)',
           'Reason: meets standards',
-        ].join('\n'),
+        ].join('\n') + distStampTrailer(),
       );
     });
 
@@ -783,7 +783,7 @@ paths:
       expect(content).toContain('status: draft');
       expect(content).toContain('rejection_reason: "tests missing"');
       expect(execFileSync('git', ['-C', repo, 'log', '-1', '--format=%B'], { encoding: 'utf-8' }).trim()).toBe(
-        'wf(task): reject task-101 [pending → draft]\n\nApprover: WingFoil Test <wf-test@example.invalid> (approver)\nReason: tests missing',
+        `wf(task): reject task-101 [pending → draft]\n\nApprover: WingFoil Test <wf-test@example.invalid> (approver)\nReason: tests missing${distStampTrailer()}`,
       );
     });
 
@@ -846,7 +846,7 @@ types:
       expect(result.status).toBe(0);
       expect(readFileSync(join(repo, 'docs/memory/decisions/decision-12.md'), 'utf-8')).toContain('status: deprecated');
       expect(execFileSync('git', ['-C', repo, 'log', '-1', '--format=%B'], { encoding: 'utf-8' }).trim()).toBe(
-        'wf(decision): deprecate decision-12 [approved → deprecated]\n\nReason: superseded by decision-20',
+        `wf(decision): deprecate decision-12 [approved → deprecated]\n\nReason: superseded by decision-20${distStampTrailer()}`,
       );
     });
 
@@ -856,7 +856,7 @@ types:
       expect(result.stderr).toBe('');
       expect(readFileSync(join(repo, 'docs/memory/decisions/decision-12.md'), 'utf-8')).toContain('status: deprecated');
       expect(execFileSync('git', ['-C', repo, 'log', '-1', '--format=%B'], { encoding: 'utf-8' }).trim()).toBe(
-        'wf(decision): deprecate decision-12 [approved → deprecated]',
+        `wf(decision): deprecate decision-12 [approved → deprecated]${distStampTrailer()}`,
       );
     });
 

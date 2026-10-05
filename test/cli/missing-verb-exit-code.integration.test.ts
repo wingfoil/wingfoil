@@ -39,15 +39,14 @@
  * the real process status. Nothing is measured through a pipe — a pipe reports the last command's
  * status, which is how this class of measurement goes wrong.
  */
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { join } from 'path';
 
 import { buildCliCommands, listRegisteredCliCommands } from '../../src/cli/registrar';
 import { CORE_MODULES } from '../../src/core';
+import { distBuildStamp } from './helpers/dist-stamp';
 import { CLI_FIXTURE_ROOT, DIST_DIR, runCliHarness, type SpawnedRun } from './helpers/spawn-cli';
 
-const REPO_ROOT = join(__dirname, '..', '..');
-const PKG_VERSION = (JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf-8')) as { version: string }).version;
 
 /** Spawn the compiled CLI against the static fixture root; `status` is the real process exit code. */
 function runCli(...args: readonly string[]): SpawnedRun {
@@ -166,7 +165,7 @@ describe('AC4 — asking for help still exits 0 (characterization: the trap)', (
   it('`wingfoil --version` exits 0', () => {
     const result = runCli('--version');
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe(PKG_VERSION);
+    expect(result.stdout.trim()).toBe(distBuildStamp());
     expect(result.stderr).toBe('');
   });
 

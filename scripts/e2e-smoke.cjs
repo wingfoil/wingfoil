@@ -181,7 +181,9 @@ function runSmoke(options) {
     const label = `wingfoil --version = ${options.expectedVersion}`;
     const run = invoke(['--version'], tmpdir());
     const actual = run.stdout.trim();
-    const ok = run.status === 0 && actual === options.expectedVersion;
+    // `--version` prints the build stamp `<semver> (<sha>)` (task-192, `dl-111` Action 3); the semver is
+    // what this check pins. A bare `<semver>` is still accepted: it is what builds before 0.3 print.
+    const ok = run.status === 0 && (actual === options.expectedVersion || versionOfStamp(actual) === options.expectedVersion);
     if (!record({ label, ok, detail: ok ? 'match' : `got "${actual}" (exit ${run.status})` })) return done();
   }
 
@@ -191,6 +193,17 @@ function runSmoke(options) {
     }
   }
   return done();
+}
+
+/**
+ * The `<semver>` of a `--version` stamp `<semver> (<sha>)`, or `null` when `stamp` has another shape.
+ *
+ * @param {string} stamp
+ * @returns {string | null}
+ */
+function versionOfStamp(stamp) {
+  const match = /^(\S+) \((?:[0-9a-f]{7,64}(?:-dirty)?|unknown)\)$/.exec(stamp);
+  return match ? match[1] : null;
 }
 
 /** Parse `[--expect-version X] [-- command args...]`. */

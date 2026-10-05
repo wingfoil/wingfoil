@@ -23,6 +23,8 @@
  * Pure and deterministic (REQ-SYS-07): the output is a function of the input alone; ids keep the order
  * the caller gives.
  */
+import { WINGFOIL_VERSION_TRAILER_KEY } from '../storage';
+
 import type { TransitionOp } from './state-machine';
 
 /** The canonical arrow written in `[from → to]` subject brackets (U+2192); `./audit.ts`'s bracket reader (`BRACKET_ARROW_RE`) also reads the ASCII `->` (`bug-137`). */
@@ -145,9 +147,9 @@ export function reasonRefusalMessage(reason: string): string | null {
  * and it is worth keeping them apart:
  *
  *  1. **git's**, which applies whether or not this function exists. `commitPaths`
- *     (`src/storage/commit.ts`) commits with `-m`, so git's `cleanup=whitespace` strips per-line
- *     trailing whitespace, collapses runs of blank lines to one, and drops leading and trailing blank
- *     lines. This is why `spec-008-cli-grammar` §2's original "Recorded verbatim" was already false
+ *     (`src/storage/commit.ts`) passes `--cleanup=whitespace` explicitly (`bug-051`, task-192), so —
+ *     whatever `commit.cleanup` the git config sets — git strips per-line trailing whitespace,
+ *     collapses runs of blank lines to one, and drops leading and trailing blank lines. This is why `spec-008-cli-grammar` §2's original "Recorded verbatim" was already false
  *     for any multi-line text, independently of bug-042.
  *  2. **This module's**: the first line's leading whitespace is trimmed. git does NOT do this. It is
  *     needed because that line sits after `Reason: ` on the same physical line and
@@ -269,6 +271,37 @@ export function parseApproverTrailerLine(body: string): string | null {
     .split('\n')
     .find((line) => line.trim() !== '');
   return first !== undefined && APPROVER_KEY_RE.test(first) ? first : null;
+}
+
+/** A `WingFoil-Version:` trailer line and its value, in any letter case as git reads trailer keys. */
+const VERSION_TRAILER_RE = new RegExp(`^${WINGFOIL_VERSION_TRAILER_KEY}:[ \\t]*(\\S.*?)\\s*$`, 'i');
+
+/**
+ * The build signature a commit body records — the value of its `WingFoil-Version:` trailer
+ * (task-192, `dl-111` Action 3), `<semver> (<sha>)` — or `null` when it records none: a commit
+ * written by hand, or by a WingFoil build older than the trailer.
+ *
+ * Read only from the body's **final paragraph**, and only when every line of it is trailer-shaped —
+ * the paragraph `commitPaths` appends, and the one git's own reader takes
+ * (`git log --format='%(trailers:key=WingFoil-Version,valueonly)'`). Unlike the `Reason:` terminator
+ * ({@link parseReasonBlock}), a body that IS that one paragraph counts: it is what a subject-only
+ * commit (`add`, `submit`) carries. A `WingFoil-Version:` line anywhere else is text, not a record;
+ * a `--reason` cannot supply one at all (`dl-067` clause 4, reserved key).
+ */
+export function parseVersionTrailer(body: string): string | null {
+  const lines = body.replace(/\r\n?/g, '\n').split('\n');
+  let end = lines.length;
+  while (end > 0 && (lines[end - 1] as string).trim() === '') end -= 1;
+  let start = end;
+  while (start > 0 && (lines[start - 1] as string).trim() !== '') start -= 1;
+
+  const paragraph = lines.slice(start, end);
+  if (paragraph.length === 0 || !paragraph.every((line) => TRAILER_LINE_RE.test(line))) return null;
+  for (const line of paragraph) {
+    const match = VERSION_TRAILER_RE.exec(line);
+    if (match) return match[1] as string;
+  }
+  return null;
 }
 
 /** The identity recorded on an approval-gate commit's `Approver:` line. */

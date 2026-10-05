@@ -47,7 +47,7 @@ Accepted by every command:
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
 | `-h`, `--help` | Show help for the command. |
-| `-V`, `--version` | Print the version (top level only). |
+| `-V`, `--version` | Print the version (top level only). Unreleased (v0.3): prints `<version> (<commit>)`, e.g. `0.3.0 (4f1c2d9b7e3a5c80d61f2a94b7c3e5d08a1f9e9a)` — the commit the build was made from, as every commit it writes records it. |
 
 ### Exit codes
 
@@ -76,6 +76,19 @@ document). Stdout is the same with or without warnings, so a script parsing it i
 Every command that changes the project writes **exactly one git commit**, authored by your git identity.
 Read-only commands never commit. The commit subject is listed per command below; `wingfoil memory
 history` reads the Memory ones back.
+
+Unreleased (v0.3): every such commit ends with a paragraph naming the WingFoil build that wrote it,
+
+```
+WingFoil-Version: 0.3.0 (4f1c2d9b7e3a5c80d61f2a94b7c3e5d08a1f9e9a)
+```
+
+the same value `wingfoil --version` prints: the package version, then the full commit hash the build
+was made from (with `-dirty` when the build had uncommitted changes to its own inputs — the sources,
+`package.json`, `package-lock.json`, a `tsconfig` or `scripts/write-build-info.cjs` — and `unknown` when the build recorded none). A commit without that line was not written by WingFoil. Read it with
+`git log --format='%(trailers:key=WingFoil-Version,valueonly)'`. The commit body is also normalized
+the same way whatever your git `commit.cleanup` setting (trailing whitespace removed, runs of blank
+lines collapsed, lines starting with `#` kept).
 
 Which state a command reads depends on whether that state can stop it:
 
@@ -651,7 +664,10 @@ wingfoil memory history <id>
 ```
 
 Each entry carries `sha`, `author`, `timestamp` (ISO-8601), `operation`, `from`, `to`, `approver`,
-`reason` and the commit `subject`. In 0.2.2, `operation` is one of `add`, `submit`, `approve`,
+`reason` and the commit `subject`. Unreleased (v0.3): every entry also carries `wingfoil`, the build
+that wrote the commit, from its `WingFoil-Version:` line (see [Git side effects](#git-side-effects)):
+`"wingfoil": "0.3.0 (4f1c2d9b7e3a5c80d61f2a94b7c3e5d08a1f9e9a)"`, or `null` for a commit written by
+hand or by an older build. In 0.2.2, `operation` is one of `add`, `submit`, `approve`,
 `reject`, `deprecate`. A commit that touched the document without being one of them appears too,
 with `"operation": null` (a hand edit you committed yourself, for example).
 

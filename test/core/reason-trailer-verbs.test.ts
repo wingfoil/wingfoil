@@ -41,6 +41,7 @@ import { UsageError } from '../../src/core/usage-error';
 import { parseCommitReason, reconstructMemoryTransitions } from '../../src/memory/audit';
 import { normalizeReason } from '../../src/memory/commit-message';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
 
 const TEST_NAME = 'WingFoil Test';
 const TEST_EMAIL = 'wf-test@example.invalid';
@@ -213,7 +214,7 @@ describe('dl-067 across the four transition verbs — a blank `--reason` is refu
     });
     expect(result.ok).toBe(true);
     const body = gitOut(repo, ['log', '-1', '--format=%B']);
-    expect(body).toBe('wf(decision): submit decision-13');
+    expect(body).toBe(`wf(decision): submit decision-13${STAMP_TRAILER}`);
     expect(body).not.toContain('Approver:');
     expect(body).not.toContain('Reason:');
   });

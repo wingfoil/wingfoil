@@ -930,6 +930,13 @@ export interface MemoryHistoryEntryView {
   readonly reason: string | null;
   readonly subject: string;
   /**
+   * The WingFoil build that wrote the commit, `<semver> (<sha>)`, from its `WingFoil-Version:` trailer
+   * (task-192, `dl-111` Action 3) — `null` when the commit carries none: written by hand, or by a
+   * build older than the trailer. Always present, like `approver` and `reason` (approver ruling D5,
+   * 2026-10-05).
+   */
+  readonly wingfoil: string | null;
+  /**
    * Present only when this commit's frontmatter does not parse (task-171, `bug-188`): why, as the
    * first line of the parse error. `to` is then `null`, and so is the next entry's `from`.
    */
@@ -1011,6 +1018,7 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
       : null,
     reason: transition.reason,
     subject: transition.subject,
+    wingfoil: transition.wingfoil,
     ...(transition.unreadable !== undefined ? { unreadable: transition.unreadable } : {}),
   }));
 
@@ -1249,7 +1257,9 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
         `${id} was approved in ${committed.value}, but the commit moving ${superseded.id} to ${superseded.to} failed: ` +
         `${finalized.error.message.trim()}. Its status is written in the working tree (${superseded.path}). ` +
         `Complete the pair by committing that file alone, from the repository root:\n\n` +
-        `git commit --only -F - -- ${superseded.path} <<'EOF'\n${finalizeMessage}\nEOF`,
+        // `--cleanup=whitespace`, as `commitPaths` passes it (bug-051, task-192 review): under the
+        // operator's `commit.cleanup=strip` a reason line opening with `#` would otherwise be lost.
+        `git commit --only --cleanup=whitespace -F - -- ${superseded.path} <<'EOF'\n${finalizeMessage}\nEOF`,
     });
   }
   return coreOk(

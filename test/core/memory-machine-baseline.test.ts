@@ -36,6 +36,7 @@ import * as storage from '../../src/storage';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
 
 const MEMORY_YAML_PATH = '.wingfoil/memory.yaml';
 const DOC_PATH = 'docs/memory/adr/adr-001.md';
@@ -130,7 +131,7 @@ describe('memory transitions resolve their state machine at HEAD (bug-081, dl-08
     // The status written, the document on disk and the commit subject all come from HEAD's machine.
     expect(statusOf(repo)).toBe('pending');
     expect(gitOut(repo, ['show', `HEAD:${DOC_PATH}`])).toContain('status: pending');
-    expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe('wf(adr): submit adr-001');
+    expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe(`wf(adr): submit adr-001${STAMP_TRAILER}`);
   });
 
   // The stranding half of bug-081: a status only a dirty machine knows can no longer be reached, and

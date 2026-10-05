@@ -41,6 +41,7 @@ import { UsageError } from '../../src/core/usage-error';
 import { loadMemoryYaml } from '../../src/core/loaders';
 import { splitFrontmatter } from '../../src/storage';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
 
 /**
  * Five machines on purpose: the real `task` machine (gates + `waiting` states), the real `adr` machine
@@ -189,7 +190,7 @@ describe('CORE_MODULES memory.memoryDeprecate — P1.9 fit criteria', () => {
     // dl-054 / spec-004 §4.3: bracketed subject, `Reason:` body, and NO `Approver:` line (dl-027).
     expect(gitOut(repo, ['rev-list', '--count', `${before}..HEAD`])).toBe('1');
     expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe(
-      'wf(decision): deprecate decision-12 [approved → deprecated]\n\nReason: superseded by decision-20',
+      `wf(decision): deprecate decision-12 [approved → deprecated]\n\nReason: superseded by decision-20${STAMP_TRAILER}`,
     );
     expect(gitOut(repo, ['log', '-1', '--format=%B'])).not.toContain('Approver:');
     expect(result.commit?.sha).toBe(head(repo));
@@ -204,7 +205,7 @@ describe('CORE_MODULES memory.memoryDeprecate — P1.9 fit criteria', () => {
     expect(exitCodeForResult(result)).toBe(0);
     expect(result.value.reason).toBeUndefined();
     expect(frontmatter(repo, 'docs/memory/decisions/decision-12.md').status).toBe('deprecated');
-    expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe('wf(decision): deprecate decision-12 [approved → deprecated]');
+    expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe(`wf(decision): deprecate decision-12 [approved → deprecated]${STAMP_TRAILER}`);
   });
 
   it('P1.9 sc.3: deprecating an already-deprecated document exits 1, state unchanged, no new commit', async () => {

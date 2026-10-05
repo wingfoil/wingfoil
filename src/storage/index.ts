@@ -22,6 +22,7 @@ export { readDocument, documentExists, removeDocument, writeDocument } from './d
 export { changedPathsBetween, commitParent, commitPaths, EMPTY_TREE_SHA, listBlobEntriesAtRev, listPathsAtRev, listPathsAtRevs, pathPorcelainStatus, readPathAtRev, readPathsAtRev, resolveCommitAtRev } from './commit';
 export type { BlobEntry } from './commit';
 export type { CommitOptions } from './commit';
+export { formatVersionTrailer, readBuildStamp, WINGFOIL_VERSION_TRAILER_KEY } from './build-stamp';
 export { GIT_READ_MAX_BUFFER, runGitRead, runGitReadBytes } from './git-read';
 export type { GitReadOptions, GitReadResult } from './git-read';
 export { initStorage, scaffoldFiles, WINGFOIL_DIR, INIT_COMMIT_MESSAGE } from './layout';

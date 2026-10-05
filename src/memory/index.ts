@@ -108,6 +108,7 @@ export {
   normalizeReason,
   parseApproverTrailerLine,
   parseReasonBlock,
+  parseVersionTrailer,
   reasonDefect,
   reasonDefectMessage,
   reasonRefusalMessage,

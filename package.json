@@ -30,7 +30,7 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/write-build-info.cjs",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build && npm test && npm run lint",
     "publish:staging": "node scripts/publish-staging.cjs",

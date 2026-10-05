@@ -34,13 +34,13 @@
  * built `dist/`. `test/lint/pack-ignore-scripts.test.ts` holds that property for the whole suite.
  */
 import { execFileSync } from 'child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs';
+import { existsSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { distBuildStamp } from './helpers/dist-stamp';
 import { CLI_ENTRY, runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
 
 const REPO_ROOT = join(__dirname, '..', '..');
-const PKG_VERSION = (JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf-8')) as { version: string }).version;
 
 interface PackedFile {
   readonly path: string;
@@ -91,10 +91,11 @@ describe('npm distribution (task-007) — bin entrypoint + package contents', ()
     }
   });
 
-  it('`node dist/cli.js --version` prints the package version and exits 0 (bug-001)', () => {
+  it('`node dist/cli.js --version` prints `<semver> (<sha>)` and exits 0 (bug-001, task-192)', () => {
     const result = runBin('--version');
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe(PKG_VERSION);
+    // `<semver> (<sha>)`, the sha from the build record dist/ was built with (task-192, dl-111 Action 3).
+    expect(result.stdout.trim()).toBe(distBuildStamp());
     expect(result.stderr).toBe('');
   });
 
@@ -112,5 +113,13 @@ describe('npm distribution (task-007) — bin entrypoint + package contents', ()
     expect(paths.some((p) => p.startsWith('.wingfoil'))).toBe(false);
     expect(paths.some((p) => p.startsWith('docs/04_memory'))).toBe(false);
     expect(paths.some((p) => p.startsWith('test/'))).toBe(false);
+  });
+
+  // task-192 AC6 (characterization): `build` writes the record into `dist/`, which `files` already
+  // ships, so the `--ignore-scripts` pack `publish.yml` runs carries it — no `prepack` step is needed.
+  it('`npm pack --dry-run --ignore-scripts` includes dist/build-info.json, the build record (dl-111 Q2 (a))', () => {
+    const raw = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: REPO_ROOT, encoding: 'utf-8' });
+    const [result] = JSON.parse(raw) as PackResult[];
+    expect((result?.files ?? []).map((f) => f.path)).toContain('dist/build-info.json');
   });
 });

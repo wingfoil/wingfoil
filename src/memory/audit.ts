@@ -32,7 +32,7 @@
 import { isConfiguredIdentity } from '../core';
 import { parseYaml, ValidationError } from '../validation';
 
-import { parseApproverTrailerLine, parseReasonBlock } from './commit-message';
+import { parseApproverTrailerLine, parseReasonBlock, parseVersionTrailer } from './commit-message';
 import { getMemoryHistory } from './history';
 import { RESERVED_TYPE_NAMES, type StateMachine } from './schema';
 import { isMachineEdge } from './state-machine';
@@ -303,6 +303,12 @@ export interface MemoryTransition {
    */
   readonly reason: string | null;
   /**
+   * The build that wrote this commit, `<semver> (<sha>)`, from its `WingFoil-Version:` trailer
+   * ({@link parseVersionTrailer}; task-192, `dl-111`) — `null` when the commit carries none, i.e. it
+   * was written by hand or by a build older than the trailer.
+   */
+  readonly wingfoil: string | null;
+  /**
    * Present only when this commit's frontmatter does not parse (task-171, `bug-188`): the first line
    * of the parse error. `toState` is then `null`, and so is the next transition's `fromState`, since
    * the state between them could not be read. Absent on every other transition, so their shape is
@@ -436,6 +442,7 @@ export function reconstructMemoryTransitions(
       toState,
       approval: parseApprovalMetadata(entry.body),
       reason: parseCommitReason(entry.body),
+      wingfoil: parseVersionTrailer(entry.body),
       ...(unreadable !== undefined ? { unreadable: unreadable.split('\n')[0]!.trim() } : {}),
     });
     previousState = toState;

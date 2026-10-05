@@ -27,6 +27,7 @@ import * as transition from '../../src/core/memory-transition';
 import { coreErr } from '../../src/core/types';
 import { UsageError } from '../../src/core/usage-error';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
 
 const MEMORY_YAML = `version: 1
 types:
@@ -174,10 +175,9 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
       expect(result.value).toEqual({ id: 'spec-001', path: SPEC, from: 'approved', to: 'approved' });
       expect(gitOut(repo, ['rev-list', '--count', `${before}..HEAD`])).toBe('1');
       expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD'])).toBe(SPEC);
-      const message = gitOut(repo, ['log', '-1', '--format=%B']);
-      expect(message).toBe(
-        `wf(tech-spec): amend spec-001 [approved → approved]\n\nApprover: ${TEST_NAME} <${TEST_EMAIL}> (approver)\nReason: r`,
-      );
+      const message = `wf(tech-spec): amend spec-001 [approved → approved]\n\nApprover: ${TEST_NAME} <${TEST_EMAIL}> (approver)\nReason: r`;
+      expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe(`${message}${STAMP_TRAILER}`);
+      // `CoreResult.commit.message` is the operation's message; the signature is commitPaths' (task-192).
       expect(result.commit).toEqual({ sha: head(repo), message });
       // The commit carries the author's bytes verbatim, and nothing is left behind for that file.
       expect(gitOut(repo, ['show', `HEAD:${SPEC}`]) + '\n').toBe(edited);
