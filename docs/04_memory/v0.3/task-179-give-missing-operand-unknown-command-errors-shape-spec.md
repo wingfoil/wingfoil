@@ -218,15 +218,53 @@ first full run under the 8-task load and passed on every later run (no threshold
   filePath)`, `filePath = join(root, ROLES_YAML_PATH)`); every MCP Resource refusal answers JSON-RPC `-32603`
   (InternalError), WingFoil refusals included.
 
+### review fixes (independent review: approve with fixes)
+
+- **F1** — the three pending Revision notes said "No exit code changed", which is false. They now name the
+  changes, all toward `2`, because the usage checks run earlier. Before this task, the missing-operand check
+  ran inside the operation after `resolveRoot()`, and `init` resolved the root before `runInit` checked
+  `--format`. Measured on the build (`npm run -s build`, `node dist/cli.js …`):
+  - from a subdirectory, `memory submit`, `dna set` and `dna set project.name bogus --value y` → `2`
+    (they used to give `1`, `E_NOT_AT_GIT_ROOT`);
+  - outside a repository, `dna set` → `2` (used to give `1`, `E_NO_GIT_ROOT`);
+  - outside a repository, `wingfoil init --format bogus` → `2` (used to give `1`);
+  - `wingfoil mcp --format bogus` → `2`. It used to start the server (`0`), or give `1` in an uninitialized
+    project.
+
+  The notes spell the commands with the global flag after the command. `test/docs/name-resolvability.test.ts`
+  reads `wingfoil --format bogus mcp` as an unknown command (`npx jest test/docs/name-resolvability` → 11
+  passed after the rewording).
+- **F2** — the spec-005 and spec-008 notes now record that the missing-verb form
+  (`missing required argument: <command>` + `hint: usage: wingfoil dna <command>`) supersedes `task-103`'s
+  ruled wording, for the approver to confirm at the gate. The 2026-09-25 revision paragraph of spec-008,
+  which stated the old form, carries a "superseded on 2026-10-05 by `task-179`" pointer. Its `bug-104`
+  sentence now says that `task-179` closed the unknown-command line and that the `help <unknown>` path is
+  `bug-115`'s.
+- **F5** — `directive assign` labelled an invalid `roles.yaml` with the absolute path
+  (`parseRoles(text, join(root, ROLES_YAML_PATH))`). Red first: `28ac8195` adds two cases to
+  `test/core/directive-assign.test.ts`. `npx jest test/core/directive-assign.test -t "never by its absolute path"`
+  → 2 failed, with the received issue `file` being `/tmp/wf-storage-…/.wingfoil/roles.yaml`. The fix passes
+  `ROLES_YAML_PATH` as the label (`npx jest test/core/directive-assign` → 55 passed).
+- Gates after the fixes:
+  - `npx jest test/core/directive test/cli/directive test/docs test/dna/roles` → 17 suites / 222 tests passed,
+    after the rewording above;
+  - `npm run lint`, `npx tsc --noEmit -p tsconfig.json` and `npx tsc -p tsconfig.build.json --noEmit` → exit 0;
+  - `node scripts/check-governance.cjs --base 0cf8b131` → exit 0.
+
 ### Pending amendments (approver)
 
 Edited in the worktree, NOT committed (approved tech-specs, `amendable: true`):
 
-- `spec-005-cli-command-contract` — `--reason "task-179 (bug-104, bug-168): §3.1 states the unknown-command
-  hint (WingFoil's own Levenshtein <= 2 match at the level typed, wording did you mean \"<name>\"?) and the one
-  missing-operand form with the usage as hint; §3.1/§4 examples corrected; dated Revision note."`
-- `spec-008-cli-grammar` — `--reason "task-179 (bug-104, bug-168, bug-180, bug-226): §1 drops the DNA surplus
-  exception, adds the missing-operand bullet and one order of usage checks, and names the hint the unknown-command
-  suggestion is; §4 states the missing-positional form; dated Revision note."`
-- `spec-006-core-domain-api` — `--reason "task-179 (bug-180): §2 declares CorePositional (name, required,
-  description, surplusHint); refusesExtraItself removed; dated Revision note."`
+- `spec-005-cli-command-contract` — `--reason "Amended by task-179 for bug-104 and bug-168. Section 3.1 states the
+  unknown-command hint (WingFoil's own Levenshtein <= 2 match at the level typed, worded did you mean \"<name>\"?)
+  and the one missing-operand form with the usage as hint; the missing-verb form supersedes task-103's wording;
+  the 3.1 and 4 examples are corrected. The dated Revision note names the exit codes that move to 2 because the
+  usage checks now run first."`
+- `spec-008-cli-grammar` — `--reason "Amended by task-179 for bug-104, bug-168, bug-180 and bug-226. Section 1 drops
+  the DNA surplus exception, adds the missing-operand bullet and one order of usage checks, and names the hint
+  the unknown-command suggestion is; section 4 states the missing-positional form, which supersedes task-103's
+  missing-verb wording. The dated Revision note names the exit codes that move to 2, and the 2026-09-25 note
+  points to the new form."`
+- `spec-006-core-domain-api` — `--reason "Amended by task-179 for bug-180. Section 2 declares CorePositional (name,
+  required, description, surplusHint) and the undeclared flag is removed. The dated Revision note names the one
+  exit code that moves, a DNA surplus outside the root, from 1 to 2."`
