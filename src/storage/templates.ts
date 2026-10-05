@@ -16,6 +16,16 @@
  * sorted by path so callers may diff the set safely.
  */
 import { BUILTIN_DIRECTIVE_TEMPLATES, builtinDirectiveMd } from './builtin-directives';
+import {
+  DIRECTIVE_FORMAT,
+  DNA_YAML_FORMAT,
+  MEMORY_TEMPLATE_FORMAT,
+  MEMORY_YAML_FORMAT,
+  ROLES_YAML_FORMAT,
+  WORKFLOW_FORMAT,
+  WORKFLOWS_YAML_FORMAT,
+} from '../validation/format';
+
 import { WINGFOIL_DIR, type ScaffoldFile } from './layout';
 
 /** A methodology starter template: the methodologies it seeds and the delivery sub-workflow it adds. */
@@ -235,7 +245,10 @@ function dnaYaml(def: TemplateDefinition): string {
   const methodologies = def.methodologies.map((m) => `    - name: ${m}`).join('\n');
   return `# Project DNA (P2.4) — scaffolded by \`wingfoil init\` (${def.name} template).
 # Structural map of the project: modules, stacks, team + roles, resource paths. Customize freely.
+# \`version\` is this file's content revision; \`format\` the file format it is written in (bumped by
+# WingFoil only on a backward-incompatible change).
 version: 1
+format: ${DNA_YAML_FORMAT}
 
 project:
   name: ""                        # your project name
@@ -328,8 +341,9 @@ function memoryYaml(): string {
 # below shares the \`defaults\` state machine; give a type its own \`states:\` block to override it for
 # that type only (REQ-STATE-08) — \`bug\` carries a commented example. \`amendable\` says whether
 # \`memory amend\` may record a correction to the type's documents without a state change; absent
-# means false.
+# means false. \`version\` is this file's content revision; \`format\` the file format it is written in.
 version: 1
+format: ${MEMORY_YAML_FORMAT}
 
 # Default state machine — applies to every type that declares no \`states:\` block of its own.
 # \`sequence\` is the ordered forward chain (\`submit\` walks it); a \`gates\` state's forward edge needs
@@ -349,7 +363,9 @@ ${types}
 function rolesYaml(): string {
   return `# Directive role assignments (P3.2/P3.7) — scaffolded by \`wingfoil init\`.
 # Binds directives to roles by directive ID, independent of the built-in/custom subfolder holding the file.
+# \`version\` is this file's content revision; \`format\` the file format it is written in.
 version: 1
+format: ${ROLES_YAML_FORMAT}
 
 assignments:
   developer:
@@ -399,7 +415,9 @@ function workflowsYaml(def: TemplateDefinition): string {
   return `# Project Workflow main configuration (P4.1) — scaffolded by \`wingfoil init\`.
 # This MAIN config file does not inline workflows; it include()s the custom (and, once populated,
 # built-in) workflow files. Startable mains + the ${def.name} delivery sub-workflow are composed below.
+# \`version\` is this file's content revision; \`format\` the file format it is written in.
 version: 1
+format: ${WORKFLOWS_YAML_FORMAT}
 
 include:
 ${includes}
@@ -435,6 +453,7 @@ name: ${d.name}
 type: directive
 kind: custom
 title: "${d.title}"
+format: ${DIRECTIVE_FORMAT}
 ---
 
 # ${d.title}
@@ -451,6 +470,7 @@ id: ""
 type: ${type}
 title: ""
 status: draft
+format: ${MEMORY_TEMPLATE_FORMAT}
 ---
 
 <!-- ${type} body. \`wingfoil memory add\` copies this scaffold verbatim; \`memory submit\` replaces
@@ -462,6 +482,7 @@ function mainWorkflowYaml(name: string, description: string, phasesYaml: string)
   return `# ${description}
 name: ${name}
 kind: main
+format: ${WORKFLOW_FORMAT}
 description: "${description}"
 ${phasesYaml}`;
 }
@@ -471,6 +492,7 @@ function deliveryWorkflowYaml(def: TemplateDefinition): string {
 # ${def.cadence}
 name: ${def.slug}-delivery
 kind: sub
+format: ${WORKFLOW_FORMAT}
 description: "${def.name} delivery loop"
 phases:
   - name: plan

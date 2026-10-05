@@ -11,7 +11,8 @@
  * derived by `builtinTemplateSources`): adding or editing a template here is automatically checked.
  *
  * **Frontmatter** (`spec-013-directive-frontmatter-schema`): exactly the declared keys `id` (the filename
- * stem), `name`, `type: directive`, `kind: built-in`, `title`, `tags`, `ref: [P3.8]`. No `scope`: whether a
+ * stem), `name`, `type: directive`, `kind: built-in`, `title`, `tags`, `ref: [P3.8]`, and `format` (`dl-149`, task-251: the frontmatter's
+ * format, `DIRECTIVE_FORMAT`). No `scope`: whether a
  * directive binds every role is the project's `roles.yaml` to say, not a shipped template's (task-144
  * review, R3). No other key: an
  * undeclared key rides `.passthrough()` and prints an `unknown field(s) ignored` warning on stderr during
@@ -29,6 +30,7 @@
  *
  * Pure data + a pure renderer (REQ-SYS-07): byte-identical output run to run.
  */
+import { DIRECTIVE_FORMAT } from '../validation/format';
 
 /** One built-in directive template, as structured data rendered by {@link builtinDirectiveMd}. */
 export interface BuiltinDirectiveTemplate {
@@ -155,6 +157,7 @@ kind: built-in
 title: "${t.name}"
 tags: [built-in, ${t.id}]
 ref: [P3.8]
+format: ${DIRECTIVE_FORMAT}
 ---
 
 # Directive — ${t.name}

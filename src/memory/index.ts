@@ -37,7 +37,7 @@
  */
 export const MODULE_NAME = 'memory' as const;
 
-export { MemoryYaml, MemoryTypeEntry, RESERVED_TYPE_NAMES, StateMachine, TemplateConfig } from './schema';
+export { MemoryTemplateFrontmatter, MemoryYaml, MemoryTypeEntry, RESERVED_TYPE_NAMES, StateMachine, TemplateConfig } from './schema';
 export {
   ARCHIVED_STATUSES,
   DEFAULT_STATE_MACHINE,

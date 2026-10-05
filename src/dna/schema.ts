@@ -9,6 +9,7 @@
  */
 import { z } from 'zod';
 
+import { DNA_YAML_FORMAT, formatField } from '../validation/format';
 import { ID_CHAR_CLASS, isIdPiece } from '../validation/id';
 
 /**
@@ -218,10 +219,14 @@ export const Paths = z
   .passthrough();
 export type Paths = z.infer<typeof Paths>;
 
-/** The whole `.wingfoil/dna.yaml` document (P2.4, spec-002) — the Project DNA structural map's root schema. */
+/**
+ * The whole `.wingfoil/dna.yaml` document (P2.4, spec-002) — the Project DNA structural map's root schema.
+ * `version` is the content revision; `format` the file's format (`dl-149`, task-251: absent = 1).
+ */
 export const DnaYaml = z
   .object({
     version: z.number().positive(),
+    format: formatField(DNA_YAML_FORMAT),
     project: Project.optional(),
     modules: uniquelyNamed(Module),
     stacks: Stacks,

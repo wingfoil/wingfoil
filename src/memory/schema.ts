@@ -10,6 +10,8 @@
  */
 import { z } from 'zod';
 
+import { formatField, MEMORY_TEMPLATE_FORMAT, MEMORY_YAML_FORMAT } from '../validation/format';
+
 const RESERVED_STATE = 'deprecated';
 
 /**
@@ -162,10 +164,13 @@ export type MemoryTypeEntry = z.infer<typeof MemoryTypeEntry>;
 /**
  * `memory.yaml`'s top-level shape. `version` is `z.number().positive()`, NOT `.int()` — the file's
  * `version: 1.0` (and `1.1`) is a YAML float and `.int()` would spuriously reject it (spec-001).
+ * `version` is the content revision; `format` is the file's format, an integer (`dl-149`, task-251:
+ * absent = 1).
  */
 export const MemoryYaml = z
   .object({
     version: z.number().positive(),
+    format: formatField(MEMORY_YAML_FORMAT),
     defaults: z.object({ states: StateMachine }).passthrough().optional(),
     types: z.record(z.string(), MemoryTypeEntry),
   })
@@ -221,3 +226,17 @@ export const MemoryYaml = z
     }
   });
 export type MemoryYaml = z.infer<typeof MemoryYaml>;
+
+/**
+ * A Memory template's frontmatter (`template.file`, task-251): the one key WingFoil itself reads from
+ * it is `format` (`dl-149`: absent = 1). Every other key is the scaffold of the type's documents —
+ * `memory add` copies it, `memory submit` enforces `template.frontmatter.required` on the document —
+ * so the object passes through and no unknown-field warning is printed for it.
+ */
+export const MemoryTemplateFrontmatter = z
+  .object({
+    format: formatField(MEMORY_TEMPLATE_FORMAT),
+  })
+  .passthrough();
+/** Parsed shape of the {@link MemoryTemplateFrontmatter} schema. */
+export type MemoryTemplateFrontmatter = z.infer<typeof MemoryTemplateFrontmatter>;

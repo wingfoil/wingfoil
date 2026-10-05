@@ -35,7 +35,7 @@ const P38_IDS = ['code-quality', 'testing', 'code-review', 'architecture', 'secu
  * The keys `DirectiveFrontmatter` declares (spec-013; `scope` and `version` since task-144, spec-013
  * Revision 2026-10-01); anything else rides `.passthrough()` and warns.
  */
-const DECLARED_KEYS = ['id', 'name', 'type', 'kind', 'title', 'tags', 'ref', 'scope', 'version'];
+const DECLARED_KEYS = ['id', 'name', 'type', 'kind', 'title', 'tags', 'ref', 'scope', 'version', 'format'];
 
 const rendered = (): Array<readonly [string, string]> =>
   BUILTIN_DIRECTIVE_TEMPLATES.map((t) => [t.id, builtinDirectiveMd(t)] as const);

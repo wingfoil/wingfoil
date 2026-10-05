@@ -22,12 +22,15 @@
  */
 import { z } from 'zod';
 
+import { DIRECTIVE_FORMAT, formatField, ROLES_YAML_FORMAT } from '../validation/format';
+
 /**
  * The YAML frontmatter of a `.wingfoil/directives/**\/*.md` file, per `spec-013`'s field table. `name`
  * is required per P3.5's BDD contract. `scope` is any string: `global` is the one value spec-013
  * defines, and `directives list` reports any other rather than failing the pillar (forward
  * compatibility, approver ruling R2 2026-10-02). `version` is a string or a number, like
  * `memory.yaml`'s and `roles.yaml`'s (R1); `./version` warns when a number loses what was written.
+ * `format` is the frontmatter's format, distinct from `version` (`dl-149`, task-251: absent = 1).
  * `.passthrough()` per spec-009 §2.
  */
 export const DirectiveFrontmatter = z
@@ -41,6 +44,7 @@ export const DirectiveFrontmatter = z
     ref: z.array(z.string()).optional(),
     scope: z.string().optional(),
     version: z.union([z.string(), z.number()]).optional(),
+    format: formatField(DIRECTIVE_FORMAT),
   })
   .passthrough();
 /** Parsed shape of the {@link DirectiveFrontmatter} schema. */
@@ -58,11 +62,13 @@ export type DirectiveFrontmatter = z.infer<typeof DirectiveFrontmatter>;
  * array), and `global` (directive ids applied to every role). `assignments` keys are role names
  * (validated against `dna.yaml`'s `team.roles` catalogue elsewhere, by REQ-SYS-08/task-034 — NOT here,
  * to keep this pillar's schema independent per REQ-SYS-02); `assignments` values and `global` entries
- * are directive **ids** (`DirectiveFrontmatter.id`), not `name`s. `.passthrough()` per spec-009 §2.
+ * are directive **ids** (`DirectiveFrontmatter.id`), not `name`s. `format` is the file's format
+ * (`dl-149`, task-251: absent = 1). `.passthrough()` per spec-009 §2.
  */
 export const RolesYaml = z
   .object({
     version: z.number().optional(),
+    format: formatField(ROLES_YAML_FORMAT),
     assignments: z.record(z.string(), z.array(z.string())),
     global: z.array(z.string()).default([]),
   })

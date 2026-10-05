@@ -147,4 +147,3 @@ describe('AC 1 — configuration written before the format key loads unchanged',
     }
   });
 });
-});

@@ -25,9 +25,10 @@
  */
 import { join } from 'path';
 
-import type { MemoryYaml, TemplateConfig } from '../memory';
-import { documentExists, readPathAtRev } from '../storage';
-import { ValidationError } from '../validation';
+import { MemoryTemplateFrontmatter, type MemoryYaml, type TemplateConfig } from '../memory';
+import { documentExists, extractFrontmatter, readPathAtRev } from '../storage';
+import { parseYaml, toValidationError, ValidationError } from '../validation';
+import { MEMORY_TEMPLATE_FORMAT, refuseNewerFormat } from '../validation/format';
 
 import { loadMemoryYaml, loadMemoryYamlAtHead, MEMORY_YAML_PATH } from './loaders';
 import { coreErr, coreOk, type CoreResult } from './types';
@@ -171,5 +172,40 @@ export function resolveAddType(root: string, type: string): CoreResult<ResolvedA
     });
   }
 
+  const unreadable = templateFormatRefusal(type, scaffold, `HEAD:${templatePath}`);
+  if (unreadable) return unreadable;
+
   return coreOk({ type, pathPattern, idPattern, template, templatePath, scaffold });
+}
+
+/**
+ * The template's `format` check (`dl-149`, task-251), or `null` when the scaffold may be copied: a
+ * format newer than this build reads is refused for its format alone (`E_INVALID_FORMAT`), and a
+ * `format` that is not a positive integer is refused as a schema error naming the field — both
+ * `VALIDATION`, exit 1, before anything is written. A scaffold with no frontmatter, or one that is not
+ * YAML, is left as it was before the key existed: `renderAddDocument` refuses the first, and the second
+ * is copied as text.
+ */
+function templateFormatRefusal(type: string, scaffold: string, label: string): CoreResult<never> | null {
+  const frontmatter = extractFrontmatter(scaffold);
+  if (frontmatter === null) return null;
+  let data: unknown;
+  try {
+    data = parseYaml(frontmatter, label);
+  } catch {
+    return null;
+  }
+  try {
+    refuseNewerFormat(data, MEMORY_TEMPLATE_FORMAT, label);
+    const parsed = MemoryTemplateFrontmatter.safeParse(data ?? {});
+    if (!parsed.success) throw toValidationError(parsed.error, label);
+  } catch (error) {
+    const refusal = error as ValidationError;
+    return coreErr({
+      code: 'VALIDATION',
+      message: `cannot read the scaffold for memory type '${type}': ${refusal.message}`,
+      details: { issues: refusal.issues },
+    });
+  }
+  return null;
 }
