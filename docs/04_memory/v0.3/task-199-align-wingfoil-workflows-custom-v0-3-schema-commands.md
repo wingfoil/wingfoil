@@ -36,6 +36,7 @@ The minor-v0.3 success criterion: every workflow under `.wingfoil/workflows/cust
 - **Triage of 2026-10-05 (`bug-224`, split):** only the `initial-design.yaml` `produces:` bare
   `{release-line}` is in scope here (bind it to the release-line's id or version explicitly). Refusing a
   `memory add` release-line value that names no release-line is a separate v0.4 bug.
+- **Handover from wave 2 B2 (2026-10-05, `dl-153`, ratified (A)).** `workflows/bindings.yaml` is a `dl-149` file kind: the first `bindings.yaml` this task writes carries `format: 1`, and the loader checks it like the other kinds (`src/validation/format.ts`, `task-251`).
 
 ## Execution Notes
 
