@@ -994,9 +994,10 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
     transitions = reconstructMemoryTransitions(root, found.path);
   } catch (error) {
     // A git read that failed is `IO`, never an empty trail (task-142, `bug-072`): the walk throws
-    // rather than answering "no history" for a history it could not read.
-    if (error instanceof StorageError) return coreErr({ code: 'IO', message: error.message });
-    throw error;
+    // rather than answering "no history" for a history it could not read. Since task-171 the tolerant
+    // reconstruction throws nothing else (a revision that does not parse is an entry, `bug-188`), so
+    // what reaches here is a `StorageError`.
+    return coreErr({ code: 'IO', message: (error as StorageError).message });
   }
   const entries: MemoryHistoryEntryView[] = transitions.map((transition) => ({
     sha: transition.sha,

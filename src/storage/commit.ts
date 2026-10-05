@@ -255,7 +255,7 @@ const LS_TREE_SYMLINK_MODE = '120000';
 export function listBlobEntriesAtRev(
   root: string,
   rev: string,
-  prefix = '',
+  prefix: string,
   options: CommitOptions = {},
 ): BlobEntry[] | null {
   const pathspec = prefix.length === 0 ? [] : ['--', prefix];
@@ -268,7 +268,8 @@ export function listBlobEntriesAtRev(
     .split('\0')
     .filter((record) => LS_TREE_BLOB_RECORD.test(record))
     .map((record) => ({ path: record.slice(record.indexOf('\t') + 1), symlink: record.startsWith(`${LS_TREE_SYMLINK_MODE} `) }))
-    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    // Code-unit order, as `listPathsAtRev`'s plain `.sort()` always gave, without a branch.
+    .sort((a, b) => Number(a.path > b.path) - Number(a.path < b.path));
 }
 
 // --- Resolving a revision, and reading MANY paths at it (task-137) -----------------------------

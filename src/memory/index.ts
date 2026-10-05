@@ -144,6 +144,7 @@ export type {
   ConsistencyMismatch,
   IllegalHop,
   MemoryOperation,
+  ReconstructOptions,
   TransitionFinding,
   UnparseableTransition,
 } from './audit';

@@ -155,8 +155,17 @@ interface ScannedFile {
   readonly symlink: boolean;
 }
 
+/**
+ * Code-unit order of two strings, as `Array.prototype.sort()` orders them by default, written without
+ * a branch: `1`, `0` or `-1`.
+ */
+function compareText(a: string, b: string): number {
+  return Number(a > b) - Number(a < b);
+}
+
+/** Ascending by path. */
 function byPath(a: ScannedFile, b: ScannedFile): number {
-  return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+  return compareText(a.path, b.path);
 }
 
 /**
@@ -182,6 +191,8 @@ function listMarkdownFilesUnder(root: string, dir: string, followSymlinks: boole
         if (entry.endsWith('.md')) out.push({ path: relative, symlink: true });
         continue;
       }
+      // Following (explain-only): a dangling link names nothing to read, so it is passed over.
+      if (own.isSymbolicLink() && !existsSync(full)) continue;
       const stats = own.isSymbolicLink() ? statSync(full) : own;
       if (stats.isDirectory()) {
         if (!followSymlinks && existsSync(join(full, '.git'))) continue;
@@ -266,8 +277,10 @@ function parseScanned(raw: string, relativePath: string, label: string, options:
   try {
     return parseMemoryDocument(raw, relativePath, label);
   } catch (error) {
-    if (!(error instanceof ValidationError)) throw error;
-    options.onDiagnostic?.(memoryUnreadableDiagnostic(relativePath, firstLineOf(error.issues[0]?.message ?? error.message)));
+    // `parseYaml` is the only thing in the parse that throws, and it throws only
+    // `ValidationError.yamlParse`, whose one issue carries the parser's message.
+    const parseError = (error as ValidationError).issues[0]!;
+    options.onDiagnostic?.(memoryUnreadableDiagnostic(relativePath, firstLineOf(parseError.message)));
     return undefined;
   }
 }
@@ -328,7 +341,8 @@ export function listMemoryDocumentPathsAtRev(root: string, rev: string, memoryYa
 
 /**
  * Read `files` at `sha` in one batch and parse them **lazily**, in path order; a path the commit does
- * not hold is left out, and a link or an unparsable document is reported and skipped (task-171). Lazy
+ * holds every one of them (they were listed at it); a link or an unparsable document is reported and
+ * skipped (task-171). Lazy
  * so that a lookup can stop at its match, as the working-tree lookup does.
  */
 function* parseMemoryDocumentsAtSha(
@@ -338,16 +352,20 @@ function* parseMemoryDocumentsAtSha(
   files: readonly ScannedFile[],
   options: MemoryScanOptions,
 ): Generator<MemoryDocumentSummary> {
-  const documents = files.filter((file) => !file.symlink);
-  const raws = readPathsAtRev(root, sha, documents.map((file) => file.path));
-  const texts = new Map(documents.map((file, i) => [file.path, raws[i] ?? null]));
+  const raws = readPathsAtRev(
+    root,
+    sha,
+    files.filter((file) => !file.symlink).map((file) => file.path),
+  );
+  let next = 0;
   for (const file of files) {
     if (file.symlink) {
       options.onDiagnostic?.(memoryUnreadableDiagnostic(file.path, SYMLINK_REASON));
       continue;
     }
-    const raw = texts.get(file.path) ?? null;
-    if (raw === null) continue;
+    // Every path here was listed as a blob of this very commit, so the commit holds it and the batch
+    // answers its bytes, never `null`.
+    const raw = raws[next++] as string;
     const summary = parseScanned(raw, file.path, `${rev}:${file.path}`, options);
     if (summary !== undefined) yield summary;
   }
@@ -381,7 +399,7 @@ export function loadMemoryDocumentsAtRev(
  *   frontmatter does not parse.
  */
 export function loadMemoryDocumentSummaryAtRev(root: string, rev: string, relativePath: string): MemoryDocumentSummary | null {
-  const [raw = null] = readPathsAtRev(root, resolveRevision(root, rev), [relativePath]);
+  const raw = readPathsAtRev(root, resolveRevision(root, rev), [relativePath])[0] as string | null;
   return raw === null ? null : parseMemoryDocument(raw, relativePath, `${rev}:${relativePath}`);
 }
 
@@ -494,11 +512,9 @@ export function listMemoryDocumentsByType(
       tags: asStringArray(frontmatter.tags),
     });
   }
-  return out.sort((a, b) => {
-    const keyA = a.id ?? a.path;
-    const keyB = b.id ?? b.path;
-    return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
-  });
+  // By `id`, a document with none by its path, then by path: a total order even when two files carry
+  // one `id` (REQ-SYS-07).
+  return out.sort((a, b) => compareText(a.id ?? a.path, b.id ?? b.path) || compareText(a.path, b.path));
 }
 
 /**
@@ -678,7 +694,6 @@ export function searchMemoryDocuments(
     const scoreA = a.metadataMatch ? 1 : 0;
     const scoreB = b.metadataMatch ? 1 : 0;
     if (scoreA !== scoreB) return scoreB - scoreA;
-    if (a.id !== b.id) return a.id < b.id ? -1 : 1;
-    return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+    return compareText(a.id, b.id) || compareText(a.path, b.path);
   });
 }

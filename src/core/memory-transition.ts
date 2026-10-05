@@ -149,18 +149,15 @@ function isPresent(full: string): boolean {
 /**
  * The working-tree path of a document carrying frontmatter `id`, or `undefined` — read only to
  * **explain** a refusal already decided at `HEAD`, never to decide one (the `command-baseline`
- * directive: "the working tree may be read to explain a refusal, never to decide one"). Any failure
- * to scan (a document elsewhere whose frontmatter does not parse) yields `undefined`, so the
- * refusal keeps its plain wording and no branch of this read can change an outcome.
+ * directive: "the working tree may be read to explain a refusal, never to decide one"). A document
+ * elsewhere whose frontmatter does not parse is skipped by the scan (task-171), so the refusal keeps
+ * its plain wording and no branch of this read can change an outcome.
  */
 function uncommittedDocumentPath(root: string, memoryYaml: MemoryYaml, id: string): string | undefined {
-  try {
-    // `followSymlinks`: this read only words a refusal, so it may follow a link the deciding scan
-    // skips (task-171, `bug-189`), and the confinement guards then refuse the link by name.
-    return findMemoryDocumentById(root, memoryYaml, id, { followSymlinks: true })?.path;
-  } catch {
-    return undefined;
-  }
+  // `followSymlinks`: this read only words a refusal, so it may follow a link the deciding scan skips
+  // (task-171, `bug-189`), and the confinement guards then refuse the link by name. It needs no
+  // `try`: the scan is tolerant of a document that does not parse, and passes over a dangling link.
+  return findMemoryDocumentById(root, memoryYaml, id, { followSymlinks: true })?.path;
 }
 
 /**
@@ -173,9 +170,9 @@ function recordedIdAt(root: string, sha: string, path: string): string | undefin
   let id: unknown;
   try {
     id = loadMemoryDocumentSummaryAtRev(root, sha, path)?.frontmatter.id;
-  } catch (error) {
-    if (error instanceof ValidationError) return undefined;
-    throw error;
+  } catch {
+    // Explain-only: a document HEAD holds but cannot be read records no id to name.
+    return undefined;
   }
   return id === undefined ? undefined : String(id);
 }

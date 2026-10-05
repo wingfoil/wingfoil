@@ -354,9 +354,9 @@ function readStatusAt(root: string, sha: string, historicalPath: string): Status
     parsed = parseYaml(frontmatter, `${historicalPath}@${sha}`);
   } catch (error) {
     // task-171 (`bug-188`): the caller decides what an unreadable revision means — a history entry
-    // with no state, or (for the consistency check) a refusal.
-    if (error instanceof ValidationError) return { status: null, unreadable: error };
-    throw error;
+    // with no state, or (for the consistency check) a refusal. `parseYaml` throws only
+    // `ValidationError.yamlParse`.
+    return { status: null, unreadable: error as ValidationError };
   }
   if (parsed === null || typeof parsed !== 'object') return { status: null };
 
@@ -368,6 +368,18 @@ function readStatusAt(root: string, sha: string, historicalPath: string): Status
 interface StatusRead {
   readonly status: string | null;
   readonly unreadable?: ValidationError;
+}
+
+/** Options of {@link reconstructMemoryTransitions}. */
+export interface ReconstructOptions {
+  /**
+   * What a revision whose frontmatter does not parse means (task-171). Tolerant (the default, `memory
+   * history`, `bug-188`): a transition with `toState: null` and {@link MemoryTransition.unreadable}.
+   * Strict: the parse error (`ValidationError`) is thrown, because a check must never pass a commit
+   * whose state it could not read — {@link verifyTransitionConsistency} and
+   * `scripts/check-governance.cjs` read strictly and report such a commit as "state not checked".
+   */
+  readonly strict?: boolean;
 }
 
 /**
@@ -398,18 +410,12 @@ interface StatusRead {
  * above, and it no longer arrives with a `fatal:` on the operator's stderr (`bug-071`; see
  * {@link readStatusAt}).
  */
-export function reconstructMemoryTransitions(root: string, relativePath: string): MemoryTransition[] {
-  return reconstruct(root, relativePath, false);
-}
-
-/**
- * {@link reconstructMemoryTransitions}, with the choice of what a revision whose frontmatter does not
- * parse means. Tolerant (`strict: false`, `memory history`, task-171 `bug-188`): a transition with
- * `toState: null` and {@link MemoryTransition.unreadable}. Strict ({@link verifyTransitionConsistency}):
- * the parse error is thrown, because a check must not pass a commit whose state it could not read —
- * `scripts/check-governance.cjs` reports it as "state not checked".
- */
-function reconstruct(root: string, relativePath: string, strict: boolean): MemoryTransition[] {
+export function reconstructMemoryTransitions(
+  root: string,
+  relativePath: string,
+  options: ReconstructOptions = {},
+): MemoryTransition[] {
+  const strict = options.strict === true;
   const history = getMemoryHistory(root, relativePath); // oldest first already
 
   const transitions: MemoryTransition[] = [];
@@ -544,7 +550,7 @@ export function verifyTransitionConsistency(
   machine?: StateMachine,
 ): TransitionFinding[] {
   // Strict: a revision whose frontmatter does not parse is thrown, never passed (task-171, `bug-188`).
-  const transitions = reconstruct(root, relativePath, true);
+  const transitions = reconstructMemoryTransitions(root, relativePath, { strict: true });
   const findings: TransitionFinding[] = [];
 
   for (const transition of transitions) {
