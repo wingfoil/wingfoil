@@ -191,6 +191,25 @@ prints `draft -> backlog`: `resolveTypeTransition` from `node_modules/wingfoil-r
 - Not changed, deliberately: `docs/agents.md` §6's row reads `<from> -> <to>` generically and stays
   true; the historical strings in `dl-032`, `dl-063`, `dl-108`, `bug-032` record what was printed then.
 
+### review fixes (independent review: APPROVE WITH FIXES)
+
+- **F3** — after the 13 dl-053 deletions nothing pinned the engine's approve-from-a-non-gate detail
+  (the text `spec-004` §4.3's example quotes). Added an exact pin on the real machine: `task` /
+  `draft` / `approve` → `draft -> (none)`, detail
+  `` illegal `approve` from "draft": not a `gates` state — `approve` is only legal from a gate ``.
+- **F4** — the sweep claimed "every legal call still returns its target" without asserting it. It now
+  asserts `resolveTypeTransition` returns `resolveTransitionTarget`'s target on every legal call, pins
+  every refusal's detail exactly by category (gate / waiting / gate+waiting / last state / not a gate,
+  derived from the machine in the test, not from the engine), and runs as `it.each` over three files:
+  this repository's `memory.yaml`, the `init` scaffold (REQ-STATE-08 default) and bug-127's custom
+  machine, with vacuity guards on both outcomes per file.
+- Runs: `npx jest test/memory/state-machine.test.ts` → 89 passed (86 − 1 old sweep + 1 pin + 3
+  sweeps); `npm run lint` 0; both `tsc` 0; `test/lint/control-characters.test.ts` 19 passed;
+  `node scripts/check-governance.cjs --base 0cf8b131` 0 findings.
+- On hold, per the coordinator, pending the approver's ruling: the `dl-053` handling (amendment vs a
+  new decision-log) and REQ-STATE-01's "Revised … by task-181" citation. Neither was touched.
+- After `task-180` lands: merge `main` and add `park` to the sweep (coordinator's note).
+
 ### Pending amendments (approver)
 
 Uncommitted in the worktree; `memory amend` at the review gate:
