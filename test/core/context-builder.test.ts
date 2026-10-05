@@ -558,7 +558,7 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
 
     it('a module with no path is matched by name only', () => {
       writeFixtureFile(repo, '.wingfoil/dna.yaml', DNA_YAML.replace('stacks:', '  - name: docs\nstacks:'));
-      writeTask(repo, ELEMENT_ID, { extra: ['modules: [docs, "src/cli"]'] });
+      writeTask(repo, ELEMENT_ID, { extra: ['modules: ["src/cli", docs]'] });
       commitAll(repo, 'a pathless module');
       expect(build(repo).context.dna.modules.map((m) => m.name)).toEqual(['cli', 'docs']);
     });
