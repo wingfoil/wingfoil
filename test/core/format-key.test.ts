@@ -220,6 +220,16 @@ describe('Memory template frontmatter — the format key, read by memory add (re
     expect(result.error.message).toContain('this file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil');
   });
 
+  it.each([
+    ['no frontmatter', 'body only\n'],
+    ['a frontmatter that is not YAML', '---\ntitle: [unclosed\n---\n'],
+  ])('a scaffold with %s is resolved as before the key existed (no format to check)', (_label, text) => {
+    writeFixtureFile(repo, '.wingfoil/memory.yaml', REGISTRY);
+    writeFixtureFile(repo, TEMPLATE, text);
+    commitAll(repo, 'fixture');
+    expect(resolveAddType(repo, 'adr').ok).toBe(true);
+  });
+
   it.each([['1.5'], ['0'], ['"1"']])('AC 3 — `format: %s` is refused as a schema error naming the field', (format) => {
     const result = resolveWith(format);
     expect(result.ok).toBe(false);
