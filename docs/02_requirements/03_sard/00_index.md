@@ -40,7 +40,7 @@ chain is recorded in each requirement's `Traceability` field in the part files 0
 | REQ-SYS-02 | Decoupled pillars                    | Each artifact validates in isolation                   | P2.4, P3.5, P4.1, P1.13   |
 | REQ-SYS-03 | Stateless state derivation           | No state index; recompute == stored                    | P4.13                     |
 | REQ-SYS-04 | Configurable per-type state machines | New type honored with no code change                   | P1.13, P4.11              |
-| REQ-SYS-05 | Dual interface over shared core      | CLI↔MCP operation parity == 100%                       | P5.1.1-P5.1.4, P5.2.1-P5.2.3  |
+| REQ-SYS-05 | Dual interface over shared core      | CLI↔MCP operation parity == 100% (bootstrap exempt)   | P5.1.1-P5.1.4, P5.2.1-P5.2.3  |
 | REQ-SYS-06 | include() composition, main/sub      | Sub runs once-per-element; sub not startable           | P4.1, P4.2, P4.16         |
 | REQ-SYS-07 | Deterministic context assembly       | Two assemblies byte-identical                          | P5.4.4                    |
 | REQ-SYS-08 | Role-based binding                   | Role reassignment needs 0 directive edits              | P3.2, P3.7, P4.14, P5.4.2 |

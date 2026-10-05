@@ -55,7 +55,11 @@
 * **Description:** Humans interact via CLI; agents via an MCP server. Both sit on the same core domain logic.
 * **Rationale:** Single behavior, two surfaces; prevents divergence between human and agent operations.
 * **Fit Criterion:** Every state-mutating operation available in the CLI is reachable via an MCP tool and vice versa; an
-  automated parity test enumerates both surfaces and reports 0 unmatched operations.
+  automated parity test enumerates both surfaces and reports 0 unmatched operations. The bootstrap commands are exempt:
+  `init`, which must run before a WingFoil project exists, and `mcp`, which starts the MCP server itself. Neither is
+  exposed on MCP, and the parity test does not enumerate them. Ratified by `dl-046-bootstrap-commands-in-spec-006-section-3`
+  (2026-09-29, option A(a)); an agent connected through `wingfoil mcp` is already inside an initialised project, so an
+  MCP `init` would have no caller.
 * **Traceability:** Feature P5.1.1 (US-0A-06, BDD `p5-interaction/P5.1.1-init.feature`); Feature P5.1.2 (US-0B-02,
   BDD `p5-interaction/P5.1.2-init-infer.feature`); Feature P5.1.3 (US-0B-01, BDD `p5-interaction/P5.1.3-audit.feature`);
   Feature P5.1.4 (US-0A-14, BDD `p5-interaction/P5.1.4-cli-ux.feature`); Feature P5.2.1 (US-1-07,
