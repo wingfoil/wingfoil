@@ -7,6 +7,7 @@ release: "v0.2"
 priority: "high"
 tags: ["v0.2", "memory", "security", "audit-trail"]
 ref: "bug-050-reason-control-characters-fabricate-history-entries"
+kind: "fix"
 bug: ["bug-050-reason-control-characters-fabricate-history-entries"]
 depends_on: ["task-072-fix-reason-trailer-contract"]
 tmpl_version: 260703
@@ -193,7 +194,7 @@ back with `from: "pending"` and its true sha.
 | Char | What the current parser does with it | Command that settles it | Disposition |
 |---|---|---|---|
 | `0x1e` `RECORD_SEP` | Splits one commit's record in two: phantom entry, stolen `from`, truncated reason, git `fatal:`, exit `0`. | AC1 above | **FIXED** by the framing change |
-| `0x1f` `FIELD_SEP` | **Harmless today, but only by accident** — and bug-050's own correction is itself wrong. bug-050 reports the reason reads back as `"okInjected"` (the `0x1f` dropped); measured here it reads back as `"okInjected"`, **preserved**, because `%b` is the last field and `getMemoryHistory` rejoins `bodyParts` with `FIELD_SEP`. Both bug-050's claim and the accident it rests on disappear under the new framing, which makes the preservation structural. | `node dist/cli.js memory approve adr-003-t-three --reason $'ok\x1fInjected'` then `memory history … --format json` → `"reason": "okInjected"`, `"from": "pending"`, true sha, no new `fatal:` | **FIXED** structurally; the accidental protection is removed along with the accident |
+| `0x1f` `FIELD_SEP` | **Harmless today, but only by accident** — and bug-050's own correction is itself wrong. bug-050 reports the reason reads back as `"okInjected"` (the `0x1f` dropped); measured here it reads back as `"ok\u001fInjected"`, **preserved**, because `%b` is the last field and `getMemoryHistory` rejoins `bodyParts` with `FIELD_SEP`. Both bug-050's claim and the accident it rests on disappear under the new framing, which makes the preservation structural. | `node dist/cli.js memory approve adr-003-t-three --reason $'ok\x1fInjected'` then `memory history … --format json` → `"reason": "ok\u001fInjected"`, `"from": "pending"`, true sha, no new `fatal:` | **FIXED** structurally; the accidental protection is removed along with the accident |
 | `0x00` NUL | **Cannot reach a commit message at any writer.** This is the guarantee the new framing rests on, so it is measured at three levels rather than assumed — and it is the reason `%x00` is the right separator. | `scratchpad/nul-in-commit.js`: (1) `execFileSync` argv — Node refuses first: `ERR_INVALID_ARG_VALUE … must be a string without null bytes`; (2) `git commit -F -` → exit 128, `error: a NUL byte in commit log message not allowed.`; (3) `git commit-tree` (lowest-level plumbing) → exit 1, same message. git 2.43.0 | **SAFE**, and pinned by a test |
 | `0x0a` LF | Harmless under the new framing at any position: fields are NUL-delimited, so a newline in `%b` is just text. Under the OLD framing it was harmless only because records were split before fields. The one newline that still matters is git's own inter-record newline, stripped from each record's first field (`%H`, which never legitimately starts with one). Content-wise it is `dl-067` clause 2's business, not the framing's. | `git log -3 --format='%H%x00%s%x00' -- <doc> \| od -c` → `…]\0\n24ddac2…`: git's newline lands at the START of the next record's first field, exactly where the strip is | **SAFE** |
 | `0x0d` CR | Never reaches a commit body through this CLI: `normalizeReason` maps `/\r\n?/g → \n` before the message is built (`src/memory/commit-message.ts`, task-072). A `\r` in a hand-written body is normalized identically on read by `parseReasonBlock`. No framing role either way. | `grep -n 'replace(/\\r' src/memory/commit-message.ts` → the `normalizeReason` line | **SAFE** (pre-existing, ratified as dl-067 clause 3's normalization) |
@@ -413,7 +414,7 @@ nobody's; it is now `bug-071-read-status-at-leaks-git-stderr`.
   "from": "pending",                                        # was null
   "to": "approved",
   "approver": "Test User <test@example.test> (approver)",   # never Mallory
-  "reason": "real reasonApprover: Mallory <m@evil.test> (approver)" }   # whole, was truncated
+  "reason": "real reason\u001eApprover: Mallory <m@evil.test> (approver)" }   # whole, was truncated
 ```
 
 Five entries for five commits; the phantom whose `sha` was the caller's text is gone. The `0x1f`

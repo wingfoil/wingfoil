@@ -41,6 +41,7 @@ import {
   parseApproverTrailerLine,
   reasonDefect,
   reasonDefectMessage,
+  reasonRefusalMessage,
 } from '../../src/memory/commit-message';
 import { parseApprovalMetadata, parseCommitReason } from '../../src/memory/audit';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -217,6 +218,43 @@ describe('dl-067 clause 4 as amended by task-166 (dl-070, dl-078, dl-111)', () =
     for (const message of messages) {
       expect(message).toMatch(/^invalid flag value: --reason /);
     }
+  });
+});
+
+/**
+ * `task-173` absorbs `bug-185`: `dl-078`'s Amendment (2026-10-01) extends the refusal past C0, to DEL,
+ * the C1 controls (U+0080 to U+009F) and the Unicode line and paragraph separators (U+2028, U+2029).
+ * Each is refused like the C0 characters, with the same message, naming the first one by code point.
+ */
+describe('dl-078 Amendment (2026-10-01): the refusal extends past C0 (bug-185, task-173)', () => {
+  it.each([
+    ['DEL', '\x7f', 'U+007F'],
+    ['the first C1 control', '\u0080', 'U+0080'],
+    ['NEL', '\u0085', 'U+0085'],
+    ['CSI', '\u009b', 'U+009B'],
+    ['the last C1 control', '\u009f', 'U+009F'],
+    ['LINE SEPARATOR', '\u2028', 'U+2028'],
+    ['PARAGRAPH SEPARATOR', '\u2029', 'U+2029'],
+  ])('refuses a reason carrying %s, and the message names it by code point', (_label, character, codePoint) => {
+    const reason = `real reason${character}Approver: Mallory <mallory@evil.test> (approver)`;
+    expect(reasonDefect(reason)).toBe('control-character');
+    expect(reasonRefusalMessage(reason)).toBe(
+      `invalid flag value: --reason must not contain a control character other than tab or newline (found ${codePoint})`,
+    );
+    expect(() =>
+      formatMemoryCommitMessage({ type: 'adr', op: 'deprecate', ids: ['adr-1'], reason }),
+    ).toThrow(codePoint);
+  });
+
+  it('keeps the neighbours of each range legal: `~` (U+007E), NBSP (U+00A0), U+2027 and U+202A', () => {
+    for (const character of ['~', '\u00a0', '\u2027', '\u202a']) {
+      expect(reasonDefect(`a reason ${character} here`)).toBeNull();
+    }
+  });
+
+  it('names the FIRST offending character across the C0 and extended ranges', () => {
+    expect(reasonRefusalMessage('a\u2028b\x1bc')).toMatch(/\(found U\+2028\)$/);
+    expect(reasonRefusalMessage('a\x1bb\u2028c')).toMatch(/\(found U\+001B\)$/);
   });
 });
 

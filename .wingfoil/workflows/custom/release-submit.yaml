@@ -5,7 +5,7 @@ kind: sub
 description: >-
   Assemble the release once its tasks are done: run pre-release checks, move the release into
   `releasing`, and gate on approval before publishing.
-version: 1.0
+version: 1.1                     # 1.0 -> 1.1 at task-173: `pre-release-checks` declares `typecheck.clean` (dl-044)
 element: release
 
 phases:
@@ -21,6 +21,7 @@ phases:
         - "all bugs where tags=[{release.version}] are status: [resolved, closed]"
         - "tests.passing"
         - "tests.coverage(min: 80)"
+        - "typecheck.clean"            # dl-044, task-173: `npm run typecheck` — `tsc --noEmit` over tsconfig.json (src AND test) and tsconfig.build.json; asserted by test/lint/typecheck-clean.test.ts. Until this, `tsc --noEmit` ran only by hand here
 
   - name: enter-releasing
     description: "Move the release element into the releasing state."

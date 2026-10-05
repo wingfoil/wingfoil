@@ -378,7 +378,7 @@ wingfoil memory reject  task-001-my-first-task --reason "Add acceptance criteria
 - `--reason` is mandatory and may not be blank. It may span several lines, but no line may begin with
   `Approver:` or `Reason:`, and it may not end with a paragraph made only of `Key: value` lines.
   From v0.3, no line may begin with `WingFoil-Version:` either, and the reason may not contain a
-  control character other than tab and newline.
+  control character other than tab and newline (C0, DEL, C1, or the separators U+2028 and U+2029).
 - The commit records the approver and the reason:
 
   ```

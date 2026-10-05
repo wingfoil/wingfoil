@@ -24,6 +24,8 @@ interface WorkflowStep {
   readonly name?: string;
   readonly uses?: string;
   readonly run?: string;
+  readonly id?: string;
+  readonly if?: string;
   readonly with?: Readonly<Record<string, unknown>>;
   readonly 'continue-on-error'?: unknown;
 }
@@ -94,15 +96,29 @@ describe('ci workflow (task-140) — dl-076 (D): the packaging gate on every pus
     expect(setup?.with?.['package-manager-cache']).toBe(false);
   });
 
-  it('runs exactly `npm ci`, `npm run prepublishOnly`, then `npm run check:audit` — publish.yml’s two gate steps plus the audit', () => {
+  it('runs exactly `npm ci`, `npm run prepublishOnly`, `npm run typecheck`, then `npm run check:audit` — publish.yml’s two gate steps plus two', () => {
     // task-250 (bug-223) added `check:audit` after the two: it needs the registry's advisory database,
     // so it is a ci.yml step and not part of `prepublishOnly`, which publish.yml's tag gate also runs.
     // It is last so a new advisory never hides the build/test/lint verdict of the push.
+    // task-173 (dl-044) added `typecheck` before it: `typecheck.clean` as a step of its own, so a red
+    // typecheck is named in the run's step list rather than found inside the test log.
     const job = read(CI_PATH).parsed.jobs['packaging-gate'];
     const runSteps = (job?.steps ?? []).filter((s) => s.run !== undefined).map((s) => s.run?.trim());
-    expect(runSteps).toEqual(['npm ci', 'npm run prepublishOnly', 'npm run check:audit']);
+    expect(runSteps).toEqual(['npm ci', 'npm run prepublishOnly', 'npm run typecheck', 'npm run check:audit']);
     const publishGate = (read(PUBLISH_PATH).parsed.jobs.gate?.steps ?? []).map((s) => s.run?.trim());
     expect(publishGate).toEqual(expect.arrayContaining(['npm ci', 'npm run prepublishOnly']));
+  });
+
+  it('runs `check:audit` under `!cancelled()`, and `typecheck` only after a successful install (task-173, task-250)', () => {
+    // typecheck needs the installed `tsc`: after a failed `npm ci` it could only add a second,
+    // misleading red. After a red `prepublishOnly` it still runs, so neither verdict hides the other.
+    const steps = read(CI_PATH).parsed.jobs['packaging-gate']?.steps ?? [];
+    const install = steps.find((s) => s.run?.trim() === 'npm ci');
+    expect(install?.id).toBe('install');
+    expect(steps.find((s) => s.run?.trim() === 'npm run typecheck')?.if).toBe(
+      "${{ !cancelled() && steps.install.outcome == 'success' }}",
+    );
+    expect(steps.find((s) => s.run?.trim() === 'npm run check:audit')?.if).toBe('${{ !cancelled() }}');
   });
 
   it('fails the run on a red gate — no `continue-on-error` anywhere (dl-076 Q2)', () => {
