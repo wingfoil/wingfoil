@@ -24,6 +24,7 @@ interface WorkflowStep {
   readonly name?: string;
   readonly uses?: string;
   readonly run?: string;
+  readonly id?: string;
   readonly if?: string;
   readonly with?: Readonly<Record<string, unknown>>;
   readonly 'continue-on-error'?: unknown;
@@ -108,11 +109,16 @@ describe('ci workflow (task-140) — dl-076 (D): the packaging gate on every pus
     expect(publishGate).toEqual(expect.arrayContaining(['npm ci', 'npm run prepublishOnly']));
   });
 
-  it('runs `typecheck` and `check:audit` under `!cancelled()`, so neither verdict hides another (task-173, task-250)', () => {
+  it('runs `check:audit` under `!cancelled()`, and `typecheck` only after a successful install (task-173, task-250)', () => {
+    // typecheck needs the installed `tsc`: after a failed `npm ci` it could only add a second,
+    // misleading red. After a red `prepublishOnly` it still runs, so neither verdict hides the other.
     const steps = read(CI_PATH).parsed.jobs['packaging-gate']?.steps ?? [];
-    for (const command of ['npm run typecheck', 'npm run check:audit']) {
-      expect(steps.find((s) => s.run?.trim() === command)?.if).toBe('${{ !cancelled() }}');
-    }
+    const install = steps.find((s) => s.run?.trim() === 'npm ci');
+    expect(install?.id).toBe('install');
+    expect(steps.find((s) => s.run?.trim() === 'npm run typecheck')?.if).toBe(
+      "${{ !cancelled() && steps.install.outcome == 'success' }}",
+    );
+    expect(steps.find((s) => s.run?.trim() === 'npm run check:audit')?.if).toBe('${{ !cancelled() }}');
   });
 
   it('fails the run on a red gate — no `continue-on-error` anywhere (dl-076 Q2)', () => {

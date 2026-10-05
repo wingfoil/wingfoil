@@ -651,8 +651,9 @@ Other modified or staged files are left as they are and are not committed.
   prose`).
 - Unreleased (v0.3): it may not contain a control character other than tab and newline. That covers
   the C0 controls, DEL (U+007F), the C1 controls (U+0080 to U+009F) and the Unicode line and paragraph
-  separators (U+2028, U+2029). The refusal exits `2` and names the first one by code point, e.g. `error: invalid flag value: --reason must not
-  contain a control character other than tab or newline (found U+001B)`.
+  separators (U+2028, U+2029). The refusal exits `2` and names the first one by code point, e.g.
+  `error: invalid flag value: --reason must not contain a control character other than tab or newline
+  (found U+001B)`.
 - Trailing whitespace is stripped, runs of blank lines collapse to one, and leading/trailing blank lines
   are dropped.
 

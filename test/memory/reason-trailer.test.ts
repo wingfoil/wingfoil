@@ -233,8 +233,8 @@ describe('dl-078 Amendment (2026-10-01): the refusal extends past C0 (bug-185, t
     ['NEL', '\u0085', 'U+0085'],
     ['CSI', '\u009b', 'U+009B'],
     ['the last C1 control', '\u009f', 'U+009F'],
-    ['LINE SEPARATOR', ' ', 'U+2028'],
-    ['PARAGRAPH SEPARATOR', ' ', 'U+2029'],
+    ['LINE SEPARATOR', '\u2028', 'U+2028'],
+    ['PARAGRAPH SEPARATOR', '\u2029', 'U+2029'],
   ])('refuses a reason carrying %s, and the message names it by code point', (_label, character, codePoint) => {
     const reason = `real reason${character}Approver: Mallory <mallory@evil.test> (approver)`;
     expect(reasonDefect(reason)).toBe('control-character');
@@ -247,14 +247,14 @@ describe('dl-078 Amendment (2026-10-01): the refusal extends past C0 (bug-185, t
   });
 
   it('keeps the neighbours of each range legal: `~` (U+007E), NBSP (U+00A0), U+2027 and U+202A', () => {
-    for (const character of ['~', ' ', '‧', '‪']) {
+    for (const character of ['~', '\u00a0', '\u2027', '\u202a']) {
       expect(reasonDefect(`a reason ${character} here`)).toBeNull();
     }
   });
 
   it('names the FIRST offending character across the C0 and extended ranges', () => {
-    expect(reasonRefusalMessage('a b\x1bc')).toMatch(/\(found U\+2028\)$/);
-    expect(reasonRefusalMessage('a\x1bb c')).toMatch(/\(found U\+001B\)$/);
+    expect(reasonRefusalMessage('a\u2028b\x1bc')).toMatch(/\(found U\+2028\)$/);
+    expect(reasonRefusalMessage('a\x1bb\u2028c')).toMatch(/\(found U\+001B\)$/);
   });
 });
 

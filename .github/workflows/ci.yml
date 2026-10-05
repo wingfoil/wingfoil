@@ -12,8 +12,10 @@
 #                    Before the audit, `npm run typecheck` (`typecheck.clean`, dl-044, task-173):
 #                    `tsc --noEmit` over `tsconfig.json` (src AND test) and `tsconfig.build.json`. The
 #                    suite `test/lint/typecheck-clean.test.ts` runs the same check inside `npm test`;
-#                    the step of its own names a red typecheck in the run's step list and, under
-#                    `if: ${{ !cancelled() }}` like the audit, still reports when an earlier step failed.
+#                    the step of its own names a red typecheck in the run's step list. It runs when
+#                    `npm ci` succeeded, whatever `prepublishOnly` did (`if: ${{ !cancelled() &&
+#                    steps.install.outcome == 'success' }}`): a red test step still reports the
+#                    typecheck, and a failed install, which leaves no `tsc`, adds no second red.
 #                    The control-character gate (bug-073) is a suite of `npm test` alone:
 #                    `test/lint/control-characters.test.ts`.
 #
@@ -82,11 +84,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
       - name: Install
+        id: install
         run: npm ci
       - name: prepublishOnly gate — build, test, lint (spec-015 §2)
         run: npm run prepublishOnly
       - name: typecheck.clean — whole-project tsc --noEmit, src and test (dl-044, task-173)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run typecheck
       - name: Production advisories — no high advisory in the dependencies tree (task-250, bug-223)
         if: ${{ !cancelled() }}
