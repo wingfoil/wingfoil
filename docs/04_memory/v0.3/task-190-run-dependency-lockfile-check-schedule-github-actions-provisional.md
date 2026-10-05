@@ -87,9 +87,14 @@ Lockfile drift arriving from the registry is seen only at a tag (`dl-069`). `dl-
 ### green (2026-10-05)
 
 - `fa6ecd23` — `.github/workflows/dependency-check.yml`; `package.json` script `check:audit:all`;
-  `package-lock.json` refreshed by `npm audit fix` (51 lines changed: `brace-expansion` 1.1.21 / 2.1.7 / 5.0.12,
-  `browserslist` 4.29.3, nested `js-yaml` 3.15.2, `baseline-browser-mapping` 2.11.27, `markdown-it` 14.3.2, plus
-  `caniuse-lite` and `electron-to-chromium` pulled by `browserslist`). New engines ranges are `20 || >=22`
+  `package-lock.json` refreshed by `npm audit fix`: 14 entries moved, all `dev: true` — `brace-expansion` ×6
+  (hoisted 2.1.1→2.1.7; nested under `test-exclude` 1.1.15→1.1.21; under `eslint`, `@eslint/config-array`,
+  `@typescript-eslint/typescript-estree`, `typedoc` 5.0.7→5.0.12), `browserslist` 4.28.4→4.29.3, nested `js-yaml`
+  (`@istanbuljs/load-nyc-config`) 3.15.0→3.15.2, `baseline-browser-mapping` 2.10.41→2.11.27, `markdown-it`
+  14.3.0→14.3.2, `caniuse-lite` 1.0.30001800→1.0.30001814, `electron-to-chromium` 1.5.387→1.5.444, `node-releases`
+  2.0.50→2.0.57, `update-browserslist-db` 1.2.3→1.3.3. Listed by
+  `git show 0cf8b131:package-lock.json > old.json` then a node diff of `old.json` `.packages` vs HEAD's `.packages`
+  by install path and `version` (14 lines, every one `dev`). New engines ranges are `20 || >=22`
   (`git diff -U0 0cf8b131 -- package-lock.json | grep '"node":'`), compatible with the 22.12.0 floor.
 - Live checks in the worktree: `npm run check:lockfile` → exit 0; `npm run check:audit` → exit 0;
   `npm run check:audit:all` → `found 0 vulnerabilities`, exit 0 (was 5: 3 high, 2 moderate, `npm audit --json`
@@ -128,3 +133,6 @@ Lockfile drift arriving from the registry is seen only at a tag (`dl-069`). `dl-
   keep them); no other workflow file lacks a pin.
 - Not verified here: the workflow's first real run (a cron tick or `workflow_dispatch` after the merge to `main`;
   GitHub runs `schedule` only from the default branch).
+- **Review fixes (independent review, 2026-10-05):** the green note named 12 of the 14 moved lock entries
+  (missing `node-releases` and `update-browserslist-db`); it now lists all 14 with the command that lists them.
+  Prose only; task stays `in-review`.
