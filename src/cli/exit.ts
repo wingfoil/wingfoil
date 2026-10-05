@@ -18,29 +18,18 @@ import type { ExitCode } from '../core';
 
 export type { ExitCode };
 
-/** Set once an exit has been deferred until the output drains; see {@link isExitDeferred}. */
-let exitDeferred = false;
-
 /**
  * Thrown by a caller that cannot simply return after {@link exitWith} deferred the exit — today only
  * the Commander `exitOverride` in `./program.ts`, because Commander calls `process.exit` itself, with
  * its own code, as soon as that callback returns. The entry points (`src/cli.ts`, the test harness)
- * recognise it and let the deferred exit happen instead of reporting an error.
+ * recognise it by its `name` (a copy of this module loaded elsewhere throws the same name) and let the
+ * deferred exit happen instead of reporting an error.
  */
 export class DeferredExit extends Error {
   constructor(readonly code: ExitCode) {
     super(`exit ${String(code)} deferred until the output drains`);
     this.name = 'DeferredExit';
   }
-}
-
-/**
- * Whether an {@link exitWith} call is waiting for the output to drain. When it is, the process is
- * still running only to finish writing: the caller returns (or throws {@link DeferredExit}) and does
- * nothing else.
- */
-export function isExitDeferred(): boolean {
-  return exitDeferred;
 }
 
 /**
@@ -55,16 +44,19 @@ export function isExitDeferred(): boolean {
  * error. Either way the code is the one passed here, and the exit is the single `process.exit` call.
  *
  * Every caller returns right after this call, so which of the two happened does not matter to it; the
- * one caller that cannot return normally checks {@link isExitDeferred}.
+ * one caller that cannot return normally reads the result.
+ *
+ * @returns `true` when the exit is deferred until the output drains — the process is still running
+ * only to finish writing, and the caller must do nothing else. (When the exit happened, nothing returns
+ * at all outside a test that stubs `process.exit`.)
  */
-export function exitWith(code: ExitCode, message?: string): void {
+export function exitWith(code: ExitCode, message?: string): boolean {
   if (message) process.stderr.write(message + '\n');
   const queued = [process.stdout, process.stderr].filter((stream) => stream.writableLength > 0);
   if (queued.length === 0) {
     process.exit(code);
-    return;
+    return false;
   }
-  exitDeferred = true;
   process.exitCode = code;
   let waiting = queued.length;
   for (const stream of queued) {
@@ -79,4 +71,5 @@ export function exitWith(code: ExitCode, message?: string): void {
     stream.once('error', settle);
     stream.write('', settle);
   }
+  return true;
 }

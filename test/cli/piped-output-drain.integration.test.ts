@@ -91,7 +91,7 @@ describe('a payload larger than the pipe buffer reaches the reader whole (task-2
 
   it.each(Array.from({ length: RUNS }, (_, run) => run + 1))(
     'memory search --format json through spawnSync: complete, parseable JSON and exit 0 (run %i)',
-    (_run) => {
+    () => {
       const run = runCliEntry(root, SEARCH);
       expect(run.stderr).toBe('');
       expect(run.status).toBe(0);
@@ -101,7 +101,7 @@ describe('a payload larger than the pipe buffer reaches the reader whole (task-2
 
   it.each(Array.from({ length: RUNS }, (_, run) => run + 1))(
     'memory search --format json | <slow reader>: complete, parseable JSON and exit 0 (run %i)',
-    (_run) => {
+    () => {
       const run = runThroughShellPipe(root, SEARCH, 'stdout');
       expect(run.status).toBe(0);
       expectWholeSearchResult(run.output);
@@ -126,14 +126,14 @@ describe('the error path keeps its exit code and its whole stderr under a pipe (
   ] as const;
 
   for (const { label, args, code, message } of cases) {
-    it.each(Array.from({ length: RUNS }, (_, run) => run + 1))(`${label} through spawnSync (run %i)`, (_run) => {
+    it.each(Array.from({ length: RUNS }, (_, run) => run + 1))(`${label} through spawnSync (run %i)`, () => {
       const run = runCliEntry(root, args);
       expect(run.status).toBe(code);
       expect(run.stderr.length).toBeGreaterThan(PIPE_BUFFER_BYTES);
       expect(run.stderr).toBe(message);
     });
 
-    it.each(Array.from({ length: RUNS }, (_, run) => run + 1))(`${label} with stderr piped into a slow reader (run %i)`, (_run) => {
+    it.each(Array.from({ length: RUNS }, (_, run) => run + 1))(`${label} with stderr piped into a slow reader (run %i)`, () => {
       const run = runThroughShellPipe(root, args, 'stderr');
       expect(run.status).toBe(code);
       expect(run.output.length).toBeGreaterThan(PIPE_BUFFER_BYTES);

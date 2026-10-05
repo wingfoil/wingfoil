@@ -171,6 +171,17 @@ describe('src/cli.ts — the last-resort error handler (bug-002-cli-error-stack-
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
+  it('lets a DeferredExit through silently: the exit is already chosen and waits for output to drain (task-249)', async () => {
+    // Matched by name, so the error need not come from the same copy of `src/cli/exit` the entry loads.
+    const deferred = Object.assign(new Error('exit 2 deferred until the output drains'), { name: 'DeferredExit' });
+    jest.mocked(buildProgram).mockRejectedValue(deferred);
+
+    await runEntrypoint();
+
+    expect(stderrSpy).not.toHaveBeenCalled();
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
   it('stringifies a non-Error rejection instead of printing `undefined`', async () => {
     jest.mocked(buildProgram).mockRejectedValue('plain string failure');
 

@@ -18,7 +18,6 @@
  * (spec-005-cli-command-contract §1, spec-008-cli-grammar §1) even outside a git repository; only an
  * actual `<noun> <verb>` invocation needs a resolvable git root.
  */
-import { DeferredExit } from './cli/exit';
 import { buildProgram } from './cli/program';
 import { CORE_MODULES } from './core';
 import { resolveProjectRoot } from './storage/git-root';
@@ -35,8 +34,9 @@ buildProgram(CORE_MODULES, {
   .then((program) => program.parseAsync(process.argv))
   .catch((error: unknown) => {
     // Not an error: an exit already chosen through `exitWith` is waiting for queued output to drain
-    // (task-249, `bug-222`), and the process ends with that code once it has.
-    if (error instanceof DeferredExit) return;
+    // (task-249, `bug-222`), and the process ends with that code once it has. Matched by name, as the
+    // compiled test harness does, so a second copy of `./cli/exit` cannot make it read as a failure.
+    if (error instanceof Error && error.name === 'DeferredExit') return;
     // Last-resort handler for anything that escapes the per-command spec-005 exit path. Emit only the
     // message as a single `error:` line — never `error.stack`, which would leak a stack trace and
     // absolute internal paths from a published CLI (bug-002-cli-error-stack-dump). The normal
