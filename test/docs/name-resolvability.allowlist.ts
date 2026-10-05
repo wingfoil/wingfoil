@@ -148,7 +148,7 @@ export const NAME_ALLOWLIST: readonly AllowlistEntry[] = [
   { document: 'docs/04_memory/design/specs/spec-008-cli-grammar.md', nameClass: 'config', name: 'tech_stack.cli', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-008-cli-grammar.md', nameClass: 'path', name: 'src/mcp-server', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-008-cli-grammar.md', nameClass: 'symbol', name: 'E_UNKNOWN_COMMAND', reason: UNTRIAGED },
-  { document: 'docs/04_memory/design/specs/spec-008-cli-grammar.md', nameClass: 'symbol', name: 'NO_COLOR', reason: UNTRIAGED },
+  { document: 'docs/04_memory/design/specs/spec-008-cli-grammar.md', nameClass: 'symbol', name: 'NO_COLOR', reason: 'external: the no-color.org environment variable, which no WingFoil code reads yet; spec-008 §2 declares the rule the colour P5.1.4 adds must honour (task-156, bug-203)' },
   { document: 'docs/04_memory/design/specs/spec-008-cli-grammar.md', nameClass: 'symbol', name: 'W_UNCOMMITTED_INPUTS', reason: PLANNED, plannedBy: ['task-198', 'task-240'] },
   { document: 'docs/04_memory/design/specs/spec-008-cli-grammar.md', nameClass: 'symbol', name: 'flags.noColor', reason: 'counterexample: spec-008 names the property to forbid inventing it (Commander derives `color`/`interactive` from the `--no-*` flags)' },
   { document: 'docs/04_memory/design/specs/spec-008-cli-grammar.md', nameClass: 'symbol', name: 'noColor', reason: 'counterexample: spec-008 names the property to forbid inventing it (Commander derives `color`/`interactive` from the `--no-*` flags)' },
