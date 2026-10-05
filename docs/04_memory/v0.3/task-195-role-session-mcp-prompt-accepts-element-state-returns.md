@@ -33,6 +33,11 @@ tmpl_version: 260703
 - **Features:** P5.4.3, P5.4.4, P5.2.2.
 - **Notes:** Proposal key: B03. `src/mcp/prompt.ts`, `docs/04_memory/design/specs/spec-004-mcp-surface-contract.md`. **Belongs with C's MCP work for file ownership**: if C's dl-039/048/049 task is scheduled first, this task rebases on it. The `agent` Resources stay v0.4 (R5, spec-016 §7).
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from wave 2 B1 (2026-10-05, `task-171` and `task-176`).** `assembleExecutionContext`
+  (`src/core/context.ts`) reads Memory tolerantly: an unreadable document is left out and reported as
+  `W_MEMORY_UNREADABLE` in the result's `warnings` (`CoreResult`, third argument of `coreOk`), and a malformed subject
+  element comes back as `NOT_FOUND` with `details.unreadable`. Neither is in the payload. Forward both to the
+  surface this task builds (stderr / `--format json` warnings, or the MCP response), so they are never dropped.
 
 ## Execution Notes
 
