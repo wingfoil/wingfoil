@@ -13,6 +13,8 @@
  *   when the entry was written. Which of them implements it was not verified. Once every cited task is
  *   `done` and the name still does not resolve, the test reports the entry (warn) or fails (from v0.4);
  *   when the name ships, the entry goes stale and is reported;
+ * - {@link scheduledIn} — the name is in the `features:` of a release that has no task for it yet
+ *   (`release-planning` creates one when that release is planned); the entry is re-checked then;
  * - `UNTRIAGED` — a first-run finding nobody has looked at yet: stale, or not built, or quoted on
  *   purpose. The v0.3 warn release is when each one is fixed in its document (through `memory amend`
  *   for an approved spec) or given its real reason; from v0.4 an `UNTRIAGED` entry fails the gate.
@@ -30,6 +32,14 @@ export const ADR_RECORD =
 /** Named in the entry's `plannedBy` tasks; spent once all of them are `done`. */
 export const PLANNED =
   'planned: named in the non-done task(s) listed in plannedBy (literal match when the entry was written; the implementing task was not verified)';
+
+/**
+ * The reason of a name scheduled by a release's `features:` list with no task yet: `release` is the
+ * release element id, `feature` the feature id that carries the name.
+ */
+export function scheduledIn(release: string, feature: string): string {
+  return `scheduled: ${feature} is in ${release}'s features: list, which has no task for it yet; re-check when ${release} is planned`;
+}
 
 /** A first-run finding not yet fixed or justified; reported in warn mode, failing from v0.4. */
 export const UNTRIAGED =
@@ -98,7 +108,7 @@ export const NAME_ALLOWLIST: readonly AllowlistEntry[] = [
   { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'command', name: 'wingfoil agent execute', reason: PLANNED, plannedBy: ['task-149', 'task-176', 'task-178', 'task-195', 'task-198', 'task-199', 'task-200', 'task-206', 'task-216', 'task-217', 'task-218', 'task-228', 'task-235', 'task-236', 'task-237', 'task-242', 'task-243', 'task-245'] },
   { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'command', name: 'wingfoil agent list', reason: PLANNED, plannedBy: ['task-206', 'task-216', 'task-228', 'task-240', 'task-243'] },
   { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'command', name: 'wingfoil agent show', reason: PLANNED, plannedBy: ['task-206', 'task-220', 'task-228', 'task-243'] },
-  { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'command', name: 'wingfoil audit', reason: 'planned: P5.1.3 (BDD p5-interaction/P5.1.3-audit.feature), not in v0.3 scope and with no task yet; dl-046 B(a) fixes its flat name' },
+  { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'command', name: 'wingfoil audit', reason: scheduledIn('minor-v0.4', 'P5.1.3') },
   { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'command', name: 'wingfoil dna infer', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'command', name: 'wingfoil memory import', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'command', name: 'wingfoil workflow create', reason: PLANNED, plannedBy: ['task-211'] },
