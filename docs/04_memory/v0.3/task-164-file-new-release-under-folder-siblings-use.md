@@ -66,7 +66,11 @@ not built. The field keeps its declared meaning (`initial-design`'s `seed-releas
 on `release-line` ("also the path folder for this file", false), and the two `memory add` test
 fixtures whose headers say they mirror this repository's `release` type
 (`grep -rn "planning/{release-line}" . --include=*.ts --include=*.yaml --include=*.md` outside
-`node_modules`/`dist`/closed v0.1–v0.2 Memory).
+`node_modules`/`dist`/closed v0.1–v0.2 Memory). *Corrected at review:* that sweep missed two more
+fixtures that say they mirror `.wingfoil/memory.yaml`'s path patterns, `test/core/helpers/reference-repo.ts`
+and `test/mcp/resource-latency.test.ts`; they are fixed under *Review fixes*. The other test files
+still carrying `planning/{release-line}` (`element-schema`, `memory-path`, `read-only-resources`,
+`relevance`, `query`) claim no mirroring (`grep -n -i "mirror\|real path"` on each → no such claim).
 
 **BDD.** The engine's behaviour does not change (no `src/` file changes), so no `.feature` scenario
 is added: the ACs are about this repository's configuration, pinned by Jest against the `memory.yaml`
@@ -142,4 +146,25 @@ For the approver:
   one sentence in the `path` placeholder paragraph, and a dated *Revision (2026-10-05)* note.
   Proposed `--reason`: "task-164 (bug-163): the release worked example files a release under
   planning/rl-{release-line}/, the release-line's id, as memory.yaml 2.3 does; the release-line field
-  keeps the version, so no release moves. Edited in place with no version bump (dl-047)."
+  keeps the version, so no release moves; counter step 1 says a placeholder's wildcard may start
+  inside its segment. Edited in place with no version bump (dl-047)."
+
+### Review fixes (coordinator review, 2026-10-05: approve with fixes)
+
+1. **Same-class sweep.** `test/core/helpers/reference-repo.ts` and `test/mcp/resource-latency.test.ts`
+   (both "Mirrors .wingfoil/memory.yaml's real path patterns") now carry
+   `planning/rl-{release-line}/{id}.md`. Neither plants a release document, so no assertion changes.
+2. **Drift guard.** `memory-add-release-folder.test.ts` "the folder of release.path is release-line's
+   id_pattern with {version} read from {release-line}": on the committed `memory.yaml`, the last folder
+   of `release.path` must equal `release-line`'s `id_pattern` with `{version}` replaced by
+   `{release-line}`, so the `rl-` literal cannot drift from `rl-{version}` unnoticed. Characterization
+   (it passes on the green configuration).
+3. **spec-001 counter step 1** (pending amendment, still uncommitted): the wildcard of a non-`{id}`
+   placeholder begins and ends where the placeholder does, so `rl-{release-line}` matches inside a
+   segment (the code, `PATH_TOKEN_SOURCE` in `src/memory/add.ts`, already behaves so). The Revision
+   note says it.
+
+`npx jest test/core/memory-add-release-folder.test.ts test/core/query-latency.test.ts test/mcp/resource-latency.test.ts test/docs/name-resolvability.test.ts`
+→ 4 suites, 23 passed (`test/cli/command-latency.test.ts`, the third user of `reference-repo.ts`,
+is opt-in via `npm run test:latency` and was not run under load). `npm run -s lint`,
+`npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` → exit 0.
