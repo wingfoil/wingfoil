@@ -108,3 +108,20 @@ half (owned by `user-docs`' `align-agent-docs`), and `dna.yaml` belongs to task-
 edited here; reported to the coordinator.
 
 Pending amendments (approver): none.
+
+### review fixes (independent review: approve with fixes) — `a2be671f`
+
+- **F1** `claim-evidence.md`: the clause's applicability read as a closed list. Now "It holds
+  wherever this directive does, including …" and names the durable prose under *How a claim is
+  recorded* (comments/TSDoc, spec sentences, decisions).
+- **F2** `determinism.md`: "P … is measured on every run" was present tense for measures that do not
+  exist. Now "is to be measured on every run", naming today's measure: `scripts/check-governance.cjs`
+  (`npm run check:governance`, `task-167`) checks `wf()` commit shape and transitions
+  (`grep -c verifyTransitionConsistency scripts/check-governance.cjs` → `4`, the positive case) and
+  neither `produces:` presence nor traceability (`grep -c produces scripts/check-governance.cjs` → `0`;
+  `grep -ci traceab scripts/check-governance.cjs` → `0`). In `src/`, `produces` appears only as
+  declaration validation (`src/core/workflow-diagnostics.ts`, `E_PHASE_PRODUCES_*`), not as a per-run
+  presence check. The remainder cites `dl-131` Action 7.
+- Re-run at `a2be671f`: `npm run build && node dist/cli.js directives list` → exit 0, both
+  directives listed; `node scripts/check-governance.cjs --base 0b297169` → exit 0 (result below the
+  commit of these notes). Prose only: no src/test change, so the suite results above stand.
