@@ -49,7 +49,7 @@ import { buildCliCommands, type BuildCommandsOptions, type CliCommand } from './
 import { runInit, createReadlinePrompt } from './init-command';
 import { runMcp } from './mcp-command';
 import { emitError } from './error';
-import { exitWith } from './exit';
+import { DeferredExit, exitWith, isExitDeferred } from './exit';
 import { isValidFormat, type OutputFormat } from './output';
 
 /**
@@ -103,6 +103,11 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
     const termination = classifyParseOutcome(error);
     if (termination.needsErrorLine) emitError(incompleteInvocationReason(program.args), { format: activeFormat(program) });
     exitWith(termination.exitCode);
+    // Commander ends the process itself, at ITS code, as soon as this callback returns. When the exit
+    // is waiting for queued output to drain (task-249, `bug-222` — e.g. a long `--help` into a pipe),
+    // returning would let Commander cut that output short at the wrong code; throwing hands control
+    // back to the entry point, which leaves the deferred exit to happen.
+    if (isExitDeferred()) throw new DeferredExit(termination.exitCode);
   });
   // Commander's own refusals in the active `--format` (task-130, `bug-114`, spec-005 §3.2). Commander
   // writes an error through `outputError` and the help it prints for an incomplete invocation through

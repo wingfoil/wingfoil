@@ -52,6 +52,9 @@ function main() {
 Promise.resolve()
   .then(main)
   .catch((error) => {
+    // The compiled `exitWith` deferred its exit until queued output drains (task-249, `bug-222`): the
+    // process ends with the chosen code by itself, exactly as `src/cli.ts` lets it.
+    if (error && error.name === 'DeferredExit') return;
     process.stderr.write(`cli-harness: unexpected error: ${error && error.stack ? error.stack : error}\n`);
     process.exit(1);
   });

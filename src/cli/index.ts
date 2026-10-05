@@ -17,7 +17,7 @@ export const MODULE_NAME = 'cli' as const;
 export { buildCliCommands, listRegisteredCliCommands } from './registrar';
 export type { BuildCommandsOptions, CliCommand } from './registrar';
 export { buildProgram } from './program';
-export { exitWith } from './exit';
+export { DeferredExit, exitWith, isExitDeferred } from './exit';
 export type { ExitCode } from './exit';
 export { isValidFormat, renderSuccess } from './output';
 export type { OutputFormat } from './output';
