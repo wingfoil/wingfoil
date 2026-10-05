@@ -167,6 +167,37 @@ branch and the new decline cases account for the difference.
   limitation. It describes the released 0.2.2, so it is the v0.3 `user-docs` phase's to drop (candidate
   finding below), not this task's.
 
+### review fixes (independent review: APPROVE WITH FIXES)
+
+One finding, fixed in-task. With `git config core.autocrlf true` and an all-CRLF `dna.yaml`,
+`dna set project.name --value Foo` committed and then exited 1 with `commit <sha> carries more than
+the change it declares: '.wingfoil/dna.yaml' at the commit differs from what this operation wrote`.
+`verifyCommittedPaths` (`src/core/write-guard.ts`) compared the CRLF text it wrote with `git show
+<sha>:<path>`, and under `autocrlf=true` git stores the LF form. This task's CRLF support made the
+case reachable. Before it, a CRLF file was rewritten whole as LF.
+
+- Red `9e460df5`: `test/core/dna-whole-file-rewrite.test.ts` "an all-CRLF dna.yaml under
+  core.autocrlf=true|false" (real git). `npx jest test/core/dna-whole-file-rewrite.test.ts` → 1 failed
+  (`true`, the error above), 10 passed (`false` passed: characterization). Also a CLI twin in
+  `test/cli/dna-force.integration.test.ts`. Its fixture commit failed in that red: under
+  `autocrlf=true` the CRLF file stores as HEAD's LF blob, so there was nothing to commit. The green
+  commit fixed the fixture with `--allow-empty`. Then, with `src/core/write-guard.ts` reverted to
+  `9e460df5` and rebuilt, the CLI `true` case failed with the same error (`error: commit … differs from
+  what this operation wrote`) and the `false` case passed. With the fix, 8/8 passed.
+- Green `db1fe380`: new `committedBlobMatches` (`src/storage/commit.ts`, exported from
+  `src/storage`). It runs `git hash-object --path=<path> --stdin` on the written text and compares the
+  result with `git rev-parse <sha>:<path>`, so the comparison goes through git's own filters
+  (`core.autocrlf`, `.gitattributes`). `verifyCommittedPaths` reports a path only when the bytes
+  differ from `git show` AND the hashes differ, so a genuine foreign change (a re-staging hook) is
+  still caught. `test/storage/committed-blob-matches.test.ts`: `true`/`false` match, a different text
+  does not, an absent path does not. `docs/cli-reference.md`'s CRLF sentence now says the working tree
+  keeps CRLF under either setting and the commit stores the file as the setting says. spec-002's
+  sentence says the same (pending amendment, reason updated below).
+- Re-run, `npm run -s build` first: `npm test` → 246 suites, 4651 tests, all passed; `npm run -s lint`,
+  `npm run -s docs:api`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json
+  --noEmit` → exit 0; `node scripts/check-governance.cjs --base 0cf8b131` → exit 0. The task stays
+  `in-review`.
+
 ### Pending amendments (approver)
 
 Edits left uncommitted in the worktree, for `memory amend`:
@@ -176,7 +207,8 @@ Edits left uncommitted in the worktree, for `memory amend`:
   and the warning, section 12 lists the flag.`
 - `spec-002-dna-yaml-schema` — new section *Writes keep the file's text, or are refused*, Revision
   note. Proposed `--reason`: `task-193 (bug-019, bug-126, ruling R20/Q9): a dna.yaml write is made in
-  place or refused unless --force. The schema itself is unchanged.`
+  place or refused unless --force, and a CRLF file keeps CRLF under either core.autocrlf setting. The
+  schema itself is unchanged.`
 
 ### Candidate findings (not filed)
 
