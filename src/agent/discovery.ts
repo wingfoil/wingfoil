@@ -125,7 +125,7 @@ export function loadAdapter(root: string, name: string, rev = 'HEAD'): CoreResul
 
   let sha: string | null;
   try {
-    sha = rev === 'HEAD' ? atHeadOr(() => resolveRevision(root, rev), null) : resolveRevision(root, rev);
+    sha = rev === 'HEAD' ? atHeadOr(root, () => resolveRevision(root, rev), null) : resolveRevision(root, rev);
   } catch (error) {
     if (error instanceof RevisionError) return coreErr(error.toCoreError());
     throw error;
