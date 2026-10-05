@@ -2,7 +2,7 @@
 id: "bug-151-mcp-tools-list-returns-method-not-found"
 type: bug
 title: "The MCP server declares only `resources`/`prompts` capabilities; a `tools/list` request fails with a JSON-RPC protocol error instead of returning an empty list"
-status: in-progress
+status: in-review
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
