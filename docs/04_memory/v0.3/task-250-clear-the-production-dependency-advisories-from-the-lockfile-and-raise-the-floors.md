@@ -116,7 +116,8 @@ and `fast-uri` (via `ajv`, fed the server's own schemas) are loaded.
 | `npm run check:lockfile` / `npm run check:audit` | pass / exit 0 |
 
 Gates run with the pending spec-015 amendment in the working tree. No BDD scenario covers dependency advisories
-(`grep -rli "audit\|advisor" docs/02_requirements/02_bdd/features` → none), so none was added.
+(`grep -rliE "npm audit|advisor|vulnerab" docs/02_requirements/02_bdd/features` → no match, exit 1; a bare
+`audit` matches only the Memory audit-trail features P1.2/P1.7/P1.10/P5.1.3), so none was added.
 
 ### review (self, reviewer, 2026-10-05)
 
