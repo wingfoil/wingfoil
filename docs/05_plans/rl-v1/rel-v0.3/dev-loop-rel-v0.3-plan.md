@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.12"
+version: "1.13"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -162,10 +162,12 @@ work first (`task-175` and `task-185` → 38 later tasks each, `task-192` → 18
 | **B1** | 250, 249, 192, 185, 175, 171, 177, 176 | `250` → `249` → `192` (`package.json`, `src/cli`); `185` → `175` (`src/workflow/schema.ts`); `171` → `176` (Memory scan primitives, `spec-012`) |
 | **B2** | 174, 172, 178, 173, 191, 182, 251 | `172` → `251` (`src/core/init.ts`); `251` is the batch's only writer of `memory.yaml` and `dna.yaml`, `178` of `roles.yaml` |
 | **B3** | 179, 180, 181, 188, 193, 190, 183 | `180` → `181` (`state-machine.ts`); `193` after `172`; `188` after `178`; `183` after the config writers |
-| **B4** | 184, 186, 187, 189, 248 | `189` last (`src/core/index.ts`); `248` alone, on an idle machine (`test:latency`) |
+| **B4** | 184, 186, 187, 189, 248, 253, 254, 255 | `255` before `253` (`src/core/relevance.ts`); `189` last (`src/core/index.ts`); `248` alone, on an idle machine (`test:latency`) |
 
 `task-251` entered B2 and `task-180` moved from B2 to B3, so that B2 keeps a single writer of
 `memory.yaml` (approver, 2026-10-05).
+`task-253` (`bug-230`), `task-254` (`bug-235`) and `task-255` (`dl-150`, `dl-151`, `bug-232`, `bug-233`)
+entered B4 from the W2 B1 triage and the B2 gate.
 
 Fix share at the opening of W2: 14 open fix tasks of 77 open (18%).
 
@@ -577,3 +579,37 @@ commit, right after the task's transition and on the task branch:
     `bug-ingest-rel-v0.3-w2b1-review-findings-plan`, triage pending.
   - **Fix share:** 11 open fix tasks of 70 open (15.7%), under the threshold.
   - **Next:** B2 (`174`, `172`, `178`, `173`, `191`, `182`, `251`).
+- **2026-10-05 — W2 B1 follow-ups triaged** (`bug-ingest-rel-v0.3-w2b1-review-findings-plan`):
+  - `bug-231` → `task-195`, `bug-234` → `task-200`, `bug-238` → `task-190`;
+  - `bug-230` → new `task-253`, `bug-235` → new `task-254` (both `backlog`, B4);
+  - `bug-232`, `bug-233` → v0.3, carried by `task-255` (below);
+  - `bug-236` → `task-252` (at the B2 gate), `bug-237` → `task-174` (closed at the B2 gate), `bug-239` → v0.3
+    user-docs, no task.
+  - Handover notes on `task-218` and `task-195` (`97a3aff3`, `64ab74ac`): forward the context builder's warnings.
+  - `dl-137` amended with the WingFoil-Templates `base` constraints R1–R4 and ratified (Q1 (b), Q2 (iii), Q3: part
+    (a) in v0.3, part (b) in v0.4), `release: v0.3`; part (a) is `task-252`, executed inside `align-agent-docs`.
+    This repository is not synchronized with the `base` pack before v0.3 ends (approver).
+- **2026-10-05 — batch B2 `done`** (`task-172`, `251`, `174`, `178`, `173`, `191`, `182`).
+  - **Review.** Every task had an independent review: "approve" for `172` and `182`, "approve with fixes" for the
+    rest, every fix applied in-task. A rate limit stopped `174`'s fixes and `251`'s review once; both resumed.
+  - **Approver rulings:**
+    - `task-251`: Memory elements keep the `format:` their template carries (it states the element file's format;
+      `tmpl_version` stays the template revision). No reader checks an element's format yet: follow-up.
+    - `task-178`: the `intake/` prefix and the on-main exceptions go to a decision-log (4 (b)); git-conventions §7
+      applies to hand sessions once `team.agents` carries an email (follow-up).
+    - `dl-150` ratified with B and `dl-151` with A → new `task-255` (`pending`, B4).
+    - Confirmed at the gate: every developer decision the approve Reasons name (group A).
+  - **Amendments: 12** — `251`: spec-001, 002, 003, 013; `174`: spec-004, 014, 006, 008; `173`: bug-050, task-086
+    (also gains `kind: "fix"`, required since `dl-133`), spec-008; `182`: spec-007.
+  - **Bugs closed:** bug-035, bug-055, bug-073, bug-121, bug-151, bug-184, bug-185, bug-190, bug-228, bug-237.
+  - **Merges,** in order 172 → 251 → 174 → 178 → 173 → 191 → 182; only spec-008's two Revision notes conflicted
+    (both kept). `173`'s amendments were recorded before its merge: without them its control-character gate fails
+    on the two documents that still held raw bytes.
+  - **Gates on `main`** (`07000bc0`): `test:coverage` 243 suites, 4609 tests, coverage 99.07 / 96.18 / 96.18 /
+    99.68; lint, `docs:api`, both `tsc`, `npm run typecheck`, `check:audit` (0 vulnerabilities) exit 0; e2e smoke
+    19/19.
+  - **Governance check:** `--base 0b297169` gives 145 gated `wf()` commits on `d3724884`, 0 findings.
+  - **Follow-ups:** filed by `bug-ingest-rel-v0.3-w2b2-review-findings-plan` (in progress). The push-protection
+    `service` element of `task-182` waits for the approver's verify run.
+  - **Fix share:** 13 open fix tasks of 69 open (18.8%; the three new fix tasks 253–255 included), under the threshold.
+  - **Next:** B3 (`179`, `180`, `181`, `188`, `193`, `190`, `183`).
