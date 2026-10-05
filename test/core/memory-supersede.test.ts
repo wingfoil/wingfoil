@@ -331,8 +331,9 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
 
     // The recovery is paste-ready: plain lines, no JSON escapes, and running it completes the pair.
     expect(result.error.message).not.toContain('\\n');
-    const command = result.error.message.slice(result.error.message.indexOf('git commit --only -F - -- '));
-    expect(command.split('\n')[0]).toBe(`git commit --only -F - -- ${ADR_A} <<'EOF'`);
+    const command = result.error.message.slice(result.error.message.indexOf('git commit --only '));
+    // `--cleanup=whitespace`, as `commitPaths` passes it (bug-051, task-192 review F1).
+    expect(command.split('\n')[0]).toBe(`git commit --only --cleanup=whitespace -F - -- ${ADR_A} <<'EOF'`);
     rmSync(hook);
     execFileSync('sh', ['-c', command], { cwd: repo });
     // The operator runs the recovery by hand, so it carries no `WingFoil-Version:` trailer (task-192):
@@ -343,6 +344,12 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
     expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD'])).toBe(ADR_A);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
     expect(verifyTransitionConsistency(repo, ADR_A)).toEqual([]);
+
+    // Under `commit.cleanup=strip` the pinned flag still keeps a `#` line the operator's message carries.
+    gitOut(repo, ['reset', '--quiet', '--soft', 'HEAD~1']);
+    gitOut(repo, ['config', 'commit.cleanup', 'strip']);
+    execFileSync('sh', ['-c', command.replace(/\nEOF$/, '\n#1234 kept at column zero\nEOF')], { cwd: repo });
+    expect(gitOut(repo, ['log', '-1', '--format=%B'])).toContain('\n#1234 kept at column zero');
   });
 
   it('an uncommitted edit of the approved element is refused as before, with the trigger firing at HEAD', async () => {

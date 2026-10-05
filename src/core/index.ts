@@ -1236,7 +1236,9 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
         `${id} was approved in ${committed.value}, but the commit moving ${superseded.id} to ${superseded.to} failed: ` +
         `${finalized.error.message.trim()}. Its status is written in the working tree (${superseded.path}). ` +
         `Complete the pair by committing that file alone, from the repository root:\n\n` +
-        `git commit --only -F - -- ${superseded.path} <<'EOF'\n${finalizeMessage}\nEOF`,
+        // `--cleanup=whitespace`, as `commitPaths` passes it (bug-051, task-192 review): under the
+        // operator's `commit.cleanup=strip` a reason line opening with `#` would otherwise be lost.
+        `git commit --only --cleanup=whitespace -F - -- ${superseded.path} <<'EOF'\n${finalizeMessage}\nEOF`,
     });
   }
   return coreOk(

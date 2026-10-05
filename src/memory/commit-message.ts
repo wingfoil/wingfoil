@@ -147,9 +147,9 @@ export function reasonRefusalMessage(reason: string): string | null {
  * and it is worth keeping them apart:
  *
  *  1. **git's**, which applies whether or not this function exists. `commitPaths`
- *     (`src/storage/commit.ts`) commits with `-m`, so git's `cleanup=whitespace` strips per-line
- *     trailing whitespace, collapses runs of blank lines to one, and drops leading and trailing blank
- *     lines. This is why `spec-008-cli-grammar` §2's original "Recorded verbatim" was already false
+ *     (`src/storage/commit.ts`) passes `--cleanup=whitespace` explicitly (`bug-051`, task-192), so —
+ *     whatever `commit.cleanup` the git config sets — git strips per-line trailing whitespace,
+ *     collapses runs of blank lines to one, and drops leading and trailing blank lines. This is why `spec-008-cli-grammar` §2's original "Recorded verbatim" was already false
  *     for any multi-line text, independently of bug-042.
  *  2. **This module's**: the first line's leading whitespace is trimmed. git does NOT do this. It is
  *     needed because that line sits after `Reason: ` on the same physical line and

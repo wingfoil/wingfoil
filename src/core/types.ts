@@ -39,6 +39,11 @@ export type CoreResult<T> =
   | {
       readonly ok: true;
       readonly value: T;
+      /**
+       * The commit the operation produced. `message` is the operation's message, not the stored body:
+       * `commitPaths` appends the `WingFoil-Version:` trailer paragraph to what it records (task-192,
+       * `dl-111`), and `git log --format=%B <sha>` reads the stored body.
+       */
       readonly commit?: { readonly sha: string; readonly message: string };
       readonly warnings?: readonly string[];
     }
