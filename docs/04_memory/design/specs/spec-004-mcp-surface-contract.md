@@ -200,7 +200,17 @@ Each Tool's input schema mirrors its CLI's required flags one-to-one (e.g. `memo
    trigger: the approve, then a `finalize` of the superseded element, `spec-008` §2) in the `wf({type}): {verb} {id}` format, authored
    as the invoking agent's configured git identity (REQ-SEC-01/02) — identical commit shape to the CLI
    path, so `memory history` and audit tooling cannot distinguish CLI-originated from MCP-originated
-   transitions except by author.
+   transitions except by author. The message ends, as every commit WingFoil writes does, with a
+   trailer paragraph of its own naming the build that wrote it (`dl-111`; `spec-008` §2):
+
+   ```
+   wf(task): approve task-042-foo [in-review → approved]
+
+   Approver: Ada Lovelace <ada@example.com> (approver)
+   Reason: meets acceptance criteria, tests pass
+
+   WingFoil-Version: 0.3.0 (<sha>)
+   ```
 3. On an illegal transition, is **rejected identically to the CLI path** (REQ-INT-03 fit criterion):
    same error message, same exit-equivalent status, no partial write.
 4. On any refusal, carries the same operator-facing **details** the CLI prints (`dl-055` option 1;
@@ -365,4 +375,11 @@ states the archived exclusion of `wingfoil://memory/{type}`, per `dl-038` option
 only in a source comment (`dl-038` Actions). The Resource's behaviour is unchanged: the collection
 already withheld archived elements and the single-document Resource already returned them; what
 changed is where the filter sits. Edited in place without a supersede or a state change, per `dl-047`
+(no `version:` field).
+
+**Revision (2026-10-05, `task-192-stamp-wingfoil-commit-wingfoil-version-semver-sha-pin`) — §4.3 item 2
+shows the trailer paragraph, per `dl-111-tool-signature-in-commits` (`ready`, Action 2).** Every commit
+the commit primitive writes ends with `WingFoil-Version: <semver> (<sha>)` in a final paragraph of its
+own, so the commit a Tool produces does too; item 2 now shows it under the `wf()` subject. No Tool,
+Resource or other rule changed. Edited in place without a supersede or a state change, per `dl-047`
 (no `version:` field).
