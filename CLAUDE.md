@@ -100,7 +100,7 @@ Workflow execution does not exist yet (§6).
 | `.wingfoil/memory/templates/`                              | Memory (P1.13)         | One Markdown scaffold per element type (`frontmatter.required` enforced on submit)                                                                                                                   |
 | `docs/04_memory/planning/{id}.md`                          | Memory (P1.11)         | The **release-line** roadmap (one file per major version, e.g. `rl-v1.md`)                                                                                                                           |
 | `docs/04_memory/planning/rl-{release-line}/{id}.md`        | Memory (P1.11)         | That release-line's **minor releases** (v0.1→v1.0 for `rl-v1`), derived from `docs/03_backlog/`                                                                                                      |
-| `.wingfoil/directives/custom/`                             | Directives (P3.5/P3.8) | Rules: P3.8 template **stand-ins** (`code-quality, testing, code-review, architecture, security, documentation`) + WingFoil-specific (`determinism, doc-versioning, security-secrets, traceability, command-baseline, claim-evidence`) |
+| `.wingfoil/directives/custom/`                             | Directives (P3.5/P3.8) | Rules: P3.8 template **stand-ins** (`code-quality, testing, code-review, architecture, security, documentation`) + WingFoil-specific (`determinism, doc-versioning, security-secrets, traceability, command-baseline, claim-evidence, git-conventions`) |
 | `.wingfoil/roles.yaml`                                     | Directives (P3.2/P3.7) | Role → directive bindings                                                                                                                                                                            |
 | `.wingfoil/workflows.yaml` + `workflows/custom/`           | Workflow (P4.1)        | `sw-life-cycle` (main) + sub-workflows + four ingest mains                                                                                                                                           |
 
@@ -408,13 +408,14 @@ Bindings are by **role**, never by person (REQ-SYS-08).
 | architect              | architecture, determinism, traceability, command-baseline                 |
 | product-owner          | traceability                                                              |
 | tech-lead              | architecture, code-review                                                 |
-| **global (all roles)** | doc-versioning, documentation, security, security-secrets, claim-evidence |
+| **global (all roles)** | doc-versioning, documentation, security, security-secrets, claim-evidence, git-conventions |
 
 `command-baseline` states which state a command may read and write (`dl-080`, option (B));
 `claim-evidence` states that a sentence asserting a fact about the code names the command that
 establishes it. Both were written by `task-094` (`roles.yaml` v1.1). `task-133` bound `security`
 globally (`dl-059`) — here the P3.8 stand-in `custom/security.md`, in an `init` scaffold the built-in —
-which is why `roles.yaml` is at v1.2.
+and `task-178` bound `git-conventions` globally (`dl-119`: branch prefixes, sync with `main`, tags,
+`wf()` subjects, identity, id allocation, AI attribution), which is why `roles.yaml` is at v1.3.
 
 When executing under a role, **auto-load and obey that role's directives** (P3.6/P5.4.2).
 

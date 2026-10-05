@@ -2,14 +2,14 @@
 # One iteration per release wave (v0.1 .. v1.0). Composes planning, per-task dev loops,
 # submission, publishing, and retrospective. Best practice adapted to WingFoil's weekly,
 # per-pillar cadence. Include-only; sw-life-cycle iterates it over `release`.
-# Git conventions (dl-024): one branch per phase (`design/<phase>_<version>`), --ff=false merge to
-# main; the release tag is created on `main` after merge, not on a phase branch. See sw-life-cycle.yaml.
+# Git conventions: the `git-conventions` directive (.wingfoil/directives/custom/git-conventions.md,
+# dl-119) — branch prefixes, --no-ff merges, and the release tag on the pushed `main` (dl-024, dl-074).
 name: release-cycle
 kind: sub
 description: >-
   Deliver one release: plan scope -> run a TDD dev-loop per backlog task (including bug-fix
   tasks) -> align user-facing docs -> submit -> publish to npm -> retrospective.
-version: 1.1                     # dl-013: added user-docs phase between implementation and submit
+version: 1.2                     # dl-013: added user-docs phase (1.1); dl-119: git comment points to git-conventions (1.2)
 element: release        # the iterated element provided by sw-life-cycle (iterate_over: release)
 
 phases:

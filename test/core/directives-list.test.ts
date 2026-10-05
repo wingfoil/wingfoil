@@ -615,7 +615,7 @@ describe('directivesList — the live configuration declares `scope` consistentl
     const entries = await listOk(liveRoot, { role: 'approver' });
     const gitConventions = entries.filter((entry) => entry.frontmatter.id === 'git-conventions');
     expect(gitConventions.map((entry) => [entry.path, entry.global])).toEqual([
-      ['.wingfoil/directives/custom/git-conventions.md', true],
+      ['directives/custom/git-conventions.md', true],
     ]);
   });
 });
