@@ -365,6 +365,13 @@ describe('spec-003 Layer 3 — workflows/bindings.yaml', () => {
     ]);
   });
 
+  it('an empty file is no bindings and no diagnostic; a wingfoil check that is not agent execute is legal', () => {
+    writeBindings(repo, '');
+    expect(loadWorkflowsYaml(repo).diagnostics).toEqual([]);
+    writeBindings(repo, 'checks:\n  memory.found: { run: [wingfoil, memory, search, agent] }\n');
+    expect(loadWorkflowsYaml(repo).diagnostics).toEqual([]);
+  });
+
   it('bindings.yaml diagnostics come after every workflow file (spec-003 order)', () => {
     writeMain(repo, '  - name: go\n    produces: ["prose here"]\n');
     writeBindings(repo, 'actions:\n  memory.add: { manual: true }\n');

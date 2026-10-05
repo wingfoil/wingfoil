@@ -114,13 +114,13 @@ export const Phase = z
     iterate_over: z.string().optional(),
     where: z.record(z.string(), WhereValue).optional(),
     produces: z.array(Produces).optional(), // task-175: string | { type, path } (dl-104 D3)
+    awaits: Awaits.optional(), // task-175: dl-104 D4
     checks: z
       .object({ pre: z.array(Check).optional(), post: z.array(Check).optional() })
       .passthrough()
       .optional(),
     approval: z.object({ by_role: z.string() }).passthrough().optional(),
     fallback: z.object({ step: z.string(), set_state: z.string().optional() }).passthrough().optional(),
-    awaits: Awaits.optional(), // task-175: dl-104 D4
   })
   .passthrough();
 /** Parsed shape of the {@link Phase} schema. */
