@@ -1,4 +1,6 @@
 /** @type {import('jest').Config} */
+const { LATENCY_SUITES } = require('./test/latency-suites.cjs');
+
 module.exports = {
   testEnvironment: 'node',
   // `src/` is a root so coverage discovery walks it: Jest finds the files it reports as uncovered by
@@ -8,6 +10,12 @@ module.exports = {
   // `test/lint/coverage-parity.test.ts` fails if the report and `src/` ever disagree.
   roots: ['<rootDir>/test', '<rootDir>/src'],
   testMatch: ['**/*.test.ts'],
+  // The suites that time spawned processes are left out of this run: their budgets presuppose an
+  // otherwise idle machine, and here jest's own workers compete with what they measure. They run
+  // alone, through `jest.latency.config.js`, only when asked for (`npm run test:latency`, or
+  // `WINGFOIL_LATENCY=1 npm test` — `scripts/run-tests.cjs`; task-154, `bug-013`). The list is
+  // `test/latency-suites.cjs`.
+  testPathIgnorePatterns: ['/node_modules/', ...LATENCY_SUITES.map((path) => `<rootDir>/${path}`)],
   // The ESM/CommonJS harness (task-065-fix-commander-esm-jest-harness, bug-007). This replaces the
   // bare `preset: 'ts-jest'` (which is exactly the first entry below with no `tsconfig` option) so
   // the two halves of the harness sit side by side:

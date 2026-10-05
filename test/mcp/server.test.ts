@@ -11,13 +11,12 @@
  * criteria are asserted against exactly what an MCP client sees from the production server — not a
  * private registrar list — and the v0.1 read-only-only channel scope (spec-014 §3) is pinned.
  */
-import { performance } from 'perf_hooks';
-
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
 import { WRITE_REFUSAL_MESSAGE } from '../../src/mcp';
 import { createMcpServer } from '../../src/mcp/server';
+import { P95_BUDGET_MS, p95, RUNS, sampleLatency } from '../core/helpers/latency';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { assertFilesUnchanged, attemptEveryResourceWrite, snapshotFiles } from './helpers/channel-enumeration';
 
@@ -102,12 +101,18 @@ describe('task-030 — production MCP server (createMcpServer), spec-014 §2', (
 
   afterAll(() => removeTempDir(root));
 
-  it('AC (a): fetching a Memory document returns its full content + id/type/status/title metadata, in under 1 second', async () => {
-    const start = performance.now();
-    const result = await client.readResource({ uri: 'wingfoil://memory/decision-log/decision-12' });
-    const elapsed = performance.now() - start;
+  // "in under 1 second" is REQ-PERF-04's budget, so it is measured in REQ-PERF-04's shape — p95 over
+  // >= 20 runs — rather than from one sample (task-154, `bug-012`). Every run's result is the same
+  // document; the content assertions read the last one.
+  it('AC (a): fetching a Memory document returns its full content + id/type/status/title metadata, in under 1 second at p95 over >= 20 runs', async () => {
+    let result: Awaited<ReturnType<Client['readResource']>> | undefined;
+    const samples = await sampleLatency(RUNS, async () => {
+      result = await client.readResource({ uri: 'wingfoil://memory/decision-log/decision-12' });
+    });
 
-    expect(elapsed).toBeLessThan(1000);
+    expect(samples).toHaveLength(RUNS);
+    expect(p95(samples)).toBeLessThan(P95_BUDGET_MS);
+    if (!result) throw new Error('no readResource result was recorded');
     const content = result.contents[0]!;
     expect(content.mimeType).toBe('text/markdown');
     expect('text' in content && content.text).toContain('id: decision-12');

@@ -80,11 +80,14 @@ describe('publish gate (task-060) — spec-015 §2 scripts', () => {
     expect(existsSync(join(REPO_ROOT, 'scripts', 'publish-staging.cjs'))).toBe(true);
   });
 
-  it('leaves the existing build/prepack/test/lint scripts unchanged (spec-015 §2)', () => {
+  // `test` was `jest` until task-154 (`bug-013`): it now runs `scripts/run-tests.cjs`, the parallel
+  // suite, which leaves out the latency suites; those run only when asked for, never from
+  // `prepublishOnly` (`test/cli/run-tests.test.ts` pins that).
+  it('declares the build/prepack/test/lint scripts spec-015 §2 names', () => {
     expect(pkg.scripts).toMatchObject({
       build: 'tsc -p tsconfig.build.json',
       prepack: 'npm run build',
-      test: 'jest',
+      test: 'node scripts/run-tests.cjs',
       lint: 'eslint .',
     });
   });

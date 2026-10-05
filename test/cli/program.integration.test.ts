@@ -471,7 +471,9 @@ types:
     // against the REGISTERED `memory.memorySearch` op — the same call this command makes — at
     // REQ-PERF-02's own measurement conditions: p95 over 25 runs on the 1,000-Memory-document
     // reference repository. `test/core/latency-budget-placement.test.ts` keeps it from drifting back
-    // across the process boundary.
+    // across the process boundary. The command itself is timed in `test/cli/command-latency.test.ts`
+    // (task-154, `bug-013`) — as its marginal cost over a measured process-start floor, run alone and
+    // only when asked for — which is the guard's one documented exemption.
     it('`memory search api` finds the "API design" document, exit 0 (BDD "Find a decision by keyword")', () => {
       const result = runCliInRoot(repo, 'memory', 'search', 'api', '--format', 'json');
       expect(result.status).toBe(0);
@@ -513,8 +515,9 @@ types:
   // `runCliInRoot` spawns `node dist/cli.js`, so a wall-clock reading taken around it would sample
   // Node process startup plus CPU contention from jest's sibling workers rather than the query. The
   // clause is enforced in `test/core/query-latency.test.ts`, in-process, against the registered
-  // `memory.memoryHistory` op at REQ-PERF-02's own measurement conditions; this suite owns the exit
-  // codes, messages and output shape.
+  // `memory.memoryHistory` op at REQ-PERF-02's own measurement conditions, and at command level in
+  // `test/cli/command-latency.test.ts` (task-154); this suite owns the exit codes, messages and
+  // output shape.
   describe('`memory history <id>` — the audit-trail read command (task-049, P1.10)', () => {
     const MEMORY_YAML = `version: 1
 types:
