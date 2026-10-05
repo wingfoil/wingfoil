@@ -11,7 +11,7 @@
  * - **bracket** — none on `add`, `submit` and `assign`; on every other verb the canonical
  *   `[from → to]` (U+2192, single spaces, closing the subject). Only `sync` chains; `deprecate` ends in
  *   `deprecated`; `amend` is the self-loop `[s → s]`; `park` is one hop between two different states (the
- *   state rule judges that it is a `returns` edge of the type's machine, task-180).
+ *   state rule requires it to be the type's `returns.<from>` edge, task-180).
  * - **body** — `approve`, `reject` and `amend` carry `Approver: Name <email> (approver)` as the first
  *   body line and a `Reason:` block; `park` carries a `Reason:` block (`spec-008` §2, `dl-110`);
  *   `assign` carries no `Approver:`. Any `Reason:` must be recordable
@@ -29,9 +29,9 @@
  *     the checked commit declares it, so a chain's hops are judged (`illegal-hop`) and the bracket is
  *     compared with the frontmatter (`mismatch`, `unparseable`). A single hop, which that function
  *     leaves to the write-time engine, is judged here with `isMachineEdge` too, because a hand-written
- *     commit never met the engine; `amend` is exempt, its self-loop being fixed by the bracket rule
- *     (`park` is not: its hop must be an edge of the machine, which `isMachineEdge` reads from
- *     `returns`, task-180);
+ *     commit never met the engine; `amend` is exempt, its self-loop being fixed by the bracket rule;
+ *     a `park` hop must be the type's declared return edge, `returns.<from>` (task-180), not merely
+ *     some edge of the machine;
  *   - a bracketless subject, from the frontmatter (`reconstructMemoryTransitions`): `submit` moves a
  *     named document along an edge of the machine; `add` leaves it in the machine's initial state;
  *     `assign` leaves its status unchanged (`spec-008` §2);
@@ -427,8 +427,16 @@ function checkGovernance(root, options = {}) {
     const bracketed = ANY_BRACKET_RE.test(commit.subject);
 
     const hops = bracketed ? dist.memory.parseBracketHops(commit.subject) : null;
-    if (op !== null && machine && hops && hops.length === 1 && !EDGE_EXEMPT_VERBS.has(op) && !dist.memory.isMachineEdge(machine, hops[0].from, hops[0].to)) {
-      push({ rule: 'state', message: `${hops[0].from} → ${hops[0].to} is not an edge of the '${type}' machine at this commit` });
+    if (op !== null && machine && hops && hops.length === 1 && !EDGE_EXEMPT_VERBS.has(op)) {
+      const { from, to } = hops[0];
+      if (op === 'park') {
+        // `park` takes the declared return edge and no other (`spec-008` §2), as `deprecate` takes only `deprecated`.
+        if ((machine.returns ?? {})[from] !== to) {
+          push({ rule: 'state', message: `${from} → ${to} is not a returns edge of the '${type}' machine at this commit` });
+        }
+      } else if (!dist.memory.isMachineEdge(machine, from, to)) {
+        push({ rule: 'state', message: `${from} → ${to} is not an edge of the '${type}' machine at this commit` });
+      }
     }
 
     // Every token of the subject, not only the parsed id list: a subject whose id list does not parse

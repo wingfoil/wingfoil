@@ -232,3 +232,13 @@ Checks after the fixes:
 - `npm run lint`, `npm run typecheck`, `npm run docs:api` clean;
   `node scripts/check-governance.cjs --base 0cf8b131` → 0 findings, exit 0.
 - The task stays `in-review`.
+
+**Focused re-review (2026-10-06) — F1 follow-up.** The state rule still judged a `park` hop with the
+generic `isMachineEdge`, so a park along a forward, gate-reject or `deprecated` edge passed (the
+reviewer's hand commit `wf(bug): park bug-001-one [open → in-progress]` gave 0 findings), and the
+header comment claiming a `returns` check was false. Red `bb99ae4d`: a park along `[backlog →
+in-progress]` (forward) and `[in-review → in-progress]` (gate reject) in
+`test/cli/check-governance.test.ts` → `npx jest test/cli/check-governance.test.ts -t park` 1 failed,
+4 passed. Fix: for `park` the rule requires `(machine.returns ?? {})[from] === to`, as `deprecate`
+requires `deprecated`, and the comments say so. `npx jest test/cli/check-governance.test.ts` → 43
+passed; `npm run lint` clean; `node scripts/check-governance.cjs --base 0cf8b131` → 0 findings.
