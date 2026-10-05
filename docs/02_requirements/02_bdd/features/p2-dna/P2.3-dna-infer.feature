@@ -1,6 +1,6 @@
 Feature: P2.3 (US-0B-03) - wingfoil dna infer
   As Morgan, I want dna infer to scan the codebase and propose a DNA structure that I
-  approve or refine so the DNA reflects real modules, stack, and conventions.
+  approve or refine so the DNA reflects real modules and stacks.
 
   Background:
     Given an initialized WingFoil project being migrated (Journey 0b)

@@ -1,5 +1,5 @@
 Feature: P2.1 (US-0A-08) - wingfoil dna set
-  As Alex, I want to define/update project DNA so modules, stack, and conventions are
+  As Alex, I want to define/update project DNA so modules, stacks, and team are
   recorded in .wingfoil/dna.yaml.
 
   Background:
