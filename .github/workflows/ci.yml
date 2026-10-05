@@ -2,6 +2,10 @@
 #
 #   packaging-gate → `npm ci`, then `prepublishOnly` (build + test + lint, spec-015 §2): the same two
 #                    commands publish.yml's `gate` job runs, on the same runner image, at the same Node.
+#                    Between them, `npm run check:audit` (`npm audit --omit=dev --audit-level=high`,
+#                    task-250 / bug-223): a high advisory in the production dependency tree fails the
+#                    run. It reads the registry's advisory database, so a new advisory can turn a run red
+#                    with no change to the repository — that is the point. publish.yml does not run it.
 #
 # Why a second workflow. publish.yml runs only on a `vX.Y.Z` tag push, so until this file existed the
 # release pipeline's environment — its runner image, its Node, the npm that Node bundles, the image's
@@ -32,7 +36,8 @@
 #
 # Read-only: `contents: read` and no job-level `permissions`. No secret, no registry credential, no OIDC.
 #
-# Locally, the same gate is `npm ci && npm run prepublishOnly`; with `act` (see publish.yml's header):
+# Locally, the same gate is `npm ci && npm run check:audit && npm run prepublishOnly`; with `act`
+# (see publish.yml's header):
 #   act push -W .github/workflows/ci.yml
 
 name: ci
@@ -67,5 +72,7 @@ jobs:
           package-manager-cache: false
       - name: Install
         run: npm ci
+      - name: Production advisories — no high advisory in the dependencies tree (task-250, bug-223)
+        run: npm run check:audit
       - name: prepublishOnly gate — build, test, lint (spec-015 §2)
         run: npm run prepublishOnly
