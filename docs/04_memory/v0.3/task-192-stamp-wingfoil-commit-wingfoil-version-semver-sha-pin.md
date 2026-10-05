@@ -131,8 +131,8 @@ On `ab8b2898` plus the two pending amendments:
 | `node scripts/check-governance.cjs --base c80167d6` | exit 0, 0 findings |
 | `npm run -s build && node dist/cli.js --version` | `0.2.2 (ab8b2898…-dirty)` (dirty: the two pending amendments) |
 
-The previous recorded baseline, `task-166`'s final tree, was 98.73 / 94.61 / 94.03 / 99.49, so there
-is no regression. Coverage was not re-measured on `main` for this task.
+Against `main` at `c80167d6`, measured by the independent reviewer (218 suites / 3887 tests):
+98.88 / 95.57 / 95.34 / 99.58. The branch has 98.89 / 95.6 / 95.37 / 99.58, so there is no regression.
 
 BDD: P1.2 and P1.10 state no build signature, and no AC asks for a scenario (`grep -rn -i
 "version" docs/02_requirements/02_bdd/features/p1-memory/P1.10-memory-history.feature` → nothing).
@@ -174,7 +174,34 @@ Edited in this worktree and left uncommitted, for `memory amend` at the review g
   bug-051, carried out by task-192: the --version row prints the build stamp semver (sha), the
   normal-form note says the commit primitive passes --cleanup=whitespace instead of relying on git's
   default, and a new note states the WingFoil-Version trailer paragraph every commit ends with. The
-  Revision note dated 2026-10-05 records it."
+  --version row says when the commit reads dirty or unknown. The Revision note dated 2026-10-05
+  records it."
 - `spec-004-mcp-surface-contract` — proposed `--reason`: "Section 4.3 item 2 shows the
   WingFoil-Version trailer paragraph that every commit, a Tool's included, ends with, per dl-111
   Action 2, carried out by task-192. The Revision note dated 2026-10-05 records it."
+
+### review fixes (independent review: approve with fixes)
+
+- **F1** (same class as `bug-051`): the recovery command `memory approve` prints when the
+  `supersedes:` finalize commit fails was `git commit --only -F - -- <path>`, with no `--cleanup`.
+  It now reads `git commit --only --cleanup=whitespace -F - -- <path>` (`src/core/index.ts`). It still
+  carries no trailer, because the operator runs it by hand. Red first:
+  `npx jest test/core/memory-supersede.test.ts -t "git failure between"` with the source change set
+  aside → 1 failed (`Received: "git commit --only -F - -- docs/adrs/adr-1-old.md <<'EOF'"`). Then
+  green: 20 passed. The case also re-runs the command under `commit.cleanup=strip`, with a `#` line
+  added to the heredoc, and checks that the line is kept.
+- **F2**: `normalizeReason`'s doc comment said `commitPaths` "commits with `-m`" and relied on git's
+  default cleanup. It now says `commitPaths` passes `--cleanup=whitespace`.
+- **F6**: the pending `spec-008` `--version` row now gives the full hex object name, `-dirty` for any
+  change `git status --porcelain` lists (untracked files included), and `unknown` also for a
+  malformed or non-hex record. `docs/cli-reference.md` shows a full 40-hex commit.
+  `src/core/types.ts` documents `CoreResult.commit.message` as the operation's message, not the
+  stored body.
+- **Held for the approver's ruling, unchanged:** (a) whether untracked files make a build `-dirty`
+  (every local and gate build is `-dirty` today); (b) whether `wingfoil` is omitted or `null` on a
+  history entry without the trailer. The `spec-008` wording follows the current rule (a) and must be
+  re-worded if the ruling changes it.
+- Commit `5fc86dcb`. Gates on it, with the two pending amendments in the tree: `npm test` exit 0,
+  221 suites / 3935 tests; `npm run -s lint`, `npm run -s docs:api`, `npx tsc --noEmit -p tsconfig.json`,
+  `npx tsc -p tsconfig.build.json --noEmit` all exit 0; `node scripts/check-governance.cjs --base c80167d6`
+  exit 0, 0 findings.
