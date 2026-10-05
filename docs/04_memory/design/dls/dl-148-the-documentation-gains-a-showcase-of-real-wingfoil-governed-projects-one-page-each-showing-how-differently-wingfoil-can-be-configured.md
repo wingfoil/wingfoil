@@ -27,8 +27,8 @@ configurations, read on 2026-10-05 from each project's `.wingfoil/memory.yaml`, 
 |---------|------------|----------------------------|------------------------------------|-----------|------------|
 | `wingfoil` (this repository) | the tool, developing itself | Lean Inception, User Story Mapping, BDD, SARD, TDD | `release-line`, `release`, `service` | 23 | public |
 | `wingfoil-benchmark` | benchmark suite comparing agents with and without WingFoil | Kanban, Lean Inception, Goal-Question-Metric, BDD, TDD | `release-line`, `release`, `campaign` (gated: pending, scored, reviewed) | 10, incl. `campaign-cycle`, `scenario-authoring`, `kanban-delivery` | public |
-| `wingfoil-ui` | local web UI for WingFoil-governed projects | Lean Inception, User Story Mapping, BDD, SARD, TDD | `release-line`, `release`, `service` | 23 | private |
-| `wingfoil-templates` | versioned templates, methodologies and directives WingFoil consumes (`dl-138`) | Kanban, Semantic Versioning | `pack`, `pack-release` (no `release` or `release-line`) | 9, incl. `pack-cycle`, `pack-release`, `pack-deprecation` | private |
+| `wingfoil-ui` | local web UI for WingFoil-governed projects | Lean Inception, User Story Mapping, BDD, SARD, TDD | `release-line`, `release`, `service` | 23 | public |
+| `wingfoil-templates` | versioned templates, methodologies and directives WingFoil consumes (`dl-138`) | Kanban, Semantic Versioning | `pack`, `pack-release` (no `release` or `release-line`) | 9, incl. `pack-cycle`, `pack-release`, `pack-deprecation` | public |
 
 The common set is `adr`, `bug`, `decision-log`, `plan`, `task`, `tech-spec`. Custom roles appear
 where the work needs them: `scenario-author` in the benchmark, `pack-author` in the templates.
@@ -59,10 +59,11 @@ An index page compares the projects side by side, on the axes of the table above
 
 Open questions, settled at ratification:
 
-**Q1 — private projects.** `wingfoil-ui` and `wingfoil-templates` are private.
-- **(a)** Their pages carry excerpts only, with no link, until each project is published.
-- **(b)** Their pages wait until each project is public.
-- **(c)** Only public projects get a page.
+**Q1 — projects with no tagged release yet.** All four projects are public (`wingfoil-templates` on
+`wingfoil/wingfoil-templates`, coherent with `dl-138`), but not every one has a tag to cite yet.
+- **(a)** Their pages carry excerpts with a permalink to the commit they were taken from, until a tag exists.
+- **(b)** Their pages wait until each project has its first tagged release.
+- **(c)** Only projects with a tagged release get a page.
 
 **Q2 — the dogfooding page and `docs/case-study.md`.**
 - **(a)** One document: the case study (`task-246`) is the showcase page of this repository.
@@ -78,7 +79,7 @@ that project changes.
 
 **Recommendation: Q1 (a), Q2 (b), Q3 (a)** for the first release, moving to Q3 (b) once
 `dl-138`'s remote template source can fetch a project's configuration by tag.
-- **Q1 (a)** shows the most varied projects now; an excerpt exposes configuration, not code.
+- **Q1 (a)** shows the most varied projects now, each excerpt pinned to the commit it was taken from.
 - **Q2 (b)** keeps figures and configuration apart, so each page has one source of truth.
 - **Q3 (a)** costs nothing to start; a generator is worth it once fetching by tag exists.
 
