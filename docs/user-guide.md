@@ -449,7 +449,9 @@ What the server exposes — all **read-only**:
 | Prompt | `<role>-session` (one per role, e.g. `developer-session`) | session instructions for the role, embedding its directives |
 
 The server has **no Tools**: an agent cannot change anything through MCP. It writes by running the CLI,
-like a person — and never approves. Full script: [`examples/04-mcp-server`](examples/04-mcp-server/run.sh).
+like a person — and never approves. Unreleased (v0.3): `tools/list` answers an empty list, and the
+server reads the role list from `dna.yaml` when it starts — restart it after adding or removing a
+role. Full script: [`examples/04-mcp-server`](examples/04-mcp-server/run.sh).
 
 ### 9.2 `agents.md`
 

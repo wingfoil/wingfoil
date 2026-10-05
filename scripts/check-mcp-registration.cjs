@@ -39,8 +39,10 @@ const MCP_CHANNELS = Object.freeze(['prompts', 'resources', 'tools']);
 
 /**
  * The channel set the pinned build is expected to advertise: Resources (P5.2.1, v0.1) and Prompts
- * (P5.2.2, v0.2). Tools (P5.2.3) land in v0.4 — update this constant in the commit that moves the pin
- * to a build that advertises them, which is the re-verification `dl-026` asks for.
+ * (P5.2.2, v0.2). From the first build that carries `task-174` (`bug-151`), the server also declares an
+ * empty `tools` channel (`tools/list` → `[]`), and Tools themselves (P5.2.3) land in v0.4 — update this
+ * constant in the commit that moves the pin to a build that advertises `tools`, which is the
+ * re-verification `dl-026` asks for.
  */
 const EXPECTED_CHANNELS = Object.freeze(['prompts', 'resources']);
 
