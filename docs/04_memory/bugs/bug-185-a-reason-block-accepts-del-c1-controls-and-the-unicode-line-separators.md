@@ -2,7 +2,7 @@
 id: bug-185-a-reason-block-accepts-del-c1-controls-and-the-unicode-line-separators
 type: bug
 title: "A Reason block accepts DEL, C1 controls and the Unicode line separators"
-status: in-progress
+status: in-review
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
