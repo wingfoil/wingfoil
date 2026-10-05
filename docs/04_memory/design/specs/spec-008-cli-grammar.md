@@ -83,7 +83,7 @@ it. A flag a single command declares is not listed here: it is in §12.
 | Flag              | Type                   | Default   | Behaviour                                                                                             |
 |-------------------|------------------------|-----------|---------------------------------------------------------------------------------------------------------|
 | `--help`, `-h`    | flag                   | —         | Print context-sensitive help (synopsis, args, flags, example) and exit `0`. Takes precedence over all other flags. |
-| `--version`       | flag                   | —         | Print CLI version and exit `0`. Takes precedence over all other flags except `--help`.                |
+| `--version`       | flag                   | —         | Print the build stamp `<semver> (<sha>)` and exit `0`: `package.json`'s `version`, then the commit the running `dist/` was built from as `dist/build-info.json` records it, as the full hex object name (`<sha>-dirty` when `git status --porcelain` lists a change, tracked or untracked, under a build input — `src/`, `package.json`, `package-lock.json`, `tsconfig*.json` or the record's writer `scripts/write-build-info.cjs` — so it means "this `dist/` does not match the sha", and a change elsewhere (documentation, Memory) does not set it; `unknown` when no record exists, when the build could not read git, or when the record's commit is malformed or not a hex object name) — the value of every commit's `WingFoil-Version:` trailer (`dl-111` Action 3). Takes precedence over all other flags except `--help`. |
 | `--format <fmt>`  | `console\|json\|yaml`  | `console` | Output encoding. `console` for humans; `json`/`yaml` for scripting/CI (REQ-INT-05). **Today, on success, `console` prints the payload `json` prints, indented by two spaces, with no colour** (errors and warnings keep their §6 `error:`/`warning:` lines): its human rendering (colour, `✓`/`⚠`/`✗` prefixes) is P5.1.4's, and how it is built is `dl-043`'s decision, deferred to v0.4. That change will alter the default output, so a script passes `--format json`. An unsupported value exits `2` with `error: invalid --format value "<value>"`. |
 | `--reason <text>` | string                 | —         | **Required** on approval-gate commands (`memory approve`, `memory reject`, `memory amend`); optional elsewhere (e.g. `memory deprecate`). Recorded in the resulting git commit body (P1.7) as a `Reason:` **block** — the remainder of the `Reason:` line plus every following body line, up to (exclusive) git's trailing trailer paragraph or the end of the body — in the **declared normal form**, not as the raw argument (`dl-067-reason-trailer-contract`; see the Notes). Omitted where required exits `2` with `error: missing required argument: --reason` (ground-truth BDD `P1.7-memory-approve.feature`). |
 | `--reason` (unrecordable value) | —        | —         | A reason that cannot be recorded faithfully in the trailer is refused at the CLI boundary with exit `2`, before anything is read or written, on **every** verb that takes the flag — `memory deprecate` included, where the flag is optional but a declared-and-empty value is still a usage error (`dl-067` S2). Four cases, judged in this order on the declared normal form, each with its own message, none of them `missing required argument: --reason` (which answers the *omitted* case above): blank or whitespace-only → `error: invalid flag value: --reason must not be blank`; a C0 control character other than tab (`U+0009`) and newline (`U+000A`) → `error: invalid flag value: --reason must not contain a control character other than tab or newline (found U+XXXX)`, naming the first one by code point (`dl-078` (A); a carriage return is not refused, because the normal form has already turned it into a newline); a line starting with one of the **reserved trailer keys** `Approver:`, `Reason:` or `WingFoil-Version:`, in any letter case (git reads trailer keys case-insensitively) → `error: invalid flag value: --reason must not contain a line starting with "Approver:", "Reason:" or "WingFoil-Version:"` (`dl-111` Q1 (A) reserves the third); a final paragraph made entirely of `Key: value` lines → `error: invalid flag value: --reason must not end in a paragraph of "Key: value" lines; add a closing sentence after it, or fold those lines into prose` (`dl-070` S4). |
@@ -101,8 +101,11 @@ Notes:
 - **`--reason`'s declared normal form** (`dl-067-reason-trailer-contract`, ratified), in two parts:
   - **What git already does, and would do whether or not this row existed** — per-line trailing
     whitespace stripped, runs of blank lines collapsed to one, leading and trailing blank lines
-    dropped. That is git's own `cleanup=whitespace`, which `git commit -m` applies to every message.
-    Stating it here does not add a transformation; it makes the outcome declared instead of incidental.
+    dropped. That is git's own `cleanup=whitespace`, which the commit primitive passes explicitly
+    (`git commit --cleanup=whitespace`, `bug-051`), so it holds whatever `commit.cleanup` the
+    operator's or the repository's git config sets — under `strip` a reason line opening with `#`
+    would otherwise be deleted, under `verbatim` the whitespace kept. Stating it here does not add a
+    transformation; it makes the outcome declared instead of incidental.
   - **What WingFoil adds** — the first line's leading whitespace is trimmed. git does **not** do this;
     it is the writer's own step, and it exists because that line sits after `Reason: ` on the same
     physical line and the reader consumes the key with its following whitespace. Without it, a reason
@@ -122,6 +125,14 @@ Notes:
   even when it is alone in such a paragraph. The writer-side refusal of a trailing `Key: value`
   paragraph (the row above) is the corollary: without it, the reader would take that paragraph for
   the trailer and drop it. A `Key: value` line *inside* the block is ordinary prose and ends nothing.
+- **The build signature — the trailer paragraph every commit ends with** (`dl-111-tool-signature-in-commits`,
+  Q2 (a), Q3 (i)). Every commit the tool writes, on every command, ends with a paragraph of its own
+  holding one trailer line, `WingFoil-Version: <semver> (<sha>)` — the stamp `--version` prints, or
+  `<semver> (unknown)` when the running build has no `dist/build-info.json`. It is the final paragraph,
+  so it is the trailing trailer paragraph at which a `Reason:` block ends, and the one git's
+  `%(trailers:key=WingFoil-Version)` reads; `memory history` reports its value as every entry's
+  `wingfoil` field, `null` when a commit has no such trailer. A commit without it was not written by
+  WingFoil. The key is reserved (the row above), so a reason cannot supply it.
 - **Why not "verbatim".** This row said "Recorded verbatim in the resulting git commit body" until
   `dl-067`. That was never achievable for multi-line text — git normalizes on the way in — and the gap
   between the promise and the behaviour was `bug-042`: a blank reason was accepted at exit `0` and
@@ -966,3 +977,12 @@ rendering to `dl-043`, deferred to v0.4 with P5.1.4. The two rows now say so, an
 Commander honours `NO_COLOR` but not `--no-color`. §3 says
 nothing reads the colour check yet, and its example carries the `--help` text the CLI prints. No
 other section changed. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-05, `task-192-stamp-wingfoil-commit-wingfoil-version-semver-sha-pin`) — §2's
+`--version` row, the normal form, and the build signature, per `dl-111-tool-signature-in-commits`
+(`ready`; Q2 (a), Q3 (i), Action 2) and `bug-051-commit-cleanup-never-pinned`.** `--version` prints
+`<semver> (<sha>)`. The normal-form note said `git commit -m` applies `cleanup=whitespace`, which held
+only under git's default configuration; the commit primitive now passes `--cleanup=whitespace`, and
+the note says so. A new note states the `WingFoil-Version:` trailer paragraph every commit ends with. Per the approver's rulings of 2026-10-05, `-dirty` counts only changes to the build inputs (D4 (c)), and `memory history` reports `wingfoil` on every entry, `null` without the trailer (D5).
+No exit code and no other rule changed. Edited in place without a supersede or a state change
+(`dl-047`).
