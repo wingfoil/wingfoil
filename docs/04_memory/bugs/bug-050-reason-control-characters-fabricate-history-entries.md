@@ -146,7 +146,7 @@ anything, and the bug is filed against `0x1e` alone:
 ```
 $ node dist/cli.js memory approve adr-003-t3 --reason $'ok\x1fInjected'
 $ node dist/cli.js memory history adr-003-t3 --format json | … last entry
-"reason": "okInjected", "from": "pending", "to": "approved", "sha": "bbdb288e…"
+"reason": "ok\u001fInjected", "from": "pending", "to": "approved", "sha": "bbdb288e…"
 ```
 
 The reason round-trips intact. Two independent things save it, and both are worth naming because they
