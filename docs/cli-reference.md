@@ -685,6 +685,11 @@ $ wingfoil memory history task-001-my-first-task
 }
 ```
 
+Unreleased (v0.3): a revision of the document whose frontmatter is not valid YAML no longer fails the
+command. Its entry has `"to": null`, an extra `"unreadable"` key giving the parse error, and the next
+entry's `from` is `null`. A `W_MEMORY_UNREADABLE` warning on stderr names the file and the commit. A
+different Memory document whose frontmatter does not parse is skipped with the same warning.
+
 - **Commit:** none.
 - **Errors:** missing id → exit `2`; unknown id → exit `1`.
 
@@ -723,6 +728,11 @@ $ wingfoil memory search --status approved --type task
 
 No match is still a success (exit `0`), with `"matches": []` and
 `"message": "no documents matched the query"`.
+
+Unreleased (v0.3): every match is a Memory element, with an `id` and a `type`. A Markdown file under a
+Memory directory with neither, such as an old plan with no frontmatter, is left out. A file whose
+frontmatter is not valid YAML, or a symbolic link, is left out too, and a `W_MEMORY_UNREADABLE` warning
+on stderr names it. One bad file no longer fails the search.
 
 - **Commit:** none.
 
