@@ -1,0 +1,39 @@
+# The fake adapter (spec-016 §2.7): a CUSTOM adapter in the test fixtures, so the path tests exercise
+# is the one every project adapter takes. It declares every §2.2 field (task-177); the script it
+# launches, `fake-agent.cjs`, is task-200's.
+name: fake
+format: 1
+command: node
+version_args: [ test/fixtures/agents/fake-agent.cjs, --version ]
+launch:
+  interactive:
+    args: [ test/fixtures/agents/fake-agent.cjs, --mcp-config, "{mcp_config_file}", --prompt, "{bootstrap}" ]
+    terminal: optional
+  headless:
+    args: [ test/fixtures/agents/fake-agent.cjs, --headless, --mcp-config, "{mcp_config_file}", --prompt, "{bootstrap}" ]
+    output: json
+prompt:
+  via: arg
+mcp:
+  via: config-file
+  template: |
+    {"mcpServers": {"wingfoil": {"command": "{mcp_command}", "args": {mcp_args}}}}
+session:
+  id: assign
+  assign_args: [ --session-id, "{session_id}" ]
+  lookup_args: [ test/fixtures/agents/fake-agent.cjs, --lookup, "{session_id}" ]
+  field: session_id
+  resume:
+    supported: true
+    args: [ --resume, "{session_id}" ]
+usage:
+  from: lookup
+  lookup_args: [ test/fixtures/agents/fake-agent.cjs, --lookup, "{session_id}" ]
+  fields:
+    model: model
+    input: usage.input
+    output: usage.output
+    cache_read: usage.cache_read
+    cache_write: usage.cache_write
+summary:
+  export_args: [ test/fixtures/agents/fake-agent.cjs, --summary ]

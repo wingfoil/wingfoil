@@ -184,7 +184,7 @@ function parseMemoryYaml(raw: string, filePath: string): MemoryYaml {
  * byte-identical, and `HEAD` is the one available before that commit exists.
  */
 export function loadMemoryYamlAtHead(root: string): MemoryYaml | null {
-  return atHeadOr(() => loadMemoryYamlAtRev(root, 'HEAD'), null);
+  return atHeadOr(root, () => loadMemoryYamlAtRev(root, 'HEAD'), null);
 }
 
 /**
@@ -282,7 +282,7 @@ function parseDnaYaml(raw: string, filePath: string): DnaYaml {
  * a write refuses while its target carries modifications it does not own.)
  */
 export function loadDnaYamlAtHead(root: string): DnaYaml | null {
-  return atHeadOr(() => loadDnaYamlAtRev(root, 'HEAD'), null);
+  return atHeadOr(root, () => loadDnaYamlAtRev(root, 'HEAD'), null);
 }
 
 /**
@@ -644,7 +644,7 @@ export function loadDirectives(root: string): DirectiveFile[] {
  * unknown). `listPathsAtRev` keeps the distinction for callers that do need it.
  */
 export function loadDirectivesAtHead(root: string): DirectiveFile[] {
-  return atHeadOr(() => loadDirectivesAtRev(root, 'HEAD'), []);
+  return atHeadOr(root, () => loadDirectivesAtRev(root, 'HEAD'), []);
 }
 
 /**
@@ -715,7 +715,7 @@ export function loadRolesYaml(root: string): RolesYaml {
  * committed `roles.yaml` that does not **validate** is the different case, and that one does refuse.
  */
 export function loadRolesYamlAtHead(root: string): RolesYaml | null {
-  return atHeadOr(() => loadRolesYamlAtRev(root, 'HEAD'), null);
+  return atHeadOr(root, () => loadRolesYamlAtRev(root, 'HEAD'), null);
 }
 
 /**

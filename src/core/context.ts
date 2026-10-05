@@ -238,19 +238,19 @@ export interface ExecutionContextInputs {
  *   `memoryYaml` in sorted order and YAML-parses each document's frontmatter until one matches
  *   `element.type`/`element.id`, so cost grows with the size of the Memory tree (bounding that is
  *   `task-035-bounded-context-relevance`'s REQ-PERF-05 scope, not this task's).
- * - It therefore **can throw**. An `element` that matches nothing yields an empty `memory` array
- *   rather than an error — an unresolvable element is the caller's concern to surface — but a
- *   `ValidationError` (`E_YAML_PARSE_ERROR`) propagates out of assembly if any document visited
- *   during that walk has unparseable frontmatter. This function adds no `try`/`catch` of its own.
+ * - It **does not throw** on a document it cannot read (task-171, `bug-031`): one whose frontmatter
+ *   does not parse is skipped, so a malformed sibling no longer aborts assembly. An `element` that
+ *   matches nothing — or whose own frontmatter does not parse — yields an empty `memory` array rather
+ *   than an error; an unresolvable element is the caller's concern to surface.
  *
  * `memory` **is** filtered by document status, in one direction only: a resolved element whose
  * `status` is archived — `{deprecated, superseded}`, per the shared {@link isArchivedStatus}
  * (`../memory`, the set ratified by `dl-028-archived-states-excluded-from-context`) — is dropped,
  * leaving `memory` empty. That is REQ-STATE-06's Fit Criterion as amended: "a `deprecated` or
- * `superseded` document never appears in an assembled agent context". The filter is applied to the
- * lookup's *result* rather than pushed into `findMemoryDocumentByTypeAndId`, because that same
- * primitive also serves `wingfoil://memory/{type}/{id}`, where explicit retrieval of archived content
- * must keep working.
+ * `superseded` document never appears in an assembled agent context". Since task-171 (`dl-038`
+ * option 1) `findMemoryDocumentByTypeAndId` already leaves an archived element out by default, and
+ * `wingfoil://memory/{type}/{id}` opts back in explicitly; the check on the result is kept so the
+ * guarantee is stated where it is relied on.
  *
  * `draft` is deliberately **not** excluded here, unlike in `./relevance.ts`. That module filters
  * *candidate* documents for relevance (spec-012 §6, which does bar `draft` from a context); this
@@ -269,7 +269,8 @@ export function assembleExecutionContext(inputs: ExecutionContextInputs): Execut
   const doc = findMemoryDocumentByTypeAndId(inputs.root, inputs.memoryYaml, inputs.element.type, inputs.element.id);
   // `frontmatter` is untyped (`Record<string, unknown>`), so project `status` to the
   // `string | undefined` shape `isArchivedStatus` takes — a non-string `status` is never archived,
-  // exactly as that predicate's contract states.
+  // exactly as that predicate's contract states. The primitive already leaves an archived element out
+  // by default (task-171, `dl-038` option 1); this check keeps the guarantee stated where it is relied on.
   const status = typeof doc?.frontmatter.status === 'string' ? doc.frontmatter.status : undefined;
   const memory = doc !== undefined && !isArchivedStatus(status) ? [doc] : [];
   return { dna: inputs.dna, directives, memory, warnings };

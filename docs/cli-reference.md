@@ -358,6 +358,14 @@ A Memory document is a Markdown file with YAML frontmatter. Its **type** (declar
 fixes its path, its id pattern, its template and its state machine; its **state** is the `status:` field
 of its frontmatter. The verbs below are the only supported way to change a state.
 
+Unreleased (v0.3): the transition verbs (`submit`, `approve`, `reject`, `deprecate`, `amend`) look an
+id up among the documents committed at `HEAD`. A committed document whose frontmatter is not valid
+YAML, or a symbolic link, no longer stops a verb acting on a different document. It is skipped, and the
+verb still succeeds, printing a `W_MEMORY_UNREADABLE` warning on stderr that names the file. If the id
+is not found and such a document was skipped, the refusal is still `error: document not found: <id>`
+(exit `1`). A second sentence then names each skipped `HEAD:<path>`, because the id may be in one of
+them.
+
 ### `wingfoil memory add`
 
 Create a document in its type's initial state (`draft`) from the type's template.
@@ -701,6 +709,11 @@ $ wingfoil memory history task-001-my-first-task
 }
 ```
 
+Unreleased (v0.3): a revision of the document whose frontmatter is not valid YAML no longer fails the
+command. Its entry has `"to": null`, an extra `"unreadable"` key giving the parse error, and the next
+entry's `from` is `null`. A `W_MEMORY_UNREADABLE` warning on stderr names the file and the commit. A
+different Memory document whose frontmatter does not parse is skipped with the same warning.
+
 - **Commit:** none.
 - **Errors:** missing id → exit `2`; unknown id → exit `1`.
 
@@ -739,6 +752,11 @@ $ wingfoil memory search --status approved --type task
 
 No match is still a success (exit `0`), with `"matches": []` and
 `"message": "no documents matched the query"`.
+
+Unreleased (v0.3): every match is a Memory element, with an `id` and a `type`. A Markdown file under a
+Memory directory with neither, such as an old plan with no frontmatter, is left out. A file whose
+frontmatter is not valid YAML, or a symbolic link, is left out too, and a `W_MEMORY_UNREADABLE` warning
+on stderr names it. One bad file no longer fails the search.
 
 - **Commit:** none.
 

@@ -82,6 +82,8 @@ function pad(n: number): string {
 interface FixtureDoc {
   readonly relativePath: string;
   readonly id: string;
+  /** The frontmatter `type` — every fixture document is an element (task-171, `bug-164`: `memory search` returns only those). */
+  readonly type: string;
 }
 
 /** Build the 1,000 (path, id) pairs — 700 tasks across 7 releases + 100 each of adr/dl/tech-spec. */
@@ -90,20 +92,20 @@ function planFixtureDocs(): FixtureDoc[] {
   for (let release = 1; release <= 7; release += 1) {
     for (let n = 0; n < 100; n += 1) {
       const id = `task-${pad(n)}-doc`;
-      docs.push({ relativePath: `docs/04_memory/v0.${release}/${id}.md`, id });
+      docs.push({ relativePath: `docs/04_memory/v0.${release}/${id}.md`, id, type: 'task' });
     }
   }
   for (let n = 0; n < 100; n += 1) {
     const id = `adr-${pad(n)}-doc`;
-    docs.push({ relativePath: `docs/04_memory/design/adrs/${id}.md`, id });
+    docs.push({ relativePath: `docs/04_memory/design/adrs/${id}.md`, id, type: 'adr' });
   }
   for (let n = 0; n < 100; n += 1) {
     const id = `dl-${pad(n)}-doc`;
-    docs.push({ relativePath: `docs/04_memory/design/dls/${id}.md`, id });
+    docs.push({ relativePath: `docs/04_memory/design/dls/${id}.md`, id, type: 'decision-log' });
   }
   for (let n = 0; n < 100; n += 1) {
     const id = `spec-${pad(n)}-doc`;
-    docs.push({ relativePath: `docs/04_memory/design/specs/${id}.md`, id });
+    docs.push({ relativePath: `docs/04_memory/design/specs/${id}.md`, id, type: 'tech-spec' });
   }
   return docs;
 }
@@ -120,6 +122,7 @@ function docContent(doc: FixtureDoc, index: number, title: string, status: strin
   return [
     '---',
     `id: ${doc.id}`,
+    `type: ${doc.type}`,
     `title: "${title}"`,
     `tags: [ ${tag} ]`,
     `status: ${status}`,

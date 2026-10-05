@@ -35,6 +35,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+import { DeferredExit } from '../../src/cli/exit';
 import { buildProgram } from '../../src/cli/program';
 import { exitCodeForParseOutcome } from '../../src/core/exit-code';
 import type { CoreModule, ParamsContext } from '../../src/core/registry';
@@ -507,6 +508,37 @@ describe('buildProgram — the special bootstrap commands `init` and `mcp`', () 
     const program = await buildFixtureProgram();
     await program.parseAsync(['node', 'wingfoil', 'mcp', '--format', 'xml']);
     expect(jest.mocked(runMcp).mock.calls[0]?.[0]).toMatchObject({ format: 'console' });
+  });
+});
+
+describe('buildProgram — the exit callback when output is still queued (task-249, `bug-222`)', () => {
+  // Commander calls `process.exit` at ITS OWN code as soon as the exit callback returns. When
+  // `exitWith` has deferred the exit until queued output drains, the callback must therefore not
+  // return: it throws `DeferredExit` carrying the contract's code, and the entry point lets the
+  // deferred exit happen. The queue is simulated with an own `writableLength` on `process.stdout`;
+  // `stdout.write` is the suite-wide no-op spy, so the empty "flush marker" write never completes and
+  // `process.exit` is never reached here.
+  const listenersBefore = (): Array<(...args: unknown[]) => void> => process.stdout.listeners('error') as Array<(...args: unknown[]) => void>;
+  let before: Array<(...args: unknown[]) => void>;
+
+  beforeEach(() => {
+    before = listenersBefore();
+    Object.defineProperty(process.stdout, 'writableLength', { value: 1, configurable: true });
+  });
+
+  afterEach(() => {
+    delete (process.stdout as unknown as { writableLength?: number }).writableLength;
+    for (const listener of listenersBefore()) if (!before.includes(listener)) process.stdout.removeListener('error', listener);
+    process.exitCode = undefined;
+  });
+
+  it('an unknown command rejects the parse with DeferredExit(2) and leaves process.exit uncalled', async () => {
+    const program = await buildFixtureProgramWithRealExitCallback();
+    const parsed = program.parseAsync(['node', 'wingfoil', 'nosuchnoun']);
+    await expect(parsed).rejects.toBeInstanceOf(DeferredExit);
+    await expect(parsed).rejects.toMatchObject({ code: 2 });
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(2);
   });
 });
 

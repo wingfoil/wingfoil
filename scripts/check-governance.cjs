@@ -466,9 +466,10 @@ function checkGovernance(root, options = {}) {
     try {
       return read();
     } catch (error) {
-      // The reconstruction reads every revision's `status`, and throws on a revision whose frontmatter
-      // does not parse. The document's commits are reported as not checked, naming the error, rather
-      // than stopping the whole check.
+      // Both reads are strict: they read every revision's `status` and throw on a revision whose
+      // frontmatter does not parse (`reconstructMemoryTransitions` is tolerant only for `memory
+      // history`, task-171). The document's commits are reported as not checked, naming the error,
+      // rather than stopping the whole check or passing them as checked.
       if (!(error instanceof dist.validation.ValidationError)) throw error;
       const first = error.message.split('\n')[0];
       for (const sha of [...shas].sort(byOrder)) {
@@ -502,7 +503,7 @@ function checkGovernance(root, options = {}) {
     const fromFrontmatter = [...touches].filter(([, touch]) => !touch.named || (!touch.bracketed && BRACKETLESS_VERBS.has(touch.op)));
     if (fromFrontmatter.length === 0) continue;
     const reportable = fromFrontmatter.filter(([, touch]) => touch.named).map(([sha]) => sha);
-    const transitions = readOrReport(path, reportable, () => dist.memory.reconstructMemoryTransitions(root, path));
+    const transitions = readOrReport(path, reportable, () => dist.memory.reconstructMemoryTransitions(root, path, { strict: true }));
     for (const transition of transitions ?? []) {
       const touch = touches.get(transition.sha);
       if (touch === undefined) continue;

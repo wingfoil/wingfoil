@@ -192,7 +192,10 @@ interface ContextLimits {
   selection input. `superseded` — the terminal state of `adr`/`tech-spec` — is archived content and is
   excluded for the same reason as `deprecated`; the previously-listed `rejected` is dropped, as
   `spec-001-memory-yaml-schema` removed that status from every type's machine. Ratified by
-  `dl-028-archived-states-excluded-from-context`; the shared predicate is `isArchivedStatus`.
+  `dl-028-archived-states-excluded-from-context`; the shared predicate is `isArchivedStatus`. The
+  Memory scan primitives the loader resolves an element with exclude archived documents by default
+  and take an explicit `includeArchived` opt-in (`dl-038` option 1, `task-171`), so a consumer that
+  omits the filter fails closed.
 
 ### 7. Canonical serialized payload (`context-builder`)
 
@@ -298,3 +301,8 @@ an enumeration of what the loader adds for every role, and `roles.yaml` v1.1 bin
 directive, so the sentence would otherwise under-report what a role's context contains. The
 resolution rules themselves — deduplicate by id, sort lexicographically, `custom/` wins over
 `built-in/` — are untouched. Edited in place without a supersede or a state change.
+
+**Revision (2026-10-05) — §6 states that the Memory scan primitives exclude archived documents by
+default, per `task-171-make-memory-scan-primitives-fail-closed-archived-elements` (`dl-038` option 1).**
+`dl-038`'s Actions ask for the new default to be stated here. The excluded set and the predicate are
+unchanged. Edited in place without a supersede or a state change.

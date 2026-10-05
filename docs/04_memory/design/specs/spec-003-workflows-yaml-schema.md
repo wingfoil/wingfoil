@@ -162,9 +162,9 @@ const Cadence = z.union([
   z.object({
     recurring: z.union([
       z.object({ cron: z.string() }).strict(),   // a five-field cron expression
-      z.object({ on: z.string() }).strict(),     // an event name
+      z.object({ on: z.string() }).strict(),     // an event name, <memory-type>-<state>
     ]),
-  }),
+  }).strict(),                                   // a closed union: no other key beside `recurring`
 ]);
 const Produces = z.union([z.string(), z.object({ type: z.string(), path: z.string() }).strict()]);
 const Phase = z.object({
@@ -363,6 +363,27 @@ A phase declares `cadence: once` (the default — every existing phase is unchan
   GitHub Actions `on: schedule` trigger takes, so the provisional trigger and the engine share one
   source of timing (e.g. `cadence: { recurring: { cron: "0 6 * * 1" } }`);
 - `{ on: "<event>" }` — an event cadence (e.g. `cadence: { recurring: { on: release-released } }`).
+  An event is named `<memory-type>-<state>` (open question 3, settled): the element type whose
+  transition fires it and the state the transition enters. Structurally an event is lower-case
+  segments joined by single hyphens, at least two of them; since a type and a state may both contain
+  hyphens (`release-line-in-progress`), the split and the check that the type and the state exist in
+  `memory.yaml` are a **core** check (they need `memory.yaml`), so an event that can never fire is a
+  validation error there.
+
+`cadence` is a closed union and is checked structurally (spec-009's structural codes, as for any Zod
+failure), each refusal at its own path:
+
+- a value that is neither `once` nor a `{ recurring: … }` map, or a map with an unknown key at either
+  level, at `phases[<i>].cadence`, message `cadence must be once or { recurring: { cron } | { on } }
+  with no other key`, followed by ` (unknown key '<key>')` or ` (unknown key 'recurring.<key>')` for
+  the first unknown key in declared order;
+- two triggers or none, at `phases[<i>].cadence.recurring`, message `recurring cadence takes exactly
+  one trigger: cron or on`;
+- a cron that is not five fields of digits, names, `*`, `,`, `-` and `/` separated by spaces or tabs
+  (one line), at `phases[<i>].cadence.recurring.cron`, message `cron must be a five-field cron
+  expression (e.g. "0 6 * * 1")`;
+- an event that does not have the shape above, at `phases[<i>].cadence.recurring.on`, message `on must
+  be an event named <memory-type>-<state> (e.g. release-released)`.
 
 The command a recurring phase runs is a bound token (Layer 3, `dl-105` R4). Its evidence is the
 timestamp and outcome of its last run (`dl-105` Decision 2): while the trigger is provisional, the CI
@@ -667,9 +688,10 @@ codes, except the named `kind` refusal.
 | `E_WORKFLOW_ELEMENT_MISMATCH` | error | loader | an included workflow declares `element: T` and the including phase neither iterates over `T` nor runs in a workflow bound to `T`; or it declares an element and is iterated over a collection | Layer 2 `element` |
 | `E_WORKFLOW_INCLUDE_CYCLE` | error | loader | the include graph has a cycle; message `include cycle: <w1> -> … -> <w1>` | P4.16 |
 | `E_PHASE_FALLBACK_STEP_UNKNOWN` | error | loader | `fallback.step` names no phase of the same workflow; message `fallback step '<step>' not found in workflow` | P4.15 sc. 3 |
-| `E_PHASE_DISTINCT_FROM_UNKNOWN` | error | loader | a `distinct_from` entry names no phase of the same workflow | `dl-134` §4 |
-| `E_PHASE_DISTINCT_FROM_SELF` | error | loader | a phase names itself in `distinct_from` | `dl-134` §4 |
-| `E_PHASE_MODE_NOT_INDEPENDENT` | error | loader | a phase whose `role` is `reviewer` or `qa` declares `mode` other than `fresh` | `dl-135` point 3 |
+| `E_PHASE_DISTINCT_FROM_UNKNOWN` | error | loader | a `distinct_from` entry names no phase of the same workflow; path `phases[<i>].distinct_from[<k>]`, message `distinct_from phase '<entry>' not found in workflow` | `dl-134` §4 |
+| `E_PHASE_DISTINCT_FROM_SELF` | error | loader | a phase names itself in `distinct_from`; path `phases[<i>].distinct_from[<k>]`, message `phase '<name>' names itself in distinct_from` | `dl-134` §4 |
+| `E_PHASE_MODE_NOT_INDEPENDENT` | error | loader | a phase whose `role` is `reviewer` or `qa` declares `mode` other than `fresh`; path `phases[<i>].mode`, message `phase '<name>' has role '<role>' and must run fresh (mode '<mode>' is not allowed)` | `dl-135` point 3 |
+| `E_PHASE_EXECUTOR_WITHOUT_ROLE` | error | loader | a phase without `role` declares `mode` or `distinct_from`, on the raw declaration (an absent `mode` is not declared); one per field, path `phases[<i>].mode` / `phases[<i>].distinct_from`, message `phase '<name>' declares <field> but has no role (it has no executor)` | open question 4, settled |
 | `E_PHASE_PRODUCES_NOT_A_PATH` | error | loader | a `produces` path is not a path pattern | `dl-104` D3 |
 | `E_PHASE_PRODUCES_OWNER_NOT_CREATED` | error | loader | a `{ type: T, path }` entry in a phase that does not `memory.add(type: T)` | `dl-104` D3 |
 | `E_PHASE_SELECTION_UNTYPED` | error | loader | `where` without `iterate_over` and without a `type` key | § "Selections"; `dl-016` |
@@ -723,7 +745,9 @@ are `spec-017` (workflow commands and state deduction) and `spec-016` (agent exe
 
 Settled at this revision: **1** (unbound tokens are warnings in v0.3, in `diagnostics` — § "Diagnostics")
 and **2** (which verb a `set_state` emits — the rule under the verb table), both taking the
-recommendation the review endorsed.
+recommendation the review endorsed. **3**, **4** and **5** were settled by their recommendations when
+this spec was approved at gate 5, and are implemented as stated (see the 2026-10-05 revision under
+Process Notes).
 
 3. **The event names of `cadence: { recurring: { on } }`.** `dl-105` R1 chose event names but listed
    none as a closed set. *Recommendation:* `<memory-type>-<state>` (e.g. `release-released`), checked
@@ -894,3 +918,14 @@ requires `kind` on every release, and declares the releases added before `dl-092
 `initial-design.yaml` 1.1 on `seed-releases`. No schema field
 changes: a check is still a free string. Edited in place without a supersede or a state change
 (`dl-047`).
+
+**Revision (2026-10-05) — the executor attributes and `cadence` implemented, carried out by
+`task-185-accept-validate-executor-attributes-mode-distinct-phase-cadence`.** Open questions 3–5 were
+settled by their recommendations at gate 5; this revision writes them where the rest of the spec
+reads them. § "Diagnostics" gains the row of open question 4, `E_PHASE_EXECUTOR_WITHOUT_ROLE`
+(loader), after `E_PHASE_MODE_NOT_INDEPENDENT`, and the four executor rows name their path and
+message, as the `fallback.step` row already did. § "Recurring phases" states the event shape of open
+question 3 and that the existence of its type and state is a core check, and that a malformed
+`cadence` is a structural failure, with the path and message of each refusal; the illustrative `Cadence` closes its outer object with
+`.strict()`. Open question 5 needed no text: `mode` was already one value. No existing code,
+severity or message changes. Edited in place without a supersede or a state change (`dl-047`).

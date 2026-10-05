@@ -30,7 +30,7 @@
  *   derived from git log ... no drift" -> {@link verifyTransitionConsistency}.
  */
 import { isConfiguredIdentity } from '../core';
-import { parseYaml } from '../validation';
+import { parseYaml, ValidationError } from '../validation';
 
 import { parseApproverTrailerLine, parseReasonBlock, parseVersionTrailer } from './commit-message';
 import { getMemoryHistory } from './history';
@@ -308,6 +308,13 @@ export interface MemoryTransition {
    * was written by hand or by a build older than the trailer.
    */
   readonly wingfoil: string | null;
+  /**
+   * Present only when this commit's frontmatter does not parse (task-171, `bug-188`): the first line
+   * of the parse error. `toState` is then `null`, and so is the next transition's `fromState`, since
+   * the state between them could not be read. Absent on every other transition, so their shape is
+   * unchanged.
+   */
+  readonly unreadable?: string;
 }
 
 /** The exit status of `git show <sha>:<path>` for a path that commit does not hold (`fatal:`). */
@@ -316,8 +323,10 @@ const GIT_FATAL = 128;
 /**
  * Read `historicalPath`'s frontmatter `status:` field as it existed at `sha` (`git show sha:path`),
  * without validating it against any type's Zod schema — this is a historical-snapshot read, not a
- * live document validation. Returns `null` if the path didn't exist at `sha`, has no frontmatter
- * block, or the frontmatter has no string `status` field.
+ * live document validation. Its `status` is `null` if the path didn't exist at `sha`, has no
+ * frontmatter block, or the frontmatter has no string `status` field. A frontmatter that does not
+ * parse is returned as `unreadable`, never thrown here (task-171, `bug-188`): one bad revision used to
+ * make the whole history unreadable.
  *
  * `historicalPath` is the path the element occupied **at that commit** — `MemoryHistoryEntry.path`,
  * produced by the same `--follow` walk that selected the commit — never the caller's current path.
@@ -338,19 +347,45 @@ const GIT_FATAL = 128;
  * failure — git that cannot be spawned, an answer past the read buffer — throws `StorageError`
  * `E_GIT_READ_FAILED`.
  */
-function readStatusAt(root: string, sha: string, historicalPath: string): string | null {
+function readStatusAt(root: string, sha: string, historicalPath: string): StatusRead {
   const run = runGitRead(root, ['show', `${sha}:${historicalPath}`], { accepted: [0, GIT_FATAL] });
-  if (run.status === GIT_FATAL) return null;
+  if (run.status === GIT_FATAL) return { status: null };
   const raw = run.stdout;
 
   const { frontmatter } = splitFrontmatter(raw);
-  if (!frontmatter) return null;
+  if (!frontmatter) return { status: null };
 
-  const parsed = parseYaml(frontmatter, `${historicalPath}@${sha}`);
-  if (parsed === null || typeof parsed !== 'object') return null;
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(frontmatter, `${historicalPath}@${sha}`);
+  } catch (error) {
+    // task-171 (`bug-188`): the caller decides what an unreadable revision means — a history entry
+    // with no state, or (for the consistency check) a refusal. `parseYaml` throws only
+    // `ValidationError.yamlParse`.
+    return { status: null, unreadable: error as ValidationError };
+  }
+  if (parsed === null || typeof parsed !== 'object') return { status: null };
 
   const status = (parsed as Record<string, unknown>).status;
-  return typeof status === 'string' ? status : null;
+  return { status: typeof status === 'string' ? status : null };
+}
+
+/** What {@link readStatusAt} found: the `status`, and the parse error when the frontmatter did not parse. */
+interface StatusRead {
+  readonly status: string | null;
+  readonly unreadable?: ValidationError;
+}
+
+/** Options of {@link reconstructMemoryTransitions}. */
+export interface ReconstructOptions {
+  /**
+   * What a revision whose frontmatter does not parse means (task-171). Tolerant (the default, `memory
+   * history`, `bug-188`): a transition with `toState: null` and {@link MemoryTransition.unreadable}.
+   * Strict: the parse error (`ValidationError`) is thrown, because a check must never pass a commit
+   * whose state it could not read — {@link verifyTransitionConsistency} and
+   * `scripts/check-governance.cjs` read strictly and report such a commit as "state not checked".
+   */
+  readonly strict?: boolean;
 }
 
 /**
@@ -381,13 +416,21 @@ function readStatusAt(root: string, sha: string, historicalPath: string): string
  * above, and it no longer arrives with a `fatal:` on the operator's stderr (`bug-071`; see
  * {@link readStatusAt}).
  */
-export function reconstructMemoryTransitions(root: string, relativePath: string): MemoryTransition[] {
+export function reconstructMemoryTransitions(
+  root: string,
+  relativePath: string,
+  options: ReconstructOptions = {},
+): MemoryTransition[] {
+  const strict = options.strict === true;
   const history = getMemoryHistory(root, relativePath); // oldest first already
 
   const transitions: MemoryTransition[] = [];
   let previousState: string | null = null;
   for (const entry of history) {
-    const toState = readStatusAt(root, entry.sha, entry.path);
+    const read = readStatusAt(root, entry.sha, entry.path);
+    if (strict && read.unreadable !== undefined) throw read.unreadable;
+    const toState = read.status;
+    const unreadable = read.unreadable?.issues[0]?.message ?? read.unreadable?.message;
     transitions.push({
       sha: entry.sha,
       authorName: entry.authorName,
@@ -400,6 +443,7 @@ export function reconstructMemoryTransitions(root: string, relativePath: string)
       approval: parseApprovalMetadata(entry.body),
       reason: parseCommitReason(entry.body),
       wingfoil: parseVersionTrailer(entry.body),
+      ...(unreadable !== undefined ? { unreadable: unreadable.split('\n')[0]!.trim() } : {}),
     });
     previousState = toState;
   }
@@ -512,7 +556,8 @@ export function verifyTransitionConsistency(
   relativePath: string,
   machine?: StateMachine,
 ): TransitionFinding[] {
-  const transitions = reconstructMemoryTransitions(root, relativePath);
+  // Strict: a revision whose frontmatter does not parse is thrown, never passed (task-171, `bug-188`).
+  const transitions = reconstructMemoryTransitions(root, relativePath, { strict: true });
   const findings: TransitionFinding[] = [];
 
   for (const transition of transitions) {

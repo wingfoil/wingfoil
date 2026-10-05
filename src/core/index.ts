@@ -15,7 +15,7 @@ import { join, relative, sep } from 'path';
 
 import { dump } from 'js-yaml';
 
-import { DiagnosticsError, generateId, parseYaml, patternTokens, toValidationError, ValidationError } from '../validation';
+import { type Diagnostic, DiagnosticsError, formatDiagnostic, generateId, parseYaml, patternTokens, toValidationError, ValidationError } from '../validation';
 import type { Paths } from '../dna/schema';
 import { DnaYaml } from '../dna/schema';
 import { applyDnaEditInText } from '../dna/edit';
@@ -43,7 +43,9 @@ import { E_PATH_ESCAPES_ROOT, E_TARGET_IS_SYMLINK } from '../storage/errors';
 import {
   expandFieldTokens,
   findMemoryDocumentById,
+  firstLineOf,
   formatMemoryCommitMessage,
+  memoryUnreadableDiagnostic,
   hasNumericToken,
   isArchivedStatus,
   nextSequenceNumber,
@@ -856,17 +858,21 @@ const memorySearchFn: CoreFn<unknown, MemorySearchResult> = async (params) => {
   const type = options?.type;
   const status = options?.status;
 
+  const diagnostics: Diagnostic[] = [];
   const scanned = searchMemoryDocuments(root, loaded.value, query, {
     ...(tag !== undefined ? { tag } : {}),
     ...(isArchivedStatus(status) ? { includeArchived: true } : {}),
+    onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
   });
   const matches: MemorySearchResultItem[] = scanned
     .filter((match) => (type === undefined || match.type === type) && (status === undefined || match.status === status))
     .map(({ path, id, title, type: docType, status: docStatus, tags }) => ({ path, id, title, type: docType, status: docStatus, tags }));
 
+  // task-171 (`bug-031`): a file the scan could not read is a warning, never the search's failure.
+  const warnings = diagnostics.map(formatDiagnostic);
   return matches.length === 0
-    ? coreOk({ query, matches, message: NO_MEMORY_SEARCH_MATCHES_MESSAGE })
-    : coreOk({ query, matches });
+    ? coreOk({ query, matches, message: NO_MEMORY_SEARCH_MATCHES_MESSAGE }, undefined, warnings)
+    : coreOk({ query, matches }, undefined, warnings);
 };
 
 /**
@@ -930,6 +936,11 @@ export interface MemoryHistoryEntryView {
    * 2026-10-05).
    */
   readonly wingfoil: string | null;
+  /**
+   * Present only when this commit's frontmatter does not parse (task-171, `bug-188`): why, as the
+   * first line of the parse error. `to` is then `null`, and so is the next entry's `from`.
+   */
+  readonly unreadable?: string;
 }
 
 /** `memory history` success shape: the resolved document (`id` + root-relative `path`) and its full
@@ -979,7 +990,8 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
   const loaded: CoreResult<MemoryYaml> = loadOrError(() => loadMemoryYaml(root));
   if (!loaded.ok) return loaded;
 
-  const found = findMemoryDocumentById(root, loaded.value, id);
+  const diagnostics: Diagnostic[] = [];
+  const found = findMemoryDocumentById(root, loaded.value, id, { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) });
   if (!found) {
     return coreErr({ code: 'NOT_FOUND', message: `document not found: ${id}` });
   }
@@ -989,9 +1001,10 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
     transitions = reconstructMemoryTransitions(root, found.path);
   } catch (error) {
     // A git read that failed is `IO`, never an empty trail (task-142, `bug-072`): the walk throws
-    // rather than answering "no history" for a history it could not read.
-    if (error instanceof StorageError) return coreErr({ code: 'IO', message: error.message });
-    throw error;
+    // rather than answering "no history" for a history it could not read. Since task-171 the tolerant
+    // reconstruction throws nothing else (a revision that does not parse is an entry, `bug-188`), so
+    // what reaches here is a `StorageError`.
+    return coreErr({ code: 'IO', message: (error as StorageError).message });
   }
   const entries: MemoryHistoryEntryView[] = transitions.map((transition) => ({
     sha: transition.sha,
@@ -1006,9 +1019,17 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
     reason: transition.reason,
     subject: transition.subject,
     wingfoil: transition.wingfoil,
+    ...(transition.unreadable !== undefined ? { unreadable: transition.unreadable } : {}),
   }));
 
-  return coreOk({ id, path: found.path, entries });
+  // task-171: the documents the lookup could not read (`bug-031`), then each revision of this one whose
+  // frontmatter does not parse (`bug-188`), named with its commit.
+  for (const transition of transitions) {
+    if (transition.unreadable !== undefined) {
+      diagnostics.push(memoryUnreadableDiagnostic(found.path, `${firstLineOf(transition.unreadable)} (at ${transition.sha})`));
+    }
+  }
+  return coreOk({ id, path: found.path, entries }, undefined, diagnostics.map(formatDiagnostic));
 };
 
 /**
@@ -1076,7 +1097,7 @@ const memorySubmitFn: CoreFn<unknown, MemorySubmitResult> = async (params) => {
   // working tree and its commit need not differ from HEAD~1 by `status` alone (task-088, bug-076 AC4).
   const committed = commitMemoryTransition(root, prepared.value, rendered, message, { [REJECTION_REASON_FIELD]: undefined }, 'carries-content');
   if (!committed.ok) return committed;
-  return coreOk({ id, path, from, to }, { sha: committed.value, message });
+  return coreOk({ id, path, from, to }, { sha: committed.value, message }, prepared.value.warnings);
 };
 
 /**
@@ -1210,7 +1231,7 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
   }
   const committed = commitMemoryTransition(root, prepared.value, rendered, message);
   if (!committed.ok) return committed;
-  if (superseded === null) return coreOk({ id, path, from, to }, { sha: committed.value, message });
+  if (superseded === null) return coreOk({ id, path, from, to }, { sha: committed.value, message }, prepared.value.warnings);
 
   const finalizeMessage = formatMemoryCommitMessage({
     type,
@@ -1250,6 +1271,8 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
       superseded: { id: superseded.id, path: superseded.path, from: superseded.from, to: superseded.to },
     },
     { sha: committed.value, message },
+    // Both lookups read the same HEAD sha in path order; a file unreadable to both is named once.
+    [...new Set([...prepared.value.warnings, ...superseded.warnings])],
   );
 };
 
@@ -1341,7 +1364,7 @@ const memoryRejectFn: CoreFn<unknown, MemoryRejectResult> = async (params) => {
   const rendered = renderRejectDocument(content, to, reason);
   const committed = commitMemoryTransition(root, prepared.value, rendered, message, { [REJECTION_REASON_FIELD]: reason });
   if (!committed.ok) return committed;
-  return coreOk({ id, path, from, to, reason }, { sha: committed.value, message });
+  return coreOk({ id, path, from, to, reason }, { sha: committed.value, message }, prepared.value.warnings);
 };
 
 /**
@@ -1436,7 +1459,7 @@ const memoryDeprecateFn: CoreFn<unknown, MemoryDeprecateResult> = async (params)
   const rendered = setFrontmatterField(content, 'status', to);
   const committed = commitMemoryTransition(root, prepared.value, rendered, message);
   if (!committed.ok) return committed;
-  return coreOk({ id, path, from, to, reason }, { sha: committed.value, message });
+  return coreOk({ id, path, from, to, reason }, { sha: committed.value, message }, prepared.value.warnings);
 };
 
 /**
@@ -1537,7 +1560,7 @@ const memoryAmendFn: CoreFn<unknown, MemoryAmendResult> = async (params) => {
   });
   const committed = commitMemoryTransition(root, prepared.value, content, message, {}, 'carries-content');
   if (!committed.ok) return committed;
-  return coreOk({ id, path, from, to }, { sha: committed.value, message });
+  return coreOk({ id, path, from, to }, { sha: committed.value, message }, prepared.value.warnings);
 };
 
 /**
@@ -1890,6 +1913,15 @@ const directivesListFn: CoreFn<unknown, DirectiveListing> = async (params) => {
  * Tool, or the diff fails.
  */
 export const CORE_MODULES: readonly CoreModule[] = [
+  // task-177 (`spec-016` §1): the `agent` module, registered under the name its operations will carry
+  // (`agentExecute`, `agentList`, `agentShow`, spec-016 §8) — with none yet. An empty `operations` map
+  // derives no command and no MCP Tool (`enumerateOperations`), so nothing reaches either surface until
+  // those tasks land. `src/agent` holds the adapter manifest they will read.
+  {
+    name: 'agent',
+    description: 'launch an agent CLI through its declared adapter (no command yet)',
+    operations: {},
+  },
   {
     name: 'dna',
     description: "read and change dna.yaml, the project's structural map",

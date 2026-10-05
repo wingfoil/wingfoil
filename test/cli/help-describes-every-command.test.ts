@@ -88,6 +88,12 @@ describe('every command in the tree has a one-line description (AC 1)', () => {
     for (const module of CORE_MODULES) {
       const noun = program.commands.find((command) => command.name() === module.name);
       const isFlat = Object.keys(module.operations).length === 1 && module.operations[module.name] !== undefined;
+      // A module with no operation yet (`agent`, task-177) derives no command, so it has no noun to
+      // describe; it must not show up as an empty one.
+      if (Object.keys(module.operations).length === 0) {
+        expect({ noun: module.name, shown: noun !== undefined }).toEqual({ noun: module.name, shown: false });
+        continue;
+      }
       if (!isFlat) expect({ noun: module.name, description: noun?.description() }).toEqual({ noun: module.name, description: module.description });
     }
     for (const { path, command } of walk(program)) {

@@ -14,7 +14,10 @@
  * an agent browsing a type is never handed a replaced or retired decision as if it were current — the
  * same guarantee `wingfoil://memory/search` and default `memory search` already give. The
  * **single-document** Resource does **not** filter: addressing a document by its id is explicit
- * retrieval, which REQ-STATE-06 preserves ("remaining present on disk and in git history"). It is the
+ * retrieval, which REQ-STATE-06 preserves ("remaining present on disk and in git history"). Since
+ * task-171 (`dl-038` option 1) the primitives exclude archived content by default, so the collection
+ * inherits its filter and the single-document Resource asks for archived content with
+ * `includeArchived: true`. It is the
  * MCP counterpart of `memory search --status deprecated` on the CLI, whose own opt-in
  * (`memorySearchFn`, `src/core/index.ts`) is gated on the same `isArchivedStatus`. `draft` is not
  * archived and is withheld by neither handler; only the *context* path (`src/core/relevance.ts`)
@@ -40,7 +43,6 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import { loadMemoryYaml } from '../core';
 import { findMemoryDocumentByTypeAndId, listMemoryDocumentsByType } from '../memory/query';
-import { isArchivedStatus } from '../memory/state-machine';
 import { readDocument } from '../storage';
 
 import { jsonResourceResult, refuseIfWriteIntent, resourceNotFoundError } from './read-only';
@@ -80,15 +82,9 @@ export function registerMemoryResources(server: McpServer, options: RegisterMemo
 
       // REQ-STATE-06 / `dl-028-archived-states-excluded-from-context` (`bug-010`): this collection is
       // an agent-facing read path, so archived documents — `{deprecated, superseded}`, per the shared
-      // `isArchivedStatus` — are withheld here. The filter sits at this call site rather than inside
-      // `listMemoryDocumentsByType` because that primitive also serves the single-document Resource's
-      // consumers, which must still see archived content; the *policy* belongs to the surface, while
-      // the *definition* of "archived" stays single, as dl-028 requires. `status` is already
-      // projected to `string | undefined` by the primitive — the shape `isArchivedStatus` takes — so
-      // a non-string frontmatter `status` is never archived. `filter` preserves the primitive's
-      // id-ascending order (REQ-SYS-07).
+      // `isArchivedStatus` — are withheld. Since task-171 (`dl-038` option 1) the primitive withholds
+      // them by default, so this call site no longer filters: omitting a filter fails closed.
       const summaries = listMemoryDocumentsByType(root, memoryYaml, type)
-        .filter(({ status }) => !isArchivedStatus(status))
         .map(({ id, title, status, tags }) => ({
           id,
           title,
@@ -113,7 +109,10 @@ export function registerMemoryResources(server: McpServer, options: RegisterMemo
       const id = variables.id as string;
       if (!(type in memoryYaml.types)) throw resourceNotFoundError(`memory/${type}/${id}`);
 
-      const doc = findMemoryDocumentByTypeAndId(root, memoryYaml, type, id);
+      // `includeArchived: true`, said here on purpose (task-171, `dl-038` option 1): REQ-STATE-06 keeps
+      // an archived document "present on disk and in git history", and this Resource is how an agent
+      // retrieves one explicitly.
+      const doc = findMemoryDocumentByTypeAndId(root, memoryYaml, type, id, { includeArchived: true });
       if (!doc) throw resourceNotFoundError(`memory/${type}/${id}`);
 
       // spec-004 §2.2 wants the *full file content* (frontmatter + body), not the re-serialized

@@ -60,6 +60,10 @@ wingfoil://workflows/{name}                   # a single workflow definition (ma
 - Listing a collection (`wingfoil://memory/{type}` with no `{id}`) returns each element's frontmatter
   only (id, title, status, tags) — not full body content — to keep listing calls cheap; fetching
   `wingfoil://memory/{type}/{id}` returns full content + metadata.
+- Archived elements (`status` `deprecated` or `superseded`, REQ-STATE-06, `dl-028`) are left out of a
+  collection listing; `wingfoil://memory/{type}/{id}` still returns one, because addressing an element
+  by id is explicit retrieval. The scan primitives exclude archived elements by default and the
+  single-document Resource opts in (`dl-038` option 1, `task-171`).
 
 #### 2.2 Read contract
 
@@ -355,3 +359,10 @@ covered every state-mutating CLI command, so `wingfoil init`, which has no Tool,
 `mcp`. §4.2 also named the workflow configuration with a singular file name that never existed; it is
 `workflows.yaml`. No Tool, Resource or other rule changed. Edited in place without a supersede or a
 state change, per `dl-047` (no `version:` field).
+
+**Revision (2026-10-05, `task-171-make-memory-scan-primitives-fail-closed-archived-elements`) — §2.1
+states the archived exclusion of `wingfoil://memory/{type}`, per `dl-038` option 1.** The policy lived
+only in a source comment (`dl-038` Actions). The Resource's behaviour is unchanged: the collection
+already withheld archived elements and the single-document Resource already returned them; what
+changed is where the filter sits. Edited in place without a supersede or a state change, per `dl-047`
+(no `version:` field).
