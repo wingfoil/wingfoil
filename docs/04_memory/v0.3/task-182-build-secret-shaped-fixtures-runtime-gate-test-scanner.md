@@ -2,7 +2,7 @@
 id: "task-182-build-secret-shaped-fixtures-runtime-gate-test-scanner"
 type: task
 title: "Build secret-shaped fixtures at runtime, gate `test/` with the scanner, and narrow the scan's claim"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "fix"
 priority: "medium"
