@@ -2,7 +2,7 @@
 id: "task-192-stamp-wingfoil-commit-wingfoil-version-semver-sha-pin"
 type: task
 title: "Stamp every WingFoil commit with `WingFoil-Version: <semver> (<sha>)` and pin `git commit --cleanup`"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "high"
