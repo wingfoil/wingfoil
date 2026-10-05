@@ -8,7 +8,7 @@ kind: "feature"
 priority: "medium"
 tags: ["v0.3", "core", "memory", "workflow-support"]
 ref: "dl-110"
-bug: []
+bug: ["bug-214"]
 depends_on: ["task-126-declare-closed-wf-operation-grammar-bracket-set-state", "task-132-read-approver-identity-once-use-authority-check-approver"]
 tmpl_version: 260703
 ---
