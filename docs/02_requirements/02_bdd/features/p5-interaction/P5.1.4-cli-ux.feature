@@ -43,6 +43,6 @@ Feature: P5.1.4 (US-0A-14) - CLI UX Improvements
     Given "task-200" has "status: approved"
     When I run "wingfoil memory submit task-200"
     Then the CLI exits with code 1
-    And the first line is "error: illegal transition approved -> pending for type 'task'"
+    And the first line is "error: illegal transition approved -> (none) for type 'task'"
     And the next line is indented and names the document's file and why the edge is illegal
     And under "--format json" the same detail is an entry of the "details" array

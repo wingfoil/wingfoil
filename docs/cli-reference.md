@@ -65,6 +65,12 @@ When the refusal names a file or explains itself, indented lines follow the `err
 finding (`<file>: <detail>`); under `--format json`/`yaml` they are a `details` array of
 `{"file", "detail"}` entries beside `error`.
 
+Unreleased (v0.3): when a Memory verb cannot move a document from its current state, the line is
+`error: illegal transition <from> -> (none) for type '<type>'` — the verb reaches nothing from
+`<from>` — and the indented line under it says why (a gate that needs `memory approve`, a state only a
+workflow moves on, the last state). 0.2.x printed, in place of `(none)`, a state the verb reaches from
+somewhere else in the machine, which could read as a backward move (`planned -> triaged`).
+
 Unreleased (v0.3): a command that succeeds can also print **warnings** — something it did that you
 should know about, such as `directive assign --force` rewriting a whole file. A warning goes to stderr
 only, as a `warning: <text>` line, or under `--format json`/`yaml` as one `{"warning": "<text>"}`
@@ -511,7 +517,8 @@ commit or stash them first.
 - **Errors:** missing `--reason` → exit `2`; blank `--reason` → exit `2`
   (`error: invalid flag value: --reason must not be blank`); not an approver → exit `1`
   (`error: user not authorized to approve type 'task'`); the state is not a gate → exit `1`
-  (`error: illegal transition draft -> approved for type 'task'`).
+  (`error: illegal transition draft -> (none) for type 'task'`; 0.2.x prints `draft -> backlog`, see
+  [Exit codes](#exit-codes)).
 
 Unreleased (v0.3): **`supersedes:`**. When an `adr` is approved into `accepted`, or a `tech-spec`
 into `approved`, and its `supersedes:` field names another element of the same type, that element

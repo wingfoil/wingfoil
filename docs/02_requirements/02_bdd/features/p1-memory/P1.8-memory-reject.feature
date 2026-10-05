@@ -15,7 +15,7 @@ Feature: P1.8 (US-4-11) - wingfoil memory reject
     Given the document "task-101" has "status: draft"
     When I run "wingfoil memory reject task-101 --reason 'x'"
     Then the state is unchanged
-    And the command exits with code 1 and message "illegal transition draft -> in-progress for type 'task'"
+    And the command exits with code 1 and message "illegal transition draft -> (none) for type 'task'"
 
   Scenario: Error - rejecting without a reason
     When I run "wingfoil memory reject task-101"

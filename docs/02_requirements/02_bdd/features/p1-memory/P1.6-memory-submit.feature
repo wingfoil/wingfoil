@@ -15,10 +15,10 @@ Feature: P1.6 (US-3-09) - wingfoil memory submit
 
   Scenario: Error - submitting a document whose state machine forbids the transition
     Given a Memory document "task-200" exists with "status: approved"
-    And the "task" type does NOT allow the transition approved -> pending
+    And the "task" type has no "submit" edge from approved
     When I run "wingfoil memory submit task-200"
     Then the state is unchanged
-    And the command exits with code 1 and message "illegal transition approved -> pending for type 'task'"
+    And the command exits with code 1 and message "illegal transition approved -> (none) for type 'task'"
 
   Scenario: Error - submitting a non-existent document
     When I run "wingfoil memory submit task-999"
