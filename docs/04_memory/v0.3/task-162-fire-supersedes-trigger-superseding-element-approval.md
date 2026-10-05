@@ -2,7 +2,7 @@
 id: "task-162-fire-supersedes-trigger-superseding-element-approval"
 type: task
 title: "Fire the `supersedes:` trigger on the superseding element's approval"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "medium"
