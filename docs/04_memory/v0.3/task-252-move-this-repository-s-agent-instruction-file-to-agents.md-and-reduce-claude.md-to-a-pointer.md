@@ -26,8 +26,10 @@ to a pointer that defers to `AGENTS.md`, so every agent keeps working during the
 The new `AGENTS.md` is written by hand but already in the shape the product's export will generate
 (`dl-137` R3/R4): a region delimited by markers that the future export will own and regenerate, and
 the rest of the file owned by the project. The marker format is the one the part (b) tech-spec will
-fix; until it exists, this task chooses a provisional pair and records it, so that the tech-spec
-either adopts it or names the migration.
+fix; until it exists, this task uses the provisional pair shared with WingFoil-Templates' `base` pack,
+`<!-- wingfoil:generated:begin -->` … `<!-- wingfoil:generated:end -->`, so that this repository and
+every repository adopting the `base` pack carry the same pair, and the tech-spec adopts one pair or
+names one migration.
 
 Part (b), the generated export, is v0.4 (`dl-137` Q3) and is not in scope.
 
@@ -35,8 +37,9 @@ Part (b), the generated export, is v0.4 (`dl-137` Q3) and is not in scope.
 
 - (characterization) `AGENTS.md` at the repository root holds the content `CLAUDE.md` holds when the
   task starts, brought up to date by `align-agent-docs`; the part that describes the project's
-  configuration sits between a begin and an end marker, and the marker pair is recorded in the
-  Execution Notes as provisional (`dl-137` R3/R4).
+  configuration sits between `<!-- wingfoil:generated:begin -->` and `<!-- wingfoil:generated:end -->`,
+  the provisional pair shared with WingFoil-Templates' `base` pack, recorded in the Execution Notes as
+  provisional until the part (b) tech-spec (`dl-137` R3/R4).
 - (characterization) `CLAUDE.md` holds only a pointer to `AGENTS.md` (for example `@AGENTS.md` plus
   one sentence), and an agent session in this repository still loads the instructions: verified by
   re-checking that Claude Code reads the pointer for the version this repository's agents use
