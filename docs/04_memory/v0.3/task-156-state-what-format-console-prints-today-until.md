@@ -129,8 +129,26 @@ All with the `spec-008` amendment in the working tree:
   when piped — `node dist/cli.js memory search --type bug | wc -c` → `65536` (to a file: 86 465). The
   suite's payloads stay far below it.
 
-### Pending amendments (approver)
+### review (coordinator, 2026-10-05) — approve with fixes, applied in-task
+
+1. `docs/cli-reference.md` `--format` row and `spec-008` §2 (pending) said `console` prints the
+   `json` payload, which holds for **success** stdout only. Errors and warnings under `console`
+   already have their own human lines (`error: <reason>`, `hint:`, `warning:`), and under `json` an
+   error is `{"error": …}` on stderr. Both now say "on success" and that errors and warnings keep
+   their `error:`/`warning:` lines; the Revision note says the same.
+2. The `NO_COLOR` allowlist reason said no code reads the variable. Commander 15 does:
+   `grep -n "NO_COLOR" node_modules/commander/lib/command.js` → `useColor()`, which strips colour
+   from its help (and the help has none). The reason now says no *WingFoil* code reads it and gives
+   Commander's use. `spec-008` §2's `--color` row (pending) adds that Commander honours `NO_COLOR` but
+   not `--no-color`, for P5.1.4.
+
+Re-run with the amendment in the working tree: `npx jest test/docs test/cli/program.test.ts
+test/cli/console-format-fallback.integration.test.ts` → 8 suites, 73 passed;
+`npx jest test/docs/name-resolvability` → 11 passed, 76 untriaged (unchanged); `npm run lint`,
+`npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` → 0. The 64 KiB pipe
+truncation is filed separately by the coordinator.
+
 
 - `spec-008-cli-grammar` (tech-spec, `approved`): §2 `--format` and `--color` rows, §3 closing
   paragraph and example help strings, Revision note 2026-10-05. Proposed `--reason`:
-  "Records task-156: section 2 states that console prints the json payload indented and that no output is coloured, so --no-color and NO_COLOR change nothing until P5.1.4 (dl-043, v0.4), per bug-152 and bug-203 and planning ruling R20."
+  "Records task-156: section 2 states that, on success, console prints the json payload indented, and that no output is coloured, so --no-color and NO_COLOR change nothing until P5.1.4 (dl-043, v0.4), per bug-152, bug-203 and planning ruling R20. Errors and warnings keep their section 6 lines, and Commander honours NO_COLOR but not --no-color."
