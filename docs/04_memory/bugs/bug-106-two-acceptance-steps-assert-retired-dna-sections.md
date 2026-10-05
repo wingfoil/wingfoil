@@ -2,7 +2,7 @@
 id: "bug-106-two-acceptance-steps-assert-retired-dna-sections"
 type: bug
 title: "Two acceptance steps assert that the DNA declares or displays a `conventions` section, which measurement refutes — `bug-089`'s class, in two files it did not own"
-status: in-review
+status: closed
 severity: "medium"
 release-origin: "v0.2"
 release: "v0.3"
