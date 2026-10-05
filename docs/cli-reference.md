@@ -849,4 +849,9 @@ wingfoil workflow list
 Read-only. WingFoil 0.2.2 has **no workflow engine**: workflows describe the process, and you (or your
 agent) follow them by hand — see the [user guide §7](user-guide.md#7-workflows).
 
+The output also carries `bindings` — the project's `.wingfoil/workflows/bindings.yaml`, which declares
+the command each workflow token runs, or `null` when there is none — and `diagnostics`, the load's
+warnings, such as `W_WORKFLOW_UNBOUND_TOKEN` for a token with no binding. A warning does not change the
+exit code; an error in any of the files exits `1`.
+
 - **Commit:** none.

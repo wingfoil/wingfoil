@@ -11,7 +11,17 @@
  * per file, in `include` order).
  */
 import type { Diagnostic } from '../validation';
-import { RESERVED_PHASE_NAMES, Workflow, WORKFLOW_NAME_RE, workflowFacts } from '../workflow/schema';
+import {
+  BINDINGS_FILE,
+  BindingsYaml,
+  isBuiltinToken,
+  isWholeInterpolation,
+  memoryAddType,
+  resolveToken,
+  runsAgentExecute,
+  tokenName,
+} from '../workflow/bindings';
+import { PATH_PATTERN_RE, producesPath, RESERVED_PHASE_NAMES, Workflow, WORKFLOW_NAME_RE, workflowFacts } from '../workflow/schema';
 
 /** One included file as the loader saw it, in manifest `include` order. */
 export interface LoadedWorkflowFile {
@@ -45,6 +55,10 @@ function looksLikePath(value: string): boolean {
 
 function error(file: string, path: string, code: string, message: string): Diagnostic {
   return { code, severity: 'error', file, path, message };
+}
+
+function warning(file: string, path: string, code: string, message: string): Diagnostic {
+  return { code, severity: 'warning', file, path, message };
 }
 
 /** Index the loaded files by name; `missing` counts manifest entries whose file does not exist. */
@@ -147,6 +161,7 @@ export function workflowFileDiagnostics(
   files: readonly LoadedWorkflowFile[],
   index: WorkflowRegistryIndex,
   i: number,
+  bindings: BindingsContext = NO_BINDINGS_FILE,
 ): Diagnostic[] {
   const { file, workflow } = files[i]!;
   if (!workflow) return [];
@@ -227,6 +242,8 @@ export function workflowFileDiagnostics(
         error(file, at('fallback.step'), 'E_PHASE_FALLBACK_STEP_UNKNOWN', `fallback step '${phase.fallback.step}' not found in workflow`),
       );
     }
+
+    out.push(...phaseEvidenceDiagnostics(file, workflow, p, bindings));
   });
 
   return out;
@@ -247,3 +264,147 @@ export function noStartableDiagnostic(files: readonly LoadedWorkflowFile[], inde
     'no startable workflow: at least one included workflow must be startable (startable: true or kind: main)',
   );
 }
+
+// --- task-175: phase evidence and token bindings (dl-104 D1 (c), D3, D4; dl-090; spec-003 Layer 3) ---
+
+/** What the loader knows about `workflows/bindings.yaml` when it checks the workflow files' tokens. */
+export interface BindingsContext {
+  /** The validated file, or `null` when there is none (or it failed its own checks). */
+  readonly bindings: BindingsYaml | null;
+  /**
+   * `false` when the file exists but failed its YAML or structural pass: a token may be bound by the
+   * part the loader could not read, so `W_WORKFLOW_UNBOUND_TOKEN` is not decided (spec-003: a loader
+   * diagnostic is not decided when its inputs are missing).
+   */
+  readonly decided: boolean;
+}
+
+/** An absent `bindings.yaml`: no bindings, and that is known (spec-003 Layer 3: "Optional"). */
+export const NO_BINDINGS_FILE: BindingsContext = { bindings: null, decided: true };
+
+/** An untyped Memory action: it acts on the workflow's element, a phase's selection, or what the phase added. */
+const UNTYPED_MEMORY_ACTION_RE = /^(memory\.(submit|approve|reject|deprecate)|element\.[a-z_]+)$/;
+
+/** A bare `{<field>}` token — `{id}`, `{version}` — owned by whichever element the reader assumes. */
+const BARE_TOKEN_RE = /\{[^{}.]+\}/;
+
+/**
+ * The index of a **self-creating** workflow's creating phase (spec-003 Layer 2 `element`): a
+ * startable workflow with no `element` whose phases `memory.add` — the phase holding the first such
+ * action. `-1` for every other workflow.
+ */
+function creatingPhaseIndex(workflow: Workflow): number {
+  if (workflow.element !== undefined || !workflowFacts(workflow).startable) return -1;
+  return workflow.phases.findIndex((phase) => (phase.actions ?? []).some((action) => tokenName(action) === 'memory.add'));
+}
+
+/**
+ * The evidence and binding rows of one phase (spec-003 § "Diagnostics"), in table order:
+ * `E_PHASE_PRODUCES_NOT_A_PATH`, `E_PHASE_PRODUCES_OWNER_NOT_CREATED`, `E_PHASE_SELECTION_UNTYPED`,
+ * then the warnings `W_WORKFLOW_UNBOUND_TOKEN`, `W_PHASE_PRODUCES_OWNER_IMPLICIT`,
+ * `W_PHASE_ACTION_UNTARGETED`.
+ */
+function phaseEvidenceDiagnostics(file: string, workflow: Workflow, p: number, bindings: BindingsContext): Diagnostic[] {
+  const phase = workflow.phases[p]!;
+  const at = (field: string): string => `phases[${p}].${field}`;
+  const out: Diagnostic[] = [];
+  const actions = phase.actions ?? [];
+  const produces = phase.produces ?? [];
+  const added = new Set(actions.map(memoryAddType).filter((type): type is string => type !== null));
+  const adds = actions.some((action) => tokenName(action) === 'memory.add');
+
+  produces.forEach((entry, k) => {
+    const path = producesPath(entry);
+    if (!PATH_PATTERN_RE.test(path)) {
+      const where = typeof entry === 'string' ? at(`produces[${k}]`) : at(`produces[${k}].path`);
+      out.push(error(file, where, 'E_PHASE_PRODUCES_NOT_A_PATH', `produces '${path}' is not a path pattern (allowed: [A-Za-z0-9._/{}-], no whitespace)`));
+    }
+  });
+  produces.forEach((entry, k) => {
+    if (typeof entry !== 'string' && !added.has(entry.type)) {
+      out.push(
+        error(file, at(`produces[${k}].type`), 'E_PHASE_PRODUCES_OWNER_NOT_CREATED', `produces owner '${entry.type}' is not a type this phase creates (no memory.add(type: ${entry.type}))`),
+      );
+    }
+  });
+  const selection = phase.where !== undefined && phase.iterate_over === undefined;
+  if (selection && !Object.prototype.hasOwnProperty.call(phase.where, 'type')) {
+    out.push(error(file, at('where'), 'E_PHASE_SELECTION_UNTYPED', 'a selection (where without iterate_over) names the type(s) it selects with a type key'));
+  }
+
+  if (bindings.decided) {
+    const unbound = (token: string, where: string, role: 'action' | 'check'): void => {
+      if (resolveToken(token, role, bindings.bindings).kind !== 'unbound') return;
+      out.push(warning(file, where, 'W_WORKFLOW_UNBOUND_TOKEN', `${role} token '${tokenName(token)}' has no built-in or bindings.yaml binding`));
+    };
+    actions.forEach((action, a) => unbound(action, at(`actions[${a}]`), 'action'));
+    (phase.checks?.pre ?? []).forEach((check, c) => unbound(check, at(`checks.pre[${c}]`), 'check'));
+    (phase.checks?.post ?? []).forEach((check, c) => unbound(check, at(`checks.post[${c}]`), 'check'));
+    if (phase.awaits !== undefined) unbound(phase.awaits.evidence, at('awaits.evidence'), 'check');
+  }
+
+  const creating = creatingPhaseIndex(workflow);
+  if (adds && p !== creating) {
+    produces.forEach((entry, k) => {
+      if (typeof entry === 'string' && BARE_TOKEN_RE.test(entry)) {
+        out.push(
+          warning(file, at(`produces[${k}]`), 'W_PHASE_PRODUCES_OWNER_IMPLICIT', `produces '${entry}' in a phase that memory.adds: name its owner as { type, path } (dl-104 D3)`),
+        );
+      }
+    });
+  }
+
+  const bindsElement = workflow.element !== undefined || (creating !== -1 && p > creating);
+  if (!bindsElement && !selection) {
+    let addedBefore = false;
+    actions.forEach((action, a) => {
+      const name = tokenName(action);
+      if (UNTYPED_MEMORY_ACTION_RE.test(name) && !addedBefore) {
+        out.push(
+          warning(file, at(`actions[${a}]`), 'W_PHASE_ACTION_UNTARGETED', `action '${name}' has no element to act on (the workflow binds none, no memory.add precedes it, no selection)`),
+        );
+      }
+      if (name === 'memory.add') addedBefore = true;
+    });
+  }
+  return out;
+}
+
+/** A `run` vector's diagnostics path: `checks.<token>.run[<i>]`. */
+function runPath(section: string, token: string, i: number): string {
+  return `${section}.${token}.run[${i}]`;
+}
+
+/**
+ * The loader rows of `workflows/bindings.yaml` (spec-003 Layer 3), on a structurally valid file:
+ * sections in a fixed order (`checks`, then `actions`), entries in declared order, and per entry the
+ * table's rows in table order — `E_BINDING_PARTIAL_INTERPOLATION` (per `run` element),
+ * `E_BINDING_BUILTIN_TOKEN`, `E_BINDING_AGENT_CHECK`.
+ */
+export function bindingsFileDiagnostics(bindings: BindingsYaml): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  const sections: Array<['checks' | 'actions', Record<string, { run?: readonly string[] }>]> = [
+    ['checks', bindings.checks ?? {}],
+    ['actions', bindings.actions ?? {}],
+  ];
+  for (const [section, entries] of sections) {
+    for (const [token, binding] of Object.entries(entries)) {
+      (binding.run ?? []).forEach((element, i) => {
+        if (!isWholeInterpolation(element)) {
+          out.push(
+            error(BINDINGS_FILE, runPath(section, token, i), 'E_BINDING_PARTIAL_INTERPOLATION', `'${element}' interpolates part of an argument: a placeholder must be a whole run element`),
+          );
+        }
+      });
+      if (isBuiltinToken(token)) {
+        out.push(error(BINDINGS_FILE, `${section}.${token}`, 'E_BINDING_BUILTIN_TOKEN', `'${token}' is a built-in token and may not be rebound`));
+      }
+      if (section === 'checks' && runsAgentExecute(binding.run ?? [])) {
+        out.push(error(BINDINGS_FILE, `${section}.${token}.run`, 'E_BINDING_AGENT_CHECK', `check '${token}' is bound to wingfoil agent execute: a check an agent asserts about its own work is not a gate`));
+      }
+    }
+  }
+  return out;
+}
+
+// --- end task-175 ---

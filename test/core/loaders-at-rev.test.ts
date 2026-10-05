@@ -219,7 +219,7 @@ describe('loadWorkflowsYamlAtRev — the same diagnostics array at a commit (tas
   it('an absent manifest at the commit is an empty registry, as in the working tree', () => {
     writeFixtureFile(repo, 'README.md', 'no configuration\n');
     commitAll(repo, 'no workflows');
-    expect(loadWorkflowsYamlAtRev(repo, 'HEAD')).toEqual({ manifest: null, workflows: [] });
+    expect(loadWorkflowsYamlAtRev(repo, 'HEAD')).toEqual({ manifest: null, workflows: [], bindings: null, diagnostics: [] });
   });
 });
 
