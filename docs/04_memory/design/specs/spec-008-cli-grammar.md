@@ -10,7 +10,7 @@ tmpl_version: 260703
 
 ## Context
 
-`src/cli` (Commander.js, `dna.yaml` `tech_stack.cli`) is one of two surfaces that must expose
+`src/cli` (Commander.js, a `dna.yaml` `stacks.technologies` entry) is one of two surfaces that must expose
 **identical behaviour** for every WingFoil operation (REQ-SYS-05 — single behaviour behind CLI and MCP).
 Every `CLI-*`/`memory.*` command, every workflow step that shells out to `wingfoil`, and every BDD
 scenario under `docs/02_requirements/02_bdd/features/p1-memory/` and `p5-interaction/` assumes a single,
@@ -29,11 +29,17 @@ surface:
 
 ```
 wingfoil [global-flags] <noun> <verb> [args] [flags]      # pillar/verb form, e.g. `memory add`
-wingfoil [global-flags] <noun> [args] [flags]              # flat command, e.g. `init`, `paths`, `audit`
+wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init`, `mcp`, `paths`, `audit`
 ```
 
 - `<noun>` is a pillar namespace (`memory`, `dna`, `directive`, `directives`, `workflow`, `agent`) or a
-  flat command (`init`, `paths`, `audit`). The DNA pillar's verbs are `show`, `set`, and the three
+  flat command (`init`, `mcp`, `paths`, `audit`). `init` and `mcp` are the **bootstrap commands**: they
+  are not `CORE_MODULES` operations but are wired directly onto the program (`src/cli/program.ts`),
+  because `init` runs before a WingFoil configuration exists and `mcp` hosts the MCP surface itself
+  (`spec-014-mcp-server-entry-point` §1). Neither is exposed on MCP (REQ-SYS-05's bootstrap exemption,
+  `dl-046-bootstrap-commands-in-spec-006-section-3` A(a)), and both obey this grammar: global flags,
+  the at-most-one-positional rule below, and §5's exit codes. `paths` is a self-named `CORE_MODULES`
+  operation, and `audit` is planned as one (BDD `P5.1.3-audit.feature`, `dl-046` B(a)). The DNA pillar's verbs are `show`, `set`, and the three
   mutation verbs `add`, `remove` and `update` (§9) — the collection they act on travels in their
   `<path>` argument, not in the verb name, so the verb list does not grow as `spec-002`'s schema does
   (`dl-081-dna-mutation-surface-shape`). The Directives pillar deliberately exposes two nouns —
@@ -53,8 +59,9 @@ wingfoil [global-flags] <noun> [args] [flags]              # flat command, e.g. 
   message naming the command, what it takes, and how many operands it got
   (`error: wingfoil memory approve takes one positional <id> (got 2 positionals)`,
   `error: wingfoil workflow list takes no positional (got 1 positional)`). The rule holds for every
-  command, present and future. For every command except the four DNA path verbs it is enforced where
-  commands are registered, before the project root is resolved, so before anything is read or
+  command, present and future, the bootstrap commands included (`error: wingfoil init takes no
+  positional (got 1 positional)`). For every command except the four DNA path verbs it is enforced
+  where commands are registered, before the project root is resolved, so before anything is read or
   written. **The exception:** `dna set`, `dna add`, `dna update` and `dna remove` refuse the surplus
   inside the operation, after the project root is resolved and after their own `<path>` check. A
   malformed `<path>` is therefore reported before the surplus (§9). An invocation that fails to
@@ -595,7 +602,7 @@ reference entry. A command that does not declare it refuses it as an unknown opt
   `Command`, using the negatable-boolean pattern in §3 — no per-command `noColor`/`noInteractive`
   re-implementation.
 - `src/core` owns exit-code selection and error-message formatting (single behaviour shared with
-  `src/mcp-server`, REQ-SYS-05); `src/cli` only maps `core` results onto stdout/stderr + `process.exit`.
+  `src/mcp`, REQ-SYS-05); `src/cli` only maps `core` results onto stdout/stderr + `process.exit`.
 - Any future command (`CLI-01`…`CLI-06` equivalents) inherits this grammar by construction and must not
   redefine flag names, exit codes, or the error format.
 - If REQ-INT-04/REQ-INT-05/REQ-INT-08 are revised (e.g. a new global flag or exit code is added), this
@@ -926,3 +933,20 @@ caller chooses the date, since a `--set date` would let the id disagree with its
 other reserved names keep the shared message. The error table also gains the two exit-`1` failures
 the tokens add: an author name that slugs to nothing, and a `GIT_AUTHOR_DATE` git cannot parse. No
 other section changed.
+
+**Revision (2026-10-05, `task-165-put-bootstrap-commands-command-surface-mcp-specs-bootstrap`) — §1
+names `mcp` among the flat commands and says what a bootstrap command is, per
+`dl-046-bootstrap-commands-in-spec-006-section-3` (`ready`; A(a), B(a), C), `bug-028`, `bug-179` and
+`bug-204`.** `wingfoil mcp` has shipped since `task-030`, and §1's grammar comment and `<noun>` bullet
+named only `init`, `paths` and `audit`. Both now list `init`, `mcp`, `paths`, `audit`, the same four
+`spec-005`'s Context and `spec-006` §3 list, and the bullet says that `init` and `mcp` are wired outside
+`CORE_MODULES`, are not on MCP (REQ-SYS-05's bootstrap exemption), and obey this grammar like every
+other command. The surplus-operand rule now holds for them in its own wording: they refused a surplus
+at exit `2` in Commander's words (`too many arguments for 'init'`), and give the shared refusal since
+`task-165` (`bug-179`). `test/docs/command-surface-specs.test.ts` fails when a flat command the program
+registers is missing from §1. Two stale names are corrected (`bug-204`): §Context's `tech_stack.cli` is
+now a `stacks.technologies` entry (`spec-002` retired `tech_stack`), and the Consequences name
+`src/mcp`, the `mcp-server` module's path, instead of a path with the module's name, which never
+existed. The Process Notes keep `tech_stack.cli`, the key `dna.yaml` had when the spec was
+cross-checked. No exit code and no other
+rule changed. Edited in place without a supersede or a state change (`dl-047`).
