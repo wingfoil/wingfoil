@@ -47,8 +47,9 @@ Claims that need a command, in practice:
   in the same note. A pattern that cannot match anything relevant proves nothing, however many times
   it prints nothing.
 
-  (`dl-097` §1.) It holds wherever this directive does: Execution Notes, bug fields, acceptance
-  criteria, triage notes, decision-log bodies and approval `Reason:` blocks.
+  (`dl-097` §1.) It holds wherever this directive does, including Execution Notes, bug fields,
+  acceptance criteria, triage notes, decision-log bodies, approval `Reason:` blocks and the durable
+  prose under *How a claim is recorded*.
 - **Uniqueness and exhaustiveness.** "the only place a path is split", "all three callers".
 - **Status of a file or a gate.** "this file is unchanged", "covered by the existing suite",
   "already handled upstream", "the suite is green without it". Open the file; run the suite; delete

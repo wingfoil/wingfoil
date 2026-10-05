@@ -16,8 +16,11 @@ Custom WingFoil rule. Applies especially to developers and architects.
   Decision 3) and promises each component only as far as its controller allows:
   - **I — Input** is guaranteed by WingFoil: identical inputs (specs + config + project state) yield
     an identical agent execution context, verified by tests (REQ-SYS-07, REQ-STATE-09).
-  - **P — Process conformance** is measured on every run: well-formed `wf()` commits, legal
-    transitions, each phase's `produces:` present, the traceability chain complete.
+  - **P — Process conformance** is to be measured on every run: well-formed `wf()` commits, legal
+    transitions, each phase's `produces:` present, the traceability chain complete. Today only the
+    first two are measured, by `scripts/check-governance.cjs` (`npm run check:governance`,
+    `task-167`); `produces:` presence and traceability completeness have no measure yet
+    (`dl-131` Action 7).
   - **O — Outcome equivalence** — behaviourally equivalent software from two independent runs — is
     reported, never promised: it depends on the agent and model, which WingFoil does not choose.
 
