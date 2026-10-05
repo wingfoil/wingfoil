@@ -8,7 +8,7 @@ kind: "feature"
 priority: "low"
 tags: ["v0.3", "workflow", "ci", "cadence"]
 ref: "dl-105"
-bug: ["bug-225"]
+bug: ["bug-225", "bug-238"]
 depends_on: ["task-140-run-packaging-gate-push-pull-request-separate"]
 tmpl_version: 260703
 ---
