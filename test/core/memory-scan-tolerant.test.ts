@@ -12,7 +12,7 @@ import type { CoreFn } from '../../src/core/registry';
 import { atHeadOr, RevisionError } from '../../src/core/revision';
 import { loadMemoryYamlAtHead } from '../../src/core/loaders';
 import { E_GIT_READ_FAILED, StorageError } from '../../src/storage';
-import { mkdtempSync, symlinkSync } from 'fs';
+import { chmodSync, mkdirSync, mkdtempSync, symlinkSync } from 'fs';
 import { reconstructMemoryTransitions, verifyTransitionConsistency } from '../../src/memory/audit';
 import { findMemoryDocumentById, listMemoryDocumentsByType, searchMemoryDocuments } from '../../src/memory/query';
 import { ValidationError } from '../../src/validation';
@@ -181,6 +181,29 @@ describe('strict reads and refusal wording over unreadable documents (task-171 r
     expect(result.error?.code).toBe('NOT_FOUND');
     expect(result.error?.message).toContain(`${BROKEN} is not committed at HEAD`);
     expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(before);
+  });
+});
+
+// task-171 re-review, finding A: the explain-only working-tree walk must not turn a filesystem error
+// into the verb's outcome. Mode 000 does not block root, so the case is skipped there.
+const runsAsRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+(runsAsRoot ? describe.skip : describe)('an unreadable directory in the working tree (task-171 re-review)', () => {
+  it('a transition on an absent id is still NOT_FOUND, never a thrown EACCES', async () => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, '.wingfoil/memory.yaml', MEMORY_YAML);
+    writeFixtureFile(repo, GOOD, doc('task-001-good', 'draft', 'Good task'));
+    commitAll(repo, 'wf(task): add task-001-good');
+    const locked = join(repo, 'docs/04_memory/v0.1/locked');
+    mkdirSync(locked);
+    chmodSync(locked, 0o000);
+    try {
+      const result = (await op('memorySubmit')({ root: repo, positional: 'task-404-absent' })) as Result;
+      expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe('NOT_FOUND');
+      expect(result.error?.message).toMatch(/^document not found: task-404-absent/);
+    } finally {
+      chmodSync(locked, 0o755);
+    }
   });
 });
 
