@@ -176,14 +176,14 @@ describe('the committed bug machine — every edge, `sequence` order (AC 2 + AC 
 
   /** The legal target of each verb from each state; `null` = illegal. `deprecate` is legal everywhere. */
   const EDGES: Record<string, Record<Exclude<TransitionOp, 'deprecate'>, string | null>> = {
-    draft: { submit: 'open', approve: null, reject: null },
-    open: { submit: null, approve: 'triaged', reject: 'closed' },
-    triaged: { submit: null, approve: null, reject: 'closed' }, // dl-123 (A)
-    planned: { submit: null, approve: null, reject: 'closed' }, // dl-123 (A)
-    'in-progress': { submit: 'in-review', approve: null, reject: null },
-    'in-review': { submit: null, approve: 'resolved', reject: 'in-progress' },
-    resolved: { submit: null, approve: 'closed', reject: 'in-progress' },
-    closed: { submit: null, approve: null, reject: null },
+    draft: { submit: 'open', approve: null, reject: null, park: null },
+    open: { submit: null, approve: 'triaged', reject: 'closed', park: null },
+    triaged: { submit: null, approve: null, reject: 'closed', park: null }, // dl-123 (A)
+    planned: { submit: null, approve: null, reject: 'closed', park: null }, // dl-123 (A)
+    'in-progress': { submit: 'in-review', approve: null, reject: null, park: null },
+    'in-review': { submit: null, approve: 'resolved', reject: 'in-progress', park: null },
+    resolved: { submit: null, approve: 'closed', reject: 'in-progress', park: null },
+    closed: { submit: null, approve: null, reject: null, park: null },
   };
 
   function target(state: string, op: TransitionOp): string | null {
@@ -201,11 +201,12 @@ describe('the committed bug machine — every edge, `sequence` order (AC 2 + AC 
     expect(machine.waiting).toEqual(['triaged', 'planned']);
   });
 
-  it.each(Object.keys(EDGES))('from `%s`, submit / approve / reject / deprecate reach exactly the declared targets', (state) => {
+  it.each(Object.keys(EDGES))('from `%s`, submit / approve / reject / park / deprecate reach exactly the declared targets', (state) => {
     expect({
       submit: target(state, 'submit'),
       approve: target(state, 'approve'),
       reject: target(state, 'reject'),
+      park: target(state, 'park'),
     }).toEqual(EDGES[state]);
     expect(target(state, 'deprecate')).toBe('deprecated');
   });

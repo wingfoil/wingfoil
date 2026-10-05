@@ -141,9 +141,9 @@ describe('the committed `service` type (task-124, dl-088)', () => {
   describe('AC 4: the machine, every edge in `sequence` order', () => {
     /** The legal target of each verb from each state; `null` = illegal. `deprecate` is legal everywhere. */
     const EDGES: Record<string, Record<Exclude<TransitionOp, 'deprecate'>, string | null>> = {
-      draft: { submit: 'pending', approve: null, reject: null },
-      pending: { submit: null, approve: 'active', reject: 'draft' },
-      active: { submit: null, approve: null, reject: null },
+      draft: { submit: 'pending', approve: null, reject: null, park: null },
+      pending: { submit: null, approve: 'active', reject: 'draft', park: null },
+      active: { submit: null, approve: null, reject: null, park: null },
     };
 
     function target(state: string, op: TransitionOp): string | null {
@@ -164,12 +164,13 @@ describe('the committed `service` type (task-124, dl-088)', () => {
       expect(machine.waiting ?? []).toEqual([]);
     });
 
-    it.each(Object.keys(EDGES))('from `%s`, submit / approve / reject / deprecate reach exactly the declared targets', (state) => {
+    it.each(Object.keys(EDGES))('from `%s`, submit / approve / reject / park / deprecate reach exactly the declared targets', (state) => {
       expect(Object.keys(committedMemoryYaml().types)).toContain('service');
       expect({
         submit: target(state, 'submit'),
         approve: target(state, 'approve'),
         reject: target(state, 'reject'),
+        park: target(state, 'park'),
       }).toEqual(EDGES[state]);
       expect(target(state, 'deprecate')).toBe('deprecated');
     });

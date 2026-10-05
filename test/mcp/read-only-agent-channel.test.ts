@@ -78,8 +78,8 @@ describe('REQ-SEC-05 — Tools is the only channel a mutation is registered unde
   });
 });
 
-describe('REQ-SEC-05 — the real surface exposes the mutating Tools today (directive.assign|create|remove, dna.add|remove|set|update, memory.add|amend|approve|deprecate|reject|submit — task-051/050/052/093/025/020/046/048/047/045/127)', () => {
-  it('the Tools write-channel is advertised, and the real registry contributes all thirteen mutating ops — `directive.assign|create|remove`, `dna.add|remove|set|update` + `memory.add|amend|approve|deprecate|reject|submit`', async () => {
+describe('REQ-SEC-05 — the real surface exposes the mutating Tools today (directive.assign|create|remove, dna.add|remove|set|update, memory.add|amend|approve|deprecate|park|reject|submit — task-051/050/052/093/025/020/046/048/047/045/127/180)', () => {
+  it('the Tools write-channel is advertised, and the real registry contributes all fourteen mutating ops — `directive.assign|create|remove`, `dna.add|remove|set|update` + `memory.add|amend|approve|deprecate|park|reject|submit`', async () => {
     const { client } = await connectCoreModuleSurface(CORE_MODULES, UNUSED_ROOT);
 
     // The sole write channel (Tools) is structurally present/advertised...
@@ -111,6 +111,8 @@ describe('REQ-SEC-05 — the real surface exposes the mutating Tools today (dire
       'memoryAmend',
       'memoryApprove',
       'memoryDeprecate',
+      // task-180 (`dl-110` P1 (a)) — `memory park`, a Tool like `memoryDeprecate`.
+      'memoryPark',
       'memoryReject',
       'memorySubmit',
     ]);
@@ -127,6 +129,7 @@ describe('REQ-SEC-05 — the real surface exposes the mutating Tools today (dire
       'memory.amend',
       'memory.approve',
       'memory.deprecate',
+      'memory.park',
       'memory.reject',
       'memory.submit',
     ]);

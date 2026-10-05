@@ -34,6 +34,8 @@
  * - `reject`: legal only from a state that IS a `gates` key (regardless of `waiting` membership —
  *   spec-001: a gate+waiting state "still exposes a manual `reject`/decline path"). Target:
  *   `gates[<state>].reject`, always taken verbatim (it need not be a `sequence` member).
+ * - `park` (task-180, `dl-110` P1 (a)): legal only from a state that is a `returns` key. Target:
+ *   `returns[<state>]`, an earlier state of `sequence` (the schema guarantees it).
  * - `deprecate`: the implicit wildcard edge — always legal from any current state, target is the
  *   reserved `"deprecated"` state. Never declared in `sequence`/`gates`/`waiting` (enforced
  *   structurally by task-004's `.superRefine()`; this engine does not need to re-check it).
@@ -134,8 +136,11 @@ export const E_INVALID_TRANSITION = 'E_INVALID_TRANSITION';
  */
 export const E_INVALID_STATE = 'E_INVALID_STATE';
 
-/** The four CLI verbs a transition can be requested for (`memory.add` assigns `sequence[0]` directly, no verb). */
-export type TransitionOp = 'submit' | 'approve' | 'reject' | 'deprecate';
+/**
+ * The CLI verbs a transition can be requested for (`memory.add` assigns `sequence[0]` directly, no
+ * verb). `park` (task-180, `dl-110` P1 (a)) takes the machine's declared `returns` edge.
+ */
+export type TransitionOp = 'submit' | 'approve' | 'reject' | 'deprecate' | 'park';
 
 /**
  * REQ-STATE-08's default machine, owned by the **engine** rather than by any config file
@@ -299,6 +304,13 @@ export function resolveTransitionTarget(
       // `reject` target is taken verbatim — need not be a `sequence` member (spec-001).
       return gate.reject;
     }
+    case 'park': {
+      const target = (machine.returns ?? {})[currentState];
+      if (target === undefined) {
+        return illegal(currentState, op, 'not a `returns` state — `park` is only legal from a state that declares a return edge', filePath);
+      }
+      return target;
+    }
     default: {
       const exhaustive: never = op;
       return illegal(currentState, exhaustive, 'unknown operation', filePath);
@@ -437,7 +449,8 @@ export function resolveSupersedeTarget(
  *    or `waiting` state, whose forward edge is taken by `approve` or by a workflow action rather than
  *    by `submit`, but is an edge all the same;
  * 2. every **`gates.<from>.reject`** target;
- * 3. the implicit wildcard edge to {@link DEPRECATED_STATE}, from any state.
+ * 3. every **`returns.<from>`** target, the edge `memory park` takes (task-180);
+ * 4. the implicit wildcard edge to {@link DEPRECATED_STATE}, from any state.
  *
  * A self-loop is not an edge. Pure; no ordering dependence (REQ-SYS-07).
  */
@@ -445,6 +458,7 @@ export function isMachineEdge(machine: StateMachine, from: string, to: string): 
   if (to === DEPRECATED_STATE) return true;
   const index = machine.sequence.indexOf(from);
   if (index !== -1 && machine.sequence[index + 1] === to) return true;
+  if ((machine.returns ?? {})[from] === to) return true;
   return (machine.gates ?? {})[from]?.reject === to;
 }
 
@@ -469,7 +483,8 @@ export function isMachineEdge(machine: StateMachine, from: string, to: string): 
  *    any `sequence` (the `StateMachine` schema's own `.superRefine()` forbids declaring it).
  *
  * `machine.waiting` contributes nothing: every `waiting` entry is required to be a `sequence` member
- * already, so it is covered by (1).
+ * already, so it is covered by (1). Nor does `machine.returns`: the schema requires every `returns`
+ * target to be an earlier `sequence` state (task-180).
  *
  * Iteration over `gates` is sorted (REQ-SYS-07 — no unordered iteration in any output-affecting path);
  * the predicate's boolean result is order-independent, but keeping the traversal deterministic keeps

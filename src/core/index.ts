@@ -85,7 +85,7 @@ import { requireCustomAsset } from './builtin-asset';
 import { requireConfinedTarget, requireConfinedWriteTarget } from './confinement';
 import { APPROVER_ROLE, requireApprovalAuthority } from './approval-authority';
 import { optionalReason, requireReason } from './require-reason';
-import { beginMemoryTransition, checkMemoryTransition, commitMemoryTransition } from './memory-transition';
+import { beginMemoryTransition, checkMemoryTransition, commitMemoryTransition, requireWipSlot } from './memory-transition';
 import { prepareSupersede, supersedeReason } from './memory-supersede';
 import { amendReservedFields, requireAmendableEdit, requireAmendableType, requireRequiredFieldsKept } from './memory-amend';
 import { resolveAddType } from './memory-add-type';
@@ -711,9 +711,11 @@ function singleOption(options: MemoryAddParams['options'], name: string): string
  *    every folder the committed `path` pattern can resolve to, plus one (task-128, `dl-101` §2 (a),
  *    `bug-087`, `bug-162`). That read is wider than `HEAD` on purpose — it can only raise the number —
  *    and is the declared baseline `command-baseline` records for it.
- * 5. **Fill the committed scaffold's bytes** with only the `id`/`status: draft`/`--title`/`--tags`
+ * 5. **Fill the committed scaffold's bytes** with only the `id`/`status`/`--title`/`--tags`
  *    skeleton (P1.3; spec-010-memory-frontmatter-schema) plus the `--set` fields (a context token only
- *    where the scaffold declares it), then **write + commit** through task-022's
+ *    where the scaffold declares it). `status` is the head of the type's committed machine
+ *    (`spec-001`; `bug-214`, task-180), and a WIP limit declared on that state is checked
+ *    (`requireWipSlot`, `CONFLICT`, exit 1). Then **write + commit** through task-022's
  *    confined `writeMemoryEntry` (REQ-SEC-06 refuse-before-write + one scoped commit
  *    `wf(<type>): add <id>`); the returned sha rides `CoreResult.commit`.
  *
@@ -741,7 +743,7 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
   // a working-tree copy, in the same way task-091 made that true of the four transition verbs.
   const resolved = resolveAddType(root, type);
   if (!resolved.ok) return resolved;
-  const { pathPattern, idPattern, scaffold } = resolved.value;
+  const { pathPattern, idPattern, scaffold, initialState, memoryYaml: committedMemoryYaml } = resolved.value;
 
   const unknown = unknownSetNames(set.values, idPattern, pathPattern);
   if (unknown.length > 0) {
@@ -763,7 +765,7 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
       ? nextSequenceNumber(root, pathPattern, materialized)
       : 0;
     const id = generateId(materialized, { slug: slugifyTitle(title), n: sequence });
-    const content = renderAddDocument(scaffold, { id, title, tags, fields: writtenFields(scaffold, set.values) });
+    const content = renderAddDocument(scaffold, { id, title, tags, fields: writtenFields(scaffold, set.values), status: initialState });
     const pathValues = { ...set.values, id };
     const message = `wf(${type}): add ${id}`;
 
@@ -779,6 +781,10 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
     const targetPath = relative(root, resolveConfinedMemoryPath(root, pathPattern, pathValues)).split(sep).join('/');
     const absent = requireAbsentTarget(root, targetPath);
     if (!absent.ok) return absent;
+    // `add` is the verb that enters the initial state, so a WIP limit declared there holds here too
+    // (task-180, `dl-110` P3 (a)), counted in the commit the type was resolved at.
+    const slot = requireWipSlot(root, 'HEAD', committedMemoryYaml, type, initialState);
+    if (!slot.ok) return slot;
 
     const { path, sha } = writeMemoryEntry(root, pathPattern, pathValues, content, message, {
       author: identity.value,
@@ -1510,6 +1516,71 @@ const memoryDeprecateFn: CoreFn<unknown, MemoryDeprecateResult> = async (params)
 };
 
 /**
+ * `wingfoil memory park <id> --reason <text>` params (task-180, `dl-110` P1 (a)). The id rides the bare
+ * `ParamsContext.positional` seam (`spec-008-cli-grammar` §7) and `--reason` the value-bearing
+ * `options` seam. Both are optional only because the seams are; {@link memoryParkFn} refuses either
+ * absent.
+ */
+export interface MemoryParkParams {
+  readonly root: string;
+  readonly positional?: string;
+  readonly options?: Readonly<Record<string, string>>;
+}
+
+/** `memory park` success shape: the document, the return edge it took, and the reason recorded. */
+export interface MemoryParkResult {
+  readonly id: string;
+  /** Root-relative path of the parked document. */
+  readonly path: string;
+  readonly from: string;
+  /** The `returns.<from>` target of the type's machine. */
+  readonly to: string;
+  /** The `--reason` text, exactly as given. */
+  readonly reason: string;
+}
+
+/**
+ * `memory park` `CoreOperation.fn` (task-180, `mutates: true`; `dl-110` P1 (a)) — return a started
+ * element to an earlier state along its type's declared `returns` edge (`spec-001`), e.g. a `task` from
+ * `in-progress` back to `backlog`. Returning is not rejecting (`dl-110` Rationale): the commit says the
+ * work is not being done now, not that it was wrong, so `memory history` keeps the two apart. Order,
+ * every refusal before the single write (`spec-006` §7):
+ *
+ * 1. **`<id>`** absent or blank, then **`requireReason`** (`dl-067`) → `UsageError` (exit `2`), before
+ *    the identity is read (task-125, `bug-172`). The reason is mandatory: a park records why.
+ * 2. **{@link beginMemoryTransition}** with op `park` — identity (REQ-SEC-01), then the document and
+ *    its edge at `HEAD` (`dl-080`): a state with no `returns` edge is `INVALID_TRANSITION` with the
+ *    `dl-032` contract message (exit `1`), and a WIP limit declared on the target state is checked
+ *    there too (`requireWipSlot`, `CONFLICT`, exit `1`).
+ * 3. **Edit + commit** — `status` set to the target and nothing else (`spec-010` field-write ownership,
+ *    enforced by `commitMemoryTransition`'s post-condition), one commit scoped to that file:
+ *    `wf(<type>): park <id> [<from> → <to>]` with a `Reason:` block (`spec-008` §2).
+ *
+ * Deliberately absent: no `Approver:` line and no authority check. A park is a scheduling decision, not
+ * an approval gate; `dl-110` names no approver for it. What parking does to the work around the element
+ * under `dev-loop` (the task's worktree, its bugs' `sync_state`) is `dl-110` P2, owned by the workflow,
+ * not by this verb.
+ */
+const memoryParkFn: CoreFn<unknown, MemoryParkResult> = async (params) => {
+  const { root, positional: id, options } = params as MemoryParkParams;
+
+  if (id === undefined || id.trim().length === 0) {
+    throw new UsageError('missing required argument: memory park <id>');
+  }
+  const reason = requireReason(options);
+
+  const prepared = beginMemoryTransition(root, id, 'park');
+  if (!prepared.ok) return prepared;
+  const { type, path, from, to, content } = prepared.value;
+
+  const message = formatMemoryCommitMessage({ type, op: 'park', ids: [id], transition: { from, to }, reason });
+  const rendered = setFrontmatterField(content, 'status', to);
+  const committed = commitMemoryTransition(root, prepared.value, rendered, message);
+  if (!committed.ok) return committed;
+  return coreOk({ id, path, from, to, reason }, { sha: committed.value, message }, prepared.value.warnings);
+};
+
+/**
  * `wingfoil memory amend <id> --reason <text>` params (task-127, `dl-108`). The id rides the bare
  * `ParamsContext.positional` seam (`spec-008-cli-grammar` §7) and `--reason` the value-bearing
  * `options` seam, as on `memory approve`. Both are optional only because the seams are;
@@ -2049,7 +2120,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
       memoryAdd: {
         name: 'memoryAdd',
         mutates: true,
-        description: "create a document in its type's initial state (draft) from the type's template",
+        description: "create a document in its type's initial state (the first state of its sequence; draft by default) from the type's template",
         options: [
           { name: 'type', required: true, valueName: 'type', description: 'the Memory type, as the committed memory.yaml declares it' },
           { name: 'title', required: true, valueName: 'title', description: 'the document title; also the source of the {slug} token' },
@@ -2149,6 +2220,18 @@ export const CORE_MODULES: readonly CoreModule[] = [
         options: [{ name: 'reason', valueName: 'text', description: "why the document is retired, recorded as the commit's Reason: (not blank when given)" }],
         example: 'wingfoil memory deprecate dl-001-use-postgresql --reason "Superseded by the hosted-DB decision."',
         fn: memoryDeprecateFn,
+      },
+      // task-180 (`dl-110` P1 (a)) — `mutates: true`: CLI `wingfoil memory park <id> --reason <text>`.
+      // `--reason` is `required` (metadata; `memoryParkFn` enforces it via `requireReason`). The id
+      // rides the bare `positional` seam (spec-008 §7).
+      memoryPark: {
+        name: 'memoryPark',
+        mutates: true,
+        description: "return a started document to an earlier state along its type's declared returns edge (for a task, in-progress → backlog)",
+        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task' },
+        options: [{ name: 'reason', required: true, valueName: 'text', description: "why the work stops for now, recorded as the commit's Reason:" }],
+        example: 'wingfoil memory park task-001-my-first-task --reason "Blocked on the schema decision; back to the backlog."',
+        fn: memoryParkFn,
       },
       // task-127 (`dl-108`) — `mutates: true`: CLI `wingfoil memory amend <id> --reason <text>` + MCP
       // Tool `memory.amend`. Approver-gated like `memoryApprove`, so `--reason` is `required`

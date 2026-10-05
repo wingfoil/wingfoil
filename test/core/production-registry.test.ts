@@ -40,6 +40,8 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memoryApprove',
       'memory.memoryDeprecate',
       'memory.memoryHistory',
+      // task-180 (`dl-110` P1 (a)): the verb that takes a declared `returns` edge.
+      'memory.memoryPark',
       'memory.memoryReject',
       'memory.memorySearch',
       'memory.memorySubmit',
@@ -48,7 +50,7 @@ describe('CORE_MODULES — production registry', () => {
     ]);
   });
 
-  it('thirteen operations mutate today — the nine before task-093, `dna.dnaAdd`, `dna.dnaRemove` and `dna.dnaUpdate` (P2.1, dl-081), and `memory.memoryAmend` (task-127, dl-108); the rest are read-only', () => {
+  it('fourteen operations mutate today — the nine before task-093, `dna.dnaAdd`, `dna.dnaRemove` and `dna.dnaUpdate` (P2.1, dl-081), `memory.memoryAmend` (task-127, dl-108) and `memory.memoryPark` (task-180, dl-110); the rest are read-only', () => {
     const mutating = enumerateOperations(CORE_MODULES).filter(({ operation }) => operation.mutates);
     expect(mutating.map(({ module, operation }) => `${module.name}.${operation.name}`)).toEqual([
       'directive.directiveAssign',
@@ -62,6 +64,7 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memoryAmend',
       'memory.memoryApprove',
       'memory.memoryDeprecate',
+      'memory.memoryPark',
       'memory.memoryReject',
       'memory.memorySubmit',
     ]);

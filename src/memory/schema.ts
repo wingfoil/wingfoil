@@ -37,14 +37,22 @@ export const RESERVED_TYPE_NAMES: readonly string[] = Object.freeze(['directive'
  * - A `gates.<state>.reject` target need NOT be a member of `sequence` (it may revert into the
  *   chain or name an off-chain decline state reached by no forward edge).
  * - The literal string `"deprecated"` is reserved: it may not appear in `sequence`, as a `gates`
- *   key, as a `gates.<state>.reject` target, or in `waiting` — it is an implicit wildcard edge to a
- *   reserved state, never declared explicitly.
+ *   key, as a `gates.<state>.reject` target, in `waiting`, or as a `returns`/`limits` key or `returns`
+ *   target — it is an implicit wildcard edge to a reserved state, never declared explicitly.
+ * - `returns` (task-180, `dl-110` P1 (a)): `{ <state>: <target> }`, a declared return edge that is not
+ *   a rejection, taken by `memory park`. Every key MUST be a member of `sequence`, and its target an
+ *   EARLIER state of `sequence`: a park steps back along the chain, never forward or off it.
+ * - `limits` (task-180, `dl-110` P3 (a)): `{ <state>: <positive integer> }`, an optional WIP limit,
+ *   enforced by the verb that enters the state (`requireWipSlot`, `src/core/memory-transition.ts`).
+ *   Every key MUST be a member of `sequence`.
  */
 export const StateMachine = z
   .object({
     sequence: z.array(z.string()).min(1),
     gates: z.record(z.string(), z.object({ reject: z.string() }).passthrough()).optional(),
     waiting: z.array(z.string()).optional(),
+    returns: z.record(z.string(), z.string()).optional(),
+    limits: z.record(z.string(), z.number().int().positive()).optional(),
   })
   .passthrough()
   .superRefine((value, ctx) => {
@@ -99,6 +107,37 @@ export const StateMachine = z
         });
       }
     });
+
+    // ---- task-180: `returns` (dl-110 P1 (a)) and `limits` (dl-110 P3 (a)) ----------------------------
+    for (const key of ['returns', 'limits'] as const) {
+      for (const state of Object.keys(value[key] ?? {})) {
+        if (state === RESERVED_STATE) {
+          ctx.addIssue({
+            code: 'custom',
+            message: `"${RESERVED_STATE}" is a reserved implicit state and may not be declared as a \`${key}\` key`,
+            path: [key, state],
+          });
+        } else if (!sequenceSet.has(state)) {
+          ctx.addIssue({ code: 'custom', message: `\`${key}\` key "${state}" must be a member of \`sequence\``, path: [key, state] });
+        }
+      }
+    }
+    for (const [state, target] of Object.entries(value.returns ?? {})) {
+      if (state === RESERVED_STATE || !sequenceSet.has(state)) continue; // reported above
+      if (target === RESERVED_STATE) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `"${RESERVED_STATE}" is a reserved implicit state and may not be a \`returns\` target`,
+          path: ['returns', state],
+        });
+      } else if (!value.sequence.slice(0, value.sequence.indexOf(state)).includes(target)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `\`returns\` target "${target}" of "${state}" must be an earlier state of \`sequence\``,
+          path: ['returns', state],
+        });
+      }
+    }
   });
 export type StateMachine = z.infer<typeof StateMachine>;
 
@@ -178,9 +217,9 @@ export const MemoryYaml = z
   /**
    * Type-contextualized restatement of spec-001's "Semantic validation (post-parse)" membership rule
    * — the P1.13 acceptance contract (task-024-implement-memory-element-schema): a state referenced by
-   * a type's machine (a `gates` key or a `waiting` entry) that is NOT one of that type's declared
-   * states (`sequence`) is a malformed schema and must be rejected at load time, **before any document
-   * of that type can be created or transitioned** (REQ-STATE-01). The `StateMachine` sub-schema's own
+   * a type's machine (a `gates` key, a `waiting` entry, or a `returns`/`limits` key, task-180) that is
+   * NOT one of that type's declared states (`sequence`) is a malformed schema and must be rejected at
+   * load time, **before any document of that type can be created or transitioned** (REQ-STATE-01). The `StateMachine` sub-schema's own
    * `.superRefine` already flags the same structural violation, but only this top-level refinement
    * knows the *owning type name*, so P1.13's required wording
    * (`transition target '<state>' not in declared states for type '<type>'`) can only be produced
@@ -223,6 +262,9 @@ export const MemoryYaml = z
       (machine.waiting ?? []).forEach((waitState, index) => {
         flag(waitState, ['waiting', index]);
       });
+      for (const key of ['returns', 'limits'] as const) {
+        for (const state of Object.keys(machine[key] ?? {})) flag(state, [key, state]);
+      }
     }
   });
 export type MemoryYaml = z.infer<typeof MemoryYaml>;

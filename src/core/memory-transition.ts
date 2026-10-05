@@ -1,7 +1,8 @@
 /**
  * The shared skeleton of every Memory state-transition verb (task-045-memory-submit; reused by
- * `memory approve`/`reject`/`deprecate`, task-046/047/048, and by `memory amend`, task-127, whose
- * edge is the self-loop of the current state).
+ * `memory approve`/`reject`/`deprecate`, task-046/047/048, by `memory amend`, task-127, whose
+ * edge is the self-loop of the current state, and by `memory park`, task-180, which takes a declared
+ * `returns` edge).
  *
  * A transition verb always does the same two things around its own verb-specific rules:
  *
@@ -28,6 +29,7 @@ import {
   E_INVALID_TRANSITION,
   findMemoryDocumentById,
   findMemoryDocumentByIdAtRev,
+  loadMemoryDocumentsAtRev,
   loadMemoryDocumentSummary,
   loadMemoryDocumentSummaryAtRev,
   resolveStateMachine,
@@ -221,6 +223,9 @@ function recordedIdAt(root: string, sha: string, path: string): string | undefin
  * - the verb is illegal from that state → `INVALID_TRANSITION` with the `dl-032` contract message
  *   (`resolveTypeTransition`), the engine's explanation in `details.issues[0].detail`. `amend`
  *   (task-127) never takes this branch: its target is the current state.
+ * - the target state declares a WIP limit its holders have reached → `CONFLICT`
+ *   ({@link requireWipSlot}, task-180). Every transition into a state goes through here, so the limit
+ *   holds whichever verb or engine action moves the element.
  *
  * The unknown-type, invalid-state and illegal-transition refusals keep their pinned messages
  * verbatim as the first sentence; {@link uncommittedMachineNote} may append a second one.
@@ -378,6 +383,11 @@ export function prepareMemoryTransitionAtRev(
         : op === 'supersede'
           ? resolveSupersedeTarget(memoryYaml, type, from, path)
           : resolveTypeTransition(memoryYaml, type, from, op, path);
+    // A self-loop (`amend`) enters no state, so it takes no slot.
+    if (to !== from) {
+      const slot = requireWipSlot(root, sha, memoryYaml, type, to, id);
+      if (!slot.ok) return slot;
+    }
     // Content from the working tree: what `submit` and `amend` commit, and what the other verbs'
     // unmodified-document guard compares with `HEAD`.
     const { frontmatter } = loadMemoryDocumentSummary(root, path);
@@ -411,6 +421,42 @@ export function prepareMemoryTransitionAtRev(
     const message = error.issues.map((issue) => issue.message).join('; ') + uncommittedMachineNote(root);
     return coreErr({ code, message, details: { issues: error.issues } });
   }
+}
+
+/**
+ * Refuse to move an element into `state` when the type's machine declares a WIP limit there
+ * (`limits: { <state>: N }`, `spec-001`, `dl-110` P3 (a), task-180) and N elements of the type already
+ * hold it — `CONFLICT`, exit `1`, naming every holder in path order, before anything is written.
+ *
+ * The one shared check: {@link prepareMemoryTransitionAtRev} calls it for every transition into a new
+ * state (`submit`, `approve`, `reject`, `park`, the `supersedes:` trigger, and any workflow emitter that
+ * prepares its transition there), and `memory add` calls it for the initial state, since `add` is the
+ * verb that enters that state. The holders are counted in commit `sha` — the one the transition is
+ * decided at (`dl-080`) — by each document's own `type` and `status`; `exceptId`, the element being
+ * moved, is never its own holder. A document the scan cannot read is not counted (task-171's tolerant
+ * scan); the transition's own lookup reports such documents as warnings. Without a declared limit
+ * nothing is read.
+ */
+export function requireWipSlot(
+  root: string,
+  sha: string,
+  memoryYaml: MemoryYaml,
+  type: string,
+  state: string,
+  exceptId?: string,
+): CoreResult<undefined> {
+  const limit = resolveStateMachine(memoryYaml, type).limits?.[state];
+  if (limit === undefined) return coreOk(undefined);
+  const holders = loadMemoryDocumentsAtRev(root, sha, memoryYaml)
+    .filter(({ frontmatter }) => frontmatter.type === type && frontmatter.status === state && frontmatter.id !== exceptId)
+    .map(({ frontmatter, path }) => (frontmatter.id === undefined ? path : String(frontmatter.id)));
+  if (holders.length < limit) return coreOk(undefined);
+  return coreErr({
+    code: 'CONFLICT',
+    message:
+      `WIP limit reached for '${state}' on type '${type}' (limit ${limit}): held by ${holders.join(', ')}. ` +
+      `Move one of them out of '${state}', then retry.`,
+  });
 }
 
 /**
