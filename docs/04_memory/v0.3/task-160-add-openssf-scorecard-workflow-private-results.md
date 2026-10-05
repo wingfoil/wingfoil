@@ -64,14 +64,28 @@ or needs revision. No backticked name was added to a spec, ADR or SARD file, so
 **Design choices** (for the approver to confirm, see review):
 
 1. Permissions: workflow-level `contents: read` (the repository's convention, as `ci.yml`), job-level
-   exactly `security-events: write` + the four documented reads. Not `read-all` (the upstream
-   template's choice): narrower, and explicit.
-2. Private means: no `publish_results`, **and no `upload-artifact` step** (an artefact of a public
-   repository's run is downloadable by any signed-in user). The SARIF goes to code scanning only. The
-   run log stays public, as every Actions log of a public repository does.
+   exactly `security-events: write` + four reads (`contents`, `issues`, `pull-requests`, `checks`).
+   Those four are the README's set for PRIVATE repositories ("Additional permissions for private
+   repositories"); this repository is public and would run without them. They are kept so a
+   visibility change does not break the run (review fix 3). Not `read-all` (the GitHub starter
+   workflow's choice): narrower, and explicit.
+2. "Private" (Q1 (b)) means **not published**: `publish_results: false`, so nothing reaches
+   api.scorecard.dev and there is no badge. It does not make the scores secret: scorecard-action
+   v2.4.4 writes the SARIF to the results file and to stdout (`internal/scorecard/format.go`,
+   `io.MultiWriter(resultFile, os.Stdout)`; read with `gh api
+   "repos/ossf/scorecard-action/contents/internal/scorecard/format.go?ref=v2.4.4"`), so the full
+   report, low checks included, is in the public run log. Leaving out `upload-artifact` is defence in
+   depth, not what keeps results private. Seeing the scores before any exposure needs a local
+   Scorecard CLI run (`GITHUB_AUTH_TOKEN=$(gh auth token) docker run --rm -e GITHUB_AUTH_TOKEN
+   gcr.io/openssf/scorecard:v5.5.0 --repo=github.com/wingfoil/wingfoil --format=json --show-details`)
+   before step 1 below — the approver's decision (review fix 1). The workflow header also warns never
+   to set `repo_token` to a PAT that is not a registered secret: `options/options.go` `Validate` prints
+   the token env var to the log, and only registered secrets are masked.
 3. Triggers: `push: branches: [main]` and `schedule: '23 5 * * 1'` (Mondays 05:23 UTC), nothing else —
-   no `workflow_dispatch`, no `branch_protection_rule` (the upstream template has the latter; `dl-129`
-   names push + weekly only).
+   no `workflow_dispatch`, no `branch_protection_rule`. The latter, with `permissions: read-all`, is in
+   GitHub's starter workflow (`gh api repos/actions/starter-workflows/contents/code-scanning/scorecard.yml`);
+   scorecard-action's own v2.4.4 example has only `workflow_dispatch` (review fix 5). `dl-129` names
+   push + weekly only.
 4. The workflow already meets the Scorecard API's restrictions on a publishing workflow (no
    `env`/`defaults`, no workflow-level write, no container/services, hosted Ubuntu, only approved
    actions), so Q1 (a) is two lines: `publish_results: true` + `id-token: write` on the job.
@@ -86,7 +100,7 @@ or needs revision. No backticked name was added to a spec, ADR or SARD file, so
 ### red (developer)
 
 `test/cli/scorecard-workflow.test.ts` (`f85ed710`), modelled on `ci-workflow.test.ts`: 8 tests —
-existence; triggers exactly push-to-`main` + one weekly cron; private results (`publish_results: false`,
+existence; triggers exactly push-to-`main` + one weekly cron; unpublished results (`publish_results: false`,
 `sarif`, `upload-sarif` reads the `results_file`, no `upload-artifact`); permissions (workflow
 `{contents: read}`, job exactly the five documented ones); no OIDC/secret/credential and
 `persist-credentials: false`; the Scorecard API's workflow shape; every `uses:` full-SHA with its tag in a
@@ -135,14 +149,35 @@ workflows (`grep -rli scorecard docs/02_requirements/02_bdd` → nothing).
 1. Merge this branch to `main` and push `main`. The push itself triggers `scorecard` (the workflow
    runs only on `main`; pushing the task branch does not run it).
 2. Record the run: `gh run list --workflow scorecard.yml --limit 1` (run id, conclusion).
-3. Read the scores: `gh api "repos/wingfoil/wingfoil/code-scanning/alerts?tool_name=Scorecard&state=open"
-   --jq '.[] | [.rule.id, .rule.description, .most_recent_instance.message.text] | @tsv'` (each open
-   alert is a check scoring below 10; the message carries the score), or Security → Code scanning,
-   tool "Scorecard".
-4. Paste run id + per-check scores into these notes; list each low check (expected: Code-Review,
+3. The low checks, from code scanning, one line per check (alerts repeat per location, and the API
+   pages at 30 by default):
+   `gh api --paginate "repos/wingfoil/wingfoil/code-scanning/alerts?tool_name=Scorecard&state=open&per_page=100"
+   --jq '.[] | [.rule.id, .most_recent_instance.message.text] | @tsv' | sort -u -t$'\t' -k1,1`.
+   This is NOT the full score table: the SARIF omits a check that scored at or above its policy score
+   or was inconclusive (ossf/scorecard v5.5.0 `pkg/scorecard/sarif.go`), so a check with no alert
+   scored 10 or was inconclusive.
+4. The complete table (every check and its score): the SARIF printed in the run log
+   (`gh run view <run-id> --log`, `runs[].tool.driver.rules`), or a local JSON run
+   (`GITHUB_AUTH_TOKEN=$(gh auth token) docker run --rm -e GITHUB_AUTH_TOKEN
+   gcr.io/openssf/scorecard:v5.5.0 --repo=github.com/wingfoil/wingfoil --format=json --show-details`).
+5. Paste run id + per-check scores into these notes; list each low check (expected: Code-Review,
    Branch-Protection, Dependency-Update-Tool, possibly Maintained/CII-Best-Practices/Fuzzing) with a
    decision line for Q1 (a).
 
 ### Pending amendments (approver)
 
 None.
+
+### review fixes (coordinator review, APPROVE WITH FIXES)
+
+1. "Private" overstated → workflow header, test docstring/titles and design choice 2 now say "not
+   published"; the SARIF is in the public run log; local CLI run named for pre-exposure viewing.
+2. AC 2 steps 3–5 rewritten: `--paginate` + `per_page=100`, grouped by `.rule.id`, a check with no
+   alert scored 10 or was inconclusive, complete-table sources named.
+3. The four job-level reads are labelled the README's private-repo set, kept for a visibility change.
+4. Test title: Q1 (a) is a two-line change.
+5. Starter-workflow attribution corrected (design choice 3).
+Plus a `repo_token` PAT warning in the workflow header. Re-run: see the gate line below.
+
+
+Gates after the fixes: `npx jest test/cli/scorecard-workflow.test.ts` → 8 passed; `npm run lint`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` → exit 0.

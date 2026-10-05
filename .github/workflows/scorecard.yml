@@ -1,4 +1,4 @@
-# WingFoil — OpenSSF Scorecard, results private (dl-129 §1, Q1 (b); built by task-160).
+# WingFoil — OpenSSF Scorecard, results not published (dl-129 §1, Q1 (b); built by task-160).
 #
 #   analysis → the official `ossf/scorecard-action` scores the repository's supply-chain practices and
 #              writes a SARIF report, which `github/codeql-action/upload-sarif` sends to this
@@ -7,12 +7,18 @@
 # Trigger: a push to `main` and weekly (Monday 05:23 UTC), as dl-129 Decision 1 states. No pull_request:
 # Scorecard scores the default branch.
 #
-# Private results (Q1 (b), ratified at retro-v0.2). `publish_results: false`: nothing is sent to the
-# OpenSSF REST API (api.scorecard.dev), so no public score and no badge exist. The report reaches the
-# code-scanning dashboard only, whose alerts a public repository shows to its maintainers, not to
-# visitors. There is deliberately NO `upload-artifact` step: an artefact of a public repository's run is
-# downloadable by any signed-in GitHub user. The run's log stays public, as every Actions log of a public
-# repository does.
+# Unpublished results (Q1 (b), ratified at retro-v0.2). `publish_results: false` means exactly this:
+# nothing is sent to the OpenSSF REST API (api.scorecard.dev), so there is no score on scorecard.dev
+# and no badge. It does NOT make the scores secret. scorecard-action v2.4.4 writes the SARIF report to
+# the results file AND to stdout (internal/scorecard/format.go, `io.MultiWriter(resultFile, os.Stdout)`),
+# so the full report — every low check included — is in this run's log, which is public like every
+# Actions log of a public repository. The code-scanning upload is there for the maintainers' dashboard.
+# Leaving out an `upload-artifact` step is defence in depth (an artefact of a public repository's run
+# is downloadable by any signed-in GitHub user), not what keeps anything private. Seeing the scores
+# before any exposure at all needs a local Scorecard CLI run instead, e.g.
+#   GITHUB_AUTH_TOKEN=$(gh auth token) docker run --rm -e GITHUB_AUTH_TOKEN \
+#     gcr.io/openssf/scorecard:v5.5.0 --repo=github.com/wingfoil/wingfoil --format=json --show-details
+# — whether to do that before this workflow first runs is the approver's decision.
 #
 # Switching to Q1 (a) — an approver decision, after reading the first run's scores — is two lines:
 # `publish_results: true` and `id-token: write` on the `analysis` job (the action signs what it
@@ -22,10 +28,15 @@
 # list. Publication is external state: record it as a `service` element (dl-088) when it is switched on.
 #
 # Permissions are the ones the action's README (v2.4.4) documents, and no more: the workflow is read-only,
-# and the job adds `security-events: write` (the code-scanning upload) plus the four reads that let the
-# default token query commits, issues, pull requests and checks. `id-token: write` is documented for
-# `publish_results: true` only, so it is absent. No secret, no PAT: the default `GITHUB_TOKEN` reads
-# repository rulesets, which classic branch protection would have hidden from it.
+# and the job adds `security-events: write` (the code-scanning upload) plus four reads — `contents`,
+# `issues`, `pull-requests`, `checks` — that the README lists for PRIVATE repositories (its section
+# "Additional permissions for private repositories"). This repository is public and would run without
+# them; they are kept so a visibility change does not break the run. `id-token: write` is documented for
+# `publish_results: true` only, so it is absent. No secret: the default `GITHUB_TOKEN` (`repo_token`'s
+# default) reads repository rulesets, which classic branch protection would have hidden from it.
+# Never set `repo_token` to a PAT unless it comes from a registered secret: the action prints its token
+# environment variable to the log (options/options.go, `Validate`), and only a registered secret, like
+# the default `github.token`, is masked there.
 #
 # Every `uses:` names a full commit SHA, with the release tag it came from in a trailing comment
 # (dl-057, as publish.yml and ci.yml); `actions/checkout` is the very line publish.yml uses.

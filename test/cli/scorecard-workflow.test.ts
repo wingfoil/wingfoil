@@ -1,13 +1,14 @@
 /**
  * task-160-add-openssf-scorecard-workflow-private-results (`dl-129` §1, Q1 (b), REQ-SYS-09) — an
- * OpenSSF Scorecard workflow, on a push to `main` and weekly, whose results stay private for the
- * first run.
+ * OpenSSF Scorecard workflow, on a push to `main` and weekly, whose results are not published for
+ * the first run.
  *
  * `dl-129` Decision 1: the official action, pinned by SHA like `publish.yml`, with only the permissions
  * the action documents. Q1 was ratified as (b) for the first run: `publish_results: false`, so nothing
- * is sent to the OpenSSF REST API and no badge exists until the approver chooses (a). The SARIF report
- * goes to the repository's code-scanning dashboard only — no `upload-artifact` step, because a
- * workflow artefact of a public repository is downloadable by any signed-in GitHub user.
+ * is sent to the OpenSSF REST API and no badge exists until the approver chooses (a). That is all it
+ * means: the action also prints the SARIF report to stdout, so the scores are in the public run log.
+ * The report goes to code scanning; no `upload-artifact` step, as defence in depth (a workflow
+ * artefact of a public repository is downloadable by any signed-in GitHub user).
  *
  * Asserted offline, as `ci-workflow.test.ts` does for `ci.yml`: the file is parsed from the working
  * tree. Nothing here runs the workflow — its first real run is the task's AC 2, a push to `main`.
@@ -70,7 +71,7 @@ function stepUsing(job: WorkflowJob, action: string): WorkflowStep | undefined {
   return job.steps.find((s) => s.uses?.startsWith(`${action}@`));
 }
 
-describe('scorecard workflow (task-160) — dl-129 §1: OpenSSF Scorecard, private results (Q1 (b))', () => {
+describe('scorecard workflow (task-160) — dl-129 §1: OpenSSF Scorecard, results not published (Q1 (b))', () => {
   it('exists at .github/workflows/scorecard.yml', () => {
     expect(existsSync(SCORECARD_PATH)).toBe(true);
   });
@@ -85,7 +86,7 @@ describe('scorecard workflow (task-160) — dl-129 §1: OpenSSF Scorecard, priva
     expect(schedule[0]?.cron).toMatch(/^\d{1,2} \d{1,2} \* \* [0-6]$/);
   });
 
-  it('keeps the results private: `publish_results: false`, SARIF to code scanning only, no artefact', () => {
+  it('does not publish the results: `publish_results: false`, SARIF to code scanning, no artefact', () => {
     const job = analysisJob();
     const scorecard = stepUsing(job, 'ossf/scorecard-action');
     expect(scorecard?.with?.publish_results).toBe(false);
@@ -99,7 +100,8 @@ describe('scorecard workflow (task-160) — dl-129 §1: OpenSSF Scorecard, priva
     const { parsed } = read(SCORECARD_PATH);
     expect(parsed.permissions).toEqual({ contents: 'read' });
     // scorecard-action v2.4.4 README: `security-events: write` uploads to code scanning; the four reads
-    // let the default token query commits, issues, PRs and checks. `id-token: write` is documented
+    // are its PRIVATE-repository set — this repository is public, they are kept so a visibility change
+    // does not break the run. `id-token: write` is documented
     // for `publish_results: true` only, so under Q1 (b) it is absent.
     expect(analysisJob().permissions).toEqual({
       'security-events': 'write',
@@ -123,7 +125,7 @@ describe('scorecard workflow (task-160) — dl-129 §1: OpenSSF Scorecard, priva
     expect(checkout?.with?.['persist-credentials']).toBe(false);
   });
 
-  it('meets the shape the Scorecard API requires of a workflow, so Q1 (a) is a one-line change', () => {
+  it('meets the shape the Scorecard API requires of a workflow, so Q1 (a) is a two-line change', () => {
     const { parsed } = read(SCORECARD_PATH);
     const job = analysisJob();
     expect(parsed.env).toBeUndefined();
