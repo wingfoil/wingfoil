@@ -256,3 +256,15 @@ transition-verb warning and the `document not found` second sentence.
 Gates after the fixes: `npm run lint`, `npm run docs:api`, `npx tsc --noEmit -p tsconfig.json` and
 `npx tsc -p tsconfig.build.json --noEmit` each exit 0. `node scripts/check-governance.cjs --base
 c80167d6` exits 0. `npx jest test/docs/cli-reference.test.ts`: 4 passed.
+
+**Re-review finding A, the explain-only lookup could throw.** `79fdd93f` removed the `try` from
+`uncommittedDocumentPath`, so a filesystem error other than a dangling link escaped the explain-only
+walk. With an unreadable directory (mode 000) in the working tree, `memory submit` on an absent id
+threw `EACCES: permission denied, scandir …` instead of returning `NOT_FOUND`.
+- Red, `9e844111`: a case in `test/core/memory-scan-tolerant.test.ts`, skipped when running as root.
+  `npx jest test/core/memory-scan-tolerant.test.ts -t "re-review"` → 1 failed (EACCES).
+- Green, `3f29def5`: the `try { … } catch { return undefined; }` is back, and the TSDoc again says any
+  walk failure yields `undefined`.
+- After: the four transition/scan suites → 71 passed. `npm run test:coverage` → 220 suites, 3925
+  passed, **98.92 / 95.83 / 95.45 / 99.59**, still at or above main. Lint, `docs:api` and both
+  `tsc` runs exit 0.
