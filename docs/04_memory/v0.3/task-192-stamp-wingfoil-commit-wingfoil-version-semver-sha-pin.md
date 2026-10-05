@@ -227,3 +227,32 @@ Edited in this worktree and left uncommitted, for `memory amend` at the review g
   - `node scripts/check-governance.cjs --base c80167d6`: exit 0, 0 findings.
   - `npm run -s build && cat dist/build-info.json`: `"commit": "b89163a3…"`, not `-dirty`, although
     the two spec amendments are uncommitted. That is D4 (c) at work.
+
+### review fixes (re-review) + integration with main
+
+- **The `-dirty` probe no longer depends on the operator's git setup.** `git status` inherited
+  `status.showUntrackedFiles`: with `no`, an untracked `src/new.ts` was stamped clean. With an
+  inherited `GIT_LITERAL_PATHSPECS=1`, `tsconfig*.json` matched nothing.
+  `scripts/write-build-info.cjs` now runs `git status --porcelain --untracked-files=all -- <BUILD_INPUTS>`
+  with `GIT_LITERAL_PATHSPECS=0` in the child's environment.
+  - Red `9bc6cc0f`: `npx jest test/cli/build-info.test.ts` → **2 failed, 15 passed** (the two new
+    rows).
+  - Green `a4f4d12d`: 17 passed.
+  - `docs/cli-reference.md` now names `scripts/write-build-info.cjs` among the build inputs.
+- **Merge of `main` at `30f06016`** (tasks 250, 249, 185, 171, 177 and an integration fix): `0cce5f78`.
+  - Conflicts were in `src/core/index.ts` (`MemoryHistoryEntryView` and the `memoryHistoryFn`
+    mapping) and `src/memory/audit.ts` (`MemoryTransition` and the push in
+    `reconstructMemoryTransitions`). Both resolved by keeping task-171's `unreadable?` beside
+    `wingfoil`, each field with its own doc comment.
+  - `npm ci` was re-run for task-250's lockfile.
+  - The pending `spec-004` edit met task-171's new Revision note. I kept both, task-171's first,
+    still uncommitted.
+- Gates on `0cce5f78`, with the two pending amendments in the tree:
+
+| Command | Result |
+|---|---|
+| `npm run test:coverage` | exit 0; 230 suites / 4170 tests; 98.93 / 95.95 / 95.67 / 99.58 (main `30f06016`: 98.92 / 95.92 / 95.65 / 99.58, so no regression) |
+| `npm run -s lint`, `npm run -s docs:api` | exit 0 |
+| `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` | exit 0 |
+| `node scripts/check-governance.cjs --base c80167d6` | exit 0; 50 `wf()` commits, 0 findings |
+| `npm run -s build && node dist/cli.js --version` | `0.2.2 (0cce5f78…)`, clean, although the two spec amendments are uncommitted |
