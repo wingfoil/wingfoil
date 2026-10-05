@@ -2,7 +2,7 @@
 id: "task-164-file-new-release-under-folder-siblings-use"
 type: task
 title: "File a new release under the folder its siblings use"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "fix"
 priority: "low"
