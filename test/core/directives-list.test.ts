@@ -607,6 +607,17 @@ describe('directivesList — the live configuration declares `scope` consistentl
     const liveRoot = join(__dirname, '..', '..');
     expect((await listingOk(liveRoot)).warnings).toEqual([]);
   });
+
+  // task-178 (dl-119 Q2 (b)): `git-conventions` binds every role, the approver included — the role
+  // that writes the approve/reject commits its subject and attribution clauses govern.
+  it('lists git-conventions as global under --role approver', async () => {
+    const liveRoot = join(__dirname, '..', '..');
+    const entries = await listOk(liveRoot, { role: 'approver' });
+    const gitConventions = entries.filter((entry) => entry.frontmatter.id === 'git-conventions');
+    expect(gitConventions.map((entry) => [entry.path, entry.global])).toEqual([
+      ['.wingfoil/directives/custom/git-conventions.md', true],
+    ]);
+  });
 });
 
 // Approver ruling R3 (2026-10-02): a project scaffolded by the released `wingfoil@0.2.2 init` — whose
