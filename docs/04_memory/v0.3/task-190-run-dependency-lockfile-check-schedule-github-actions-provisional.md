@@ -29,6 +29,9 @@ Lockfile drift arriving from the registry is seen only at a tag (`dl-069`). `dl-
 - **Features:** P4.1.
 - **Notes:** Proposal key: A21. coordinate with the `dl-076` (D) `ci.yml` task and `dl-129`'s Scorecard workflow (other domains) so CI files and their pinning test stay consistent. Declaring `cadence` on `dl-089`/`dl-100`/`dl-088` phases (Action 3) waits for those phases to exist and for the engine (v1.0); not in v0.3.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Triage of 2026-10-05 (`bug-ingest-rel-v0.3-w1b6-review-findings-plan`):** the scheduled check also runs
+  `npm audit --omit=dev --audit-level=high` (`bug-223`, fixed by `task-250`), and `bug-225` adds a
+  directory-wide test that every `uses:` in `.github/workflows/` is a full commit SHA with its tag comment.
 
 ## Execution Notes
 
