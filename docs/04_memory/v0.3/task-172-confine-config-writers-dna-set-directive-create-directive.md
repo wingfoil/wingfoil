@@ -2,7 +2,7 @@
 id: "task-172-confine-config-writers-dna-set-directive-create-directive"
 type: task
 title: "Confine the config writers (`dna set`, `directive create`, `directive assign`, `init`)"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "fix"
 priority: "high"
