@@ -134,3 +134,6 @@ scaffolded by `node dist/cli.js init --template Scrum` held the cases that need 
   `WingFoil-Version: 0.2.2 (d3724884...)` trailer paragraph (the code build at the branch base). No commit was
   amended. The CLI-written commits carry no `Co-Authored-By:` trailer, as on the B1 ingest; `bug-240` is why
   §7's name cannot be written yet.
+
+- **triage done (2026-10-05, approver)** — every captured element ruled; see `dev-loop-rel-v0.3-plan` (v1.13 and
+  the batch notes that follow) for the outcome per element, the new tasks and the handover notes.
