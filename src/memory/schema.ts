@@ -13,6 +13,15 @@ import { z } from 'zod';
 const RESERVED_STATE = 'deprecated';
 
 /**
+ * The type names no `memory.yaml` may declare (`spec-001`, `bug-177`): the `wf({scope})` scopes that
+ * record a change to **configuration**, not to a Memory element (`spec-008` §2) — `wf(dna)`,
+ * `wf(directive)` and `wf(workflow)`. The audit reader skips those scopes, so a type named after one
+ * would have every commit of its own read as configuration (`operation: null`). The audit module's
+ * `CONFIGURATION_SCOPES` is this list, so the two cannot drift apart.
+ */
+export const RESERVED_TYPE_NAMES: readonly string[] = Object.freeze(['directive', 'dna', 'workflow']);
+
+/**
  * The sequence/gates/waiting state-machine encoding (spec-001 "Sub-schema: StateMachine"),
  * replacing the earlier ambiguous `transitions: {state: [target, ...]}` dict-of-arrays format.
  *
@@ -174,10 +183,20 @@ export const MemoryYaml = z
    *
    * `gates.<state>.reject` targets are intentionally NOT checked: spec-001 explicitly allows them to
    * be off-chain ("need **not** be a member of `sequence` ... e.g. `bug`'s `open: { reject: closed }`").
+   * The same refinement refuses a type named in {@link RESERVED_TYPE_NAMES} (`spec-001`, `bug-177`).
    * Iteration is over insertion-ordered `Object.entries`/`Object.keys` only — no wall-clock, no
    * randomness, no set ordering (REQ-SYS-07 determinism).
    */
   .superRefine((value, ctx) => {
+    for (const typeName of Object.keys(value.types)) {
+      if (RESERVED_TYPE_NAMES.includes(typeName)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `type name '${typeName}' is reserved: wf(${typeName}) commits record configuration, not Memory`,
+          path: ['types', typeName],
+        });
+      }
+    }
     for (const [typeName, entry] of Object.entries(value.types)) {
       const machine = entry.states;
       if (!machine) continue; // no own machine ⇒ `defaults.states` applies (REQ-STATE-08)

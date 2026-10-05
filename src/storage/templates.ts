@@ -282,6 +282,21 @@ paths:
 }
 
 /**
+ * The commented-out per-type machine the scaffold shows on `bug` (`dl-072` (A) + S1, task-153): the
+ * scaffold keeps one shared `defaults` machine and does not commit a new project to any lifecycle, but
+ * shows the override mechanism (`adr-008`'s per-type machines) where a user will meet it. Uncommented,
+ * it is a valid `spec-001` machine (`test/storage/templates.test.ts` loads it); its states are an
+ * example, not a recommendation.
+ */
+const BUG_STATES_EXAMPLE = `
+    # Example — uncomment to give \`bug\` its own state machine instead of \`defaults\` (spec-001):
+    # states:
+    #   sequence: [ draft, open, in-progress, resolved, closed ]
+    #   gates:
+    #     open: { reject: closed }
+    #     resolved: { reject: in-progress }`;
+
+/**
  * The scaffolded `memory.yaml` (P1.13, `spec-001-memory-yaml-schema`) — type registry **plus** the
  * `defaults.states` machine every scaffolded type runs on.
  *
@@ -305,13 +320,14 @@ function memoryYaml(): string {
     template:
       file: memory/templates/${type}.md
       frontmatter:
-        required: [id, type, title, status]`,
+        required: [id, type, title, status]${type === 'bug' ? BUG_STATES_EXAMPLE : ''}`,
   ).join('\n');
   return `# Memory element schema (P1.13) — scaffolded by \`wingfoil init\`.
 # One entry per element type: its path pattern, its id pattern and its scaffold template. Every type
 # below shares the \`defaults\` state machine; give a type its own \`states:\` block to override it for
-# that type only (REQ-STATE-08). \`amendable\` says whether \`memory amend\` may record a correction to
-# the type's documents without a state change; absent means false.
+# that type only (REQ-STATE-08) — \`bug\` carries a commented example. \`amendable\` says whether
+# \`memory amend\` may record a correction to the type's documents without a state change; absent
+# means false.
 version: 1
 
 # Default state machine — applies to every type that declares no \`states:\` block of its own.

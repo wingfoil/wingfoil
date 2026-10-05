@@ -15,8 +15,8 @@
 # Field-provenance legend (human-audit aid), same scheme as dna.yaml:
 #   [SPEC]      = required or defined by the specifications (ref cited inline).
 #   [AUTHORING] = authoring addition: coherent with the specs but not mandated by them.
-# P1.13 defines each type by (path pattern, states, transitions); REQ-STATE-08 fixes the default machine.
-# So `path`, `states` (values/initial/transitions) and the `defaults` block are [SPEC]; per-type
+# P1.13 defines each type by (path pattern, state machine); REQ-STATE-08 fixes the default machine.
+# So `path`, `states` (sequence/gates/waiting, spec-001) and the `defaults` block are [SPEC]; per-type
 # `name`/`description`/`tags`/`template`/`id_pattern`, the `version`, and the chosen state *vocabularies* are [AUTHORING].
 # The `template` block (frontmatter.required + file) is an [AUTHORING] addition: it drives the
 # scaffold that `wingfoil memory add` generates; the tool validates required fields on submit (P4.12).
@@ -55,10 +55,11 @@
 # docs/03_backlog/; each `requirements:` points to its by-release backlog JSON) plus the initial `adr`
 # and `decision-log` content recorded by initial-design (under design/adrs/ and design/dls/).
 # The per-type `template.file:` scaffolds live alongside the config under .wingfoil/memory/templates/.
-version: 2.0                     # [AUTHORING] config-file format version (WingFoil convention); a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1
+version: 2.1                     # [AUTHORING] config-file format version (WingFoil convention); a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053)
 
 # Default machine used by any type that does not declare its own `states` block.
-# [SPEC: REQ-STATE-08] default machine: draft -> pending -> approved/rejected -> deprecated.
+# [SPEC: REQ-STATE-08] default machine: draft -> pending -> approved, reject from pending back to draft,
+# deprecated reachable from any state (spec-001; REQ-STATE-08 reconciled by task-153, bug-052).
 # State-machine encoding: `sequence` (ordered chain) + `gates` (per-state approve/reject) +
 # `waiting` (workflow/engine-triggered edges, no CLI verb) — replaces the earlier `transitions`
 # dict-of-arrays format, which left ambiguous which of several legal targets from one state is the
@@ -74,7 +75,9 @@ defaults:
     gates:
       pending: { reject: draft }   # [AUTHORING] reject sends straight back to draft (no separate "rejected" status — see above)
 
-# Types — per type, `path` and `states` (values/initial/transitions) are [SPEC] (P1.13 / REQ-SYS-04);
+# Types — per type, `path` and `states` (sequence/gates/waiting) are [SPEC] (P1.13 / REQ-SYS-04, spec-001);
+# the type names `directive`, `dna` and `workflow` are reserved [SPEC: spec-001, bug-177] — they are the
+# configuration commit scopes, so the schema refuses a type that takes one;
 # `name`, `description`, `tags` and the chosen state *vocabularies* are [AUTHORING]. (release is tagged
 # inline below as the worked example; the other types follow the same rule.)
 types:

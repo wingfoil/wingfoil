@@ -45,8 +45,8 @@
  * independent of any transition attempt. `resolveTransitionTarget` only answers "is verb `op` legal
  * FROM `currentState`"; it never asserts that an arbitrary `status` string read off a document's
  * frontmatter is itself a member of the type's declared state set at all — the check
- * spec-010-memory-frontmatter-schema's "Validation rules" table names ("`status` must be a value in
- * the type's `states.values`" → failure "invalid state for type") and BDD
+ * spec-010-memory-frontmatter-schema's "Validation rules" table names ("`status` must be a state of
+ * the type's machine" → failure "invalid state for type") and BDD
  * `P4.11-deliverables.feature`/`P4.13-state-deduction.feature` both exercise (`"invalid state
  * 'shipped' for type 'task'"`). A state is legal for a type iff it belongs to that machine's full
  * reachable set — `sequence` ∪ every `gates.<state>.reject` target (spec-001 permits those to be
@@ -151,8 +151,9 @@ export type TransitionOp = 'submit' | 'approve' | 'reject' | 'deprecate';
  * block", and its `Then` names the machine by value — so its title ("uses the defaults block")
  * describes the common case rather than a precondition.
  *
- * **Why this value.** It is `spec-001`'s own worked `defaults` example, verbatim — not REQ-STATE-08's
- * literal `draft → pending → approved/rejected → deprecated` wording, which `spec-001` §Consequences
+ * **Why this value.** It is `spec-001`'s own worked `defaults` example, verbatim, and the machine
+ * REQ-STATE-08 names since task-153 reconciled it (`bug-052`) — not the earlier
+ * `draft → pending → approved/rejected → deprecated` wording, which `spec-001` §Consequences
  * deliberately superseded: the default machine "loses its `rejected` state" ("no document ever records
  * `status: rejected` again" — a `reject` from the `pending` gate lands straight back on `draft`), and
  * `deprecated` is the reserved implicit wildcard reachable from any state, never declared in a
@@ -439,7 +440,7 @@ function isDeclaredState(machine: StateMachine, status: string): boolean {
 /**
  * Assert that `status` — a value read straight off a document's frontmatter — is a legal state for
  * `typeName` under `machine` (REQ-STATE-01: state is derived from frontmatter; spec-010's "Validation
- * rules": *"`status` must be a value in the type's `states.values`"*). The legal set is exactly
+ * rules": *"`status` must be a state of the type's machine"*). The legal set is exactly
  * {@link isDeclaredState}'s: `sequence` ∪ every `gates.<state>.reject` target ∪ `deprecated`.
  *
  * This is a distinct check from {@link resolveTransitionTarget}: that function asks "is verb `op`

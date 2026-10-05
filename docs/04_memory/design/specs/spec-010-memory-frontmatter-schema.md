@@ -53,7 +53,7 @@ A `.md` file under a Memory `path` pattern without a `type` key matching a regis
 | `id`           | string  | yes      | `memory.add` (from the type's `id_pattern`) | Placeholder `"{auto}"` in the raw scaffold before `memory.add` resolves it; thereafter the generated id (e.g. `task-042-implement-cli-grammar`, `adr-004-...`, `rl-v1`). Must match the file stem (`{id}.md`) and the type's `id_pattern` in `memory.yaml`. |
 | `type`         | string  | yes      | `memory.add` (fixed by the scaffold used)  | Must be a key registered in `memory.yaml` `types:` (`release-line, release, task, adr, decision-log, tech-spec, bug, plan, service`; `spec-001`).                                                |
 | `title`        | string  | yes      | `memory.add` (if the add action sets it) or `memory.submit` | Human-readable title. Empty in the freshly added `draft` scaffold; **must** be filled before `memory.submit` moves the document past `draft` — every type lists `title` in its `template.frontmatter.required` (verified against all seven templates when written; `plan` and `service` list it too). |
-| `status`       | string  | yes      | every state transition (`memory.add`/`submit`/`approve`/`reject`/`deprecate`) | Current lifecycle state. Set to the type's `states.initial` (`draft` for every type currently declared) at `memory.add`; thereafter must be a value in that type's `states.values` list. This is the **only** state carrier — REQ-STATE-01/02: no separate `.wingfoil/state/` index; state is recomputed by reading `status` at a given git commit. |
+| `status`       | string  | yes      | every state transition (`memory.add`/`submit`/`approve`/`reject`/`deprecate`) | Current lifecycle state. The declared rule: `memory.add` sets it to the head of the type's machine — its own `states.sequence`, or `defaults.states.sequence` (the built-in default machine when the file declares no `defaults`) for a type with no machine of its own; `draft` for every type currently declared. (Today `memory.add` writes `draft` literally; aligning it with this rule is tracked separately.) thereafter must be a state of that type's machine (`spec-001`). This is the **only** state carrier — REQ-STATE-01/02: no separate `.wingfoil/state/` index; state is recomputed by reading `status` at a given git commit. |
 | `tmpl_version` | integer | yes      | `memory.add` (copied from the scaffold)    | The originating template scaffold's build stamp, `YYMMDD` as an integer (e.g. `260703`). Fixed at creation and **not** touched again by WingFoil — it identifies which revision of `.wingfoil/memory/templates/{type}.md` produced this file, for detecting documents scaffolded from a stale template. It is not a per-write counter (see "No document-version counter" below). |
 | `rejection_reason` | string | no (optional) | `memory.reject` (set); `memory.submit` (cleared) | Absent until the document's first `memory.reject`. Set to the exact `--reason` text passed to `wingfoil memory reject` at the same time `status` moves to the type's `gates.<state>.reject` target (`spec-001`). The next `memory.submit` on this document clears it (removes the key from frontmatter) as part of moving `status` forward again — it reflects only the **most recent** reject, not a history. Its presence is therefore itself a signal: a document carrying `rejection_reason` was submitted at least once (had real content) and sent back, distinguishing it from a document still in its first, never-submitted `draft`. This is a convenience mirror of the `Reason:` trailer that `memory.reject`'s commit body already carries (P1.7/REQ-SEC-04) — the commit body remains the authoritative audit-trail record; see "No document-version counter" below for why this does not reopen the door to a fuller in-frontmatter audit trail. |
 
@@ -66,8 +66,10 @@ whose presence/absence is itself meaningful (see its row above).
 
 ### Document template shape (what `memory.add` produces)
 
-Every scaffold under `.wingfoil/memory/templates/*.md` follows this shape (task shown; other types
-differ only in which type-specific keys appear after `status`):
+Every scaffold under `.wingfoil/memory/templates/*.md` follows this shape. The block is an
+**example** (task shown; other types differ only in which type-specific keys appear after `status`):
+the type-specific keys belong to each type's template and its `template.frontmatter` declaration in
+`memory.yaml` (`spec-001`), which are authoritative for them.
 
 ```yaml
 ---
@@ -76,10 +78,12 @@ type: task
 title: ""              # REQUIRED — e.g. "Implement git-backed Memory store (REQ-SYS-01)"
 status: draft
 release: ""            # REQUIRED — target release version, e.g. "v0.1"      <- type-specific
+kind: ""               # REQUIRED — feature | fix                           <- type-specific
 priority: ""           # optional — high | medium | low                     <- type-specific
 tags: []               # optional — additional labels                      <- type-specific
 ref: ""                # optional — backlog item ID                        <- type-specific
-bug: ""                # optional — source bug id                         <- type-specific
+bug: []                # optional — list of bug ids the task closes        <- type-specific
+depends_on: []         # optional — ids of tasks this one depends on       <- type-specific
 tmpl_version: 260703   # Orignal template version
 ---
 ## <body sections, template placeholder comments>
@@ -148,7 +152,7 @@ the content and never `status`. It also leaves alone the fields other operations
 | `id` must match the file stem (`{id}.md`)                                               | id/filename mismatch                                        |
 | `id` must match the owning type's `id_pattern` (`memory.yaml`, `spec-001`)              | invalid id for type                                          |
 | `type` must be a key registered in `memory.yaml` `types:`                               | unknown type                                                  |
-| `status` must be a value in the type's `states.values`                                  | invalid state for type                                        |
+| `status` must be a state of the type's machine (`spec-001`)                             | invalid state for type                                        |
 | `tmpl_version` must be present and equal to an integer the type's template has carried  | stale/unknown template version (non-fatal — informational)   |
 | `title` must be non-empty once `status` is anything other than `draft`                  | missing title on submit                                      |
 | Every field in the type's `template.frontmatter.required` must be non-empty once `status` is anything other than `draft` | missing required field on submit                              |
@@ -245,3 +249,14 @@ field the type declares in `template.frontmatter.lists`, `[]` included. On any o
 a mapping is missing. The `release` scaffold leaves `features:` empty, so an untouched one still
 fails. The reader note on `n/a` is non-normative. Edited in place, with no supersede, no state change and no `version:`
 field (`dl-047`); pending the approver's sign-off at `task-168`'s review.
+
+**Revision (2026-10-02, `task-153-reconcile-req-state-08-p1-13-scenario-memory`) — the example
+block, and `status` in the `sequence` encoding.** `bug-196`: the illustrative task frontmatter under
+"Document template shape" showed `bug: ""`, a list since `dl-045`, and had neither `kind` (`task-150`)
+nor `depends_on` (`dl-015`). It now matches `.wingfoil/memory/templates/task.md`'s keys and says it
+is an example, pointing to `spec-001` for type-specific fields. The `status` row named the retired
+`states.initial`/`states.values` keys (the `bug-053` class); it names the head of the type's machine,
+own or default, as the declared rule,
+and the § Validation rules row on `status` names a state of the type's machine.
+No field, requirement or ownership changes. Edited in place, with no supersede, no state change and
+no `version:` field (`dl-047`); pending the approver's sign-off at `task-153`'s review.

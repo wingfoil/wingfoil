@@ -2,7 +2,7 @@
 id: "bug-052-req-state-08-names-retired-default-machine"
 type: bug
 title: "REQ-STATE-08 still specifies the pre-spec-001 default machine with a `rejected` state, and its P1.13 BDD scenario asserts it — the reconciliation spec-001 called for never happened"
-status: planned
+status: closed
 severity: "medium"
 release-origin: "v0.2"
 release: "v0.3"

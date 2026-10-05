@@ -28,6 +28,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { load } from 'js-yaml';
 
+import { CONFIGURATION_SCOPES } from '../../src/memory/audit';
 import { MemoryYaml } from '../../src/memory/schema';
 import { resolveStateMachine, resolveTransitionTarget } from '../../src/memory/state-machine';
 
@@ -165,5 +166,41 @@ describe('P1.13 scenario 3 — a transition references an undeclared state → v
       },
     });
     expect(result.success).toBe(true);
+  });
+});
+
+/**
+ * P1.13 scenario 4 (task-153, bug-177) — a type named after a configuration commit scope is refused.
+ * `wf(dna)`, `wf(directive)` and `wf(workflow)` commits record configuration (`spec-008` §2), so the
+ * audit reader drops them (`CONFIGURATION_SCOPES`, `src/memory/audit.ts`). A Memory type taking one of
+ * those names would have every one of its own commits read as configuration (`operation: null`), so
+ * `spec-001` reserves the names and the schema refuses them at load time, as it refuses a declared
+ * `deprecated` state.
+ */
+describe('P1.13 scenario 4 — a type named after a configuration commit scope fails validation', () => {
+  const withType = (name: string) => ({
+    version: 1.1,
+    types: { [name]: { path: `docs/memory/${name}/{id}.md` } },
+  });
+
+  it('the configuration scopes are the three spec-008 §2 names', () => {
+    expect([...CONFIGURATION_SCOPES]).toEqual(['directive', 'dna', 'workflow']);
+  });
+
+  // Driven by the audit reader's own list, so a scope added there is reserved here too.
+  for (const name of CONFIGURATION_SCOPES) {
+    it(`refuses a type named '${name}' with the exact message`, () => {
+      const result = MemoryYaml.safeParse(withType(name));
+      expect(result.success).toBe(false);
+      const issues = result.success ? [] : result.error.issues.map((i) => [i.message, i.path]);
+      expect(issues).toContainEqual([
+        `type name '${name}' is reserved: wf(${name}) commits record configuration, not Memory`,
+        ['types', name],
+      ]);
+    });
+  }
+
+  it('accepts a name that only contains a reserved one (`workflow-run`)', () => {
+    expect(MemoryYaml.safeParse(withType('workflow-run')).success).toBe(true);
   });
 });
