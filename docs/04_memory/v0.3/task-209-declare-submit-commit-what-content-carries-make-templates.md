@@ -8,7 +8,7 @@ kind: "feature"
 priority: "medium"
 tags: ["v0.3", "core", "memory", "audit"]
 ref: "dl-106"
-bug: ["bug-146"]
+bug: ["bug-146", "bug-219"]
 depends_on: ["task-126-declare-closed-wf-operation-grammar-bracket-set-state", "task-192-stamp-wingfoil-commit-wingfoil-version-semver-sha-pin"]
 tmpl_version: 260703
 ---
