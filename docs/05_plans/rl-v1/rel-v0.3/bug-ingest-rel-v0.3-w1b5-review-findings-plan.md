@@ -2,7 +2,7 @@
 id: bug-ingest-rel-v0.3-w1b5-review-findings-plan
 type: plan
 title: "Bug-ingest — rel-v0.3 wave 1 B5 review findings"
-status: active
+status: done
 version: "1.0"
 workflow: "bug-ingest"
 phase: "rel-v0.3-w1b5-review-findings"
@@ -79,3 +79,17 @@ separately by `decision-log-ingest-rel-v0.3-req-perf-02-plan` (`dl-146`).
   shared folder (`item-20261005-a-decision` then `item-20261006-a-bug`).
 - `bug-218`'s reproduction needed a custom `adr` machine, an approver member and a `supersedes` template field
   on the scratch repository, which is itself `bug-219`'s second point.
+- **triage done (2026-10-05)**, on the approver's instruction, with the proposals accepted:
+
+  | Bug | Outcome |
+  |---|---|
+  | `bug-212` | `task-186` |
+  | `bug-213` | `task-188` |
+  | `bug-214` | `task-180` |
+  | `bug-217` | `task-210` |
+  | `bug-218` | `task-208` |
+  | `bug-219` | `task-209` |
+  | `bug-220` | `triaged`, v0.3, no task: the release's `user-docs` phase (`align-agent-docs`) |
+  | `bug-215`, `bug-216`, `bug-221` | `triaged`, v0.4, unabsorbed |
+
+  Each absorbing task names its bug through `memory amend`. Plan complete.
