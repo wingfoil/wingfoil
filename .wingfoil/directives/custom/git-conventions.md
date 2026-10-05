@@ -28,7 +28,9 @@ directive is where they are met; each decision-log is where its rule is argued, 
 - `dl-094-one-author-identity-per-act` — whose identity an act carries (§5);
 - `dl-101-id-allocation-across-refs` §1 — allocating a Memory id (§6);
 - `dl-117-ai-attribution-policy` — AI co-authorship (§7);
-- `dl-111-tool-signature-in-commits` — the `WingFoil-Version:` trailer (§8).
+- `bug-236-a-wingfoil-commit-amended-by-hand-with-a-separate-co-authored-by-paragraph-loses-its-wingfoil-version-trailer-and-reads-it-into-the-reason-block` — amending a tool-written commit (§8); the mechanism it protects is
+  `dl-111-tool-signature-in-commits` (the `WingFoil-Version:` trailer) and `dl-067-reason-trailer-contract`
+  (the `Reason:` block).
 
 Do not re-open a choice here — if you believe a rule is wrong for your case, file a `decision-log`,
 do not deviate. The general commit bullet of `code-quality` (conventional messages, one state change
@@ -113,14 +115,19 @@ rule; this clause only keeps a test identity from leaking into it.
 - **Past commits are not rewritten.** The policy applies from `dl-117`'s ratification. `agent execute`
   carries this rule to the agents it launches (approver ruling R20, `release-planning-rel-v0.3-plan`).
 
-## 8. Amending a tool-written commit (`dl-111`)
+## 8. Amending a tool-written commit (`bug-236-a-wingfoil-commit-amended-by-hand-with-a-separate-co-authored-by-paragraph-loses-its-wingfoil-version-trailer-and-reads-it-into-the-reason-block`)
 
-A commit written by `wingfoil` ends with a `WingFoil-Version: <semver> (<sha>)` trailer paragraph. To
-add a trailer to it (e.g. `Co-Authored-By:`), amend with
+A commit written by `wingfoil` ends with a `WingFoil-Version: <semver> (<sha>)` trailer paragraph
+(`dl-111-tool-signature-in-commits`). To add a trailer to it (e.g. `Co-Authored-By:`), amend with
 `git commit --amend --no-edit --trailer "Co-Authored-By: …"`, which joins the existing trailer
 paragraph. Never add a new paragraph after `WingFoil-Version:`: the trailer paragraph would no longer
 be the last one, and a reader of the `Reason:` block (`dl-067-reason-trailer-contract`) would take the
-`WingFoil-Version:` line into the reason.
+`WingFoil-Version:` line into the reason. Two limits:
+
+- **Only a commit not yet pushed.** Amending a pushed `wf()` commit rewrites an audit record, which §2
+  forbids.
+- **Never an `approve` or `reject` commit.** §7 excludes them from AI co-authorship, so there is no
+  trailer to add.
 
 > Source: `dl-119-a-git-conventions-directive` (Actions 2–4), `dl-117-ai-attribution-policy` (Action 2),
 > `dl-101-id-allocation-across-refs` (Action 2). Features P3.5, P3.7; REQ-SEC-01 (every state change
