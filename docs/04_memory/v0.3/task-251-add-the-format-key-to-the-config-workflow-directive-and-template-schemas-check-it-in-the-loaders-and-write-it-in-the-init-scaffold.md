@@ -47,6 +47,8 @@ frontmatter, Memory template frontmatter. Agent adapter manifests already carry 
   `memory.yaml` become "content revision".
 
 ## Implementation Notes
+- **kind:** feature · **wave:** 2, batch B2 (added after `commit-backlog`, by the approver's ratification of
+  `dl-149` on 2026-10-05; merges after `task-172`, which also edits `src/core/init.ts`).
 
 - `version:` is untouched; `task-183`'s bump gate is unaffected.
 - The "older format no longer read" branch has no case in this release (every kind is at 1); declare
