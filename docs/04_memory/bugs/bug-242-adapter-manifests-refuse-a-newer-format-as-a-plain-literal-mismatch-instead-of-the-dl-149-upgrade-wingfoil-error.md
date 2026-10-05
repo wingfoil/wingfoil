@@ -5,7 +5,7 @@ title: "Adapter manifests refuse a newer format as a plain literal mismatch inst
 status: triaged          # auto-set by wingfoil; memory.submit → open
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
-release: ""            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
+release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
 feature: "P5.3.1"            # optional — related feature ID, e.g. "P1.6"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
