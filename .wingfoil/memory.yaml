@@ -56,7 +56,7 @@
 # docs/03_backlog/; each `requirements:` points to its by-release backlog JSON) plus the initial `adr`
 # and `decision-log` content recorded by initial-design (under design/adrs/ and design/dls/).
 # The per-type `template.file:` scaffolds live alongside the config under .wingfoil/memory/templates/.
-version: 2.2                     # [AUTHORING] config-file format version (WingFoil convention); a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable)
+version: 2.3                     # [AUTHORING] config-file format version (WingFoil convention); a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable); 2.2 -> 2.3 at task-164 (release path folder = the release-line id, bug-163)
 
 # Default machine used by any type that does not declare its own `states` block.
 # [SPEC: REQ-STATE-08] default machine: draft -> pending -> approved, reject from pending back to draft,
@@ -100,7 +100,7 @@ types:
       waiting: [ active ]             # active->done: fires when every release under it is `released`
 
   release:
-    path: "docs/04_memory/planning/{release-line}/{id}.md"     # [SPEC] path pattern (P1.13)
+    path: "docs/04_memory/planning/rl-{release-line}/{id}.md"  # [SPEC] path pattern (P1.13); the folder is the parent release-line's id, `rl-` + its version (release-line id_pattern `rl-{version}`), while the `release-line` field holds the version, e.g. "v1" -> planning/rl-v1/ (bug-163, task-164, 2.3)
     id_pattern: "{kind}-{version}"              # [AUTHORING] dl-092 Q1 (A); `kind` is the implementation chosen 2026-09-29 — id derives from kind + version, e.g. minor-v0.1, patch-v0.2.2; ids added before dl-092 (minor-v0.1..minor-v1.0) are immutable and carry no `kind:` field
     name: Release               # [AUTHORING]
     description: A WingFoil release wave centered on a pillar (v0.1 .. v1.0), belonging to a release-line — a `minor`, or a `patch` of a minor already `released` (dl-092). Workflow — a minor is produced by release-line-cycle's `initial-design` (`seed-releases`, per release-line); a patch is registered on the ruling of the patched minor's retrospective (dl-092 — no workflow action seeds it yet); both are iterated by release-line-cycle / release-cycle (iterate_over release). A patch runs every release-cycle phase except `retrospective` (dl-092 Q2 (ii)), declared in its release-planning plan.   # [AUTHORING]
