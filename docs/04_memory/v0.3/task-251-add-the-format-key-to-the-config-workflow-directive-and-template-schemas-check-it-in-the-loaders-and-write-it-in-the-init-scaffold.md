@@ -170,7 +170,7 @@ Gates, run with the four spec amendments in the working tree:
 - `npm run lint` → 0; `npm run docs:api` → 0; `npx tsc --noEmit -p tsconfig.json` → 0;
   `npx tsc -p tsconfig.build.json --noEmit` → 0; `node scripts/check-governance.cjs --base 0b297169` → 0.
 - BDD: no `.feature` scenario covers the format key (`grep -rln "format:" docs/02_requirements/02_bdd/features`
-  finds only `--format` output scenarios), and no AC asks for one.
+  → nothing), and no AC asks for one.
 
 ### review (reviewer, self)
 
