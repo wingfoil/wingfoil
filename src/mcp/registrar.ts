@@ -70,7 +70,8 @@ export function deriveMcpResourceUri(moduleName: string, verb: string): string {
  * operation returns warnings today, so a Resource's warnings are not rendered. Note that the shipped
  * `wingfoil mcp` server (`./server.ts`) does not call this function and registers no Tools (P5.2.3,
  * v0.4), so the Tool warning field is reachable only where this registrar is used; when Tools ship,
- * `directive.assign` also needs `force` as a Tool input (`spec-004` §4.3).
+ * `directive.assign` and the four `dna` write Tools (task-193) also need `force` as a Tool input
+ * (`spec-004` §4.3).
  */
 export function registerCoreModules(
   server: McpServer,

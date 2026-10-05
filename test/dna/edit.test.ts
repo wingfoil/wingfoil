@@ -482,10 +482,11 @@ paths:
     expect(result).toBe('stacks:\n  # the technologies\n  technologies: []\n  methodologies:\n    - TDD\npaths: {}\n');
   });
 
+  // The inline comment keeps its column, as on every rewritten key line (`rewriteKeyLine`).
   it('a key whose parent is an empty flow mapping `{}` opens that mapping into a block', () => {
     const text = '# header\nversion: 1\nmodules: []\nstacks: {}\nteam:\n  members: []\n  roles: []\npaths: {}   # the paths\n';
     const result = edited(text, { verb: 'add', field: 'paths.sources', value: 'src/' });
-    expect(result).toBe('# header\nversion: 1\nmodules: []\nstacks: {}\nteam:\n  members: []\n  roles: []\npaths:   # the paths\n  sources:\n    - src/\n');
+    expect(result).toBe('# header\nversion: 1\nmodules: []\nstacks: {}\nteam:\n  members: []\n  roles: []\npaths:      # the paths\n  sources:\n    - src/\n');
   });
 
   it('a scalar whose PARENT is absent too is inserted with its parent, by every write shape (a batch included)', () => {
@@ -505,7 +506,7 @@ paths:
       { kind: 'set-scalar', path: [{ key: 'project' }, { key: 'north_star' }], value: 'short' },
       { project: { north_star: 'short', name: 'wf' } },
     );
-    expect(result).toBe('# top\nproject:\n  north_star: short    # [SPEC] P1\n\n  # next field\n  name: wf\n');
+    expect(result).toBe('# top\nproject:\n  north_star: short # [SPEC] P1\n\n  # next field\n  name: wf\n');
   });
 
   it('bug-019: a literal block scalar `|` likewise', () => {

@@ -66,7 +66,7 @@ finding (`<file>: <detail>`); under `--format json`/`yaml` they are a `details` 
 `{"file", "detail"}` entries beside `error`.
 
 Unreleased (v0.3): a command that succeeds can also print **warnings** — something it did that you
-should know about, such as `directive assign --force` rewriting a whole file. A warning goes to stderr
+should know about, such as `directive assign --force` or `dna add --force` rewriting a whole file. A warning goes to stderr
 only, as a `warning: <text>` line, or under `--format json`/`yaml` as one `{"warning": "<text>"}`
 document per warning (under `yaml`, each closed by `...`, so a following error is a separate
 document). Stdout is the same with or without warnings, so a script parsing it is not affected.
@@ -194,6 +194,19 @@ loaded also exits `1`, with the reason.
 `roles`, `agents`) and `paths`. **Scalar** fields are written with `dna set`; **collections and lists**
 with `dna add` / `dna update` / `dna remove`.
 
+**Comments are kept, or the write is refused** (Unreleased (v0.3)). The four write commands edit
+`dna.yaml` in place: only the lines of the field or entry they change are written, and every comment
+stays. This now includes the first entry of a collection the file does not list yet (the first
+`team.agents` entry), a field whose value is a `>-` or `|` block, and a file with CRLF line endings,
+which 0.2.2 rewrote without a single comment. When a change still cannot be made in place (for
+example, `paths` is written inline as `paths: { sources: [src/] }` and you add `paths.tests`), the
+command exits `1`, writes nothing, and says
+`error: dna.yaml cannot be updated in place; edit <path> by hand, or pass --force to rewrite the whole file`.
+**`--force`** allows that rewrite: the whole file is written again from its parsed content, in the
+same one commit, and a warning on stderr names what was not kept:
+`warning: dna.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, blank lines, line endings or number formatting (1.0 becomes 1)`.
+`--force` changes nothing when the in-place edit works.
+
 ### `wingfoil dna show`
 
 Print `dna.yaml`, or one top-level section of it.
@@ -222,7 +235,7 @@ $ wingfoil dna show project
 Set one scalar field.
 
 ```
-wingfoil dna set <path> --value <value>
+wingfoil dna set <path> --value <value> [--force]
 ```
 
 ```console
@@ -234,14 +247,17 @@ $ wingfoil dna set project.name --value "My Project"
 ```
 
 - **Commit:** `wf(dna): set <path>`
-- **Errors:** `<path>` names a collection or list → exit `1`, pointing you to `dna add|remove|update`.
+- **Errors:** `<path>` names a collection or list → exit `1`, pointing you to `dna add|remove|update`;
+  a change that cannot be made in place → exit `1` unless `--force` (see above).
+- **`--force`** — allow the whole-file rewrite of `dna.yaml` when the in-place edit cannot apply; the
+  success then carries the warning above.
 
 ### `wingfoil dna add`
 
 Add an entry to a collection, or values to a list.
 
 ```
-wingfoil dna add <path> --value <name-or-values> [--entry-<field> <value> ...]
+wingfoil dna add <path> --value <name-or-values> [--entry-<field> <value> ...] [--force]
 ```
 
 - When `<path>` is a **collection** (`modules`, `stacks.technologies`, `stacks.methodologies`,
@@ -279,6 +295,8 @@ $ wingfoil dna add paths.sources --value src
   an entry of that name already in the collection → exit `1`, nothing written
   (`error: 'modules' already carries an entry named 'core' — …`; for `team.roles`,
   `error: role already defined: reviewer`).
+- **`--force`** — allow the whole-file rewrite of `dna.yaml` when the in-place edit cannot apply
+  (see above). The first `team.agents` entry no longer needs it: it is added in place.
 - A role added to `team.roles` is usable as soon as the command returns, because its commit is what
   `directive assign` reads: `wingfoil directive assign --directive <name> --role <role>` accepts it next. A role you add to
   `dna.yaml` by hand is refused until you commit it.
@@ -288,8 +306,8 @@ $ wingfoil dna add paths.sources --value src
 Change fields of an existing collection entry.
 
 ```
-wingfoil dna update <collection>.<name> [--entry-<field> <value> ...]
-wingfoil dna update <collection>.<name>.<field> --value <value>
+wingfoil dna update <collection>.<name> [--entry-<field> <value> ...] [--force]
+wingfoil dna update <collection>.<name>.<field> --value <value> [--force]
 ```
 
 The second form sets one field of an entry; `dna set` on the same path is equivalent for a scalar
@@ -304,14 +322,15 @@ $ wingfoil dna update modules.api --entry-description "Public HTTP API"
 
 - **Commit:** `wf(dna): update <path>`
 - **Errors:** no entry with that name → exit `1` (`error: no entry named 'x' in 'modules'`).
+- **`--force`** — allow the whole-file rewrite of `dna.yaml` when the in-place edit cannot apply (see above).
 
 ### `wingfoil dna remove`
 
 Remove a collection entry, or values from a list.
 
 ```
-wingfoil dna remove <collection>.<name>
-wingfoil dna remove <list-path> --value <values>
+wingfoil dna remove <collection>.<name> [--force]
+wingfoil dna remove <list-path> --value <values> [--force]
 ```
 
 ```console
@@ -328,6 +347,7 @@ $ wingfoil dna remove paths.docs --value README.md
 
 - **Commit:** `wf(dna): remove <path>[ <value>]`
 - **Errors:** no such entry → exit `1`.
+- **`--force`** — allow the whole-file rewrite of `dna.yaml` when the in-place edit cannot apply (see above).
 
 ### `wingfoil paths`
 
