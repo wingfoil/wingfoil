@@ -2,7 +2,7 @@
 id: "task-165-put-bootstrap-commands-command-surface-mcp-specs-bootstrap"
 type: task
 title: "Put the bootstrap commands on the command surface: `mcp` in the specs, bootstrap exempt from REQ-SYS-05"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "fix"
 priority: "low"
