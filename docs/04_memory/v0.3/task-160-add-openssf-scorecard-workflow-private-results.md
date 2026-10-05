@@ -70,7 +70,7 @@ or needs revision. No backticked name was added to a spec, ADR or SARD file, so
    visibility change does not break the run (review fix 3). Not `read-all` (the GitHub starter
    workflow's choice): narrower, and explicit.
 2. "Private" (Q1 (b)) means **not published**: `publish_results: false`, so nothing reaches
-   api.scorecard.dev and there is no badge. It does not make the scores secret: scorecard-action
+   api.scorecard.dev and there is no badge. It does not keep the scores hidden, because scorecard-action
    v2.4.4 writes the SARIF to the results file and to stdout (`internal/scorecard/format.go`,
    `io.MultiWriter(resultFile, os.Stdout)`; read with `gh api
    "repos/ossf/scorecard-action/contents/internal/scorecard/format.go?ref=v2.4.4"`), so the full
