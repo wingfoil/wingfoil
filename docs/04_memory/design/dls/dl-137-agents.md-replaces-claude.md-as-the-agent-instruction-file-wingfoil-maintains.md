@@ -2,7 +2,7 @@
 id: dl-137-agents.md-replaces-claude.md-as-the-agent-instruction-file-wingfoil-maintains
 type: decision-log
 title: "AGENTS.md replaces CLAUDE.md as the agent instruction file WingFoil maintains"
-status: in-discussion
+status: ready
 context: "ad-hoc"            # optional — short label for the context, e.g. "retrospective", "planning", "ad-hoc"
 release: ""            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
