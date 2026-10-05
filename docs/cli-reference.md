@@ -373,13 +373,14 @@ slug of the title. The slug keeps a `.` between two letters or digits (`v0.2` st
 other run of non-alphanumeric characters becomes one `-`.
 
 Any other token in the pattern names a frontmatter field, and you give its value with `--set`. A
-`release` type with `id_pattern: "{kind}-{version}"` and `path: "docs/04_memory/planning/{release-line}/{id}.md"`:
+`release` type with `id_pattern: "{kind}-{version}"` and `path: "docs/04_memory/planning/rl-{release-line}/{id}.md"`
+(a token may share a path segment with literal text, here the release-line id prefix `rl-`):
 
 ```console
 $ wingfoil memory add --type release --title "v0.2.3" --set kind=patch --set version=v0.2.3 --set release-line=v1
 {
   "id": "patch-v0.2.3",
-  "path": "docs/04_memory/planning/v1/patch-v0.2.3.md"
+  "path": "docs/04_memory/planning/rl-v1/patch-v0.2.3.md"
 }
 ```
 

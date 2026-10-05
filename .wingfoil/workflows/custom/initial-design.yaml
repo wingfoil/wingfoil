@@ -23,7 +23,7 @@ description: >-
   Generate this release-line's minor-release roadmap, then record the initial Architectural
   Decision Records, Decision Logs, and Technical Specifications that formalize choices already
   implied by it — before this release-line's delivery begins.
-version: 1.1                     # 1.1 bug-169: header describes the shipped CLI/MCP; bug-175: seed-releases states the release `kind` (task-148)
+version: 1.2                     # 1.1 bug-169: header describes the shipped CLI/MCP; bug-175: seed-releases states the release `kind` (task-148); 1.2 bug-163: seed-releases produces under rl-{release-line}/, as memory.yaml 2.3 files a release (task-164)
 
 phases:
   - name: seed-releases
@@ -34,7 +34,7 @@ phases:
     # No submit: the `release` machine has no `pending`; releases stay `draft` and `release-planning`
     # performs draft -> planning when delivery reaches each release.
     produces:
-      - "docs/04_memory/planning/{release-line}/{id}.md"
+      - "docs/04_memory/planning/rl-{release-line}/{id}.md"   # mirrors memory.yaml `release` path (bug-163)
     checks:
       # field list mirrors memory.yaml `release` template.frontmatter.required, and the exemption
       # release-planning's define-scope states (bug-175, release-planning-rel-v0.3-plan R20)

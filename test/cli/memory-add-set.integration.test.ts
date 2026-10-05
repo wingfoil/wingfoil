@@ -2,7 +2,7 @@
  * task-110-memory-add-keeps-version-dots-and-sources-every-id-token — `memory add --set
  * <name>=<value>` (`spec-008-cli-grammar` §10, `dl-107` S2) through the REAL compiled `dist/cli.js`,
  * in a throwaway git repository whose committed `memory.yaml` carries this repository's own `release`
- * type (`{kind}-{version}` under a `{release-line}` folder).
+ * type (`{kind}-{version}` under an `rl-{release-line}` folder, task-164).
  *
  * Pins what only the process boundary shows: that Commander collects the REPEATED option into every
  * occurrence (not just the last), that `--help` advertises it, and the exit codes of §10's error
@@ -18,7 +18,7 @@ import { runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
 const MEMORY_YAML = `version: 1
 types:
   release:
-    path: "docs/memory/planning/{release-line}/{id}.md"
+    path: "docs/memory/planning/rl-{release-line}/{id}.md"
     id_pattern: "{kind}-{version}"
     template:
       file: "memory/templates/release.md"
@@ -67,8 +67,8 @@ describe('wingfoil memory add --set (task-110, spec-008 §10)', () => {
     );
     expect(run.stderr).toBe('');
     expect(run.status).toBe(0);
-    expect(JSON.parse(run.stdout)).toEqual({ id: 'patch-v0.2.3', path: 'docs/memory/planning/v1/patch-v0.2.3.md' });
-    const content = readFileSync(join(repo, 'docs/memory/planning/v1/patch-v0.2.3.md'), 'utf-8');
+    expect(JSON.parse(run.stdout)).toEqual({ id: 'patch-v0.2.3', path: 'docs/memory/planning/rl-v1/patch-v0.2.3.md' });
+    const content = readFileSync(join(repo, 'docs/memory/planning/rl-v1/patch-v0.2.3.md'), 'utf-8');
     // Each filled line keeps the template's inline comment (task-163, `bug-033`).
     expect(content).toMatch(/^kind: "patch" +# REQUIRED/m);
     expect(content).toMatch(/^version: "v0.2.3" +# REQUIRED/m);

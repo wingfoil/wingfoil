@@ -7,7 +7,7 @@ description: >-
   governance into their gated states, identify and spec shared artefacts up front, pull backlog
   tasks for the release, and stamp each included element with its `release`. Set the release
   element to `planning` then `in-development`.
-version: 1.5                     # dl-016: added triage-bugs + reconcile-governance, record-adrs approve, build-backlog release-stamping; 1.2 dl-092: define-scope check gains `kind`; 1.3 dl-095 Q3 (B): + advance-pinned-build (task-112); 1.4 dl-133 Q1 (b): build-backlog check gains the task `kind` (task-150); 1.5 bug-175: define-scope check exempts the pre-dl-092 minors from `kind` (task-148)
+version: 1.6                     # dl-016: added triage-bugs + reconcile-governance, record-adrs approve, build-backlog release-stamping; 1.2 dl-092: define-scope check gains `kind`; 1.3 dl-095 Q3 (B): + advance-pinned-build (task-112); 1.4 dl-133 Q1 (b): build-backlog check gains the task `kind` (task-150); 1.5 bug-175: define-scope check exempts the pre-dl-092 minors from `kind` (task-148); 1.6 bug-163: define-scope produces under rl-{release-line}/, as memory.yaml 2.3 files a release (task-164)
 element: release
 
 # Selection filter (dl-016 §1) — every phase that considers accumulated elements picks those whose
@@ -41,7 +41,7 @@ phases:
     actions:
       - memory.submit                          # release: draft -> planning
     produces:
-      - "docs/04_memory/planning/{release-line}/{release.id}.md"
+      - "docs/04_memory/planning/rl-{release-line}/{release.id}.md"   # mirrors memory.yaml `release` path (bug-163)
     checks:
       # dl-092: + kind. bug-175 (approver ruling 2026-09-30, release-planning-rel-v0.3-plan R20): the
       # releases added before dl-092 are immutable (memory.yaml `release` id_pattern) and carry no
