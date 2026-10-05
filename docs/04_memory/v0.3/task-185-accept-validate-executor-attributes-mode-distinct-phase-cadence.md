@@ -2,7 +2,7 @@
 id: "task-185-accept-validate-executor-attributes-mode-distinct-phase-cadence"
 type: task
 title: "Accept and validate the executor attributes `mode` / `distinct_from` and the phase `cadence`"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "medium"
