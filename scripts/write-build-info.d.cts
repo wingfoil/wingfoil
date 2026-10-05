@@ -2,9 +2,12 @@
 export interface BuildInfo {
   /** `package.json`'s `version`. */
   readonly version: string;
-  /** `git rev-parse HEAD` of the built tree, `-dirty` when it has changes, `unknown` without git. */
+  /** `git rev-parse HEAD` of the built tree, `-dirty` when a build input has changes, `unknown` without git. */
   readonly commit: string;
 }
+
+/** The build inputs, as git pathspecs: a change under one of them makes the build `-dirty` (D4 (c)). */
+export const BUILD_INPUTS: readonly string[];
 
 /** The commit value of a build git could not describe. */
 export const UNKNOWN_COMMIT: 'unknown';

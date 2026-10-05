@@ -11,9 +11,11 @@
  *
  * - `version` — `package.json`'s `version`.
  * - `commit` — `git rev-parse HEAD` of the tree being built, with `-dirty` appended when
- *   `git status --porcelain` lists anything (a modified, staged or untracked file: the tree built is
- *   then not the commit named). `unknown` when git cannot answer — no repository, no commit, no git —
- *   and the record is still written, so a stale one from an earlier build never survives.
+ *   `git status --porcelain` lists a change under one of the {@link BUILD_INPUTS} (a modified, staged
+ *   or untracked file): `-dirty` means "this `dist/` does not match the sha" (approver ruling D4 (c),
+ *   2026-10-05), so a change to the documentation, the Memory or a stray note does not set it.
+ *   `unknown` when git cannot answer — no repository, no commit, no git — and the record is still
+ *   written, so a stale one from an earlier build never survives.
  *
  * Deterministic (REQ-SYS-07): no timestamp and no host detail, and a fixed key order, so two builds
  * of one clean commit write byte-identical files (`test/cli/build-info.test.ts`). The runtime reader
@@ -31,6 +33,15 @@ const { join } = require('node:path');
 
 /** The commit value of a build git could not describe. */
 const UNKNOWN_COMMIT = 'unknown';
+
+/**
+ * The paths whose content decides what `dist/` contains, as git pathspecs relative to the package
+ * root: the sources `tsc` compiles, the manifest and lockfile that fix the version and the compiler,
+ * the compiler configurations, and this writer. A change git lists under any of them — tracked or
+ * untracked — makes the build `-dirty`; a change anywhere else does not (approver ruling D4 (c)).
+ * Sorted, so the git invocation is the same on every run (REQ-SYS-07).
+ */
+const BUILD_INPUTS = Object.freeze(['package-lock.json', 'package.json', 'scripts/write-build-info.cjs', 'src', 'tsconfig*.json']);
 
 /**
  * Run git in `root` and return its stdout, or `null` when it cannot answer (not spawnable, non-zero
@@ -54,7 +65,7 @@ function gitAnswer(root, args) {
 function computeBuildInfo(root) {
   const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
   const head = gitAnswer(root, ['rev-parse', '--verify', '--quiet', 'HEAD^{commit}']);
-  const status = head === null ? null : gitAnswer(root, ['status', '--porcelain']);
+  const status = head === null ? null : gitAnswer(root, ['status', '--porcelain', '--', ...BUILD_INPUTS]);
   if (head === null || status === null) return { version, commit: UNKNOWN_COMMIT };
   const sha = head.trim();
   return { version, commit: status.trim().length > 0 ? `${sha}-dirty` : sha };
@@ -92,4 +103,4 @@ if (require.main === module) {
   writeBuildInfo(root);
 }
 
-module.exports = { UNKNOWN_COMMIT, computeBuildInfo, serializeBuildInfo, writeBuildInfo };
+module.exports = { BUILD_INPUTS, UNKNOWN_COMMIT, computeBuildInfo, serializeBuildInfo, writeBuildInfo };
