@@ -44,7 +44,8 @@ succeeding.
 
 | Field      | Type        | Required | Provenance                | Notes                                                          |
 |------------|-------------|----------|---------------------------|----------------------------------------------------------------|
-| `version`  | `number`    | yes      | [AUTHORING]               | Config-file format version (e.g. `1.1`). `z.number().positive()`. |
+| `version`  | `number`    | yes      | [AUTHORING]               | Content revision (e.g. `1.1`, `dl-047`). `z.number().positive()`. |
+| `format`   | `integer`   | no       | [SPEC: dl-149]            | The file's format; absent = `1`. See *`format`* below.         |
 | `project`  | `Project`   | no       | [AUTHORING]               | Identity/strategy block; `north_star` is its one [SPEC] field. |
 | `modules`  | `Module[]`  | yes      | [SPEC: P2.4]              | Ordered list of project modules.                               |
 | `stacks`   | `Stacks`    | yes      | [SPEC: P2.4]              | Technologies + methodologies, as flat generic lists (see below). |
@@ -152,6 +153,7 @@ const Paths = z.object({
 
 export const DnaYaml = z.object({
   version: z.number().positive(),
+  format:  formatField(DNA_YAML_FORMAT),   // optional positive integer ≤ the format this build reads
   project: Project.optional(),
   modules: uniquelyNamed(Module),
   stacks:  Stacks,
@@ -161,6 +163,20 @@ export const DnaYaml = z.object({
 
 export type DnaYaml = z.infer<typeof DnaYaml>;
 ```
+
+### `format`
+
+`version` is the file's content revision (`dl-047`); `format` (`dl-149`) is the format the file is
+written in. It is optional and an absent key reads as format `1`, so a file written before the key
+existed loads unchanged. A value that is not a positive integer is a schema error on `format`
+(`E_VALIDATION`). `dna.yaml`'s format is bumped **only** on a backward-incompatible change of its shape;
+an additive, optional field does not bump it. The highest format this build reads is
+`DNA_YAML_FORMAT` (`1`), declared once in `src/validation/format.ts` beside every other file kind's. A
+file whose `format` is higher is refused by the loader **before** the structural pass, as the one issue
+`E_INVALID_FORMAT` on `format`, exit `1` (`spec-005` §1; `spec-009` §3), message
+`this file is written in format <N>; this WingFoil reads up to format <M>: upgrade WingFoil`. `dna set`
+cannot write a format this build does not read: the post-edit validation refuses it. `wingfoil init`
+writes `format: <current>`.
 
 ### `stacks` — why a generic list
 
@@ -380,3 +396,10 @@ that adopt them land — loads as before (`test/dna/schema.test.ts`, "validates 
 
 Edited in place without a supersede or a state change, per the `dl-041` / `spec-001` precedent
 `spec-006`'s 2026-09-17 revision cites.
+
+**Revision (2026-10-05, `task-251-add-the-format-key-to-the-config-workflow-directive-and-template-schemas-check-it-in-the-loaders-and-write-it-in-the-init-scaffold`)
+— the `format` key (`dl-149`).** The top-level table and the Zod listing gain the optional `format`
+field, and a new *`format`* section gives its default (absent = 1), its bump rule and the newer-format
+refusal. `version`'s row, which called it the "config-file format version", now calls it the content
+revision (`dl-047`). Every file valid before stays valid. Edited in place, with no `version:` bump
+(`dl-047`); pending the approver's sign-off at `task-251`'s review.
