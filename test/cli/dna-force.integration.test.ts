@@ -100,7 +100,8 @@ describe('`wingfoil dna` — keep dna.yaml\'s comments, or refuse the rewrite un
     git(repo, ['config', 'core.autocrlf', autocrlf]);
     writeFileSync(join(repo, DNA_PATH), scaffold.replace(/\n/g, '\r\n'), 'utf-8');
     git(repo, ['add', DNA_PATH]);
-    git(repo, ['commit', '--quiet', '-m', 'fixture: CRLF dna.yaml']);
+    // `--allow-empty`: under autocrlf=true the CRLF file stores as the LF blob HEAD already holds.
+    git(repo, ['commit', '--quiet', '--allow-empty', '-m', 'fixture: CRLF dna.yaml']);
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
 
     const run = wingfoil(repo, 'dna', 'set', 'project.name', '--value', 'Foo');

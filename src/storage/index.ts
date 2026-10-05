@@ -19,7 +19,7 @@ export type { RealPathResolution } from './confinement';
 export { extractFrontmatter, splitFrontmatter } from './frontmatter';
 export type { FrontmatterSplit } from './frontmatter';
 export { readDocument, documentExists, removeDocument, writeDocument } from './document';
-export { changedPathsBetween, commitParent, commitPaths, EMPTY_TREE_SHA, listBlobEntriesAtRev, listPathsAtRev, listPathsAtRevs, pathPorcelainStatus, readPathAtRev, readPathsAtRev, resolveCommitAtRev } from './commit';
+export { changedPathsBetween, commitParent, commitPaths, committedBlobMatches, EMPTY_TREE_SHA, listBlobEntriesAtRev, listPathsAtRev, listPathsAtRevs, pathPorcelainStatus, readPathAtRev, readPathsAtRev, resolveCommitAtRev } from './commit';
 export type { BlobEntry } from './commit';
 export type { CommitOptions } from './commit';
 export { formatVersionTrailer, readBuildStamp, WINGFOIL_VERSION_TRAILER_KEY } from './build-stamp';

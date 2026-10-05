@@ -171,6 +171,27 @@ export function readPathAtRev(root: string, rev: string, path: string, options: 
 }
 
 /**
+ * Whether `content`, put through the filters git applies when it stores `path` (`core.autocrlf`,
+ * `.gitattributes` `eol`/`text`/`filter`), is exactly the blob `rev` holds at `path` — git's own
+ * answer to "is this what was committed", rather than a byte comparison with `git show`, which on a
+ * machine that normalizes line endings sees an LF blob where the working tree holds CRLF (task-193
+ * review). Compares object ids: `git hash-object --path=<path> --stdin` of the bytes against
+ * `git rev-parse <rev>:<path>`. `false` when `rev` does not hold `path`.
+ *
+ * @param root - The repository.
+ * @param rev - The revision whose blob is compared (a commit sha).
+ * @param path - Root-relative path, which selects the filters as well as the blob.
+ * @param content - The text as it was written to the working tree.
+ * @param options - {@link CommitOptions} (the environment git runs with).
+ */
+export function committedBlobMatches(root: string, rev: string, path: string, content: string, options: CommitOptions = {}): boolean {
+  const blob = runGitRead(root, ['rev-parse', '--verify', '--quiet', `${rev}:${path}`], gitReadOptions(options, [0, 1, GIT_FATAL]));
+  if (blob.status !== 0) return false;
+  const hashed = runGitRead(root, ['hash-object', `--path=${path}`, '--stdin'], { ...gitReadOptions(options, [0]), input: content });
+  return hashed.stdout.trim() === blob.stdout.trim();
+}
+
+/**
  * The two-character `git status --porcelain` code for `path` (index status, then working-tree
  * status), or the empty string when the path is clean — unmodified in both, and tracked.
  *

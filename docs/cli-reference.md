@@ -198,7 +198,9 @@ with `dna add` / `dna update` / `dna remove`.
 `dna.yaml` in place: only the lines of the field or entry they change are written, and every comment
 stays. This now includes the first entry of a collection the file does not list yet (the first
 `team.agents` entry), a field whose value is a `>-` or `|` block, and a file with CRLF line endings,
-which 0.2.2 rewrote without a single comment. When a change still cannot be made in place (for
+which 0.2.2 rewrote without a single comment. A file whose every line ends in CRLF keeps CRLF in your
+working tree, with `core.autocrlf` set to `true` or `false`; the commit stores it as that setting says
+(LF under `true`). When a change still cannot be made in place (for
 example, `paths` is written inline as `paths: { sources: [src/] }` and you add `paths.tests`), the
 command exits `1`, writes nothing, and says
 `error: dna.yaml cannot be updated in place; edit <path> by hand, or pass --force to rewrite the whole file`.
