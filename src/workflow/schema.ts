@@ -88,10 +88,11 @@ export const INDEPENDENT_ROLES: readonly string[] = ['reviewer', 'qa'];
 
 /**
  * One five-field cron expression, the string a GitHub Actions `on: schedule` trigger takes
- * (spec-003 § "Recurring phases"): five whitespace-separated fields of digits, names, `*`, `,`, `-`
- * and `/`. The field values themselves are not range-checked.
+ * (spec-003 § "Recurring phases"): five fields of digits, names, `*`, `,`, `-` and `/`, separated by
+ * spaces or tabs (a line break or other whitespace is refused: the expression is one line). The
+ * field values themselves are not range-checked.
  */
-export const CRON_EXPRESSION_RE = /^[0-9A-Za-z*,/-]+(\s+[0-9A-Za-z*,/-]+){4}$/;
+export const CRON_EXPRESSION_RE = /^[0-9A-Za-z*,/-]+([ \t]+[0-9A-Za-z*,/-]+){4}$/;
 
 /**
  * The shape of a cadence event, `<memory-type>-<state>` (spec-003 open question 3): lower-case
@@ -124,8 +125,32 @@ const RecurringCadence = z
   })
   .strict();
 
-/** A phase's cadence (`dl-105` R1): `once` (the default) or recurring on one trigger. */
-export const Cadence = z.union([z.literal('once'), RecurringCadence]);
+/** The refusal of a `cadence` that matches neither shape, as spec-003 § "Recurring phases" words it. */
+export const CADENCE_SHAPE_MESSAGE = 'cadence must be once or { recurring: { cron } | { on } } with no other key';
+
+function isMap(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The message of a `cadence` that matches neither shape: {@link CADENCE_SHAPE_MESSAGE}, naming the
+ * first unknown key in declared order — beside `recurring` first, then inside it — when there is one.
+ */
+export function cadenceShapeMessage(input: unknown): string {
+  if (!isMap(input)) return CADENCE_SHAPE_MESSAGE;
+  const outer = Object.keys(input).find((key) => key !== 'recurring');
+  if (outer !== undefined) return `${CADENCE_SHAPE_MESSAGE} (unknown key '${outer}')`;
+  const recurring = input['recurring'];
+  const inner = isMap(recurring) ? Object.keys(recurring).find((key) => key !== 'cron' && key !== 'on') : undefined;
+  return inner === undefined ? CADENCE_SHAPE_MESSAGE : `${CADENCE_SHAPE_MESSAGE} (unknown key 'recurring.${inner}')`;
+}
+
+/**
+ * A phase's cadence (`dl-105` R1): `once` (the default) or recurring on one trigger. A value that
+ * matches neither branch is refused at the `cadence` path with {@link cadenceShapeMessage}; a bad
+ * `cron` / `on` value or a trigger count other than one keeps its own, deeper path and message.
+ */
+export const Cadence = z.union([z.literal('once'), RecurringCadence], { error: (issue) => cadenceShapeMessage(issue.input) });
 /** Parsed shape of the {@link Cadence} schema. */
 export type Cadence = z.infer<typeof Cadence>;
 // ---- end task-185 -----------------------------------------------------------------------------------
