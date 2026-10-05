@@ -20,9 +20,9 @@ phases:
     actions:
       - agent.mine_execution_notes
     produces:
-      # The source-cited friction inventory, grouped by theme, next to the release's phase plans
-      # (dl-104 D3: a produces entry is a path pattern an engine can test for existence).
-      - "docs/05_plans/rl-{release.release-line}/rel-{release.version}/retrospective-friction-inventory.md"
+      # The source-cited friction inventory, grouped by theme, outside every Memory path (approver
+      # ruling 2026-10-05; dl-104 D3: a produces entry is a path pattern an engine can test for existence).
+      - "docs/06_retrospectives/rl-{release.release-line}/rel-{release.version}-friction-inventory.md"
 
   - name: additional-points
     description: >-

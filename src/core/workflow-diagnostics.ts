@@ -14,6 +14,7 @@ import type { Diagnostic } from '../validation';
 import {
   BINDINGS_FILE,
   BindingsYaml,
+  collectionKeyIssues,
   isBuiltinToken,
   isWholeInterpolation,
   memoryAddType,
@@ -377,9 +378,10 @@ function runPath(section: string, token: string, i: number): string {
 
 /**
  * The loader rows of `workflows/bindings.yaml` (spec-003 Layer 3), on a structurally valid file:
- * sections in a fixed order (`checks`, then `actions`), entries in declared order, and per entry the
- * table's rows in table order — `E_BINDING_PARTIAL_INTERPOLATION` (per `run` element),
- * `E_BINDING_BUILTIN_TOKEN`, `E_BINDING_AGENT_CHECK`.
+ * sections in a fixed order (`checks`, then `actions`, then `collections`), entries in declared order,
+ * and per entry the table's rows in table order — `E_BINDING_PARTIAL_INTERPOLATION` (per `run`
+ * element), `E_BINDING_BUILTIN_TOKEN`, `E_BINDING_AGENT_CHECK`; then `E_BINDING_COLLECTION_KEY` per
+ * collection entry (approver ruling D1 (a)).
  */
 export function bindingsFileDiagnostics(bindings: BindingsYaml): Diagnostic[] {
   const out: Diagnostic[] = [];
@@ -402,6 +404,11 @@ export function bindingsFileDiagnostics(bindings: BindingsYaml): Diagnostic[] {
       if (section === 'checks' && runsAgentExecute(binding.run ?? [])) {
         out.push(error(BINDINGS_FILE, `${section}.${token}.run`, 'E_BINDING_AGENT_CHECK', `check '${token}' is bound to wingfoil agent execute: a check an agent asserts about its own work is not a gate`));
       }
+    }
+  }
+  for (const [name, entries] of Object.entries(bindings.collections ?? {})) {
+    for (const issue of collectionKeyIssues(entries)) {
+      out.push(error(BINDINGS_FILE, `collections.${name}[${issue.index}]`, 'E_BINDING_COLLECTION_KEY', issue.message));
     }
   }
   return out;

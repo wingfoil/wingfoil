@@ -80,22 +80,39 @@ export function collectionEntryKey(entry: CollectionEntry): string | null {
   return typeof key === 'string' || typeof key === 'number' ? String(key) : null;
 }
 
-/** A named collection: entries with unique keys in spec-009's ID characters, in declared order. */
-const Collection = z.array(CollectionEntry).superRefine((entries, ctx) => {
+/**
+ * A named collection: a list of entries, in declared order. Its key rules (a key per entry, unique,
+ * in spec-009's ID characters) are a loader row, not part of this structural pass
+ * ({@link collectionKeyIssues}; approver ruling D1 (a), 2026-10-05), so a bad key leaves the rest of
+ * the file decided.
+ */
+const Collection = z.array(CollectionEntry);
+
+/** One collection-key problem: the entry's index and the message (`E_BINDING_COLLECTION_KEY`). */
+export interface CollectionKeyIssue {
+  readonly index: number;
+  readonly message: string;
+}
+
+/**
+ * The key problems of one collection (spec-003 § "Collections"), in entry order: a map entry with no
+ * `id` / `name`, a key outside spec-009's ID characters, a key already used by an earlier entry.
+ */
+export function collectionKeyIssues(entries: readonly CollectionEntry[]): CollectionKeyIssue[] {
+  const issues: CollectionKeyIssue[] = [];
   const seen = new Set<string>();
   entries.forEach((entry, index) => {
     const key = collectionEntryKey(entry);
     if (key === null) {
-      ctx.addIssue({ code: 'custom', path: [index], message: 'a collection entry map needs an id or name field' });
+      issues.push({ index, message: 'a collection entry map needs an id or name field' });
       return;
     }
-    if (!ID_RE.test(key)) {
-      ctx.addIssue({ code: 'custom', path: [index], message: `collection key '${key}' is outside the ID characters [${ID_CHAR_CLASS}]` });
-    }
-    if (seen.has(key)) ctx.addIssue({ code: 'custom', path: [index], message: `duplicate collection key '${key}'` });
+    if (!ID_RE.test(key)) issues.push({ index, message: `collection key '${key}' is outside the ID characters [${ID_CHAR_CLASS}]` });
+    if (seen.has(key)) issues.push({ index, message: `duplicate collection key '${key}'` });
     seen.add(key);
   });
-});
+  return issues;
+}
 
 /** Layer 3 — `.wingfoil/workflows/bindings.yaml`. Optional: an absent file is no bindings. */
 export const BindingsYaml = z

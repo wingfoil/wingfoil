@@ -78,7 +78,7 @@ chain is recorded in each requirement's `Traceability` field in the part files 0
 | REQ-INT-01 | MCP Resources read-only     | Write via Resources refused                   | P5.2.1               |
 | REQ-INT-02 | MCP Prompts role-based      | Prompt embeds 100% role directives            | P5.2.2, P3.6         |
 | REQ-INT-03 | MCP Tools state mutation    | Same validation as CLI; agent-authored commit | P5.2.3               |
-| REQ-INT-04 | CLI exit-code contract      | 0/1/2 matrix asserted; check exit 0 pass / 1 fail / 2 blocked | P1.3, P1.6, P1.7, P5.1.4, P4.12 (+ all command features) |
+| REQ-INT-04 | CLI exit-code contract      | 0/1/2 matrix asserted; check exit 0 pass / 1 fail / 2 blocked | P1.3, P1.6, P1.7, P5.1.4, P4.12, P4.15 (+ all command features) |
 | REQ-INT-05 | Machine-readable formats    | json/yaml parse valid                         | P2.5, P4.5                         |
 | REQ-INT-06 | Git operations as actions   | Effect produced; conflict aborts clean        | P4.10                              |
 | REQ-INT-07 | Agent execution wrapper     | role/element resolved, context pre-loaded     | P5.3.1, P5.3.2                     |
