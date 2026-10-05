@@ -16,6 +16,9 @@
  * - **AC 2** (the same rule over the committed documents): every release document committed at `HEAD`
  *   sits exactly where the committed `path` pattern puts it for its own `release-line` and `id`, so
  *   no existing release has to move for the fix.
+ * - **Drift guard** (review fix): the `rl-` in `release.path` restates `release-line`'s `id_pattern`
+ *   (`rl-{version}`); the folder must equal that pattern with `{version}` read from `{release-line}`,
+ *   so changing one without the other fails here.
  *
  * Determinism (REQ-SYS-07): fixed inputs, documents iterated in sorted order, no wall-clock read.
  */
@@ -99,6 +102,19 @@ describe('a new release is filed under the folder its siblings use (task-164, bu
       const written = frontmatterOf(readFileSync(join(repo, result.value.path), 'utf-8'));
       expect(written['release-line']).toBe('v1');
       expect(written['release-line']).toBe(frontmatterOf(SIBLING)['release-line']);
+    });
+  });
+
+  describe('drift guard — the release folder restates the release-line id_pattern', () => {
+    it('the folder of release.path is release-line\'s id_pattern with {version} read from {release-line}', () => {
+      const registry = loadMemoryYamlAtHead(REPO_ROOT);
+      const lineIdPattern = registry?.types['release-line']?.id_pattern;
+      expect(lineIdPattern).toBeDefined();
+      // The release's `release-line` field holds the parent's version, so the parent's id is its
+      // id_pattern with `{version}` filled from that field. `rl-` in `release.path` is a copy of it.
+      const expectedFolder = String(lineIdPattern).replace('{version}', '{release-line}');
+      const folder = releasePathPattern().split('/').slice(-2, -1)[0];
+      expect(folder).toBe(expectedFolder);
     });
   });
 
