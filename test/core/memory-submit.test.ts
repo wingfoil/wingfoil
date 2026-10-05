@@ -179,14 +179,14 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
     expect(head(repo)).toBe(before);
   });
 
-  it('P1.6 sc.2: an illegal transition (approved -> pending) leaves the state unchanged and exits 1 with the pinned message', async () => {
+  it('P1.6 sc.2: an illegal `submit` from `approved` leaves the state unchanged and exits 1 with the pinned message', async () => {
     const before = head(repo);
     const original = readFileSync(join(repo, 'docs/memory/v0.2/task-200.md'), 'utf-8');
     const result = await memorySubmitFn()({ root: repo, positional: 'task-200' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('INVALID_TRANSITION');
-    expect(result.error.message).toBe("illegal transition approved -> pending for type 'task'");
+    expect(result.error.message).toBe("illegal transition approved -> (none) for type 'task'");
     expect(exitCodeForResult(result)).toBe(1);
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-200.md'), 'utf-8')).toBe(original);
     expect(head(repo)).toBe(before);

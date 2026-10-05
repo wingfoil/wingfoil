@@ -239,9 +239,9 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('INVALID_TRANSITION');
-    // dl-053: `<to>` is `approve`'s own first legal edge on the `task` machine (pending → backlog),
-    // never the next `sequence` state after `draft`.
-    expect(result.error.message).toBe("illegal transition draft -> backlog for type 'task'");
+    // task-181 (bug-165): `<to>` is what `approve` reaches from `draft` — nothing, so `(none)`; never
+    // `approve`'s edge from another state (`pending -> backlog`) nor the next `sequence` state.
+    expect(result.error.message).toBe("illegal transition draft -> (none) for type 'task'");
     expect(exitCodeForResult(result)).toBe(1);
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-200.md'), 'utf-8')).toContain('status: draft');
     expect(head(repo)).toBe(before);

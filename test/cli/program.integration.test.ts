@@ -623,13 +623,13 @@ types:
       expect(execFileSync('git', ['-C', repo, 'log', '-1', '--format=%s'], { encoding: 'utf-8' }).trim()).toBe('wf(task): submit task-101');
     });
 
-    it('sc.2 `memory submit task-200` (approved) exits 1 with "illegal transition approved -> pending for type \'task\'", state unchanged', () => {
+    it('sc.2 `memory submit task-200` (approved) exits 1 with "illegal transition approved -> (none) for type \'task\'", state unchanged', () => {
       const result = runCliInRoot(repo, 'memory', 'submit', 'task-200');
       expect(result.status).toBe(1);
       // The contract line is the first line, byte-exact; since task-130 (`dl-055` option 1) the engine's
       // `dl-032` explanation follows it, indented, naming the document.
       expect(result.stderr).toBe(
-        "error: illegal transition approved -> pending for type 'task'\n" +
+        "error: illegal transition approved -> (none) for type 'task'\n" +
           '  docs/memory/task/task-200.md: illegal `submit` from "approved": a `waiting` state — its forward edge fires only via a Workflow action, not `submit`\n',
       );
       expect(readFileSync(join(repo, 'docs/memory/task/task-200.md'), 'utf-8')).toContain('status: approved');
@@ -790,9 +790,9 @@ paths:
     it('sc.2 `memory reject task-200` on a document in no gate state exits 1, state unchanged', () => {
       const result = runCliInRoot(repo, 'memory', 'reject', 'task-200', '--reason', 'x');
       expect(result.status).toBe(1);
-      // dl-032's contract message; `<to>` is dl-053's rule, owned by task-046 (see Execution Notes).
+      // dl-032's contract message; `<to>` is `(none)`: `reject` has no edge from `draft` (task-181).
       // Contract line first (task-130 appends the indented `dl-032` detail line after it).
-      expect(result.stderr).toMatch(/^error: illegal transition draft -> \S+ for type 'task'\n {2}docs\/memory\/task\/task-200\.md: illegal `reject` from "draft": .+\n$/);
+      expect(result.stderr).toMatch(/^error: illegal transition draft -> \(none\) for type 'task'\n {2}docs\/memory\/task\/task-200\.md: illegal `reject` from "draft": .+\n$/);
       expect(readFileSync(join(repo, 'docs/memory/task/task-200.md'), 'utf-8')).toContain('status: draft');
     });
 

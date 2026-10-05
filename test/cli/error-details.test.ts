@@ -22,7 +22,7 @@ import { buildCliCommands, type CliCommand } from '../../src/cli/registrar';
 import type { CoreModule } from '../../src/core/registry';
 import { coreErr } from '../../src/core/types';
 
-const CONTRACT = "illegal transition draft -> backlog for type 'task'";
+const CONTRACT = "illegal transition draft -> (none) for type 'task'";
 const FILE = 'docs/memory/task/task-001-x.md';
 const DETAIL = 'not a `gates` state: `approve` is only legal from a gate';
 

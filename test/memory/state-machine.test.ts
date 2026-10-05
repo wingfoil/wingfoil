@@ -642,133 +642,116 @@ describe('resolveTypeTransition — the dl-032 illegal-transition contract (P1.6
   it('BDD P1.6 sc.2 against the REAL `task` machine: submit from `approved` → the pinned string, exit 1', () => {
     expectContract(
       () => resolveTypeTransition(memoryYaml, 'task', 'approved', 'submit', 'docs/04_memory/v0.2/task-200.md'),
-      "illegal transition approved -> pending for type 'task'",
+      "illegal transition approved -> (none) for type 'task'",
       /`waiting` state/,
     );
   });
 
-  it('`<to>` is the verb\'s canonical edge for the type — same string on the default machine (approved is terminal there)', () => {
-    const fixture = MemoryYaml.parse(
-      load(`version: 1
-defaults:
-  states:
-    sequence: [draft, pending, approved]
-    gates:
-      pending: { reject: draft }
+  // task-181 (bug-165, bug-127): `<to>` is what the verb the user typed reaches FROM `<from>`. A call is
+  // refused exactly when the verb has no edge from there, so `<to>` is always `(none)` — never the
+  // verb's canonical edge elsewhere in the machine (dl-053 option 1, superseded), which printed
+  // backward moves (`planned -> triaged`) and skips (`triaged -> resolved`). The engine's explanation
+  // rides as the detail (dl-032 option (c)) and says why, in the verb's terms.
+  describe('task-181: `<to>` is `(none)`, never a move the verb cannot make from `<from>`', () => {
+    // The shape `wingfoil init` scaffolds: a type with no `states`, so REQ-STATE-08's built-in default
+    // machine (`draft -> pending -> approved`, gate `pending`) — bug-127's reproduction.
+    const scaffold = MemoryYaml.parse(load(`version: 1
 types:
   task:
     path: "docs/memory/task/{id}.md"
-`),
-    );
-    expectContract(
-      () => resolveTypeTransition(fixture, 'task', 'approved', 'submit'),
-      "illegal transition approved -> pending for type 'task'",
-      /last state in `sequence`/,
-    );
-  });
+`));
+    // bug-127's custom machine: a gate followed by a plain state, then a last state.
+    const custom = MemoryYaml.parse(load(`version: 1
+types:
+  item:
+    path: "docs/memory/item/{id}.md"
+    states:
+      sequence: [draft, ready, in-progress, done]
+      gates:
+        ready: { reject: draft }
+`));
 
-  it('names the type\'s own canonical submit edge from any other state (release: draft → planning)', () => {
-    expectContract(
-      () => resolveTypeTransition(memoryYaml, 'release', 'in-development', 'submit'),
-      "illegal transition in-development -> planning for type 'release'",
-      /`waiting` state/,
-    );
-  });
+    it('AC1 (bug-165): `approve` on a `planned` bug — a gate+waiting state — prints `(none)`, not the backward `triaged`', () => {
+      expectContract(
+        () => resolveTypeTransition(memoryYaml, 'bug', 'planned', 'approve'),
+        "illegal transition planned -> (none) for type 'bug'",
+        /^illegal `approve` from "planned": both a `gates` and `waiting` state — its forward edge is verb-less/,
+      );
+    });
 
-  // dl-053-illegal-transition-target-for-verbless-edges (`ready`, ratified with option 1): `<to>` is
-  // the verb's FIRST legal edge in `sequence` order; when the document is already AT that target the
-  // message names the NEXT legal edge of the SAME verb; `(none)` when the verb has no other target.
-  // It must never name the next state in `sequence` regardless of verb — the shipped fallback did,
-  // printing a forward move for a `reject` and an engine-only `waiting` edge for an `approve`.
-  it('dl-053: from the verb\'s own canonical target, `<to>` is the NEXT legal edge of the SAME verb — `release`/`submit` has none, so `(none)`', () => {
-    expectContract(
-      () => resolveTypeTransition(memoryYaml, 'release', 'planning', 'submit'),
-      "illegal transition planning -> (none) for type 'release'",
-      /`waiting` state/,
-    );
-  });
+    it('AC1 (bug-165): `approve` on a `triaged` bug prints `(none)`, not `resolved` three states ahead', () => {
+      expectContract(
+        () => resolveTypeTransition(memoryYaml, 'bug', 'triaged', 'approve'),
+        "illegal transition triaged -> (none) for type 'bug'",
+        /^illegal `approve` from "triaged": both a `gates` and `waiting` state/,
+      );
+    });
 
-  it('dl-053: `approve` never names an engine-only `waiting` edge — task `backlog` prints the next approve target, not `in-progress`', () => {
-    expectContract(
-      () => resolveTypeTransition(memoryYaml, 'task', 'backlog', 'approve'),
-      "illegal transition backlog -> approved for type 'task'",
-      /not a `gates` state/,
-    );
-  });
+    it('AC2 (bug-127, end of the chain): `submit` on the last state prints `(none)`, not `pending` behind it', () => {
+      expectContract(
+        () => resolveTypeTransition(scaffold, 'task', 'approved', 'submit'),
+        "illegal transition approved -> (none) for type 'task'",
+        /^illegal `submit` from "approved": the last state in `sequence` — there is no forward edge$/,
+      );
+    });
 
-  it('dl-053: `reject` never names a forward move — task `draft` prints the next reject target, not `pending`', () => {
-    expectContract(
-      () => resolveTypeTransition(memoryYaml, 'task', 'draft', 'reject'),
-      "illegal transition draft -> in-progress for type 'task'",
-      /not a `gates` state/,
-    );
-  });
+    it('AC2 (bug-127, end of the chain): `reject` on the last state prints `(none)`, not `draft` behind it', () => {
+      expectContract(
+        () => resolveTypeTransition(scaffold, 'task', 'approved', 'reject'),
+        "illegal transition approved -> (none) for type 'task'",
+        /^illegal `reject` from "approved": not a `gates` state — `reject` is only legal from a gate$/,
+      );
+    });
 
-  it('dl-053: the canonical edge is kept when it already differs from `<from>` (task `approved`/`approve`)', () => {
-    expectContract(
-      () => resolveTypeTransition(memoryYaml, 'task', 'approved', 'approve'),
-      "illegal transition approved -> backlog for type 'task'",
-      /not a `gates` state/,
-    );
-  });
+    it('AC2 (bug-127, a gate): `submit` on `pending` prints `(none)` and the detail names `approve`', () => {
+      expectContract(
+        () => resolveTypeTransition(scaffold, 'task', 'pending', 'submit'),
+        "illegal transition pending -> (none) for type 'task'",
+        /^illegal `submit` from "pending": a `gates` state — its forward edge requires `approve`, not `submit`$/,
+      );
+    });
 
-  it('dl-053: `adr` — `approve` has one target, so from `accepted` (that target) it is `(none)`, not the `sequence` successor `superseded`', () => {
-    expectContract(
-      () => resolveTypeTransition(memoryYaml, 'adr', 'accepted', 'approve'),
-      "illegal transition accepted -> (none) for type 'adr'",
-      /not a `gates` state/,
-    );
-  });
+    it('AC2 (bug-127, custom machine): `submit` on the gate `ready` prints `(none)`, not `done` past `in-progress`', () => {
+      expectContract(
+        () => resolveTypeTransition(custom, 'item', 'ready', 'submit'),
+        "illegal transition ready -> (none) for type 'item'",
+        /^illegal `submit` from "ready": a `gates` state — its forward edge requires `approve`, not `submit`$/,
+      );
+    });
 
-  it('dl-053: `adr` — `reject`\'s only target is `draft`, so from `draft` it is `(none)`, not the forward `pending`', () => {
-    expectContract(
-      () => resolveTypeTransition(memoryYaml, 'adr', 'draft', 'reject'),
-      "illegal transition draft -> (none) for type 'adr'",
-      /not a `gates` state/,
-    );
-  });
+    it('AC2 (bug-127, custom machine): `submit` on the last state `done` prints `(none)`, not `ready` behind it', () => {
+      expectContract(
+        () => resolveTypeTransition(custom, 'item', 'done', 'submit'),
+        "illegal transition done -> (none) for type 'item'",
+        /^illegal `submit` from "done": the last state in `sequence` — there is no forward edge$/,
+      );
+    });
 
-  it('dl-053: `decision-log` — `approve` from `draft` still names the edge `approve` would take (`ready`)', () => {
-    expectContract(
-      () => resolveTypeTransition(memoryYaml, 'decision-log', 'draft', 'approve'),
-      "illegal transition draft -> ready for type 'decision-log'",
-      /not a `gates` state/,
-    );
-  });
-
-  it('dl-053: `decision-log` — `reject`\'s only target is `draft`, so from `draft` it is `(none)`, not the forward `in-discussion`', () => {
-    expectContract(
-      () => resolveTypeTransition(memoryYaml, 'decision-log', 'draft', 'reject'),
-      "illegal transition draft -> (none) for type 'decision-log'",
-      /not a `gates` state/,
-    );
-  });
-
-  it('dl-053: `bug` has three approve gates — from `triaged` (the first target) the next approve target is named, not the `waiting` successor `planned`', () => {
-    // Since dl-123 `triaged` is gated (reject -> closed) AND waiting, so the engine's reason is the
-    // verb-less forward edge; `triaged`/`planned` expose no approve target, so the message is unchanged.
-    expectContract(
-      () => resolveTypeTransition(memoryYaml, 'bug', 'triaged', 'approve'),
-      "illegal transition triaged -> resolved for type 'bug'",
-      /both a `gates` and `waiting` state/,
-    );
-  });
-
-  it('dl-053: `bug` — from `closed` (the first reject target) a later reject target is named instead of `(none)`', () => {
-    expectContract(
-      () => resolveTypeTransition(memoryYaml, 'bug', 'closed', 'reject'),
-      "illegal transition closed -> in-progress for type 'bug'",
-      /not a `gates` state/,
-    );
-  });
-
-  it('renders `<to>` as `(none)` when the machine has no legal edge at all for the verb', () => {
-    // `plan` declares no `gates`, so `approve` is legal from nowhere.
-    expectContract(
-      () => resolveTypeTransition(memoryYaml, 'plan', 'draft', 'approve'),
-      "illegal transition draft -> (none) for type 'plan'",
-      /not a `gates` state/,
-    );
+    // The rule is not a property of the cases above: for every registered type of this repository's
+    // own `memory.yaml`, every state and every refusable verb, a refusal prints `(none)` — and every
+    // legal call still returns its target (the refusal set is exactly "no edge of this verb here").
+    it('every refusal on every real type prints `<from> -> (none)`', () => {
+      let refusals = 0;
+      for (const typeName of Object.keys(memoryYaml.types).sort()) {
+        const machine = resolveStateMachine(memoryYaml, typeName);
+        for (const state of machine.sequence) {
+          for (const op of ['submit', 'approve', 'reject'] as const) {
+            try {
+              resolveTransitionTarget(machine, state, op);
+              continue; // legal: nothing to print
+            } catch {
+              refusals += 1;
+            }
+            expectContract(
+              () => resolveTypeTransition(memoryYaml, typeName, state, op),
+              `illegal transition ${state} -> (none) for type '${typeName}'`,
+              new RegExp(`^illegal \`${op}\` from "${state}": `),
+            );
+          }
+        }
+      }
+      expect(refusals).toBeGreaterThan(20); // vacuity guard: the sweep really exercised refusals
+    });
   });
 
   it('carries the file path onto the issue', () => {
