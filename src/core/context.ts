@@ -259,7 +259,9 @@ export interface AssembledExecutionContext {
   readonly context: ExecutionContext;
   /** The canonical §7 payload: UTF-8, LF-only, exactly one trailing `\n`. */
   readonly payload: string;
-  /** `no relevant Memory found for task` when nothing passed the relevance threshold (P5.3.3 sc. 3). */
+  /** In §3 stage order: `no module matches the element's modules:/scope: (…); all modules included`
+   * when the element names modules and none matches (§4, ruling D3), then `no relevant Memory found
+   * for task` when nothing passed the relevance threshold (P5.3.3 sc. 3). */
   readonly notes: readonly string[];
 }
 
@@ -379,8 +381,33 @@ export function serializeExecutionContext(context: ExecutionContext): string {
 }
 
 function asNames(value: unknown): string[] {
-  if (typeof value === 'string') return value.length > 0 ? [value] : [];
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0) : [];
+  const entries = typeof value === 'string' ? [value] : Array.isArray(value) ? value : [];
+  return entries.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+}
+
+/** A path with `\` read as `/` and no trailing `/`, so `src/core/` and `src/core` compare equal. */
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+/**
+ * Whether one `modules:`/`scope:` entry selects `module` (`spec-012` §4, approver ruling D3,
+ * 2026-10-05). The entry is read by its leading token — `src/workflow — the engine` is
+ * `src/workflow` — which matches the module's `name`, or its `path` when equal to it or a prefix of it
+ * at a segment boundary (`src` selects `src/core`; `src/co` selects nothing).
+ */
+function entrySelectsModule(entry: string, module: Module): boolean {
+  const token = entry.trim().split(/\s+/)[0]!;
+  if (token === module.name) return true;
+  if (module.path === undefined) return false;
+  const prefix = normalizePath(token);
+  const path = normalizePath(module.path);
+  return prefix.length > 0 && (path === prefix || path.startsWith(`${prefix}/`));
+}
+
+/** The note recorded when the element names modules and none of them matches (ruling D3). */
+function noModuleMatchNote(entries: readonly string[]): string {
+  return `no module matches the element's modules:/scope: (${entries.map((entry) => JSON.stringify(entry)).join(', ')}); all modules included`;
 }
 
 /** The top-level keys of a `dna.yaml` text that has already validated, in the order the file
@@ -391,20 +418,30 @@ function declaredKeyOrder(raw: string, label: string): string[] {
 
 /**
  * `spec-012` §4, the `dna-loader`: `project` and `team` always, `paths` whole (every category), and
- * the `modules` named by the element's `modules:`/`scope:` — every module when it names none — in
- * `dna.yaml` order. Sections are inserted in `declaredOrder`, the file's own key order.
+ * the `modules` the element's `modules:`/`scope:` entries select ({@link entrySelectsModule}), in
+ * `dna.yaml` order. Every module when it names none — and also when it names some and none matches,
+ * which then returns a note (ruling D3) for the caller's diagnostics. Sections are inserted in
+ * `declaredOrder`, the file's own key order.
  */
-function selectDnaSections(dna: DnaYaml, declaredOrder: readonly string[], frontmatter: Record<string, unknown>): DnaSelection {
-  const named = new Set([...asNames(frontmatter.modules), ...asNames(frontmatter.scope)]);
+function selectDnaSections(
+  dna: DnaYaml,
+  declaredOrder: readonly string[],
+  frontmatter: Record<string, unknown>,
+): { readonly selection: DnaSelection; readonly note?: string } {
+  const entries = [...asNames(frontmatter.modules), ...asNames(frontmatter.scope)];
+  const matched = dna.modules.filter((module) => entries.some((entry) => entrySelectsModule(entry, module)));
+  const unmatched = entries.length > 0 && matched.length === 0;
   const sections: Record<string, unknown> = {
     project: dna.project,
-    modules: named.size === 0 ? dna.modules : dna.modules.filter((module) => named.has(module.name)),
+    modules: matched.length === 0 ? dna.modules : matched,
     team: dna.team,
     paths: dna.paths,
   };
   const selection: Record<string, unknown> = {};
   for (const key of declaredOrder) if (sections[key] !== undefined) selection[key] = sections[key];
-  return selection as unknown as DnaSelection;
+  return unmatched
+    ? { selection: selection as unknown as DnaSelection, note: noModuleMatchNote(entries) }
+    : { selection: selection as unknown as DnaSelection };
 }
 
 /** The Markdown body of each resolved directive, read at `sha` (`DirectiveFile.path` is relative to
@@ -463,7 +500,7 @@ function requestProblem(request: ContextRequest): CoreError | undefined {
  *    (`loadMemoryDocumentsAtRev`); the element is found in that snapshot. Absent → `NOT_FOUND`;
  *    archived (`isArchivedStatus`) → `VALIDATION`, since an archived document never enters a context
  *    (REQ-STATE-06). A `draft` element assembles.
- * 2. **load-dna** (§4): see `selectDnaSections`.
+ * 2. **load-dna** (§4): see `selectDnaSections`; modules match by name or path (ruling D3).
  * 3. **load-directives** (§5): {@link resolveRoleDirectives} over the directives and `roles.yaml` at the
  *    commit; its warnings become `context.warnings`.
  * 4. **filter-memory** (§6): `selectRelevantMemoryDocuments` over the same snapshot, within
@@ -516,10 +553,11 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   // Zod-parsed object loses (schema keys come first there). `loadDnaYamlAtRev` is non-null whenever
   // the raw read is: both read the same path at the same sha.
   const dnaRaw = readPathAtRev(root, sha, DNA_YAML_PATH);
-  const dna =
+  const dnaSelected =
     dnaRaw === null
       ? undefined
       : selectDnaSections(loadDnaYamlAtRev(root, sha)!, declaredKeyOrder(dnaRaw, `${sha}:${DNA_YAML_PATH}`), frontmatter);
+  const dna = dnaSelected?.selection;
 
   const rolesYaml = loadRolesYamlAtRev(root, sha);
   const resolution = rolesYaml === null ? undefined : resolveRoleDirectives(loadDirectivesAtRev(root, sha), rolesYaml, role);
@@ -548,6 +586,7 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   }
 
   const context = validated.value;
-  const notes = relevant?.note === undefined ? [] : [relevant.note];
+  // In §3 stage order: the DNA note (ruling D3), then the relevance note (P5.3.3 sc. 3).
+  const notes = [dnaSelected?.note, relevant?.note].filter((note): note is string => note !== undefined);
   return coreOk({ context, payload: serializeExecutionContext(context), notes });
 }

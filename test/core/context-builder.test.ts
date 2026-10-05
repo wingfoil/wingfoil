@@ -482,7 +482,7 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
       commitAll(repo, 'scope by path');
       const { context, notes } = build(repo);
       expect(context.dna.modules.map((m) => m.name)).toEqual(['core']);
-      expect(notes).toEqual([]);
+      expect(notes).toEqual([NO_RELEVANT_MEMORY_NOTE]); // the rewritten element links nothing; no module note
     });
 
     it('a path prefix selects every module under it, at segment boundaries only', () => {
