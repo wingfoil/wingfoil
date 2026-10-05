@@ -38,6 +38,11 @@ Custom WingFoil rule. Applies to all roles editing versioned docs.
   bumps a document once, and further edits on the same branch — review fixes included — do not bump
   it again, even though each of them is committed (approver ruling 2026-10-01).
 - Update the `**Date:**` to the edit date when bumping, where the document has one.
+- **Gate (the four versioned config files only).** `test/lint/version-bump.test.ts`, run by `npm test`,
+  fails when the pending change (the working tree against `HEAD`) changes `.wingfoil/dna.yaml`,
+  `memory.yaml`, `workflows.yaml` or `roles.yaml` — comments included — without changing its
+  `version:` as YAML reads it, unless the branch already bumped that file since it left `main`
+  (`task-183`, `bug-143`). Committed history is not re-judged.
 
 > Rationale: keeps version numbers meaningful (one bump per revision that reaches `main`) rather than
 > churning on every micro-edit or review fix. Mirrors the standing project convention.
