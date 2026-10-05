@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.9"
+version: "1.10"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -416,3 +416,52 @@ commit, right after the task's transition and on the task branch:
   - **Follow-ups:** filed by `bug-ingest-rel-v0.3-w1b4-review-findings-plan`, triage pending.
   - **Fix share:** 22 open fix tasks of 87 open (25.3%), under the threshold.
   - **Next:** B5 (`153`, `154`, `158`, `159`, `162`, `163`).
+- **2026-10-02 — B4 follow-ups triaged** (2026-10-03, `bug-ingest-rel-v0.3-w1b4-review-findings-plan`, `done`):
+  - `bug-203` → `task-156`, `bug-204` → `task-165`, `bug-206` → `task-187`;
+  - `bug-210` → v0.3, the release's `user-docs` phase, no task;
+  - `bug-205`, `bug-207`, `bug-208`, `bug-209`, `bug-211` → v0.4.
+  `main` is not pushed past `ea637c43`, on the approver's instruction.
+- **2026-10-05 — batch B5 `done`** (`task-153`, `154`, `158`, `159`, `162`, `163`).
+  - **Review.** Every task had an independent review, all "approve with fixes", every fix applied in-task.
+    The reviews of `162` and `163` stalled once (stream watchdog) and were resumed.
+  - **`task-158` stopped after design**: its ACs needed notes on two `accepted` ADRs while `adr` was
+    `amendable: false`.
+  - **Approver rulings:**
+    - `task-158`: `adr` becomes `amendable: true` for dated correction and Revision notes (a changed
+      decision is still a new ADR, `dl-108` A3), in `memory.yaml` (2.2) and in the `wingfoil init`
+      scaffold. This revises the `task-127` ruling for `adr`.
+    - `task-154`: the command-level latency suite runs only when asked (`npm run test:latency`,
+      `WINGFOIL_LATENCY=1`), never in CI or `prepublishOnly`. REQ-PERF-02 says "return in", startup
+      included, while the suite asserts the marginal cost over a `--version` floor: the deviation goes to
+      a decision-log.
+    - Confirmed at the gate:
+      - `153`: P1.13 scenario 4 and the commented `bug` machine example.
+      - `158`: the rewritten AC2 and the added AC3.
+      - `159`: the P2.2 quoted-list step and the frozen-archive header in `00_index.md`.
+      - `162`: two commits (approve, then `finalize` of the superseded element), the `finalize` verb,
+        and no trigger on types without the edge.
+      - `163`: `{date}` from the add commit's author date in UTC, the commit authored by the checked
+        identity, `--set date`/`--set author` refused, and `dl-107` left as is.
+  - **Amendments: 15.**
+    - `task-153`: spec-001, spec-010, spec-011.
+    - `task-154`: spec-015.
+    - `task-158`: spec-001, adr-001, adr-010 — the first `wf(adr): amend` commits.
+    - `task-162`: spec-001, spec-010, spec-008, spec-004, spec-006.
+    - `task-163`: spec-001, spec-008, spec-009.
+  - **Bugs closed:** bug-012, bug-013, bug-014, bug-033, bug-052, bug-053, bug-054, bug-069, bug-105,
+    bug-106, bug-107, bug-157, bug-158, bug-176, bug-177, bug-196.
+  - **Merges,** in order 153 → 158 → 162 → 163 → 159 → 154. Conflicts:
+    - `.wingfoil/memory.yaml`'s `version` line (153's 2.1 and 158's 2.2) was resolved to 2.2, keeping both
+      comments.
+    - The Revision notes appended to spec-001, spec-010 and spec-008 were all kept, in merge order.
+  - **Gates on `main`** (`be8184ec`):
+    - `test:coverage`: 214 suites, 3844 tests; coverage 98.88 / 95.53 / 95.34 / 99.57.
+    - `npm test` (parallel pass only) green; lint, `docs:api` and both `tsc` exit 0; e2e smoke 19/19 ok.
+    - `npm run test:latency`, run at load ~18: 5/5. Marginal p95 was 439 / 284 / 383 ms; the total p95
+      (reported only) was 1028 / 872 / 972 ms.
+  - **Governance check over B5:** `--base f579bc17` gives 87 gated `wf()` commits, 0 findings, exit 0.
+  - **Not pushed** (approver's instruction).
+  - **Follow-ups:** filed by `bug-ingest-rel-v0.3-w1b5-review-findings-plan`, plus a decision-log on
+    REQ-PERF-02. Triage pending.
+  - **Fix share:** 17 open fix tasks of 81 open (21.0%), under the threshold.
+  - **Next:** B6 (`156`, `157`, `160`, `164`, `165`).
