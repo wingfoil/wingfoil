@@ -2,7 +2,7 @@
 id: "task-174-settle-mcp-prompts-contract-server-preflight-answer-tools"
 type: task
 title: "Settle the MCP Prompts contract and the server's pre-flight, and answer `tools/list` with an empty list"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "fix"
 priority: "high"
