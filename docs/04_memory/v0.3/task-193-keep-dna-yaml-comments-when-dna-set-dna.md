@@ -2,7 +2,7 @@
 id: "task-193-keep-dna-yaml-comments-when-dna-set-dna"
 type: task
 title: "Keep `dna.yaml`'s comments when `dna set`/`dna add` cannot edit in place, or say they were lost"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "fix"
 priority: "medium"
