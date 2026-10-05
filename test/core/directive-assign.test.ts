@@ -24,7 +24,7 @@
  * at this call path by the "a change someone else staged" case below.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -287,6 +287,23 @@ describe('CORE_MODULES directive.directiveAssign — P3.2 scenarios (initialized
     expect(result.error.code).toBe('VALIDATION');
     expect(readRoles(repo)).toBe('assignments:\n  developer: not-a-list\n');
     expect(head(repo)).toBe(sha);
+  });
+
+  // task-179 (bug-245 class, independent review F5): the refusal names roles.yaml from the project root,
+  // never by the host's absolute path — in the reason and in every issue's `file`.
+  it.each([
+    ['not valid YAML', 'assignments:\n  developer: [unclosed\n'],
+    ['schema-invalid', 'assignments:\n  developer: not-a-list\n'],
+  ])('a %s roles.yaml is named `.wingfoil/roles.yaml`, never by its absolute path', async (_kind, text) => {
+    writeFixtureFile(repo, ROLES, text);
+    commitAll(repo, 'fixture: break roles.yaml');
+    const result = await directiveAssignFn()({ root: repo, options: { directive: 'testing', role: 'developer' } });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const shown = JSON.stringify(result.error);
+    expect(shown).toContain('.wingfoil/roles.yaml');
+    expect(shown).not.toContain(repo);
+    expect(shown).not.toContain(realpathSync(repo));
   });
 });
 
