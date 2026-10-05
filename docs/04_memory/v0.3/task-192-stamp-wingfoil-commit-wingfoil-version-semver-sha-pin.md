@@ -174,8 +174,9 @@ Edited in this worktree and left uncommitted, for `memory amend` at the review g
   bug-051, carried out by task-192: the --version row prints the build stamp semver (sha), the
   normal-form note says the commit primitive passes --cleanup=whitespace instead of relying on git's
   default, and a new note states the WingFoil-Version trailer paragraph every commit ends with. The
-  --version row says when the commit reads dirty or unknown. The Revision note dated 2026-10-05
-  records it."
+  --version row says when the commit reads dirty, only for a change to a build input per the
+  approver's ruling D4 (c), or unknown; memory history reports wingfoil on every entry, null without
+  the trailer, per ruling D5. The Revision note dated 2026-10-05 records it."
 - `spec-004-mcp-surface-contract` — proposed `--reason`: "Section 4.3 item 2 shows the
   WingFoil-Version trailer paragraph that every commit, a Tool's included, ends with, per dl-111
   Action 2, carried out by task-192. The Revision note dated 2026-10-05 records it."
@@ -197,11 +198,32 @@ Edited in this worktree and left uncommitted, for `memory amend` at the review g
   malformed or non-hex record. `docs/cli-reference.md` shows a full 40-hex commit.
   `src/core/types.ts` documents `CoreResult.commit.message` as the operation's message, not the
   stored body.
-- **Held for the approver's ruling, unchanged:** (a) whether untracked files make a build `-dirty`
-  (every local and gate build is `-dirty` today); (b) whether `wingfoil` is omitted or `null` on a
-  history entry without the trailer. The `spec-008` wording follows the current rule (a) and must be
-  re-worded if the ruling changes it.
 - Commit `5fc86dcb`. Gates on it, with the two pending amendments in the tree: `npm test` exit 0,
   221 suites / 3935 tests; `npm run -s lint`, `npm run -s docs:api`, `npx tsc --noEmit -p tsconfig.json`,
   `npx tsc -p tsconfig.build.json --noEmit` all exit 0; `node scripts/check-governance.cjs --base c80167d6`
   exit 0, 0 findings.
+
+**Approver rulings, 2026-10-05, applied in-task:**
+
+- **D4 (c)** — `-dirty` means "this `dist/` does not match the sha". `scripts/write-build-info.cjs`
+  declares `BUILD_INPUTS` (`package-lock.json`, `package.json`, `scripts/write-build-info.cjs`, `src`,
+  `tsconfig*.json`) and runs `git status --porcelain -- <BUILD_INPUTS>`. A tracked or untracked change
+  under any of them sets `-dirty`. A change elsewhere does not: documentation, Memory, `TODOs.md`,
+  `tools/`. This supersedes design decision 1's "untracked files included" for files outside the
+  inputs.
+- **D5** — `memory history` entries always carry `wingfoil`, `null` when the commit has no trailer,
+  like `approver` and `reason`. This supersedes design decision 6. AC4's "when the trailer is present"
+  is read as "non-null when the trailer is present" (approver ruling).
+- Red `6bc7003c`: `npx jest test/cli/build-info.test.ts test/core/memory-history.test.ts test/core/memory-supersede.test.ts`
+  → **4 failed, 47 passed**. The 4 are the doc-edit and untracked-note cases (stamped `-dirty`) and
+  the two `null` history cases. The five build-input rows passed, because the old rule already
+  dirtied on them. Green `b89163a3`: the same command → 51 passed.
+- `docs/cli-reference.md` (`--version` / Git side effects, `memory history`) and the pending `spec-008`
+  (`--version` row, build-signature note, Revision note) follow both rulings.
+- Gates on `b89163a3`, with the two pending amendments in the tree:
+  - `npm test`: exit 0, 221 suites / 3942 tests.
+  - `npm run -s lint`, `npm run -s docs:api`, `npx tsc --noEmit -p tsconfig.json` and
+    `npx tsc -p tsconfig.build.json --noEmit`: all exit 0.
+  - `node scripts/check-governance.cjs --base c80167d6`: exit 0, 0 findings.
+  - `npm run -s build && cat dist/build-info.json`: `"commit": "b89163a3…"`, not `-dirty`, although
+    the two spec amendments are uncommitted. That is D4 (c) at work.
