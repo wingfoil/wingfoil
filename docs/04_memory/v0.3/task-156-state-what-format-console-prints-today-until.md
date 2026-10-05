@@ -2,7 +2,7 @@
 id: "task-156-state-what-format-console-prints-today-until"
 type: task
 title: "State what `--format console` prints today, until P5.1.4 gives it a human rendering"
-status: approved
+status: done
 release: "v0.3"
 kind: "fix"
 priority: "low"
