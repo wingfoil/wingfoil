@@ -2,7 +2,7 @@
 id: "task-154-give-latency-budgets-statistical-shape-guard-says-what"
 type: task
 title: "Give the latency budgets one statistical shape and a guard that says what it enforces"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "fix"
 priority: "low"
