@@ -12,7 +12,10 @@ import type { CoreFn } from '../../src/core/registry';
 import { atHeadOr, RevisionError } from '../../src/core/revision';
 import { loadMemoryYamlAtHead } from '../../src/core/loaders';
 import { E_GIT_READ_FAILED, StorageError } from '../../src/storage';
-import { mkdtempSync } from 'fs';
+import { mkdtempSync, symlinkSync } from 'fs';
+import { reconstructMemoryTransitions, verifyTransitionConsistency } from '../../src/memory/audit';
+import { findMemoryDocumentById, listMemoryDocumentsByType, searchMemoryDocuments } from '../../src/memory/query';
+import { ValidationError } from '../../src/validation';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -145,5 +148,74 @@ describe('atHeadOr falls back only when there is no HEAD to read (bug-201)', () 
     } finally {
       process.env.PATH = path;
     }
+  });
+});
+
+// task-171 review (F1, F2): the strict read the consistency check and `check-governance` rely on, and
+// the branches the tolerant scan left for a refusal to be worded.
+describe('strict reads and refusal wording over unreadable documents (task-171 review)', () => {
+  const BROKEN_TEXT = '---\nid: task-001-good\ntype: task\ntitle: "a: "b"\n  bad: [\nstatus: pending\n---\n';
+
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, '.wingfoil/memory.yaml', MEMORY_YAML);
+    writeFixtureFile(repo, GOOD, doc('task-001-good', 'draft', 'Good task'));
+    commitAll(repo, 'wf(task): add task-001-good');
+  });
+
+  it('reconstructMemoryTransitions is tolerant by default and throws with { strict: true }; the consistency check is strict', () => {
+    writeFixtureFile(repo, GOOD, BROKEN_TEXT);
+    commitAll(repo, 'wf(task): approve task-001-good [draft → pending]');
+    expect(reconstructMemoryTransitions(repo, GOOD).map((t) => t.toState)).toEqual(['draft', null]);
+    expect(() => reconstructMemoryTransitions(repo, GOOD, { strict: true })).toThrow(ValidationError);
+    expect(() => verifyTransitionConsistency(repo, GOOD)).toThrow(ValidationError);
+  });
+
+  it('a document whose committed frontmatter does not parse, valid in the working tree, is refused as not committed', async () => {
+    writeFixtureFile(repo, BROKEN, '---\nid: task-002-broken\ntype: task\ntitle: "unterminated\nstatus: draft\n---\n');
+    commitAll(repo, 'commit a malformed document');
+    writeFixtureFile(repo, BROKEN, doc('task-002-broken', 'draft', 'Repaired'));
+    const before = git(repo, ['rev-parse', 'HEAD']).trim();
+    const result = (await op('memorySubmit')({ root: repo, positional: 'task-002-broken' })) as Result;
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('NOT_FOUND');
+    expect(result.error?.message).toContain(`${BROKEN} is not committed at HEAD`);
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(before);
+  });
+});
+
+describe('search order and the explain-only walk (task-171 review)', () => {
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, '.wingfoil/memory.yaml', MEMORY_YAML);
+  });
+
+  it('two documents carrying one id are ordered by path (REQ-SYS-07: a total order)', () => {
+    writeFixtureFile(repo, 'docs/04_memory/v0.2/task-009-twin.md', doc('task-009-twin', 'draft', 'Twin'));
+    writeFixtureFile(repo, 'docs/04_memory/v0.1/task-009-twin.md', doc('task-009-twin', 'draft', 'Twin'));
+    const yaml = { version: 1, types: { task: { path: 'docs/04_memory/{release}/{id}.md' } } };
+    expect(searchMemoryDocuments(repo, yaml, 'twin').map((m) => m.path)).toEqual([
+      'docs/04_memory/v0.1/task-009-twin.md',
+      'docs/04_memory/v0.2/task-009-twin.md',
+    ]);
+  });
+
+  it('listMemoryDocumentsByType orders by id, an id-less document by its path, and twins by path', () => {
+    writeFixtureFile(repo, 'docs/04_memory/v0.2/task-009-twin.md', doc('task-009-twin', 'draft', 'Twin'));
+    writeFixtureFile(repo, 'docs/04_memory/v0.1/task-009-twin.md', doc('task-009-twin', 'draft', 'Twin'));
+    writeFixtureFile(repo, 'docs/04_memory/v0.1/a-no-id.md', '---\ntype: task\ntitle: "No id"\n---\n');
+    const yaml = { version: 1, types: { task: { path: 'docs/04_memory/{release}/{id}.md' } } };
+    expect(listMemoryDocumentsByType(repo, yaml, 'task').map((d) => d.path)).toEqual([
+      'docs/04_memory/v0.1/a-no-id.md',
+      'docs/04_memory/v0.1/task-009-twin.md',
+      'docs/04_memory/v0.2/task-009-twin.md',
+    ]);
+  });
+
+  it('the following walk passes over a dangling link instead of throwing', () => {
+    writeFixtureFile(repo, GOOD, doc('task-001-good', 'draft', 'Good task'));
+    symlinkSync(join(repo, 'no-such-target.md'), join(repo, 'docs/04_memory/v0.1/task-005-dangling.md'));
+    const yaml = { version: 1, types: { task: { path: 'docs/04_memory/{release}/{id}.md' } } };
+    expect(findMemoryDocumentById(repo, yaml, 'task-001-good', { followSymlinks: true })?.path).toBe(GOOD);
   });
 });

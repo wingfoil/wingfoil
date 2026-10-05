@@ -149,7 +149,7 @@ describe('a genuine git failure is an error, not an empty history (bug-072, AC1)
   /**
    * Only a `StorageError` becomes `IO`. A revision whose frontmatter is not YAML used to propagate
    * its `ValidationError` here (exit 2); since task-171 (`bug-188`) it is an entry whose state could
-   * not be read, so the history is still listed (`test/core/memory-history-unreadable.test.ts`).
+   * not be read, so the history is still listed (`test/core/memory-scan-tolerant.test.ts`).
    */
   it('`memory history` lists a document one of whose revisions does not parse (task-171, bug-188)', async () => {
     repo = makeTempGitRepo();
