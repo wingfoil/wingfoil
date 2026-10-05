@@ -181,7 +181,7 @@ function locate(lines: readonly string[], path: readonly DnaTextStep[]): Cursor 
 
 /**
  * Render a value as the single-line YAML token `js-yaml` itself would emit — which is what keeps this
- * editor's bytes identical to the whole-file `dump()` fallback's at the same position, including
+ * editor's bytes identical to the `--force`d whole-file `dump()`'s at the same position, including
  * defensive quoting (`'2'` stays a string, `'y'` is quoted because YAML 1.1 reads a bare `y` as a
  * boolean).
  *
