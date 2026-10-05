@@ -387,6 +387,10 @@ export function prepareMemoryTransitionAtRev(
     if (to !== from) {
       const slot = requireWipSlot(root, sha, memoryYaml, type, to, id);
       if (!slot.ok) return slot;
+      // The documents the slot count could not read, if the lookup above has not already named them.
+      for (const diagnostic of slot.value) {
+        if (!unreadable.some((known) => known.file === diagnostic.file)) unreadable.push(diagnostic);
+      }
     }
     // Content from the working tree: what `submit` and `amend` commit, and what the other verbs'
     // unmodified-document guard compares with `HEAD`.
@@ -434,8 +438,10 @@ export function prepareMemoryTransitionAtRev(
  * verb that enters that state. The holders are counted in commit `sha` — the one the transition is
  * decided at (`dl-080`) — by each document's own `type` and `status`; `exceptId`, the element being
  * moved, is never its own holder. A document the scan cannot read is not counted (task-171's tolerant
- * scan); the transition's own lookup reports such documents as warnings. Without a declared limit
- * nothing is read.
+ * scan), since its `type` and `status` are unknown; it is returned as a `W_MEMORY_UNREADABLE`
+ * diagnostic, which the caller's success carries as a warning and a refusal carries in
+ * `details.issues`, so a limit that may be undercounted says so. Without a declared limit nothing is
+ * read and nothing is returned.
  */
 export function requireWipSlot(
   root: string,
@@ -444,18 +450,20 @@ export function requireWipSlot(
   type: string,
   state: string,
   exceptId?: string,
-): CoreResult<undefined> {
+): CoreResult<readonly Diagnostic[]> {
   const limit = resolveStateMachine(memoryYaml, type).limits?.[state];
-  if (limit === undefined) return coreOk(undefined);
-  const holders = loadMemoryDocumentsAtRev(root, sha, memoryYaml)
+  if (limit === undefined) return coreOk([]);
+  const unreadable: Diagnostic[] = [];
+  const holders = loadMemoryDocumentsAtRev(root, sha, memoryYaml, { onDiagnostic: (diagnostic) => unreadable.push(diagnostic) })
     .filter(({ frontmatter }) => frontmatter.type === type && frontmatter.status === state && frontmatter.id !== exceptId)
     .map(({ frontmatter, path }) => (frontmatter.id === undefined ? path : String(frontmatter.id)));
-  if (holders.length < limit) return coreOk(undefined);
+  if (holders.length < limit) return coreOk(unreadable);
   return coreErr({
     code: 'CONFLICT',
     message:
       `WIP limit reached for '${state}' on type '${type}' (limit ${limit}): held by ${holders.join(', ')}. ` +
       `Move one of them out of '${state}', then retry.`,
+    ...(unreadable.length > 0 ? { details: { issues: unreadable } } : {}),
   });
 }
 

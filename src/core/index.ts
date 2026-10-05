@@ -794,7 +794,7 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
     });
     const leaked = committedScopeError(root, sha, targetPath, content);
     if (leaked) return leaked;
-    return coreOk({ id, path: relative(root, path) }, { sha, message });
+    return coreOk({ id, path: relative(root, path) }, { sha, message }, slot.value.map(formatDiagnostic));
   } catch (error) {
     if (error instanceof StorageError) {
       // One rule, one code (task-130, `bug-123`, `spec-005` §3): a confinement refusal is `VALIDATION`

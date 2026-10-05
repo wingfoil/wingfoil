@@ -10,9 +10,11 @@
  *   `wf(directive)`, `wf(workflow)`) are not Memory operations and are skipped.
  * - **bracket** — none on `add`, `submit` and `assign`; on every other verb the canonical
  *   `[from → to]` (U+2192, single spaces, closing the subject). Only `sync` chains; `deprecate` ends in
- *   `deprecated`; `amend` is the self-loop `[s → s]`; `park` is `[in-progress → backlog]`.
+ *   `deprecated`; `amend` is the self-loop `[s → s]`; `park` is one hop between two different states (the
+ *   state rule judges that it is a `returns` edge of the type's machine, task-180).
  * - **body** — `approve`, `reject` and `amend` carry `Approver: Name <email> (approver)` as the first
- *   body line and a `Reason:` block; `assign` carries no `Approver:`. Any `Reason:` must be recordable
+ *   body line and a `Reason:` block; `park` carries a `Reason:` block (`spec-008` §2, `dl-110`);
+ *   `assign` carries no `Approver:`. Any `Reason:` must be recordable
  *   under `dl-067` as `task-166` amended it (`reasonDefect`): not blank, no control character other
  *   than tab and newline, no line starting with a reserved key (`Approver:`, `Reason:`,
  *   `WingFoil-Version:`, in any letter case), no final `Key: value` paragraph. At most one `Approver:`
@@ -27,8 +29,9 @@
  *     the checked commit declares it, so a chain's hops are judged (`illegal-hop`) and the bracket is
  *     compared with the frontmatter (`mismatch`, `unparseable`). A single hop, which that function
  *     leaves to the write-time engine, is judged here with `isMachineEdge` too, because a hand-written
- *     commit never met the engine; `amend` and `park` are exempt, their brackets being fixed by the
- *     bracket rule;
+ *     commit never met the engine; `amend` is exempt, its self-loop being fixed by the bracket rule
+ *     (`park` is not: its hop must be an edge of the machine, which `isMachineEdge` reads from
+ *     `returns`, task-180);
  *   - a bracketless subject, from the frontmatter (`reconstructMemoryTransitions`): `submit` moves a
  *     named document along an edge of the machine; `add` leaves it in the machine's initial state;
  *     `assign` leaves its status unchanged (`spec-008` §2);
@@ -78,7 +81,9 @@ const APPROVAL_VERBS = new Set(['approve', 'reject', 'amend']);
 /** The verbs whose subject carries no bracket (`spec-008` §2). */
 const BRACKETLESS_VERBS = new Set(['add', 'submit', 'assign']);
 /** The verbs whose fixed bracket the bracket rule pins, so the machine does not judge their hop. */
-const EDGE_EXEMPT_VERBS = new Set(['amend', 'park']);
+const EDGE_EXEMPT_VERBS = new Set(['amend']);
+/** The verbs that record a reason but no approval (`spec-008` §2): `park` (`dl-110`, task-180). */
+const REASON_VERBS = new Set(['park']);
 
 /** The subject's `wf({scope}): {verb}` head, read as `src/memory/audit.ts`'s own reader reads it. */
 const WF_HEAD_RE = /^wf\(([^)]*)\):\s*(\S+)/;
@@ -282,8 +287,8 @@ function checkSubjectAndBracket(commit, memoryYaml, dist) {
   if (op === 'amend' && (states.length !== 2 || states[0] !== states[1])) {
     add('bracket', "'amend' brackets the unchanged state, [s → s]");
   }
-  if (op === 'park' && (states.length !== 2 || states[0] !== 'in-progress' || states[1] !== 'backlog')) {
-    add('bracket', "'park' is [in-progress → backlog]");
+  if (op === 'park' && (states.length !== 2 || states[0] === states[1])) {
+    add('bracket', "'park' brackets one hop between two different states, [from → to]");
   }
   return { findings, op, ids: ids ?? [] };
 }
@@ -308,6 +313,7 @@ function checkBodyAndAuthority(commit, op, dna, dist) {
     if (APPROVAL_VERBS.has(op) && reasonLines.length === 0) add('body', `'${op}' needs a Reason: block`);
   }
 
+  if (REASON_VERBS.has(op) && reasonLines.length === 0) add('body', `'${op}' needs a Reason: block`);
   if (reasonLines.length > 1) add('body', `${reasonLines.length} Reason: lines; a commit records one Reason: block`);
   if (reasonLines.some((line) => !line.startsWith('Reason:'))) add('body', 'the Reason: key is written `Reason:`');
   if (reasonLines.length > 0 && lines.some((line) => line.startsWith('Reason:'))) {
