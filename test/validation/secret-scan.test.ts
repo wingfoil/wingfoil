@@ -2,7 +2,9 @@
  * task-043-secret-credential-hygiene (REQ-SEC-08) — secret/credential hygiene scan, built to
  * spec-007-secret-hygiene-patterns: the canonical pattern set (§2), exclusions (§3), and scan
  * procedure (§4). Every fixture "secret" below is an obviously-fake value (per the global
- * security-secrets directive) — none are real credentials.
+ * security-secrets directive) — none are real credentials — and every one that a pattern matches is
+ * assembled at runtime (`./helpers/secret-fixtures`, directive rule S1, dl-122): this file holds no
+ * secret-shaped source literal (`bug-055`), which the "dl-122 S1" block below checks.
  */
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
@@ -15,6 +17,17 @@ import {
   matchesIgnoreGlob,
 } from '../../src/validation/secret-scan';
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import {
+  FAKE_API_KEY_ASSIGNMENT,
+  FAKE_AWS_ACCESS_KEY_ID,
+  FAKE_AWS_SECRET_ACCESS_KEY,
+  FAKE_GCP_SERVICE_ACCOUNT_TYPE,
+  FAKE_GITHUB_TOKEN,
+  FAKE_JWT,
+  FAKE_NPM_TOKEN_LINE,
+  FAKE_PEM_RSA_HEADER,
+  FAKE_SLACK_TOKEN,
+} from './helpers/secret-fixtures';
 
 describe('SECRET_PATTERNS — canonical pattern set (spec-007 §2)', () => {
   it('declares exactly the 10 named rules from spec-007 §2, in declared order', () => {
@@ -49,54 +62,53 @@ describe('SECRET_PATTERNS — canonical pattern set (spec-007 §2)', () => {
 
 describe('scanText — block-severity pattern shapes (spec-007 §2)', () => {
   it('flags a PEM private-key header', () => {
-    const result = scanText('-----BEGIN RSA PRIVATE KEY-----\nMIIFAKEfake==\n', 'fixture.txt');
+    const result = scanText(`${FAKE_PEM_RSA_HEADER}\nMIIFAKEfake==\n`, 'fixture.txt');
     expect(result.blocking.map((f) => f.patternId)).toContain('private-key-pem');
   });
 
   it('flags a generic api-key assignment', () => {
-    const result = scanText('api_key: "sk_live_fake1234567890abcdef"\n', 'fixture.txt');
+    const result = scanText(`${FAKE_API_KEY_ASSIGNMENT}\n`, 'fixture.txt');
     expect(result.blocking.map((f) => f.patternId)).toContain('generic-api-key-assignment');
   });
 
   it('flags an AWS access key ID shape', () => {
-    const result = scanText('aws_access_key_id = AKIAFAKEFAKEFAKEFAKE\n', 'fixture.txt');
+    const result = scanText(`aws_access_key_id = ${FAKE_AWS_ACCESS_KEY_ID}\n`, 'fixture.txt');
     expect(result.blocking.map((f) => f.patternId)).toContain('aws-access-key-id');
   });
 
   it('flags an AWS secret access key assignment', () => {
     const result = scanText(
-      'aws_secret_key: "fAkEsEcReT1234567890fAkEsEcReT1234567890"\n',
+      `aws_secret_key: "${FAKE_AWS_SECRET_ACCESS_KEY}"\n`,
       'fixture.txt',
     );
     expect(result.blocking.map((f) => f.patternId)).toContain('aws-secret-access-key');
   });
 
   it('flags a GCP service-account JSON key fragment', () => {
-    const result = scanText('  "type": "service_account",\n', 'fixture.json');
+    const result = scanText(`  ${FAKE_GCP_SERVICE_ACCOUNT_TYPE},\n`, 'fixture.json');
     expect(result.blocking.map((f) => f.patternId)).toContain('gcp-service-account-key');
   });
 
   it('flags a GitHub personal access token', () => {
-    const result = scanText('ghp_fakeFAKEfakeFAKEfakeFAKEfakeFAKEfake\n', 'fixture.txt');
+    const result = scanText(`${FAKE_GITHUB_TOKEN}\n`, 'fixture.txt');
     expect(result.blocking.map((f) => f.patternId)).toContain('github-token');
   });
 
   it('flags a Slack bot token', () => {
-    const result = scanText('xoxb-fake-1234567890-fakefakefakefake\n', 'fixture.txt');
+    const result = scanText(`${FAKE_SLACK_TOKEN}\n`, 'fixture.txt');
     expect(result.blocking.map((f) => f.patternId)).toContain('slack-token');
   });
 });
 
 describe('scanText — patterns promoted warn → block by dl-036 (spec-007 §2)', () => {
   it('blocks on a JWT-shaped string', () => {
-    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmYWtlIn0.fakefakefakefakefakefakefake';
-    const result = scanText(`token = ${jwt}\n`, 'fixture.txt');
+    const result = scanText(`token = ${FAKE_JWT}\n`, 'fixture.txt');
     expect(result.blocking.map((f) => f.patternId)).toContain('jwt-like');
     expect(result.warnings.map((f) => f.patternId)).not.toContain('jwt-like');
   });
 
   it('blocks on a .env-style credential line (the NPM_TOKEN leak dl-036 names)', () => {
-    const result = scanText('NPM_TOKEN=fake1234567890abcdef\n', '.env.fixture');
+    const result = scanText(`${FAKE_NPM_TOKEN_LINE}\n`, '.env.fixture');
     expect(result.blocking.map((f) => f.patternId)).toContain('dotenv-style-secret-line');
     expect(result.warnings.map((f) => f.patternId)).not.toContain('dotenv-style-secret-line');
   });
@@ -168,6 +180,67 @@ describe('scanText — dotenv-style-secret-line tolerates a line prefix (bug-037
   });
 });
 
+/**
+ * task-182 / `bug-190-the-dotenv-secret-pattern-misses-commented-readonly-declare-and-powershell-assignments`:
+ * after bug-037 the prefix still missed a commented-out credential line (the common `.env` leak shape),
+ * a list marker in front of `export`, the `readonly` and `declare` shell builtins, and PowerShell's
+ * `$env:` assignment. Values stay short, as above, so only the dotenv pattern can catch them.
+ */
+describe('scanText — dotenv-style-secret-line covers comment, readonly, declare and $env: prefixes (bug-190, spec-007 §2)', () => {
+  const blockingIds = (line: string): string[] =>
+    scanText(`${line}\n`, '.envrc.fixture').blocking.map((f) => f.patternId);
+
+  it.each([
+    ['a `#` comment', '# TOKEN=abcdef123'],
+    ['a `#` comment with no space', '#NPM_TOKEN=abcdef123'],
+    ['a list marker and `export`', '- export TOKEN=abcdef123'],
+    ['`readonly`', 'readonly API_KEY=abcdef123'],
+    ['`declare` with a flag', 'declare -x DB_PASSWORD=abcdef123'],
+    ['PowerShell `$env:`', '$env:API_TOKEN="abcdef123"'],
+  ])('blocks a credential line behind %s', (_prefix, line) => {
+    expect(blockingIds(line)).toContain('dotenv-style-secret-line');
+  });
+
+  it.each([
+    ['a comment naming an unrelated key', '# NODE_ENV=production'],
+    ['a comment with a YAML colon mapping', '# TOKEN: abc123'],
+    ['`readonly` on an unrelated key', 'readonly NODE_ENV=production'],
+    ['an empty `$env:` value', '$env:API_TOKEN='],
+  ])('does not match %s', (_what, line) => {
+    expect(blockingIds(line)).not.toContain('dotenv-style-secret-line');
+  });
+});
+
+/**
+ * task-182 / `bug-228-the-generic-api-key-assignment-secret-pattern-flags-prose-such-as-secret-scorecard-action-in-memory-documents`:
+ * a sentence whose colon follows a key word and precedes a hyphenated name of 16+ characters read as
+ * a key assignment. A value made only of lower-case words joined by hyphens is prose, not a key.
+ * The lines that must still block are given as (key, value) halves and joined at runtime, so this
+ * source file holds no secret-shaped literal (dl-122 S1).
+ */
+describe('scanText — generic-api-key-assignment does not read prose as a key (bug-228, spec-007 §2)', () => {
+  const blockingIds = (line: string): string[] =>
+    scanText(`${line}\n`, 'notes.md').blocking.map((f) => f.patternId);
+
+  it.each([
+    ['the sentence that failed the B6 gate', 'It does not make the scores secret: scorecard-action uploads them'],
+    ['a decision about a token', 'The refresh token: rotation-every-release is decided'],
+    ['a hyphenated passphrase in prose', 'the password: correct-horse-battery-staple'],
+  ])('does not block %s', (_what, line) => {
+    expect(blockingIds(line)).not.toContain('generic-api-key-assignment');
+  });
+
+  it.each([
+    ['a mixed-case value', 'client_secret: ', 'abcdefGHIJKLmnopQRST'],
+    ['a value with a digit', 'the password: ', 'correct-horse-battery-staple-9'],
+    ['a value with an underscore', 'token: ', 'abcd_efgh_ijkl_mnop'],
+    ['a lower-case run with no hyphen', 'secret: ', 'abcdefghijklmnopqrstuv'],
+    ['a capitalised key word', 'Client_Secret: ', 'abcdefGHIJKLmnopQRST'],
+  ])('still blocks %s', (_what, key, value) => {
+    expect(blockingIds(key + value)).toContain('generic-api-key-assignment');
+  });
+});
+
 describe('scanText — warn-severity pattern shapes (spec-007 §2)', () => {
   it('warns (not blocks) on a generic high-entropy string near a credential-shaped key', () => {
     const result = scanText('auth: fakeFAKEfakeFAKEfakeFAKEfakeFAKE1234\n', 'fixture.txt');
@@ -181,7 +254,7 @@ describe('scanText — deterministic ordering (REQ-SYS-07, spec-007 §4 step 3)'
   it('orders same-line findings by pattern declaration order, not by match column', () => {
     // The api-key match sits at a LOWER column than the PEM-header match, yet private-key-pem is
     // declared first in SECRET_PATTERNS — the finding order must follow declaration order.
-    const line = 'api_key: "sk_live_fake1234567890abcdef" -----BEGIN RSA PRIVATE KEY-----';
+    const line = `${FAKE_API_KEY_ASSIGNMENT} ${FAKE_PEM_RSA_HEADER}`;
     const result = scanText(line, 'fixture.txt');
     expect(result.blocking.map((f) => f.patternId)).toEqual([
       'private-key-pem',
@@ -212,7 +285,7 @@ describe('scanText — exclusions (spec-007 §3)', () => {
     const content = [
       '<!-- example -->',
       '```',
-      'api_key: "sk_live_fake1234567890abcdef"',
+      FAKE_API_KEY_ASSIGNMENT,
       '```',
     ].join('\n');
     const result = scanText(content, 'fixture.md');
@@ -221,7 +294,7 @@ describe('scanText — exclusions (spec-007 §3)', () => {
   });
 
   it('does NOT exempt a finding inside an unlabelled fence', () => {
-    const content = ['```', 'api_key: "sk_live_fake1234567890abcdef"', '```'].join('\n');
+    const content = ['```', FAKE_API_KEY_ASSIGNMENT, '```'].join('\n');
     const result = scanText(content, 'fixture.md');
     expect(result.blocking.some((f) => f.patternId === 'generic-api-key-assignment')).toBe(true);
   });
@@ -232,14 +305,14 @@ describe('scanText — exclusions (spec-007 §3)', () => {
       '```',
       'ignored content',
       '```',
-      'api_key: "sk_live_fake1234567890abcdef"',
+      FAKE_API_KEY_ASSIGNMENT,
     ].join('\n');
     const result = scanText(content, 'fixture.md');
     expect(result.blocking.some((f) => f.patternId === 'generic-api-key-assignment')).toBe(true);
   });
 
   it('downgrades every finding in a path-ignored file to info via pathIgnored', () => {
-    const result = scanText('api_key: "sk_live_fake1234567890abcdef"\n', 'fixture.txt', {
+    const result = scanText(`${FAKE_API_KEY_ASSIGNMENT}\n`, 'fixture.txt', {
       pathIgnored: true,
     });
     expect(result.blocking).toHaveLength(0);
@@ -274,7 +347,7 @@ describe('scanProjectSurface — the REQ-SEC-08 Fit Criterion made checkable (sp
     repo = makeTempGitRepo();
     writeFixtureFile(repo, '.wingfoil/dna.yaml', 'modules: [core]\n');
     writeFixtureFile(repo, 'docs/04_memory/bugs/bug-001-clean.md', 'status: open\n');
-    writeFixtureFile(repo, 'not-in-scope/outside.md', 'api_key: "sk_live_fake1234567890abcdef"\n');
+    writeFixtureFile(repo, 'not-in-scope/outside.md', `${FAKE_API_KEY_ASSIGNMENT}\n`);
     git(repo, ['add', '-A']);
     git(repo, ['commit', '--quiet', '-m', 'seed']);
 
@@ -287,7 +360,7 @@ describe('scanProjectSurface — the REQ-SEC-08 Fit Criterion made checkable (sp
     writeFixtureFile(
       repo,
       '.wingfoil/directives/custom/leaky.md',
-      'api_key: "sk_live_fake1234567890abcdef"\n',
+      `${FAKE_API_KEY_ASSIGNMENT}\n`,
     );
     git(repo, ['add', '-A']);
     git(repo, ['commit', '--quiet', '-m', 'seed']);
@@ -303,7 +376,7 @@ describe('scanProjectSurface — the REQ-SEC-08 Fit Criterion made checkable (sp
     writeFixtureFile(repo, '.wingfoil/dna.yaml', 'modules: [core]\n');
     git(repo, ['add', '-A']);
     git(repo, ['commit', '--quiet', '-m', 'seed']);
-    writeFixtureFile(repo, '.wingfoil/untracked-leak.md', 'api_key: "sk_live_fake1234567890abcdef"\n');
+    writeFixtureFile(repo, '.wingfoil/untracked-leak.md', `${FAKE_API_KEY_ASSIGNMENT}\n`);
 
     const result = scanProjectSurface(repo);
     expect(result.blocking).toHaveLength(0);
@@ -315,7 +388,7 @@ describe('scanProjectSurface — the REQ-SEC-08 Fit Criterion made checkable (sp
     writeFixtureFile(
       repo,
       '.wingfoil/fixtures/known-fake.md',
-      'api_key: "sk_live_fake1234567890abcdef"\n',
+      `${FAKE_API_KEY_ASSIGNMENT}\n`,
     );
     git(repo, ['add', '-A']);
     git(repo, ['commit', '--quiet', '-m', 'seed']);
@@ -348,7 +421,7 @@ describe('scanProjectSurface — reads the git index, not the working tree (bug-
   it('does not throw when an indexed file is missing from disk, and still reports its indexed content', () => {
     repo = makeTempGitRepo();
     writeFixtureFile(repo, '.wingfoil/dna.yaml', 'modules: [core]\n');
-    writeFixtureFile(repo, '.wingfoil/leaky.md', 'api_key: "sk_live_fake1234567890abcdef"\n');
+    writeFixtureFile(repo, '.wingfoil/leaky.md', `${FAKE_API_KEY_ASSIGNMENT}\n`);
     git(repo, ['add', '-A']);
     git(repo, ['commit', '--quiet', '-m', 'seed']);
     rmSync(join(repo, '.wingfoil/leaky.md')); // deleted on disk, deletion NOT staged
@@ -361,7 +434,7 @@ describe('scanProjectSurface — reads the git index, not the working tree (bug-
   it('does not list a staged deletion at all', () => {
     repo = makeTempGitRepo();
     writeFixtureFile(repo, '.wingfoil/dna.yaml', 'modules: [core]\n');
-    writeFixtureFile(repo, '.wingfoil/leaky.md', 'api_key: "sk_live_fake1234567890abcdef"\n');
+    writeFixtureFile(repo, '.wingfoil/leaky.md', `${FAKE_API_KEY_ASSIGNMENT}\n`);
     git(repo, ['add', '-A']);
     git(repo, ['commit', '--quiet', '-m', 'seed']);
     git(repo, ['rm', '--quiet', '.wingfoil/leaky.md']);
@@ -373,7 +446,7 @@ describe('scanProjectSurface — reads the git index, not the working tree (bug-
 
   it('judges the staged blob: a clean unstaged edit cannot hide a staged secret', () => {
     repo = makeTempGitRepo();
-    writeFixtureFile(repo, '.wingfoil/leaky.md', 'api_key: "sk_live_fake1234567890abcdef"\n');
+    writeFixtureFile(repo, '.wingfoil/leaky.md', `${FAKE_API_KEY_ASSIGNMENT}\n`);
     git(repo, ['add', '-A']);
     writeFixtureFile(repo, '.wingfoil/leaky.md', 'nothing to see here\n'); // unstaged
 
@@ -385,14 +458,14 @@ describe('scanProjectSurface — reads the git index, not the working tree (bug-
     repo = makeTempGitRepo();
     writeFixtureFile(repo, '.wingfoil/notes.md', 'nothing to see here\n');
     git(repo, ['add', '-A']);
-    writeFixtureFile(repo, '.wingfoil/notes.md', 'api_key: "sk_live_fake1234567890abcdef"\n'); // unstaged
+    writeFixtureFile(repo, '.wingfoil/notes.md', `${FAKE_API_KEY_ASSIGNMENT}\n`); // unstaged
 
     expect(scanProjectSurface(repo).blocking).toEqual([]);
   });
 
   it('scans nothing for an empty surface-root list (not the whole index)', () => {
     repo = makeTempGitRepo();
-    writeFixtureFile(repo, 'outside.md', 'api_key: "sk_live_fake1234567890abcdef"\n');
+    writeFixtureFile(repo, 'outside.md', `${FAKE_API_KEY_ASSIGNMENT}\n`);
     git(repo, ['add', '-A']);
 
     expect(scanProjectSurface(repo, { surfaceRoots: [] })).toEqual({ blocking: [], warnings: [], info: [], filesScanned: 0 });
@@ -482,6 +555,51 @@ describe("REQ-SEC-08 Fit Criterion — this repository's own indexed (tracked + 
 
     expect(result.filesScanned).toBe(0);
     expect(result.blocking).toEqual([]);
+  });
+});
+
+/**
+ * dl-122 Q1 (b) / `security-secrets` S1 — a fixture that must match a secret pattern is built at
+ * runtime, never written as one source literal. This is the rule's check: the project's own scanner,
+ * run over every tracked (indexed) file under `test/`, finds no blocking match. `test/` is not the
+ * production scan surface (spec-007 §1, `SCAN_SURFACE_ROOTS`, unchanged — dl-073 (A) declined); it
+ * is the surface the rule applies to, chosen here. GitHub push protection rejected this repository's
+ * pushes over a literal in this very file (`bug-055`): every scanner reads every file.
+ *
+ * Like `scanProjectSurface`, it judges the git index, so an edit is seen once it is staged. A line
+ * that must stay literal uses a spec-007 §3 exclusion (an `<!-- example -->` fence, a placeholder
+ * value, a `.wingfoil/security-ignore` glob).
+ */
+describe('dl-122 S1 — no blocking secret-shaped literal in the tracked files under test/', () => {
+  const repoRoot = join(__dirname, '..', '..');
+  const TEST_SCAN_ROOTS = ['test'];
+
+  it('reads every tracked file under test/ (non-vacuity)', () => {
+    expect(scanProjectSurface(repoRoot, { surfaceRoots: TEST_SCAN_ROOTS }).filesScanned).toBeGreaterThan(100);
+  });
+
+  it('matches 0 blocking secret patterns across the tracked files under test/', () => {
+    // `toEqual([])` names each offending file, line and pattern on failure.
+    expect(scanProjectSurface(repoRoot, { surfaceRoots: TEST_SCAN_ROOTS }).blocking).toEqual([]);
+  });
+
+  describe('the same scan on a planted literal (the clean verdict above is a real discriminator)', () => {
+    let repo: string;
+    afterEach(() => removeTempDir(repo));
+
+    it('fails on a tracked test file that holds a secret-shaped literal', () => {
+      repo = makeTempGitRepo();
+      // The planted literal is assembled at runtime, so this file does not hold it (S1).
+      writeFixtureFile(repo, 'test/planted.test.ts', `const pem = '${FAKE_PEM_RSA_HEADER}';\n`);
+      writeFixtureFile(repo, 'test/clean.test.ts', 'const ok = 1;\n');
+      git(repo, ['add', '-A']);
+
+      const result = scanProjectSurface(repo, { surfaceRoots: TEST_SCAN_ROOTS });
+      expect(result.filesScanned).toBe(2);
+      expect(result.blocking.map((f) => [f.file, f.patternId])).toEqual([
+        ['test/planted.test.ts', 'private-key-pem'],
+      ]);
+    });
   });
 });
 

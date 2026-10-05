@@ -37,6 +37,20 @@ The secret-hygiene scan (hereafter "the scan") walks every **text file** tracked
 Binary files (detected via a null-byte sniff on the first 8KB, consistent with `git diff --numstat`
 binary detection) are skipped — they are out of scope for this spec.
 
+**What a clean scan claims** (`dl-073` (C) and S1). A scan with 0 blocking findings claims **0
+findings on the configuration store**, the roots above, and nothing more. It is not a pre-publication
+check: it does not say that the repository holds no secret, nor that a remote's push protection will
+accept a push, since such a remote reads every pushed file and `test/`, `src/` and `docs/` outside
+`docs/04_memory/` are not on this surface. Publishing is governed separately: `package.json` `files`
+sets what the npm package contains, and `spec-015` §5 how the publish authenticates. REQ-SEC-08 is
+unchanged (`dl-073` S2): it is about `.wingfoil/` content, which this surface covers.
+
+**The fixture rule's check is not this surface.** The `security-secrets` directive's rule S1
+(`dl-122`) — a fixture that must match a pattern is built at runtime — is checked by running this
+spec's procedure (§4) over the tracked files under `test/`, in the project's own suite. That run uses
+§2 and §3 unchanged; it does not widen the surface of this section (`dl-073` (A), declined until
+measured).
+
 ### 2. Pattern set
 
 Each pattern is a named rule: `{id, regex, description, severity}`. `severity` is `block` (fails the
@@ -55,7 +69,7 @@ patterns:
   - id: generic-api-key-assignment
     description: "Variable assignment that looks like an API key/secret/token"
     severity: block
-    regex: '(?i)(api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'']?[A-Za-z0-9_\-\/+=]{16,}["'']?'
+    regex: '(?i)(api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["'']?(?-i:(?![a-z]+(?:-[a-z]+)+(?![A-Za-z0-9_\-\/+=])))[A-Za-z0-9_\-\/+=]{16,}["'']?'
 
   - id: aws-access-key-id
     description: "AWS access key ID shape"
@@ -99,7 +113,7 @@ patterns:
   - id: dotenv-style-secret-line
     description: ".env-style KEY=VALUE line where KEY names a credential"
     severity: block
-    regex: '(?im)^\s*(?:export\s+|[-*]\s+)?[A-Z0-9_]*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*\S+'
+    regex: '(?im)^\s*(?:#+\s*)?(?:[-*]\s+)?(?:(?:export|readonly|declare)(?:\s+-[A-Za-z]+)*\s+)?(?:\$env:)?[A-Z0-9_]*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*\S+'
 ```
 
 Notes on the set:
@@ -110,12 +124,23 @@ Notes on the set:
   does not by itself abort a scan, to bound false-positive noise on identifiers that merely look like
   tokens (e.g. long UUIDs, content hashes). `jwt-like` was promoted to `block` by `dl-036` (§4 step 6).
 - `dotenv-style-secret-line` is anchored at the start of the line but tolerates a prefix: leading
-  whitespace, an `export` keyword, or a `-`/`*` list marker — the ordinary shapes of shell profiles,
-  `.envrc` files, indented examples and bulleted documentation. The price is a known false-positive
+  whitespace, a `#` comment marker, a `-`/`*` list marker, an `export`, `readonly` or `declare`
+  keyword (with flags such as `-x`), and PowerShell's `$env:` scope — the ordinary shapes of shell
+  profiles, `.envrc` files, commented-out `.env` lines, indented examples and bulleted documentation.
+  The price is a known false-positive
   shape: an indented code assignment whose name contains a credential word (a `token` variable
   assigned a function call, a `max_tokens` setting, a CI step passing a token from a secrets store)
-  matches too. Such lines belong in an example fence marked `<!-- example -->` or, for a file that
-  must carry them, under a `.wingfoil/security-ignore` entry (§3).
+  matches too, and so does a commented-out line of that kind, such as a shell comment that shows a
+  credential variable assigned from a command. Such lines belong in an example fence marked
+  `<!-- example -->` or, for a file that must carry them, under a `.wingfoil/security-ignore` entry
+  (§3). Other assignment syntaxes (`set` in the Windows command prompt, `local`, a `//` comment) are
+  not covered.
+- `generic-api-key-assignment` refuses a value made only of lower-case words joined by hyphens: the
+  `(?-i:…)` lookahead is case-sensitive while the key words stay case-insensitive. Such a value is
+  prose (a hyphenated name after a colon, as in a sentence that calls something secret and then names
+  a tool), not a key. The price is a known false-negative shape: a real lower-case hyphenated
+  passphrase after a key word. A value with a digit, an upper-case letter, an underscore or any other
+  value character, or a lower-case run with no hyphen, still matches.
 - The generic high-entropy rule intentionally uses a *named-key proximity* heuristic (`auth|credential|
   bearer` near the value) rather than raw Shannon-entropy scoring, to keep the check regex-only,
   deterministic, and dependency-free (no entropy-calculation library), consistent with the project's
@@ -233,4 +258,19 @@ template as the REQ-SEC-10 schema-check messages do, `built-in <kind> template s
 <name> (<pattern_id>, line <n>)`. Tolerating the prefix makes indented code assignments a known
 false-positive shape; §2's notes name it with its escape hatches, and §4 step 6 no longer calls the
 dotenv trigger near-unambiguous. Edited in place without a supersede or a state change; pending the
+approver's sign-off at that task's review.
+
+**Revision (2026-10-05) — §1 states what a clean scan claims, and §2's `dotenv-style-secret-line`
+and `generic-api-key-assignment` are revised, per
+`task-182-build-secret-shaped-fixtures-runtime-gate-test-scanner` (`dl-073` (C) + S1, `dl-122`,
+`bug-055`, `bug-190`, `bug-228`).** §1 already named the roots `.wingfoil/` and `docs/04_memory/`
+(Revision of 2026-09-29), matching `SCAN_SURFACE_ROOTS`; it now states the narrowed claim, that a
+clean scan is "0 findings on the configuration store" and not a pre-publication check, that
+REQ-SEC-08 is unchanged (`dl-073` S2), and that the `security-secrets` S1 check over `test/` runs this
+procedure without widening the surface. In §2, `dotenv-style-secret-line`'s prefix adds a `#`
+comment, a list marker before the keyword, `readonly`, `declare` with flags, and `$env:` (`bug-190`).
+`generic-api-key-assignment` gains a case-sensitive lookahead that refuses a value made only of
+lower-case words joined by hyphens (`bug-228`); `SECRET_PATTERNS` implements it by case-folding the
+key words, because Node 22's `RegExp` has no `(?-i:…)` group. §2's notes name the new false-positive
+and false-negative shapes. Edited in place without a supersede or a state change; pending the
 approver's sign-off at that task's review.

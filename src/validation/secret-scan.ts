@@ -5,10 +5,12 @@
  * `wingfoil audit`) re-implements its own regex list and lets the patterns drift.
  *
  * `SECRET_PATTERNS` reproduces spec-007 §2's ten named rules; each JS `RegExp` below carries a
- * comment quoting the exact spec-007 YAML `regex:` string it implements. Two of spec-007's patterns
+ * comment quoting the exact spec-007 YAML `regex:` string it implements. Four of spec-007's patterns
  * use the PCRE inline mode-modifier syntax `(?i)`/`(?im)` in their YAML text — JS `RegExp` has no
- * such inline syntax (`new RegExp('(?i)...')` throws `SyntaxError`) — so that flag is moved to the
- * equivalent JS `i` flag instead. This is a mechanical syntax translation, not a semantic rewrite:
+ * such inline syntax on Node 22 (`new RegExp('(?i)...')` throws `SyntaxError`) — so that flag is
+ * moved to the equivalent JS `i` flag instead, except on `generic-api-key-assignment`, whose YAML
+ * also holds a case-sensitive `(?-i:…)` group: there the key words are case-folded letter by letter
+ * (`caseless`) and no flag is set. This is a mechanical syntax translation, not a semantic rewrite:
  * the matched shape is unchanged, so it satisfies spec-007's Consequences-section instruction to
  * "reproduce the pattern table in §2 verbatim (or import it as data)" rather than hand-roll
  * alternative regexes.
@@ -33,6 +35,15 @@ export interface SecretPattern {
 }
 
 /**
+ * Case-fold the letters of a regex source fragment (`token` → `[Tt][Oo][Kk][Ee][Nn]`), leaving every
+ * other character as written. It stands in for spec-007's PCRE `(?i)` on a pattern that also needs a
+ * case-sensitive part, which a JS `i` flag cannot express (bug-228).
+ */
+function caseless(source: string): string {
+  return source.replace(/[a-z]/gi, (ch) => `[${ch.toUpperCase()}${ch.toLowerCase()}]`);
+}
+
+/**
  * The canonical secret-hygiene pattern set (spec-007 §2), in the fixed declaration order every scan
  * must evaluate patterns in (determinism, REQ-SYS-07, spec-007 §4 step 3). Adding, removing, or
  * re-classifying a pattern is a revision to spec-007's §2 table, not a call-site code change.
@@ -49,9 +60,17 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
     id: 'generic-api-key-assignment',
     description: 'Variable assignment that looks like an API key/secret/token',
     severity: 'block',
-    // spec-007 §2 (case-insensitive per its `(?i)` marker):
-    // '(api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["\']?[A-Za-z0-9_\-\/+=]{16,}["\']?'
-    regex: /(api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["']?[A-Za-z0-9_\-/+=]{16,}["']?/i,
+    // spec-007 §2 (case-insensitive key words per its `(?i)` marker; the `(?-i:…)` group is
+    // case-SENSITIVE, bug-228):
+    // '(?i)(api[_-]?key|secret|token|passwd|password)\s*[:=]\s*["\']?(?-i:(?![a-z]+(?:-[a-z]+)+(?![A-Za-z0-9_\-\/+=])))[A-Za-z0-9_\-\/+=]{16,}["\']?'
+    // The lookahead refuses a value made only of lower-case words joined by hyphens — prose such as
+    // a hyphenated name after a colon, not a key. JS has no `(?-i:…)` group on Node 22, so instead of
+    // the `i` flag the key words are case-folded one letter at a time (`caseless`): the matched
+    // shape is the spec's, and only the lookahead stays case-sensitive.
+    regex: new RegExp(
+      `(${['api[_-]?key', 'secret', 'token', 'passwd', 'password'].map(caseless).join('|')})` +
+        `\\s*[:=]\\s*["']?(?![a-z]+(?:-[a-z]+)+(?![A-Za-z0-9_\\-/+=]))[A-Za-z0-9_\\-/+=]{16,}["']?`,
+    ),
   },
   {
     id: 'aws-access-key-id',
@@ -113,9 +132,12 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
     // spec-007 §2 (case-insensitive per its `(?im)` marker; the `m` is a no-op here because the
     // scan procedure already evaluates one line at a time, so `^`/`$` anchor to that line either way).
     // The optional prefix — indentation, an `export` keyword, a `-`/`*` list marker — is
-    // bug-037's amendment (task-135): a column-0 anchor let those lines through.
-    // '^\s*(?:export\s+|[-*]\s+)?[A-Z0-9_]*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*\S+'
-    regex: /^\s*(?:export\s+|[-*]\s+)?[A-Z0-9_]*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*\S+/i,
+    // bug-037's amendment (task-135): a column-0 anchor let those lines through. bug-190's (task-182)
+    // adds a `#` comment, a list marker before the keyword, `readonly` and `declare` (with flags such
+    // as `-x`), and PowerShell's `$env:` scope.
+    // '^\s*(?:#+\s*)?(?:[-*]\s+)?(?:(?:export|readonly|declare)(?:\s+-[A-Za-z]+)*\s+)?(?:\$env:)?[A-Z0-9_]*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*\S+'
+    regex:
+      /^\s*(?:#+\s*)?(?:[-*]\s+)?(?:(?:export|readonly|declare)(?:\s+-[A-Za-z]+)*\s+)?(?:\$env:)?[A-Z0-9_]*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*\S+/i,
   },
 ];
 

@@ -27,6 +27,7 @@ import {
   builtinDirectiveMd,
 } from '../../src/storage/builtin-directives';
 import { parseYaml, scanText } from '../../src/validation';
+import { FAKE_PEM_RSA_HEADER } from '../validation/helpers/secret-fixtures';
 
 /** The P3.8 feature's set, in the order its Scenario 1 lists it. */
 const P38_IDS = ['code-quality', 'testing', 'code-review', 'architecture', 'security', 'documentation'];
@@ -106,7 +107,7 @@ describe('secret-scan non-vacuity for the built-in directive path', () => {
   it('the same scan DOES flag a planted private-key header under that path (the clean verdict is real)', () => {
     const security = BUILTIN_DIRECTIVE_TEMPLATES.find((t) => t.id === 'security');
     if (security === undefined) throw new Error('security template missing');
-    const planted = `${builtinDirectiveMd(security)}-----BEGIN RSA PRIVATE KEY-----\n`;
+    const planted = `${builtinDirectiveMd(security)}${FAKE_PEM_RSA_HEADER}\n`;
     expect(scanText(planted, '.wingfoil/directives/built-in/security.md').blocking.length).toBeGreaterThan(0);
   });
 });
