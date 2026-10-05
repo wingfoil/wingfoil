@@ -556,6 +556,13 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
       expect(build(repo).context.dna.modules.map((m) => m.name)).toEqual(['memory', 'cli']);
     });
 
+    it('a module with no path is matched by name only', () => {
+      writeFixtureFile(repo, '.wingfoil/dna.yaml', DNA_YAML.replace('stacks:', '  - name: docs\nstacks:'));
+      writeTask(repo, ELEMENT_ID, { extra: ['modules: [docs, "src/cli"]'] });
+      commitAll(repo, 'a pathless module');
+      expect(build(repo).context.dna.modules.map((m) => m.name)).toEqual(['cli', 'docs']);
+    });
+
     it('when nothing matches: every module, and a note in the diagnostics, never in the payload', () => {
       writeTask(repo, ELEMENT_ID, { extra: ['scope: "the whole agent layer"', 'depends_on: ["task-002-linked"]'] });
       commitAll(repo, 'prose scope matching nothing');
