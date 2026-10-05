@@ -1903,6 +1903,15 @@ const directivesListFn: CoreFn<unknown, DirectiveListing> = async (params) => {
  * Tool, or the diff fails.
  */
 export const CORE_MODULES: readonly CoreModule[] = [
+  // task-177 (`spec-016` §1): the `agent` module, registered under the name its operations will carry
+  // (`agentExecute`, `agentList`, `agentShow`, spec-016 §8) — with none yet. An empty `operations` map
+  // derives no command and no MCP Tool (`enumerateOperations`), so nothing reaches either surface until
+  // those tasks land. `src/agent` holds the adapter manifest they will read.
+  {
+    name: 'agent',
+    description: 'launch an agent CLI through its declared adapter (no command yet)',
+    operations: {},
+  },
   {
     name: 'dna',
     description: "read and change dna.yaml, the project's structural map",
