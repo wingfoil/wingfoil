@@ -37,7 +37,7 @@ repository root.
 │                                        (moved from docs/self/.wingfoil/ by task-111 — see README.md)
 ├── README.md                         ← human-facing layout doc + rationale (this spec formalizes it)
 ├── WORKFLOW.md                       ← human-facing workflow reference (diagrams, phase by phase)
-├── dna.yaml                          ← Project DNA (P2.4): modules, stack, team & roles, conventions
+├── dna.yaml                          ← Project DNA (P2.4): modules, stack, team & roles, paths
 ├── memory.yaml                       ← Memory element registry (P1.13): per-type path/state machine/template
 ├── roles.yaml                        ← Directive role assignments (P3.2/P3.7): role → directive list
 ├── workflows.yaml                    ← Workflow main config (P4.1): version + includes: [...] list
@@ -108,8 +108,8 @@ resolves via the per-type `path` pattern declared in `memory.yaml` against the r
 
 | File            | Pillar             | Contract |
 |------------------|---------------------|----------|
-| `dna.yaml`       | DNA (P2.4)          | Modules, tech stack, team & roles, conventions, resource `paths:` (query categories `sources, tests, docs, config, governance`) |
-| `memory.yaml`    | Memory (P1.13)      | `types:` map — one entry per element type, each declaring `path` (must contain `{id}`), `states` (values/initial/transitions), and `template:` (`frontmatter.required` + `file:` pointing into `memory/templates/`) |
+| `dna.yaml`       | DNA (P2.4)          | Modules, tech stack, team & roles, resource `paths:` (query categories `sources, tests, docs, config, governance`) |
+| `memory.yaml`    | Memory (P1.13)      | `types:` map — one entry per element type, each declaring `path` (must contain `{id}`), an optional `states` machine (`sequence`/`gates`/`waiting`), and `template:` (`frontmatter.required` + `file:` pointing into `memory/templates/`); an optional top-level `defaults.states` machine for every type that declares none (REQ-STATE-08). Schema: `spec-001`. The `wingfoil init` scaffold ships `defaults` only, with a commented per-type `states:` example on `bug` (`dl-072`) |
 | `roles.yaml`     | Directives (P3.2/P3.7) | `assignments:` map (role → list of directive names) + a `global:` list applied to every role |
 | `workflows.yaml` | Workflow (P4.1)     | `version:` + `includes:` — an ordered list of paths under `workflows/custom/` (and, once populated, `workflows/built-in/`); this file inlines nothing itself, it only composes |
 
@@ -255,3 +255,15 @@ Measured with `find .wingfoil -maxdepth 4 -type f | sort` at this revision: 9 te
 files. Nothing about the layout, the `built-in/`-versus-`custom/` split or the root-detection
 algorithm changes. Edited in place without a supersede or a state change (the `spec-001` precedent
 `dl-041` cites); pending the approver's sign-off at `task-124`'s review.
+
+**Revision (2026-10-02, `task-153-reconcile-req-state-08-p1-13-scenario-memory`) — the `memory.yaml`
+and `dna.yaml` contract cells, per `bug-053` and `dl-072`.** The `memory.yaml` cell described per-type
+`states` in the `values`/`initial`/`transitions` encoding `spec-001` retired, and never named the
+`defaults` block; it now names the `sequence`/`gates`/`waiting` encoding, the optional `defaults`
+machine, and `spec-001` as the schema. It also states the scaffold's shape `dl-072` ratified ((A) +
+S1): `defaults` only, with a commented `states:` example on `bug`. The `dna.yaml` cell listed
+`conventions`, which `spec-002` removed from `DnaYaml`, and so did the `dna.yaml` line of the
+layout tree; neither does now (the tree line names `paths` in its place). Nothing about the layout,
+the file names or the root-detection algorithm changes. Edited in place without a supersede or a
+state change (the `spec-001` precedent `dl-041` cites); pending the approver's sign-off at
+`task-153`'s review.
