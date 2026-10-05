@@ -98,8 +98,10 @@ for them, derived from each bug's Expected Behavior.
    link (`command-baseline`: the working tree may explain a refusal, never decide one).
 6. **`memory history` (bug-188).** The entry gets an `unreadable` key only when that revision does not
    parse, so every other entry keeps its shape. The next entry's `from` is then `null`, since the state
-   before it is unknown. `verifyTransitionConsistency` stays strict (throws the `ValidationError`), so
-   `check-governance` keeps its "state not checked" report (`test/cli/check-governance.test.ts`).
+   before it is unknown. `verifyTransitionConsistency` stays strict (throws the `ValidationError`). *Corrected at
+   review:* that alone did not keep `check-governance`'s "state not checked" report. The script also
+   calls `reconstructMemoryTransitions` directly for bracketless and unnamed touches, and that call had
+   become tolerant, so it failed open. Fixed with `{ strict: true }` (see "review fixes").
 7. **`atHeadOr` (bug-201)** takes `root` and falls back on `E_GIT_READ_FAILED` only when `root` holds no
    `.git`. Everything else, `git` that cannot be spawned included, is thrown. Before, its TSDoc listed
    "no runnable `git`" as a fallback case; that sentence goes.
@@ -194,7 +196,7 @@ threshold was touched.
 | 2 malformed file fails neither search nor submit; warning names the path | met | `memory-scan-tolerant` search cases; `memory-transition-head-baseline` "task-171" cases (submit ok + warning; a miss names `HEAD:<path>`) |
 | 3 search returns only elements | met | `query-tolerant` bug-164 block; this repository: 0 of 717 without `id`/`type` |
 | 4 TSDoc | met | `loadMemoryDocumentSummary`'s TSDoc now says the single-file read throws and the scans are tolerant |
-| 5 history over an unparsable revision | met | `memory-scan-tolerant` bug-188 case; `check-governance.test.ts` "does not parse" still passes (strict verify) |
+| 5 history over an unparsable revision | met | `memory-scan-tolerant` bug-188 case; `check-governance.test.ts` "does not parse" still passes, but only for a bracketed subject. The bracketless and unnamed paths failed open until the review fix |
 | 6 one link rule | met | `query-tolerant` bug-189 block (both baselines, same diagnostic); the symlink/confinement suites of the transition verbs still pass |
 | 7 `atHeadOr` | met | `memory-scan-tolerant` bug-201 block: an unspawnable `git` (PATH emptied) throws `E_GIT_READ_FAILED` |
 
@@ -209,3 +211,48 @@ is reported, not changed.
 - `spec-012-context-loader-relevance-filtering`: a §6 sentence plus a dated Revision note. Proposed
   `--reason`: "States in §6 that the Memory scan primitives exclude archived documents by default with
   an explicit includeArchived opt-in, per dl-038 option 1 (task-171)."
+
+### review fixes (independent review: APPROVE WITH FIXES)
+
+**F1, `check-governance` failed open.** `scripts/check-governance.cjs` reads bracketless and unnamed
+touches with `reconstructMemoryTransitions`, which `ea2a37be` made tolerant. A revision it could not
+read was therefore taken as checked: `findings []`, `stateUnchecked []`, and a spurious "status went
+draft → null" on an unnamed touch.
+- Red, `78917ace`: two cases in `test/cli/check-governance.test.ts` ("a bracketless or unnamed touch
+  whose revision does not parse"). `npx jest test/cli/check-governance.test.ts -t "task-171 review"`
+  on `ea2a37be` → 2 failed.
+- Green, `79fdd93f`: `reconstructMemoryTransitions(root, path, { strict: true })` (`ReconstructOptions`)
+  throws on such a revision. `verifyTransitionConsistency` and both script reads use it, and the
+  script's comment now says both reads are strict.
+
+**F2, coverage regressed.** Before the fixes it was 98.72 / 95.08 / 95.46 / 99.45 (statements /
+branches / functions / lines); main `c80167d6` measures 98.88 / 95.57 / 95.34 / 99.58 (reviewer's
+figures).
+- New tests in `test/core/memory-scan-tolerant.test.ts`:
+  - the strict throw in `reconstructMemoryTransitions` and `verifyTransitionConsistency`;
+  - `recordedIdAt` over a committed document that does not parse, which yields the "not committed at
+    HEAD" refusal;
+  - the path tie-break for two documents with one id, in search and in `listMemoryDocumentsByType`;
+  - an id-less document in `listMemoryDocumentsByType`;
+  - a dangling link in the following walk.
+- Dead branches removed:
+  - comparators are branch-free (`compareText`, and the same in `listBlobEntriesAtRev`);
+  - `parseScanned` and `readStatusAt` no longer re-throw a non-`ValidationError` (`parseYaml` throws
+    nothing else);
+  - the at-commit batch no longer checks for a `null` read (every path was listed at that commit);
+  - `loadMemoryDocumentSummaryAtRev` no longer has a default destructure;
+  - `listBlobEntriesAtRev` takes an explicit `prefix`;
+  - `memoryHistoryFn`'s catch maps to `IO` directly;
+  - `uncommittedDocumentPath` has no `try` (the following walk passes over a dangling link), and
+    `recordedIdAt` catches everything (explain-only).
+- After, `npm run test:coverage`: 220 suites, 3924 passed; **98.92 / 95.83 / 95.45 / 99.59**, so no
+  metric is below main.
+
+**F3.** The `test/memory/git-read.test.ts` comment now cites `test/core/memory-scan-tolerant.test.ts`.
+
+**Same-class docs.** `docs/cli-reference.md` (`cd3d9c0e`): the Memory section states the
+transition-verb warning and the `document not found` second sentence.
+
+Gates after the fixes: `npm run lint`, `npm run docs:api`, `npx tsc --noEmit -p tsconfig.json` and
+`npx tsc -p tsconfig.build.json --noEmit` each exit 0. `node scripts/check-governance.cjs --base
+c80167d6` exits 0. `npx jest test/docs/cli-reference.test.ts`: 4 passed.
