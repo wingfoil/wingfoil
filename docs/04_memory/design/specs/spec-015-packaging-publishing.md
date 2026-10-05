@@ -3,7 +3,7 @@ id: spec-015-packaging-publishing
 type: tech-spec
 title: "npm packaging & publishing pipeline (package.json publish surface + CI publish flow)"
 status: approved
-scope: "package.json (publish metadata + scripts), server.json, .github/workflows/publish.yml + scripts/publish-staging"
+scope: "package.json (publish metadata + scripts), server.json, .github/workflows/publish.yml + scripts/publish-staging.cjs"
 supersedes: ""
 release: "v0.2"
 contributor: ""
@@ -117,13 +117,13 @@ scheme (§4), not hand-edited at publish time.
   so no publish waits on a wall-clock measurement. See the *Revision (2026-10-03) — §2 `test`* note
   below.
 
-### 3. Publish pipeline (`.github/workflows/publish.yml` + `scripts/publish-staging`)
+### 3. Publish pipeline (`.github/workflows/publish.yml` + `scripts/publish-staging.cjs`)
 
-Stages, in order (the CI job invokes the same `scripts/publish-staging` a developer runs locally):
+Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a developer runs locally):
 
 1. **build + gate** — `npm ci`, then `prepublishOnly` (build/test/lint) + `npm publish --dry-run`
    (manifest visibility; must be exactly `dist` + docs per `files`).
-2. **stage** — start **Verdaccio** from `scripts/publish-staging` itself, in CI exactly as locally:
+2. **stage** — start **Verdaccio** from `scripts/publish-staging.cjs` itself, in CI exactly as locally:
    there is no service container (the workflow's `stage` job runs one staging step,
    `npm run publish:staging -- --tarball <the gate's tarball>`). The script installs a major-pinned
    **`verdaccio@6`** (`VERDACCIO_PACKAGE`) into a **throwaway per-run work dir** (`stagingPaths` under
@@ -245,7 +245,7 @@ the approver — **and has since been settled**, by `adr-010-node-22-runtime-flo
 corrected by the `user-docs` gate. See the *Revision (2026-09-21) — §1 Node floor* note below, which is a separate
 revision from this one.
 
-**Revision (2026-09-21) — §3 stage 2: Verdaccio is started by `scripts/publish-staging` in both
+**Revision (2026-09-21) — §3 stage 2: Verdaccio is started by `scripts/publish-staging.cjs` in both
 environments, not as a CI service container, per `dl-052-verdaccio-started-by-staging-script-in-ci`
 (`ready`, approve commit `58ac6f9`, ratified option 1).** §3 stage 2 previously read: "start
 **Verdaccio** (`npx verdaccio` locally / official image as a CI service on `http://localhost:4873`)".
@@ -556,3 +556,10 @@ argument, `npm test` runs only the parallel run, with the arguments unchanged. `
 unchanged, sets no such variable, and so neither CI nor the publish workflow runs the latency suites.
 Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions
 above.
+
+**Revision (2026-10-05, `task-165-put-bootstrap-commands-command-surface-mcp-specs-bootstrap`) — the
+staging script is named by its file, per `bug-204`.** The `scope` field, §3's heading and stages, and
+the 2026-09-21 revision named the script without its extension, a path that does not exist; the file
+has always been `scripts/publish-staging.cjs` (the same revision quotes `package.json`'s
+`node scripts/publish-staging.cjs`). Each occurrence now names it. No stage, script or other rule
+changed. Edited in place without a supersede or a state change, per `dl-047` (no `version:` field).

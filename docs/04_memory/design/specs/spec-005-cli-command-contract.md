@@ -11,7 +11,8 @@ tmpl_version: 260703
 ## Context
 
 Every `wingfoil` command — regardless of pillar (`memory`, `dna`, `directive`, `workflow`, `agent`) or
-flat command (`init`, `audit`, `paths`) — is consumed by two audiences that need a **stable, predictable
+flat command (`init`, `mcp`, `paths`, `audit`; `init` and `mcp` are the bootstrap commands,
+`spec-008-cli-grammar` §1) — is consumed by two audiences that need a **stable, predictable
 contract** independent of the specific command's arguments: (1) humans reading console output, and
 (2) scripts, CI pipelines, and other tools parsing exit codes and structured output.
 
@@ -318,6 +319,17 @@ not written, so stderr is parseable as one object. Third, the confinement refusa
 `memory add` and `VALIDATION` from the transition verbs; §3.2 now names `VALIDATION` as its one code.
 No exit code changed, and the console `error:` line of every existing refusal is unchanged. Edited in
 place without a supersede or a state change, per `dl-047-tech-specs-carry-no-version-field`.
+
+**Revision (2026-10-05, `task-165-put-bootstrap-commands-command-surface-mcp-specs-bootstrap`) —
+§Context names `mcp` among the flat commands, per `bug-028` and
+`dl-046-bootstrap-commands-in-spec-006-section-3` (`ready`).** `wingfoil mcp` has shipped since
+`task-030` and is bound by this contract like every other command, but §Context listed only `init`,
+`audit` and `paths`. It now lists `init`, `mcp`, `paths`, `audit`, the same four `spec-008-cli-grammar`
+§1 and `spec-006-core-domain-api` §3 list, and points to `spec-008` §1 for what a bootstrap command is.
+`test/docs/command-surface-specs.test.ts` fails when a flat command the program registers is missing
+from the list. No exit code, format or rule changed: §1's exit-`2` row already covers a surplus operand
+on `init` and `mcp`, whose wording is now the shared one (`bug-179`). Edited in place without a
+supersede or a state change, per `dl-047-tech-specs-carry-no-version-field`.
 
 ## Process Notes
 

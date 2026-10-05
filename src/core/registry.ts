@@ -120,7 +120,11 @@ export function extraOperandsReason(command: string, positionalName: string | un
  * and value-bearing `options`. The single source of truth `src/cli` and `src/mcp` register from.
  */
 export interface CoreOperation<P = unknown, R = unknown> {
-  /** camelCase, `{module}{Verb}` (spec-006 §5) — e.g. `memoryApprove`, `dnaShow`. */
+  /**
+   * camelCase, `{module}{Verb}` (spec-006 §5) — e.g. `memoryApprove`, `dnaShow` — or, for a self-named
+   * flat operation, exactly the module's name (`paths`; `dl-046` C), from which {@link deriveVerb}
+   * derives no verb, so the command is the bare `wingfoil <module>`.
+   */
   readonly name: string;
   /** `true` => MCP Tool only; `false` => MCP Resource only. CLI exposes both regardless (§2). */
   readonly mutates: boolean;

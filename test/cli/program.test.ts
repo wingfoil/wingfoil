@@ -468,6 +468,24 @@ describe('buildProgram — the special bootstrap commands `init` and `mcp`', () 
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
+  // bug-179 (task-165): a surplus operand on a bootstrap command gets the shared refusal at exit 2,
+  // in the active `--format`, before the root is resolved and without running the command.
+  it.each([
+    [['init', 'extra'], 'error: wingfoil init takes no positional (got 1 positional)\n'],
+    [['--format', 'json', 'mcp', 'a', 'b'], `${JSON.stringify({ error: 'wingfoil mcp takes no positional (got 2 positionals)' })}\n`],
+  ])('`wingfoil %j` refuses the surplus operand before resolving the root (bug-179)', async (argv, expected) => {
+    const resolveRoot = jest.fn(() => '/fixture-root');
+    const program = await buildProgram(FIXTURE_MODULES, { resolveRoot, buildParams: (ctx) => ({ root: ctx.root }) });
+    program.exitOverride();
+    await program.parseAsync(['node', 'wingfoil', ...argv]);
+
+    expect(written(stderrSpy)).toBe(expected);
+    expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(resolveRoot).not.toHaveBeenCalled();
+    expect(runInit).not.toHaveBeenCalled();
+    expect(runMcp).not.toHaveBeenCalled();
+  });
+
   it('`mcp` drives `runMcp` with the package version and the validated ambient format', async () => {
     const program = await buildFixtureProgram();
     await program.parseAsync(['node', 'wingfoil', 'mcp', '--format', 'yaml']);

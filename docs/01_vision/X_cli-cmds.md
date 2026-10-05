@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 1.3
-**Date:** 2026-09-24  
+**Version:** 1.4
+**Date:** 2026-10-05  
 **Status:** Approved
 
 ---
@@ -195,6 +195,7 @@ interactive wizard, flag-based, or inferred from repo. Initialization automatica
 |------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|--------------|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `wingfoil init [--mode wizard/params/infer] [--template METHODOLOGY] [--tech-stack STACK] [--team-size N] [--confirm]` | Initialize WingFoil on new or existing project                              | Alex, Morgan | 0a, 0b   | Three modes: wizard (interactive Q&A), params (flags), infer (deduce from repo). Generates DNA, installs built-in directives/workflows, creates Memory structure |
 | `wingfoil audit [--output-type full/summary] [--format json/yaml]`                                                     | Scan project and summarize current state (languages, frameworks, structure) | Morgan, Alex | 0b       | Pre-requisite to `init --mode infer`. Shows: repo size, languages, frameworks, module structure, team members (from git history). Helps inform DNA inference     |
+| `wingfoil mcp`                                                                                                         | Start the WingFoil MCP server over stdio, for an MCP client to launch       | Alex         | 1        | Bootstrap command, like `init`: not a core operation and not exposed on MCP itself (REQ-SYS-05's exemption, `dl-046-bootstrap-commands-in-spec-006-section-3`). Contract in `spec-014-mcp-server-entry-point` §1 |
 
 ### Parameters for Pillar 5 Commands
 
@@ -360,6 +361,11 @@ All commands support:
 ---
 
 ## Revision history
+
+**Version 1.4 (2026-10-05) — Pillar 5 gains the `wingfoil mcp` row, per `task-165` (`bug-028`,
+`dl-046-bootstrap-commands-in-spec-006-section-3`).** `wingfoil mcp` has shipped since `task-030`, and
+`spec-008-cli-grammar` §1 says its grammar matches this map, which had no row for it. The row names it a
+bootstrap command, outside the MCP surface it starts. No other row changed.
 
 **Version 1.3 (2026-09-24) — Pillar 2 is brought onto `dl-082-cli-parameter-shape`'s grammar, and two claims that were
 never true of a shipped command are retired.** Closes `bug-090-dna-set-grammar-differs-across-three-artefacts`.

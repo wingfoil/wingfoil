@@ -176,9 +176,14 @@ closed bijection, not a best-effort overlap:
 ```
 
 Concretely, for the Memory pillar this is exactly the five lifecycle verbs (`add, submit, approve,
-reject, deprecate` — features P1.3/P1.6/P1.7/P1.8/P1.9) plus whatever workflow-action verbs `workflow.yaml` steps
+reject, deprecate` — features P1.3/P1.6/P1.7/P1.8/P1.9) plus whatever workflow-action verbs `workflows.yaml` steps
 invoke (`element.set_state`, `git.*` actions wrapped by `agent.execute`, etc., per P4.10) once those
 ship in v1.0.
+
+The two **bootstrap commands** are outside both sets: `wingfoil init`, which mutates state but must run
+before a WingFoil project exists, and `wingfoil mcp`, which starts this server. Neither has a Tool or a
+Resource, and REQ-SYS-05's Fit Criterion exempts both by name
+(`dl-046-bootstrap-commands-in-spec-006-section-3` A(a); `spec-006-core-domain-api` §3).
 
 #### 4.3 Input/output shape
 
@@ -341,3 +346,12 @@ Revision note). `deprecate` is not an approval gate (`dl-027`, REQ-SEC-04), so b
 "exactly one git commit" gains the one exception, an approve that fires the `supersedes:` trigger.
 Edited in place without a supersede or a state change, per `dl-047` (no `version:` field); pending
 the approver's sign-off at `task-162`'s review.
+
+**Revision (2026-10-05, `task-165-put-bootstrap-commands-command-surface-mcp-specs-bootstrap`) — §4.2
+states the bootstrap exemption, and names the workflow configuration file correctly, per
+`dl-046-bootstrap-commands-in-spec-006-section-3` (`ready`, A(a)) and `bug-204`.** §4.2's bijection
+covered every state-mutating CLI command, so `wingfoil init`, which has no Tool, contradicted it.
+`dl-046` A(a) exempts the bootstrap commands from REQ-SYS-05, and §4.2 now says so, naming `init` and
+`mcp`. §4.2 also named the workflow configuration with a singular file name that never existed; it is
+`workflows.yaml`. No Tool, Resource or other rule changed. Edited in place without a supersede or a
+state change, per `dl-047` (no `version:` field).

@@ -39,7 +39,7 @@ import { join } from 'node:path';
 // Type-only; commander is ESM-only, hence the explicit resolution-mode attribute — see module doc above.
 import type { Command } from 'commander' with { 'resolution-mode': 'import' };
 
-import type { CoreModule, CorePositional } from '../core/registry';
+import { extraOperandsReason, type CoreModule, type CorePositional } from '../core/registry';
 // Direct module import, not the `../core` barrel — the same path `./registrar.ts` already uses for the
 // other two exit-code mappings (task-101; keeps this file out of the barrel's merge surface).
 import { classifyParseOutcome } from '../core/exit-code';
@@ -158,7 +158,9 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
       `methodology template, one of: ${TEMPLATE_NAMES.join(', ')} (required without a terminal or with --no-interactive)`,
     )
     .addHelpText('after', leafHelpFooter(`wingfoil init --template ${TEMPLATE_NAMES[0] ?? '<name>'}`))
-    .action(async (localOpts: { template?: string }) => {
+    .allowExcessArguments(true)
+    .action(async (localOpts: { template?: string }, command: Command) => {
+      if (refusedSurplus(program, 'init', command.args)) return;
       const globalOpts = program.opts<{ format: string; interactive: boolean }>();
       let root: string;
       try {
@@ -184,7 +186,9 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
     .command('mcp')
     .description('start the WingFoil MCP server (read-only Resources and role Prompts) over stdio')
     .addHelpText('after', leafHelpFooter('wingfoil mcp'))
-    .action(async () => {
+    .allowExcessArguments(true)
+    .action(async (_localOpts: unknown, command: Command) => {
+      if (refusedSurplus(program, 'mcp', command.args)) return;
       const globalOpts = program.opts<{ format: string }>();
       const format = isValidFormat(globalOpts.format) ? globalOpts.format : 'console';
       await runMcp({ resolveRoot: options.resolveRoot, version: readPackageVersion(), format });
@@ -299,6 +303,23 @@ function leafHelpFooter(example: string): string {
     '  1  the command line was valid, but the operation failed',
     '  2  the command line is wrong: unknown command or option, missing or invalid argument',
   ].join('\n');
+}
+
+/**
+ * The surplus-operand refusal of the two hand-wired bootstrap commands (`bug-179`, task-165). `init`
+ * and `mcp` declare no positional, so any operand is a surplus (`spec-008-cli-grammar` §1): refused at
+ * exit `2` with the same {@link extraOperandsReason} wording the registrar gives every `CORE_MODULES`
+ * command (task-129), in the active `--format`, before the project root is resolved — so nothing is
+ * read or written. Both commands allow excess arguments so the surplus reaches this check instead of
+ * Commander's own `too many arguments` refusal, whose wording differs.
+ *
+ * @returns `true` when the invocation was refused (the caller returns), `false` when it had no operand.
+ */
+function refusedSurplus(program: Command, name: string, operands: readonly string[]): boolean {
+  if (operands.length === 0) return false;
+  emitError(extraOperandsReason(name, undefined, operands.length), { format: activeFormat(program) });
+  exitWith(2);
+  return true;
 }
 
 /**
