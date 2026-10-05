@@ -67,13 +67,30 @@ Rules:
   through `0`/`1`/`2` per the rules above, and defines the exact mapping for its own case in that
   command's own CLI-* spec.
 
+- The exit never loses output. The single exit function ends the process only once everything
+  written to stdout and stderr has been written to the pipe: a payload larger than a pipe's buffer
+  arrives whole, with the command's exit code. When the reader has gone away (`EPIPE`), the process
+  still ends with that code. There is no drain timeout, so a reader that stays open without reading
+  keeps the CLI waiting — the normal behaviour of a Unix writer, and a change from 0.2.x, which exited
+  at once and dropped the rest.
+
 ```ts
 // src/cli/exit.ts
 export type ExitCode = 0 | 1 | 2;
 
-export function exitWith(code: ExitCode, message?: string): never {
+// Ends the process now when nothing is queued; otherwise sets `process.exitCode = code`, calls
+// `process.exit(code)` once the queued stdout/stderr writes complete (or fail with EPIPE), and
+// returns `true` ("deferred") to its caller.
+export function exitWith(code: ExitCode, message?: string): boolean {
   if (message) process.stderr.write(message + '\n');
-  process.exit(code);
+  const queued = [process.stdout, process.stderr].filter((s) => s.writableLength > 0);
+  if (queued.length === 0) {
+    process.exit(code);
+    return false;
+  }
+  process.exitCode = code;
+  // … one empty write per queued stream; the last one to complete calls process.exit(code)
+  return true;
 }
 ```
 
@@ -330,6 +347,22 @@ place without a supersede or a state change, per `dl-047-tech-specs-carry-no-ver
 from the list. No exit code, format or rule changed: §1's exit-`2` row already covers a surplus operand
 on `init` and `mcp`, whose wording is now the shared one (`bug-179`). Edited in place without a
 supersede or a state change, per `dl-047-tech-specs-carry-no-version-field`.
+
+**Revision (2026-10-05, `task-249-let-piped-cli-output-drain-before-the-process-exits`) — §1's exit
+function lets queued output drain before the process ends, per `bug-222`.** The listing called
+`process.exit(code)` right after the last write. A write to a pipe is asynchronous in Node: the kernel
+takes what fits in the pipe buffer (64 KiB on Linux) and the rest stays queued. So `memory search
+--format json | jq` received truncated JSON while the process exited `0` — the code no longer described
+what the reader got. §1 gains a rule that the exit never loses output, with no drain timeout (a reader that stays open
+without reading keeps the CLI waiting, as any Unix writer does), and the listing shows the mechanism. It is still the single exit function and still the one `process.exit` call. When nothing is
+queued (a file, a TTY, a pipe that took everything) it ends the process at once, as before. Otherwise it
+sets `process.exitCode` and exits with the same code once the queued writes complete or fail with
+`EPIPE`. It no longer returns `never`: in that case it returns `true` to its caller, and every caller returns
+right after it. The argument parser's exit callback cannot simply return (the parser would then exit
+with its own code), so on `true` it throws a marker the entry point recognises, and the deferred exit
+proceeds. The entry point's last-resort handler for an escaped error now ends through the same
+function. No exit code, format or other rule changed. Edited in place without a supersede or a state
+change, per `dl-047-tech-specs-carry-no-version-field`.
 
 ## Process Notes
 

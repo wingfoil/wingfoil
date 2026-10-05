@@ -18,6 +18,7 @@
  * (spec-005-cli-command-contract §1, spec-008-cli-grammar §1) even outside a git repository; only an
  * actual `<noun> <verb>` invocation needs a resolvable git root.
  */
+import { exitWith } from './cli/exit';
 import { buildProgram } from './cli/program';
 import { CORE_MODULES } from './core';
 import { resolveProjectRoot } from './storage/git-root';
@@ -33,11 +34,18 @@ buildProgram(CORE_MODULES, {
 })
   .then((program) => program.parseAsync(process.argv))
   .catch((error: unknown) => {
+    // Not an error: an exit already chosen through `exitWith` is waiting for queued output to drain
+    // (task-249, `bug-222`), and the process ends with that code once it has. Matched by name, as the
+    // compiled test harness does, so a second copy of `./cli/exit` cannot make it read as a failure —
+    // and only when `exitWith` has really chosen a code (`process.exitCode` is set), so an unrelated
+    // error that happens to carry the name is still reported below rather than swallowed.
+    if (error instanceof Error && error.name === 'DeferredExit' && process.exitCode !== undefined) return;
     // Last-resort handler for anything that escapes the per-command spec-005 exit path. Emit only the
     // message as a single `error:` line — never `error.stack`, which would leak a stack trace and
     // absolute internal paths from a published CLI (bug-002-cli-error-stack-dump). The normal
     // no-git-root path is already handled cleanly inside the registrar; this guards the unexpected.
+    // It ends through `exitWith` like every other outcome (spec-005 §1), so output a command queued
+    // before the escape still drains (task-249 review).
     const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`error: ${message}\n`);
-    process.exit(1);
+    exitWith(1, `error: ${message}`);
   });
