@@ -201,8 +201,45 @@ Determinism: `grep -nE "Date\.now|new Date|Math\.random|process\.env" src/core/c
 
 ### Pending amendments (approver)
 
-- `spec-012-context-loader-relevance-filtering` (§4 bullets + a dated Revision note; no `version`
-  field, so no bump, as the two earlier Revision notes did). Proposed reason: `§4 named the conventions
-  section spec-002 v1.1 removed and listed five paths categories where the schema has six since
-  task-138 added runs; the bullets now match dna.yaml as it is, and the selection rules, order and the
-  §7 envelope are unchanged. Edited by task-176, which implements §4.`
+- `spec-012-context-loader-relevance-filtering` (§4 bullets, §5's global enumeration + one dated
+  Revision note; no `version` field, so no bump, as the two earlier Revision notes did). Proposed
+  reason: `§4 named the conventions section spec-002 v1.1 removed and listed five paths categories where
+  the schema has six since task-138 added runs, and §5 enumerated four global directives where
+  roles.yaml binds five since task-133 bound security (dl-059). The bullets now match dna.yaml and
+  roles.yaml as they are; the selection rules, order and the §7 envelope are unchanged. Edited by
+  task-176, which implements §4.`
+- `spec-016-agent-execution` (one citation, line 70: `src/core/context.ts:267` → `src/core/context.ts`).
+  Proposed reason: `The citation pinned assembleExecutionContext to a line offset that task-176's
+  rewrite of src/core/context.ts made stale; it now names the file only, so it cannot drift again. The
+  entry's name is unchanged.`
+
+### review fixes (independent review: approve with fixes)
+
+Commit `c06119db`; the task stays `in-review`.
+
+- **F1** (pending amendment, uncommitted): §4's `paths` bullet now has its verb ("… is included");
+  §5's global enumeration gains `security` (`grep -n -A8 '^global' .wingfoil/roles.yaml` → five
+  globals), recorded in the same Revision note. Reason above extended.
+- **F3**: the REQ-PERF-05 block now asserts ids, not counts. K = 25 relevant among 1,000 → exactly
+  those 25, in §6 order. K = 60 with 8,000-byte bodies → the first 32 ids, every one `-hot`, because a
+  33rd would pass `maxBytes` (the byte bound can now fail). K = 60 with small bodies → the first 40.
+- **F6**:
+  - `src/core/loaders.ts` `loadRolesYaml`'s comment no longer says the context reads it; the context
+    reads `loadRolesYamlAtRev`.
+  - `spec-016` line 70's stale offset: a pending amendment (above).
+  - A role, element type or element id holding a control character or `-->` is refused before any
+    read (`VALIDATION`, `invalid role "<role>": it may hold no control character and no '-->'`), and
+    `serializeExecutionContext` throws on one rather than writing it into the header comment.
+  - `limits` must be positive integers: `NaN`, `0`, `1.5` and `-1` are refused (`VALIDATION`,
+    `invalid context limits: …`).
+  - A section left unset by an absent pillar file carries `details.cause` naming it, e.g.
+    `no .wingfoil/roles.yaml at <sha>`; the message stays P5.4.4's, verbatim.
+- **Held, per the coordinator**: module matching by name only (`scope: "src/core"` → no module)
+  awaits an approver ruling; the task-171 integration lands by merging `main` after it.
+
+| Gate (after `c06119db`) | Result |
+|---|---|
+| `npm run test:coverage` | 219 suites / 3941 tests passed; 98.91 / 95.70 / 95.60 / 99.59 (`main` `c80167d6`: 98.88 / 95.54 / 95.34 / 99.58) |
+| `src/core/context.ts` | 100 / 99.15 / 100 / 100; the one branch left is `withBodies`' `?? ''`, for a directive git has just listed |
+| `npm run lint` / `npm run docs:api` (0 warning lines) | exit 0 / exit 0 |
+| `npx tsc --noEmit -p tsconfig.json` / `npx tsc -p tsconfig.build.json --noEmit` | exit 0 / exit 0 |
