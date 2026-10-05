@@ -194,6 +194,35 @@ describe('cadence — once | { recurring: { cron } | { on } } (dl-105 R1, spec-0
     if (!result.success) expect(result.error.issues[0]!.path.slice(0, 3)).toEqual(['phases', 0, 'cadence']);
   });
 
+  const SHAPE = 'cadence must be once or { recurring: { cron } | { on } } with no other key';
+  it.each([
+    ['an unknown trigger key', { recurring: { cron: '0 6 * * 1', x: 1 } }, `${SHAPE} (unknown key 'recurring.x')`],
+    ['an unknown key beside recurring', { recurring: { on: 'release-released' }, x: 1 }, `${SHAPE} (unknown key 'x')`],
+    ['an unknown literal', 'twice', SHAPE],
+    ['null', null, SHAPE],
+    ['a recurring that is not a map', { recurring: 'weekly' }, SHAPE],
+  ])('review F1 — %s is refused at phases[0].cadence with a message naming the shape', (_label, cadence, message) => {
+    const result = parse(cadence);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((i) => [i.path.join('.'), i.message])).toEqual([['phases.0.cadence', message]]);
+    }
+  });
+
+  it.each(['0 6\n* * 1', '0 6 * *\r1', '0\v6 * * 1'])('review F2 — a cron separated by a non-blank whitespace (%j) is refused', (cron) => {
+    const result = parse({ recurring: { cron } });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((i) => [i.path.join('.'), i.message])).toEqual([
+        ['phases.0.cadence.recurring.cron', 'cron must be a five-field cron expression (e.g. "0 6 * * 1")'],
+      ]);
+    }
+  });
+
+  it('a cron may separate its fields with spaces and tabs', () => {
+    expect(parse({ recurring: { cron: '0\t6  * * 1' } }).success).toBe(true);
+  });
+
   it('names the rule in the message: exactly one trigger', () => {
     const result = parse({ recurring: { cron: '0 6 * * 1', on: 'release-released' } });
     expect(result.success).toBe(false);
