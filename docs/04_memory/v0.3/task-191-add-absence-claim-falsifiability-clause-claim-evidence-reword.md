@@ -2,7 +2,7 @@
 id: "task-191-add-absence-claim-falsifiability-clause-claim-evidence-reword"
 type: task
 title: "Add the absence-claim falsifiability clause to claim-evidence and reword the determinism directive to the I/P/O split"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "medium"
