@@ -2,7 +2,7 @@
 id: "task-176-complete-spec-012-context-builder-dna-selection-relevance"
 type: task
 title: "Complete the `spec-012` context builder: DNA selection, relevance-filtered Memory, the canonical §7 payload and its validation, all pinned to `stateRef`"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "high"
