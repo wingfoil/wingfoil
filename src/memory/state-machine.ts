@@ -12,7 +12,8 @@
  * This is spec-009-validation-strategy §1's Pass 2 (semantic / cross-file): the transition rule
  * needs the type's registered machine (loaded from `memory.yaml`) plus the document's own `status`
  * field — neither is decidable from the document's frontmatter schema alone, matching spec-009's own
- * worked example ("`wingfoil.status` must be a member of that type's `states.values`"). An illegal
+ * worked example ("`wingfoil.status` must be a state of that type's machine — a member of its
+ * `sequence`, a `gates` reject target, or `deprecated`"; {@link validateFrontmatterState}). An illegal
  * transition throws the shared `ValidationError` (exit code `1` — a business-rule failure, not an
  * integrity one, per spec-009 §3 as rewritten under `dl-032-illegal-transition-message-contract`)
  * and — critically — throws *before* returning any target, so a caller can never reach
