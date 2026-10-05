@@ -45,7 +45,7 @@ import { loadMemoryYaml } from '../core';
 import { findMemoryDocumentByTypeAndId, listMemoryDocumentsByType } from '../memory/query';
 import { readDocument } from '../storage';
 
-import { jsonResourceResult, refuseIfWriteIntent, resourceNotFoundError } from './read-only';
+import { jsonResourceResult, refuseIfWriteIntent, resourceNotFoundError, withRefusalDetails } from './read-only';
 
 /** Options for {@link registerMemoryResources}. */
 export interface RegisterMemoryResourcesOptions {
@@ -69,31 +69,32 @@ export function registerMemoryResources(server: McpServer, options: RegisterMemo
     'memory.list',
     collectionTemplate,
     { description: 'Memory documents of one type, frontmatter only (read-only)' },
-    async (uri, variables, extra) => {
-      refuseIfWriteIntent(extra._meta);
-      const root = options.resolveRoot();
-      const memoryYaml = loadMemoryYaml(root);
-      // `variables.type` is typed `string | string[]` (the SDK's generic `Variables` shape), but
-      // this template's `{type}` variable has no `*`/`+` explode modifier, so a match always binds
-      // it to a single string (see the SDK's `UriTemplate.match`) — the `string[]` case is
-      // unreachable here (mirrors task-009's own `{id}` reasoning for this same SDK behaviour).
-      const type = variables.type as string;
-      if (!(type in memoryYaml.types)) throw resourceNotFoundError(`memory/${type}`);
+    (uri, variables, extra) =>
+      withRefusalDetails(() => {
+        refuseIfWriteIntent(extra._meta);
+        const root = options.resolveRoot();
+        const memoryYaml = loadMemoryYaml(root);
+        // `variables.type` is typed `string | string[]` (the SDK's generic `Variables` shape), but
+        // this template's `{type}` variable has no `*`/`+` explode modifier, so a match always binds
+        // it to a single string (see the SDK's `UriTemplate.match`) — the `string[]` case is
+        // unreachable here (mirrors task-009's own `{id}` reasoning for this same SDK behaviour).
+        const type = variables.type as string;
+        if (!(type in memoryYaml.types)) throw resourceNotFoundError(`memory/${type}`);
 
-      // REQ-STATE-06 / `dl-028-archived-states-excluded-from-context` (`bug-010`): this collection is
-      // an agent-facing read path, so archived documents — `{deprecated, superseded}`, per the shared
-      // `isArchivedStatus` — are withheld. Since task-171 (`dl-038` option 1) the primitive withholds
-      // them by default, so this call site no longer filters: omitting a filter fails closed.
-      const summaries = listMemoryDocumentsByType(root, memoryYaml, type)
-        .map(({ id, title, status, tags }) => ({
-          id,
-          title,
-          status,
-          tags,
-        }));
+        // REQ-STATE-06 / `dl-028-archived-states-excluded-from-context` (`bug-010`): this collection is
+        // an agent-facing read path, so archived documents — `{deprecated, superseded}`, per the shared
+        // `isArchivedStatus` — are withheld. Since task-171 (`dl-038` option 1) the primitive withholds
+        // them by default, so this call site no longer filters: omitting a filter fails closed.
+        const summaries = listMemoryDocumentsByType(root, memoryYaml, type)
+          .map(({ id, title, status, tags }) => ({
+            id,
+            title,
+            status,
+            tags,
+          }));
 
-      return jsonResourceResult(uri, summaries);
-    },
+        return jsonResourceResult(uri, summaries);
+      }),
   );
 
   const documentTemplate = new ResourceTemplate(MEMORY_DOCUMENT_URI_TEMPLATE, { list: undefined });
@@ -101,52 +102,53 @@ export function registerMemoryResources(server: McpServer, options: RegisterMemo
     'memory.show',
     documentTemplate,
     { description: 'one Memory document, full content + metadata (read-only)' },
-    async (uri, variables, extra) => {
-      refuseIfWriteIntent(extra._meta);
-      const root = options.resolveRoot();
-      const memoryYaml = loadMemoryYaml(root);
-      const type = variables.type as string;
-      const id = variables.id as string;
-      if (!(type in memoryYaml.types)) throw resourceNotFoundError(`memory/${type}/${id}`);
+    (uri, variables, extra) =>
+      withRefusalDetails(() => {
+        refuseIfWriteIntent(extra._meta);
+        const root = options.resolveRoot();
+        const memoryYaml = loadMemoryYaml(root);
+        const type = variables.type as string;
+        const id = variables.id as string;
+        if (!(type in memoryYaml.types)) throw resourceNotFoundError(`memory/${type}/${id}`);
 
-      // `includeArchived: true`, said here on purpose (task-171, `dl-038` option 1): REQ-STATE-06 keeps
-      // an archived document "present on disk and in git history", and this Resource is how an agent
-      // retrieves one explicitly.
-      const doc = findMemoryDocumentByTypeAndId(root, memoryYaml, type, id, { includeArchived: true });
-      if (!doc) throw resourceNotFoundError(`memory/${type}/${id}`);
+        // `includeArchived: true`, said here on purpose (task-171, `dl-038` option 1): REQ-STATE-06 keeps
+        // an archived document "present on disk and in git history", and this Resource is how an agent
+        // retrieves one explicitly.
+        const doc = findMemoryDocumentByTypeAndId(root, memoryYaml, type, id, { includeArchived: true });
+        if (!doc) throw resourceNotFoundError(`memory/${type}/${id}`);
 
-      // spec-004 §2.2 wants the *full file content* (frontmatter + body), not the re-serialized
-      // parsed frontmatter `loadMemoryDocumentSummary` already split apart for the scan — so this
-      // re-reads the resolved path's raw bytes via `storage.readDocument` (still a read primitive
-      // reuse, not a reimplemented scan: the scan itself already happened inside
-      // `findMemoryDocumentByTypeAndId`).
-      const fullText = readDocument(join(root, doc.path));
+        // spec-004 §2.2 wants the *full file content* (frontmatter + body), not the re-serialized
+        // parsed frontmatter `loadMemoryDocumentSummary` already split apart for the scan — so this
+        // re-reads the resolved path's raw bytes via `storage.readDocument` (still a read primitive
+        // reuse, not a reimplemented scan: the scan itself already happened inside
+        // `findMemoryDocumentByTypeAndId`).
+        const fullText = readDocument(join(root, doc.path));
 
-      // spec-004 §2.2 depicts `metadata` as a sibling of `uri`/`mimeType`/`text`, i.e. flat on the
-      // result — not nested inside a `contents[]` entry (whose shape the real MCP wire schema fixes
-      // to `{uri, mimeType, text|blob, _meta?}`, `ReadResourceResultSchema`'s `contents` union in the
-      // SDK's `types.d.ts`). The top-level `ReadResourceResultSchema` object itself is passthrough
-      // (`z.core.$loose`), so this extra top-level `metadata` key is preserved end to end (server ->
-      // wire -> client parse) without needing a non-standard content shape. Built via an
-      // untyped-at-the-literal `result` variable (assigned, not returned directly) so TypeScript's
-      // excess-property check — which only applies to object literals in a contextually-typed
-      // position — never triggers on this extra key.
-      const result = {
-        contents: [
-          {
-            uri: uri.toString(),
-            mimeType: 'text/markdown',
-            text: fullText,
+        // spec-004 §2.2 depicts `metadata` as a sibling of `uri`/`mimeType`/`text`, i.e. flat on the
+        // result — not nested inside a `contents[]` entry (whose shape the real MCP wire schema fixes
+        // to `{uri, mimeType, text|blob, _meta?}`, `ReadResourceResultSchema`'s `contents` union in the
+        // SDK's `types.d.ts`). The top-level `ReadResourceResultSchema` object itself is passthrough
+        // (`z.core.$loose`), so this extra top-level `metadata` key is preserved end to end (server ->
+        // wire -> client parse) without needing a non-standard content shape. Built via an
+        // untyped-at-the-literal `result` variable (assigned, not returned directly) so TypeScript's
+        // excess-property check — which only applies to object literals in a contextually-typed
+        // position — never triggers on this extra key.
+        const result = {
+          contents: [
+            {
+              uri: uri.toString(),
+              mimeType: 'text/markdown',
+              text: fullText,
+            },
+          ],
+          metadata: {
+            id: doc.frontmatter.id,
+            type: doc.frontmatter.type,
+            status: doc.frontmatter.status,
+            title: doc.frontmatter.title,
           },
-        ],
-        metadata: {
-          id: doc.frontmatter.id,
-          type: doc.frontmatter.type,
-          status: doc.frontmatter.status,
-          title: doc.frontmatter.title,
-        },
-      };
-      return result;
-    },
+        };
+        return result;
+      }),
   );
 }

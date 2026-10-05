@@ -23,7 +23,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import { loadWorkflowsYaml } from '../core';
 
-import { jsonResourceResult, refuseIfWriteIntent, resourceNotFoundError } from './read-only';
+import { jsonResourceResult, refuseIfWriteIntent, resourceNotFoundError, withRefusalDetails } from './read-only';
 
 /** Options for {@link registerWorkflowResources}. */
 export interface RegisterWorkflowResourcesOptions {
@@ -46,17 +46,18 @@ export function registerWorkflowResources(server: McpServer, options: RegisterWo
     'workflows.list',
     WORKFLOWS_COLLECTION_URI,
     { description: 'every loaded workflow definition, summary only (read-only)' },
-    async (uri, extra) => {
-      refuseIfWriteIntent(extra._meta);
-      const root = options.resolveRoot();
-      const { workflows } = loadWorkflowsYaml(root);
-      // Deterministic order (REQ-SYS-07): sorted by `name`, independent of `include` list order.
-      const summaries = [...workflows]
-        .map(({ name, kind, description }) => ({ name, kind, description }))
-        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    (uri, extra) =>
+      withRefusalDetails(() => {
+        refuseIfWriteIntent(extra._meta);
+        const root = options.resolveRoot();
+        const { workflows } = loadWorkflowsYaml(root);
+        // Deterministic order (REQ-SYS-07): sorted by `name`, independent of `include` list order.
+        const summaries = [...workflows]
+          .map(({ name, kind, description }) => ({ name, kind, description }))
+          .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
-      return jsonResourceResult(uri, summaries);
-    },
+        return jsonResourceResult(uri, summaries);
+      }),
   );
 
   const documentTemplate = new ResourceTemplate(WORKFLOW_DOCUMENT_URI_TEMPLATE, { list: undefined });
@@ -64,18 +65,19 @@ export function registerWorkflowResources(server: McpServer, options: RegisterWo
     'workflows.show',
     documentTemplate,
     { description: 'one workflow definition, full content (read-only)' },
-    async (uri, variables, extra) => {
-      refuseIfWriteIntent(extra._meta);
-      const root = options.resolveRoot();
-      const { workflows } = loadWorkflowsYaml(root);
-      // `variables.name` is typed `string | string[]` (see `memory-resource.ts`'s identical note on
-      // `{type}`/`{id}`) — this template's `{name}` has no explode modifier, so it is always a single
-      // string in practice.
-      const name = variables.name as string;
-      const workflow = workflows.find((candidate) => candidate.name === name);
-      if (!workflow) throw resourceNotFoundError(`workflows/${name}`);
+    (uri, variables, extra) =>
+      withRefusalDetails(() => {
+        refuseIfWriteIntent(extra._meta);
+        const root = options.resolveRoot();
+        const { workflows } = loadWorkflowsYaml(root);
+        // `variables.name` is typed `string | string[]` (see `memory-resource.ts`'s identical note on
+        // `{type}`/`{id}`) — this template's `{name}` has no explode modifier, so it is always a single
+        // string in practice.
+        const name = variables.name as string;
+        const workflow = workflows.find((candidate) => candidate.name === name);
+        if (!workflow) throw resourceNotFoundError(`workflows/${name}`);
 
-      return jsonResourceResult(uri, workflow);
-    },
+        return jsonResourceResult(uri, workflow);
+      }),
   );
 }

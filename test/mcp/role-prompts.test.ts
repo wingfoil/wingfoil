@@ -336,8 +336,8 @@ describe('prompts/get — a directive body\'s headings are demoted two levels (s
         '#### After the fences',
       ].join('\n'),
     );
-    // The prompt's own outline is the only H1 left.
-    expect(text.split('\n').filter((line) => /^# /.test(line))).toEqual(['# Role: developer']);
+    // The prompt's own header is the only H1 of the outline; the other `# ` line is the fenced comment.
+    expect(text.split('\n').filter((line) => /^# /.test(line))).toEqual(['# Role: developer', '# a shell comment, not a heading']);
   });
 });
 

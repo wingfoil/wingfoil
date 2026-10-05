@@ -25,6 +25,9 @@ import { z } from 'zod';
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
+import { coreErrorOf } from '../core';
+import { errorDetails, type ErrorDetail } from '../core/error-details';
+
 /** spec-004 §2.3's exact, verbatim write-refusal string. */
 export const WRITE_REFUSAL_MESSAGE = 'resources are read-only';
 
@@ -50,6 +53,35 @@ export function refuseIfWriteIntent(meta: Record<string, unknown> | undefined): 
  * the BDD scenario (`P5.2.1-mcp-resources.feature`) `resource not found: {identifier}` format. */
 export function resourceNotFoundError(identifier: string): Error {
   return new Error(`resource not found: ${identifier}`);
+}
+
+/**
+ * A failed read's JSON-RPC error: `message` as its text and, when there are any, the refusal's
+ * operator-facing `details` as `error.data.details` (spec-004 §4.3 item 4; task-130, `dl-055` option 1).
+ * The SDK forwards an `Error`'s `data` as the JSON-RPC `error.data`. No details, no `data` — the shape
+ * a refusal always had. Shared by the core-derived Resources (`./registrar.ts`) and the bespoke ones.
+ */
+export function readRefusalError(message: string, details: readonly ErrorDetail[]): Error {
+  return details.length > 0 ? Object.assign(new Error(message), { data: { details } }) : new Error(message);
+}
+
+/**
+ * Run a Resource or Prompt read, and give a loader refusal it throws the same details the CLI prints
+ * (task-174, `bug-184`). The handlers registered here call the pillar loaders directly, not through a
+ * `CoreOperation`, so a refusal reached the client without the `error.data` `./registrar.ts` gives
+ * one. The thrown error is mapped once, by core's own `coreErrorOf`; one that carries details is
+ * re-thrown as {@link readRefusalError} with its message unchanged, and anything else — a refusal with
+ * no details, a write refusal, a "resource not found", a programmer bug — is re-thrown as it was.
+ */
+export async function withRefusalDetails<T>(read: () => T | Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    const refusal = coreErrorOf(error);
+    const details = refusal === null ? [] : errorDetails(refusal);
+    if (refusal === null || details.length === 0) throw error;
+    throw readRefusalError(refusal.message, details);
+  }
 }
 
 /**
