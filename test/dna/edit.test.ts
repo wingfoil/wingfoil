@@ -334,6 +334,32 @@ describe('the safety contract: verified, or `undefined` for the caller to fall b
         ],
       },
     ],
+    // task-193: the absent-key insertion (`insertMissingPath`) declines what it cannot open.
+    [
+      'an absent key sits below a sequence index the sequence does not have (no entry to descend into)',
+      'items:\n  - name: a\n',
+      { kind: 'set-scalar', path: [{ key: 'items' }, { index: 2 }, { key: 'name' }], value: 'x' },
+    ],
+    [
+      'an append names an absent sequence index rather than an absent key',
+      'items:\n  - a\n',
+      { kind: 'append-items', path: [{ key: 'items' }, { index: 3 }], items: ['b'] },
+    ],
+    [
+      'an append targets an existing sequence item rather than a key',
+      'items:\n  - a\n',
+      { kind: 'append-items', path: [{ key: 'items' }, { index: 0 }], items: ['b'] },
+    ],
+    [
+      'an absent sequence would open with an empty-mapping item, which has no `- key: value` form',
+      'team:\n  roles: []\n',
+      { kind: 'append-items', path: [{ key: 'team' }, { key: 'agents' }], items: [{}] },
+    ],
+    [
+      'an absent key\'s parent holds a plain scalar, under which no block line can be added',
+      'project: none\n',
+      { kind: 'set-scalar', path: [{ key: 'project' }, { key: 'name' }], value: 'x' },
+    ],
   ])('declines: %s', (_case, text, pending) => {
     it('returns undefined instead of an edit', () => {
       expect(applyDnaEditInText(text, pending, load(text))).toBeUndefined();

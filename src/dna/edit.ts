@@ -13,16 +13,19 @@
  *
  * The safety contract is `setDnaValueInText`'s, unchanged and strengthened: every candidate edit is
  * verified by re-parsing it and comparing the **whole document** against the intended object before it
- * is returned, and anything that cannot be done provably-minimally returns `undefined` so the caller
- * falls back to `dump()` rather than writing something subtly wrong. A mis-located edit therefore
- * cannot corrupt a file; at worst it costs the comments.
+ * is returned, and anything that cannot be done provably-minimally returns `undefined` rather than
+ * writing something subtly wrong. A mis-located edit therefore cannot corrupt a file. Since task-193
+ * (`bug-019`, `bug-126`) the caller no longer falls back to `dump()` on its own: it refuses the write
+ * unless `--force` authorizes the whole-file rewrite, and a forced rewrite is reported in a warning.
+ * Absent keys (with absent parents), block-scalar values and CRLF files are edited here, so that
+ * refusal is left to shapes such as a key under a non-empty flow mapping.
  *
  * Pure and deterministic (REQ-SYS-07): a function of `(text, edit, intended)` alone — no wall-clock, no
  * randomness, no filesystem, and the input text is never mutated.
  */
 import { dump, load } from 'js-yaml';
 
-import { inlineCommentIndex, setDnaValueInText, valueOf } from './set';
+import { inlineCommentIndex, valueOf } from './set';
 
 /** One step of a text path: a mapping key, or the index of an entry inside a block sequence. */
 export type DnaTextStep = { readonly key: string } | { readonly index: number };
@@ -486,25 +489,11 @@ function applyOne(lines: string[], edit: DnaTextEdit, intended: unknown): string
   }
 }
 
-
-/**
- * The one shape the walker above cannot reach: a scalar whose PARENT key is itself absent from the
- * text, so there is no block to insert into (`project.name` in a file with no `project:` at all).
- * `setDnaValueInText` (`task-063`) already solves exactly that — it inserts the missing tail of a
- * mapping path, comments intact — so it is reused rather than re-implemented, for the mapping-only
- * paths it understands. Anything else still falls through to the caller's `dump()`.
- */
-function insertMissingScalarPath(text: string, edit: DnaTextEdit): string | undefined {
-  if (edit.kind !== 'set-scalar' || typeof edit.value !== 'string') return undefined;
-  if (!edit.path.every((step) => 'key' in step)) return undefined;
-  const keyPath = edit.path.map((step) => (step as { key: string }).key).join('.');
-  return setDnaValueInText(text, keyPath, edit.value);
-}
-
 /**
  * Apply `edit` to the RAW TEXT of a `dna.yaml`, editing as few lines as possible, and return the new
- * text — or `undefined`, deliberately and not as an error, when no provably-minimal edit exists, so the
- * caller falls back to the whole-file `dump()`.
+ * text — or `undefined`, deliberately and not as an error, when no provably-minimal edit exists. The
+ * caller then refuses the write, or rewrites the whole file when `--force` authorizes it and says that
+ * the comments were not kept (task-193, `runDnaMutation` in `src/core`).
  *
  * `intended` is the document the mutation produced (`applyDnaMutation`'s `dna`). It serves twice: an
  * inline flow sequence is re-rendered from it rather than patched token-by-token, and — the part that
@@ -513,10 +502,10 @@ function insertMissingScalarPath(text: string, edit: DnaTextEdit): string | unde
  * while key values are the contract; a mis-located edit fails the comparison and costs the comments,
  * never the content.
  *
- * Declines (returns `undefined`) when: the text is not one valid YAML document; a step of the path is
- * absent from the text; the target or a value it must rewrite spans more than its own line (a block
- * scalar, a nested block); a value has no single-line YAML form; or the result does not read back as
- * `intended`.
+ * Declines (returns `undefined`) when: the text is not one valid YAML document; an absent step of the
+ * path cannot be inserted (a sequence index, or a parent holding an inline value other than `{}`); the
+ * target spans more than its own line as a nested block (a block scalar is replaced, not declined); a
+ * value has no single-line YAML form; or the result does not read back as `intended`.
  */
 export function applyDnaEditInText(text: string, edit: DnaTextEdit, intended: unknown): string | undefined {
   try {
@@ -531,10 +520,10 @@ export function applyDnaEditInText(text: string, edit: DnaTextEdit, intended: un
   const crlf = text.includes('\r\n') && !text.replace(/\r\n/g, '').includes('\n');
   const source = crlf ? text.replace(/\r\n/g, '\n') : text;
 
-  const edited = applyOne(source.split('\n'), edit, intended) ?? insertMissingScalarPath(source, edit);
+  const edited = applyOne(source.split('\n'), edit, intended);
   if (edited === undefined) return undefined;
 
-  const result = Array.isArray(edited) ? edited.join('\n') : edited;
+  const result = edited.join('\n');
   let parsed: unknown;
   try {
     parsed = load(result);
