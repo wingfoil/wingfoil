@@ -2,7 +2,7 @@
 id: bug-164-memory-search-returns-non-element-files
 type: bug
 title: "`memory search` returns files that are not Memory elements — no frontmatter, so the match has a path and nothing else: no `id`, `type` or `status`"
-status: in-review
+status: closed
 severity: "low"
 release-origin: "v0.2.2"
 release: "v0.3"
