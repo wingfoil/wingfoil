@@ -261,3 +261,25 @@ does not re-inherit them:
   85 / 58 / 2 figures above are from the second method only.
 - `@cfworker/json-schema` appears in the closure with no version and no installed manifest (an unmet
   optional peer), so "85 entries" is 84 readable manifests plus one absent entry — E1 caveat (a).
+
+**Revision (2026-10-02) — the Consequences and the closing list are out of date, per `bug-069` and
+`task-158`.** Every element and action this ADR names as open is now closed or done, so the sentences
+that describe them as open are no longer current:
+
+- `@types/node` is `^22.20.4`, not `^18.19.130` (`task-087`, which closed `bug-049`). This applies to
+  the *Neutral* bullet ("still pinned `^18.19.130`") and to the closing list's "`bug-049`
+  (`@types/node` still `^18`)".
+- Whether the floor must *equal* the production closure's floor or only satisfy it is settled.
+  `spec-015` §1's Revision of 2026-10-02 (`task-155`, which closed `bug-046` and `bug-047`) defines
+  the floor as the lowest version every production range admits, and the guard asserts both equality
+  and satisfaction. The value is unchanged: `>=22.12.0`.
+- The cascade under §Actions is done. It was merged at `7bb95d6e`, and the product brief, `dl-001`,
+  `dna.yaml`, `README.md` and `CLAUDE.md` now give 22.12+ (`dl-001` through its own Correction note).
+  `task-074`, which owned the `package.json` edit, the `spec-015` §1 revision and the regression
+  guard, is `done`. This applies to the *Negative* bullet ("Six artefacts now disagree with the
+  code") and the second *Neutral* bullet ("remain `task-074`'s work").
+- `bug-048` was closed at v0.3's triage. `task-074` rewrote the CI comment, and whether
+  `engine-strict` should be enforced is `dl-076`'s question.
+
+The decision is unchanged: the runtime floor is Node.js 22.12 or later. The text above is left as
+written, as the record of what the floor cost when it was decided.
