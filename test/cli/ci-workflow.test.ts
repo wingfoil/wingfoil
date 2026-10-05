@@ -24,6 +24,7 @@ interface WorkflowStep {
   readonly name?: string;
   readonly uses?: string;
   readonly run?: string;
+  readonly if?: string;
   readonly with?: Readonly<Record<string, unknown>>;
   readonly 'continue-on-error'?: unknown;
 }
@@ -94,15 +95,24 @@ describe('ci workflow (task-140) — dl-076 (D): the packaging gate on every pus
     expect(setup?.with?.['package-manager-cache']).toBe(false);
   });
 
-  it('runs exactly `npm ci`, `npm run prepublishOnly`, then `npm run check:audit` — publish.yml’s two gate steps plus the audit', () => {
+  it('runs exactly `npm ci`, `npm run prepublishOnly`, `npm run typecheck`, then `npm run check:audit` — publish.yml’s two gate steps plus two', () => {
     // task-250 (bug-223) added `check:audit` after the two: it needs the registry's advisory database,
     // so it is a ci.yml step and not part of `prepublishOnly`, which publish.yml's tag gate also runs.
     // It is last so a new advisory never hides the build/test/lint verdict of the push.
+    // task-173 (dl-044) added `typecheck` before it: `typecheck.clean` as a step of its own, so a red
+    // typecheck is named in the run's step list rather than found inside the test log.
     const job = read(CI_PATH).parsed.jobs['packaging-gate'];
     const runSteps = (job?.steps ?? []).filter((s) => s.run !== undefined).map((s) => s.run?.trim());
-    expect(runSteps).toEqual(['npm ci', 'npm run prepublishOnly', 'npm run check:audit']);
+    expect(runSteps).toEqual(['npm ci', 'npm run prepublishOnly', 'npm run typecheck', 'npm run check:audit']);
     const publishGate = (read(PUBLISH_PATH).parsed.jobs.gate?.steps ?? []).map((s) => s.run?.trim());
     expect(publishGate).toEqual(expect.arrayContaining(['npm ci', 'npm run prepublishOnly']));
+  });
+
+  it('runs `typecheck` and `check:audit` under `!cancelled()`, so neither verdict hides another (task-173, task-250)', () => {
+    const steps = read(CI_PATH).parsed.jobs['packaging-gate']?.steps ?? [];
+    for (const command of ['npm run typecheck', 'npm run check:audit']) {
+      expect(steps.find((s) => s.run?.trim() === command)?.if).toBe('${{ !cancelled() }}');
+    }
   });
 
   it('fails the run on a red gate — no `continue-on-error` anywhere (dl-076 Q2)', () => {

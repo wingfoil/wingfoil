@@ -29,9 +29,10 @@ Custom stand-in directive. Applies to developers and QA.
 - Each behavior has at least one happy-path and one edge/error-path test (mirrors the BDD suite).
 - Tests are deterministic and isolated; no reliance on external services or wall-clock/random.
 - Test sources typecheck as cleanly as production sources (`dl-044`). Gate: `typecheck.clean`, the
-  whole-project `tsc --noEmit` over the src and test configurations. That gate is delivered by
-  `task-173-add-whole-project-typecheck-clean-gate-control-character`, which also rewrites this
-  pointer once the gate runs. Until then, `tsc --noEmit` is run by hand at `refactor`.
+  whole-project `tsc --noEmit` over `tsconfig.json` (src and test) and `tsconfig.build.json` (src),
+  run as `npm run typecheck` and asserted by `test/lint/typecheck-clean.test.ts`, so `npm test` fails
+  on a type error in either tree. `ci.yml` runs `npm run typecheck` on every push, and
+  `release-submit`'s `pre-release-checks` declares `typecheck.clean`.
 
 ## WingFoil-specific clauses (`dl-121`)
 

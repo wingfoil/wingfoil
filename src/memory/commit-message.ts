@@ -55,18 +55,25 @@ const TRAILER_LINE_RE = /^[A-Za-z][A-Za-z0-9-]*:[ \t]\S/;
 const RESERVED_TRAILER_LINE_RE = /^(?:Approver|Reason|WingFoil-Version):/i;
 
 /**
- * The first C0 control character in `text` other than tab (`U+0009`) and newline (`U+000A`) — the two
- * a reason legitimately carries (`dl-078` (A)) — or `null` when there is none. Such a character
- * renders as nothing, or moves the cursor, in a terminal, so a reason carrying one can show a human
- * reading `git log` a line nobody wrote: the presentation half of `bug-050`, which no read-side fix
- * can reach. A carriage return never gets this far, because {@link normalizeReason} turns it into a
- * newline before any rule is judged. A scan rather than a character-class regex, which the
- * `no-control-regex` lint rule forbids.
+ * The first character in `text` a reason may not carry, or `null` when there is none:
+ *
+ * - a C0 control other than tab (`U+0009`) and newline (`U+000A`) — the two a reason legitimately
+ *   carries (`dl-078` (A));
+ * - DEL (`U+007F`), the C1 controls (`U+0080` to `U+009F`) and the Unicode line and paragraph
+ *   separators (`U+2028`, `U+2029`) — `dl-078`'s Amendment (2026-10-01), `bug-185`, `task-173`.
+ *
+ * Such a character renders as nothing, moves the cursor or breaks the line in a terminal or a log
+ * viewer, so a reason carrying one can show a human reading `git log` a line nobody wrote: the
+ * presentation half of `bug-050`, which no read-side fix can reach. A carriage return never gets this
+ * far, because {@link normalizeReason} turns it into a newline before any rule is judged. A scan
+ * rather than a character-class regex, which the `no-control-regex` lint rule forbids.
  */
 function firstControlCharacter(text: string): string | null {
   for (const character of text) {
     const code = character.charCodeAt(0);
     if (code < 0x20 && character !== '\t' && character !== '\n') return character;
+    if (code >= 0x7f && code <= 0x9f) return character;
+    if (code === 0x2028 || code === 0x2029) return character;
   }
   return null;
 }
@@ -82,8 +89,9 @@ export type ReasonDefect =
   /** Empty, or nothing but whitespace: git would store a bare `Reason:` and both parsers would fail. */
   | 'blank'
   /**
-   * Carries a C0 control character other than tab and newline (`dl-078` (A)). The refusal names the
-   * first one by code point ({@link reasonRefusalMessage}).
+   * Carries a C0 control character other than tab and newline (`dl-078` (A)), DEL, a C1 control, or
+   * U+2028/U+2029 (`dl-078` Amendment 2026-10-01, `bug-185`). The refusal names the first one by code
+   * point ({@link reasonRefusalMessage}).
    */
   | 'control-character'
   /**

@@ -1,6 +1,6 @@
 // TEST-RUNTIME ONLY compiler options (task-065-fix-commander-esm-jest-harness, bug-007).
 // Referenced solely by `jest.config.js`'s ts-jest transform — never by `npm run build`
-// (`tsconfig.build.json`), by `npx tsc --noEmit` (`tsconfig.json`) or by `npm run docs:api`
+// (`tsconfig.build.json`), by `npm run typecheck` (`tsconfig.json`, `tsconfig.build.json`) or by `npm run docs:api`
 // (typedoc reads `tsconfig.build.json`). Everything not listed here is inherited unchanged, so the
 // project's real type-checking semantics stay the ones in `tsconfig.json`.
 //
@@ -23,6 +23,10 @@
   "compilerOptions": {
     "module": "CommonJS",
     "moduleResolution": "Node10",
+    // dl-044 (second item; ruling "Pin: accept until TS 7", 16436983): ACCEPTED until TypeScript 7 removes `node10`
+    // resolution; it is a loud failure (TS5107 without it), not silent drift. Revisit the test
+    // runtime's module strategy then. It never weakens `typecheck.clean` (`npm run typecheck`), which
+    // reads `tsconfig.json` and `tsconfig.build.json`, never this file (task-173).
     "ignoreDeprecations": "6.0",
     // `commander`'s own `.js` sources are transformed by the same ts-jest transformer.
     "allowJs": true
