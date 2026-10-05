@@ -403,6 +403,11 @@ async function runDnaMutation(
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
 
+  // REQ-SEC-06 / bug-121 (task-172): `writeDocument` follows a symlinked `dna.yaml`, so a file that
+  // leads outside the project, or is itself a link, is refused before any read or write. First, so a
+  // path that leaves the project is reported as leaving it (`requireConfinedTarget`'s ordering rule).
+  const confined = requireConfinedWriteTarget(root, DNA_YAML_PATH, 'write');
+  if (!confined.ok) return confined;
   const unmodified = requireUnmodifiedTarget(root, DNA_YAML_PATH);
   if (!unmodified.ok) return unmodified;
 
@@ -1642,6 +1647,11 @@ const directiveCreateFn: CoreFn<unknown, { name: string; path: string }> = async
   // correct absolute path on Windows; the root-relative form is what `commitPaths` stages.
   const relativePath = `.wingfoil/directives/custom/${name}.md`;
   const absolutePath = join(root, relativePath);
+  // REQ-SEC-06 / bug-121 (task-172): a DANGLING link at the path reads as free to `documentExists`
+  // (`existsSync` follows it), and `writeDocument` would create the file wherever it points. Refused
+  // before the existence check, so a path that leaves the project is reported as leaving it.
+  const confined = requireConfinedWriteTarget(root, relativePath, 'write');
+  if (!confined.ok) return confined;
   if (documentExists(absolutePath)) {
     return coreErr({ code: 'CONFLICT', message: `directive already exists: ${name}` });
   }

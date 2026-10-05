@@ -60,6 +60,7 @@ import { RolesYaml } from '../directives/schema';
 import { commitPaths, documentExists, readDocument, writeDocument } from '../storage';
 import { parseYaml, toValidationError, ValidationError } from '../validation';
 
+import { requireConfinedWriteTarget } from './confinement';
 import {
   DIRECTIVES_DIR_PATH,
   DNA_YAML_PATH,
@@ -356,6 +357,10 @@ export function updateRoleAssignments(
   // whose subject names only the binding. Before the read, so the refusal cannot depend on a value
   // the dirty copy contributed. An ABSENT `roles.yaml` is clean (porcelain reports nothing), which is
   // what keeps the first `directive assign` on a fresh project working.
+  // REQ-SEC-06 / bug-121 (task-172): `writeDocument` follows a symlinked `roles.yaml`; one that leads
+  // outside the project, or is itself a link, is refused before any read or write.
+  const confined = requireConfinedWriteTarget(root, ROLES_YAML_PATH, 'write');
+  if (!confined.ok) return confined;
   const unmodified = requireUnmodifiedTarget(root, ROLES_YAML_PATH);
   if (!unmodified.ok) return unmodified;
 

@@ -2,7 +2,7 @@
 id: "bug-121-config-write-paths-have-no-confinement-pre-flight"
 type: bug
 title: "`dna set`, `directive assign` and `directive create` write through a symlinked config file to a target outside the project root — the same crossing as `bug-044` and `bug-120`, in the DNA and Directives stores"
-status: planned
+status: closed
 severity: "medium"
 release-origin: "v0.2"
 release: "v0.3"

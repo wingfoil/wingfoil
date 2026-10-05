@@ -92,6 +92,24 @@ function aliasDirectory(repo: string, relativeDir: string, destination: string):
 const placements = ['inside', 'outside'] as const;
 type Placement = (typeof placements)[number];
 
+/**
+ * A verb's refusal for a target beyond a symlinked directory. In the root it is this suite's
+ * inspectability refusal; out of it, the write paths ask confinement first (task-172, `bug-121`:
+ * a path that leaves the project is reported as leaving it), so the message is the boundary one.
+ * Either way: exit 1, the path named, nothing written — asserted by each caller on the bytes.
+ */
+function expectVerbRefusal(result: CoreResult<unknown>, path: string, placement: Placement): void {
+  if (placement === 'inside') {
+    expectUninspectableRefusal(result, path);
+    return;
+  }
+  expect(result.ok).toBe(false);
+  expect(exitCodeForResult(result)).toBe(1);
+  expect(errorMessage(result)).toContain(path);
+  expect(errorMessage(result)).toContain('outside the project root');
+  expect(errorMessage(result)).not.toContain('Command failed');
+}
+
 describe('requireUnmodifiedTarget — a target beyond a symbolic link is refused, never read as clean (bug-118)', () => {
   let repo: string;
   let outside: string;
@@ -206,7 +224,7 @@ describe('the six requireUnmodifiedTarget call sites refuse before any write (bu
         options: { value: 'Renamed' },
       })) as CoreResult<unknown>;
 
-      expectUninspectableRefusal(result, DNA);
+      expectVerbRefusal(result, DNA, placement);
       expect(readFileSync(join(real, 'dna.yaml'), 'utf-8')).toBe(bytes);
       expect(head(repo)).toBe(before);
     });
@@ -251,7 +269,7 @@ describe('the six requireUnmodifiedTarget call sites refuse before any write (bu
 
       const result = (await op('directive', 'directiveCreate')({ root: repo, options: { name: 'delta' } })) as CoreResult<unknown>;
 
-      expectUninspectableRefusal(result, `${CUSTOM_DIR}/delta.md`);
+      expectVerbRefusal(result, `${CUSTOM_DIR}/delta.md`, placement);
       expect(existsSync(join(real, 'delta.md'))).toBe(false);
       expect(head(repo)).toBe(before);
     });
@@ -263,7 +281,7 @@ describe('the six requireUnmodifiedTarget call sites refuse before any write (bu
 
       const result = initWingfoilStorage(repo);
 
-      expectUninspectableRefusal(result, '.wingfoil/');
+      expectVerbRefusal(result, '.wingfoil/', placement);
       expect(readFileSync(join(real, 'dna.yaml'), 'utf-8')).toBe(bytes);
       expect(head(repo)).toBe(before);
     });
