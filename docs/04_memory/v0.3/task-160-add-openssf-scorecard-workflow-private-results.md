@@ -181,3 +181,22 @@ Plus a `repo_token` PAT warning in the workflow header. Re-run: see the gate lin
 
 
 Gates after the fixes: `npx jest test/cli/scorecard-workflow.test.ts` → 8 passed; `npm run lint`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` → exit 0.
+
+### AC 2 — first run (2026-10-05)
+
+- **Local run before the push** (approver's ruling): `ghcr.io/ossf/scorecard:v5.5.0` (gcr.io refused the
+  pull: billing not enabled on its project) against `github.com/wingfoil/wingfoil` at `ea637c43`. Aggregate 3.9.
+  - 10: Binary-Artifacts, Dangerous-Workflow, License, Pinned-Dependencies, Token-Permissions.
+  - 4: Security-Policy. 3: Contributors.
+  - 0: Branch-Protection, CII-Best-Practices, Code-Review, Dependency-Update-Tool, Fuzzing,
+    Maintained, SAST, Vulnerabilities (38 OSV advisories).
+  - −1 (inconclusive): CI-Tests, Packaging, Signed-Releases.
+- **First CI run** after the push of `main` (`ea637c43..ccccc227`): `scorecard` run `37282333590`,
+  conclusion success (`ci` run `37282333523` success).
+- **Code-scanning alerts** (`gh api "repos/wingfoil/wingfoil/code-scanning/alerts?tool_name=Scorecard&state=open&per_page=100" --paginate --jq '.[].rule.id'`):
+  one each for BranchProtectionID, CIIBestPracticesID, CodeReviewID, DependencyUpdateToolID,
+  FuzzingID, MaintainedID, SASTID, SecurityPolicyID and VulnerabilitiesID. These are the nine low checks
+  of the local run.
+- **Q1 (a) decision per low check:** left to the approver. The ones already owned:
+  - Branch-Protection is `task-208`'s;
+  - Vulnerabilities is filed by the B6 bug-ingest plan.
