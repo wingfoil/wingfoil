@@ -38,6 +38,9 @@
  * (`spec-015` §1a), and — the one exception to "nothing here asserts a script" — the version-sync
  * cases of `checkReleaseTag` (`spec-015` §4), which `spec-015` pins in this file because they keep
  * metadata copies equal. That block sits just before the task-074 one.
+ *
+ * `task-157-add-glama-json-glama-directory-listing` (`dl-093`) added the root `glama.json` of the Glama
+ * listing (`spec-015` §1b), asserted right after the `server.json` block.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -293,6 +296,62 @@ describe('MCP Registry listing (task-115) — spec-015 §1a `server.json`', () =
   it('is not shipped in the tarball — it is the listing input, not package content', () => {
     expect(pkg.files ?? []).not.toContain('server.json');
     expect(packedPaths()).not.toContain('server.json');
+  });
+});
+
+/* ---------------------------------------------------------------------------------------------- *
+ * task-157-add-glama-json-glama-directory-listing (`dl-093`, release-planning-rel-v0.3 R7,
+ * `spec-015` §1b) — the root `glama.json` through which the maintainer claims the Glama listing.
+ *
+ * Glama lets the owner of a personal repository claim a listing by signing in with GitHub; a
+ * repository owned by an organisation (`wingfoil/wingfoil`, svc-003) is claimed only through a
+ * `glama.json` at the repository root naming the maintainers' GitHub usernames.
+ *
+ * The schema the file's `$schema` names is `https://glama.ai/mcp/schemas/server.json` (JSON Schema
+ * draft-07). Read on 2026-10-05, it declares one property, `maintainers` — required, an array of
+ * unique strings, each a GitHub username — and no `additionalProperties` restriction. A test cannot
+ * fetch it offline, so this block re-states that schema's constraints, and pins the top-level keys to
+ * `$schema` and `maintainers` so that no field the schema does not declare is invented here.
+ * ---------------------------------------------------------------------------------------------- */
+
+const GLAMA_JSON_PATH = join(REPO_ROOT, 'glama.json');
+
+/** The `$id` of Glama's schema for `glama.json`, read 2026-10-05. */
+const GLAMA_SCHEMA_URL = 'https://glama.ai/mcp/schemas/server.json';
+
+/** The approver's GitHub account (svc-001: the organisation was created from it). */
+const APPROVER_GITHUB_LOGIN = 'robypomper';
+
+function readGlamaJson(): Record<string, unknown> {
+  return JSON.parse(readFileSync(GLAMA_JSON_PATH, 'utf-8')) as Record<string, unknown>;
+}
+
+describe('Glama listing (task-157) — spec-015 §1b `glama.json`', () => {
+  it('exists at the repository root', () => {
+    expect(existsSync(GLAMA_JSON_PATH)).toBe(true);
+  });
+
+  it('names Glama\'s schema and declares only the keys that schema knows', () => {
+    const glama = readGlamaJson();
+    expect(glama.$schema).toBe(GLAMA_SCHEMA_URL);
+    expect(Object.keys(glama).sort()).toEqual(['$schema', 'maintainers']);
+  });
+
+  it('satisfies the schema: `maintainers` is a required array of unique strings', () => {
+    const maintainers = readGlamaJson().maintainers;
+    expect(Array.isArray(maintainers)).toBe(true);
+    const list = maintainers as unknown[];
+    expect(list.every((m) => typeof m === 'string' && m.length > 0)).toBe(true);
+    expect(new Set(list).size).toBe(list.length);
+  });
+
+  it('names the approver\'s GitHub account as the maintainer', () => {
+    expect(readGlamaJson().maintainers).toEqual([APPROVER_GITHUB_LOGIN]);
+  });
+
+  it('is not shipped in the tarball — it is the listing claim, not package content', () => {
+    expect(pkg.files).toEqual(['dist', 'README.md']);
+    expect(packedPaths()).not.toContain('glama.json');
   });
 });
 
