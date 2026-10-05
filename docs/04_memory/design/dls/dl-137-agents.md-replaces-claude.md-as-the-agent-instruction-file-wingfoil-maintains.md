@@ -98,7 +98,19 @@ spec. The approver chooses whether either enters v0.3 or v0.4.
    - update `.wingfoil/README.md` and the source comments that cite `CLAUDE.md` as the conventions'
      home.
 3. **Part (b), the product**, once ratified. A tech-spec for the generated `AGENTS.md`: sections,
-   sources, determinism, and drift detection. Then the task(s) implementing Q2.
+   sources, determinism, and drift detection. Then the task(s) implementing Q2. The tech-spec must
+   meet these constraints, agreed on 2026-10-05 with the WingFoil-Templates `base` pack (approver):
+   - **R1 — never a pack file.** `AGENTS.md`, and `CLAUDE.md` as its pointer, is never a file a
+     template pack provides; packs write only under `.wingfoil/`.
+   - **R2 — generated from the composed configuration.** WingFoil generates the file from the
+     composed DNA, role directives, Memory and workflows. A pack contributes at most a fragment it
+     declares under `.wingfoil/`, which the generator includes. The tech-spec defines that fragment
+     input.
+   - **R3 — two owners.** A region delimited by markers belongs to WingFoil and is regenerated; the
+     rest of the file belongs to the project and is never touched. Drift detection reads only the
+     generated region. The tech-spec defines the marker format.
+   - **R4 — until the export exists**, a repository writes `AGENTS.md` by hand, already with the
+     markers; part (a) does so for this repository.
 4. **Re-check the fact** that Claude Code reads AGENTS.md, for the version this repository's agents
    use, before choosing Q1 (a).
 
@@ -108,3 +120,5 @@ spec. The approver chooses whether either enters v0.3 or v0.4.
   its `produces:`).
 - **Related:** `dl-131` (the Determinism Index, agent-agnostic positioning), `spec-016` (agent
   execution through per-agent adapters), `dl-112` (the brief's *Works with*).
+- **Related:** `dl-138` (templates consumed from a remote versioned source): the generated
+  region depends on the packs a project composes (R2).
