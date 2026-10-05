@@ -24,11 +24,13 @@ project:
   # [SPEC] North Star metric ← Product Brief, made composite by dl-131 (Decisions 1 and 3). Only its
   # input component I is formalized as a requirement: REQ-SYS-07 / REQ-STATE-09 (deterministic context).
   north_star: >-
-    Determinism Index — the goal: two independent runs from the same specs + WingFoil
-    config, using different AI agents, produce substantially (behaviourally) equivalent
-    software, passing the same spec-derived acceptance contracts written before either run.
-    I (input: identical context for identical inputs) is guaranteed; P (process
-    conformance) is measured on every run; O (outcome equivalence) is reported, never promised.
+    Determinism Index — two independent runs from the same specs + WingFoil
+    config using different AI agents produce substantially equivalent software.
+    This is a goal, not a guarantee. Substantially equivalent means behaviourally
+    equivalent: both codebases pass the same acceptance contracts, derived from the
+    specifications and written before either run. I (input: identical context for
+    identical inputs) is guaranteed; P (process conformance) is measured on every run;
+    O (outcome equivalence) is reported, never promised.
 
 # ---------------------------------------------------------------------------
 # Modules — the parts of the system (anatomy for navigation)   [SPEC: P2.4]
