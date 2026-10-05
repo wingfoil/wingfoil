@@ -20,7 +20,7 @@ import { CORE_MODULES } from '../../src/core';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
-import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const DNA_PATH = '.wingfoil/dna.yaml';
 
@@ -144,6 +144,39 @@ describe('dna verbs — the whole-file rewrite is refused unless --force (task-1
       expect(warningsOf(result)).toEqual([]);
       expect(commentLines(dnaText(repo))).toEqual(commentLines(REAL_DNA));
       expect((load(dnaText(repo)) as { project: { north_star: string } }).project.north_star).toBe('short');
+    });
+  });
+
+  /**
+   * Review fix (independent review of task-193): an all-CRLF `dna.yaml` is written back CRLF, and with
+   * `core.autocrlf=true` git stores it LF. The committed-scope post-condition must compare through
+   * git's own filters, or it reports the operation's own commit as carrying something else.
+   */
+  describe.each<[string, string]>([
+    ['true', 'stored LF in the commit'],
+    ['false', 'stored CRLF in the commit'],
+  ])('an all-CRLF dna.yaml under core.autocrlf=%s (%s)', (autocrlf) => {
+    const CRLF = REAL_DNA.replace(/\r?\n/g, '\r\n');
+
+    beforeEach(() => {
+      repo = makeTempGitRepo();
+      git(repo, ['config', 'core.autocrlf', autocrlf]);
+      writeFixtureFile(repo, DNA_PATH, CRLF);
+      commitAll(repo, 'seed a CRLF dna.yaml');
+    });
+
+    it('`dna set project.name` succeeds in place, keeps CRLF and every comment, and commits only dna.yaml', async () => {
+      const before = head(repo);
+      const result = await op('dnaSet')({ root: repo, positionals: ['project.name'], options: { value: 'Foo' } });
+
+      expect(result.ok ? undefined : result.error).toBeUndefined();
+      expect(warningsOf(result)).toEqual([]);
+      const written = dnaText(repo);
+      expect(written.replace(/\r\n/g, '')).not.toContain('\n'); // every line ending is still CRLF
+      expect(commentLines(written.replace(/\r\n/g, '\n'))).toEqual(commentLines(REAL_DNA));
+      expect(execFileSync('git', ['rev-list', '--count', `${before}..HEAD`], { cwd: repo, encoding: 'utf-8' }).trim()).toBe('1');
+      expect(execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf-8' }).trim()).toBe(DNA_PATH);
+      expect(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf-8' })).toBe('');
     });
   });
 

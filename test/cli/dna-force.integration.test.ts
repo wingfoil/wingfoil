@@ -94,6 +94,26 @@ describe('`wingfoil dna` — keep dna.yaml\'s comments, or refuse the rewrite un
     expect(added[0]!.indexOf('#')).toBe(removed[0]!.indexOf('#'));
   });
 
+  // Review fix: under core.autocrlf=true git stores a CRLF file LF; the post-condition must not read
+  // that normalization as a foreign change (it used to commit, then exit 1).
+  it.each(['true', 'false'])('an all-CRLF dna.yaml under core.autocrlf=%s takes `dna set` in place at exit 0, CRLF kept', (autocrlf) => {
+    git(repo, ['config', 'core.autocrlf', autocrlf]);
+    writeFileSync(join(repo, DNA_PATH), scaffold.replace(/\n/g, '\r\n'), 'utf-8');
+    git(repo, ['add', DNA_PATH]);
+    git(repo, ['commit', '--quiet', '-m', 'fixture: CRLF dna.yaml']);
+    const before = gitOut(repo, ['rev-parse', 'HEAD']);
+
+    const run = wingfoil(repo, 'dna', 'set', 'project.name', '--value', 'Foo');
+
+    expect(run.stderr).toBe('');
+    expect(run.status).toBe(0);
+    expect(gitOut(repo, ['rev-list', '--count', `${before}..HEAD`])).toBe('1');
+    expect(git(repo, ['status', '--porcelain'])).toBe('');
+    const after = dnaText(repo);
+    expect(after.replace(/\r\n/g, '')).not.toContain('\n');
+    expect(commentLines(after.replace(/\r\n/g, '\n'))).toEqual(commentLines(scaffold));
+  });
+
   describe('a file the in-place editor cannot edit (`paths` written as a flow mapping)', () => {
     let flow: string;
 
