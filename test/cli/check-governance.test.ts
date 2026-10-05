@@ -254,6 +254,51 @@ describe('authority rule — the author is a team.members approver (dl-094)', ()
   });
 });
 
+/**
+ * task-180 review F1 — `park` takes the type's declared `returns` edge, whatever it is (`spec-008` §2:
+ * `[from → to]`, `to` the type's `returns.<from>`), so the bracket rule asks only for one hop between two
+ * states and the state rule judges that hop against the machine (`isMachineEdge` accepts a `returns`
+ * edge). A park records why: it needs a `Reason:` block, and no `Approver:`.
+ */
+describe('park — one hop along a declared returns edge (task-180)', () => {
+  const f = fixture();
+  f.commit('chore: declare return edges', {
+    '.wingfoil/memory.yaml': memoryYaml().replace(
+      '        in-review: { reject: in-progress }\n',
+      '        in-review: { reject: in-progress }\n      returns: { in-progress: backlog, in-review: pending }\n',
+    ),
+  });
+  const reason = '\n\nReason: Blocked for now.';
+  f.task('t-1', 'in-progress', 'wf(task): add t-1');
+  const conforming = f.task('t-1', 'backlog', `wf(task): park t-1 [in-progress → backlog]${reason}`);
+  f.task('t-2', 'in-review', 'wf(task): add t-2');
+  const otherEdge = f.task('t-2', 'pending', `wf(task): park t-2 [in-review → pending]${reason}`);
+  f.task('t-3', 'in-progress', 'wf(task): add t-3');
+  const notAnEdge = f.task('t-3', 'draft', `wf(task): park t-3 [in-progress → draft]${reason}`);
+  f.task('t-4', 'backlog', 'wf(task): add t-4');
+  const selfLoop = f.task('t-4', 'backlog', `wf(task): park t-4 [backlog → backlog]${reason}`);
+  f.task('t-5', 'in-progress', 'wf(task): add t-5');
+  const noReason = f.task('t-5', 'backlog', 'wf(task): park t-5 [in-progress → backlog]');
+  const report = checkGovernance(f.root);
+
+  it('accepts a park along any declared returns edge, not only in-progress → backlog', () => {
+    expect(rulesOf(report, conforming)).toEqual([]);
+    expect(rulesOf(report, otherEdge)).toEqual([]);
+  });
+
+  it('judges the hop against the machine: a park along no edge is a state finding', () => {
+    expect(rulesOf(report, notAnEdge)).toEqual(['state']);
+  });
+
+  it('a park that does not move is a bracket finding', () => {
+    expect(rulesOf(report, selfLoop)).toContain('bracket');
+  });
+
+  it('a park without a Reason: block is a body finding', () => {
+    expect(rulesOf(report, noReason)).toEqual(['body']);
+  });
+});
+
 describe('state rule — verifyTransitionConsistency with the machine at the checked commit', () => {
   const f = fixture();
   f.pending('t-1');
