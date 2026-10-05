@@ -14,7 +14,8 @@
  *
  * The planted template uses the `builtinTemplates` test seam both init entry points already expose
  * (the one `bug-018`'s symmetry table drives), so the guard is pinned on BOTH write paths. Every
- * "secret" below is an obviously fake fixture value.
+ * "secret" below is an obviously fake fixture value, assembled at runtime
+ * (`test/validation/helpers/secret-fixtures.ts`, `security-secrets` S1, dl-122).
  */
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -23,6 +24,7 @@ import { exitCodeForResult, type CoreResult } from '../../src/core';
 import { verifyBuiltinTemplates, type BuiltinTemplateSource } from '../../src/core/builtin-integrity';
 import { initWingfoilProject, initWingfoilStorage } from '../../src/core/init';
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
+import { FAKE_PEM_HEADER, FAKE_PEM_RSA_HEADER } from '../validation/helpers/secret-fixtures';
 
 /** A schema-valid built-in directive whose body is `bodyLine` — so only the secret scan can fail it. */
 function directiveWithBody(name: string, bodyLine: string): BuiltinTemplateSource {
@@ -45,7 +47,7 @@ ${bodyLine}
   };
 }
 
-const PEM_LINE = '-----BEGIN RSA PRIVATE KEY-----';
+const PEM_LINE = FAKE_PEM_RSA_HEADER;
 const SECRET_MESSAGE = 'built-in directive template secret scan failed: security (private-key-pem, line 12)';
 
 describe('verifyBuiltinTemplates — secret scan of the built-in templates (bug-038, spec-007 §4 step 5)', () => {
@@ -62,7 +64,7 @@ describe('verifyBuiltinTemplates — secret scan of the built-in templates (bug-
     const workflow: BuiltinTemplateSource = {
       name: 'task',
       kind: 'workflow',
-      content: 'name: task\nkind: sub\ndescription: "-----BEGIN PRIVATE KEY-----"\nphases:\n  - name: plan\n',
+      content: `name: task\nkind: sub\ndescription: "${FAKE_PEM_HEADER}"\nphases:\n  - name: plan\n`,
     };
     expect(verifyBuiltinTemplates([workflow])?.message).toBe(
       'built-in workflow template secret scan failed: task (private-key-pem, line 3)',
