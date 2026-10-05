@@ -8,7 +8,7 @@ kind: "feature"
 priority: "high"
 tags: ["v0.3", "process", "governance", "ci"]
 ref: "dl-103"
-bug: ["bug-192"]
+bug: ["bug-192", "bug-218"]
 depends_on: ["task-139-extend-documentation-doc-versioning-testing-directives-ratified-clauses", "task-167-build-governance-check-over-pushed-wf-commits", "task-201-add-claim-rerun-rereview-items-code-review-task"]
 tmpl_version: 260703
 ---
