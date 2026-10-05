@@ -2,7 +2,7 @@
 id: "task-171-make-memory-scan-primitives-fail-closed-archived-elements"
 type: task
 title: "Make the Memory scan primitives fail closed on archived elements and tolerant of unreadable files"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "fix"
 priority: "high"
