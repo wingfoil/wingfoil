@@ -89,12 +89,13 @@ Validation against the live schema with a real validator (the `ajv@8.20.0` alrea
 `node_modules`, on the body fetched above): `valid true null`; the two negative controls `{}` and
 `{maintainers:["a","a"]}` → `false false`.
 
-**AC 2 evidence.** Plain `npm publish --dry-run` cannot run on this tree: it refuses with "You cannot
-publish over the previously published versions: 0.2.2." (it checks the registry first). Pointed at an
-unreachable registry, `timeout 40 npm publish --dry-run --ignore-scripts --registry http://127.0.0.1:9/`
-lists the tarball before failing to connect: **383 files** with `glama.json` present and **383,
-identical** (`diff` empty) with it moved away, i.e. the base file list; `grep -c glama` → `0`. The same
-list equals `npm pack --dry-run --json --ignore-scripts` (what the test uses), `diff` empty.
+**AC 2 evidence.** `npm publish --dry-run --ignore-scripts` prints the tarball manifest ("Tarball
+Contents", **total files: 383**), with no `glama.json` in it (`grep -c glama` → `0`), and then exits `1`
+on the registry's version check ("You cannot publish over the previously published versions: 0.2.2."),
+as task-115's notes recorded. With `glama.json` moved away the list is the same 383 files (`diff`
+empty), i.e. the base file list. The same list equals `npm pack --dry-run --json --ignore-scripts`
+(what the test uses), `diff` empty. (The `--json` form of `npm publish --dry-run` prints only the
+error object, without the manifest.)
 
 ### refactor (developer)
 
@@ -120,24 +121,24 @@ Run with the spec-015 amendment in the working tree:
 - No same-class instance elsewhere: `server.json` already has its own block.
 
 **Approver steps for AC 3 (post-merge, after push to `wingfoil/wingfoil` `main`).**
+0. WingFoil is not listed on Glama yet (`curl -s -o /dev/null -w %{http_code}
+   https://glama.ai/mcp/servers/@wingfoil/wingfoil` → `404`, reviewer's check). If still unlisted, use
+   "Add Server" on `https://glama.ai/mcp/servers` with `https://github.com/wingfoil/wingfoil`, then
+   claim it as below. Glama's checks on the listing (a Docker build, a release) may need configuring in
+   its UI after the claim.
 1. Check the file is served: `curl -s https://raw.githubusercontent.com/wingfoil/wingfoil/main/glama.json`
    → the two keys above.
-2. On `https://glama.ai/mcp/servers`, find WingFoil (search "wingfoil"), sign in with GitHub as
-   `robypomper`, and run the "Claim ownership" flow, which makes Glama read the root `glama.json`
-   (Glama's article above; re-run it after any change to the file). The article covers claiming an
-   existing listing only: if WingFoil is not listed yet, how to submit it is not verified here.
+2. On the listing, sign in with GitHub as `robypomper` and run the "Claim ownership" flow, which makes
+   Glama read the root `glama.json` (Glama's article above; re-run it after any change to the file).
 3. Collect: the listing URL, the claim date, and what Glama shows as the maintainer.
 4. Record it as a new `service` element (`kind: listing`, `owner_role: approver`, `account:
    robypomper`, `decision: dl-130-visibility-steps-in-the-release-flow`, as `svc-012`), with `verify`
    e.g. `curl -s https://raw.githubusercontent.com/wingfoil/wingfoil/main/glama.json` plus opening the
-   listing URL. The element is not added by this task (coordinator/approver, through `service-ingest`).
+   listing URL, per `dl-088` / `dl-130`. It goes through `service-ingest` after the claim; this task
+   does not add it.
 
 **Pending amendments (approver).**
 - `spec-015-packaging-publishing` — §1b `glama.json` and the Revision (2026-10-05) note. Proposed
   `--reason`: "task-157 adds a second root listing input, glama.json, which claims the Glama listing of
   an organisation-owned repository; section 1b states its two keys, the schema it is validated against,
   and that it stays out of the tarball. The files allowlist and the pipeline are unchanged."
-
-**Out of scope, reported not filed.** The AC wording `npm publish --dry-run` does not run once the
-current version is on npm (registry check first); `npm pack --dry-run` or a dry run against an
-unreachable registry gives the file list.
