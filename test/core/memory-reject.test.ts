@@ -266,7 +266,7 @@ describe('CORE_MODULES memory.memoryReject — P1.8 fit criteria', () => {
       try {
         await memoryRejectFn()({ root: repo, positional, options: { reason: 'x' } });
       } catch (error) {
-        expect(exitCodeForThrow(error)).toEqual({ reason: 'missing required argument: memory reject <id>', exitCode: 2 });
+        expect(exitCodeForThrow(error)).toEqual({ reason: 'missing required argument: <id>', exitCode: 2 });
       }
     }
   });

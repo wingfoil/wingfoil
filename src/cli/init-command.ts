@@ -24,7 +24,7 @@ import {
 
 import { emitError } from './error';
 import { exitWith } from './exit';
-import { isValidFormat, renderSuccess, type OutputFormat } from './output';
+import { invalidFormatReason, isValidFormat, renderSuccess, type OutputFormat } from './output';
 
 /** The parsed flag surface `runInit` acts on (global `--format`/`--interactive` + local `--template`). */
 export interface InitCliOptions {
@@ -98,7 +98,7 @@ async function selectTemplate(options: InitCliOptions, deps: InitCliDeps, format
 export async function runInit(options: InitCliOptions, deps: InitCliDeps): Promise<void> {
   // Usage error first (pre-core), same as the registrar: an invalid --format never reaches core.
   if (!isValidFormat(options.format)) {
-    exitWith(2, `error: invalid --format value "${options.format}", expected one of: console, json, yaml`);
+    exitWith(2, `error: ${invalidFormatReason(options.format)}`);
     return;
   }
   const format: OutputFormat = options.format;

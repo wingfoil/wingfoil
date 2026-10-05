@@ -84,12 +84,11 @@ describe('AC2 — a noun invoked with no verb exits 2 and emits an `error:` line
       const result = runCli(noun);
       expect(result.status).toBe(2);
       // The WORDING is a ruling, not a lookup: commander supplies no message on this path at all, so
-      // the shape is borrowed from the one WingFoil already emits for a missing positional
-      // (`src/core/index.ts`'s `missing required argument: wingfoil dna set <path> --value <value>`,
-      // task-093) — the same key, and the incomplete invocation echoed back with the token that would
-      // complete it. `<command>` rather than `<verb>` is commander's own placeholder for a
+      // it is the one shape WingFoil emits for every missing operand (task-179, `bug-168`) — the
+      // placeholder, then the incomplete invocation echoed back with the token that would complete it
+      // as the `hint:` line. `<command>` rather than `<verb>` is commander's own placeholder for a
       // subcommand, which is what the usage line printed directly above this says.
-      expect(result.stderr).toContain(`error: missing required argument: wingfoil ${noun} <command>`);
+      expect(result.stderr).toContain(`error: missing required argument: <command>\nhint: usage: wingfoil ${noun} <command>\n`);
       expect(result.stdout).toBe('');
     },
   );
@@ -98,7 +97,7 @@ describe('AC2 — a noun invoked with no verb exits 2 and emits an `error:` line
     for (const noun of NOUNS_WITH_VERBS) {
       const result = runCli(noun);
       expect({ noun, status: result.status }).toEqual({ noun, status: 2 });
-      expect(result.stderr).toContain(`error: missing required argument: wingfoil ${noun} <command>`);
+      expect(result.stderr).toContain(`error: missing required argument: <command>\nhint: usage: wingfoil ${noun} <command>\n`);
     }
   });
 
@@ -109,10 +108,10 @@ describe('AC2 — a noun invoked with no verb exits 2 and emits an `error:` line
     // `wingfoil --help` or `wingfoil help`, and both still exit 0 (AC4 below).
     const result = runCli();
     expect(result.status).toBe(2);
-    expect(result.stderr).toContain('error: missing required argument: wingfoil <command>');
+    expect(result.stderr).toContain('error: missing required argument: <command>\nhint: usage: wingfoil <command>\n');
   });
 
-  it('the usage text commander prints is kept, and the `error:` line closes stderr', () => {
+  it('the usage text commander prints is kept, and the `error:` and `hint:` lines close stderr', () => {
     // The ORDER is a ruling too. Commander writes the help before it calls the exit callback, so the
     // `error:` line can only follow it; suppressing the help would mean intercepting commander's
     // output stream, which would also put the nine already-correct messages `task-101` pinned behind
@@ -121,7 +120,7 @@ describe('AC2 — a noun invoked with no verb exits 2 and emits an `error:` line
     const result = runCli('dna');
     const lines = result.stderr.trimEnd().split('\n');
     expect(lines[0]).toContain('Usage: wingfoil dna');
-    expect(lines[lines.length - 1]).toBe('error: missing required argument: wingfoil dna <command>');
+    expect(lines.slice(-2)).toEqual(['error: missing required argument: <command>', 'hint: usage: wingfoil dna <command>']);
   });
 });
 

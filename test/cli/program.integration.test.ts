@@ -46,11 +46,9 @@
  * every Commander termination through `exitCodeForParseOutcome` (`src/core/exit-code.ts`), so the
  * assertions below read `2`. That is the EXIT-CODE half of spec-008 §1's `E_UNKNOWN_COMMAND`, and only
  * that half: §1 also asks for a closest-match suggestion in `spec-005` §3.1's `hint: ` form, computed
- * at Levenshtein distance <= 2, and what the binary emits is commander's own
- * `\n(Did you mean memory?)` from `showSuggestionAfterError` — a different line, from a different
- * matcher (`node_modules/commander/lib/suggestSimilar.js`: Damerau-Levenshtein, `maxDistance = 3`, a
- * 0.4 similarity ratio), never routed through WingFoil's `src/cli/error.ts` emitter. That divergence
- * is `bug-104`; this task did not close it and does not claim to.
+ * at Levenshtein distance <= 2. That half was `bug-104`, closed by task-179: the suggestion is now
+ * WingFoil's own (`src/cli/suggest.ts`), written through `src/cli/error.ts` as a `hint:` line
+ * (`./operand-error-shape.integration.test.ts`).
  */
 import { execFileSync } from 'child_process';
 import { existsSync, readFileSync, readdirSync, symlinkSync } from 'fs';
@@ -393,10 +391,10 @@ paths:
       expect(readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8')).toBe(before);
     });
 
-    it('a missing <path> is a usage error at exit 2, naming the grammar (spec-008 §5, §9)', () => {
+    it('a missing <path> is a usage error at exit 2, with the usage as the hint (spec-008 §4, §5, §9; task-179)', () => {
       const result = runCliInRoot(repo, 'dna', 'add', '--value', 'x');
       expect(result.status).toBe(2);
-      expect(result.stderr).toBe('error: missing required argument: wingfoil dna add <path> --value <value>\n');
+      expect(result.stderr).toBe('error: missing required argument: <path>\nhint: usage: wingfoil dna add <path>\n');
     });
 
     // `dl-082-cli-parameter-shape` takes the second positional away from a SHIPPED command, so the old
@@ -582,7 +580,7 @@ types:
     it('`memory history` with no <id> exits 2 with the missing-required-argument message (spec-008 §5)', () => {
       const result = runCliInRoot(repo, 'memory', 'history');
       expect(result.status).toBe(2);
-      expect(result.stderr).toBe('error: missing required argument: memory history <id>\n');
+      expect(result.stderr).toBe('error: missing required argument: <id>\nhint: usage: wingfoil memory history <id>\n');
       expect(result.stdout).toBe('');
     });
   });
@@ -1089,7 +1087,7 @@ types:
     it('a missing <name> exits 2 (usage error, spec-008 §5)', () => {
       const result = runCliInRoot(repo, 'directive', 'remove');
       expect(result.status).toBe(2);
-      expect(result.stderr).toBe('error: missing required argument: directive remove <name>\n');
+      expect(result.stderr).toBe('error: missing required argument: <name>\nhint: usage: wingfoil directive remove <name>\n');
     });
   });
 

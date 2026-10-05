@@ -69,10 +69,13 @@ export interface CoreFlag {
  * a positional identifies the target, an option carries an attribute), declared so `--help` can name
  * it (`<id>`, `<path>`, `[section]`) instead of describing a generic list (task-120, `bug-128`).
  *
- * `required` is declarative, like {@link CoreOption.required}: the operation's own `CoreFn` refuses a
- * missing positional (a `UsageError`, exit `2`), and `src/cli/program.ts` only renders it — Commander
- * is never told to enforce it, so the refusal keeps core's message. `test/cli/help-positional-required.integration.test.ts`
- * checks that the declaration and the refusal agree.
+ * `required` is enforced by the CLI registrar (`src/cli/registrar.ts`, task-179, `bug-168`): an
+ * invocation that omits it is refused at exit `2` with {@link missingOperandReason}'s one wording and the
+ * command's {@link commandUsage} as the hint, before the project root is resolved. The operation's own
+ * `CoreFn` refuses it too, in the same words, for a caller that reaches core without the registrar.
+ * `src/cli/program.ts` only renders it — Commander is never told to enforce it, so the refusal keeps
+ * WingFoil's message. `test/cli/operand-error-shape.integration.test.ts` drives every command that
+ * declares a required positional without it.
  */
 export interface CorePositional {
   /** The name `--help` shows, in the placeholder form the CLI reference uses — `id`, `path`, `name`, `section`. */
@@ -82,16 +85,13 @@ export interface CorePositional {
   /** What `--help` says the argument is. */
   readonly description: string;
   /**
-   * Whether the operation refuses an operand beyond this one ITSELF, instead of the registrar doing it
-   * (task-129, `bug-171`). The registrar refuses a surplus operand for every command, before resolving
-   * the project root (`src/cli/registrar.ts`); an operation sets this only when another usage check of
-   * its own must come first — the DNA path verbs, where a malformed path is reported before the
-   * migration message (`P2.1-dna-set.feature`'s `dna set ..language python`). Such an operation must
-   * still refuse the surplus at exit `2` with {@link extraOperandsReason}'s wording:
-   * `test/cli/extra-operand-refusal.integration.test.ts` drives every registered command with one
-   * operand too many, whoever refuses it. Absent means the registrar refuses.
+   * A clause the surplus-operand refusal adds after what the command takes, naming what the extra
+   * operand should have been (task-179, `bug-180`): the DNA path verbs' `the value travels in --value`,
+   * the migration hint of `dl-082`'s move of the value out of a second positional. The registrar refuses
+   * a surplus operand for every command alike, before the project root is resolved
+   * (`src/cli/registrar.ts`), and appends this through {@link extraOperandsReason}. Absent means none.
    */
-  readonly refusesExtraItself?: boolean;
+  readonly surplusHint?: string;
 }
 
 /**
@@ -112,6 +112,36 @@ export interface CorePositional {
 export function extraOperandsReason(command: string, positionalName: string | undefined, given: number, hint?: string): string {
   const takes = positionalName === undefined ? 'takes no positional' : `takes one positional <${positionalName}>`;
   return `wingfoil ${command} ${takes}${hint === undefined ? '' : `; ${hint}`} (got ${given} positional${given === 1 ? '' : 's'})`;
+}
+
+/**
+ * The usage error for an invocation that omits a required operand (`spec-008-cli-grammar` §4; task-179,
+ * `bug-168`): `missing required argument: <id>` — the positional's placeholder, as `--help` writes it,
+ * beside `missing required argument: --<name>` for an option. One wording for every command; the
+ * registrar adds the command's usage as the `hint:` line ({@link commandUsage}). Deterministic.
+ *
+ * @param positionalName - the declared positional's name (`id`, `path`, `name`).
+ */
+export function missingOperandReason(positionalName: string): string {
+  return `missing required argument: <${positionalName}>`;
+}
+
+/**
+ * The usage line of a command, as the missing-operand refusal's `hint:` shows it (task-179, `bug-168`):
+ * `wingfoil <command>`, the declared positional (`<id>` when required, `[section]` when not), then every
+ * REQUIRED option with its placeholder — `wingfoil memory approve <id> --reason <text>`. Optional
+ * options are left to `--help`. A pure function of the declaration (REQ-SYS-07).
+ *
+ * @param command - the command as typed after `wingfoil`: `memory approve`, or a flat noun (`paths`).
+ * @param operation - the operation whose declaration the line is read from.
+ */
+export function commandUsage(command: string, operation: Pick<CoreOperation, 'positional' | 'options'>): string {
+  const positional = operation.positional;
+  const operand = positional === undefined ? [] : [positional.required === true ? `<${positional.name}>` : `[${positional.name}]`];
+  const options = (operation.options ?? [])
+    .filter((option) => option.required === true)
+    .map((option) => `--${option.name} <${option.valueName ?? 'value'}>`);
+  return ['wingfoil', command, ...operand, ...options].join(' ');
 }
 
 /**
@@ -263,15 +293,13 @@ export interface ParamsContext {
    * by the first operation taking two data inputs (`dna set <key> <value>` -> `['<key>', '<value>']`).
    * Since `dl-082-cli-parameter-shape` (task-093) every command reads at most ONE positional — the
    * identity of its target — and `dna set`'s value travels in `--value`, so the list is now a
-   * uniform seam rather than one shaped by a single two-input verb; it stays variadic so an
-   * operation declaring {@link CorePositional.refusesExtraItself} can refuse an extra positional after
-   * its own checks. For every other operation the registrar refuses a surplus before `buildParams` is
-   * called (task-129), so the list it sees never exceeds the declared count.
+   * uniform seam rather than one shaped by a single two-input verb. The registrar refuses a surplus
+   * for every operation before `buildParams` is called (task-129; the DNA path verbs too since
+   * task-179, `bug-180`), so the list it sees never exceeds the declared count.
    * {@link positional} is exactly `positionals?.[0]` and is kept unchanged for the single-positional
    * read ops that predate this (`dna show [section]`, `paths [category]`), so their `buildParams` and
-   * `CoreFn`s are untouched; an op that must validate its positional (`dnaSet` and the three mutation
-   * verbs, which reject an extra one) reads `positionals`
-   * instead. Same additive contract as {@link positional}/{@link flags}: the MCP surface never
+   * `CoreFn`s are untouched; the four DNA path verbs (`dnaSet` and the three mutation verbs) read
+   * `positionals` instead. Same additive contract as {@link positional}/{@link flags}: the MCP surface never
    * populates it (a zero-argument Tool/Resource template carries no positional — see {@link positional}),
    * so an MCP `buildParams` simply never sets it.
    */

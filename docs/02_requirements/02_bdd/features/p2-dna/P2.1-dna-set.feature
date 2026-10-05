@@ -29,6 +29,6 @@ Feature: P2.1 (US-0A-08) - wingfoil dna set
     And the command exits with code 1 and message "'stacks.technologies' does not hold a single value: reach it with `dna add|remove|update stacks.technologies --value <v>` (dl-081)"
 
   Scenario: Error - invalid dotted key path
-    When I run "wingfoil dna set ..language python"
+    When I run "wingfoil dna set ..language --value python"
     Then ".wingfoil/dna.yaml" is unchanged
     And the command exits with code 2 and message "invalid key path: '..language'"

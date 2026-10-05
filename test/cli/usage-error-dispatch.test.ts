@@ -48,8 +48,7 @@ describe('CLI dispatch — UsageError -> exit 2 (task-025)', () => {
           dnaSet: {
             name: 'dnaSet',
             mutates: true,
-            // Like the real `dna set`, it refuses a surplus operand itself (task-129), after its own checks.
-            positional: { name: 'path', required: true, description: 'p', refusesExtraItself: true },
+            positional: { name: 'path', required: true, description: 'p' },
             fn: async () => {
               throw new UsageError("invalid key path: '..language'");
             },
@@ -61,13 +60,13 @@ describe('CLI dispatch — UsageError -> exit 2 (task-025)', () => {
       resolveRoot: () => '/fixture-root',
       buildParams: (ctx) => ({ root: ctx.root, positionals: ctx.positionals }),
     });
-    await find(commands, 'dna', 'set').run('console', ['..language', 'python']);
+    await find(commands, 'dna', 'set').run('console', ['..language']);
     expect(stderrSpy).toHaveBeenCalledWith("error: invalid key path: '..language'\n");
     expect(exitSpy).toHaveBeenCalledWith(2);
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
-  it('the full positional list reaches buildParams as ctx.positionals, with ctx.positional == positionals[0]', async () => {
+  it('the positional list reaches buildParams as ctx.positionals, with ctx.positional == positionals[0]', async () => {
     let seen: unknown;
     const modules: CoreModule[] = [
       {
@@ -76,7 +75,7 @@ describe('CLI dispatch — UsageError -> exit 2 (task-025)', () => {
           dnaSet: {
             name: 'dnaSet',
             mutates: true,
-            positional: { name: 'path', required: true, description: 'p', refusesExtraItself: true },
+            positional: { name: 'path', required: true, description: 'p' },
             fn: async (p) => coreOk(p),
           },
         },
@@ -89,7 +88,9 @@ describe('CLI dispatch — UsageError -> exit 2 (task-025)', () => {
         return seen;
       },
     });
-    await find(commands, 'dna', 'set').run('json', ['tech_stack.language', 'python']);
-    expect(seen).toEqual({ positional: 'tech_stack.language', positionals: ['tech_stack.language', 'python'] });
+    // Since task-179 (`bug-180`) the registrar refuses a surplus for every command, so the list carries
+    // at most the one declared operand.
+    await find(commands, 'dna', 'set').run('json', ['tech_stack.language']);
+    expect(seen).toEqual({ positional: 'tech_stack.language', positionals: ['tech_stack.language'] });
   });
 });

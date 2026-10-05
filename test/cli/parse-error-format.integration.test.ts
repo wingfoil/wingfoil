@@ -49,7 +49,7 @@ beforeAll(() => {
  * flag is placed both before and after the failing token, because Commander reads the global option
  * wherever it appears and a refusal must not depend on where the caller put it.
  */
-const PARSE_REFUSALS: readonly { name: string; args: readonly string[]; reason: string }[] = [
+const PARSE_REFUSALS: readonly { name: string; args: readonly string[]; reason: string; hint?: string }[] = [
   { name: 'an unknown command', args: ['nosuchpillar'], reason: "unknown command 'nosuchpillar'" },
   { name: 'an unknown option', args: ['dna', 'show', '--bogus'], reason: "unknown option '--bogus'" },
   {
@@ -57,24 +57,25 @@ const PARSE_REFUSALS: readonly { name: string; args: readonly string[]; reason: 
     args: ['memory', 'add', '--type'],
     reason: "option '--type <type>' argument missing",
   },
-  { name: 'a noun with no verb', args: ['dna'], reason: 'missing required argument: wingfoil dna <command>' },
+  // task-179 (`bug-168`): the one missing-operand shape, with the usage as the hint.
+  { name: 'a noun with no verb', args: ['dna'], reason: 'missing required argument: <command>', hint: 'usage: wingfoil dna <command>' },
 ];
 
 describe('AC2 — a parse-path refusal under `--format json` is one JSON object on stderr (bug-114)', () => {
-  it.each(PARSE_REFUSALS)('$name: `{"error": <reason>}` and nothing else, exit 2', ({ args, reason }) => {
+  it.each(PARSE_REFUSALS)('$name: `{"error": <reason>}` and nothing else, exit 2', ({ args, reason, hint }) => {
     const result = runCli('--format', 'json', ...args);
     expect(result.status).toBe(2);
-    expect(singleJsonObject(result.stderr)).toEqual({ error: reason });
+    expect(singleJsonObject(result.stderr)).toEqual({ error: reason, ...(hint !== undefined ? { hint } : {}) });
     expect(result.stdout).toBe('');
   });
 
   // A missing option argument consumes the next token as its value, so it is the one case the trailing
   // placement cannot express; the others must not depend on placement.
   const TRAILING = PARSE_REFUSALS.filter(({ args }) => args.at(-1) !== '--type');
-  it.each(TRAILING)('$name: the same object when `--format json` comes last', ({ args, reason }) => {
+  it.each(TRAILING)('$name: the same object when `--format json` comes last', ({ args, reason, hint }) => {
     const result = runCli(...args, '--format', 'json');
     expect(result.status).toBe(2);
-    expect(singleJsonObject(result.stderr)).toEqual({ error: reason });
+    expect(singleJsonObject(result.stderr)).toEqual({ error: reason, ...(hint !== undefined ? { hint } : {}) });
   });
 
   it('the same shape as a core refusal: the keys a WingFoil error carries, and no others', () => {
@@ -89,7 +90,7 @@ describe('AC2 — a parse-path refusal under `--format json` is one JSON object 
   it("an unknown command's closest-match suggestion rides as `hint`, not inside `error`", () => {
     const result = runCli('--format', 'json', 'memroy', 'add');
     expect(result.status).toBe(2);
-    expect(singleJsonObject(result.stderr)).toEqual({ error: "unknown command 'memroy'", hint: 'Did you mean memory?' });
+    expect(singleJsonObject(result.stderr)).toEqual({ error: "unknown command 'memroy'", hint: 'did you mean "memory"?' });
   });
 
   it('`--format yaml` is the same object, serialized as YAML', () => {
@@ -97,15 +98,15 @@ describe('AC2 — a parse-path refusal under `--format json` is one JSON object 
     // itself valid YAML for `{error: …}`, so only a two-field object tells the formats apart.
     const result = runCli('--format', 'yaml', 'memroy', 'add');
     expect(result.status).toBe(2);
-    expect(yamlLoad(result.stderr)).toEqual({ error: "unknown command 'memroy'", hint: 'Did you mean memory?' });
+    expect(yamlLoad(result.stderr)).toEqual({ error: "unknown command 'memroy'", hint: 'did you mean "memory"?' });
   });
 });
 
-describe('characterization — console output of the parse path is unchanged', () => {
-  it('an unknown command keeps `error:` and commander\'s own suggestion line', () => {
+describe('characterization — console output of the parse path', () => {
+  it('an unknown command keeps `error:`; its suggestion is the spec-005 §3.1 `hint:` line since task-179 (bug-104)', () => {
     const result = runCli('memroy', 'add');
     expect(result.status).toBe(2);
-    expect(result.stderr).toBe("error: unknown command 'memroy'\n(Did you mean memory?)\n");
+    expect(result.stderr).toBe(`error: unknown command 'memroy'\nhint: did you mean "memory"?\n`);
   });
 
   it('an unknown option keeps its single `error:` line', () => {
@@ -118,7 +119,7 @@ describe('characterization — console output of the parse path is unchanged', (
     const result = runCli('dna');
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('Usage: wingfoil dna');
-    expect(result.stderr.endsWith('error: missing required argument: wingfoil dna <command>\n')).toBe(true);
+    expect(result.stderr.endsWith('error: missing required argument: <command>\nhint: usage: wingfoil dna <command>\n')).toBe(true);
   });
 
   it('`--help` is untouched by a machine format: usage on stdout, exit 0', () => {

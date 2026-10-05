@@ -8,7 +8,7 @@
  * here yet; there is intentionally zero mutating operation in production today.
  */
 import { enumerateOperations } from '../../src/core/registry';
-import { CORE_MODULES } from '../../src/core';
+import { CORE_MODULES, WINGFOIL_NOT_INITIALIZED } from '../../src/core';
 import { makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 describe('CORE_MODULES — production registry', () => {
@@ -140,12 +140,26 @@ phases:
     }
   });
 
-  it('dnaShow returns coreErr(NOT_FOUND) when .wingfoil/dna.yaml is missing', async () => {
+  it('dnaShow returns coreErr(NOT_FOUND) when .wingfoil/dna.yaml is missing, naming it repository-relative', async () => {
+    // A `.wingfoil/` without the file (task-179, `bug-245`); with no `.wingfoil/` at all the refusal is
+    // `WINGFOIL_NOT_INITIALIZED` (`bug-198`, below).
+    writeFixtureFile(repo, '.wingfoil/.gitkeep', '');
     const result = await findOperation('dna', 'dnaShow').fn({ root: repo });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('NOT_FOUND');
+      expect(result.error.message).toMatch(/^\.wingfoil\/dna\.yaml is missing: /);
+      expect(result.error.message).not.toContain(repo);
     }
+  });
+
+  it.each([
+    ['dna', 'dnaShow'],
+    ['paths', 'paths'],
+    ['memory', 'memorySearch'],
+  ] as const)('%s.%s refuses with WINGFOIL_NOT_INITIALIZED when there is no .wingfoil/ (task-179, bug-198)', async (moduleName, operationName) => {
+    const result = await findOperation(moduleName, operationName).fn({ root: repo });
+    expect(result).toEqual({ ok: false, error: { code: 'VALIDATION', message: WINGFOIL_NOT_INITIALIZED } });
   });
 
   it('directivesList returns coreOk([...]) for valid directive files', async () => {
@@ -216,6 +230,7 @@ phases:
   });
 
   it('paths returns coreErr(NOT_FOUND) when .wingfoil/dna.yaml is missing, same as dnaShow', async () => {
+    writeFixtureFile(repo, '.wingfoil/.gitkeep', '');
     const result = await findOperation('paths', 'paths').fn({ root: repo, positional: 'sources' });
     expect(result.ok).toBe(false);
     if (!result.ok) {

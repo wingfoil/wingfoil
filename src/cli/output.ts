@@ -13,6 +13,15 @@ export function isValidFormat(value: string): value is OutputFormat {
 }
 
 /**
+ * The reason an unrecognised `--format` value is refused with (spec-005 §2), without the `error: `
+ * prefix: one composer for every command, the derived ones (`./registrar.ts`) and the bootstrap ones
+ * (`./program.ts`, `./init-command.ts`), so the line cannot drift between them (task-179, `bug-226`).
+ */
+export function invalidFormatReason(value: string): string {
+  return `invalid --format value "${value}", expected one of: console, json, yaml`;
+}
+
+/**
  * Render a successful `CoreResult.value` to stdout text, per the envelope rules in spec-005 §2:
  * `json`/`yaml` carry only the structured payload (no banners/colour). `console` has no human
  * rendering yet: it prints `json`'s payload indented by two spaces, with no colour, as spec-008 §2

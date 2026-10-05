@@ -209,7 +209,7 @@ describe('CORE_MODULES memory.memoryHistory — P1.10 Scenario "Error - history 
   });
 
   it('an omitted <id> is a USAGE error (exit 2), not a "not found" (spec-008 §5)', async () => {
-    await expect(memoryHistoryFn()({ root: repo })).rejects.toThrow('missing required argument: memory history <id>');
+    await expect(memoryHistoryFn()({ root: repo })).rejects.toThrow('missing required argument: <id>');
     try {
       await memoryHistoryFn()({ root: repo });
     } catch (error) {
@@ -219,10 +219,14 @@ describe('CORE_MODULES memory.memoryHistory — P1.10 Scenario "Error - history 
 
   it('a missing .wingfoil/memory.yaml is a NOT_FOUND from the pillar load, exit 1 — same as every other read op', async () => {
     const bare = makeTempGitRepo();
+    // A `.wingfoil/` without memory.yaml; with no `.wingfoil/` at all the refusal is
+    // `WINGFOIL_NOT_INITIALIZED` (task-179, `bug-198`).
+    writeFixtureFile(bare, '.wingfoil/.gitkeep', '');
     try {
       const result = await memoryHistoryFn()({ root: bare, positional: 'decision-12' });
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error.code).toBe('NOT_FOUND');
+      if (!result.ok) expect(result.error.message).toMatch(/^\.wingfoil\/memory\.yaml is missing: /);
     } finally {
       removeTempDir(bare);
     }
