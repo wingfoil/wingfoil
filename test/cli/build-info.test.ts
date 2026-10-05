@@ -27,8 +27,8 @@ const PKG = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf-8')) a
 };
 
 /** Run the writer against `root`, as `npm run build` runs it against the package root. */
-function writeBuildInfo(root: string): Buffer {
-  execFileSync(process.execPath, [WRITER, '--root', root], { stdio: 'pipe' });
+function writeBuildInfo(root: string, env: NodeJS.ProcessEnv = {}): Buffer {
+  execFileSync(process.execPath, [WRITER, '--root', root], { stdio: 'pipe', env: { ...process.env, ...env } });
   return readFileSync(join(root, 'dist', 'build-info.json'));
 }
 
@@ -108,6 +108,24 @@ describe('scripts/write-build-info.cjs — the build record (dl-111 Q2 (a))', ()
     writeFixtureFile(repo, path, content);
 
     expect(JSON.parse(writeBuildInfo(repo).toString('utf-8')).commit).toBe(`${head}-dirty`);
+  });
+
+  // Re-review (task-192): the answer must not depend on the operator's git configuration or environment.
+  it('an untracked file under src/ stamps `-dirty` even with `status.showUntrackedFiles=no` in the git config', () => {
+    repo = makePackageRepo();
+    const head = git(repo, ['rev-parse', 'HEAD']).trim();
+    git(repo, ['config', 'status.showUntrackedFiles', 'no']);
+    writeFixtureFile(repo, 'src/new.ts', 'export {};\n');
+
+    expect(JSON.parse(writeBuildInfo(repo).toString('utf-8')).commit).toBe(`${head}-dirty`);
+  });
+
+  it('`tsconfig*.json` stays a glob with `GIT_LITERAL_PATHSPECS=1` in the environment', () => {
+    repo = makePackageRepo();
+    const head = git(repo, ['rev-parse', 'HEAD']).trim();
+    writeFixtureFile(repo, 'tsconfig.json', '{ "compilerOptions": { "strict": true } }\n');
+
+    expect(JSON.parse(writeBuildInfo(repo, { GIT_LITERAL_PATHSPECS: '1' }).toString('utf-8')).commit).toBe(`${head}-dirty`);
   });
 
   it('outside a git repository the commit is `unknown`, and the record is still written (no stale one survives)', () => {
