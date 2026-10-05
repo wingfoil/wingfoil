@@ -101,6 +101,17 @@ package `wingfoil` over `stdio` with the argument `mcp` (the command `wingfoil m
 `files`: it is the input of the MCP Registry listing, and publishing to the registry is not part of
 this pipeline — it happens with the approver at publication time (`dl-093` point 6, `dl-130`).
 
+### 1b. `glama.json` (Glama listing claim, `dl-093`, release-planning-rel-v0.3 R7)
+
+A `glama.json` at the repository root lets the maintainer claim the project's listing on Glama, a
+directory of MCP servers. Glama accepts a sign-in with GitHub as the claim only for a repository
+owned by a personal account; this one is owned by the organisation `wingfoil`, so the file is the
+claim route. It carries exactly two keys: `$schema`, set to `https://glama.ai/mcp/schemas/server.json`,
+and `maintainers`, the GitHub usernames allowed to maintain the listing: the approver's account. That
+schema (JSON Schema draft-07, read 2026-10-05) requires `maintainers`, an array of unique strings, and
+declares no other property. Like `server.json`, it is not in `files`: it is read by Glama from the
+repository, not from the package, and claiming the listing is an approver step outside this pipeline.
+
 Unchanged: `name: wingfoil`, `main`, `types`, `license: MIT`. `version` is driven by the release/tag
 scheme (§4), not hand-edited at publish time.
 
@@ -563,3 +574,12 @@ the 2026-09-21 revision named the script without its extension, a path that does
 has always been `scripts/publish-staging.cjs` (the same revision quotes `package.json`'s
 `node scripts/publish-staging.cjs`). Each occurrence now names it. No stage, script or other rule
 changed. Edited in place without a supersede or a state change, per `dl-047` (no `version:` field).
+
+**Revision (2026-10-05) — §1b `glama.json`: the root file that claims the Glama listing (`task-157`,
+`dl-093`; release-planning-rel-v0.3 R7).** The spec named one listing input at the repository root,
+`server.json` (§1a). `task-157` adds a second, `glama.json`, for the Glama directory, which accepts
+it as the only claim route for a repository owned by an organisation. §1b states its two keys, the
+schema it is validated against, and that it stays out of the tarball, which
+`test/cli/publish-metadata.test.ts` pins. The `files` allowlist and the publish pipeline are
+unchanged. Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the
+revisions above.
