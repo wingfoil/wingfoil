@@ -2,7 +2,7 @@
 id: "bug-143-versioned-config-yaml-edits-skip-the-bump"
 type: bug
 title: "Content edits to the four versioned self-config YAMLs routinely skip the `doc-versioning` `version:` bump, and nothing checks for it"
-status: planned
+status: in-progress
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
