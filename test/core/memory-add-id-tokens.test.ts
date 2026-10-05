@@ -6,7 +6,7 @@
  *
  * Exercised at the `CoreFn` seam through the REAL registered `memory.memoryAdd`, in a throwaway git
  * repo whose `memory.yaml` mirrors this repository's own `release`, `release-line` and `plan` types
- * (`.wingfoil/memory.yaml`): `{kind}-{version}` under a `{release-line}` path folder,
+ * (`.wingfoil/memory.yaml`): `{kind}-{version}` under an `rl-{release-line}` path folder (task-164),
  * `rl-{version}`, and `{workflow}-{phase}-plan` under a `{scope}` path folder. The CLI surface hands
  * the repeatable option as a string array under `options.set` (`src/cli/program.ts`).
  */
@@ -30,7 +30,7 @@ types:
       frontmatter:
         required: [id, type, title, status]
   release:
-    path: "docs/memory/planning/{release-line}/{id}.md"
+    path: "docs/memory/planning/rl-{release-line}/{id}.md"
     id_pattern: "{kind}-{version}"
     template:
       file: "memory/templates/release.md"
@@ -157,7 +157,7 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
   });
 
   describe('AC 2 — a {<field>} token takes its value from --set and writes it back', () => {
-    it('{kind}-{version} under a {release-line} folder produces patch-v0.2.3, dots kept, fields written', async () => {
+    it('{kind}-{version} under an rl-{release-line} folder produces patch-v0.2.3, dots kept, fields written', async () => {
       const result = await memoryAddFn()({
         root: repo,
         options: { type: 'release', title: 'WingFoil v0.2.3', set: ['kind=patch', 'version=v0.2.3', 'release-line=v1'] },
@@ -165,7 +165,7 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value.id).toBe('patch-v0.2.3');
-      expect(result.value.path).toBe('docs/memory/planning/v1/patch-v0.2.3.md');
+      expect(result.value.path).toBe('docs/memory/planning/rl-v1/patch-v0.2.3.md');
       expect(subject(repo)).toBe('wf(release): add patch-v0.2.3');
 
       const content = readFileSync(join(repo, result.value.path), 'utf-8');

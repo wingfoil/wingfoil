@@ -144,7 +144,7 @@ artefact specs already implied by it. `seed-releases` is required; the other thr
 flowchart TD
     IN2["`approve` output\nrelease-line: active"]
 
-    P2b["**seed-releases** *(product-owner)*\nmemory.add(type: release, release-line: {release-line.version}, kind: minor) × N\nstatus: draft (no pending state)\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n`docs/04_memory/planning/{release-line}/{id}.md`"]
+    P2b["**seed-releases** *(product-owner)*\nmemory.add(type: release, release-line: {release-line.version}, kind: minor) × N\nstatus: draft (no pending state)\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n`docs/04_memory/planning/rl-{release-line}/{id}.md`"]
     SC2b{{"Stop-Check\nN files · all draft\nfeatures list complete per release"}}
 
     P3["**seed-adrs** *(architect)* · **OPTIONAL**\nmemory.add(type: adr)\ndraft → pending → accepted\n✔ P4.12: [title, sard_ref]\n`docs/04_memory/design/adrs/{id}.md`"]

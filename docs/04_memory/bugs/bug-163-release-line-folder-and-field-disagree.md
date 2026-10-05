@@ -2,7 +2,7 @@
 id: bug-163-release-line-folder-and-field-disagree
 type: bug
 title: "A release's `release-line` field holds `v1` while its folder is `planning/rl-v1/`, so `memory add --type release` files a new release under a folder no other release uses, or with a field value no other release has"
-status: planned
+status: closed
 severity: "medium"
 release-origin: "v0.2.2"
 release: "v0.3"

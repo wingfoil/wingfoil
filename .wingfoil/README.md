@@ -53,8 +53,8 @@ There is still no workflow engine: a workflow phase is carried out by hand again
 > `directives/built-in/` stays empty. Reconciling them is `bug-040`'s scope.
 
 > **Memory paths:** `memory.yaml` declares each type's `path` under `docs/04_memory/` (e.g.
-> `docs/04_memory/planning/{id}.md` for `release-line`, `docs/04_memory/planning/{release-line}/{id}.md`
-> for `release` — nested under its parent release-line's version). They resolve against the
+> `docs/04_memory/planning/{id}.md` for `release-line`, `docs/04_memory/planning/rl-{release-line}/{id}.md`
+> for `release` — nested under its parent release-line's id, `rl-` + the version its `release-line` field holds). They resolve against the
 > repository root, where the files live — the same root this `.wingfoil/` sits in, so the tool and a
 > reader find the same file. Release content is derived from
 > `docs/03_backlog/` (each release's `requirements:` points to its by-release backlog JSON).

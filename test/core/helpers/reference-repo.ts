@@ -55,7 +55,7 @@ types:
   release-line:
     path: "docs/04_memory/planning/{id}.md"
   release:
-    path: "docs/04_memory/planning/{release-line}/{id}.md"
+    path: "docs/04_memory/planning/rl-{release-line}/{id}.md"
   task:
     path: "docs/04_memory/{release}/{id}.md"
   adr:

@@ -9,8 +9,8 @@ version: ""            # REQUIRED — e.g. "v0.1"
 pillar: ""             # REQUIRED — primary feature pillar, e.g. "P1"
 features:              # REQUIRED — feature IDs covered by this release, e.g. [P1.1, P1.2, P1.13]; [] if none. Left empty so an untouched scaffold fails submit (bug-147)
 requirements: ""       # REQUIRED — path to per-release backlog JSON, e.g. "docs/03_backlog/04_backlog/by-release/v0.1.json"
-release-line: ""       # REQUIRED — version of the parent release-line, e.g. "v1"; also the path folder for this file
-tmpl_version: 261002   # Orignal template version
+release-line: ""       # REQUIRED — version of the parent release-line, e.g. "v1"; the file sits under the release-line's id, planning/rl-v1/ (memory.yaml `release` path)
+tmpl_version: 261005   # Orignal template version
 ---
 
 ## Scope
