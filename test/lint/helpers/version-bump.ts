@@ -6,8 +6,14 @@
  * from `HEAD` must declare a top-level `version:` that differs, as YAML reads it, from the one at
  * `HEAD` — unless `HEAD` already carries a bump over the file's version at its fork point from
  * {@link TRUNK_BRANCH}: the bump baseline is `main`, so a branch bumps a file once (doc-versioning).
+ *
+ * "Differs" is git's verdict (`git diff HEAD`), so eol conversion is honoured. The relaxation trusts
+ * the LOCAL `refs/heads/main`: a stale local `main` (one that predates the file's last bump on the
+ * real trunk) can credit a bump the branch did not make; with no local `main` the check is strict,
+ * against `HEAD` alone. The verdict therefore depends on git objects, file bytes, the eol settings and
+ * where the local `main` points.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -44,6 +50,18 @@ function gitOrNull(root: string, args: string[]): string | null {
 /** The file's text at `commit`, or `null` when it does not exist there. */
 function textAt(root: string, commit: string, path: string): string | null {
   return gitOrNull(root, ['show', `${commit}:${path}`]);
+}
+
+/**
+ * True when the file in the working tree (staged or not) differs from `HEAD` as git sees it: through
+ * `git diff`, so eol conversion (`core.autocrlf`, `.gitattributes`) is applied and a clean checkout
+ * with CRLF line ends is not a change. `git diff --quiet` exits 1 on a difference.
+ */
+function differsFromHead(root: string, path: string): boolean {
+  const result = spawnSync('git', ['diff', '--quiet', 'HEAD', '--', path], { cwd: root, stdio: 'ignore' });
+  if (result.status === 0) return false;
+  if (result.status === 1) return true;
+  throw new Error(`git diff HEAD -- ${path} failed in ${root} (exit ${String(result.status)})`);
 }
 
 /** The file's text in the working tree, or `null` when it does not exist there. */
@@ -97,7 +115,7 @@ export function checkPendingVersionBumps(root: string): VersionBumpFinding[] {
   for (const path of VERSIONED_CONFIG_FILES) {
     const head = textAt(root, 'HEAD', path);
     const working = workingText(root, path);
-    if (head === null || working === null || head === working) continue;
+    if (head === null || working === null || !differsFromHead(root, path)) continue;
 
     const read = readVersion(working);
     if ('error' in read) {

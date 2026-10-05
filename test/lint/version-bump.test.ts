@@ -15,9 +15,13 @@
  *   and further edits on it do not bump again. So an edit that leaves `version:` as at `HEAD` passes when
  *   `HEAD` already carries a version different from the one at its fork point from `main`
  *   (`git-conventions` §2 names `main` as the trunk every task branch is cut from).
+ *   The relaxation trusts the local `refs/heads/main`: a stale local `main` can over-credit a bump, and
+ *   with no local `main` the judgement is strict, against `HEAD` alone.
+ * - "Differs" is git's own verdict (`git diff HEAD`), so a clean `core.autocrlf` checkout is no change.
  * - A file absent at `HEAD` (new) or from the working tree (deleted) has no pending edit to judge.
  *
- * Deterministic: a fixed, ordered file list; the verdict is a pure function of git objects and bytes.
+ * Deterministic: a fixed, ordered file list; the verdict depends only on git objects, file bytes, the
+ * repository's eol settings and where the local `main` points — no clock, no randomness.
  */
 import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
