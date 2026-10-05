@@ -92,7 +92,7 @@ the merge, because ts-jest is transpile-only: exactly the gap `dl-044` describes
   The alternative, an allowlist of known offsets in the suite, was rejected: it would leave the
   invisible bytes in place. **Approver to confirm.**
 - **CI.** A `npm run typecheck` step after `prepublishOnly` and before `check:audit` (which stays last),
-  under `if: ${{ !cancelled() }}` like the audit, so a red test step still reports the typecheck. The
+  so a red test step still reports the typecheck (condition corrected at review, F2 below). The
   control-character gate is a suite of `npm test`, so it runs inside `prepublishOnly` (CI and
   `publish.yml`'s tag gate) without a step of its own.
 - **Reason rule (bug-185).** `firstControlCharacter` also returns DEL..U+009F and U+2028/U+2029. The
@@ -131,8 +131,8 @@ Commit `6a93df25`:
   `scanTrackedFiles`, `formatFindings`).
 - `src/memory/commit-message.ts`: `firstControlCharacter` extended; `ReasonDefect` doc updated.
 - `.github/workflows/ci.yml` (step + header), `test/cli/ci-workflow.test.ts` (pinned run list now
-  `npm ci`, `prepublishOnly`, `typecheck`, `check:audit`; a new case pins `!cancelled()` on the last
-  two), `release-submit.yaml` 1.0 → 1.1 (`typecheck.clean` in `pre-release-checks`),
+  `npm ci`, `prepublishOnly`, `typecheck`, `check:audit`; a new case pins the two steps'
+  `if:` conditions, corrected at review, F2 below), `release-submit.yaml` 1.0 → 1.1 (`typecheck.clean` in `pre-release-checks`),
   `tsconfig.test.json` (comment citing `dl-044`'s ruling `16436983`, accepted until TS 7),
   `testing.md` pointer, and the Reason rule in `docs/cli-reference.md`, `docs/user-guide.md`,
   `docs/agents.md`.
@@ -198,6 +198,31 @@ Run sequentially in the worktree, after `npm ci`, with the three pending amendme
 `bug-026` (TS2339 in `test/core/directive-create.test.ts`) reached `main` through `task-050` with every
 gate green. `task-065` recorded `tsc --noEmit` as a hand-run guard. From this task on, the guard is
 `typecheck.clean`: `npm run typecheck`, asserted inside `npm test` by `test/lint/typecheck-clean.test.ts`.
+
+### review fixes (independent review: APPROVE WITH FIXES)
+
+Commit `7a72158e`.
+- **F1.** `test/memory/reason-trailer.test.ts` held RAW U+2028, U+2029, NBSP, U+2027 and U+202A
+  (the last a bidi control) at lines 236, 237, 250, 256 and 257. The editing tool resolved the
+  `\uXXXX` escapes I typed into the characters themselves: the `bug-073` incident in another shape.
+  Rewritten as escapes. `grep -nP '[\x{2028}\x{2029}\x{00A0}\x{2027}\x{202A}]'
+  test/memory/reason-trailer.test.ts` → no output (exit 1). The other files this task touched have
+  no raw U+0080–U+009F, U+00A0, U+2027–U+2029, U+202A–U+202E or U+2066–U+2069 (`grep -rnP` over
+  `test/lint`, `src/memory/commit-message.ts`, `.github`, this task file and the three user docs → no
+  output). The control-character gate did not catch F1 because it judges single bytes below 0x80 only,
+  as the AC defines it; widening it to Unicode invisibles is reported to the coordinator as a candidate,
+  not done here.
+- **F2.** Under `!cancelled()` alone, the typecheck step also ran after a failed `npm ci`, with no
+  `tsc` installed: a second, misleading red. The install step now has `id: install`, and typecheck runs
+  under `${{ !cancelled() && steps.install.outcome == 'success' }}`. `check:audit` stays last under
+  `!cancelled()`. `ci-workflow.test.ts` pins the id and both conditions; the `ci.yml` header says why.
+- **Nit.** `docs/cli-reference.md`'s rule paragraph re-wrapped.
+
+Re-run after the fixes, with the three pending amendments in the tree:
+`npx jest test/memory/reason-trailer.test.ts test/cli/ci-workflow.test.ts test/lint/control-characters.test.ts test/docs/cli-reference.test.ts test/lint/typecheck-clean.test.ts`
+→ 5 suites, 95 tests passed; `npm run lint`, `npx tsc --noEmit -p tsconfig.json`,
+`npx tsc -p tsconfig.build.json --noEmit` → exit 0 each; `node scripts/check-governance.cjs --base
+0b297169` → exit 0, 0 findings. The task stays `in-review`.
 
 ### Pending amendments (approver)
 
