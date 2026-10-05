@@ -25,6 +25,11 @@ This task builds the pre-launch half of `agent execute`, for the stepless (`adho
 - (red-first) dl-050 option 4: a role with a dangling binding prints `spec-012` §5.1's warnings on stderr, in order, before the MCP pre-flight, and nothing on stdout.
 - (red-first) The bootstrap bytes equal §2.4's template for `(role, element, run id, state_ref)`. Two runs from the same `HEAD` render identical bootstrap bytes. The handoff line depends on the type template's `
 - **Handover from wave 1 B3 (2026-10-02, `task-169`).** Reuse the success-warning channel: `coreOk(value, commit?, warnings?)` in `src/core/types.ts` and the single CLI renderer `src/cli/warning.ts` (`emitWarning`, `emitWarnings`; console `warning: …`, json one object per line, yaml documents closed by `...` so a following error is its own document). `spec-008` §6 records where this departs from `spec-005` §3.2 (stderr may be non-empty on exit 0) until this task amends `spec-005`.
+- **Handover from wave 2 B1 (2026-10-05, `task-171` and `task-176`).** `assembleExecutionContext`
+  (`src/core/context.ts`) reads Memory tolerantly: an unreadable document is left out and reported as
+  `W_MEMORY_UNREADABLE` in the result's `warnings` (`CoreResult`, third argument of `coreOk`), and a malformed subject
+  element comes back as `NOT_FOUND` with `details.unreadable`. Neither is in the payload. Forward both to the
+  surface this task builds (stderr / `--format json` warnings, or the MCP response), so they are never dropped.
 
 ## Execution Notes` heading.
 - (red-first) Temporary files are created under the OS temp dir, never inside the repository, and are removed on every exit path, refusals included.
