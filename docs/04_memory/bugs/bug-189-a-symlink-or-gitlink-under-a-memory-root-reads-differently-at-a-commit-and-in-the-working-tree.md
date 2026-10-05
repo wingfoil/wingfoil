@@ -2,7 +2,7 @@
 id: bug-189-a-symlink-or-gitlink-under-a-memory-root-reads-differently-at-a-commit-and-in-the-working-tree
 type: bug
 title: "A symlink or gitlink under a Memory root reads differently at a commit and in the working tree"
-status: in-progress
+status: in-review
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
