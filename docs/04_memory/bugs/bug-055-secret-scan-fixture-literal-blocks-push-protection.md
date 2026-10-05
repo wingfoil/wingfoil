@@ -2,7 +2,7 @@
 id: "bug-055-secret-scan-fixture-literal-blocks-push-protection"
 type: bug
 title: "The secret scanner's own AWS test fixture is a secret-shaped literal, so GitHub push protection rejected the repository's first push and a permanent allowlist exception had to be created to ship it"
-status: in-review
+status: closed
 severity: "medium"
 release-origin: "v0.2"
 release: "v0.3"
