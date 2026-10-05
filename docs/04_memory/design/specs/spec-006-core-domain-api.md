@@ -386,7 +386,9 @@ the single write, so "the state is unchanged" holds on every refusal by construc
    `memory.yaml` committed at `HEAD` (§6), the verb's edge resolved (`dl-032`, `dl-053`) → exit `1`.
 4. **Authority** (REQ-SEC-03), on `approve` and `reject` → exit `1`,
    `user not authorized to approve type '<type>'`, read from the `dna.yaml` committed at `HEAD`.
-5. **Write** — one commit, scoped to the document.
+5. **Write** — one commit, scoped to the document. An `approve` that fires the `supersedes:` trigger
+   (`spec-001`) also resolves the superseded element at step 3's commit and refuses it before any
+   write. It then makes a second commit, scoped to that element (`spec-008` §2, `finalize`).
 
 Steps 2 and 3 are one shared function, `beginMemoryTransition` (`src/core/memory-transition.ts`);
 no verb reads the identity or prepares the transition on its own.
@@ -721,3 +723,9 @@ commit holds names `memory add`). The "working tree, deviating" row keeps
 `directiveRemove`'s name resolution alone (`bug-108`). Items 1–7 and every other section are
 unchanged. Tech-specs carry no `version:` field (`dl-047`); edited in place without a supersede or a
 state change.
+
+**Revision (2026-10-02, `task-162-fire-supersedes-trigger-superseding-element-approval`) — §7 step 5
+and the `supersedes:` trigger.** `dl-065` Q1.1 has an approve move a second element. Step 5 now says
+where that element is decided (at step 3's commit, before any write) and that it gets a commit of its
+own. The order of steps 1–4 is unchanged. Edited in place without a supersede or a state change
+(`dl-047`); pending the approver's sign-off at `task-162`'s review.
