@@ -151,6 +151,9 @@ const TemplateConfig = z.object({
 `path` MAY contain named placeholders **besides** `{id}` (e.g. `task`'s `{release}`,
 `release`'s `{release-line}`). Those are resolved by the Workflow pillar from the active
 `element:` chain **before** the ID engine runs; the ID engine only ever substitutes `{id}` → `*`.
+A placeholder may share a path segment with literal text: `release`'s folder is
+`rl-{release-line}`, the parent release-line's id (`rl-{version}`), because its `release-line` field
+holds that release-line's version (`v1` → `planning/rl-v1/`, `bug-163`).
 
 **`amendable` — which types `memory amend` may correct** (`dl-108` A3, `task-127`). `true` lets
 `memory amend` record a content correction on the type's documents in any state, with no state
@@ -211,7 +214,9 @@ prerequisite, and until it lands only undotted tokens are defined. There is no f
 *Revision (2026-09-30)* note below):**
 
 1. Build a pattern from the type's `path` by replacing `{id}` with the materialized `id_pattern` and
-   **every other `path` placeholder with a wildcard** (one or more path segments), whatever value the
+   **every other `path` placeholder with a wildcard** (one or more path segments, beginning and ending
+   wherever the placeholder does, so `rl-{release-line}` matches `rl-` followed by the rest of a
+   segment, and possibly further segments), whatever value the
    add itself gives it — so a `task`'s counter spans every `docs/04_memory/{release}/` folder, not
    only the release being added to (`bug-162`).
 2. Collect the candidate paths from **every baseline a number can be taken on**: the tree of each
@@ -258,7 +263,7 @@ types:
       waiting: [ active ]               # active→done: fires when every release under it is `released`
 
   release:
-    path: "docs/04_memory/planning/{release-line}/{id}.md"
+    path: "docs/04_memory/planning/rl-{release-line}/{id}.md"   # folder = the release-line's id; the field holds its version (bug-163)
     id_pattern: "{kind}-{version}"      # dl-092: minor-v0.3, patch-v0.2.2 (ids added earlier are immutable)
     amendable: false
     states:
@@ -506,3 +511,14 @@ digits, the width every id in this repository carries; the row now states the en
 `{n:1}` is the way to get no padding. Counter step 3 drops its note that `{n:N}` is not implemented.
 Edited in place, with no `version:` bump (`dl-047`); pending the approver's sign-off at `task-163`'s
 review.
+
+**Revision (2026-10-05, `task-164-file-new-release-under-folder-siblings-use`) — `release`'s path
+folder is the release-line's id.** The worked example gave `release` the path
+`planning/{release-line}/{id}.md`, filled from the `release-line` field, which holds the
+release-line's version (`v1`), while every release in this repository sits under the release-line's
+id, `planning/rl-v1/` (`bug-163`). The example now reads `planning/rl-{release-line}/{id}.md`, as
+`memory.yaml` 2.3 does, and the paragraph on `path` placeholders says that a placeholder may share a
+segment with literal text; counter step 1 says that such a placeholder's wildcard starts inside its
+segment. The field keeps its meaning, so no release document moves. No schema
+field, token or edge changes. Edited in place, with no `version:` bump (`dl-047`); pending the
+approver's sign-off at `task-164`'s review.
