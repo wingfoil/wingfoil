@@ -171,7 +171,7 @@ describe('a commit git resolved but cannot list is a failed read, not an empty s
     try {
       writeFixtureFile(repo, 'docs/04_memory/v0.1/task-1-a.md', doc('task', 'task-1-a', 'draft', 'A'));
       commitAll(repo, 'seed');
-      const spy = jest.spyOn(storage, 'listPathsAtRev').mockReturnValue(null);
+      const spy = jest.spyOn(storage, 'listBlobEntriesAtRev').mockReturnValue(null); // the scan lists through it since task-171 (bug-189)
       try {
         expect(() => listMemoryDocumentPathsAtRev(repo, 'HEAD', MEMORY_YAML)).toThrow(/E_GIT_READ_FAILED/);
       } finally {

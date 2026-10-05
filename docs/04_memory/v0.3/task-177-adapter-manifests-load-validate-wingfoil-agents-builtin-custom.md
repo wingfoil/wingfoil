@@ -2,7 +2,7 @@
 id: "task-177-adapter-manifests-load-validate-wingfoil-agents-builtin-custom"
 type: task
 title: "Adapter manifests load and validate from `.wingfoil/agents/{built-in,custom}/`, and the `agent` module is registered"
-status: backlog
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "high"
@@ -37,9 +37,137 @@ Creates `src/agent` (`spec-016` §1). It adds the module to `dna.yaml` `modules`
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+Branch `task/task-177-adapter-manifests-load-validate-wingfoil-agents-builtin-custom`, worktree
+`../.wf2-wt/task-177`, cut from `main` at `c80167d6`; start `777b3b3c`. `bug: []`, so no bug syncs.
+
+### design (architect)
+
+**`depends_on`** (dl-015): `task-138` is `done` (`grep -n "^status" docs/04_memory/v0.3/task-138*.md`).
+Its notes hand over: `team.agents[].adapter` is validated in the id class, `paths.runs` exists, and
+`dna.yaml` was left untouched for later tasks. Nothing it defers lands here (the run log is task-206's).
+
+**Specs.** `spec-016` and `spec-009` are `approved`, `adr-012` `accepted`, `dl-055`/`dl-080`/`dl-090`
+`ready` (`grep -n "^status:"` over the six files). No spec edit was needed: every AC is stated in
+`spec-016` §2.1–§2.3 and §3.2 step 5.
+
+**Placement.** `src/agent` = `schema.ts` (Pass 1, every object `z.strictObject`), `manifest.ts`
+(`parseAdapterManifest`: YAML → `runValidation` with one Pass-2 check: basename, required-with,
+placeholders), `placeholders.ts` (§2.3), `discovery.ts` (`listAdaptersAtRev`, `loadAdapter`), `index.ts`.
+It reads git through `storage.readPathAtRev` and `core/revision`'s `resolveRevision` /
+`listPathsAtCommit` / `atHeadOr`, as `src/memory/query.ts` already does; `src/core/index.ts` does not
+import `src/agent`, so there is no cycle. `CORE_MODULES` gains `{ name: 'agent', operations: {} }`.
+
+**AC classification (T1).**
+
+| AC | Class | Why |
+|---|---|---|
+| 1 strict schema, `adapter '<name>': <zod issue>` + dl-055 details | red-first | no `src/agent` existed (`ls src` on `c80167d6`) |
+| 2 §2.3 placeholder rules | red-first | same |
+| 3 required-with rules | red-first | same |
+| 4 duplicate basename at discovery; basename = `name` | red-first | same |
+| 5 read at `HEAD` | red-first | same |
+| 6 only the selected adapter parsed | red-first | same |
+| 7 `dna.yaml` `modules` gains `agent`; API-docs gate covers it | characterization | `test/core/module-layout.test.ts` already forces every `src/` dir into `dna.yaml`, and `typedoc.json` `entryPoints: ["src"]` with `expand` already covers any new directory |
+
+The `CoreModule` registration (the title, not an AC) was written test-first in `test/agent/module.test.ts`.
+
+### red (developer)
+
+`a675ddae`: `test/agent/manifest.test.ts`, `test/agent/discovery.test.ts`, `test/agent/module.test.ts`,
+and the fixture `test/fixtures/agents/custom/fake.yaml` (a custom adapter declaring every §2.2 field;
+its script is task-200's). `npx jest test/agent` → **3 suites failed, 0 tests ran**: `Cannot find
+module '../../src/agent'` in each — the genuine red for a module that does not exist.
+
+### green (developer)
+
+`e0c9e958`: `src/agent/*`, `CORE_MODULES` entry, `.wingfoil/dna.yaml` (`agent` at `src/agent`, version
+1.2 → 1.3). `npx jest test/agent test/core/module-layout.test.ts test/core/production-registry.test.ts
+test/core/parity.test.ts` → **6 suites, 110 passed**.
+
+### refactor (developer)
+
+The first full `npm run test:coverage` failed one test: `test/cli/help-describes-every-command.test.ts`
+expected every `CoreModule` to show as a CLI noun with its description, but a module with no operation
+derives no command (`buildCliCommands` iterates `enumerateOperations`). `2c35af67` makes the test assert
+that such a module shows **no** noun, rather than giving `agent` an empty noun; it also covers the
+module's exported codes and the non-`HEAD` revision refusal (agent function coverage was 83.78%).
+
+Gates on `2c35af67`:
+- `npm run test:coverage` → **221 suites, 3979 passed**; All files **98.88 | 95.65 | 95.53 | 99.57**
+  (stmts | branch | funcs | lines), against `main`'s last recorded figure in `task-160`'s notes,
+  `98.88 | 95.56 | 95.34 | 99.58`. Lines is 0.01 lower. That is a real, small dilution: `src/agent` is
+  98.78 | 97.87 | 100 | 99.23, below the global lines figure, and its one uncovered line is
+  `discovery.ts`'s defensive re-throw of a non-`RevisionError` (corrected at review, F5).
+- `npm test` → 3978 passed, 1 failed: `test/core/query-latency.test.ts`, a wall-clock test, while
+  other worktrees ran jest. Re-run alone: `npx jest test/core/query-latency.test.ts` → **4/4 passed**.
+- `npm run lint` → 0; `npm run docs:api` → 0; `npx tsc --noEmit -p tsconfig.json` → 0;
+  `npx tsc -p tsconfig.build.json --noEmit` → 0; `node scripts/check-governance.cjs --base c80167d6` → 0.
+
+### review (reviewer, self)
+
+- AC 1: an unknown key (top level and nested, including `env`), a missing required field (8 top-level, 8
+  nested) and `format` 2 / 0 / `"1"` / 1.5 are each refused (`manifest.test.ts`). Through
+  `loadAdapter`, the message is `adapter 'fake': <path>: <message>` for the first issue, and
+  `errorDetails` (dl-055, `src/core/error-details.ts`) gives one entry per issue, each with its `file`
+  `HEAD:.wingfoil/agents/custom/fake.yaml` and its `<path>: <message>` detail (`discovery.test.ts`). Met.
+- AC 2: unknown placeholder (argv and `mcp.template`); concatenation (`--x={bootstrap}`, `{bootstrap}x`,
+  `{mcp_command} {mcp_args}`); `{bootstrap}` under `prompt.via` stdin/file; `{session_id}` in
+  `session.lookup_args` / `usage.lookup_args` under `lookup` and `output`; `prompt.via: stdin` with the
+  interactive launch. Also refused: a placeholder in a field §2.3 does not list. Met.
+- AC 3: `mcp.template`/config-file, `session.assign_args`/assign, `session.lookup_args`+`field`/lookup,
+  `session.field`/output, `usage.lookup_args`+`fields`/lookup, `usage.fields`/output, `verified_with`
+  on a built-in only; `mcp.via: none` is outside the enum. Met.
+- AC 4: the same basename in both directories → `listAdaptersAtRev` throws `E_ADAPTER_DUPLICATE` naming
+  both files, and `loadAdapter` of **any** adapter is refused `adapter 'fake': declared in both …`.
+  A `name` other than the basename → `adapter 'other': name: must equal the file basename …`. Met.
+- AC 5: an uncommitted edit (valid or broken), an untracked manifest, and an untracked same-name file
+  change nothing at `HEAD`; `rev` reads another commit. Met.
+- AC 6: with a broken `custom/broken.yaml` and a nameless built-in committed, `loadAdapter('fake')` is
+  ok, and only `loadAdapter('broken')` fails. Met.
+- AC 7: `module-layout.test.ts` and `test/agent/module.test.ts` pass; the API-docs gate passes over
+  `src/agent` (`npm run docs:api` → 0). Met.
+
+**Decisions for the approver to confirm** (none of them is stated in `spec-016`):
+1. An adapter name that neither directory holds is `NOT_FOUND`, `adapter '<name>': no
+   .wingfoil/agents/built-in/<name>.yaml or .wingfoil/agents/custom/<name>.yaml at HEAD`. §3.7 has no row
+   for it.
+2. Only `<kind>/<name>.yaml` directly inside a directory is an adapter. `.yml`, nested files and other
+   extensions are ignored silently.
+3. `launch.headless.args` is required inside `launch.headless` (the table marks it "no", read as
+   "headless is optional").
+4. The duplicate check runs at discovery over all names, so a duplicate pair blocks every adapter, as
+   §3.3 step 2 orders. AC 6's isolation covers parse errors only.
+5. `prompt.via: stdin` is always refused in format 1, because `launch.interactive` is required. The enum
+   value is unreachable until a headless-only manifest exists (v1.0).
+
+**Same-class sweep.** No other place lists the nine modules: `grep -rn "nine\b" .wingfoil/README.md
+README.md docs/user-guide.md docs/agents.md` finds nothing. `CLAUDE.md` §1/§2/§4 still says nine modules;
+that is `align-agent-docs`'s, not changed here.
+
+### review fixes (independent review: APPROVE WITH FIXES)
+
+- **F1** (should-fix): the placeholder token class was `[a-z][a-z0-9_]*`, so `{Bootstrap}`, `{boot-strap}`
+  and `{bootstrap }` passed as literal argv. Every field except `mcp.template` now reads tokens with
+  `/\{([A-Za-z0-9_\- ]+)\}/g` and refuses unknown ones; `mcp.template` keeps the narrow class, because of
+  its JSON braces. Red `e9c4cd88`: one test per typo shape, plus `command: {Mcp_Command}` → 4 failed.
+  Green `0e9ccd1c`.
+- **F2** (should-fix): `loadAdapter`'s duplicate refusal had no `details`, and it named only the first
+  pair. It now goes through the `refuse` helper: the message names the first duplicated name, and every
+  duplicated name is a `details.issues` entry (file `HEAD:.wingfoil/agents`). Red `e9c4cd88` (two duplicate
+  pairs → 2 detail lines; failed); green `0e9ccd1c`.
+- **F4** (nit): `jest.config.js` `collectCoverageFrom` gains `'!src/agent/index.ts'`, the barrel convention
+  of task-122/bug-021 (`npx jest test/lint/coverage-scope.test.ts` passes). The coverage-only tests of
+  `ADAPTER_MANIFEST_FORMAT` and `placeholderIssues` are dropped; the issue-code test stays.
+- **F5** (nit): the coverage sentence in refactor is reworded (dilution, not rounding).
+
+Gates on `0e9ccd1c`:
+- `npm test` → **221 suites, 3982 passed**.
+- `npm run test:coverage` → 3980 passed, 2 failed, both in `test/mcp/resource-latency.test.ts` (a timed
+  test, under parallel load). Re-run alone: `npx jest test/mcp/resource-latency.test.ts` → 4/4 passed.
+  All files **98.88 | 95.65 | 95.48 | 99.57**; `src/agent` 98.67 | 97.95 | 100 | 99.21.
+- `npm run lint` → 0; `npm run docs:api` → 0; both `tsc` → 0; `node scripts/check-governance.cjs --base
+  c80167d6` → 0.
+
+### Pending amendments (approver)
+
+None.

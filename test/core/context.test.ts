@@ -24,7 +24,6 @@ import { join } from 'path';
 
 import { assembleExecutionContext, resolveRoleDirectives, selectDirectivesById } from '../../src/core/context';
 import { loadDirectives, loadRolesYaml, type DirectiveFile } from '../../src/core/loaders';
-import { ValidationError } from '../../src/validation';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const MEMORY_YAML = `
@@ -462,11 +461,16 @@ describe('assembleExecutionContext — distinct addressable dna/memory/directive
     expect(context.element.id).toBe('task-101-alpha');
   });
 
-  it('propagates a ValidationError when any Memory document at stateRef has unparseable frontmatter', () => {
-    // The snapshot read at `stateRef` parses every Memory document (relevance needs all of them), so a
-    // malformed sibling aborts assembly wherever it sorts.
+  it('a Memory document with unparseable frontmatter no longer aborts assembly (task-171, bug-031)', () => {
+    // Until task-171 the scan threw on a malformed sibling. It is now tolerant: the sibling is left out
+    // and reported on the result's warnings, and the element still resolves.
     writeFixtureFile(repo, 'docs/04_memory/v0.1/task-100-broken.md', '---\nid: "task-100-broken\n---\n\nbody\n');
-    expect(() => assemble('developer', 'task-101-alpha')).toThrow(ValidationError);
+    const result = assembleResultFrom(repo, 'developer', 'task', 'task-101-alpha');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.context.element.id).toBe('task-101-alpha');
+      expect(result.warnings?.[0]).toMatch(/^W_MEMORY_UNREADABLE \(docs\/04_memory\/v0\.1\/task-100-broken\.md\): /);
+    }
   });
 });
 

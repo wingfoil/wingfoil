@@ -21,7 +21,7 @@ import type { RolesYaml } from '../directives/schema';
 import type { DnaYaml, Module, Paths, Project, Team } from '../dna/schema';
 import { isArchivedStatus, loadMemoryDocumentsAtRev, type MemoryDocumentSummary } from '../memory';
 import { readPathAtRev, splitFrontmatter } from '../storage';
-import { parseYaml } from '../validation';
+import { formatDiagnostic, parseYaml, type Diagnostic } from '../validation';
 
 import { isRemovableCustomAssetPath } from './builtin-asset';
 import {
@@ -513,9 +513,13 @@ function requestProblem(request: ContextRequest): CoreError | undefined {
  * Before any read, a role or element field holding a control character or `-->`, or limits that are
  * not positive integers, are refused as `VALIDATION`.
  *
+ * A Memory document that does not parse is left out and reported (task-171): as a `W_MEMORY_UNREADABLE`
+ * line in the result's `warnings` on success, and in `details.unreadable` of a `NOT_FOUND` refusal, so
+ * a subject that does not parse is not reported as merely absent. Neither reaches the payload.
+ *
  * Expected failures are returned, never thrown: a `stateRef` that is malformed or names no commit is
- * the `RevisionError`'s own `CoreError`. A document or pillar file that does not parse still throws
- * `ValidationError`, as every loader does.
+ * the `RevisionError`'s own `CoreError`. A pillar file (`dna.yaml`, `roles.yaml`, a directive) that
+ * does not parse still throws `ValidationError`, as its loader does.
  */
 export function assembleExecutionContext(root: string, request: ContextRequest): CoreResult<AssembledExecutionContext> {
   const refused = requestProblem(request);
@@ -531,13 +535,27 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   const { role, element: wanted } = request;
   const label = `${wanted.type}:${wanted.id}`;
 
+  // The scan is tolerant (task-171, `bug-031`): a document it cannot read is left out and reported as
+  // `W_MEMORY_UNREADABLE`, so one malformed sibling no longer fails every context. It reads archived
+  // documents too — the archived subject is refused below, and §6 drops archived candidates itself.
+  const diagnostics: Diagnostic[] = [];
   const memoryYaml = loadMemoryYamlAtRev(root, sha);
-  const documents = memoryYaml === null ? null : loadMemoryDocumentsAtRev(root, sha, memoryYaml);
+  const documents =
+    memoryYaml === null
+      ? null
+      : loadMemoryDocumentsAtRev(root, sha, memoryYaml, { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) });
+  const unreadable = diagnostics.map(formatDiagnostic);
   const found = documents?.find(
     (doc) => stringField(doc.frontmatter, 'type') === wanted.type && stringField(doc.frontmatter, 'id') === wanted.id,
   );
   if (documents !== null && found === undefined) {
-    return coreErr({ code: 'NOT_FOUND', message: `element '${label}' not found at ${sha}` });
+    // A subject whose own frontmatter does not parse is among the unreadable files: name them, so the
+    // refusal does not read as a bare "not found".
+    return coreErr({
+      code: 'NOT_FOUND',
+      message: `element '${label}' not found at ${sha}`,
+      ...(unreadable.length > 0 ? { details: { unreadable } } : {}),
+    });
   }
   const status = found === undefined ? undefined : stringField(found.frontmatter, 'status');
   if (isArchivedStatus(status)) {
@@ -588,5 +606,7 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   const context = validated.value;
   // In §3 stage order: the DNA note (ruling D3), then the relevance note (P5.3.3 sc. 3).
   const notes = [dnaSelected?.note, relevant?.note].filter((note): note is string => note !== undefined);
-  return coreOk({ context, payload: serializeExecutionContext(context), notes });
+  // Unreadable files are about the repository, not the context: they ride the success-warning channel
+  // (task-169), as `memory search` carries them (task-171), and never enter the payload.
+  return coreOk({ context, payload: serializeExecutionContext(context), notes }, undefined, unreadable);
 }

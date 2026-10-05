@@ -75,7 +75,7 @@ Required additions (values are the contract; exact URLs confirmed at implementat
   for a gapped range such as `^20.19.0 || ^22.13.0 || >=24` can lie above every range's own minimum —
   because `files: ["dist", "README.md"]` means that closure is exactly
   what a consumer installs. Two packages bind it today: `commander@15` (`>=22.12.0`) and
-  `@hono/node-server@1.19.14` (`>=18.14.1`, reached through `@modelcontextprotocol/sdk`). The floor
+  `@hono/node-server@2.1.3` (`>=20`, reached through `@modelcontextprotocol/sdk`). The floor
   is written as a plain `>=major.minor.patch` so "the advertised floor" is a single number, and it is
   enforced by an assertion in `test/cli/publish-metadata.test.ts` that recomputes it from the
   installed tree, in both directions (satisfied by every dependency, and equal to the closure's floor)
@@ -583,3 +583,12 @@ schema it is validated against, and that it stays out of the tarball, which
 `test/cli/publish-metadata.test.ts` pins. The `files` allowlist and the publish pipeline are
 unchanged. Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the
 revisions above.
+
+**Revision (2026-10-05, `task-250-clear-the-production-dependency-advisories-from-the-lockfile-and-raise-the-floors`)
+— §1 `engines.node`: the second binding package is now `@hono/node-server@2.1.3` (`>=20`).** `bug-223`'s fix
+raised the direct floors to `js-yaml ^4.3.2` and `@modelcontextprotocol/sdk ^1.32.0` and refreshed the lock;
+the SDK 1.32.0 admits `@hono/node-server` `^1.19.9 || ^2.0.5`, and the lock now resolves 2.1.3, whose own
+floor is `>=20` (`jq -r '.packages["node_modules/@hono/node-server"]|.version+" "+.engines.node' package-lock.json`).
+`commander@15`'s `>=22.12.0` is still the highest, so `engines.node` stays `>=22.12.0`, which
+`test/cli/publish-metadata.test.ts` recomputes from the installed tree. Only the example version in §1 changed.
+Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions above.

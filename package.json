@@ -35,6 +35,7 @@
     "prepublishOnly": "npm run build && npm test && npm run lint",
     "publish:staging": "node scripts/publish-staging.cjs",
     "check:lockfile": "node scripts/check-lockfile-pins.cjs",
+    "check:audit": "npm audit --omit=dev --audit-level=high",
     "lint": "eslint .",
     "docs:api": "typedoc --options typedoc.json",
     "test": "node scripts/run-tests.cjs",
@@ -79,9 +80,9 @@
     "wingfoil-released": "npm:wingfoil@0.2.2"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "commander": "^15.0.0",
-    "js-yaml": "^4.3.0",
+    "js-yaml": "^4.3.2",
     "zod": "^4.4.3"
   },
   "//overrides": "task-080 / bug-056 / dl-069 option (b). @napi-rs/wasm-runtime (dev, optional, reached through eslint -> @unrs/resolver) declares @emnapi/core and @emnapi/runtime as REQUIRED peers, and npm recorded no hoisted entry for either - so npm resolved them from the registry on every install and `npm ci` then rejected the lock for missing what it had just resolved. That is invisible under npm 11.x and fatal under the npm 10.9.0 that the pipeline's pinned Node 22.12.0 bundles, which is why it surfaced only in the release gate. These exact pins make both peers resolve from package-lock.json instead of the registry. Scoped to @napi-rs/wasm-runtime on purpose: the nested @emnapi/core@1.10.0 under @unrs/resolver-binding-wasm32-wasi is a different edge and stays where it is. Revisit on any eslint / @unrs/resolver bump; test/cli/lockfile-peer-overrides.test.ts fails if the lock stops carrying these. task-104 amends this: the overrides block alone did NOT keep the entries in the lock - see the //devDependencies:@emnapi note above.",

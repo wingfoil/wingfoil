@@ -408,6 +408,59 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
     });
   });
 
+  describe('tolerant Memory reads at stateRef (task-171 integration)', () => {
+    const BROKEN = '---\nid: "task-2000-broken\ntags: [performance]\n---\n\nbody\n';
+
+    it('a malformed sibling is reported on the warnings, outside the payload, and the context still builds', () => {
+      writeFixtureFile(repo, 'docs/04_memory/v0.9/task-000-broken.md', BROKEN);
+      commitAll(repo, 'a malformed unrelated document');
+      const result = assembleExecutionContext(repo, request());
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.warnings).toHaveLength(1);
+        expect(result.warnings?.[0]).toMatch(/^W_MEMORY_UNREADABLE \(docs\/04_memory\/v0\.9\/task-000-broken\.md\): unreadable frontmatter in /);
+        expect(result.value.payload).not.toContain('W_MEMORY_UNREADABLE');
+        expect(result.value.payload).not.toContain('task-000-broken');
+      }
+    });
+
+    it('a malformed would-be-relevant document is reported, never silently dropped', () => {
+      // Same release and tag as the element: it would score T2 + T4 if it parsed.
+      writeFixtureFile(repo, 'docs/04_memory/v0.2/task-2000-broken.md', BROKEN);
+      commitAll(repo, 'a malformed relevant document');
+      const result = assembleExecutionContext(repo, request());
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.context.memory.map((doc) => doc.id)).toEqual(['task-002-linked']);
+        expect(result.warnings).toEqual([expect.stringContaining('(docs/04_memory/v0.2/task-2000-broken.md)')]);
+      }
+    });
+
+    it('a subject that does not parse is NOT_FOUND with the unreadable files in details, not a bare "not found"', () => {
+      writeFixtureFile(repo, `docs/04_memory/v0.2/${ELEMENT_ID}.md`, `---\nid: "${ELEMENT_ID}\ntype: task\n---\n`);
+      commitAll(repo, 'break the subject');
+      const result = assembleExecutionContext(repo, request());
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+        expect(result.error.details).toEqual({
+          unreadable: [expect.stringMatching(new RegExp(`^W_MEMORY_UNREADABLE \\(docs/04_memory/v0\\.2/${ELEMENT_ID}\\.md\\): `))],
+        });
+      }
+    });
+
+    it('an element absent with every document readable carries no details', () => {
+      const result = assembleExecutionContext(repo, request({ element: { type: 'task', id: 'task-999-missing' } }));
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.details).toBeUndefined();
+    });
+
+    it('a clean build carries no warnings key', () => {
+      const result = assembleExecutionContext(repo, request());
+      expect(result.ok && result.warnings).toBeUndefined();
+    });
+  });
+
   describe('spec-012 §4 — DNA selection', () => {
     it('emits project, modules, team and paths in dna.yaml declared order (stacks and version are not selected)', () => {
       const { context, payload } = build(repo);
