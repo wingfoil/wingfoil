@@ -2,7 +2,7 @@
 id: "task-175-declare-phase-evidence-produces-ownership-selections-awaits-collections"
 type: task
 title: "Declare phase evidence: `produces` ownership, selections, `awaits`, collections and the Layer-3 bindings file"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "high"
