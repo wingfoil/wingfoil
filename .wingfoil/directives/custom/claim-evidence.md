@@ -41,6 +41,14 @@ Claims that need a command, in practice:
 - **Absence and presence.** "`--version` is not in `program.options`"; "no spec states this";
   "nothing else calls it". Absence is the easiest thing to believe and the easiest to check:
   `grep -rn`, and paste what it printed — including when it printed nothing.
+
+  **An absence claim shows that its command could have found the thing.** An empty result is
+  evidence only when the same command, or the same pattern, is shown hitting a known positive case,
+  in the same note. A pattern that cannot match anything relevant proves nothing, however many times
+  it prints nothing.
+
+  (`dl-097` §1.) It holds wherever this directive does: Execution Notes, bug fields, acceptance
+  criteria, triage notes, decision-log bodies and approval `Reason:` blocks.
 - **Uniqueness and exhaustiveness.** "the only place a path is split", "all three callers".
 - **Status of a file or a gate.** "this file is unchanged", "covered by the existing suite",
   "already handled upstream", "the suite is green without it". Open the file; run the suite; delete
@@ -85,6 +93,10 @@ Measured in one week of `minor-v0.2`, all with element ids:
 - `task-096` — a TSDoc claiming git C-quotes a path containing a **space** (`3e2506c4`), next to a
   test whose fixture could not have caught it; corrected inside the same task (`ee689b31`).
 - `bug-099` — the user-facing CLI reference still declaring a `--dry-run` that does not exist.
+- `task-079` — a review summary read an empty `grep -rn 'REQ-SYS-09'` over the BDD feature files as
+  "no BDD coverage" (corrected at `e693a289`). Feature files cite user stories, not `REQ-*` codes, so
+  the pattern could not have matched anything: the command was run and reported, and the claim was
+  still false. This is the instance the falsifiability clause exists for (`dl-097`).
 
 The cost is not the sentence. It is that a reader downstream believes it, and that review has to
 re-measure what the author could have measured once.
