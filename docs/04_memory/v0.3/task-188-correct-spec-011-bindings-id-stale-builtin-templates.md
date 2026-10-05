@@ -151,6 +151,19 @@ After: `grep -rn "not yet implemented" .wingfoil src docs/04_memory/design/specs
 ### Pending amendments (approver)
 
 Uncommitted in the worktree; the gates above ran with them.
-- `spec-011-storage-layout` — `--reason "roles.yaml binds by directive id (dl-060); the P3.8 templates ship and init installs them, while this repository's built-in/ stays empty (bug-040); the dna.yaml cell names the six paths categories (bug-191); a new roles.yaml write contract subsection states what task-169 shipped for dl-062 Q1 option 3. The custom/ listing gains git-conventions.md and the security.md line says global (task-188)."`
+- `spec-011-storage-layout` — `--reason "roles.yaml binds by directive id (dl-060); the P3.8 templates ship and init installs them, while this repository's built-in/ stays empty (bug-040); the dna.yaml cell names the six paths categories (bug-191); a new roles.yaml write contract subsection states what task-169 shipped for dl-062 Q1 option 3, including the VALIDATION refusal of an invalid or newer-format file. The custom/ listing gains git-conventions.md and the security.md line says global (task-188)."`
 - `spec-009-validation-strategy` — `--reason "Section 1's cross-file example names the states of spec-001's machine instead of the retired states.values key (bug-213, task-188)."`
 - `adr-008-per-type-state-machines` — `--reason "A dated correction note: machines use spec-001's sequence/gates/waiting encoding, the default machine has no rejected state, and decision-log has its own machine. The decision is unchanged (bug-213, task-188)."`
+- `spec-013-directive-frontmatter-schema` — `--reason "The P3.8 anchor no longer says reconciling the stand-ins with the shipped templates is bug-040's: bug-040 corrected only the documentation, and the reconciliation is out of its scope and not scheduled, as spec-011 and the stand-ins now say (task-188 review)."`
+
+### review fixes (2026-10-05, coordinator: approve with fixes; no re-submit)
+
+- Same-class: `spec-013` §Context (P3.8 anchor) said "reconciling the two is `bug-040`", contradicting
+  the new text. Reworded the same way (out of `bug-040`'s scope, not scheduled) with a dated Revision
+  note — a fourth pending amendment, uncommitted (`--reason` above). `grep -rn "bug-040" docs/04_memory/design/specs`
+  → only `spec-011`'s and `spec-013`'s Revision notes and the reworded anchor.
+- Polish, `spec-011` write contract: a file that is not valid YAML, fails the `roles.yaml` schema or
+  has a newer `format:` is refused with `VALIDATION` (exit `1`) before any write, `--force` included —
+  checked against `updateRoleAssignments` (`parseRoles` runs before the edit and the `force` branch)
+  and `src/core/exit-code.ts` (`VALIDATION: 1`). `spec-011`'s `--reason` updated above.
+- `npx jest test/docs` → 7 suites, 34 passed.
