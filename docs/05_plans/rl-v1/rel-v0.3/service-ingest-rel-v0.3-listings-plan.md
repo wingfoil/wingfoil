@@ -66,3 +66,6 @@ effect (one file, `wf(service): {verb} {id}`, exit 0).
   v0.3 on, and whether v0.2.2 gets one by hand is the approver's call.
 - **Completion criteria:** `svc-010` and `svc-011` `active`; `svc-012` `pending` until mcp.so publishes
   the listing, then `active`. The plan goes `active → done` when the last of the three is `active`.
+- **2026-10-05 — `svc-013-glama-listing-wingfoil` added** (`add` → `submit` → `approve [pending → active]`, `7e22b6cd`)
+  under this plan. It is the Glama listing, claimed through `task-157`'s `glama.json`. The plan's completion
+  criteria are unchanged: it closes when `svc-012` (mcp.so) is `active`.
