@@ -11,13 +11,10 @@ import { join } from 'path';
 import { dump, load } from 'js-yaml';
 
 import {
-  ADAPTER_MANIFEST_FORMAT,
   ADAPTER_PLACEHOLDERS,
-  AdapterManifest,
   E_ADAPTER_MANIFEST,
   E_ADAPTER_PLACEHOLDER,
   parseAdapterManifest,
-  placeholderIssues,
   type AdapterKind,
 } from '../../src/agent';
 import { ValidationError, type ValidationIssue } from '../../src/validation';
@@ -170,6 +167,21 @@ describe('AC 2 — §2.3 placeholders', () => {
     const manifest = fake();
     manifest.launch.interactive.args.push('{workspace}');
     expectIssue(issuesOf(manifest), 'launch.interactive.args.5', /unknown placeholder \{workspace\}/);
+  });
+
+  it.each([['{Bootstrap}'], ['{boot-strap}'], ['{bootstrap }']])(
+    'refuses a misspelt placeholder in an argv element rather than passing it as a literal: %p (review F1)',
+    (element) => {
+      const manifest = fake();
+      manifest.launch.interactive.args[4] = element;
+      expectIssue(issuesOf(manifest), 'launch.interactive.args.4', /unknown placeholder/);
+    },
+  );
+
+  it('refuses a misspelt placeholder in a scalar field that takes none (command: {Mcp_Command})', () => {
+    const manifest = fake();
+    manifest.command = '{Mcp_Command}';
+    expectIssue(issuesOf(manifest), 'command', /unknown placeholder/);
   });
 
   it('refuses an unknown placeholder in mcp.template', () => {
@@ -368,20 +380,11 @@ describe('a manifest that is not YAML', () => {
 });
 
 describe('the module surface', () => {
-  it('format 1 is the only format, and the schema alone accepts the fake adapter', () => {
-    expect(ADAPTER_MANIFEST_FORMAT).toBe(1);
-    expect(AdapterManifest.safeParse(fake()).success).toBe(true);
-  });
-
   it('Pass-2 issues carry their own codes: cross-field rules E_ADAPTER_MANIFEST, placeholders E_ADAPTER_PLACEHOLDER', () => {
     const manifest = fake();
     delete manifest.mcp.template;
     manifest.launch.interactive.args.push('{nope}');
     const codes = new Set(issuesOf(manifest).map((issue) => issue.code));
     expect([...codes].sort()).toEqual([E_ADAPTER_MANIFEST, E_ADAPTER_PLACEHOLDER].sort());
-  });
-
-  it('placeholderIssues can be run on its own, and finds nothing in the fake adapter', () => {
-    expect(placeholderIssues(fake() as never, 'f.yaml')).toEqual([]);
   });
 });

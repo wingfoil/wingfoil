@@ -80,6 +80,24 @@ describe('adapter discovery and loading', () => {
     });
   });
 
+  it('a refusal for duplicates carries a dl-055 detail for every duplicated name (review F2)', () => {
+    writeFixtureFile(repo, '.wingfoil/agents/built-in/fake.yaml', builtIn('fake'));
+    writeFixtureFile(repo, '.wingfoil/agents/custom/fake.yaml', FAKE);
+    writeFixtureFile(repo, '.wingfoil/agents/built-in/zeta.yaml', builtIn('zeta'));
+    writeFixtureFile(repo, '.wingfoil/agents/custom/zeta.yaml', renamed('zeta'));
+    commitAll(repo, 'adapters');
+    const result = loadAdapter(repo, 'fake');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('VALIDATION');
+    expect(result.error.message).toMatch(/^adapter 'fake': declared in both /);
+    const details = errorDetails(result.error);
+    expect(details).toHaveLength(2);
+    for (const entry of details) expect(entry.file).toBe('HEAD:.wingfoil/agents');
+    expect(details[0]!.detail).toContain('.wingfoil/agents/custom/fake.yaml');
+    expect(details[1]!.detail).toContain('.wingfoil/agents/custom/zeta.yaml');
+  });
+
   it('AC 4 — loading refuses a manifest whose `name` is not its file basename', () => {
     writeFixtureFile(repo, '.wingfoil/agents/custom/other.yaml', FAKE);
     commitAll(repo, 'adapters');
