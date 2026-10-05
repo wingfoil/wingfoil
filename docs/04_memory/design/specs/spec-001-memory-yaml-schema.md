@@ -60,6 +60,15 @@ YAML float and `.int()` would spuriously reject a future `1.1`.
 Because it is a number, `version` is compared numerically, and a bump must increase it as a number:
 `1.9` is followed by `2.0`, never `1.10`, which YAML reads as `1.1` (`task-168` review).
 
+**Reserved type names.** No key of `types` may be `directive`, `dna` or `workflow`. Those are the
+`wf({scope})` scopes that record a change to configuration, not to a Memory element (`spec-008` §2),
+and the audit reader skips their commits; a type that took one would have every commit of its own
+read as configuration. The list is `RESERVED_TYPE_NAMES` in `src/memory/schema.ts`, which the audit
+reader's `CONFIGURATION_SCOPES` is. A reserved name fails validation with
+`type name '<name>' is reserved: wf(<name>) commits record configuration, not Memory`
+(BDD P1.13, `bug-177`); the loader reports it as `E_VALIDATION`, exit 1, as it reports every other
+schema refusal.
+
 ### Sub-schema: `StateMachine` — the sequence/gates/waiting format (REPLACES `transitions`)
 
 A type's lifecycle is an **ordered chain** plus two optional annotations — never a free-form graph:
@@ -452,3 +461,12 @@ not in `not_applicable_allowed`: as a declared list field, an explicit `[]` alre
 moved `version` from 1.9 to 2.0, not 1.10. `version` is a number, compared numerically, and YAML
 reads `1.10` as 1.1, below 1.9 (approver ruling, `task-168` review). Edited in
 place, with no `version:` bump (`dl-047`); pending the approver's sign-off at `task-168`'s review.
+
+**Revision (2026-10-02, `task-153-reconcile-req-state-08-p1-13-scenario-memory`) — reserved type
+names, and the reconciliation § Consequences asked for.** `bug-177`: the paragraph after `version`'s
+reserves the three configuration commit scopes as type names. `bug-052`: § Consequences said
+REQ-STATE-08's wording "must be reconciled"; REQ-STATE-08 and its P1.13 scenario now name this spec's
+default machine, so that bullet records history, not an open debt. `dl-072` (A) + S1: the `wingfoil
+init` scaffold keeps the shared `defaults` block and shows a commented per-type `states:` example on
+`bug`, which `spec-011` states. No field, edge or worked example changes. Edited in place, with no
+`version:` bump (`dl-047`); pending the approver's sign-off at `task-153`'s review.
