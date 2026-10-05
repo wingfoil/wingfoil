@@ -93,15 +93,17 @@ describe('AC3 — an unknown option exits 2 on every registered command (AC8: th
     },
   );
 
-  // `commander.excessArguments` is reachable in production through these two only: a derived command
-  // accepts any number of operands and leaves refusing an extra one to core (task-120 kept that
-  // unchanged). Pinned because `src/core/exit-code.ts` states it.
+  // `commander.excessArguments` was reachable in production through these two only, until task-165
+  // (`bug-179`) gave them the shared refusal every derived command gives (task-129): no shipped command
+  // raises it now, so the extra operand exits 2 in WingFoil's wording, pinned in full by
+  // `./extra-operand-refusal.integration.test.ts`.
   it.each(BOOTSTRAP_COMMAND_PATHS.map((path) => [path.join(' '), path] as const))(
-    '`wingfoil %s extra` exits 2 — Commander refuses the extra operand (commander.excessArguments)',
+    '`wingfoil %s extra` exits 2 — the shared surplus refusal, not Commander\'s (bug-179)',
     (_label, path) => {
       const result = runCli(...path, 'extra');
       expect(result.status).toBe(2);
-      expect(result.stderr).toContain('error: too many arguments');
+      expect(result.stderr).toContain('takes no positional (got 1 positional)');
+      expect(result.stderr).not.toContain('too many arguments');
     },
   );
 
