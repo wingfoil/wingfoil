@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.10"
+version: "1.11"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -465,3 +465,50 @@ commit, right after the task's transition and on the task branch:
     REQ-PERF-02. Triage pending.
   - **Fix share:** 17 open fix tasks of 81 open (21.0%), under the threshold.
   - **Next:** B6 (`156`, `157`, `160`, `164`, `165`).
+- **2026-10-05 — B5 follow-ups triaged** (`bug-ingest-rel-v0.3-w1b5-review-findings-plan`, `done`):
+  - `bug-212` → `task-186`, `bug-213` → `task-188`, `bug-214` → `task-180`, `bug-217` → `task-210`,
+    `bug-218` → `task-208`, `bug-219` → `task-209`;
+  - `bug-220` → v0.3, the release's `user-docs` phase (`align-agent-docs`), no task;
+  - `bug-215`, `bug-216`, `bug-221` → v0.4.
+
+  `dl-146` ratified (C; Q2 marginal 1,000 ms; Q3 REQ-PERF-03 follows) → new
+  `task-248-assert-req-perf-02-s-total-and-marginal-budgets-on-an-idle-machine` (`backlog`). Intake:
+  `dl-147` (benchmark cost finding, `in-discussion`) fast-forwarded to `0cb289e6`.
+- **2026-10-05 — batch B6 `done`** (`task-156`, `157`, `160`, `164`, `165`) — **wave 1 closed**: 42/42.
+  - **Review.** Every task had an independent review, all "approve with fixes", every fix applied in-task.
+  - **Confirmed at the gate:**
+    - `156`: the colour flags and rule kept as P5.1.4's contract; AC2 as characterization.
+    - `157`: AC1 red-first. AC3 (add and claim the Glama listing, then a `service` element) is the
+      approver's, after the push.
+    - `160`: AC2 by a local Scorecard run before the push, then the first CI run.
+    - `164`: the `rl-` literal until `dl-090`.
+    - `165`: dl-046 C applied by renaming rows, and the `scheduledIn` allowlist reason kind.
+  - **Amendments: 8.**
+    - `task-165`: spec-008, spec-005, spec-006, spec-004, spec-015.
+    - `task-156`: spec-008.
+    - `task-157`: spec-015.
+    - `task-164`: spec-001.
+    - After merge, one `memory amend` on `task-160`: its Execution Notes read "secret: scorecard-action",
+      which the repository's own REQ-SEC-08 scan flagged as a key assignment. Reworded (`9df1bab8`).
+  - **Bugs closed:** bug-028, bug-152, bug-163, bug-179, bug-203, bug-204.
+  - **Merges,** in order 165 → 156 → 157 → 160 → 164. Only Revision notes conflicted (spec-008 and
+    spec-015), all kept.
+  - **Gates on `main`:**
+    - `test:coverage`: 218 suites, 3887 tests, coverage 98.88 / 95.57 / 95.34 / 99.58 (after the amend
+      above). lint, `docs:api` and both `tsc` exit 0; e2e smoke 19/19.
+    - `test:latency` at load ~16: 5/5. Totals reach 1,097–1,102 ms, which is what task-248 bounds on an
+      idle machine.
+    - Governance check over B6 (`--base 0cb289e6`): 0 findings.
+  - **Local Scorecard run** (`ghcr.io/ossf/scorecard:v5.5.0` against `github.com/wingfoil/wingfoil` at
+    `ea637c43`, the pushed head), before any push: aggregate 3.9.
+    - 10: Binary-Artifacts, Dangerous-Workflow, License, Pinned-Dependencies, Token-Permissions.
+    - 4: Security-Policy. 3: Contributors.
+    - 0: Branch-Protection, CII-Best-Practices, Code-Review, Dependency-Update-Tool, Fuzzing,
+      Maintained (repo < 90 days), SAST, Vulnerabilities (38 OSV advisories; `npm audit --omit=dev`:
+      3 high, 3 moderate).
+    - Inconclusive: CI-Tests, Packaging, Signed-Releases.
+  - **Not pushed** yet (approver).
+  - **Follow-ups:** filed by `bug-ingest-rel-v0.3-w1b6-review-findings-plan`, among them the 64 KiB pipe
+    truncation and the production advisories.
+  - **Open tasks:** 77 (14 fix), all `backlog`, including task-248.
+  - **Next:** wave 2.
