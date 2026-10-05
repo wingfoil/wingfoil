@@ -2,7 +2,7 @@
 id: "task-177-adapter-manifests-load-validate-wingfoil-agents-builtin-custom"
 type: task
 title: "Adapter manifests load and validate from `.wingfoil/agents/{built-in,custom}/`, and the `agent` module is registered"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "high"
