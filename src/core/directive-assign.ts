@@ -59,6 +59,7 @@ import { setRoleAssignmentsInText } from '../directives/roles-edit';
 import { RolesYaml } from '../directives/schema';
 import { commitPaths, documentExists, readDocument, writeDocument } from '../storage';
 import { parseYaml, toValidationError, ValidationError } from '../validation';
+import { newerFormatIssue, ROLES_YAML_FORMAT } from '../validation/format';
 
 import { requireConfinedWriteTarget } from './confinement';
 import {
@@ -312,6 +313,9 @@ function parseRoles(text: string, filePath: string): CoreResult<{ raw: Record<st
     // (`src/validation/yaml.ts`).
     return validationError(error as ValidationError);
   }
+  // A `roles.yaml` from a newer WingFoil is never rewritten by this one (`dl-149`, task-251).
+  const newerFormat = newerFormatIssue(raw, ROLES_YAML_FORMAT, filePath);
+  if (newerFormat) return validationError(new ValidationError([newerFormat]));
   const parsed = RolesYaml.safeParse(raw);
   if (!parsed.success) return validationError(toValidationError(parsed.error, filePath));
   return coreOk({ raw: raw as Record<string, unknown>, roles: parsed.data });

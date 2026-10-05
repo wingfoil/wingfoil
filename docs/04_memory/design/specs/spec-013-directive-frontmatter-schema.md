@@ -70,6 +70,7 @@ surface as a warning (`spec-009` §2), never a failure, so the shape stays forwa
 | `ref`   | string[]            | optional  | `[AUTHORING]` | Upstream traceability references (feature IDs like `P3.8`, REQ codes, or requirement doc paths). May be empty (`[]`) for pure-WingFoil conventions (e.g. `doc-versioning`). |
 | `scope` | string              | optional  | `[AUTHORING]` | `global` declares that the directive binds every role — the one value this spec defines. **`roles.yaml`'s `global:` list is the authority**, not this key: see *`scope` and `roles.yaml`* below. Any other value loads and is reported by `directives list`, never a validation failure (forward compatibility). |
 | `version` | string \| number  | optional  | `[AUTHORING]` | The directive's document version, where it declares one (`doc-versioning`; approver ruling 2026-10-01). A string or a number, like `memory.yaml`'s and `roles.yaml`'s `version`; never a reason to fail the pillar — see *`version`* below. |
+| `format` | integer (positive) | optional | `[SPEC]` `dl-149` | The frontmatter's format, distinct from `version`; absent = `1`. See *`format`* below. |
 
 ### Reference implementation
 
@@ -87,6 +88,7 @@ export const DirectiveFrontmatter = z
     ref: z.array(z.string()).optional(),
     scope: z.string().optional(),
     version: z.union([z.string(), z.number()]).optional(),
+    format: formatField(DIRECTIVE_FORMAT),
   })
   .passthrough();
 ```
@@ -116,6 +118,24 @@ number loads as the number it parses to; when that number does not read back as 
 `1.1`, `1.0` → `1`), loading warns the author to quote it. A value that is neither a string nor a
 number is dropped with a warning, and the rest of the file loads. These warnings are spec-009 §2
 stderr warnings (`Warning: <file>: …`), like the unknown-field one.
+
+### `format`
+
+`version` is the directive's document revision; `format` (`dl-149`) is the format its frontmatter is
+written in. It is optional, and an absent key reads as format `1`, so every directive written before
+the key existed loads unchanged. A value that is not a positive integer is a schema error on `format`
+(`E_VALIDATION`), which fails the pillar like any other schema error. The format is bumped **only** on a
+backward-incompatible change of this frontmatter's shape; an additive, optional field such as `scope`
+does not bump it. The highest format this build reads is `DIRECTIVE_FORMAT` (`1`), declared once in
+`src/validation/format.ts` beside every other file kind's. A directive whose `format` is higher is
+refused **before** the structural pass, as the one issue `E_INVALID_FORMAT` on `format`, exit `1`
+(`spec-005` §1; `spec-009` §3), message
+`this file is written in format <N>; this WingFoil reads up to format <M>: upgrade WingFoil`.
+`wingfoil init` writes `format: <current>` in every directive it scaffolds, built-in and custom.
+
+`roles.yaml` follows the same rule with its own counter, `ROLES_YAML_FORMAT` (`1`): an optional
+top-level `format`, absent = `1`, a newer one refused by its loader and by `directive assign`, which
+never rewrites a file in a format it does not read.
 
 ### Isolation obligation (REQ-SYS-02)
 
@@ -166,3 +186,10 @@ none. `version` becomes a declared optional string or number, so a directive dec
 stays valid, except one whose `scope` is not a string (a list, a number), which no directive in this
 repository or in the `init` scaffold carries. The Context is brought up to date: the P3.8 built-ins ship, and the custom directives
 are twelve.
+
+**Revision (2026-10-05, `task-251-add-the-format-key-to-the-config-workflow-directive-and-template-schemas-check-it-in-the-loaders-and-write-it-in-the-init-scaffold`)
+— the `format` key (`dl-149`).** The field table and the reference implementation gain the optional
+`format` field, and a new *`format`* section gives its default (absent = 1), its bump rule, the
+newer-format refusal, and the same key in `roles.yaml`. Every directive valid before stays valid.
+Edited in place without a supersede or a state change (`dl-047`); pending the approver's sign-off at
+`task-251`'s review.

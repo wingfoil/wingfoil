@@ -13,7 +13,7 @@ tmpl_version: 260703   # Orignal template version
 The Project Workflow pillar (P4.1) is configured by two kinds of YAML file that today have
 **no shared, validated definition**:
 
-1. **The main manifest** — `.wingfoil/workflows.yaml`. It carries a format `version` and
+1. **The main manifest** — `.wingfoil/workflows.yaml`. It carries a content revision `version`, a `format` (`dl-149`) and
    a single ordered list of workflow-file paths to load (P4.1: *"main file `.wingfoil/workflows.yaml`
    includes built-in/custom workflows"*). Every WingFoil command reads it at startup to build the
    workflow registry; a divergent or unvalidated shape breaks `workflow list/start/next/status`
@@ -52,7 +52,8 @@ Resolved against `.wingfoil/workflows.yaml` under the project root. Fields:
 
 | Field     | Type                 | Required | Description                                                                                                                            |
 |-----------|----------------------|----------|--------------------------------------------------------------------------------------------------------------------------------------|
-| `version` | number (positive)    | no       | Config-file format version (e.g. `1.0`). Accepted but not required, for forward compatibility.                                        |
+| `version` | number (positive)    | no       | Content revision (e.g. `1.0`, `dl-047`). Accepted but not required, for forward compatibility.                                        |
+| `format`  | integer (positive)   | no       | The manifest's format (`dl-149`); absent = `1`. See § "Format".                                                                     |
 | `include` | string[] (min 1)     | yes      | Ordered list of paths to workflow-definition YAML files, each resolved relative to the directory containing `workflows.yaml` (`.wingfoil/`). At least one path is required. |
 
 ```yaml
@@ -70,6 +71,7 @@ Zod shape:
 ```ts
 export const WorkflowsYaml = z.object({
   version: z.number().positive().optional(),
+  format: formatField(WORKFLOWS_YAML_FORMAT),
   include: z.array(z.string()).min(1),
 });
 ```
@@ -111,7 +113,8 @@ Every workflow-definition file validates against the following schema. Top-level
 | `includable`  | boolean                 | see below | `true` = a phase of another workflow may `include:` it (P4.1, P4.16). `dl-109` K1 (a).                                                      |
 | `kind`        | `main` \| `sub`         | see below | **Alias kept readable during v0.3** (`dl-109` K1 (a)): `main` ≡ `startable: true, includable: false`; `sub` ≡ `startable: false, includable: true`. |
 | `description` | string                  | no       | Human summary of the workflow's purpose.                                                                                                      |
-| `version`     | number (positive)       | no       | Workflow-definition format version (e.g. `1.0`).                                                                                              |
+| `version`     | number (positive)       | no       | The workflow file's content revision (e.g. `1.0`, `dl-047`).                                                                                  |
+| `format`      | integer (positive)      | no       | The workflow file's format (`dl-149`); absent = `1`. See § "Format".                                                                        |
 | `element`     | string (memory type)    | no       | The Memory element type this workflow operates on. When the workflow is included, it comes from the parent's `iterate_over`, or, for a plain `include`, from the including workflow's own bound element of the same type (`E_WORKFLOW_ELEMENT_MISMATCH` otherwise). When the workflow is started on its own, the start command provides it (`--element <type:id>`, falling back to the active context — `dl-109` K2). A startable workflow that declares no `element` and whose own phases `memory.add` an element is **self-creating**: the element its first such action creates becomes the instance's element. The command contracts are `spec-017`'s (§3.4). Absent for workflows that manage no single element. |
 | `phases`      | `Phase[]` (min 1)       | yes      | Ordered list of phases; executed top to bottom (subject to `fallback` routing).                                                              |
 
@@ -199,6 +202,7 @@ export const Workflow = z.object({
   includable: z.boolean().optional(),
   description: z.string().optional(),
   version: z.number().positive().optional(),
+  format: formatField(WORKFLOW_FORMAT),
   element: z.string().optional(),
   phases: z.array(Phase).min(1),
 }); // + the kind/startable/includable rules above, as a refinement
@@ -607,7 +611,7 @@ bindings file replaces (`dl-090` Action 3).
 
 | Field                  | Type                     | Required | Description |
 |------------------------|--------------------------|----------|-------------|
-| `version`              | number (positive)        | no       | File format version. |
+| `version`              | number (positive)        | no       | Content revision (`dl-047`); this file has no `format` key yet (§ "Format"). |
 | `checks`               | map<token, CheckBinding> | no       | One entry per check token name. |
 | `actions`              | map<token, ActionBinding>| no       | One entry per action token name. |
 | `collections`          | map<name, (scalar \| map)[]> | no   | Named lists for `iterate_over: bindings:<name>`; entry keys per § "Collections". |
@@ -627,6 +631,23 @@ otherwise). A project binding may not rebind a built-in token
 `review` gate, never by an ordinary `docs(self)` commit; built-in bindings shipped with built-in
 workflows are immutable (REQ-SEC-07). The check that no binding changed outside a task is `dl-103`'s
 enforcement point.
+
+### Format
+
+`version` is a file's content revision (`dl-047`); `format` (`dl-149`) is the format the file is
+written in. The manifest and the workflow files are two kinds with two counters,
+`WORKFLOWS_YAML_FORMAT` and `WORKFLOW_FORMAT` (both `1`), declared once in `src/validation/format.ts`.
+The key is optional and an absent one reads as format `1`, so every file written before it loads
+unchanged. A value that is not a positive integer is a structural error on `format` (`E_VALIDATION`).
+A kind's format is bumped **only** on a backward-incompatible change of that kind: an additive,
+optional field (such as `task-185`'s `mode`, `distinct_from` and `cadence`) does not bump it. A file
+whose `format` is greater than the highest this build reads is reported **instead of** its structural
+pass, as one `E_INVALID_FORMAT` error on that file at path `format`, message
+`this file is written in format <N>; this WingFoil reads up to format <M>: upgrade WingFoil`; for the
+manifest that one diagnostic is the whole array, for a workflow file it takes the place of the file's
+structural diagnostics. `wingfoil init` writes `format: <current>` in the manifest and in every
+workflow file it scaffolds. `workflows/bindings.yaml` (Layer 3) is not one of `dl-149`'s file kinds and
+has no `format` key yet.
 
 ### Diagnostics (load and validation)
 
@@ -674,6 +695,7 @@ codes, except the named `kind` refusal.
 | Code | Severity | Runs in | Rule | Source |
 |---|---|---|---|---|
 | `E_WORKFLOW_FILE_NOT_FOUND` | error | loader | a manifest `include` path resolves to no file | Layer 1 |
+| `E_INVALID_FORMAT` | error | loader | the manifest's or a workflow file's `format` is greater than this build reads; path `format`, message `this file is written in format <N>; this WingFoil reads up to format <M>: upgrade WingFoil`; it replaces that file's structural pass | § "Format"; `dl-149` |
 | `E_WORKFLOW_INVALID_KIND` | error | loader | `kind` outside `main`/`sub`; message `invalid workflow kind '<kind>' (allowed: main, sub)` | P4.1 sc. 3 |
 | `E_WORKFLOW_NAME_INVALID` | error | loader | a workflow `name` outside `[a-z][a-z0-9-]*` | § "Names" |
 | `E_WORKFLOW_DUPLICATE_NAME` | error | loader | two files declare one `name` | registry uniqueness |
@@ -944,3 +966,11 @@ refuses; it now passes `--min` and `"{min}"` as two elements. § "Diagnostics" "
 distinct unbound action tokens; by name they are 10 (`cli.run` and `git.commit` were counted once
 per phase). No other code, severity or message changes. Edited in place without a supersede or a
 state change (`dl-047`).
+
+**Revision (2026-10-05, `task-251-add-the-format-key-to-the-config-workflow-directive-and-template-schemas-check-it-in-the-loaders-and-write-it-in-the-init-scaffold`)
+— the `format` key (`dl-149`).** Layers 1 and 2 gain the optional `format` field in their tables and
+Zod listings; a new § "Format" gives its default (absent = 1), its bump rule and the newer-format
+refusal, and § "Diagnostics" gains the `E_INVALID_FORMAT` row. The three `version` rows (Layers 1, 2 and 3), which called it
+a format version, now call it the content revision (`dl-047`). Every file valid before stays valid.
+Edited in place without a supersede or a state change (`dl-047`); pending the approver's sign-off at
+`task-251`'s review.

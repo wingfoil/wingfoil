@@ -28,6 +28,16 @@ import {
   runValidation,
   ValidationError,
 } from '../validation';
+import {
+  DIRECTIVE_FORMAT,
+  DNA_YAML_FORMAT,
+  MEMORY_YAML_FORMAT,
+  newerFormatIssue,
+  refuseNewerFormat,
+  ROLES_YAML_FORMAT,
+  WORKFLOW_FORMAT,
+  WORKFLOWS_YAML_FORMAT,
+} from '../validation/format';
 import { Workflow, WorkflowsYaml } from '../workflow/schema';
 
 import { atHeadOr, listPathsAtCommit, resolveRevision } from './revision';
@@ -167,10 +177,13 @@ export const MEMORY_YAML_PATH = '.wingfoil/memory.yaml' as const;
  * The Memory pillar's two-pass parse, over bytes that may come from anywhere — the working-tree file
  * ({@link loadMemoryYaml}) or a git revision ({@link loadMemoryYamlAtHead}). `filePath` is a label
  * only: it rides every issue this raises, so an error names the baseline it came from
- * (`HEAD:.wingfoil/memory.yaml`, not just a path on disk).
+ * (`HEAD:.wingfoil/memory.yaml`, not just a path on disk). A `format` newer than this build reads is
+ * refused before the structural pass (`dl-149`, task-251).
  */
 function parseMemoryYaml(raw: string, filePath: string): MemoryYaml {
-  return runValidation(MemoryYaml, parseYaml(raw, filePath), filePath);
+  const data = parseYaml(raw, filePath);
+  refuseNewerFormat(data, MEMORY_YAML_FORMAT, filePath);
+  return runValidation(MemoryYaml, data, filePath);
 }
 
 /**
@@ -260,6 +273,8 @@ function parseDnaYaml(raw: string, filePath: string): DnaYaml {
     }
     throw err;
   }
+  // A file from a newer WingFoil is refused for its format alone (`dl-149`, task-251).
+  refuseNewerFormat(data, DNA_YAML_FORMAT, filePath);
   return runValidation(DnaYaml, data, filePath);
 }
 
@@ -459,6 +474,9 @@ function loadWorkflowsFrom(source: WorkflowSource): WorkflowsLoadResult {
   // diagnostics are the whole array.
   const manifestData = parseYamlOrDiagnostic(manifestRaw, manifestPath, WORKFLOWS_MANIFEST_FILE);
   if (manifestData.diagnostic) throw new DiagnosticsError([manifestData.diagnostic]);
+  // A manifest from a newer WingFoil is refused for its format alone (`dl-149`, task-251).
+  const manifestFormat = newerFormatIssue(manifestData.data, WORKFLOWS_YAML_FORMAT, WORKFLOWS_MANIFEST_FILE);
+  if (manifestFormat) throw new DiagnosticsError([{ ...manifestFormat, severity: 'error' }]);
   const manifestResult = WorkflowsYaml.safeParse(manifestData.data);
   if (!manifestResult.success) throw new DiagnosticsError(zodDiagnostics(manifestResult.error.issues, WORKFLOWS_MANIFEST_FILE));
   emitUnknownFieldWarning(manifestData.data as Record<string, unknown>, WorkflowsYaml as unknown as HasShape, manifestPath);
@@ -487,8 +505,15 @@ function loadWorkflowsFrom(source: WorkflowSource): WorkflowsLoadResult {
       return;
     }
     const data = yaml.data;
-    const parsed = parseWorkflowFile(data, includePath, workflowPath);
     const rawName = (data as { name?: unknown } | null)?.name;
+    // A workflow file from a newer WingFoil: its format is its one structural diagnostic (task-251).
+    const newerFormat = newerFormatIssue(data, WORKFLOW_FORMAT, includePath);
+    if (newerFormat) {
+      files.push({ file: includePath, workflow: null, rawName: typeof rawName === 'string' ? rawName : null });
+      structural.push([{ ...newerFormat, severity: 'error' }]);
+      return;
+    }
+    const parsed = parseWorkflowFile(data, includePath, workflowPath);
     files.push({ file: includePath, workflow: parsed.workflow, rawName: typeof rawName === 'string' ? rawName : null });
     structural.push(parsed.diagnostics);
   });
@@ -572,8 +597,11 @@ function parseDirectiveFile(
       },
     ]);
   }
+  const data = parseYaml(frontmatterText, filePath);
+  // A directive from a newer WingFoil is refused for its format alone (`dl-149`, task-251).
+  refuseNewerFormat(data, DIRECTIVE_FORMAT, filePath);
   // `version` never fails the pillar (task-144 review, R1): a lossy number or a wrong type is a warning.
-  const versionCheck = checkDirectiveVersion(parseYaml(frontmatterText, filePath), frontmatterText);
+  const versionCheck = checkDirectiveVersion(data, frontmatterText);
   if (versionCheck.warning !== null) warn(versionCheck.warning);
   const frontmatter = runValidation(DirectiveFrontmatter, versionCheck.data, filePath);
   // `join`, so `DirectiveFile.path` carries the platform separator on both loaders — `requireCustomAsset`
@@ -739,6 +767,7 @@ export function loadRolesYaml(root: string): RolesYaml {
   const filePath = join(root, '.wingfoil', 'roles.yaml');
   const raw = readDocument(filePath);
   const data = parseYaml(raw, filePath);
+  refuseNewerFormat(data, ROLES_YAML_FORMAT, filePath);
   return runValidation(RolesYaml, data, filePath);
 }
 
@@ -774,5 +803,7 @@ export function loadRolesYamlAtRev(root: string, rev: string): RolesYaml | null 
   const raw = readPathAtRev(root, resolveRevision(root, rev), ROLES_YAML_PATH);
   if (raw === null) return null;
   const label = `${rev}:${ROLES_YAML_PATH}`;
-  return runValidation(RolesYaml, parseYaml(raw, label), label);
+  const data = parseYaml(raw, label);
+  refuseNewerFormat(data, ROLES_YAML_FORMAT, label);
+  return runValidation(RolesYaml, data, label);
 }

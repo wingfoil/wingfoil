@@ -14,10 +14,14 @@
  */
 import { z } from 'zod';
 
+import { ADAPTER_MANIFEST_FORMAT } from '../validation/format';
 import { ID_CHAR_CLASS, isIdPiece } from '../validation/id';
 
-/** The manifest format this build reads (`spec-016` §2.2 `format`). A new manifest field bumps it. */
-export const ADAPTER_MANIFEST_FORMAT = 1 as const;
+/**
+ * The manifest format this build reads (`spec-016` §2.2 `format`). A new manifest field bumps it.
+ * Declared in `src/validation/format.ts` beside every other file kind's format (task-251, `dl-149`).
+ */
+export { ADAPTER_MANIFEST_FORMAT };
 
 /** An argv template: a list of whole arguments, never a shell string (`dl-090` Q3 (a)). */
 const Argv = z.array(z.string());

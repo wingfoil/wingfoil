@@ -22,6 +22,21 @@ export type { RunValidationOptions, SemanticCheck } from './two-pass';
 export { generateId, idPatternIssues, isIdPiece, isNumericToken, patternTokens, patternToRegExp, patternToSource, ID_CHAR_CLASS } from './id';
 export { parseYaml } from './yaml';
 export {
+  ADAPTER_MANIFEST_FORMAT,
+  DIRECTIVE_FORMAT,
+  DNA_YAML_FORMAT,
+  E_INVALID_FORMAT,
+  MEMORY_TEMPLATE_FORMAT,
+  MEMORY_YAML_FORMAT,
+  ROLES_YAML_FORMAT,
+  WORKFLOW_FORMAT,
+  WORKFLOWS_YAML_FORMAT,
+  formatField,
+  newerFormatIssue,
+  newerFormatMessage,
+  refuseNewerFormat,
+} from './format';
+export {
   SECRET_PATTERNS,
   SCAN_SURFACE_ROOTS,
   DEFAULT_IGNORE_FILE,

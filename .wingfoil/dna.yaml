@@ -8,7 +8,7 @@
 #   [AUTHORING] = authoring addition: coherent with the specs but not mandated by them.
 # Spec-required top-level sections: modules, stacks, team (BDD P2.4-project-dna-config); paths (P2.5).
 # Sections/fields without a [SPEC] ref are [AUTHORING].
-version: 1.3                     # [AUTHORING] config-file format version (WingFoil convention)
+version: 1.4                     # [AUTHORING] content revision (WingFoil convention, dl-047), bumped on every content change — 1.3 -> 1.4 at task-251 (this annotation, dl-149; north_star worded as a goal, dl-131). The file's FORMAT is the separate `format:` key [SPEC: spec-002, dl-149], absent here and so read as 1
 
 # [AUTHORING] section — not required by P2.4; identity/strategy values sourced from the Product Brief.
 project:
@@ -21,10 +21,16 @@ project:
   license: MIT
   repository: WingFoil
   methodology: custom            # see .wingfoil/workflows.yaml (main: sw-life-cycle)
-  # [SPEC] North Star metric ← Product Brief; formalized as REQ-SYS-07 (deterministic context).
+  # [SPEC] North Star metric ← Product Brief, made composite by dl-131 (Decisions 1 and 3). Only its
+  # input component I is formalized as a requirement: REQ-SYS-07 / REQ-STATE-09 (deterministic context).
   north_star: >-
     Determinism Index — two independent runs from the same specs + WingFoil
     config using different AI agents produce substantially equivalent software.
+    This is a goal, not a guarantee. Substantially equivalent means behaviourally
+    equivalent: both codebases pass the same acceptance contracts, derived from the
+    specifications and written before either run. I (input: identical context for
+    identical inputs) is guaranteed; P (process conformance) is measured on every run;
+    O (outcome equivalence) is reported, never promised.
 
 # ---------------------------------------------------------------------------
 # Modules — the parts of the system (anatomy for navigation)   [SPEC: P2.4]

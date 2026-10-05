@@ -16,17 +16,19 @@
  */
 import { z } from 'zod';
 
+import { formatField, WORKFLOW_FORMAT, WORKFLOWS_YAML_FORMAT } from '../validation/format';
 import { idPatternIssues } from '../validation/id';
 
 /**
  * Layer 1 — the main manifest (`.wingfoil/workflows.yaml`). `include` (singular) is the canonical
  * key per spec-003's required rename from the legacy plural `includes:`; a document that still uses
  * `includes:` fails Pass 1 here (missing required `include`) and `includes` itself is preserved only
- * as an unknown, passed-through key.
+ * as an unknown, passed-through key. `format` is the manifest's format (`dl-149`, task-251: absent = 1).
  */
 export const WorkflowsYaml = z
   .object({
     version: z.number().positive().optional(),
+    format: formatField(WORKFLOWS_YAML_FORMAT),
     include: z.array(z.string()).min(1),
   })
   .passthrough();
@@ -235,7 +237,10 @@ export function invalidKindMessage(kind: unknown): string {
   return `invalid workflow kind '${String(kind)}' (allowed: main, sub)`;
 }
 
-/** Layer 2 — one workflow-definition file (`.wingfoil/workflows/**\/*.yaml`). */
+/**
+ * Layer 2 — one workflow-definition file (`.wingfoil/workflows/**\/*.yaml`). `version` is the file's
+ * content revision; `format` its format (`dl-149`, task-251: absent = 1).
+ */
 export const Workflow = z
   .object({
     name: z.string(),
@@ -245,6 +250,7 @@ export const Workflow = z
     includable: z.boolean().optional(),
     description: z.string().optional(),
     version: z.number().positive().optional(),
+    format: formatField(WORKFLOW_FORMAT),
     element: z.string().optional(),
     phases: z.array(Phase).min(1),
   })

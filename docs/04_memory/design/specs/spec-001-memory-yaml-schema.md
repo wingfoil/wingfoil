@@ -37,7 +37,8 @@ file; **only the state-machine encoding changes.**
 ### Top-level shape
 
 ```yaml
-version: 1.0            # config-file format version — a positive NUMBER (float ok), not a string
+version: 1.0            # content revision (dl-047) — a positive NUMBER (float ok), not a string
+format: 1              # optional; the file's format (dl-149) — a positive integer, absent = 1
 defaults:              # optional; applies to any type without its own `states` block (REQ-STATE-08)
   states: <StateMachine>
 types:                 # required; one entry per Memory element type
@@ -50,6 +51,7 @@ file stays readable by an older client):
 ```ts
 const MemoryYaml = z.object({
   version:  z.number().positive(),                 // NOT .int() — 1.0 is written as a float
+  format:   formatField(MEMORY_YAML_FORMAT),         // optional positive integer ≤ the format this build reads
   defaults: z.object({ states: StateMachine }).optional(),
   types:    z.record(z.string(), MemoryTypeEntry),
 }).passthrough();
@@ -59,6 +61,24 @@ const MemoryYaml = z.object({
 YAML float and `.int()` would spuriously reject a future `1.1`.
 Because it is a number, `version` is compared numerically, and a bump must increase it as a number:
 `1.9` is followed by `2.0`, never `1.10`, which YAML reads as `1.1` (`task-168` review).
+
+**`format`** (`dl-149`). `version` is the file's content revision; `format` is the format the file is
+written in, a separate key. It is optional, and an absent key reads as format `1`, so every file
+written before the key existed loads unchanged. A value that is not a positive integer is a schema
+error on `format` (`E_VALIDATION`). The format of a file kind is bumped **only** on a
+backward-incompatible change of that kind; an additive, optional field does not bump it. Each kind has
+its own counter, declared once in `src/validation/format.ts` (`MEMORY_YAML_FORMAT`, `1`). A file whose
+`format` is greater than the highest this build reads is refused by the loader **before** the
+structural pass, as the one issue `E_INVALID_FORMAT` on `format`, exit `1` (`spec-005` §1, a
+validation failure; `spec-009` §3):
+`this file is written in format <N>; this WingFoil reads up to format <M>: upgrade WingFoil`, with the
+file named in the issue. A format this build no longer reads would be refused at the same point,
+naming the last release that read it; no kind has one yet. `wingfoil init` writes `format: <current>`.
+
+The same key, with its own counter (`MEMORY_TEMPLATE_FORMAT`, `1`), sits in the frontmatter of every
+`template.file` scaffold. `memory add` checks it before it copies the scaffold, with the same refusals
+(`VALIDATION`, exit `1`, nothing written). `tmpl_version` stays the template's revision. The scaffold is
+copied verbatim, so an element added from a template that declares `format` carries the line too.
 
 **Reserved type names.** No key of `types` may be `directive`, `dna` or `workflow`. Those are the
 `wf({scope})` scopes that record a change to configuration, not to a Memory element (`spec-008` §2),
@@ -522,3 +542,11 @@ segment with literal text; counter step 1 says that such a placeholder's wildcar
 segment. The field keeps its meaning, so no release document moves. No schema
 field, token or edge changes. Edited in place, with no `version:` bump (`dl-047`); pending the
 approver's sign-off at `task-164`'s review.
+
+**Revision (2026-10-05, `task-251-add-the-format-key-to-the-config-workflow-directive-and-template-schemas-check-it-in-the-loaders-and-write-it-in-the-init-scaffold`)
+— the `format` key (`dl-149`).** The top-level shape gains the optional `format` key, the Zod listing
+its field, and a paragraph after `version`'s gives its default (absent = 1), its bump rule, the
+newer-format refusal and the same key in a Memory template's frontmatter. `version`'s comment, which
+called it the "config-file format version", now calls it the content revision (`dl-047`). Every file
+valid before stays valid. Edited in place, with no `version:` bump (`dl-047`); pending the approver's
+sign-off at `task-251`'s review.
