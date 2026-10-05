@@ -2,7 +2,7 @@
 id: decision-log-ingest-rel-v0.3-req-perf-02-plan
 type: plan
 title: "Decision-log-ingest — rel-v0.3 REQ-PERF-02 marginal vs total"
-status: active
+status: done
 version: "1.0"
 workflow: "decision-log-ingest"
 phase: "rel-v0.3-req-perf-02"
@@ -51,3 +51,7 @@ Every fact the decision-log states is checked at capture:
   Cites `bug-013` and `task-154`; related `bug-221` (filed by `bug-ingest-rel-v0.3-w1b5-review-findings-plan`).
 - Release proposal: v0.3 (a SARD amendment plus one assertion in an existing suite), as a small task or absorbed
   where the approver prefers; not scheduled until ruled.
+- **ratified (2026-10-05)** by the approver: `dl-146` `in-discussion → ready` (`592ca435`), release v0.3.
+  Q1 option (C), total and marginal budgets on an otherwise idle machine; Q2 the marginal budget stays at
+  1,000 ms p95; Q3 REQ-PERF-03 follows the same rule. Actions 2 and 3 go to a new task,
+  `task-248-assert-req-perf-02-s-total-and-marginal-budgets-on-an-idle-machine` (`backlog`). Plan complete.
