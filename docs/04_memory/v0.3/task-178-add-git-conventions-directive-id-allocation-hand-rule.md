@@ -2,7 +2,7 @@
 id: "task-178-add-git-conventions-directive-id-allocation-hand-rule"
 type: task
 title: "Add the git-conventions directive with the id-allocation hand rule and the AI attribution policy"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "high"
