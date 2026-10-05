@@ -127,8 +127,9 @@ where the machine starts at `new`). The ones that passed are pins, not reds: the
   `isMachineEdge` accepts a `returns` edge. `contractTarget` untouched (`git diff 0cf8b131 -- src/memory/state-machine.ts | grep -c contractTarget` → 0).
 - `src/core/memory-transition.ts`: `requireWipSlot`, called by `prepareMemoryTransitionAtRev` whenever
   `to !== from`.
-- `src/core/index.ts`: `memoryParkFn` + its `CORE_MODULES` entry (an MCP Tool `memory.park` follows
-  mechanically, like every mutating op); `memory add` writes `initialState` and checks its slot.
+- `src/core/index.ts`: `memoryParkFn` + its `CORE_MODULES` entry (the registrar would register it as
+  a Tool `memory.park`, as the parity harness shows, but the production server serves no Tools:
+  `tools/list` stays `[]`, `spec-014` §3, Tools v0.4 — corrected at the independent review, F6); `memory add` writes `initialState` and checks its slot.
   `src/core/memory-add-type.ts` returns `initialState` and the committed `memoryYaml`;
   `src/memory/add.ts` `renderAddDocument` takes `status`.
 - `src/storage/templates.ts`: Kanban description and cadence reworded; the scaffold's commented `bug`
@@ -198,12 +199,36 @@ Gates, with the pending amendments in the working tree:
 3. The Kanban sentence is reworded rather than backed by a declared limit (the scaffold's machine has
    no in-progress state); the scaffold's commented `bug` example shows `returns` and `limits`.
 4. `memory add` also enforces a limit on the initial state ("the verb that enters the state").
-5. `memory park` is exposed as MCP Tool `memory.park` by the mechanical registrar, like every mutating op.
+5. `memory park` is registered as Tool `memory.park` only by the registrar harness (`test/core/parity.test.ts`);
+   the production MCP server's `tools/list` stays `[]` (`spec-014` §3, Tools v0.4).
 
 ### Pending amendments (approver)
 
-Uncommitted in the worktree; run each with `memory amend` at the review gate.
+Uncommitted in the worktree; run each with `memory amend` at the review gate (five since the review, F2).
 - `spec-001-memory-yaml-schema` — `--reason "task-180: adds the returns and limits keys of dl-110 P1 (a) and P3 (a) to the StateMachine sub-schema, its field table, verb list and semantic validation, and returns { in-progress: backlog } to the worked task example, as memory.yaml 2.5 declares it; every file valid before stays valid."`
+- `spec-003-workflows-yaml-schema` — `--reason "task-180: the park row of the verb table gives its bracket by rule, from to the type's returns target as spec-008 section 2 states it, instead of the literal in-progress to backlog edge, which stays as this repository's example."`
 - `spec-006-core-domain-api` — `--reason "task-180: adds memoryPark, and memoryAmend which task-127 registered without a row, to the section 3 Memory table, and names park in the section 7 pre-flight order with a required reason, no authority step, and the WIP-limit refusal at step 3."`
 - `spec-008-cli-grammar` — `--reason "task-180: declares memory park per dl-110 P1 (a), its subject, Reason block, absent Approver line and refusals, states its bracket by the type's returns target, and declares the WIP-limit refusal of dl-110 P3 (a) and the verbs it binds; park joins the reason, one-document and committed-baseline lists."`
 - `spec-010-memory-frontmatter-schema` — `--reason "task-180: removes the status row's note that memory.add wrote draft literally, which bug-214 tracked and task-180 fixed, aligns the memory.add ownership row, and adds memory.park as a status-only writer."`
+
+### review (independent) — APPROVE WITH FIXES, fixed in-task
+
+| # | Finding | Red | Fix |
+|---|---------|-----|-----|
+| F1 | `scripts/check-governance.cjs` pinned `park` to `[in-progress → backlog]` and exempted it from the machine-edge check, so a CLI-written `wf(bug): park … [in-progress → open]` (the scaffold example) was a gated finding | `a208ab4d` `test/cli/check-governance.test.ts` "park — one hop along a declared returns edge": `npx jest test/cli/check-governance.test.ts -t park` → 3 failed, 1 passed | `d5d914a7`: the bracket rule asks for one hop between two different states; `park` left `EDGE_EXEMPT_VERBS`, so the state rule judges the hop with `isMachineEdge` (which reads `returns`); a park needs a `Reason:` block (`spec-008` §2) |
+| F2 | `spec-003`'s verb table still gave `park`'s bracket as the literal edge | — | fifth pending amendment, below |
+| F4 | `requireWipSlot` dropped an unreadable document silently, and its comment said the transition reported it, which the `memory add` path never did | `617127e8`: two warnings tests in `test/core/memory-wip-limits.test.ts` → 2 failed (`Received has value: undefined`) | `d5d914a7`: `requireWipSlot` returns the scan's `W_MEMORY_UNREADABLE` diagnostics; a transition merges them into its warnings (deduplicated by file against the id lookup's), `memory add` carries them, a `CONFLICT` refusal carries them in `details.issues`; `6fa7b8c2` covers the dedupe and the refusal detail |
+| F6 | notes said the MCP Tool `memory.park` follows mechanically | — | corrected above (green section, decision 5) |
+
+Checks after the fixes:
+- Scratch repository with the code build (`npm run build`; `wingfoil init --template Kanban`, the
+  scaffold's `bug` example uncommented and committed, `memory add`/`submit`/`approve` a bug to
+  `in-progress`, then `memory park bug-002-two --reason "Not now."`): exit 0, commit
+  `wf(bug): park bug-002-two [in-progress → open]` + `Reason: Not now.` + `WingFoil-Version`, one file;
+  `node scripts/check-governance.cjs --root <scratch>` → `gated: 0 findings on 0 commits`, exit 0.
+- `npx jest --coverage` → `Test Suites: 247 passed`, `Tests: 4682 passed`; Statements 99.08%
+  (5847/5901), Branches 96.28% (3287/3414), Functions 96.20% (1014/1054), Lines 99.68% (5070/5086) —
+  all at or above `main`'s (99.07 / 96.21 / 96.18 / 99.68).
+- `npm run lint`, `npm run typecheck`, `npm run docs:api` clean;
+  `node scripts/check-governance.cjs --base 0cf8b131` → 0 findings, exit 0.
+- The task stays `in-review`.
