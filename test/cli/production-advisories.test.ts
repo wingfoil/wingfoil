@@ -9,12 +9,12 @@
  * the advised versions. Nothing in CI ran `npm audit`.
  *
  * The live check is `npm run check:audit` (`npm audit --omit=dev --audit-level=high`), run by
- * `.github/workflows/ci.yml` on every push — it needs the registry's advisory database, so it is a CI
- * step and a named npm script (the one `task-190`'s scheduled workflow calls too), not a Jest assertion:
+ * `.github/workflows/ci.yml` on every push, as the gate's last step — it needs the registry's advisory
+ * database, so it is a CI step and a named npm script (the one `task-190`'s scheduled workflow calls too), not a Jest assertion:
  * a test that reached the network would make the suite's verdict depend on the day it ran.
  *
  * This suite is the offline half, deterministic and read from committed files only:
- *   1. the script exists with exactly that command, and `ci.yml` runs it;
+ *   1. the script exists with exactly that command, and `ci.yml` runs it last, unless cancelled;
  *   2. the direct floors in `package.json` exclude the advised versions `bug-223` measured;
  *   3. `package-lock.json` resolves each of the six advised packages above its advised range — the
  *      snapshot of `bug-223`, so the lock cannot silently slide back to it.
@@ -36,7 +36,7 @@ interface Lockfile {
 }
 
 interface Workflow {
-  readonly jobs: Readonly<Record<string, { readonly steps: readonly { readonly run?: string }[] }>>;
+  readonly jobs: Readonly<Record<string, { readonly steps: readonly { readonly run?: string; readonly if?: string }[] }>>;
 }
 
 const manifest = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')) as Manifest;
@@ -83,11 +83,15 @@ describe('production advisories (task-250, bug-223) — the live audit gate', ()
     expect(manifest.scripts?.['check:audit']).toBe('npm audit --omit=dev --audit-level=high');
   });
 
-  it('runs `npm run check:audit` in ci.yml’s packaging gate, after `npm ci`', () => {
+  it('runs `npm run check:audit` last in ci.yml’s packaging gate, unless the run is cancelled', () => {
+    // Last, and not skipped by a red build: a new advisory must not hide the build/test/lint verdict,
+    // and a red build must not hide the audit's (task-250 review).
     const ci = yamlLoad(readFileSync(join(REPO_ROOT, '.github', 'workflows', 'ci.yml'), 'utf8')) as Workflow;
-    const runs = (ci.jobs['packaging-gate']?.steps ?? []).flatMap((s) => (s.run === undefined ? [] : [s.run.trim()]));
-    expect(runs).toContain('npm run check:audit');
-    expect(runs.indexOf('npm run check:audit')).toBeGreaterThan(runs.indexOf('npm ci'));
+    const steps = (ci.jobs['packaging-gate']?.steps ?? []).filter((s) => s.run !== undefined);
+    const audit = steps[steps.length - 1];
+    expect(audit?.run?.trim()).toBe('npm run check:audit');
+    expect(audit?.if).toBe('${{ !cancelled() }}');
+    expect(steps.map((s) => s.run?.trim())).toContain('npm run prepublishOnly');
   });
 });
 

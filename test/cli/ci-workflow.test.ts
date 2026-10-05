@@ -94,12 +94,13 @@ describe('ci workflow (task-140) — dl-076 (D): the packaging gate on every pus
     expect(setup?.with?.['package-manager-cache']).toBe(false);
   });
 
-  it('runs exactly `npm ci`, `npm run check:audit`, then `npm run prepublishOnly` — publish.yml’s two gate steps plus the audit', () => {
-    // task-250 (bug-223) added `check:audit` between the two: it needs the registry's advisory database,
+  it('runs exactly `npm ci`, `npm run prepublishOnly`, then `npm run check:audit` — publish.yml’s two gate steps plus the audit', () => {
+    // task-250 (bug-223) added `check:audit` after the two: it needs the registry's advisory database,
     // so it is a ci.yml step and not part of `prepublishOnly`, which publish.yml's tag gate also runs.
+    // It is last so a new advisory never hides the build/test/lint verdict of the push.
     const job = read(CI_PATH).parsed.jobs['packaging-gate'];
     const runSteps = (job?.steps ?? []).filter((s) => s.run !== undefined).map((s) => s.run?.trim());
-    expect(runSteps).toEqual(['npm ci', 'npm run check:audit', 'npm run prepublishOnly']);
+    expect(runSteps).toEqual(['npm ci', 'npm run prepublishOnly', 'npm run check:audit']);
     const publishGate = (read(PUBLISH_PATH).parsed.jobs.gate?.steps ?? []).map((s) => s.run?.trim());
     expect(publishGate).toEqual(expect.arrayContaining(['npm ci', 'npm run prepublishOnly']));
   });

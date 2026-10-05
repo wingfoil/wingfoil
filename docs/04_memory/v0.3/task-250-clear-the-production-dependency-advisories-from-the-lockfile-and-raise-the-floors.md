@@ -60,7 +60,7 @@ and `fast-uri` (via `ajv`, fed the server's own schemas) are loaded.
 - **Gate design.** `npm audit` needs the registry's advisory database, so it cannot be a Jest assertion without
   making the suite's verdict depend on the network and the day (determinism directive). The check is therefore
   split: (1) the live gate, a named npm script `check:audit` = `npm audit --omit=dev --audit-level=high`, run by
-  `.github/workflows/ci.yml`'s packaging gate after `npm ci` (so a regression — including a newly published
+  `.github/workflows/ci.yml`'s packaging gate as its last step, after `prepublishOnly` (so a regression — including a newly published
   advisory — fails the build); (2) an offline Jest suite, `test/cli/production-advisories.test.ts`, pinning the
   script, its wiring in `ci.yml`, the direct floors, and the six `bug-223` packages' locked versions above their
   advised ranges. Not added to `prepublishOnly` (publish.yml's tag gate also runs it, and `publish-pipeline.test.ts`
@@ -89,7 +89,7 @@ and `fast-uri` (via `ajv`, fed the server's own schemas) are loaded.
   already admitted fixed. Lock now: `js-yaml 4.3.2`, SDK `1.32.0`, `fast-uri 3.1.8`, `ip-address 10.7.3`,
   `hono 4.13.13`, `@hono/node-server 2.1.3`, `qs 6.16.0` (`npm ls … --omit=dev`). Same commit: script
   `check:audit`, the `ci.yml` step, and `test/cli/ci-workflow.test.ts`'s exact step list updated to
-  `['npm ci', 'npm run check:audit', 'npm run prepublishOnly']`.
+  `['npm ci', 'npm run check:audit', 'npm run prepublishOnly']` (reordered at review, below).
 - `npm run -s check:audit; echo $?` → `0`. `npm audit --json | jq -c .metadata.vulnerabilities` (dev included) →
   `{"moderate":2,"high":3,"total":5}`, all dev-only (`baseline-browser-mapping`, `brace-expansion`, `browserslist`,
   a nested `js-yaml`, `markdown-it`) — out of this task's `--omit=dev` scope; reported as a candidate finding.
@@ -134,3 +134,16 @@ Gates run with the pending spec-015 amendment in the working tree. No BDD scenar
   Revision note. Proposed `--reason`: "task-250 (bug-223) refreshed the lock: the MCP SDK 1.32.0 resolves
   @hono/node-server 2.1.3, whose engines floor is >=20, so section 1 names that version; engines.node stays >=22.12.0,
   still bound by commander@15."
+
+### review fix (independent review, 2026-10-05)
+
+- Finding: in `ci.yml` the `check:audit` step ran before `prepublishOnly`, so a newly published advisory would
+  hide the push's build/test/lint verdict. Fix: the audit step is now the gate's LAST step, under
+  `if: ${{ !cancelled() }}` — a red build still reports the audit, and an advisory never skips the build. Pinned
+  order in `test/cli/ci-workflow.test.ts` is now `['npm ci', 'npm run prepublishOnly', 'npm run check:audit']`;
+  `production-advisories.test.ts` asserts the audit is the last `run` step and carries that `if`. `ci.yml`'s
+  header and local-command line updated to match.
+- Re-run: `npx jest test/cli/production-advisories.test.ts test/cli/ci-workflow.test.ts test/cli/publish-pipeline.test.ts
+  test/cli/scorecard-workflow.test.ts` → 52 passed; `npm run lint` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
+  `node scripts/check-governance.cjs --base c80167d6` exit 0.
+
