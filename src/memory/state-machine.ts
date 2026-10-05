@@ -306,41 +306,22 @@ export function resolveTransitionTarget(
   }
 }
 
-/** What the contract message prints for `<to>` when a verb has no legal edge anywhere in the machine. */
-const NO_TARGET = '(none)';
-
 /**
- * The `<to>` of the illegal-transition contract message: the verb's **canonical edge** for this type —
- * the target `op` reaches from the first state, in `sequence` order, from which `op` is legal (for
- * `submit` on `task` or on the default machine: `pending`; on `release`: `planning`). A verb names no
- * target of its own, so the message needs a rule; this one reproduces the string BDD `P1.6` sc.2 and
- * `P5.2.3` sc.2 pin (`approved -> pending` for `task`) on both the default machine and the real `task`
- * machine, where the literal forward edge out of `approved` is `done`.
+ * The `<to>` of the illegal-transition contract message — what the verb the user typed reaches from
+ * `<from>`. A transition verb names no target of its own, and {@link resolveTransitionTarget} refuses a
+ * call exactly when the verb has no edge from the current state (`deprecate` is never refused), so on a
+ * refusal that target is always nothing, rendered `(none)` (`task-181`, `bug-165`, `bug-127`;
+ * REQ-STATE-01).
  *
- * What happens when that canonical target IS `currentState` — printing it would be a self-loop — is
- * ratified by `dl-053-illegal-transition-target-for-verbless-edges` (option 1): **keep walking
- * `sequence` for the next legal edge of the SAME verb**, and render {@link NO_TARGET} when the verb
- * has no other target. It must never name the next state in `sequence` regardless of verb — the
- * earlier fallback did, printing `draft -> pending` for a `reject` (a rejection shown as a forward
- * move) and `backlog -> in-progress` for an `approve` (a `waiting` edge no verb drives), misinforming
- * exactly the user who has just made an illegal call. Every `<to>` printed here is therefore a real
- * target of the verb the user typed, on this type's own machine.
- *
- * A pure function of `(machine, currentState, op)` walked in `sequence` order (REQ-SYS-07).
+ * It replaces the verb's **canonical edge** (`dl-053` option 1): the target the verb reaches from the
+ * first state in `sequence` where it is legal. That edge starts somewhere else in the machine, so it
+ * printed backward moves (`approve` on a `planned` bug → `planned -> triaged`; `submit` on the last
+ * state of the default machine → `approved -> pending`) and skips (`triaged -> resolved`), naming a move
+ * nobody attempted to exactly the user who has just made an illegal call. Why the verb has no edge is
+ * the issue's `detail` (`dl-032` option (c)), which reaches the operator under the message
+ * (`dl-055`, task-130).
  */
-function contractTarget(machine: StateMachine, currentState: string, op: TransitionOp): string {
-  for (const state of machine.sequence) {
-    let target: string;
-    try {
-      target = resolveTransitionTarget(machine, state, op);
-    } catch {
-      continue; // `op` is not legal from this state — keep walking the chain
-    }
-    // dl-053: a self-loop is not a transition; keep looking for a different target of this same verb.
-    if (target !== currentState) return target;
-  }
-  return NO_TARGET;
-}
+const NO_TARGET = '(none)';
 
 /**
  * Resolve the legal target of verb `op` for a document of type `typeName` currently in `currentState`
@@ -352,7 +333,7 @@ function contractTarget(machine: StateMachine, currentState: string, op: Transit
  * `dl-032-illegal-transition-message-contract` (option (c)) — `message` is the pinned
  * `` illegal transition <from> -> <to> for type '<type>' `` (REQ-STATE-01 Fit Criterion; BDD `P1.6`
  * sc.2, `P5.2.3` sc.2), `detail` carries the engine's explanation of *why* the edge is illegal, and the
- * exit code is `1`. `<to>` is computed by {@link contractTarget}.
+ * exit code is `1`. `<to>` is always {@link NO_TARGET}: the verb reaches nothing from `<from>`.
  *
  * @throws {@link ../validation.ValidationError} `E_INVALID_TRANSITION` (exit `1`) as above.
  * @throws `Error` when `typeName` is not registered (see {@link resolveStateMachine}). A registered type
@@ -376,7 +357,7 @@ export function resolveTypeTransition(
         code: E_INVALID_TRANSITION,
         path: 'status',
         file: filePath,
-        message: `illegal transition ${currentState} -> ${contractTarget(machine, currentState, op)} for type '${typeName}'`,
+        message: `illegal transition ${currentState} -> ${NO_TARGET} for type '${typeName}'`,
         detail,
       },
     ]);
@@ -400,8 +381,7 @@ export function supersedesEdgeFrom(machine: StateMachine, state: string): boolea
  * always {@link SUPERSEDED_STATE} — or a thrown `E_INVALID_TRANSITION` with `dl-032`'s contract
  * message, `illegal transition <from> -> superseded for type '<type>'`, when the document is not in
  * the state whose `waiting` edge leads there ({@link supersedesEdgeFrom}). The trigger is not a verb,
- * so this is not a {@link TransitionOp}: it has no `contractTarget`, and its `<to>` is the one state
- * it can ever reach.
+ * so this is not a {@link TransitionOp}, and its `<to>` is the one state it can ever reach.
  *
  * @throws {@link ../validation.ValidationError} `E_INVALID_TRANSITION` as above.
  * @throws `Error` when `typeName` is not registered (see {@link resolveStateMachine}).
