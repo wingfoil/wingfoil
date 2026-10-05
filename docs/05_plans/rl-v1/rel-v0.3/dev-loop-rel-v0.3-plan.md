@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.11"
+version: "1.12"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -148,6 +148,26 @@ most later work go first (`task-136` → 40 later tasks, `task-130` → 26, `tas
 
 Fix share (`dl-133`, tracked by hand until `task-221`'s `start` check): at the opening of W1, 38
 open fix tasks of 117 open tasks (32%); B1 holds 4 fixes of 8.
+
+**Wave 2** (opened 2026-10-05, the approver's choice of batches): `task-171` … `task-193`, plus
+`task-248` (`dl-146`), `task-249` (`bug-222`) and `task-250` (`bug-223`), added after
+`commit-backlog`, and `task-251` (`dl-149`), approved into the backlog during B1: 27 tasks, 14 of them
+fixes. Every `depends_on` of the wave points to a wave 0 or wave 1 task, all `done`. The batches follow
+the rules of wave 1: one writer of `memory.yaml` per batch, the tasks that unblock the most later
+work first (`task-175` and `task-185` → 38 later tasks each, `task-192` → 18, `task-171` → 16), and
+`task-249` (HIGH) in the first batch.
+
+| Batch | Tasks | Merge order on shared files |
+|---|---|---|
+| **B1** | 250, 249, 192, 185, 175, 171, 177, 176 | `250` → `249` → `192` (`package.json`, `src/cli`); `185` → `175` (`src/workflow/schema.ts`); `171` → `176` (Memory scan primitives, `spec-012`) |
+| **B2** | 174, 172, 178, 173, 191, 182, 251 | `172` → `251` (`src/core/init.ts`); `251` is the batch's only writer of `memory.yaml` and `dna.yaml`, `178` of `roles.yaml` |
+| **B3** | 179, 180, 181, 188, 193, 190, 183 | `180` → `181` (`state-machine.ts`); `193` after `172`; `188` after `178`; `183` after the config writers |
+| **B4** | 184, 186, 187, 189, 248 | `189` last (`src/core/index.ts`); `248` alone, on an idle machine (`test:latency`) |
+
+`task-251` entered B2 and `task-180` moved from B2 to B3, so that B2 keeps a single writer of
+`memory.yaml` (approver, 2026-10-05).
+
+Fix share at the opening of W2: 14 open fix tasks of 77 open (18%).
 
 **Amending approved Memory elements during a task (from W1 on).** `memory amend` exists since
 `task-127`, so an edit to an element past its first state (a spec's Revision note, a ready
@@ -512,3 +532,48 @@ commit, right after the task's transition and on the task branch:
     truncation and the production advisories.
   - **Open tasks:** 77 (14 fix), all `backlog`, including task-248.
   - **Next:** wave 2.
+- **2026-10-05 — wave 2 opened; batch B1 `done`** (`task-250`, `249`, `192`, `185`, `175`, `171`, `177`, `176`).
+  - **Batches.** Four, in §3. The v0.2 worktrees `task-093` … `task-106` (all clean and merged) were removed
+    with their branches, on the approver's instruction.
+  - **Interruptions.** The session stopped abruptly once and hit the API usage limit twice. Every agent was
+    resumed from its transcript; stale `.jest-dist.lock` files with dead pids were removed by the agents.
+  - **Review.** Every task had an independent review, all "approve with fixes" except `task-250` ("approve",
+    one fix), every fix applied in-task. `171`, `175`, `176` and `192` had a focused re-review after their
+    fixes changed the design; `171`'s found one regression (an `EACCES` escaping an explain-only walk), fixed.
+    `171`'s first review found that the governance check failed open on an unreadable revision once the
+    reconstruction became tolerant: the check now reads strictly.
+  - **Approver rulings:**
+    - D1 (`task-175`): the key rules of a `bindings.yaml` collection are a loader row,
+      `E_BINDING_COLLECTION_KEY`, not a structural failure, so the file stays decided.
+    - D2 (`task-175`): the retrospective's friction inventory lives outside every Memory path,
+      `docs/06_retrospectives/rl-{release-line}/rel-{version}-friction-inventory.md`.
+    - D3 (`task-176`): a module is selected by name or by path prefix at a `/` boundary; when nothing matches,
+      all modules and a note.
+    - D4 (`task-192`): `-dirty` only for a change to a build input (`src`, `package*.json`, `tsconfig*.json`,
+      `scripts/write-build-info.cjs`).
+    - D5 (`task-192`): `memory history` entries always carry `wingfoil`, `null` without the trailer.
+    - Confirmed at the gate: the developers' decisions each task's approve Reason names.
+  - **Amendments: 10.**
+    - `task-250`: spec-015. `task-249`: spec-005. `task-185`: spec-003. `task-171`: spec-004, spec-012.
+    - `task-192`: spec-008, spec-004. `task-175`: spec-003. `task-176`: spec-012, spec-016.
+  - **Bugs closed:** bug-031, bug-051, bug-164, bug-188, bug-189, bug-201, bug-222, bug-223.
+  - **Merges,** in order 250 → 249 → 185 → 171 → 177 (first approval), then 192 → 175 → 176 (second).
+    - **Integration fix** `ff82aa04` (branch `fix/w2b1-agent-discovery-atheador`): `task-177` called `atHeadOr`
+      with the two-argument form `task-171` had just replaced; each branch compiled alone, the merge failed
+      `tsc` (TS2554), so jest's `globalSetup` build failed too. One line.
+    - `175`, `176` and `192` merged `main` into their branches before their gate; only Revision notes and two
+      adjacent field declarations (`unreadable` / `wingfoil`) conflicted, all kept.
+  - **First commits stamped by the tool itself:** the amends of `task-192` onwards carry
+    `WingFoil-Version: 0.2.2 (<sha>)`, clean although the worktree held pending spec edits (D4). The
+    `Approver:`/`Reason:` paragraph is no longer git's trailer block, so `%(trailers:key=Approver)` no longer
+    reads it; nothing in `src/`, `scripts/` or `tools/` used it.
+  - **Gates on `main`** (`a5ef0b75`): `test:coverage` 233 suites, 4289 tests, coverage 98.99 / 96.16 / 96.08 /
+    99.61; lint, `docs:api`, both `tsc`, `check:audit` (0 vulnerabilities) exit 0; e2e smoke 19/19.
+  - **Governance check:** `--base c80167d6` gives 79 gated `wf()` commits on `0bb7f6d6`, 0 findings.
+  - **Intake** fast-forwarded twice: `dl-148` (docs showcase, `in-discussion`) at `ca1919c6`; `dl-149` (a
+    `format:` key distinct from `version:`) and `task-251` at `3fea170d`. The approver ratified `dl-149`
+    (`ee44906f`, urgent for v0.3) and approved `task-251` into the backlog (`535cd598`), scheduled in B2.
+  - **Follow-ups:** 14 items (bugs, two decision-log candidates, handover notes) to be filed through
+    `bug-ingest-rel-v0.3-w2b1-review-findings-plan`, triage pending.
+  - **Fix share:** 11 open fix tasks of 70 open (15.7%), under the threshold.
+  - **Next:** B2 (`174`, `172`, `178`, `173`, `191`, `182`, `251`).
