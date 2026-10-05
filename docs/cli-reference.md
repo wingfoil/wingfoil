@@ -85,7 +85,7 @@ WingFoil-Version: 0.3.0 (4f1c2d9b7e3a5c80d61f2a94b7c3e5d08a1f9e9a)
 
 the same value `wingfoil --version` prints: the package version, then the full commit hash the build
 was made from (with `-dirty` when the build had uncommitted changes to its own inputs — the sources,
-`package.json`, `package-lock.json` or a `tsconfig` — and `unknown` when the build recorded none). A commit without that line was not written by WingFoil. Read it with
+`package.json`, `package-lock.json`, a `tsconfig` or `scripts/write-build-info.cjs` — and `unknown` when the build recorded none). A commit without that line was not written by WingFoil. Read it with
 `git log --format='%(trailers:key=WingFoil-Version,valueonly)'`. The commit body is also normalized
 the same way whatever your git `commit.cleanup` setting (trailing whitespace removed, runs of blank
 lines collapsed, lines starting with `#` kept).

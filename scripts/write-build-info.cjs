@@ -39,7 +39,9 @@ const UNKNOWN_COMMIT = 'unknown';
  * root: the sources `tsc` compiles, the manifest and lockfile that fix the version and the compiler,
  * the compiler configurations, and this writer. A change git lists under any of them — tracked or
  * untracked — makes the build `-dirty`; a change anywhere else does not (approver ruling D4 (c)).
- * Sorted, so the git invocation is the same on every run (REQ-SYS-07).
+ * Sorted, so the git invocation is the same on every run (REQ-SYS-07). Untracked files are asked for
+ * explicitly (`--untracked-files=all`), so `status.showUntrackedFiles=no` in a git config cannot hide
+ * one (task-192 re-review).
  */
 const BUILD_INPUTS = Object.freeze(['package-lock.json', 'package.json', 'scripts/write-build-info.cjs', 'src', 'tsconfig*.json']);
 
@@ -52,7 +54,13 @@ const BUILD_INPUTS = Object.freeze(['package-lock.json', 'package.json', 'script
  * @returns {string | null}
  */
 function gitAnswer(root, args) {
-  const run = spawnSync('git', ['-C', root, ...args], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+  // `GIT_LITERAL_PATHSPECS=0`: an operator's `GIT_LITERAL_PATHSPECS=1` would turn `tsconfig*.json`
+  // into a literal name that matches nothing (task-192 re-review).
+  const run = spawnSync('git', ['-C', root, ...args], {
+    encoding: 'utf-8',
+    env: { ...process.env, GIT_LITERAL_PATHSPECS: '0' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   return run.error === undefined && run.status === 0 ? run.stdout : null;
 }
 
@@ -65,7 +73,7 @@ function gitAnswer(root, args) {
 function computeBuildInfo(root) {
   const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
   const head = gitAnswer(root, ['rev-parse', '--verify', '--quiet', 'HEAD^{commit}']);
-  const status = head === null ? null : gitAnswer(root, ['status', '--porcelain', '--', ...BUILD_INPUTS]);
+  const status = head === null ? null : gitAnswer(root, ['status', '--porcelain', '--untracked-files=all', '--', ...BUILD_INPUTS]);
   if (head === null || status === null) return { version, commit: UNKNOWN_COMMIT };
   const sha = head.trim();
   return { version, commit: status.trim().length > 0 ? `${sha}-dirty` : sha };
