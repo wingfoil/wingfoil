@@ -23,7 +23,6 @@ import { auditAttribution } from '../../src/memory/audit';
 import { walkGitLogFields } from '../../src/memory/git-log';
 import { getMemoryHistory } from '../../src/memory/history';
 import { E_GIT_READ_FAILED, StorageError } from '../../src/storage';
-import { ValidationError } from '../../src/validation';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const DOC = 'docs/04_memory/design/dls/dl-900.md';
@@ -148,12 +147,11 @@ describe('a genuine git failure is an error, not an empty history (bug-072, AC1)
   });
 
   /**
-   * Only a `StorageError` becomes `IO`; anything else the reconstruction throws keeps propagating, as
-   * before task-142. Pinned, not endorsed: a revision whose frontmatter is not YAML throws a
-   * `ValidationError` today, which the CLI renders as exit 2 — that tolerance is `bug-188`'s, not
-   * this task's (task-142 review, finding 4).
+   * Only a `StorageError` becomes `IO`. A revision whose frontmatter is not YAML used to propagate
+   * its `ValidationError` here (exit 2); since task-171 (`bug-188`) it is an entry whose state could
+   * not be read, so the history is still listed (`test/core/memory-scan-tolerant.test.ts`).
    */
-  it('`memory history` lets a non-storage failure propagate (today: a revision with unparsable frontmatter)', async () => {
+  it('`memory history` lists a document one of whose revisions does not parse (task-171, bug-188)', async () => {
     repo = makeTempGitRepo();
     writeFixtureFile(repo, '.wingfoil/memory.yaml', 'version: 1\ntypes:\n  decision-log:\n    path: "docs/04_memory/design/dls/{id}.md"\n');
     writeFixtureFile(repo, DOC, ['---', 'id: dl-900', 'status: [unclosed', '---', ''].join('\n'));
@@ -161,7 +159,8 @@ describe('a genuine git failure is an error, not an empty history (bug-072, AC1)
     writeDoc(repo, 'draft');
     commitAll(repo, 'wf(decision-log): fix dl-900');
 
-    await expect(memoryHistoryFn()({ root: repo, positional: 'dl-900' })).rejects.toBeInstanceOf(ValidationError);
+    const result = (await memoryHistoryFn()({ root: repo, positional: 'dl-900' })) as { ok: boolean };
+    expect(result.ok).toBe(true);
   });
 
   it('a repository with no commits yet still has no history: [] rather than an error', () => {

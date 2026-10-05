@@ -382,6 +382,31 @@ describe('a document whose frontmatter does not parse at some commit', () => {
   });
 });
 
+// task-171 review F1: `reconstructMemoryTransitions` became tolerant for `memory history` (bug-188); the
+// check must still read strictly, or a revision it cannot read passes as checked (fail open).
+describe('a bracketless or unnamed touch whose revision does not parse (task-171 review)', () => {
+  const BROKEN = '---\nid: "t-1"\ntype: task\ntitle: "a: "b"\n  bad: [\nstatus: pending\n---\n';
+  const f = fixture();
+  f.task('t-1', 'draft', 'wf(task): add t-1');
+  const brokenSubmit = f.commit('wf(task): submit t-1', { 'docs/memory/task/t-1.md': BROKEN });
+  f.task('t-1', 'pending', 'docs: repair t-1');
+  const brokenUnnamed = f.commit('wf(task): add t-2', {
+    'docs/memory/task/t-2.md': '---\nid: "t-2"\ntype: task\ntitle: "T"\nstatus: draft\n---\n\nt-2.\n',
+    'docs/memory/task/t-1.md': BROKEN,
+  });
+  f.task('t-1', 'pending', 'docs: repair t-1 again');
+  const report = checkGovernance(f.root);
+
+  it('reports a bracketless named touch it cannot read as state not checked, never as checked', () => {
+    expect(report.stateUnchecked.some((entry) => entry.sha === brokenSubmit && /does not parse/.test(entry.reason))).toBe(true);
+    expect(rulesOf(report, brokenSubmit)).toEqual([]);
+  });
+
+  it('raises no finding about a status "→ null" on an unnamed document it cannot read', () => {
+    expect(report.findings.filter((finding) => finding.sha === brokenUnnamed && /t-1/.test(finding.message))).toEqual([]);
+  });
+});
+
 describe('starting mode — hard-fail after the introduction commit, report history before it (dl-103 §1)', () => {
   const f = fixture();
   const before = f.task('t-1', 'draft', 'wf(task): schedule t-1');

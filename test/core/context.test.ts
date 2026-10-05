@@ -24,7 +24,6 @@ import { join } from 'path';
 
 import { assembleExecutionContext, resolveRoleDirectives, selectDirectivesById } from '../../src/core/context';
 import { loadDirectives, loadDnaYaml, loadMemoryYaml, loadRolesYaml, type DirectiveFile } from '../../src/core/loaders';
-import { ValidationError } from '../../src/validation';
 import { makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const MEMORY_YAML = `
@@ -459,12 +458,12 @@ describe('assembleExecutionContext — distinct addressable dna/memory/directive
     expect(context.memory[0]?.frontmatter.id).toBe('task-101-alpha');
   });
 
-  it('propagates a ValidationError when any Memory document has unparseable frontmatter', () => {
-    // Documents the *real* contract the first pass mis-stated as "never throws": the element lookup
-    // walks and YAML-parses Memory documents in path order until it matches, so a malformed sibling
-    // visited *before* the target aborts assembly (`task-100-*` sorts ahead of `task-101-alpha`).
+  it('a Memory document with unparseable frontmatter no longer aborts assembly (task-171, bug-031)', () => {
+    // Until task-171 the element lookup threw on a malformed sibling visited *before* the target
+    // (`task-100-*` sorts ahead of `task-101-alpha`). The scan is now tolerant: the sibling is skipped,
+    // and the element still resolves.
     writeFixtureFile(repo, 'docs/04_memory/v0.1/task-100-broken.md', '---\nid: "task-100-broken\n---\n\nbody\n');
-    expect(() => assemble('developer', 'task-101-alpha')).toThrow(ValidationError);
+    expect(assemble('developer', 'task-101-alpha').memory.map((d) => d.frontmatter.id)).toEqual(['task-101-alpha']);
   });
 });
 

@@ -74,6 +74,7 @@ function seedRepo(): string {
     [
       '---',
       'id: task-001-doc',
+      'type: task',
       'title: "API design"',
       'tags: [ architecture ]',
       'status: draft',
@@ -89,6 +90,7 @@ function seedRepo(): string {
     [
       '---',
       'id: task-002-doc',
+      'type: task',
       'title: "Unrelated task"',
       'tags: [ infra ]',
       'status: draft',
@@ -101,7 +103,7 @@ function seedRepo(): string {
   writeFixtureFile(
     repo,
     'docs/04_memory/design/adrs/adr-001-doc.md',
-    ['---', 'id: adr-001-doc', 'title: "Storage layout"', 'tags: [ storage ]', 'status: draft', '---', '', 'Nothing relevant here.', ''].join(
+    ['---', 'id: adr-001-doc', 'type: adr', 'title: "Storage layout"', 'tags: [ storage ]', 'status: draft', '---', '', 'Nothing relevant here.', ''].join(
       '\n',
     ),
   );
@@ -217,7 +219,7 @@ describe('searchMemoryDocuments — deterministic keyword/frontmatter relevance 
     writeFixtureFile(
       repo,
       'docs/04_memory/v0.1/uniquetoken-doc.md',
-      ['---', 'id: uniquetoken-doc', 'title: "Untitled"', 'tags: [ infra ]', 'status: draft', '---', '', 'body', ''].join('\n'),
+      ['---', 'id: uniquetoken-doc', 'type: task', 'title: "Untitled"', 'tags: [ infra ]', 'status: draft', '---', '', 'body', ''].join('\n'),
     );
     const byId = searchMemoryDocuments(repo, MEMORY_YAML, 'uniquetoken');
     expect(byId.map((m) => m.path)).toEqual(['docs/04_memory/v0.1/uniquetoken-doc.md']);
@@ -227,12 +229,13 @@ describe('searchMemoryDocuments — deterministic keyword/frontmatter relevance 
     expect(searchMemoryDocuments(repo, MEMORY_YAML, 'uniquetoken', { tag: 'infra' })).toHaveLength(1);
   });
 
-  it('breaks a same-tier tie by path when a document has no `id` frontmatter field', () => {
+  // task-171 (bug-164): a document with no `id` is not an element, so it is no longer a match at all.
+  // This case used to pin the path tie-break such a document needed.
+  it('(amended by task-171, bug-164) leaves out documents with no `id` frontmatter field', () => {
     repo = makeTempGitRepo();
-    writeFixtureFile(repo, 'docs/04_memory/v0.1/no-id-b.md', '---\ntitle: "shared"\n---\nshared\n');
-    writeFixtureFile(repo, 'docs/04_memory/v0.1/no-id-a.md', '---\ntitle: "shared"\n---\nshared\n');
-    const matches = searchMemoryDocuments(repo, MEMORY_YAML, 'shared');
-    expect(matches.map((m) => m.path)).toEqual(['docs/04_memory/v0.1/no-id-a.md', 'docs/04_memory/v0.1/no-id-b.md']);
+    writeFixtureFile(repo, 'docs/04_memory/v0.1/no-id-b.md', '---\ntype: task\ntitle: "shared"\n---\nshared\n');
+    writeFixtureFile(repo, 'docs/04_memory/v0.1/no-id-a.md', '---\ntype: task\ntitle: "shared"\n---\nshared\n');
+    expect(searchMemoryDocuments(repo, MEMORY_YAML, 'shared')).toEqual([]);
   });
 
   // task-021-implement-memory-search (P1.5): `type` is a spec-010-memory-frontmatter-schema base
@@ -249,10 +252,12 @@ describe('searchMemoryDocuments — deterministic keyword/frontmatter relevance 
     expect(matches.map((m) => m.type)).toEqual(['task']);
   });
 
-  it('leaves `type` undefined (not a crash) for a document with no `type` frontmatter field', () => {
-    repo = seedRepo(); // seedRepo's fixtures declare no `type:` field
-    const matches = searchMemoryDocuments(repo, MEMORY_YAML, 'API');
-    expect(matches[0]?.type).toBeUndefined();
+  // task-171 (bug-164): a document with no `type` is not an element; it used to come back with
+  // `type` undefined, which no consumer could place.
+  it('(amended by task-171, bug-164) leaves out a document with no `type` frontmatter field', () => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, 'docs/04_memory/v0.1/untyped.md', ['---', 'id: untyped', 'title: "API design"', '---', '', 'body', ''].join('\n'));
+    expect(searchMemoryDocuments(repo, MEMORY_YAML, 'API')).toEqual([]);
   });
 });
 
@@ -316,9 +321,14 @@ describe('REQ-STATE-06 — archived documents excluded from default search (task
     expect(doc?.frontmatter.status).toBe('deprecated');
   });
 
-  it('AC2 (characterization) — `listMemoryDocumentsByType` browsing still includes a deprecated document', () => {
+  // Amended deliberately by task-171 (`dl-038` option 1). task-038 pinned this primitive as NOT the
+  // policy layer, so a browse included a deprecated document. The primitive now fails closed: a
+  // consumer that forgets to filter no longer reaches archived content, and one that must see it says
+  // so with `includeArchived: true`.
+  it('AC2 (amended by task-171, dl-038) — `listMemoryDocumentsByType` excludes a deprecated document unless `includeArchived: true`', () => {
     repo = seedRepoWithDeprecated();
-    const tasks = listMemoryDocumentsByType(repo, MEMORY_YAML, 'task');
+    expect(listMemoryDocumentsByType(repo, MEMORY_YAML, 'task').map((t) => t.id)).not.toContain('task-003-deprecated-doc');
+    const tasks = listMemoryDocumentsByType(repo, MEMORY_YAML, 'task', { includeArchived: true });
     expect(tasks.map((t) => t.id)).toContain('task-003-deprecated-doc');
   });
 
@@ -426,7 +436,7 @@ describe('P1.12 acceptance criteria — keyword match/rank + empty-query validat
     writeFixtureFile(
       r,
       'docs/04_memory/v0.1/doc-a-body-only.md',
-      ['---', 'id: doc-a-body-only', 'title: "Untitled"', 'status: draft', '---', '', 'This document discusses a caching strategy in depth.', ''].join(
+      ['---', 'id: doc-a-body-only', 'type: task', 'title: "Untitled"', 'status: draft', '---', '', 'This document discusses a caching strategy in depth.', ''].join(
         '\n',
       ),
     );
@@ -434,7 +444,7 @@ describe('P1.12 acceptance criteria — keyword match/rank + empty-query validat
     writeFixtureFile(
       r,
       'docs/04_memory/v0.1/doc-b-tag-match.md',
-      ['---', 'id: doc-b-tag-match', 'title: "Untitled"', 'tags: [ caching ]', 'status: draft', '---', '', 'No mention of the keyword here.', ''].join(
+      ['---', 'id: doc-b-tag-match', 'type: task', 'title: "Untitled"', 'tags: [ caching ]', 'status: draft', '---', '', 'No mention of the keyword here.', ''].join(
         '\n',
       ),
     );
