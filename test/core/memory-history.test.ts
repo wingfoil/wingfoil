@@ -326,13 +326,14 @@ describe('CORE_MODULES memory.memoryHistory — the `wingfoil` field (task-192, 
 
   afterEach(() => removeTempDir(repo));
 
-  it('carries `wingfoil` on the entries whose commit has the trailer, and no such key on the one without', async () => {
+  // Approver ruling D5, 2026-10-05: always present, `null` without the trailer, like `approver`/`reason`.
+  it('carries `wingfoil` on every entry: the trailer value, or `null` when the commit has none', async () => {
     const result = await memoryHistoryFn()({ root: repo, positional: 'decision-12' });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    const entries = result.value.entries as readonly (HistoryEntry & { wingfoil?: string })[];
-    expect('wingfoil' in (entries[0] as object)).toBe(false);
+    const entries = result.value.entries as readonly (HistoryEntry & { wingfoil: string | null })[];
+    expect(entries[0]?.wingfoil).toBeNull();
     expect(entries[1]?.wingfoil).toBe(STAMP);
     expect(entries[2]?.wingfoil).toBe(STAMP);
   });
@@ -357,6 +358,6 @@ describe('CORE_MODULES memory.memoryHistory — the `wingfoil` field (task-192, 
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect('wingfoil' in (result.value.entries[3] as object)).toBe(false);
+    expect((result.value.entries[3] as HistoryEntry & { wingfoil: string | null }).wingfoil).toBeNull();
   });
 });
