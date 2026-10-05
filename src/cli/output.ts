@@ -14,10 +14,10 @@ export function isValidFormat(value: string): value is OutputFormat {
 
 /**
  * Render a successful `CoreResult.value` to stdout text, per the envelope rules in spec-005 §2:
- * `json`/`yaml` carry only the structured payload (no banners/colour); `console` payload *shape*
- * is otherwise owned by each command's own spec (none exists yet for today's read-only pillar
- * queries — see task-006 Execution Notes — so `console` falls back to pretty-printed JSON, the
- * same structure as `json`/`yaml`, until a command-specific spec defines a human-facing rendering).
+ * `json`/`yaml` carry only the structured payload (no banners/colour). `console` has no human
+ * rendering yet: it prints `json`'s payload indented by two spaces, with no colour, as spec-008 §2
+ * declares, until P5.1.4 gives it one (`dl-043`, v0.4; task-156, `bug-152`). That change is meant to
+ * be visible: `test/cli/console-format-fallback.integration.test.ts` pins today's bytes.
  */
 export function renderSuccess(value: unknown, format: OutputFormat): string {
   if (format === 'json') return JSON.stringify(value) + '\n';
