@@ -160,11 +160,13 @@ repository: `node dist/cli.js memory search --type task --format json | node -e 
 bytes, exit 0. On `c80167d6` the same query was cut at 65 536 (`bug-222` step 4).
 
 **Pending amendments (approver).** `spec-005-cli-command-contract` (approved) — edited in the worktree,
-NOT committed: §1 gains the rule that the exit never loses output, the listing shows the drain-then-exit
-mechanism and the `boolean` return, and a dated Revision note (2026-10-05). Proposed `--reason`:
-"task-249 (bug-222): §1's single exit function now lets queued stdout/stderr drain before the process
-ends, so piped output over 64 KiB arrives whole with the command's exit code; the listing shows the
-mechanism and its boolean return. No exit code, format or other rule changed."
+NOT committed: §1 gains the rule that the exit never loses output (no drain timeout), the listing shows
+the drain-then-exit mechanism and the `boolean` return, and a dated Revision note (2026-10-05). Proposed
+`--reason` (final, after review F3): "task-249 (bug-222): §1's single exit function now lets queued
+stdout/stderr be written to the pipe before the process ends, so piped output over 64 KiB arrives whole
+with the command's exit code; there is no drain timeout, so a reader that stays open without reading
+keeps the CLI waiting, a change from 0.2.x. The listing shows the mechanism and its boolean return. No
+exit code, format or other rule changed."
 
 ### review (reviewer)
 
@@ -172,6 +174,31 @@ Against the code-review directive: AC 1 and AC 2 — `piped-output-drain.integra
 the fix, 9/9 slow-reader cases red before it; AC 3 — the CLI's `process.exit` calls are still in `exitWith`, which makes exactly
 one per invocation on either branch (`grep -rn "process.exit(" src/` → the two branches of
 `src/cli/exit.ts`, plus the pre-existing last-resort handler in `src/cli.ts`), exit-code suites unchanged, spec-005 amendment pending; AC 4 — the five examples and the
-§10 query above. Same-class check in touched files: `src/cli.ts`'s last-resort `process.exit(1)` writes
-only a one-line message, so it cannot exceed a pipe buffer; left as is (out of scope, noted for the
-coordinator). Submitted for the approver's review; `bug-222` synced to `in-review`.
+§10 query above. Same-class check in touched files: `src/cli.ts`'s last-resort `process.exit(1)` was first left as is
+(it writes one line); the independent review overruled that (F1, below). Submitted for the approver's review; `bug-222` synced to `in-review`.
+
+### review fixes (independent review: approve with fixes, 2026-10-05)
+
+- **F1 — the last-resort handler bypassed `exitWith`.** `src/cli.ts` called `process.exit(1)` itself,
+  against the amended §1 (one exit function; the exit never loses output). Red-first, at unit level:
+  `test/cli/entrypoint.test.ts` "waits for queued stdout before exiting 1, through exitWith" simulates a
+  queued stdout (own `writableLength`) and an escaped error. On `73aa51c8` it failed (`process.exit`
+  called at once); `db18d175` is the red commit. A spawned red is not reachable: no command lets an error
+  escape after a large write. Fix `6de9c423`: the handler ends with `` exitWith(1, `error: ${message}`) ``.
+  The two existing bug-002 cases pass unchanged (same `error:` line, exit 1).
+  `grep -rn "process.exit(" src/` → only the two branches of `src/cli/exit.ts` (plus comments).
+- **F2 — any error named `DeferredExit` was swallowed.** `src/cli.ts` and the harness now let it through
+  only when `process.exitCode !== undefined` (`exitWith` sets it before the exit callback throws).
+  Red-first: "an error merely NAMED DeferredExit, with no exit code chosen, is reported and exits 1"
+  failed on `73aa51c8` (in `db18d175`), passes on `6de9c423`; the genuine case now sets
+  `process.exitCode = 2` and asserts it is kept. `npx jest test/cli/entrypoint.test.ts` → 2 failed /
+  8 passed before the fix, 10/10 after.
+- **F3 — spec wording (pending, uncommitted).** "has reached the reader" → "has been written to the
+  pipe"; a sentence that there is no drain timeout, so a reader that stays open without reading keeps the
+  CLI waiting (normal Unix writer behaviour, a change from 0.2.x); the Revision note says the same and
+  that the last-resort handler now ends through the exit function. Proposed `--reason` updated above.
+
+Gates on `6de9c423` with the spec edit in the working tree: `npm run test:coverage` exit 0, 220 suites /
+3918 tests, 98.89 / 95.56 / 95.36 / 99.58 (`cli.ts` and `exit.ts` 100 %); `npm run -s lint`,
+`npm run -s docs:api`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit`
+all exit 0; `node scripts/check-governance.cjs --base c80167d6` exit 0. Task stays `in-review`.
