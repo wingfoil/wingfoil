@@ -68,3 +68,9 @@ Waves B1–B3 are in the same position and are not listed here.
 
 Captured on 2026-10-05 by `bug-ingest-rel-v0.3-w1b6-review-findings-plan`, from the independent reviews of wave 1
 batch B6 (`dev-loop-rel-v0.3-plan`), reproduced against `main` at `ccccc227`.
+
+- **Added at the W2 B2 triage (2026-10-05).** User-visible changes of W2 B1/B2 the CHANGELOG must list: the
+  `WingFoil-Version` commit trailer and `wingfoil --version` printing `<semver> (<sha>)` (`task-192`); piped output
+  over 64 KiB arriving whole (`task-249`); `wingfoil mcp`'s pre-flight refusal and `tools/list` answering `[]`
+  (`task-174`); the `format:` key and its upgrade error (`task-251`); `npm run typecheck` and the control-character
+  gate (`task-173`); `check:audit` in CI (`task-250`); the config writers' project-root confinement (`task-172`).
