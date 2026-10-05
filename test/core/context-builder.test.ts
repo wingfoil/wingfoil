@@ -473,6 +473,47 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
     });
   });
 
+  describe('spec-012 §4 module matching — approver ruling D3 (2026-10-05)', () => {
+    const NO_MODULE_MATCH = (entries: string): string =>
+      `no module matches the element's modules:/scope: (${entries}); all modules included`;
+
+    it('a scope: that equals a module path selects that module', () => {
+      writeTask(repo, ELEMENT_ID, { extra: ['scope: "src/core"'] });
+      commitAll(repo, 'scope by path');
+      const { context, notes } = build(repo);
+      expect(context.dna.modules.map((m) => m.name)).toEqual(['core']);
+      expect(notes).toEqual([]);
+    });
+
+    it('a path prefix selects every module under it, at segment boundaries only', () => {
+      writeTask(repo, ELEMENT_ID, { extra: ['modules: ["src/", "src/co"]'] });
+      commitAll(repo, 'scope by prefix');
+      expect(build(repo).context.dna.modules.map((m) => m.name)).toEqual(['core', 'memory', 'cli']);
+    });
+
+    it("a prose scope: matches by its leading path token (\"src/cli — …\" → cli)", () => {
+      writeTask(repo, ELEMENT_ID, { extra: ['scope: "src/cli — the command surface"'] });
+      commitAll(repo, 'prose scope with a leading path');
+      expect(build(repo).context.dna.modules.map((m) => m.name)).toEqual(['cli']);
+    });
+
+    it('a name match still works alongside a path match, in dna.yaml order', () => {
+      writeTask(repo, ELEMENT_ID, { extra: ['modules: [cli, "src/memory/"]'] });
+      commitAll(repo, 'name + path');
+      expect(build(repo).context.dna.modules.map((m) => m.name)).toEqual(['memory', 'cli']);
+    });
+
+    it('when nothing matches: every module, and a note in the diagnostics, never in the payload', () => {
+      writeTask(repo, ELEMENT_ID, { extra: ['scope: "the whole agent layer"', 'depends_on: ["task-002-linked"]'] });
+      commitAll(repo, 'prose scope matching nothing');
+      const { context, notes, payload } = build(repo);
+      const note = NO_MODULE_MATCH('"the whole agent layer"');
+      expect(context.dna.modules.map((m) => m.name)).toEqual(['core', 'memory', 'cli']);
+      expect(notes).toEqual([note]);
+      expect(payload).not.toContain('no module matches');
+    });
+  });
+
   describe('P5.3.3 sc. 1–3 — relevance filtering at stateRef, on a 100-document fixture', () => {
     function seedHundred(relevant: number, deprecated = 0): string[] {
       const ids: string[] = [];
