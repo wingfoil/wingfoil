@@ -187,7 +187,8 @@ Each Tool's input schema mirrors its CLI's required flags one-to-one (e.g. `memo
 
 1. Performs the **same validation** as the CLI path (state-machine legality per `memory.yaml`, role
    authority per REQ-SEC-03, mandatory-reason per REQ-SEC-04).
-2. On success, produces **exactly one git commit** in the `wf({type}): {verb} {id}` format, authored
+2. On success, produces **exactly one git commit** (two when `memory.approve` fires the `supersedes:`
+   trigger: the approve, then a `finalize` of the superseded element, `spec-008` §2) in the `wf({type}): {verb} {id}` format, authored
    as the invoking agent's configured git identity (REQ-SEC-01/02) — identical commit shape to the CLI
    path, so `memory history` and audit tooling cannot distinguish CLI-originated from MCP-originated
    transitions except by author.
@@ -211,8 +212,9 @@ Each Tool's input schema mirrors its CLI's required flags one-to-one (e.g. `memo
 
 **The `[{from} → {to}]` bracket belongs to the verbs of the `spec-003` verb table that carry one**
 (`dl-079` (A); the list and each verb's bracket rule are `spec-008-cli-grammar` §2's). Those are the
-approver-gated `approve`, `reject` and `deprecate`, whose subject must say which edge was taken,
-because those verbs sit on a gate and the edge is a decision rather than a derivation. They are also
+state-transition verbs `approve`, `reject` and `deprecate`, whose subject must say which edge was
+taken, because the edge is a decision rather than a derivation (`approve` and `reject` sit on a gate;
+`deprecate` is not an approval gate, `dl-027`). They are also
 the workflow verbs `start`, `finalize` and `sync` (whose bracket may chain states), and `amend`
 (`[s → s]`) and `park`. `add` and `submit` subjects stay **plain**
 (`wf({type}): submit {id}`, exactly the item-2 format above): their target state is derivable from the
@@ -272,7 +274,7 @@ No prior-art source material was identified or used; this is authored fresh from
 `wf({type}): {verb} {id}`, generically; it never said which verbs carry the state bracket, so
 `task-045-memory-submit` had to re-derive that from `src/memory/audit.ts`'s parsing convention and
 CLAUDE.md §5.1. `dl-054` (`ready`, approved `194ff91`) ratified option 2 — the bracket belongs to the
-approver-gated verbs (`approve`, `reject`, `deprecate`), `add` and `submit` stay plain — so the next
+state-transition verbs (`approve`, `reject`, `deprecate`), `add` and `submit` stay plain — so the next
 verb does not have to rediscover it. The decision changes nothing already written or built: item 2's
 format is unchanged, `task-045`'s shipped subject builder already conforms, and no commit message was
 rewritten. Edited in place without a supersede or a state change, per the `spec-001` precedent
@@ -330,3 +332,12 @@ the operation returned warnings. A Resource read is not given a field: no read-o
 warnings. The rule is implemented and tested in the registrar. The shipped `wingfoil mcp` registers no
 Tools before P5.2.3 (v0.4), so it is not reachable from a client yet. No other item changed. Edited in place without a supersede or a state change, per `dl-047`
 (no `version:` field).
+
+**Revision (2026-10-02, `task-162-fire-supersedes-trigger-superseding-element-approval`) — "state-transition
+verbs", and the `supersedes:` trigger's second commit.** `dl-065` (`ready`). Q3: §4.3 called
+`approve`, `reject` and `deprecate` "approver-gated", twice (the bracket sentence and the `dl-054`
+Revision note). `deprecate` is not an approval gate (`dl-027`, REQ-SEC-04), so both now say
+"state-transition verbs". The 2026-09-30 note keeps its quotation of the old text. Q1.1: item 2's
+"exactly one git commit" gains the one exception, an approve that fires the `supersedes:` trigger.
+Edited in place without a supersede or a state change, per `dl-047` (no `version:` field); pending
+the approver's sign-off at `task-162`'s review.

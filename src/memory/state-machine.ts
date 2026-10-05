@@ -75,10 +75,14 @@ import type { MemoryYaml, StateMachine } from './schema';
 export const DEPRECATED_STATE = 'deprecated';
 
 /**
- * The terminal state of the `adr` and `tech-spec` machines (`memory.yaml`): reached along the forward
- * `sequence` by `approve`, never by `memory deprecate`. A superseded decision is archived content — a
- * later element explicitly replaced it — which is why `dl-028-archived-states-excluded-from-context`
- * puts it in {@link ARCHIVED_STATUSES} alongside {@link DEPRECATED_STATE}.
+ * The terminal state of the `adr` and `tech-spec` machines (`memory.yaml`). The state before it is a
+ * `waiting` state, so no verb drives the edge into it — not `approve` and not `memory deprecate`
+ * (`spec-001`: "`submit`/`approve` on a `waiting` state is illegal"). It is reached only through the
+ * `supersedes:` engine trigger: approving an element whose `supersedes:` names another element of its
+ * type moves that element along this edge ({@link supersedesEdgeFrom}, `dl-065` Q1.1, task-162). A
+ * superseded decision is archived content — a later element explicitly replaced it — which is why
+ * `dl-028-archived-states-excluded-from-context` puts it in {@link ARCHIVED_STATUSES} alongside
+ * {@link DEPRECATED_STATE}.
  */
 export const SUPERSEDED_STATE = 'superseded';
 
@@ -377,6 +381,50 @@ export function resolveTypeTransition(
       },
     ]);
   }
+}
+
+/**
+ * True when `state`'s forward edge leads into {@link SUPERSEDED_STATE} and no verb drives it: `state`
+ * is a `waiting` state and the next `sequence` entry is `superseded` (`accepted` for `adr`, `approved`
+ * for `tech-spec`). This is the edge the `supersedes:` trigger fires (`dl-065` Q1.1, `spec-001`), read
+ * from the machine rather than from a type name, so a project type with the same shape gets the same
+ * trigger. Pure (REQ-SYS-07).
+ */
+export function supersedesEdgeFrom(machine: StateMachine, state: string): boolean {
+  const index = machine.sequence.indexOf(state);
+  return index !== -1 && (machine.waiting ?? []).includes(state) && machine.sequence[index + 1] === SUPERSEDED_STATE;
+}
+
+/**
+ * The target of the `supersedes:` trigger on a document of type `typeName` in `currentState` —
+ * always {@link SUPERSEDED_STATE} — or a thrown `E_INVALID_TRANSITION` with `dl-032`'s contract
+ * message, `illegal transition <from> -> superseded for type '<type>'`, when the document is not in
+ * the state whose `waiting` edge leads there ({@link supersedesEdgeFrom}). The trigger is not a verb,
+ * so this is not a {@link TransitionOp}: it has no `contractTarget`, and its `<to>` is the one state
+ * it can ever reach.
+ *
+ * @throws {@link ../validation.ValidationError} `E_INVALID_TRANSITION` as above.
+ * @throws `Error` when `typeName` is not registered (see {@link resolveStateMachine}).
+ */
+export function resolveSupersedeTarget(
+  memoryYaml: MemoryYaml,
+  typeName: string,
+  currentState: string,
+  filePath: string,
+): string {
+  const machine = resolveStateMachine(memoryYaml, typeName);
+  if (supersedesEdgeFrom(machine, currentState)) return SUPERSEDED_STATE;
+  throw new ValidationError([
+    {
+      code: E_INVALID_TRANSITION,
+      path: 'status',
+      file: filePath,
+      message: `illegal transition ${currentState} -> ${SUPERSEDED_STATE} for type '${typeName}'`,
+      detail:
+        `only an element in the \`waiting\` state whose forward edge leads to '${SUPERSEDED_STATE}' can be superseded ` +
+        `(spec-001); '${currentState}' is not that state`,
+    },
+  ]);
 }
 
 /**

@@ -284,9 +284,11 @@ export interface MemoryCommitMessageInput {
   readonly type: string;
   /**
    * The verb, which is also the subject's operation word. `add` is included for completeness;
-   * `amend` (task-127, `dl-108`) moves no state, so its `transition` is the self-loop `[s → s]`.
+   * `amend` (task-127, `dl-108`) moves no state, so its `transition` is the self-loop `[s → s]`;
+   * `finalize` is what the `supersedes:` trigger emits for the element it moves into `superseded`
+   * (task-162, `spec-008` §2).
    */
-  readonly op: TransitionOp | 'add' | 'amend';
+  readonly op: TransitionOp | 'add' | 'amend' | 'finalize';
   /** The element ids moved by this commit, in the order they are listed in the subject. */
   readonly ids: readonly string[];
   /** When given, appended to the subject as ` [from → to]`. Omitted for `add`/`submit` (spec-004 §4.3). */

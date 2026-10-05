@@ -475,6 +475,41 @@ commit or stash them first.
   (`error: user not authorized to approve type 'task'`); the state is not a gate → exit `1`
   (`error: illegal transition draft -> approved for type 'task'`).
 
+Unreleased (v0.3): **`supersedes:`**. When an `adr` is approved into `accepted`, or a `tech-spec`
+into `approved`, and its `supersedes:` field names another element of the same type, that element
+moves to `superseded`. The move is a second commit, made right after the approve. It changes only
+that element's `status`:
+
+```
+wf(adr): finalize adr-1-old [accepted → superseded]
+
+Reason: superseded by adr-2-new (its supersedes: field), approved in <sha of the approve commit>.
+```
+
+The result then has a `superseded` entry (`id`, `path`, `from`, `to`). The approve is refused with
+exit `1`, and neither commit is written, when the named element does not exist, is of another type,
+is not `accepted` (`approved` for a `tech-spec`), or has uncommitted edits:
+`error: cannot approve adr-2-new: its supersedes: field names adr-9, which cannot be superseded: document not found: adr-9`.
+Leave `supersedes:` empty when nothing is replaced. A `superseded` element can still be deprecated.
+
+The approve reads `supersedes:` as committed, so it cannot be corrected in place. If it names an
+element that can no longer be superseded, for example one already `deprecated`, the approve is
+refused every time. Reject the element back to `draft`, fix or empty `supersedes:`, then submit and
+approve it again.
+
+One exit-`1` case does leave a commit behind: the approve commit lands, and then git fails on the
+second commit (a commit hook refuses it, the disk is full). The error says so and names the approve
+commit. The superseded element's new `status` is left in the working tree. The error ends with the
+command that completes the pair, ready to paste:
+
+```
+git commit --only -F - -- docs/adrs/adr-1-old.md <<'EOF'
+wf(adr): finalize adr-1-old [accepted → superseded]
+
+Reason: superseded by adr-2-new (its supersedes: field), approved in <sha of the approve commit>.
+EOF
+```
+
 ### `wingfoil memory reject`
 
 Send a gated document back to its gate's reject target (default machine: `pending → draft`).

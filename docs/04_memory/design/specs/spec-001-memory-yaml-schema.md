@@ -109,6 +109,14 @@ This is why the ambiguity of the old format cannot arise: `approve`'s target is 
 `sequence`/`gates`/`waiting`; the literal string `"deprecated"` is reserved and may not appear as a
 state name or a `reject` target.
 
+**The `supersedes:` trigger** (`dl-065` Q1.1). A `waiting` state whose next `sequence` entry is
+`superseded` (`adr`'s `accepted`, `tech-spec`'s `approved`) is left by one engine trigger. When an
+element is approved into that state and its committed `supersedes:` field names another element, the
+named element moves along that edge, `<state> → superseded`. The named element must exist at the same
+commit, be of the same type and be in that state. Otherwise the approve is refused before anything is
+written. The move is a commit of its own, whose subject is `spec-008` §2's (`finalize`); the field is
+`spec-010`'s. `superseded → deprecated` stays legal through the wildcard edge above.
+
 **Semantic validation (post-parse):** every key in `gates` and every entry in `waiting` MUST be a
 member of `sequence`. A `gates.<state>.reject` target need **not** be a member of `sequence`: it may
 revert into the chain (e.g. `pending: { reject: draft }`) or name an off-chain decline state reached by
@@ -477,3 +485,10 @@ At the approver's ruling of 2026-10-02 this repository's `memory.yaml` 2.2 decla
 evidence corrected, and dated revision notes" as amendments and only a change to the decision itself
 as a new element; the worked example and the `amendable` paragraph now say so. Edited in place, with
 no `version:` bump (`dl-047`); pending the approver's sign-off at `task-158`'s review.
+
+**Revision (2026-10-02, `task-162-fire-supersedes-trigger-superseding-element-approval`) — the
+`supersedes:` trigger.** The `waiting` row and the worked `adr`/`tech-spec` examples named an engine
+trigger that nothing implemented (`dl-065`, `ready`; Q1.1 chose to build it, fired on the superseding
+element's `approve`). The paragraph after "`deprecated` is implicit" states the rule. No schema field
+changes. Edited in place, with no `version:` bump (`dl-047`); pending the approver's sign-off at
+`task-162`'s review.
