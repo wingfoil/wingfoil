@@ -8,8 +8,8 @@
  *
  * This module implements ONLY spec-012 §6 (`relevance-filter`), one of the four cooperating units
  * spec-012 defines (`dna-loader`, `directive-loader`, `relevance-filter`, `context-builder`) — the
- * other three, and the canonical serialized envelope (§7), belong to
- * task-037-role-task-scoped-context (REQ-STATE-05, the `context-builder`/envelope task). For the
+ * other three, and the canonical serialized envelope (§7), live in `./context.ts`
+ * (`assembleExecutionContext`, task-176), which calls this unit at its `stateRef`. For the
  * document scan itself it wraps, not reimplements, `src/memory/query.ts`'s scan primitives
  * (task-008) — no second directory walk or frontmatter parser — and is placed in `src/core` per
  * spec-012 §1 ("folded into the `core` module"). It is re-exported from `src/core`'s barrel, so
@@ -26,14 +26,15 @@
  * `spec-001-memory-yaml-schema` removed from every type's machine.
  *
  * Determinism (REQ-SYS-07): no wall-clock, no randomness, no unordered map/set iteration in any
- * output-affecting path. This function READS the live working tree under `root` — it is not pinned to
- * a git revision, and `root`'s content is therefore part of its input, not a constant. What is
- * guaranteed is *referential transparency over that observed state*: for one unchanged working tree,
- * the selection and its order are a pure function of `(the Memory documents under root, memoryYaml,
- * element, limits)`, so repeated calls return the identical array. See
- * {@link filterRelevantMemoryDocuments}'s own doc comment for the exact ordering/bounding contract.
+ * output-affecting path. The ranking itself, {@link selectRelevantMemoryDocuments}, is a pure function
+ * of `(documents, element, limits)` and reads nothing. Where the documents come from is the caller's
+ * choice: the execution-context builder (`./context.ts`, task-176) feeds it the snapshot
+ * `loadMemoryDocumentsAtRev` reads at `spec-012` §2's `stateRef`, so a context is pinned to one commit;
+ * {@link filterRelevantMemoryDocuments} feeds it the live working tree under `root`, whose content is
+ * then part of its input. See {@link selectRelevantMemoryDocuments} for the exact ordering/bounding
+ * contract.
  */
-import { listMemoryDocumentPaths, loadMemoryDocumentSummary } from '../memory/query';
+import { listMemoryDocumentPaths, loadMemoryDocumentSummary, type MemoryDocumentSummary } from '../memory/query';
 import type { MemoryYaml } from '../memory/schema';
 import { isArchivedStatus } from '../memory/state-machine';
 
@@ -230,35 +231,52 @@ function isSameReleaseScope(elementRelease: string | undefined, documentPath: st
 }
 
 /**
- * Rank and bound the Memory documents relevant to `element` (spec-012 §6, REQ-PERF-05). Deterministic
- * end to end (REQ-SYS-07):
- *
- * 1. **Scan** every document `memoryYaml` declares under `root` ({@link listMemoryDocumentPaths}'s
- *    already-sorted order, task-008) — no second directory walk.
- * 2. **Exclude** the element's own document (never relevant to itself) and any document
- *    {@link isExcludedFromContext} bars — `draft` plus the shared archived set `{deprecated,
- *    superseded}` (`dl-028`; the archived half is the same predicate REQ-STATE-06 applies to default
- *    `memory search`, the `draft` half is context-only).
- * 3. **Score** each remaining document: `1000*T1 + 100*T2 + 10*T3 + overlapCount(T4)` — T1 explicit
- *    link, T2 same release scope, T3 shared traceability key, T4 keyword/tag overlap count
- *    (spec-012 §6's exact formula). A document scoring `0` (no tier hit at all) is **not relevant**
- *    and is dropped — this is the relevance threshold P5.3.3-relevance-filtering.feature's "Edge - no
- *    documents pass the relevance threshold" scenario exercises.
- * 4. **Order**: score DESC, then `type` ASC, then `id` ASC (falling back to `path` when a document has
- *    no `id`) — a total, deterministic tie-break (spec-012 §6/REQ-SYS-07).
- * 5. **Bound**: walk in that order, including documents until either `limits.maxDocs` or
- *    `limits.maxBytes` (summed UTF-8 body bytes) would be exceeded, then **stop** — never skip a
- *    lower-ranked document to fit under a cap while a higher-ranked one was excluded, and never
- *    partially include a document (spec-012 §6's "deterministic truncation").
- *
- * Returns {@link NO_RELEVANT_MEMORY_NOTE} in `note` only when **step 3 left nothing** — i.e. no
- * document passed the relevance threshold at all (P5.3.3's edge-case scenario, verbatim wording).
- * When documents scored as relevant but step 5's caps admitted none of them, `documents` is empty and
- * `note` is omitted: relevant Memory *was* found, so the note would assert something false.
+ * Rank and bound the Memory documents relevant to `element` (spec-012 §6, REQ-PERF-05), scanning the
+ * **working tree** under `root`: every document `memoryYaml` declares, in
+ * {@link listMemoryDocumentPaths}'s already-sorted order (task-008), handed to
+ * {@link selectRelevantMemoryDocuments}. An execution context does not use this reader: it ranks the
+ * snapshot read at its `stateRef` (`./context.ts`).
  */
 export function filterRelevantMemoryDocuments(
   root: string,
   memoryYaml: MemoryYaml,
+  element: RelevanceElementRef,
+  limits: ContextLimits = DEFAULT_CONTEXT_LIMITS,
+): RelevantMemoryResult {
+  const documents = listMemoryDocumentPaths(root, memoryYaml).map((path) => loadMemoryDocumentSummary(root, path));
+  return selectRelevantMemoryDocuments(documents, element, limits);
+}
+
+/**
+ * Rank and bound `documents` by their relevance to `element` (spec-012 §6, REQ-PERF-05). A pure
+ * function of its arguments: it reads nothing, so the caller decides which state is ranked — the
+ * working tree ({@link filterRelevantMemoryDocuments}) or one commit (`./context.ts`, `stateRef`).
+ * Deterministic end to end (REQ-SYS-07):
+ *
+ * 1. **Exclude** the element's own document (never relevant to itself) and any document
+ *    {@link isExcludedFromContext} bars — `draft` plus the shared archived set `{deprecated,
+ *    superseded}` (`dl-028`; the archived half is the same predicate REQ-STATE-06 applies to default
+ *    `memory search`, the `draft` half is context-only).
+ * 2. **Score** each remaining document: `1000*T1 + 100*T2 + 10*T3 + overlapCount(T4)` — T1 explicit
+ *    link, T2 same release scope, T3 shared traceability key, T4 keyword/tag overlap count
+ *    (spec-012 §6's exact formula). A document scoring `0` (no tier hit at all) is **not relevant**
+ *    and is dropped — this is the relevance threshold P5.3.3-relevance-filtering.feature's "Edge - no
+ *    documents pass the relevance threshold" scenario exercises.
+ * 3. **Order**: score DESC, then `type` ASC, then `id` ASC (falling back to `path` when a document has
+ *    no `id`) — a total, deterministic tie-break (spec-012 §6/REQ-SYS-07). The input order therefore
+ *    never reaches the output.
+ * 4. **Bound**: walk in that order, including documents until either `limits.maxDocs` or
+ *    `limits.maxBytes` (summed UTF-8 body bytes) would be exceeded, then **stop** — never skip a
+ *    lower-ranked document to fit under a cap while a higher-ranked one was excluded, and never
+ *    partially include a document (spec-012 §6's "deterministic truncation").
+ *
+ * Returns {@link NO_RELEVANT_MEMORY_NOTE} in `note` only when **step 2 left nothing** — i.e. no
+ * document passed the relevance threshold at all (P5.3.3's edge-case scenario, verbatim wording).
+ * When documents scored as relevant but step 4's caps admitted none of them, `documents` is empty and
+ * `note` is omitted: relevant Memory *was* found, so the note would assert something false.
+ */
+export function selectRelevantMemoryDocuments(
+  documents: readonly MemoryDocumentSummary[],
   element: RelevanceElementRef,
   limits: ContextLimits = DEFAULT_CONTEXT_LIMITS,
 ): RelevantMemoryResult {
@@ -268,8 +286,7 @@ export function filterRelevantMemoryDocuments(
   const elementKeywords = collectKeywords(element.frontmatter);
 
   const scored: RelevantMemoryDocument[] = [];
-  for (const path of listMemoryDocumentPaths(root, memoryYaml)) {
-    const { frontmatter, body } = loadMemoryDocumentSummary(root, path);
+  for (const { path, frontmatter, body } of documents) {
     const type = asString(frontmatter.type);
     const id = asString(frontmatter.id);
     const status = asString(frontmatter.status);
@@ -302,17 +319,17 @@ export function filterRelevantMemoryDocuments(
     return idA < idB ? -1 : idA > idB ? 1 : 0;
   });
 
-  const documents: RelevantMemoryDocument[] = [];
+  const included: RelevantMemoryDocument[] = [];
   let totalBytes = 0;
   for (const doc of scored) {
-    if (documents.length >= limits.maxDocs) break;
+    if (included.length >= limits.maxDocs) break;
     const docBytes = Buffer.byteLength(doc.body, 'utf-8');
     if (totalBytes + docBytes > limits.maxBytes) break;
-    documents.push(doc);
+    included.push(doc);
     totalBytes += docBytes;
   }
 
-  // The note is keyed to `scored`, NOT to `documents`: an empty `documents` with a non-empty `scored`
+  // The note is keyed to `scored`, NOT to `included`: an empty `included` with a non-empty `scored`
   // means relevant Memory existed and was bounded out, which the note must not claim away.
-  return scored.length === 0 ? { documents, note: NO_RELEVANT_MEMORY_NOTE } : { documents };
+  return scored.length === 0 ? { documents: included, note: NO_RELEVANT_MEMORY_NOTE } : { documents: included };
 }

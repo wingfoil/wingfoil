@@ -23,9 +23,9 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 
 import { assembleExecutionContext, resolveRoleDirectives, selectDirectivesById } from '../../src/core/context';
-import { loadDirectives, loadDnaYaml, loadMemoryYaml, loadRolesYaml, type DirectiveFile } from '../../src/core/loaders';
+import { loadDirectives, loadRolesYaml, type DirectiveFile } from '../../src/core/loaders';
 import { ValidationError } from '../../src/validation';
-import { makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const MEMORY_YAML = `
 version: 1.1
@@ -128,18 +128,18 @@ function writeTask(root: string, id: string, title: string, status = 'in-progres
   );
 }
 
-/** Load all four pillars from `repo` and assemble a context for one element — the wiring every
- * `assembleExecutionContext` test needs, so each describe supplies only what it varies. */
+/** Commit whatever the test wrote, then build the context at `HEAD` — task-176 made the entry read
+ * every pillar at a `stateRef`, never the working tree. */
+function assembleResultFrom(repo: string, role: string, type: string, elementId: string) {
+  if (git(repo, ['status', '--porcelain']).length > 0) commitAll(repo, 'fixture');
+  return assembleExecutionContext(repo, { role, element: { type, id: elementId }, stateRef: 'HEAD' });
+}
+
+/** {@link assembleResultFrom}, unwrapped to the context; throws if the build was refused. */
 function assembleFrom(repo: string, role: string, type: string, elementId: string) {
-  return assembleExecutionContext({
-    root: repo,
-    dna: loadDnaYaml(repo),
-    memoryYaml: loadMemoryYaml(repo),
-    directiveFiles: loadDirectives(repo),
-    rolesYaml: loadRolesYaml(repo),
-    role,
-    element: { type, id: elementId },
-  });
+  const result = assembleResultFrom(repo, role, type, elementId);
+  if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
+  return result.value.context;
 }
 
 function writeAdr(root: string, id: string, title: string, status: string): void {
@@ -389,8 +389,9 @@ describe('assembleExecutionContext — distinct addressable dna/memory/directive
   beforeEach(() => {
     repo = makeTempGitRepo();
     writeFixtureConfig(repo);
-    writeTask(repo, 'task-101-alpha', 'Alpha task');
-    writeTask(repo, 'task-102-beta', 'Beta task');
+    // Titles share no word: spec-012 §6 T4 would otherwise make the two tasks relevant to each other.
+    writeTask(repo, 'task-101-alpha', 'Alpha');
+    writeTask(repo, 'task-102-beta', 'Beta');
   });
 
   afterEach(() => {
@@ -401,8 +402,9 @@ describe('assembleExecutionContext — distinct addressable dna/memory/directive
     return assembleFrom(repo, role, 'task', elementId);
   }
 
-  it('exposes distinct, individually addressable `dna`, `memory`, and `directives` sections', () => {
+  it('exposes distinct, individually addressable `element`, `dna`, `memory`, and `directives` sections', () => {
     const context = assemble('developer', 'task-101-alpha');
+    expect(context.element).toBeDefined();
     expect(context.dna).toBeDefined();
     expect(context.memory).toBeDefined();
     expect(context.directives).toBeDefined();
@@ -422,21 +424,22 @@ describe('assembleExecutionContext — distinct addressable dna/memory/directive
     expect(reviewerIds).not.toContain('testing');
   });
 
-  it('memory: scoped to the active task — the named element is present', () => {
+  it('the active task is the `element` section, never one of its own Memory entries', () => {
     const context = assemble('developer', 'task-101-alpha');
-    expect(context.memory).toHaveLength(1);
-    expect(context.memory[0]?.frontmatter.id).toBe('task-101-alpha');
+    expect(context.element.id).toBe('task-101-alpha');
+    expect(context.memory.map((doc) => doc.id)).not.toContain('task-101-alpha');
   });
 
   it('memory: an unrelated task is NOT present in the assembled context', () => {
     const context = assemble('developer', 'task-101-alpha');
-    const ids = context.memory.map((doc) => doc.frontmatter.id);
+    const ids = context.memory.map((doc) => doc.id);
     expect(ids).not.toContain('task-102-beta');
   });
 
-  it('memory: an unresolvable element yields an empty (not thrown) memory section', () => {
-    const context = assemble('developer', 'task-999-missing');
-    expect(context.memory).toEqual([]);
+  it('an element the commit does not hold is refused as NOT_FOUND, not assembled empty', () => {
+    const result = assembleResultFrom(repo, 'developer', 'task', 'task-999-missing');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('NOT_FOUND');
   });
 
   it('is deterministic for unchanged inputs: assembling twice yields deep-equal output', () => {
@@ -456,13 +459,12 @@ describe('assembleExecutionContext — distinct addressable dna/memory/directive
     expect(() => assemble('constructor', 'task-101-alpha')).not.toThrow();
     const context = assemble('constructor', 'task-101-alpha');
     expect(context.directives.map((d) => d.frontmatter.id)).toEqual(['doc-versioning']);
-    expect(context.memory[0]?.frontmatter.id).toBe('task-101-alpha');
+    expect(context.element.id).toBe('task-101-alpha');
   });
 
-  it('propagates a ValidationError when any Memory document has unparseable frontmatter', () => {
-    // Documents the *real* contract the first pass mis-stated as "never throws": the element lookup
-    // walks and YAML-parses Memory documents in path order until it matches, so a malformed sibling
-    // visited *before* the target aborts assembly (`task-100-*` sorts ahead of `task-101-alpha`).
+  it('propagates a ValidationError when any Memory document at stateRef has unparseable frontmatter', () => {
+    // The snapshot read at `stateRef` parses every Memory document (relevance needs all of them), so a
+    // malformed sibling aborts assembly wherever it sorts.
     writeFixtureFile(repo, 'docs/04_memory/v0.1/task-100-broken.md', '---\nid: "task-100-broken\n---\n\nbody\n');
     expect(() => assemble('developer', 'task-101-alpha')).toThrow(ValidationError);
   });
@@ -475,11 +477,11 @@ describe('assembleExecutionContext — distinct addressable dna/memory/directive
  * present on disk and in git history." BDD `p1-memory/P1.9-memory-deprecate.feature`, Scenario
  * "Deprecated documents are excluded from default agent context".
  *
- * The exclusion here is the **archived set only**. `src/core/relevance.ts` additionally excludes
- * `draft` because spec-012 §6 filters *candidate* documents for relevance; this function resolves the
- * **subject** element the context is assembled for (spec-012 §3's `resolve-element` stage), so
- * excluding `draft` here would blank the context for the very element being worked on. dl-028 did not
- * widen the archived set to include `draft`, and these tests pin that boundary from both sides.
+ * Since task-176 the subject element is its own section (`## 1. Task`), so an archived subject is
+ * **refused** rather than assembled with an empty `memory`; archived candidates are dropped by the
+ * relevance filter. `draft` is a different case: `src/core/relevance.ts` excludes a draft *candidate*
+ * (spec-012 §6), but a draft *subject* still assembles — blanking the context for the element being
+ * worked on would defeat it, and dl-028 did not put `draft` in the archived set.
  */
 describe('assembleExecutionContext — archived elements never reach the context (REQ-STATE-06, dl-028)', () => {
   let repo: string;
@@ -498,34 +500,38 @@ describe('assembleExecutionContext — archived elements never reach the context
     removeTempDir(repo);
   });
 
-  function assemble(role: string, type: string, elementId: string) {
-    return assembleFrom(repo, role, type, elementId);
+  function assembleResult(role: string, type: string, elementId: string) {
+    return assembleResultFrom(repo, role, type, elementId);
   }
 
-  it('AC1 — a `deprecated` element yields an empty `memory` section', () => {
-    expect(assemble('developer', 'task', 'task-105-gone').memory).toEqual([]);
+  it('AC1 — a `deprecated` element is refused', () => {
+    expect(assembleResult('developer', 'task', 'task-105-gone')).toEqual({
+      ok: false,
+      error: {
+        code: 'VALIDATION',
+        message: "element 'task:task-105-gone' is deprecated: an archived element never enters an execution context",
+      },
+    });
   });
 
-  it('AC2 — a `superseded` element yields an empty `memory` section too, not only `deprecated`', () => {
-    expect(assemble('developer', 'adr', 'adr-002-old').memory).toEqual([]);
+  it('AC2 — a `superseded` element is refused too, not only `deprecated`', () => {
+    const result = assembleResult('developer', 'adr', 'adr-002-old');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.message).toContain('is superseded');
   });
 
   it('AC2 — a non-archived element of the same type is unaffected', () => {
-    const context = assemble('developer', 'adr', 'adr-001-live');
-    expect(context.memory.map((doc) => doc.frontmatter.id)).toEqual(['adr-001-live']);
+    expect(assembleFrom(repo, 'developer', 'adr', 'adr-001-live').element.id).toBe('adr-001-live');
   });
 
   it('AC3 — a `draft` subject element still assembles: `draft` is not archived (dl-028)', () => {
-    const context = assemble('developer', 'task', 'task-106-early');
-    expect(context.memory.map((doc) => doc.frontmatter.id)).toEqual(['task-106-early']);
+    expect(assembleFrom(repo, 'developer', 'task', 'task-106-early').element.id).toBe('task-106-early');
   });
 
-  it('only `memory` is affected — `dna`, `directives` and `warnings` are identical to a live element', () => {
-    const archived = assemble('developer', 'task', 'task-105-gone');
-    const live = assemble('developer', 'task', 'task-101-alpha');
-    expect(archived.directives).toEqual(live.directives);
-    expect(archived.warnings).toEqual([]);
-    expect(archived.dna).toEqual(live.dna);
+  it('archived and draft candidates never reach `memory`, even when they score as relevant', () => {
+    // "task" is a shared title word (T4): every task here scores, yet only live ones are carried.
+    expect(assembleFrom(repo, 'developer', 'task', 'task-101-alpha').memory.map((doc) => doc.id)).toEqual([]);
+    expect(assembleFrom(repo, 'developer', 'adr', 'adr-001-live').memory.map((doc) => doc.id)).not.toContain('adr-002-old');
   });
 
   it('the archived element remains on disk — excluded from the context, never deleted', () => {
@@ -533,7 +539,7 @@ describe('assembleExecutionContext — archived elements never reach the context
     expect(existsSync(join(repo, 'docs/04_memory/design/adrs/adr-002-old.md'))).toBe(true);
   });
 
-  it('is deterministic: assembling an archived element twice yields deep-equal output (REQ-SYS-07)', () => {
-    expect(assemble('developer', 'task', 'task-105-gone')).toEqual(assemble('developer', 'task', 'task-105-gone'));
+  it('is deterministic: refusing an archived element twice yields deep-equal output (REQ-SYS-07)', () => {
+    expect(assembleResult('developer', 'task', 'task-105-gone')).toEqual(assembleResult('developer', 'task', 'task-105-gone'));
   });
 });

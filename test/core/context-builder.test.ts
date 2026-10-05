@@ -155,7 +155,8 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
 
     it('carries the §7 headings in their fixed order', () => {
       const { payload } = build(repo);
-      const headings = payload.split('\n').filter((line) => /^#{1,2} /.test(line));
+      // Bodies are verbatim and may carry their own `#` headings; the fixed literals are these.
+      const headings = payload.split('\n').filter((line) => /^# WingFoil |^## \d\. /.test(line));
       expect(headings).toEqual([
         '# WingFoil Agent Context',
         '## 1. Task',

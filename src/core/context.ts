@@ -1,35 +1,40 @@
 /**
- * Agent execution context assembly (task-037-role-task-scoped-context, REQ-STATE-05) — the
- * `directive-loader` + a minimal `context-builder` slice of
- * `spec-012-context-loader-relevance-filtering` (§1 "placement & responsibilities", §5 "Directive
- * resolution"). Satisfies REQ-STATE-05's Fit Criterion, verbatim: "The assembled context object
- * exposes separate `dna`, `memory`, `directives` sections; it contains 100% of the role's assigned
- * directives and 0 directives of other roles."
+ * The `spec-012-context-loader-relevance-filtering` context builder: the `directive-loader`
+ * ({@link resolveRoleDirectives}, §5), the `dna-loader` (§4), the call into the `relevance-filter`
+ * (`./relevance.ts`, §6), the validator (P5.4.4 sc. 3) and the canonical serializer (§7), behind one
+ * public entry, {@link assembleExecutionContext} (task-176; task-037 built the directive half,
+ * REQ-STATE-05).
  *
- * **Archived elements are excluded** (REQ-STATE-06, the `{deprecated, superseded}` set ratified by
- * `dl-028-archived-states-excluded-from-context`): {@link assembleExecutionContext} drops a resolved
- * element whose `status` is archived, through the shared `isArchivedStatus` primitive rather than any
- * local notion of "archived". This closed `bug-010-deprecated-reaches-agent-context` — which this
- * header previously recorded as an open gap — together with the `wingfoil://memory/{type}` collection
- * Resource, the other surface that bug covered (`task-069-fix-archived-excluded-from-agent-context`).
+ * Every read is pinned to `spec-012` §2's `stateRef`: the entry resolves it once to a commit sha
+ * (`resolveRevision`) and reads every pillar and every Memory document at that sha through task-137's
+ * `…AtRev` readers. The working tree is never read, so the same `(role, element, stateRef, limits)`
+ * yields the same bytes (§8, REQ-SYS-07).
  *
- * Still deliberately NOT the full spec-012 pipeline: no `ContextRequest`/`stateRef` pinning, no tiered
- * (T1–T4) Memory relevance ranking, no bounding caps, and no canonical byte-for-byte Markdown
- * serialization (§7). Those are split across sibling Wave-1 v0.2 tasks
- * (task-035-bounded-context-relevance REQ-PERF-05, task-038-deprecated-excluded-from-context
- * REQ-STATE-06) and v0.3 (`REQ-SYS-07`, `REQ-PERF-01`, `REQ-STATE-09`, the real `agent execute`
- * CLI/MCP surface) — see this task's Execution Notes for the full scope decision. This module wraps
- * only existing, already-shipped primitives: `loadDirectives`/`loadRolesYaml` (`./loaders`),
- * `findMemoryDocumentByTypeAndId` and `isArchivedStatus` (`../memory`, task-011/task-035) — no
- * scan/parse logic and no second status predicate is reimplemented here.
+ * **Archived elements never reach a context** (REQ-STATE-06, the `{deprecated, superseded}` set
+ * ratified by `dl-028-archived-states-excluded-from-context`): an archived subject element is refused,
+ * and archived candidates are dropped by the relevance filter — both through the shared
+ * `isArchivedStatus`.
  */
-import { findMemoryDocumentByTypeAndId, isArchivedStatus, type MemoryDocumentSummary } from '../memory';
-import type { MemoryYaml } from '../memory/schema';
+import { dump } from 'js-yaml';
+
 import type { RolesYaml } from '../directives/schema';
-import type { DnaYaml } from '../dna/schema';
+import type { DnaYaml, Module, Paths, Project, Team } from '../dna/schema';
+import { isArchivedStatus, loadMemoryDocumentsAtRev, type MemoryDocumentSummary } from '../memory';
+import { readPathAtRev, splitFrontmatter } from '../storage';
+import { parseYaml } from '../validation';
 
 import { isRemovableCustomAssetPath } from './builtin-asset';
-import type { DirectiveFile } from './loaders';
+import {
+  DNA_YAML_PATH,
+  loadDirectivesAtRev,
+  loadDnaYamlAtRev,
+  loadMemoryYamlAtRev,
+  loadRolesYamlAtRev,
+  type DirectiveFile,
+} from './loaders';
+import { DEFAULT_CONTEXT_LIMITS, selectRelevantMemoryDocuments, type ContextLimits, type RelevantMemoryDocument } from './relevance';
+import { resolveRevision, RevisionError } from './revision';
+import { coreErr, coreOk, type CoreResult } from './types';
 
 /**
  * The outcome of {@link resolveRoleDirectives}: the resolved directive files **and** any operator
@@ -176,101 +181,304 @@ export function resolveRoleDirectives(
   return { directives: [...selection.byId.values()], warnings };
 }
 
-/** The active Memory element an execution context is scoped to (spec-012 §2 `ContextRequest.element`,
- * narrowed here to just `type`/`id` — this task does not implement the full `ContextRequest` shape). */
+// --- The context builder (spec-012 §1–§8, task-176) ----------------------------------------------
+
+/** The active Memory element a context is built for (`spec-012` §2 `ContextRequest.element`). */
 export interface ExecutionContextElement {
   readonly type: string;
   readonly id: string;
 }
 
 /**
- * The assembled execution context (REQ-STATE-05 Fit Criterion, P5.4.4 "a context object containing
- * distinct DNA, Memory, and Directives sections", "each section is individually addressable"): three
- * plain, independently-readable properties — `context.dna`, `context.memory`,
- * `context.directives` — never merged into one flat structure.
+ * `spec-012` §2's `ContextRequest`: everything a context is a function of. Nothing else is read — no
+ * clock, no environment, no working tree.
  */
-export interface ExecutionContext {
-  /** The full parsed `dna.yaml` (P5.4.4: DNA section — this task does not sub-select DNA sections by
-   * scope, unlike spec-012 §4's full `dna-loader`; that selection logic is out of this task's scope). */
-  readonly dna: DnaYaml;
-  /** This role's assigned directives + global, resolved by {@link resolveRoleDirectives}. */
-  readonly directives: readonly DirectiveFile[];
-  /** Memory relevant to `element` — today, exactly the element's own document (0 or 1 entries), and
-   * empty when that document is archived (REQ-STATE-06; see {@link assembleExecutionContext}); the
-   * full T1–T4 tiered relevance expansion is task-035/038/v0.3's scope (see the module doc comment). */
-  readonly memory: readonly MemoryDocumentSummary[];
-  /** Operator diagnostics gathered during assembly — currently only
-   * {@link RoleDirectiveResolution.warnings}: no-assignments (dl-029), dangling binding (dl-042 D),
-   * shadowed directive (dl-037 B.1). Diagnostics *about* the context, not content
-   * *of* it: spec-012 §7's canonical envelope has no warnings section, so this never enters the
-   * serialized payload. */
-  readonly warnings: readonly string[];
+export interface ContextRequest {
+  /** The role the agent executes under (`roles.yaml` binding, §5). */
+  readonly role: string;
+  /** The element the context is built for, usually a `task`. */
+  readonly element: ExecutionContextElement;
+  /** The revision every read is pinned to — a sha, or any name of one commit (`HEAD`, a branch). It is
+   * resolved once; the payload records the full sha. */
+  readonly stateRef: string;
+  /** Memory caps (§6); {@link DEFAULT_CONTEXT_LIMITS} when omitted. */
+  readonly limits?: ContextLimits;
 }
 
-/** Inputs to {@link assembleExecutionContext} — every pillar's config, already loaded by its own
- * loader (`./loaders.ts`), plus the `role`/`element` the context is being assembled for. Nothing here
- * reads the filesystem itself beyond resolving `element` via `findMemoryDocumentByTypeAndId`. */
-export interface ExecutionContextInputs {
-  /** Project root the Memory element lookup resolves against (same root the pillar loaders were
-   * called with). */
-  readonly root: string;
-  readonly dna: DnaYaml;
-  readonly memoryYaml: MemoryYaml;
-  readonly directiveFiles: readonly DirectiveFile[];
-  readonly rolesYaml: RolesYaml;
-  readonly role: string;
-  readonly element: ExecutionContextElement;
+/** The subject element as `stateRef` holds it (§3 stage 1, `resolve-element`). */
+export interface ContextElementDocument extends MemoryDocumentSummary {
+  readonly type: string;
+  readonly id: string;
 }
 
 /**
- * Assemble a role- and task-scoped {@link ExecutionContext} (REQ-STATE-05) from already-loaded pillar
- * config. Given the same inputs and unchanged on-disk Memory content, the output is deep-equal across
- * calls: the function itself introduces no wall-clock, randomness, or unordered iteration
- * (REQ-SYS-07's discipline, applied to this narrower slice per REQ-STATE-05's own rationale "crisp,
- * low-noise context; determinism"), and `directives` is totally ordered by
- * {@link resolveRoleDirectives}.
- *
- * `memory` resolves `element` via `findMemoryDocumentByTypeAndId`
- * (`task-011-mcp-resources-read-only`). Two properties of that primitive are inherited here and are
- * worth stating plainly:
- *
- * - It is **not** a single addressed read. It walks the Memory document paths derived from
- *   `memoryYaml` in sorted order and YAML-parses each document's frontmatter until one matches
- *   `element.type`/`element.id`, so cost grows with the size of the Memory tree (bounding that is
- *   `task-035-bounded-context-relevance`'s REQ-PERF-05 scope, not this task's).
- * - It therefore **can throw**. An `element` that matches nothing yields an empty `memory` array
- *   rather than an error — an unresolvable element is the caller's concern to surface — but a
- *   `ValidationError` (`E_YAML_PARSE_ERROR`) propagates out of assembly if any document visited
- *   during that walk has unparseable frontmatter. This function adds no `try`/`catch` of its own.
- *
- * `memory` **is** filtered by document status, in one direction only: a resolved element whose
- * `status` is archived — `{deprecated, superseded}`, per the shared {@link isArchivedStatus}
- * (`../memory`, the set ratified by `dl-028-archived-states-excluded-from-context`) — is dropped,
- * leaving `memory` empty. That is REQ-STATE-06's Fit Criterion as amended: "a `deprecated` or
- * `superseded` document never appears in an assembled agent context". The filter is applied to the
- * lookup's *result* rather than pushed into `findMemoryDocumentByTypeAndId`, because that same
- * primitive also serves `wingfoil://memory/{type}/{id}`, where explicit retrieval of archived content
- * must keep working.
- *
- * `draft` is deliberately **not** excluded here, unlike in `./relevance.ts`. That module filters
- * *candidate* documents for relevance (spec-012 §6, which does bar `draft` from a context); this
- * function resolves the **subject** element the context is being assembled for (spec-012 §3's
- * `resolve-element` stage), and blanking the context for a task still in `draft` would defeat the
- * point of assembling it. dl-028 ratified the archived set as `{deprecated, superseded}` and did not
- * put `draft` in it.
- *
- * An archived element produces no warning: {@link ExecutionContext.warnings} carries
- * directive-resolution diagnostics only (dl-029, dl-037, dl-042), and adding an unratified entry would change a payload
- * REQ-SYS-07 governs. An archived element is therefore indistinguishable here from an unresolvable
- * one — both yield `memory: []`.
+ * The DNA sections `spec-012` §4 selects. Its own keys are inserted in `dna.yaml`'s declared order, and
+ * that order is the order §7 emits them in.
  */
-export function assembleExecutionContext(inputs: ExecutionContextInputs): ExecutionContext {
-  const { directives, warnings } = resolveRoleDirectives(inputs.directiveFiles, inputs.rolesYaml, inputs.role);
-  const doc = findMemoryDocumentByTypeAndId(inputs.root, inputs.memoryYaml, inputs.element.type, inputs.element.id);
-  // `frontmatter` is untyped (`Record<string, unknown>`), so project `status` to the
-  // `string | undefined` shape `isArchivedStatus` takes — a non-string `status` is never archived,
-  // exactly as that predicate's contract states.
-  const status = typeof doc?.frontmatter.status === 'string' ? doc.frontmatter.status : undefined;
-  const memory = doc !== undefined && !isArchivedStatus(status) ? [doc] : [];
-  return { dna: inputs.dna, directives, memory, warnings };
+export interface DnaSelection {
+  readonly project?: Project;
+  /** The element's `modules:`/`scope:` entries, or every module when it declares neither. */
+  readonly modules: readonly Module[];
+  readonly team?: Team;
+  /** Every category, `runs` included. */
+  readonly paths?: Paths;
+}
+
+/** A resolved directive and its Markdown body, which §7 carries verbatim. */
+export interface ContextDirective extends DirectiveFile {
+  readonly body: string;
+}
+
+/**
+ * The assembled execution context (P5.4.4 sc. 1: "distinct DNA, Memory, and Directives sections",
+ * "each section is individually addressable"; REQ-STATE-05). Each section is its own property, checked
+ * by {@link validateExecutionContext} before {@link serializeExecutionContext} renders it.
+ */
+export interface ExecutionContext {
+  readonly role: string;
+  /** The full sha `ContextRequest.stateRef` resolved to. */
+  readonly stateRef: string;
+  /** §7 `## 1. Task`. */
+  readonly element: ContextElementDocument;
+  /** §7 `## 2. Project DNA`. */
+  readonly dna: DnaSelection;
+  /** §7 `## 3. Directives`: the role's directives and the globals, ascending by id ({@link resolveRoleDirectives}). */
+  readonly directives: readonly ContextDirective[];
+  /** §7 `## 4. Relevant Memory`, in §6 order and within the request's limits. */
+  readonly memory: readonly RelevantMemoryDocument[];
+  /** {@link RoleDirectiveResolution.warnings}: §5.1's three kinds in their fixed order. Diagnostics
+   * *about* the context, never part of the payload (dl-050, dl-051). */
+  readonly warnings: readonly string[];
+}
+
+/** What {@link assembleExecutionContext} returns: the context, its §7 bytes, and the notes recorded
+ * while building it — diagnostics, kept out of `payload` like `context.warnings`. */
+export interface AssembledExecutionContext {
+  readonly context: ExecutionContext;
+  /** The canonical §7 payload: UTF-8, LF-only, exactly one trailing `\n`. */
+  readonly payload: string;
+  /** `no relevant Memory found for task` when nothing passed the relevance threshold (P5.3.3 sc. 3). */
+  readonly notes: readonly string[];
+}
+
+/**
+ * The sections {@link validateExecutionContext} checks, in §7 order, with the shape each must have.
+ * The name is the {@link ExecutionContext} property, so the refusal names what to address.
+ */
+const REQUIRED_SECTIONS: readonly (readonly [string, (value: unknown) => boolean])[] = [
+  ['element', (value) => isRecord(value)],
+  ['dna', (value) => isRecord(value) && Array.isArray(value.modules)],
+  ['directives', (value) => Array.isArray(value)],
+  ['memory', (value) => Array.isArray(value)],
+];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function missingSection(name: string): string {
+  return `invalid execution context: missing '${name}' section`;
+}
+
+/**
+ * Validate an assembled context before anything uses it (P5.4.4 sc. 3). The first section that is
+ * absent, or not of its section's shape, refuses the context with `VALIDATION` and the scenario's
+ * message, verbatim: `invalid execution context: missing '<section>' section`. Sections are checked in
+ * §7 order — `element`, `dna`, `directives`, `memory` — so the refusal is deterministic.
+ */
+export function validateExecutionContext(candidate: unknown): CoreResult<ExecutionContext> {
+  const value = isRecord(candidate) ? candidate : {};
+  for (const [name, hasShape] of REQUIRED_SECTIONS) {
+    if (!hasShape(value[name])) return coreErr({ code: 'VALIDATION', message: missingSection(name) });
+  }
+  return coreOk(candidate as unknown as ExecutionContext);
+}
+
+/** YAML for the payload: keys sorted ascending (§7), no line folding and no anchors, so the text is a
+ * function of the value alone. */
+function canonicalYaml(value: unknown): string {
+  return dump(value, { sortKeys: true, lineWidth: -1, noRefs: true });
+}
+
+function yamlBlock(value: unknown): string {
+  return '```yaml\n' + canonicalYaml(value) + '```';
+}
+
+/** A body as §7 carries it: verbatim, without the blank lines around it. */
+function trimBody(body: string): string {
+  return body.replace(/^(?:[ \t]*\r?\n)+/, '').trimEnd();
+}
+
+/** §7's canonicalization: LF only, no trailing whitespace on any line, exactly one trailing `\n`. */
+function canonicalize(text: string): string {
+  return (
+    text
+      .replace(/\r\n?/g, '\n')
+      .replace(/[ \t]+$/gm, '')
+      .replace(/\n+$/, '') + '\n'
+  );
+}
+
+/**
+ * Render a context as `spec-012` §7's canonical Markdown payload — the bytes §8 holds identical across
+ * builds. Fixed headings in a fixed order; frontmatter and DNA sections as YAML with sorted keys;
+ * directive and document bodies verbatim; ids rather than paths; the header names only role, element
+ * and the resolved sha. `warnings` are not rendered.
+ *
+ * @throws Error `invalid execution context: missing '<section>' section` when `context` does not
+ *   validate ({@link validateExecutionContext}): a partial payload is never rendered.
+ */
+export function serializeExecutionContext(context: ExecutionContext): string {
+  const valid = validateExecutionContext(context);
+  if (!valid.ok) throw new Error(valid.error.message);
+
+  const { role, stateRef, element, dna, directives, memory } = context;
+  // The header comment sits on the title's next line, as §7's template shows.
+  const blocks: string[] = [
+    `# WingFoil Agent Context\n<!-- role: ${role} | element: ${element.type}:${element.id} | state: ${stateRef} -->`,
+  ];
+  const push = (...items: string[]): void => {
+    for (const item of items) if (item.length > 0) blocks.push(item);
+  };
+
+  push('## 1. Task', yamlBlock(element.frontmatter), trimBody(element.body));
+
+  push('## 2. Project DNA');
+  for (const [name, value] of Object.entries(dna)) push(`### ${name}`, yamlBlock(value));
+
+  push(`## 3. Directives (${role} + global)`);
+  for (const directive of directives) push(`### ${directive.frontmatter.id}`, trimBody(directive.body));
+
+  push(`## 4. Relevant Memory (${memory.length} documents)`);
+  for (const doc of memory) {
+    push(`### ${doc.type ?? ''}:${doc.id ?? doc.path}`, yamlBlock(doc.frontmatter), trimBody(doc.body));
+  }
+
+  return canonicalize(blocks.join('\n\n'));
+}
+
+function asNames(value: unknown): string[] {
+  if (typeof value === 'string') return value.length > 0 ? [value] : [];
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0) : [];
+}
+
+/** The top-level keys of the committed `dna.yaml` text, in the order the file declares them. */
+function declaredDnaOrder(root: string, sha: string): string[] {
+  const raw = readPathAtRev(root, sha, DNA_YAML_PATH);
+  const parsed = raw === null ? null : parseYaml(raw, `${sha}:${DNA_YAML_PATH}`);
+  return isRecord(parsed) ? Object.keys(parsed) : [];
+}
+
+/**
+ * `spec-012` §4, the `dna-loader`: `project` and `team` always, `paths` whole (every category), and
+ * the `modules` named by the element's `modules:`/`scope:` — every module when it names none — in
+ * `dna.yaml` order. Sections are inserted in `declaredOrder`, the file's own key order.
+ */
+function selectDnaSections(dna: DnaYaml, declaredOrder: readonly string[], frontmatter: Record<string, unknown>): DnaSelection {
+  const named = new Set([...asNames(frontmatter.modules), ...asNames(frontmatter.scope)]);
+  const sections: Record<string, unknown> = {
+    project: dna.project,
+    modules: named.size === 0 ? dna.modules : dna.modules.filter((module) => named.has(module.name)),
+    team: dna.team,
+    paths: dna.paths,
+  };
+  const selection: Record<string, unknown> = {};
+  for (const key of declaredOrder) if (sections[key] !== undefined) selection[key] = sections[key];
+  return selection as unknown as DnaSelection;
+}
+
+/** The Markdown body of each resolved directive, read at `sha` (`DirectiveFile.path` is relative to
+ * `.wingfoil/`). */
+function withBodies(root: string, sha: string, directives: readonly DirectiveFile[]): ContextDirective[] {
+  return directives.map((directive) => {
+    const raw = readPathAtRev(root, sha, `.wingfoil/${directive.path.split(/[\\/]/).join('/')}`) ?? '';
+    return { ...directive, body: splitFrontmatter(raw).body };
+  });
+}
+
+function stringField(frontmatter: Record<string, unknown>, key: string): string | undefined {
+  const value = frontmatter[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * Build the execution context for `request` — `spec-012`'s single public entry (§1), the context
+ * `agent execute` (task-218) and the `{role}-session` Prompt (task-195) hand an agent.
+ *
+ * The §3 pipeline, every read at the one commit `request.stateRef` resolves to:
+ *
+ * 1. **resolve-element**: every Memory document at that commit is read once
+ *    (`loadMemoryDocumentsAtRev`); the element is found in that snapshot. Absent → `NOT_FOUND`;
+ *    archived (`isArchivedStatus`) → `VALIDATION`, since an archived document never enters a context
+ *    (REQ-STATE-06). A `draft` element assembles.
+ * 2. **load-dna** (§4): see `selectDnaSections`.
+ * 3. **load-directives** (§5): {@link resolveRoleDirectives} over the directives and `roles.yaml` at the
+ *    commit; its warnings become `context.warnings`.
+ * 4. **filter-memory** (§6): `selectRelevantMemoryDocuments` over the same snapshot, within
+ *    `request.limits`.
+ * 5. **validate** (P5.4.4 sc. 3) and **serialize** (§7).
+ *
+ * A pillar file the commit does not hold leaves its section unset, and step 5 refuses the context:
+ * no `roles.yaml` → `missing 'directives'`, no `dna.yaml` → `missing 'dna'`, no `memory.yaml` →
+ * `missing 'element'`.
+ *
+ * Expected failures are returned, never thrown: a `stateRef` that is malformed or names no commit is
+ * the `RevisionError`'s own `CoreError`. A document or pillar file that does not parse still throws
+ * `ValidationError`, as every loader does.
+ */
+export function assembleExecutionContext(root: string, request: ContextRequest): CoreResult<AssembledExecutionContext> {
+  let sha: string;
+  try {
+    sha = resolveRevision(root, request.stateRef);
+  } catch (error) {
+    if (error instanceof RevisionError) return coreErr(error.toCoreError());
+    throw error;
+  }
+  const { role, element: wanted } = request;
+  const label = `${wanted.type}:${wanted.id}`;
+
+  const memoryYaml = loadMemoryYamlAtRev(root, sha);
+  const documents = memoryYaml === null ? null : loadMemoryDocumentsAtRev(root, sha, memoryYaml);
+  const found = documents?.find(
+    (doc) => stringField(doc.frontmatter, 'type') === wanted.type && stringField(doc.frontmatter, 'id') === wanted.id,
+  );
+  if (documents !== null && found === undefined) {
+    return coreErr({ code: 'NOT_FOUND', message: `element '${label}' not found at ${sha}` });
+  }
+  const status = found === undefined ? undefined : stringField(found.frontmatter, 'status');
+  if (isArchivedStatus(status)) {
+    return coreErr({
+      code: 'VALIDATION',
+      message: `element '${label}' is ${status}: an archived element never enters an execution context`,
+    });
+  }
+  const element = found === undefined ? undefined : { ...found, type: wanted.type, id: wanted.id };
+  const frontmatter = element?.frontmatter ?? {};
+
+  const dnaYaml = loadDnaYamlAtRev(root, sha);
+  const dna = dnaYaml === null ? undefined : selectDnaSections(dnaYaml, declaredDnaOrder(root, sha), frontmatter);
+
+  const rolesYaml = loadRolesYamlAtRev(root, sha);
+  const resolution = rolesYaml === null ? undefined : resolveRoleDirectives(loadDirectivesAtRev(root, sha), rolesYaml, role);
+  const directives = resolution === undefined ? undefined : withBodies(root, sha, resolution.directives);
+
+  const relevant =
+    documents === null
+      ? undefined
+      : selectRelevantMemoryDocuments(documents, { ...wanted, frontmatter }, request.limits ?? DEFAULT_CONTEXT_LIMITS);
+
+  const validated = validateExecutionContext({
+    role,
+    stateRef: sha,
+    element,
+    dna,
+    directives,
+    memory: relevant?.documents,
+    warnings: resolution?.warnings ?? [],
+  });
+  if (!validated.ok) return validated;
+
+  const context = validated.value;
+  const notes = relevant?.note === undefined ? [] : [relevant.note];
+  return coreOk({ context, payload: serializeExecutionContext(context), notes });
 }
