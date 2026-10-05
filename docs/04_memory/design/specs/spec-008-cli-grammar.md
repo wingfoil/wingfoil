@@ -144,7 +144,7 @@ wf({type}): {verb} {id1}, {id2}[ [{s0} → {s1}( → {sN})*]]
 | `reject`    | `memory reject`; a `fallback.set_state` routed by a reject                 | `[from → to]` |
 | `deprecate` | `memory deprecate`                                                         | `[from → deprecated]` |
 | `start`     | a `set_state` that opens work on an element                                | `[from → to]` |
-| `finalize`  | a `set_state` into the last state of the type's `sequence`; `workflow end` for a plan | `[from → to]` |
+| `finalize`  | a `set_state` into the last state of the type's `sequence`; `workflow end` for a plan; the `supersedes:` trigger of `memory approve` (below) | `[from → to]` |
 | `sync`      | `<type>.sync_state` (`bug.sync_state`, `dl-045`)                           | `[from → to]`, or a chain `[s0 → s1 → … → sN]` |
 | `amend`     | `memory amend` (`dl-108`)                                                  | `[s → s]` |
 | `park`      | `memory park` (`dl-110`)                                                   | `[in-progress → backlog]` |
@@ -153,6 +153,21 @@ wf({type}): {verb} {id1}, {id2}[ [{s0} → {s1}( → {sN})*]]
 **Which verb a `set_state` emits** (`spec-003` verb table). `approve` when the phase declares
 `approval:`. Otherwise `finalize` when the target is the last state of the type's `sequence`.
 Otherwise `start`.
+
+**The `supersedes:` trigger emits `finalize`** (`dl-065` Q1.1; the rule is `spec-001`'s, the field
+`spec-010`'s). `memory approve` on an element whose committed `supersedes:` names another element moves
+that element into `superseded`, the last state of its type's `sequence`. That is a `set_state` into the
+last state, so the commit is a `finalize`, made right after the approve:
+
+```
+wf({type}): finalize {id} [{state} → superseded]
+
+Reason: superseded by {approved id} (its supersedes: field), approved in {approve sha}.
+```
+
+It carries no `Approver:` line: the approval is the approve commit's, which the `Reason:` cites by
+sha (the reasoning `dl-061` B.1 gives for `sync`). Every refusal of the pair runs before the approve
+is written (`spec-006` §7).
 
 **`element.set_release` emits `assign`** (approver ruling 2026-10-01, which reverses
 `release-planning`'s R20/Q6 on this point). `assign` writes the `release` field and nothing else.
@@ -889,3 +904,11 @@ without a supersede or a state change (`dl-047`).
 names, and read its current status, at `HEAD` (`spec-006` §6 item 1); a document no commit holds is
 refused at exit `1` with a message naming `memory add`. The row keeps `directive remove` alone
 (`bug-108`), and the `HEAD` row names what the verbs read there. No other section changed.
+
+**Revision (2026-10-02, `task-162-fire-supersedes-trigger-superseding-element-approval`) — the
+`supersedes:` trigger emits `finalize`.** `dl-065` (`ready`, Q1.1) asks for an engine trigger that
+moves a superseded element into `superseded` when its successor is approved. The move needs a
+subject. It is a `set_state` into the last state of the type's `sequence`, which this section already
+maps to `finalize`. The `finalize` row names the trigger, and a paragraph gives the commit. No verb is
+added, so `spec-003`'s verb table is unchanged. Edited in place without a supersede or a state change
+(`dl-047`); pending the approver's sign-off at `task-162`'s review.
