@@ -5,7 +5,7 @@ title: "memory add files a release under any release-line value, so --set releas
 status: triaged          # auto-set by wingfoil; memory.submit → open
 severity: "medium"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
-release: ""            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
+release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
 feature: "P1.3"            # optional — related feature ID, e.g. "P1.6"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
