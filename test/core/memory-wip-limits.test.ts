@@ -181,6 +181,29 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
     expect(result.error.message).toContain('held by docs/memory/cards/card-001.md.');
   });
 
+  // Review F4: a committed document the scan cannot read might be a holder. It is not counted (the
+  // tolerant scan, task-171), so the success says so as a W_MEMORY_UNREADABLE warning naming it.
+  const UNREADABLE = '---\nid: [unclosed\n---\n\nBody.\n';
+
+  it('a transition checked against a limit names an unreadable document of the scan as a warning', async () => {
+    writeFixtureFile(repo, 'docs/memory/wide/wide-zzz.md', UNREADABLE);
+    commitAll(repo, 'an unreadable document');
+    const result = await verb('memorySubmit', repo, 'wide-002');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings?.join('\n')).toMatch(/W_MEMORY_UNREADABLE[\s\S]*docs\/memory\/wide\/wide-zzz\.md/);
+  });
+
+  it('`memory add` checked against a limit names an unreadable document as a warning too', async () => {
+    writeFixtureFile(repo, 'docs/memory/slots/slot-001.md', doc('slot-001', 'slot', 'closed'));
+    writeFixtureFile(repo, 'docs/memory/slots/slot-zzz.md', UNREADABLE);
+    commitAll(repo, 'slot-001 closed; an unreadable document');
+    const result = await operation('memoryAdd')({ root: repo, options: { type: 'slot', title: 'Second slot' } });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings?.join('\n')).toMatch(/W_MEMORY_UNREADABLE[\s\S]*docs\/memory\/slots\/slot-zzz\.md/);
+  });
+
   it('below the limit the transition goes through', async () => {
     const result = await verb('memorySubmit', repo, 'wide-002');
     expect(result.ok).toBe(true);
