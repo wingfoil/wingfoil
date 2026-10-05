@@ -126,8 +126,12 @@ function name to obtain the verb — so it is pinned per row rather than inferre
 `module` value marked *(planned)* belongs to an operation not yet registered in `CORE_MODULES`, and
 names the module its acceptance contract (BDD feature file) or a decision-log mandates; an unmarked
 value is the module the operation is registered under today. Each row: function name (camelCase,
-matches `{module}{Verb}` — e.g. `memoryApprove`), `module`, `mutates`, and the CLI command / MCP
-exposure it backs.
+matches `{module}{Verb}` — e.g. `memoryApprove` — or, for a **self-named flat operation**, is exactly its
+module's name — `paths` — from which `deriveVerb` derives no verb, so the CLI command is the bare
+`wingfoil <module>` and the MCP name the bare module), `module`, `mutates`, and the CLI command / MCP
+exposure it backs. The two **bootstrap commands** (`init`, `mcp`) are not core functions: their rows
+name the CLI entry function instead and are outside the parity of §4 (REQ-SYS-05's bootstrap
+exemption).
 
 > **MCP naming — authoritative source is `spec-004-mcp-surface-contract`.** The MCP column below uses
 > the wire-visible names defined by `spec-004` (`scope: src/mcp`): **Tool names are dot-form
@@ -162,7 +166,7 @@ exposure it backs.
 | `dnaShow`  | `dna`                | false   | `wingfoil dna show` | Resource `wingfoil://dna/show`    |
 | `dnaUpdate`  | `dna`              | true    | `wingfoil dna update` | Tool `dna.update`      |
 | `dnaInfer` | `dna` *(planned)*    | true    | `wingfoil dna infer`| Tool `dna.infer`         |
-| `pathsQuery` | `paths`            | false   | `wingfoil paths`    | Resource `wingfoil://dna/paths`   |
+| `paths`      | `paths`            | false   | `wingfoil paths`    | Resource `wingfoil://dna/paths` *(URI per `dl-040`; the registrar derives `wingfoil://paths`)* |
 
 **Directives pillar** (P3, `src/directives`) — two nouns by design: singular `directive` for the
 per-directive mutations (BDD P3.1–P3.3), plural `directives` for the listing (BDD P3.4)
@@ -204,12 +208,24 @@ for cell):
   workflow name or an open instance id, `spec-017` §3.3, §7); no `--name` option exists. The BDD
   `--name` spelling (P4.2/P4.3/P4.7/P4.8) is amended in its own task (`spec-017` Consequences).
 
-**Project bootstrap & audit** (P5.1, `src/core` top-level, no dedicated pillar module):
+**Project bootstrap & audit** (P5.1, P5.2.1; no dedicated pillar module):
 
 | function     | module                                                                 | mutates | CLI              | MCP                    |
 |--------------|-------------------------------------------------------------------------|---------|-------------------|--------------------------|
-| `projectInit`| — *(not a `CoreModule`: bootstrap command wired directly in `src/cli/program.ts`)* | true    | `wingfoil init`   | Tool `project.init`      |
-| `projectAudit` | `audit` *(planned — flat `wingfoil audit`, BDD P5.1.3)*              | false   | `wingfoil audit`  | Resource `wingfoil://project/audit` |
+| `runInit` *(CLI entry, `src/cli/init-command.ts`)* | — *(bootstrap command, not a `CoreModule`: wired directly in `src/cli/program.ts`)* | true    | `wingfoil init`   | — *(bootstrap; not MCP-exposed)* |
+| `runMcp` *(CLI entry, `src/cli/mcp-command.ts`)*   | — *(bootstrap command, not a `CoreModule`: wired directly in `src/cli/program.ts`)* | false   | `wingfoil mcp`    | — *(bootstrap; it hosts the MCP surface, `spec-014` §1)* |
+| `audit`      | `audit` *(planned — self-named flat operation, BDD P5.1.3)*             | false   | `wingfoil audit`  | Resource `wingfoil://audit` |
+
+- **The bootstrap commands are not on MCP** (`dl-046-bootstrap-commands-in-spec-006-section-3` A(a)).
+  `init` must run before a WingFoil project exists, and `mcp` starts the server an agent is connected
+  through, so an agent connected over MCP is already inside an initialised project and neither has a
+  caller there. REQ-SYS-05's Fit Criterion exempts both by name; they are wired outside `CORE_MODULES`,
+  which is why no registrar derives a Tool or Resource for them.
+- **`audit` is a flat, self-named operation** (`dl-046` B(a)): module `audit`, op `audit`, so `deriveVerb`
+  yields the bare `wingfoil audit` BDD P5.1.3 states and `deriveMcpResourceUri` the Resource
+  `wingfoil://audit`, with no registrar change. That is the derivation the registrar applies to `paths`
+  today (`wingfoil://paths`); whether the `paths` row's MCP cell follows it is
+  `dl-040-spec-006-resource-uri-divergence`'s question.
 
 **Agent execution** (P5.3, `src/agent` *(planned module, `spec-016` §1)*, `CoreModule.name` `agent`)
 — the v0.3 surface (`minor-v0.3` `features:` P5.3.1–P5.3.3; run tracking per `dl-135`; normative
@@ -287,7 +303,10 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
 ### 5. Naming and versioning conventions
 
 - Function names: `{module}{Verb}` camelCase (`memoryApprove`, `dnaSet`), matching the module +
-  first-noun-then-verb shape of the CLI command it backs (`wingfoil memory approve`). **This is the one
+  first-noun-then-verb shape of the CLI command it backs (`wingfoil memory approve`). A **self-named
+  flat operation** is named exactly after its module (`paths`, and the planned `audit`): it backs the
+  flat command `wingfoil <module>`, and `deriveVerb` derives no verb from it
+  (`dl-046-bootstrap-commands-in-spec-006-section-3` C). **This is the one
   naming convention `spec-006` owns** — the core-function surface is `src/core`'s (this spec's) scope.
 - **MCP Tool names and Resource URIs are owned by `spec-004-mcp-surface-contract` (`scope: src/mcp`),
   not by this spec.** `spec-004` is authoritative for anything wire-visible on the MCP surface; the
@@ -304,7 +323,8 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
     `{module}://{query}` URI scheme; both diverged from `spec-004` and were the source of the
     `task-006` reconciliation — see Process Notes.)*
 - This table (§3) is the enumeration source for the REQ-SYS-05 parity test; when `X_cli-cmds.md` gains
-  or removes a command, this spec is revised in the same change (§ Consequences).
+  or removes a command, this spec is revised in the same change (§ Consequences). The bootstrap rows
+  (`init`, `mcp`) are outside that parity, by REQ-SYS-05's own exemption.
 
 ### 6. Configuration baseline — which state a core function reads and writes
 
@@ -365,7 +385,7 @@ users is `spec-008-cli-grammar` §11):
 |----------|------------|
 | `HEAD`, gating (item 1) | `memoryAdd` (type registry and scaffold; its `{n}` counter reads the wider baseline `command-baseline` declares, which can only raise the id), `memorySubmit`, `memoryApprove`, `memoryReject`, `memoryDeprecate`, `memoryAmend` (state machine, the document their `<id>` names and its committed `status` — `findMemoryDocumentByIdAtRev` at the one sha `prepareMemoryTransition` resolves — and approver authority on the gated verbs; the working tree supplies the content `memorySubmit` and `memoryAmend` commit and is checked to be the element `HEAD` records); `dnaSet`, `dnaAdd`, `dnaUpdate`, `dnaRemove` (`dna.yaml`, read only after item 2 has refused any difference from `HEAD`); `directiveAssign` (role catalogue, directive inventory, bindings); `directiveRemove`'s referrer check (`roles.yaml`, `loadRolesYamlAtHead`); `workflowNext`, from the task that ships it in v0.3 |
 | `HEAD`, declared (item 6) | `workflowStatus`, `workflowList`, `workflowShow`, `agentList`, `agentShow`, the two v0.3 workflow Resources — each from the task that ships it in v0.3 |
-| working tree, gating nothing (item 4) | `dnaShow`, `pathsQuery`, `directivesList`, `memorySearch`, `memoryHistory` (its log is git's, its `memory.yaml` the working tree's), the shipped MCP Resources and the role Prompts; `workflowList` until its v0.3 reshape moves it to item 6 |
+| working tree, gating nothing (item 4) | `dnaShow`, `paths`, `directivesList`, `memorySearch`, `memoryHistory` (its log is git's, its `memory.yaml` the working tree's), the shipped MCP Resources and the role Prompts; `workflowList` until its v0.3 reshape moves it to item 6 |
 | filesystem, predicting an effect (item 5) | the confinement and symlink guards of every writing or deleting operation, and `directiveCreate`'s check that its target file does not exist |
 | working tree, deviating | `directiveRemove`'s name resolution (`bug-108`) — owed to `HEAD` |
 
@@ -729,3 +749,20 @@ and the `supersedes:` trigger.** `dl-065` Q1.1 has an approve move a second elem
 where that element is decided (at step 3's commit, before any write) and that it gets a commit of its
 own. The order of steps 1–4 is unchanged. Edited in place without a supersede or a state change
 (`dl-047`); pending the approver's sign-off at `task-162`'s review.
+
+**Revision (2026-10-05, `task-165-put-bootstrap-commands-command-surface-mcp-specs-bootstrap`) — §3's
+bootstrap table, the self-named flat operations, and `mcp`'s row, per
+`dl-046-bootstrap-commands-in-spec-006-section-3` (`ready`; approver ruling 2026-09-29: A(a), B(a), C)
+and `bug-028`.** The table's MCP cells named a Tool and a Resource under a `project` module that no
+registrar can derive, since no such module exists or is planned, and the function cells used the same
+`project` prefix. It had no row for `wingfoil mcp`, which has shipped since `task-030`. A(a): `init` and
+`mcp` are bootstrap commands, exempt from REQ-SYS-05 (whose Fit Criterion now says so), and their MCP
+cells say they are not MCP-exposed. Their function cells name the CLI entry functions `runInit` and
+`runMcp`, because neither is a core function. B(a): `audit` is planned as a flat, self-named operation
+on module `audit`, so its Resource is the derived `wingfoil://audit`. C: §3's preamble and §5 admit a
+self-named flat operation, named exactly after its module, so the `paths` rows (in §3's DNA table and
+§6's baseline table) now carry the registered name `paths` instead of a `{module}{Verb}` name the
+registry never had. The `paths` row's MCP cell keeps its URI, which is `dl-040`'s (`in-discussion`, v0.4), and is now marked like the agent rows: the registrar derives `wingfoil://paths`, not the cell's URI. §5's parity bullet states the exemption.
+`test/docs/command-surface-specs.test.ts` fails when a flat command the program registers has no §3
+row. No other row or section changed. Tech-specs carry no `version:` field (`dl-047`); edited in place
+without a supersede or a state change.
