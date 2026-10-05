@@ -2,7 +2,7 @@
 id: bug-188-memory-history-exits-2-on-a-document-revision-whose-frontmatter-is-not-valid-yaml
 type: bug
 title: "memory history exits 2 on a document revision whose frontmatter is not valid YAML"
-status: planned
+status: in-progress
 severity: "medium"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
