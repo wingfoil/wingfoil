@@ -32,6 +32,7 @@ import { splitFrontmatter } from '../../src/storage';
 import { readPathAtRev } from '../../src/storage/commit';
 import { ValidationError } from '../../src/validation';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
 
 /** This repository's root: its `.wingfoil/` is the configuration WingFoil develops itself with. */
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -143,7 +144,7 @@ describe('dl-123 (A) — the committed bug machine declines a triaged or planned
     expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe(
       `wf(bug): reject ${id} [${state} → closed]\n\n` +
         'Approver: WingFoil Test <wf-test@example.invalid> (approver)\n' +
-        'Reason: ruled a design, not a defect',
+        `Reason: ruled a design, not a defect${STAMP_TRAILER}`,
     );
     expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD'])).toBe(bugPath(id));
   });

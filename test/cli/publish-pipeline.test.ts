@@ -85,7 +85,8 @@ describe('publish gate (task-060) — spec-015 §2 scripts', () => {
   // `prepublishOnly` (`test/cli/run-tests.test.ts` pins that).
   it('declares the build/prepack/test/lint scripts spec-015 §2 names', () => {
     expect(pkg.scripts).toMatchObject({
-      build: 'tsc -p tsconfig.build.json',
+      // task-192 (`dl-111` Q2 (a)): `build`, not `prepack`, writes dist/build-info.json.
+      build: 'tsc -p tsconfig.build.json && node scripts/write-build-info.cjs',
       prepack: 'npm run build',
       test: 'node scripts/run-tests.cjs',
       lint: 'eslint .',

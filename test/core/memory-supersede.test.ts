@@ -20,6 +20,7 @@ import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import { verifyTransitionConsistency } from '../../src/memory/audit';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
 
 const MEMORY_YAML = `version: 1
 types:
@@ -159,15 +160,16 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
 
     expect(gitOut(repo, ['log', '-1', '--format=%B', 'HEAD~1'])).toBe(
-      `wf(adr): approve adr-2-new [pending → accepted]\n\nApprover: ${TEST_NAME} <${TEST_EMAIL}> (approver)\nReason: replaces adr-1`,
+      `wf(adr): approve adr-2-new [pending → accepted]\n\nApprover: ${TEST_NAME} <${TEST_EMAIL}> (approver)\nReason: replaces adr-1${STAMP_TRAILER}`,
     );
     const finalize = gitOut(repo, ['log', '-1', '--format=%B', 'HEAD']);
     expect(finalize).toBe(
-      `wf(adr): finalize adr-1-old [accepted → superseded]\n\nReason: superseded by adr-2-new (its supersedes: field), approved in ${approveSha}.`,
+      `wf(adr): finalize adr-1-old [accepted → superseded]\n\nReason: superseded by adr-2-new (its supersedes: field), approved in ${approveSha}.${STAMP_TRAILER}`,
     );
     // The finalize commit is derived: no `Approver:` line of its own (dl-061 B.1's reasoning).
     expect(finalize).not.toMatch(/^Approver:/m);
-    expect(result.commit).toEqual({ sha: approveSha, message: gitOut(repo, ['log', '-1', '--format=%B', 'HEAD~1']) });
+    // `CoreResult.commit.message` is the operation's message; the signature is commitPaths' (task-192).
+    expect(result.commit).toEqual({ sha: approveSha, message: gitOut(repo, ['log', '-1', '--format=%B', 'HEAD~1']).replace(STAMP_TRAILER, '') });
 
     // Only `status` moved on each document.
     expect(readFileSync(join(repo, ADR_A), 'utf-8')).toBe(doc({ id: 'adr-1-old', type: 'adr', status: 'superseded', supersedes: '""' }));
@@ -333,6 +335,8 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
     expect(command.split('\n')[0]).toBe(`git commit --only -F - -- ${ADR_A} <<'EOF'`);
     rmSync(hook);
     execFileSync('sh', ['-c', command], { cwd: repo });
+    // The operator runs the recovery by hand, so it carries no `WingFoil-Version:` trailer (task-192):
+    // "no trailer" keeps meaning "not written by WingFoil".
     expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe(
       `wf(adr): finalize adr-1-old [accepted → superseded]\n\nReason: superseded by adr-2-new (its supersedes: field), approved in ${approveSha}.`,
     );

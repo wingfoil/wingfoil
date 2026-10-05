@@ -32,7 +32,7 @@
 import { isConfiguredIdentity } from '../core';
 import { parseYaml } from '../validation';
 
-import { parseApproverTrailerLine, parseReasonBlock } from './commit-message';
+import { parseApproverTrailerLine, parseReasonBlock, parseVersionTrailer } from './commit-message';
 import { getMemoryHistory } from './history';
 import { RESERVED_TYPE_NAMES, type StateMachine } from './schema';
 import { isMachineEdge } from './state-machine';
@@ -302,6 +302,12 @@ export interface MemoryTransition {
    * When `approval` is non-null the two always agree, by construction.
    */
   readonly reason: string | null;
+  /**
+   * The build that wrote this commit, `<semver> (<sha>)`, from its `WingFoil-Version:` trailer
+   * ({@link parseVersionTrailer}; task-192, `dl-111`) — `null` when the commit carries none, i.e. it
+   * was written by hand or by a build older than the trailer.
+   */
+  readonly wingfoil: string | null;
 }
 
 /** The exit status of `git show <sha>:<path>` for a path that commit does not hold (`fatal:`). */
@@ -393,6 +399,7 @@ export function reconstructMemoryTransitions(root: string, relativePath: string)
       toState,
       approval: parseApprovalMetadata(entry.body),
       reason: parseCommitReason(entry.body),
+      wingfoil: parseVersionTrailer(entry.body),
     });
     previousState = toState;
   }

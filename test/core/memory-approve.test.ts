@@ -27,6 +27,7 @@ import { exitCodeForResult, exitCodeForThrow } from '../../src/core/exit-code';
 import { UsageError } from '../../src/core/usage-error';
 import { parseApprovalMetadata, verifyTransitionConsistency } from '../../src/memory/audit';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
 
 const MEMORY_YAML = `version: 1
 defaults:
@@ -159,10 +160,9 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
 
     // dl-054 + CLAUDE.md §5.1: subject carries `[from → to]`; body carries `Approver:` and `Reason:`.
-    const message = gitOut(repo, ['log', '-1', '--format=%B']);
-    expect(message).toBe(
-      `wf(task): approve task-101 [pending → backlog]\n\nApprover: ${TEST_NAME} <${TEST_EMAIL}> (approver)\nReason: meets standards`,
-    );
+    const message = `wf(task): approve task-101 [pending → backlog]\n\nApprover: ${TEST_NAME} <${TEST_EMAIL}> (approver)\nReason: meets standards`;
+    expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe(`${message}${STAMP_TRAILER}`);
+    // `CoreResult.commit.message` is the operation's message; the signature is commitPaths' (task-192).
     expect(result.commit).toEqual({ sha: head(repo), message });
 
     // P1.7's ISO-8601 timestamp is git's own, never written into the message (P1.2/P1.10). The zone

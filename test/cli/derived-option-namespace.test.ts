@@ -248,7 +248,7 @@ describe('the drive: every declared entry-field option lands, through the real c
       // fires, prints and exits 0.
       expect(result.status).toBe(0);
       expect(result.stderr).toBe('');
-      expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+ \((?:[0-9a-f]{7,64}(?:-dirty)?|unknown)\)$/);
       // And the whole point: nothing was written, at a success exit code.
       expect(readFileSync(join(repo, DNA), 'utf-8')).toBe(before);
       expect((dna().stacks as unknown as { technologies: unknown[] }).technologies).toEqual([]);

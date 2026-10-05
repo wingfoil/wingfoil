@@ -19,15 +19,14 @@
  * sample, so a command added later is covered the day it is registered; `init` and `mcp` are
  * hand-wired bootstrap commands outside `CORE_MODULES` and are asserted explicitly.
  */
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { join } from 'path';
 
 import { buildCliCommands, listRegisteredCliCommands } from '../../src/cli/registrar';
 import { CORE_MODULES } from '../../src/core';
+import { distBuildStamp } from './helpers/dist-stamp';
 import { CLI_FIXTURE_ROOT, DIST_DIR, runCliHarness, type SpawnedRun } from './helpers/spawn-cli';
 
-const REPO_ROOT = join(__dirname, '..', '..');
-const PKG_VERSION = (JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf-8')) as { version: string }).version;
 
 /** Spawn the compiled CLI against the static fixture root; `status` is the real process exit code. */
 function runCli(...args: readonly string[]): SpawnedRun {
@@ -175,10 +174,10 @@ describe('AC5 — `--help` and `--version` still exit 0 (characterization: the t
     expect(runCli('init', '--help').status).toBe(0);
   });
 
-  it('`wingfoil --version` exits 0 and prints the package version', () => {
+  it('`wingfoil --version` exits 0 and prints the build stamp `<semver> (<sha>)` (task-192)', () => {
     const result = runCli('--version');
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe(PKG_VERSION);
+    expect(result.stdout.trim()).toBe(distBuildStamp());
   });
 
   it("commander's built-in `help` command exits 0, at both depths", () => {

@@ -15,8 +15,8 @@
  * until `test/global-teardown.cjs`. A second run waits for it, or refuses naming the holder; it never
  * deletes the `dist/` another run is using.
  *
- * Deterministic by construction: a clean removal + a single `tsc` invocation, no wall-clock or
- * ordering dependence in what is built.
+ * Deterministic by construction: a clean removal + a single `npm run build` (`tsc`, then the build
+ * record, which carries no timestamp), no wall-clock or ordering dependence in what is built.
  */
 const { execSync } = require('node:child_process');
 const { join } = require('node:path');
@@ -32,6 +32,8 @@ module.exports = async () => {
   const repoRoot = join(__dirname, '..');
   await prepareDist({
     repoRoot,
-    build: () => execSync('npx tsc -p tsconfig.build.json', { cwd: repoRoot, stdio: 'pipe' }),
+    // `npm run build`, not `tsc` alone: the build also writes `dist/build-info.json` (task-192,
+    // `dl-111` Q2 (a)), which the compiled CLI stamps on `--version` and on every commit it writes.
+    build: () => execSync('npm run -s build', { cwd: repoRoot, stdio: 'pipe' }),
   });
 };

@@ -923,6 +923,13 @@ export interface MemoryHistoryEntryView {
   /** The commit's `Reason:` line, or `null` when it carries none. */
   readonly reason: string | null;
   readonly subject: string;
+  /**
+   * The WingFoil build that wrote the commit, `<semver> (<sha>)`, from its `WingFoil-Version:` trailer
+   * (task-192, `dl-111` Action 3). **Present only when the commit carries the trailer**: absent on a
+   * commit written by hand or by a build older than the trailer, so the key itself tells a
+   * tool-written entry from a hand-written one.
+   */
+  readonly wingfoil?: string;
 }
 
 /** `memory history` success shape: the resolved document (`id` + root-relative `path`) and its full
@@ -998,6 +1005,7 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
       : null,
     reason: transition.reason,
     subject: transition.subject,
+    ...(transition.wingfoil !== null ? { wingfoil: transition.wingfoil } : {}),
   }));
 
   return coreOk({ id, path: found.path, entries });

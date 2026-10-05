@@ -43,7 +43,7 @@ import { extraOperandsReason, type CoreModule, type CorePositional } from '../co
 // Direct module import, not the `../core` barrel — the same path `./registrar.ts` already uses for the
 // other two exit-code mappings (task-101; keeps this file out of the barrel's merge surface).
 import { classifyParseOutcome } from '../core/exit-code';
-import { TEMPLATE_NAMES } from '../storage';
+import { readBuildStamp, TEMPLATE_NAMES } from '../storage';
 
 import { buildCliCommands, type BuildCommandsOptions, type CliCommand } from './registrar';
 import { runInit, createReadlinePrompt } from './init-command';
@@ -136,7 +136,9 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
   program.configureHelp({ subcommandTerm: (command) => subcommandTerm(command, declaredPositionals.get(command)) });
   // Register `-V, --version` so `wingfoil --version` prints the version and exits 0
   // (spec-008-cli-grammar §1, bug-001-cli-version-flag) — Commander handles it before any command.
-  program.version(readPackageVersion());
+  // It prints the build stamp `<semver> (<sha>)`, the value every commit's `WingFoil-Version:` trailer
+  // carries (task-192, `dl-111` Action 3); the MCP server keeps announcing the bare semver below.
+  program.version(readBuildStamp());
   program
     // Until P5.1.4 gives `console` a human rendering (`dl-043`), the help says what the default prints
     // and that no output is coloured (spec-008 §2, task-156, `bug-152`, `bug-203`).

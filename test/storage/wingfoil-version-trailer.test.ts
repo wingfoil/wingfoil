@@ -37,9 +37,10 @@ function versionTrailer(repo: string, rev = 'HEAD'): string {
   }).trim();
 }
 
-/** The whole commit message of `rev`, as stored. */
+/** The whole commit message of `rev`, byte for byte as stored in the commit object (`%B` adds a newline). */
 function rawBody(repo: string, rev = 'HEAD'): string {
-  return execFileSync('git', ['-C', repo, 'log', '-1', '--format=%B', rev], { encoding: 'utf-8' });
+  const object = execFileSync('git', ['-C', repo, 'cat-file', 'commit', rev], { encoding: 'utf-8' });
+  return object.slice(object.indexOf('\n\n') + 2);
 }
 
 function operation(moduleName: string, name: string): CoreFn<unknown, unknown> {
@@ -136,7 +137,7 @@ describe('every commit written through commitPaths carries `WingFoil-Version: <s
     expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe('wf(directive): create trailer-check');
     expect(versionTrailer(repo)).toBe(UNKNOWN_STAMP);
 
-    const removed = (await operation('directive', 'directiveRemove')({ root: repo, options: { name: 'trailer-check' } })) as {
+    const removed = (await operation('directive', 'directiveRemove')({ root: repo, positional: 'trailer-check' })) as {
       ok: boolean;
     };
     expect(removed.ok).toBe(true);
