@@ -213,10 +213,9 @@ first full run under the 8-task load and passed on every later run (no threshold
   mutation load (decision 6), `mcp`'s silent `--format` fallback (decision 5), stale comments in `program.ts`,
   `registry.ts`, `index.ts` (`grep -rn "missing required argument: memory \|wingfoil dna \${verb} <path>" src`
   → nothing), spec-005 §4's wrong `--reason` example.
-- Not fixed (other files, other tasks' ground) — candidate findings in the final report: `directive assign`
-  labels `roles.yaml` validation with the absolute path (`src/core/directive-assign.ts` `parseRoles(text,
-  filePath)`, `filePath = join(root, ROLES_YAML_PATH)`); every MCP Resource refusal answers JSON-RPC `-32603`
-  (InternalError), WingFoil refusals included.
+- Not fixed (other ground), a candidate finding in the final report: every MCP Resource refusal answers
+  JSON-RPC `-32603` (InternalError), WingFoil refusals included. (`directive assign`'s absolute `roles.yaml`
+  label, listed here at first, was fixed as review F5.)
 
 ### review fixes (independent review: approve with fixes)
 
