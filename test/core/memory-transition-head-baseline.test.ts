@@ -274,16 +274,31 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     expect(head(repo)).toBe(before);
   });
 
-  // Review fix 5: a malformed document committed at HEAD, sorting before the target, is a refusal
-  // naming it, not a raw YAML throw at exit 2.
-  it('review: a committed document that does not parse is a refusal naming HEAD:<path>, exit 1', async () => {
+  // Review fix 5 (task-247), amended by task-171 (bug-031): a malformed document committed at HEAD,
+  // sorting before the target, no longer refuses the transition of ANOTHER element. It is reported as
+  // a W_MEMORY_UNREADABLE warning naming its repository-relative path.
+  it('task-171: a committed document that does not parse no longer refuses another element; it is a warning', async () => {
     writeFixtureFile(repo, 'docs/memory/bugs/bug-000.md', '---\nid: [unclosed\n---\n');
     commitAll(repo, 'a malformed document');
     const before = head(repo);
     const result = await run('memorySubmit', repo, 'task-001');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(head(repo)).not.toBe(before);
+    expect(result.warnings).toEqual([expect.stringMatching(/^W_MEMORY_UNREADABLE \(docs\/memory\/bugs\/bug-000\.md\): unreadable frontmatter in docs\/memory\/bugs\/bug-000\.md: /)]);
+  });
+
+  // The id may be in the unreadable document, so a miss says so — after the pinned P1.6 sentence.
+  it('task-171: an id not found while a committed document was unreadable is NOT_FOUND naming HEAD:<path>, exit 1', async () => {
+    writeFixtureFile(repo, 'docs/memory/bugs/bug-000.md', '---\nid: [unclosed\n---\n');
+    commitAll(repo, 'a malformed document');
+    const before = head(repo);
+    const result = await run('memorySubmit', repo, 'bug-000');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(exitCodeForResult(result)).toBe(1);
+    expect(result.error.code).toBe('NOT_FOUND');
+    expect(result.error.message.startsWith('document not found: bug-000')).toBe(true);
     expect(result.error.message).toContain('HEAD:docs/memory/bugs/bug-000.md');
     expect(head(repo)).toBe(before);
   });

@@ -19,3 +19,16 @@ Feature: P1.5 (US-1-08) - wingfoil memory search
     When I run "wingfoil memory search nonexistentkeyword"
     Then zero results are returned
     And the command exits with code 0 and message "no documents matched the query"
+
+  Scenario: Edge - a Memory file that cannot be read
+    Given a Memory file "task-002-broken.md" whose frontmatter is not valid YAML
+    When I run "wingfoil memory search api"
+    Then the results include the document titled "API design"
+    And the command exits with code 0
+    And a warning "W_MEMORY_UNREADABLE" names the file by its repository-relative path
+
+  Scenario: Edge - a file that is not a Memory element
+    Given a Markdown file under a Memory directory with no frontmatter "id" or "type"
+    When I run "wingfoil memory search"
+    Then that file is not among the results
+    And every returned document has an "id" and a "type"
