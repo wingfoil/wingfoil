@@ -10,7 +10,16 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { dump, load } from 'js-yaml';
 
-import { ADAPTER_PLACEHOLDERS, parseAdapterManifest, type AdapterKind } from '../../src/agent';
+import {
+  ADAPTER_MANIFEST_FORMAT,
+  ADAPTER_PLACEHOLDERS,
+  AdapterManifest,
+  E_ADAPTER_MANIFEST,
+  E_ADAPTER_PLACEHOLDER,
+  parseAdapterManifest,
+  placeholderIssues,
+  type AdapterKind,
+} from '../../src/agent';
 import { ValidationError, type ValidationIssue } from '../../src/validation';
 
 const FIXTURE = join(__dirname, '..', 'fixtures', 'agents', 'custom', 'fake.yaml');
@@ -355,5 +364,24 @@ describe('a manifest that is not YAML', () => {
     expect(() =>
       parseAdapterManifest('name: [unclosed', { name: 'fake', kind: 'custom', file: 'HEAD:.wingfoil/agents/custom/fake.yaml' }),
     ).toThrow(ValidationError);
+  });
+});
+
+describe('the module surface', () => {
+  it('format 1 is the only format, and the schema alone accepts the fake adapter', () => {
+    expect(ADAPTER_MANIFEST_FORMAT).toBe(1);
+    expect(AdapterManifest.safeParse(fake()).success).toBe(true);
+  });
+
+  it('Pass-2 issues carry their own codes: cross-field rules E_ADAPTER_MANIFEST, placeholders E_ADAPTER_PLACEHOLDER', () => {
+    const manifest = fake();
+    delete manifest.mcp.template;
+    manifest.launch.interactive.args.push('{nope}');
+    const codes = new Set(issuesOf(manifest).map((issue) => issue.code));
+    expect([...codes].sort()).toEqual([E_ADAPTER_MANIFEST, E_ADAPTER_PLACEHOLDER].sort());
+  });
+
+  it('placeholderIssues can be run on its own, and finds nothing in the fake adapter', () => {
+    expect(placeholderIssues(fake() as never, 'f.yaml')).toEqual([]);
   });
 });

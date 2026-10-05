@@ -7,7 +7,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { ADAPTERS_DIR_PATH, listAdaptersAtRev, loadAdapter } from '../../src/agent';
+import { ADAPTERS_DIR_PATH, E_ADAPTER_DUPLICATE, listAdaptersAtRev, loadAdapter } from '../../src/agent';
 import { errorDetails } from '../../src/core/error-details';
 import { ValidationError } from '../../src/validation';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -64,6 +64,7 @@ describe('adapter discovery and loading', () => {
         thrown = error;
       }
       expect(thrown).toBeInstanceOf(ValidationError);
+      expect((thrown as ValidationError).issues.map((issue) => issue.code)).toEqual([E_ADAPTER_DUPLICATE]);
       const message = (thrown as ValidationError).message;
       expect(message).toContain('built-in/fake.yaml');
       expect(message).toContain('custom/fake.yaml');
@@ -189,6 +190,15 @@ describe('adapter discovery and loading', () => {
       commitAll(repo, 'adapters');
       writeFixtureFile(repo, '.wingfoil/agents/built-in/fake.yaml', builtIn('fake'));
       expect(loadAdapter(repo, 'fake').ok).toBe(true);
+    });
+
+    it('a revision other than HEAD that names no commit is the revision refusal, not an empty adapter set', () => {
+      commitAll(repo, 'empty');
+      const result = loadAdapter(repo, 'fake', 'no-such-branch');
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('NOT_FOUND');
+      expect(result.error.message).toBe('revision "no-such-branch" does not name a commit');
     });
 
     it('reads another revision when asked', () => {
