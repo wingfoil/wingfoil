@@ -2,7 +2,7 @@
 id: bug-179-init-and-mcp-refuse-a-surplus-operand-in-commander-s-wording-not-the-shared-refusal
 type: bug
 title: "init and mcp refuse a surplus operand in Commander's wording, not the shared refusal"
-status: planned
+status: in-progress
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
