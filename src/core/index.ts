@@ -100,6 +100,8 @@ import type { CoreError, CoreResult } from './types';
 export const MODULE_NAME = 'core' as const;
 
 export {
+  // A missing working-tree configuration file, named repository-relative (task-179, `bug-245`).
+  ConfigFileMissingError,
   DIRECTIVES_DIR_PATH,
   DNA_YAML_PATH,
   MEMORY_YAML_PATH,
@@ -474,9 +476,10 @@ async function runDnaMutation(
   const current = readDocument(dnaPath);
   const serialized = applyDnaEditInText(current, applied.edit, applied.dna) ?? dump(applied.dna, { lineWidth: -1 });
 
-  const parsed = DnaYaml.safeParse(parseYaml(serialized, dnaPath));
+  // Labelled repository-relative, as every working-tree loader labels it (task-179, `bug-245`).
+  const parsed = DnaYaml.safeParse(parseYaml(serialized, DNA_YAML_PATH));
   if (!parsed.success) {
-    const validationError = toValidationError(parsed.error, dnaPath);
+    const validationError = toValidationError(parsed.error, DNA_YAML_PATH);
     return coreErr({ code: 'VALIDATION', message: validationError.message, details: { issues: validationError.issues } });
   }
 

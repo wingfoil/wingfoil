@@ -612,6 +612,17 @@ describe("buildProgram — the exit callback's own behaviour (task-103, `bug-103
     expect(written(stderrSpy)).toBe(`${JSON.stringify({ error: 'missing required argument: <command>', hint: 'usage: wingfoil dna <command>' })}\n`);
   });
 
+  it('an unknown verb is matched against its noun\'s verbs, and an unknown option keeps the parser\'s match, both as `hint:` (task-179)', async () => {
+    const program = await buildFixtureProgramWithRealExitCallback();
+    await parseIgnoringFallout(program, 'dna', 'sett', 'project.name');
+    expect(written(stderrSpy)).toBe(`error: unknown command 'sett'\nhint: did you mean "set"?\n`);
+
+    stderrSpy.mockClear();
+    const option = await buildFixtureProgramWithRealExitCallback();
+    await parseIgnoringFallout(option, 'dna', 'show', '--formt', 'json');
+    expect(written(stderrSpy)).toBe(`error: unknown option '--formt'\nhint: did you mean "--format"?\n`);
+  });
+
   it('an explicit `help` writes NO error line and asks for exit 0 — the trap, at the callback level', async () => {
     // `help` and `wingfoil dna` reach this callback through the SAME commander code
     // (`commander.help`); only the suggested exit code separates them. If that discriminator is ever

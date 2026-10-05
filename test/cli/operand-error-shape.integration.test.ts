@@ -129,6 +129,11 @@ describe('task-179 — one shape for missing-operand and unknown-command refusal
       expect([result.status, result.stderr]).toEqual([2, "error: unknown command 'memxyz'\n"]);
     });
 
+    it('an unknown option keeps the parser\'s match, in the same `hint:` wording', () => {
+      const result = runCli(repo, ['dna', 'show', '--formt', 'json']);
+      expect([result.status, result.stderr]).toEqual([2, `error: unknown option '--formt'\nhint: did you mean "--format"?\n`]);
+    });
+
     it('under `--format json` the hint is the same text', () => {
       const result = runCli(repo, ['--format', 'json', 'memroy', 'add']);
       expect(result.status).toBe(2);

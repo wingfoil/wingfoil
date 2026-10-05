@@ -7,9 +7,12 @@
  */
 import { coreErr, coreOk } from '../../src/core/types';
 import {
+  commandUsage,
   computeParityDiff,
   deriveVerb,
   enumerateOperations,
+  extraOperandsReason,
+  missingOperandReason,
   type CoreModule,
 } from '../../src/core/registry';
 
@@ -111,5 +114,35 @@ describe('computeParityDiff — the REQ-SYS-05 fit-criterion primitive', () => {
 
   it('the reported diffs are themselves sorted, independent of input order', () => {
     expect(computeParityDiff(['b', 'a'], [])).toEqual({ onlyInA: ['a', 'b'], onlyInB: [] });
+  });
+});
+
+describe('the operand refusals (task-179, bug-168, bug-180)', () => {
+  it('missingOperandReason names the placeholder --help shows', () => {
+    expect(missingOperandReason('id')).toBe('missing required argument: <id>');
+  });
+
+  it('commandUsage lists the positional, then only the REQUIRED options with their placeholders', () => {
+    expect(
+      commandUsage('memory approve', {
+        positional: { name: 'id', required: true, description: 'd' },
+        options: [
+          { name: 'reason', required: true, valueName: 'text' },
+          { name: 'note', valueName: 'text' },
+          { name: 'value', required: true },
+        ],
+      }),
+    ).toBe('wingfoil memory approve <id> --reason <text> --value <value>');
+  });
+
+  it('commandUsage brackets an optional positional, and a command with neither is its name alone', () => {
+    expect(commandUsage('paths', { positional: { name: 'category', description: 'c' } })).toBe('wingfoil paths [category]');
+    expect(commandUsage('workflow list', {})).toBe('wingfoil workflow list');
+  });
+
+  it('extraOperandsReason appends a declared surplus hint after what the command takes', () => {
+    expect(extraOperandsReason('dna set', 'path', 2, 'the value travels in --value')).toBe(
+      'wingfoil dna set takes one positional <path>; the value travels in --value (got 2 positionals)',
+    );
   });
 });
