@@ -590,7 +590,7 @@ binding serves every phase that uses the token. It also declares the named colle
 version: 1.0
 checks:
   tests.passing:           { run: [npm, test] }
-  tests.coverage:          { run: [npm, run, coverage, --, "--min={min}"], args: { min: "^[0-9]{1,3}$" } }
+  tests.coverage:          { run: [npm, run, coverage, --, --min, "{min}"], args: { min: "^[0-9]{1,3}$" } }
   docs.api.build:          { run: [npm, run, "docs:api"] }
   lint.clean:              { run: [npm, run, lint] }
 actions:
@@ -698,10 +698,11 @@ codes, except the named `kind` refusal.
 | `E_BINDING_PARTIAL_INTERPOLATION` | error | loader | a placeholder that is not a whole `run` element | `dl-090` Q3 |
 | `E_BINDING_BUILTIN_TOKEN` | error | loader | a project binding for a built-in token | `dl-090` Q5 |
 | `E_BINDING_AGENT_CHECK` | error | loader | a check bound to `wingfoil agent execute` | `dl-090` Q6 |
+| `E_BINDING_COLLECTION_KEY` | error | loader | a `bindings.yaml` collection entry with no key (a map with neither `id` nor `name`), a key outside the ID characters, or a key an earlier entry of the same collection already uses; path `collections.<name>[<i>]` | § "Collections"; approver ruling 2026-10-05 |
 | `E_PHASE_ROLE_UNKNOWN` | error | core | `role` or `approval.by_role` is not a `dna.yaml` `team.roles` name; message `unknown role '<role>' (not defined in dna.yaml)` | P3.2, P4.14 |
 | `E_PHASE_APPROVER_UNKNOWN` | error | core | `approval.by_person` names no `team.members[]` `name` or `email` | P4.14 sc. 2 |
 | `E_WORKFLOW_ELEMENT_TYPE_UNKNOWN` | error | core | `element`, a Memory `iterate_over`, a `memory.add(type: T)` or a `produces` owner type is not a `memory.yaml` type | P1.13 |
-| `E_WORKFLOW_COLLECTION_UNRESOLVED` | error | core | a collection `iterate_over` names no list in `dna.yaml` / `bindings.yaml`, or two entries share a key, or a key is outside the ID characters | `dl-104` D2 (b) |
+| `E_WORKFLOW_COLLECTION_UNRESOLVED` | error | core | a collection `iterate_over` names no list in `dna.yaml` / `bindings.yaml`, or a `dna.yaml` list it names has an entry with no key, two entries sharing a key, or a key outside the ID characters (a `bindings.yaml` collection's keys are `E_BINDING_COLLECTION_KEY`'s) | `dl-104` D2 (b) |
 | `W_WORKFLOW_UNBOUND_TOKEN` | warning | loader | an action or check token has neither a built-in nor a `bindings.yaml` binding | `dl-090` Q2 (c); open question 1, settled |
 | `W_PHASE_PRODUCES_OWNER_IMPLICIT` | warning | loader | a string `produces` entry with an `{id}` or `{<field>}` token in a phase that `memory.add`s (not a self-creating workflow's creating phase) | `dl-104` D3 |
 | `W_PHASE_ACTION_UNTARGETED` | warning | loader | an untyped Memory action (`memory.submit\|approve\|reject\|deprecate`, `element.*`) with no element to act on: the workflow binds none, no `memory.add` precedes it in the phase, and the phase has no selection | `spec-017` §4.2 |
@@ -721,7 +722,7 @@ table to the committed files (`git show 997e8998:.wingfoil/<path>`; `npm run -s 
 list --format json` with the pinned build 0.2.2 loads the same 23 workflows and 85 phases, exit `0`):
 one error, `E_PHASE_PRODUCES_NOT_A_PATH` on `retrospective.explore`
 (`.wingfoil/workflows/custom/retrospective.yaml:23`); and 103 warnings — 90
-`W_WORKFLOW_UNBOUND_TOKEN` (17 action occurrences over 13 distinct tokens, 73 check entries; no
+`W_WORKFLOW_UNBOUND_TOKEN` (17 action occurrences over 10 distinct token names, 73 check entries; no
 `bindings.yaml` exists), 9 `W_PHASE_PRODUCES_OWNER_IMPLICIT`, 2 `W_PHASE_TOKEN_OUT_OF_SCOPE`
 (`release-planning.yaml:118,120`: `{dl.id}` names no Memory type, and no enclosing scope is a `bug` for
 `{bug.id}`),
@@ -929,3 +930,17 @@ question 3 and that the existence of its type and state is a core check, and tha
 `cadence` is a structural failure, with the path and message of each refusal; the illustrative `Cadence` closes its outer object with
 `.strict()`. Open question 5 needed no text: `mode` was already one value. No existing code,
 severity or message changes. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-05) — collection keys become a loader row; the Layer 3 example and a count
+corrected, per `task-175-declare-phase-evidence-produces-ownership-selections-awaits-collections` and
+the approver's ruling at its review (D1 (a)).** A key rule that failed `bindings.yaml`'s structural
+pass left the whole file undecided, so a duplicate collection key also silenced every
+`W_WORKFLOW_UNBOUND_TOKEN`. The key rules of a `bindings.yaml` collection (an entry with no key, a
+key outside the ID characters, a repeated key) are therefore a loader row of their own,
+`E_BINDING_COLLECTION_KEY`, and `E_WORKFLOW_COLLECTION_UNRESOLVED` keeps the unresolved name and the
+key rules of a `dna.yaml` list, which need `dna.yaml` (core). The Layer 3 example bound
+`tests.coverage` with `"--min={min}"`, a partial interpolation `E_BINDING_PARTIAL_INTERPOLATION`
+refuses; it now passes `--min` and `"{min}"` as two elements. § "Diagnostics" "Measured" counted 13
+distinct unbound action tokens; by name they are 10 (`cli.run` and `git.commit` were counted once
+per phase). No other code, severity or message changes. Edited in place without a supersede or a
+state change (`dl-047`).
