@@ -8,7 +8,7 @@ kind: "fix"
 priority: "high"
 tags: ["v0.3", "core", "mcp", "first-use"]
 ref: "dl-039"
-bug: ["bug-035", "bug-151", "bug-184"]
+bug: ["bug-035", "bug-151", "bug-184", "bug-237"]
 depends_on: ["task-130-show-coreerror-details-surface-give-refusal-shape-under", "task-143-make-directive-loader-robust-dangling-symlinks-project"]
 tmpl_version: 260703
 ---
