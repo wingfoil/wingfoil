@@ -113,3 +113,6 @@ what they printed; scratch repositories held a copy of `.wingfoil/` where a find
   says `0.2.2` during v0.3 development). Two submit commits were amended by hand with `--no-edit`, which keeps the
   CLI-written message verbatim: `bug-231` (a note on `spec-004` corrected after the submit) and `dl-150` (a
   `release: "v0.3"` cleared, since the release is the approver's triage call).
+
+- **triage done (2026-10-05, approver)** — every captured element ruled; see `dev-loop-rel-v0.3-plan` (v1.13 and
+  the batch notes that follow) for the outcome per element, the new tasks and the handover notes.
