@@ -42,7 +42,10 @@ Custom WingFoil rule. Applies to all roles editing versioned docs.
   fails when the pending change (the working tree against `HEAD`) changes `.wingfoil/dna.yaml`,
   `memory.yaml`, `workflows.yaml` or `roles.yaml` — comments included — without changing its
   `version:` as YAML reads it, unless the branch already bumped that file since it left `main`
-  (`task-183`, `bug-143`). Committed history is not re-judged.
+  (`task-183`, `bug-143`). "Changes" is `git diff HEAD`'s verdict, so eol conversion is honoured. The
+  `main` it reads is the local `refs/heads/main`: a stale local `main` can credit a bump the branch did
+  not make, and with no local `main` the check is strict, against `HEAD` alone. Committed history is
+  not re-judged.
 
 > Rationale: keeps version numbers meaningful (one bump per revision that reaches `main`) rather than
 > churning on every micro-edit or review fix. Mirrors the standing project convention.
