@@ -56,7 +56,7 @@
 # docs/03_backlog/; each `requirements:` points to its by-release backlog JSON) plus the initial `adr`
 # and `decision-log` content recorded by initial-design (under design/adrs/ and design/dls/).
 # The per-type `template.file:` scaffolds live alongside the config under .wingfoil/memory/templates/.
-version: 2.3                     # [AUTHORING] config-file format version (WingFoil convention); a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable); 2.2 -> 2.3 at task-164 (release path folder = the release-line id, bug-163)
+version: 2.4                     # [AUTHORING] content revision (WingFoil convention, dl-047) — the file's FORMAT is the separate `format:` key [SPEC: spec-001, dl-149], absent here and so read as 1; a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable); 2.2 -> 2.3 at task-164 (release path folder = the release-line id, bug-163); 2.3 -> 2.4 at task-251 (this annotation: content revision, not format, dl-149)
 
 # Default machine used by any type that does not declare its own `states` block.
 # [SPEC: REQ-STATE-08] default machine: draft -> pending -> approved, reject from pending back to draft,
