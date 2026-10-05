@@ -40,9 +40,17 @@
 * **Rationale:** Scriptability and deterministic automation.
 * **Fit Criterion:** An automated matrix asserts the documented exit code for each command on success, logic-error, and
   missing-argument inputs (e.g., missing `--reason` → `2`, unknown document → `1`).
+* **Check exit codes:** A command bound to a workflow **check** (the token-binding file, `spec-003-workflows-yaml-schema` Layer 3) reads the same
+  codes as a gate: `0` the gate passes; `1` the gate fails and routes to the phase's `fallback`; `2` the binding is
+  misconfigured, so the phase is **blocked** and the gate does not count as failed. Any other status, a signal or a
+  timeout is an error. A command bound to an **action** fails its step on any non-zero status (REQ-INT-06). Fit
+  criterion for the clause: over a fixture check bound to a command exiting `0`, `1`, `2` and `3`, the engine reports
+  pass, fail-with-fallback, blocked and error respectively (asserted when check evaluation ships, P4.12).
 * **Traceability:** Feature P1.3 (US-4-01, BDD `p1-memory/P1.3-memory-add.feature`); Feature P1.6 (US-3-09,
   BDD `p1-memory/P1.6-memory-submit.feature`); Feature P1.7 (US-2-10, BDD `p1-memory/P1.7-memory-approve.feature`);
-  Feature P5.1.4 (US-0A-14, BDD `p5-interaction/P5.1.4-cli-ux.feature`); and all command features.
+  Feature P5.1.4 (US-0A-14, BDD `p5-interaction/P5.1.4-cli-ux.feature`); and all command features. The check
+  exit-code clause: `dl-090-which-command-each-workflow-token-binds` Q4 and Action 2, `spec-003-workflows-yaml-schema`
+  § "Check expressions"; Features P4.12 (checks) and P4.15 (fallback).
 
 ### REQ-INT-05 — Machine-readable output formats
 
