@@ -6,7 +6,7 @@ description: >-
   Close the release loop: EXPLORE the release's Execution Notes for friction, let the approver add
   points, capture what went well / what to improve as Memory, and feed adjustments into the next
   release planning.
-version: 1.1                     # dl-019/retro-v0.1 — added explore + additional-points phases
+version: 1.2                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175)
 element: release
 
 phases:
@@ -20,7 +20,9 @@ phases:
     actions:
       - agent.mine_execution_notes
     produces:
-      - "retrospective friction inventory (source-cited, grouped by theme)"
+      # The source-cited friction inventory, grouped by theme, outside every Memory path (approver
+      # ruling 2026-10-05; dl-104 D3: a produces entry is a path pattern an engine can test for existence).
+      - "docs/06_retrospectives/rl-{release.release-line}/rel-{release.version}-friction-inventory.md"
 
   - name: additional-points
     description: >-

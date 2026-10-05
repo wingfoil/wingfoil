@@ -31,7 +31,16 @@ import {
 import { Workflow, WorkflowsYaml } from '../workflow/schema';
 
 import { atHeadOr, listPathsAtCommit, resolveRevision } from './revision';
-import { indexWorkflowFiles, LoadedWorkflowFile, noStartableDiagnostic, workflowFileDiagnostics } from './workflow-diagnostics';
+import { BINDINGS_FILE, BindingsYaml } from '../workflow/bindings';
+import {
+  BindingsContext,
+  bindingsFileDiagnostics,
+  indexWorkflowFiles,
+  LoadedWorkflowFile,
+  NO_BINDINGS_FILE,
+  noStartableDiagnostic,
+  workflowFileDiagnostics,
+} from './workflow-diagnostics';
 
 /**
  * The resolved `Stats` of `full`, or why it cannot be resolved (task-143, `bug-125`). `statSync`
@@ -304,6 +313,17 @@ export interface WorkflowsLoadResult {
   /** `null` when `.wingfoil/workflows.yaml` is absent — an empty registry (spec-003 Layer 1). */
   readonly manifest: WorkflowsYaml | null;
   readonly workflows: readonly Workflow[];
+  /**
+   * The validated `workflows/bindings.yaml` (spec-003 Layer 3, task-175), or `null` when the project
+   * has none — an absent file is no bindings. Read only when the manifest is present.
+   */
+  readonly bindings: BindingsYaml | null;
+  /**
+   * The load's `warning` diagnostics, in spec-003's order (task-175: `W_WORKFLOW_UNBOUND_TOKEN`,
+   * `W_PHASE_PRODUCES_OWNER_IMPLICIT`, `W_PHASE_ACTION_UNTARGETED`). A load with an error throws a
+   * {@link DiagnosticsError} carrying every diagnostic instead, so a returned array holds warnings only.
+   */
+  readonly diagnostics: readonly Diagnostic[];
 }
 
 /** The manifest's path relative to `.wingfoil/` — the `file` of its diagnostics (spec-003). */
@@ -433,7 +453,7 @@ interface WorkflowSource {
  */
 function loadWorkflowsFrom(source: WorkflowSource): WorkflowsLoadResult {
   const manifestRaw = source.read(WORKFLOWS_MANIFEST_FILE);
-  if (manifestRaw === null) return { manifest: null, workflows: [] };
+  if (manifestRaw === null) return { manifest: null, workflows: [], bindings: null, diagnostics: [] };
   const manifestPath = source.label(WORKFLOWS_MANIFEST_FILE);
   // A manifest that cannot be read as YAML, or fails its structural pass, names no file to load: its
   // diagnostics are the whole array.
@@ -477,14 +497,37 @@ function loadWorkflowsFrom(source: WorkflowSource): WorkflowsLoadResult {
   const noStartable = noStartableDiagnostic(files, index);
   if (noStartable) manifestDiagnostics.push(noStartable);
 
+  // `workflows/bindings.yaml` (Layer 3, task-175) is read before the workflow files are checked, since
+  // their tokens resolve through it, but its own diagnostics come last (spec-003 § "Diagnostics" order).
+  const layer3 = loadBindingsFrom(source);
+
   const diagnostics: Diagnostic[] = [...manifestDiagnostics];
   files.forEach((_, i) => {
-    diagnostics.push(...structural[i]!, ...workflowFileDiagnostics(files, index, i));
+    diagnostics.push(...structural[i]!, ...workflowFileDiagnostics(files, index, i, layer3.context));
   });
+  diagnostics.push(...layer3.diagnostics);
   if (diagnostics.some((diagnostic) => diagnostic.severity === 'error')) throw new DiagnosticsError(diagnostics);
 
   // Every file is structurally valid once no error was reported.
-  return { manifest, workflows: files.map((loaded) => loaded.workflow!) };
+  return { manifest, workflows: files.map((loaded) => loaded.workflow!), bindings: layer3.context.bindings, diagnostics };
+}
+
+/**
+ * Layer 3 (spec-003, task-175): `workflows/bindings.yaml` through the same source as the workflow
+ * files. Absent → no bindings and no diagnostic. Not YAML → one `E_YAML_PARSE_ERROR`; structurally
+ * invalid → its Zod issues as `E_VALIDATION`; either way the tokens' bindings are left undecided.
+ * Otherwise the file's loader rows ({@link bindingsFileDiagnostics}).
+ */
+function loadBindingsFrom(source: WorkflowSource): { context: BindingsContext; diagnostics: Diagnostic[] } {
+  const raw = source.read(BINDINGS_FILE);
+  if (raw === null) return { context: NO_BINDINGS_FILE, diagnostics: [] };
+  const undecided: BindingsContext = { bindings: null, decided: false };
+  const yaml = parseYamlOrDiagnostic(raw, source.label(BINDINGS_FILE), BINDINGS_FILE);
+  if (yaml.diagnostic) return { context: undecided, diagnostics: [yaml.diagnostic] };
+  const result = BindingsYaml.safeParse(yaml.data ?? {});
+  if (!result.success) return { context: undecided, diagnostics: zodDiagnostics(result.error.issues, BINDINGS_FILE) };
+  emitUnknownFieldWarning((yaml.data ?? {}) as Record<string, unknown>, BindingsYaml as unknown as HasShape, source.label(BINDINGS_FILE));
+  return { context: { bindings: result.data, decided: true }, diagnostics: bindingsFileDiagnostics(result.data) };
 }
 
 /** One Directives pillar file: its root-relative path and its validated frontmatter. */

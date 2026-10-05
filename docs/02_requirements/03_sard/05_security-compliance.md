@@ -126,3 +126,22 @@
   0 notifications routed to unconfigured roles — asserted over a routing fixture.`
 * **Traceability:** Feature X1.2 (US-2-03, BDD `x1-notification/X1.2-notification-routing.feature`); Feature X1.1
   (US-2-02, BDD `x1-notification/X1.1-human-needed-notifications.feature`).
+
+### REQ-SEC-12 — Workflow token arguments reach a command as argv only
+
+* **Description:** When a workflow `actions:` or `checks:` token runs the command its binding declares
+  (the token-binding file, `spec-003-workflows-yaml-schema` Layer 3), the command is an argument vector, never a shell string. An interpolated value
+  (`{<key>}` for a token argument, `{element.field}` / `{<type>.field}` for the scope) fills one **whole** argument and
+  never part of one, and must match `spec-009-validation-strategy`'s ID character class or the pattern the binding
+  declares for that argument (`args`). No shell is involved at any point, so a separator inside a value is data.
+* **Rationale:** Interpolated values come from Memory frontmatter, which outside contributors write (`dl-020`). A
+  frontmatter value spliced into a shell string is a command-injection path; argv-only interpolation with a declared
+  value pattern removes it, and is checked where the binding is loaded rather than trusted at run time.
+* **Fit Criterion:** A binding whose `run` element interpolates part of an argument is refused at load
+  (`E_BINDING_PARTIAL_INTERPOLATION`, exit 1); over a fixture of interpolated values containing `;`, `|`, `$(…)`,
+  whitespace and quotes, **0** commands are executed through a shell, and every value outside the ID class or its
+  declared pattern is refused before the command starts.
+* **Traceability:** `dl-090-which-command-each-workflow-token-binds` Q3 (a) and Action 2;
+  `spec-003-workflows-yaml-schema` Layer 3 and § "Action expressions". Features P4.1 (workflow configuration), P4.10
+  (atomic step execution, v1.0) and P4.12 (checks, v1.0); no BDD scenario yet — the run-time half of the criterion is
+  the acceptance contract of the engine that executes bindings.

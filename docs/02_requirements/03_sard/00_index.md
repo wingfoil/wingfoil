@@ -22,8 +22,8 @@ chain is recorded in each requirement's `Traceability` field in the part files 0
 | [02_performance-nfr.md](02_performance-nfr.md)         | Performance & Latency                | `REQ-PERF-*`  | 5      |
 | [03_state-context.md](03_state-context.md)             | State & Context Management           | `REQ-STATE-*` | 10     |
 | [04_integrations.md](04_integrations.md)               | Integrations & Interfaces            | `REQ-INT-*`   | 9      |
-| [05_security-compliance.md](05_security-compliance.md) | Security & Compliance                | `REQ-SEC-*`   | 11     |
-| **Total**                                              |                                      |               | **44** |
+| [05_security-compliance.md](05_security-compliance.md) | Security & Compliance                | `REQ-SEC-*`   | 12     |
+| **Total**                                              |                                      |               | **45** |
 
 > The 5 macro-areas map 1:1 to files 01–05: file 01 captures the cross-cutting architectural
 > constraints (REQ-SYS), and files 02–05 the four NFR macro-areas that depend on them.
@@ -78,7 +78,7 @@ chain is recorded in each requirement's `Traceability` field in the part files 0
 | REQ-INT-01 | MCP Resources read-only     | Write via Resources refused                   | P5.2.1               |
 | REQ-INT-02 | MCP Prompts role-based      | Prompt embeds 100% role directives            | P5.2.2, P3.6         |
 | REQ-INT-03 | MCP Tools state mutation    | Same validation as CLI; agent-authored commit | P5.2.3               |
-| REQ-INT-04 | CLI exit-code contract      | 0/1/2 matrix asserted                         | P1.3, P1.6, P1.7, P5.1.4 (+ all command features) |
+| REQ-INT-04 | CLI exit-code contract      | 0/1/2 matrix asserted; check exit 0 pass / 1 fail / 2 blocked | P1.3, P1.6, P1.7, P5.1.4, P4.12, P4.15 (+ all command features) |
 | REQ-INT-05 | Machine-readable formats    | json/yaml parse valid                         | P2.5, P4.5                         |
 | REQ-INT-06 | Git operations as actions   | Effect produced; conflict aborts clean        | P4.10                              |
 | REQ-INT-07 | Agent execution wrapper     | role/element resolved, context pre-loaded     | P5.3.1, P5.3.2                     |
@@ -100,6 +100,7 @@ chain is recorded in each requirement's `Traceability` field in the part files 0
 | REQ-SEC-09 | Human approval before inferred writes | Nothing persisted until approved | P2.3, P5.1.2            |
 | REQ-SEC-10 | Built-in template integrity           | Corrupt template aborts init     | P3.8, P4.17             |
 | REQ-SEC-11 | Notification routing authority        | Routed only to dna.yaml-configured roles; 0 to unconfigured | X1.2, X1.1 |
+| REQ-SEC-12 | Token arguments as argv only          | Partial interpolation refused; 0 shell executions | P4.1, P4.10, P4.12 |
 
 ---
 
@@ -107,15 +108,16 @@ chain is recorded in each requirement's `Traceability` field in the part files 0
 
 > **Rule:** every requirement (REQ) must include a quantifiable, measurable Fit Criterion.
 
-- **Total requirements:** 44 (SYS 9, PERF 5, STATE 10, INT 9, SEC 11)
-- **Requirements with a Fit Criterion:** 44 / 44
+- **Total requirements:** 45 (SYS 9, PERF 5, STATE 10, INT 9, SEC 12)
+- **Requirements with a Fit Criterion:** 45 / 45
 - **Requirements without a Fit Criterion:** 0
 - **Coverage:** **100% ✅**
 
 ### Verification results (2026-06-26)
 
-> Recorded when the registry held 43 requirements. `REQ-STATE-10` (added 2026-10-01, `task-141`) carries a
-> `Fit Criterion:` line, so the 100% coverage above still holds.
+> Recorded when the registry held 43 requirements. `REQ-STATE-10` (added 2026-10-01, `task-141`) and `REQ-SEC-12`
+> (added 2026-10-05, `task-175`, `dl-090` Action 2) each carry a `Fit Criterion:` line, so the 100% coverage above
+> still holds.
 
 | Check                                    | Result                                                                       |
 |------------------------------------------|------------------------------------------------------------------------------|

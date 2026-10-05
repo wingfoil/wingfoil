@@ -495,11 +495,11 @@ describe('startable / includable — dl-109 K1 (a), BDD P4.1 sc. 1–2', () => {
 });
 
 describe('spec-003 Layer 1 — an absent manifest is an empty registry', () => {
-  it('loads { manifest: null, workflows: [] } with no diagnostic when .wingfoil/workflows.yaml is absent', () => {
+  it('loads { manifest: null, workflows: [], bindings: null, diagnostics: [] } with no diagnostic when .wingfoil/workflows.yaml is absent', () => {
     const repo = makeTempGitRepo();
     try {
       writeFixtureFile(repo, '.wingfoil/dna.yaml', 'version: 1.0\n');
-      expect(loadWorkflowsYaml(repo)).toEqual({ manifest: null, workflows: [] });
+      expect(loadWorkflowsYaml(repo)).toEqual({ manifest: null, workflows: [], bindings: null, diagnostics: [] });
     } finally {
       removeTempDir(repo);
     }

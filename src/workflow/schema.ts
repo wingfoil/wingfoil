@@ -155,11 +155,42 @@ export const Cadence = z.union([z.literal('once'), RecurringCadence], { error: (
 export type Cadence = z.infer<typeof Cadence>;
 // ---- end task-185 -----------------------------------------------------------------------------------
 
+// --- task-175: phase evidence (dl-104 D3, D4; spec-003 § "Evidence") ---
+
+/**
+ * One `produces` entry (`dl-104` D3): a path pattern owned by the workflow's `element` (a string), or
+ * `{ type: T, path }`, owned by the elements of type `T` the phase creates. Whether each path is a
+ * path pattern, and whether the phase creates `T`, are loader checks (`E_PHASE_PRODUCES_NOT_A_PATH`,
+ * `E_PHASE_PRODUCES_OWNER_NOT_CREATED`), so the rest of the file is still checked.
+ */
+export const Produces = z.union([z.string(), z.object({ type: z.string(), path: z.string() }).strict()]);
+/** Parsed shape of one {@link Produces} entry. */
+export type Produces = z.infer<typeof Produces>;
+
+/**
+ * `awaits` (`dl-104` D4): the phase waits on an actor outside the project — `party` names it,
+ * `evidence` is a check token (Layer 3) that observes the outcome. Evaluated from v1.0 (P4.12).
+ */
+const Awaits = z.object({ party: z.string().min(1), evidence: Check }).strict();
+
+/**
+ * A path pattern (spec-003 § "Evidence"): the characters `[A-Za-z0-9._/{}-]`, no whitespace — a
+ * repository-relative file or directory path, either with `{…}` tokens. Anything else is prose.
+ */
+export const PATH_PATTERN_RE = /^[A-Za-z0-9._/{}-]+$/;
+
+/** The path of one `produces` entry, whichever form it takes. */
+export function producesPath(entry: Produces): string {
+  return typeof entry === 'string' ? entry : entry.path;
+}
+
+// --- end task-175 ---
+
 /**
  * One `phases[]` entry of a Layer-2 workflow definition (spec-003) — a named step with its optional
- * `role`, `actions`, `include`, `iterate_over`/`where`, `produces`, `checks`, `approval`,
- * `fallback`, the executor attributes `mode` / `distinct_from` and the `cadence` (task-185).
- * `.passthrough()` per spec-009 §2, except the closed `cadence` union.
+ * `role`, `actions`, `include`, `iterate_over`/`where`, `produces`, `awaits` (task-175), `checks`,
+ * `approval`, `fallback`, the executor attributes `mode` / `distinct_from` and the `cadence`
+ * (task-185). `.passthrough()` per spec-009 §2, except the closed `cadence` union.
  */
 export const Phase = z
   .object({
@@ -171,7 +202,8 @@ export const Phase = z
     include: z.string().optional(),
     iterate_over: z.string().optional(),
     where: z.record(z.string(), WhereValue).optional(),
-    produces: z.array(z.string()).optional(),
+    produces: z.array(Produces).optional(), // task-175: string | { type, path } (dl-104 D3)
+    awaits: Awaits.optional(), // task-175: dl-104 D4
     checks: z
       .object({ pre: z.array(Check).optional(), post: z.array(Check).optional() })
       .passthrough()
