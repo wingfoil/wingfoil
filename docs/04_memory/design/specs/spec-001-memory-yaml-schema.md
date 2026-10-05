@@ -147,8 +147,8 @@ const TemplateConfig = z.object({
 **`amendable` — which types `memory amend` may correct** (`dl-108` A3, `task-127`). `true` lets
 `memory amend` record a content correction on the type's documents in any state, with no state
 change (`spec-008` §2, `spec-010` § Field-write ownership). Absent or `false`, the verb refuses the
-type at exit `1`. Absent means `false` so that amending is a choice made per type: a type whose
-content is a decision, such as `adr`, is corrected by a new element and declares `false` explicitly.
+type at exit `1`. Absent means `false` so that amending is a choice made per type. A changed
+decision is never an amendment: for an `adr` it is a new element, even where `adr` is amendable.
 The key is read from the `memory.yaml` committed at `HEAD`, like the state machine (`dl-080` (B)).
 There is no `defaults.amendable`: the choice is never inherited.
 
@@ -273,7 +273,7 @@ types:
   adr:
     path: "docs/04_memory/design/adrs/{id}.md"
     id_pattern: "adr-{n}-{slug}"
-    amendable: false   # dl-108 A3: a change to the decision is a new ADR
+    amendable: true    # dated correction notes only; a changed decision is a new ADR (dl-108 A3, task-158)
     states:
       sequence: [ draft, pending, accepted, superseded ]
       gates:
@@ -470,3 +470,10 @@ default machine, so that bullet records history, not an open debt. `dl-072` (A) 
 init` scaffold keeps the shared `defaults` block and shows a commented per-type `states:` example on
 `bug`, which `spec-011` states. No field, edge or worked example changes. Edited in place, with no
 `version:` bump (`dl-047`); pending the approver's sign-off at `task-153`'s review.
+
+**Revision (2026-10-02, `task-158-reconcile-adr-001-adr-010-node-22-floor`) — `adr` is amendable.**
+At the approver's ruling of 2026-10-02 this repository's `memory.yaml` 2.2 declares `adr`
+`amendable: true`, and the `wingfoil init` scaffold follows. `dl-108` A3 counts "facts that later
+evidence corrected, and dated revision notes" as amendments and only a change to the decision itself
+as a new element; the worked example and the `amendable` paragraph now say so. Edited in place, with
+no `version:` bump (`dl-047`); pending the approver's sign-off at `task-158`'s review.

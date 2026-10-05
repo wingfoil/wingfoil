@@ -7,9 +7,11 @@
  * Exercises the REAL, registered `CORE_MODULES` `memory.memoryAmend` operation — the exact `CoreFn`
  * the CLI command and the MCP Tool dispatch to. Every write lands in a THROWAWAY temp git repo.
  *
- * The fixture's `tech-spec` and `adr` carry this repository's own machines (`.wingfoil/memory.yaml`);
- * `tech-spec` declares `amendable: true`, `adr` declares `amendable: false` (`dl-108` A3: a change to
- * an ADR's decision is a new element), and `note` declares nothing — absent means not amendable.
+ * The fixture's `tech-spec`, `adr` and `release` carry this repository's own machines
+ * (`.wingfoil/memory.yaml`): `tech-spec` and `adr` declare `amendable: true` (an `adr` takes dated
+ * correction and Revision notes; a changed decision is still a new ADR, `dl-108` A3 — approver ruling
+ * at `task-158`, 2026-10-02), `release` declares `amendable: false`, and `note` declares nothing —
+ * absent means not amendable.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -43,12 +45,17 @@ types:
       waiting: [approved]
   adr:
     path: "docs/memory/adrs/{id}.md"
-    amendable: false
+    amendable: true
     states:
       sequence: [draft, pending, accepted, superseded]
       gates:
         pending: { reject: draft }
       waiting: [accepted]
+  release:
+    path: "docs/memory/planning/{id}.md"
+    amendable: false
+    states:
+      sequence: [draft, planning, in-development, releasing, released]
   note:
     path: "docs/memory/note/{id}.md"
 `;
@@ -82,6 +89,7 @@ const REVIEWER_ONLY_DNA = APPROVER_DNA.replace('roles: [ approver, developer ]',
 const SPEC = 'docs/memory/specs/spec-001.md';
 const ADR = 'docs/memory/adrs/adr-001.md';
 const NOTE = 'docs/memory/note/note-1.md';
+const RELEASE = 'docs/memory/planning/minor-v0.1.md';
 
 function doc(fields: { id: string; type: string; status: string; title?: string; scope?: string | null }, body = 'Original body.\n'): string {
   const scope = fields.scope === null ? '' : `scope: "${fields.scope ?? 'src/x'}"\n`;
@@ -139,6 +147,7 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
     writeFixtureFile(repo, SPEC, doc({ id: 'spec-001', type: 'tech-spec', status: 'approved' }));
     writeFixtureFile(repo, ADR, doc({ id: 'adr-001', type: 'adr', status: 'accepted' }));
     writeFixtureFile(repo, NOTE, doc({ id: 'note-1', type: 'note', status: 'approved' }));
+    writeFixtureFile(repo, RELEASE, doc({ id: 'minor-v0.1', type: 'release', status: 'released' }));
     writeFixtureFile(repo, 'src/other.ts', 'export const a = 1;\n');
     commitAll(repo, 'seed');
   });
@@ -173,6 +182,22 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
       // The commit carries the author's bytes verbatim, and nothing is left behind for that file.
       expect(gitOut(repo, ['show', `HEAD:${SPEC}`]) + '\n').toBe(edited);
       expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    });
+
+    it('task-158: an accepted adr takes a dated correction note as one amend commit, `[accepted → accepted]`', async () => {
+      const edited = doc({ id: 'adr-001', type: 'adr', status: 'accepted' }, 'Original body.\n\n> **Correction (2026-10-02) — a fact.**\n');
+      writeFixtureFile(repo, ADR, edited);
+      const before = head(repo);
+
+      const result = await amend()({ root: repo, positional: 'adr-001', options: { reason: 'a correction note' } });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toEqual({ id: 'adr-001', path: ADR, from: 'accepted', to: 'accepted' });
+      expect(gitOut(repo, ['rev-list', '--count', `${before}..HEAD`])).toBe('1');
+      expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD'])).toBe(ADR);
+      expect(gitOut(repo, ['log', '-1', '--format=%s'])).toBe('wf(adr): amend adr-001 [accepted → accepted]');
+      expect(gitOut(repo, ['show', `HEAD:${ADR}`]) + '\n').toBe(edited);
     });
 
     it('may change a frontmatter field other than status (spec-010: amend owns the body and the non-status fields)', async () => {
@@ -337,10 +362,10 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
     });
 
     it.each([
-      ['adr', 'adr-001', ADR, 'declares amendable: false'],
+      ['release', 'minor-v0.1', RELEASE, 'declares amendable: false'],
       ['note', 'note-1', NOTE, 'does not declare amendable: true'],
     ])('a type whose memory.yaml entry does not declare itself amendable (%s) → exit 1', async (type, id, path, why) => {
-      const status = type === 'adr' ? 'accepted' : 'approved';
+      const status = type === 'release' ? 'released' : 'approved';
       const edited = doc({ id, type, status }, 'Corrected body.\n');
       writeFixtureFile(repo, path, edited);
       const before = head(repo);
@@ -354,12 +379,12 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
 
     it('amendability is read from the committed memory.yaml, not the working tree (command-baseline)', async () => {
       writeFixtureFile(repo, '.wingfoil/memory.yaml', MEMORY_YAML.replace('amendable: false', 'amendable: true'));
-      const edited = doc({ id: 'adr-001', type: 'adr', status: 'accepted' }, 'Corrected body.\n');
-      writeFixtureFile(repo, ADR, edited);
+      const edited = doc({ id: 'minor-v0.1', type: 'release', status: 'released' }, 'Corrected body.\n');
+      writeFixtureFile(repo, RELEASE, edited);
       const before = head(repo);
-      const result = await amend()({ root: repo, positional: 'adr-001', options: { reason: 'r' } });
+      const result = await amend()({ root: repo, positional: 'minor-v0.1', options: { reason: 'r' } });
       expect(result.ok).toBe(false);
-      expectNothingWritten(before, ADR, edited);
+      expectNothingWritten(before, RELEASE, edited);
     });
 
     it.each([

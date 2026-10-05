@@ -539,7 +539,8 @@ run `amend`: it commits that edit, and only that file, as one recorded operation
 correction to an element no other verb can move, such as an `approved` tech-spec. Same approver
 requirement as `approve`. The type must declare `amendable: true` in the committed `memory.yaml`;
 absent means not amendable. A project created by `wingfoil init` declares it for `tech-spec`,
-`decision-log`, `task` and `bug`, and declares `false` for `adr`, `release` and `release-line`.
+`decision-log`, `task`, `bug` and `adr` (for a dated correction note: a
+changed decision is a new ADR), and declares `false` for `release` and `release-line`.
 `release` is fixed only on a type whose scaffold, as committed, declares a `release` field. On any
 other type an amendment may remove a `release` key, as when a `service`'s set-up release moves to
 `set_up_in`.
@@ -570,7 +571,7 @@ Other modified or staged files are left as they are and are not committed.
   past `draft`, the edit empties `title` or a required field → exit `1`
   (`error: missing required field on amend: <fields>`), or (Unreleased (v0.3)) sets a not-applicable
   value the type does not allow on that field → exit `1` (`error: not-applicable value on amend: <field> …`);
-  the type is not amendable → exit `1` (`error: type 'adr' is not amendable: …`); not an approver →
+  the type is not amendable → exit `1` (`error: type 'release' is not amendable: …`); not an approver →
   exit `1` (`error: user not authorized to approve type 'tech-spec'`).
 
 #### Rules for `--reason` (approve, reject, deprecate, amend)

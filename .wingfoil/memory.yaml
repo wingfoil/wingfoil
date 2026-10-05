@@ -6,9 +6,10 @@
 # element.set_state actions are validated against the type's graph.
 # `amendable` (dl-108 A3, spec-001, task-127) says whether `memory amend` may record a content
 # correction on a type's documents without a state change; absent means false. Values:
-# true for tech-spec, decision-log, service, task, bug and plan; false for adr (a change to the
-# decision is a new ADR, dl-108 A3), release and release-line (approver ruling, task-127 review,
-# 2026-10-01).
+# true for tech-spec, decision-log, service, task, bug and plan; false for release and release-line
+# (approver ruling, task-127 review, 2026-10-01). true for adr since the approver ruling of 2026-10-02
+# (task-158): dated correction and Revision notes only, since a change to the decision is a new ADR
+# (dl-108 A3).
 # Source: docs/01_vision/06_features.md, docs/02_requirements/.../P1.13-memory-element-schema.feature
 #          docs/02_requirements/03_sard/03_state-context.md (REQ-STATE-01, REQ-STATE-08)
 #
@@ -55,7 +56,7 @@
 # docs/03_backlog/; each `requirements:` points to its by-release backlog JSON) plus the initial `adr`
 # and `decision-log` content recorded by initial-design (under design/adrs/ and design/dls/).
 # The per-type `template.file:` scaffolds live alongside the config under .wingfoil/memory/templates/.
-version: 2.1                     # [AUTHORING] config-file format version (WingFoil convention); a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053)
+version: 2.2                     # [AUTHORING] config-file format version (WingFoil convention); a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable)
 
 # Default machine used by any type that does not declare its own `states` block.
 # [SPEC: REQ-STATE-08] default machine: draft -> pending -> approved, reject from pending back to draft,
@@ -157,7 +158,7 @@ types:
       frontmatter:
         required: [ title, sard_ref ]
       file: "memory/templates/adr.md"
-    amendable: false     # [SPEC: dl-108 A3] a change to the decision is a new ADR
+    amendable: true      # key [SPEC: spec-001, dl-108 A3]; value: approver ruling 2026-10-02 (task-158) — dated correction and Revision notes are amendments ("facts that later evidence corrected, and dated revision notes", dl-108 A3); a change to the decision itself is still a new ADR
     states: # [SPEC] structure (P1.13 / REQ-SYS-04); [AUTHORING] ADR vocabulary+encoding (accepted/superseded lifecycle)
       sequence: [ draft, pending, accepted, superseded ]
       gates:

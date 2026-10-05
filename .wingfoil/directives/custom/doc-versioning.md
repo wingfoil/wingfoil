@@ -27,8 +27,9 @@ Custom WingFoil rule. Applies to all roles editing versioned docs.
   equivalent closing section. `<element>` is what required the edit: e.g. the decision-log, bug or task, an approver ruling or a plan.
   Git already versions every Memory element per commit (P1.2, P1.10), so the note records the human
   reason, not a number. The edit is committed with `memory amend`, which needs approver authority,
-  for every type that `memory.yaml` declares `amendable: true`. An `adr` is not edited in place: it is
-  `amendable: false`, and a changed decision is a new ADR (`dl-108` A3).
+  for every type that `memory.yaml` declares `amendable: true`. An `adr` takes such a note too
+  (`amendable: true`, approver ruling at `task-158`), but only for a correction: a changed decision
+  is a new ADR (`dl-108` A3).
 
 ## The bump rule
 
