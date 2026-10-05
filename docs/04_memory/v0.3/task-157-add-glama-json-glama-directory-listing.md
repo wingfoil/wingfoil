@@ -2,7 +2,7 @@
 id: "task-157-add-glama-json-glama-directory-listing"
 type: task
 title: "Add glama.json for the Glama directory listing"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "low"
