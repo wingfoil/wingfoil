@@ -111,13 +111,34 @@ what it does not (directive declares no version: `grep -c '^version:'` → `0`, 
 - AC 1: met — tests "fails a content edit that leaves version: unchanged…", "fails a staged edit…",
   "fails a comment-only edit…", "compares versions as YAML reads them…", plus the repository probe
   above. Clean tree passes ("passes a clean committed tree", and the suite passes on this branch).
-- Determinism: fixed ordered file list; verdict depends only on git objects and file bytes.
+- Determinism: fixed ordered file list, no clock or randomness. The verdict depends on git objects,
+  file bytes, the eol settings and where the local `main` points (corrected at review, F2).
 - `git` errors are swallowed only where absence is the meaning (`git show HEAD:<path>` of a file not
   at `HEAD`, an absent `main`); stderr of those calls is not echoed.
 - Limit, stated in the directive bullet: the gate judges the pending change only. A commit made
   without running the suite is not caught, and on a clean CI checkout (`task-208`'s `governance.yml`)
   the gate has nothing to judge — `task-208`'s note that the suite there enforces `bug-143` holds only
   for uncommitted edits, which CI never has. Reported to the coordinator, not filed.
+
+### review fixes (independent review: approve with fixes)
+
+- **F1** — "differs" compared the raw `HEAD` blob with the working-tree bytes, ignoring eol
+  conversion, so a clean `core.autocrlf=true` checkout failed. Red `cf7b467f`: a fixture test
+  checks out with `core.autocrlf=true` (CRLF in the working tree) →
+  `npx jest test/lint/version-bump.test.ts` → `1 failed, 17 passed` (all four files reported).
+  Green `bd54b915`: "differs" is now `git diff --quiet HEAD -- <path>` (exit 1 = differs; staged and
+  unstaged; eol filters applied); versions are read as before → `18 passed`. The same test also
+  checks that a CRLF edit without a bump still fails.
+- **F2** — the helper's TSDoc (`bd54b915`) and the `doc-versioning` bullet (`306b8cba`) now say the
+  relaxation trusts the local `refs/heads/main` (a stale local `main` can over-credit a bump; no
+  local `main` → strict against `HEAD`). The test header's and these notes' "pure function of git
+  objects and bytes" is corrected: the verdict also depends on the eol settings and where `main`
+  points.
+- Not in-task (the coordinator files them): a numeric-increase tightening; committed edits never
+  judged (a range rule in `check-governance --base`; `task-208`'s enforcement note).
+- Re-run: `npm test` → `Test Suites: 244 passed`, `Tests: 4631 passed`; `npm run lint` → `0`;
+  `npx tsc --noEmit -p tsconfig.json` → `0`; `npx tsc -p tsconfig.build.json --noEmit` → `0`;
+  `node scripts/check-governance.cjs --base 0cf8b131` → `0`.
 
 ### Decisions for the approver
 
