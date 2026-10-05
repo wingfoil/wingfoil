@@ -2,7 +2,7 @@
 id: "task-173-add-whole-project-typecheck-clean-gate-control-character"
 type: task
 title: "Add the whole-project `typecheck.clean` gate and a control-character gate, and run them in CI and before release"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "high"
