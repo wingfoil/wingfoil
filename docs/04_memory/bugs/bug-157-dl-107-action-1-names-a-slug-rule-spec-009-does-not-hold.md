@@ -2,7 +2,7 @@
 id: "bug-157-dl-107-action-1-names-a-slug-rule-spec-009-does-not-hold"
 type: bug
 title: "`dl-107` Action 1 asks to amend a slug rule in `spec-009` §1, but `spec-009` holds no slug rule, so half of the Action has no target and is still open"
-status: in-review
+status: closed
 severity: "low"
 release-origin: "v0.2.2"
 release: "v0.3"
