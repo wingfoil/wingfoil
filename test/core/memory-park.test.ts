@@ -12,7 +12,7 @@
  * Exercises the REAL, registered `CORE_MODULES` `memory.memoryPark` operation, in a throwaway repo.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CORE_MODULES } from '../../src/core';
@@ -133,15 +133,17 @@ describe('CORE_MODULES memory.memoryPark (task-180, dl-110 P1 (a))', () => {
   });
 
   it.each([
-    ['task-002', 'in-review', "illegal transition in-review -> backlog for type 'task'"],
-    ['note-001', 'draft', "illegal transition draft -> (none) for type 'note'"],
-  ])('%s, in %s, has no `returns` edge: exit 1, nothing written', async (id, _state, message) => {
+    ['task-002', 'in-review', 'task'],
+    ['note-001', 'draft', 'note'],
+  ])('%s, in %s, has no `returns` edge: exit 1, nothing written', async (id, state, type) => {
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
     const result = await park(repo, id, { reason: 'try' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('INVALID_TRANSITION');
-    expect(result.error.message).toBe(message);
+    // The `<to>` is not pinned (task-181, bug-165): the refusal names the state and the type, and why.
+    expect(result.error.message).toMatch(new RegExp(`^illegal transition ${state} -> \\S+ for type '${type}'$`));
+    expect(JSON.stringify(result.error.details)).toContain('not a `returns` state');
     expect(exitCodeForResult(result)).toBe(1);
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
@@ -162,6 +164,19 @@ describe('CORE_MODULES memory.memoryPark (task-180, dl-110 P1 (a))', () => {
       expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
     },
   );
+
+  it('an uncommitted edit of the document is refused, not swept into the park commit (bug-076 guard)', async () => {
+    const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const path = join(repo, 'docs/memory/tasks/task-001.md');
+    const edited = readFileSync(path, 'utf-8') + '\nAn unrelated paragraph.\n';
+    writeFileSync(path, edited);
+    const result = await park(repo, 'task-001', { reason: 'not now' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
+    expect(readFileSync(path, 'utf-8')).toBe(edited);
+  });
 
   it('a missing <id> is a usage error, exit 2', async () => {
     let thrown: unknown;

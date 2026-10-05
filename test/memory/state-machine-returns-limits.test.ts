@@ -116,7 +116,9 @@ describe('the `park` edge in the engine', () => {
     expect(() => resolveTransitionTarget(machine, state, 'park')).toThrow(ValidationError);
   });
 
-  it('the contract message names the type and the canonical park edge (dl-032), exit 1', () => {
+  // The `<to>` of the contract message is not pinned: task-181 (bug-165) changes how it is computed.
+  // What a park refusal must say is the state it was refused from, the type, and why.
+  it('the contract message names the state refused from and the type (dl-032), exit 1', () => {
     const memoryYaml = MemoryYaml.parse({ version: 1, types: { task: { path: 'docs/{id}.md', states: machine } } });
     try {
       resolveTypeTransition(memoryYaml, 'task', 'in-review', 'park');
@@ -125,15 +127,16 @@ describe('the `park` edge in the engine', () => {
       expect(error).toBeInstanceOf(ValidationError);
       const issue = (error as ValidationError).issues[0]!;
       expect(issue.code).toBe(E_INVALID_TRANSITION);
-      expect(issue.message).toBe("illegal transition in-review -> backlog for type 'task'");
+      expect(issue.message).toMatch(/^illegal transition in-review -> \S+ for type 'task'$/);
+      expect(issue.detail).toContain('not a `returns` state');
       expect((error as ValidationError).exitCode).toBe(1);
     }
   });
 
-  it('on a machine with no `returns` at all, the message names no target', () => {
+  it('on a machine with no `returns` at all, `park` is refused the same way', () => {
     const memoryYaml = MemoryYaml.parse({ version: 1, types: { note: { path: 'docs/{id}.md' } } });
     expect(() => resolveTypeTransition(memoryYaml, 'note', 'draft', 'park')).toThrow(
-      "illegal transition draft -> (none) for type 'note'",
+      /illegal transition draft -> \S+ for type 'note'$/,
     );
   });
 

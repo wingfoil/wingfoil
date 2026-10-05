@@ -224,7 +224,8 @@ function escapeRegExp(value: string): string {
 /**
  * Copy a type's `template.file` scaffold verbatim and fill only the frontmatter skeleton `memory.add`
  * pins (P1.3; spec-010-memory-frontmatter-schema): the generated `id`, the `--title`, the
- * initial `status` (the head of the type's machine, {@link AddDocumentFields.status}), when `--tags` was supplied the `tags` flow sequence, and the `--set` fields
+ * initial `status` (the head of the type's machine, {@link AddDocumentFields.status}), when `--tags`
+ * was supplied the `tags` flow sequence, and the `--set` fields
  * {@link AddDocumentFields.fields} carries (task-110). Every other
  * field (notably `type` and `tmpl_version`, spec-010: not touched by add) and the whole body are left
  * exactly as the scaffold had them. `title`/`tags` are JSON-quoted (valid YAML double-quoted scalars /

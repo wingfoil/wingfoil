@@ -172,6 +172,15 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
     expect(result.error.message).toContain('(limit 1): held by card-001, card-004.');
   });
 
+  it('a holder whose frontmatter carries no id is named by its path', async () => {
+    writeFixtureFile(repo, 'docs/memory/cards/card-001.md', doc('card-001', 'card', 'in-progress').replace('id: "card-001"\n', ''));
+    commitAll(repo, 'a holder without an id');
+    const result = await verb('memorySubmit', repo, 'card-002');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('held by docs/memory/cards/card-001.md.');
+  });
+
   it('below the limit the transition goes through', async () => {
     const result = await verb('memorySubmit', repo, 'wide-002');
     expect(result.ok).toBe(true);

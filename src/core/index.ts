@@ -2221,7 +2221,8 @@ export const CORE_MODULES: readonly CoreModule[] = [
         example: 'wingfoil memory deprecate dl-001-use-postgresql --reason "Superseded by the hosted-DB decision."',
         fn: memoryDeprecateFn,
       },
-      // task-180 (`dl-110` P1 (a)) — `mutates: true`: CLI `wingfoil memory park <id> --reason <text>`.
+      // task-180 (`dl-110` P1 (a)) — `mutates: true`: CLI `wingfoil memory park <id> --reason <text>` + MCP
+      // Tool `memory.park`.
       // `--reason` is `required` (metadata; `memoryParkFn` enforces it via `requireReason`). The id
       // rides the bare `positional` seam (spec-008 §7).
       memoryPark: {
