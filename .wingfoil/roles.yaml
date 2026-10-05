@@ -12,7 +12,11 @@
 # command: it must be loaded before a read is written, and before a review lets one through.
 # `claim-evidence` is global — its measured instances are acceptance criteria and bug fields as
 # often as TSDoc, so binding it to the coding roles alone would miss most of them.
-version: 1.2
+#
+# `git-conventions` (dl-119 Q2 (b), task-178) is global: its subject, identity and attribution clauses
+# bind whoever commits — the approver's approve commits, the facilitator's and product-owner's captures
+# — not only the developer. Declared global here and by `scope: global` in its file (task-144).
+version: 1.3
 
 assignments:
   developer:
@@ -44,3 +48,4 @@ global:
   - security
   - security-secrets
   - claim-evidence
+  - git-conventions
