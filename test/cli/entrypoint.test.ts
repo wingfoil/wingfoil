@@ -69,6 +69,7 @@ beforeEach(() => {
 afterEach(() => {
   exitSpy.mockRestore();
   stderrSpy.mockRestore();
+  process.exitCode = undefined;
 });
 
 describe('src/cli.ts — the `wingfoil` bin entrypoint', () => {
@@ -172,14 +173,54 @@ describe('src/cli.ts — the last-resort error handler (bug-002-cli-error-stack-
   });
 
   it('lets a DeferredExit through silently: the exit is already chosen and waits for output to drain (task-249)', async () => {
-    // Matched by name, so the error need not come from the same copy of `src/cli/exit` the entry loads.
+    // Matched by name, so the error need not come from the same copy of `src/cli/exit` the entry loads;
+    // `exitWith` has already set `process.exitCode`, which is what makes the name trustworthy.
     const deferred = Object.assign(new Error('exit 2 deferred until the output drains'), { name: 'DeferredExit' });
     jest.mocked(buildProgram).mockRejectedValue(deferred);
+    process.exitCode = 2;
 
     await runEntrypoint();
 
     expect(stderrSpy).not.toHaveBeenCalled();
     expect(exitSpy).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(2);
+  });
+
+  it('an error merely NAMED DeferredExit, with no exit code chosen, is reported and exits 1 (task-249 review F2)', async () => {
+    const impostor = Object.assign(new Error('not from exitWith'), { name: 'DeferredExit' });
+    jest.mocked(buildProgram).mockRejectedValue(impostor);
+
+    await runEntrypoint();
+
+    expect(stderrSpy.mock.calls.map((call) => String(call[0])).join('')).toBe('error: not from exitWith\n');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('waits for queued stdout before exiting 1, through exitWith (task-249 review F1, spec-005 §1)', async () => {
+    // A queued stdout is simulated with an own `writableLength`; `stdout.write` is stubbed so the test
+    // decides when the empty "flush marker" write completes.
+    Object.defineProperty(process.stdout, 'writableLength', { value: 1, configurable: true });
+    const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const errorListeners = process.stdout.listeners('error');
+    try {
+      jest.mocked(buildProgram).mockRejectedValue(new Error('escaped after a large payload'));
+
+      await runEntrypoint();
+
+      expect(stderrSpy.mock.calls.map((call) => String(call[0])).join('')).toBe('error: escaped after a large payload\n');
+      expect(exitSpy).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(1);
+      const marker = stdoutSpy.mock.calls.find((call) => call[0] === '')?.[1] as ((error?: Error | null) => void) | undefined;
+      expect(marker).toBeDefined();
+      marker!(null);
+      expect(exitSpy.mock.calls).toEqual([[1]]);
+    } finally {
+      delete (process.stdout as unknown as { writableLength?: number }).writableLength;
+      for (const listener of process.stdout.listeners('error')) {
+        if (!errorListeners.includes(listener)) process.stdout.removeListener('error', listener as (...args: unknown[]) => void);
+      }
+      stdoutSpy.mockRestore();
+    }
   });
 
   it('stringifies a non-Error rejection instead of printing `undefined`', async () => {
