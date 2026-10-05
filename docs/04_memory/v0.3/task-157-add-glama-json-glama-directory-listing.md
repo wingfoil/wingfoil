@@ -142,3 +142,13 @@ Run with the spec-015 amendment in the working tree:
   `--reason`: "task-157 adds a second root listing input, glama.json, which claims the Glama listing of
   an organisation-owned repository; section 1b states its two keys, the schema it is validated against,
   and that it stays out of the tarball. The files allowlist and the pipeline are unchanged."
+
+### AC 3 — Glama listing (2026-10-05)
+
+- After the push of `main` (`ea637c43..ccccc227`) the approver added the server on Glama, claimed it by
+  signing in with GitHub as `robypomper` (the maintainer `glama.json` names), configured Admin →
+  Dockerfile (build from the repository with npm, a demo project in `/opt/wingfoil-demo`, CMD
+  `mcp-proxy -- … wingfoil mcp`, no env vars), and the build passed.
+- Listing: `https://glama.ai/mcp/servers/wingfoil/wingfoil` (`curl -s -o /dev/null -w '%{http_code}'` → 200).
+- Recorded as `svc-013-glama-listing-wingfoil` (`kind: listing`, `active`, `7e22b6cd`) through
+  `service-ingest-rel-v0.3-listings-plan`.
