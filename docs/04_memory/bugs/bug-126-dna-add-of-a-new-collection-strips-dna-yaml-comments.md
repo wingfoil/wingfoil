@@ -2,7 +2,7 @@
 id: "bug-126-dna-add-of-a-new-collection-strips-dna-yaml-comments"
 type: bug
 title: "`dna add` on a collection `dna.yaml` does not declare yet (e.g. the first `team.agents` entry) rewrites the file without a single comment"
-status: planned
+status: in-progress
 severity: "medium"
 release-origin: "v0.2"
 release: "v0.3"
