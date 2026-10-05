@@ -2,7 +2,7 @@
 id: "task-180-add-memory-park-declared-returns-edge-optional-per"
 type: task
 title: "Add `memory park`, a declared `returns` edge and optional per-state WIP limits"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "medium"
