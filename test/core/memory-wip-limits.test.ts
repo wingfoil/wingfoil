@@ -194,6 +194,25 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
     expect(result.warnings?.join('\n')).toMatch(/W_MEMORY_UNREADABLE[\s\S]*docs\/memory\/wide\/wide-zzz\.md/);
   });
 
+  it('an unreadable document the id lookup already named is warned about once', async () => {
+    writeFixtureFile(repo, 'docs/memory/wide/wide-000.md', UNREADABLE);
+    commitAll(repo, 'an unreadable document before the moving one');
+    const result = await verb('memorySubmit', repo, 'wide-002');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings?.filter((line) => line.includes('docs/memory/wide/wide-000.md'))).toHaveLength(1);
+  });
+
+  it('a refusal carries the unreadable documents in its details, since the count may be short', async () => {
+    writeFixtureFile(repo, 'docs/memory/cards/card-zzz.md', UNREADABLE);
+    commitAll(repo, 'an unreadable card');
+    const result = await verb('memorySubmit', repo, 'card-002');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('CONFLICT');
+    expect(JSON.stringify(result.error.details)).toContain('docs/memory/cards/card-zzz.md');
+  });
+
   it('`memory add` checked against a limit names an unreadable document as a warning too', async () => {
     writeFixtureFile(repo, 'docs/memory/slots/slot-001.md', doc('slot-001', 'slot', 'closed'));
     writeFixtureFile(repo, 'docs/memory/slots/slot-zzz.md', UNREADABLE);
