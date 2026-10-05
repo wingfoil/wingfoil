@@ -223,7 +223,7 @@ the feature needs no new scenario (the undefined-role string is unchanged).
   option 1 and dl-049 (b): the §3.2 example uses role user and lists its blocks id-ascending as a
   resolution set, embedded directive headings are demoted two levels, the new §3.4 states the two
   prompts/get refusals and the details of a failed read, and §3.1 says the role set is read once in
-  the wingfoil mcp pre-flight. Applied by task-174."`
+  the wingfoil mcp pre-flight. Applied by task-174."` (final wording in "review fixes" below)
 - `spec-014-mcp-server-entry-point`: `--reason "§1-§3 per dl-049 (b) and its editorial item, bug-035 and
   bug-151: the pre-flight refuses a root with no .wingfoil and reads the DNA role set, §2 drops the v0.1
   channel set and shares only the semver of wingfoil --version since task-192, and §3 lists the
@@ -234,3 +234,42 @@ spec-014 (`w2-b2-notes.md`). This task adds a function next to `loadOrError` in 
 `task-172` and `task-251` edit `src/core/init.ts`, not `index.ts`'s read helpers. The task's
 Implementation Notes flag `B`'s spec-004 §3.1–§3.2 Prompt-argument amendment (R18) as touching the
 same section: whichever lands second rebases.
+
+### review fixes (independent review: approve with fixes)
+
+- **F1.** `src/mcp/registrar.ts`: the corrected comment called zero `mutates: true` operations "the
+  real production registry today", which is false (`grep -c "mutates: true" src/core/index.ts` → 31).
+  It now says "zero `mutates: true` operations in the `modules` passed (as in the parity test's
+  read-only fixtures)".
+- **F2.** `spec-006-core-domain-api` §3's MCP exposure note said the production server answers
+  `tools/list` with a protocol error (`bug-151`). It now says it answers with an empty list since
+  `task-174`, with a dated Revision note. Pending amendment, uncommitted.
+- **F4.** `spec-004` §3.2 said "every ATX heading of the body". It now says "every line of the body that
+  opens with an ATX heading", and states that a heading inside a list item or a blockquote is left as
+  written. That is what `demoteHeadings` does: its regex is anchored at the line start, after at most
+  three spaces.
+- **F6.** `spec-008` §11 said "`init` and `mcp` read no committed configuration" without naming the
+  pre-flight's read. It now adds that `mcp`'s pre-flight reads the working tree's `dna.yaml` role set
+  once, and that the Prompts serve it until a restart (`spec-014` §1, `dl-049` (b)). A dated Revision
+  note goes with it. Pending amendment, uncommitted.
+- Re-run, with the four pending amendments in the working tree:
+  - `npx jest test/mcp test/docs test/cli/mcp-command.test.ts test/core/parity.test.ts test/core/dna-role-set.test.ts`
+    → 20 suites, 148 tests passed;
+  - `npm run lint`, both `tsc` runs and `node scripts/check-governance.cjs --base 0b297169` → exit 0.
+
+**Pending amendments (approver), final reasons.** These supersede the list in the review section.
+- `spec-004-mcp-surface-contract`: `--reason "§3 per dl-039 (role 1, ordering 1, headings 1), dl-048
+  option 1 and dl-049 (b): the §3.2 example uses role user and lists its blocks id-ascending as a
+  resolution set, every line of a directive body that opens with an ATX heading is demoted two levels,
+  the new §3.4 states the two prompts/get refusals and the details of a failed read, and §3.1 says the
+  role set is read once in the wingfoil mcp pre-flight. Applied by task-174."`
+- `spec-014-mcp-server-entry-point`: `--reason "§1-§3 per dl-049 (b) and its editorial item, bug-035 and
+  bug-151: the pre-flight refuses a root with no .wingfoil and reads the DNA role set, §2 drops the v0.1
+  channel set and shares only the semver of wingfoil --version since task-192, and §3 lists the
+  Resources, the Prompts and the empty Tools channel. Applied by task-174."`
+- `spec-006-core-domain-api`: `--reason "§3's MCP exposure note says the production server answers
+  tools/list with an empty list since task-174 (bug-151), no longer with a protocol error. Applied by
+  task-174 at its review."`
+- `spec-008-cli-grammar`: `--reason "§11 names the one start-time read of wingfoil mcp: its pre-flight
+  reads the working tree's dna.yaml role set once, per dl-049 (b) and spec-014 §1. Applied by task-174
+  at its review."`
