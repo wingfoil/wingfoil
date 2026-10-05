@@ -33,6 +33,9 @@ The minor-v0.3 success criterion: every workflow under `.wingfoil/workflows/cust
 - **Features:** P4.1, P4.11.
 - **Notes:** Proposal key: A17. `dev-loop.yaml`'s v1.5 *content* changes are task-205 (after this task, same file). Anyone adding a later workflow (task-212, the `dl-089`/`dl-100` phases) must keep task-199's test green. `bug-134` (`e2e-smoke`'s missing `produces:`) is task-207's, which depends on this task; if its absence leaves a warning here, it is listed with the others. `.wingfoil/workflows/custom/` is also edited later by task-205, task-213, task-221, task-219, task-230, task-222, task-215 — each keeps this task's zero-error test green.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Triage of 2026-10-05 (`bug-224`, split):** only the `initial-design.yaml` `produces:` bare
+  `{release-line}` is in scope here (bind it to the release-line's id or version explicitly). Refusing a
+  `memory add` release-line value that names no release-line is a separate v0.4 bug.
 
 ## Execution Notes
 
