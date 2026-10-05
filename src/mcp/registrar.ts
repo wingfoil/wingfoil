@@ -81,11 +81,11 @@ export function registerCoreModules(
   // surface), even when `modules` has zero operations of one kind. Declaring a capability installs no
   // request handler, though: the SDK installs `tools/list` / `tools/call` on the first `registerTool`
   // (and the Resources handlers on the first `registerResource`). So with zero `mutates: true`
-  // operations — the real production registry today — `initialize` advertises `tools` while
-  // `tools/list` still answers JSON-RPC -32601 "Method not found" (task-174 corrected this comment,
-  // which claimed the opposite; `test/core/parity.test.ts` documents the same and skips the call). The production
-  // server does not use this registrar; it answers `tools/list` with an empty list itself
-  // (`./server.ts`, `bug-151`).
+  // operations in the `modules` passed (as in the parity test's read-only fixtures), `initialize`
+  // advertises `tools` while `tools/list` still answers JSON-RPC -32601 "Method not found" (task-174
+  // corrected this comment, which claimed the opposite; `test/core/parity.test.ts` documents the same
+  // and skips the call). The production server does not use this registrar; it answers `tools/list`
+  // with an empty list itself (`./server.ts`, `bug-151`).
   server.server.registerCapabilities({ tools: {}, resources: {} });
 
   for (const { module, operation } of enumerateOperations(modules)) {
