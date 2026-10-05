@@ -598,7 +598,9 @@ CLI reference's *Git side effects* says the same to users.
 
 `init` and `mcp` read no committed configuration: `init` writes the scaffold, and `mcp` starts the
 server, whose Resources and Prompts follow `spec-006` §6 item 4 — except the two v0.3 workflow
-Resources, which follow item 6.
+Resources, which follow item 6. Before it starts, `mcp`'s pre-flight reads the working tree's
+`dna.yaml` role set once, and the Prompts channel serves that set until a restart (`spec-014` §1,
+`dl-049` (b)).
 
 ### 12. Command-specific flags
 
@@ -986,3 +988,10 @@ only under git's default configuration; the commit primitive now passes `--clean
 the note says so. A new note states the `WingFoil-Version:` trailer paragraph every commit ends with. Per the approver's rulings of 2026-10-05, `-dirty` counts only changes to the build inputs (D4 (c)), and `memory history` reports `wingfoil` on every entry, `null` without the trailer (D5).
 No exit code and no other rule changed. Edited in place without a supersede or a state change
 (`dl-047`).
+
+**Revision (2026-10-05, `task-174-settle-mcp-prompts-contract-server-preflight-answer-tools`) — §11
+names `mcp`'s start-time read.** Per `dl-049` (b), `wingfoil mcp`'s pre-flight reads the DNA role set
+from the working tree's `dna.yaml` once and hands it to the server, whose Prompts serve that set until
+a restart (`spec-014` §1, `spec-004` §3.1). §11's sentence on `init` and `mcp` now names that read. The
+baseline of every Resource and Prompt read is unchanged. Tech-specs carry no `version:` field
+(`dl-047`); edited in place without a supersede or a state change.
