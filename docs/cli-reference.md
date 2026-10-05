@@ -345,6 +345,14 @@ A Memory document is a Markdown file with YAML frontmatter. Its **type** (declar
 fixes its path, its id pattern, its template and its state machine; its **state** is the `status:` field
 of its frontmatter. The verbs below are the only supported way to change a state.
 
+Unreleased (v0.3): the transition verbs (`submit`, `approve`, `reject`, `deprecate`, `amend`) look an
+id up among the documents committed at `HEAD`. A committed document whose frontmatter is not valid
+YAML, or a symbolic link, no longer stops a verb acting on a different document. It is skipped, and the
+verb still succeeds, printing a `W_MEMORY_UNREADABLE` warning on stderr that names the file. If the id
+is not found and such a document was skipped, the refusal is still `error: document not found: <id>`
+(exit `1`). A second sentence then names each skipped `HEAD:<path>`, because the id may be in one of
+them.
+
 ### `wingfoil memory add`
 
 Create a document in its type's initial state (`draft`) from the type's template.
