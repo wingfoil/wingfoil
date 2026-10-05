@@ -2,7 +2,7 @@
 id: "task-183-gate-four-versioned-config-files-version-bump-pending"
 type: task
 title: "Gate the four versioned config files on a `version:` bump in the pending change"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "fix"
 priority: "medium"
