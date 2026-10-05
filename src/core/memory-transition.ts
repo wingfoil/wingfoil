@@ -150,14 +150,20 @@ function isPresent(full: string): boolean {
  * The working-tree path of a document carrying frontmatter `id`, or `undefined` — read only to
  * **explain** a refusal already decided at `HEAD`, never to decide one (the `command-baseline`
  * directive: "the working tree may be read to explain a refusal, never to decide one"). A document
- * elsewhere whose frontmatter does not parse is skipped by the scan (task-171), so the refusal keeps
- * its plain wording and no branch of this read can change an outcome.
+ * elsewhere whose frontmatter does not parse is skipped by the scan (task-171), and any failure to
+ * walk the working tree yields `undefined`, so the refusal keeps its plain wording and no branch of
+ * this read can change an outcome.
  */
 function uncommittedDocumentPath(root: string, memoryYaml: MemoryYaml, id: string): string | undefined {
   // `followSymlinks`: this read only words a refusal, so it may follow a link the deciding scan skips
-  // (task-171, `bug-189`), and the confinement guards then refuse the link by name. It needs no
-  // `try`: the scan is tolerant of a document that does not parse, and passes over a dangling link.
-  return findMemoryDocumentById(root, memoryYaml, id, { followSymlinks: true })?.path;
+  // (task-171, `bug-189`), and the confinement guards then refuse the link by name.
+  try {
+    return findMemoryDocumentById(root, memoryYaml, id, { followSymlinks: true })?.path;
+  } catch {
+    // Explain-only: a working tree the walk cannot read (an unreadable directory, `EACCES`) leaves
+    // the refusal its plain wording rather than becoming the outcome (task-171 re-review A).
+    return undefined;
+  }
 }
 
 /**
