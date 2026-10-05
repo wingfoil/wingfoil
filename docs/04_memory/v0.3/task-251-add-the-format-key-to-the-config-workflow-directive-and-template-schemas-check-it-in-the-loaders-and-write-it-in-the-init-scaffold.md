@@ -233,3 +233,17 @@ not check `format` (candidate below).
 - Merge order: `task-172` first (B2 notes); this branch does not touch `src/core/init.ts`. `task-183`
   (version bump gate) will see `dna.yaml` 1.4 and `memory.yaml` 2.4 already bumped here.
 
+
+### review fixes (independent review: APPROVE WITH FIXES)
+
+- **F1** (in-task): `dl-131` Decision 1 says the North Star sentence "stays" and "keeps its wording";
+  the first pass had edited it. `8bb9bc4d` restores it verbatim (`git show 0b297169:.wingfoil/dna.yaml | grep -A2
+  "north_star:"` matches the first two lines of the new value) and puts the goal framing, the
+  behavioural definition and the I/P/O sentence in separate sentences after it. The annotation
+  (REQ-SYS-07 / REQ-STATE-09 for I only) is unchanged; no second version bump (`dna.yaml` stays 1.4).
+  Checks: `npx jest test/dna test/core/module-layout.test.ts test/core/format-key.test.ts
+  test/core/format-init-scaffold.test.ts test/core/dna-show.test.ts` → **14 suites, 405 passed**;
+  `npm run build && node dist/cli.js dna show` → exit 0, `north_star` as above; `npm run lint` → 0;
+  `node scripts/check-governance.cjs --base 0b297169` → 0.
+- Decision 4 (`memory add` copying `format: 1` into elements) is held as is, for the approver's ruling at
+  the gate.
