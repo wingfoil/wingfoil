@@ -302,15 +302,25 @@ describe('spec-003 Layer 3 — workflows/bindings.yaml', () => {
     ['a severity outside warn|reject', 'checks:\n  x.y: { run: [a], severity: block }\n', 'checks.x.y.severity'],
     ['manual: false', 'actions:\n  x.y: { manual: false }\n', 'actions.x.y.manual'],
     ['an args pattern that is not a regular expression', 'checks:\n  x.y: { run: [a, "{n}"], args: { n: "([" } }\n', 'checks.x.y.args.n'],
-    ['duplicate collection keys', 'collections:\n  c: [ a, b, a ]\n', 'collections.c[2]'],
-    ['a collection key outside the ID characters', 'collections:\n  c: [ Kanban ]\n', 'collections.c[0]'],
-    ['a map entry with neither id nor name', 'collections:\n  c: [ { label: x } ]\n', 'collections.c[0]'],
   ])('refuses %s (E_VALIDATION on bindings.yaml)', (_label, content, path) => {
     writeBindings(repo, content);
     const diagnostics = errorsOf(repo);
     expect(diagnostics.length).toBeGreaterThan(0);
     expect(diagnostics.every((d) => d.file === BINDINGS && d.severity === 'error')).toBe(true);
     expect(diagnostics.map((d) => d.path)).toContain(path);
+  });
+
+  it.each([
+    ['a duplicate key', 'collections:\n  c: [ a, b, a ]\n', 'collections.c[2]', "duplicate collection key 'a'"],
+    ['a key outside the ID characters', 'collections:\n  c: [ Kanban ]\n', 'collections.c[0]', "collection key 'Kanban' is outside the ID characters [a-z0-9-.]"],
+    ['a map entry with neither id nor name', 'collections:\n  c: [ { label: x } ]\n', 'collections.c[0]', 'a collection entry map needs an id or name field'],
+  ])('E_BINDING_COLLECTION_KEY — %s is a loader row, and the unbound-token warnings still fire (approver ruling D1 (a))', (_label, content, path, message) => {
+    writeMain(repo, '  - name: go\n    actions:\n      - git.tag\n');
+    writeBindings(repo, content);
+    expect(errorsOf(repo)).toEqual([
+      expect.objectContaining({ code: 'W_WORKFLOW_UNBOUND_TOKEN', file: MAIN_FILE, path: 'phases[0].actions[0]' }),
+      { code: 'E_BINDING_COLLECTION_KEY', severity: 'error', file: BINDINGS, path, message },
+    ]);
   });
 
   it('a file that is not YAML is one E_YAML_PARSE_ERROR, and token bindings are left undecided', () => {
@@ -396,5 +406,13 @@ describe("this repository's own workflows (characterization, spec-003 § Diagnos
     const result = loadWorkflowsYaml(liveRoot) as unknown as { workflows: unknown[]; diagnostics: Diag[] };
     expect(result.workflows.length).toBeGreaterThanOrEqual(23);
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+  });
+
+  it("retrospective.explore produces the friction inventory outside every Memory path (approver ruling D2 (b))", () => {
+    const liveRoot = join(__dirname, '..', '..');
+    const retrospective = loadWorkflowsYaml(liveRoot).workflows.find((w) => w.name === 'retrospective');
+    expect(retrospective?.phases.find((p) => p.name === 'explore')?.produces).toEqual([
+      'docs/06_retrospectives/rl-{release.release-line}/rel-{release.version}-friction-inventory.md',
+    ]);
   });
 });
