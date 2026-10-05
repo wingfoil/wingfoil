@@ -134,10 +134,32 @@ In the coverage run `test/mcp/resource-latency.test.ts` failed once under load (
   `workflow/schema.ts` mention `distinct_from` in `src/`.
 - Order: a mixed fixture pins the per-phase table order across all four rows.
 
+### review fixes (independent review: approve with fixes)
+
+- **F1 (should-fix).** A `cadence` matching neither shape (`twice`, `null`, an unknown key beside or
+  inside `recurring`) came back at `phases[i].cadence` with Zod's bare `Invalid input`. It now carries
+  `cadence must be once or { recurring: { cron } | { on } } with no other key`, plus
+  ` (unknown key '<key>')` / ` (unknown key 'recurring.<key>')` for the first unknown key in declared
+  order (`cadenceShapeMessage`, `src/workflow/schema.ts`). Bad `cron` / `on` values and the trigger
+  count keep their deeper path and own message. Tests assert path and message.
+- **F2 (trivial).** `CRON_EXPRESSION_RE` split fields on `\s+`, so `"0 6\n* * 1"` passed; it now
+  splits on `[ \t]+`. Tests: `\n`, `\r`, `\v` separators refused at `…recurring.cron` with its
+  message; spaces and tabs accepted.
+- Red: `7fd4a0ac`, `npx jest test/core/workflow-executor-cadence.test.ts --json` → **8 failed, 40
+  passed, 48 total** (the 5 F1 and 3 F2 cases; the tabs guard passes). Green: `7305b949` → 48 passed.
+- The pending spec-003 amendment's § "Recurring phases" paragraph now lists each refusal's path and
+  message (still uncommitted).
+- **Decision for the approver (visible output).** The `cadence: 'once'` default appears on every
+  parsed phase in `workflow list` JSON as well as in the MCP resource: `npm run build && node
+  dist/cli.js workflow list | grep -c '"cadence"'` → 85 on this repository, all `"cadence": "once"`.
+- Gates after the fixes: `npm test` → 219 suites / 3937 tests, exit 0; `npm run lint`, `npm run
+  docs:api`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` → exit 0;
+  `node scripts/check-governance.cjs --base c80167d6` → exit 0.
+
 ### Pending amendments (approver)
 
 - `spec-003-workflows-yaml-schema` (uncommitted in the worktree): diagnostics rows gain path and
   message for the three executor codes and a new `E_PHASE_EXECUTOR_WITHOUT_ROLE` row; § "Recurring
   phases" states the event shape and the structural refusals; the illustrative `Cadence` closes its
   outer object; open questions 3–5 marked settled; dated Revision note (2026-10-05). Proposed reason:
-  `--reason "task-185 implements open questions 3-5 as settled at gate 5: the executor rows name their path and message, E_PHASE_EXECUTOR_WITHOUT_ROLE joins the diagnostics table, and Recurring phases states the event shape and the structural refusals of cadence. No existing code, severity or message changes."`
+  `--reason "task-185 implements open questions 3-5 as settled at gate 5: the executor rows name their path and message, E_PHASE_EXECUTOR_WITHOUT_ROLE joins the diagnostics table, and Recurring phases states the event shape and the path and message of each structural refusal of cadence. No existing code, severity or message changes."`
