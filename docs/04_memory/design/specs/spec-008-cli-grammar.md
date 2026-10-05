@@ -544,10 +544,14 @@ is read, so they are usage errors (§5, exit `2`), each with its own message:
 | `<name>` outside `[a-z][a-z0-9_-]*` — including a dotted name such as `release.version`, which stays undefined until `dl-090` | `error: invalid flag value: --set name "<name>" is not a field name ([a-z][a-z0-9_-]*)` | `2` |
 | Blank or whitespace-only `<value>` | `error: invalid flag value: --set <name> must not be blank` | `2` |
 | The same `<name>` given twice | `error: invalid flag value: --set <name> given more than once` | `2` |
-| A name `memory add` fills itself or through its own option: `id`, `type`, `status`, `title`, `tags`, `n`, `slug`, `date`, `author` | `error: invalid flag value: --set cannot set "<name>": memory add fills it itself or through its own option` | `2` |
+| A name `memory add` fills itself or through its own option: `id`, `type`, `status`, `title`, `tags`, `n`, `slug` | `error: invalid flag value: --set cannot set "<name>": memory add fills it itself or through its own option` | `2` |
+| `date`, whose value is the add commit's author date (`spec-001`'s `{date}` row) | `error: invalid flag value: --set cannot set "date": memory add fills {date} from the add commit's author date (GIT_AUTHOR_DATE, or the clock)` | `2` |
+| `author`, whose value is the git author name (`spec-001`'s `{author}` row) | `error: invalid flag value: --set cannot set "author": memory add fills {author} from the git author name` | `2` |
 | A well-formed `<name>` the type's committed `id_pattern` and `path` do not contain | `error: --set <name>: memory type '<type>' has no token {<name>} in its id_pattern or path` | `1` |
 | An `id_pattern` token with no `--set` value | `error: missing value for token {<name>}: give it with --set <name>=<value>` | `1` |
 | A value that would take the id outside `[a-z0-9-.]` (`spec-009` §1) | `error: value for token {<name>} is not a valid [a-z0-9-.] piece: "<value>"` | `1` |
+| An `{author}` token whose git author name has no `[a-z0-9]` character once slugged | `error: value for token {author} is empty once the git author name "<name>" is slugged` | `1` |
+| A `{date}` token while `GIT_AUTHOR_DATE` holds a date git cannot parse | `error: E_GIT_READ_FAILED: git var GIT_AUTHOR_IDENT failed in <root>: fatal: invalid date format: <value>` | `1` |
 
 The last three depend on the committed `memory.yaml` (`dl-080` (B): a gating read at `HEAD`), which is
 what separates them from the first five — the same malformed-versus-unresolvable line §5 draws for a
@@ -912,3 +916,13 @@ subject. It is a `set_state` into the last state of the type's `sequence`, which
 maps to `finalize`. The `finalize` row names the trigger, and a paragraph gives the commit. No verb is
 added, so `spec-003`'s verb table is unchanged. Edited in place without a supersede or a state change
 (`dl-047`); pending the approver's sign-off at `task-162`'s review.
+
+**Revision (2026-10-02, `task-163-implement-date-author-id-tokens-edit-frontmatter-through`) — §10's
+refusal of `--set date` and `--set author` says where the value comes from.** The shared refusal said
+`memory add` fills both names itself, which was false while neither token was implemented
+(`bug-158`). `task-163` implements them (`spec-001`'s `{date}` and `{author}` rows), and the two names
+keep their exit-`2` refusal, each with its own message naming its source: `GIT_AUTHOR_DATE` is how a
+caller chooses the date, since a `--set date` would let the id disagree with its own commit. The
+other reserved names keep the shared message. The error table also gains the two exit-`1` failures
+the tokens add: an author name that slugs to nothing, and a `GIT_AUTHOR_DATE` git cannot parse. No
+other section changed.

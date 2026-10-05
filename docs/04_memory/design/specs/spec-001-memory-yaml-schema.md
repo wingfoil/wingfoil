@@ -184,15 +184,15 @@ An `id_pattern` is a string template: literal characters (which must respect the
 
 | Placeholder | Expansion | Source |
 |-------------|-----------|--------|
-| `{n}`       | Next available integer, no padding (e.g. `12`) | counter algorithm (below) |
-| `{n:N}`     | Next available integer, zero-padded to a **minimum** of N digits (`{n:3}` → `001`; overflow past N digits uses natural width) | counter algorithm (below) |
+| `{n}`       | Next available integer, zero-padded to a **minimum** of 3 digits (`12` → `012`; overflow uses natural width). `{nn}`, `{nnn}`, … are the same counter, padded to a minimum of 3 digits or of the token's width, whichever is larger | counter algorithm (below) |
+| `{n:N}`     | Next available integer, zero-padded to a **minimum** of N digits, `N >= 1` (`{n:3}` → `001`, `{n:1}` → `1`, no padding; overflow past N digits uses natural width) | counter algorithm (below) |
 | `{slug}`    | Normalized kebab-case slug from `--slug` or `--title`. A `.` between two alphanumerics is **kept** (`v0.2` → `v0.2`); every other run of characters outside `[a-z0-9]` collapses to `-`. The slugifier and the id validator share this one character rule (`dl-107` S1 (a)) | user input |
 | `{version}` | The release-line / release version string (e.g. `v1`, `v0.1`, `v0.2.2`) — used by `release-line` (`rl-{version}`) and `release` (`{kind}-{version}`) | a frontmatter field (below) |
 | `{kind}`    | The release kind, `minor` or `patch` — used by `release` (`{kind}-{version}` → `minor-v0.3`, `patch-v0.2.2`; `dl-092` Q1 (A), implemented as `{kind}-{version}` in `92908e8c`; the optional `patch-of` field names the released minor a patch belongs to) | a frontmatter field (below) |
 | `{<field>}` | Any other token names a **frontmatter field of the same name**, given to `memory add` on the command line — through an option `spec-008-cli-grammar` defines, in the amendment `dl-107` Action 2 requires (not `--field`, which `spec-008` retired for DNA paths under `dl-082`) — or pinned by the workflow action. `memory add` also writes the value into that field, so the id and the field cannot disagree (`dl-107` S2 (a)) | a frontmatter field |
 | `{workflow}`, `{phase}`, `{scope}` | Execution **context** of the workflow that runs the add. The workflow engine fills them; from the CLI they must be given explicitly, as any other `{<field>}` (`dl-107` S2 (c)). Where the type also has a frontmatter field of that name (`plan` requires `workflow` and `phase`), there is one value, not two: the context value is written into the field, as S2 (a) does for any token | workflow engine / user input |
-| `{date}`    | Current date `YYYYMMDD` (UTC) | system clock |
-| `{author}`  | Slug-normalized git `user.name` | git identity |
+| `{date}`    | The UTC date `YYYYMMDD` of the add commit's author date: `GIT_AUTHOR_DATE` when it is set, otherwise the system clock. Read once per add, and the add commit is recorded with that same author date, so the id and its commit cannot disagree | git author date |
+| `{author}`  | The git author name the add commit records (`GIT_AUTHOR_NAME`, then `author.name`, then `user.name`), normalized by the `{slug}` rule. A name with no `[a-z0-9]` character is an error that names the token | git identity |
 
 Expansion order is fixed — `{date}` → `{author}` → every frontmatter and context token (`{kind}`,
 `{version}`, `{<field>}`, `{workflow}`, …) → `{slug}` → `{n}` — so the `{n}` counter regexp always
@@ -220,9 +220,9 @@ prerequisite, and until it lands only undotted tokens are defined. There is no f
    used: what the remotes hold is what was last fetched (`git fetch` stays the operator's step,
    `dl-101` §1.1).
 3. Keep the paths the pattern matches, and from each capture the numeric group at the `{n}`-family
-   token's position (`{n}`, `{nn}`, `{nnn}`: the tokens the implementation accepts; `{n:N}`, defined
-   in the placeholder table above, is not implemented) (e.g. `docs/04_memory/{release}/{id}.md` with `task-{n}-{slug}` →
-   `^docs/04_memory/<any>/task-(\d+)-<slug>\.md$`).
+   token's position (`{n}`, `{nn}`, `{nnn}` or `{n:N}`). For example,
+   `docs/04_memory/{release}/{id}.md` with `task-{n}-{slug}` gives
+   `^docs/04_memory/<any>/task-(\d+)-<slug>\.md$`.
 4. `next_n = max(captured) + 1`, defaulting to `1` when nothing matches. The **highest** number, not
    a count, so a gap left by a removed element never reissues a number (`bug-087`); and a maximum is
    independent of the order the refs and paths are enumerated in (REQ-SYS-07).
@@ -492,3 +492,17 @@ trigger that nothing implemented (`dl-065`, `ready`; Q1.1 chose to build it, fir
 element's `approve`). The paragraph after "`deprecated` is implicit" states the rule. No schema field
 changes. Edited in place, with no `version:` bump (`dl-047`); pending the approver's sign-off at
 `task-162`'s review.
+
+**Revision (2026-10-02, `task-163-implement-date-author-id-tokens-edit-frontmatter-through`) — the
+`{date}`, `{author}` and `{n:N}` tokens are implemented.** The placeholder table declared all three, and
+`memory add` implemented none of them (`bug-158`, `bug-176`). The `{date}` row now names its source
+precisely: the author date git records for the add commit, which is the system clock unless
+`GIT_AUTHOR_DATE` is set. It is read once per add, and the add commit is pinned to it, so a run can be
+reproduced by fixing that variable (the `determinism` directive) and the id always matches its own
+commit's date. The `{author}` row now follows the author identity `memory add` already resolves and
+pins on its commit (`GIT_AUTHOR_NAME`, then `author.name`, then `user.name`; `task-132`), not
+`user.name` alone. The `{n}` row said "no padding" while the engine has always padded `{n}` to three
+digits, the width every id in this repository carries; the row now states the engine's behaviour, and
+`{n:1}` is the way to get no padding. Counter step 3 drops its note that `{n:N}` is not implemented.
+Edited in place, with no `version:` bump (`dl-047`); pending the approver's sign-off at `task-163`'s
+review.

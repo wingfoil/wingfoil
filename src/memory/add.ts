@@ -7,12 +7,15 @@
  * Every function here is deterministic (REQ-SYS-07): a slug is a pure function of the title, the
  * rendered document a pure function of `(scaffold, id, title, tags)`, and the sequence counter a
  * maximum over the paths every ref and the working tree hold (order-independent, task-128) — no
- * wall-clock, no randomness, no unordered iteration in a value that reaches the produced id or
- * document.
+ * randomness and no unordered iteration in a value that reaches the produced id or document. The one
+ * time read is `{date}`'s ({@link readAuthorDate}, task-163): a write path, not a context-building
+ * one, taken once per add from the author date git records for the add commit, so a caller fixes it
+ * with `GIT_AUTHOR_DATE` and the id never disagrees with its own commit.
  */
-import { listPathsAtRevs, runGitRead, splitFrontmatter } from '../storage';
-import { isIdPiece, patternTokens, patternToSource, ValidationError } from '../validation';
+import { E_GIT_READ_FAILED, listPathsAtRevs, runGitRead, splitFrontmatter, StorageError } from '../storage';
+import { isIdPiece, isNumericToken, patternTokens, patternToSource, ValidationError } from '../validation';
 import type { ValidationIssue } from '../validation';
+import { setFrontmatterEntry } from './frontmatter-edit';
 
 const TOKEN_RE = /\{([^{}]+)\}/g;
 
@@ -49,13 +52,58 @@ export function parseTags(raw: string | undefined): string[] | undefined {
   return tags.length > 0 ? tags : undefined;
 }
 
-/** Whether an `id_pattern` contains a `{n}`-family numeric token (e.g. `task-{n}-{slug}`) — i.e. it
- * needs a sequence counter resolved before {@link generateId} can render it. */
+/** Whether an `id_pattern` contains a `{n}`-family numeric token (e.g. `task-{n}-{slug}`, `u-{n:1}`) —
+ * i.e. it needs a sequence counter resolved before {@link generateId} can render it. */
 export function hasNumericToken(idPattern: string): boolean {
   for (const match of idPattern.matchAll(TOKEN_RE)) {
-    if (/^n+$/.test(match[1] ?? '')) return true;
+    if (isNumericToken(match[1] ?? '')) return true;
   }
   return false;
+}
+
+/**
+ * The author date git would record for a commit made now at `root`, as git's internal
+ * `<seconds> <offset>` pair (`1790731800 -0200`): `GIT_AUTHOR_DATE` when it is set, in any format git
+ * accepts, otherwise the system clock — read ONCE, through `git var GIT_AUTHOR_IDENT` (task-163,
+ * `bug-158`). `memory add` builds `{date}` from it ({@link formatIdDate}) and records the add commit
+ * with this same author date (passed back as `@<seconds> <offset>`: git reads a bare pair as a
+ * timestamp only from 9 digits of seconds up), so the id and the commit cannot disagree, and a caller (a test, a
+ * replay) fixes the date the way it fixes any git author date.
+ *
+ * `identity` is passed to git as `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`: the identity was already
+ * resolved and checked (`requireGitIdentity`), and only the date part of git's answer is read.
+ *
+ * @throws {@link StorageError} `E_GIT_READ_FAILED` when git refuses (e.g. a `GIT_AUTHOR_DATE` it
+ *   cannot parse) or answers in a shape that is not `… <seconds> <offset>`.
+ */
+export function readAuthorDate(root: string, identity: { readonly name: string; readonly email: string }): string {
+  const answer = runGitRead(root, ['var', 'GIT_AUTHOR_IDENT'], {
+    env: { GIT_AUTHOR_NAME: identity.name, GIT_AUTHOR_EMAIL: identity.email },
+  }).stdout;
+  return identDate(answer);
+}
+
+/**
+ * The `<seconds> <offset>` date that ends a git ident line (`Name <email> 1790731800 -0200`). Pure.
+ *
+ * @throws {@link StorageError} `E_GIT_READ_FAILED` when the line does not end with one.
+ */
+export function identDate(ident: string): string {
+  const date = /> (-?[0-9]+ [+-][0-9]{4})$/.exec(ident.trim())?.[1];
+  if (date === undefined) {
+    throw new StorageError(E_GIT_READ_FAILED, `git var GIT_AUTHOR_IDENT gave no author date: "${ident.trim()}"`);
+  }
+  return date;
+}
+
+/**
+ * `{date}`'s value (`spec-001`'s placeholder table): the UTC calendar date `YYYYMMDD` of a git
+ * `<seconds> <offset>` date ({@link readAuthorDate}). The offset does not move the instant, so
+ * `23:30 -0200` on the 29th is the 30th. Pure.
+ */
+export function formatIdDate(gitDate: string): string {
+  const seconds = Number.parseInt(gitDate, 10);
+  return new Date(seconds * 1000).toISOString().slice(0, 10).replace(/-/g, '');
 }
 
 /** A non-`{id}` `path` token as the counter matches it: one or more path segments (`dl-101` (a)). */
@@ -168,20 +216,6 @@ function escapeRegExp(value: string): string {
 }
 
 /**
- * Set one frontmatter field on the raw frontmatter text, line-based: replace the value on the existing
- * `^<indent>key:` line if present (preserving the scaffold's ordering, comments and other fields
- * verbatim — the P1.3 memory.add contract copies the scaffold verbatim), otherwise append the field. `valueYaml`
- * is the already-serialized YAML scalar/flow value (e.g. a JSON-quoted string, a flow sequence).
- */
-function setFrontmatterField(frontmatter: string, key: string, valueYaml: string): string {
-  const re = new RegExp(`^([ \\t]*)${escapeRegExp(key)}:.*$`, 'm');
-  if (re.test(frontmatter)) {
-    return frontmatter.replace(re, (_match, indent: string) => `${indent}${key}: ${valueYaml}`);
-  }
-  return `${frontmatter}\n${key}: ${valueYaml}`;
-}
-
-/**
  * Copy a type's `template.file` scaffold verbatim and fill only the frontmatter skeleton `memory.add`
  * pins (P1.3; spec-010-memory-frontmatter-schema): the generated `id`, the `--title`, the
  * initial `status: draft`, when `--tags` was supplied the `tags` flow sequence, and the `--set` fields
@@ -189,6 +223,10 @@ function setFrontmatterField(frontmatter: string, key: string, valueYaml: string
  * field (notably `type` and `tmpl_version`, spec-010: not touched by add) and the whole body are left
  * exactly as the scaffold had them. `title`/`tags` are JSON-quoted (valid YAML double-quoted scalars /
  * flow sequences), so an arbitrary title with spaces or colons is written safely.
+ *
+ * Each field is set through `./frontmatter-edit`'s shared setter, the one the transition verbs use
+ * (task-163, `bug-033`): only a TOP-LEVEL key is matched, so a nested key of the same name is never
+ * edited, and an edited line keeps the scaffold's inline `# comment`.
  *
  * @throws when the scaffold has no frontmatter block (a malformed template — a config error surfaced
  *   as a thrown `Error` the core op maps to a `CoreError`).
@@ -198,18 +236,20 @@ export function renderAddDocument(scaffold: string, fields: AddDocumentFields): 
   if (frontmatter === null) {
     throw new Error('memory template scaffold has no frontmatter block');
   }
-  let fm = frontmatter;
-  fm = setFrontmatterField(fm, 'id', fields.id);
-  fm = setFrontmatterField(fm, 'title', JSON.stringify(fields.title));
-  fm = setFrontmatterField(fm, 'status', 'draft');
+  // Rebuilt as `memory add` always wrote it (a `---` line, the frontmatter, a `---` line, the body),
+  // then edited in place by the shared setter.
+  let document = `---\n${frontmatter}\n---\n${body}`;
+  document = setFrontmatterEntry(document, 'id', fields.id);
+  document = setFrontmatterEntry(document, 'title', JSON.stringify(fields.title));
+  document = setFrontmatterEntry(document, 'status', 'draft');
   if (fields.tags !== undefined) {
     const flow = `[${fields.tags.map((tag) => JSON.stringify(tag)).join(',')}]`;
-    fm = setFrontmatterField(fm, 'tags', flow);
+    document = setFrontmatterEntry(document, 'tags', flow);
   }
   for (const [name, value] of fields.fields ?? []) {
-    fm = setFrontmatterField(fm, name, JSON.stringify(value));
+    document = setFrontmatterEntry(document, name, JSON.stringify(value));
   }
-  return `---\n${fm}\n---\n${body}`;
+  return document;
 }
 
 /**
@@ -218,6 +258,18 @@ export function renderAddDocument(scaffold: string, fields: AddDocumentFields): 
  * their own (`n`, `slug`, `date`, `author` — `spec-001`'s placeholder table).
  */
 const RESERVED_SET_NAMES: ReadonlySet<string> = new Set(['id', 'type', 'status', 'title', 'tags', 'n', 'slug', 'date', 'author']);
+
+/**
+ * The refusal of a reserved `--set` name, saying where its value comes from (`spec-008` §10). `date`
+ * and `author` name their source, which is not an option of `memory add` (task-163, `bug-158`: the
+ * generic sentence was false while nothing filled them, and unhelpful once something did).
+ */
+function reservedSetMessage(name: string): string {
+  const prefix = `invalid flag value: --set cannot set "${name}": memory add fills`;
+  if (name === 'date') return `${prefix} {date} from the add commit's author date (GIT_AUTHOR_DATE, or the clock)`;
+  if (name === 'author') return `${prefix} {author} from the git author name`;
+  return `${prefix} it itself or through its own option`;
+}
 
 /** A `--set` field name: `[a-z][a-z0-9_-]*` — the same shape `idPatternIssues` accepts for a token. */
 const SET_NAME_RE = /^[a-z][a-z0-9_-]*$/;
@@ -256,10 +308,7 @@ export function parseSetOptions(raw: string | readonly string[] | undefined): Pa
       return { ok: false, message: `invalid flag value: --set name "${name}" is not a field name ([a-z][a-z0-9_-]*)` };
     }
     if (RESERVED_SET_NAMES.has(name)) {
-      return {
-        ok: false,
-        message: `invalid flag value: --set cannot set "${name}": memory add fills it itself or through its own option`,
-      };
+      return { ok: false, message: reservedSetMessage(name) };
     }
     if (value.trim().length === 0) {
       return { ok: false, message: `invalid flag value: --set ${name} must not be blank` };
@@ -288,20 +337,45 @@ export function unknownSetNames(
 }
 
 /**
- * Materialize an `id_pattern`'s frontmatter and context tokens (`{kind}`, `{version}`, `{workflow}`,
- * …) from the `--set` values, leaving `{slug}`, the `{n}` family and the not-yet-implemented
- * `{date}`/`{author}` in place — `spec-001`'s fixed expansion order (`{date}` → `{author}` → field and
- * context tokens → `{slug}` → `{n}`), so the `{n}` counter regexp built from the result sees a
- * fully-materialized prefix (task-110).
+ * The values of the tokens `memory add` sources itself rather than from `--set` (`spec-001`'s
+ * placeholder table, task-163): `{date}` and `{author}`. Each is needed only when the pattern has the
+ * token, and is read once per add by the caller.
+ */
+export interface IdTokenSources {
+  /** The add commit's author date as git's `<seconds> <offset>` ({@link readAuthorDate}). */
+  readonly date?: string;
+  /** The git author name the add commit records (`requireGitIdentity`), before slugging. */
+  readonly authorName?: string;
+}
+
+/**
+ * Materialize an `id_pattern`'s `{date}`, `{author}`, frontmatter and context tokens (`{kind}`,
+ * `{version}`, `{workflow}`, …), leaving `{slug}` and the `{n}` family in place — `spec-001`'s fixed
+ * expansion order (`{date}` → `{author}` → field and context tokens → `{slug}` → `{n}`), so the
+ * `{n}` counter regexp built from the result sees a fully-materialized prefix (task-110). `{date}` is
+ * the UTC `YYYYMMDD` of `sources.date` ({@link formatIdDate}); `{author}` the slug of
+ * `sources.authorName` ({@link slugifyTitle}) — task-163, `bug-158`.
  *
  * @throws {@link ValidationError} naming every field token with no value
- *   (`missing value for token {<name>}: give it with --set <name>=<value>`) and every value outside
- *   the ID character class, in pattern order — the same `E_INVALID_ID` code `generateId` raises.
+ *   (`missing value for token {<name>}: give it with --set <name>=<value>`), an `{author}` whose
+ *   name slugs to nothing, and every value outside the ID character class, in pattern order — the
+ *   same `E_INVALID_ID` code `generateId` raises.
  */
-export function expandFieldTokens(idPattern: string, values: Readonly<Record<string, string>>): string {
+export function expandFieldTokens(
+  idPattern: string,
+  values: Readonly<Record<string, string>>,
+  sources: IdTokenSources = {},
+): string {
   const issues: ValidationIssue[] = [];
   const expanded = idPattern.replace(TOKEN_RE, (whole: string, token: string) => {
-    if (/^n+$/.test(token) || RESERVED_SET_NAMES.has(token)) return whole;
+    if (token === 'date' && sources.date !== undefined) return formatIdDate(sources.date);
+    if (token === 'author' && sources.authorName !== undefined) {
+      const author = slugifyTitle(sources.authorName);
+      if (author.length > 0) return author;
+      issues.push(fieldIssue(idPattern, `value for token {author} is empty once the git author name "${sources.authorName}" is slugged`));
+      return whole;
+    }
+    if (isNumericToken(token) || RESERVED_SET_NAMES.has(token)) return whole;
     const value = values[token];
     if (value === undefined) {
       issues.push(fieldIssue(idPattern, `missing value for token {${token}}: give it with --set ${token}=<value>`));
@@ -330,8 +404,9 @@ function fieldIssue(pattern: string, message: string): ValidationIssue {
  */
 export function writtenFields(scaffold: string, values: Readonly<Record<string, string>>): [string, string][] {
   const { frontmatter } = splitFrontmatter(scaffold);
+  // A top-level key only (task-163): a nested key of the same name is not a declaration of the field.
   const declared = (key: string): boolean =>
-    frontmatter !== null && new RegExp(`^[ \\t]*${escapeRegExp(key)}:`, 'm').test(frontmatter);
+    frontmatter !== null && new RegExp(`^${escapeRegExp(key)}:(?:[ \\t\\r]|$)`, 'm').test(frontmatter);
   return Object.keys(values)
     .sort()
     .filter((name) => !CONTEXT_TOKENS.has(name) || declared(name))

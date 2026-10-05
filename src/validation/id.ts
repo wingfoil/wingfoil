@@ -27,8 +27,11 @@ const ID_PIECE_RE = /^[a-z0-9.-]+$/;
 /** A literal pattern segment: every character must be a member of the ID character class. */
 const LITERAL_RE = /^[a-z0-9.-]+$/;
 
-/** A numeric token is one written purely as `n` (e.g. `{n}`, `{nn}`, `{nnn}`). */
-const NUMERIC_TOKEN_RE = /^n+$/;
+/**
+ * A numeric token: one written purely as `n` (`{n}`, `{nn}`, `{nnn}`), or `{n:N}` with a width
+ * `N >= 1` (`spec-001`'s placeholder table; task-163, `bug-176`).
+ */
+const NUMERIC_TOKEN_RE = /^(?:n+|n:[1-9][0-9]*)$/;
 
 /** Minimum zero-pad width for numeric tokens (observed convention: task-001, adr-005, spec-009). */
 const DEFAULT_PAD_WIDTH = 3;
@@ -60,7 +63,11 @@ function parsePattern(pattern: string): Segment[] {
   return segments;
 }
 
-function isNumericToken(token: string): boolean {
+/**
+ * Whether `token` (a `{…}` name without its braces) is a `{n}`-family counter token: `n`, `nn`,
+ * `nnn`, … or `n:N` (task-163, `bug-176`). Every such token takes the one counter value given as `n`.
+ */
+export function isNumericToken(token: string): boolean {
   return NUMERIC_TOKEN_RE.test(token);
 }
 
@@ -205,7 +212,8 @@ export function generateId(pattern: string, values: Record<string, string | numb
       continue;
     }
     const token = segment.value;
-    const value = values[token];
+    // Every `{n}`-family token renders the one counter value, given as `n` (task-163, `bug-176`).
+    const value = values[token] ?? (isNumericToken(token) ? values.n : undefined);
     if (value === undefined) {
       issues.push(invalidId(pattern, `missing value for token {${token}}`));
       continue;
@@ -240,7 +248,11 @@ function invalidId(pattern: string, message: string): ValidationIssue {
   return { code: 'E_INVALID_ID', path: 'id', file: pattern, message };
 }
 
-/** Render a numeric token, zero-padded to at least the token width (min 3). `null` if not numeric. */
+/**
+ * Render a numeric token zero-padded to its minimum width: `N` for `{n:N}`, otherwise the token's
+ * width with a floor of 3 (`{n}` → `002`). Never truncates. `null` if the value is not a
+ * non-negative integer.
+ */
 function renderNumeric(token: string, value: string | number): string | null {
   let n: number;
   if (typeof value === 'number') {
@@ -251,6 +263,6 @@ function renderNumeric(token: string, value: string | number): string | null {
     return null;
   }
   if (!Number.isInteger(n) || n < 0) return null;
-  const width = Math.max(DEFAULT_PAD_WIDTH, token.length);
+  const width = token.startsWith('n:') ? Number(token.slice(2)) : Math.max(DEFAULT_PAD_WIDTH, token.length);
   return String(n).padStart(width, '0');
 }

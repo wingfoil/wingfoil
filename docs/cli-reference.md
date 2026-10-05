@@ -386,6 +386,11 @@ $ wingfoil memory add --type release --title "v0.2.3" --set kind=patch --set ver
 The workflow tokens `{workflow}`, `{phase}` and `{scope}` are given the same way. They are written
 to the frontmatter only where the type's template has a field of that name.
 
+Two tokens are never given with `--set`. `{date}` is the UTC date, as `YYYYMMDD`, of the add
+commit's author date: today (UTC), or the date in `GIT_AUTHOR_DATE` when that is set. The commit is
+recorded with the same date. `{author}` is the git author name, slugged like the title. The counter
+token `{n}` is padded to three digits; `{n:N}` pads to `N` digits instead, and `{n:1}` not at all.
+
 - **Commit:** `wf(<type>): add <id>`
 - **Errors:**
   - Exit `2`: a missing `--type` or `--title`. Also a `--set` with no `=`, a name that is not a field
@@ -393,7 +398,11 @@ to the frontmatter only where the type's template has a field of that name.
     `memory add` fills itself: `id`, `type`, `status`, `title`, `tags`, `n`, `slug`, `date`, `author`.
   - Exit `1`: a type not in the committed `memory.yaml`. Also a `--set` name the type's `id_pattern`
     and `path` do not use, or a token left without a value
-    (`missing value for token {version}: give it with --set version=<value>`).
+    (`missing value for token {version}: give it with --set version=<value>`). Also, for a pattern
+    with `{author}`, a git author name with no letter or digit in `a-z0-9`
+    (`value for token {author} is empty once the git author name "李明" is slugged`), and, for a
+    pattern with `{date}`, a `GIT_AUTHOR_DATE` git cannot parse
+    (`E_GIT_READ_FAILED: git var GIT_AUTHOR_IDENT failed in <root>: fatal: invalid date format: <value>`).
 
 ### `wingfoil memory submit`
 

@@ -1,5 +1,5 @@
 import { EXIT_INTEGRITY, ValidationError } from '../../src/validation/errors';
-import { generateId, patternToRegExp } from '../../src/validation/id';
+import { generateId, idPatternIssues, patternToRegExp, patternToSource } from '../../src/validation/id';
 
 // id_pattern values copied literally from .wingfoil/memory.yaml (the authoritative
 // source), one per Memory type — not re-derived. Mirrors module-layout.test.ts's convention of
@@ -141,5 +141,35 @@ describe('generateId — rejects placeholder values that would produce invalid I
     }
     expect(thrown).toBeInstanceOf(ValidationError);
     expect((thrown as ValidationError).issues.map((i) => i.code)).toContain('E_INVALID_ID');
+  });
+});
+
+// task-163 (`bug-176`): `spec-001`'s placeholder table declares `{n:N}`, a counter zero-padded to a
+// minimum of N digits. Every `{n}`-family token takes the one counter value given as `n`.
+describe('generateId — the {n:N} token and the {n}-family counter value (task-163, bug-176)', () => {
+  it('accepts {n:N} as a well-formed token', () => {
+    expect(idPatternIssues('task-{n:3}-{slug}')).toEqual([]);
+    expect(idPatternIssues('u-{n:1}')).toEqual([]);
+  });
+
+  it('still refuses a {n:N} with no width or a zero width', () => {
+    expect(idPatternIssues('t-{n:}')).toEqual(['malformed token {n:}']);
+    expect(idPatternIssues('t-{n:0}')).toEqual(['malformed token {n:0}']);
+  });
+
+  it('pads {n:N} to a minimum of N digits, never truncating', () => {
+    expect(generateId('p-{n:2}-{slug}', { n: 1, slug: 'x' })).toBe('p-01-x');
+    expect(generateId('u-{n:1}', { n: 7 })).toBe('u-7');
+    expect(generateId('w-{n:5}', { n: 42 })).toBe('w-00042');
+    expect(generateId('u-{n:1}', { n: 1234 })).toBe('u-1234');
+  });
+
+  it('gives {nn}, {nnn} and {n:N} the value supplied as n', () => {
+    expect(generateId('t-{nnn}', { n: 4 })).toBe('t-004');
+    expect(generateId('t-{n:4}', { n: 4 })).toBe('t-0004');
+  });
+
+  it('captures a {n:N} value like any {n}-family token', () => {
+    expect(new RegExp(`^${patternToSource('u-{n:1}', { captureNumeric: true })}$`).exec('u-12')?.[1]).toBe('12');
   });
 });

@@ -15,7 +15,7 @@ import { join, relative, sep } from 'path';
 
 import { dump } from 'js-yaml';
 
-import { DiagnosticsError, generateId, parseYaml, toValidationError, ValidationError } from '../validation';
+import { DiagnosticsError, generateId, parseYaml, patternTokens, toValidationError, ValidationError } from '../validation';
 import type { Paths } from '../dna/schema';
 import { DnaYaml } from '../dna/schema';
 import { applyDnaEditInText } from '../dna/edit';
@@ -49,6 +49,7 @@ import {
   nextSequenceNumber,
   parseSetOptions,
   parseTags,
+  readAuthorDate,
   reconstructMemoryTransitions,
   renderAddDocument,
   REJECTION_REASON_FIELD,
@@ -704,8 +705,11 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
   }
 
   try {
-    // spec-001's order: field/context tokens → {slug} → {n}, so the counter sees the materialized prefix.
-    const materialized = expandFieldTokens(idPattern, set.values);
+    // spec-001's order: {date} → {author} → field/context tokens → {slug} → {n}, so the counter sees
+    // the materialized prefix. {date} is read ONCE, from the author date git records for this add's
+    // commit, and the commit is pinned to it below, as it is to the author {author} slugs (task-163).
+    const date = patternTokens(idPattern).includes('date') ? readAuthorDate(root, identity.value) : undefined;
+    const materialized = expandFieldTokens(idPattern, set.values, { date, authorName: identity.value.name });
     const sequence = hasNumericToken(materialized)
       ? nextSequenceNumber(root, pathPattern, materialized)
       : 0;
@@ -727,7 +731,12 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
     const absent = requireAbsentTarget(root, targetPath);
     if (!absent.ok) return absent;
 
-    const { path, sha } = writeMemoryEntry(root, pathPattern, pathValues, content, message);
+    const { path, sha } = writeMemoryEntry(root, pathPattern, pathValues, content, message, {
+      author: identity.value,
+      // `@`: git reads a bare `<seconds> <offset>` as a timestamp only from 9 digits of seconds up
+      // (`0 +0000` is "invalid date format"); `@<seconds> <offset>` is a timestamp at any width.
+      ...(date === undefined ? {} : { env: { GIT_AUTHOR_DATE: `@${date}` } }),
+    });
     const leaked = committedScopeError(root, sha, targetPath, content);
     if (leaked) return leaked;
     return coreOk({ id, path: relative(root, path) }, { sha, message });
