@@ -111,9 +111,13 @@ describe('scorecard workflow (task-160) — dl-129 §1: OpenSSF Scorecard, priva
   });
 
   it('carries no OIDC grant, no secret and no credential', () => {
-    const { raw } = read(SCORECARD_PATH);
+    // The header comment explains the `id-token` switch to Q1 (a); only the YAML itself is scanned.
+    const yaml = read(SCORECARD_PATH)
+      .raw.split('\n')
+      .filter((line) => !/^\s*#/.test(line))
+      .join('\n');
     for (const secret of ['secrets.', 'id-token', 'repo_token', 'NPM_TOKEN', '_authToken']) {
-      expect(raw).not.toContain(secret);
+      expect(yaml).not.toContain(secret);
     }
     const checkout = stepUsing(analysisJob(), 'actions/checkout');
     expect(checkout?.with?.['persist-credentials']).toBe(false);

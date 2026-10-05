@@ -1,0 +1,67 @@
+# WingFoil — OpenSSF Scorecard, results private (dl-129 §1, Q1 (b); built by task-160).
+#
+#   analysis → the official `ossf/scorecard-action` scores the repository's supply-chain practices and
+#              writes a SARIF report, which `github/codeql-action/upload-sarif` sends to this
+#              repository's code-scanning dashboard (Security → Code scanning, tool "Scorecard").
+#
+# Trigger: a push to `main` and weekly (Monday 05:23 UTC), as dl-129 Decision 1 states. No pull_request:
+# Scorecard scores the default branch.
+#
+# Private results (Q1 (b), ratified at retro-v0.2). `publish_results: false`: nothing is sent to the
+# OpenSSF REST API (api.scorecard.dev), so no public score and no badge exist. The report reaches the
+# code-scanning dashboard only, whose alerts a public repository shows to its maintainers, not to
+# visitors. There is deliberately NO `upload-artifact` step: an artefact of a public repository's run is
+# downloadable by any signed-in GitHub user. The run's log stays public, as every Actions log of a public
+# repository does.
+#
+# Switching to Q1 (a) — an approver decision, after reading the first run's scores — is two lines:
+# `publish_results: true` and `id-token: write` on the `analysis` job (the action signs what it
+# publishes with the job's OIDC token). The file already meets the shape the Scorecard API requires of
+# a publishing workflow: no top-level or job-level `env`/`defaults`, no write permission at workflow
+# level, no container or service, a GitHub-hosted Ubuntu runner, and only actions from its approved
+# list. Publication is external state: record it as a `service` element (dl-088) when it is switched on.
+#
+# Permissions are the ones the action's README (v2.4.4) documents, and no more: the workflow is read-only,
+# and the job adds `security-events: write` (the code-scanning upload) plus the four reads that let the
+# default token query commits, issues, pull requests and checks. `id-token: write` is documented for
+# `publish_results: true` only, so it is absent. No secret, no PAT: the default `GITHUB_TOKEN` reads
+# repository rulesets, which classic branch protection would have hidden from it.
+#
+# Every `uses:` names a full commit SHA, with the release tag it came from in a trailing comment
+# (dl-057, as publish.yml and ci.yml); `actions/checkout` is the very line publish.yml uses.
+# `ossf/scorecard-action` v2.4.4 is a docker action (`ghcr.io/ossf/scorecard-action:v2.4.4`);
+# `upload-sarif` v4.38.2 runs on node24. Pinned by `test/cli/scorecard-workflow.test.ts`.
+
+name: scorecard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 5 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-24.04
+    permissions:
+      security-events: write
+      contents: read
+      issues: read
+      pull-requests: read
+      checks: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: false
+      - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: results.sarif
