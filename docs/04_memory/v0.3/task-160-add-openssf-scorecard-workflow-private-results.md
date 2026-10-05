@@ -2,7 +2,7 @@
 id: "task-160-add-openssf-scorecard-workflow-private-results"
 type: task
 title: "Add the OpenSSF Scorecard workflow with private results"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "low"
