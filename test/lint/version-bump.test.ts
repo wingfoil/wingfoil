@@ -19,7 +19,7 @@
  *
  * Deterministic: a fixed, ordered file list; the verdict is a pure function of git objects and bytes.
  */
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -69,6 +69,16 @@ describe('version bump of the four versioned config files (bug-143, task-183)', 
 
     it('passes a clean committed tree', () => {
       expect(checkPendingVersionBumps(repo)).toEqual([]);
+    });
+
+    it('passes a clean checkout whose working tree has CRLF line ends from core.autocrlf', () => {
+      git(repo, ['config', 'core.autocrlf', 'true']);
+      for (const path of VERSIONED_CONFIG_FILES) rmSync(join(repo, path));
+      git(repo, ['checkout', '--quiet', '--', '.']);
+      expect(readFileSync(join(repo, DNA), 'utf-8')).toContain('\r\n');
+      expect(checkPendingVersionBumps(repo)).toEqual([]);
+      writeFixtureFile(repo, DNA, config('1.0', 'b').replace(/\n/g, '\r\n'));
+      expect(checkPendingVersionBumps(repo).map((finding) => finding.path)).toEqual([DNA]);
     });
 
     it('fails a content edit that leaves version: unchanged, naming the file and the version', () => {
