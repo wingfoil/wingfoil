@@ -137,7 +137,7 @@ describe('bug-031 / spec-017 §1.4 — a document whose frontmatter does not par
     const { diagnostics, onDiagnostic } = collect();
     expect(findMemoryDocumentById(repo, MEMORY_YAML, 'task-003-other', { onDiagnostic })?.path).toBe('docs/04_memory/v0.1/task-003-other.md');
     expect(diagnostics.map((d) => d.file)).toEqual([BROKEN]);
-    expect(findMemoryDocumentByTypeAndId(repo, MEMORY_YAML, 'task', 'task-003-other')?.id ?? 'found').toBeDefined();
+    expect(findMemoryDocumentByTypeAndId(repo, MEMORY_YAML, 'task', 'task-003-other')?.path).toBe('docs/04_memory/v0.1/task-003-other.md');
   });
 
   it('(red-first) the same at a commit: lookup and full load are tolerant and name the file without the rev', () => {

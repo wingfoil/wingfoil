@@ -38,7 +38,7 @@ import {
 } from '../memory';
 import type { DocumentScope, MemoryYaml, StateMachine, TransitionOp } from '../memory';
 import { commitPaths, pathPorcelainStatus, readDocument, readPathAtRev, writeDocument } from '../storage';
-import { ValidationError } from '../validation';
+import { type Diagnostic, formatDiagnostic, ValidationError } from '../validation';
 
 import { requireConfinedWriteTarget } from './confinement';
 import { requireGitIdentity, type GitIdentity } from './git-identity';
@@ -88,6 +88,11 @@ export interface PreparedMemoryTransition {
    * `command-baseline` 1.4), where {@link frontmatter} is the working tree's content to commit.
    */
   readonly committedFrontmatter: Readonly<Record<string, unknown>>;
+  /**
+   * The committed documents the lookup could not read on its way to this one (task-171, `bug-031`), as
+   * `W_MEMORY_UNREADABLE` warning lines (`formatDiagnostic`). A verb's success carries them.
+   */
+  readonly warnings: readonly string[];
 }
 
 /**
@@ -120,6 +125,17 @@ function uncommittedMachineNote(root: string): string {
   );
 }
 
+/**
+ * A second sentence for `document not found` when the lookup at `HEAD` skipped documents it could not
+ * read (task-171): the id may be in one of them, so they are named as `HEAD:<path>`. Empty otherwise,
+ * so the pinned first sentence (P1.6 sc.3) is unchanged.
+ */
+function unreadableNote(unreadable: readonly Diagnostic[]): string {
+  if (unreadable.length === 0) return '';
+  const named = unreadable.map((diagnostic) => `HEAD:${diagnostic.file} (${diagnostic.message.slice(diagnostic.message.indexOf(': ') + 2)})`);
+  return ` — it may be in a Memory document committed at HEAD that could not be read: ${named.join('; ')}`;
+}
+
 /** Whether `full` names a directory entry at all — `lstat`, so a link is present even when dangling. */
 function isPresent(full: string): boolean {
   try {
@@ -139,7 +155,9 @@ function isPresent(full: string): boolean {
  */
 function uncommittedDocumentPath(root: string, memoryYaml: MemoryYaml, id: string): string | undefined {
   try {
-    return findMemoryDocumentById(root, memoryYaml, id)?.path;
+    // `followSymlinks`: this read only words a refusal, so it may follow a link the deciding scan
+    // skips (task-171, `bug-189`), and the confinement guards then refuse the link by name.
+    return findMemoryDocumentById(root, memoryYaml, id, { followSymlinks: true })?.path;
   } catch {
     return undefined;
   }
@@ -147,12 +165,18 @@ function uncommittedDocumentPath(root: string, memoryYaml: MemoryYaml, id: strin
 
 /**
  * The frontmatter `id` commit `sha` records for `path`, or `undefined` when the commit does not hold
- * the path. Like {@link uncommittedDocumentPath}, it only words a refusal. It needs no guard against
- * an unparsable document: it runs after a full scan at the same sha found nothing, and that scan has
- * already parsed (or thrown on) every document the commit holds under the scan roots.
+ * the path, or holds it with frontmatter that does not parse (the scan at the same sha skipped it,
+ * task-171). Like {@link uncommittedDocumentPath}, it only words a refusal, so no branch of it can
+ * change an outcome.
  */
 function recordedIdAt(root: string, sha: string, path: string): string | undefined {
-  const id = loadMemoryDocumentSummaryAtRev(root, sha, path)?.frontmatter.id;
+  let id: unknown;
+  try {
+    id = loadMemoryDocumentSummaryAtRev(root, sha, path)?.frontmatter.id;
+  } catch (error) {
+    if (error instanceof ValidationError) return undefined;
+    throw error;
+  }
   return id === undefined ? undefined : String(id);
 }
 
@@ -206,7 +230,7 @@ export function prepareMemoryTransition(
   // Resolved ONCE: every read below is at this sha, so the machine and the document cannot come from
   // two commits even if `HEAD` moves while the verb runs (task-137). No commit at all is the same
   // answer as a commit without `memory.yaml`.
-  const sha = atHeadOr(() => resolveRevision(root, 'HEAD'), null);
+  const sha = atHeadOr(root, () => resolveRevision(root, 'HEAD'), null);
   let memoryYaml: MemoryYaml | null;
   try {
     memoryYaml = sha === null ? null : loadMemoryYamlAtRev(root, sha);
@@ -252,23 +276,11 @@ export function prepareMemoryTransitionAtRev(
   op: TransitionResolution,
   expectedType?: string,
 ): CoreResult<PreparedMemoryTransition> {
-  let found: ReturnType<typeof findMemoryDocumentByIdAtRev>;
-  try {
-    found = findMemoryDocumentByIdAtRev(root, sha, memoryYaml, id);
-  } catch (error) {
-    if (!(error instanceof ValidationError)) throw error;
-    // The scan parses every committed document in path order until it meets the id, so one that does
-    // not parse refuses every transition behind it. Say which, as HEAD names it (the reader labels it
-    // with the resolved sha), at exit 1 rather than as a raw throw.
-    const message = error.message.split(`${sha}:`).join('HEAD:');
-    return coreErr({
-      code: 'VALIDATION',
-      message:
-        `cannot resolve ${id} at HEAD: a Memory document committed at HEAD does not parse — ${message}. A transition ` +
-        'reads the documents the repository records (spec-006 §6 item 1); fix that document and commit the fix, then retry.',
-      details: { issues: error.issues },
-    });
-  }
+  // Tolerant (task-171, `bug-031`): a committed document the scan cannot read no longer refuses the
+  // transition of another element. It is skipped and reported; the verb's success carries it as a
+  // warning, and a miss names it, since the id may be in it.
+  const unreadable: Diagnostic[] = [];
+  const found = findMemoryDocumentByIdAtRev(root, sha, memoryYaml, id, { onDiagnostic: (diagnostic) => unreadable.push(diagnostic) });
   if (!found) {
     const onDisk = uncommittedDocumentPath(root, memoryYaml, id);
     if (onDisk !== undefined) {
@@ -296,7 +308,11 @@ export function prepareMemoryTransitionAtRev(
           'on a committed element; register a new element with `memory add`, then retry.',
       });
     }
-    return coreErr({ code: 'NOT_FOUND', message: `document not found: ${id}${uncommittedMachineNote(root)}` });
+    return coreErr({
+      code: 'NOT_FOUND',
+      message: `document not found: ${id}${unreadableNote(unreadable)}${uncommittedMachineNote(root)}`,
+      ...(unreadable.length > 0 ? { details: { issues: unreadable } } : {}),
+    });
   }
 
   const path = found.path;
@@ -373,7 +389,19 @@ export function prepareMemoryTransitionAtRev(
       });
     }
     const content = readDocument(join(root, path));
-    return coreOk({ memoryYaml, id, type, path, frontmatter, content, from, to, sha, committedFrontmatter: found.frontmatter });
+    return coreOk({
+      memoryYaml,
+      id,
+      type,
+      path,
+      frontmatter,
+      content,
+      from,
+      to,
+      sha,
+      committedFrontmatter: found.frontmatter,
+      warnings: unreadable.map(formatDiagnostic),
+    });
   } catch (error) {
     if (!(error instanceof ValidationError)) throw error;
     const code = error.issues.some((issue) => issue.code === E_INVALID_TRANSITION) ? 'INVALID_TRANSITION' : 'VALIDATION';

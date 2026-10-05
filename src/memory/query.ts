@@ -42,18 +42,30 @@
  * `draft` is deliberately NOT excluded here: spec-012 §6 excludes drafts from an assembled agent
  * *context*, but REQ-STATE-06 scopes default-search exclusion to archived content only, so a draft
  * document a user is actively working on stays findable. The two filters are different sets on purpose.
+ *
+ * **Fail closed on archived elements (task-171, `dl-038` option 1).** {@link listMemoryDocumentsByType}
+ * and {@link findMemoryDocumentByTypeAndId} (and its `…AtRev` sibling) exclude archived documents by
+ * default too, so a consumer that forgets to filter does not reach them; the one that must —
+ * `wingfoil://memory/{type}/{id}` — passes `includeArchived: true`. {@link findMemoryDocumentById}
+ * stays neutral: `memory history` and the transition verbs act on archived elements.
+ *
+ * **Tolerant reads (task-171, `bug-031`, `spec-017` §1.4).** A scan never throws on a document it
+ * cannot read. A document whose frontmatter does not parse, and a symbolic link (never followed and
+ * never parsed, by either baseline, `bug-189`), are left out and reported to the caller's
+ * {@link MemoryScanOptions.onDiagnostic} as {@link W_MEMORY_UNREADABLE}, in path order. Only the
+ * single-file read {@link loadMemoryDocumentSummary} still throws: its caller named that file.
  */
-import { existsSync, readdirSync, statSync } from 'fs';
+import { existsSync, lstatSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
-import { parseYaml, ValidationError } from '../validation';
+import { type Diagnostic, parseYaml, ValidationError } from '../validation';
 
 import type { MemoryYaml } from './schema';
 import { isArchivedStatus } from './state-machine';
 import { readDocument, readPathsAtRev, splitFrontmatter } from '../storage';
 // The module, not the `../core` barrel: `src/core` imports this module, and `./revision` depends on
 // `../storage` alone, so nothing here closes a load-time cycle.
-import { listPathsAtCommit, resolveRevision } from '../core/revision';
+import { listBlobEntriesAtCommit, resolveRevision } from '../core/revision';
 
 /**
  * The static (placeholder-free) directory prefix of a `memory.yaml` type `path` pattern — e.g.
@@ -85,20 +97,97 @@ export function computeMemoryContentRoots(memoryYaml: MemoryYaml): string[] {
   return all.filter((dir) => !all.some((other) => other !== dir && dir.startsWith(`${other}/`)));
 }
 
-/** Recursively list every `.md` file under `root/dir`, as root-relative POSIX paths, sorted. */
-function listMarkdownFilesUnder(root: string, dir: string): string[] {
+/** `W_MEMORY_UNREADABLE` (`spec-017` §1.4, §2): a Memory file a scan left out because it cannot read it. */
+export const W_MEMORY_UNREADABLE = 'W_MEMORY_UNREADABLE';
+
+/** The reason {@link W_MEMORY_UNREADABLE} gives for a symbolic link (task-171, `bug-189`). */
+const SYMLINK_REASON = 'a symbolic link is not read as a Memory document';
+
+/**
+ * The one builder of a {@link W_MEMORY_UNREADABLE} diagnostic, shared by the scan here and by
+ * `spec-017`'s deduction: `spec-003`'s shape, `file` repository-relative, `path` `''` (the whole file),
+ * and `spec-017` §1.4's message `unreadable frontmatter in <file>: <reason>`.
+ */
+export function memoryUnreadableDiagnostic(file: string, reason: string): Diagnostic {
+  return { code: W_MEMORY_UNREADABLE, severity: 'warning', file, path: '', message: `unreadable frontmatter in ${file}: ${reason}` };
+}
+
+/** The first line of a parse error: js-yaml appends a multi-line excerpt a one-line warning cannot carry. */
+export function firstLineOf(message: string): string {
+  return message.split('\n')[0]!.trim();
+}
+
+/** What every tolerant scan takes (task-171). */
+export interface MemoryScanOptions {
+  /**
+   * Told about each file the scan left out because it cannot read it ({@link W_MEMORY_UNREADABLE}), in
+   * path order. A lookup that stops at its match reports only the files it read before it. Omitted:
+   * the files are left out silently.
+   */
+  readonly onDiagnostic?: (diagnostic: Diagnostic) => void;
+}
+
+/** {@link MemoryScanOptions} plus the archived opt-in of the type-scoped primitives (`dl-038` option 1). */
+export interface MemoryTypeScanOptions extends MemoryScanOptions {
+  /**
+   * Include archived documents (`deprecated`, `superseded`, `isArchivedStatus`). Defaults to `false`,
+   * so a consumer that forgets to filter fails closed (`dl-038` option 1); a consumer that must see
+   * archived content — `wingfoil://memory/{type}/{id}`, REQ-STATE-06's "remaining present" — says so.
+   */
+  readonly includeArchived?: boolean;
+}
+
+/** {@link MemoryScanOptions} of {@link findMemoryDocumentById}, which alone may follow links. */
+export interface MemoryIdLookupOptions extends MemoryScanOptions {
+  /**
+   * Walk the working tree the way it did before task-171: follow symbolic links and descend into a
+   * nested repository. **Explain-only**: the transition verbs use it to word a refusal already decided
+   * at `HEAD` (`command-baseline`: the working tree may explain a refusal, never decide one), so that a
+   * linked document is refused by the confinement guards by name. No read that decides anything sets
+   * it. Defaults to `false`.
+   */
+  readonly followSymlinks?: boolean;
+}
+
+/** One file under a scan root: its root-relative path, and whether it is a symbolic link. */
+interface ScannedFile {
+  readonly path: string;
+  readonly symlink: boolean;
+}
+
+function byPath(a: ScannedFile, b: ScannedFile): number {
+  return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+}
+
+/**
+ * Recursively list every `.md` entry under `root/dir`, as root-relative POSIX paths, sorted.
+ *
+ * One rule with the read at a commit (task-171, `bug-189`): a symbolic link is never followed — a
+ * `.md` link is listed as a link, so the caller can report it, and a link to a directory is not
+ * entered — and a directory holding `.git` (a nested repository, which a commit records as a gitlink
+ * at most) is not entered. With `followSymlinks` the walk is the pre-task-171 one, for
+ * {@link MemoryIdLookupOptions.followSymlinks}'s explain-only use.
+ */
+function listMarkdownFilesUnder(root: string, dir: string, followSymlinks: boolean): ScannedFile[] {
   const absoluteDir = join(root, dir);
   if (!existsSync(absoluteDir) || !statSync(absoluteDir).isDirectory()) return [];
 
-  const out: string[] = [];
+  const out: ScannedFile[] = [];
   const walk = (current: string, relativePrefix: string): void => {
     for (const entry of readdirSync(current).sort()) {
       const full = join(current, entry);
       const relative = `${relativePrefix}/${entry}`;
-      if (statSync(full).isDirectory()) {
+      const own = lstatSync(full);
+      if (own.isSymbolicLink() && !followSymlinks) {
+        if (entry.endsWith('.md')) out.push({ path: relative, symlink: true });
+        continue;
+      }
+      const stats = own.isSymbolicLink() ? statSync(full) : own;
+      if (stats.isDirectory()) {
+        if (!followSymlinks && existsSync(join(full, '.git'))) continue;
         walk(full, relative);
       } else if (entry.endsWith('.md')) {
-        out.push(relative);
+        out.push({ path: relative, symlink: false });
       }
     }
   };
@@ -106,17 +195,26 @@ function listMarkdownFilesUnder(root: string, dir: string): string[] {
   return out;
 }
 
+/** Every `.md` entry under the scan roots of `memoryYaml`, sorted, links marked (see {@link listMarkdownFilesUnder}). */
+function scanWorkingTree(root: string, memoryYaml: MemoryYaml, followSymlinks = false): ScannedFile[] {
+  const out = new Map<string, ScannedFile>();
+  for (const dir of computeMemoryContentRoots(memoryYaml)) {
+    for (const file of listMarkdownFilesUnder(root, dir, followSymlinks)) out.set(file.path, file);
+  }
+  return [...out.values()].sort(byPath);
+}
+
 /**
  * List every Memory document under `root`, as root-relative POSIX paths, sorted lexicographically
  * (REQ-SYS-07 — deterministic, no unordered iteration). Scans only the directories
- * {@link computeMemoryContentRoots} derives from `memoryYaml`, never the whole project tree.
+ * {@link computeMemoryContentRoots} derives from `memoryYaml`, never the whole project tree. A
+ * symbolic link is not a document and is not listed (task-171, `bug-189`), the same as
+ * {@link listMemoryDocumentPathsAtRev} at a commit.
  */
 export function listMemoryDocumentPaths(root: string, memoryYaml: MemoryYaml): string[] {
-  const out = new Set<string>();
-  for (const dir of computeMemoryContentRoots(memoryYaml)) {
-    for (const path of listMarkdownFilesUnder(root, dir)) out.add(path);
-  }
-  return [...out].sort();
+  return scanWorkingTree(root, memoryYaml)
+    .filter((file) => !file.symlink)
+    .map((file) => file.path);
 }
 
 /** A Memory document's parsed frontmatter (loose — no Zod schema validation, see module doc) + body. */
@@ -130,6 +228,11 @@ export interface MemoryDocumentSummary {
  * Read one Memory document and split it into its parsed frontmatter and body text, without running
  * it through any type's Zod schema — `memory search`/`history` must handle documents of every type
  * and any (even structurally imperfect) state, so this is a read, never a validation.
+ *
+ * This single-file read **throws** `ValidationError` (`E_YAML_PARSE_ERROR`) when the frontmatter does
+ * not parse: its caller named the file. The scans built on it are what is tolerant (task-171,
+ * `bug-031`): each one leaves such a document out and reports it as {@link W_MEMORY_UNREADABLE} to its
+ * {@link MemoryScanOptions.onDiagnostic}, so one malformed document never fails a query about another.
  */
 export function loadMemoryDocumentSummary(root: string, relativePath: string): MemoryDocumentSummary {
   const absolute = join(root, relativePath);
@@ -154,43 +257,99 @@ function parseMemoryDocument(raw: string, relativePath: string, label: string): 
   return { path: relativePath, frontmatter, body };
 }
 
+/**
+ * {@link parseMemoryDocument} for a scan: the summary, or `undefined` after reporting the document as
+ * {@link W_MEMORY_UNREADABLE} when its frontmatter does not parse. The diagnostic names the
+ * repository-relative path, whichever baseline was read.
+ */
+function parseScanned(raw: string, relativePath: string, label: string, options: MemoryScanOptions): MemoryDocumentSummary | undefined {
+  try {
+    return parseMemoryDocument(raw, relativePath, label);
+  } catch (error) {
+    if (!(error instanceof ValidationError)) throw error;
+    options.onDiagnostic?.(memoryUnreadableDiagnostic(relativePath, firstLineOf(error.issues[0]?.message ?? error.message)));
+    return undefined;
+  }
+}
+
+/**
+ * The working-tree scan every tolerant reader is built on: each document under the scan roots, parsed,
+ * lazily and in path order, so a lookup can stop at its match. A link and an unparsable document are
+ * reported and skipped.
+ */
+function* scanWorkingTreeDocuments(
+  root: string,
+  memoryYaml: MemoryYaml,
+  options: MemoryScanOptions & { readonly followSymlinks?: boolean },
+): Generator<MemoryDocumentSummary> {
+  for (const file of scanWorkingTree(root, memoryYaml, options.followSymlinks === true)) {
+    if (file.symlink) {
+      options.onDiagnostic?.(memoryUnreadableDiagnostic(file.path, SYMLINK_REASON));
+      continue;
+    }
+    const absolute = join(root, file.path);
+    const summary = parseScanned(readDocument(absolute), file.path, absolute, options);
+    if (summary !== undefined) yield summary;
+  }
+}
+
 // --- The same scan at a revision (task-137) -----------------------------------------------------
 //
 // `spec-012` §2 pins an agent context to `stateRef`, a commit sha, and `spec-017` §1.1/§1.3 deduce
 // workflow state from every Memory document "enumerated from `HEAD`'s tree in sorted path order". The
-// four readers below are the working-tree scan above, read at one commit instead: the same scan roots
-// ({@link computeMemoryContentRoots}), the same `.md` filter, the same sort, the same parse. Each
-// resolves `rev` once (`resolveRevision`) and reads every byte at that sha; an unknown or malformed rev
-// throws `RevisionError` rather than answering with an empty scan. Pass the `memoryYaml` loaded at the
-// same rev (`loadMemoryYamlAtRev`), and a resolved sha when several calls must see one commit.
+// readers below are the working-tree scan above, read at one commit instead: the same scan roots
+// ({@link computeMemoryContentRoots}), the same `.md` filter, the same sort, the same parse, the same
+// tolerance and the same rule for links (task-171). Each resolves `rev` once (`resolveRevision`) and
+// reads every byte at that sha; an unknown or malformed rev throws `RevisionError` rather than
+// answering with an empty scan. Pass the `memoryYaml` loaded at the same rev (`loadMemoryYamlAtRev`),
+// and a resolved sha when several calls must see one commit.
 
-/** {@link listMemoryDocumentPathsAtRev} over an already-resolved commit sha. */
-function listMemoryDocumentPathsAtSha(root: string, sha: string, memoryYaml: MemoryYaml): string[] {
-  const out = new Set<string>();
+/** Every `.md` blob under the scan roots at `sha`, sorted, links marked (git mode `120000`). */
+function scanCommit(root: string, sha: string, memoryYaml: MemoryYaml): ScannedFile[] {
+  const out = new Map<string, ScannedFile>();
   for (const dir of computeMemoryContentRoots(memoryYaml)) {
-    for (const path of listPathsAtCommit(root, sha, dir)) if (path.endsWith('.md')) out.add(path);
+    for (const entry of listBlobEntriesAtCommit(root, sha, dir)) if (entry.path.endsWith('.md')) out.set(entry.path, entry);
   }
-  return [...out].sort();
+  return [...out.values()].sort(byPath);
 }
 
 /**
  * Every Memory document **commit `rev` holds**, as root-relative POSIX paths sorted the way
  * {@link listMemoryDocumentPaths} sorts the working tree's (REQ-SYS-07). A document added after `rev`,
- * or present only in the working tree, is not listed.
+ * or present only in the working tree, is not listed; nor is a symbolic link (task-171, `bug-189`).
  *
  * @throws `RevisionError` when `rev` is malformed or names no commit.
  */
 export function listMemoryDocumentPathsAtRev(root: string, rev: string, memoryYaml: MemoryYaml): string[] {
-  return listMemoryDocumentPathsAtSha(root, resolveRevision(root, rev), memoryYaml);
+  return scanCommit(root, resolveRevision(root, rev), memoryYaml)
+    .filter((file) => !file.symlink)
+    .map((file) => file.path);
 }
 
 /**
- * Read `paths` at `sha` in one batch and parse them **lazily**, in path order; a path the commit does
- * not hold is left out. Lazy so that a lookup can stop at its match, as the working-tree lookup does.
+ * Read `files` at `sha` in one batch and parse them **lazily**, in path order; a path the commit does
+ * not hold is left out, and a link or an unparsable document is reported and skipped (task-171). Lazy
+ * so that a lookup can stop at its match, as the working-tree lookup does.
  */
-function* parseMemoryDocumentsAtSha(root: string, sha: string, rev: string, paths: readonly string[]): Generator<MemoryDocumentSummary> {
-  for (const [i, raw] of readPathsAtRev(root, sha, paths).entries()) {
-    if (raw !== null) yield parseMemoryDocument(raw, paths[i]!, `${rev}:${paths[i]!}`);
+function* parseMemoryDocumentsAtSha(
+  root: string,
+  sha: string,
+  rev: string,
+  files: readonly ScannedFile[],
+  options: MemoryScanOptions,
+): Generator<MemoryDocumentSummary> {
+  const documents = files.filter((file) => !file.symlink);
+  const raws = readPathsAtRev(root, sha, documents.map((file) => file.path));
+  const texts = new Map(documents.map((file, i) => [file.path, raws[i] ?? null]));
+  for (const file of files) {
+    if (file.symlink) {
+      options.onDiagnostic?.(memoryUnreadableDiagnostic(file.path, SYMLINK_REASON));
+      continue;
+    }
+    const raw = texts.get(file.path) ?? null;
+    if (raw === null) continue;
+    const summary = parseScanned(raw, file.path, `${rev}:${file.path}`, options);
+    if (summary !== undefined) yield summary;
   }
 }
 
@@ -198,25 +357,32 @@ function* parseMemoryDocumentsAtSha(root: string, sha: string, rev: string, path
  * Every Memory document **commit `rev` holds**, parsed — the paths of
  * {@link listMemoryDocumentPathsAtRev}, in its order, each read in one batch (`storage.readPathsAtRev`)
  * and split as {@link loadMemoryDocumentSummary} splits a working-tree file. This is the snapshot a
- * reader pinned to one commit builds from (`spec-012` §6 relevance, `spec-017` §4 deduction).
+ * reader pinned to one commit builds from (`spec-012` §6 relevance, `spec-017` §4 deduction). A
+ * document whose frontmatter does not parse, and a link, are left out and reported (task-171).
  *
- * @throws `RevisionError` when `rev` is malformed or names no commit; `ValidationError` when a
- *   document's frontmatter does not parse, as {@link loadMemoryDocumentSummary} does.
+ * @throws `RevisionError` when `rev` is malformed or names no commit.
  */
-export function loadMemoryDocumentsAtRev(root: string, rev: string, memoryYaml: MemoryYaml): MemoryDocumentSummary[] {
+export function loadMemoryDocumentsAtRev(
+  root: string,
+  rev: string,
+  memoryYaml: MemoryYaml,
+  options: MemoryScanOptions = {},
+): MemoryDocumentSummary[] {
   const sha = resolveRevision(root, rev);
-  return [...parseMemoryDocumentsAtSha(root, sha, rev, listMemoryDocumentPathsAtSha(root, sha, memoryYaml))];
+  return [...parseMemoryDocumentsAtSha(root, sha, rev, scanCommit(root, sha, memoryYaml), options)];
 }
 
 /**
  * One Memory document **as commit `rev` holds it** — {@link loadMemoryDocumentSummary} at a commit.
- * `null` when that commit does not hold `relativePath` as a file.
+ * `null` when that commit does not hold `relativePath` as a file. Like its working-tree counterpart,
+ * this single-file read throws when the frontmatter does not parse.
  *
- * @throws `RevisionError` when `rev` is malformed or names no commit.
+ * @throws `RevisionError` when `rev` is malformed or names no commit; `ValidationError` when the
+ *   frontmatter does not parse.
  */
 export function loadMemoryDocumentSummaryAtRev(root: string, rev: string, relativePath: string): MemoryDocumentSummary | null {
-  const [summary = null] = parseMemoryDocumentsAtSha(root, resolveRevision(root, rev), rev, [relativePath]);
-  return summary;
+  const [raw = null] = readPathsAtRev(root, resolveRevision(root, rev), [relativePath]);
+  return raw === null ? null : parseMemoryDocument(raw, relativePath, `${rev}:${relativePath}`);
 }
 
 function asStringArray(value: unknown): string[] {
@@ -235,25 +401,22 @@ function asString(value: unknown): string | undefined {
  * (single document) — there is no bare, single-segment `wingfoil://memory/{id}` form there, and this
  * `{id}` segment would collide with spec-004's `{type}` segment. task-011-mcp-resources-read-only has
  * since replaced the `wingfoil://memory/{id}` *Resource* this primitive originally backed with the
- * conformant `wingfoil://memory/{type}/{id}` form (see {@link findMemoryDocumentByTypeAndId}) — this
- * bare-id primitive itself is left in place (still covered by its own `test/memory/query.test.ts`
- * unit tests and REQ-PERF-04's ported benchmark) as a generic, type-agnostic lookup; nothing in
- * `src/mcp` calls it anymore.
+ * conformant `wingfoil://memory/{type}/{id}` form (see {@link findMemoryDocumentByTypeAndId}). This
+ * bare-id primitive is what `memory history` resolves its `<id>` with, and what the transition verbs
+ * use to explain a refusal; it is neutral about archived documents, since both act on them.
  *
- * A linear scan over every document {@link listMemoryDocumentPaths} returns, in its
- * already-deterministic sorted order, stopping at the first document whose frontmatter `id` matches
+ * A linear scan, in sorted path order, stopping at the first document whose frontmatter `id` matches
  * *exactly* (never a substring — that remains `searchMemoryDocuments`'/task-021's keyword-search
- * surface, not this primitive's). Returns `undefined` — never throws — when no document matches;
- * turning that into a protocol-level "resource not found" failure is the MCP Resource adapter's job
- * (spec-004 §2.2's general unresolvable-URI contract), not this primitive's.
+ * surface, not this primitive's). Returns `undefined` — never throws — when no document matches; a
+ * document it cannot read on the way is reported to `options.onDiagnostic` and skipped (task-171).
  */
 export function findMemoryDocumentById(
   root: string,
   memoryYaml: MemoryYaml,
   id: string,
+  options: MemoryIdLookupOptions = {},
 ): MemoryDocumentSummary | undefined {
-  for (const path of listMemoryDocumentPaths(root, memoryYaml)) {
-    const summary = loadMemoryDocumentSummary(root, path);
+  for (const summary of scanWorkingTreeDocuments(root, memoryYaml, options)) {
     if (asString(summary.frontmatter.id) === id) return summary;
   }
   return undefined;
@@ -264,7 +427,8 @@ export function findMemoryDocumentById(
  * the sorted path order of {@link listMemoryDocumentPathsAtRev}, whose own frontmatter `id` matches
  * exactly, with its frontmatter and body as `rev` holds them; `undefined` when that commit holds none.
  * A document present only in the working tree, or added after `rev`, is never returned. This is the
- * lookup the Memory transition verbs decide from (`spec-006-core-domain-api` §6 item 1).
+ * lookup the Memory transition verbs decide from (`spec-006-core-domain-api` §6 item 1). A document it
+ * cannot read on the way is reported to `options.onDiagnostic` and skipped (task-171).
  *
  * @throws `RevisionError` when `rev` is malformed or names no commit.
  */
@@ -273,9 +437,10 @@ export function findMemoryDocumentByIdAtRev(
   rev: string,
   memoryYaml: MemoryYaml,
   id: string,
+  options: MemoryScanOptions = {},
 ): MemoryDocumentSummary | undefined {
   const sha = resolveRevision(root, rev);
-  for (const summary of parseMemoryDocumentsAtSha(root, sha, rev, listMemoryDocumentPathsAtSha(root, sha, memoryYaml))) {
+  for (const summary of parseMemoryDocumentsAtSha(root, sha, rev, scanCommit(root, sha, memoryYaml), options)) {
     if (asString(summary.frontmatter.id) === id) return summary;
   }
   return undefined;
@@ -291,6 +456,11 @@ export interface MemoryDocumentFrontmatterSummary {
   readonly tags: readonly string[];
 }
 
+/** Whether a document is kept under the archived default of {@link MemoryTypeScanOptions}. */
+function keptByArchivedDefault(frontmatter: Record<string, unknown>, options: MemoryTypeScanOptions): boolean {
+  return options.includeArchived === true || !isArchivedStatus(asString(frontmatter.status));
+}
+
 /**
  * List every Memory document whose frontmatter `type:` field equals `type` (a `memory.yaml` `types:`
  * key), as frontmatter-only summaries — spec-004 §2.1's `wingfoil://memory/{type}` collection
@@ -302,16 +472,20 @@ export interface MemoryDocumentFrontmatterSummary {
  * `release`/`release-line` both resolve to `docs/04_memory/planning`; `task`'s own pattern collapses
  * all the way to `docs/04_memory` itself — see {@link computeMemoryContentRoots}'s doc comment), so a
  * directory-only filter would wrongly fold sibling types' documents into this type's collection.
+ *
+ * Archived documents are left out unless `options.includeArchived` (task-171, `dl-038` option 1), and
+ * a document the scan cannot read is reported to `options.onDiagnostic` and skipped.
  */
 export function listMemoryDocumentsByType(
   root: string,
   memoryYaml: MemoryYaml,
   type: string,
+  options: MemoryTypeScanOptions = {},
 ): MemoryDocumentFrontmatterSummary[] {
   const out: MemoryDocumentFrontmatterSummary[] = [];
-  for (const path of listMemoryDocumentPaths(root, memoryYaml)) {
-    const { frontmatter } = loadMemoryDocumentSummary(root, path);
+  for (const { path, frontmatter } of scanWorkingTreeDocuments(root, memoryYaml, options)) {
     if (asString(frontmatter.type) !== type) continue;
+    if (!keptByArchivedDefault(frontmatter, options)) continue;
     out.push({
       path,
       id: asString(frontmatter.id),
@@ -336,16 +510,21 @@ export function listMemoryDocumentsByType(
  * because that type's path pattern happens to also resolve under the same directory. Returns
  * `undefined` — never throws — when nothing matches; surfacing that as a protocol-level "resource not
  * found" failure is the MCP Resource adapter's job (spec-004 §2.2), not this primitive's.
+ *
+ * An archived document matches only with `options.includeArchived` (task-171, `dl-038` option 1); the
+ * single-document Resource passes it, since REQ-STATE-06 keeps archived content retrievable.
  */
 export function findMemoryDocumentByTypeAndId(
   root: string,
   memoryYaml: MemoryYaml,
   type: string,
   id: string,
+  options: MemoryTypeScanOptions = {},
 ): MemoryDocumentSummary | undefined {
-  for (const path of listMemoryDocumentPaths(root, memoryYaml)) {
-    const summary = loadMemoryDocumentSummary(root, path);
-    if (asString(summary.frontmatter.type) === type && asString(summary.frontmatter.id) === id) return summary;
+  for (const summary of scanWorkingTreeDocuments(root, memoryYaml, options)) {
+    if (asString(summary.frontmatter.type) === type && asString(summary.frontmatter.id) === id) {
+      return keptByArchivedDefault(summary.frontmatter, options) ? summary : undefined;
+    }
   }
   return undefined;
 }
@@ -353,7 +532,7 @@ export function findMemoryDocumentByTypeAndId(
 /**
  * {@link findMemoryDocumentByTypeAndId} **at commit `rev`**: the document whose own frontmatter `type`
  * and `id` match, with its frontmatter and body as `rev` holds them; `undefined` when that commit holds
- * none.
+ * none, or holds it archived without `options.includeArchived`.
  *
  * @throws `RevisionError` when `rev` is malformed or names no commit.
  */
@@ -363,19 +542,19 @@ export function findMemoryDocumentByTypeAndIdAtRev(
   memoryYaml: MemoryYaml,
   type: string,
   id: string,
+  options: MemoryTypeScanOptions = {},
 ): MemoryDocumentSummary | undefined {
   const sha = resolveRevision(root, rev);
-  // Parsed in path order and stopped at the first match, as the working-tree lookup does: a document
-  // whose frontmatter does not parse fails the lookup only if the scan reaches it (`task-171` makes
-  // both baselines tolerant together, through `parseMemoryDocument`).
-  for (const summary of parseMemoryDocumentsAtSha(root, sha, rev, listMemoryDocumentPathsAtSha(root, sha, memoryYaml))) {
-    if (asString(summary.frontmatter.type) === type && asString(summary.frontmatter.id) === id) return summary;
+  for (const summary of parseMemoryDocumentsAtSha(root, sha, rev, scanCommit(root, sha, memoryYaml), options)) {
+    if (asString(summary.frontmatter.type) === type && asString(summary.frontmatter.id) === id) {
+      return keptByArchivedDefault(summary.frontmatter, options) ? summary : undefined;
+    }
   }
   return undefined;
 }
 
 /** Optional filters/refinements for {@link searchMemoryDocuments}. */
-export interface MemorySearchOptions {
+export interface MemorySearchOptions extends MemoryScanOptions {
   /** Only include documents whose `tags:` frontmatter contains this exact tag. */
   readonly tag?: string;
   /**
@@ -392,14 +571,16 @@ export interface MemorySearchOptions {
 /** One ranked search result — enough for a future CLI/MCP surface to render without re-reading the file. */
 export interface MemorySearchMatch {
   readonly path: string;
-  readonly id?: string;
+  /** Always present: a document with no `id` is not an element and is never a match (task-171, `bug-164`). */
+  readonly id: string;
   readonly title?: string;
   readonly tags: readonly string[];
   readonly status?: string;
   /** The document's frontmatter `type:` field (spec-010-memory-frontmatter-schema base field) —
    * projected here (task-021-implement-memory-search) alongside `status`/`tags` so `memorySearch`'s
-   * `--type` filter can narrow an already-ranked result without a second file read per match. */
-  readonly type?: string;
+   * `--type` filter can narrow an already-ranked result without a second file read per match. Always
+   * present, as `id` is (task-171, `bug-164`). */
+  readonly type: string;
   /** Query matched the title, id, or a tag (P1.12: ranks above a body-only match). */
   readonly metadataMatch: boolean;
   /** Query matched somewhere in the document body. */
@@ -441,8 +622,13 @@ export function validateSearchQuery(query: string): void {
  * concern, task-021's, not this primitive's).
  *
  * Ordering is a total, deterministic order (REQ-SYS-07): metadata matches before body-only matches,
- * then by `id` (falling back to `path` when a document has no `id`) ascending — so calling this
- * twice against unchanged state always returns the exact same array.
+ * then by `id`, then by `path` (two files may carry one `id`) ascending — so calling this twice
+ * against unchanged state always returns the exact same array.
+ *
+ * **Only elements, never a throw (task-171).** A match has an `id` and a `type` (`bug-164`); a file
+ * with neither is left out without a report. A document whose frontmatter does not parse, or a
+ * symbolic link, is left out and reported to `options.onDiagnostic` as {@link W_MEMORY_UNREADABLE}
+ * (`bug-031`), so one malformed file never fails a search.
  *
  * **REQ-STATE-06:** a document whose frontmatter `status` is archived — `deprecated` or `superseded`
  * (`isArchivedStatus`, `dl-028`) — is excluded by default, so it never appears in these "default
@@ -461,23 +647,25 @@ export function searchMemoryDocuments(
   const needle = query.trim().toLowerCase();
   const matches: MemorySearchMatch[] = [];
 
-  for (const path of listMemoryDocumentPaths(root, memoryYaml)) {
-    const { frontmatter, body } = loadMemoryDocumentSummary(root, path);
+  for (const { path, frontmatter, body } of scanWorkingTreeDocuments(root, memoryYaml, options)) {
+    // Only an element is a match (task-171, `bug-164`): a file with no `id` or no `type` — a plan
+    // `dl-019` grandfathered without frontmatter — is left out, silently: it is not unreadable.
+    const id = asString(frontmatter.id);
+    const type = asString(frontmatter.type);
+    if (id === undefined || type === undefined) continue;
     const status = asString(frontmatter.status);
     if (!options.includeArchived && isArchivedStatus(status)) continue;
     const tags = asStringArray(frontmatter.tags);
     if (options.tag && !tags.includes(options.tag)) continue;
 
     const title = asString(frontmatter.title);
-    const id = asString(frontmatter.id);
-    const type = asString(frontmatter.type);
 
     let metadataMatch = false;
     let bodyMatch = false;
     if (needle.length > 0) {
       metadataMatch =
         (title !== undefined && title.toLowerCase().includes(needle)) ||
-        (id !== undefined && id.toLowerCase().includes(needle)) ||
+        id.toLowerCase().includes(needle) ||
         tags.some((tag) => tag.toLowerCase().includes(needle));
       bodyMatch = body.toLowerCase().includes(needle);
       if (!metadataMatch && !bodyMatch) continue;
@@ -490,8 +678,7 @@ export function searchMemoryDocuments(
     const scoreA = a.metadataMatch ? 1 : 0;
     const scoreB = b.metadataMatch ? 1 : 0;
     if (scoreA !== scoreB) return scoreB - scoreA;
-    const keyA = a.id ?? a.path;
-    const keyB = b.id ?? b.path;
-    return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
+    if (a.id !== b.id) return a.id < b.id ? -1 : 1;
+    return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
   });
 }

@@ -62,20 +62,26 @@ export {
   findMemoryDocumentByIdAtRev,
   findMemoryDocumentByTypeAndId,
   findMemoryDocumentByTypeAndIdAtRev,
+  firstLineOf,
   listMemoryDocumentPaths,
   listMemoryDocumentPathsAtRev,
   listMemoryDocumentsByType,
   loadMemoryDocumentsAtRev,
   loadMemoryDocumentSummary,
   loadMemoryDocumentSummaryAtRev,
+  memoryUnreadableDiagnostic,
   searchMemoryDocuments,
   validateSearchQuery,
+  W_MEMORY_UNREADABLE,
 } from './query';
 export type {
   MemoryDocumentFrontmatterSummary,
   MemoryDocumentSummary,
+  MemoryIdLookupOptions,
+  MemoryScanOptions,
   MemorySearchMatch,
   MemorySearchOptions,
+  MemoryTypeScanOptions,
 } from './query';
 export { getMemoryHistory } from './history';
 export type { MemoryHistoryEntry } from './history';
