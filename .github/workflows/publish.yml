@@ -69,8 +69,8 @@
 # ── Node versions: the floor for gate and stage, a newer Node for promote alone (adr-011 point 4) ──
 #
 # `gate` and `stage` run `env.NODE_VERSION` = 22.12.0 — the lowest version every PRODUCTION dependency
-# accepts (commander@15 declares `engines.node >=22.12.0`; @hono/node-server@1.19.14, transitive via
-# @modelcontextprotocol/sdk, declares >=18.14.1). Since task-074 closed bug-023, `package.json` declares
+# accepts (commander@15 declares `engines.node >=22.12.0`; @hono/node-server@2.1.3, transitive via
+# @modelcontextprotocol/sdk, declares >=20 — task-250). Since task-074 closed bug-023, `package.json` declares
 # that same floor — `engines.node >=22.12.0` (adr-010) — and `test/cli/publish-metadata.test.ts`
 # recomputes it from the installed tree, so the two cannot drift apart again. Do not add Node 18/20
 # here: the package no longer claims to run there.

@@ -11,7 +11,8 @@
  * refusal with a named code is an unknown `kind` (`E_WORKFLOW_INVALID_KIND`, BDD P4.1 sc. 3), whose
  * message this schema carries.
  *
- * Every object node is `.passthrough()` per spec-009 §2.
+ * Every object node is `.passthrough()` per spec-009 §2, except a phase `cadence`, a closed union whose
+ * objects are `.strict()` (spec-003 § "Recurring phases": exactly one trigger, no unknown key; task-185).
  */
 import { z } from 'zod';
 
@@ -67,6 +68,93 @@ const Actions = z.array(z.string()).superRefine((actions, ctx) => {
   });
 });
 
+// ---- task-185: executor attributes (`mode`, `distinct_from`) and phase `cadence` -------------------
+// spec-003 § "Execution independence" (`dl-134` §4 (c), `dl-135` points 3–4) and § "Recurring phases"
+// (`dl-105` R1). The loader rules on the raw declaration (`E_PHASE_DISTINCT_FROM_UNKNOWN`,
+// `E_PHASE_DISTINCT_FROM_SELF`, `E_PHASE_MODE_NOT_INDEPENDENT`, `E_PHASE_EXECUTOR_WITHOUT_ROLE`) live in
+// `src/core/workflow-diagnostics.ts`; here is only the structural shape.
+
+/**
+ * The execution modes a phase may allow (spec-003 § "Execution independence"). One value per phase
+ * (spec-003 open question 5); an absent `mode` reads as `fresh` but stays absent in the parsed phase,
+ * so the loader's checks see the raw declaration (open question 4).
+ */
+export const PHASE_MODES = ['fresh', 'resume', 'reference'] as const;
+/** One of {@link PHASE_MODES}. */
+export type PhaseMode = (typeof PHASE_MODES)[number];
+
+/** Roles whose phases judge independently, so `fresh` is mandatory there (`dl-135` point 3). */
+export const INDEPENDENT_ROLES: readonly string[] = ['reviewer', 'qa'];
+
+/**
+ * One five-field cron expression, the string a GitHub Actions `on: schedule` trigger takes
+ * (spec-003 § "Recurring phases"): five fields of digits, names, `*`, `,`, `-` and `/`, separated by
+ * spaces or tabs (a line break or other whitespace is refused: the expression is one line). The
+ * field values themselves are not range-checked.
+ */
+export const CRON_EXPRESSION_RE = /^[0-9A-Za-z*,/-]+([ \t]+[0-9A-Za-z*,/-]+){4}$/;
+
+/**
+ * The shape of a cadence event, `<memory-type>-<state>` (spec-003 open question 3): lower-case
+ * segments joined by single hyphens, at least two of them. Both the type and the state may contain
+ * hyphens (`release-line-in-progress`), so where the type ends is decided against `memory.yaml` by
+ * the core check of task-194, not here.
+ */
+export const CADENCE_EVENT_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/;
+
+/** `{ recurring: { cron } | { on } }`: exactly one trigger, no other key at either level. */
+const RecurringCadence = z
+  .object({
+    recurring: z
+      .object({
+        cron: z
+          .string()
+          .regex(CRON_EXPRESSION_RE, { message: 'cron must be a five-field cron expression (e.g. "0 6 * * 1")' })
+          .optional(),
+        on: z
+          .string()
+          .regex(CADENCE_EVENT_RE, { message: 'on must be an event named <memory-type>-<state> (e.g. release-released)' })
+          .optional(),
+      })
+      .strict()
+      .superRefine((trigger, ctx) => {
+        if ((trigger.cron === undefined) === (trigger.on === undefined)) {
+          ctx.addIssue({ code: 'custom', message: 'recurring cadence takes exactly one trigger: cron or on' });
+        }
+      }),
+  })
+  .strict();
+
+/** The refusal of a `cadence` that matches neither shape, as spec-003 § "Recurring phases" words it. */
+export const CADENCE_SHAPE_MESSAGE = 'cadence must be once or { recurring: { cron } | { on } } with no other key';
+
+function isMap(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The message of a `cadence` that matches neither shape: {@link CADENCE_SHAPE_MESSAGE}, naming the
+ * first unknown key in declared order — beside `recurring` first, then inside it — when there is one.
+ */
+export function cadenceShapeMessage(input: unknown): string {
+  if (!isMap(input)) return CADENCE_SHAPE_MESSAGE;
+  const outer = Object.keys(input).find((key) => key !== 'recurring');
+  if (outer !== undefined) return `${CADENCE_SHAPE_MESSAGE} (unknown key '${outer}')`;
+  const recurring = input['recurring'];
+  const inner = isMap(recurring) ? Object.keys(recurring).find((key) => key !== 'cron' && key !== 'on') : undefined;
+  return inner === undefined ? CADENCE_SHAPE_MESSAGE : `${CADENCE_SHAPE_MESSAGE} (unknown key 'recurring.${inner}')`;
+}
+
+/**
+ * A phase's cadence (`dl-105` R1): `once` (the default) or recurring on one trigger. A value that
+ * matches neither branch is refused at the `cadence` path with {@link cadenceShapeMessage}; a bad
+ * `cron` / `on` value or a trigger count other than one keeps its own, deeper path and message.
+ */
+export const Cadence = z.union([z.literal('once'), RecurringCadence], { error: (issue) => cadenceShapeMessage(issue.input) });
+/** Parsed shape of the {@link Cadence} schema. */
+export type Cadence = z.infer<typeof Cadence>;
+// ---- end task-185 -----------------------------------------------------------------------------------
+
 // --- task-175: phase evidence (dl-104 D3, D4; spec-003 § "Evidence") ---
 
 /**
@@ -100,8 +188,9 @@ export function producesPath(entry: Produces): string {
 
 /**
  * One `phases[]` entry of a Layer-2 workflow definition (spec-003) — a named step with its optional
- * `role`, `actions`, `include`, `iterate_over`/`where`, `produces`, `checks`, `approval`, `fallback`
- * and `awaits`. `.passthrough()` per spec-009 §2.
+ * `role`, `actions`, `include`, `iterate_over`/`where`, `produces`, `awaits` (task-175), `checks`,
+ * `approval`, `fallback`, the executor attributes `mode` / `distinct_from` and the `cadence`
+ * (task-185). `.passthrough()` per spec-009 §2, except the closed `cadence` union.
  */
 export const Phase = z
   .object({
@@ -121,6 +210,10 @@ export const Phase = z
       .optional(),
     approval: z.object({ by_role: z.string() }).passthrough().optional(),
     fallback: z.object({ step: z.string(), set_state: z.string().optional() }).passthrough().optional(),
+    // task-185 (spec-003 § "Execution independence", § "Recurring phases"):
+    mode: z.enum(PHASE_MODES).optional(),
+    distinct_from: z.array(z.string()).optional(),
+    cadence: Cadence.default('once'),
   })
   .passthrough();
 /** Parsed shape of the {@link Phase} schema. */

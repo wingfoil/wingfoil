@@ -387,7 +387,7 @@ describe('wingfoil://workflows and wingfoil://workflows/{name} (spec-004 §2.1)'
     const content = result.contents[0]!;
     const parsed = 'text' in content ? JSON.parse(content.text) : undefined;
     expect(parsed.kind).toBe('main');
-    expect(parsed.phases).toEqual([{ name: 'inception', optional: false }]);
+    expect(parsed.phases).toEqual([{ name: 'inception', optional: false, cadence: 'once' }]); // cadence default: task-185
   });
 
   it('an unknown workflow name is refused with "resource not found"', async () => {

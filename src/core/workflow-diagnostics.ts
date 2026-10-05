@@ -22,7 +22,15 @@ import {
   runsAgentExecute,
   tokenName,
 } from '../workflow/bindings';
-import { PATH_PATTERN_RE, producesPath, RESERVED_PHASE_NAMES, Workflow, WORKFLOW_NAME_RE, workflowFacts } from '../workflow/schema';
+import {
+  INDEPENDENT_ROLES,
+  PATH_PATTERN_RE,
+  producesPath,
+  RESERVED_PHASE_NAMES,
+  Workflow,
+  WORKFLOW_NAME_RE,
+  workflowFacts,
+} from '../workflow/schema';
 
 /** One included file as the loader saw it, in manifest `include` order. */
 export interface LoadedWorkflowFile {
@@ -154,6 +162,58 @@ function elementMismatch(including: Workflow, phase: Workflow['phases'][number],
   return `workflow '${included.name}' declares element '${element}', but this phase neither iterates over '${element}' nor runs in a workflow bound to '${element}'`;
 }
 
+// ---- task-185: executor attributes (spec-003 § "Execution independence") ---------------------------
+/**
+ * The executor rows of spec-003 § "Diagnostics" for one phase, in table order:
+ * `E_PHASE_DISTINCT_FROM_UNKNOWN` and `E_PHASE_DISTINCT_FROM_SELF` (`dl-134` §4),
+ * `E_PHASE_MODE_NOT_INDEPENDENT` (`dl-135` point 3) and `E_PHASE_EXECUTOR_WITHOUT_ROLE` (spec-003
+ * open question 4). Every rule reads the raw declaration: the schema gives `mode` no default, so an
+ * absent `mode` is never a declared one. Validation only — no v0.3 command enforces `distinct_from`
+ * at run time (P4.12, v1.0).
+ */
+function executorDiagnostics(
+  file: string,
+  phase: Workflow['phases'][number],
+  p: number,
+  phaseNames: ReadonlySet<string>,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  const at = (field: string): string => `phases[${p}].${field}`;
+  const distinct = phase.distinct_from ?? [];
+  distinct.forEach((target, k) => {
+    if (!phaseNames.has(target)) {
+      out.push(
+        error(file, at(`distinct_from[${k}]`), 'E_PHASE_DISTINCT_FROM_UNKNOWN', `distinct_from phase '${target}' not found in workflow`),
+      );
+    }
+  });
+  distinct.forEach((target, k) => {
+    if (target === phase.name) {
+      out.push(error(file, at(`distinct_from[${k}]`), 'E_PHASE_DISTINCT_FROM_SELF', `phase '${phase.name}' names itself in distinct_from`));
+    }
+  });
+  if (phase.role !== undefined && INDEPENDENT_ROLES.includes(phase.role) && phase.mode !== undefined && phase.mode !== 'fresh') {
+    out.push(
+      error(
+        file,
+        at('mode'),
+        'E_PHASE_MODE_NOT_INDEPENDENT',
+        `phase '${phase.name}' has role '${phase.role}' and must run fresh (mode '${phase.mode}' is not allowed)`,
+      ),
+    );
+  }
+  if (phase.role === undefined) {
+    for (const field of ['mode', 'distinct_from'] as const) {
+      if (phase[field] === undefined) continue;
+      out.push(
+        error(file, at(field), 'E_PHASE_EXECUTOR_WITHOUT_ROLE', `phase '${phase.name}' declares ${field} but has no role (it has no executor)`),
+      );
+    }
+  }
+  return out;
+}
+// ---- end task-185 -----------------------------------------------------------------------------------
+
 /**
  * Every loader diagnostic of file `i` (spec-003 § "Diagnostics"), in spec-003's order. A file that
  * failed its structural pass contributes nothing here — its structural diagnostics are the loader's.
@@ -244,6 +304,7 @@ export function workflowFileDiagnostics(
       );
     }
 
+    out.push(...executorDiagnostics(file, phase, p, phaseNames));
     out.push(...phaseEvidenceDiagnostics(file, workflow, p, bindings));
   });
 

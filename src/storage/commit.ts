@@ -232,6 +232,32 @@ export function listPathsAtRev(
   prefix = '',
   options: CommitOptions = {},
 ): string[] | null {
+  return listBlobEntriesAtRev(root, rev, prefix, options)?.map((entry) => entry.path) ?? null;
+}
+
+/** One blob {@link listBlobEntriesAtRev} lists: its path, and whether git records it as a symbolic link. */
+export interface BlobEntry {
+  readonly path: string;
+  /** Mode `120000`: the blob holds the link's target text, not a file's content (task-171, `bug-189`). */
+  readonly symlink: boolean;
+}
+
+/** The mode git records for a symbolic link. */
+const LS_TREE_SYMLINK_MODE = '120000';
+
+/**
+ * {@link listPathsAtRev} with each blob's kind: the same paths, in the same order, each marked when git
+ * records it as a **symbolic link** (mode `120000`). A link is a blob, so `listPathsAtRev` lists it and
+ * `readPathAtRev` reads back its target text; a reader that must not take that text for a document
+ * (the Memory scan, task-171, `bug-189`) asks here instead. Same `null` and same errors as
+ * {@link listPathsAtRev}.
+ */
+export function listBlobEntriesAtRev(
+  root: string,
+  rev: string,
+  prefix: string,
+  options: CommitOptions = {},
+): BlobEntry[] | null {
   const pathspec = prefix.length === 0 ? [] : ['--', prefix];
   // `runGitRead` (task-142 review): an unresolvable revision is git's exit `128`, an expected answer
   // here, and its `fatal: Not a valid object name` stays in a captured pipe. A listing past Node's
@@ -241,8 +267,9 @@ export function listPathsAtRev(
   return run.stdout
     .split('\0')
     .filter((record) => LS_TREE_BLOB_RECORD.test(record))
-    .map((record) => record.slice(record.indexOf('\t') + 1))
-    .sort();
+    .map((record) => ({ path: record.slice(record.indexOf('\t') + 1), symlink: record.startsWith(`${LS_TREE_SYMLINK_MODE} `) }))
+    // Code-unit order, as `listPathsAtRev`'s plain `.sort()` always gave, without a branch.
+    .sort((a, b) => Number(a.path > b.path) - Number(a.path < b.path));
 }
 
 // --- Resolving a revision, and reading MANY paths at it (task-137) -----------------------------

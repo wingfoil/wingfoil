@@ -8,7 +8,10 @@
  * directive list or Memory scan is a legitimate answer for a commit that holds nothing, so handing it
  * back for a mistyped rev would build an agent a wrong context that looks right.
  */
-import { E_GIT_READ_FAILED, listPathsAtRev, resolveCommitAtRev, StorageError } from '../storage';
+import { existsSync } from 'fs';
+import { join } from 'path';
+
+import { type BlobEntry, E_GIT_READ_FAILED, listBlobEntriesAtRev, listPathsAtRev, resolveCommitAtRev, StorageError } from '../storage';
 
 import type { CoreError, CoreErrorCode } from './types';
 
@@ -97,20 +100,43 @@ export function listPathsAtCommit(root: string, sha: string, prefix: string): st
 }
 
 /**
+ * {@link listPathsAtCommit} with each blob's kind (`storage.listBlobEntriesAtRev`): the Memory scan
+ * reads at a commit through this, so that a symbolic link is known as one rather than read as a
+ * document whose text is the link's target (task-171, `bug-189`).
+ *
+ * @throws `StorageError` `E_GIT_READ_FAILED` when the listing fails.
+ */
+export function listBlobEntriesAtCommit(root: string, sha: string, prefix: string): BlobEntry[] {
+  const listed = listBlobEntriesAtRev(root, sha, prefix);
+  if (listed === null) {
+    throw new StorageError(E_GIT_READ_FAILED, `git ls-tree ${sha} -- ${prefix} failed in ${root}: the commit could not be listed`);
+  }
+  return listed;
+}
+
+/**
  * Run a `…AtRev(root, 'HEAD')` read with the answer the `…AtHead` readers have always given when there
  * is no `HEAD` to read — `fallback` (`null`, or `[]` for a directory) — rather than an error. Two
- * refusals mean that: {@link RevisionError} `NOT_FOUND` (a repository with no commit yet; `HEAD` is a
- * constant, so `VALIDATION` cannot occur) and `StorageError` `E_GIT_READ_FAILED` from resolving it (a
- * `root` that is not a repository, or no runnable `git`). Before task-137 those readers read through
- * `readPathAtRev`, which then answered `null` for every git failure, and their callers treat that as
- * "nothing committed" (task-090, task-091, task-096); this keeps it so. Any other error propagates.
+ * conditions mean that, and only two (task-171, `bug-201`):
+ *
+ * - {@link RevisionError} `NOT_FOUND`: a repository with no commit yet (`HEAD` is a constant, so
+ *   `VALIDATION` cannot occur);
+ * - `StorageError` `E_GIT_READ_FAILED` when `root` holds no `.git`: it is not a repository, so nothing
+ *   is committed there.
+ *
+ * Their callers treat the fallback as "nothing committed" (task-090, task-091, task-096). Any other
+ * failure is thrown, and the caller refuses it by name: a `git` that cannot be spawned, an answer past
+ * the read buffer, a tree git cannot read. Until task-171 every `E_GIT_READ_FAILED` gave the fallback,
+ * so a failed read inside a repository passed for an empty baseline.
+ *
+ * @param root - The project root the read is against; asked only whether it holds `.git`.
  */
-export function atHeadOr<T, F>(read: () => T, fallback: F): T | F {
+export function atHeadOr<T, F>(root: string, read: () => T, fallback: F): T | F {
   try {
     return read();
   } catch (error) {
     if (error instanceof RevisionError && error.code === 'NOT_FOUND') return fallback;
-    if (error instanceof StorageError && error.code === E_GIT_READ_FAILED) return fallback;
+    if (error instanceof StorageError && error.code === E_GIT_READ_FAILED && !existsSync(join(root, '.git'))) return fallback;
     throw error;
   }
 }
