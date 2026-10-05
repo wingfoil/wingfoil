@@ -122,9 +122,10 @@ Run with the spec-015 amendment in the working tree:
 **Approver steps for AC 3 (post-merge, after push to `wingfoil/wingfoil` `main`).**
 1. Check the file is served: `curl -s https://raw.githubusercontent.com/wingfoil/wingfoil/main/glama.json`
    → the two keys above.
-2. On `https://glama.ai/mcp/servers`, find WingFoil (search "wingfoil"; if not indexed yet, use Glama's
-   "Add server" with `https://github.com/wingfoil/wingfoil`), sign in with GitHub as `robypomper`, and
-   claim it; Glama checks `maintainers` in the root `glama.json`.
+2. On `https://glama.ai/mcp/servers`, find WingFoil (search "wingfoil"), sign in with GitHub as
+   `robypomper`, and run the "Claim ownership" flow, which makes Glama read the root `glama.json`
+   (Glama's article above; re-run it after any change to the file). The article covers claiming an
+   existing listing only: if WingFoil is not listed yet, how to submit it is not verified here.
 3. Collect: the listing URL, the claim date, and what Glama shows as the maintainer.
 4. Record it as a new `service` element (`kind: listing`, `owner_role: approver`, `account:
    robypomper`, `decision: dl-130-visibility-steps-in-the-release-flow`, as `svc-012`), with `verify`
