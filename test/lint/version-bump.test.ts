@@ -109,7 +109,7 @@ describe('version bump of the four versioned config files (bug-143, task-183)', 
       commitAll(repo, 'bump to 1.1');
       writeFixtureFile(repo, DNA, config('1.10', 'b'));
       expect(checkPendingVersionBumps(repo)).toEqual([
-        { path: DNA, reason: 'content differs from HEAD but version: is still 1.1' },
+        { path: DNA, reason: "content differs from HEAD but version: 1.10 reads as 1.1 in YAML, the same as HEAD's 1.1" },
       ]);
     });
 
