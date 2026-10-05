@@ -1,0 +1,76 @@
+# WingFoil — the dependency and lockfile check, on a schedule (dl-105 Decision 3–4, Action 2; built by task-190).
+#
+#   dependency-check → `npm ci`, then three checks, each reported on its own step:
+#     - `npm run check:lockfile` (scripts/check-lockfile-pins.cjs, dl-069): the hoisted override pins, the
+#       peer edges npm 10.9 needs and the `wingfoil-released` alias are still in package-lock.json;
+#     - `npm run check:audit` (`npm audit --omit=dev --audit-level=high`, task-250 / bug-223): no high
+#       advisory in the production tree — the same script ci.yml runs on every push;
+#     - `npm run check:audit:all` (`npm audit --audit-level=high`, bug-238): no high advisory in the WHOLE
+#       tree, dev dependencies included. ci.yml does not run it: a push is gated on what users install,
+#       the dev toolchain is reported here.
+#   Each check runs once `npm ci` succeeded, whatever the check before it said
+#   (`if: ${{ !cancelled() && steps.install.outcome == 'success' }}`), so one red never hides another.
+#
+# Why a schedule. Lockfile drift arrives from the registry, and an advisory from the advisory database,
+# with no change to the repository: until this file existed `npm ci` against a fresh registry ran only on a
+# push or at a tag, so drift on a quiet branch was seen weeks late (dl-069). dl-105 makes the check a
+# recurring phase; until the workflow engine exists, GitHub Actions `schedule` is its provisional trigger
+# (Decision 3), and `workflow_dispatch` runs it by hand.
+#
+# Cadence (dl-105 R1 (a)) — one source of timing for the provisional trigger and the engine:
+#   cron '17 6 * * *' — dl-105: the future phase declares `cadence: { recurring: { cron: "17 6 * * *" } }`
+#   with this same string, so the step to the engine changes who fires the check, not when.
+#   Daily, at an off-the-hour minute (GitHub delays runs queued on the hour). GitHub disables a scheduled
+#   workflow after 60 days without repository activity; re-enable it from the Actions tab.
+#
+# Evidence (dl-105 R2 (c)): while the trigger is provisional the run's outcome lives in the Actions run
+# history only. The job reads and reports — it never commits, tags, pushes or publishes, holds no secret
+# and no OIDC grant (`contents: read`, no job-level `permissions`). The verdict is the exit status alone
+# (dl-105 R4, dl-069 S1): no `continue-on-error`, no parsing of npm's messages.
+#
+# Kept equal to ci.yml, and pinned by `test/cli/dependency-check-workflow.test.ts`: `env.NODE_VERSION`
+# (the 22.12.0 floor publish.yml explains — the npm it bundles is the one bug-056's lockfile refusal needs),
+# the runner image, and every `uses:` line (full commit SHA, release tag in the trailing comment, dl-057;
+# the directory-wide rule is `test/cli/workflow-action-pins.test.ts`, bug-225).
+#
+# Locally, the same check is
+#   npm ci && npm run check:lockfile && npm run check:audit && npm run check:audit:all
+# or, with `act` (see publish.yml's header):
+#   act workflow_dispatch -W .github/workflows/dependency-check.yml
+
+name: dependency-check
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22.12.0'
+
+jobs:
+  dependency-check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - name: Install from the lockfile
+        id: install
+        run: npm ci
+      - name: Lockfile pins and peer edges (dl-069, check-lockfile-pins.cjs)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run check:lockfile
+      - name: Production advisories — no high advisory in the production tree (task-250, bug-223)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run check:audit
+      - name: Whole-tree advisories — no high advisory, dev dependencies included (bug-238)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run check:audit:all
