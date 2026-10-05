@@ -51,7 +51,8 @@ error still throws `DiagnosticsError`) and `bindings`.
 **Specs.** `spec-003-workflows-yaml-schema` and `spec-009-validation-strategy` are `approved`;
 `dl-104` and `dl-090` are `ready` (`grep -m1 "^status"` over the four files). spec-003 § Evidence,
 § Selections, § Collections, § Action expressions (built-in table), § Check expressions, Layer 3 and
-§ Diagnostics fix every code, severity and rule implemented here. No spec edit was needed.
+§ Diagnostics fix every code, severity and rule implemented here. No spec edit was needed at design;
+the review added one (`E_BINDING_COLLECTION_KEY`, see "review fixes" and "Pending amendments").
 
 **Design.**
 - `src/workflow/schema.ts`: `produces` is `(string | { type, path })[]` (object strict, per spec-003's
@@ -106,7 +107,8 @@ implementation in place and `retrospective.yaml` stashed, `npx jest test/core/wo
 
 `1d91ae7b` (`feat(workflow)`): `src/workflow/bindings.ts` (new), `src/workflow/schema.ts`,
 `src/core/workflow-diagnostics.ts`, `src/core/loaders.ts`; `retrospective.yaml` **1.1 → 1.2**
-(`explore.produces` = `docs/05_plans/rl-{release.release-line}/rel-{release.version}/retrospective-friction-inventory.md`);
+(`explore.produces` = `docs/05_plans/rl-{release.release-line}/rel-{release.version}/retrospective-friction-inventory.md`,
+moved at review to `docs/06_retrospectives/…`);
 `docs/cli-reference.md` (`workflow list` names the new `bindings` / `diagnostics` keys). Existing
 tests pinning the old result shape updated (`test/core/workflow-diagnostics.test.ts`,
 `test/core/loaders-at-rev.test.ts`: `{ manifest: null, workflows: [], bindings: null, diagnostics: [] }`).
@@ -161,14 +163,55 @@ BDD: no test under `test/` runs a P4.1 / P4.11 / P4.13 feature file (`grep -rln 
 - Determinism: arrays and insertion-ordered records only; bindings sections in a fixed order
   (`checks`, then `actions`).
 
+### review fixes (independent review: approve with fixes; approver rulings 2026-10-05)
+
+- **D1 (a) — collection keys are a loader row.** Red `8e738e52`: three `E_BINDING_COLLECTION_KEY`
+  cases (duplicate key, key outside the ID class, map entry with neither `id` nor `name`), each also
+  asserting that `W_WORKFLOW_UNBOUND_TOKEN` still fires; `npx jest test/core/workflow-evidence.test.ts`
+  → 4 failed, 33 passed (the fourth is the D2 path test). Green `8fee27c9`: the key rules left the
+  `BindingsYaml` structural pass (`collectionKeyIssues`, `src/workflow/bindings.ts`) and are emitted
+  by `bindingsFileDiagnostics` after the `checks` / `actions` rows, path `collections.<name>[<i>]`.
+  The map entry with no key moved with the other two rules (same reason: it would otherwise leave
+  the file undecided).
+- **D2 (b) — friction inventory outside every Memory path.** `retrospective.yaml`
+  `explore.produces` = `docs/06_retrospectives/rl-{release.release-line}/rel-{release.version}-friction-inventory.md`
+  (no second version bump: 1.2 is this branch's one bump), pinned by the live-repository test.
+- **Nit:** `00_index.md` REQ-INT-04 row traces P4.15 too.
+- **Notes corrected:** the design claim "No spec edit was needed" now says the review added one.
+- **Merge of `main` (`a350cdd0`, with task-185) — `0dc0e332`.** Conflicts resolved as asked:
+  `src/workflow/schema.ts` keeps both blocks (task-185's first) and one Phase doc comment;
+  `src/core/workflow-diagnostics.ts` calls `executorDiagnostics` then `phaseEvidenceDiagnostics`.
+- **`main` `a350cdd0` fails `tsc`** (`src/agent/discovery.ts:128` calls `atHeadOr` with two arguments;
+  task-171 added a `root` parameter). `2d2ea25a` applies the one-line fix main needs; with it,
+  `jest`'s globalSetup builds again (without it the whole suite stops at `npx tsc -p tsconfig.build.json`).
+
+| Command (after the merge, pending spec-003 amendment in the working tree) | Result |
+|---|---|
+| `npx jest --coverage --coverageReporters=json-summary` | exit 0; 229 suites / 4167 tests; 98.96 / 96.03 / 95.80 / 99.60 |
+| same on `main` `a350cdd0` + the `discovery.ts` one-liner, temporary worktree | 227 suites / 4113 tests; 98.92 / 95.92 / 95.65 / 99.58 — no regression |
+| `npm run lint`, `npm run docs:api`, both `tsc` | exit 0 |
+| `node scripts/check-governance.cjs --base c80167d6` | exit 0 |
+| `node dist/cli.js workflow list --format json` | exit 0; 23 workflows; W_WORKFLOW_UNBOUND_TOKEN × 91, W_PHASE_PRODUCES_OWNER_IMPLICIT × 9, W_PHASE_ACTION_UNTARGETED × 1; no error |
+
+### Pending amendments (approver)
+
+- `spec-003-workflows-yaml-schema` (uncommitted in the worktree). Proposed `--reason`:
+  "task-175's review moved the key rules of a bindings.yaml collection out of the structural pass
+  (approver ruling D1 (a), 2026-10-05), because a structural failure left the file undecided and a
+  duplicate key silenced every unbound-token warning. Section Diagnostics gains the loader row
+  E_BINDING_COLLECTION_KEY, and E_WORKFLOW_COLLECTION_UNRESOLVED keeps the unresolved name and the key
+  rules of a dna.yaml list. The Layer 3 example no longer binds tests.coverage with a partial
+  interpolation the loader refuses, and the measured count of unbound action tokens reads 10
+  distinct names instead of 13. No other code, severity or message changes."
+
 ### Decisions for the approver
 
 1. **Loader / `workflow list` payload gains `bindings` and `diagnostics`.** spec-003 says
    `workflow list` reports unbound tokens in `diagnostics` and exits 0; task-204 still owns the
    reshape and the stderr printing of warnings in console format (dl-050), not done here.
-2. **The friction inventory becomes a committed file** beside the release's phase plans
-   (`docs/05_plans/rl-v1/rel-v0.3/retrospective-friction-inventory.md` for v0.3). The v0.2
-   retrospective plan kept it in the session scratchpad; `dl-104` D3 needs a path an engine can test.
+2. **The friction inventory becomes a committed file.** *(Superseded at review, ruling D2 (b): it
+   lives outside every Memory path, `docs/06_retrospectives/rl-{release.release-line}/rel-{release.version}-friction-inventory.md`.)*
+   The v0.2 retrospective plan kept it in the session scratchpad; `dl-104` D3 needs a path an engine can test.
 3. **No version bump on the SARD files**: the AC asks for one, but they declare no version and
    `doc-versioning` forbids adding one; the amendment is traced in each requirement instead.
 4. `resolveToken`'s `expectedCommit` for a `set_state` lists the three candidate verbs; choosing
@@ -178,5 +221,6 @@ BDD: no test under `test/` runs a P4.1 / P4.11 / P4.13 feature file (`grep -rln 
 
 - spec-003 § Diagnostics "Measured" counts 13 distinct unbound action tokens; by name they are 10.
   Wording only, for whoever next amends spec-003 / spec-017 §12.
-- `E_WORKFLOW_COLLECTION_UNRESOLVED` (core) duplicates the key rules the Layer-3 schema now refuses
-  structurally for `bindings:` collections; task-194 should only add the unresolved-name half.
+- *(Settled at review, ruling D1 (a).)* `E_WORKFLOW_COLLECTION_UNRESOLVED` (core, task-194) keeps
+  the unresolved name and the key rules of a `dna.yaml` list; a `bindings.yaml` collection's keys are
+  `E_BINDING_COLLECTION_KEY`.
