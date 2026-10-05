@@ -28,6 +28,8 @@ import { errorDetails } from '../core/error-details';
 import type { CoreModule, ParamsBuilder } from '../core/registry';
 import { deriveVerb, enumerateOperations } from '../core/registry';
 
+import { readRefusalError } from './read-only';
+
 /** Ambient dependencies {@link registerCoreModules} needs: how to resolve the project root and how to shape each operation's params. */
 export interface RegisterCoreModulesOptions {
   /** Resolves the project root a core call is served from (an ambient concern, not a Tool/Resource argument). */
@@ -75,12 +77,15 @@ export function registerCoreModules(
   modules: readonly CoreModule[],
   options: RegisterCoreModulesOptions,
 ): void {
-  // Always advertise both channels (spec-004 §1: Resources and Tools are fixed channel types of
-  // the MCP surface), even when `modules` currently has zero operations of one kind — as is the
-  // case for the real production registry today (0 mutating ops; see task-006 Execution Notes).
-  // Without this, a client's `tools/list` call on a server with zero registered Tools fails at the
-  // protocol level ("Method not found") because the SDK only auto-declares a capability the first
-  // time something is registered under it.
+  // Declare both channels (spec-004 §1: Resources and Tools are fixed channel types of the MCP
+  // surface), even when `modules` has zero operations of one kind. Declaring a capability installs no
+  // request handler, though: the SDK installs `tools/list` / `tools/call` on the first `registerTool`
+  // (and the Resources handlers on the first `registerResource`). So with zero `mutates: true`
+  // operations in the `modules` passed (as in the parity test's read-only fixtures), `initialize`
+  // advertises `tools` while `tools/list` still answers JSON-RPC -32601 "Method not found" (task-174
+  // corrected this comment, which claimed the opposite; `test/core/parity.test.ts` documents the same
+  // and skips the call). The production server does not use this registrar; it answers `tools/list`
+  // with an empty list itself (`./server.ts`, `bug-151`).
   server.server.registerCapabilities({ tools: {}, resources: {} });
 
   for (const { module, operation } of enumerateOperations(modules)) {
@@ -138,9 +143,7 @@ export function registerCoreModules(
           }
           // A failed read IS a JSON-RPC error; the SDK forwards an `Error`'s `data` as `error.data`
           // (task-130, `dl-055` option 1). No details, no `data` — the shape it always had.
-          throw outcome.details.length > 0
-            ? Object.assign(new Error(outcome.message), { data: { details: outcome.details } })
-            : new Error(outcome.message);
+          throw readRefusalError(outcome.message, outcome.details);
         },
       );
     }

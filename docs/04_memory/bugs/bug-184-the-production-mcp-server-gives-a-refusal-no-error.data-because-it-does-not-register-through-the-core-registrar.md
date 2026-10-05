@@ -2,7 +2,7 @@
 id: bug-184-the-production-mcp-server-gives-a-refusal-no-error.data-because-it-does-not-register-through-the-core-registrar
 type: bug
 title: "The production MCP server gives a refusal no error.data, because it does not register through the core registrar"
-status: planned
+status: closed
 severity: "medium"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)

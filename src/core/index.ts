@@ -94,7 +94,7 @@ import { UsageError } from './usage-error';
 import type { CoreFn, CoreModule, CoreOption } from './registry';
 import { extraOperandsReason } from './registry';
 import { coreErr, coreOk } from './types';
-import type { CoreResult } from './types';
+import type { CoreError, CoreResult } from './types';
 
 /** This module's `dna.yaml` name (`core`) — the stable identifier surfaces and tests key it by. */
 export const MODULE_NAME = 'core' as const;
@@ -220,20 +220,51 @@ function loadOrError<R>(loader: () => R): CoreResult<R> {
   try {
     return coreOk(loader());
   } catch (error) {
-    // A loader that collects spec-003 diagnostics (task-136): the first error is the reason, the whole
-    // ordered array rides `details` under spec-003's own name for it, `diagnostics`.
-    if (error instanceof DiagnosticsError) {
-      return coreErr({ code: 'VALIDATION', message: error.message, details: { diagnostics: error.diagnostics } });
-    }
-    if (error instanceof ValidationError) {
-      return coreErr({ code: 'VALIDATION', message: error.message, details: { issues: error.issues } });
-    }
-    const errno = error as NodeJS.ErrnoException;
-    if (errno && errno.code === 'ENOENT') {
-      return coreErr({ code: 'NOT_FOUND', message: errno.message });
-    }
-    throw error;
+    const refusal = coreErrorOf(error);
+    if (refusal === null) throw error;
+    return coreErr(refusal);
   }
+}
+
+/**
+ * The expected failure a pillar loader throws, as the {@link CoreError} a read-only query returns for
+ * it, or `null` when `error` is not one (a programmer bug, which the caller re-throws). This is
+ * {@link loadOrError}'s mapping on its own, for a surface that calls a loader directly rather than
+ * through a `CoreOperation` — the MCP server's Resource and Prompt handlers (task-174, `bug-184`), so a
+ * refusal there carries the same details (`./error-details.ts`) the CLI prints:
+ *
+ * - a loader that collects spec-003 diagnostics (task-136): the first error is the reason, and the whole
+ *   ordered array rides `details` under spec-003's own name for it, `diagnostics`;
+ * - a `ValidationError` from the shared two-pass pipeline: `details.issues`;
+ * - a missing file (`ENOENT`): `NOT_FOUND`, with the system message.
+ */
+export function coreErrorOf(error: unknown): CoreError | null {
+  if (error instanceof DiagnosticsError) {
+    return { code: 'VALIDATION', message: error.message, details: { diagnostics: error.diagnostics } };
+  }
+  if (error instanceof ValidationError) {
+    return { code: 'VALIDATION', message: error.message, details: { issues: error.issues } };
+  }
+  const errno = error as NodeJS.ErrnoException | null;
+  if (errno && errno.code === 'ENOENT') {
+    return { code: 'NOT_FOUND', message: errno.message };
+  }
+  return null;
+}
+
+/**
+ * The DNA role set — `dna.yaml` `team.roles[].name`, in declaration order — read once, by `wingfoil
+ * mcp`'s pre-flight, for the Prompts channel to serve for the server's whole life (`dl-049` (b),
+ * spec-004 §3.1 "derived from DNA at server start", spec-014 §1; task-174).
+ *
+ * A root with no `.wingfoil/` is refused with the shared not-initialized message
+ * ({@link requireInitializedProject}, task-143) before anything is read, so the refusal names no path
+ * (`bug-035`); an unreadable or invalid `dna.yaml` is refused as every read-only query refuses it.
+ */
+export function loadDnaRoleSet(root: string): CoreResult<readonly string[]> {
+  const initialized = requireInitializedProject(root);
+  if (!initialized.ok) return initialized;
+  return loadOrError(() => loadDnaYaml(root).team.roles.map(({ name }) => name));
 }
 
 /** Adapt a synchronous, throwing pillar loader into a `CoreFn` taking just `{ root }` (spec-006 §2). */

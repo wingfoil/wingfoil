@@ -1211,6 +1211,17 @@ types:
         );
       },
     );
+
+    // task-174 (`bug-035`): the same refusal from `wingfoil mcp`'s pre-flight, on the compiled CLI. It
+    // exits before any server is built, so no stdio server is ever opened against the repo.
+    it('with no .wingfoil/ at the root, `mcp` exits 1 with the not-initialized message and writes nothing on stdout (bug-035)', () => {
+      const result = runCliInRoot(repo, 'mcp');
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toBe(
+        "error: WingFoil not initialized (no .wingfoil/ directory at the project root): run 'wingfoil init' first\n",
+      );
+    });
   });
 
   it('an invalid --format value exits 2 with the usage-error message on stderr, never touching stdout', () => {

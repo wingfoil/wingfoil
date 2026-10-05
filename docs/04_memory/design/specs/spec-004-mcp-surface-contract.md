@@ -108,7 +108,9 @@ only agent write path that successfully mutates state is a Tool call).
 One Prompt is registered per role declared in `dna.yaml` `team.roles` / the DNA role set (`developer,
 reviewer, qa, architect, product-owner, tech-lead, facilitator, approver`), named `{role}-session`,
 e.g. `developer-session`, `reviewer-session`. `prompts/list` returns this fixed set derived from DNA at
-server start — it is not hand-maintained.
+server start — it is not hand-maintained. `wingfoil mcp` reads the set once, in its pre-flight
+(`spec-014` §1), and it holds for the server's life: a role added to `dna.yaml` while the server runs
+is served after a restart. The Prompts capability is therefore declared without `listChanged`.
 
 #### 3.2 Embedding contract
 
@@ -120,29 +122,57 @@ cached from server boot), each as a distinct, clearly delimited block:
 prompts/get("developer-session") →
   messages: [
     {
-      role: "system",
+      role: "user",
       content:
         "# Role: developer\n\n"
       + "## Directive: code-quality\n<full directive body>\n\n"
-      + "## Directive: testing\n<full directive body>\n\n"
       + "## Directive: determinism\n<full directive body>\n\n"
       + "## Directive: doc-versioning\n<full directive body>\n\n"   # global, all roles
       + "## Directive: documentation\n<full directive body>\n\n"    # global, all roles
       + "## Directive: security-secrets\n<full directive body>\n\n" # global, all roles
+      + "## Directive: testing\n<full directive body>"
     }
   ]
 ```
 
-Directive resolution order for a role R: `roles.yaml[R].directives` ∪ the `global (all roles)` binding
-defined in `roles.yaml` (this project's own dogfooded config, generalized per-project). A directive assigned to R
-after server start but before the next `prompts/get("{R}-session")` call MUST appear in that next
-call's output — Prompts are resolved per-request, not baked in at server boot (fit criterion: "a newly
-assigned directive appears on the next session start").
+Directive resolution set for a role R: `roles.yaml[R].directives` ∪ the `global (all roles)` binding
+defined in `roles.yaml` (this project's own dogfooded config, generalized per-project). The set is
+deduplicated by id, and its blocks are emitted in id-ascending order (`spec-012` §5, REQ-SYS-07), the
+order of the one resolver the context builder also uses — not grouped as "own, then global". The
+message `role` is `"user"`: MCP's `PromptMessage.role` admits only `"user"` and `"assistant"`.
+
+Each block carries the directive's full body with its headings **demoted two levels**: every line
+of the body that opens with an ATX heading (`#` … `######`, after at most three spaces) gains two `#`,
+capped at H6, so a directive's own `# Title` becomes `### Title` under its `## Directive:` block and
+the prompt's outline matches its nesting. A line inside a fenced code block is code and is left as
+written, and so is a heading inside a list item or a blockquote; nothing else in the body changes.
+
+A directive assigned to R after server start but before the next `prompts/get("{R}-session")` call
+MUST appear in that next call's output — a Prompt's content is resolved per-request, not baked in at
+server boot (fit criterion: "a newly assigned directive appears on the next session start"). Only
+the role set of §3.1 is fixed at start.
 
 #### 3.3 No mutation
 
 Prompts are, like Resources, read-only: invoking a Prompt returns instructional text; it has no side
 effect on Memory/DNA/Workflow state.
+
+#### 3.4 Refusals
+
+The BDD step "an agent session starts under role R" (`P5.2.2-mcp-prompts.feature`) is
+`prompts/get("{R}-session")`. "Defined in DNA" means a `dna.yaml` `team.roles[].name` in the set §3.1
+fixes at server start. Both refusals of a requested name are JSON-RPC errors with code `-32602`
+(InvalidParams, the code the MCP SDK itself uses for an unknown prompt or resource), and the server
+sends the message exactly as below:
+
+| Request | Message |
+|---|---|
+| `prompts/get("{R}-session")`, `R` not in the role set | `no prompt for undefined role '<R>'` |
+| `prompts/get(<name>)`, `<name>` not of the form `{role}-session` | `Prompt <name> not found` |
+
+An SDK client renders them as `MCP error -32602: <message>`. A read that fails while the prompt is
+built (`roles.yaml`, a directive file) carries the loader's operator-facing details as
+`error.data.details`, as a failed Resource read does (§4.3 item 4).
 
 ### 4. Tools (REQ-INT-03, REQ-SYS-05)
 
@@ -383,3 +413,17 @@ the commit primitive writes ends with `WingFoil-Version: <semver> (<sha>)` in a 
 own, so the commit a Tool produces does too; item 2 now shows it under the `wf()` subject. No Tool,
 Resource or other rule changed. Edited in place without a supersede or a state change, per `dl-047`
 (no `version:` field).
+
+**Revision (2026-10-05, `task-174-settle-mcp-prompts-contract-server-preflight-answer-tools`) — §3:
+the Prompt example, the resolution set, embedded headings and the refusals, per `dl-039` (role 1,
+ordering 1, headings 1), `dl-048` (option 1) and `dl-049` (b).** §3.2's example showed `role:
+"system"`, which MCP's two-value `PromptMessage.role` cannot carry; it now shows `"user"`, as the server
+always sent. "Resolution order" became "resolution set", with the id-ascending block order of
+`spec-012` §5 stated, and the example lists its blocks in that order. The choice rests on reusing the
+one resolver, not on determinism, which an own-then-global grouping would meet too. §3.2 now states
+that a directive body's headings are demoted two levels (the server embedded them verbatim, so each
+directive's own H1 outranked its block). New §3.4 states the two `prompts/get` refusals the server
+already gave (`-32602`, exact messages) and the details a failed read carries (`bug-184`). §3.1 now
+says when the "fixed set derived from DNA at server start" is read: once, in `wingfoil mcp`'s pre-flight
+(`spec-014` §1), with no `listChanged`; the server had been reading it per request. Edited in place
+without a supersede or a state change, per `dl-047` (no `version:` field).

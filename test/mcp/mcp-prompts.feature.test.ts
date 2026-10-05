@@ -94,8 +94,11 @@ function seedFixtureRepo(): string {
   return root;
 }
 
+/** The role set {@link DNA_YAML} declares — what `wingfoil mcp`'s pre-flight hands the server (`dl-049` (b)). */
+const FIXTURE_ROLES = ['developer', 'reviewer'] as const;
+
 async function connectProductionClient(root: string): Promise<Client> {
-  const server = createMcpServer({ resolveRoot: () => root, name: 'wingfoil', version: '9.9.9-test' });
+  const server = createMcpServer({ resolveRoot: () => root, roles: FIXTURE_ROLES, name: 'wingfoil', version: '9.9.9-test' });
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'wingfoil-test-client', version: '0.0.0' });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -179,7 +182,7 @@ describe('P5.2.2 — edges of the undefined-role refusal', () => {
   });
 
   it('owns the Prompts handlers: a later high-level registerPrompt on the same server fails loudly, never shadows them', () => {
-    const server = createMcpServer({ resolveRoot: () => root });
+    const server = createMcpServer({ resolveRoot: () => root, roles: FIXTURE_ROLES });
 
     expect(() => server.registerPrompt('developer-session', {}, () => ({ messages: [] }))).toThrow(
       /A request handler for prompts\/list already exists/,
@@ -188,13 +191,13 @@ describe('P5.2.2 — edges of the undefined-role refusal', () => {
 });
 
 /**
- * Second pass (rejection ff13321, B1): the DNA role catalogue is read **per request**, never while
- * `createMcpServer` builds the server — spec-014 §2 "no I/O at construction time beyond wiring
- * handlers". The consequence is that spec-004 §3.1's "fixed set derived from DNA at server start" is
- * served as "the DNA role set at request time"; that spec-014 §2 vs spec-004 §3.1 tension is raised
- * for the approver as a decision-log, and the last case below pins the side taken until it is decided.
+ * `dl-049` (b), task-174: the DNA role set is read once, in `wingfoil mcp`'s pre-flight (`runMcp`,
+ * `test/cli/mcp-command.test.ts`), and handed to `createMcpServer`, which still reads nothing while it
+ * wires the server (spec-014 §2). spec-004 §3.1's "fixed set derived from DNA at server start" then
+ * holds literally: a role added to `dna.yaml` while the server runs is not listed until a restart.
+ * (task-058's second pass read the set per request; `dl-049` chose (b) over that (a).)
  */
-describe('P5.2.2 — the DNA role catalogue is read at request time, not at construction (spec-014 §2)', () => {
+describe('P5.2.2 — the DNA role set is fixed at server start (spec-004 §3.1, dl-049 (b))', () => {
   let root: string;
 
   beforeEach(() => {
@@ -206,35 +209,26 @@ describe('P5.2.2 — the DNA role catalogue is read at request time, not at cons
   it('createMcpServer performs no I/O at construction: resolveRoot is never invoked while wiring', () => {
     const resolveRoot = jest.fn(() => root);
 
-    createMcpServer({ resolveRoot });
+    createMcpServer({ resolveRoot, roles: FIXTURE_ROLES });
 
     expect(resolveRoot).not.toHaveBeenCalled();
   });
 
-  it('a repo with no dna.yaml still yields a connectable server, and each Prompts request surfaces the missing DNA as an error', async () => {
-    const bare = makeTempGitRepo();
-    try {
-      const bareClient = await connectProductionClient(bare);
-
-      expect(bareClient.getServerCapabilities()?.prompts).toBeDefined();
-      await expect(bareClient.listPrompts()).rejects.toThrow(/dna\.yaml/);
-      await expect(bareClient.getPrompt({ name: 'developer-session' })).rejects.toThrow(/dna\.yaml/);
-    } finally {
-      removeTempDir(bare);
-    }
-  });
-
-  it('a role added to dna.yaml after the server started is listed and served on the next request', async () => {
+  it('a role added to dna.yaml after the server started is neither listed nor served: it is an undefined role until a restart', async () => {
     const client = await connectProductionClient(root);
-    const before = (await client.listPrompts()).prompts.map((prompt) => prompt.name);
-    expect(before).not.toContain('wizard-session');
 
     writeFixtureFile(root, '.wingfoil/dna.yaml', DNA_YAML.replace('    - name: reviewer', '    - name: reviewer\n    - name: wizard'));
     writeFixtureFile(root, '.wingfoil/roles.yaml', ROLES_YAML_BINDING_WIZARD);
 
     const after = (await client.listPrompts()).prompts.map((prompt) => prompt.name);
-    expect(after).toEqual(['developer-session', 'reviewer-session', 'wizard-session']);
-    const text = promptText(await client.getPrompt({ name: 'wizard-session' }));
-    expect(text).toContain('## Directive: security');
+    expect(after).toEqual(['developer-session', 'reviewer-session']);
+    const error = await client.getPrompt({ name: 'wizard-session' }).catch((caught: unknown) => caught);
+    expect((error as McpError).message).toBe("MCP error -32602: no prompt for undefined role 'wizard'");
+  });
+
+  it('advertises Prompts without listChanged, since the list cannot change during a session', async () => {
+    const client = await connectProductionClient(root);
+
+    expect(client.getServerCapabilities()?.prompts).toEqual({});
   });
 });

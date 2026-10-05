@@ -256,9 +256,9 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
 - **Tools** (`mutates: true`) come with P5.2.3, which is in `minor-v0.4` `features:`. No Tool of any
   module is served today: the production server (`src/mcp/server.ts`, `createMcpServer`) registers
   only the read-only Resources and the role Prompts and deliberately does not call
-  `registerCoreModules`, and it answers `tools/list` with a protocol error (`bug-151`, `triaged`,
-  v0.3). The `memory` and `dna` Tools are in the same position. `agent.execute` is served from v0.4
-  but refuses every call until headless launch exists (v1.0, `spec-016` §3.5, §7), because an MCP
+  `registerCoreModules`. Since `task-174` it answers `tools/list` with an empty list (`bug-151`).
+  The `memory` and `dna` Tools are in the same position. `agent.execute` is served from v0.4 but
+  refuses every call until headless launch exists (v1.0, `spec-016` §3.5, §7), because an MCP
   caller has no terminal.
 - **The two workflow Resources of v0.3** (ruling R12): `workflowNext` and `workflowStatus` are
   served on the production server in v0.3, at `wingfoil://workflows/-/next` and
@@ -766,3 +766,10 @@ registry never had. The `paths` row's MCP cell keeps its URI, which is `dl-040`'
 `test/docs/command-surface-specs.test.ts` fails when a flat command the program registers has no §3
 row. No other row or section changed. Tech-specs carry no `version:` field (`dl-047`); edited in place
 without a supersede or a state change.
+
+**Revision (2026-10-05, `task-174-settle-mcp-prompts-contract-server-preflight-answer-tools`) — §3's
+MCP exposure note no longer says the production server answers `tools/list` with a protocol error.**
+`task-174` (`bug-151`) gives the server an empty Tools channel: `initialize` advertises `tools: {}` and
+`tools/list` answers `{tools: []}` (`spec-014` §3). No Tool is served, so the note's point stands; only
+its description of the refusal changed. Tech-specs carry no `version:` field (`dl-047`); edited in
+place without a supersede or a state change.

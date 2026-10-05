@@ -15,7 +15,7 @@
  * files and returns text. There is no code path in this module that writes, and it registers no Tool —
  * so Prompts cannot become the agent write path REQ-SEC-05 reserves for validated Tools
  * (`test/mcp/role-prompts.test.ts` asserts both: files byte-for-byte unchanged after a round trip, and
- * `tools/list` still unroutable on a Prompts-only server).
+ * no Tools channel declared on a Prompts-only server).
  *
  * **Nothing is re-implemented here.** Role catalogue via `loadDnaYaml`, bindings via `loadRolesYaml`,
  * directive files via `loadDirectives`, and the role → directive resolution itself via
@@ -32,18 +32,25 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ErrorCode, GetPromptRequestSchema, ListPromptsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { loadDirectives, loadDnaYaml, loadRolesYaml, resolveRoleDirectives } from '../core';
+import { loadDirectives, loadRolesYaml, resolveRoleDirectives } from '../core';
 import type { DirectiveFile } from '../core';
 import { readDocument, splitFrontmatter, WINGFOIL_DIR } from '../storage';
+
+import { withRefusalDetails } from './read-only';
 
 /** Options for {@link registerRolePrompts}. */
 export interface RegisterRolePromptsOptions {
   /**
-   * Resolves the project root each `prompts/get` is served from — invoked per request by the prompt
-   * handlers, and once by {@link registerRolePrompts} itself to read the DNA role catalogue (see
-   * that function's note on the two different timings spec-004 §3.1 and §3.2 mandate).
+   * Resolves the project root each `prompts/get` is served from — invoked per request by the
+   * `prompts/get` handler, which resolves the role's directives then (spec-004 §3.2).
    */
   readonly resolveRoot: () => string;
+  /**
+   * The DNA role set (`dna.yaml` `team.roles[].name`, declaration order), read once before the server
+   * starts — by `wingfoil mcp`'s pre-flight (`loadDnaRoleSet`, `dl-049` (b)) — and fixed for the
+   * server's life: spec-004 §3.1's "fixed set derived from DNA at server start".
+   */
+  readonly roles: readonly string[];
 }
 
 /** spec-004 §3.1's prompt-name suffix: one prompt per role, named `{role}-session`. Module-local —
@@ -93,6 +100,50 @@ function readDirectiveBody(root: string, file: DirectiveFile): string {
   return splitFrontmatter(readDocument(join(root, WINGFOIL_DIR, file.path))).body.trim();
 }
 
+/** An ATX heading line: up to three spaces of indent, one to six `#`, then a space, a tab or the end. */
+const ATX_HEADING = /^( {0,3})(#{1,6})(?=[ \t]|$)/;
+
+/** A code-fence line: up to three spaces of indent, then three or more backticks or tildes. */
+const CODE_FENCE = /^ {0,3}(`{3,}|~{3,})/;
+
+/** How many levels a directive body's headings are pushed down inside a prompt (`dl-039` headings 1). */
+const EMBEDDED_HEADING_DEMOTION = 2;
+
+/**
+ * Push every heading of a directive `body` down {@link EMBEDDED_HEADING_DEMOTION} levels, capped at H6
+ * (`dl-039` headings 1, spec-004 §3.2). A directive file opens with its own H1, so embedded verbatim
+ * under a `## Directive:` block it outranked the block holding it, and every directive after the first
+ * read, structurally, as a new top-level section beside `# Role:`. Demoted, the body's H1 becomes an H3
+ * under its H2 block, and the prompt's outline matches its nesting.
+ *
+ * Only ATX headings (`#` … `######`) are rewritten. A line inside a fenced code block (``` or ~~~,
+ * closed by a fence of the same character at least as long) is code, not outline, and is left as
+ * written — a `# comment` in a shell example stays one. Every other byte is unchanged.
+ */
+function demoteHeadings(body: string): string {
+  let fence: string | null = null;
+  return body
+    .split('\n')
+    .map((line) => {
+      const fenceMatch = CODE_FENCE.exec(line);
+      if (fence !== null) {
+        const closing = fenceMatch?.[1];
+        if (closing !== undefined && closing[0] === fence[0] && closing.length >= fence.length && line.trim() === closing) {
+          fence = null;
+        }
+        return line;
+      }
+      if (fenceMatch) {
+        fence = fenceMatch[1]!;
+        return line;
+      }
+      return line.replace(ATX_HEADING, (_whole, indent: string, hashes: string) =>
+        `${indent}${'#'.repeat(Math.min(6, hashes.length + EMBEDDED_HEADING_DEMOTION))}`,
+      );
+    })
+    .join('\n');
+}
+
 /** One directive as it appears in a composed prompt: the `id` the `## Directive:` heading names and
  * the body text that follows it. */
 interface RolePromptDirectiveBlock {
@@ -103,7 +154,7 @@ interface RolePromptDirectiveBlock {
 /**
  * Compose the prompt text for `role` from its already-resolved directives — spec-004 §3.2's shape: a
  * `# Role: {role}` header followed by one `## Directive: {id}` block per directive, each carrying that
- * directive's full body.
+ * directive's full body with its headings demoted two levels ({@link demoteHeadings}).
  *
  * The heading uses `frontmatter.id`, not `name`: spec-004 §3.2's own example headings read
  * `## Directive: code-quality` / `security-secrets`, which are the `id` values of the real directive
@@ -111,13 +162,13 @@ interface RolePromptDirectiveBlock {
  * by id.
  *
  * Block order is `resolveRoleDirectives`' — deduplicated by id and sorted id-ascending per
- * `spec-012-context-loader-relevance-filtering` §5 / REQ-SYS-07 — rather than the "own directives,
- * then globals" grouping spec-004 §3.2's illustrative example happens to print. §3.2 states the
- * resolution itself as a *set* union (`roles.yaml[R].directives` ∪ `global`), which fixes membership,
- * not sequence; an explicit total order is what makes two runs byte-identical.
+ * `spec-012-context-loader-relevance-filtering` §5 / REQ-SYS-07. spec-004 §3.2 states the resolution
+ * as a *set* (`roles.yaml[R].directives` ∪ `global`) and the order as id-ascending (`dl-039` ordering
+ * 1). The choice rests on reusing the one resolver, which keeps REQ-INT-02's "100%" and REQ-STATE-05's
+ * disjointness a single guarantee; an own-then-global grouping would be equally deterministic.
  */
 function composeRolePromptText(role: string, directives: readonly RolePromptDirectiveBlock[]): string {
-  const blocks = directives.map(({ id, body }) => `## Directive: ${id}\n${body}`);
+  const blocks = directives.map(({ id, body }) => `## Directive: ${id}\n${demoteHeadings(body)}`);
   return [`# Role: ${role}`, ...blocks].join('\n\n');
 }
 
@@ -138,55 +189,43 @@ function buildRolePrompt(root: string, role: string): GetPromptResult {
     directives.map((file) => ({ id: file.frontmatter.id, body: readDirectiveBody(root, file) })),
   );
   // MCP's `PromptMessage.role` is the two-value enum `"user" | "assistant"` (the SDK's
-  // `PromptMessageSchema`), so spec-004 §3.2's illustrative `role: "system"` is not representable on
-  // this protocol by any conformant server; `user` is the only wire role that can deliver
-  // instructional content. Open as `dl-039-spec-004-prompt-example-corrections`.
+  // `PromptMessageSchema`); `user` is the only wire role that can deliver instructional content.
+  // spec-004 §3.2's example says so since `dl-039` (role 1) — it used to show an unrepresentable
+  // `role: "system"`.
   return { messages: [{ role: 'user', content: { type: 'text', text } }] };
 }
 
 /**
- * The DNA role catalogue as `dna.yaml` declares it **now**, in declaration order. Read per request (see
- * {@link registerRolePrompts}); a missing or invalid `dna.yaml` throws the loader's own error, which the
- * SDK returns to the client as that request's error — the same way `wingfoil://dna` reports it.
- */
-function loadRoleNames(root: string): string[] {
-  return loadDnaYaml(root).team.roles.map(({ name }) => name);
-}
-
-/**
- * Register the role-scoped Prompts channel: one `{role}-session` Prompt per role in `dna.yaml`'s
- * `team.roles` catalogue (spec-004 §3.1), each embedding that role's directives (§3.2), and a refusal
- * for a session prompt naming a role DNA does not declare (P5.2.2's undefined-role scenario).
+ * Register the role-scoped Prompts channel: one `{role}-session` Prompt per role in `options.roles`
+ * (spec-004 §3.1), each embedding that role's directives (§3.2), and the refusals of §3.4.
  *
- * **Nothing is read here — every read happens per request** (task-058 second pass, rejection `ff13321`).
- * spec-014 §2 requires `createMcpServer` to perform "no I/O at construction time beyond wiring
- * handlers", so the DNA role catalogue is loaded inside the `prompts/list` / `prompts/get` handlers,
- * next to the per-request directive resolution spec-004 §3.2 already mandated (REQ-INT-02's "a newly
- * assigned directive appears on the next session start"). Two consequences, both deliberate:
- *
- * - `wingfoil mcp` starts in a git root with no `.wingfoil/dna.yaml` (e.g. a repository that has not
- *   run `wingfoil init`) exactly as the Resources channel always has; the missing DNA surfaces as the
- *   error of each Prompts request instead of aborting the process start.
- * - spec-004 §3.1's "fixed set derived from DNA at server start" is served as the DNA role set **at
- *   request time**: a role added to `dna.yaml` while the server runs is listed on the next
- *   `prompts/list`. That tension between spec-014 §2 and spec-004 §3.1 is open for the approver.
+ * **The role set is fixed; the directives are not** (`dl-049` (b), task-174). `options.roles` is the
+ * DNA role set `wingfoil mcp` read once, in its pre-flight, before the server started; it is copied
+ * here and never re-read, so `prompts/list` and the undefined-role check read nothing, and a role added
+ * to `dna.yaml` while the server runs is served after a restart. The Prompts capability is therefore
+ * declared without `listChanged`: the list cannot change during a session. What a Prompt *embeds* is
+ * still resolved per request — `roles.yaml` and the directive files are read on every `prompts/get`
+ * (spec-004 §3.2, REQ-INT-02's "a newly assigned directive appears on the next session start"). This
+ * function itself reads nothing, so `createMcpServer` keeps spec-014 §2's "no I/O at construction".
  *
  * **Why the low-level handlers, not `McpServer.registerPrompt`.** The high-level API answers an
  * unregistered name with its own `Prompt <name> not found` before any WingFoil code runs, so the BDD's
- * `no prompt for undefined role 'wizard'` cannot be expressed through it (and it would need the role
- * set at registration time). This function therefore owns `prompts/list` and `prompts/get` on
- * `server.server` — the same pattern `./read-only.ts`'s `registerWriteRefusalHandler` uses — and a
- * later `registerPrompt` on the same server fails loudly ("A request handler for prompts/list already
- * exists") instead of being silently shadowed. A requested name that is not `{role}-session`-shaped
- * keeps the SDK-equivalent `Prompt <name> not found` wording: it names no role, so it is not an
- * undefined-role request, and it is answered without reading anything.
+ * `no prompt for undefined role 'wizard'` cannot be expressed through it. This function therefore owns
+ * `prompts/list` and `prompts/get` on `server.server` — the same pattern `./read-only.ts`'s
+ * `registerWriteRefusalHandler` uses — and a later `registerPrompt` on the same server fails loudly ("A
+ * request handler for prompts/list already exists") instead of being silently shadowed. spec-004 §3.4's
+ * two refusals, both `-32602`: a `{role}-session` name whose role is not in the set is `no prompt for
+ * undefined role '<role>'`; a name that is not `{role}-session`-shaped names no role and keeps the SDK's
+ * `Prompt <name> not found`. A read that fails while a Prompt is built carries the loader's details as
+ * `error.data.details`, as a failed Resource read does (`withRefusalDetails`, `bug-184`).
  *
  * Call before the server is connected (MCP capabilities cannot be registered after connecting).
  */
 export function registerRolePrompts(server: McpServer, options: RegisterRolePromptsOptions): void {
+  const roles: readonly string[] = [...options.roles];
   server.server.registerCapabilities({ prompts: {} });
   server.server.setRequestHandler(ListPromptsRequestSchema, () => ({
-    prompts: loadRoleNames(options.resolveRoot()).map((role) => ({
+    prompts: roles.map((role) => ({
       name: roleSessionPromptName(role),
       description: `session instructions for the '${role}' role, embedding its assigned directives (read-only)`,
     })),
@@ -197,8 +236,7 @@ export function registerRolePrompts(server: McpServer, options: RegisterRoleProm
       throw promptRequestError(`Prompt ${name} not found`);
     }
     const role = name.slice(0, -ROLE_PROMPT_NAME_SUFFIX.length);
-    const root = options.resolveRoot();
-    if (!loadRoleNames(root).includes(role)) throw undefinedRolePromptError(role);
-    return buildRolePrompt(root, role);
+    if (!roles.includes(role)) throw undefinedRolePromptError(role);
+    return withRefusalDetails(() => buildRolePrompt(options.resolveRoot(), role));
   });
 }

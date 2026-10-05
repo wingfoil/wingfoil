@@ -176,16 +176,18 @@ describe('REQ-SEC-05 — the shipped production surface: Prompts advertised, no 
 
   afterAll(() => removeTempDir(root));
 
-  it('advertises Prompts but no Tools, and a prompts/list + prompts/get round trip leaves every file byte-for-byte unchanged', async () => {
-    const server = createMcpServer({ resolveRoot: () => root });
+  it('advertises Prompts and an empty Tools channel, and a prompts/list + prompts/get round trip leaves every file byte-for-byte unchanged', async () => {
+    const server = createMcpServer({ resolveRoot: () => root, roles: ['developer'] });
     const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'wingfoil-test-client', version: '0.0.0' });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
 
     const caps = client.getServerCapabilities();
     expect(caps?.prompts).toBeDefined();
-    expect(caps?.tools).toBeUndefined();
-    await expect(client.listTools()).rejects.toThrow(/method not found/i);
+    // task-174 (`bug-151`): the Tools channel is declared and answers with an empty list — still no
+    // write path on the production surface (REQ-SEC-05), now without a -32601 for a routine probe.
+    expect(caps?.tools).toEqual({});
+    await expect(client.listTools()).resolves.toEqual({ tools: [] });
 
     const snapshot = snapshotFiles(root, PROMPT_FIXTURE_FILES);
     const { prompts } = await client.listPrompts();

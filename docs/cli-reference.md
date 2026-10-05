@@ -179,6 +179,13 @@ Exposes the project **read-only**: Resources for DNA, Memory and workflows, and 
 CLI. See the [user guide §9](user-guide.md#9-connect-an-ai-agent) for client configuration and the
 full Resource list.
 
+Unreleased (v0.3): `tools/list` answers an empty list instead of a protocol error. Before serving, the
+server checks the project and reads the role set from `dna.yaml`; the role set then holds until the
+server restarts (a change of directive assignments shows on the next Prompt request). With no
+`.wingfoil/` at the project root it exits `1` without starting: `error: WingFoil not initialized (no
+.wingfoil/ directory at the project root): run 'wingfoil init' first`. A `dna.yaml` that cannot be
+loaded also exits `1`, with the reason.
+
 ---
 
 ## DNA — the project's structural map

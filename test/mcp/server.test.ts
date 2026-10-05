@@ -13,6 +13,7 @@
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { McpError } from '@modelcontextprotocol/sdk/types.js';
 
 import { WRITE_REFUSAL_MESSAGE } from '../../src/mcp';
 import { createMcpServer } from '../../src/mcp/server';
@@ -83,7 +84,7 @@ function seedFixtureRepo(): string {
  * in-memory pair, so no real `StdioServerTransport` is ever opened against a repo (HARD RULE).
  */
 async function connectProductionClient(root: string): Promise<Client> {
-  const server = createMcpServer({ resolveRoot: () => root, name: 'wingfoil', version: '9.9.9-test' });
+  const server = createMcpServer({ resolveRoot: () => root, roles: ['developer'], name: 'wingfoil', version: '9.9.9-test' });
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'wingfoil-test-client', version: '0.0.0' });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -152,15 +153,27 @@ describe('task-030 — production MCP server (createMcpServer), spec-014 §2', (
     expect(String((error as Error).message)).not.toContain(WRITE_REFUSAL_MESSAGE);
   });
 
-  it('scope (spec-014 §3): the server exposes the read-only Resources and Prompts channels — no Tools', async () => {
+  it('scope (spec-014 §3): the server exposes the read-only Resources and Prompts channels and an empty Tools channel', async () => {
     const caps = client.getServerCapabilities();
     expect(caps?.resources).toBeDefined();
     // task-058-mcp-prompts-role-based (P5.2.2, v0.2): spec-014 §3 "when Prompts ship (P5.2.2, v0.2),
     // it adds their registrar" — the role-scoped Prompts channel (spec-004 §3) is now wired on.
     expect(caps?.prompts).toBeDefined();
-    // No mutating Tool channel is advertised — in particular the task-025 `dna.set` Tool is NOT
-    // registered on the read-only server (Tools are P5.2.3/v0.4 scope).
-    expect(caps?.tools).toBeUndefined();
+    // task-174 (`bug-151`): the Tools channel is declared, without `listChanged`, and lists nothing —
+    // in particular the task-025 `dna.set` Tool is NOT registered on the read-only server (Tools are
+    // P5.2.3/v0.4 scope). A client probing `tools/list` gets an empty list, not a -32601.
+    expect(caps?.tools).toEqual({});
+    await expect(client.listTools()).resolves.toEqual({ tools: [] });
+  });
+
+  it('scope (spec-014 §3): a tools/call names a tool that does not exist, and is refused as a Tool refusal (spec-004 §4.3)', async () => {
+    const tracked = ['.wingfoil/dna.yaml', '.wingfoil/memory.yaml', 'docs/04_memory/design/dls/decision-12.md'];
+    const before = snapshotFiles(root, tracked);
+
+    const result = await client.callTool({ name: 'dna.set', arguments: { path: 'project.name', value: 'x' } });
+
+    expect(result).toEqual({ content: [{ type: 'text', text: 'Tool dna.set not found' }], isError: true });
+    assertFilesUnchanged(root, before);
   });
 
   it('the DNA and Workflow Resources are also reachable on the production server (spec-004 §2.1)', async () => {
@@ -168,5 +181,44 @@ describe('task-030 — production MCP server (createMcpServer), spec-014 §2', (
     const dnaContent = dna.contents[0]!;
     const parsed = 'text' in dnaContent ? JSON.parse(dnaContent.text) : undefined;
     expect(parsed.team.roles).toEqual([{ name: 'developer' }]);
+  });
+});
+
+/**
+ * task-174 (`bug-184`): `task-130` gave a refusal its operator-facing details (`error.data.details`,
+ * spec-004 §4.3 item 4), but only through `registerCoreModules`, which the production server does not
+ * call. Its own Resource handlers re-threw the loader's error bare. A workflow manifest that includes
+ * two missing files is a loader refusal with two diagnostics: the first is the reason, the second is
+ * the detail the CLI prints under it.
+ */
+describe('task-174 — a Resource refusal on the production server carries its details (bug-184)', () => {
+  let root: string;
+  let client: Client;
+
+  beforeAll(async () => {
+    root = seedFixtureRepo();
+    writeFixtureFile(root, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/a.yaml\n  - workflows/custom/b.yaml\n');
+    commitAll(root, 'a workflow manifest naming two missing files');
+    client = await connectProductionClient(root);
+  });
+
+  afterAll(() => removeTempDir(root));
+
+  it('a failed read carries the details in JSON-RPC error.data.details, the reason unchanged', async () => {
+    const error = (await client.readResource({ uri: 'wingfoil://workflows' }).catch((caught: unknown) => caught)) as McpError;
+
+    expect(error).toBeInstanceOf(McpError);
+    expect(error.message).toContain('included workflow file not found: workflows/custom/a.yaml');
+    const details = (error.data as { details?: ReadonlyArray<{ detail?: string }> } | undefined)?.details;
+    expect(details?.[0]).toEqual({ detail: expect.stringContaining('included workflow file not found: workflows/custom/b.yaml') });
+  });
+
+  it('characterization: a refusal with no details still carries no error.data', async () => {
+    const error = (await client
+      .readResource({ uri: 'wingfoil://memory/decision-log/decision-999' })
+      .catch((caught: unknown) => caught)) as McpError;
+
+    expect(error.message).toContain('resource not found:');
+    expect(error.data).toBeUndefined();
   });
 });

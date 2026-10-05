@@ -22,7 +22,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import { loadDnaYaml } from '../core';
 
-import { jsonResourceResult, refuseIfWriteIntent, resourceNotFoundError } from './read-only';
+import { jsonResourceResult, refuseIfWriteIntent, resourceNotFoundError, withRefusalDetails } from './read-only';
 
 /** Options for {@link registerDnaResources}. */
 export interface RegisterDnaResourcesOptions {
@@ -44,12 +44,13 @@ export function registerDnaResources(server: McpServer, options: RegisterDnaReso
     'dna.read',
     DNA_WHOLE_URI,
     { description: 'the whole dna.yaml document (read-only)' },
-    async (uri, extra) => {
-      refuseIfWriteIntent(extra._meta);
-      const root = options.resolveRoot();
-      const dna = loadDnaYaml(root);
-      return jsonResourceResult(uri, dna);
-    },
+    (uri, extra) =>
+      withRefusalDetails(() => {
+        refuseIfWriteIntent(extra._meta);
+        const root = options.resolveRoot();
+        const dna = loadDnaYaml(root);
+        return jsonResourceResult(uri, dna);
+      }),
   );
 
   const sectionTemplate = new ResourceTemplate(DNA_SECTION_URI_TEMPLATE, { list: undefined });
@@ -57,17 +58,18 @@ export function registerDnaResources(server: McpServer, options: RegisterDnaReso
     'dna.section',
     sectionTemplate,
     { description: 'one top-level dna.yaml section (read-only)' },
-    async (uri, variables, extra) => {
-      refuseIfWriteIntent(extra._meta);
-      const root = options.resolveRoot();
-      const dna = loadDnaYaml(root) as Record<string, unknown>;
-      // `variables.section` is typed `string | string[]` (see `memory-resource.ts`'s identical note
-      // on `{type}`/`{id}`) — this template's `{section}` has no explode modifier, so it is always a
-      // single string in practice.
-      const section = variables.section as string;
-      if (!(section in dna)) throw resourceNotFoundError(`dna/${section}`);
+    (uri, variables, extra) =>
+      withRefusalDetails(() => {
+        refuseIfWriteIntent(extra._meta);
+        const root = options.resolveRoot();
+        const dna = loadDnaYaml(root) as Record<string, unknown>;
+        // `variables.section` is typed `string | string[]` (see `memory-resource.ts`'s identical note
+        // on `{type}`/`{id}`) — this template's `{section}` has no explode modifier, so it is always a
+        // single string in practice.
+        const section = variables.section as string;
+        if (!(section in dna)) throw resourceNotFoundError(`dna/${section}`);
 
-      return jsonResourceResult(uri, dna[section]);
-    },
+        return jsonResourceResult(uri, dna[section]);
+      }),
   );
 }

@@ -124,10 +124,13 @@ function seedFixtureRepo(): string {
   return root;
 }
 
+/** The role set {@link DNA_YAML} declares, as `wingfoil mcp`'s pre-flight reads it (`dl-049` (b)). */
+const FIXTURE_ROLES = ['developer', 'reviewer', 'qa'] as const;
+
 /** Connect a real `Client`/`McpServer` pair with only the Prompts channel wired on, over `root`. */
 async function connectPromptClient(root: string): Promise<{ client: Client; server: McpServer }> {
   const server = new McpServer({ name: 'wingfoil-test', version: '0.0.0' });
-  registerRolePrompts(server, { resolveRoot: () => root });
+  registerRolePrompts(server, { resolveRoot: () => root, roles: FIXTURE_ROLES });
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'wingfoil-test-client', version: '0.0.0' });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -258,7 +261,110 @@ describe('the Prompts channel is read-only (spec-004 §3.3, CLAUDE.md §8)', () 
     assertFilesUnchanged(root, snapshot);
   });
 
-  it('registers no Tool — the Prompts registrar adds no write path to the surface', async () => {
-    await expect(client.listTools()).rejects.toThrow(/method not found/i);
+  // task-174 (`bug-151`): the production server now answers `tools/list` with an empty list, so "no
+  // Tool" is no longer a -32601. What this registrar must not do is declare the Tools channel at all.
+  it('registers no Tool — the Prompts registrar declares no Tools channel', () => {
+    expect(client.getServerCapabilities()?.tools).toBeUndefined();
+  });
+});
+
+/**
+ * task-174 (`dl-039` headings 1): every directive body opens with its own H1, so embedded verbatim it
+ * outranked the `## Directive:` block holding it. Each ATX heading of a body is demoted two levels,
+ * capped at H6; a fenced code block is code, not outline, and stays as written.
+ */
+describe('prompts/get — a directive body\'s headings are demoted two levels (spec-004 §3.2, dl-039)', () => {
+  let root: string;
+  let client: Client;
+
+  const HEADED_BODY = [
+    '# Directive — Testing',
+    '',
+    'Intro paragraph with a # that is not a heading.',
+    '',
+    '## Rules',
+    '   ### Indented three spaces',
+    '#### Four',
+    '##### Five',
+    '###### Six',
+    '#no-space-is-not-a-heading',
+    '',
+    '```bash',
+    '# a shell comment, not a heading',
+    '```',
+    '',
+    '~~~~',
+    '## still code',
+    '~~~~',
+    '',
+    '## After the fences',
+  ].join('\n');
+
+  beforeAll(async () => {
+    root = seedFixtureRepo();
+    writeFixtureFile(root, '.wingfoil/directives/custom/testing.md', directiveDoc('testing', HEADED_BODY));
+    ({ client } = await connectPromptClient(root));
+  });
+
+  afterAll(() => removeTempDir(root));
+
+  it('nests each body heading under its `## Directive:` block, and leaves code and plain text alone', async () => {
+    const text = promptText(await client.getPrompt({ name: 'developer-session' }));
+
+    expect(text).toContain(
+      [
+        '## Directive: testing',
+        '### Directive — Testing',
+        '',
+        'Intro paragraph with a # that is not a heading.',
+        '',
+        '#### Rules',
+        '   ##### Indented three spaces',
+        '###### Four',
+        '###### Five',
+        '###### Six',
+        '#no-space-is-not-a-heading',
+        '',
+        '```bash',
+        '# a shell comment, not a heading',
+        '```',
+        '',
+        '~~~~',
+        '## still code',
+        '~~~~',
+        '',
+        '#### After the fences',
+      ].join('\n'),
+    );
+    // The prompt's own header is the only H1 of the outline; the other `# ` line is the fenced comment.
+    expect(text.split('\n').filter((line) => /^# /.test(line))).toEqual(['# Role: developer', '# a shell comment, not a heading']);
+  });
+});
+
+/**
+ * task-174 (`dl-049` (b)): the role set is the one handed over at server start — `wingfoil mcp` reads it
+ * in its pre-flight — so neither `prompts/list` nor the undefined-role check reads `dna.yaml`.
+ */
+describe('the role set is fixed when the channel is registered (spec-004 §3.1, dl-049 (b))', () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = seedFixtureRepo();
+  });
+
+  afterEach(() => removeTempDir(root));
+
+  it('lists exactly the given roles, in the given order, even after dna.yaml changes on disk', async () => {
+    const { client } = await connectPromptClient(root);
+    writeFixtureFile(root, '.wingfoil/dna.yaml', DNA_YAML.replace('    - name: qa', '    - name: qa\n    - name: wizard'));
+
+    const { prompts } = await client.listPrompts();
+    expect(prompts.map((prompt) => prompt.name)).toEqual(['developer-session', 'reviewer-session', 'qa-session']);
+    await expect(client.getPrompt({ name: 'wizard-session' })).rejects.toThrow("no prompt for undefined role 'wizard'");
+  });
+
+  it('declares the Prompts channel without listChanged: the list cannot change during a session', async () => {
+    const { client } = await connectPromptClient(root);
+    expect(client.getServerCapabilities()?.prompts).toEqual({});
   });
 });
