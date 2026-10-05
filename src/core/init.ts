@@ -35,9 +35,11 @@ import {
   scaffoldFiles,
   templateScaffold,
   type BuiltinTemplateSource,
+  type ScaffoldFile,
 } from '../storage';
 
 import { verifyBuiltinTemplates } from './builtin-integrity';
+import { requireConfinedWriteTarget } from './confinement';
 import { requireGitIdentity } from './git-identity';
 import { coreErr, coreOk, type CoreResult } from './types';
 import { requireUnmodifiedTargets } from './write-guard';
@@ -103,6 +105,37 @@ function refuseInitializedProject(root: string): CoreResult<never> | null {
   return null;
 }
 
+// ---- task-172 (bug-121): the scaffold's write-target guards — kept in one delimited block ----
+
+/**
+ * Refuse, before the first write, a scaffold whose targets the init commit could not own — the
+ * guard both init entry points run over the exact `files` they are about to write (task-172,
+ * `bug-121-config-write-paths-have-no-confinement-pre-flight`).
+ *
+ * 1. **Confinement** ({@link requireConfinedWriteTarget}, REQ-SEC-06), on every path, first: a path
+ *    that leaves the project is reported as leaving it. `init` does not establish the boundary it is
+ *    checked against — the boundary is the git root, which guard 1 requires to exist; `init` only
+ *    creates `.wingfoil/` beneath it. The one pre-existing shape a target can take here is a
+ *    `.wingfoil` that is a symbolic link to an empty directory (an initialized one is refused), and
+ *    out of the root that link would receive the whole scaffold before `git add` failed.
+ * 2. **Unmodified and inspectable** (`requireUnmodifiedTargets`, dl-080 (B) with task-131's
+ *    inspectability check): refuses a dirty target and one beyond a symbolic link — an in-root
+ *    linked `.wingfoil`, which git cannot stage.
+ *
+ * Returns the first refusal (`VALIDATION`, exit 1), or `ok` when every path may be written.
+ */
+function requireScaffoldTargets(root: string, files: readonly ScaffoldFile[]): CoreResult<undefined> {
+  for (const file of files) {
+    const confined = requireConfinedWriteTarget(root, file.path, 'write');
+    if (!confined.ok) return confined;
+  }
+  const unmodified = requireUnmodifiedTargets(root, files.map((file) => file.path));
+  if (!unmodified.ok) return unmodified;
+  return coreOk(undefined);
+}
+
+// ---- end task-172 block ----
+
 /** What a successful init reports: the resolved root and the root-relative paths it created. */
 export interface InitStorageValue {
   readonly root: string;
@@ -141,7 +174,8 @@ export interface InitStorageValue {
  * @returns `ok` carrying the created paths and the produced `{sha, message}` commit; or a
  *   `CoreResult.error` (code `VALIDATION` → exit 1) when `root` is not a git repository, when git
  *   identity is unconfigured (REQ-SEC-01), when a built-in template fails its schema check
- *   (REQ-SEC-10) or its secret scan (spec-007 §4 step 5), when a target is dirty or uninspectable,
+ *   (REQ-SEC-10) or its secret scan (spec-007 §4 step 5), when a target leads outside the project root
+ *   or is a symbolic link (REQ-SEC-06, task-172), when a target is dirty or uninspectable,
  *   when `root` is already initialized, or (code `IO`) when the git commit itself fails.
  */
 export function initWingfoilStorage(
@@ -166,13 +200,14 @@ export function initWingfoilStorage(
     return coreErr({ code: 'VALIDATION', message: integrityFailure.message });
   }
 
-  // Guard 4 — dl-080 (B) / bug-078 / task-092, with task-131's inspectability check inside it.
-  // Here a target CAN pre-exist, and its uncommitted content would be overwritten and the diff
-  // committed under a subject saying "initialize"; behind a symlink it cannot even be inspected. It
-  // runs BEFORE guard 5 so a dirty or uninspectable target is refused with the message that names
-  // that target, not with the generic one below.
-  const unmodified = requireUnmodifiedTargets(root, files.map((file) => file.path));
-  if (!unmodified.ok) return unmodified as CoreResult<InitStorageValue>;
+  // Guard 4 — task-172 (REQ-SEC-06, bug-121) confinement, then dl-080 (B) / bug-078 / task-092
+  // with task-131's inspectability check inside it ({@link requireScaffoldTargets}). Here a target
+  // CAN pre-exist, and its uncommitted content would be overwritten and the diff committed under a
+  // subject saying "initialize"; behind a symlink it cannot even be inspected. It runs BEFORE guard 5
+  // so a dirty or uninspectable target is refused with the message that names that target, not with
+  // the generic one below.
+  const targets = requireScaffoldTargets(root, files);
+  if (!targets.ok) return targets as CoreResult<InitStorageValue>;
 
   // Guard 5 — task-135 / bug-088: an initialized project is not re-initialized. The message is
   // {@link initWingfoilProject}'s, but this path runs it fifth rather than second, so the two give
@@ -226,6 +261,9 @@ export interface InitProjectValue {
  *      (there is no separate registry to forget to update). `templateScaffold` is pure and writes
  *      nothing, so computing it before the guard preserves the "before writing partial assets"
  *      ordering the fit criterion demands.
+ *   6. every scaffold path stays inside the project root, is not itself a symbolic link, and is not
+ *      beyond one ({@link requireScaffoldTargets}, REQ-SEC-06, task-172 / `bug-121`) — a `.wingfoil`
+ *      linked to an empty directory passes guard 2 and would otherwise receive the whole scaffold.
  *
  * @param builtinTemplates - test-only override for guard 5's source list, exercising the abort path
  *   without real built-in content on disk. Omit it in production: the derived set is the contract.
@@ -256,6 +294,11 @@ export function initWingfoilProject(
   if (integrityFailure) {
     return coreErr({ code: 'VALIDATION', message: integrityFailure.message });
   }
+
+  // Guard 6 — task-172 (REQ-SEC-06, bug-121): no scaffold path may lead outside the project root or
+  // lie beyond a symbolic link. A `.wingfoil` linked to an empty directory passes guard 2.
+  const targets = requireScaffoldTargets(root, files);
+  if (!targets.ok) return targets as CoreResult<InitProjectValue>;
 
   try {
     const message = initProjectCommitMessage(template);
