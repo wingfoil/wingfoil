@@ -110,7 +110,12 @@ scheme (§4), not hand-edited at publish time.
   publish (staging or prod). Must exit non-zero on any failure.
 - `publish:staging`: the **local-first** entry point (`scripts/publish-staging.*`) that runs the full
   staging→smoke flow (§3) against a Verdaccio instance, usable identically on a dev machine and in CI.
-- Existing `build`/`prepack`/`test`/`lint` unchanged; `prepack → build` still produces `dist/`.
+- Existing `build`/`prepack`/`lint` unchanged; `prepack → build` still produces `dist/`. `test` is
+  `node scripts/run-tests.cjs`: the parallel jest run, which leaves out the suites that time spawned
+  processes (`test/latency-suites.cjs`). Those run alone (`jest.latency.config.js`) only when asked
+  for — `npm run test:latency`, or `WINGFOIL_LATENCY=1 npm test` — and never from `prepublishOnly`,
+  so no publish waits on a wall-clock measurement. See the *Revision (2026-10-03) — §2 `test`* note
+  below.
 
 ### 3. Publish pipeline (`.github/workflows/publish.yml` + `scripts/publish-staging`)
 
@@ -535,3 +540,19 @@ Node-versions header already used ("the lowest version every PRODUCTION dependen
 value is unchanged: `>=22.12.0`, set by `commander@15`. The bullet also records that the assertion
 now checks equality as well as satisfaction; before `task-155` it checked satisfaction only.
 Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions above.
+
+**Revision (2026-10-03) — §2 `test`: `npm test` leaves the latency suites out, and runs them only
+when asked for (`task-154`, `bug-013`; approver ruling 2026-10-03).** §2 said the `test` script was
+unchanged, and it was `jest`. `task-154` added `test/cli/command-latency.test.ts`, which spawns
+REQ-PERF-02's three commands and asserts each one's marginal cost over a measured process-start
+floor against 1,000 ms at p95 (that the requirement words the total, start-up included, is a
+deviation pending a decision-log). That budget presupposes an otherwise idle machine: inside jest's
+parallel run, or beside other jobs, it has failed with nothing in the commands changed. So the suites
+listed in `test/latency-suites.cjs` are ignored by `jest.config.js` and run alone, by
+`jest.latency.config.js`, only when asked for: `npm run test:latency`; `npm test` with
+`WINGFOIL_LATENCY=1`, as a second pass after a passing parallel run; or `npm test` with an argument
+naming one of those suites, which sends that invocation to the latency config. With any other
+argument, `npm test` runs only the parallel run, with the arguments unchanged. `prepublishOnly` is
+unchanged, sets no such variable, and so neither CI nor the publish workflow runs the latency suites.
+Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions
+above.
