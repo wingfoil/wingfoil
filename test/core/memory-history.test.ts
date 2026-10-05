@@ -298,3 +298,65 @@ describe('CORE_MODULES memory.memoryHistory — an archived document keeps its a
     expect(result.value.entries[1]?.reason).toBe('superseded by decision-12');
   });
 });
+
+/**
+ * task-192 (`dl-111` Action 3, P1.10): an entry names the build that wrote its commit. The field is
+ * read from the commit's trailing trailer paragraph — the one `commitPaths` appends — and is present
+ * only when that paragraph carries `WingFoil-Version:`, so a hand-written commit stays distinguishable
+ * from a tool-written one.
+ */
+describe('CORE_MODULES memory.memoryHistory — the `wingfoil` field (task-192, dl-111)', () => {
+  const STAMP = '0.3.0 (0123456789abcdef0123456789abcdef01234567)';
+  const MULTI_LINE_REASON = 'Ratified at the design review.\n\nThe second paragraph stays in the reason.';
+  let repo: string;
+
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, '.wingfoil/memory.yaml', MEMORY_YAML);
+    writeDecision(repo, DECISION_12, 'decision-12', 'draft');
+    commitAll(repo, 'wf(decision-log): add decision-12');
+    writeDecision(repo, DECISION_12, 'decision-12', 'in-discussion');
+    commitAll(repo, `wf(decision-log): submit decision-12\n\nWingFoil-Version: ${STAMP}`);
+    writeDecision(repo, DECISION_12, 'decision-12', 'ready');
+    commitAll(
+      repo,
+      `wf(decision-log): approve decision-12 [in-discussion → ready]\n\n${APPROVER_LINE}\nReason: ${MULTI_LINE_REASON}\n\nWingFoil-Version: ${STAMP}`,
+    );
+  });
+
+  afterEach(() => removeTempDir(repo));
+
+  it('carries `wingfoil` on the entries whose commit has the trailer, and no such key on the one without', async () => {
+    const result = await memoryHistoryFn()({ root: repo, positional: 'decision-12' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const entries = result.value.entries as readonly (HistoryEntry & { wingfoil?: string })[];
+    expect('wingfoil' in (entries[0] as object)).toBe(false);
+    expect(entries[1]?.wingfoil).toBe(STAMP);
+    expect(entries[2]?.wingfoil).toBe(STAMP);
+  });
+
+  it('the trailer paragraph ends the Reason: block — a multi-line reason before it reads back whole', async () => {
+    const result = await memoryHistoryFn()({ root: repo, positional: 'decision-12' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.entries[2]?.reason).toBe(MULTI_LINE_REASON);
+    expect(result.value.entries[2]?.approver).toBe('Roberto Pompermaier <robypomper@gmail.com> (approver)');
+  });
+
+  it('reads the key only from the trailing trailer paragraph, as git does — not from a line earlier in the body', async () => {
+    writeDecision(repo, DECISION_12, 'decision-12', 'deprecated');
+    commitAll(
+      repo,
+      'wf(decision-log): deprecate decision-12 [ready → deprecated]\n\nWingFoil-Version: 9.9.9 (forged)\nnot a trailer line\n\nCo-Authored-By: Someone <someone@example.invalid>',
+    );
+
+    const result = await memoryHistoryFn()({ root: repo, positional: 'decision-12' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect('wingfoil' in (result.value.entries[3] as object)).toBe(false);
+  });
+});

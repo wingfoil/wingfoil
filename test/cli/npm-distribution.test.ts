@@ -91,10 +91,12 @@ describe('npm distribution (task-007) — bin entrypoint + package contents', ()
     }
   });
 
-  it('`node dist/cli.js --version` prints the package version and exits 0 (bug-001)', () => {
+  it('`node dist/cli.js --version` prints `<semver> (<sha>)` and exits 0 (bug-001, task-192)', () => {
     const result = runBin('--version');
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe(PKG_VERSION);
+    // `<semver> (<sha>)`, the sha from the build record dist/ was built with (task-192, dl-111 Action 3).
+    const built = (JSON.parse(readFileSync(join(REPO_ROOT, 'dist', 'build-info.json'), 'utf-8')) as { commit: string }).commit;
+    expect(result.stdout.trim()).toBe(`${PKG_VERSION} (${built})`);
     expect(result.stderr).toBe('');
   });
 

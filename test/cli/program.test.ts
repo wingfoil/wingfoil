@@ -247,13 +247,13 @@ describe('buildProgram — the program itself (bug-007: this module is now loada
     expect(program.opts()).toEqual({ format: 'console', color: true, interactive: true });
   });
 
-  it('`--version` prints the package.json version and terminates with commander exit code 0', async () => {
+  it('`--version` prints `<semver> (<sha>)` — `(unknown)` from src/, which has no build-info.json (task-192, dl-111) — and terminates with commander exit code 0', async () => {
     const program = await buildFixtureProgram();
     await expect(program.parseAsync(['node', 'wingfoil', '--version'])).rejects.toMatchObject({
       code: 'commander.version',
       exitCode: 0,
     });
-    expect(written(stdoutSpy).trim()).toBe(PKG_VERSION);
+    expect(written(stdoutSpy).trim()).toBe(`${PKG_VERSION} (unknown)`);
   });
 });
 
