@@ -33,6 +33,7 @@ The rulings that reshape `dev-loop`: `red` moves to role `qa` (black-box, and it
 - **Features:** P4.1, P4.15.
 - **Notes:** Proposal key: A19. The stop-the-line `start.checks.pre` (`dl-133` Q4 (i)) and the other v0.3 gates (`dl-044`, `dl-097`, `dl-098`, `dl-102` §4, `dl-115`, `dl-116`) are task-221's single v1.6 revision, after this task. Coordinate with task-139 (`testing.md` T1/T2) on the same file. `dl-133`'s `kind` field is task-150.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from wave 2 B2 (2026-10-05, `bug-248`).** As the next writer of `.wingfoil/directives/custom/testing.md`, add one line pointing to `security-secrets` S1 (fixtures that look like secrets are built at runtime, `task-182`), as `dl-073` Action 3 asks.
 
 ## Execution Notes
 
