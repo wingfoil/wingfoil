@@ -262,3 +262,31 @@ describe('characterization: in-root writes are unchanged (task-172 AC2)', () => 
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
   });
 });
+
+/**
+ * The init entry points' `IO` branch — a commit that fails AFTER every guard passed. Before task-172
+ * a linked `.wingfoil` reached it (git's "beyond a symbolic link"); now the guards refuse that case
+ * first, so the branch is pinned on the failure it is for: git itself refusing the commit (here a
+ * `pre-commit` hook). Characterization: the behaviour is unchanged, only its fixture moved.
+ */
+describe('characterization: a commit git refuses after the guards pass is still an IO result', () => {
+  let repo: string;
+
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    const hook = join(repo, '.git', 'hooks', 'pre-commit');
+    writeFileSync(hook, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  });
+  afterEach(() => {
+    removeTempDir(repo);
+  });
+
+  it.each([
+    ['initWingfoilProject', (root: string) => initWingfoilProject(root, 'Scrum')],
+    ['initWingfoilStorage', (root: string) => initWingfoilStorage(root)],
+  ] as const)('%s', (_name, run) => {
+    const result = run(repo) as CoreResult<unknown>;
+    expect(result.ok).toBe(false);
+    expect(result.ok ? undefined : result.error.code).toBe('IO');
+  });
+});
