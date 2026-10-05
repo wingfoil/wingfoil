@@ -10,12 +10,15 @@
  */
 import { hostname } from 'os';
 
+import * as core from '../../src/core';
 import {
   assembleExecutionContext,
   serializeExecutionContext,
   validateExecutionContext,
   type ContextRequest,
 } from '../../src/core/context';
+import { filterRelevantMemoryDocuments, selectRelevantMemoryDocuments } from '../../src/core/relevance';
+import { loadMemoryDocumentsAtRev } from '../../src/memory';
 import { DEFAULT_CONTEXT_LIMITS, NO_RELEVANT_MEMORY_NOTE } from '../../src/core/relevance';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
@@ -276,6 +279,33 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
       });
     });
 
+    it("a stateRef holding no dna.yaml is refused as missing 'dna'", () => {
+      git(repo, ['rm', '--quiet', '.wingfoil/dna.yaml']);
+      commitAll(repo, 'drop dna.yaml');
+      const result = assembleExecutionContext(repo, request());
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.message).toBe("invalid execution context: missing 'dna' section");
+    });
+
+    it("a stateRef holding no memory.yaml is refused as missing 'element': nothing resolves it", () => {
+      git(repo, ['rm', '--quiet', '.wingfoil/memory.yaml']);
+      commitAll(repo, 'drop memory.yaml');
+      const result = assembleExecutionContext(repo, request());
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.message).toBe("invalid execution context: missing 'element' section");
+    });
+
+    it('a section of the wrong shape, or a candidate that is no object, is refused as missing', () => {
+      const { context } = build(repo);
+      const message = (value: unknown): string | undefined => {
+        const result = validateExecutionContext(value);
+        return result.ok ? undefined : result.error.message;
+      };
+      expect(message(null)).toBe("invalid execution context: missing 'element' section");
+      expect(message({ ...context, dna: { project: {} } })).toBe("invalid execution context: missing 'dna' section");
+      expect(message({ ...context, memory: {} })).toBe("invalid execution context: missing 'memory' section");
+    });
+
     it('serializeExecutionContext refuses an invalid context rather than rendering a partial payload', () => {
       const { context } = build(repo);
       expect(() => serializeExecutionContext({ ...context, dna: undefined } as never)).toThrow(
@@ -309,6 +339,22 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
       writeTask(repo, ELEMENT_ID, { status: 'draft' });
       commitAll(repo, 'back to draft');
       expect(build(repo).context.element.frontmatter.status).toBe('draft');
+    });
+
+    it('a malformed stateRef is refused as VALIDATION, never shown to git', () => {
+      const result = assembleExecutionContext(repo, request({ stateRef: 'HEAD..main' }));
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe('VALIDATION');
+    });
+
+    it('a root git cannot read at all throws: a broken environment is not a missing revision', () => {
+      const plain = makeTempGitRepo();
+      try {
+        removeTempDir(`${plain}/.git`);
+        expect(() => assembleExecutionContext(plain, request())).toThrow(/git/);
+      } finally {
+        removeTempDir(plain);
+      }
     });
 
     it('a stateRef naming no commit is refused with the RevisionError CoreError', () => {
@@ -352,6 +398,40 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
       const { context, payload } = build(repo);
       expect(context.dna.modules.map((m) => m.name)).toEqual(['memory']);
       expect(section(payload, '## 2. Project DNA')).not.toContain('src/cli');
+    });
+  });
+
+  describe('edge shapes the payload still renders deterministically', () => {
+    it("an empty scope: is no scope — every module", () => {
+      writeTask(repo, ELEMENT_ID, { extra: ['scope: ""'] });
+      commitAll(repo, 'empty scope');
+      expect(build(repo).context.dna.modules.map((m) => m.name)).toEqual(['core', 'memory', 'cli']);
+    });
+
+    it('an empty element body adds no block; a relevant document with no type or id is headed by its path', () => {
+      writeTask(repo, ELEMENT_ID, { tags: ['performance'], body: '' });
+      writeFixtureFile(repo, 'docs/04_memory/v0.2/loose-note.md', '---\nid: 42\nrelease: "v0.2"\nstatus: backlog\n---\n\nLoose.\n');
+      commitAll(repo, 'empty body, untyped document');
+      const { payload } = build(repo);
+      expect(section(payload, '## 1. Task').trimEnd().endsWith('```')).toBe(true);
+      expect(subHeadings(section(payload, '## 4.'))).toEqual([':docs/04_memory/v0.2/loose-note.md']);
+    });
+  });
+
+  describe('public surface', () => {
+    it('the core barrel re-exports the builder, its validator, serializer and the pure ranking', () => {
+      expect(core.assembleExecutionContext).toBe(assembleExecutionContext);
+      expect(core.validateExecutionContext).toBe(validateExecutionContext);
+      expect(core.serializeExecutionContext).toBe(serializeExecutionContext);
+      expect(core.selectRelevantMemoryDocuments).toBe(selectRelevantMemoryDocuments);
+    });
+
+    it('the working-tree filter and the snapshot ranking agree on the same documents', () => {
+      const memoryYaml = core.loadMemoryYamlAtRev(repo, 'HEAD')!;
+      const element = { type: 'task', id: ELEMENT_ID, frontmatter: { release: 'v0.2', depends_on: ['task-002-linked'] } };
+      const fromTree = filterRelevantMemoryDocuments(repo, memoryYaml, element);
+      const fromSnapshot = selectRelevantMemoryDocuments(loadMemoryDocumentsAtRev(repo, 'HEAD', memoryYaml), element, DEFAULT_CONTEXT_LIMITS);
+      expect(fromSnapshot).toEqual(fromTree);
     });
   });
 

@@ -362,11 +362,10 @@ function asNames(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0) : [];
 }
 
-/** The top-level keys of the committed `dna.yaml` text, in the order the file declares them. */
-function declaredDnaOrder(root: string, sha: string): string[] {
-  const raw = readPathAtRev(root, sha, DNA_YAML_PATH);
-  const parsed = raw === null ? null : parseYaml(raw, `${sha}:${DNA_YAML_PATH}`);
-  return isRecord(parsed) ? Object.keys(parsed) : [];
+/** The top-level keys of a `dna.yaml` text that has already validated, in the order the file
+ * declares them. */
+function declaredKeyOrder(raw: string, label: string): string[] {
+  return Object.keys(parseYaml(raw, label) as Record<string, unknown>);
 }
 
 /**
@@ -455,8 +454,13 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   const element = found === undefined ? undefined : { ...found, type: wanted.type, id: wanted.id };
   const frontmatter = element?.frontmatter ?? {};
 
-  const dnaYaml = loadDnaYamlAtRev(root, sha);
-  const dna = dnaYaml === null ? undefined : selectDnaSections(dnaYaml, declaredDnaOrder(root, sha), frontmatter);
+  // `loadDnaYamlAtRev` validates; the raw text gives the declared section order, which the
+  // Zod-parsed object loses (schema keys come first there). `loadDnaYamlAtRev` is non-null whenever the raw read is: both read the same path at the same sha.
+  const dnaRaw = readPathAtRev(root, sha, DNA_YAML_PATH);
+  const dna =
+    dnaRaw === null
+      ? undefined
+      : selectDnaSections(loadDnaYamlAtRev(root, sha)!, declaredKeyOrder(dnaRaw, `${sha}:${DNA_YAML_PATH}`), frontmatter);
 
   const rolesYaml = loadRolesYamlAtRev(root, sha);
   const resolution = rolesYaml === null ? undefined : resolveRoleDirectives(loadDirectivesAtRev(root, sha), rolesYaml, role);

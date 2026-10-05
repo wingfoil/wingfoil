@@ -278,7 +278,7 @@ export function filterRelevantMemoryDocuments(
 export function selectRelevantMemoryDocuments(
   documents: readonly MemoryDocumentSummary[],
   element: RelevanceElementRef,
-  limits: ContextLimits = DEFAULT_CONTEXT_LIMITS,
+  limits: ContextLimits,
 ): RelevantMemoryResult {
   const linkedIds = collectLinkedIds(element.frontmatter);
   const elementRelease = asString(element.frontmatter.release);
