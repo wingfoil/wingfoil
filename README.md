@@ -1,5 +1,7 @@
 <p align="center"><img src="docs/assets/wingfoil-mark.svg" width="140" alt="WingFoil logo"></p>
 
+<p align="center"><a href="https://glama.ai/mcp/servers/wingfoil/wingfoil"><img src="https://glama.ai/mcp/servers/wingfoil/wingfoil/badges/score.svg" alt="WingFoil MCP server on Glama"></a></p>
+
 # WingFoil
 
 **A structured harness for deterministic AI-assisted software development.**
