@@ -31,6 +31,13 @@ WingFoil's answer to "which database does the core tech stack use": none — `dn
 `tech_stack.storage` is `git`, and no DB client, ORM, or schema-migration tooling appears anywhere
 in the stack (TypeScript/Node.js 18+/Commander.js/MCP over stdio/Zod/Jest, per `dna.yaml`).
 
+> **Correction (2026-10-02) — the stack parenthetical reads Node.js 22.12+, not Node.js 18+.**
+> `adr-010-node-22-runtime-floor` (`accepted`) moved WingFoil's runtime floor to Node.js 22.12:
+> `dna.yaml` now says `22.12+`, and `package.json` `engines.node` is `>=22.12.0`, the floor
+> `spec-015` §1 defines. Wherever the paragraph above says "Node.js 18+", read **Node.js 22.12+**.
+> The decision of this ADR is unchanged: git is the single store, with no database. The sentence
+> above is left as written (`bug-054`, `task-158`).
+
 ## Consequences
 
 - **Positive:**
