@@ -2,7 +2,7 @@
 id: "bug-028-mcp-command-missing-from-cli-specs"
 type: bug
 title: "The shipped `wingfoil mcp` command is missing from the CLI command surface in spec-005, spec-006 §3 and spec-008 §1"
-status: planned
+status: in-progress
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
