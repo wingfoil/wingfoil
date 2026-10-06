@@ -48,9 +48,71 @@ and `docs/01_vision/X_cli-cmds.md`'s `ROLE` row still names `dna show --section 
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+### design (architect, 2026-10-06)
+
+- `depends_on: []`; no tech-spec is cited by the ACs. Inputs: `bug-256`, `bug-257`, `task-258`'s
+  Execution Notes (it kept P1.11 lines 2 and 10 out of scope). Started from main `4b952b16`.
+- **Store definition used in every edit:** a Memory document is written at the path its type declares in
+  `.wingfoil/memory.yaml`, resolved against the project root (`task-017`, `task-172`); `.wingfoil/memory/` holds
+  only the type templates (`.wingfoil/memory/templates/`). Verified on a scratch repository with this branch's
+  build: `git init`, `node dist/cli.js init --template Scrum` → `find .wingfoil -maxdepth 2 -type d | grep memory`
+  lists `.wingfoil/memory` and `.wingfoil/memory/templates` only; `grep -n 'path:' .wingfoil/memory.yaml` gives
+  `docs/memory/<type>/{id}.md`; `memory add --type task --title "Older probe"` → exit 0,
+  `docs/memory/task/task-001-older-probe.md`. `dna show --section team` → exit 2 `error: unknown option
+  '--section'`; `dna show team` → exit 0 (`bug-257` step 3).
+- **Rewrite, not dated note:** none of the thirteen passages is historical text (they describe where the store *is*),
+  so each is rewritten; the vision documents get a version bump, and `X_cli-cmds.md` (the only one with a revision
+  history) a dated `Version 1.6 (2026-10-06)` entry. A note quoting the old path would itself trip the AC's grep.
+- **AC classification (corrected from the planner's labels):**
+
+| AC | Classification | Why |
+|----|----------------|-----|
+| 1 — passages and bug-256's grep | **red-first** | The text does not say it yet: a new gate `test/docs/memory-store-location-text.test.ts` (bug-256 step-1 grep as a test) fails on the current tree. |
+| 2 — P1.3 sc.1 / P1.11 sc.1 | scenario text **red-first** (same suite); the behaviour **characterization** | `init` already declares confined paths and tracks the templates; `memory add` already writes at the declared path (`test/core/memory-add.test.ts` AC(a), `docs/memory/decision/...`). The rewritten `entry.test.ts` sc.1 passes on first run. |
+| 3 — ROLE row | **red-first** | Same suite: the row names `--section` today. |
+
+- **Same-class instances fixed in the files touched** (beyond bug-256's thirteen): the P1.1 row and the MVP-list
+  P1.1 line of `06_features.md` ("all project state (Memory, …) in `.wingfoil/`"), and US-0A-01 in
+  `01_init-migrate.md` — each now says configuration in `.wingfoil/`, Memory at the declared paths.
+- Not touched: `docs/01_vision/00_index.md` (task-186's file, B4b notes); its version column is already stale
+  (`X_cli-cmds.md` listed at 1.3) — reported as a finding.
+
+### red
+
+- `npx jest test/docs/memory-store-location-text.test.ts` → **6 failed, 6 total**; the grep test lists exactly the
+  13 lines of `bug-256` step 1 (`… | grep -c '^    +   "docs'` → 13). Commit `f417f030`.
+
+### green
+
+- Doc edits, commit `34dd77aa`: `06_features.md` (1.8 → 1.9, 2026-10-06), `08_mvp-canvas.md` (1.6 → 1.7),
+  `X_cli-cmds.md` (1.5 → 1.6 + revision entry), `01_init-migrate.md` (no version field; precedent `86001f5d`),
+  P1.3 (Background now declares `path "docs/memory/decision/{id}.md"`, sc.1 expects `docs/memory/decision/`),
+  P1.4 sc.1, P1.11 narrative and sc.1 (`memory.yaml` declares a confined path for every type; templates under
+  `.wingfoil/memory/templates/`; both tracked).
+- `test/memory/entry.test.ts` sc.1 (commits `0c9a0482`, `558fa2fa`): runs `initWingfoilProject(repo, 'Scrum')`
+  (what `wingfoil init` does), loads `memory.yaml`, resolves every type's path with probe token values through
+  `resolveConfinedMemoryPath`, refuses a path under `.wingfoil/`, checks every declared template
+  (`.wingfoil/` + `template.file`) is tracked, and that `git ls-files .wingfoil/memory/` holds templates only.
+- `npx jest test/docs/memory-store-location-text.test.ts test/docs/req-sec-06-confinement-text.test.ts` → 16 passed;
+  `npx jest test/memory/entry.test.ts` → 3 passed. bug-256 step-1 grep and bug-257 step-1 grep → no output.
+
+### refactor
+
+- First `npm test` run: 1 failed (`test/lint/typecheck-clean.test.ts`: TS2538 on the destructured `matchAll`
+  capture in `entry.test.ts`); fixed by indexing `match[1]` (`558fa2fa`).
+- `npm test` → exit 0, **271 suites, 5018 tests passed**.
+- `npm run test:coverage` → exit 0, All files 99.13 % stmts / 96.39 % branches / 96.53 % funcs / 99.69 % lines
+  (no `src/` change in this task: `git diff --stat 4b952b16 -- src` is empty).
+- `npm run lint` → 0; `npm run docs:api` → 0; `npx tsc --noEmit -p tsconfig.json` → 0;
+  `npx tsc -p tsconfig.build.json --noEmit` → 0; `node scripts/check-governance.cjs --base 4b952b16` → 0.
+- BDD: nothing executes `.feature` files (bug-106); the scenarios are pinned by the doc suite above and by
+  `test/memory/entry.test.ts` / `test/core/memory-add.test.ts`.
+
+### review (self, reviewer)
+
+- AC1: bug-256's grep `grep -rn '\.wingfoil/memory' docs/01_vision docs/02_requirements | grep -v
+  'memory\.yaml\|memory/templates'` → nothing; doc-versioning: one bump per vision document, dated 2026-10-06.
+- AC2: P1.3 sc.1 expects the declared directory (pinned against the Background's declared path); P1.11 sc.1 asserts
+  the store `memory.yaml` declares and its test follows; `req-sec-06-confinement-text` (P1.11 sc.3) still green.
+- AC3: ROLE row says `dna show team`; `grep -rn -e '--section' … docs/01_vision …` → nothing.
+- Pending amendments (approver): none — no Memory element other than this task and the two bug syncs is edited.
