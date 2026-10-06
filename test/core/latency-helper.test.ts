@@ -165,6 +165,9 @@ describe('latency helper — the otherwise-idle machine REQ-PERF-02 presupposes,
     expect(verdict).toContain('>= 500 ms');
     expect(verdict).toContain('before 1.94 / 4.13, after 4.61 / 4.30');
     expect(verdict).toContain('not a REQ-PERF-02 measurement');
+    // The refusal names its calibration, so a genuinely idle but slower machine is not sent into endless reruns.
+    expect(verdict).toContain("calibrated on this repository's reference machine (idle floor about 200 ms)");
+    expect(verdict).toContain('no rerun passes and the bound, not the load, is the cause');
     expect(() => idleMachineVerdict([], windowOf([0, 0], [0, 0]))).toThrow(/empty/);
   });
 

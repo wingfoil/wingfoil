@@ -215,7 +215,9 @@ export function idleMachineVerdict(floor: readonly number[], load: LoadWindow): 
   if (p95(floor) < IDLE_FLOOR_P95_BOUND_MS) return 'otherwise idle';
   return (
     `loaded: floor ${describeSamples(floor)} >= ${IDLE_FLOOR_P95_BOUND_MS} ms; ${describeLoad(load)}; ` +
-    'not a REQ-PERF-02 measurement (an otherwise idle machine): rerun when the floor is idle'
+    'not a REQ-PERF-02 measurement (an otherwise idle machine): rerun when the floor is idle. ' +
+    `The ${IDLE_FLOOR_P95_BOUND_MS} ms bound is calibrated on this repository's reference machine (idle floor about 200 ms); ` +
+    'on a machine whose idle floor reaches it, no rerun passes and the bound, not the load, is the cause'
   );
 }
 
