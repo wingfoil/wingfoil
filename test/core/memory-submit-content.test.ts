@@ -126,6 +126,33 @@ describe('memory submit declares the content it carries (task-209, dl-106 W1 (a)
     expect(git(repo, ['log', '-1', '--format=%s'])).toBe('wf(task): submit task-101\n');
   });
 
+  describe('line endings (review F1)', () => {
+    const crlf = (text: string): string => text.replace(/\n/g, '\r\n');
+
+    it('core.autocrlf=true: a pure transition on a CRLF working tree over an LF blob declares nothing', async () => {
+      git(repo, ['config', 'core.autocrlf', 'true']);
+      writeFileSync(join(repo, PATH), crlf(taskDoc()));
+      const result = await submit();
+      expect(result.ok).toBe(true);
+      expect(result.commit?.message).toBe('wf(task): submit task-101');
+    });
+
+    it('core.autocrlf=true: a body edit on a CRLF working tree declares "the body" and nothing else', async () => {
+      git(repo, ['config', 'core.autocrlf', 'true']);
+      writeFileSync(join(repo, PATH), crlf(taskDoc({ body: '## Description\n\nFinished.\n' })));
+      const result = await submit();
+      expect(result.ok).toBe(true);
+      expect(result.commit?.message).toBe('wf(task): submit task-101\n\nCarries content: the body');
+    });
+
+    it('no line-ending filter: converting the document to CRLF is content git commits, declared as "the line endings"', async () => {
+      writeFileSync(join(repo, PATH), crlf(taskDoc()));
+      const result = await submit();
+      expect(result.ok).toBe(true);
+      expect(result.commit?.message).toBe('wf(task): submit task-101\n\nCarries content: the line endings');
+    });
+  });
+
   it('`memory history` still reads the content-carrying submit as `submit`, draft -> pending', async () => {
     writeFileSync(join(repo, PATH), taskDoc({ body: 'x\n' }));
     await submit();

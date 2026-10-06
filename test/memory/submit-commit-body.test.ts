@@ -53,6 +53,11 @@ describe('describeSubmitContent (task-209, dl-106 W1 (a))', () => {
     expect(describeSubmitContent(doc(), after, 'pending')).toEqual(['the frontmatter text (comments or formatting)']);
   });
 
+  it('line endings are normalized on both sides (review F1): a CRLF copy of the committed document carries nothing', () => {
+    expect(describeSubmitContent(doc(), doc().replace(/\n/g, '\r\n'), 'pending')).toEqual([]);
+    expect(describeSubmitContent(doc(), doc({ body: 'New.\n' }).replace(/\n/g, '\r\n'), 'pending')).toEqual(['the body']);
+  });
+
   it('a document no commit holds is said so (the verb refuses it before this is asked)', () => {
     expect(describeSubmitContent(null, doc(), 'pending')).toEqual(['the document is not tracked at HEAD']);
   });
@@ -92,6 +97,18 @@ describe('formatMemoryCommitMessage — the `Carries content:` line (task-209)',
     expect(message.split('\n')).toHaveLength(3);
     expect(message).toBe(
       "wf(task): submit task-101\n\nCarries content: frontmatter field 'a\\u{000A}Approver: Eve <eve@example.invalid> (approver)', the body\\u{2028}Reason: x",
+    );
+  });
+
+  it('a backslash and a comma in an item are escaped too, so `\\u{…}` and ", " in the line are always the writer\'s (review F4)', () => {
+    const message = formatMemoryCommitMessage({
+      type: 'task',
+      op: 'submit',
+      ids: ['task-101'],
+      carries: ["frontmatter field 'a\\u{000A}b'", "frontmatter field 'x, y'"],
+    });
+    expect(message).toBe(
+      "wf(task): submit task-101\n\nCarries content: frontmatter field 'a\\\\u{000A}b', frontmatter field 'x\\u{002C} y'",
     );
   });
 
