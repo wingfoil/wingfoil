@@ -12,9 +12,12 @@ ref: [P3.8]
 
 Custom stand-in directive. Applies to reviewers (and the approver gate).
 
-> **Stand-in custom directive.** WingFoil's official built-in P3.8 templates are not yet implemented;
-> until they ship, this generic rule (adapted to the project methodology/tech-stack in `dna.yaml`) is
-> kept as `custom`. `ref: [P3.8]` records the built-in template it becomes once those exist.
+> **Stand-in custom directive.** WingFoil ships its official built-in P3.8 templates, and
+> `wingfoil init` installs them under `.wingfoil/directives/built-in/` (task-057). This repository's
+> hand-authored configuration predates them, so this generic rule (adapted to the project
+> methodology/tech-stack in `dna.yaml`) is kept here as `custom`; `ref: [P3.8]` names the built-in
+> template it stands in for. Reconciling the stand-ins with the shipped templates is out of scope of
+> bug-040, which corrected this note, and is not scheduled.
 
 - Review checklist: correctness, tests present + passing, adherence to other directives, no secrets.
 - Verify the change matches its task/deliverable acceptance criteria.

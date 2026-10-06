@@ -4,9 +4,11 @@
  * **The rule is REQ-SEC-07's, the layout is spec-011's.** REQ-SEC-07 states that built-in directives
  * and built-in workflow templates cannot be removed; `spec-011-storage-layout` supplies the structure
  * that rule is expressed over — the `directives/{built-in,custom}/` and `workflows/{built-in,custom}/`
- * split, where `built-in/` is "reserved for the official … templates shipped by the `wingfoil` npm
- * package" (empty today, `.gitkeep` only) and `custom/` holds every asset that exists right now. Only
- * the removability rule comes from REQ-SEC-07; spec-011 never speaks about removal or protection.
+ * split, where `built-in/` holds the official templates shipped by the `wingfoil` npm package (the P3.8
+ * directive templates `wingfoil init` installs, task-057; no workflow templates ship yet) and `custom/`
+ * holds the project's own assets. This repository's own `directives/built-in/` holds only `.gitkeep`:
+ * its hand-authored configuration predates the templates. Only the removability rule comes from
+ * REQ-SEC-07; spec-011 never speaks about removal or protection.
  *
  * Classification is **structural** (which subdirectory holds the file), not the directive
  * frontmatter's `kind:` field — and that is the one point spec-011 does settle: the six P3.8 template

@@ -24,9 +24,8 @@ source.
 This spec is scoped to this repository's `.wingfoil/` — the actual, current, hand-authored dogfooding
 directory (see `.wingfoil/README.md`), at the repository root since `task-111` moved it there from
 `docs/self/.wingfoil/`. It documents the
-layout **as it exists today** on the `design/initial-design` branch and defines the root-detection /
-init-marker algorithm the (not-yet-built) `wingfoil` tool must use once this directory moves to the
-repository root.
+layout **as it exists today** and defines the root-detection / init-marker algorithm the `wingfoil`
+tool uses.
 
 ## Specification
 
@@ -42,8 +41,9 @@ repository root.
 ├── roles.yaml                        ← Directive role assignments (P3.2/P3.7): role → directive list
 ├── workflows.yaml                    ← Workflow main config (P4.1): version + includes: [...] list
 ├── directives/
-│   ├── built-in/                     ← Official P3.8 templates; EMPTY today (only a .gitkeep) —
-│   │                                    not yet implemented, see README.md "interim decision"
+│   ├── built-in/                     ← Official P3.8 templates, which `wingfoil init` installs (task-057);
+│   │                                    EMPTY here (only a .gitkeep): this hand-authored config predates
+│   │                                    them, see README.md "interim decision"
 │   └── custom/                       ← P3.5 rules + P3.8 stand-ins (kind: custom, ref: [P3.8])
 │       ├── architecture.md
 │       ├── claim-evidence.md        ← WingFoil rule (assigned globally)
@@ -53,7 +53,8 @@ repository root.
 │       ├── determinism.md
 │       ├── doc-versioning.md
 │       ├── documentation.md
-│       ├── security.md               ← generic P3.8 stand-in (unassigned in roles.yaml)
+│       ├── git-conventions.md       ← WingFoil rule (assigned globally)
+│       ├── security.md               ← generic P3.8 stand-in (assigned globally since task-133)
 │       ├── security-secrets.md        ← WingFoil elaboration (assigned globally)
 │       ├── testing.md
 │       └── traceability.md
@@ -108,9 +109,9 @@ resolves via the per-type `path` pattern declared in `memory.yaml` against the r
 
 | File            | Pillar             | Contract |
 |------------------|---------------------|----------|
-| `dna.yaml`       | DNA (P2.4)          | Modules, tech stack, team & roles, resource `paths:` (query categories `sources, tests, docs, config, governance`) |
+| `dna.yaml`       | DNA (P2.4)          | Modules, tech stack, team & roles, resource `paths:` (the six query categories of `spec-002`'s Categories section: `sources, tests, docs, config, governance, runs`) |
 | `memory.yaml`    | Memory (P1.13)      | `types:` map — one entry per element type, each declaring `path` (must contain `{id}`), an optional `states` machine (`sequence`/`gates`/`waiting`), and `template:` (`frontmatter.required` + `file:` pointing into `memory/templates/`); an optional top-level `defaults.states` machine for every type that declares none (REQ-STATE-08). Schema: `spec-001`. The `wingfoil init` scaffold ships `defaults` only, with a commented per-type `states:` example on `bug` (`dl-072`) |
-| `roles.yaml`     | Directives (P3.2/P3.7) | `assignments:` map (role → list of directive names) + a `global:` list applied to every role |
+| `roles.yaml`     | Directives (P3.2/P3.7) | `assignments:` map (role → list of directive **ids**, `frontmatter.id`) + a `global:` list of ids applied to every role; written as the "`roles.yaml` write contract" below states |
 | `workflows.yaml` | Workflow (P4.1)     | `version:` + `includes:` — an ordered list of paths under `workflows/custom/` (and, once populated, `workflows/built-in/`); this file inlines nothing itself, it only composes |
 
 Each of these four files is independently loadable and schema-validated (REQ-SYS-02): editing
@@ -118,14 +119,48 @@ Each of these four files is independently loadable and schema-validated (REQ-SYS
 
 ### `directives/{built-in,custom}/` split
 
-- `built-in/` — reserved for the official P3.8 directive templates shipped by the `wingfoil` npm
-  package once implemented. Today it contains only `.gitkeep` (empty).
-- `custom/` — every directive file that exists right now, including the six P3.8 **stand-ins**
+- `built-in/` — holds the official P3.8 directive templates shipped by the `wingfoil` npm package,
+  which `wingfoil init` installs in a new project (`task-057`). In this repository it contains only
+  `.gitkeep`: the hand-authored configuration predates the templates and keeps them as stand-ins in
+  `custom/`. Reconciling those stand-ins with the shipped templates is a separate, open intention that
+  this spec does not schedule.
+- `custom/` — every directive file this repository has, including the six P3.8 **stand-ins**
   (`code-quality`, `testing`, `code-review`, `architecture`, `security`, `documentation` — each
   authored with `kind: custom`, `ref: [P3.8]`) plus WingFoil-specific rules (`determinism`,
-  `doc-versioning`, `security-secrets`, `traceability`, `command-baseline`, `claim-evidence`). `roles.yaml` binds by directive **name**,
-  independent of which of the two subdirectories currently holds the file — so promoting a stand-in
-  from `custom/` to `built-in/` later requires no change to `roles.yaml`.
+  `doc-versioning`, `security-secrets`, `traceability`, `command-baseline`, `claim-evidence`,
+  `git-conventions`). `roles.yaml` binds by directive **id** (`frontmatter.id`), independent of which
+  of the two subdirectories currently holds the file — so promoting a stand-in from `custom/` to
+  `built-in/` later requires no change to `roles.yaml`.
+
+### `roles.yaml` write contract
+
+`roles.yaml` is hand-annotated configuration. Two writers exist:
+
+- `wingfoil init` writes it whole, in its single init commit, from the scaffold.
+- `wingfoil directive assign` (P3.2, and P3.7's comma-separated `--directive`) is the one writer of an
+  existing file. `directive remove` (P3.3) never writes it: it refuses a directive still bound to a
+  role or to `global`, naming the referrer (`spec-008` §6).
+
+`directive assign` validates every role and id before writing, then edits `assignments.<role>` in
+place and commits only `.wingfoil/roles.yaml` (`wf(directive): assign <ids> to <role>`):
+
+1. **In-place edit.** Only the lines of that role's list change. Comments, blank lines, quoting, key
+   order, line endings and every other role's lines are kept byte for byte. An edit that leaves the list
+   unchanged writes nothing and makes no commit.
+2. **When the in-place edit cannot apply** — no block `assignments:` mapping, a non-empty flow list, a
+   non-scalar or multi-line item, tab indentation, mixed line endings, or a result that does not read
+   back as the intended list — the command refuses with `spec-008` §6's `CONFLICT` reason (exit `1`) and
+   writes nothing. Whether the file contains a comment makes no difference (`dl-062` Q1 option 3).
+3. **`--force`** (`spec-008` §12) authorizes, in that case only, a whole-file rewrite of the parsed
+   content. The success carries `spec-008` §6's warning naming what the rewrite does not keep. `--force`
+   does not force a rewrite: an edit that can be made in place is made in place, with no warning.
+4. **A missing `roles.yaml`** is written whole without the flag, since there is nothing to preserve.
+
+Before any read the writer refuses a `roles.yaml` that is a symbolic link, that resolves outside the
+project root, or that carries uncommitted changes. After the read, and before any write, it refuses
+with a `VALIDATION` error (exit `1`) a file that is not valid YAML, that fails the `roles.yaml` schema,
+or whose `format:` is newer than it supports; nothing is written in any of these cases, `--force`
+included.
 
 ### `workflows/{built-in,custom}/` split
 
@@ -208,9 +243,9 @@ within `.wingfoil/` is excluded.
   workflow composer) or root/init detection must target exactly this layout — no ad hoc path
   guessing. Changing a top-level file name (e.g. `roles.yaml`) or the `built-in`/`custom` split
   requires revising this spec first, then the dependent code.
-- `wingfoil init` (not yet implemented) is the eventual producer of this layout at the repository
-  root; until then, this repository's hand-authored `.wingfoil/` is the reference implementation
-  agents must keep in sync with any change to this spec.
+- `wingfoil init` (`task-029`) produces this layout in a new project, with the P3.8 templates under
+  `directives/built-in/`. This repository's hand-authored `.wingfoil/` predates it and stays the
+  reference implementation agents must keep in sync with any change to this spec.
 - The MCP server's read-only Resources layer and the CLI's config-inspection commands both resolve
   paths through the algorithms defined here, keeping the dual CLI/MCP interface (REQ-SYS-05)
   consistent by construction — one root/init-detection implementation, two surfaces.
@@ -267,3 +302,19 @@ layout tree; neither does now (the tree line names `paths` in its place). Nothin
 the file names or the root-detection algorithm changes. Edited in place without a supersede or a
 state change (the `spec-001` precedent `dl-041` cites); pending the approver's sign-off at
 `task-153`'s review.
+
+**Revision (2026-10-05, `task-188-correct-spec-011-bindings-id-stale-builtin-templates`) — bindings by
+id, the built-in templates as shipped, the six `paths` categories, and the `roles.yaml` write contract,
+per `dl-060`, `bug-040`, `bug-191` and `dl-062`.** `roles.yaml` binds by directive **id**, which every
+implementation does (`dl-060`); the `roles.yaml` cell and the `custom/` paragraph said **name**. The
+P3.8 templates ship and `wingfoil init` installs them (`task-057`), so the tree, the `built-in/`
+paragraph, the Context and the `wingfoil init` consequence no longer call the templates or the tool
+unbuilt; what stays true is that this repository's own `directives/built-in/` holds only `.gitkeep`
+(`bug-040`). The `dna.yaml` cell names the six `paths` categories `task-138` made, with `runs`
+(`bug-191`). The new "`roles.yaml` write contract" subsection states the writer `task-169` shipped for
+`dl-062` Q1 option 3; the exact refusal and warning strings stay in `spec-008` §6 and the flag in §12.
+The same pass lists `git-conventions.md` (`task-178`) in the tree and the `custom/` paragraph, and the
+tree's `security.md` line says it is global since `task-133`, because both listings enumerate every file
+there: 13, measured with `ls .wingfoil/directives/custom/*.md | wc -l`. Nothing about the layout, the
+file names or the root-detection algorithm changes. Edited in place without a supersede or a state
+change (the `spec-001` precedent `dl-041` cites); pending the approver's sign-off at `task-188`'s review.
