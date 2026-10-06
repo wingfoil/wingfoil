@@ -177,11 +177,11 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
       expect(payload.endsWith('\n## 4. Relevant Memory (0 documents)\n')).toBe(true);
     });
 
-    it('the header carries role, element and the resolved full sha only', () => {
+    it('the header carries the format, role, element and the resolved full sha only (format field: dl-150 B)', () => {
       const { payload } = build(repo);
       expect(payload.split('\n').slice(0, 2)).toEqual([
         '# WingFoil Agent Context',
-        `<!-- role: developer | element: task:${ELEMENT_ID} | state: ${headSha(repo)} -->`,
+        `<!-- format: 1 | role: developer | element: task:${ELEMENT_ID} | state: ${headSha(repo)} -->`,
       ]);
     });
   });
@@ -462,10 +462,10 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
   });
 
   describe('spec-012 §4 — DNA selection', () => {
-    it('emits project, modules, team and paths in dna.yaml declared order (stacks and version are not selected)', () => {
+    it('emits project, modules, stacks, team and paths in dna.yaml declared order (stacks since dl-151 A; version is not selected)', () => {
       const { context, payload } = build(repo);
-      expect(Object.keys(context.dna)).toEqual(['project', 'paths', 'modules', 'team']);
-      expect(subHeadings(section(payload, '## 2. Project DNA'))).toEqual(['project', 'paths', 'modules', 'team']);
+      expect(Object.keys(context.dna)).toEqual(['project', 'paths', 'modules', 'stacks', 'team']);
+      expect(subHeadings(section(payload, '## 2. Project DNA'))).toEqual(['project', 'paths', 'modules', 'stacks', 'team']);
     });
 
     it('includes every paths category, runs among them', () => {
@@ -499,13 +499,18 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
       expect(build(repo).context.dna.modules.map((m) => m.name)).toEqual(['core', 'memory', 'cli']);
     });
 
-    it('an empty element body adds no block; a relevant document with no type or id is headed by its path', () => {
+    // dl-150 B changed both halves: an empty body is a pair of adjacent markers, and a document with no
+    // type or id is left out and reported instead of headed by its path.
+    it('an empty element body renders adjacent markers; a relevant document with no type or id is left out and reported', () => {
       writeTask(repo, ELEMENT_ID, { tags: ['performance'], body: '' });
       writeFixtureFile(repo, 'docs/04_memory/v0.2/loose-note.md', '---\nid: 42\nrelease: "v0.2"\nstatus: backlog\n---\n\nLoose.\n');
       commitAll(repo, 'empty body, untyped document');
-      const { payload } = build(repo);
-      expect(section(payload, '## 1. Task').trimEnd().endsWith('```')).toBe(true);
-      expect(subHeadings(section(payload, '## 4.'))).toEqual([':docs/04_memory/v0.2/loose-note.md']);
+      const result = assembleExecutionContext(repo, request());
+      if (!result.ok) throw new Error(result.error.message);
+      const { payload } = result.value;
+      expect(section(payload, '## 1. Task').trimEnd().endsWith(`<!-- begin:task:${ELEMENT_ID} -->\n<!-- end:task:${ELEMENT_ID} -->`)).toBe(true);
+      expect(subHeadings(section(payload, '## 4.'))).toEqual([]);
+      expect(result.warnings).toEqual([expect.stringContaining('(docs/04_memory/v0.2/loose-note.md)')]);
     });
   });
 
@@ -520,8 +525,10 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
     it('the working-tree filter and the snapshot ranking agree on the same documents', () => {
       const memoryYaml = core.loadMemoryYamlAtRev(repo, 'HEAD')!;
       const element = { type: 'task', id: ELEMENT_ID, frontmatter: { release: 'v0.2', depends_on: ['task-002-linked'] } };
-      const fromTree = filterRelevantMemoryDocuments(repo, memoryYaml, element);
+      // The working-tree reader also reports what it left out (task-253, `bug-230`); the ranking is what must agree.
+      const { diagnostics, ...fromTree } = filterRelevantMemoryDocuments(repo, memoryYaml, element);
       const fromSnapshot = selectRelevantMemoryDocuments(loadMemoryDocumentsAtRev(repo, 'HEAD', memoryYaml), element, DEFAULT_CONTEXT_LIMITS);
+      expect(diagnostics).toEqual([]);
       expect(fromSnapshot).toEqual(fromTree);
     });
   });

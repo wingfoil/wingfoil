@@ -65,6 +65,7 @@ Part (b), the generated export, is v0.4 (`dl-137` Q3) and is not in scope.
     this task lands.
   - No product code: `wingfoil init` and the export are part (b), v0.4.
 - Added on 2026-10-05 by the approver's ratification of `dl-137`.
+- **Handover from wave 2 B3 (2026-10-06).** `dl-155` (ratified (A)) owns the reconciliation of the six P3.8 stand-in directives with the shipped built-ins: the agent file must cite it where `CLAUDE.md` §3 and `.wingfoil/README.md` still name `bug-040` (closed). `CLAUDE.md` also states "20 in all" commands (22 since `memory park` and `memory amend`) and nine modules (bug-239).
 
 ## Execution Notes
 

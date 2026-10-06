@@ -91,12 +91,18 @@ in the **fixed section order** of §7 regardless of completion order.
 
 DNA is small and fully declared, so selection is inclusion-by-category, not fuzzy matching:
 
-- Always include: `project`, `team` (roles/members). The rules the former `conventions` section held
-  are directives since `spec-002` v1.1, and reach the context through §5.
-- Include the `modules[]` entries the element's `modules:`/`scope:` frontmatter selects. Each entry is
-  read by its leading token (`src/workflow — the engine` is `src/workflow`), which selects a module
-  whose `name` equals it, or whose `path` equals it or lies under it at a segment boundary (`src`
-  selects `src/core`, while a prefix that ends mid-segment selects nothing). If the element declares
+- Always include: `project`, `stacks` (technologies and methodologies, whole — `dl-151` option A) and
+  `team` (roles/members). The rules the former `conventions` section held are directives since
+  `spec-002` v1.1, and reach the context through §5.
+- Include the `modules[]` entries the element's `modules:`/`scope:` frontmatter selects. Every value
+  (a string, or each string of a list) is read as follows: parenthesised text is set aside, the rest
+  is split on commas into entries, and each entry is read by its leading token with surrounding quotes
+  and backticks and trailing punctuation (`.,;:!?`) stripped — ``src/mcp/server.ts, src/cli (the
+  `wingfoil mcp` command)`` names `src/mcp/server.ts` and `src/cli`; `src/workflow — the engine` names
+  `src/workflow`. A token selects a module whose `name` equals it, or — compared as paths at segment
+  boundaries — whose `path` equals it, lies under it (`src` selects `src/core`) or holds it
+  (`src/mcp/server.ts` selects the module at `src/mcp`); a prefix that ends mid-segment
+  selects nothing. If the element declares
   none, include **all** modules (deterministic superset, never a guess); if it declares some and none
   selects a module, include **all** modules too and record the note `no module matches the element's
   modules:/scope: (<entries>); all modules included` among the build's diagnostics, never in the
@@ -211,35 +217,96 @@ interface ContextLimits {
 ### 7. Canonical serialized payload (`context-builder`)
 
 The output is a **single UTF-8, LF-terminated Markdown document** with a fixed section order and fixed
-formatting. This canonical form is the byte-for-byte artifact REQ-SYS-07 tests against.
+formatting. This canonical form is the byte-for-byte artifact REQ-SYS-07 tests against. Its byte
+format is **format 1** (`dl-150` option B), named in the header comment:
 
-```
+````
 # WingFoil Agent Context
-<!-- role: {role} | element: {type}:{id} | state: {stateRef} -->
+<!-- format: 1 | role: {role} | element: {type}:{id} | state: {stateRef} -->
 
 ## 1. Task
-{element frontmatter as sorted YAML block}
-{element body, verbatim}
+
+```yaml
+{element frontmatter}
+```
+
+<!-- begin:{type}:{id} -->
+{element body}
+<!-- end:{type}:{id} -->
 
 ## 2. Project DNA
-{selected DNA sections, in dna.yaml declared order}
+
+### {section}               (repeated, in dna.yaml declared order)
+
+```yaml
+{section value}
+```
 
 ## 3. Directives ({role} + global)
-### {directive-id}          <!-- repeated, ids sorted ascending -->
-{directive body, verbatim}
+
+### {directive-id}          (repeated, ids sorted ascending)
+
+<!-- begin:directive:{directive-id} -->
+{directive body}
+<!-- end:directive:{directive-id} -->
 
 ## 4. Relevant Memory ({n} documents)
-### {type}:{id}             <!-- repeated, in §6 order -->
-{doc frontmatter as sorted YAML block}
-{doc body, verbatim}
+
+### {type}:{id}             (repeated, in §6 order)
+
+```yaml
+{doc frontmatter}
 ```
+
+<!-- begin:{type}:{id} -->
+{doc body}
+<!-- end:{type}:{id} -->
+````
+
+The parenthesised notes are not part of the payload. Format 1, block by block:
+
+- **Blocks.** The title line with the header comment on the next line, each heading line, each fenced
+  YAML block and each marked body is one block; blocks are joined by exactly **one blank line**. No
+  block is ever empty, so none is dropped.
+- **YAML blocks** are fenced by ```` ```yaml ```` and ```` ``` ````, each on its own line, around the
+  value dumped with keys sorted ascending, no line folding and no anchors (js-yaml `dump` with
+  `sortKeys`, `lineWidth: -1`, `noRefs`) and the payload's YAML schema (next bullet). A dumped line at column 0 is a key or a `-` list item (YAML
+  quotes a scalar beginning with `#` or a backtick, and indents multi-line scalars), so no line inside a
+  YAML block can pass for a heading or a fence.
+- **Dates as written** (`bug-232`). The frontmatter the payload carries (the element's and each
+  selected document's) is read at `stateRef` with js-yaml's default schema whose timestamp type keeps
+  the scalar's text instead of constructing an instant, and dumped with the same schema. Every
+  timestamp is therefore re-emitted exactly as the document wrote it (`2026-10-05`,
+  `2026-10-05T00:00:00Z`, `2026-10-05 10:00:00 +02:00` unchanged), and a quoted date stays a quoted
+  string (in js-yaml's single quotes), never becoming plain. A `Date` that a caller of the serializer
+  built itself is written in its ISO-8601 UTC form.
+- **Marked bodies.** Every body — the element's, each directive's, each Memory document's — is carried
+  **verbatim** between `<!-- begin:{key} -->` and `<!-- end:{key} -->`, each marker on its own line;
+  the key is `{type}:{id}` for the element and a Memory document, `directive:{id}` for a directive.
+  Only the blank lines before the body and the whitespace after it are dropped (and the payload-wide
+  canonicalization below applies); an empty body leaves the two markers on adjacent lines.
+- **Splitting rule.** Outside a marker pair, a line starting `# `, `## ` or `### ` is §7 structure;
+  after `<!-- begin:{key} -->`, every line up to the first line equal to `<!-- end:{key} -->` is that
+  body. A body's own headings therefore never mix with the fixed literals.
+- **What never enters a payload.** A Memory document whose `type` or `id` is not a non-empty string
+  free of control characters and `-->` cannot be named, and is never headed by its path: it is left
+  out before §6 bounds the set and reported as `W_MEMORY_UNREADABLE` (`spec-017` §1.4) when §6 would
+  have found it relevant. A Memory document whose body holds the line that closes it
+  (`<!-- end:{key} -->`, after canonicalization) is left out and always reported the same way. An
+  element or directive body holding its own end marker, or a directive id holding a control character
+  or `-->`, refuses the context as `VALIDATION` — a directive is never dropped (§5). These reports
+  are diagnostics, outside the payload, after the scan's own, in path order.
+- **Normative example.** `test/fixtures/context/golden-payload.md` is the format-1 payload of the
+  context `test/core/context-payload-format.test.ts` builds by hand; the test compares the serializer's
+  output with it byte for byte. Where the golden fixture and the illustrative template above differ,
+  the golden fixture prevails.
 
 Canonicalization rules (all mandatory for the byte-for-byte guarantee):
 
-- **No wall-clock / no environment data.** The header comment carries only `role`, `element`, and the
-  caller-supplied `stateRef` (a commit SHA). No "generated at" timestamp, no host, no absolute paths.
+- **No wall-clock / no environment data.** The header comment carries only the payload `format`,
+  `role`, `element`, and the caller-supplied `stateRef` (a commit SHA). No "generated at" timestamp, no host, no absolute paths.
 - **Newlines** normalized to `\n`; exactly one trailing `\n`; no trailing whitespace on any line.
-- **YAML frontmatter blocks** re-emitted with keys **sorted ascending**, so upstream key-order changes
+- **YAML frontmatter blocks** (and DNA section blocks) re-emitted with keys **sorted ascending**, so upstream key-order changes
   do not perturb output (paired with the doc-level `stateRef` which does capture real content changes).
 - **Section headings and numbering are fixed literals**; a section with no content still renders its
   heading with an empty body (e.g. `## 4. Relevant Memory (0 documents)`), so structure is stable.
@@ -272,9 +339,11 @@ acceptance test for the module (Jest, comparing two independent assemblies of th
   bytes. Relevance tiers (§6) and canonicalization (§7) each get focused unit tests; this satisfies the
   "context building (relevance filtering)" unit-test line in the testing strategy.
 - **Bounded by design.** If real workloads need larger contexts, tune `ContextLimits` — but any change to
-  default caps, tier rules, ordering, or the canonical envelope is a **breaking change to the byte
-  stream** and MUST supersede this spec (new `spec-*`, `supersedes: spec-012-...`) so the Determinism
-  Index baseline is re-established intentionally, not silently.
+  default caps, tier rules or ordering is a **breaking change to the selection** and MUST supersede this
+  spec (new `spec-*`, `supersedes: spec-012-...`) so the Determinism Index baseline is re-established
+  intentionally, not silently. A change to the canonical envelope (§7's byte format) instead bumps the
+  payload's `format:` (format 1 since `dl-150`): the bump is the deliberate baseline reset, visible in
+  every payload's header.
 - **Semantic search later.** When embeddings arrive (v1.1), they enter as an *additional* deterministic
   tier or a re-ranked candidate set with a fixed tie-break — they must not reintroduce nondeterministic
   ordering. That is a future spec, not this one.
@@ -342,3 +411,23 @@ default. Since `task-176` the builder resolves the element from the commit's who
 those lookups and says how the builder keeps archived content out instead: it refuses an archived
 subject and §6 drops archived candidates. The excluded set and the predicate are unchanged. Edited in
 place without a supersede or a state change.
+
+**Revision (2026-10-06) — §7 pins the payload's byte format (format 1), §4 carries `stacks` and reads
+every scope entry, per `task-255-pin-the-context-payload-s-byte-format-carry-the-dna-stacks-keep-yaml-dates-verbatim-and-match-modules-by-every-scope-entry`.**
+`dl-150` (`ready`, option B) asked §7 to state the bytes the implementation had left implicit — the
+fenced YAML, the `### {section}` DNA sub-headings, the blank-line joins, the `:<path>` fallback heading —
+and to put verbatim bodies between comment markers, so that a body's `#`/`##` headings no longer pass for
+§7's literals; the header gains `format: 1` (`dl-149`), and a document with no `type` or `id` is left
+out and reported rather than headed by a path. `dl-151` (`ready`, option A) adds `stacks` to §4's
+always-included sections. `bug-232` (unquoted dates re-emitted as ISO timestamps) and `bug-233` (only
+an entry's leading token read, no match for a file inside a module path, a trailing comma kept) are
+fixed in the same change, so the bytes change once; dates are carried exactly as written. The
+Consequences section asked that a change to the envelope supersede this spec; the change is made in
+place, as `dl-150` (Rationale) and `dl-151` (Context) argue, because no consumer of the payload has
+shipped (`task-218`, `task-195` are `backlog`), so no Determinism Index baseline exists to
+re-establish. That Consequences bullet now says a later envelope change bumps the payload's `format:`,
+while a change to caps, tiers or ordering still supersedes this spec. §7 also states that the golden
+fixture prevails over the illustrative template. Every statement was checked against `serializeExecutionContext`,
+`entryTokens`/`tokenSelectsModule`, `payloadCandidates` and `writtenFrontmatter` (`src/core/context.ts`) and the tests in
+`test/core/context-payload-format.test.ts`. Edited in place without a supersede or a state change, as
+the earlier Revision notes were.

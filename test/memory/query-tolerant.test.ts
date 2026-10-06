@@ -22,6 +22,7 @@ import {
   listMemoryDocumentPaths,
   listMemoryDocumentPathsAtRev,
   listMemoryDocumentsByType,
+  loadMemoryDocuments,
   loadMemoryDocumentsAtRev,
   memoryUnreadableDiagnostic,
   searchMemoryDocuments,
@@ -224,5 +225,33 @@ describe('bug-189 — one rule for symbolic links and nested repositories in bot
     expect(findMemoryDocumentById(repo, MEMORY_YAML, 'task-010-via-dir', { followSymlinks: true })?.path).toBe(
       'docs/04_memory/linked-dir/task-010-via-dir.md',
     );
+  });
+});
+
+describe('task-253 (bug-230) — loadMemoryDocuments reads the working tree by the at-commit rule (bug-189)', () => {
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, 'docs/04_memory/v0.1/task-001-live.md', doc('task-001-live', 'task', 'draft'));
+    writeFixtureFile(repo, 'docs/04_memory/v0.1/task-003-retired.md', doc('task-003-retired', 'task', 'deprecated'));
+    writeFixtureFile(repo, BROKEN, BROKEN_TEXT);
+    symlinkSync('task-001-live.md', join(repo, 'docs/04_memory/v0.1/task-004-link.md'));
+    commitAll(repo, 'seed a link and a malformed document');
+  });
+
+  it('on a clean committed tree it equals loadMemoryDocumentsAtRev at HEAD: same documents, same diagnostics', () => {
+    // Called without options (the default branch): it neither throws nor reads the link.
+    const fromTree = loadMemoryDocuments(repo, MEMORY_YAML);
+    expect(fromTree).toEqual(loadMemoryDocumentsAtRev(repo, 'HEAD', MEMORY_YAML));
+    expect(fromTree.map((d) => d.path)).toEqual(['docs/04_memory/v0.1/task-001-live.md', 'docs/04_memory/v0.1/task-003-retired.md']);
+
+    const tree = collect();
+    const head = collect();
+    loadMemoryDocuments(repo, MEMORY_YAML, { onDiagnostic: tree.onDiagnostic });
+    loadMemoryDocumentsAtRev(repo, 'HEAD', MEMORY_YAML, { onDiagnostic: head.onDiagnostic });
+    expect(tree.diagnostics).toEqual(head.diagnostics);
+    expect(tree.diagnostics.map((d) => [d.code, d.file])).toEqual([
+      [W_MEMORY_UNREADABLE, BROKEN],
+      [W_MEMORY_UNREADABLE, 'docs/04_memory/v0.1/task-004-link.md'],
+    ]);
   });
 });

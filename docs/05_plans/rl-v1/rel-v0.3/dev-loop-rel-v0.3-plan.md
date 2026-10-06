@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.14"
+version: "1.15"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -654,3 +654,21 @@ commit, right after the task's transition and on the task branch:
   - **Fix share:** 10 open fix tasks of 65 open (15.4%), under the threshold.
   - **Next:** B4 (`184`, `186`, `187`, `189`, `248`, `253`, `254`, `255`, `256`, `257`, `258`), to be split in two
     batches at its opening.
+- **2026-10-06 — W2 B3 follow-ups filed and triaged** (`bug-ingest-rel-v0.3-w2b3-review-findings-plan`, `done`):
+  - `bug-249` → `task-208` (a range rule for version bumps in `check-governance --base` and a numeric-increase check);
+    `bug-250` → handover on `task-205` (BDD for `memory park` and WIP limits); `bug-252` → one `service` element per
+    scheduled workflow, no task; `bug-251`, `bug-254`, `bug-255` → v0.4.
+  - `bug-253` (a moderate `sprintf-js` advisory in the dev tree, no fixed release) accepted with a dated record and
+    closed.
+  - `dl-155` (A: adopt the shipped P3.8 built-ins, WingFoil clauses into custom directives; implemented in v0.4),
+    `dl-156` (Q1 (a): WIP limits count across refs; Q2 (i): reject and returns edges exempt) and `dl-157` (A: MCP
+    Resource refusals answer -32602 or a WingFoil code; implemented in v0.4) ratified, release v0.3.
+  - Handover notes on `task-205` (dl-156, bug-250) and `task-252` (dl-155 replaces bug-040 in the agent file; stale
+    command and module counts). `bug-227` gains the B3 CHANGELOG items.
+  - From this triage on, `backlog/` and `ingest/` branches merge into `main` with `--no-ff` (approver, dl-152
+    ruling 4 (b)), so their Memory commits stay off `main`'s first-parent line.
+- **2026-10-06 — batch B4a opened** (`task-255`, `253`, `256`, `257`, `258`, `187`), pre-batch main `1abafadd`;
+  B4b (`184`, `186`, `189`, `254`, `248`) follows. A weekly API limit interrupted four developers once; all resumed.
+  Approver ruling on `task-256`: `team.agents[].email` stays optional, defaulting to the address the agent's vendor
+  publishes, with a project machine account (GitHub's id-qualified noreply form) as an option; documented in the
+  user guide.
