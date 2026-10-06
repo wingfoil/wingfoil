@@ -147,7 +147,7 @@ error: <reason>
   grep for; it is not itself a symbolic code.
 - An optional second line may suggest a fix, prefixed `hint: `:
   ```
-  error: unknown command "memorey"
+  error: unknown command 'memorey'
   hint: did you mean "memory"?
   ```
 - **Details** (`dl-055` option 1): when the error carries operator-facing details — for each issue
@@ -162,12 +162,25 @@ error: <reason>
   error: illegal transition approved -> pending for type 'task'
     docs/memory/task/task-200.md: illegal `submit` from "approved": a `waiting` state — its forward edge fires only via a Workflow action, not `submit`
   ```
-- **Unknown-command suggestion:** when the first token after `wingfoil` (and any recognized global
-  flags) does not match a known pillar or flat command, the CLI computes the closest known command by
-  edit distance and — if within a small distance threshold — appends the `hint:` suggestion line shown
-  above; if no close match exists, the `hint:` line is omitted. This is the mechanism that makes the
-  "closest-command suggestion for unknown commands" requirement concrete; the exact distance function
-  and threshold are an implementation detail owned by `src/cli`, not fixed by this spec.
+- **Unknown-command suggestion:** when a command token — the first one after `wingfoil` (and any
+  recognized global flags), or a verb under its noun — matches no known command at that level, the CLI
+  computes the closest command **at that level** and, when one is close enough, writes the `hint:`
+  line shown above, in exactly that wording: `did you mean "<name>"?`. If no command is close enough,
+  the `hint:` line is omitted. "Close enough" is `spec-008-cli-grammar` §1's Levenshtein distance ≤ 2;
+  the nearest command wins, and a tie goes to the one first in code-unit order, so the hint is a
+  function of the token and the command set alone. WingFoil computes it (`src/cli/suggest.ts`) and
+  writes it through §3.2's `emitError`; the argument parser's own suggestion text is not shown. An
+  unknown **option** keeps the parser's closest match, re-worded into the same `hint:` line. A token
+  that reaches the CLI through `wingfoil help <unknown>` carries no `hint:` yet (`bug-115`).
+- **Missing operand:** a command invoked without the positional it requires is refused at exit `2`
+  with `missing required argument: <name>` — the placeholder `--help` shows for it — and the
+  command's usage, its required options included, on the `hint:` line. One form for every command:
+  ```
+  error: missing required argument: <id>
+  hint: usage: wingfoil memory approve <id> --reason <text>
+  ```
+  A noun invoked without its verb is the same case, with `<command>` (§1). A missing **option** keeps
+  `spec-008-cli-grammar` §4's `missing required argument: --<name>`.
 
 #### 3.2 Structured format (`--format json` / `--format yaml`)
 
@@ -243,7 +256,7 @@ in `src/core/error-details.ts`, so the CLI and the MCP surface (`spec-004`) show
 
 ```
 $ wingfoil memorey add --type task --title "Fix login"
-error: unknown command "memorey"
+error: unknown command 'memorey'
 hint: did you mean "memory"?
 ```
 Exit code: `2`
@@ -252,7 +265,7 @@ Exit code: `2`
 
 ```
 $ wingfoil memory submit --format json
-{"error":"missing required argument: --reason"}
+{"error":"missing required argument: <id>","hint":"usage: wingfoil memory submit <id>"}
 ```
 Exit code: `2`
 
@@ -363,6 +376,31 @@ with its own code), so on `true` it throws a marker the entry point recognises, 
 proceeds. The entry point's last-resort handler for an escaped error now ends through the same
 function. No exit code, format or other rule changed. Edited in place without a supersede or a state
 change, per `dl-047-tech-specs-carry-no-version-field`.
+
+**Revision (2026-10-05, `task-179-give-missing-operand-unknown-command-errors-shape-spec`) — §3.1
+fixes the unknown-command suggestion and the missing-operand form, per `bug-104` and `bug-168`.** The
+binary wrote the argument parser's own `(Did you mean memory?)`, from a Damerau–Levenshtein matcher
+at distance ≤ 3, while §3.1 declared a `hint:` line and `spec-008` §1 a distance ≤ 2; a test pinned
+the parser's wording. The suggestion is now WingFoil's, at `spec-008` §1's distance, written as the
+`hint:` line, and §3.1 states its wording, its tie-break and that it is matched at the level the token
+was typed. The rule that the distance function is an implementation detail is replaced by that
+reference. The missing-operand refusal had two shapes (`memory submit <id>` for Memory and directive
+verbs, `wingfoil dna set <path> --value <value>` for the DNA verbs); §3.1 now states one, with the
+usage on the `hint:` line. §3.1's and §4's examples now quote the token as the parser does
+(`'memorey'`), and §4's missing-argument example, which showed a `--reason` that `memory submit` does
+not take, shows the missing `<id>`. A noun invoked without its verb takes the same form
+(`missing required argument: <command>`, `hint: usage: wingfoil dna <command>`), which supersedes the
+wording `task-103` ruled (`missing required argument: wingfoil dna <command>`), for the approver to
+confirm at the review gate. Three exit codes change, all
+toward `2` and all because a usage check now runs before something that used to fail first: the
+operand checks (a surplus, then a missing required operand) run before the project root is resolved,
+so from a subdirectory or outside a repository `memory submit` or `dna set` with no operand, and
+`dna set project.name bogus --value y`, exit `2` instead of `1` (`E_NOT_AT_GIT_ROOT` /
+`E_NO_GIT_ROOT`); and the bootstrap commands check `--format` first, so `wingfoil mcp --format bogus`
+exits `2` instead of starting the server (`0`) or refusing an uninitialized project (`1`), and
+`wingfoil init --format bogus` outside a repository exits `2` instead of `1`. Each is the code §1
+already assigns to a malformed invocation; no rule of the exit-code table changed. Edited in place without a supersede or a state change, per
+`dl-047-tech-specs-carry-no-version-field`.
 
 ## Process Notes
 
