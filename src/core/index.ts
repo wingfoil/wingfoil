@@ -127,6 +127,7 @@ export {
   loadWorkflowsYamlAtRev,
 } from './loaders';
 export { isWellFormedRevision, resolveRevision, RevisionError } from './revision';
+export { malformedElementRefMessage, parseElementRef } from './element-ref';
 export type { DirectiveFile, WorkflowsLoadResult } from './loaders';
 export {
   assembleExecutionContext,

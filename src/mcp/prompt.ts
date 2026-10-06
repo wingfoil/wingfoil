@@ -32,7 +32,15 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ErrorCode, GetPromptRequestSchema, ListPromptsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { assembleExecutionContext, loadDirectives, loadRolesYaml, resolveRevision, resolveRoleDirectives, RevisionError } from '../core';
+import {
+  assembleExecutionContext,
+  loadDirectives,
+  loadRolesYaml,
+  parseElementRef,
+  resolveRevision,
+  resolveRoleDirectives,
+  RevisionError,
+} from '../core';
 import type { CoreError, DirectiveFile, ExecutionContextElement } from '../core';
 import { errorDetails, type ErrorDetail } from '../core/error-details';
 import { readDocument, splitFrontmatter, WINGFOIL_DIR } from '../storage';
@@ -106,21 +114,6 @@ const ROLE_PROMPT_ARGUMENTS = [
 
 const ROLE_PROMPT_ARGUMENT_NAMES: readonly string[] = ROLE_PROMPT_ARGUMENTS.map((argument) => argument.name);
 
-/**
- * `spec-008` §7's element-ref, `<type>:<id>`: exactly one `:`, both sides non-empty, and no whitespace,
- * control character or `-->` (the payload header could not carry one, `spec-012` §7).
- */
-// eslint-disable-next-line no-control-regex
-const ELEMENT_REF = /^([^:\s\u0000-\u001f\u007f]+):([^:\s\u0000-\u001f\u007f]+)$/;
-
-/** The element `ref` names, or the spec-004 §3.4 malformed-element-ref refusal. */
-function parseElementRef(ref: string): ExecutionContextElement {
-  const match = ELEMENT_REF.exec(ref);
-  if (match === null || ref.includes('-->')) {
-    throw promptRequestError(`malformed element-ref ${JSON.stringify(ref)}: expected <type>:<id>`);
-  }
-  return { type: match[1]!, id: match[2]! };
-}
 
 /**
  * The details of a context refusal that is a failed read: the issues `errorDetails` selects, then the
@@ -339,7 +332,10 @@ export function registerRolePrompts(server: McpServer, options: RegisterRoleProm
     if (unknown !== undefined) {
       throw promptRequestError(`unknown prompt argument '${unknown}': '${name}' takes only 'element' and 'state'`);
     }
-    const { element, state } = args;
+    // An empty string is an absent argument (spec-004 §3.1): a client that submits every declared
+    // field sends `""` for the ones its user left blank.
+    const element = args.element === '' ? undefined : args.element;
+    const state = args.state === '' ? undefined : args.state;
     if (element === undefined && state === undefined) {
       return withRefusalDetails(() => buildRolePrompt(options.resolveRoot(), role));
     }
@@ -349,6 +345,7 @@ export function registerRolePrompts(server: McpServer, options: RegisterRoleProm
       );
     }
     const ref = parseElementRef(element);
-    return withRefusalDetails(() => buildContextPrompt(options.resolveRoot(), role, ref, state));
+    if (!ref.ok) throw promptRequestError(ref.error.message);
+    return withRefusalDetails(() => buildContextPrompt(options.resolveRoot(), role, ref.value, state));
   });
 }

@@ -263,6 +263,23 @@ describe('prompts/get — request refusals are InvalidParams with the spec-004 �
     expect(error.message).toBe(`MCP error -32602: ${message}`);
   });
 
+  // Review F1: a client that submits every declared field sends "" for a blank one; "" is absent.
+  it.each([
+    ['element empty, state set', { element: '', state: 'HEAD' }, "'element' is missing"],
+    ['element set, state empty', { element: ELEMENT, state: '' }, "'state' is missing"],
+  ])('%s → the one-without-the-other refusal', async (_label, args, missing) => {
+    const error = await refusal(client.getPrompt({ name: 'developer-session', arguments: args }));
+    expect(error.code).toBe(ErrorCode.InvalidParams);
+    expect(error.message).toBe(`MCP error -32602: prompt arguments 'element' and 'state' go together: ${missing}`);
+  });
+
+  it('both arguments empty → the argument-less Prompt, unchanged', async () => {
+    const blank = await client.getPrompt({ name: 'developer-session', arguments: { element: '', state: '' } });
+    const none = await client.getPrompt({ name: 'developer-session' });
+    expect(blank).toEqual(none);
+    expect(JSON.stringify(blank.messages)).toContain('# Role: developer');
+  });
+
   it('an argument other than element and state → -32602, naming it', async () => {
     const error = await refusal(client.getPrompt({ name: 'developer-session', arguments: { element: ELEMENT, State: sha } }));
     expect(error.code).toBe(ErrorCode.InvalidParams);
@@ -271,7 +288,7 @@ describe('prompts/get — request refusals are InvalidParams with the spec-004 �
     );
   });
 
-  it.each(['task', 'task:', ':task-001-active', 'task:a:b', 'task: task-001-active', 'task:task\u0007bell', ''])(
+  it.each(['task', 'task:', ':task-001-active', 'task:a:b', 'task: task-001-active', 'task:task\u0007bell', 'task:a-->b'])(
     'a malformed element-ref %j → -32602',
     async (element) => {
       const error = await refusal(client.getPrompt({ name: 'developer-session', arguments: { element, state: sha } }));
