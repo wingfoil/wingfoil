@@ -181,3 +181,46 @@ All run in the worktree, one jest process at a time:
   - spec-005 Context omits `directives`;
   - spec-004 §4.1's Tool table predates the dna/directive verbs and `memory amend`/`park`.
   The approver may want them amended in v0.3 to empty the warn backlog.
+
+### Review fixes (2026-10-06, independent review: approve with fixes)
+
+Applied in-task on this branch. The task stays `in-review` and is not re-submitted. Commits:
+`7eee2cfd` (red, F1), `9a27d0af` (green, F1), `ec550593` (F1 follow-up), `587e1e35` (F2, F4).
+
+- **F1. Prose in a summary label.** This was red-first.
+  - The one-node-summary branch counted every bare word of a Mermaid label that names a workflow,
+    prose included. So "Approval gate" documented `e2e-smoke/gate`, and "design gate" documented
+    `dev-loop/design`. These are bug-206's own examples.
+  - A summary label now counts only the names its arrows chain: a name right after a `→`, or right
+    before one (an `(opt.)` may sit between). This is the reviewer's pattern.
+  - Red: the new fixture case "counts only arrow-chained names in a one-node summary, not its prose"
+    → `npx jest test/docs/workflow-md.test.ts` → `1 failed, 5 passed`, `Received: []`.
+  - Green: `6 passed`. The real `WORKFLOW.md` passes unchanged.
+  - Mutations (not committed, each restored with `cp`):
+    - Removing the `**gate**` node and the summary's `→ gate` → `1 failed`.
+    - Renaming the `**design**` node and removing the three other marked `design` mentions in the
+      dev-loop section (two `` `design` ``, one `` `dev-loop/design` ``) → `1 failed`. Before the
+      fix, both passed.
+  - `9a27d0af` left `npx tsc --noEmit -p tsconfig.json` failing (`TS2345` on the untyped `match`
+    result). `ec550593` types it. The tsc error was found by the re-run below, not by the jest run.
+- **F2. The `workflow.next` entries.** Approved `spec-017` §9 makes `workflowNext` `mutates: false`,
+  served as the Resource `wingfoil://workflows/-/next`
+  (`grep -n workflowNext docs/04_memory/design/specs/spec-017-*.md` → line 674). Its Consequences
+  move spec-004 §4.1's row to v1.0 (lines 862–863). `task-239`'s AC makes that amendment.
+  - Both `workflow.next` entries (`tools` and `tools vs CORE_MODULES`) now carry
+    `WORKFLOW_NEXT_ROW`, a `planned:` reason that says so, with `plannedBy: ['task-239']`.
+  - The shape test accepts any `planned: ` reason with `plannedBy`.
+- **F4. Pinning the untriaged keys.** `enumeration-parity.allowlist.test.ts` now pins the ten
+  first-run `UNTRIAGED` keys (`FIRST_RUN_UNTRIAGED`) in place of the count cap. Fixing one entry
+  therefore frees no slot.
+  - Mutation (not committed): giving `audit` the `UNTRIAGED` reason → `1 failed`.
+- **Counts after the fixes.** There are still 30 findings. By reason
+  (`grep -o "reason: [A-Z_0-9]*" test/docs/enumeration-parity.allowlist.ts | sort | uniq -c`):
+  planned 9, untriaged 10, `TOOLS_V04` 7, `AUDIT_V04` 2, `WORKFLOW_NEXT_ROW` 2.
+- **Gates after the fixes.**
+  - `npx jest test/docs` → `12 passed`, `54 passed`.
+  - `npm test` → `264 passed`, `4897 passed`.
+  - `npm run lint` → exit 0.
+  - `npx tsc --noEmit -p tsconfig.json` → exit 0.
+  - `npx tsc -p tsconfig.build.json --noEmit` → exit 0.
+  - `node scripts/check-governance.cjs --base 1abafadd` → `gated: 0 findings`, exit 0.
