@@ -32,9 +32,10 @@ Four bypasses, all naming the same file and the "Amazon AWS Secret Access Key" d
 - the v0.3 wave 1 B2 push, 2026-10-02 (`448e6df5`, `a7bb4b64`);
 - the v0.3 wave 2 B2 push, 2026-10-05 (`198a2e1c`, `task-182`'s red commit).
 
-No value is recorded: the literal is fake, and quoting it would recreate the problem. Secret scanning was
-disabled on the repository during all four bypasses; the approver enabled it on 2026-10-05, with push protection
-already on.
+No value is recorded: the literal is fake, and quoting it would recreate the problem. During all four bypasses
+the repository's secret scanning was disabled; the pushes were blocked by GitHub's push protection as a
+repository rule (GH013). On 2026-10-05/06 the approver enabled both secret scanning and the repository's push
+protection setting.
 
 ## Verification
 
