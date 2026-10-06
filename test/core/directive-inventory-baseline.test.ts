@@ -406,6 +406,7 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
     repo = seedRepo();
     writeFileSync(join(repo, SPARE_PATH), `${directiveMd('spare', 'custom')}\nAN UNCOMMITTED PARAGRAPH.\n`, 'utf-8');
 
+    const unchanged = snapshotPersistence(repo);
     const result = await remove(repo, 'spare');
 
     expect(result.ok).toBe(false);
@@ -413,6 +414,7 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
     expect(exitCodeForResult(result)).toBe(1);
     expect(result.error.message).toContain(`refusing to commit ${SPARE_PATH}`);
     expect(existsSync(join(repo, SPARE_PATH))).toBe(true);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC5: REQ-SEC-07 clause (a) still fires first for a built-in, before any reference check', async () => {

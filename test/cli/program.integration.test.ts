@@ -1098,19 +1098,23 @@ types:
 
     it('a directive still assigned to a role exits 1 with the exact BDD message (BDD Sc.2)', () => {
       expect(runCliInRoot(repo, 'directive', 'assign', '--directive', 'legacy-rule', '--role', 'developer').status).toBe(0);
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'directive', 'remove', 'legacy-rule');
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("error: cannot remove 'legacy-rule': still assigned to role 'developer'\n");
       expect(result.stdout).toBe('');
       expect(existsSync(join(repo, CUSTOM))).toBe(true);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it("a built-in directive exits 1 with REQ-SEC-07's exact message (BDD Sc.3)", () => {
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'directive', 'remove', 'testing');
       expect(result.status).toBe(1);
       expect(result.stderr).toBe('error: built-in directives cannot be removed\n');
       expect(result.stdout).toBe('');
       expect(existsSync(join(repo, '.wingfoil', 'directives', 'built-in', 'testing.md'))).toBe(true);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('a missing <name> exits 2 (usage error, spec-008 §5)', () => {

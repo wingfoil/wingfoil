@@ -115,10 +115,12 @@ describe('dna verbs — the whole-file rewrite is refused unless --force (task-1
 
     it('a mutation the schema refuses is still VALIDATION, not CONFLICT: --force would not help it', async () => {
       // `paths.runs` holds exactly one entry (spec-002), and it sits under the same flow mapping.
+      const unchanged = snapshotPersistence(repo);
       const result = await op('dnaUpdate')({ root: repo, positionals: ['paths.runs'], options: { value: 'a/,b/' } });
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error.code).toBe('VALIDATION');
       expect(dnaText(repo)).toBe(FLOW_PATHS);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 

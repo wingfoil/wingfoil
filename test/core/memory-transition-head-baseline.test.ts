@@ -258,9 +258,11 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     ['a staged rename (git mv)', ['mv', 'docs/memory/bugs/bug-001.md', 'docs/memory/bugs/bug-001-renamed.md']],
   ])('review: after %s, the refusal names a restore command that works', async (_label, args) => {
     gitOut(repo, args);
+    const unchanged = snapshotPersistence(repo);
     const result = await run('memoryApprove', repo, 'bug-001');
     expect(result.ok).toBe(false);
     if (result.ok) return;
+    assertPersistenceUnchanged(repo, unchanged);
     const hint = 'git restore --source=HEAD --staged --worktree -- docs/memory/bugs/bug-001.md';
     expect(result.error.message).toContain(hint);
     gitOut(repo, hint.split(' ').slice(1));

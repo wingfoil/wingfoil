@@ -191,6 +191,7 @@ describe('a dotted entry name is addressable, and writable, through a quoted seg
   });
 
   it('the bare spelling of a dotted name is still refused at exit 1 — quoting is how you reach it', async () => {
+    const unchanged = snapshotPersistence(repo);
     const result = await dnaOp('dnaUpdate')({
       root: repo,
       positionals: ['stacks.technologies.Node.js.version'],
@@ -200,6 +201,7 @@ describe('a dotted entry name is addressable, and writable, through a quoted seg
     if (result.ok) return;
     expect(result.error.message).toContain("no entry named 'Node'");
     expect(dnaText(repo)).toBe(DNA_FIXTURE);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 

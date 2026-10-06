@@ -483,10 +483,12 @@ describe('CORE_MODULES memory.memorySubmit — empty required list vs untouched 
     writeFixtureFile(repo, '.wingfoil/memory.yaml', config);
     writeFixtureFile(repo, PATH, fromScaffold('features: []'));
     commitAll(repo, 'seed');
+    const unchanged = snapshotPersistence(repo);
     const result = await memorySubmitFn()({ root: repo, positional: 'minor-v9.9' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toBe('missing required field on submit: features');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('re-review ruling 2: a mapping or a list in a scalar field (task kind) is missing', async () => {

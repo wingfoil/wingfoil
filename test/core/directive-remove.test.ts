@@ -214,6 +214,7 @@ describe('CORE_MODULES directive.directiveRemove — P3.3 scenarios (initialized
   });
 
   it('refuses every one of the six shipped built-ins by name (task-057)', async () => {
+    const unchanged = snapshotPersistence(repo);
     for (const name of ['code-quality', 'testing', 'code-review', 'architecture', 'security', 'documentation']) {
       const result = await directiveRemoveFn()({ root: repo, positional: name });
       expect(result.ok).toBe(false);
@@ -221,6 +222,7 @@ describe('CORE_MODULES directive.directiveRemove — P3.3 scenarios (initialized
       expect(result.error.message).toBe('built-in directives cannot be removed');
       expect(existsSync(join(repo, BUILTIN_DIR, `${name}.md`))).toBe(true);
     }
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('an unknown directive name is NOT_FOUND — exit 1, nothing touched', async () => {
@@ -300,6 +302,7 @@ describe('CORE_MODULES directive.directiveRemove — REQ-SEC-07 clause (b): ever
   it('names the alphabetically FIRST role when several bind the id (REQ-SYS-07 — never YAML order)', async () => {
     // Scaffold: `traceability` is bound to reviewer, architect and product-owner, declared in that
     // order in roles.yaml; the message must be a pure function of content, so `architect` wins.
+    const unchanged = snapshotPersistence(repo);
     const result = await directiveRemoveFn()({ root: repo, positional: 'traceability' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -308,11 +311,13 @@ describe('CORE_MODULES directive.directiveRemove — REQ-SEC-07 clause (b): ever
       message: "cannot remove 'traceability': still assigned to role 'architect'",
     });
     expect(existsSync(join(repo, CUSTOM_DIR, 'traceability.md'))).toBe(true);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('refuses a directive carried by `roles.yaml` `global` — it binds EVERY role', async () => {
     // Scaffold: `doc-versioning` is a custom directive in the `global:` list and in no `assignments`
     // entry. [AUTHORING] wording — P3.3 pins only the per-role form (see the task Execution Notes).
+    const unchanged = snapshotPersistence(repo);
     const result = await directiveRemoveFn()({ root: repo, positional: 'doc-versioning' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -322,6 +327,7 @@ describe('CORE_MODULES directive.directiveRemove — REQ-SEC-07 clause (b): ever
     });
     expect(exitCodeForResult(result)).toBe(1);
     expect(existsSync(join(repo, CUSTOM_DIR, 'doc-versioning.md'))).toBe(true);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a project with no roles.yaml has no bindings — removal proceeds (task-051/053 reading)', async () => {
@@ -446,6 +452,7 @@ describe('CORE_MODULES directive.directiveRemove — REQ-SEC-01 git-identity pre
 
   it('refuses before any deletion when the git identity is unset (REQ-SEC-01)', async () => {
     writeFixtureFile(repo, `${CUSTOM_DIR}/legacy-rule.md`, renderCustomDirective('legacy-rule'));
+    const unchanged = snapshotPersistence(repo);
     const result = await directiveRemoveFn()({ root: repo, positional: 'legacy-rule' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -455,5 +462,6 @@ describe('CORE_MODULES directive.directiveRemove — REQ-SEC-01 git-identity pre
     });
     expect(exitCodeForResult(result)).toBe(1);
     expect(existsSync(join(repo, CUSTOM_DIR, 'legacy-rule.md'))).toBe(true);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
