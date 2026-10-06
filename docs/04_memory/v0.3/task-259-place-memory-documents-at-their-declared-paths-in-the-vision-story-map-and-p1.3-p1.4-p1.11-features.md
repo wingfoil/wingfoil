@@ -116,3 +116,13 @@ and `docs/01_vision/X_cli-cmds.md`'s `ROLE` row still names `dna show --section 
   the store `memory.yaml` declares and its test follows; `req-sec-06-confinement-text` (P1.11 sc.3) still green.
 - AC3: ROLE row says `dna show team`; `grep -rn -e '--section' … docs/01_vision …` → nothing.
 - Pending amendments (approver): none — no Memory element other than this task and the two bug syncs is edited.
+
+### review fixes (2026-10-06, independent review: approve with fixes)
+
+- `06_features.md` P1.1 priority-table row ("Stores all project state in `.wingfoil/`", missed by bug-256's grep) now
+  uses the P1.1 feature-row wording; no re-bump (1.9 already on this branch, doc-versioning baseline = main).
+- `P1.1-git-backed-storage.feature` narrative aligned with the rewritten US-0A-01 (configuration under `.wingfoil/`,
+  Memory at the paths `memory.yaml` declares, templates in `.wingfoil/memory/templates/`); sc.1's `memory/`
+  subfolder stays true.
+- `npx jest test/docs test/storage/git-backed-storage.test.ts test/memory/entry.test.ts` → 79 passed; bug-256's
+  step-1 grep → nothing. Pending at the gate: re-sync `00_index.md`'s `X_cli-cmds.md` row after task-186 merges.
