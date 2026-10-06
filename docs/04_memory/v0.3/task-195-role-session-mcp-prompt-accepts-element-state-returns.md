@@ -95,8 +95,10 @@ the last AC. spec-012 lists no builder refusal codes (`grep -n "NOT_FOUND" docs/
   - any other argument name → `unknown prompt argument '<name>': '{role}-session' takes only 'element' and 'state'`
     (not in the AC: decision for the approver — a silently ignored argument would let a misspelt
     `State` fall back to the argument-less Prompt);
-  - an element that is not `<type>:<id>` (`spec-008` §7: exactly one `:`, both parts non-empty, no
-    whitespace or control character) → `malformed element-ref <json>: expected <type>:<id>`;
+  - an element that is not `<type>:<id>` → `malformed element-ref <json>: expected <type>:<id>`. The
+    rules (exactly one `:`, both parts non-empty, no whitespace, control character or `-->`) are this
+    task's: `spec-008` §7 states only the form `<type>:<id>` (corrected at review, F3 — the first
+    version of this note attributed them to §7, which it did not say; §7 now does, pending amendment);
   - a `state` that is not a commit → `RevisionError`'s own message (`malformed revision "<rev>": …` or
     `revision "<rev>" does not name a commit`);
   - an element the commit does not hold → the builder's `element '<type>:<id>' not found at <sha>`, its
@@ -198,7 +200,7 @@ Gates (worktree, with the uncommitted spec-004 amendment on disk; load average 6
 | `npm run lint` | clean |
 | `npm run docs:api` | exit 0 |
 | `npx tsc --noEmit -p tsconfig.json` / `npx tsc -p tsconfig.build.json --noEmit` | both clean |
-| `node scripts/check-governance.cjs --base ed4607a4` | exit 0, 0 findings (3 `wf()` commits) |
+| `node scripts/check-governance.cjs --base ed4607a4` | exit 0, 0 findings (3 `wf()` commits at the time; 6 after submit and the bug syncs, re-run in Review fixes) |
 | `npm run test:coverage` | 275 suites, **5107 passed**; 99.2 / 96.7 / 96.57 / 99.7 (stmts/branches/funcs/lines). Last recorded `main` (plan, `f15096a2`): 99.23 / 96.72 / 96.53 / 99.7 — not re-measured on `ed4607a4`. Touched files: `prompt.ts` 98.87 / 97.82 / 100 / 98.76 (before `4b8e6d12`; line 156 is the rethrow that commit covers), `memory-resource.ts`, `read-only.ts`, `registrar.ts` 100 / 100 / 100 / 100, `context.ts` 99.62 / 98.26 / 100 / 100 (the new `newerFormatSubject`'s rethrow of a non-format error — a failed git read — is the one new uncovered branch) |
 | `npm test` | 275 suites, 5108 tests: 5104 passed, 4 failed, all in `test/mcp/resource-latency.test.ts` and `test/core/query-latency.test.ts` (wall-clock p95 budgets) at load average ~110 (`uptime`). Re-run alone: `resource-latency` passed (load 98), `query-latency` 4/4 passed (load 71). No budget touched; the idle latency run is the coordinator's |
 
@@ -238,8 +240,13 @@ BDD: no scenario of `P5.2.2-mcp-prompts.feature` or `P5.4.3`/`P5.4.4` speaks of 
 - `spec-004-mcp-surface-contract` — proposed `--reason`: "task-195: §3.1 declares the optional element
   and state arguments of every {role}-session Prompt, §3.2 the embedding contract with them (the
   spec-012 §7 payload resolved at state) and where the context diagnostics go, §3.4 the six new -32602
-  refusals and the failed-read side; §2.2 and §4.3 item 5 give Resource reads and Prompts a top-level
-  warnings array (bug-231, bug-263, approver ruling R18)."
+  refusals and the failed-read side, an empty argument counting as absent; §2.2 and §4.3 item 5 give
+  Resource reads and Prompts a top-level warnings array — every unreadable file for a collection, the
+  files passed before the match for a single document (bug-231, bug-263, approver ruling R18)."
+- `spec-008-cli-grammar` — proposed `--reason`: "task-195: §7 states the element-ref grammar (exactly
+  one ':', non-empty type and id, no whitespace, control character or '-->') and its refusal text, lists
+  the {role}-session Prompt's element argument beside agent execute --element, and names the one core
+  parser both use (parseElementRef), so task-218 inherits the same rules."
 
 **Decisions for the approver.**
 1. `state` accepts any name of one commit (`HEAD`, a branch), as `spec-012` §2's `stateRef` does; it is
@@ -250,3 +257,31 @@ BDD: no scenario of `P5.2.2-mcp-prompts.feature` or `P5.4.3`/`P5.4.4` speaks of 
    with details), not `InvalidParams`: the element exists, the request is well-formed.
 4. Diagnostics ride as a top-level `warnings` array (beside `messages`/`contents`), not under `_meta`,
    following the existing top-level `metadata` of `memory.show` and the `warnings` name of §4.3 item 5.
+
+### Review fixes (approve with fixes, 2026-10-06)
+
+Status stays `in-review`; no re-submit. Code `3805d97c`, docs `aa15f03a`; the two spec edits stay
+uncommitted pending amendments (reasons above).
+- **F1** — an empty `element` or `state` is now an absent argument (`src/mcp/prompt.ts`): both empty is
+  the argument-less Prompt, one empty beside one set is the pairing refusal. Before, a client that
+  submits every declared field got `malformed element-ref ""`. The test that pinned `""` as malformed
+  now pins `"task:a-->b"`. New cases in `role-prompt-context.test.ts`: element empty with state set,
+  element set with state empty (both `-32602` pairing), both empty (equal to the argument-less result).
+  This is a behaviour change made at review: the fix and its tests are in one commit, so there is no
+  separate red run. spec-004 §3.1/§3.4 state the rule.
+- **F2** — spec-004 §2.2 now says it exactly: a collection read reports every unreadable file; a
+  single-document read is a lookup that stops at its match, so it reports only the files it passed
+  before the match (`findFirst`, `src/memory/query.ts`), and on a miss it has passed them all.
+- **F3** — the element-ref grammar was this task's, not `spec-008` §7's (§7 gave only `<type>:<id>`); the
+  design note's attribution is corrected. The parser moved to `src/core/element-ref.ts`
+  (`parseElementRef` → `CoreResult<{type, id}>`, `malformedElementRefMessage`, exported from
+  `src/core`), so `agent execute --element` (task-218) reuses it; `prompt.ts` maps its `VALIDATION` to
+  `-32602`. Unit tests: `test/core/element-ref.test.ts` (3 accepted, 12 refused forms). spec-008 §7
+  gains the grammar, the Prompt row and a dated Revision note — a second pending amendment. No command,
+  flag or exit code changed, so no other spec is touched.
+- **F4** — `docs/cli-reference.md` and `docs/user-guide.md` say `state="<commit>"`, any name of one
+  commit, a sha recommended.
+- Gates after the fixes (spec edits on disk): `npm run lint` exit 0; both `tsc` clean; `npm run docs:api`
+  exit 0; `npx jest test/mcp test/core/context-builder.test.ts test/core/element-ref.test.ts test/docs`
+  → 29 suites, 289 passed (load average 35); `node scripts/check-governance.cjs --base ed4607a4` → exit
+  0, 6 `wf()` commits, 0 findings.
