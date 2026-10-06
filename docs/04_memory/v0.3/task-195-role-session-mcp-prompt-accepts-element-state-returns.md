@@ -38,6 +38,11 @@ tmpl_version: 260703
   `W_MEMORY_UNREADABLE` in the result's `warnings` (`CoreResult`, third argument of `coreOk`), and a malformed subject
   element comes back as `NOT_FOUND` with `details.unreadable`. Neither is in the payload. Forward both to the
   surface this task builds (stderr / `--format json` warnings, or the MCP response), so they are never dropped.
+- **Handover from wave 2 B4a (2026-10-06, `task-255`).** The context payload's bytes are pinned as format 1
+  (`spec-012` §7, `dl-150` (B)): consume them only as `task-255` left them, through `assembleExecutionContext`, and
+  never re-serialize the context yourself. `CONTEXT_PAYLOAD_FORMAT` and `WrittenTimestamp` are re-exported from
+  `src/core`: a YAML date in the carried frontmatter is a `WrittenTimestamp` holding the text as written, not a `Date`,
+  and its `toJSON()` returns that text, so a `--format json` rendering keeps the document's own spelling.
 
 ## Execution Notes
 
