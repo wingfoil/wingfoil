@@ -30,9 +30,115 @@ tmpl_version: 260703
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+Branch `task/task-184-bring-test-guard-prose-overclaims-line-what-asserts`, worktree
+`../.wf2-wt/task-184`, cut from `main` at `02fd6102`. Start `e165ade9`; bug syncs `[planned →
+in-progress]` `189adaf1` (bug-045), `716f24a7` (bug-096), `f723417f` (bug-194).
+
+### design (architect)
+
+**`depends_on` read (dl-015).** `task-139` is `done` (`awk '/^status:/{print $2;exit}'` on its file
+→ `done`). It wrote T1 into `.wingfoil/directives/custom/testing.md` (section *WingFoil-specific
+clauses (`dl-121`)*) and names this task as the owner of the named instances. T1 allows either fix:
+narrow the prose, or widen the assertions.
+
+**Specs.** `spec-004`, `spec-006` and `spec-008` are `approved`; `dl-121` is `ready` (same `awk`).
+
+**Scope.** Three bugs. `bug-045` and `bug-096` are prose (the task Description). `bug-194` was
+absorbed at the W1 B3 triage (`bug-ingest-rel-v0.3-w1b3-review-findings-plan`, triage table), after
+the ACs were written. Its Expected Behavior is a widening: one shared snapshot used by every "writes
+nothing" assertion on a write path. Done that way, rather than by narrowing ~60 titles.
+
+**AC classification.**
+
+| AC / bug | Class | Why |
+|---|---|---|
+| AC (`--version` claim → assertion of the measured fact) | **characterization** (planned red-first) | The fact exists: `program.options` holds `--version`. An assertion of it passes on first run, so a red would be fabricated. Efficacy is shown by mutation instead (green section). |
+| AC (other prose corrected to what the assertions check) | documentation | Titles, module docs, one `src` comment. |
+| bug-194 (widened writes-nothing assertions) | **characterization** | The verbs already write nothing. Every converted assertion passed on first run. Efficacy is shown by the helper's own suite, which plants each kind of write. |
+
+### red
+
+No red-first AC, so there is no `test(…): failing test` commit. The one failure seen while converting
+was my own fixture-ordering error. In `memory-submit.test.ts` AC1 (`bare n/a`), `submitWith()` seeds
+and commits inside the call, so the snapshot taken before it saw the seed commit as `HEAD moved`. Fixed
+by seeding before the snapshot. No verb wrote anything.
+
+### green
+
+- `b3e8436d` — `test/storage/helpers/persistence-snapshot.ts`: `snapshotPersistence(root, paths?)` /
+  `assertPersistenceUnchanged(root, snapshot, label?)`. It compares the bytes of listed files and of
+  every file `git status` lists (so a dirty fixture is allowed and a rewrite of an already-dirty file
+  is caught), plus `status --porcelain --untracked-files=all --ignored`, `HEAD` (`''` when unborn),
+  its symbolic target, and `for-each-ref`. `test/mcp/helpers/channel-enumeration.ts` delegates to it,
+  keeping its clean-tree precondition and its `channel-enumeration:` messages. Its own suite,
+  `test/storage/persistence-snapshot.test.ts` (11 tests), plants each kind of write over a dirty
+  fixture and over an unborn branch.
+- `4975599f` — 59 writes-nothing sites in 30 files (core + CLI) now take the snapshot before the call
+  and assert it after, alongside their existing checks. Located with
+  `grep -rn -i "writes nothing\|wrote nothing\|writing nothing\|persists nothing\|nothing written\|nothing is written\|nothing was written\|overwrites nothing\|commits nothing" test/core test/cli`,
+  restricted to `it`/`describe` titles (61 hits), then read one by one. Excluded, with the reason:
+  - `test/cli/success-warnings.test.ts:119` (stderr) and `program.integration.test.ts` `mcp` case
+    (stdout) are not about the repository;
+  - `memory-add-confinement.test.ts:115` and `memory-add-symlink-target.test.ts:145` claim "nothing
+    *outside the project root*", and `readdirSync(outside)` asserts exactly that;
+  - `test/memory/entry.test.ts:96` is storage-layer, not core/CLI, and task-259 (B4b) edits that file.
+    It is left for whoever widens next.
+- `033b12d3` — prose:
+  - `production-registry`, `parity` and `read-only-agent-channel`: the module docs no longer say
+    "zero mutating ops", and the titles name the property, not a roster. The rosters are the arrays
+    compared. Parity's "no mutating op is a Resource" check had 12 hand-listed `not.toContain` lines.
+    They omitted `dna/add|remove|update` and listed `memory/approve` twice. That check is now derived
+    from `CORE_MODULES` with `deriveVerb`.
+  - **Unasserted (T1):** "a mutating Tool call rejected on an illegal transition, identical to the
+    CLI" (task-016's AC case). `grep -rn "callTool" test` finds only synthetic or stubbed ops for
+    that case, and the production server registers no Tool. The module doc now says so instead of
+    "awaits task-018+". This is a candidate bug.
+  - `derived-option-namespace`: both comments claimed `--version` is absent from `program.options`.
+    The test now asserts `globals.has('--version') === true` and `globals.has('--help') === false`,
+    and adds only `help`/`--help` by hand. Its two writes-nothing cases use the shared snapshot.
+  - `dna-set.test.ts` title: `dna set nonsense.at.any.depth --value value` (the dl-082 grammar).
+  - `src/core/index.ts` step 7 comment (the only `src` edit, within the block task-189 must not
+    touch): rewritten in the current grammar, with the measurement.
+    `node dist/cli.js dna set version --value 2` on a fresh `init --template scrum` repo printed
+    `error: E_VALIDATION version (.wingfoil/dna.yaml): Invalid input: expected number, received string`
+    and exited `1`. `git status --porcelain` was empty and `git log` held only the init commit.
+    The old spelling `dna set version 2` exits `2` (one positional only).
+
+**Mutation check (bug-096 item 2).** I commented out `program.version(readBuildStamp())`
+(`src/cli/program.ts:147`) and ran `npx jest test/cli/derived-option-namespace.test.ts -t invariant`.
+Result: 1 failed (`Expected: true, Received: false` on `globals.has('--version')`). Before this task,
+the hand-added `--version` kept the invariant green under that mutation. The file was then restored
+(`git diff --stat src/cli/program.ts` → empty).
+
+### refactor
+
+With the two pending amendments present (uncommitted) in the working tree:
+
+- `npm run test:coverage` → 271 suites, **5025 tests passed**. All files: statements 99.13, branches
+  96.39, functions 96.53, lines 99.69. Not regressing: `git diff 02fd6102 -- src` changes only
+  comment lines (`… | grep "^[+-] " | grep -v "^[+-] \*" | wc -l` → `0`), so no `src` line changed
+  coverage.
+- `npm test` → exit 0, 271 suites, 5025 tests passed.
+- `npm run lint` → clean. `npx tsc --noEmit -p tsconfig.json` and
+  `npx tsc -p tsconfig.build.json --noEmit` → clean. `npm run docs:api` → exit 0.
+- `node scripts/check-governance.cjs --base 02fd6102` → exit 0 (0 findings).
+
+### review (self, code-review directive)
+
+- Both ACs are met (table above, with evidence). The three bugs are addressed: bug-045 (prose and
+  the derived Resource check), bug-096 (items 1–4: comment and measured assertion, hand-listed
+  `version` removed, present-tense grammar, §1 → §2 citation), bug-194 (shared helper, 59 sites).
+- Same-class fixes in files I touched: the parity `not.toContain` roster (derived), the third parity
+  comment (lines 169-172 in the bug), and the task-history comment in read-only-agent-channel. The
+  long task-history comment in parity's first production test is history ("task-X adds Y"), not a
+  claim about the current set, and is kept.
+
+### Pending amendments (approver)
+
+- `spec-008-cli-grammar` (§9 and the 2026-09-23 revision note cite "§1's precedence"; now §1
+  placement + §2 `--version` precedence; dated Revision note appended). Proposed `--reason`:
+  "Correct the citation behind §9's second outcome: §1 gives a global's placement, §2's --version row
+  gives its precedence (bug-096, task-184). No rule changed."
+- `task-093-dna-mutation-surface-add-remove-update` (dated Correction note appended; the notes said
+  `--version` is outside `program.options`). Proposed `--reason`: "Record that --version is in
+  program.options, as measured by task-184 (bug-096); the earlier notes are kept as written."
