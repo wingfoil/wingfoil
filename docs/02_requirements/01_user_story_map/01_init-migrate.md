@@ -12,12 +12,14 @@
 
 ### Step 1 — Repository creation and project structure
 
-* **[MVP · v0.1]** US-0A-01: As Alex, I want all project state saved in a centralized git repository in `.wingfoil/` so
-  I have a single source of truth versioned from day one. _(feat: P1.1)_
+* **[MVP · v0.1]** US-0A-01: As Alex, I want all project state saved in a centralized git repository — the configuration
+  in `.wingfoil/`, the Memory documents at the paths `.wingfoil/memory.yaml` declares — so I have a single source of
+  truth versioned from day one. _(feat: P1.1)_
 * **[MVP · v0.1]** US-0A-02: As Morgan, I want every modification (Memory, DNA, Directives, Workflow) automatically
   tracked via git with author, timestamp, and message so that I have an audit trail without manual work. _(feat: P1.2)_
-* **[MVP · v0.1]** US-0A-03: As Alex, I want a `.wingfoil/memory/` structure ready to contain versioned documents and
-  artifacts so that I can record decisions immediately. _(feat: P1.11)_
+* **[MVP · v0.1]** US-0A-03: As Alex, I want a Memory store ready to contain versioned documents and artifacts — each
+  type at the path `.wingfoil/memory.yaml` declares, inside the project root, with its template in
+  `.wingfoil/memory/templates/` — so that I can record decisions immediately. _(feat: P1.11)_
 * **[MVP · v0.1]** US-0A-04: As Morgan, I want to define Memory element types (pattern paths, allowed states, and
   transitions) in `.wingfoil/memory.yaml` so that I have coherent per-type state machines. _(feat: P1.13)_
 * **[MVP · v0.1]** US-0A-05: As Alex, I want a structured project map (modules, stacks, team, resource paths) in

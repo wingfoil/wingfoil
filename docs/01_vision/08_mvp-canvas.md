@@ -1,7 +1,7 @@
 # MVP Canvas — WingFoil v1.0 (MVP Complete)
 
-**Version:** 1.6
-**Date:** 2026-10-01
+**Version:** 1.7
+**Date:** 2026-10-06
 **Status:** Approved
 
 ---
@@ -60,7 +60,7 @@ project:
 ### All 5 Pillars Delivered
 
 **Pillar 1: Project Memory (v0.1)**
-✓ Git-backed document storage (`.wingfoil/memory/`)  
+✓ Git-backed document storage (each type at the path `.wingfoil/memory.yaml` declares)  
 ✓ Element schema + per-type state machines (`.wingfoil/memory.yaml`)  
 ✓ Versioning & audit trail (git commits)  
 ✓ Add, search, history commands

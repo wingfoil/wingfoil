@@ -1,7 +1,7 @@
 # Features — WingFoil
 
-**Version:** 1.8
-**Date:** 2026-10-05  
+**Version:** 1.9
+**Date:** 2026-10-06  
 **Status:** Approved
 
 ---
@@ -22,9 +22,9 @@ persist their configuration and state files.
 
 | ID    | Feature                                | Journey            | User                | Description                                                                                                                                                      | Type           |
 |-------|----------------------------------------|--------------------|---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------|
-| P1.1  | Git-Backed Storage (foundational)      | 0a, 0b, 1, 2, 3, 4 | All                 | Centralized git repository for all project state (Memory, DNA, Directives, Workflow) in `.wingfoil/`                                                             | Infrastructure |
+| P1.1  | Git-Backed Storage (foundational)      | 0a, 0b, 1, 2, 3, 4 | All                 | Centralized git repository for all project state: configuration in `.wingfoil/`, Memory documents at the paths `.wingfoil/memory.yaml` declares | Infrastructure |
 | P1.2  | Versioning & Audit Trail (all pillars) | 0a, 1, 2, 3, 5     | Morgan, Casey       | All changes (Memory, DNA, Directives, Workflow) tracked via git with author, timestamp, commit message                                                           | Infrastructure |
-| P1.3  | `wingfoil memory add`                  | 0a, 0b, 2, 4, 5    | Morgan, Alex, Casey | Create/add document to Memory in `.wingfoil/memory/` (draft state)                                                                                               | Command        |
+| P1.3  | `wingfoil memory add`                  | 0a, 0b, 2, 4, 5    | Morgan, Alex, Casey | Create/add document to Memory at the path its type declares in `.wingfoil/memory.yaml` (draft state)                                                             | Command        |
 | P1.4  | `wingfoil memory import`               | 0b                 | Morgan, Alex        | Scan project for existing docs and import into Memory (interactive, with metadata extraction)                                                                    | Command        |
 | P1.5  | `wingfoil memory search`               | 1, 3, 5            | Casey, Alex         | Query Memory by keyword and metadata                                                                                                                             | Command        |
 | P1.6  | `wingfoil memory submit`               | 2, 3, 4, 5         | Morgan, Alex        | Submit Memory document for approval (pending state)                                                                                                              | Command        |
@@ -32,7 +32,7 @@ persist their configuration and state files.
 | P1.8  | `wingfoil memory reject`               | 2, 4, 5            | Morgan, Casey       | Reject Memory document; reverts to draft for rework                                                                                                              | Command        |
 | P1.9  | `wingfoil memory deprecate`            | 2, 3, 5            | Morgan, Casey       | Mark Memory document as deprecated (remains in repo, agents ignore)                                                                                              | Command        |
 | P1.10 | `wingfoil memory history`              | 2, 3, 5            | Morgan, Casey       | View audit trail of Memory document (commits, approvals, state changes)                                                                                          | Command        |
-| P1.11 | Memory Entries (git-backed)            | 0a, 0b, 1, 2, 3    | All                 | Store documents, decisions, artifacts in `.wingfoil/memory/` with versioning                                                                                     | Infrastructure |
+| P1.11 | Memory Entries (git-backed)            | 0a, 0b, 1, 2, 3    | All                 | Store documents, decisions, artifacts at the paths each type declares in `.wingfoil/memory.yaml`, inside the project root, with versioning                        | Infrastructure |
 | P1.12 | Keyword Memory Search                  | 1, 3, 5            | Alex, Casey         | Find relevant docs by keyword and metadata                                                                                                                       | Feature        |
 | P1.13 | Memory Element Schema (`memory.yaml`)  | 0a, 0b, 2, 4       | All                 | Define each element type (path pattern, name, description, tags, **allowed states + transitions**) in `.wingfoil/memory.yaml`; basis for per-type state machines | Infrastructure |
 
@@ -72,8 +72,8 @@ Role-based rules that humans and agents respect automatically (in `.wingfoil/dir
 ### **Pillar 4: Project Workflow (P4)**
 
 Unified tracking of project progress, blockers, and deliverables (main config in `.wingfoil/workflows.yaml`, which
-`include()`s built-in/custom workflow files from `.wingfoil/workflows/{built-in,custom}/`; state in
-`.wingfoil/memory/` frontmatter).
+`include()`s built-in/custom workflow files from `.wingfoil/workflows/{built-in,custom}/`; state in the frontmatter of
+the Memory documents, at the paths `.wingfoil/memory.yaml` declares).
 
 | ID    | Feature                                     | Journey            | User          | Description                                                                                                                                                                                                                         | Type           |
 |-------|---------------------------------------------|--------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------|
@@ -302,12 +302,12 @@ Notifications and alerts across all features.
 
 **Core Infrastructure:**
 
-- ✓ Git-Backed Storage (P1.1) — All state in `.wingfoil/`
+- ✓ Git-Backed Storage (P1.1) — Configuration in `.wingfoil/`, Memory documents at their declared paths, all in git
 - ✓ Versioning & Audit Trail (P1.2) — Via git commits
 
 **Pillar 1 — Project Memory:**
 
-- ✓ Memory Entries (P1.11) — `.wingfoil/memory/`
+- ✓ Memory Entries (P1.11) — at the paths `.wingfoil/memory.yaml` declares; type templates in `.wingfoil/memory/templates/`
 - ✓ Element schema + per-type state machines (P1.13) — `.wingfoil/memory.yaml`
 - ✓ Add, Search, History commands (P1.3, P1.5, P1.10)
 - ✓ Keyword search (P1.12)
