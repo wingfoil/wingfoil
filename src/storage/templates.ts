@@ -483,8 +483,9 @@ function supersedesNote(type: string): string {
      \`memory.yaml\` no \`superseded\` state, so approving this ${type} retires nothing. To use the
      trigger, add \`supersedes: ""\` to this scaffold (it holds the full id of the replaced element, e.g.
      "${type === 'adr' ? 'adr-2-git-backed-storage' : 'spec-2-memory-yaml-schema'}", never a short form) and give the type its own \`states:\` in
-     \`memory.yaml\` whose \`sequence\` ends in an approved state listed in \`waiting\` and then
-     \`superseded\`. Otherwise retire the replaced element with \`wingfoil memory deprecate\`, naming
+     \`memory.yaml\` whose \`sequence\` ends in a state listed in \`gates\`, then an approved state
+     listed in \`waiting\`, then \`superseded\`: the trigger fires only when \`memory approve\` lands
+     in that \`waiting\` state, and approve moves only out of a gate. Otherwise retire the replaced element with \`wingfoil memory deprecate\`, naming
      this one in \`--reason\`. -->
 `;
 }

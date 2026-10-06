@@ -192,6 +192,19 @@ export function committedBlobMatches(root: string, rev: string, path: string, co
 }
 
 /**
+ * Whether git would store `content`, written to the working tree at `path`, as exactly the blob
+ * `blob` — `content` put through the filters git applies to `path` (`core.autocrlf`, `.gitattributes`),
+ * `blob` taken as-is. The counterpart of {@link committedBlobMatches} for a blob that exists only in
+ * memory (`memory submit`'s rendering of the committed document, task-209 review F1): it compares
+ * `git hash-object --path=<path> --stdin` with `git hash-object --no-filters --stdin`.
+ */
+export function storesAsBlob(root: string, path: string, content: string, blob: string, options: CommitOptions = {}): boolean {
+  const filtered = runGitRead(root, ['hash-object', `--path=${path}`, '--stdin'], { ...gitReadOptions(options, [0]), input: content });
+  const raw = runGitRead(root, ['hash-object', '--no-filters', '--stdin'], { ...gitReadOptions(options, [0]), input: blob });
+  return filtered.stdout.trim() === raw.stdout.trim();
+}
+
+/**
  * The two-character `git status --porcelain` code for `path` (index status, then working-tree
  * status), or the empty string when the path is clean — unmodified in both, and tracked.
  *

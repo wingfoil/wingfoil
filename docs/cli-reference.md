@@ -605,7 +605,9 @@ Unreleased (v0.3): a project scaffolded by `wingfoil init` has neither half of t
 and `tech-spec` templates have no `supersedes:` field, and its `memory.yaml` gives every type the
 default machine, which has no `superseded` state; their template comments say so. To use the trigger,
 add `supersedes: ""` to the type's template and give the type its own `states:` whose `sequence` ends
-in an approved state listed in `waiting`, then `superseded`. Otherwise retire the replaced element with
+in a state listed in `gates`, then an approved state listed in `waiting`, then `superseded`. The
+trigger fires only when `memory approve` lands in that `waiting` state, and `approve` moves a document
+only out of a gate. Otherwise retire the replaced element with
 `memory deprecate`, naming its replacement in `--reason`.
 
 The approve reads `supersedes:` as committed, so it cannot be corrected in place. If it names an

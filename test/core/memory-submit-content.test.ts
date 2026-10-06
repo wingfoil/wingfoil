@@ -129,6 +129,14 @@ describe('memory submit declares the content it carries (task-209, dl-106 W1 (a)
   describe('line endings (review F1)', () => {
     const crlf = (text: string): string => text.replace(/\n/g, '\r\n');
 
+    it('core.autocrlf=input normalizes as well: a CRLF working tree over an LF blob declares nothing', async () => {
+      git(repo, ['config', 'core.autocrlf', 'input']);
+      writeFileSync(join(repo, PATH), crlf(taskDoc()));
+      const result = await submit();
+      expect(result.ok).toBe(true);
+      expect(result.commit?.message).toBe('wf(task): submit task-101');
+    });
+
     it('core.autocrlf=true: a pure transition on a CRLF working tree over an LF blob declares nothing', async () => {
       git(repo, ['config', 'core.autocrlf', 'true']);
       writeFileSync(join(repo, PATH), crlf(taskDoc()));
@@ -146,6 +154,8 @@ describe('memory submit declares the content it carries (task-209, dl-106 W1 (a)
     });
 
     it('no line-ending filter: converting the document to CRLF is content git commits, declared as "the line endings"', async () => {
+      // Pinned per repository: a developer's global config may set core.autocrlf (input normalizes CRLF too).
+      git(repo, ['config', 'core.autocrlf', 'false']);
       writeFileSync(join(repo, PATH), crlf(taskDoc()));
       const result = await submit();
       expect(result.ok).toBe(true);

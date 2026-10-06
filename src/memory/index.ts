@@ -123,7 +123,7 @@ export {
   verifyFrontmatterEdit,
 } from './frontmatter-edit';
 export type { DocumentScope } from './frontmatter-edit';
-export { describeSubmitContent, missingRequiredFields, notApplicableRefusals, REJECTION_REASON_FIELD, renderSubmitDocument } from './submit';
+export { describeSubmitContent, LINE_ENDINGS_ITEM, missingRequiredFields, notApplicableRefusals, REJECTION_REASON_FIELD, renderSubmitDocument } from './submit';
 export type { NotApplicableProblem, NotApplicableRefusal } from './submit';
 export { renderRejectDocument } from './reject';
 export {

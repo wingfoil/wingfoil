@@ -129,7 +129,20 @@ export function renderSubmitDocument(content: string, target: string): string {
  * Pure and deterministic (REQ-SYS-07).
  */
 export function describeSubmitContent(committed: string | null, content: string, target: string): string[] {
-  const after = renderSubmitDocument(content, target);
+  const after = renderSubmitDocument(toLf(content), target);
   if (committed === null) return describeDocumentChanges(null, after);
-  return describeDocumentChanges(renderSubmitDocument(committed, target), after);
+  return describeDocumentChanges(renderSubmitDocument(toLf(committed), target), after);
 }
+
+/** CRLF → LF: the comparison is of content, so line endings are compared separately (task-209 review F1). */
+function toLf(text: string): string {
+  return text.replace(/\r\n/g, '\n');
+}
+
+/**
+ * The item a submit declares when its rendered document differs from the committed one in line
+ * endings alone, and git — after its own line-ending filters — would store it differently
+ * (`storesAsBlob`, `src/storage`): the one change {@link describeSubmitContent} cannot see, because it
+ * compares line-ending-normalized text.
+ */
+export const LINE_ENDINGS_ITEM = 'the line endings';

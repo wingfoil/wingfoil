@@ -356,16 +356,19 @@ const CARRIES_KEY = 'Carries content:';
 
 /**
  * One content-declaration item made safe for a single body line: every character
- * {@link firstControlCharacter} would refuse in a reason, plus tab and newline, is written as the text
- * `\u{XXXX}`, so a frontmatter key holding a line break cannot add a line (an `Approver:`, a
- * `Reason:`) to the commit body.
+ * {@link firstControlCharacter} would refuse in a reason, plus tab and newline, and the comma that
+ * separates items, is written as the text `\u{XXXX}`, so a frontmatter key holding a line break
+ * cannot add a line (an `Approver:`, a `Reason:`) to the commit body, and a key holding `, ` cannot
+ * read as two items. A backslash is doubled, so a key that literally holds `\u{000A}` cannot read
+ * as an escaped character (task-209 review F4).
  */
 function escapeCarriesItem(item: string): string {
   let escaped = '';
   for (const character of item) {
     const code = character.charCodeAt(0);
-    const control = code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029;
-    escaped += control ? `\\u{${code.toString(16).toUpperCase().padStart(4, '0')}}` : character;
+    const asCode = code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029 || character === ',';
+    if (character === '\\') escaped += '\\\\';
+    else escaped += asCode ? `\\u{${code.toString(16).toUpperCase().padStart(4, '0')}}` : character;
   }
   return escaped;
 }

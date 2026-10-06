@@ -34,7 +34,7 @@ import {
   renderCustomDirective,
 } from '../directives/create';
 import { parseDirectiveIds, withAssignedDirectives } from '../directives/roles-edit';
-import { commitPaths, documentExists, readDocument, readPathAtRev, removeDocument, StorageError, writeDocument } from '../storage';
+import { commitPaths, documentExists, readDocument, readPathAtRev, removeDocument, storesAsBlob, StorageError, writeDocument } from '../storage';
 // Not re-exported by the `../storage` barrel, imported directly per that module's own convention
 // (same as `src/memory/entry.ts`): `memory add` needs the CONFINED target path before it writes, to
 // run task-092's absence guard on it.
@@ -57,6 +57,7 @@ import {
   REJECTION_REASON_FIELD,
   renderRejectDocument,
   describeSubmitContent,
+  LINE_ENDINGS_ITEM,
   renderSubmitDocument,
   searchMemoryDocuments,
   setFrontmatterField,
@@ -1232,9 +1233,15 @@ const memorySubmitFn: CoreFn<unknown, MemorySubmitResult> = async (params) => {
   // The subject stays plain (`dl-054`, ruling R20); the body declares the content the commit carries
   // beyond the state move, measured against the document committed at the sha the transition was
   // decided at (task-209, `dl-106` W1 (a)). A pure transition gets no body line.
-  const carries = describeSubmitContent(readPathAtRev(root, prepared.value.sha, path), content, to);
-  const message = formatMemoryCommitMessage({ type, op: 'submit', ids: [id], carries });
   const rendered = renderSubmitDocument(content, to);
+  const committedContent = readPathAtRev(root, prepared.value.sha, path);
+  const described = describeSubmitContent(committedContent, content, to);
+  // `describeSubmitContent` compares line-ending-normalized text; whether the line endings alone change
+  // the blob is git's answer, after its own filters (`core.autocrlf`, `.gitattributes`; review F1).
+  const lineEndingsOnly =
+    described.length === 0 && committedContent !== null && !storesAsBlob(root, path, rendered, renderSubmitDocument(committedContent, to));
+  const carries = lineEndingsOnly ? [LINE_ENDINGS_ITEM] : described;
+  const message = formatMemoryCommitMessage({ type, op: 'submit', ids: [id], carries });
   // `carries-content`: submit is the ONE verb entitled to bring the author's body and required fields
   // into its commit (spec-010's field-write ownership row), so it is not guarded against a modified
   // working tree and its commit need not differ from HEAD~1 by `status` alone (task-088, bug-076 AC4).

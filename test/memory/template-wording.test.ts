@@ -98,6 +98,9 @@ describe('the scaffolds tell the truth about `supersedes:` (task-209, bug-219)',
       const comments = bodyComments(content);
       expect(comments).toContain('This starter scaffold has no `supersedes:` field, and the starter `memory.yaml` no `superseded` state');
       expect(comments).toContain('`waiting`');
+      // review F3: the trigger fires only when an approve lands in the waiting state, so a gate precedes it.
+      expect(comments).toContain('ends in a state listed in `gates`, then an approved state listed in `waiting`, then `superseded`');
+      expect(comments).toContain('the trigger fires only when `memory approve` lands in that `waiting` state');
       expect(comments).toContain('the full id');
       expect(comments).toContain('`wingfoil memory deprecate`');
     },
