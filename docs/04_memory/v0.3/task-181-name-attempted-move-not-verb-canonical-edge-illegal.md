@@ -210,12 +210,25 @@ prints `draft -> backlog`: `resolveTypeTransition` from `node_modules/wingfoil-r
   new decision-log) and REQ-STATE-01's "Revised … by task-181" citation. Neither was touched.
 - After `task-180` lands: merge `main` and add `park` to the sweep (coordinator's note).
 
+### approver rulings (2026-10-06)
+
+- **D1:** option (A) confirmed.
+- **D2:** a new decision-log, `dl-154-an-illegal-transition-prints-none-as-its-target-replacing-dl-053-s-canonical-edge`
+  (`ready`, v0.3, on `main`, not on this branch yet). Applied in `4d0c69b0`: REQ-STATE-01 now cites
+  `dl-154` as the ratifying decision (task-181 as the implementer); the four BDD scenarios carry a
+  `# dl-154 …` comment (precedent: `P3.2`'s `# dl-062 …`); `NO_TARGET`'s doc comment, the test
+  comment and the `contractTarget` allowlist reason follow. The pending `spec-004`/`spec-005` Revision
+  notes cite `dl-154` (dated 2026-10-06); `dl-053`'s pending section is now a one-line pointer.
+- `npx jest test/docs/name-resolvability.test.ts test/memory/state-machine.test.ts` → 1 failed, 99
+  passed. The one failure is `name-resolvability`, listing `dl-154-…` as unresolved in
+  `03_state-context.md`, `spec-004` and `spec-005` — only because `dl-154` is not on this branch; it
+  resolves once `main` is merged (coordinator's instruction: record and leave). `npm run lint` 0, both
+  `tsc` 0.
+
 ### Pending amendments (approver)
 
 Uncommitted in the worktree; `memory amend` at the review gate:
 
-- `spec-004-mcp-surface-contract` — `--reason "§4.3's illegal-transition example names (none) as <to>, per bug-165 and task-181: the canonical edge draft -> backlog was reached from pending, not from draft. Dated Revision note added; no Tool, Resource or rule changed."`
-- `spec-005-cli-command-contract` — `--reason "§3.1's details example names (none) as <to>, per bug-165 and task-181: pending was submit's edge from draft, not from approved. Dated Revision note added; no exit code, format or rule changed."`
-- `dl-053-illegal-transition-target-for-verbless-edges` — `--reason "Revisited by task-181 (bug-165, bug-127): option 1's canonical edge still named backward moves and skips, so <to> is now (none), a generalised option 3. Dated Revision section added, pending the approver's confirmation of the choice."`
-  If the approver rules that a changed decision needs a new decision-log rather than an amendment,
-  drop this one and file the new DL (agents add none).
+- `spec-004-mcp-surface-contract` — `--reason "§4.3's illegal-transition example names (none) as <to>, per dl-154 (option A), which replaces dl-053: the canonical edge draft -> backlog was reached from pending, not from draft (bug-165, task-181). Dated Revision note added; no Tool, Resource or rule changed."`
+- `spec-005-cli-command-contract` — `--reason "§3.1's details example names (none) as <to>, per dl-154 (option A), which replaces dl-053: pending was submit's edge from draft, not from approved (bug-165, task-181). Dated Revision note added; no exit code, format or rule changed."`
+- `dl-053-illegal-transition-target-for-verbless-edges` — `--reason "Editorial pointer under dl-108 A3: replaced on 2026-10-06 by dl-154 (option A, (none)). The decision text is unchanged; the element is deprecated separately."`
