@@ -2,7 +2,7 @@
 id: "task-189-cover-or-remove-untested-paths-src-core-index"
 type: task
 title: "Cover or remove the untested paths of `src/core/index.ts`"
-status: approved
+status: done
 release: "v0.3"
 kind: "fix"
 priority: "low"
