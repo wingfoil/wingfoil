@@ -32,7 +32,10 @@ export function fixtureDirPrefix(): string {
   return join(tmpdir(), tag ? `wf-storage-${tag}-` : 'wf-storage-');
 }
 
-/** Create a fresh temp directory initialized as a git repo, with a local (non-global) test identity. */
+/**
+ * Create a fresh temp directory initialized as a git repo, with a local (non-global) test identity,
+ * auto-gc off and the hooks directory pinned to `.git/hooks`.
+ */
 export function makeTempGitRepo(): string {
   const dir = mkdtempSync(fixtureDirPrefix());
   git(dir, ['init', '--quiet', '--initial-branch=main']);
@@ -47,6 +50,7 @@ export function makeTempGitRepo(): string {
   // objects against gc.auto's 6,700 default), but nothing keeps fixtures below that threshold, so
   // disable it outright rather than depend on staying under a limit.
   disableAutoGc(dir);
+  pinHooksPath(dir);
   return dir;
 }
 
@@ -57,6 +61,19 @@ export function makeTempGitRepo(): string {
  */
 function disableAutoGc(repo: string): void {
   git(repo, ['config', 'gc.auto', '0']);
+}
+
+/**
+ * Set `core.hooksPath=.git/hooks` in a fixture repo's local config, so git runs the hooks a test
+ * plants in `<repo>/.git/hooks` whatever the developer's global config says (bug-273, task-262).
+ * A global `core.hooksPath` — a common way to install team-wide hooks — otherwise redirects git to
+ * another directory and a planted hook never runs. The local value wins over the global one; a
+ * relative path is resolved against the working-tree root, where git runs hooks in a non-bare repo.
+ * Called on every repo the helper hands out, for the same reason as {@link disableAutoGc}: a clone
+ * does not inherit the source's local config.
+ */
+function pinHooksPath(repo: string): void {
+  git(repo, ['config', 'core.hooksPath', '.git/hooks']);
 }
 
 /** Write a file (creating parent directories) relative to a fixture repo root. */
@@ -97,7 +114,7 @@ export function commitAllAs(root: string, message: string, author: { name: strin
 
 /**
  * Clone a fixture repo (local, filesystem-only) into a fresh temp directory, with auto-gc disabled
- * like every other fixture repo.
+ * and the hooks directory pinned to `.git/hooks` like every other fixture repo.
  *
  * The clone *is* the temp directory: `git clone` into `.` from inside the empty directory `mkdtemp`
  * just made, so it creates exactly one directory and the caller's `removeTempDir(clone)` removes all
@@ -108,6 +125,7 @@ export function cloneTempRepo(source: string): string {
   const dest = mkdtempSync(fixtureDirPrefix());
   git(dest, ['clone', '--quiet', source, '.']);
   disableAutoGc(dest);
+  pinHooksPath(dest);
   return dest;
 }
 
