@@ -184,7 +184,8 @@ wingfoil init [--template <Scrum|Kanban>]
 
 Creates `.wingfoil/dna.yaml`, `memory.yaml` (+ `memory/templates/`), `roles.yaml`, the six built-in
 directives in `directives/built-in/` plus four starter custom directives in `directives/custom/`,
-`workflows.yaml` (+ `workflows/custom/`). The two templates differ only in the delivery sub-workflow
+`workflows.yaml` (+ `workflows/custom/`), and `agents/built-in/` (the built-in agent adapters; none ships
+yet) with an empty `agents/custom/`. The two templates differ only in the delivery sub-workflow
 (`scrum-delivery` vs `kanban-delivery`) and in `project.methodology` / `stacks.methodologies`.
 
 - **Output:** `{ root, template, files: [...] }` — the files it created.
