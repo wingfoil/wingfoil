@@ -25,10 +25,7 @@ This is the run-log library, used by `agent execute` (task-228), `agent list` (t
 - (red-first) The commit contains exactly the run-log file. The agent's uncommitted edits elsewhere stay uncommitted and unstaged. The subject is `agent: record <run-id>` and the trailer block holds `WingFoil-Version:`. `memory history` does not report the commit as a Memory operation.
 - (red-first) Collision: pre-commit the same id at `HEAD`, then record. The result is `CONFLICT` `run id <run-id> already recorded at HEAD`, nothing is appended, and the full record is on stderr.
 - (red-first) A failed commit returns `IO` `run <run-id> not recorded: <cause>` with the record as a `details` line.
-- (red-first) The `notes` field is `<element-id>#execution-notes` when the element's `
-- **Handover from wave 1 B2 (2026-10-02, `task-138`'s independent review).** `paths.runs` (`task-138`) accepts an empty string, an absolute path and a `../` path, so the run log must be confined when it is written (REQ-SEC-06, `resolveConfinedMemoryPath`). The scaffold value `docs/runs/` has a trailing slash: build `<runs>/<id>.jsonl` with `path.join`, not string concatenation. This repository's `.wingfoil/dna.yaml` does not declare `runs` or an agent `adapter` yet; this task and `task-236` add them.
-
-## Execution Notes` differs between `state_ref` and `HEAD`, else `none`. It is always `none` for a type whose template lacks the section.
+- (red-first) The `notes` field is `<element-id>#execution-notes` when the element's `## Execution Notes` differs between `state_ref` and `HEAD`, else `none`. It is always `none` for a type whose template lacks the section.
 - (characterization) This repository's `.wingfoil/dna.yaml` gains `paths.runs` (value chosen and recorded in Execution Notes), with a `doc-versioning` bump.
 - (characterization) `dl-135` Action 2: `dl-114`'s body gains the session-id field through `memory amend` (`dl-108`'s verb), one `wf(decision-log): amend …` commit. If the verb has not shipped when this task reaches review, the task records that fact and leaves the action open. It does not hand-edit the file.
 
@@ -39,6 +36,7 @@ This is the run-log library, used by `agent execute` (task-228), `agent list` (t
 - **Features:** P5.3.1.
 - **Notes:** Proposal key: B08. `src/agent/run-log.ts` (or similar). `dl-114` Action 3 (cost metrics in `dl-089`'s catalogue) is optional and owned by `dl-089`'s task; not claimed.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from wave 1 B2 (2026-10-02, `task-138`'s independent review).** `paths.runs` (`task-138`) accepts an empty string, an absolute path and a `../` path, so the run log must be confined when it is written (REQ-SEC-06, `resolveConfinedMemoryPath`). The scaffold value `docs/runs/` has a trailing slash: build `<runs>/<id>.jsonl` with `path.join`, not string concatenation. This repository's `.wingfoil/dna.yaml` does not declare `runs` or an agent `adapter` yet; this task and `task-236` add them.
 
 ## Execution Notes
 
