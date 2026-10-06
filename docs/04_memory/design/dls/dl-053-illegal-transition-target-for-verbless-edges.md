@@ -93,3 +93,5 @@ be settled before they implement.
 
 Related: `dl-032`, `bug-032`, REQ-STATE-01, BDD `P1.6` / `P5.2.3`, `task-045-memory-submit`,
 `task-046`, `task-047`, `spec-001`.
+
+**Replaced on 2026-10-06 by `dl-154-an-illegal-transition-prints-none-as-its-target-replacing-dl-053-s-canonical-edge` (option A, `(none)`); this decision-log is deprecated.**
