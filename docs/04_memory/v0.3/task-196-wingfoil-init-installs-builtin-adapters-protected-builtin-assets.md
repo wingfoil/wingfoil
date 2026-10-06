@@ -22,7 +22,7 @@ The package ships its built-in adapter manifests, and `init` writes them to `.wi
 - (red-first) A fresh `init` writes one file per shipped built-in adapter plus an empty `agents/custom/`, all in the single init commit. With a test-only source list (no real built-ins yet), the mechanism is exercised on a fixture manifest.
 - (red-first) A built-in manifest that fails the task-177 schema aborts `init` before anything is written (REQ-SEC-10, the same message shape as the built-in directive case).
 - (red-first) The built-in adapter sources are secret-scanned before they are written, the same step `spec-007` §4 step 5 asks of the other built-ins. If `bug-038`'s task lands first, this reuses its caller.
-- (characterization) Docs with `doc-versioning` bumps: `spec-011` storage layout gains `.wingfoil/agents/{built-in,custom}/`; `REQ-SEC-07` (`05_security-compliance.md:77-85`) gains built-in adapters in its description and fit criterion (`spec-016` Consequences, recommended at Appendix C). If the approver keeps it an analogy at review, the ruling goes to Execution Notes and the SARD stays untouched.
+- (characterization) Docs with `doc-versioning` bumps: `spec-011` storage layout gains `.wingfoil/agents/{built-in,custom}/`; `REQ-SEC-07` (`05_security-compliance.md`, section "REQ-SEC-07 — Immutable built-in assets") gains built-in adapters in its description and fit criterion (`spec-016` Consequences, recommended at Appendix C). If the approver keeps it an analogy at review, the ruling goes to Execution Notes and the SARD stays untouched.
 
 ## Implementation Notes
 
@@ -145,6 +145,35 @@ parallel agents:
 - Same-class sweep in touched files: the `BuiltinTemplateKind` doc, `builtinTemplateSources` doc, the
   integrity module header and the `INTEGRITY_POLICY` doc now name the adapter kind.
 
+### Review fixes (2026-10-06, independent review: approve with fixes; status stays `in-review`)
+
+- **F1.** `spec-016` §2.1 still called `REQ-SEC-07` an analogy that "names built-in directives and
+  workflow templates only", which became false with `fdf2b981`. §2.1 now says the requirement names
+  built-in agent adapters, keyed on location, and `REQ-SEC-10` names their manifests. The SARD line
+  offset is replaced by the section name (`dl-075`), and a dated Revision note records the change.
+  `spec-016` is approved, so the edit is uncommitted and listed as a second pending amendment below. It
+  is dropped if the approver keeps the analogy.
+- **F2.** `src/core/builtin-asset.ts`: the header and the `AssetKind` comment now say `REQ-SEC-07` also
+  names built-in adapters, which this module does not check because no operation removes one. Comments
+  only.
+- **F3.** The adapter clause of `REQ-SEC-07`'s fit criterion had no evidence. The new characterization
+  test `test/core/builtin-adapter-writers.test.ts` (3 tests) checks two things:
+  - the `agent` module registers no mutating operation outside an explicit, empty reviewed list, so
+    `agentExecute`'s task must list it;
+  - only `src/storage/templates.ts` and `src/agent/discovery.ts` spell the adapter directory in code,
+    and only those, the integrity check and the barrels use its constants.
+
+  The SARD sentence now cites `npx jest test/core/builtin-adapter-writers.test.ts`. The test's stated
+  limit: a user-configured `memory.yaml` `path` under `.wingfoil/agents/` is configuration, not code.
+- The line-offset citation `05_security-compliance.md:77-85` in this task's AC 4 is replaced by the
+  section name.
+- Gates:
+  - `npm run lint` and both `tsc` runs exit 0;
+  - `npx jest test/docs` with the touched suites (`builtin-adapter-writers`, `builtin-asset`,
+    `builtin-integrity`, `init-builtin-adapters`, `builtin-workflow-loader-rules`, `init-project`,
+    `test/storage/templates.test.ts`): 21 suites, 225 tests passed;
+  - `node scripts/check-governance.cjs --base ed4607a4` exits 0.
+
 ### Decisions for the approver
 
 1. **REQ-SEC-07 extended** (the AC's reserved ruling): built-in agent adapters join built-in directives
@@ -164,3 +193,8 @@ parallel agents:
   built-in manifests installed under the same pre-write integrity pass as the built-in directive
   templates and custom/ scaffolded empty. The layout tree is unchanged, because it lists this
   repository's own configuration, which has no agents/ directory. A dated Revision note records it."
+- `spec-016-agent-execution` — proposed `--reason`: "task-196 (review F1): the Consequences amendment
+  to REQ-SEC-07 landed, so §2.1 no longer calls the rule an analogy. It states that REQ-SEC-07 names
+  built-in agent adapters, keyed on the agents/built-in/ location, and that REQ-SEC-10 names the
+  adapter manifests init schema-checks. The line-offset citation of the SARD file is replaced by the
+  section name. A dated Revision note records it."
