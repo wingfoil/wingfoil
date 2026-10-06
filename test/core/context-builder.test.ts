@@ -520,8 +520,10 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
     it('the working-tree filter and the snapshot ranking agree on the same documents', () => {
       const memoryYaml = core.loadMemoryYamlAtRev(repo, 'HEAD')!;
       const element = { type: 'task', id: ELEMENT_ID, frontmatter: { release: 'v0.2', depends_on: ['task-002-linked'] } };
-      const fromTree = filterRelevantMemoryDocuments(repo, memoryYaml, element);
+      // The working-tree reader also reports what it left out (task-253, `bug-230`); the ranking is what must agree.
+      const { diagnostics, ...fromTree } = filterRelevantMemoryDocuments(repo, memoryYaml, element);
       const fromSnapshot = selectRelevantMemoryDocuments(loadMemoryDocumentsAtRev(repo, 'HEAD', memoryYaml), element, DEFAULT_CONTEXT_LIMITS);
+      expect(diagnostics).toEqual([]);
       expect(fromSnapshot).toEqual(fromTree);
     });
   });

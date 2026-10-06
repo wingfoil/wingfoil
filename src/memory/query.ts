@@ -306,6 +306,17 @@ function* scanWorkingTreeDocuments(
   }
 }
 
+/**
+ * Every Memory document **in the working tree** under `root`, parsed — {@link loadMemoryDocumentsAtRev}
+ * for the live files, in {@link listMemoryDocumentPaths}'s sorted order. Archived documents are
+ * included: the caller decides what to drop. A document whose frontmatter does not parse, and a
+ * symbolic link, are left out and reported to `options.onDiagnostic` as {@link W_MEMORY_UNREADABLE}
+ * (task-171, task-253 / `bug-230`), so one malformed document never fails a read of the others.
+ */
+export function loadMemoryDocuments(root: string, memoryYaml: MemoryYaml, options: MemoryScanOptions = {}): MemoryDocumentSummary[] {
+  return [...scanWorkingTreeDocuments(root, memoryYaml, options)];
+}
+
 // --- The same scan at a revision (task-137) -----------------------------------------------------
 //
 // `spec-012` §2 pins an agent context to `stateRef`, a commit sha, and `spec-017` §1.1/§1.3 deduce
