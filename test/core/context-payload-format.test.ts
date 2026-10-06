@@ -344,8 +344,20 @@ describe('task-255 — spec-012 §7 payload format 1 (dl-150 B, dl-151 A, bug-23
       const { payload } = build();
       expect(payload).toContain('\ncreated: 2026-10-05\n');
       expect(payload).toContain('\ncreated: 2026-09-30\n');
-      expect(payload).toContain('\nquoted: 2026-09-29\n');
+      // A quoted date is a string: it stays quoted (js-yaml's single quotes), never becomes plain.
+      expect(payload).toContain("\nquoted: '2026-09-29'\n");
       expect(payload).not.toMatch(/T00:00:00/);
+    });
+
+    it('review F1 — every timestamp form keeps its exact text, in the element and in a Memory document', () => {
+      const forms = ['midnight: 2026-10-05T00:00:00Z', 'spaced: 2026-10-05 10:00:00 +02:00', 'fraction: 2026-10-05T10:20:30.5Z', 'plain: 2026-10-05'];
+      writeElement(forms);
+      writeFixtureFile(repo, 'docs/04_memory/v0.2/task-002-linked.md', taskMd('task-002-linked', [...forms, 'quoted: "2026-10-05T00:00:00Z"']));
+      commitAll(repo, 'every timestamp form');
+      const { payload } = build();
+      for (const form of forms) expect(payload.split('\n').filter((line) => line === form)).toHaveLength(2);
+      expect(payload).toContain("\nquoted: '2026-10-05T00:00:00Z'\n");
+      expect(payload).not.toContain('.000Z');
     });
 
     it('serialize re-emits a parsed date-only value as YYYY-MM-DD and a timestamp in ISO form', () => {
