@@ -122,3 +122,11 @@ test/core/helpers/latency.ts`). `test/cli/run-tests.test.ts` (opt-in, not in CI/
 - Unasserted (T1): the load average is evidence only; nothing asserts its value. The 500 ms bound is relative to
   this repository's reference machine (stated in its TSDoc); on a much slower machine an idle floor could reach it.
 - Pending amendments (approver): none.
+
+### review fixes
+
+- Approver review (APPROVE with one fix): the refusal text said only "rerun when the floor is idle", which misleads on an
+  idle but slower machine. `idleMachineVerdict` now adds that the 500 ms bound is calibrated on this repository's
+  reference machine (idle floor about 200 ms) and that on a machine whose idle floor reaches it no rerun passes; no env
+  override. Pinned in `test/core/latency-helper.test.ts`. `npx jest test/core/latency-helper.test.ts
+  test/core/latency-budget-placement.test.ts` → 617 passed; `npm run lint`, both `tsc --noEmit` → exit 0.
