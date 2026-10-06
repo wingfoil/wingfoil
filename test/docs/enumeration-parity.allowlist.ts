@@ -6,7 +6,7 @@
  * list is sorted by that key (`enumeration-parity.allowlist.test.ts` enforces the order, the
  * uniqueness and a non-empty reason). Reasons, by kind:
  *
- * - `PLANNED` with `plannedBy` — the document names an item a non-done task is to build (a `surplus`),
+ * - `PLANNED` (or another `planned:` reason, such as {@link WORKFLOW_NEXT_ROW}) with `plannedBy` — the document names an item a non-done task is to build (a `surplus`),
  *   or a task is to amend the document. Once every cited task is `done` and the finding remains, the
  *   gate reports the entry (warn) or fails (from v0.4); when the item ships, the entry goes stale;
  * - {@link AUDIT_V04} — a command a later release's `features:` schedules with no task yet;
@@ -32,6 +32,16 @@ export const PARITY_MODE = 'warn' as 'warn' | 'fail';
 
 /** Named by the non-done task(s) in `plannedBy`; spent once all of them are `done`. */
 export const PLANNED = 'planned: the non-done task(s) in plannedBy build the item or amend the document';
+
+/**
+ * `spec-004` §4.1's `workflow.next` Tool row: approved `spec-017` §9 makes `workflowNext`
+ * `mutates: false`, served as the Resource `wingfoil://workflows/-/next`, so no Tool will ever list
+ * it in v0.3 or v0.4; spec-017's Consequences move the row to v1.0 step advancement, and `task-239`
+ * (its AC) makes that amendment. Review fix F2: these entries cited `task-216`, which builds the
+ * command, not the Tool.
+ */
+export const WORKFLOW_NEXT_ROW =
+  "planned: spec-017 §9 makes workflowNext a Resource (mutates: false), not a Tool; task-239 moves spec-004 §4.1's workflow.next row to v1.0";
 
 /** An MCP Tool `spec-004` §4.1 declares, deliberately unregistered until P5.2.3 (v0.4). */
 export const TOOLS_V04 =
@@ -61,7 +71,7 @@ export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [
   { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'memory.amend', reason: UNTRIAGED },
   { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'memory.park', reason: UNTRIAGED },
   { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'surplus', item: 'workflow.end', reason: PLANNED, plannedBy: ['task-217'] },
-  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'surplus', item: 'workflow.next', reason: PLANNED, plannedBy: ['task-216'] },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'surplus', item: 'workflow.next', reason: WORKFLOW_NEXT_ROW, plannedBy: ['task-239'] },
   { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'surplus', item: 'workflow.start', reason: PLANNED, plannedBy: ['task-217'] },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.add', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.approve', reason: TOOLS_V04 },
@@ -69,7 +79,7 @@ export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.reject', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.submit', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.end', reason: TOOLS_V04 },
-  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.next', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.next', reason: WORKFLOW_NEXT_ROW, plannedBy: ['task-239'] },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.start', reason: TOOLS_V04 },
   { enumeration: 'spec-005 Context flat commands', document: SPEC_005, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
   { enumeration: 'spec-005 Context nouns', document: SPEC_005, direction: 'missing', item: 'directives', reason: UNTRIAGED },

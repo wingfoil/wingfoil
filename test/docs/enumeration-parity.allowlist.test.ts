@@ -6,6 +6,20 @@
 import { PARITY_ALLOWLIST, PLANNED, UNTRIAGED } from './enumeration-parity.allowlist';
 import { parityKey } from './support/enumeration-parity';
 
+/** The first run's untriaged findings (base `1abafadd`): the only keys `UNTRIAGED` may ever carry. */
+const FIRST_RUN_UNTRIAGED: readonly string[] = [
+  'spec-004 §4.1 tools vs CORE_MODULES|docs/04_memory/design/specs/spec-004-mcp-surface-contract.md|missing|directive.assign',
+  'spec-004 §4.1 tools vs CORE_MODULES|docs/04_memory/design/specs/spec-004-mcp-surface-contract.md|missing|directive.create',
+  'spec-004 §4.1 tools vs CORE_MODULES|docs/04_memory/design/specs/spec-004-mcp-surface-contract.md|missing|directive.remove',
+  'spec-004 §4.1 tools vs CORE_MODULES|docs/04_memory/design/specs/spec-004-mcp-surface-contract.md|missing|dna.add',
+  'spec-004 §4.1 tools vs CORE_MODULES|docs/04_memory/design/specs/spec-004-mcp-surface-contract.md|missing|dna.remove',
+  'spec-004 §4.1 tools vs CORE_MODULES|docs/04_memory/design/specs/spec-004-mcp-surface-contract.md|missing|dna.set',
+  'spec-004 §4.1 tools vs CORE_MODULES|docs/04_memory/design/specs/spec-004-mcp-surface-contract.md|missing|dna.update',
+  'spec-004 §4.1 tools vs CORE_MODULES|docs/04_memory/design/specs/spec-004-mcp-surface-contract.md|missing|memory.amend',
+  'spec-004 §4.1 tools vs CORE_MODULES|docs/04_memory/design/specs/spec-004-mcp-surface-contract.md|missing|memory.park',
+  'spec-005 Context nouns|docs/04_memory/design/specs/spec-005-cli-command-contract.md|missing|directives',
+];
+
 describe('enumeration-parity allowlist', () => {
   const keys = PARITY_ALLOWLIST.map(parityKey);
 
@@ -16,10 +30,14 @@ describe('enumeration-parity allowlist', () => {
   });
 
   it('has a planned entry cite at least one task, and no other entry cite any', () => {
-    expect(PARITY_ALLOWLIST.filter((entry) => (entry.reason === PLANNED) !== (entry.plannedBy?.length ?? 0) > 0).map(parityKey)).toEqual([]);
+    const planned = (reason: string): boolean => reason === PLANNED || reason.startsWith('planned: ');
+    expect(PARITY_ALLOWLIST.filter((entry) => planned(entry.reason) !== (entry.plannedBy?.length ?? 0) > 0).map(parityKey)).toEqual([]);
   });
 
-  it('never grows the untriaged backlog past the first run (10 entries): a new entry carries its own reason', () => {
-    expect(PARITY_ALLOWLIST.filter((entry) => entry.reason === UNTRIAGED).length).toBeLessThanOrEqual(10);
+  // Review fix F4: the untriaged backlog is the first run's, key by key. Fixing one entry removes it
+  // from both lists; it does not free a slot for a new untriaged entry.
+  it('marks UNTRIAGED only first-run findings (task-187), never a new entry', () => {
+    const untriaged = PARITY_ALLOWLIST.filter((entry) => entry.reason === UNTRIAGED).map(parityKey);
+    expect(untriaged.filter((key) => !FIRST_RUN_UNTRIAGED.includes(key))).toEqual([]);
   });
 });
