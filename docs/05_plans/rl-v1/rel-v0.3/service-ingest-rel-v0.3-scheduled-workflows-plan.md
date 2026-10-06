@@ -40,3 +40,4 @@ the code build (`npm run build && node dist/cli.js`), on a branch merged with `-
   `active → done`.
 
 ## Execution Notes
+- **2026-10-06 — capture and approve done.** svc-016 (`dependency-check`) and svc-017 (`scorecard`) added and submitted (one commit each, secret scan clean), then approved after the approver's verify (both `active`); bug-252 closed naming them.
