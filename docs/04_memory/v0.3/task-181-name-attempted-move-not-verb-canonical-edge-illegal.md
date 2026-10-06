@@ -2,7 +2,7 @@
 id: "task-181-name-attempted-move-not-verb-canonical-edge-illegal"
 type: task
 title: "Name the attempted move, not the verb's canonical edge, in illegal-transition errors"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "fix"
 priority: "medium"
