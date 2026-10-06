@@ -17,8 +17,10 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+import * as core from '../../src/core';
 import {
   assembleExecutionContext,
+  CONTEXT_PAYLOAD_FORMAT,
   serializeExecutionContext,
   WrittenTimestamp,
   type ContextRequest,
@@ -364,6 +366,20 @@ describe('task-255 — spec-012 §7 payload format 1 (dl-150 B, dl-151 A, bug-23
       writeElement(['created: 2026-10-05']);
       commitAll(repo, 'a dated element');
       expect(build().context.element.frontmatter.created).toEqual(new WrittenTimestamp('2026-10-05'));
+    });
+
+    it('a WrittenTimestamp serializes to JSON as its text', () => {
+      writeElement(['created: 2026-10-05 10:00:00 +02:00']);
+      commitAll(repo, 'a timestamp with a zone');
+      const { element } = build().context;
+      expect(JSON.parse(JSON.stringify(element.frontmatter)).created).toBe('2026-10-05 10:00:00 +02:00');
+      expect(new WrittenTimestamp('2026-10-05').toJSON()).toBe('2026-10-05');
+    });
+
+    it('the core barrel re-exports WrittenTimestamp and CONTEXT_PAYLOAD_FORMAT', () => {
+      expect(core.WrittenTimestamp).toBe(WrittenTimestamp);
+      expect(core.CONTEXT_PAYLOAD_FORMAT).toBe(CONTEXT_PAYLOAD_FORMAT);
+      expect(CONTEXT_PAYLOAD_FORMAT).toBe(1);
     });
 
     it('serialize writes a Date a caller built itself in its ISO-8601 UTC form', () => {

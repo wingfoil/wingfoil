@@ -130,10 +130,12 @@ export { isWellFormedRevision, resolveRevision, RevisionError } from './revision
 export type { DirectiveFile, WorkflowsLoadResult } from './loaders';
 export {
   assembleExecutionContext,
+  CONTEXT_PAYLOAD_FORMAT,
   resolveRoleDirectives,
   selectDirectivesById,
   serializeExecutionContext,
   validateExecutionContext,
+  WrittenTimestamp,
 } from './context';
 export {
   buildDirectiveListing,

@@ -218,6 +218,8 @@ export interface ContextRequest {
 export interface ContextElementDocument extends MemoryDocumentSummary {
   readonly type: string;
   readonly id: string;
+  /** As the document wrote it: a timestamp value is a {@link WrittenTimestamp} (its text as written), never a `Date`. */
+  readonly frontmatter: Record<string, unknown>;
 }
 
 /**
@@ -255,7 +257,8 @@ export interface ExecutionContext {
   readonly dna: DnaSelection;
   /** §7 `## 3. Directives`: the role's directives and the globals, ascending by id ({@link resolveRoleDirectives}). */
   readonly directives: readonly ContextDirective[];
-  /** §7 `## 4. Relevant Memory`, in §6 order and within the request's limits. */
+  /** §7 `## 4. Relevant Memory`, in §6 order and within the request's limits. Each `frontmatter` is as
+   * the document wrote it: a timestamp value is a {@link WrittenTimestamp} (its text as written), never a `Date`. */
   readonly memory: readonly RelevantMemoryDocument[];
   /** {@link RoleDirectiveResolution.warnings}: §5.1's three kinds in their fixed order. Diagnostics
    * *about* the context, never part of the payload (dl-050, dl-051). */
@@ -324,6 +327,11 @@ export class WrittenTimestamp {
     /** The scalar's text, as written. */
     readonly text: string,
   ) {}
+
+  /** The text as written, so `JSON.stringify` of a context renders the timestamp as the document did. */
+  toJSON(): string {
+    return this.text;
+  }
 }
 
 // js-yaml 4 exports its built-in types as `types`; `@types/js-yaml` does not declare that export.
