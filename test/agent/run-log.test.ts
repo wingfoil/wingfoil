@@ -70,6 +70,10 @@ const line = (overrides: Partial<RunRecord> = {}): string => serializeRunRecord(
 /** The record as a plain object, keys in §4.2 order, for mutating into an invalid line. */
 const asObject = (): Record<string, unknown> => JSON.parse(line()) as Record<string, unknown>;
 
+/** `object` without `key`, the other keys in their order. */
+const without = <T extends object>(object: T, key: string): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(object).filter(([name]) => name !== key));
+
 describe('run record serialization (spec-016 §4.2)', () => {
   it('declares the 18 keys in §4.2 order and the four token keys', () => {
     expect(RUN_RECORD_KEYS).toEqual([
@@ -112,8 +116,7 @@ describe('run record serialization (spec-016 §4.2)', () => {
     expect(() => serializeRunRecord(withNull)).toThrow(/'model' must be a string/);
     const tokensNull = record({ tokens: { input: null, output: 1, cache_read: 1, cache_write: 1 } as unknown as RunRecord['tokens'] });
     expect(() => serializeRunRecord(tokensNull)).toThrow(/'tokens\.input' must be a non-negative integer or "not-reported"/);
-    const { session: _omitted, ...missing } = record();
-    expect(() => serializeRunRecord(missing as RunRecord)).toThrow(/missing key 'session'/);
+    expect(() => serializeRunRecord(without(record(), 'session') as unknown as RunRecord)).toThrow(/missing key 'session'/);
   });
 
   it('records a signal exit as signal:<NAME>', () => {
@@ -242,8 +245,7 @@ describe('strict reader (spec-016 §4.5)', () => {
   });
 
   it('refuses a missing key', () => {
-    const { notes: _notes, ...rest } = asObject();
-    expect(refusal(`${JSON.stringify(rest)}\n`)).toEqual(invalid(1, "missing key 'notes'"));
+    expect(refusal(`${JSON.stringify(without(asObject(), 'notes'))}\n`)).toEqual(invalid(1, "missing key 'notes'"));
   });
 
   it('refuses an extra key', () => {
@@ -318,6 +320,9 @@ describe('strict reader (spec-016 §4.5)', () => {
       commitAll(repo, 'one run');
       expect(readRunLogAt(repo, 'HEAD', LOG)).toEqual({ ok: true, value: [record()] });
       expect(readRunLogAt(repo, 'HEAD', 'docs/runs/task-404.jsonl')).toEqual({ ok: true, value: [] });
+      const unknownRev = readRunLogAt(repo, 'no-such-branch', LOG);
+      expect(unknownRev.ok).toBe(false);
+      if (!unknownRev.ok) expect(unknownRev.error.code).toBe('NOT_FOUND');
     } finally {
       removeTempDir(repo);
     }
@@ -486,6 +491,12 @@ describe('recording a run (spec-016 §4.3 collision, §4.4 commit, §3.7)', () =
     const result = recordRun(repo, LOG, record({ id: 'task-002-other/design/1' }));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe('VALIDATION');
+    expect(existsSync(join(repo, LOG))).toBe(false);
+  });
+
+  it('refuses an invalid record, writing nothing', () => {
+    const result = recordRun(repo, LOG, record({ duration_ms: -5 }));
+    expect(result).toEqual({ ok: false, error: { code: 'VALIDATION', message: "run record is not valid: 'duration_ms' must be a non-negative integer" } });
     expect(existsSync(join(repo, LOG))).toBe(false);
   });
 
