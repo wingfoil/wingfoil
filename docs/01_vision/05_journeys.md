@@ -59,7 +59,7 @@ manual work.
 
 **Obstacles:**
 
-- DNA inference is imperfect — may miss implicit conventions or misclassify structure (requires human review)
+- DNA inference is imperfect — may miss or misclassify modules, stacks or structure (requires human review)
 - Memory is seeded but empty — team must document existing decisions (not auto-imported to avoid outdated content)
 - Directives inferred from patterns may be too permissive or restrictive (requires customization)
 - Team skepticism: "Why add more process if we're already shipping?"
@@ -220,7 +220,7 @@ tests/releases, and reviews an audit trail showing who decided and when.
 | 1.5  | Explore project documentation structure         | CLI: `wingfoil paths docs` or `wingfoil paths governance`                                                                  | Casey sees where to find architecture, data models, team info, stakeholders     |
 | 2    | Search or browse decisions by topic             | CLI: `wingfoil memory search api-design`                                                                                   | Casey finds the API design decision quickly                                     |
 | 3    | Read the decision document (ADR, RFC)           | Memory file                                                                                                                | Casey understands what, why, and who decided                                    |
-| 4    | Check current project DNA for status            | CLI: `wingfoil dna show`                                                                                                   | Casey knows: team size, tech stack, current phase, risks                        |
+| 4    | Check current project DNA for status            | CLI: `wingfoil dna show`                                                                                                   | Casey knows: team size, stacks, current phase, risks                            |
 | 5    | Review traceability configured in workflow      | Configured in workflow + Memory metadata                                                                                   | Traceability shows req→test→release links (defined at setup, not auto-inferred) |
 | 6    | Query audit trail for decisions and changes     | CLI: `wingfoil memory history [document-id]`                                                                               | Casey sees who decided what, when, why, and what changed                        |
 | 7    | Agent or developer triggers "human needed" flag | Notification system (CLI hooks, email)                                                                                     | Casey is notified: specific action needed (e.g., "Approve database migration")  |

@@ -38,9 +38,9 @@ line count (`awk 'END{print NR}'`).
 | Document                                               | Ver | Date       | Status   | Lines | What it contains                                                                                                        |
 |--------------------------------------------------------|-----|------------|----------|-------|-------------------------------------------------------------------------------------------------------------------------|
 | [`01_product-brief.md`](01_product-brief.md)           | 1.7 | 2026-10-06 | Approved | 361   | Executive summary: vision, problem, pillars, differentiators, personas, metrics, GTM, timeline, tech stack, constraints |
-| [`02_product-vision.md`](02_product-vision.md)         | 1.2 | 2026-10-01 | Approved | 103   | Vision statement, key decisions, and the reference-workflow/methodology-template model                                  |
+| [`02_product-vision.md`](02_product-vision.md)         | 1.3 | 2026-10-06 | Approved | 103   | Vision statement, key decisions, and the reference-workflow/methodology-template model                                  |
 | [`03_is-isnot.md`](03_is-isnot.md)                     | 1.4 | 2026-10-06 | Approved | 59    | Scope boundaries: what WingFoil IS / IS NOT / DOES / DOES NOT                                                           |
-| [`04_personas.md`](04_personas.md)                     | 1.1 | 2026-10-06 | Approved | 149   | The primary persona (Morgan) and the 7 personas (Alex, Sam, Jordan, Morgan, Casey, Taylor, the maintainer)              |
+| [`04_personas.md`](04_personas.md)                     | 1.1 | 2026-10-06 | Approved | 147   | The primary persona (Morgan) and the 7 personas (Alex, Sam, Jordan, Morgan, Casey, Taylor, the maintainer)              |
 | [`05_journeys.md`](05_journeys.md)                     | 1.4 | 2026-10-06 | Approved | 286   | 8 end-to-end user journeys (0a, 0b, 1–6): steps, obstacles, success                                                     |
 | [`06_features.md`](06_features.md)                     | 1.9 | 2026-10-06 | Approved | 518   | 63 features (by pillar + by release) and the data-model / implementation notes                                          |
 | [`07_sequencer.md`](07_sequencer.md)                   | 1.8 | 2026-10-01 | Approved | 471   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
@@ -59,7 +59,7 @@ line count (`awk 'END{print NR}'`).
 | The 5 pillars (Memory, DNA, Directives, Workflow, Interaction)      | `01_product-brief` L39–79 · `08_mvp-canvas` L58–97                                                     |
 | Scope boundaries (is / is-not / does / does-not)                    | `03_is-isnot` (whole file, L9–59)                                                                      |
 | The primary persona (Morgan) and why                                | `04_personas` L9–20 · `01_product-brief` note L108                                                     |
-| Persona details (pains, goals, AI-usage)                            | `04_personas` L9–149 · quick summary `01_product-brief` L106–159                                       |
+| Persona details (pains, goals, AI-usage)                            | `04_personas` L9–147 · quick summary `01_product-brief` L106–159                                       |
 | End-to-end user flows                                               | `05_journeys` (per-journey ranges below)                                                               |
 | The full feature list + feature IDs (P1.x…X1.x)                     | `06_features` L9–159                                                                                   |
 | Which feature ships in which version                                | `06_features` L160–300 · `07_sequencer` scope changes L108–133 · `01_product-brief` GTM L202–247       |
@@ -115,8 +115,8 @@ line count (`awk 'END{print NR}'`).
 - Jordan (team developer) — L56–74
 - Morgan (tech lead) — L75–91
 - Casey (non-technical manager; goals as read-only views) — L92–110
-- Taylor (architect, future) — L111–128
-- Persona 7, the maintainer receiving AI-generated contributions — L129–149
+- Taylor (architect, future) — L111–126
+- Persona 7, the maintainer receiving AI-generated contributions — L127–147
 
 ### `05_journeys.md`
 

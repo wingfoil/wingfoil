@@ -12,9 +12,9 @@
 inception workshop, before anything was used. Two releases later the only production use is WingFoil's own repository,
 and its shape is Morgan's with agents as the team: one person sets the rules, approves every gate and directs AI agents
 that execute as developer, reviewer, QA and architect without approval authority (`.wingfoil/dna.yaml` `team`). Morgan's
-goals (encode the team's rules once, be notified when a human decision is required) are the ones v0.2 shipped and v0.3
-extends. The other personas stay as written: no persona is renamed or removed, so the journeys, the features' persona
-column and the User Story Map that name them stay valid.
+goals are the ones the releases deliver: encoding the team's rules once shipped in v0.2; being notified when a human
+decision is required (X1) arrives in v0.3. The other personas stay as written: no persona is renamed or removed, so the
+journeys, the features' persona column and the User Story Map that name them stay valid.
 
 ---
 
@@ -121,8 +121,6 @@ column and the User Story Map that name them stay valid.
     - Write architectural decisions once (ADR, RFC) and have them centrally queryable
     - Have agents reference architecture docs in their reasoning
     - Build a searchable knowledge base of design patterns and constraints
-
----
 
 ---
 
