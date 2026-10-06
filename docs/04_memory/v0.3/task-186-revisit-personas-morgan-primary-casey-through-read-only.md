@@ -2,7 +2,7 @@
 id: "task-186-revisit-personas-morgan-primary-casey-through-read-only"
 type: task
 title: "Revisit the personas: Morgan primary, Casey through read-only views, a maintainer persona"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "medium"
