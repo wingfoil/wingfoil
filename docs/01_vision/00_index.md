@@ -42,10 +42,10 @@ line count (`awk 'END{print NR}'`).
 | [`03_is-isnot.md`](03_is-isnot.md)                     | 1.4 | 2026-10-06 | Approved | 59    | Scope boundaries: what WingFoil IS / IS NOT / DOES / DOES NOT                                                           |
 | [`04_personas.md`](04_personas.md)                     | 1.1 | 2026-10-06 | Approved | 147   | The primary persona (Morgan) and the 7 personas (Alex, Sam, Jordan, Morgan, Casey, Taylor, the maintainer)              |
 | [`05_journeys.md`](05_journeys.md)                     | 1.4 | 2026-10-06 | Approved | 286   | 8 end-to-end user journeys (0a, 0b, 1–6): steps, obstacles, success                                                     |
-| [`06_features.md`](06_features.md)                     | 1.9 | 2026-10-06 | Approved | 518   | 63 features (by pillar + by release) and the data-model / implementation notes                                          |
+| [`06_features.md`](06_features.md)                     | 1.10 | 2026-10-06 | Approved | 518   | 63 features (by pillar + by release) and the data-model / implementation notes                                          |
 | [`07_sequencer.md`](07_sequencer.md)                   | 1.8 | 2026-10-01 | Approved | 471   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
-| [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.7 | 2026-10-06 | Approved | 213   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
-| [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.5 | 2026-10-05 | Approved | 399   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
+| [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.8 | 2026-10-06 | Approved | 213   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
+| [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.6 | 2026-10-06 | Approved | 408   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
 | [`X_lean-inception-plan.md`](X_lean-inception-plan.md) | —   | 2026-06-11 | —        | 42    | Workshop plan: sessions, key decisions, output list                                                                     |
 
 ---
@@ -182,7 +182,7 @@ line count (`awk 'END{print NR}'`).
 - Command-Line Syntax Conventions — L242–277
 - Release Timeline by Command — L278–313
 - Command Reference by Persona (Alex L316, Morgan L325, Casey L335, Jordan L344, Sam L353) — L314–362
-- Revision history — L363–399
+- Revision history — L363–408
 
 ### `X_lean-inception-plan.md`
 

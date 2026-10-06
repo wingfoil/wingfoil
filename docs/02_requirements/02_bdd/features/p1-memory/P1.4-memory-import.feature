@@ -8,7 +8,7 @@ Feature: P1.4 (US-0B-04) - wingfoil memory import
 
   Scenario: Import existing documents with extracted metadata
     When I run "wingfoil memory import" and confirm each proposed document
-    Then 3 Memory files are created under ".wingfoil/memory/"
+    Then 3 Memory files are created, each at the path its type declares in ".wingfoil/memory.yaml"
     And each imported file has frontmatter with an extracted title and a "status: draft"
     And the command exits with code 0 reporting "3 imported, 0 skipped"
 

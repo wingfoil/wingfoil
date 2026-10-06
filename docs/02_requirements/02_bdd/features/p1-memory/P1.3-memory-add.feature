@@ -4,11 +4,13 @@ Feature: P1.3 (US-4-01) - wingfoil memory add
 
   Background:
     Given an initialized WingFoil project
-    And the Memory type "decision" is defined in ".wingfoil/memory.yaml" with initial state "draft"
+    And the Memory type "decision" is defined in ".wingfoil/memory.yaml" with initial state "draft" and path "docs/memory/decision/{id}.md"
 
+  # task-259 (bug-256): a document is written at the path its type declares, resolved against the project
+  # root (task-017, task-172); only the type templates sit in ".wingfoil/memory/templates/".
   Scenario: Add a new Memory document in draft state
     When I run "wingfoil memory add --type decision --title 'Use PostgreSQL'"
-    Then a Memory file is created under ".wingfoil/memory/decision/"
+    Then a Memory file is created under "docs/memory/decision/"
     And its frontmatter contains "status: draft" and a generated unique id
     And the command exits with code 0 and prints the new document id
 
