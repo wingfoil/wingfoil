@@ -129,7 +129,7 @@ describe('REQ-SYS-05 parity — fixture registry (representative mutating + read
 });
 
 describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODULES)', () => {
-  it('reports 0 unmatched operations — the thirteen mutating ops (incl. `dna add|remove|update`, task-093, and `memory amend`, task-127) are on BOTH surfaces (task-051/050/052/025/093/020/046/048/047/045/127)', async () => {
+  it('reports 0 unmatched operations — the fourteen mutating ops (incl. `dna add|remove|update`, task-093, `memory amend`, task-127, and `memory park`, task-180) are on BOTH surfaces (task-051/050/052/025/093/020/046/048/047/045/127/180)', async () => {
     const cli = actualMutatingCliCommands(CORE_MODULES).sort();
     const tools = (await actualMcpToolsAsCliForm(CORE_MODULES)).sort();
 
@@ -143,7 +143,8 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
     // task-093-dna-mutation-surface-add-remove-update adds `dna add|remove|update`: `dl-081`'s
     // ratification chose option (E) precisely because spec-006 §3's one-Tool-per-function rule makes
     // this three Tools rather than the dozen a per-collection verb set would have cost.
-    // task-127 adds `memory amend` (`dl-108`), the approver-gated amendment verb.
+    // task-127 adds `memory amend` (`dl-108`), the approver-gated amendment verb; task-180 adds
+    // `memory park` (`dl-110`), the verb that takes a declared `returns` edge.
     const expected = [
       'directive assign',
       'directive create',
@@ -156,6 +157,7 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'memory amend',
       'memory approve',
       'memory deprecate',
+      'memory park',
       'memory reject',
       'memory submit',
     ];
@@ -164,7 +166,7 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
     expect(computeParityDiff(cli, tools)).toEqual({ onlyInA: [], onlyInB: [] });
   });
 
-  it('the read-only production operations are Resources, the thirteen mutating ops (incl. `dna.add`, `dna.remove`, `dna.update`, `memory.amend`) are Tools, never both', async () => {
+  it('the read-only production operations are Resources, the fourteen mutating ops (incl. `dna.add`, `dna.remove`, `dna.update`, `memory.amend`, `memory.park`) are Tools, never both', async () => {
     const server = new McpServer({ name: 'parity-test-prod', version: '0.0.0' });
     registerCoreModules(server, CORE_MODULES as CoreModule[], {
       resolveRoot: () => '/fixture-root',
@@ -203,6 +205,7 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'memory.amend',
       'memory.approve',
       'memory.deprecate',
+      'memory.park',
       'memory.reject',
       'memory.submit',
     ]);
@@ -217,5 +220,6 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
     expect(resources.map((r) => r.uri)).not.toContain('wingfoil://dna/set');
     expect(resources.map((r) => r.uri)).not.toContain('wingfoil://memory/add');
     expect(resources.map((r) => r.uri)).not.toContain('wingfoil://memory/amend');
+    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://memory/park');
   });
 });

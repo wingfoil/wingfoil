@@ -316,7 +316,30 @@ describe('scaffolded memory.yaml carries a commented per-type `states:` example 
         expect([type, resolveStateMachine(parsed, type)]).toEqual([type, parsed.defaults!.states]);
       }
     });
+
+    it(`${def.name}: uncommented, the example also declares a \`returns\` edge and a WIP limit (task-180, dl-110)`, () => {
+      const parsed = MemoryYaml.parse(loadYaml(uncommented(scaffoldedMemoryYaml(def))));
+      const machine = resolveStateMachine(parsed, 'bug');
+      expect(machine.returns).toEqual({ 'in-progress': 'open' });
+      expect(machine.limits).toEqual({ 'in-progress': 3 });
+      expect(resolveTypeTransition(parsed, 'bug', 'in-progress', 'park')).toBe('open');
+    });
   }
+});
+
+/**
+ * task-180 (`dl-110` Action 3) — the Kanban template promised "explicit WIP limits" that no schema could
+ * declare. A WIP limit is now a `limits:` key of a type's machine; the scaffold's machine has no
+ * in-progress state, so the sentence points at the mechanism instead of claiming a declared limit.
+ */
+describe('the Kanban template names the WIP-limit mechanism it relies on (task-180)', () => {
+  const kanban = TEMPLATES.find((def) => def.name === 'Kanban')!;
+
+  it('its description and cadence point at `limits:` in memory.yaml', () => {
+    expect(kanban.description).toContain('`limits:`');
+    expect(kanban.cadence).toContain('`limits:`');
+    expect(kanban.cadence).not.toContain('under explicit WIP limits');
+  });
 });
 
 /**

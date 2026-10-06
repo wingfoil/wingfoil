@@ -93,7 +93,7 @@ lines collapsed, lines starting with `#` kept).
 Which state a command reads depends on whether that state can stop it:
 
 - **Commands that change the project read the configuration as committed at `HEAD`** — `memory add`,
-  `submit`, `approve`, `reject`, `deprecate`, `amend`, the `dna` verbs `set`, `add`, `update`,
+  `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, the `dna` verbs `set`, `add`, `update`,
   `remove`, and `directive assign`. If you edit `dna.yaml`, `memory.yaml` or `roles.yaml` by hand,
   commit it before running the command that depends on it — otherwise the command fails and says the
   change is not committed.
@@ -107,7 +107,7 @@ Which state a command reads depends on whether that state can stop it:
   example, whether a path leads outside the project through a symbolic link — because that is what
   the write will follow.
 
-The Memory transition verbs (`submit`, `approve`, `reject`, `deprecate`, `amend`) find the document
+The Memory transition verbs (`submit`, `approve`, `reject`, `deprecate`, `park`, `amend`) find the document
 their `<id>` names, and read its current status, as committed at `HEAD`; what `submit` and `amend`
 commit is the file in your working tree. A document you created by hand and never committed is
 refused (exit `1`) with a message naming `memory add`, and editing `status` by hand does not change
@@ -365,7 +365,7 @@ A Memory document is a Markdown file with YAML frontmatter. Its **type** (declar
 fixes its path, its id pattern, its template and its state machine; its **state** is the `status:` field
 of its frontmatter. The verbs below are the only supported way to change a state.
 
-Unreleased (v0.3): the transition verbs (`submit`, `approve`, `reject`, `deprecate`, `amend`) look an
+Unreleased (v0.3): the transition verbs (`submit`, `approve`, `reject`, `deprecate`, `park`, `amend`) look an
 id up among the documents committed at `HEAD`. A committed document whose frontmatter is not valid
 YAML, or a symbolic link, no longer stops a verb acting on a different document. It is skipped, and the
 verb still succeeds, printing a `W_MEMORY_UNREADABLE` warning on stderr that names the file. If the id
@@ -375,7 +375,12 @@ them.
 
 ### `wingfoil memory add`
 
-Create a document in its type's initial state (`draft`) from the type's template.
+Create a document in its type's initial state (the first state of its sequence; `draft` by default) from the type's template.
+
+Unreleased (v0.3): the initial state is the first state of the type's `sequence` in the committed
+`memory.yaml` (or of `defaults.states` for a type with no machine of its own); until then `add` wrote
+`draft` whatever the machine (`bug-214`). When that state declares a WIP limit (`limits:`, see
+[`memory park`](#wingfoil-memory-park)) that its documents have reached, `add` is refused at exit `1`.
 
 ```
 wingfoil memory add --type <type> --title <title> [--tags <t1,t2>] [--set <name>=<value> ...]
@@ -596,6 +601,43 @@ $ wingfoil memory deprecate dl-001-use-postgresql --reason "Superseded by the ho
 
 - **Commit:** `wf(<type>): deprecate <id> [<from> → deprecated]`, with a `Reason:` body line when given.
 
+### `wingfoil memory park`
+
+Return a started document to an earlier state along its type's declared `returns` edge (for a `task`, `in-progress → backlog`).
+
+**Unreleased (v0.3)** — not in 0.2.2.
+
+```
+wingfoil memory park <id> --reason <text>
+```
+
+A type's state machine in `memory.yaml` may declare return edges next to `gates` and `waiting`:
+`returns: { in-progress: backlog }`. Each target must be an earlier state of the `sequence`. `park`
+takes that edge: the work is not being done now, which is not the same as rejecting it. `--reason` is
+required. No approver role is required.
+
+```console
+$ wingfoil memory park task-001-my-first-task --reason "Blocked on the schema decision; back to the backlog."
+{
+  "id": "task-001-my-first-task",
+  "path": "docs/memory/task/task-001-my-first-task.md",
+  "from": "in-progress",
+  "to": "backlog",
+  "reason": "Blocked on the schema decision; back to the backlog."
+}
+```
+
+- **Commit:** `wf(<type>): park <id> [<from> → <to>]` with a `Reason:` body line; `wingfoil memory
+  history` reports it as `"operation": "park"`.
+- **WIP limits.** A machine may also declare `limits: { in-progress: 3 }`: at most that many documents
+  of the type in that state. Every command that moves a document into a limited state (`add`, `submit`,
+  `approve`, `reject`, `park`) is refused at exit `1` once the limit is reached, before anything is
+  written, and the message names the documents holding the state:
+  `error: WIP limit reached for 'in-progress' on type 'task' (limit 3): held by task-004-…, task-007-…, task-009-…. Move one of them out of 'in-progress', then retry.`
+- **Errors:** missing or blank `--reason` → exit `2`; the document's state declares no `returns` edge →
+  exit `1`, with the illegal-transition error naming the state it was refused from and the type; the
+  target state is at its WIP limit → exit `1`.
+
 ### `wingfoil memory amend`
 
 Record an uncommitted correction to a document as an amendment, leaving its state unchanged.
@@ -647,7 +689,7 @@ Other modified or staged files are left as they are and are not committed.
   the type is not amendable → exit `1` (`error: type 'release' is not amendable: …`); not an approver →
   exit `1` (`error: user not authorized to approve type 'tech-spec'`).
 
-#### Rules for `--reason` (approve, reject, deprecate, amend)
+#### Rules for `--reason` (approve, reject, deprecate, park, amend)
 
 - It may span several lines, but it may not be blank.
 - No line of it may begin with `Approver:` or `Reason:` — those keys are reserved for the commit trailer.
