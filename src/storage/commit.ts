@@ -17,7 +17,7 @@
  * env silently drops `GIT_*` overrides a test sets (the task-014 env-isolation gotcha).
  */
 import { execFileSync, spawnSync } from 'child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmdirSync, statSync, unlinkSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmdirSync, unlinkSync, writeFileSync } from 'fs';
 import { dirname, isAbsolute, join, relative, sep } from 'path';
 
 import { formatVersionTrailer, readBuildStamp } from './build-stamp';
@@ -219,7 +219,7 @@ export function writeAndCommit(root: string, changes: readonly PathChange[], mes
   const relativePaths = planned.map((change) => change.relative);
   const indexBefore = indexEntries(root, relativePaths, options);
   const bytesBefore = planned.map((change) => (existsSync(change.absolute) ? readFileSync(change.absolute) : null));
-  const createdDirectories: string[] = [];
+  const createdDirectories: { readonly file: string; readonly created: string }[] = [];
   const restore = (): void => {
     restoreIndex(root, relativePaths, indexBefore, options);
     planned.forEach((change, index) => {
@@ -227,7 +227,7 @@ export function writeAndCommit(root: string, changes: readonly PathChange[], mes
       if (bytes !== null) writeFileSync(change.absolute, bytes);
       else if (existsSync(change.absolute)) unlinkSync(change.absolute);
     });
-    for (const directory of createdDirectories) removeEmptyDirectories(directory);
+    for (const { file, created } of createdDirectories) removeCreatedDirectories(file, created);
   };
 
   try {
@@ -236,7 +236,7 @@ export function writeAndCommit(root: string, changes: readonly PathChange[], mes
         unlinkSync(change.absolute);
       } else {
         const created = mkdirSync(dirname(change.absolute), { recursive: true });
-        if (created !== undefined) createdDirectories.push(created);
+        if (created !== undefined) createdDirectories.push({ file: change.absolute, created });
         writeFileSync(change.absolute, change.content, 'utf-8');
       }
     }
@@ -270,36 +270,19 @@ function restoreIndex(root: string, paths: readonly string[], entries: readonly 
   });
 }
 
-/** Remove the directory a write created and every empty directory it created under it, deepest first. */
-function removeEmptyDirectories(created: string): void {
-  const stack = [created];
-  // `mkdirSync({recursive})` reports the FIRST directory it created; the file's own directory is
-  // below it. Walk down to collect them, then remove bottom-up, stopping at a non-empty one.
-  for (;;) {
-    const current = stack[stack.length - 1] as string;
-    let entries: string[];
-    try {
-      entries = readdirSync(current);
-    } catch {
-      return;
-    }
-    if (entries.length !== 1) break;
-    const child = join(current, entries[0] as string);
-    let isDirectory = false;
-    try {
-      isDirectory = statSync(child).isDirectory();
-    } catch {
-      break;
-    }
-    if (!isDirectory) break;
-    stack.push(child);
-  }
-  for (const directory of stack.reverse()) {
+/**
+ * Remove the directories a write created for `file`: from the file's own directory up to and including
+ * `created` (the first directory `mkdirSync({recursive})` created), deepest first, stopping at the first
+ * one that is not empty — something else now lives there, and it is not this write's to remove.
+ */
+function removeCreatedDirectories(file: string, created: string): void {
+  for (let directory = dirname(file); ; directory = dirname(directory)) {
     try {
       rmdirSync(directory);
     } catch {
       return;
     }
+    if (directory === created || dirname(directory) === directory) return;
   }
 }
 

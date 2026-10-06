@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import { CORE_MODULES, initWingfoilProject, loadDnaYaml } from '../../src/core';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
+import { captureDryRun } from '../../src/storage';
 import { makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 
 function op(module: string, name: string): CoreFn<unknown, unknown> {
@@ -78,17 +79,35 @@ describe('src/core/index.ts arms with no other test (task-189, bug-161)', () => 
   });
 
   it('memory add: a failure that is neither a StorageError nor a ValidationError propagates as a throw', async () => {
-    // A pre-commit hook that refuses the commit: `commitPaths` throws git's own error (by design,
-    // src/storage/commit.ts), which `memory add` does not translate into a domain refusal.
-    // Pins CURRENT behaviour pending bug-217 (owned by task-210), which may turn this raw git throw
-    // into a `CoreResult`; that fix must then find this arm another trigger or re-justify it.
+    // The trigger since task-210: the dry-run stop the commit primitive throws where the operation
+    // would commit (`src/storage/dry-run.ts`). Before it, the arm was reached by a refusing hook's raw
+    // git error, which `bug-217`'s fix turned into a `StorageError` (`E_COMMIT_FAILED`, below).
+    const before = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
+    let thrown: unknown;
+    const outcome = await captureDryRun(async () => {
+      try {
+        return await op('memory', 'memoryAdd')({ root: repo, options: { type: 'bug', title: 'Planned' } });
+      } catch (error) {
+        thrown = error;
+        throw error;
+      }
+    });
+
+    expect((thrown as Error | undefined)?.name).toBe('DryRunStop');
+    expect(outcome.kind).toBe('planned');
+    expect(execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim()).toBe(before);
+  });
+
+  it('memory add: a commit git refuses is the StorageError arm, IO, with nothing left behind (bug-217)', async () => {
     const hook = join(repo, '.git', 'hooks', 'pre-commit');
     writeFileSync(hook, '#!/bin/sh\nexit 1\n', 'utf-8');
     chmodSync(hook, 0o755);
-    const before = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
 
-    await expect(op('memory', 'memoryAdd')({ root: repo, options: { type: 'bug', title: 'Refused' } })).rejects.toThrow(/ commit --only /);
-    expect(execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim()).toBe(before);
+    const result = await op('memory', 'memoryAdd')({ root: repo, options: { type: 'bug', title: 'Refused' } });
+
+    expect(result.ok === false && result.error.code).toBe('IO');
+    expect(result.ok === false && result.error.message).toContain('E_COMMIT_FAILED');
+    expect(execFileSync('git', ['-C', repo, 'status', '--porcelain'], { encoding: 'utf-8' })).toBe('');
   });
 
   it('directive remove: an invalid directive file is the inventory loader\'s VALIDATION refusal', async () => {
