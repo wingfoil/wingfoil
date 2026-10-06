@@ -80,6 +80,18 @@ The same key, with its own counter (`MEMORY_TEMPLATE_FORMAT`, `1`), sits in the 
 (`VALIDATION`, exit `1`, nothing written). `tmpl_version` stays the template's revision. The scaffold is
 copied verbatim, so an element added from a template that declares `format` carries the line too.
 
+**An element keeps the `format` of its template** and is read with the same counter,
+`MEMORY_TEMPLATE_FORMAT`; an absent key reads as `1`. An element whose `format` is newer than this
+build reads is not read by today's rules. Every transition verb and `memory amend` refuse it, whether
+`HEAD` records the newer format or only the working-tree content to commit does, and `memory history`
+refuses the element it is asked about: `VALIDATION`, exit `1`, the `E_INVALID_FORMAT` issue naming the
+file, nothing written. A scan over many
+documents (`memory search`, a lookup passing it on its way, the snapshot at a commit) leaves it out and
+reports it as `W_MEMORY_UNREADABLE` (`spec-017` §1.4), naming the file and the refusal. Only a newer
+format is checked on an element: its frontmatter is otherwise read loosely, as every other field is.
+`memory amend` reads the type's committed template with `memory add`'s reader and refuses it with
+`memory add`'s message.
+
 **Reserved type names.** No key of `types` may be `directive`, `dna` or `workflow`. Those are the
 `wf({scope})` scopes that record a change to configuration, not to a Memory element (`spec-008` §2),
 and the audit reader skips their commits; a type that took one would have every commit of its own
@@ -568,3 +580,14 @@ example declares `returns: { in-progress: backlog }`, as this repository's `memo
 Every file valid before stays valid. The `sequence[0]` rule of the field table is unchanged; `memory
 add` now follows it (`bug-214`). Edited in place, with no `version:` bump (`dl-047`); pending the
 approver's `memory amend` at `task-180`'s review.
+
+**Revision (2026-10-06, `task-257-check-the-format-key-on-memory-elements-and-on-memory-amend-s-template-read`)
+— the `format` of an element (`dl-149`, `bug-241`, `bug-243`).** The paragraph on the template's `format`
+gains the element rule: an element keeps its template's `format` (the approver's ruling at `task-251`'s
+review) and reads with `MEMORY_TEMPLATE_FORMAT`; a newer one is refused by the transition verbs and
+`memory amend` (as `HEAD` records it or as the working tree would commit it) and by `memory history` for
+the element it is asked about, and is reported, not refused, by the scans (`memory search`, a lookup
+passing it, the snapshot at a commit); `memory amend` reads the committed template with `memory add`'s
+check. No schema field, token or edge changes, and every file valid before stays valid. Edited
+in place, with no `version:` bump (`dl-047`); pending the approver's `memory amend` at `task-257`'s
+review.
