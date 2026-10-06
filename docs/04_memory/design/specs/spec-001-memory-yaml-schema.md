@@ -98,6 +98,8 @@ const StateMachine = z.object({
   sequence: z.array(z.string()).min(1),                          // ordered chain of states
   gates:    z.record(z.string(), z.object({ reject: z.string() })).optional(),
   waiting:  z.array(z.string()).optional(),
+  returns:  z.record(z.string(), z.string()).optional(),             // task-180, dl-110 P1 (a)
+  limits:   z.record(z.string(), z.number().int().positive()).optional(), // task-180, dl-110 P3 (a)
 }).passthrough();
 ```
 
@@ -106,6 +108,8 @@ const StateMachine = z.object({
 | `sequence` | The ordered list of states. `sequence[0]` is the state `memory.add` assigns (this replaces the old explicit `initial:` field — the first element *is* the initial state). Each consecutive pair `sequence[i] → sequence[i+1]` is the type's forward edge. |
 | `gates`    | `{ <state>: { reject: <target> } }`. Listing a state here means its forward edge is an **approval gate**: the forward move (to the next state in `sequence`) fires only via `wingfoil memory approve`, and `reject` names the explicit target of `wingfoil memory reject`. |
 | `waiting`  | States whose forward edge has **no CLI verb at all** — it fires only as a side effect of a Workflow step's `element.set_state(...)` action or an engine trigger (e.g. another element's `supersedes:` field). `submit`/`approve` on a `waiting` state is illegal. |
+| `returns`  | `{ <state>: <earlier state> }` (`dl-110` P1 (a)). A declared **return edge** that is not a rejection: `wingfoil memory park` takes it, moving a started element back along the chain (e.g. `task`'s `in-progress: backlog`). The target must be an earlier state of `sequence`. A park says the work is not being done now; a reject says it was wrong, so the two are different edges and different verbs. |
+| `limits`   | `{ <state>: <positive integer> }` (`dl-110` P3 (a)). An optional **WIP limit**: at most N documents of the type in that state. The verb that enters the state enforces it — `memory add` for `sequence[0]`, `submit`, `approve`, `reject`, `park`, and the `supersedes:` trigger — refusing (exit `1`) before anything is written and naming the documents that hold the state. The holders are counted in the commit the transition is decided at (`dl-080`). The limit counts per type, also when it is declared in `defaults.states`. |
 
 **Which verb drives each forward edge — fully determined by the schema:**
 
@@ -120,6 +124,8 @@ const StateMachine = z.object({
 - state in `waiting` → forward edge has no verb; advanced only by a Workflow action / engine trigger.
 - a state MAY be **both** in `waiting` and a key in `gates`: its forward edge is verb-less (picked up
   automatically) while it still exposes a manual `reject`/decline path.
+- a state that is a key in `returns` also has a backward edge, to `returns.<state>`, taken by
+  `wingfoil memory park` (whatever else the state is).
 
 This is why the ambiguity of the old format cannot arise: `approve`'s target is structurally fixed
 (next in `sequence`), and `reject`'s target is always spelled out in `gates.<state>.reject`.
@@ -137,8 +143,9 @@ commit, be of the same type and be in that state. Otherwise the approve is refus
 written. The move is a commit of its own, whose subject is `spec-008` §2's (`finalize`); the field is
 `spec-010`'s. `superseded → deprecated` stays legal through the wildcard edge above.
 
-**Semantic validation (post-parse):** every key in `gates` and every entry in `waiting` MUST be a
-member of `sequence`. A `gates.<state>.reject` target need **not** be a member of `sequence`: it may
+**Semantic validation (post-parse):** every key in `gates`, every entry in `waiting` and every key in
+`returns` and `limits` MUST be a member of `sequence`; every `returns` target MUST be an earlier state
+of `sequence` than its key; every `limits` value is a positive integer. A `gates.<state>.reject` target need **not** be a member of `sequence`: it may
 revert into the chain (e.g. `pending: { reject: draft }`) or name an off-chain decline state reached by
 no forward edge (e.g. `bug`'s `open: { reject: closed }`). The only universal constraint on any state
 name anywhere is that none may be `"deprecated"`. Errors: `E_INVALID_MEMORY_SCHEMA` (Zod shape),
@@ -302,6 +309,7 @@ types:
         in-review: { reject: in-progress }  # approve: in-review→approved · reject: →in-progress
       waiting: [ backlog, approved ]        # backlog→in-progress (dev-loop starts);
                                             # approved→done (dev-loop finalizes)
+      returns: { in-progress: backlog }     # memory park: a started task goes back to the backlog (dl-110)
 
   adr:
     path: "docs/04_memory/design/adrs/{id}.md"
@@ -550,3 +558,13 @@ newer-format refusal and the same key in a Memory template's frontmatter. `versi
 called it the "config-file format version", now calls it the content revision (`dl-047`). Every file
 valid before stays valid. Edited in place, with no `version:` bump (`dl-047`); pending the approver's
 sign-off at `task-251`'s review.
+
+**Revision (2026-10-05, `task-180-add-memory-park-declared-returns-edge-optional-per`) — `returns` and
+`limits`, per `dl-110` (`ready`; P1 (a), P3 (a), approve `6d12740d`).** The `StateMachine` sub-schema
+gains two optional keys next to `gates` and `waiting`: `returns`, a declared return edge to an earlier
+state that `memory park` takes, and `limits`, a per-state WIP limit enforced by the verb that enters
+the state. The field table, the verb list and the semantic validation say so, and the worked `task`
+example declares `returns: { in-progress: backlog }`, as this repository's `memory.yaml` 2.5 does.
+Every file valid before stays valid. The `sequence[0]` rule of the field table is unchanged; `memory
+add` now follows it (`bug-214`). Edited in place, with no `version:` bump (`dl-047`); pending the
+approver's `memory amend` at `task-180`'s review.
