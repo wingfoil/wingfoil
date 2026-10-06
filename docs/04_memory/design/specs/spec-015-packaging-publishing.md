@@ -614,3 +614,15 @@ passes `"$GITHUB_SHA"`. Stage 2's quoted command and stage 3's text say so. The 
 `test/cli/publish-pipeline.test.ts`. The command quoted in the *Revision (2026-09-21) — §3 stage 2*
 note is the step as it was verified then, and stays as written. Edited in place: no supersede, no
 state change, no `version:` bump (`dl-047`), as in the revisions above.
+
+**Revision (2026-10-06, `task-248-assert-req-perf-02-s-total-and-marginal-budgets-on-an-idle-machine`)
+— §2 `test`: the latency suite asserts both of REQ-PERF-02's budgets (`dl-146` (C)).** The 2026-10-03
+revision recorded that `test/cli/command-latency.test.ts` asserted each command's marginal cost over a
+process-start floor while the requirement worded the total, a deviation pending a decision-log.
+`dl-146` settled it with option (C): the SARD's measurement conditions now include an otherwise idle
+machine, and REQ-PERF-02 budgets both the total, process start-up included, and the marginal cost,
+each at 1,000 ms p95. The suite asserts both for each command, through the one verdict function of
+`test/core/helpers/latency.ts`, and `test/core/latency-budget-placement.test.ts` fails it if it stops
+judging either. How the suites run is unchanged: `npm test`, CI and
+`prepublishOnly` still leave them out, and `npm run test:latency` runs them alone, only when asked for.
+Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions above.

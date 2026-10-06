@@ -2,10 +2,12 @@
  * Structural guard for where and how the suite measures latency. Born of
  * `bug-011-cli-latency-assertion-measures-spawn-contention` (task-067-fix-cli-latency-assertion);
  * given one statistical shape and an honest statement of its reach by
- * `task-154-give-latency-budgets-statistical-shape-guard-says-what` (`bug-012`, `bug-013`, `bug-014`).
+ * `task-154-give-latency-budgets-statistical-shape-guard-says-what` (`bug-012`, `bug-013`, `bug-014`);
+ * rule 3 added by `task-248-assert-req-perf-02-s-total-and-marginal-budgets-on-an-idle-machine` (`dl-146`).
  *
  * **What it enforces — a same-file, textual check.** For every `.ts`/`.cjs` file under `test/` (this
- * file excepted), it reads that file's own source text and asserts two rules:
+ * file excepted), it reads that file's own source text and asserts two rules, and a third on the
+ * exempted suites:
  *
  * 1. **One clock.** No file but `test/core/helpers/latency.ts` contains a wall-clock marker
  *    ({@link WALL_CLOCK_MARKERS}). Every timing suite therefore measures through that module, whose
@@ -23,6 +25,10 @@
  *    exactly the suites left out of the parallel run and run alone, only when asked for
  *    (`test/latency-suites.cjs`, `scripts/run-tests.cjs`): a timed spawn is only about the code on an
  *    otherwise idle machine.
+ * 3. **Both process-level budgets.** Each exempted suite judges each command on both quantities
+ *    REQ-PERF-02 budgets (`dl-146` (C)): the total, process start included, and the marginal cost over
+ *    process start, through the helper's `processLevelVerdict` over `PROCESS_LEVEL_QUANTITIES`
+ *    ({@link processLevelProblems}), so neither can be dropped silently.
  *
  * **What it does not see.** The check reads one file at a time and follows no import other than the
  * two named above. A spawn reached through any other module is invisible to it: the git calls inside
@@ -80,10 +86,12 @@ const LATENCY_HELPER_IMPORT = /from\s+['"][^'"]*helpers\/latency['"]/;
  */
 const EXEMPTIONS: Readonly<Record<string, string>> = {
   'cli/command-latency.test.ts':
-    "REQ-PERF-02 is worded against the commands (bug-013). The file spawns a process-start floor and " +
-    'each command and budgets each total minus the median floor (sampleMarginalLatency), so the ' +
-    "asserted number is the command's marginal cost, not the spawn's wall-clock that bug-011 measured; " +
-    'it runs alone and only when asked for (test/latency-suites.cjs), because it presupposes an idle machine.',
+    "REQ-PERF-02 is worded against the commands (bug-013), and budgets both each command's total and its " +
+    'marginal cost over process start (dl-146 (C)). The file spawns a process-start floor and each command, ' +
+    'and judges each total and each total minus the median floor (sampleMarginalLatency, rule 3), so the ' +
+    'marginal separates the query cost from start-up; it runs alone and only when asked for ' +
+    "(test/latency-suites.cjs), because both budgets presuppose an idle machine, where bug-011's spawn ran " +
+    "inside jest's parallel run.",
 };
 
 /** What to do instead, named in every failure so a hit costs no lookup. */
@@ -92,6 +100,47 @@ const REMEDY_SPAWN =
   'measure the operation in-process through the latency helper, as test/core/query-latency.test.ts does; ' +
   'if the budget really is worded at process level, budget the marginal cost over a measured floor ' +
   '(sampleMarginalLatency) and list the file in EXEMPTIONS in test/core/latency-budget-placement.test.ts with its reason';
+
+/**
+ * Rule 3 (dl-146 (C)): a suite in `test/latency-suites.cjs` times a spawned command, and REQ-PERF-02
+ * budgets two quantities of it, the **total** (process start included) and the **marginal** over
+ * process start. The suite must judge both through the helper. Read with its imports and comments
+ * removed (a header that names the list proves nothing), its source must iterate the helper's list
+ * whole — `PROCESS_LEVEL_QUANTITIES.map(`, `.flatMap(`, `.forEach(`, `it.each(PROCESS_LEVEL_QUANTITIES`
+ * or `for (const … of PROCESS_LEVEL_QUANTITIES)`, so a `.slice`/`.filter` chained before the
+ * iteration does not count — and call `processLevelVerdict(`; it may not index the list, write
+ * `'total'` or `'marginal'` as a string literal anywhere, or take a `p95(` of its own.
+ * A same-file textual check, with rules 1 and 2's limits. What it still does not see: a callback that
+ * iterates the list but ignores its element, a quantity built at run time (string concatenation,
+ * `.filter`/`.slice` on a copy held in another variable), or an iteration whose result is unused.
+ */
+const REMEDY_BOTH =
+  'judge each command with processLevelVerdict(measured, index, quantity) for every quantity in PROCESS_LEVEL_QUANTITIES ' +
+  '(test/core/helpers/latency.ts), as test/cli/command-latency.test.ts does';
+
+/** How the list may be iterated whole: a direct call on it, or it as the iterable itself. */
+const WHOLE_ITERATION =
+  /PROCESS_LEVEL_QUANTITIES\s*\.\s*(?:map|flatMap|forEach)\(|\.each\(\s*PROCESS_LEVEL_QUANTITIES\s*\)|\bof\s+PROCESS_LEVEL_QUANTITIES\s*\)/;
+
+/** A suite's source without its import statements and comments: what rule 3 reads. */
+function codeOnly(source: string): string {
+  return source
+    .replace(/^import[\s\S]*?from\s+['"][^'"]+['"];?$/gm, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+}
+
+/** What rule 3 finds wrong in a latency suite's source text, as messages; empty when it holds. */
+function processLevelProblems(suitePath: string, source: string): string[] {
+  const body = codeOnly(source);
+  const problems: string[] = [];
+  if (!WHOLE_ITERATION.test(body)) problems.push(`${suitePath} does not iterate PROCESS_LEVEL_QUANTITIES whole: ${REMEDY_BOTH}`);
+  if (/PROCESS_LEVEL_QUANTITIES\s*\[/.test(body)) problems.push(`${suitePath} indexes PROCESS_LEVEL_QUANTITIES: ${REMEDY_BOTH}`);
+  if (!body.includes('processLevelVerdict(')) problems.push(`${suitePath} does not call processLevelVerdict: ${REMEDY_BOTH}`);
+  if (/(['"`])(?:total|marginal)\1/.test(body)) problems.push(`${suitePath} writes a quantity as a literal: ${REMEDY_BOTH}`);
+  if (/(?<![\w.])p95\(/.test(body)) problems.push(`${suitePath} computes a p95 of its own: ${REMEDY_BOTH}`);
+  return problems;
+}
 
 /** Every jest-executed source file under `test/`, as `test/`-relative POSIX paths, sorted
  * (REQ-SYS-07 — `readdirSync` order is not guaranteed stable, so sort explicitly). */
@@ -176,4 +225,43 @@ describe('latency budgets: one clock, no timed spawn without a documented exempt
   it('the exempted files are exactly the suites that run alone, only when asked for (test/latency-suites.cjs)', () => {
     expect([...LATENCY_SUITES].sort()).toEqual(Object.keys(EXEMPTIONS).map((path) => `test/${path}`).sort());
   });
+
+  it('rule 3 catches the plain ways of dropping one of the two quantities (guards the guard)', () => {
+    const imports = "import { PROCESS_LEVEL_QUANTITIES, processLevelVerdict } from '../core/helpers/latency';\n";
+    const header = '/** Judges every quantity in PROCESS_LEVEL_QUANTITIES through processLevelVerdict(. */\n';
+    const judge = "expect(processLevelVerdict(m, 0, q)).toBe('within budget')";
+    const both = `${imports}${header}it.each(PROCESS_LEVEL_QUANTITIES)('%s', (q) => ${judge});`;
+    expect(processLevelProblems('s', both)).toEqual([]);
+    expect(processLevelProblems('s', `${imports}PROCESS_LEVEL_QUANTITIES.flatMap((q) => [q]).map((q) => ${judge});`)).toEqual([]);
+    const notIterated = (problems: string[]): void =>
+      expect(problems).toContainEqual(expect.stringMatching(/does not iterate PROCESS_LEVEL_QUANTITIES whole/));
+    // M4: a literal list in place of the helper's (the total silently dropped).
+    const m4 = processLevelProblems('s', `${imports}${header}(['marginal'] as const).map((q) => ${judge});`);
+    notIterated(m4);
+    expect(m4).toContainEqual(expect.stringMatching(/as a literal/));
+    // M1: one quantity held in a constant and passed through a variable.
+    const m1 = `${imports}const ONLY = 'marginal' as const;\nPROCESS_LEVEL_QUANTITIES.map(() => processLevelVerdict(m, 0, ONLY));`;
+    expect(processLevelProblems('s', m1)).toEqual([expect.stringMatching(/as a literal/)]);
+    // M3: the list sliced (or filtered) before it is iterated.
+    notIterated(processLevelProblems('s', `${imports}${header}PROCESS_LEVEL_QUANTITIES.slice(1).map((q) => ${judge});`));
+    notIterated(processLevelProblems('s', `${imports}PROCESS_LEVEL_QUANTITIES.filter((q) => q !== QT).map((q) => ${judge});`));
+    // The list indexed rather than iterated, and a p95 taken by hand.
+    expect(processLevelProblems('s', `${imports}PROCESS_LEVEL_QUANTITIES.map(() => processLevelVerdict(m, 0, PROCESS_LEVEL_QUANTITIES[1]));`)).toEqual([
+      expect.stringMatching(/indexes PROCESS_LEVEL_QUANTITIES/),
+    ]);
+    const ownP95 = `${imports}PROCESS_LEVEL_QUANTITIES.map((q) => processLevelVerdict(m, 0, q));\nexpect(p95(m.marginal[0]) < 1000).toBe(true);`;
+    expect(processLevelProblems('s', ownP95)).toEqual([expect.stringMatching(/p95 of its own/)]);
+    // Names in comments or imports alone prove nothing.
+    expect(processLevelProblems('s', `${imports}${header}// PROCESS_LEVEL_QUANTITIES.map( processLevelVerdict(\n`)).toEqual([
+      expect.stringMatching(/does not iterate PROCESS_LEVEL_QUANTITIES whole/),
+      expect.stringMatching(/does not call processLevelVerdict/),
+    ]);
+  });
+
+  it.each([...LATENCY_SUITES].sort())(
+    '%s budgets both quantities of a spawned command, the total and the marginal, through the helper (dl-146 (C), rule 3)',
+    (suitePath) => {
+      expect(processLevelProblems(suitePath, readFileSync(join(TEST_ROOT, '..', suitePath), 'utf-8'))).toEqual([]);
+    },
+  );
 });
