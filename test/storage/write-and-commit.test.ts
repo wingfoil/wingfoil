@@ -21,6 +21,7 @@ import {
   writeDocument,
 } from '../../src/storage';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from './helpers/git-fixture';
+import { stopWithPlan } from '../../src/storage/dry-run';
 import { assertPersistenceUnchanged, snapshotPersistence } from './helpers/persistence-snapshot';
 
 const itOnPosix = process.platform === 'win32' ? it.skip : it;
@@ -102,6 +103,20 @@ describe('writeAndCommit', () => {
     expect(existsSync(join(repo, 'docs/deep'))).toBe(false);
   });
 
+  it('a commit git declines without a word on stderr is reported by its own message, the project root removed', () => {
+    // Content identical to HEAD: `git commit --only` has nothing to record and says so on stdout only.
+    let thrown: unknown;
+    try {
+      writeAndCommit(repo, [{ path: 'docs/kept.md', content: 'one\ntwo\nthree\n' }], 'nothing');
+    } catch (error) {
+      thrown = error;
+    }
+    expect((thrown as StorageError).code).toBe(E_COMMIT_FAILED);
+    expect((thrown as StorageError).message).toContain('git did not commit docs/kept.md: Command failed: git -C . commit');
+    expect((thrown as StorageError).message).not.toContain(repo);
+    expect(git(repo, ['status', '--porcelain']).trim()).toBe('');
+  });
+
   itOnPosix('a filesystem failure is rethrown as raised, after the paths already written are put back', () => {
     mkdirSync(join(repo, 'docs/blocked'));
     chmodSync(join(repo, 'docs/blocked'), 0o500);
@@ -125,6 +140,14 @@ describe('unifiedDiff', () => {
 
   it('fails loudly, as E_GIT_READ_FAILED, when git cannot produce the diff', () => {
     expect(() => unifiedDiff('x.md', 'a\n', 'b\n', { PATH: '' })).toThrow(/E_GIT_READ_FAILED: git diff for the dry run of x.md failed/);
+  });
+
+  it('fails loudly with git\'s own words when git runs but errors', () => {
+    expect(() => unifiedDiff('x.md', 'a\n', 'b\n', { GIT_CONFIG_PARAMETERS: 'bogus' })).toThrow(/E_GIT_READ_FAILED: git diff for the dry run of x.md failed: .*GIT_CONFIG_PARAMETERS/);
+  });
+
+  it('stopWithPlan outside a dry run is a programming error', () => {
+    expect(() => stopWithPlan({ dryRun: true, subject: 's', message: 's', paths: [], diff: '' })).toThrow('stopWithPlan called outside a dry run');
   });
 
   it('marks a missing final newline the way git does', () => {

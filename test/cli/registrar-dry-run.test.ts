@@ -5,7 +5,8 @@
  * `mutates` and from nothing else, it never reaches the operation's params, and each of the four ways a
  * dry run can end maps to the result the surface renders.
  */
-import { DRY_RUN_FLAG, runAsDryRun } from '../../src/core/dry-run';
+// Through the core barrel, as a surface imports them.
+import { DRY_RUN_FLAG, runAsDryRun } from '../../src/core';
 import type { CoreModule, ParamsContext } from '../../src/core/registry';
 import { coreErr, coreOk, type CoreResult } from '../../src/core/types';
 import { buildCliCommands, type CliCommand } from '../../src/cli/registrar';

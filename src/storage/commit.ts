@@ -40,11 +40,13 @@ export interface CommitOptions {
   readonly author?: { readonly name: string; readonly email: string };
 }
 
+/** The environment git runs with: `process.env`, with {@link CommitOptions.env} merged over it. */
+function gitEnv(options: CommitOptions): NodeJS.ProcessEnv {
+  return options.env ? { ...process.env, ...options.env } : process.env;
+}
+
 function runGit(root: string, args: readonly string[], options: CommitOptions): string {
-  return execFileSync('git', ['-C', root, ...args], {
-    encoding: 'utf-8',
-    env: options.env ? { ...process.env, ...options.env } : process.env,
-  });
+  return execFileSync('git', ['-C', root, ...args], { encoding: 'utf-8', env: gitEnv(options) });
 }
 
 /**
@@ -60,11 +62,7 @@ function runGit(root: string, args: readonly string[], options: CommitOptions): 
  * has not been created yet. A non-zero exit still raises through `execFileSync` exactly as before.
  */
 function probeGit(root: string, args: readonly string[], options: CommitOptions): string {
-  return execFileSync('git', ['-C', root, ...args], {
-    encoding: 'utf-8',
-    env: options.env ? { ...process.env, ...options.env } : process.env,
-    stdio: ['ignore', 'pipe', 'ignore'],
-  });
+  return execFileSync('git', ['-C', root, ...args], { encoding: 'utf-8', env: gitEnv(options), stdio: ['ignore', 'pipe', 'ignore'] });
 }
 
 /** git's exit status for `fatal:` — an absent path, an unresolvable revision, no repository. */
@@ -150,11 +148,7 @@ function commitPathsNow(root: string, paths: readonly string[], message: string,
 
 /** {@link runGit} with stderr captured into the thrown error instead of inherited by the terminal. */
 function quietGit(root: string, args: readonly string[], options: CommitOptions): string {
-  return execFileSync('git', ['-C', root, ...args], {
-    encoding: 'utf-8',
-    env: options.env ? { ...process.env, ...options.env } : process.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  return execFileSync('git', ['-C', root, ...args], { encoding: 'utf-8', env: gitEnv(options), stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
 // --- The one write-and-commit primitive (task-210, dl-106 W2, bug-217) -------------------------
@@ -212,7 +206,7 @@ export function writeAndCommit(root: string, changes: readonly PathChange[], mes
     const sorted = [...planned].sort((a, b) => Number(a.relative > b.relative) - Number(a.relative < b.relative));
     stopWithPlan({
       dryRun: true,
-      subject: message.split('\n')[0] ?? '',
+      subject: (/^.*/.exec(message) as RegExpExecArray)[0],
       message: stampedMessage(message),
       paths: sorted.map((change) => change.relative),
       diff: sorted.map((change) => unifiedDiff(change.relative, readPathAtRev(root, 'HEAD', change.relative, options), change.content, options.env)).join(''),
@@ -268,7 +262,7 @@ function restoreIndex(root: string, paths: readonly string[], entries: readonly 
   if (entries.length === 0) return;
   execFileSync('git', ['-C', root, 'update-index', '-z', '--index-info'], {
     input: entries.map((entry) => `${entry}\0`).join(''),
-    env: options.env ? { ...process.env, ...options.env } : process.env,
+    env: gitEnv(options),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 }
@@ -296,15 +290,13 @@ function removeCreatedDirectories(file: string, created: string): void {
  */
 function commitFailureReason(root: string, paths: readonly string[], error: unknown): string {
   const captured = (error as { stderr?: unknown }).stderr;
-  const raw = typeof captured === 'string' && captured.trim().length > 0 ? captured : error instanceof Error ? error.message : String(error);
-  const roots = new Set([root]);
-  try {
-    roots.add(realpathSync(root));
-  } catch {
-    // The root as given is still removed.
-  }
+  // git's stderr when it wrote one; else the error's own message (`Command failed: git -C <root> …`,
+  // whose root the next step removes) — a commit with nothing to record explains itself on stdout.
+  const raw = typeof captured === 'string' && captured.trim().length > 0 ? captured : (error as Error).message;
+  // The longer spelling first, so that one spelling being a prefix of the other leaves no fragment.
+  const real = realpathSync(root);
   let detail = raw;
-  for (const spelling of [...roots].sort((a, b) => b.length - a.length)) {
+  for (const spelling of real.length >= root.length ? [real, root] : [root, real]) {
     detail = detail.split(`${spelling}${sep}`).join('').split(spelling).join('.');
   }
   const oneLine = detail
