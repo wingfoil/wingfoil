@@ -6,6 +6,7 @@ status: done
 rejection_reason: ""
 release: "v0.2"
 priority: "high"
+kind: "feature"
 tags: ["v0.2", "dna", "cli", "mcp"]
 ref: "dl-081-dna-mutation-surface-shape"
 bug: ["bug-084-dna-key-alias-writes-unschemad-keys", "bug-083-dna-set-cannot-write-array-valued-fields"]
@@ -1036,3 +1037,11 @@ the note.
 3. The P2.1 table above — the only place the breaking change is visible as a behaviour a contract
    already pins, and the hand-off `bug-089` needs.
 4. `src/dna/mutate.ts`'s refusal messages, and why the prefix helpers moved into the pillar.
+
+**Correction (2026-10-06, `task-184`, `bug-096`).** Two sentences above (the invariant's description
+in the second-pass notes, and the third-pass paragraph on the derived overlap) say `--version` is
+registered outside `program.options`. Measured, it is not: `program.version()` puts `--version` in
+`program.options`, and only `--help` is absent. `test/cli/derived-option-namespace.test.ts` now
+asserts both facts and adds only `--help` by hand, so commenting out `program.version()` in
+`src/cli/program.ts` fails the invariant test, which it did not before. Recorded here rather than by
+rewriting the notes, which stay the record of what was believed at the time.
