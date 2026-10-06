@@ -122,6 +122,17 @@ export const TeamMember = z
 export type TeamMember = z.infer<typeof TeamMember>;
 
 /**
+ * The address shape a `team.agents[].email` must have to sit inside a `Co-Authored-By:` trailer's
+ * `<…>`: exactly one `@`, a dotted domain, and no whitespace or angle brackets (task-256).
+ */
+export const AGENT_EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+
+/** Whether `name` can be the name part of a trailer: no `<`, `>`, CR or LF (task-256). */
+function isTrailerSafeName(name: string): boolean {
+  return !/[<>\r\n]/.test(name);
+}
+
+/**
  * One `team.agents[]` entry — an AI agent, the roles it `executes_as`, whether it may hold
  * `approval_authority` (REQ-SEC-03), and the `adapter` that says *how* it is launched.
  *
@@ -129,10 +140,23 @@ export type TeamMember = z.infer<typeof TeamMember>;
  * the manifest's file basename under `.wingfoil/agents/{built-in,custom}/`, so it is held to the shared
  * id character class (`spec-009-validation-strategy` §1, `src/validation/id.ts`). It is optional — an
  * agent without one can be named in DNA but not launched (`spec-016` §3.7, `NO_ADAPTER`).
+ *
+ * `name` and `email` together are the agent's commit identity: `git-conventions` §7 writes them as the
+ * `Co-Authored-By: <name> <<email>>` trailer (`dl-117` Q2 (c), task-256, `bug-240`). So a `name` may
+ * not hold `<`, `>` or a line break, and `email` (optional: an agent can be declared before it has an
+ * address) must be one mailbox, {@link AGENT_EMAIL_RE}.
  */
 export const AgentEntry = z
   .object({
-    name: z.string(),
+    name: z.string().refine(isTrailerSafeName, {
+      message: 'an agent name may not contain "<", ">" or a line break (it is written into a Co-Authored-By: trailer)',
+    }),
+    email: z
+      .string()
+      .refine((value) => AGENT_EMAIL_RE.test(value), {
+        message: 'an agent email must be one address, local@domain.tld, with no whitespace or angle brackets',
+      })
+      .optional(),
     executes_as: z.array(z.string()),
     approval_authority: z.boolean().optional(),
     adapter: z
