@@ -4,8 +4,8 @@
  *
  * REQ-PERF-02 and REQ-PERF-04 (`docs/02_requirements/03_sard/02_performance-nfr.md`) state each
  * budget as **`< 1,000 ms (p95)`**, and the requirement set's measurement conditions as **p95 over
- * `>= 20` runs** on a 1,000-Memory-document reference repository. This module is where those
- * conditions live in code:
+ * `>= 20` runs** on a 1,000-Memory-document reference repository, on an otherwise idle machine. This
+ * module is where those conditions live in code:
  *
  * - {@link MIN_RUNS} is the SARD's `>= 20`; {@link RUNS} is the 25 the suites take (task-008's
  *   convention, kept); {@link P95_BUDGET_MS} is the 1,000 ms threshold, unchanged.
@@ -14,6 +14,8 @@
  *   percentile method is this module's choice (task-008's, kept): the REQ does not specify one.
  * - {@link sampleLatency} and {@link sampleMarginalLatency} refuse fewer than {@link MIN_RUNS} runs,
  *   so a budget cannot be checked against a single sample through this module.
+ * - {@link PROCESS_LEVEL_QUANTITIES} and {@link processLevelVerdict} are REQ-PERF-02's two budgets for
+ *   a spawned command, the total and the marginal over process start (`dl-146` (C)).
  *
  * It is also the **only test source that reads the wall clock** — `test/core/latency-budget-placement.test.ts`
  * fails any other file that does. A suite that times something imports this module, which is what
@@ -118,6 +120,38 @@ export async function sampleMarginalLatency(
     total: totalSamples,
     marginal: totalSamples.map((samples) => samples.map((total) => total - centralFloor)),
   };
+}
+
+/**
+ * The two quantities REQ-PERF-02 budgets for a spawned command (`dl-146` (C); task-248): the
+ * **total**, invocation to return with process start included (what the user waits for), and the
+ * **marginal** cost over the median process-start floor (what WingFoil's own query work costs). Each
+ * is held to {@link P95_BUDGET_MS} at p95, on an otherwise idle machine. A suite that times a spawned
+ * command judges every quantity in this list through {@link processLevelVerdict};
+ * `test/core/latency-budget-placement.test.ts` (rule 3) fails one that drops either.
+ */
+export const PROCESS_LEVEL_QUANTITIES = ['total', 'marginal'] as const;
+
+/** One of {@link PROCESS_LEVEL_QUANTITIES}: a field of {@link MarginalLatencySamples}. */
+export type ProcessLevelQuantity = (typeof PROCESS_LEVEL_QUANTITIES)[number];
+
+/**
+ * Judge call `call` of `measured` on one `quantity`: `'within budget'` when that quantity's p95 is
+ * under {@link P95_BUDGET_MS}, otherwise `'over budget: …'` naming the quantity first and then the
+ * floor, total and marginal distributions, so a red says whether the command or the machine moved.
+ * Pure: it reads only the samples it is given.
+ */
+export function processLevelVerdict(measured: MarginalLatencySamples, call: number, quantity: ProcessLevelQuantity): string {
+  const total = measured.total[call];
+  const marginal = measured.marginal[call];
+  if (total === undefined || marginal === undefined) {
+    throw new Error(`the measurement has no call ${call} (it has ${measured.total.length})`);
+  }
+  const samples = quantity === 'total' ? total : marginal;
+  if (p95(samples) < P95_BUDGET_MS) return 'within budget';
+  const distributions: Record<'floor' | ProcessLevelQuantity, readonly number[]> = { floor: measured.floor, total, marginal };
+  const others = (['floor', ...PROCESS_LEVEL_QUANTITIES] as const).filter((name) => name !== quantity);
+  return `over budget: ${[quantity, ...others].map((name) => `${name} ${describeSamples(distributions[name])}`).join('; ')}`;
 }
 
 /** One-line summary of a sample set for a failure message: p95, min and max, in whole ms. */

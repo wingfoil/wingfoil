@@ -86,10 +86,12 @@ const LATENCY_HELPER_IMPORT = /from\s+['"][^'"]*helpers\/latency['"]/;
  */
 const EXEMPTIONS: Readonly<Record<string, string>> = {
   'cli/command-latency.test.ts':
-    "REQ-PERF-02 is worded against the commands (bug-013). The file spawns a process-start floor and " +
-    'each command and budgets each total minus the median floor (sampleMarginalLatency), so the ' +
-    "asserted number is the command's marginal cost, not the spawn's wall-clock that bug-011 measured; " +
-    'it runs alone and only when asked for (test/latency-suites.cjs), because it presupposes an idle machine.',
+    "REQ-PERF-02 is worded against the commands (bug-013), and budgets both each command's total and its " +
+    'marginal cost over process start (dl-146 (C)). The file spawns a process-start floor and each command, ' +
+    'and judges each total and each total minus the median floor (sampleMarginalLatency, rule 3), so the ' +
+    'marginal separates the query cost from start-up; it runs alone and only when asked for ' +
+    "(test/latency-suites.cjs), because both budgets presuppose an idle machine, where bug-011's spawn ran " +
+    "inside jest's parallel run.",
 };
 
 /** What to do instead, named in every failure so a hit costs no lookup. */
