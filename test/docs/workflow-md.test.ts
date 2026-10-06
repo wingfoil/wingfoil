@@ -123,6 +123,25 @@ describe('WORKFLOW.md parity — the phase predicate, on a fixture (bug-206)', (
     ] as const;
     expect(undocumentedPhases(text, phases)).toEqual(['backlog-export/map-dependencies', 'release-cycle/gate']);
   });
+
+  // Review fix F1: a summary label also carries prose ("Approval gate", "design gate"); only the names
+  // its arrows chain are phases.
+  it('counts only arrow-chained names in a one-node summary, not its prose', () => {
+    const text = [
+      '```mermaid',
+      'ES["**e2e-smoke** → `e2e-smoke`\\nfresh-init → drive-cli (opt.) → mcp-registration\\n🔑 Approval gate — *approver*"]',
+      'DL["**implementation** → `dev-loop`\\n— design gate + TDD cycle per task —"]',
+      '```',
+    ].join('\n');
+    const phases = [
+      ['e2e-smoke', 'fresh-init'],
+      ['e2e-smoke', 'drive-cli'],
+      ['e2e-smoke', 'mcp-registration'],
+      ['e2e-smoke', 'gate'],
+      ['dev-loop', 'design'],
+    ] as const;
+    expect(undocumentedPhases(text, phases)).toEqual(['dev-loop/design', 'e2e-smoke/gate']);
+  });
 });
 
 describe('WORKFLOW.md parity with workflows.yaml (.wingfoil/WORKFLOW.md)', () => {
