@@ -455,9 +455,11 @@ export const DNA_REWRITE_WARNING =
  *    authorizes the rewrite and does not demand it: an in-place edit is still made in place, unwarned.
  * 7. **Re-validate the written bytes** against `DnaYaml` (spec-002) BEFORE persisting — re-parsing the
  *    serialized form, not the in-memory object, so the check honours YAML's own scalar coercion and
- *    validates the exact bytes about to be written (`dna set version 2` writes `version: '2'` and
- *    still fails `z.number()` on read-back). It is also what enforces the cross-field rules the verbs
- *    do not duplicate: a member naming a role absent from `team.roles` fails here (REQ-SYS-08,
+ *    validates the exact bytes about to be written: `--value` is a string, so
+ *    `wingfoil dna set version --value 2` serializes `'2'` and fails `z.number()` on read-back — refused
+ *    at exit 1, `expected number, received string`, nothing written (measured with that command on a
+ *    fresh `init --template scrum` repository, task-184, bug-096). It is also what enforces the
+ *    cross-field rules the verbs do not duplicate: a member naming a role absent from `team.roles` fails here (REQ-SYS-08,
  *    `Team.superRefine`), which is why `dl-081` records that referential integrity needs no new check.
  * 8. **Persist + commit** through the single storage primitives (task-018) — `writeDocument` then
  *    `commitPaths` on the ONE scoped path `.wingfoil/dna.yaml`; the returned sha rides

@@ -21,6 +21,7 @@ import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import { UsageError } from '../../src/core/usage-error';
 import { makeTempGitRepo, removeTempDir, writeFixtureFile, commitAll } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const DNA_FIXTURE = `version: 1.1
 modules:
@@ -191,7 +192,7 @@ describe('CORE_MODULES dna.dnaSet — bug-084: an unschema\'d path is refused, n
     expect(dnaText(repo)).not.toContain('cli:');
   });
 
-  it('the general case — `dna set nonsense.at.any.depth value` — is refused at exit 1 too', async () => {
+  it('the general case — `dna set nonsense.at.any.depth --value value` — is refused at exit 1 too', async () => {
     const before = head(repo);
     const result = await dnaSetFn()({ root: repo, positionals: ['nonsense.at.any.depth'], options: { value: 'value' } });
     expect(result.ok).toBe(false);
@@ -244,6 +245,7 @@ describe('CORE_MODULES dna.dnaSet — REQ-SEC-01 git-identity pre-flight (no con
 
   it('refuses with the exact REQ-SEC-01 message (CoreResult.error VALIDATION -> exit 1), writing nothing', async () => {
     const beforeText = dnaText(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await dnaSetFn()({ root: repo, positionals: ['stacks.language'], options: { value: 'python' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -251,5 +253,6 @@ describe('CORE_MODULES dna.dnaSet — REQ-SEC-01 git-identity pre-flight (no con
     expect(result.error.message).toBe('git identity not configured (user.name/user.email)');
     expect(exitCodeForResult(result)).toBe(1);
     expect(dnaText(repo)).toBe(beforeText);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });

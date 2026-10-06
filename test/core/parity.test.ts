@@ -13,11 +13,11 @@
  *
  * Two registries are exercised:
  *  1. A fixture registry with a representative mix of mutating + read-only operations across two
- *     modules — meaningful coverage of the mechanism (a production registry with zero mutating ops,
- *     see below, would make this assertion vacuously true on its own).
- *  2. The real production `CORE_MODULES` (`src/core/index.ts`) — the actual regression guard that
- *     will start catching real drift once task-018+ registers real mutating operations; today it
- *     legitimately reports 0 mutating ops on both surfaces (see task-006 Execution Notes / scope).
+ *     modules — coverage of the mechanism that does not depend on what production registers.
+ *  2. The real production `CORE_MODULES` (`src/core/index.ts`) — the regression guard itself: every
+ *     operation it declares `mutates: true` is checked against both surfaces, and the expected
+ *     lists the assertions compare against are the roster (the titles name the property, not the
+ *     roster, so a new mutating operation cannot make them stale — bug-045, dl-121 T1).
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -129,7 +129,7 @@ describe('REQ-SYS-05 parity — fixture registry (representative mutating + read
 });
 
 describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODULES)', () => {
-  it('reports 0 unmatched operations — the fourteen mutating ops (incl. `dna add|remove|update`, task-093, `memory amend`, task-127, and `memory park`, task-180) are on BOTH surfaces (task-051/050/052/025/093/020/046/048/047/045/127/180)', async () => {
+  it('reports 0 unmatched operations — every mutating op is a CLI command AND an MCP Tool, and both surfaces carry exactly the expected list', async () => {
     const cli = actualMutatingCliCommands(CORE_MODULES).sort();
     const tools = (await actualMcpToolsAsCliForm(CORE_MODULES)).sort();
 
@@ -166,7 +166,7 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
     expect(computeParityDiff(cli, tools)).toEqual({ onlyInA: [], onlyInB: [] });
   });
 
-  it('the read-only production operations are Resources, the fourteen mutating ops (incl. `dna.add`, `dna.remove`, `dna.update`, `memory.amend`, `memory.park`) are Tools, never both', async () => {
+  it('the read-only production operations are exactly the Resources listed, the mutating ops exactly the Tools listed, and no mutating op is a Resource', async () => {
     const server = new McpServer({ name: 'parity-test-prod', version: '0.0.0' });
     registerCoreModules(server, CORE_MODULES as CoreModule[], {
       resolveRoot: () => '/fixture-root',
@@ -187,10 +187,8 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'wingfoil://paths',
       'wingfoil://workflow/list',
     ]);
-    // `directive.directiveAssign`, `directive.directiveCreate`, `directive.directiveRemove`,
-    // `dna.dnaSet`, `memory.memoryAdd`, `memory.memoryApprove`, `memory.memoryDeprecate`,
-    // `memory.memoryReject` + `memory.memorySubmit` are `mutates: true` → registered ONLY as Tools
-    // (never Resources), so they do NOT appear above; they are the Tools the surface now advertises.
+    // Every `mutates: true` operation is registered ONLY as a Tool (never a Resource), so none appears
+    // above; the Tools list below is the mutating set the surface advertises.
     expect(hasAnyMutatingOperation(CORE_MODULES)).toBe(true);
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
@@ -209,17 +207,13 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'memory.reject',
       'memory.submit',
     ]);
-    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://directive/assign');
-    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://directive/remove');
-    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://memory/approve');
-    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://memory/deprecate');
-    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://memory/reject');
-    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://memory/submit');
-    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://memory/approve');
-    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://directive/create');
-    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://dna/set');
-    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://memory/add');
-    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://memory/amend');
-    expect(resources.map((r) => r.uri)).not.toContain('wingfoil://memory/park');
+    // No mutating op is ALSO a Resource — derived from the registry, so the list cannot fall behind it.
+    const mutatingUris = CORE_MODULES.flatMap((module) =>
+      Object.values(module.operations)
+        .filter((operation) => operation.mutates)
+        .map((operation) => `wingfoil://${module.name}/${deriveVerb(module.name, operation.name)}`),
+    );
+    expect(mutatingUris).toHaveLength(tools.length);
+    for (const uri of mutatingUris) expect(resources.map((r) => r.uri)).not.toContain(uri);
   });
 });

@@ -1,18 +1,18 @@
 /**
  * The real, production `CORE_MODULES` registry exported from `src/core/index.ts` (task-006,
- * spec-006-core-domain-api). Scope note (see task-006's Execution Notes): today this registry wires
- * in exactly the core functions that already legitimately exist — task-004's read-only per-pillar
- * loaders (`loadDnaYaml`, `loadDirectives`, `loadWorkflowsYaml`) — re-packaged as `mutates: false`
- * `CoreOperation`s. The full memory/dna/directives/workflow domain operations tables in spec-006 §3
- * (`memoryAdd`, `dnaSet`, ...) are feature work for task-018..030 and are deliberately NOT registered
- * here yet; there is intentionally zero mutating operation in production today.
+ * spec-006-core-domain-api): the operations it registers, which of them are declared
+ * `mutates: true`, and how the read-only per-pillar loaders it wraps behave.
+ *
+ * The titles below name the property each assertion checks, never the roster: the rosters are the
+ * arrays the assertions compare against, and a title that repeated them went stale with every new
+ * operation (bug-045, dl-121 T1).
  */
 import { enumerateOperations } from '../../src/core/registry';
 import { CORE_MODULES, WINGFOIL_NOT_INITIALIZED } from '../../src/core';
 import { makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 describe('CORE_MODULES — production registry', () => {
-  it('registers the currently-existing operations, incl. the mutating ops `dna.dnaAdd`/`dnaRemove`/`dnaUpdate` (task-093), `dna.dnaSet` (task-025), `memory.memoryAdd` (task-020) + `directive.directiveCreate` (task-050)', () => {
+  it('registers exactly the operations listed, as `<module>.<operation>`, in sorted order', () => {
     const flat = enumerateOperations(CORE_MODULES).map(
       (entry) => `${entry.module.name}.${entry.operation.name}`,
     );
@@ -50,7 +50,7 @@ describe('CORE_MODULES — production registry', () => {
     ]);
   });
 
-  it('fourteen operations mutate today — the nine before task-093, `dna.dnaAdd`, `dna.dnaRemove` and `dna.dnaUpdate` (P2.1, dl-081), `memory.memoryAmend` (task-127, dl-108) and `memory.memoryPark` (task-180, dl-110); the rest are read-only', () => {
+  it('the operations declared `mutates: true` are exactly the ones listed; every other registered operation is read-only', () => {
     const mutating = enumerateOperations(CORE_MODULES).filter(({ operation }) => operation.mutates);
     expect(mutating.map(({ module, operation }) => `${module.name}.${operation.name}`)).toEqual([
       'directive.directiveAssign',
