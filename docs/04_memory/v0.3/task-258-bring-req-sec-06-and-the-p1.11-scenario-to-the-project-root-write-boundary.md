@@ -101,3 +101,22 @@ writers (`task-172`). `dl-022` already noted the wording.
   (`grep -n "wingfoil/memory" docs/02_requirements/03_sard/05_security-compliance.md` → nothing).
 - No pending amendments.
 
+
+### review fixes (independent review: approve with fixes)
+
+- Finding: REQ-SEC-06's writer list left out `wingfoil directive remove` (P3.3). That command deletes and commits a
+  configuration file through the same guard, `requireConfinedTarget(root, relativePath, 'remove')` in
+  `directiveRemoveFn` (`src/core/index.ts`, `task-102`/`bug-044`), and prints the second quoted refusal with
+  `<action>` = `remove`.
+- Fix: the description now says "writes or deletes" and names `wingfoil directive remove`, and says the
+  symbolic-link-target clause does not apply to a delete (it acts on the link, not its target). The fit criterion
+  covers deleting a configuration file, binds `<action>` to `write`/`remove`, excludes `directive remove` from the
+  symlink quote, and marks each quote as the leading clause followed by a remedy. Traceability adds P3.3 and
+  `task-102`. The `00_index.md` row now reads "Write/delete outside project root refused" and adds P3.3.
+- Guard test extended: `removeRefusal` is derived from `requireConfinedTarget(…, 'remove')` and must equal the writer
+  refusal with `remove` as its action. The SARD must name `wingfoil directive remove`, `` `<action>` is `remove` ``,
+  the symlink exclusion, P3.3 and `task-102`, and the index row must name P3.3. Against the pre-fix SARD and index
+  (`git checkout HEAD -- …`): `npx jest test/docs/req-sec-06-confinement-text.test.ts` → **2 failed, 8 passed,
+  10 total**; with the fix → 10 passed.
+- Re-run: `npx jest test/docs` → 44 passed · `npm run lint` 0 · `npx tsc --noEmit -p tsconfig.json` 0 ·
+  `node scripts/check-governance.cjs --base 1abafadd` → exit 0, 0 findings.
