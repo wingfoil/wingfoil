@@ -39,9 +39,125 @@ template read) never check the `format` key, so an element or template written i
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+Branch `task/task-257-check-the-format-key-on-memory-elements-and-on-memory-amend-s-template-read`, worktree
+`../.wf2-wt/task-257`, cut from `main` at `1abafadd`; start `cd9da10b`, bug syncs `fc48eeca` (`bug-241`) and
+`e6654aed` (`bug-243`), both `planned → in-progress`.
+
+### design (architect)
+
+**Inputs.** `depends_on` is empty; the Implementation Notes name `task-251`, read per `dl-015`: its decision 4
+(`memory add` copies `format: 1` into elements, not stripped) was held for the approver, who ruled at the B2 gate
+that elements keep it (this task's Description); its candidate findings are this task's two bugs. `dl-149` is
+`ready`; `spec-001` and `spec-017` are `approved` (`grep -m1 "^status"` over the three files).
+
+**Which counter an element reads with.** `bug-241` Notes offer (a) a counter for elements or (b) strip the line;
+the ruling points to (a). An element is its template's copy (`spec-001`, "copied verbatim"), so its `format` line
+*is* the template's: a separate `MEMORY_ELEMENT_FORMAT` could only diverge from the value `memory add` writes.
+Elements read with `MEMORY_TEMPLATE_FORMAT`; no new constant.
+
+**Where the check sits.** One parse already serves both baselines, `parseMemoryDocument` in `src/memory/query.ts`.
+The check is `newerFormatIssue` from `src/validation/format.ts` (`task-251`'s pre-check), applied to the parsed
+frontmatter; the issue names the repository-relative path, as a scan diagnostic does. Three behaviours, by who
+asked:
+- a **collection** scan (search, list by type, `loadMemoryDocumentsAtRev`) leaves the element out and reports it as
+  `W_MEMORY_UNREADABLE` (`spec-017` §1.4) with reason `E_INVALID_FORMAT: <dl-149 text>`;
+- a **lookup by id** that reaches the element it names throws the refusal (`ValidationError`, exit 1), as the
+  single-file reads (`loadMemoryDocumentSummary`, `…AtRev`) do; one it passes on its way is reported;
+- `prepareMemoryTransitionAtRev` (every transition verb, `amend`, the supersede trigger) and `memory history`
+  turn the throw into `VALIDATION`, exit 1. The transition also refuses a working-tree edit that writes a newer
+  `format`, since that is the content it would commit.
+
+Only a *newer* format is checked on an element: the element read is loose by design (no schema runs), so `1.5` is
+left to the rules that validate frontmatter, as every other field is.
+
+**Template (`bug-243`).** `memory add`'s private `templateFormatRefusal` becomes the exported
+`readTemplateFrontmatter` (`src/core/memory-add-type.ts`), the one reader of a template's frontmatter; `memory
+amend` reads its committed scaffold through it and refuses an unreadable one with `requireReadableScaffold`, after
+`requireAmendableType`. `amendReservedFields` keeps its signature (existing tests call it).
+
+**AC classification (T1).**
+
+| AC | Class | Why |
+|---|---|---|
+| 1 element `format: 2` refused by the verbs and `amend`, reported by search/history | red-first | `grep -rn 'refuseNewerFormat\|newerFormatIssue' src` → only `loaders.ts`, `memory-add-type.ts`, `directive-assign.ts` (`bug-241` step 6) |
+| 2 `amend` refuses a newer-format committed template, as `add` | red-first | `committedScaffoldDeclaresRelease` parsed with `js-yaml` `load`, no check |
+| 3 absent reads as 1; `spec-001` states the rule | characterization | today's behaviour; the spec half is documentation |
+
+### red (developer)
+
+`ded1600a`: `test/memory/query-element-format.test.ts` (the primitives) and `test/core/memory-element-format.test.ts`
+(the registered operations). `npx jest test/memory/query-element-format.test.ts test/core/memory-element-format.test.ts`
+→ **24 failed, 4 passed**; the 4 are the AC 3 characterization rows (absent and `1`, primitives and verbs), which
+pass before and after. A first run had a fifth failure in a characterization row, a fixture bug (an empty
+`git commit` of an unchanged template), fixed before the commit.
+
+### green (developer)
+
+`fa858302`: `src/memory/query.ts` (`newerElementFormat`, `refuseNewerElement`, `readableDocuments`, `findFirst`;
+the scans yield the document with its format issue), `src/core/memory-transition.ts` (`newerFormatRefusal` for
+the HEAD lookup and the working-tree read), `src/core/index.ts` (`memory history` refusal; `amend` calls
+`requireReadableScaffold`), `src/core/memory-add-type.ts` (`readTemplateFrontmatter`), `src/core/memory-amend.ts`
+(reads the scaffold through it; `js-yaml` import dropped). The two suites → **28 passed**; `npm test` →
+**261 suites, 4893 passed**.
+
+### refactor (developer)
+
+`f42f6407`: the module header of `query.ts` states the rule; one characterization test for a template whose
+frontmatter block is empty (`memory add` resolves, `release` stays reserved), which covered the last new branch
+of `readTemplateFrontmatter`. Gates, with the `spec-001` amendment in the working tree:
+- `npm test` → **261 suites, 4894 passed** (includes `typecheck` and the control-character lint).
+- `npm run test:coverage` (before the empty-frontmatter test) → **4893 passed**; All files
+  **99.1 | 96.28 | 96.33 | 99.69**, against the last figure recorded on `main` (`task-251`,
+  `98.99 | 96.13 | 96.1 | 99.59`): no regression. `query.ts` 100 | 99.19 | 100 | 100, `memory-amend.ts` 100 all.
+- `npm run lint` → 0; `npm run docs:api` → 0; `npx tsc --noEmit -p tsconfig.json` → 0;
+  `npx tsc -p tsconfig.build.json --noEmit` → 0; `node scripts/check-governance.cjs --base 1abafadd` → 0.
+- End to end (`npm run build`, scratch repo, `node dist/cli.js init --template Scrum`, `memory add --type task
+  --title Probe`, `format: 1` → `2`, committed): `memory search` → exit 0 with
+  `warning: W_MEMORY_UNREADABLE (docs/memory/task/task-001-probe.md): … E_INVALID_FORMAT: this file is written in
+  format 2; this WingFoil reads up to format 1: upgrade WingFoil`; `memory submit task-001-probe` → exit 1,
+  `error: refusing to submit task-001-probe: its document, as HEAD holds it, is written in a newer format:
+  E_INVALID_FORMAT format (docs/memory/task/task-001-probe.md): …`; `memory history task-001-probe` → exit 1.
+- BDD: no AC asks for a scenario and none covers the format key
+  (`grep -rln "format:" docs/02_requirements/02_bdd/features` → nothing); none added.
+
+### review (reviewer, self)
+
+- AC 1: `memory-element-format.test.ts` — submit, approve, reject, deprecate, park and amend on a committed
+  `format: 2` element → `VALIDATION`, exit 1 (`exitCodeForResult`), message contains
+  `E_INVALID_FORMAT format (<path>): … upgrade WingFoil`, `HEAD` and the file unchanged; the same for submit and
+  amend when only the working tree writes `format: 2`; `memory search` → exit 0, the three newer elements left
+  out, one `W_MEMORY_UNREADABLE` warning each naming the file; `memory history` of another id → three such
+  warnings; of the newer element → refused. Primitives in `query-element-format.test.ts`. Met.
+- AC 2: committed template `format: 2` and `format: 1.5` → `memory amend` refused, exit 1, message **equal** to
+  `resolveAddType`'s (`memory add`'s), `HEAD` unchanged. Met.
+- AC 3: absent and `1` rows, primitives and verbs (amend + approve commit); `spec-001` amendment below. Met.
+
+**Same-class sweep** (`grep -rn "splitFrontmatter\|extractFrontmatter" src`): every element read goes through
+`query.ts` except `src/memory/audit.ts` (each past revision's `status` in `memory history`'s trail; not an element
+read of today's file) and `src/core/relevance.ts`, which reads with `loadMemoryDocumentSummary` and so now throws
+the refusal as it throws a YAML error today (`task-253` makes that reader tolerant: see merge order).
+`src/core/builtin-integrity.ts` reads shipped templates (schema bound applies). No other template-frontmatter
+reader remains (`grep -rn "load(extractFrontmatter" src` → nothing).
+
+**Decisions for the approver to confirm.**
+1. Elements read with `MEMORY_TEMPLATE_FORMAT`, no element constant (an element's `format` line is its
+   template's).
+2. A lookup by id that names a newer-format element refuses it; `memory history` of that element is refused
+   (exit 1), not answered with a warning. The AC's "reported by … `memory history` as a diagnostic" holds for the
+   newer elements history passes on its way. Answering "document not found" plus a warning would be false.
+3. On an element only a *newer* format is checked; `format: 1.5` on an element is read as today.
+4. The scan diagnostic reuses `W_MEMORY_UNREADABLE` (reason `E_INVALID_FORMAT: …`) rather than a new code.
+5. `memory amend` also refuses a template `format` that is not a positive integer, as `memory add` does.
+
+**Pending amendments (approver)** — uncommitted in the worktree, for `memory amend`:
+- `spec-001-memory-yaml-schema` — `--reason "dl-149: an element keeps its template's format and reads with MEMORY_TEMPLATE_FORMAT; a newer one is refused by the transition verbs, memory amend and memory history (E_INVALID_FORMAT, exit 1) and reported by the scans as W_MEMORY_UNREADABLE; memory amend reads the committed template with memory add's check (task-257, bug-241, bug-243)."`
+
+**Candidate findings (not filed).**
+- `memory history --follow` reads each past revision's `status` (`src/memory/audit.ts`) without the format
+  check; a revision written in a newer format is read by today's rules.
+- An assembled context (`src/core/context.ts`) whose target element is in a newer format answers `NOT_FOUND` with
+  the `W_MEMORY_UNREADABLE` diagnostic, not the `E_INVALID_FORMAT` refusal the verbs give.
+- **Merge order:** `task-253` (merges before this one) makes `filterRelevantMemoryDocuments` tolerant; after both,
+  that reader should report an `E_INVALID_FORMAT` throw from `loadMemoryDocumentSummary` the way it reports a YAML
+  error. Both edit `src/memory/query.ts`'s scan area only if 253 touches it; this branch changes the scan
+  generators' element type (`ScannedDocument`).
