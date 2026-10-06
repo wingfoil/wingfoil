@@ -2,7 +2,7 @@
 id: "task-179-give-missing-operand-unknown-command-errors-shape-spec"
 type: task
 title: "Give missing-operand and unknown-command errors the one shape `spec-005`/`spec-008` declare"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "fix"
 priority: "medium"
