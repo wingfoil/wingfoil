@@ -2,7 +2,7 @@
 id: "task-188-correct-spec-011-bindings-id-stale-builtin-templates"
 type: task
 title: "Correct `spec-011` (bindings by id) and every stale \"built-in templates not yet implemented\" text"
-status: approved
+status: done
 release: "v0.3"
 kind: "fix"
 priority: "low"
