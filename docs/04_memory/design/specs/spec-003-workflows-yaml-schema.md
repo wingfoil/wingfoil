@@ -473,7 +473,7 @@ of the following — no other:
 | `sync`      | `<type>.sync_state` (`bug.sync_state`, `dl-045`); the bracket may chain several states (`[in-review → resolved → closed]`) | yes |
 | `amend`     | the `memory amend` verb (`dl-108`); no workflow token emits it  | yes (`[s → s]`)       |
 | `assign`    | `element.set_release`; writes only `release`, on any type, never `status`; no `Approver:` | no |
-| `park`      | the `memory park` verb (`dl-110`); no workflow token emits it   | yes (`[in-progress → backlog]`) |
+| `park`      | the `memory park` verb (`dl-110`); no workflow token emits it   | yes (`[from → to]`, `to` the type's `returns.<from>`, `spec-001`; this repository's `task`: `[in-progress → backlog]`) |
 
 **Which verb a `set_state` emits.** `approve` when the phase declares `approval:`; otherwise
 `finalize` when the target is the last state of the type's `sequence` (`memory.yaml`); otherwise
@@ -974,3 +974,10 @@ refusal, and § "Diagnostics" gains the `E_INVALID_FORMAT` row. The three `versi
 a format version, now call it the content revision (`dl-047`). Every file valid before stays valid.
 Edited in place without a supersede or a state change (`dl-047`); pending the approver's sign-off at
 `task-251`'s review.
+
+**Revision (2026-10-05, `task-180-add-memory-park-declared-returns-edge-optional-per`) — the `park`
+row's bracket.** The verb table gave `park`'s bracket as the literal `[in-progress → backlog]`.
+`dl-110` P1 (a) makes the return edge a declared key of any type's machine (`returns`, `spec-001`), so
+the bracket is `[from → to]` with `to` the type's `returns.<from>`, as `spec-008` §2 now states it; this
+repository's `task` edge is kept as the example. No other row changed. Edited in place without a
+supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-180`'s review.
