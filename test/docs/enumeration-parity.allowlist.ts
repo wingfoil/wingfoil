@@ -9,6 +9,7 @@
  * - `PLANNED` with `plannedBy` — the document names an item a non-done task is to build (a `surplus`),
  *   or a task is to amend the document. Once every cited task is `done` and the finding remains, the
  *   gate reports the entry (warn) or fails (from v0.4); when the item ships, the entry goes stale;
+ * - {@link AUDIT_V04} — a command a later release's `features:` schedules with no task yet;
  * - {@link TOOLS_V04} — an MCP Tool the specification declares and the shipped server deliberately
  *   does not register before P5.2.3 (v0.4, `spec-014` §3);
  * - `UNTRIAGED` — a first-run finding nobody has looked at yet: the document is stale, or the code is
@@ -40,5 +41,45 @@ export const TOOLS_V04 =
 export const UNTRIAGED =
   'first run (task-187), untriaged: the document or the code is stale; fix it, or replace this reason with why the difference is deliberate';
 
+/** `wingfoil audit`: P5.1.3 is in `minor-v0.4`'s `features:` and no task builds it yet (`dl-046` B(a)). */
+export const AUDIT_V04 =
+  "scheduled: P5.1.3 (wingfoil audit) is in minor-v0.4's features: list, which has no task for it yet; re-check when minor-v0.4 is planned";
+
+const SPEC_004 = 'docs/04_memory/design/specs/spec-004-mcp-surface-contract.md';
+const SPEC_005 = 'docs/04_memory/design/specs/spec-005-cli-command-contract.md';
+const SPEC_008 = 'docs/04_memory/design/specs/spec-008-cli-grammar.md';
+
 /** Every allowed finding, sorted by `enumeration|document|direction|item`. */
-export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [];
+export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'directive.assign', reason: UNTRIAGED },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'directive.create', reason: UNTRIAGED },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'directive.remove', reason: UNTRIAGED },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'dna.add', reason: UNTRIAGED },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'dna.remove', reason: UNTRIAGED },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'dna.set', reason: UNTRIAGED },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'dna.update', reason: UNTRIAGED },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'memory.amend', reason: UNTRIAGED },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'memory.park', reason: UNTRIAGED },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'surplus', item: 'workflow.end', reason: PLANNED, plannedBy: ['task-217'] },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'surplus', item: 'workflow.next', reason: PLANNED, plannedBy: ['task-216'] },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'surplus', item: 'workflow.start', reason: PLANNED, plannedBy: ['task-217'] },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.add', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.approve', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.deprecate', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.reject', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.submit', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.end', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.next', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.start', reason: TOOLS_V04 },
+  { enumeration: 'spec-005 Context flat commands', document: SPEC_005, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
+  { enumeration: 'spec-005 Context nouns', document: SPEC_005, direction: 'missing', item: 'directives', reason: UNTRIAGED },
+  { enumeration: 'spec-005 Context nouns', document: SPEC_005, direction: 'surplus', item: 'agent', reason: PLANNED, plannedBy: ['task-220', 'task-228', 'task-240'] },
+  { enumeration: 'spec-008 §1 flat commands', document: SPEC_008, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
+  { enumeration: 'spec-008 §1 nouns', document: SPEC_008, direction: 'surplus', item: 'agent', reason: PLANNED, plannedBy: ['task-220', 'task-228', 'task-240'] },
+  { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'agent list', reason: PLANNED, plannedBy: ['task-240'] },
+  { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'agent show', reason: PLANNED, plannedBy: ['task-220'] },
+  { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'workflow next', reason: PLANNED, plannedBy: ['task-216'] },
+  { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'workflow show', reason: PLANNED, plannedBy: ['task-204'] },
+  { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'workflow status', reason: PLANNED, plannedBy: ['task-225'] },
+];
+
