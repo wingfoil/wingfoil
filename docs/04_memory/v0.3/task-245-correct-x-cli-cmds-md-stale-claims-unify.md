@@ -8,7 +8,7 @@ kind: "fix"
 priority: "medium"
 tags: ["v0.3", "process", "docs", "vision"]
 ref: ""
-bug: ["bug-099", "bug-100"]
+bug: ["bug-099", "bug-100", "bug-274", "bug-275"]
 depends_on: ["task-127-add-memory-amend-id-reason-approver-gated-verb", "task-138-dna-yaml-declares-team-agents-adapter-runs-paths", "task-169-make-directive-assign-refuse-whole-file-rewrite-unless", "task-180-add-memory-park-declared-returns-edge-optional-per", "task-204-reshape-workflow-list-add-workflow-show-both-answering", "task-210-add-dry-run-mutating-verb-through-commit-primitive", "task-211-add-workflow-create-workflow-remove-req-sec", "task-216-add-workflow-next-naming-next-step-verb-role", "task-217-add-workflow-start-workflow-end-recording-instance-plan", "task-220-wingfoil-agent-show-run-id-prints-recorded-run", "task-225-add-workflow-status-pending-approvals-role-routing-fallback", "task-226-add-workflow-finalize-which-records-checkpoint-or-uncarried", "task-227-link-added-element-workflow-step-memory-add-workflow", "task-228-agent-execute-launches-agent-forwards-right-signals-records", "task-235-agent-execute-next-workflow-ref-step-key-take", "task-240-wingfoil-agent-list-past-waiting-lists-recorded-runs"]
 tmpl_version: 260703
 ---
@@ -31,6 +31,11 @@ The CLI vision reference declares sync against the retired `tech-stack` key, rep
 - **Features:** P2.5, P4.2, P4.3, P4.4, P4.5, P4.6, P4.7, P4.8, P4.9, P5.3.1.
 - **Notes:** Proposal key: D29. Single owner of `X_cli-cmds.md` in v0.3 (task-138, task-228 and the workflow tasks hand their rows here); runs late on purpose.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from the W2 B4b triage (2026-10-06).** `bug-274` and `bug-275` are absorbed here. `bug-275`: nine
+  vision lines still give the default state machine a `rejected` state (`X_cli-cmds.md`, `06_features.md`,
+  `07_sequencer.md`, `08_mvp-canvas.md`), and `X_cli-cmds.md`'s 1.5 bump (`833ec080`, `task-179`) wrote no revision
+  entry. `bug-274`: `docs/design.md:138` places tasks under `.wingfoil/memory/task/`; widen `task-259`'s
+  `test/docs/memory-store-location-text.test.ts` guard to `docs/*.md` with the fix.
 
 ## Execution Notes
 

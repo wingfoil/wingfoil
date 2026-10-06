@@ -8,7 +8,7 @@ kind: "feature"
 priority: "medium"
 tags: ["v0.3", "workflow", "memory", "vision", "configuration", "process"]
 ref: "dl-132"
-bug: []
+bug: ["bug-270"]
 depends_on: ["task-199-align-wingfoil-workflows-custom-v0-3-schema-commands"]
 tmpl_version: 260703
 ---
@@ -33,6 +33,10 @@ After inception the vision can only be changed by hand. `dl-132` adds a `change-
 - **Features:** P1.13, P4.1.
 - **Notes:** Proposal key: A20 (merged: D13). the feature id for the process (`dl-132` Action 5) is the first output of the process itself, not this task. Merged with proposal D13 (same `dl-132` configuration). A Persona-7 journey (`dl-113`, task-186) is the process's natural first input.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from the W2 B4b triage (2026-10-06).** `bug-270` is absorbed here: no test checks
+  `docs/01_vision/00_index.md` against the vision files (the index drifted within days of `task-141`'s re-index).
+  The `vision-change` workflow's index element (`dl-132`) gains a test that runs `task-141`'s index check over
+  `docs/01_vision/` and fails on any mismatch of version, date, line count or section ranges.
 
 ## Execution Notes
 
