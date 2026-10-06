@@ -44,9 +44,81 @@ of the 1-minute load average passed with a loaded floor.
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+### design (architect)
+
+- **depends_on:** none (`depends_on: []`). Context read: `task-248`'s notes ("latency pass (AC 3)": runs 1–3,
+  floors 826 / 886 / 194 ms at 1-min loads 15.52 / 1.94 (5-min 4.13) / 1.36 (5-min 2.94)) and `task-154`'s idle
+  figure (floor 203 at load 3.75), as quoted there. No tech-spec governs the test helpers; `dl-146` is `ready`.
+  The SARD (`docs/02_requirements/03_sard/02_performance-nfr.md`) is not edited.
+- **Signal (AC 2, design call):** the **floor's p95**, bounded at `IDLE_FLOOR_P95_BOUND_MS = 500` (strict `<`).
+  The floor spawns the same compiled CLI on the same path, so it measures the condition directly; the measured
+  idle floors are 194–203 ms and the loaded ones 826–886 ms. The **load average is recorded, not judged**: no
+  threshold separates the evidence (task-154 idle at a load of 3.75; task-248 run 2 loaded at a 5-min 4.13), it
+  lags, and it scales with cores and background. Stated in the suite header and in the constant's TSDoc.
+- **Warn or refuse:** **refuse.** A dedicated case, "the run was taken on an otherwise idle machine", fails with
+  the floor distribution and the load window, so a loaded pass is red even when every budget case is green.
+  The budget cases are unchanged and still run.
+- **"Before and after each command's sampling" (AC 1):** the three commands are sampled interleaved, round by
+  round (`sampleMarginalLatency`, unchanged), so there is one sampling window shared by every command. The load
+  is read immediately before and after that window, and the report says so ("one window: the commands are sampled
+  interleaved"). Decision for the approver: per-command windows would require de-interleaving, which `bug-013`'s
+  median-floor design relies on.
+- **Placement guard:** rule 4 added to `test/core/latency-budget-placement.test.ts`: each latency suite's code
+  (imports and comments removed) calls `readLoadAverage(` and `idleMachineVerdict(`, so the check cannot be
+  dropped silently. Like rule 3, it checks the calls are present, not how their results are used (stated in its
+  doc, T1).
+
+| AC | Classification | Why |
+|---|---|---|
+| 1 — load recorded before/after in the report | red-first | `grep -rn loadavg test scripts src jest*.js` → nothing on `ed4607a4` |
+| 2 — a loaded run refused, unit-tested on synthetic inputs | red-first | no idle check exists (same grep; no case in `test/cli/command-latency.test.ts` reads the load) |
+| 3 — SARD, opt-in, 1,000 ms budgets unchanged | characterization | the change touches only test sources |
+
+### red
+
+Commit `dfcb47ba`: six helper cases in `test/core/latency-helper.test.ts` (`readLoadAverage` with an injected
+reader, `describeLoad`, the bound, `idleMachineVerdict` incl. strict bound and the task-248 run-2 shape,
+`latencyReport` exact lines) and rule 4 (self-test + applied to `test/latency-suites.cjs`).
+`npx jest test/core/latency-helper.test.ts test/core/latency-budget-placement.test.ts` → **2 suites failed,
+7 failed / 610 passed** (the six helper cases and rule 4 on `test/cli/command-latency.test.ts`).
+
+### green
+
+Commit `dbc62afe`: `test/core/helpers/latency.ts` gains `LoadAverage`, `LoadWindow`, `readLoadAverage`
+(`os.loadavg`, 1- and 5-minute, hundredths), `describeLoad`, `IDLE_FLOOR_P95_BOUND_MS`, `idleMachineVerdict`,
+`latencyReport`; `test/cli/command-latency.test.ts` reads the load around `sampleMarginalLatency`, prints
+`latencyReport` under `WINGFOIL_LATENCY_REPORT=1`, and adds the idle case. Same jest command → **617 passed**.
+
+**Real run (loaded evidence; the idle run is the coordinator's at the gate):**
+`WINGFOIL_LATENCY_REPORT=1 npm run test:latency` with 9 batch agents running → **7 failed, 2 passed** (the idle
+case and all six budget cases failed; floor and sanity cases passed). Report:
+`load average (1-min / 5-min): before 45.64 / 26.95, after 37.73 / 36.08`; `machine: loaded: floor p95 3099 ms
+(n=25, min 622 ms, max 3242 ms) >= 500 ms; …`. The run is refused with its own evidence, as AC 2 requires.
+
+### refactor
+
+| Gate | Result |
+|---|---|
+| `npm test` | **273 suites, 5073 tests passed** (exit 0) |
+| `npm run test:coverage` | 272/273 suites, 5072/5073: `test/core/query-latency.test.ts` `memory history` p95 1010 ms at a 1-min load ≈ 47 (`/proc/loadavg`); re-run alone `npx jest test/core/query-latency.test.ts` → 4 passed (in-process perf under load, `bug-221`). Coverage from `coverage/lcov.info`: lines 99.72, branches 96.73, funcs 96.53. `git diff --stat ed4607a4 -- src` is empty and `collectCoverageFrom` is `src/**/*.ts`, so coverage equals main's |
+| `npm run lint` | exit 0 |
+| `npm run docs:api` | exit 0 |
+| `npx tsc --noEmit -p tsconfig.json` | exit 0 |
+| `npx tsc -p tsconfig.build.json --noEmit` | exit 0 |
+| `node scripts/check-governance.cjs --base ed4607a4` | exit 0, 0 findings |
+
+AC 3 (characterization): `git diff --stat ed4607a4 -- package.json scripts .github jest.latency.config.js
+jest.config.js docs/02_requirements` → empty; `P95_BUDGET_MS = 1000` unchanged (`grep -n "P95_BUDGET_MS = "
+test/core/helpers/latency.ts`). `test/cli/run-tests.test.ts` (opt-in, not in CI/`prepublishOnly`) passes in
+`npm test`.
+
+### review (self, reviewer)
+
+- AC 1 met: `latencyReport` prints the 1- and 5-minute loads before and after (pinned line by line in
+  `test/core/latency-helper.test.ts`; seen in the real report above).
+- AC 2 met: floor-p95 signal, refusal by a failing case, stated in the suite header; synthetic unit tests pin
+  idle, loaded, strict bound and the load-not-deciding case.
+- AC 3 met (commands above).
+- Unasserted (T1): the load average is evidence only; nothing asserts its value. The 500 ms bound is relative to
+  this repository's reference machine (stated in its TSDoc); on a much slower machine an idle floor could reach it.
+- Pending amendments (approver): none.
