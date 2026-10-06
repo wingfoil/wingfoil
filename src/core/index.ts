@@ -1626,7 +1626,7 @@ const memoryParkFn: CoreFn<unknown, MemoryParkResult> = async (params) => {
   const { root, positional: id, options } = params as MemoryParkParams;
 
   if (id === undefined || id.trim().length === 0) {
-    throw new UsageError('missing required argument: memory park <id>');
+    throw new UsageError(missingOperandReason('id'));
   }
   const reason = requireReason(options);
 

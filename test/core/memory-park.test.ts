@@ -185,6 +185,6 @@ describe('CORE_MODULES memory.memoryPark (task-180, dl-110 P1 (a))', () => {
     } catch (error) {
       thrown = error;
     }
-    expect(exitCodeForThrow(thrown)).toEqual({ reason: 'missing required argument: memory park <id>', exitCode: 2 });
+    expect(exitCodeForThrow(thrown)).toEqual({ reason: 'missing required argument: <id>', exitCode: 2 });
   });
 });
