@@ -402,7 +402,7 @@ function* scanWorkingTreeDocuments(
  * (task-171, task-253 / `bug-230`), so one malformed document never fails a read of the others.
  */
 export function loadMemoryDocuments(root: string, memoryYaml: MemoryYaml, options: MemoryScanOptions = {}): MemoryDocumentSummary[] {
-  return [...scanWorkingTreeDocuments(root, memoryYaml, options)];
+  return [...readableDocuments(scanWorkingTreeDocuments(root, memoryYaml, options), options)];
 }
 
 // --- The same scan at a revision (task-137) -----------------------------------------------------
