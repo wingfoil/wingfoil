@@ -2,7 +2,7 @@
 id: "task-209-declare-submit-commit-what-content-carries-make-templates"
 type: task
 title: "Declare in `submit`'s commit what content it carries, and make the templates tell the truth about `submit`"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "medium"
