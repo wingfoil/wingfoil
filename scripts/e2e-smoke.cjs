@@ -16,9 +16,13 @@
  * in what is asserted (the temp directory name is never compared).
  *
  * Usage:
- *   node scripts/e2e-smoke.cjs [--expect-version X.Y.Z]                  # drives `wingfoil` on PATH
- *   node scripts/e2e-smoke.cjs [--expect-version X.Y.Z] -- node "$PWD/dist/cli.js"
+ *   node scripts/e2e-smoke.cjs [--expect-version X.Y.Z [--expect-commit SHA]]   # drives `wingfoil` on PATH
+ *   node scripts/e2e-smoke.cjs [--expect-version X.Y.Z [--expect-commit SHA]] -- node "$PWD/dist/cli.js"
  * Every step runs inside a throwaway directory, so a script path after `--` must be absolute.
+ * `--expect-version` alone pins the semver of the build stamp and accepts any commit in it;
+ * `--expect-commit` (task-254, `bug-235`) requires the whole stamp, `X.Y.Z (SHA)`, which is how the
+ * staging stage proves the tarball was built from the released commit (`dl-111`).
+ * Exit codes: 0 every check passed, 1 a check failed, 2 a bad argument.
  */
 'use strict';
 
@@ -26,6 +30,14 @@ const { spawnSync } = require('node:child_process');
 const { mkdtempSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
+
+/**
+ * A commit an expected stamp may name: a full hex object name, SHA-1 (40) or SHA-256 (64) — the shape
+ * `scripts/write-build-info.cjs` records for a clean build (`git rev-parse HEAD`). An abbreviated sha
+ * could never equal a real stamp, so it is refused as an argument rather than failing every run; and
+ * `unknown` and `<sha>-dirty` are stamps the check must refuse, so they can never be what it expects.
+ */
+const COMMIT_NAME_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 /** Every template `wingfoil init` supports, in the order they are smoked. */
 const SMOKE_TEMPLATES = Object.freeze(['Scrum', 'Kanban']);
@@ -152,12 +164,46 @@ function smokeTemplate(template, invoke, env) {
 }
 
 /**
+ * Throw unless `commit` is a commit name an expected stamp may carry ({@link COMMIT_NAME_RE}).
+ * @param {string} commit
+ */
+function assertCommitName(commit) {
+  if (!COMMIT_NAME_RE.test(commit)) {
+    throw new Error(`expected commit "${commit}" is not a commit name (a full sha: 40 or 64 lowercase hex digits)`);
+  }
+}
+
+/**
+ * The `--version` check: the stamp `<semver> (<sha>)` (task-192, `dl-111` Action 3). With an expected
+ * commit the whole stamp must match exactly (task-254, `bug-235`); without one only its semver is
+ * pinned, and a bare `<semver>` — what builds before 0.3 print — is accepted too.
+ */
+function versionCheck(run, expectedVersion, expectedCommit) {
+  const expected = expectedCommit === undefined ? expectedVersion : `${expectedVersion} (${expectedCommit})`;
+  const actual = run.stdout.trim();
+  const matches =
+    expectedCommit === undefined
+      ? actual === expectedVersion || versionOfStamp(actual) === expectedVersion
+      : actual === expected;
+  const ok = run.status === 0 && matches;
+  return {
+    label: `wingfoil --version = ${expected}`,
+    ok,
+    detail: ok ? 'match' : `expected "${expected}", got "${actual}" (exit ${run.status})`,
+  };
+}
+
+/**
  * Run the whole smoke. Stops at the first failing check.
  * @param {{ command: string, commandArgs?: readonly string[], env?: NodeJS.ProcessEnv,
- *           expectedVersion?: string, log?: (line: string) => void }} options
+ *           expectedVersion?: string, expectedCommit?: string, log?: (line: string) => void }} options
  * @returns {{ ok: boolean, checks: ReadonlyArray<{ label: string, ok: boolean, detail: string }> }}
  */
 function runSmoke(options) {
+  if (options.expectedCommit !== undefined) {
+    if (options.expectedVersion === undefined) throw new Error('expectedCommit requires expectedVersion');
+    assertCommitName(options.expectedCommit);
+  }
   const env = options.env ?? process.env;
   const prefix = options.commandArgs ?? [];
   const log = options.log ?? (() => undefined);
@@ -178,13 +224,8 @@ function runSmoke(options) {
   if (!record(helpCheck)) return done();
 
   if (options.expectedVersion !== undefined) {
-    const label = `wingfoil --version = ${options.expectedVersion}`;
-    const run = invoke(['--version'], tmpdir());
-    const actual = run.stdout.trim();
-    // `--version` prints the build stamp `<semver> (<sha>)` (task-192, `dl-111` Action 3); the semver is
-    // what this check pins. A bare `<semver>` is still accepted: it is what builds before 0.3 print.
-    const ok = run.status === 0 && (actual === options.expectedVersion || versionOfStamp(actual) === options.expectedVersion);
-    if (!record({ label, ok, detail: ok ? 'match' : `got "${actual}" (exit ${run.status})` })) return done();
+    const check = versionCheck(invoke(['--version'], tmpdir()), options.expectedVersion, options.expectedCommit);
+    if (!record(check)) return done();
   }
 
   for (const template of SMOKE_TEMPLATES) {
@@ -206,7 +247,7 @@ function versionOfStamp(stamp) {
   return match ? match[1] : null;
 }
 
-/** Parse `[--expect-version X] [-- command args...]`. */
+/** Parse `[--expect-version X [--expect-commit SHA]] [-- command args...]`. */
 function parseSmokeArgs(argv) {
   const separator = argv.indexOf('--');
   const own = separator === -1 ? argv : argv.slice(0, separator);
@@ -216,9 +257,16 @@ function parseSmokeArgs(argv) {
     if (own[i] === '--expect-version' && own[i + 1]) {
       options.expectedVersion = own[i + 1];
       i += 1;
+    } else if (own[i] === '--expect-commit' && own[i + 1]) {
+      assertCommitName(own[i + 1]);
+      options.expectedCommit = own[i + 1];
+      i += 1;
     } else {
       throw new Error(`unknown or incomplete argument: ${own[i]}`);
     }
+  }
+  if (options.expectedCommit !== undefined && options.expectedVersion === undefined) {
+    throw new Error('--expect-commit requires --expect-version');
   }
   return options;
 }
@@ -233,4 +281,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { SMOKE_TEMPLATES, smokeSteps, runSmoke };
+module.exports = { SMOKE_TEMPLATES, assertCommitName, parseSmokeArgs, smokeSteps, runSmoke };

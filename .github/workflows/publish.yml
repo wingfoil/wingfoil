@@ -4,8 +4,10 @@
 #   gate    → assert the tag is on main and equals v<package.json version>, and that server.json's
 #             `version` and every `packages[].version` equal it too (spec-015 §4), `npm ci`,
 #             `prepublishOnly` (build + test + lint), `npm publish --dry-run` (the manifest), pack ONCE
-#   stage   → `npm run publish:staging -- --tarball <that tarball>`: ephemeral Verdaccio, publish,
-#             clean `npm install -g`, dl-023 init + CLI smoke, teardown — the very script a developer runs
+#   stage   → `npm run publish:staging -- --tarball <that tarball> --expect-commit "$GITHUB_SHA"`:
+#             ephemeral Verdaccio, publish, clean `npm install -g`, dl-023 init + CLI smoke — whose
+#             `wingfoil --version` must be exactly `<version> (<GITHUB_SHA>)`, the commit the gate built
+#             (task-254, bug-235) — teardown; the very script a developer runs
 #   promote → `npm stage publish` THAT SAME tarball to npm with provenance. The version is NOT live yet:
 #             it waits in npm's stage queue until the approver approves it on npm with 2FA (adr-011).
 #
@@ -189,7 +191,7 @@ jobs:
           name: ${{ env.TARBALL_ARTIFACT }}
           path: dist-pack
       - name: Stage on ephemeral Verdaccio + dl-023 smoke (spec-015 §3 stages 2–3)
-        run: npm run publish:staging -- --tarball dist-pack/*.tgz
+        run: npm run publish:staging -- --tarball dist-pack/*.tgz --expect-commit "$GITHUB_SHA"
 
   promote:
     needs: stage

@@ -9,7 +9,10 @@
  *   4. `npm publish <tarball>` to staging with provenance explicitly off (no OIDC issuer at staging;
  *      `publishConfig.provenance: true` would otherwise apply, see task-059's handoff);
  *   5. `npm install --global wingfoil@<version>` from staging into a work-dir prefix and cache;
- *   6. run the dl-023 smoke (`scripts/e2e-smoke.cjs`) against the `wingfoil` now on PATH;
+ *   6. run the dl-023 smoke (`scripts/e2e-smoke.cjs`) against the `wingfoil` now on PATH — with
+ *      `--expect-commit <sha>` (CI: `"$GITHUB_SHA"`), its `--version` must be exactly
+ *      `<version> (<sha>)`, so a tarball not built from that clean commit fails here (task-254,
+ *      `bug-235`, `dl-111`); without it the stamp's commit is not checked, and the run says so;
  *   7. tear down — remove the token, stop Verdaccio, delete the work dir — on success, on every
  *      failure, and on an interrupt: `SIGINT`, `SIGTERM` or `SIGHUP` delivered to this script runs the
  *      same teardown and then re-raises the signal, so the run still dies with the conventional
@@ -24,7 +27,7 @@
  * Publishing a tarball runs no lifecycle scripts, so `prepublishOnly` is not re-run here — run the gate
  * (`npm run prepublishOnly`) first, as the workflow's gate job does. POSIX only (CI runs ubuntu).
  *
- * Usage: npm run publish:staging [-- --tarball path/to/wingfoil-X.Y.Z.tgz]
+ * Usage: npm run publish:staging [-- [--tarball path/to/wingfoil-X.Y.Z.tgz] [--expect-commit <sha>]]
  */
 'use strict';
 
@@ -34,7 +37,7 @@ const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require(
 const { tmpdir } = require('node:os');
 const { delimiter, dirname, join, resolve } = require('node:path');
 
-const { runSmoke } = require('./e2e-smoke.cjs');
+const { assertCommitName, runSmoke } = require('./e2e-smoke.cjs');
 
 /** The transient staging registry address (spec-015 §1/§5) — passed as `--registry`, stored nowhere. */
 const STAGING_REGISTRY = 'http://localhost:4873/';
@@ -143,12 +146,19 @@ function installArgs(name, version) {
   return ['install', '--global', `${name}@${version}`, '--registry', STAGING_REGISTRY];
 }
 
-/** Parse `[--tarball <path>]`. */
+/**
+ * Parse `[--tarball <path>] [--expect-commit <sha>]`. An empty or malformed commit throws before
+ * anything starts: an unset `"$GITHUB_SHA"` must stop the stage, never run it unchecked.
+ */
 function parseArgs(argv) {
   const options = {};
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--tarball' && argv[i + 1]) {
       options.tarball = argv[i + 1];
+      i += 1;
+    } else if (argv[i] === '--expect-commit' && argv[i + 1]) {
+      assertCommitName(argv[i + 1]);
+      options.expectCommit = argv[i + 1];
       i += 1;
     } else {
       throw new Error(`unknown or incomplete argument: ${argv[i]}`);
@@ -230,7 +240,7 @@ function installTeardownHandlers({ teardown, log, die = raiseSignal, target = pr
  * Teardown (token removal, registry stop, work-dir removal) runs on every path, including an
  * interrupt when `interrupts` is given (task-083; `main` gives it, the offline tests do not).
  */
-async function runStaging({ name, version, tarball, effects, baseEnv = process.env, interrupts }) {
+async function runStaging({ name, version, tarball, commit, effects, baseEnv = process.env, interrupts }) {
   const workDir = effects.makeWorkDir();
   let registry;
   let teardownRun;
@@ -286,7 +296,8 @@ async function runStaging({ name, version, tarball, effects, baseEnv = process.e
     await effects.createToken(paths);
     effects.npm(publishArgs(file), env, paths);
     effects.npm(installArgs(name, version), env, paths);
-    const report = effects.smoke(env, version);
+    if (commit === undefined) effects.log("no --expect-commit: the build stamp's commit is not checked");
+    const report = effects.smoke(env, version, commit);
     if (!report.ok) {
       effects.log('staging smoke FAILED — the build must not be promoted');
       return 1;
@@ -413,8 +424,8 @@ function realEffects(repoRoot, log) {
       writeFileSync(paths.userconfig, `${host}:_authToken=${body.token}\n`, { mode: 0o600 });
     },
     npm: (args, env, paths) => run('npm', args, { env, cwd: paths.root }),
-    smoke: (env, version) =>
-      runSmoke({ command: 'wingfoil', env, expectedVersion: version, log: (line) => log(`  ${line}`) }),
+    smoke: (env, version, commit) =>
+      runSmoke({ command: 'wingfoil', env, expectedVersion: version, expectedCommit: commit, log: (line) => log(`  ${line}`) }),
     log,
   };
 }
@@ -422,12 +433,13 @@ function realEffects(repoRoot, log) {
 async function main() {
   const repoRoot = dirname(__dirname);
   const { name, version } = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf-8'));
-  const { tarball } = parseArgs(process.argv.slice(2));
+  const { tarball, expectCommit } = parseArgs(process.argv.slice(2));
   const log = (line) => process.stdout.write(`[publish:staging] ${line}\n`);
   return runStaging({
     name,
     version,
     tarball: tarball === undefined ? undefined : resolve(tarball),
+    commit: expectCommit,
     effects: realEffects(repoRoot, log),
     // The real run — and only the real run — arms the interrupt handlers (task-083). The offline
     // orchestration tests call `runStaging` without this option and so install nothing on `process`.
@@ -460,6 +472,7 @@ module.exports = {
   publishArgs,
   installArgs,
   parseArgs,
+  realEffects,
   runStaging,
   stopProcess,
 };

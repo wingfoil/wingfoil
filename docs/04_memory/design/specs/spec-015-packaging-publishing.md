@@ -136,7 +136,7 @@ Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a de
    (manifest visibility; must be exactly `dist` + docs per `files`).
 2. **stage** — start **Verdaccio** from `scripts/publish-staging.cjs` itself, in CI exactly as locally:
    there is no service container (the workflow's `stage` job runs one staging step,
-   `npm run publish:staging -- --tarball <the gate's tarball>`). The script installs a major-pinned
+   `npm run publish:staging -- --tarball <the gate's tarball> --expect-commit "$GITHUB_SHA"`). The script installs a major-pinned
    **`verdaccio@6`** (`VERDACCIO_PACKAGE`) into a **throwaway per-run work dir** (`stagingPaths` under
    an `mkdtempSync` temp dir: registry storage, htpasswd, config, the verdaccio install prefix, and
    npm's own cache/prefix/user+global config, with `stagingEnv` redirecting npm into it and stripping
@@ -148,7 +148,16 @@ Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a de
    the install. See the *Revision (2026-09-21) — §3 stage 2* note below.
 3. **smoke** — in a clean environment, `npm install -g wingfoil --registry http://localhost:4873`,
    then run the `dl-023` init+CLI e2e smoke (assert `wingfoil --help` on PATH exits 0, and the
-   fresh-init CLI surface is schema-valid). Verdaccio is torn down after.
+   fresh-init CLI surface is schema-valid). The installed build's stamp must name the commit the
+   stage was given: with `--expect-commit <sha>` — which the CI stage always passes, as
+   `"$GITHUB_SHA"`, the commit the `gate` job of the same run built and packed — `wingfoil --version`
+   must print exactly `<package.json version> (<sha>)` (`dl-111`, `task-192`'s build record), so a
+   tarball whose stamp is `unknown` (a `dist/` built without its record), `<sha>-dirty` (built from a
+   modified tree) or another commit fails the stage and is never promoted. An `--expect-commit` that
+   is empty or not a full sha (40 or 64 hex digits) stops the stage before Verdaccio starts. Without
+   the option — a developer's local run — only the stamp's semver is checked, and the run logs that
+   the commit is not.
+   Verdaccio is torn down after.
 4. **promote** — only if smoke passes, **stage** the **same** tarball on the public npm registry:
    `npm stage publish` with **provenance**, authenticated by the stage-only **trusted publisher**
    over GitHub OIDC (`id-token: write`; no token, no `.npmrc`; §5). The version is **not live** until
@@ -592,3 +601,16 @@ floor is `>=20` (`jq -r '.packages["node_modules/@hono/node-server"]|.version+" 
 `commander@15`'s `>=22.12.0` is still the highest, so `engines.node` stays `>=22.12.0`, which
 `test/cli/publish-metadata.test.ts` recomputes from the installed tree. Only the example version in §1 changed.
 Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions above.
+
+**Revision (2026-10-06, `task-254-require-the-released-commit-in-the-staging-smoke-s-build-stamp-check`)
+— §3 stages 2–3: the staging smoke requires the released commit in the build stamp, per `bug-235`.**
+§3 stage 3 checked only that the smoke ran; the script's `--version` check, since `task-192`, compared
+the stamp's semver alone and so accepted `<version> (unknown)` and `<version> (<sha>-dirty)`, although
+`dl-111`'s point is that the stamp names the commit. `scripts/e2e-smoke.cjs` now takes
+`--expect-commit <sha>` (`runSmoke`'s `expectedCommit`) and then requires the whole stamp;
+`scripts/publish-staging.cjs` takes the same option and forwards it; `publish.yml`'s `stage` step
+passes `"$GITHUB_SHA"`. Stage 2's quoted command and stage 3's text say so. The pins are
+`test/cli/e2e-smoke.test.ts`, `test/cli/publish-staging.test.ts` and
+`test/cli/publish-pipeline.test.ts`. The command quoted in the *Revision (2026-09-21) — §3 stage 2*
+note is the step as it was verified then, and stays as written. Edited in place: no supersede, no
+state change, no `version:` bump (`dl-047`), as in the revisions above.
