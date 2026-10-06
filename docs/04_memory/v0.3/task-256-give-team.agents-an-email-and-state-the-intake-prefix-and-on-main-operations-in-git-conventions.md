@@ -47,9 +47,109 @@ Implements `dl-152` (ratified 2026-10-05: Q1 (A), Q2 (a), Q3 (i)) and closes `bu
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+### design (architect, 2026-10-06)
+
+- **Inputs.** `depends_on: []`, so no upstream notes to read (dl-015). `dl-152` is `ready` (ruled Q1 (A), Q2 (a),
+  Q3 (i)); `dl-117` and `dl-119` are `ready`; `bug-240` is `in-progress`; `spec-002` is `approved`
+  (`grep -n '^status' docs/04_memory/{design/dls/dl-152*,design/dls/dl-117*,design/dls/dl-119*,design/specs/spec-002*}.md`).
+- **Ground measured.** `AgentEntry` (`src/dna/schema.ts`) declared `name`, `executes_as`, `approval_authority`,
+  `adapter`, no `email`; `.wingfoil/dna.yaml` declared one agent, `AI agent (Claude/Cursor/etc.)`, no email
+  (`grep -n -A4 '^  agents:' .wingfoil/dna.yaml` on `1abafadd`). Because the write path refuses undeclared fields
+  (`spec-002` *Unknown keys*), `dna update team.agents.<n> --entry-email …` was refused (red run below).
+- **Design.** `email` is optional (an agent can be declared before it has an address) and `[AUTHORING]`; it is
+  refined to one mailbox, `AGENT_EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/`, because it is written inside
+  a trailer's `<…>`. The "plain name" half of the AC is enforced only as far as the trailer needs: an agent
+  `name` may not contain `<`, `>`, CR or LF (a name with `/` or parentheses still loads — only this repository's
+  value changes). Both refusals name the field (`team.agents.<i>.email` / `.name`). The check is local to
+  `src/dna` (no import of `src/memory`'s `isValidAttribution`, keeping the pillars decoupled, REQ-SYS-02); the
+  live-file test cross-checks with `isValidAttribution` instead.
+- **AC classification.**
+
+  | AC | Class | Why |
+  |----|-------|-----|
+  | AC1 `email` + plain name in `AgentEntry`, live `dna.yaml`, spec-002 | red-first | new behaviour: malformed email/name refused, `--entry-email` writable, live file declares an identity — all failed before (red run) |
+  | AC2 `git-conventions` §1/§7 text | characterization | documentation; pinned by `test/directives/git-conventions.test.ts`, written with the text |
+  | AC3 `npm test` green; `directives list` loads the directive | characterization | already covered by `test/core/directives-list.test.ts` ("lists git-conventions as global …"); re-run below |
+
+### red (2026-10-06)
+
+- `test/dna/agent-identity.test.ts` (commit `9e19eddf`). `npx jest test/dna/agent-identity.test.ts` →
+  **14 failed, 4 passed, 18 total**: 7 malformed-email cases, 4 unsafe-name cases, the two `--entry-email`
+  write-path cases (`result.ok` false: unknown field), and the live-file identity case. The 4 that passed are the
+  optional/accept cases, which `.passthrough()` already tolerated (they pin that nothing regresses).
+
+### green (2026-10-06)
+
+- `56e8f42f` — `AgentEntry.email` + `isTrailerSafeName`; `.wingfoil/dna.yaml` agent renamed `WingFoil Agent`
+  with `email:` (marked `[AUTHORING] PLACEHOLDER`, see the decision below), `version: 1.5 → 1.6` (version-bump
+  gate); `test/dna/path.test.ts`'s pinned `team.agents` entry-field list gains `email` (schema order);
+  `docs/cli-reference.md`'s `team.agents` row lists `email`. `npx jest test/dna` → 254 passed.
+- `f297f43e` — `git-conventions` `version: "1.0" → "1.1"`, date 2026-10-06 (doc-versioning: first edit since its
+  commit on main). §1: `intake/` row with its fast-forward merge (Q2 (a)); "the specific prefix wins" (Q3 (i));
+  the closed list of commits made directly on `main` — approver `approve`/`reject`, triage `assign`/`sync`/the
+  absorbing tasks' `amend`, the coordinator's `docs(plans)` bookkeeping (Q1 (A)); the intro cites `dl-152`. §7:
+  the trailer is `Co-Authored-By: <team.agents name> <<team.agents email>>` plus `AI-Model:`, values read with
+  `wingfoil dna show team`; hand sessions apply it from this task's merge. The directive does not copy the
+  address, so replacing the placeholder needs no directive edit. Pinned by `test/directives/git-conventions.test.ts`.
+  `dl-024`/`dl-119` untouched (dl-152 Action 3).
+- `node dist/cli.js dna show team` → the agent entry shows `"name": "WingFoil Agent"` and its `"email"`.
+- `node dist/cli.js directives list --role developer` → lists `directives/custom/git-conventions.md`.
+
+**Hand-commit trailers after merge (§7).** A commit an agent co-authors by hand — not `approve`/`reject` — ends
+with one trailer paragraph:
+
+```
+Co-Authored-By: WingFoil Agent <wingfoil-agent@users.noreply.github.com>
+AI-Model: claude-opus-5-5
+```
+
+(the address is whatever the approver confirms in `dna.yaml`; `AI-Model:` is the id the running agent reports).
+On a tool-written commit the two join the `WingFoil-Version:` paragraph via `git commit --amend --no-edit
+--trailer …` (§8), unpushed only. This task's own commits keep the brief's `Co-Authored-By: Claude Opus 5.5`
+line, since §7 applies only from the merge.
+
+### Decision for the approver — the agent's email (bug-240)
+
+The value in `dna.yaml` is a **placeholder**, not a registered identity; the field is optional, so it can also
+be removed. Options:
+
+1. **(recommended)** Register a GitHub machine account (e.g. `wingfoil-agent`) and use its noreply form,
+   `<id>+wingfoil-agent@users.noreply.github.com`: GitHub then links the co-author to an account the project
+   controls, and no mailbox is exposed. Record the account as a `service` element (like `svc-001`).
+2. Keep `wingfoil-agent@users.noreply.github.com` (the placeholder) without an account: valid shape, passes
+   `isValidAttribution`, but GitHub links it to nobody, and if someone else registers that login the trailers
+   would be attributed to them. Acceptable only together with option 1.
+3. A role address on a domain the project owns — none exists today (`package.json` `homepage`/`repository` point
+   at github.com/wingfoil/wingfoil).
+
+A reserved-TLD address (`….invalid`) is not offered: `isValidAttribution` refuses it (`src/memory/audit.ts`).
+The vendor's own `noreply@anthropic.com` is not offered either: dl-117 Q2 (c) wants a name stable across models
+and vendors. The agent `name` `WingFoil Agent` is also an authoring choice for the approver to confirm.
+
+### Pending amendments (approver)
+
+- `spec-002-dna-yaml-schema` — Zod listing of `AgentEntry` gains `email` and the name refinement; dated Revision
+  note (2026-10-06), no version bump (`dl-047`, as the earlier revisions). Proposed `--reason`: "task-256 (bug-240,
+  dl-117 Q2 (c)): team.agents entries gain an optional email and refuse a name holding angle brackets or a line
+  break, so the declared agent can be written as the Co-Authored-By trailer git-conventions section 7 prescribes."
+
+### refactor (2026-10-06, with the spec-002 amendment in the working tree)
+
+- `npm test` → 261 suites, **4889 passed** (after one fix: the first run failed
+  `test/docs/name-resolvability.test.ts` because the Revision heading cited the full task id, whose `team.agents`
+  segment reads as a config path; the heading now cites `task-256`).
+- `npm run test:coverage` → 4889 passed; All files: statements 99.11, branches 96.33, functions 96.28, lines 99.69.
+- `npm run lint` → exit 0; `npm run docs:api` → exit 0; `npx tsc --noEmit -p tsconfig.json` → exit 0;
+  `npx tsc -p tsconfig.build.json --noEmit` → exit 0.
+- BDD: no scenario covers `team.agents` fields (`grep -rn agents docs/02_requirements/02_bdd/features/p2-dna/` →
+  only the comment-keeping `dna add team.agents` scenario in P2.1, unchanged and still green).
+
+### review (self, reviewer, 2026-10-06)
+
+- AC1 met: schema + refusals (`test/dna/agent-identity.test.ts`), writable via `--entry-email`, live `dna.yaml`
+  declares name + email with a version bump, spec-002 Revision pending. The email value itself awaits the
+  decision above.
+- AC2 met: §1 and §7 text, pinned by `test/directives/git-conventions.test.ts`.
+- AC3 met: `npm test` green; `directives list` loads the directive (command above).
+- Same-class check in touched files: `docs/cli-reference.md` lists every `team.agents` field again;
+  `docs/user-guide.md:163`'s `dna add team.agents` example stays valid (email optional).
