@@ -123,6 +123,10 @@ describe('unifiedDiff', () => {
     expect(unifiedDiff('x.md', 'same\n', 'same\n')).toBe('');
   });
 
+  it('fails loudly, as E_GIT_READ_FAILED, when git cannot produce the diff', () => {
+    expect(() => unifiedDiff('x.md', 'a\n', 'b\n', { PATH: '' })).toThrow(/E_GIT_READ_FAILED: git diff for the dry run of x.md failed/);
+  });
+
   it('marks a missing final newline the way git does', () => {
     expect(unifiedDiff('x.md', 'a', 'b')).toBe(['--- a/x.md', '+++ b/x.md', '@@ -1 +1 @@', '-a', '\\ No newline at end of file', '+b', '\\ No newline at end of file', ''].join('\n'));
   });

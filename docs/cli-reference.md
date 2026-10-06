@@ -58,11 +58,12 @@ your machine.
 
 ### Global options
 
-Accepted by every command:
+Accepted by every command, except `--dry-run`, which only the commands that change the project take:
 
 | Option | Effect |
 |---|---|
 | `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet; errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
+| `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code. It does not run git hooks, and for a `memory approve` that also moves a superseded document it shows only the approve commit. |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
@@ -104,7 +105,11 @@ document). Stdout is the same with or without warnings, so a script parsing it i
 ### Git side effects
 
 Every command that changes the project writes **exactly one git commit**, authored by your git identity.
-Read-only commands never commit. The commit subject is listed per command below; `wingfoil memory
+Read-only commands never commit. Unreleased (v0.3): if git refuses that commit — a `pre-commit` hook
+that fails, a full disk — the command puts back every file it wrote, and the index, as they were, and
+fails (exit `1`) with `error: E_COMMIT_FAILED: git did not commit <paths>: <git's explanation> — nothing
+was committed, and the working tree and the index are as they were`. A `memory add` you retry gets the
+same id; 0.2.x left the new file written and staged. The commit subject is listed per command below; `wingfoil memory
 history` reads the Memory ones back.
 
 Unreleased (v0.3): every such commit ends with a paragraph naming the WingFoil build that wrote it,

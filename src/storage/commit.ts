@@ -109,6 +109,9 @@ function stampedMessage(message: string): string {
  * a context-building read path (the determinism rule targets read/derivation paths, e.g.
  * `computeStateSnapshot`), so it is correct and intended here.
  *
+ * A mutating operation commits through {@link writeAndCommit}, which writes, commits and undoes a
+ * refused commit in one place; during a dry run this function throws instead of committing (task-210).
+ *
  * @throws whatever `git` raises (via `execFileSync`) — e.g. nothing staged to commit, or `root` is
  *   not a git repository. Callers that must translate those into a `CoreResult` do so at their layer
  *   (see `src/core/init.ts`); this primitive stays a thin, throwing mechanism by design.

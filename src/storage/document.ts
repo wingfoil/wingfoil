@@ -24,6 +24,9 @@ export function documentExists(absolutePath: string): boolean {
 /**
  * Write `content` to `absolutePath`, creating any missing parent directories. No other file or
  * directory is created or touched — the write is exactly this one path, nothing else.
+ *
+ * A mutating operation writes through `writeAndCommit` (`./commit`, task-210), not through this
+ * function: during a dry run this throws instead of writing (`./dry-run`).
  */
 export function writeDocument(absolutePath: string, content: string): void {
   refuseDuringDryRun('writeDocument');
@@ -42,6 +45,9 @@ export function writeDocument(absolutePath: string, content: string): void {
  * nothing is ever removed recursively. Staging and committing the deletion is the caller's job,
  * exactly as it is for a write (`commitPaths`, ./commit) — this module only owns the bytes at an
  * already-resolved absolute path.
+ *
+ * During a dry run this throws instead of deleting (task-210, `./dry-run`); a mutating operation deletes
+ * through `writeAndCommit` (`./commit`).
  *
  * @throws Node's `ENOENT` when nothing is there. Callers resolve the target before calling (P3.3
  *   resolves a directive NAME to a file that `loadDirectives` just read), so a missing path is a
