@@ -14,6 +14,10 @@
  * AC 3 (no arguments: unchanged) is `role-prompts.test.ts` and `mcp-prompts.feature.test.ts`; AC 5 (no
  * Tool, nothing written) is `read-only-agent-channel.test.ts`.
  */
+import { mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
@@ -390,5 +394,23 @@ describe('prompts/get — a repository refusal is a failed read, not InvalidPara
     expect(error.code).toBe(ErrorCode.InternalError);
     expect(error.message).toBe("MCP error -32603: invalid execution context: missing 'directives' section");
     expect(error.data).toEqual({ details: [{ detail: `no .wingfoil/roles.yaml at ${sha}` }] });
+  });
+});
+
+describe('prompts/get — a git that cannot answer is not a missing revision', () => {
+  it('a root that is not a repository fails the read (-32603) rather than refusing the state as -32602', async () => {
+    const notARepo = mkdtempSync(join(tmpdir(), 'wf-task-195-'));
+    try {
+      const server = createMcpServer({ resolveRoot: () => notARepo, roles: ROLES });
+      const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: 'wingfoil-test-client', version: '0.0.0' });
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+      const error = await refusal(client.getPrompt({ name: 'developer-session', arguments: { element: ELEMENT, state: 'HEAD' } }));
+
+      expect(error.code).toBe(ErrorCode.InternalError);
+    } finally {
+      removeTempDir(notARepo);
+    }
   });
 });
