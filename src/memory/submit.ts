@@ -12,7 +12,7 @@
  *
  * Deterministic (REQ-SYS-07): results follow the declared field order, never object-key order.
  */
-import { removeFrontmatterField, setFrontmatterField } from './frontmatter-edit';
+import { describeDocumentChanges, removeFrontmatterField, setFrontmatterField } from './frontmatter-edit';
 
 /** The frontmatter key `memory.reject` sets and `memory.submit` removes (spec-010). */
 export const REJECTION_REASON_FIELD = 'rejection_reason';
@@ -115,4 +115,21 @@ export function notApplicableRefusals(
 /** The submitted document: `status` set to `target` and `rejection_reason` removed; nothing else changes. */
 export function renderSubmitDocument(content: string, target: string): string {
   return removeFrontmatterField(setFrontmatterField(content, 'status', target), REJECTION_REASON_FIELD);
+}
+
+/**
+ * What a submit carries besides its own edit (task-209, `dl-106` W1 (a)): every way the author's
+ * working-tree document differs from the one committed at `HEAD`, worded by `describeDocumentChanges`
+ * — "the body", a `frontmatter field '<name>'` per moved field, sorted by name — the function that
+ * already words the gated verbs' refusal of the same edits. Both copies are first rendered by the same
+ * transition ({@link renderSubmitDocument}), so the submit's own fields, `status` and a cleared
+ * `rejection_reason`, never count: a pure transition carries nothing (`[]`).
+ *
+ * `committed` is `null` when no commit holds the document; the verb refuses that case before asking.
+ * Pure and deterministic (REQ-SYS-07).
+ */
+export function describeSubmitContent(committed: string | null, content: string, target: string): string[] {
+  const after = renderSubmitDocument(content, target);
+  if (committed === null) return describeDocumentChanges(null, after);
+  return describeDocumentChanges(renderSubmitDocument(committed, target), after);
 }

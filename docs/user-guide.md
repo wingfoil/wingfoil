@@ -383,7 +383,9 @@ wingfoil memory submit task-001-my-first-task      # draft → pending
 ```
 
 The submit commit records your content **and** the state change. You do not need to commit the edits
-first.
+first. Unreleased (v0.3): the commit body names what it carries besides the state change, e.g.
+`Carries content: frontmatter field 'title', the body`. The template's placeholder comments are yours
+to replace: neither `memory add` nor `memory submit` writes the body for you.
 
 ### 8.3 Approve or reject
 

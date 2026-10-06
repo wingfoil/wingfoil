@@ -13,8 +13,14 @@ renews: ""             # optional — ISO date on which it expires or must be re
 repo_refs: []          # optional — repository paths that depend on it, e.g. [".github/workflows/publish.yml"]
 decision: ""           # optional — the decision-log or ADR that motivated it
 set_up_in: ""          # optional — the release in which it was set up, e.g. "v0.2"; not `release`, and never stamped by build-backlog (bug-166)
-tmpl_version: 261001   # Original template version
+tmpl_version: 261006   # Original template version
 ---
+
+<!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
+     `--tags` or `--set` value). Fill the required frontmatter fields and replace these placeholder
+     comments yourself; `wingfoil memory submit` then checks the required fields, moves `status`
+     forward and commits the document as you left it, naming in the commit body the content it
+     carries. -->
 
 <!-- SECURITY RULE (dl-088, REQ-SEC-08, directive security-secrets):
      a service element NEVER holds a secret value — no token, password, recovery code or key, and no
