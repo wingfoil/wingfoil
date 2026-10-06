@@ -74,3 +74,16 @@ batch B6 (`dev-loop-rel-v0.3-plan`), reproduced against `main` at `ccccc227`.
   over 64 KiB arriving whole (`task-249`); `wingfoil mcp`'s pre-flight refusal and `tools/list` answering `[]`
   (`task-174`); the `format:` key and its upgrade error (`task-251`); `npm run typecheck` and the control-character
   gate (`task-173`); `check:audit` in CI (`task-250`); the config writers' project-root confinement (`task-172`).
+- **Added at the W2 B3 ingest (2026-10-06, `bug-ingest-rel-v0.3-w2b3-review-findings-plan` item 11).** User-visible
+  changes of W2 B3 the CHANGELOG must list: `memory park <id> --reason`, the `returns` key and optional per-state
+  WIP `limits` in `memory.yaml`, a full state refused with `CONFLICT` naming its holders (`task-180`); one
+  missing-operand form for every verb with the usage on a `hint:` line, the unknown-command suggestion on a
+  `hint:` line, and `.wingfoil/<file> is missing: ...` with no host path for an incomplete configuration
+  (`task-179`); an illegal transition naming the attempted move, with `(none)` as the target when the verb has
+  no edge from that state (`task-181`, `dl-154`); DNA writes edit `dna.yaml` in place and keep its comments, and a
+  whole-file rewrite is refused unless `--force` and warned about when forced (`task-193`). For contributors: the scheduled dependency
+  and lockfile check, `dependency-check.yml` (`task-190`), and the version-bump gate on the four versioned config
+  files (`task-183`). The same `user-docs` pass also corrects `docs/user-guide.md`: section 4.3 still says
+  `paths` has five categories (a scaffolded `dna.yaml` declares six, `runs` included; `bug-191` corrected every
+  other copy), and section 11 still lists the comment loss of `dna add` on a new collection (`bug-126`) as a
+  known limitation, which `task-193` fixed.
