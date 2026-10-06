@@ -2,7 +2,7 @@
 id: "task-196-wingfoil-init-installs-builtin-adapters-protected-builtin-assets"
 type: task
 title: "`wingfoil init` installs the built-in adapters as protected built-in assets"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "medium"
