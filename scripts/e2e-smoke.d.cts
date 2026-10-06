@@ -44,7 +44,7 @@ export interface SmokeOptions {
   readonly expectedVersion?: string;
   /**
    * When given, `wingfoil --version` must print exactly `<expectedVersion> (<expectedCommit>)`
-   * (task-254, `bug-235`). Requires {@link expectedVersion}; must be a hex commit name of 7–64 digits,
+   * (task-254, `bug-235`). Requires {@link expectedVersion}; must be a full sha (40 or 64 lowercase hex digits),
    * never `unknown` or `-dirty`. {@link runSmoke} throws otherwise.
    */
   readonly expectedCommit?: string;
@@ -61,7 +61,7 @@ export function smokeSteps(template: string): readonly SmokeStep[];
 /** Run the dl-023 smoke; stops at the first failing check. Throws on an invalid `expectedCommit`. */
 export function runSmoke(options: SmokeOptions): SmokeReport;
 
-/** Throw unless `commit` is a hex commit name of 7–64 digits (no `-dirty`, not `unknown`). */
+/** Throw unless `commit` is a full sha, 40 or 64 lowercase hex digits (no `-dirty`, not `unknown`). */
 export function assertCommitName(commit: string): void;
 
 /** Parse `[--expect-version X [--expect-commit SHA]] [-- command args...]`; throws on a bad argument. */

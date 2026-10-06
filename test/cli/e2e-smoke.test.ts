@@ -163,7 +163,6 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
       ['a -dirty build of the expected commit', `0.3.0 (${SHA}-dirty)`],
       ['another commit', `0.3.0 (${OTHER})`],
       ['a bare semver', '0.3.0'],
-      ['an abbreviated form of the expected commit', `0.3.0 (${SHA.slice(0, 12)})`],
     ])('fails on %s, naming the expected and the actual stamp, and stops there', (_case, stamp) => {
       const report = smokeWith(stamp, SHA);
       expect(report.ok).toBe(false);
@@ -178,9 +177,11 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
       const run = (options: { expectedVersion?: string; expectedCommit?: string }) => () =>
         runSmoke({ command: process.execPath, commandArgs: ['-e', STAMP_STUB, '--'], ...options });
       expect(run({ expectedCommit: SHA })).toThrow('expectedCommit requires expectedVersion');
-      for (const bad of ['unknown', `${SHA}-dirty`, 'main', 'abc12', '']) {
+      // An abbreviated sha can never equal a real stamp (write-build-info records the full sha): refused.
+      for (const bad of ['unknown', `${SHA}-dirty`, 'main', 'abc12', SHA.slice(0, 12), SHA.slice(0, 39), '']) {
         expect(run({ expectedVersion: '0.3.0', expectedCommit: bad })).toThrow('not a commit name');
       }
+      expect(run({ expectedVersion: '0.3.0', expectedCommit: 'a'.repeat(64) })).not.toThrow();
     });
 
     it('keeps the version-only check lenient on the commit when no commit is expected (AC3)', () => {
@@ -202,6 +203,7 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
         expectedVersion: '0.3.0',
       });
       expect(() => parseSmokeArgs(['--expect-commit'])).toThrow('--expect-commit');
+      expect(() => parseSmokeArgs(['--expect-version', '0.3.0', '--expect-commit', SHA.slice(0, 12)])).toThrow('not a commit name');
       expect(() => parseSmokeArgs(['--expect-commit', SHA])).toThrow('--expect-commit requires --expect-version');
     });
 
@@ -219,6 +221,9 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
       const alone = cli(['--expect-commit', SHA]);
       expect(alone.status).toBe(2);
       expect(alone.stderr).toContain('--expect-commit requires --expect-version');
+      const abbreviated = cli(['--expect-version', '0.3.0', '--expect-commit', SHA.slice(0, 12)]);
+      expect(abbreviated.status).toBe(2);
+      expect(abbreviated.stderr).toContain('not a commit name');
     });
   });
 });

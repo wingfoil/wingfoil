@@ -159,7 +159,7 @@ describe('publish:staging (task-060) — pure builders', () => {
     expect(() => parseArgs(['--expect-commit'])).toThrow('--expect-commit');
     // An empty `"$GITHUB_SHA"` must stop the stage, never run it unchecked.
     expect(() => parseArgs(['--expect-commit', ''])).toThrow('--expect-commit');
-    for (const bad of ['unknown', `${sha}-dirty`, 'main']) {
+    for (const bad of ['unknown', `${sha}-dirty`, 'main', sha.slice(0, 12)]) {
       expect(() => parseArgs(['--expect-commit', bad])).toThrow('not a commit name');
     }
   });

@@ -40,6 +40,7 @@ interface WorkflowStep {
   readonly uses?: string;
   readonly run?: string;
   readonly if?: string;
+  readonly env?: Readonly<Record<string, string>>;
   readonly with?: Readonly<Record<string, unknown>>;
 }
 
@@ -162,7 +163,7 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
     const step = parsed.jobs.stage?.steps.find((s) => s.run?.includes('npm run publish:staging'));
     expect(step?.run).toBe('npm run publish:staging -- --tarball dist-pack/*.tgz --expect-commit "$GITHUB_SHA"');
     // GITHUB_SHA must stay the one GitHub Actions sets for the run: nothing in the workflow overrides it.
-    for (const env of [parsed.env, parsed.jobs.gate?.env, parsed.jobs.stage?.env]) {
+    for (const env of [parsed.env, parsed.jobs.gate?.env, parsed.jobs.stage?.env, step?.env]) {
       expect(Object.keys(env ?? {})).not.toContain('GITHUB_SHA');
     }
   });

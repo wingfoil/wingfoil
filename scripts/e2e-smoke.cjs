@@ -32,11 +32,12 @@ const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 
 /**
- * A commit an expected stamp may name: a full or abbreviated hex object name (SHA-1 or SHA-256), the
- * shape `scripts/write-build-info.cjs` records for a clean build. `unknown` and `<sha>-dirty` are
- * stamps the check must refuse, so they can never be what it expects.
+ * A commit an expected stamp may name: a full hex object name, SHA-1 (40) or SHA-256 (64) — the shape
+ * `scripts/write-build-info.cjs` records for a clean build (`git rev-parse HEAD`). An abbreviated sha
+ * could never equal a real stamp, so it is refused as an argument rather than failing every run; and
+ * `unknown` and `<sha>-dirty` are stamps the check must refuse, so they can never be what it expects.
  */
-const COMMIT_NAME_RE = /^[0-9a-f]{7,64}$/;
+const COMMIT_NAME_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 /** Every template `wingfoil init` supports, in the order they are smoked. */
 const SMOKE_TEMPLATES = Object.freeze(['Scrum', 'Kanban']);
@@ -168,7 +169,7 @@ function smokeTemplate(template, invoke, env) {
  */
 function assertCommitName(commit) {
   if (!COMMIT_NAME_RE.test(commit)) {
-    throw new Error(`expected commit "${commit}" is not a commit name (7-64 lowercase hex digits)`);
+    throw new Error(`expected commit "${commit}" is not a commit name (a full sha: 40 or 64 lowercase hex digits)`);
   }
 }
 
