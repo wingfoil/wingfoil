@@ -310,11 +310,11 @@ export function resolveTransitionTarget(
  * The `<to>` of the illegal-transition contract message — what the verb the user typed reaches from
  * `<from>`. A transition verb names no target of its own, and {@link resolveTransitionTarget} refuses a
  * call exactly when the verb has no edge from the current state (`deprecate` is never refused), so on a
- * refusal that target is always nothing, rendered `(none)` (`task-181`, `bug-165`, `bug-127`;
- * REQ-STATE-01).
+ * refusal that target is always nothing, rendered `(none)` (`dl-154` option A; `task-181`, `bug-165`,
+ * `bug-127`; REQ-STATE-01).
  *
- * It replaces the verb's **canonical edge** (`dl-053` option 1): the target the verb reaches from the
- * first state in `sequence` where it is legal. That edge starts somewhere else in the machine, so it
+ * It replaces the verb's **canonical edge** (`dl-053` option 1, replaced by `dl-154`): the target the
+ * verb reaches from the first state in `sequence` where it is legal. That edge starts somewhere else in the machine, so it
  * printed backward moves (`approve` on a `planned` bug → `planned -> triaged`; `submit` on the last
  * state of the default machine → `approved -> pending`) and skips (`triaged -> resolved`), naming a move
  * nobody attempted to exactly the user who has just made an illegal call. Why the verb has no edge is

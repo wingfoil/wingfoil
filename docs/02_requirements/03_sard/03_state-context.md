@@ -27,8 +27,9 @@
   bug → `planned -> triaged`) and skips (`triaged -> resolved`), misinforming exactly the user who has just made an
   illegal call (`bug-165`, `bug-127`). Why the verb has no edge — a gate needing `approve`, a `waiting` state whose
   edge only a Workflow action fires, the last state of `sequence` — is the issue's detail, shown under the message.
-  Revised 2026-10-05 by `task-181-name-attempted-move-not-verb-canonical-edge-illegal`; a pure function of
-  `(machine, from, verb)`, per REQ-SYS-07.
+  Ratified by `dl-154-an-illegal-transition-prints-none-as-its-target-replacing-dl-053-s-canonical-edge` (2026-10-06, option A), which replaces `dl-053`; implemented by
+  `task-181-name-attempted-move-not-verb-canonical-edge-illegal`. A pure function of `(machine, from, verb)`, per
+  REQ-SYS-07.
 * **Traceability:** Feature P1.6 (US-3-09, BDD `p1-memory/P1.6-memory-submit.feature`); Feature P4.11 (US-4-08,
   BDD `p4-workflow/P4.11-deliverables.feature`); Feature P4.13 (US-1-02, BDD `p4-workflow/P4.13-state-deduction.feature`).
 

@@ -13,6 +13,7 @@ Feature: P1.6 (US-3-09) - wingfoil memory submit
     And the transition is recorded in git
     And the command exits with code 0
 
+  # dl-154-an-illegal-transition-prints-none-as-its-target-replacing-dl-053-s-canonical-edge (option A, replacing dl-053), task-181: a refused verb reaches nothing from <from>, so <to> is (none).
   Scenario: Error - submitting a document whose state machine forbids the transition
     Given a Memory document "task-200" exists with "status: approved"
     And the "task" type has no "submit" edge from approved

@@ -654,7 +654,7 @@ describe('resolveTypeTransition — the dl-032 illegal-transition contract (P1.6
 
   // task-181 (bug-165, bug-127): `<to>` is what the verb the user typed reaches FROM `<from>`. A call is
   // refused exactly when the verb has no edge from there, so `<to>` is always `(none)` — never the
-  // verb's canonical edge elsewhere in the machine (dl-053 option 1, superseded), which printed
+  // verb's canonical edge elsewhere in the machine (dl-053 option 1, replaced by dl-154 option A), which printed
   // backward moves (`planned -> triaged`) and skips (`triaged -> resolved`). The engine's explanation
   // rides as the detail (dl-032 option (c)) and says why, in the verb's terms.
   describe('task-181: `<to>` is `(none)`, never a move the verb cannot make from `<from>`', () => {

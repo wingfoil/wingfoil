@@ -39,6 +39,7 @@ Feature: P5.1.4 (US-0A-14) - CLI UX Improvements
     And whose "hint" names "memory"
     And no usage text is written
 
+  # dl-154-an-illegal-transition-prints-none-as-its-target-replacing-dl-053-s-canonical-edge (option A, replacing dl-053), task-181: a refused verb reaches nothing from <from>, so <to> is (none).
   Scenario: Error - a refusal's details follow its error line
     Given "task-200" has "status: approved"
     When I run "wingfoil memory submit task-200"
