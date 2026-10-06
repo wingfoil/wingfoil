@@ -16,8 +16,9 @@
  *   level, so a subsection about another workflow does not lend it names. In a section or a subgraph
  *   the phase must be marked as a name — a bold node title `**phase**` or inline code `` `phase` `` —
  *   since prose there uses the same common words ("the end-to-end gate"); a one-node summary lists
- *   its phases bare, so there a whole word counts. A `.` does not bound a name: `memory.submit` is an
- *   action, not the `submit` phase, and `submit.x` is no mention either.
+ *   its phases bare as an arrow chain (`fresh-init → drive-cli → gate`), so there a name counts only
+ *   next to a `→` — the label's prose ("Approval gate") does not (review fix F1). A `.` does not bound
+ *   a name: `memory.submit` is an action, not the `submit` phase, and `submit.x` is no mention either.
  *
  * Before bug-206 a phase counted as documented wherever its name occurred, so common-word phases
  * (`submit`, `approve`, `gate`, `design`, `capture`) passed on any prose or dotted action. A task that
@@ -50,11 +51,21 @@ function marks(text: string, name: string): boolean {
   return new RegExp(`\\*\\*${escape(name)}\\*\\*|\`${escape(name)}\``).test(text);
 }
 
+/**
+ * Whether `name` is one of the names a one-node summary's arrows chain (`a → b (opt.) → c`): a name
+ * right after a `→`, or right before one. The label's prose ("Approval gate", "design gate") is not
+ * a phase list, so a word there names no phase (review fix F1).
+ */
+function chains(label: string, name: string): boolean {
+  const chained = label.match(/(?<=→\s*)[a-z][a-z0-9-]*|[a-z][a-z0-9-]*(?=\s*(?:\(opt\.\))?\s*→)/g) ?? [];
+  return chained.includes(name);
+}
+
 /** A region of the reference that documents one workflow, and how a phase must be named in it. */
 interface Region {
   readonly text: string;
-  /** `marked` in a section or a subgraph; `word` in a one-node summary, which lists phases bare. */
-  readonly naming: 'marked' | 'word';
+  /** `marked` in a section or a subgraph; `chained` in a one-node summary, which lists phases bare between arrows. */
+  readonly naming: 'marked' | 'chained';
 }
 
 /** The regions of `markdown` that document `workflow` (see the module comment), in document order. */
@@ -76,7 +87,7 @@ function regionsOf(markdown: string, workflow: string): Region[] {
   });
   const subgraph = new RegExp(`^\\s*subgraph \\w+\\["${escape(workflow)}"\\]\\n([\\s\\S]*?)^\\s*end\\s*$`, 'gm');
   for (const [block] of markdown.matchAll(subgraph)) regions.push({ text: block, naming: 'marked' });
-  for (const [label] of markdown.matchAll(/\["[^"\n]*"\]/g)) if (named.test(label)) regions.push({ text: label, naming: 'word' });
+  for (const [label] of markdown.matchAll(/\["[^"\n]*"\]/g)) if (named.test(label)) regions.push({ text: label, naming: 'chained' });
   return regions;
 }
 
@@ -86,7 +97,7 @@ function undocumentedPhases(markdown: string, phases: ReadonlyArray<readonly [st
   // name that opens a label line counts as a whole word.
   const text = markdown.replace(/\\n/g, ' ');
   return phases
-    .filter(([workflow, phase]) => !mentions(text, `${workflow}/${phase}`) && !regionsOf(text, workflow).some((region) => (region.naming === 'marked' ? marks : mentions)(region.text, phase)))
+    .filter(([workflow, phase]) => !mentions(text, `${workflow}/${phase}`) && !regionsOf(text, workflow).some((region) => (region.naming === 'marked' ? marks : chains)(region.text, phase)))
     .map(([workflow, phase]) => `${workflow}/${phase}`)
     .sort();
 }
