@@ -40,9 +40,137 @@ This is the run-log library, used by `agent execute` (task-228), `agent list` (t
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+Branch `task/task-206-agent-execute-records-run-json-lines-line-under`, cut from `main` at `ed4607a4`
+(wave 3, batch B1); start `5a1a6184`. `bug: []`, so no bug syncs.
+
+### design (architect)
+
+**`depends_on` (dl-015).** `task-127` (`memory amend`), `task-131` (dirty-target guard), `task-138`
+(`paths.runs`, `team.agents[].adapter`) and `task-192` (`WingFoil-Version:` trailer) are all `done`
+(`grep -m1 "^status:"` over the four files). The one handover addressed to this task is `task-138`'s
+independent review: `paths.runs` accepts `''`, absolute and `../` values, so the run log is confined
+where it is resolved (REQ-SEC-06) and its file path is built with `path.join`. Both are done in
+`resolveRunLogPath` (below).
+
+**Specs.** `spec-016-agent-execution` is `approved`; `dl-111`, `dl-114`, `dl-135` and `dl-108` are
+`ready` (`grep -m1 "^status:"`). No spec edit is needed: the library implements §4.1–§4.5 as written
+and adds no command, option, exit code, Memory type/state or MCP surface, so no enumeration-parity
+amendment applies (the `agent` `CoreModule` still registers no operation, `test/agent/module.test.ts`).
+
+**Placement.** `src/agent/run-log.ts`, exported from `src/agent/index.ts` (spec-016 §1: the `agent`
+module owns run-log reading and writing). API, for task-228/240/220: `serializeRunRecord`,
+`parseRunLog`, `readRunLogAt(root, rev, path)`, `formatRunId` / `isRunId` / `nextRunId`,
+`resolveRunLogPath(root, paths.runs, elementId)`, `recordRun(root, logPath, record)` (returns
+`CoreResult<{record, sha}>` with `commit`), `notesField` / `deriveNotesField` /
+`executionNotesSection`. `src/storage/commit.ts` gains `unstagePaths` (the undo of `commitPaths`' `git
+add`), used only on a failed record commit.
+
+**AC classification (T1).**
+
+| AC | Class | Why |
+|---|---|---|
+| 1 serialization | red-first | no serializer existed (`ls src/agent` before: discovery, index, manifest, placeholders, schema) |
+| 2 run id at `state_ref`, two clones, malformed id | red-first | new |
+| 3 strict reader refusals | red-first | new |
+| 4 commit contains only the log, subject, trailer, not a Memory op | red-first | new |
+| 5 collision → `CONFLICT` | red-first | new |
+| 6 failed commit → `IO` | red-first | new |
+| 7 `notes` field | red-first | new |
+| 8 this repository's `paths.runs` | characterization (config) | a configuration edit; pinned with the edit in `test/agent/module.test.ts`, and the existing live-file case in `test/dna/schema.test.ts` keeps it loading |
+| 9 `dl-114` gains the session id via `memory amend` | characterization (documentation) | `memory amend` has shipped (`task-127` `done`), so the action is NOT left open: the edit is in the worktree, uncommitted, as a pending amendment for the coordinator's `memory amend` (below) |
+
+### red (developer)
+
+`0a3c339a` — `test/agent/run-log.test.ts` (64 tests). `npx jest test/agent/run-log.test.ts` → **64
+failed, 64 total**, every one with `TypeError: (0 , agent_1.serializeRunRecord) is not a function` (or
+the sibling export): the functions did not exist.
+
+### green (developer)
+
+`3f770654` — `src/agent/run-log.ts`, `src/agent/index.ts` exports, `src/storage/commit.ts`
+`unstagePaths` (+ `src/storage/index.ts`). Three test defects found on the first green run were fixed
+in the same commit, none weakening an assertion: the section expectation carried one newline too many;
+the pre-commit hook was enabled before the fixture's own commit (so the fixture commit failed); the
+malformed-id line was built with the serializer, which now refuses it, and is built by hand instead.
+`npx jest test/agent/run-log.test.ts` → **64 passed**.
+
+`69b601bd` — `.wingfoil/dna.yaml` `paths.runs: [docs/06_runs/]`, `version` 1.6 → 1.7 (one bump,
+annotated), pinned in `test/agent/module.test.ts`. `npx jest test/agent test/dna/schema.test.ts
+test/lint/version-bump.test.ts` → **192 passed**.
+
+**Value chosen for `paths.runs`: `docs/06_runs/`** — numbered after `docs/05_plans/`, the repository's
+`docs/NN_*` convention; `init`'s scaffold default stays `docs/runs/` (spec-016 §4.1). The directory is
+created by the first record, so nothing is committed under it now.
+
+Behaviour per AC, as built:
+- AC 1: keys written in `RUN_RECORD_KEYS` order whatever order the caller built the object in (tokens
+  too), `JSON.stringify` with no spacing, `\n`-terminated. The writer validates with the reader's rules
+  (except key order, which it fixes), so a `null`, an absent key or a fractional count is refused, never
+  written. `NO_WORKFLOW = 'n/a'`, `ADHOC_PHASE = 'adhoc'`.
+- AC 2: `nextRunId` reads the log at `state_ref` strictly and counts records whose `element` AND `phase`
+  match, whatever the workflow; later commits and the working tree do not count; equal in a clone.
+- AC 3: `run log <path>: line <k> is not a valid run record: <detail>` (`not JSON`, `not a JSON
+  object`, `missing key '<k>'`, `unexpected key '<k>'`, `key '<k>' out of order: …`, `'<k>' must be
+  …`, `'id' '<id>' is not a run id of element '<basename>' …`) and `run log <path>: run id <id>
+  recorded twice`, all `VALIDATION`.
+- AC 4: `commitPaths(root, [logPath], 'agent: record <id>')` — `--only`, so the agent's staged and
+  unstaged edits elsewhere are untouched (the test checks `git status --porcelain` and the index before
+  and after); the stored body is the subject plus the `WingFoil-Version:` paragraph only;
+  `parseMemoryOperation` returns `null` for the subject and `getMemoryHistory` on the element does not
+  list the commit.
+- AC 5: re-read at `HEAD` before appending; a present id → `CONFLICT` `run id <id> already recorded at
+  HEAD`, file and `HEAD` unchanged, `details: {run_id, record, issues: [{detail: <the JSON line>}]}`, so
+  `errorDetails` renders the record as one details line.
+- AC 6: a refusing pre-commit hook → `IO` `run <id> not recorded: <cause>` (the cause is the first
+  non-empty stderr line of git or its hook, else `git exited with status <n>` — never `execFileSync`'s
+  `Command failed: git -C <absolute path> …`, cf. bug-217), same `details`; the file and its index entry
+  are put back as `HEAD` holds them (`git status --porcelain` empty afterwards).
+- AC 7: the section is found by its heading LINE (`## Execution Notes`, exactly), after the frontmatter,
+  outside code fences, up to the next level-1/2 heading — never by substring (W3 notes); `notes` is
+  `<element-id>#execution-notes` when the section text differs between `state_ref` and `HEAD`, `none`
+  otherwise and always `none` when the type's template has no such section (`## Triage & Execution
+  Notes` does not count, spec-016 §2.4). `deriveNotesField` reads committed states only, so uncommitted
+  notes yield `none` (tested).
+
+### refactor (developer)
+
+`bacae992` — lint-clean key removal in the test (`@typescript-eslint/no-unused-vars` on two
+destructured placeholders) and two cases covering `readRunLogAt`'s unknown revision and `recordRun`'s
+invalid record.
+
+Gates, with the `dl-114` amendment in the working tree:
+- `npm run test:coverage` → 274 suites, **5129 passed, 4 failed**: all four are wall-clock latency
+  assertions (`test/core/query-latency.test.ts` ×3, `test/mcp/resource-latency.test.ts` ×1) under a load
+  average of 64–104 (`uptime`). Re-run alone: `npx jest test/core/query-latency.test.ts
+  test/mcp/resource-latency.test.ts` → 7/8 (the `memory history` case again, load 99), then
+  `npx jest test/core/query-latency.test.ts -t "memory history"` → passed. This branch changes nothing
+  under `src/memory` or `src/core` (`git diff ed4607a4 --stat -- src/memory src/core` → empty).
+- Coverage All files **99.21 | 96.52 | 96.61 | 99.68** (stmts | branch | funcs | lines), against the
+  last figure recorded in a task's notes on `main`, `task-251`'s `98.99 | 96.13 | 96.1 | 99.59` — not
+  regressing. `src/agent/run-log.ts` 98.6 | 91.54 | 100 | 98.86; uncovered 292 and 324 are the
+  re-throws of an error that is not a `RevisionError` / `StorageError` (a defect path).
+- `npm run lint` → exit 0. `npm run docs:api` → exit 0. `npx tsc --noEmit -p tsconfig.json` → exit 0;
+  `npx tsc -p tsconfig.build.json --noEmit` → exit 0.
+- `node scripts/check-governance.cjs --base ed4607a4` → exit 0 (0 findings).
+
+### review (reviewer, self)
+
+- AC 1–7: met, each by the cases named above in `test/agent/run-log.test.ts` (66 tests, green).
+- AC 8: met — `docs/06_runs/`, `version: 1.7`, `test/agent/module.test.ts` and
+  `test/lint/version-bump.test.ts` green.
+- AC 9: prepared — `memory amend` exists, so the edit is a pending amendment (below), one
+  `wf(decision-log): amend …` commit for the coordinator; the file is not committed by hand.
+- Decisions beyond the spec's letter, for the approver: (1) `recordRun` itself refuses a log with
+  uncommitted changes (`CONFLICT` `run log <path> has uncommitted changes`, the §3.7 row of pipeline step
+  6), since the append would overwrite them; (2) a failed record commit restores the file and its index
+  entry; (3) the reader refuses an unterminated last line; (4) the reader does not check that the id's
+  phase segment equals the `phase` field, nor that `element`'s id equals the basename — §4.5 does not ask
+  it; (5) the confinement refusal is `resolveConfinedMemoryPath`'s REQ-SEC-06 text prefixed with
+  `paths.runs: `, which still says "Memory entries" though the run log is not Memory.
+- Same-class sweep in touched files: none found.
+
+### Pending amendments (approver)
+
+- `dl-114-recording-agent-token-consumption` — proposed `--reason`: "Adds the agent's session id to Q2
+  (b), extracted by the adapter or not-reported, as dl-135 point 2 and Action 2 record; the Q2 (b) bullet
+  changes, nothing else."
