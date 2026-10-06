@@ -58,9 +58,13 @@ reach a child process spawned without an explicit `env`: jest hands each suite a
 without `env` → it listed `file:/home/…/.gitconfig`, not the scratch file (suite deleted, never committed).
 That is why `src/storage/commit.ts` passes `env: process.env` explicitly. The fixture's own `git()` and
 `commitAll` pass no `env`, so a suite cannot isolate them through `process.env`. The new suite therefore
-passes its isolated global config to every git process it spawns as an explicit `env`
-(`{ ...process.env, GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM: '1' }`), and commits as a verb does (explicit
-env), never through `commitAll`. The developer's real config is never read or written.
+passes its isolated global config as an explicit `env`
+(`{ ...process.env, GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM: '1' }`) to the git processes it spawns itself
+(`gitIsolated`, `commitIsolated`), and makes the planted-hook commit as a verb does (explicit env), not
+through `commitAll`. The developer's real config is never written, and the suite's own git calls never read
+it; the fixture helpers it exercises (`makeTempGitRepo`, `cloneTempRepo`, `commitAll` for the clone's seed
+commit, and `git` for the local-config checks) pass no `env` and still read it — a separate follow-up,
+reported to the coordinator.
 
 **AC classification (T1).**
 
@@ -125,8 +129,9 @@ Run in this worktree on HEAD `0e12664a`, under heavy load (8 sibling agents; `up
 - Same class in the touched file: `cloneTempRepo` gets the pin too (a clone drops local config, as for
   `gc.auto`, bug-065). No other helper creates a repository (`grep -n "'init'\|'clone'" test/storage/helpers/git-fixture.ts`
   → only these two).
-- Never touches the developer's config: every git call of the new suite carries an explicit `env` naming a
-  scratch file; this machine has no global `core.hooksPath` (`git config --global --get core.hooksPath` →
+- Never writes the developer's config: the suite's own git calls (`gitIsolated`, `commitIsolated`) carry an
+  explicit `env` naming a scratch file; the fixture helpers it calls still read the real global config
+  (design, above). This machine has no global `core.hooksPath` (`git config --global --get core.hooksPath` →
   exit 1), so the suite's control would otherwise be meaningless — the scratch file is what makes it bite.
 - Out of scope, reported to the coordinator rather than fixed: other suites (`approval-authority`,
   `init`, `directive-remove`, `memory-approve`, …) isolate git config by assigning `process.env.GIT_CONFIG_*`;
@@ -134,3 +139,9 @@ Run in this worktree on HEAD `0e12664a`, under heavy load (8 sibling agents; `up
   with the real environment.
 
 **Pending amendments (approver):** none.
+
+**Review fixes (approve with fixes, claim-evidence).** The claim that the real git config is "never read or
+written" was false on "read": the suite also calls `makeTempGitRepo`, `cloneTempRepo`, `commitAll` and the
+fixture's `git`, which spawn git with no `env` (`grep -n "execFileSync" test/storage/helpers/git-fixture.ts`
+→ no `env` in `git`). Reworded in the suite's header and the two note passages to "never written; the
+suite's own git calls never read it". No behaviour change; the suite is still 6/6.

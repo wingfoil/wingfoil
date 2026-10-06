@@ -8,8 +8,10 @@
  * redirects git to another directory, so the planted hook never ran and those tests failed.
  *
  * The global configuration here is an isolated scratch file named by `GIT_CONFIG_GLOBAL` (with
- * `GIT_CONFIG_NOSYSTEM`), handed to every git process this suite spawns through an explicit `env`: the
- * developer's real git configuration is never read or written. Explicit, not an assignment to
+ * `GIT_CONFIG_NOSYSTEM`), handed through an explicit `env` to the git processes this suite spawns itself
+ * ({@link gitIsolated}, {@link commitIsolated}): the developer's real git configuration is never
+ * written, and those calls never read it. The fixture helpers this suite exercises (`makeTempGitRepo`,
+ * `cloneTempRepo`, `commitAll`, `git`) spawn git with no `env`, so they still read it. Explicit, not an assignment to
  * `process.env`: jest gives each suite a sandboxed copy of `process.env`, and `child_process` spawns
  * with the real one unless `env` is passed — which is why `src/storage/commit.ts` passes
  * `env: process.env` explicitly, and why this suite commits the way it does (see {@link commitIsolated}).
@@ -33,7 +35,7 @@ const MARKER = 'wf-planted-hook-ran';
 
 let scratch: string;
 let globalHooksDir: string;
-/** The environment every git process of this suite runs with: the real one plus the isolated global config. */
+/** The environment of the git processes this suite spawns itself: the real one plus the isolated global config. */
 let isolatedEnv: NodeJS.ProcessEnv;
 const cleanup: string[] = [];
 
