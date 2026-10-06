@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.15"
+version: "1.16"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -672,3 +672,30 @@ commit, right after the task's transition and on the task branch:
   Approver ruling on `task-256`: `team.agents[].email` stays optional, defaulting to the address the agent's vendor
   publishes, with a project machine account (GitHub's id-qualified noreply form) as an option; documented in the
   user guide.
+- **2026-10-06 — batch B4a `done`** (`task-255`, `253`, `257`, `256`, `258`, `187`).
+  - **Review.** Every task had an independent review: "approve" for `253` (its suggested test added), "approve with
+    fixes" for the rest, every fix applied in-task. Focused re-reviews: `255` (dates kept as written, `F1`) and `256`.
+  - **Approver rulings:**
+    - `task-255`: `spec-012` amended in place, since no payload consumer has shipped.
+    - `task-256`: `team.agents[].email` optional, defaulting to the vendor's published co-author address; a project
+      machine account in GitHub's id-qualified noreply form is an option; the bare noreply login form is refused.
+      From this merge on, hand commits carry git-conventions §7's trailers (`Co-Authored-By: Claude
+      <noreply@anthropic.com>`, `AI-Model: claude-opus-5-5`), except on approve and reject.
+    - `task-258`: P1.11's narrative lines kept, the quoted refusals limited to the leading clause.
+    - `task-187`: an unlisted finding fails in warn mode too (the stricter `bug-206` rule).
+    - Confirmed at the gate: every developer decision the approve Reasons name.
+  - **Amendments: 3** — `255`: spec-012; `257`: spec-001; `256`: spec-002. Handover notes on `task-218` and `task-195`
+    (consume the context payload as format 1; `CONTEXT_PAYLOAD_FORMAT` and `WrittenTimestamp` from `src/core`).
+  - **Bugs closed:** bug-206, bug-230, bug-232, bug-233, bug-240, bug-241, bug-243, bug-244.
+  - **Merges,** in order 255 → 253 → 257 → 256 → 258 → 187, no textual conflict.
+    - **Integration fix** `a2b63f54` (on `task-257`'s branch, after merging `main`): `loadMemoryDocuments`, added by
+      `253`, reads through `257`'s `readableDocuments` (a TS2322 the textually clean merge left).
+  - **Gates on `main`** (`b0c3e472`): `test:coverage` 270 suites, 5010 tests, coverage 99.13 / 96.39 / 96.53 /
+    99.69; lint, `docs:api`, both `tsc`, `npm run typecheck`, `check:audit` (0 vulnerabilities) exit 0; e2e smoke
+    19/19.
+  - **Governance check:** `--base 6a76202e` gives 53 `wf()` commits, 0 findings.
+  - **Follow-ups:** being filed by `bug-ingest-rel-v0.3-w2b4a-review-findings-plan`; the approver triages them later.
+    Note for W3: a task that adds a mutating verb or an MCP Tool updates spec-008 §11 / spec-004 §4.1 in the same
+    task, or `task-187`'s parity gates fail on an unlisted finding.
+  - **Fix share:** 6 open fix tasks of 59 open (10.2%), under the threshold.
+  - **Next:** B4b (`184`, `186`, `189`, `254`, `248`; `189` last, `248` alone on an idle machine).
