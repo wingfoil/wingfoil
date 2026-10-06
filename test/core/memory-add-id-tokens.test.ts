@@ -19,6 +19,7 @@ import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import { UsageError } from '../../src/core/usage-error';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 types:
@@ -202,6 +203,7 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
 
     it('a token with no value fails naming the token and the option, writing nothing (exit 1)', async () => {
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await memoryAddFn()({
         root: repo,
         options: { type: 'release', title: 'X', set: ['kind=patch', 'release-line=v1'] },
@@ -212,6 +214,7 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
       expect(result.error.message).toBe('missing value for token {version}: give it with --set version=<value>');
       expect(exitCodeForResult(result)).toBe(1);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('every missing token is named, in pattern order', async () => {
@@ -299,6 +302,7 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
 
     it('a path token still missing keeps its storage refusal (exit 1), writing nothing', async () => {
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await memoryAddFn()({
         root: repo,
         options: { type: 'plan', title: 'X', set: ['workflow=dev-loop', 'phase=p'] },
@@ -309,6 +313,7 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
       expect(result.error.message).toContain('scope');
       expect(head(repo)).toBe(before);
       expect(existsSync(join(repo, 'docs/plans'))).toBe(false);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 

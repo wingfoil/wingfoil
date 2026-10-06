@@ -61,6 +61,7 @@ import { renderCustomDirective } from '../../src/directives/create';
 import { makeTempGitRepo, removeTempDir, writeFixtureFile, commitAll } from '../storage/helpers/git-fixture';
 import { distBuildStamp, distStampTrailer } from './helpers/dist-stamp';
 import { CLI_FIXTURE_ROOT, DIST_DIR, runCliHarness, type SpawnedRun } from './helpers/spawn-cli';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 
 /** Spawn the real, compiled CLI wiring against a given project root and capture exit code/stdout/stderr. */
@@ -385,10 +386,12 @@ paths:
 
     it('refuses a field no schema declares at exit 1, naming it, and commits nothing', () => {
       const before = readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8');
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'dna', 'add', 'tech_stack.cli', '--value', 'Commander');
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('tech_stack.cli');
       expect(readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8')).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('a missing <path> is a usage error at exit 2, with the usage as the hint (spec-008 §4, §5, §9; task-179)', () => {
@@ -903,11 +906,13 @@ types:
       const created = join(repo, '.wingfoil', 'directives', 'custom', 'no-direct-db-access.md');
       const before = readFileSync(created, 'utf-8');
 
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'directive', 'create', '--name', 'no-direct-db-access');
       expect(result.status).toBe(1);
       expect(result.stderr).toBe('error: directive already exists: no-direct-db-access\n');
       expect(result.stdout).toBe('');
       expect(readFileSync(created, 'utf-8')).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it("an invalid name exits 2 with the exact BDD message and creates no file (BDD \"Error - invalid directive name\")", () => {
@@ -1012,11 +1017,13 @@ types:
     it('P3.7 Sc.3: an unknown id anywhere in the list exits 1, names it, and persists nothing', () => {
       const head = (): string => execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
       const before = head();
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'directive', 'assign', '--directive', 'testing,ghost', '--role', 'developer');
       expect(result.status).toBe(1);
       expect(result.stderr).toBe('error: unknown directive: ghost\n');
       expect(result.stdout).toBe('');
       expect(head()).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('P3.7: the success payload carries `directives` as a list under --format json', () => {

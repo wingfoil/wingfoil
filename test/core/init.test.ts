@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { exitCodeForResult, requireInitializedProject, WINGFOIL_NOT_INITIALIZED } from '../../src/core';
 import { WINGFOIL_ALREADY_INITIALIZED, initWingfoilProject, initWingfoilStorage } from '../../src/core/init';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const NOT_A_GIT_REPO = "not a git repository: run 'git init' first";
 const ISOLATION_KEYS = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM'] as const;
@@ -121,10 +122,12 @@ describe('initWingfoilStorage (P1.1, REQ-SYS-01)', () => {
       expect(initWingfoilStorage(repo).ok).toBe(true);
       const before = head();
 
+      const unchanged = snapshotPersistence(repo);
       const result = initWingfoilStorage(repo);
 
       expect(result).toMatchObject({ ok: false, error: { message: WINGFOIL_ALREADY_INITIALIZED } });
       expect(head()).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('gives the same answer as initWingfoilProject on the same initialized project', () => {
@@ -166,6 +169,7 @@ describe('initWingfoilStorage (P1.1, REQ-SYS-01)', () => {
       repo = makeTempGitRepo();
       writeFileSync(join(repo, '.wingfoil'), 'not a directory\n', 'utf-8');
 
+      const unchanged = snapshotPersistence(repo);
       let result: ReturnType<typeof runInit> | undefined;
       expect(() => {
         result = runInit(repo);
@@ -176,6 +180,7 @@ describe('initWingfoilStorage (P1.1, REQ-SYS-01)', () => {
       expect(exitCodeForResult(result!)).toBe(1);
       expect(readFileSync(join(repo, '.wingfoil'), 'utf-8')).toBe('not a directory\n');
       expect(git(repo, ['rev-list', '--all', '--count']).trim()).toBe('0');
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 });

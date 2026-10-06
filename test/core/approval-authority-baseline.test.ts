@@ -27,6 +27,7 @@ import { CORE_MODULES } from '../../src/core';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /** The git identity `makeTempGitRepo` configures — the principal every case below runs as. */
 const TEST_EMAIL = 'wf-test@example.invalid';
@@ -133,6 +134,7 @@ describe('approval authority is resolved from the committed dna.yaml (bug-079, R
     writeUncommittedDna(repo, APPROVER_DNA);
     const before = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryFn('memoryApprove')({
       root: repo,
       positional: 'adr-001',
@@ -153,6 +155,7 @@ describe('approval authority is resolved from the committed dna.yaml (bug-079, R
     // State unchanged (P1.7 sc.3 / REQ-STATE-01): no commit, and the document still says `pending`.
     expect(head(repo)).toBe(before);
     expect(readFileSync(join(repo, DOC_PATH), 'utf-8')).toBe(adrDoc('pending'));
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // AC3 — red-first: the same refusal for `reject`, the other authority-gated verb.

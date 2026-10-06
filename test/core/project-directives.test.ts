@@ -32,6 +32,7 @@ import { exitCodeForResult, type CoreResult } from '../../src/core';
 import type { BuiltinTemplateSource } from '../../src/core/builtin-integrity';
 import { initWingfoilProject, initWingfoilStorage } from '../../src/core/init';
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /** The two production write paths, each invoked with an optional REQ-SEC-10 source-list override. */
 const WRITE_PATHS: ReadonlyArray<
@@ -104,6 +105,7 @@ describe.each(WRITE_PATHS)(
           { name: 'security', kind: 'directive', content: 'no frontmatter at all\n' },
         ];
 
+        const unchanged = snapshotPersistence(repo);
         const result = runInit(repo, corrupted);
 
         expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION' } });
@@ -111,6 +113,7 @@ describe.each(WRITE_PATHS)(
         expect(exitCodeForResult(result)).toBe(1);
         // REQ-SEC-10 fit criterion: the abort happens BEFORE any partial asset is written.
         expect(existsSync(join(repo, '.wingfoil'))).toBe(false);
+        assertPersistenceUnchanged(repo, unchanged);
       } finally {
         removeTempDir(repo);
       }

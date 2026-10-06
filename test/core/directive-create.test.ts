@@ -23,6 +23,7 @@ import { deriveVerb, enumerateOperations } from '../../src/core/registry';
 import { UsageError } from '../../src/core/usage-error';
 import { deriveMcpResourceUri, deriveMcpToolName } from '../../src/mcp/registrar';
 import { makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const NAME = 'no-direct-db-access';
 const CUSTOM_DIR = join('.wingfoil', 'directives', 'custom');
@@ -148,6 +149,7 @@ describe('CORE_MODULES directive.directiveCreate — P3.1 fit criteria (initiali
     const contentBefore = readFileSync(filePath, 'utf-8');
     const shaBefore = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const second = await directiveCreateFn()({ root: repo, options: { name: NAME } });
     expect(second.ok).toBe(false);
     if (second.ok) return;
@@ -157,6 +159,7 @@ describe('CORE_MODULES directive.directiveCreate — P3.1 fit criteria (initiali
     // "no file is overwritten" — and no second commit was produced.
     expect(readFileSync(filePath, 'utf-8')).toBe(contentBefore);
     expect(head(repo)).toBe(shaBefore);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // task-057: the six P3.8 ids moved to `directives/built-in/`; `determinism` is still an init-scaffolded
@@ -255,6 +258,7 @@ describe('CORE_MODULES directive.directiveCreate — REQ-SEC-01 git-identity pre
   });
 
   it('refuses with the exact REQ-SEC-01 message (exit 1) and writes nothing', async () => {
+    const unchanged = snapshotPersistence(repo);
     const result = await directiveCreateFn()({ root: repo, options: { name: NAME } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -264,5 +268,6 @@ describe('CORE_MODULES directive.directiveCreate — REQ-SEC-01 git-identity pre
     });
     expect(exitCodeForResult(result)).toBe(1);
     expect(existsSync(join(repo, CUSTOM_DIR))).toBe(false);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });

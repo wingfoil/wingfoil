@@ -60,6 +60,7 @@ import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const DNA = '.wingfoil/dna.yaml';
 const ROLES = '.wingfoil/roles.yaml';
@@ -153,6 +154,7 @@ describe('dna set — refuses a dna.yaml carrying modifications it does not own 
     dirty(repo, DNA, UNRELATED);
     const before = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await op('dna', 'dnaSet')({ root: repo, positionals: ['project.name'], options: { value: 'Renamed' } });
 
     expect(result.ok).toBe(false);
@@ -163,6 +165,7 @@ describe('dna set — refuses a dna.yaml carrying modifications it does not own 
     expect(head(repo)).toBe(before);
     expect(readFile(repo, DNA)).toContain(UNRELATED);
     expect(readFile(repo, DNA)).not.toContain('Renamed');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC4: on a clean tree it still commits, and the commit carries exactly the field it declares', async () => {
@@ -205,6 +208,7 @@ describe('dna add|remove|update — the same rule, on the same file (task-093, d
     dirty(repo, DNA, UNRELATED);
     const before = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await op('dna', operation)({ root: repo, positionals: [path], options });
 
     expect(result.ok).toBe(false);
@@ -213,6 +217,7 @@ describe('dna add|remove|update — the same rule, on the same file (task-093, d
     expect(errorMessage(result)).toContain('the file content');
     expect(head(repo)).toBe(before);
     expect(readFile(repo, DNA)).toContain(UNRELATED);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('on a clean tree `dna add` still commits, and the commit carries exactly what it declares', async () => {
@@ -235,6 +240,7 @@ describe('directive assign — refuses a roles.yaml carrying modifications it do
     dirty(repo, ROLES, UNRELATED);
     const before = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await op('directive', 'directiveAssign')({
       root: repo,
       options: { directive: 'architecture', role: 'developer' },
@@ -246,6 +252,7 @@ describe('directive assign — refuses a roles.yaml carrying modifications it do
     expect(head(repo)).toBe(before);
     expect(readFile(repo, ROLES)).toContain(UNRELATED);
     expect(readFile(repo, ROLES)).not.toContain('    - architecture\n    - code-quality');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC4: on a clean tree it still commits, and the commit carries exactly the binding it declares', async () => {

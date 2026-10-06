@@ -42,6 +42,7 @@ import { loadMemoryYaml } from '../../src/core/loaders';
 import { splitFrontmatter } from '../../src/storage';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /**
  * Five machines on purpose: the real `task` machine (gates + `waiting` states), the real `adr` machine
@@ -247,6 +248,7 @@ describe('CORE_MODULES memory.memoryDeprecate — P1.9 fit criteria', () => {
 
   it('spec-008 §7: a missing `<id>` is a usage error (exit 2), nothing written', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     for (const positional of [undefined, '', '   ']) {
       await expect(memoryDeprecateFn()({ root: repo, positional })).rejects.toThrow(
         'missing required argument: <id>',
@@ -259,16 +261,19 @@ describe('CORE_MODULES memory.memoryDeprecate — P1.9 fit criteria', () => {
       expect(exitCodeForThrow(error)).toEqual({ reason: 'missing required argument: <id>', exitCode: 2 });
     }
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('an unknown id exits 1 with `document not found` and writes nothing', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryDeprecateFn()({ root: repo, positional: 'decision-999' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toBe('document not found: decision-999');
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('bug-027: an unrelated STAGED change is not swept into the `wf(decision): deprecate` commit', async () => {
@@ -404,11 +409,13 @@ describe('CORE_MODULES memory.memoryDeprecate — REQ-SEC-01 git-identity pre-fl
   });
 
   it('refuses with the exact REQ-SEC-01 message (exit 1), writing nothing', async () => {
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryDeprecateFn()({ root: repo, positional: 'decision-12' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toBe('git identity not configured (user.name/user.email)');
     expect(exitCodeForResult(result)).toBe(1);
     expect(frontmatter(repo, 'docs/memory/decisions/decision-12.md').status).toBe('approved');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });

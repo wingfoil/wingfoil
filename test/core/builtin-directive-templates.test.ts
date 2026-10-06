@@ -38,6 +38,7 @@ import { loadDirectives, loadDnaYaml, loadRolesYaml } from '../../src/core/loade
 import { TEMPLATE_NAMES } from '../../src/storage';
 import { scanProjectSurface } from '../../src/validation';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /** The P3.8 set, sorted — the order a directory listing yields. */
 const P38_IDS_SORTED = ['architecture', 'code-quality', 'code-review', 'documentation', 'security', 'testing'];
@@ -206,6 +207,7 @@ describe('P3.8 Scenario 3 — a corrupted REAL built-in template aborts init bef
       const corrupted: BuiltinTemplateSource[] = [
         { name: 'security', kind: 'directive', content: valid.slice(0, valid.indexOf('type:')) },
       ];
+      const unchanged = snapshotPersistence(repo);
       const result = initWingfoilProject(repo, 'Scrum', corrupted);
       expect(result).toEqual({
         ok: false,
@@ -213,6 +215,7 @@ describe('P3.8 Scenario 3 — a corrupted REAL built-in template aborts init bef
       });
       expect(exitCodeForResult(result)).toBe(1);
       expect(existsSync(join(repo, '.wingfoil'))).toBe(false);
+      assertPersistenceUnchanged(repo, unchanged);
     } finally {
       removeTempDir(repo);
     }

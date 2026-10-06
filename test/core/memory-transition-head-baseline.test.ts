@@ -26,6 +26,7 @@ import { CORE_MODULES } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const TEST_EMAIL = 'wf-test@example.invalid';
 const TEST_NAME = 'WingFoil Test';
@@ -157,6 +158,7 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     writeFileSync(path, edited);
     const before = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await run('memorySubmit', repo, 'bug-001');
 
     expect(result.ok).toBe(false);
@@ -166,6 +168,7 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     expect(result.error.message).toContain('illegal transition open -> ');
     expect(head(repo)).toBe(before);
     expect(readFileSync(path, 'utf-8')).toBe(edited);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC3: submit commits the working-tree content, with the state decided from HEAD (an uncommitted status edit does not decide `from`)', async () => {
@@ -346,6 +349,7 @@ describe('task-247 — a document with no commit at HEAD is refused by every tra
     writeFixtureFile(repo, 'docs/memory/bugs/bug-009.md', content);
     const before = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await run(verb, repo, 'bug-009');
 
     expect(result.ok).toBe(false);
@@ -355,6 +359,7 @@ describe('task-247 — a document with no commit at HEAD is refused by every tra
     expect(result.error.message).toContain('docs/memory/bugs/bug-009.md');
     expect(head(repo)).toBe(before);
     expect(readFileSync(join(repo, 'docs/memory/bugs/bug-009.md'), 'utf-8')).toBe(content);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC2: a hand-made document that is staged but not committed is refused the same way', async () => {

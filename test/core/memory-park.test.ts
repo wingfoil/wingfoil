@@ -20,6 +20,7 @@ import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult, exitCodeForThrow } from '../../src/core/exit-code';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 types:
@@ -137,6 +138,7 @@ describe('CORE_MODULES memory.memoryPark (task-180, dl-110 P1 (a))', () => {
     ['note-001', 'draft', 'note'],
   ])('%s, in %s, has no `returns` edge: exit 1, nothing written', async (id, state, type) => {
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
     const result = await park(repo, id, { reason: 'try' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -147,6 +149,7 @@ describe('CORE_MODULES memory.memoryPark (task-180, dl-110 P1 (a))', () => {
     expect(exitCodeForResult(result)).toBe(1);
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it.each([[undefined], [{}], [{ reason: '' }], [{ reason: '   ' }]])(

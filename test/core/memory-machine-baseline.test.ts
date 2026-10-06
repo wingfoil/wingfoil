@@ -37,6 +37,7 @@ import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML_PATH = '.wingfoil/memory.yaml';
 const DOC_PATH = 'docs/memory/adr/adr-001.md';
@@ -141,6 +142,7 @@ describe('memory transitions resolve their state machine at HEAD (bug-081, dl-08
     dirtyMachine(repo, FABRICATED_MEMORY_YAML);
     const before = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryFn('memorySubmit')({ root: repo, positional: 'adr-001' });
 
     expect(result.ok).toBe(false);
@@ -149,6 +151,7 @@ describe('memory transitions resolve their state machine at HEAD (bug-081, dl-08
     expect(result.error.message).toContain("invalid state 'FABRICATED-BY-SUBMIT' for type 'adr'");
     expect(head(repo)).toBe(before);
     expect(statusOf(repo)).toBe('FABRICATED-BY-SUBMIT');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // The same read serves all four verbs, so all four move to the committed baseline together.
@@ -221,12 +224,14 @@ describe('memory transitions resolve their state machine at HEAD (bug-081, dl-08
     dirtyMachine(repo, `${MEMORY_YAML}  note:\n    path: "docs/memory/note/{id}.md"\n`);
     writeFixtureFile(repo, 'docs/memory/note/note-001.md', '---\nid: "note-001"\ntype: note\ntitle: "A note"\nstatus: draft\n---\n\nBody.\n');
 
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryFn('memorySubmit')({ root: repo, positional: 'note-001' });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // AC4 — fail-closed, deliberately (see the task's `design` § D4): `init` commits `memory.yaml`, so a

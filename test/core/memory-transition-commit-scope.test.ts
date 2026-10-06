@@ -40,6 +40,7 @@ import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 defaults:
@@ -171,6 +172,7 @@ describe('Memory transition verbs — the commit carries the declared change and
     dirtyBody(repo, TASK_101, 'INJECTED BODY PARAGRAPH — never mentioned by any commit subject.');
     const before = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryOp('memoryApprove')({ root: repo, positional: 'task-101', options: { reason: 'state change only, allegedly' } });
 
     expect(result.ok).toBe(false);
@@ -182,6 +184,7 @@ describe('Memory transition verbs — the commit carries the declared change and
     const onDisk = readFileSync(join(repo, TASK_101), 'utf-8');
     expect(onDisk).toContain('status: pending');
     expect(onDisk).toContain('INJECTED BODY PARAGRAPH');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC2: `approve` refuses an uncommitted FRONTMATTER field it does not own, naming the field', async () => {

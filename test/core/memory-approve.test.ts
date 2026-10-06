@@ -28,6 +28,7 @@ import { UsageError } from '../../src/core/usage-error';
 import { parseApprovalMetadata, verifyTransitionConsistency } from '../../src/memory/audit';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 defaults:
@@ -235,6 +236,7 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
 
   it('dl-032/dl-053: approving a `draft` task is refused with the pinned contract message (exit 1), writing nothing', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryApproveFn()({ root: repo, positional: 'task-200', options: { reason: 'ok' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -245,6 +247,7 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
     expect(exitCodeForResult(result)).toBe(1);
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-200.md'), 'utf-8')).toContain('status: draft');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a non-existent document exits 1 with `document not found: task-999`', async () => {
@@ -275,12 +278,14 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
     writeFixtureFile(repo, '.wingfoil/dna.yaml', 'version: 1.1\nmodules: "not a list"\n');
     commitAll(repo, 'broken dna');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryApproveFn()({ root: repo, positional: 'task-101', options: { reason: 'ok' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(exitCodeForResult(result)).toBeGreaterThan(0);
     expect(head(repo)).toBe(before);
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-101.md'), 'utf-8')).toContain('status: pending');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('dl-054: the approve commit is cross-checkable — `verifyTransitionConsistency` finds no drift between bracket and frontmatter', async () => {
@@ -320,6 +325,7 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
     writeFixtureFile(repo, 'docs/memory/v0.2/task-105.md', taskDoc({ id: 'task-105', status: 'shipped' }));
     commitAll(repo, 'seed 105');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryApproveFn()({ root: repo, positional: 'task-105', options: { reason: 'ok' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -327,6 +333,7 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
     expect(result.error.message).toBe("invalid state 'shipped' for type 'task'");
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 
@@ -359,11 +366,13 @@ describe('CORE_MODULES memory.memoryApprove — REQ-SEC-01 git-identity pre-flig
   });
 
   it('with valid arguments, refuses with the exact REQ-SEC-01 message (exit 1) before any authority check, writing nothing', async () => {
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryApproveFn()({ root: repo, positional: 'task-101', options: { reason: 'x' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toBe('git identity not configured (user.name/user.email)');
     expect(exitCodeForResult(result)).toBe(1);
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-101.md'), 'utf-8')).toContain('status: pending');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });

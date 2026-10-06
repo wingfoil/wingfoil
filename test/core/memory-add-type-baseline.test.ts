@@ -40,6 +40,7 @@ import * as loaders from '../../src/core/loaders';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML_PATH = '.wingfoil/memory.yaml';
 const SCAFFOLD_PATH = '.wingfoil/memory/templates/adr.md';
@@ -139,6 +140,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     writeFixtureFile(repo, '.wingfoil/memory/templates/fabricated.md', COMMITTED_SCAFFOLD);
     const before = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await add(repo, 'fabricated-type', 'Probe');
 
     expect(result.ok).toBe(false);
@@ -151,6 +153,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     // Nothing committed, and no element file created anywhere.
     expect(head(repo)).toBe(before);
     expect(existsSync(join(repo, 'docs/memory/fabricated'))).toBe(false);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // D4: the second sentence appears ONLY because the working tree and HEAD actually disagree.
