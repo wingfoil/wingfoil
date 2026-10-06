@@ -54,11 +54,26 @@
  * never parsed, by either baseline, `bug-189`), are left out and reported to the caller's
  * {@link MemoryScanOptions.onDiagnostic} as {@link W_MEMORY_UNREADABLE}, in path order. Only the
  * single-file read {@link loadMemoryDocumentSummary} still throws: its caller named that file.
+ *
+ * **The `format` key (task-257, `bug-241`, `dl-149`).** An element keeps the `format` of the template
+ * it was copied from and reads with that counter, `MEMORY_TEMPLATE_FORMAT`; absent reads as `1`. An
+ * element written in a newer format is not read by today's rules: a collection scan leaves it out and
+ * reports it as {@link W_MEMORY_UNREADABLE}, naming the file and the "upgrade WingFoil" refusal; a
+ * single-file read, and a lookup by id that reaches the element it names, throw that refusal
+ * (`ValidationError`, `E_INVALID_FORMAT`, exit `1`); a lookup reports one it passes on its way.
  */
 import { existsSync, lstatSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
-import { type Diagnostic, parseYaml, ValidationError } from '../validation';
+import {
+  type Diagnostic,
+  EXIT_VALIDATION,
+  MEMORY_TEMPLATE_FORMAT,
+  newerFormatIssue,
+  parseYaml,
+  ValidationError,
+  type ValidationIssue,
+} from '../validation';
 
 import type { MemoryYaml } from './schema';
 import { isArchivedStatus } from './state-machine';
@@ -247,7 +262,7 @@ export interface MemoryDocumentSummary {
  */
 export function loadMemoryDocumentSummary(root: string, relativePath: string): MemoryDocumentSummary {
   const absolute = join(root, relativePath);
-  return parseMemoryDocument(readDocument(absolute), relativePath, absolute);
+  return refuseNewerElement(parseMemoryDocument(readDocument(absolute), relativePath, absolute));
 }
 
 /**
@@ -269,13 +284,52 @@ function parseMemoryDocument(raw: string, relativePath: string, label: string): 
 }
 
 /**
- * {@link parseMemoryDocument} for a scan: the summary, or `undefined` after reporting the document as
- * {@link W_MEMORY_UNREADABLE} when its frontmatter does not parse. The diagnostic names the
- * repository-relative path, whichever baseline was read.
+ * The `format` check of an element (`dl-149`, task-257, `bug-241`): `E_INVALID_FORMAT` on `format`
+ * when the document's frontmatter declares a format newer than this build reads, else `null`. An
+ * element is its template's copy (`spec-001`: the scaffold is copied verbatim, `format` line included),
+ * and keeps the format its template carries (approver ruling at the W2 B2 gate, task-251 decision 4),
+ * so it reads with the template's counter, `MEMORY_TEMPLATE_FORMAT`. An absent `format` reads as `1`.
+ * The issue names the repository-relative path, whichever baseline was read, as a scan diagnostic does.
+ *
+ * Only a newer format is checked here. The element read is loose by design (no type's schema runs on
+ * it, see {@link loadMemoryDocumentSummary}), so a `format` that is not a positive integer is left to
+ * the rules that validate an element's frontmatter, as every other field is.
  */
-function parseScanned(raw: string, relativePath: string, label: string, options: MemoryScanOptions): MemoryDocumentSummary | undefined {
+function newerElementFormat(summary: MemoryDocumentSummary): ValidationIssue | null {
+  return newerFormatIssue(summary.frontmatter, MEMORY_TEMPLATE_FORMAT, summary.path);
+}
+
+/**
+ * `summary`, or the `dl-149` refusal of it as a `ValidationError` at exit `1` when it is written in a
+ * newer format: a read whose caller named this document — a single-file read, or a lookup that reached
+ * the element it looks for — refuses it, where a scan reports it ({@link readableDocuments}).
+ */
+function refuseNewerElement(summary: MemoryDocumentSummary): MemoryDocumentSummary {
+  const newer = newerElementFormat(summary);
+  if (newer !== null) throw new ValidationError([newer], EXIT_VALIDATION);
+  return summary;
+}
+
+/** A parsed document a scan read, with its {@link newerElementFormat} issue (or `null`). */
+interface ScannedDocument {
+  readonly summary: MemoryDocumentSummary;
+  readonly newer: ValidationIssue | null;
+}
+
+/** The {@link W_MEMORY_UNREADABLE} report of a document written in a newer format: the file and the `dl-149` refusal. */
+function newerFormatDiagnostic(newer: ValidationIssue): Diagnostic {
+  return memoryUnreadableDiagnostic(newer.file, `${newer.code}: ${newer.message}`);
+}
+
+/**
+ * {@link parseMemoryDocument} for a scan: the document with its format check, or `undefined` after
+ * reporting it as {@link W_MEMORY_UNREADABLE} when its frontmatter does not parse. The diagnostic names
+ * the repository-relative path, whichever baseline was read.
+ */
+function parseScanned(raw: string, relativePath: string, label: string, options: MemoryScanOptions): ScannedDocument | undefined {
+  let summary: MemoryDocumentSummary;
   try {
-    return parseMemoryDocument(raw, relativePath, label);
+    summary = parseMemoryDocument(raw, relativePath, label);
   } catch (error) {
     // `parseYaml` is the only thing in the parse that throws, and it throws only
     // `ValidationError.yamlParse`, whose one issue carries the parser's message.
@@ -283,6 +337,40 @@ function parseScanned(raw: string, relativePath: string, label: string, options:
     options.onDiagnostic?.(memoryUnreadableDiagnostic(relativePath, firstLineOf(parseError.message)));
     return undefined;
   }
+  return { summary, newer: newerElementFormat(summary) };
+}
+
+/**
+ * The documents of a scan a **collection** reader may use: one written in a newer format is left out
+ * and reported as {@link W_MEMORY_UNREADABLE}, naming the file and the `dl-149` refusal (task-257,
+ * `bug-241`), so it is neither read by today's rules nor dropped silently.
+ */
+function* readableDocuments(documents: Iterable<ScannedDocument>, options: MemoryScanOptions): Generator<MemoryDocumentSummary> {
+  for (const { summary, newer } of documents) {
+    if (newer !== null) {
+      options.onDiagnostic?.(newerFormatDiagnostic(newer));
+      continue;
+    }
+    yield summary;
+  }
+}
+
+/**
+ * The first document of a scan whose frontmatter `matches`, for a **lookup**: the caller named that
+ * element, so one written in a newer format is refused (`ValidationError`, `E_INVALID_FORMAT`, exit
+ * `1`), as a single-file read refuses it; a newer-format document the lookup passes on its way is
+ * reported, as a collection scan reports it (task-257, `bug-241`).
+ */
+function findFirst(
+  documents: Iterable<ScannedDocument>,
+  matches: (frontmatter: Record<string, unknown>) => boolean,
+  options: MemoryScanOptions,
+): MemoryDocumentSummary | undefined {
+  for (const { summary, newer } of documents) {
+    if (matches(summary.frontmatter)) return refuseNewerElement(summary);
+    if (newer !== null) options.onDiagnostic?.(newerFormatDiagnostic(newer));
+  }
+  return undefined;
 }
 
 /**
@@ -294,7 +382,7 @@ function* scanWorkingTreeDocuments(
   root: string,
   memoryYaml: MemoryYaml,
   options: MemoryScanOptions & { readonly followSymlinks?: boolean },
-): Generator<MemoryDocumentSummary> {
+): Generator<ScannedDocument> {
   for (const file of scanWorkingTree(root, memoryYaml, options.followSymlinks === true)) {
     if (file.symlink) {
       options.onDiagnostic?.(memoryUnreadableDiagnostic(file.path, SYMLINK_REASON));
@@ -314,7 +402,7 @@ function* scanWorkingTreeDocuments(
  * (task-171, task-253 / `bug-230`), so one malformed document never fails a read of the others.
  */
 export function loadMemoryDocuments(root: string, memoryYaml: MemoryYaml, options: MemoryScanOptions = {}): MemoryDocumentSummary[] {
-  return [...scanWorkingTreeDocuments(root, memoryYaml, options)];
+  return [...readableDocuments(scanWorkingTreeDocuments(root, memoryYaml, options), options)];
 }
 
 // --- The same scan at a revision (task-137) -----------------------------------------------------
@@ -362,7 +450,7 @@ function* parseMemoryDocumentsAtSha(
   rev: string,
   files: readonly ScannedFile[],
   options: MemoryScanOptions,
-): Generator<MemoryDocumentSummary> {
+): Generator<ScannedDocument> {
   const raws = readPathsAtRev(
     root,
     sha,
@@ -398,7 +486,7 @@ export function loadMemoryDocumentsAtRev(
   options: MemoryScanOptions = {},
 ): MemoryDocumentSummary[] {
   const sha = resolveRevision(root, rev);
-  return [...parseMemoryDocumentsAtSha(root, sha, rev, scanCommit(root, sha, memoryYaml), options)];
+  return [...readableDocuments(parseMemoryDocumentsAtSha(root, sha, rev, scanCommit(root, sha, memoryYaml), options), options)];
 }
 
 /**
@@ -411,7 +499,7 @@ export function loadMemoryDocumentsAtRev(
  */
 export function loadMemoryDocumentSummaryAtRev(root: string, rev: string, relativePath: string): MemoryDocumentSummary | null {
   const raw = readPathsAtRev(root, resolveRevision(root, rev), [relativePath])[0] as string | null;
-  return raw === null ? null : parseMemoryDocument(raw, relativePath, `${rev}:${relativePath}`);
+  return raw === null ? null : refuseNewerElement(parseMemoryDocument(raw, relativePath, `${rev}:${relativePath}`));
 }
 
 function asStringArray(value: unknown): string[] {
@@ -445,10 +533,7 @@ export function findMemoryDocumentById(
   id: string,
   options: MemoryIdLookupOptions = {},
 ): MemoryDocumentSummary | undefined {
-  for (const summary of scanWorkingTreeDocuments(root, memoryYaml, options)) {
-    if (asString(summary.frontmatter.id) === id) return summary;
-  }
-  return undefined;
+  return findFirst(scanWorkingTreeDocuments(root, memoryYaml, options), (frontmatter) => asString(frontmatter.id) === id, options);
 }
 
 /**
@@ -469,10 +554,8 @@ export function findMemoryDocumentByIdAtRev(
   options: MemoryScanOptions = {},
 ): MemoryDocumentSummary | undefined {
   const sha = resolveRevision(root, rev);
-  for (const summary of parseMemoryDocumentsAtSha(root, sha, rev, scanCommit(root, sha, memoryYaml), options)) {
-    if (asString(summary.frontmatter.id) === id) return summary;
-  }
-  return undefined;
+  const documents = parseMemoryDocumentsAtSha(root, sha, rev, scanCommit(root, sha, memoryYaml), options);
+  return findFirst(documents, (frontmatter) => asString(frontmatter.id) === id, options);
 }
 
 /** A Memory document's frontmatter-only summary — spec-004 §2.1's collection-listing shape
@@ -483,6 +566,11 @@ export interface MemoryDocumentFrontmatterSummary {
   readonly title?: string;
   readonly status?: string;
   readonly tags: readonly string[];
+}
+
+/** The match of the (`type`, `id`) lookups: both are the document's own frontmatter values. */
+function isTypeAndId(type: string, id: string): (frontmatter: Record<string, unknown>) => boolean {
+  return (frontmatter) => asString(frontmatter.type) === type && asString(frontmatter.id) === id;
 }
 
 /** Whether a document is kept under the archived default of {@link MemoryTypeScanOptions}. */
@@ -512,7 +600,7 @@ export function listMemoryDocumentsByType(
   options: MemoryTypeScanOptions = {},
 ): MemoryDocumentFrontmatterSummary[] {
   const out: MemoryDocumentFrontmatterSummary[] = [];
-  for (const { path, frontmatter } of scanWorkingTreeDocuments(root, memoryYaml, options)) {
+  for (const { path, frontmatter } of readableDocuments(scanWorkingTreeDocuments(root, memoryYaml, options), options)) {
     if (asString(frontmatter.type) !== type) continue;
     if (!keptByArchivedDefault(frontmatter, options)) continue;
     out.push({
@@ -548,12 +636,8 @@ export function findMemoryDocumentByTypeAndId(
   id: string,
   options: MemoryTypeScanOptions = {},
 ): MemoryDocumentSummary | undefined {
-  for (const summary of scanWorkingTreeDocuments(root, memoryYaml, options)) {
-    if (asString(summary.frontmatter.type) === type && asString(summary.frontmatter.id) === id) {
-      return keptByArchivedDefault(summary.frontmatter, options) ? summary : undefined;
-    }
-  }
-  return undefined;
+  const found = findFirst(scanWorkingTreeDocuments(root, memoryYaml, options), isTypeAndId(type, id), options);
+  return found !== undefined && keptByArchivedDefault(found.frontmatter, options) ? found : undefined;
 }
 
 /**
@@ -572,12 +656,8 @@ export function findMemoryDocumentByTypeAndIdAtRev(
   options: MemoryTypeScanOptions = {},
 ): MemoryDocumentSummary | undefined {
   const sha = resolveRevision(root, rev);
-  for (const summary of parseMemoryDocumentsAtSha(root, sha, rev, scanCommit(root, sha, memoryYaml), options)) {
-    if (asString(summary.frontmatter.type) === type && asString(summary.frontmatter.id) === id) {
-      return keptByArchivedDefault(summary.frontmatter, options) ? summary : undefined;
-    }
-  }
-  return undefined;
+  const found = findFirst(parseMemoryDocumentsAtSha(root, sha, rev, scanCommit(root, sha, memoryYaml), options), isTypeAndId(type, id), options);
+  return found !== undefined && keptByArchivedDefault(found.frontmatter, options) ? found : undefined;
 }
 
 /** Optional filters/refinements for {@link searchMemoryDocuments}. */
@@ -674,7 +754,7 @@ export function searchMemoryDocuments(
   const needle = query.trim().toLowerCase();
   const matches: MemorySearchMatch[] = [];
 
-  for (const { path, frontmatter, body } of scanWorkingTreeDocuments(root, memoryYaml, options)) {
+  for (const { path, frontmatter, body } of readableDocuments(scanWorkingTreeDocuments(root, memoryYaml, options), options)) {
     // Only an element is a match (task-171, `bug-164`): a file with no `id` or no `type` — a plan
     // `dl-019` grandfathered without frontmatter — is left out, silently: it is not unreadable.
     const id = asString(frontmatter.id);

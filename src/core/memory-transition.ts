@@ -40,7 +40,7 @@ import {
 } from '../memory';
 import type { DocumentScope, MemoryYaml, StateMachine, TransitionOp } from '../memory';
 import { commitPaths, pathPorcelainStatus, readDocument, readPathAtRev, writeDocument } from '../storage';
-import { type Diagnostic, formatDiagnostic, ValidationError } from '../validation';
+import { type Diagnostic, formatDiagnostic, isNewerFormatError, ValidationError } from '../validation';
 
 import { requireConfinedWriteTarget } from './confinement';
 import { requireGitIdentity, type GitIdentity } from './git-identity';
@@ -138,6 +138,22 @@ function unreadableNote(unreadable: readonly Diagnostic[]): string {
   return ` — it may be in a Memory document committed at HEAD that could not be read: ${named.join('; ')}`;
 }
 
+/**
+ * The refusal of a transition whose element is written in a `format` newer than this build reads
+ * (`dl-149`, task-257, `bug-241`): `VALIDATION`, exit `1`, before anything is written, carrying the
+ * loader's own `E_INVALID_FORMAT format (<file>): … upgrade WingFoil` text and naming which copy said so —
+ * `HEAD`'s, which decides, or the working tree's, which the verb would commit. Anything other than that
+ * refusal is rethrown.
+ */
+function newerFormatRefusal(op: TransitionResolution, id: string, where: 'HEAD' | 'the working tree', error: unknown): CoreResult<never> {
+  if (!isNewerFormatError(error)) throw error;
+  return coreErr({
+    code: 'VALIDATION',
+    message: `refusing to ${op} ${id}: its document, as ${where} holds it, is written in a newer format: ${error.message}`,
+    details: { issues: error.issues },
+  });
+}
+
 /** Whether `full` names a directory entry at all — `lstat`, so a link is present even when dangling. */
 function isPresent(full: string): boolean {
   try {
@@ -223,6 +239,9 @@ function recordedIdAt(root: string, sha: string, path: string): string | undefin
  * - the verb is illegal from that state → `INVALID_TRANSITION` with the `dl-032` contract message
  *   (`resolveTypeTransition`), the engine's explanation in `details.issues[0].detail`. `amend`
  *   (task-127) never takes this branch: its target is the current state.
+ * - the document, as `HEAD` records it or as the working tree would have it committed, declares a
+ *   `format` newer than this build reads → `VALIDATION` with the `dl-149` `E_INVALID_FORMAT` text, the
+ *   file named (task-257, `bug-241`);
  * - the target state declares a WIP limit its holders have reached → `CONFLICT`
  *   ({@link requireWipSlot}, task-180). Every transition into a state goes through here, so the limit
  *   holds whichever verb or engine action moves the element.
@@ -288,7 +307,13 @@ export function prepareMemoryTransitionAtRev(
   // transition of another element. It is skipped and reported; the verb's success carries it as a
   // warning, and a miss names it, since the id may be in it.
   const unreadable: Diagnostic[] = [];
-  const found = findMemoryDocumentByIdAtRev(root, sha, memoryYaml, id, { onDiagnostic: (diagnostic) => unreadable.push(diagnostic) });
+  let found: ReturnType<typeof findMemoryDocumentByIdAtRev>;
+  try {
+    found = findMemoryDocumentByIdAtRev(root, sha, memoryYaml, id, { onDiagnostic: (diagnostic) => unreadable.push(diagnostic) });
+  } catch (error) {
+    // The lookup throws only the `dl-149` refusal of the element it names (task-257, `bug-241`).
+    return newerFormatRefusal(op, id, 'HEAD', error);
+  }
   if (!found) {
     const onDisk = uncommittedDocumentPath(root, memoryYaml, id);
     if (onDisk !== undefined) {
@@ -393,8 +418,14 @@ export function prepareMemoryTransitionAtRev(
       }
     }
     // Content from the working tree: what `submit` and `amend` commit, and what the other verbs'
-    // unmodified-document guard compares with `HEAD`.
-    const { frontmatter } = loadMemoryDocumentSummary(root, path);
+    // unmodified-document guard compares with `HEAD`. A working-tree edit that declares a newer
+    // `format` is refused before it can be committed (task-257, `bug-241`).
+    let frontmatter: Record<string, unknown>;
+    try {
+      ({ frontmatter } = loadMemoryDocumentSummary(root, path));
+    } catch (error) {
+      return newerFormatRefusal(op, id, 'the working tree', error);
+    }
     const changed = (['id', 'type'] as const).filter((key) => frontmatter[key] !== found.frontmatter[key]);
     if (changed.length > 0) {
       return coreErr({

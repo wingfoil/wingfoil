@@ -9,11 +9,10 @@
  * what an amendment owns (`spec-010` § Field-write ownership: the body and every frontmatter field
  * except those in {@link AMEND_RESERVED_FIELDS}).
  */
-import { load } from 'js-yaml';
-
 import { describeDocumentChanges, resolveStateMachine, type MemoryYaml } from '../memory';
-import { extractFrontmatter, readPathAtRev, WINGFOIL_DIR } from '../storage';
+import { readPathAtRev, WINGFOIL_DIR } from '../storage';
 
+import { readTemplateFrontmatter } from './memory-add-type';
 import { requireRequiredFields } from './required-fields';
 import { coreErr, coreOk, type CoreResult } from './types';
 
@@ -37,21 +36,42 @@ export const AMEND_RESERVED_FIELDS: readonly string[] = ['id', 'rejection_reason
 const ASSIGN_OWNED_FIELD = 'release';
 
 /**
+ * The frontmatter of the type's scaffold as committed at `HEAD`, read by the reader `memory add` uses
+ * ({@link readTemplateFrontmatter}, task-257, `bug-243`): `null` when there is no scaffold to read — no
+ * `template.file`, not committed, or no parseable frontmatter mapping — and the `dl-149` refusal when
+ * it declares a `format` this build does not read.
+ */
+function committedScaffoldFrontmatter(root: string, memoryYaml: MemoryYaml, type: string): CoreResult<Record<string, unknown> | null> {
+  const file = memoryYaml.types[type]?.template?.file;
+  if (file === undefined) return coreOk(null);
+  const path = `${WINGFOIL_DIR}/${file}`;
+  const scaffold = readPathAtRev(root, 'HEAD', path);
+  if (scaffold === null) return coreOk(null);
+  return readTemplateFrontmatter(type, scaffold, `HEAD:${path}`);
+}
+
+/**
  * Whether the type's scaffold, as committed at `HEAD`, declares a `release` frontmatter field. `null`
- * when there is no scaffold to read — no `template.file`, not committed, or no parseable frontmatter.
+ * when there is no scaffold to read, or it cannot be read ({@link requireReadableScaffold} refuses
+ * that case before this answer is used).
  */
 function committedScaffoldDeclaresRelease(root: string, memoryYaml: MemoryYaml, type: string): boolean | null {
-  const file = memoryYaml.types[type]?.template?.file;
-  if (file === undefined) return null;
-  const scaffold = readPathAtRev(root, 'HEAD', `${WINGFOIL_DIR}/${file}`);
-  if (scaffold === null) return null;
-  try {
-    const fields: unknown = load(extractFrontmatter(scaffold) ?? '');
-    if (fields === null || typeof fields !== 'object' || Array.isArray(fields)) return null;
-    return Object.prototype.hasOwnProperty.call(fields, ASSIGN_OWNED_FIELD);
-  } catch {
-    return null;
-  }
+  const fields = committedScaffoldFrontmatter(root, memoryYaml, type);
+  if (!fields.ok || fields.value === null) return null;
+  return Object.prototype.hasOwnProperty.call(fields.value, ASSIGN_OWNED_FIELD);
+}
+
+/**
+ * Refuse a type whose scaffold, as committed at `HEAD`, `memory add` would refuse to read: a `format`
+ * newer than this build reads (`E_INVALID_FORMAT`) or not a positive integer (`dl-149`; task-257,
+ * `bug-243`) — `VALIDATION`, exit `1`, with `memory add`'s own message, before anything is written.
+ * `amend` reads that scaffold to decide which fields it owns ({@link amendReservedFields}), and does
+ * not apply today's rule to a template shape this build may not understand. No scaffold to read is
+ * not a refusal: `release` then stays reserved.
+ */
+export function requireReadableScaffold(root: string, memoryYaml: MemoryYaml, type: string): CoreResult<undefined> {
+  const fields = committedScaffoldFrontmatter(root, memoryYaml, type);
+  return fields.ok ? coreOk(undefined) : fields;
 }
 
 /**

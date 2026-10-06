@@ -15,7 +15,7 @@ import { join, relative, sep } from 'path';
 
 import { dump } from 'js-yaml';
 
-import { type Diagnostic, DiagnosticsError, formatDiagnostic, generateId, parseYaml, patternTokens, toValidationError, ValidationError } from '../validation';
+import { type Diagnostic, DiagnosticsError, formatDiagnostic, generateId, isNewerFormatError, parseYaml, patternTokens, toValidationError, ValidationError } from '../validation';
 import type { Paths } from '../dna/schema';
 import { DnaYaml } from '../dna/schema';
 import { applyDnaEditInText } from '../dna/edit';
@@ -87,7 +87,7 @@ import { APPROVER_ROLE, requireApprovalAuthority } from './approval-authority';
 import { optionalReason, requireReason } from './require-reason';
 import { beginMemoryTransition, checkMemoryTransition, commitMemoryTransition, requireWipSlot } from './memory-transition';
 import { prepareSupersede, supersedeReason } from './memory-supersede';
-import { amendReservedFields, requireAmendableEdit, requireAmendableType, requireRequiredFieldsKept } from './memory-amend';
+import { amendReservedFields, requireAmendableEdit, requireAmendableType, requireReadableScaffold, requireRequiredFieldsKept } from './memory-amend';
 import { resolveAddType } from './memory-add-type';
 import { committedScopeError, requireAbsentTarget, requireUnmodifiedTarget } from './write-guard';
 import { UsageError } from './usage-error';
@@ -1083,7 +1083,9 @@ export interface MemoryHistoryResult {
  * 3. **Resolve the id to a document** with task-009's {@link findMemoryDocumentById} — an EXACT
  *    frontmatter-`id` match over the deterministically-sorted document set, never a substring (that
  *    is `memory search`'s job). No match is a domain `NOT_FOUND` (exit 1) with the exact P1.10 message
- *    `document not found: <id>`, returned rather than thrown. Archived documents are deliberately NOT
+ *    `document not found: <id>`, returned rather than thrown. A document written in a `format` newer
+ *    than this build reads is refused, `VALIDATION` (exit 1) with the `dl-149` `E_INVALID_FORMAT` text
+ *    (task-257, `bug-241`); one the lookup passes on its way is a warning. Archived documents are deliberately NOT
  *    excluded: REQ-STATE-06 scopes its exclusion to default *search* results, and explicitly
  *    guarantees an archived element remains "present on disk and in git history" — which is precisely
  *    what this command reads.
@@ -1108,7 +1110,20 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
   if (!loaded.ok) return loaded;
 
   const diagnostics: Diagnostic[] = [];
-  const found = findMemoryDocumentById(root, loaded.value, id, { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) });
+  let found: ReturnType<typeof findMemoryDocumentById>;
+  try {
+    found = findMemoryDocumentById(root, loaded.value, id, { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) });
+  } catch (error) {
+    // The `dl-149` refusal of the element the lookup names (task-257, `bug-241`): a document written in
+    // a newer format is not read by today's rules. Any other failure (an unreadable directory) is not
+    // that refusal and propagates as it did (review F2).
+    if (!isNewerFormatError(error)) throw error;
+    return coreErr({
+      code: 'VALIDATION',
+      message: `cannot read the history of ${id}: its document is written in a newer format: ${error.message}`,
+      details: { issues: error.issues },
+    });
+  }
   if (!found) {
     return coreErr({ code: 'NOT_FOUND', message: `document not found: ${id}` });
   }
@@ -1690,6 +1705,9 @@ export interface MemoryAmendResult {
  *    the edit (task-127 review F6).
  * 5. **{@link requireAmendableType}** — the committed entry must declare `amendable: true`
  *    (`dl-108` A3, `spec-001`); exit `1`.
+ *    Then **{@link requireReadableScaffold}**: the type's scaffold committed at `HEAD`, which step 6
+ *    reads, must be one `memory add` would read — a newer or malformed `format` is refused with
+ *    `memory add`'s message (`dl-149`; task-257, `bug-243`); exit `1`.
  * 6. **{@link requireAmendableEdit}** — the document must be committed at `HEAD`, carry a change, and
  *    leave every field the type's {@link amendReservedFields} lists as committed (`spec-010` §
  *    Field-write ownership: `release` only where the committed scaffold declares it, task-170);
@@ -1726,6 +1744,8 @@ const memoryAmendFn: CoreFn<unknown, MemoryAmendResult> = async (params) => {
 
   const amendable = requireAmendableType(memoryYaml, type);
   if (!amendable.ok) return amendable;
+  const scaffold = requireReadableScaffold(root, memoryYaml, type);
+  if (!scaffold.ok) return scaffold;
   const edit = requireAmendableEdit(root, id, path, content, amendReservedFields(root, memoryYaml, type));
   if (!edit.ok) return edit;
   const filled = requireRequiredFieldsKept(memoryYaml, type, from, frontmatter);
