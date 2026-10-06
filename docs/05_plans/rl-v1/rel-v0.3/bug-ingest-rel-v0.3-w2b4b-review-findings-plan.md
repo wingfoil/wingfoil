@@ -145,3 +145,14 @@ was checked with `task-141`'s one-line script.
   refusal is Node's raw text with the absolute path (the `bug-251` class). Nothing was written or committed
   (`git status --porcelain` empty, `HEAD` unchanged), and the retry with a shorter title got the same number.
   No open bug covers it (`grep -rli 'ENAMETOOLONG\|name too long' docs/04_memory/bugs` → nothing).
+- **triage done (2026-10-06, approver: triage before the W3 session, as proposed)** — each bug `approve [open →
+  triaged]`, `assign release`, and for an absorbed bug the task's `memory amend` (its `bug:` list) and `sync [triaged →
+  planned]`:
+  - v0.3, new tasks (wave 3, `add`, `submit`, `approve [pending → backlog]`): `task-261` (`bug-268`, `bug-269`),
+    `task-262` (`bug-273`), `task-263` (`bug-276`).
+  - v0.3, absorbed: `bug-270` → `task-212`; `bug-274` and `bug-275` → `task-245`.
+  - v0.4, no task: `bug-271`, `bug-272`.
+  - Handover notes (approver `memory amend`): `task-212` (`bug-270`), `task-245` (`bug-274`, `bug-275`), `task-210`
+    (item 7), `bug-221` (item 15).
+  - Left to the approver: whether the `memory add` `ENAMETOOLONG` discrepancy under Execution Notes becomes a bug
+    (carried into the W3 session's opening).
