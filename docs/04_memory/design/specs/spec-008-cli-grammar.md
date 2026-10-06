@@ -69,8 +69,8 @@ wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init
   `E_NO_GIT_ROOT` outside a repository. Their surplus message adds the migration hint
   `the value travels in --value`. They still write nothing.
 - **One id per call.** The Memory transition verbs (`memory submit`, `approve`, `reject`, `deprecate`),
-  `memory amend` and `memory history` act on exactly one document per invocation; transitioning several documents
-  takes one invocation, and one commit, each. The multi-id commit subject `wf({type}): {verb} {id1},
+  `memory amend`, `memory park` and `memory history` act on exactly one document per invocation;
+  transitioning several documents takes one invocation, and one commit, each. The multi-id commit subject `wf({type}): {verb} {id1},
   {id2}, ...` is **historical only**: it records batch operations written by hand before the verbs
   shipped, and no command produces it.
 
@@ -85,7 +85,7 @@ it. A flag a single command declares is not listed here: it is in §12.
 | `--help`, `-h`    | flag                   | —         | Print context-sensitive help (synopsis, args, flags, example) and exit `0`. Takes precedence over all other flags. |
 | `--version`       | flag                   | —         | Print the build stamp `<semver> (<sha>)` and exit `0`: `package.json`'s `version`, then the commit the running `dist/` was built from as `dist/build-info.json` records it, as the full hex object name (`<sha>-dirty` when `git status --porcelain` lists a change, tracked or untracked, under a build input — `src/`, `package.json`, `package-lock.json`, `tsconfig*.json` or the record's writer `scripts/write-build-info.cjs` — so it means "this `dist/` does not match the sha", and a change elsewhere (documentation, Memory) does not set it; `unknown` when no record exists, when the build could not read git, or when the record's commit is malformed or not a hex object name) — the value of every commit's `WingFoil-Version:` trailer (`dl-111` Action 3). Takes precedence over all other flags except `--help`. |
 | `--format <fmt>`  | `console\|json\|yaml`  | `console` | Output encoding. `console` for humans; `json`/`yaml` for scripting/CI (REQ-INT-05). **Today, on success, `console` prints the payload `json` prints, indented by two spaces, with no colour** (errors and warnings keep their §6 `error:`/`warning:` lines): its human rendering (colour, `✓`/`⚠`/`✗` prefixes) is P5.1.4's, and how it is built is `dl-043`'s decision, deferred to v0.4. That change will alter the default output, so a script passes `--format json`. An unsupported value exits `2` with `error: invalid --format value "<value>"`. |
-| `--reason <text>` | string                 | —         | **Required** on approval-gate commands (`memory approve`, `memory reject`, `memory amend`); optional elsewhere (e.g. `memory deprecate`). Recorded in the resulting git commit body (P1.7) as a `Reason:` **block** — the remainder of the `Reason:` line plus every following body line, up to (exclusive) git's trailing trailer paragraph or the end of the body — in the **declared normal form**, not as the raw argument (`dl-067-reason-trailer-contract`; see the Notes). Omitted where required exits `2` with `error: missing required argument: --reason` (ground-truth BDD `P1.7-memory-approve.feature`). |
+| `--reason <text>` | string                 | —         | **Required** on approval-gate commands (`memory approve`, `memory reject`, `memory amend`) and on `memory park`; optional elsewhere (e.g. `memory deprecate`). Recorded in the resulting git commit body (P1.7) as a `Reason:` **block** — the remainder of the `Reason:` line plus every following body line, up to (exclusive) git's trailing trailer paragraph or the end of the body — in the **declared normal form**, not as the raw argument (`dl-067-reason-trailer-contract`; see the Notes). Omitted where required exits `2` with `error: missing required argument: --reason` (ground-truth BDD `P1.7-memory-approve.feature`). |
 | `--reason` (unrecordable value) | —        | —         | A reason that cannot be recorded faithfully in the trailer is refused at the CLI boundary with exit `2`, before anything is read or written, on **every** verb that takes the flag — `memory deprecate` included, where the flag is optional but a declared-and-empty value is still a usage error (`dl-067` S2). Four cases, judged in this order on the declared normal form, each with its own message, none of them `missing required argument: --reason` (which answers the *omitted* case above): blank or whitespace-only → `error: invalid flag value: --reason must not be blank`; a C0 control character other than tab (`U+0009`) and newline (`U+000A`), DEL (`U+007F`), a C1 control (`U+0080` to `U+009F`) or a Unicode line or paragraph separator (`U+2028`, `U+2029`) → `error: invalid flag value: --reason must not contain a control character other than tab or newline (found U+XXXX)`, naming the first one by code point (`dl-078` (A) and its Amendment of 2026-10-01; a carriage return is not refused, because the normal form has already turned it into a newline); a line starting with one of the **reserved trailer keys** `Approver:`, `Reason:` or `WingFoil-Version:`, in any letter case (git reads trailer keys case-insensitively) → `error: invalid flag value: --reason must not contain a line starting with "Approver:", "Reason:" or "WingFoil-Version:"` (`dl-111` Q1 (A) reserves the third); a final paragraph made entirely of `Key: value` lines → `error: invalid flag value: --reason must not end in a paragraph of "Key: value" lines; add a closing sentence after it, or fold those lines into prose` (`dl-070` S4). |
 | `--verbose`       | flag                   | `false`   | Emit diagnostic logs to stderr in plain text, even under `--format json`/`yaml`. Never alters stdout.  |
 | `--color` (negatable) | boolean flag        | `true`    | ANSI colour on stdout. Pass `--no-color` to disable; also disabled automatically when `NO_COLOR` is set to any non-empty string (https://no-color.org/) — an explicitly empty `NO_COLOR=` does **not** disable colour. **Today no output is coloured** (see `--format`), so `--no-color` and `NO_COLOR` are accepted and change nothing; the rule above is the one the colour P5.1.4 adds must honour. Commander itself already honours `NO_COLOR` (it strips colour from its help, which has none) but not `--no-color`, so that rendering must read both. |
@@ -165,7 +165,7 @@ wf({type}): {verb} {id1}, {id2}[ [{s0} → {s1}( → {sN})*]]
 | `finalize`  | a `set_state` into the last state of the type's `sequence`; `workflow end` for a plan; the `supersedes:` trigger of `memory approve` (below) | `[from → to]` |
 | `sync`      | `<type>.sync_state` (`bug.sync_state`, `dl-045`)                           | `[from → to]`, or a chain `[s0 → s1 → … → sN]` |
 | `amend`     | `memory amend` (`dl-108`)                                                  | `[s → s]` |
-| `park`      | `memory park` (`dl-110`)                                                   | `[in-progress → backlog]` |
+| `park`      | `memory park` (`dl-110`)                                                   | `[from → to]`, `to` the type's `returns.<from>` (this repository's `task`: `[in-progress → backlog]`) |
 | `assign`    | `element.set_release` (below)                                              | none |
 
 **Which verb a `set_state` emits** (`spec-003` verb table). `approve` when the phase declares
@@ -224,10 +224,34 @@ Approver: {name} <{email}> (approver)
 Reason: {reason}
 ```
 
+**`memory park` emits `park`** (`dl-110` P1 (a); `task-180`). It takes the declared return edge of the
+document's state, `returns.<from>` in the type's machine (`spec-001`), and writes `status` and
+nothing else. A park is a scheduling decision, not an approval: the body carries a `Reason:` block,
+mandatory as on `approve` (§2 above), and no `Approver:` line, and no authority is checked. Its
+refusals: a missing or blank `--reason` exits `2`; a state with no `returns` edge exits `1` with the
+illegal-transition message (`dl-032`); a target state at its WIP limit (`spec-001` `limits`) exits
+`1`, naming the elements that hold it.
+
+```
+wf({type}): park {id} [{from} → {to}]
+
+Reason: {reason}
+```
+
+**A WIP limit binds every verb that enters the state** (`dl-110` P3 (a); `task-180`). When the type's
+machine declares `limits: { <state>: N }` and N documents of the type are in `<state>` in the commit
+the transition is decided at, a verb that would move another one there — `add` for the initial state,
+`submit`, `approve`, `reject`, `park`, and the `supersedes:` trigger — refuses with `CONFLICT` (exit
+`1`) before anything is written:
+
+```
+WIP limit reached for '<state>' on type '<type>' (limit <N>): held by <id1>, <id2>. Move one of them out of '<state>', then retry.
+```
+
 **A chained bracket** is read from its first state to its last. Those two states are compared with
 the frontmatter before and after the commit. Given the type's machine, every hop must be one of its
-edges: the forward edge `sequence[i] → sequence[i+1]`, a `gates` reject target, or the implicit edge to
-`deprecated`. A hop that is none of these is an `illegal-hop` finding of
+edges: the forward edge `sequence[i] → sequence[i+1]`, a `gates` reject target, a `returns` target
+(`task-180`), or the implicit edge to `deprecated`. A hop that is none of these is an `illegal-hop` finding of
 `verifyTransitionConsistency` (`src/memory/audit.ts`, `bug-155`). `sync` is the only verb that
 emits a chain. The reader reads a chain, and checks its hops, whatever the verb.
 
@@ -590,7 +614,7 @@ CLI reference's *Git side effects* says the same to users.
 
 | Baseline | Commands | Why |
 |----------|----------|-----|
-| **committed at `HEAD`** | `memory add`, `memory submit`, `memory approve`, `memory reject`, `memory deprecate`, `memory amend` (their `memory.yaml`, the document the `<id>` names and its status, and approver authority — the content `submit` and `amend` commit is the working tree's); `dna set`, `dna add`, `dna update`, `dna remove`; `directive assign`; `directive remove`'s referrer check; `workflow next` (v0.3) | a read that can refuse the command or change what it writes (`spec-006` §6 items 1–2). When the working tree defines a type the commit does not, `memory add`'s refusal says the change is not committed (`dl-084` (D), `task-095`); the `dna` verbs first refuse a `dna.yaml` that differs from `HEAD`, so what they then read is `HEAD`'s; `memory add`'s `{n}` counter reads the wider baseline the `command-baseline` directive declares, which can only raise the number |
+| **committed at `HEAD`** | `memory add`, `memory submit`, `memory approve`, `memory reject`, `memory deprecate`, `memory park`, `memory amend` (their `memory.yaml`, the document the `<id>` names and its status, and approver authority — the content `submit` and `amend` commit is the working tree's); `dna set`, `dna add`, `dna update`, `dna remove`; `directive assign`; `directive remove`'s referrer check; `workflow next` (v0.3) | a read that can refuse the command or change what it writes (`spec-006` §6 items 1–2). When the working tree defines a type the commit does not, `memory add`'s refusal says the change is not committed (`dl-084` (D), `task-095`); the `dna` verbs first refuse a `dna.yaml` that differs from `HEAD`, so what they then read is `HEAD`'s; `memory add`'s `{n}` counter reads the wider baseline the `command-baseline` directive declares, which can only raise the number |
 | **committed at `HEAD`, declared** (v0.3, as each ships) | `workflow status`, `workflow list`, `workflow show`, `agent list`, `agent show` | approver ruling R15: one deduction, one baseline; a working tree that differs is reported as the warning `W_UNCOMMITTED_INPUTS`, and never decides the answer (`spec-006` §6 item 6, `spec-017` §1.2) |
 | **working tree** | `dna show`, `paths`, `directives list`, `memory search`, `memory history`; `workflow list` until its v0.3 reshape | a read that gates nothing: a draft you have not committed is what `memory search` exists to find (`spec-006` §6 item 4). `memory history` reads git's log for the entries and the working tree's `memory.yaml` |
 | **filesystem** | the confinement and symlink guards of every command that writes or deletes a file; `directive create`'s check that its target does not exist | the read predicts where a syscall will land, which no commit records (`spec-006` §6 item 5, `dl-086`) |
@@ -1003,3 +1027,13 @@ approver's ruling at the triage of `bug-185`).** DEL (`U+007F`), the C1 controls
 controls other than tab and newline, with the same message, naming the first one by code point. No
 exit code, message or other rule changed. Edited in place without a supersede or a state change
 (`dl-047`).
+
+**Revision (2026-10-05, `task-180-add-memory-park-declared-returns-edge-optional-per`) — `memory park`
+and WIP limits, per `dl-110` (`ready`; P1 (a), P3 (a), approve `6d12740d`).** §2's `park` row names its
+bracket by rule — the type's `returns` target — rather than by this repository's one edge. The
+paragraph after the `amend` rule declares the verb: its subject and body, no `Approver:`, and its
+refusals. A second paragraph declares the WIP-limit refusal and the verbs it binds, and the chained
+bracket's edge list gains the `returns` edge. The `--reason` row names `park` among the commands that
+require it; §1's one-document sentence and §11's committed-baseline row name `memory park`. No other
+rule changed. Edited in place without a supersede or a state change (`dl-047`); pending the approver's
+`memory amend` at `task-180`'s review.
