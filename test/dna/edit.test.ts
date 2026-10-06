@@ -261,8 +261,11 @@ describe('YAML styles the editor has to meet in a hand-written file', () => {
 });
 
 describe('the safety contract: verified, or `undefined` for the caller to fall back on', () => {
-  it('declines (returns undefined) when the target key is absent from the text entirely', () => {
-    const text = 'version: 1\nmodules: []\nstacks: {}\nteam:\n  members: []\n  roles: []\npaths: {}\n';
+  // task-193 (`bug-126`): an absent target key is now inserted under its parent (see the task-193 block
+  // below); what is still declined is a parent written as a non-empty FLOW mapping, under which no
+  // block line can be added.
+  it('declines (returns undefined) when the absent target key\'s parent is a non-empty flow mapping', () => {
+    const text = 'version: 1\nmodules: []\nstacks: {}\nteam:\n  members: []\n  roles: []\npaths: { tests: [] }\n';
     expect(edit(text, { verb: 'add', field: 'paths.sources', value: 'src/' })).toBeUndefined();
   });
 
@@ -275,11 +278,6 @@ describe('the safety contract: verified, or `undefined` for the caller to fall b
   // that quietly returned the text unchanged would pass its own read-back check and hand that text
   // back, so these assertions would fail. Only a genuine decline satisfies them.
   describe.each<[string, string, DnaTextEdit]>([
-    [
-      'the target key holds a block scalar, which cannot be rewritten on its own line',
-      'note: >-\n  folded text\n',
-      { kind: 'set-scalar', path: [{ key: 'note' }], value: 'plain' },
-    ],
     [
       'the target key opens a nested block, so rewriting its line would orphan what follows',
       'project:\n  name: a\n',
@@ -335,6 +333,32 @@ describe('the safety contract: verified, or `undefined` for the caller to fall b
           { kind: 'set-scalar', path: [{ key: 'absent' }, { key: 'deeper' }], value: 'z' },
         ],
       },
+    ],
+    // task-193: the absent-key insertion (`insertMissingPath`) declines what it cannot open.
+    [
+      'an absent key sits below a sequence index the sequence does not have (no entry to descend into)',
+      'items:\n  - name: a\n',
+      { kind: 'set-scalar', path: [{ key: 'items' }, { index: 2 }, { key: 'name' }], value: 'x' },
+    ],
+    [
+      'an append names an absent sequence index rather than an absent key',
+      'items:\n  - a\n',
+      { kind: 'append-items', path: [{ key: 'items' }, { index: 3 }], items: ['b'] },
+    ],
+    [
+      'an append targets an existing sequence item rather than a key',
+      'items:\n  - a\n',
+      { kind: 'append-items', path: [{ key: 'items' }, { index: 0 }], items: ['b'] },
+    ],
+    [
+      'an absent sequence would open with an empty-mapping item, which has no `- key: value` form',
+      'team:\n  roles: []\n',
+      { kind: 'append-items', path: [{ key: 'team' }, { key: 'agents' }], items: [{}] },
+    ],
+    [
+      'an absent key\'s parent holds a plain scalar, under which no block line can be added',
+      'project: none\n',
+      { kind: 'set-scalar', path: [{ key: 'project' }, { key: 'name' }], value: 'x' },
     ],
   ])('declines: %s', (_case, text, pending) => {
     it('returns undefined instead of an edit', () => {
@@ -422,5 +446,120 @@ describe('the safety contract: verified, or `undefined` for the caller to fall b
     const first = edited(BLOCK, { verb: 'add', field: 'modules', value: 'cli', fields: { path: 'src/cli' } });
     const second = edited(BLOCK, { verb: 'add', field: 'modules', value: 'cli', fields: { path: 'src/cli' } });
     expect(first).toBe(second);
+  });
+});
+
+/**
+ * task-193 (`bug-019`, `bug-126`) — the shapes that used to fall back to the whole-file `dump()` and
+ * strip every comment are now edited in place: the first entry of a collection the file does not
+ * declare yet, a key whose parents are absent too, a key holding a block scalar, and a CRLF file.
+ */
+describe('task-193: the former dump() shapes are edited in place, comments intact', () => {
+  /** Every comment line, trimmed, in order. */
+  function comments(source: string): string[] {
+    return source.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.startsWith('#'));
+  }
+
+  /** `after` must be `before` with exactly the lines `inserted` added at one place, and nothing else touched. */
+  function expectPureInsertion(before: string, after: string, inserted: readonly string[]): void {
+    const b = before.split('\n');
+    const a = after.split('\n');
+    let prefix = 0;
+    while (prefix < b.length && b[prefix] === a[prefix]) prefix += 1;
+    expect(a.slice(prefix, prefix + inserted.length)).toEqual(inserted);
+    expect([...a.slice(0, prefix), ...a.slice(prefix + inserted.length)]).toEqual(b);
+  }
+
+  const NO_AGENTS = `# Team & roles
+team:
+  members:
+    - name: roberto           # [SPEC] a member
+      email: r@example.it
+      roles: [ approver ]
+  roles:
+    - name: approver
+    - name: developer
+  # a trailing comment that introduces the next section
+
+# Resource paths
+paths:
+  sources: [ src/ ]
+`;
+  const AGENTS_SCHEMA = z.object({
+    team: z.object({
+      members: z.array(z.object({ name: z.string(), email: z.string(), roles: z.array(z.string()) })),
+      roles: z.array(z.object({ name: z.string() })),
+      agents: z.array(z.object({ name: z.string(), executes_as: z.array(z.string()) })).optional(),
+    }),
+    paths: z.object({ sources: z.array(z.string()) }),
+  });
+
+  it('bug-126: the first `dna add team.agents` opens `agents:` under `team`, adding lines and touching none', () => {
+    const result = edited(NO_AGENTS, { verb: 'add', field: 'team.agents', value: 'claude', fields: { executes_as: 'developer' } }, AGENTS_SCHEMA);
+    expect(comments(result)).toEqual(comments(NO_AGENTS));
+    expectPureInsertion(NO_AGENTS, result, ['  agents:', '    - name: claude', '      executes_as: [developer]']);
+    expect(result).toContain('    - name: developer\n  agents:\n');
+  });
+
+  it('bug-126: a list of strings the file does not declare yet is opened the same way', () => {
+    const text = 'stacks:\n  # the technologies\n  technologies: []\npaths: {}\n';
+    const schema = z.object({ stacks: z.object({ technologies: z.array(z.string()), methodologies: z.array(z.string()).optional() }), paths: z.object({}).passthrough() });
+    const result = edited(text, { verb: 'add', field: 'stacks.methodologies', value: 'TDD' }, schema);
+    expect(result).toBe('stacks:\n  # the technologies\n  technologies: []\n  methodologies:\n    - TDD\npaths: {}\n');
+  });
+
+  // The inline comment keeps its column, as on every rewritten key line (`rewriteKeyLine`).
+  it('a key whose parent is an empty flow mapping `{}` opens that mapping into a block', () => {
+    const text = '# header\nversion: 1\nmodules: []\nstacks: {}\nteam:\n  members: []\n  roles: []\npaths: {}   # the paths\n';
+    const result = edited(text, { verb: 'add', field: 'paths.sources', value: 'src/' });
+    expect(result).toBe('# header\nversion: 1\nmodules: []\nstacks: {}\nteam:\n  members: []\n  roles: []\npaths:      # the paths\n  sources:\n    - src/\n');
+  });
+
+  it('a scalar whose PARENT is absent too is inserted with its parent, by every write shape (a batch included)', () => {
+    const text = '# top\nname: x\n';
+    const result = applyDnaEditInText(
+      text,
+      { kind: 'batch', edits: [{ kind: 'set-scalar', path: [{ key: 'project' }, { key: 'license' }], value: 'MIT' }] },
+      { name: 'x', project: { license: 'MIT' } },
+    );
+    expect(result).toBe('# top\nname: x\nproject:\n  license: MIT\n');
+  });
+
+  it('bug-019: a key holding a folded block scalar is rewritten on one line, its old value\'s lines dropped', () => {
+    const text = '# top\nproject:\n  north_star: >-   # [SPEC] P1\n    a long\n    folded text\n\n  # next field\n  name: wf\n';
+    const result = applyDnaEditInText(
+      text,
+      { kind: 'set-scalar', path: [{ key: 'project' }, { key: 'north_star' }], value: 'short' },
+      { project: { north_star: 'short', name: 'wf' } },
+    );
+    expect(result).toBe('# top\nproject:\n  north_star: short # [SPEC] P1\n\n  # next field\n  name: wf\n');
+  });
+
+  it('bug-019: a literal block scalar `|` likewise', () => {
+    const text = 'note: |\n  line one\n  line two\nother: x\n';
+    expect(applyDnaEditInText(text, { kind: 'set-scalar', path: [{ key: 'note' }], value: 'plain' }, { note: 'plain', other: 'x' })).toBe(
+      'note: plain\nother: x\n',
+    );
+  });
+
+  it("bug-019: a CRLF file is edited in place and keeps its CRLF line endings", () => {
+    const text = '# top\r\nproject:\r\n  name: a   # the name\r\n';
+    const result = applyDnaEditInText(text, { kind: 'set-scalar', path: [{ key: 'project' }, { key: 'name' }], value: 'b' }, { project: { name: 'b' } });
+    expect(result).toBe('# top\r\nproject:\r\n  name: b   # the name\r\n');
+  });
+
+  it('(characterization) bug-019: a leading `---` document marker does not stop an in-place edit', () => {
+    const text = '---\n# top\nproject:\n  name: a\n';
+    expect(applyDnaEditInText(text, { kind: 'set-scalar', path: [{ key: 'project' }, { key: 'name' }], value: 'b' }, { project: { name: 'b' } })).toBe(
+      '---\n# top\nproject:\n  name: b\n',
+    );
+  });
+
+  it("bug-019: WingFoil's own dna.yaml takes `dna update project.north_star` and `project.description` in place", () => {
+    const own = readFileSync(join(__dirname, '..', '..', '.wingfoil', 'dna.yaml'), 'utf-8');
+    for (const field of ['project.north_star', 'project.description']) {
+      const result = edited(own, { verb: 'update', field, value: 'short' });
+      expect(comments(result)).toEqual(comments(own));
+    }
   });
 });

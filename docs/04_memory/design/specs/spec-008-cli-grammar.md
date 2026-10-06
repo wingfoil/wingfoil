@@ -414,6 +414,7 @@ Q2 option 1):
 | Command | Exit | Reason |
 |---------|------|--------|
 | `directive assign` | `1` | `roles.yaml cannot be updated in place; edit assignments.<role> by hand, or pass --force to rewrite the whole file` — the in-place editor cannot apply the edit and `--force` was not given, whether or not the file has comments. Nothing is written. |
+| `dna set`, `dna add`, `dna update`, `dna remove` | `1` | `dna.yaml cannot be updated in place; edit <path> by hand, or pass --force to rewrite the whole file` — the in-place editor cannot express the change and `--force` was not given, whether or not the file has comments (task-193, ruling R20/Q9: `dl-062`'s rule applied to `dna.yaml`). Nothing is written. A change the schema refuses is reported as that validation failure first. |
 | `directive remove` | `1` | `cannot remove '<id>': still assigned to every role via roles.yaml 'global'` — the directive is bound through `roles.yaml`'s `global` list. A per-role binding gives `P3.3-directive-remove.feature`'s `cannot remove '<id>': still assigned to role '<role>'`. |
 
 **Warnings on a successful command.** A command that succeeds may also have something to tell the
@@ -429,11 +430,12 @@ them, and never change the exit code. So stderr can be non-empty on exit `0`, an
 `json`/`yaml` a refusal can follow warnings. `spec-005` §3.2 still says stderr under `json`/`yaml`
 carries "the one object and nothing else". That sentence is about refusals and predates warnings.
 Its amendment, together with §2's, is the task that implements `spec-016` §3.4 (task-218), and this
-paragraph is the rule until then. The text of the one warning shipped today is pinned:
+paragraph is the rule until then. The text of each warning shipped today is pinned:
 
 | Command | Warning |
 |---------|---------|
 | `directive assign --force`, when the whole file was rewritten | `roles.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, blank lines, line endings or number formatting (1.0 becomes 1)` |
+| `dna set\|add\|update\|remove --force`, when the whole file was rewritten | `dna.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, blank lines, line endings or number formatting (1.0 becomes 1)` |
 
 An MCP Tool has no stderr: its result carries the warnings as `structuredContent` (`spec-004` §4.3
 item 5). The shipped `wingfoil mcp` registers no Tools before P5.2.3 (v0.4), so on that surface the
@@ -652,6 +654,7 @@ reference entry. A command that does not declare it refuses it as an unknown opt
 |---------|------|-----------|
 | `paths` | `--list` | Accepted for the planned drill-down view; it does not change the output yet. |
 | `directive assign` | `--force` | Authorizes the whole-file rewrite of `roles.yaml` when the in-place edit cannot apply (`dl-062` Q1 option 3). Without it that case is §6's `CONFLICT` refusal. With it the file is written again from its parsed content in the one `wf(directive): assign …` commit, and the success carries §6's warning. `--force` does not force a rewrite: an edit the in-place editor can make is made in place, with no warning. A missing `roles.yaml` is written whole without the flag, since there is nothing to preserve. |
+| `dna set`, `dna add`, `dna update`, `dna remove` | `--force` | Authorizes the whole-file rewrite of `dna.yaml` when the in-place edit cannot express the change (task-193, ruling R20/Q9, as `dl-062`). Without it that case is §6's `CONFLICT` refusal. With it the file is written again from its parsed content in the verb's one `wf(dna): …` commit, and the success carries §6's warning. As for `directive assign`, `--force` does not force a rewrite: an edit the in-place editor can make is made in place, with no warning. `dna.yaml` always exists when these verbs run, so there is no unflagged whole-file write. |
 
 ## Consequences
 
@@ -1079,3 +1082,11 @@ exits `2` instead of starting the server (`0`) or refusing an uninitialized proj
 `wingfoil init --format bogus` outside a repository exits `2` instead of `1`. Each is the code §1
 already assigns to a malformed invocation; no rule of the exit-code table changed. Edited in place without a
 supersede or a state change (`dl-047`).
+
+**Revision (2026-10-05, `task-193-keep-dna-yaml-comments-when-dna-set-dna`) — the four DNA write verbs
+take `--force`, per approver ruling R20/Q9 (`release-planning-rel-v0.3-plan`: "`dna.yaml` refuses the
+whole-file rewrite unless `--force` (as `dl-062`)").** §6 gains the `dna.yaml` refusal, pinned word for
+word beside `directive assign`'s, and the `dna.yaml` warning beside the `roles.yaml` one; §12 gains the
+`--force` row for `dna set`, `dna add`, `dna update` and `dna remove`. The behaviour is
+`directive assign --force`'s, applied to the file `bug-019` and `bug-126` found rewritten without a
+warning. No other section changed. Edited in place without a supersede or a state change (`dl-047`).

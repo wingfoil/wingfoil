@@ -231,6 +231,27 @@ still resolves to `stacks` (see Consequences below), but `dna set tech_stack.<ke
 the unknown key it is, because `stacks` replaced a fixed-key object and a first-segment rewrite cannot
 perform a change of shape.
 
+### Writes keep the file's text, or are refused
+
+`dna.yaml` carries its `[SPEC]`/`[AUTHORING]` field-provenance annotations as comments, and removing
+a `[SPEC]` field needs the referenced specification changed first, so a write must not erase them. The
+four write verbs therefore edit the file **in place**: only the lines of the node they change are
+written, every other byte is kept, and the edited text is accepted only if it reads back as the
+intended document (`src/dna/edit.ts`). That covers a key the file does not carry yet (with any parent
+keys it lacks, the first `team.agents` entry included), a value held as a `>-`/`|` block scalar, and a
+file written with CRLF line endings. A file whose every line ends in CRLF is written back with CRLF in
+the working tree under any `core.autocrlf` setting, and git stores it as that setting says (LF in
+the blob under `true`); the post-write check compares the commit through git's own filters, so that
+normalization is not read as a foreign change.
+
+A change the in-place editor still cannot express — for example, a key under a parent written as a
+non-empty flow mapping (`paths: { sources: [src/] }`) — is **refused** (exit `1`, nothing written)
+unless the caller passes `--force`, which authorizes rewriting the whole file from its parsed content.
+A forced rewrite keeps no comment and says so in a warning on the success (`spec-008-cli-grammar` §6,
+§12). This is `dl-062`'s rule for `roles.yaml`, applied to `dna.yaml` by approver ruling R20/Q9
+(`release-planning-rel-v0.3-plan`). A write the schema refuses is reported as that validation failure
+first: `--force` cannot make it valid.
+
 ### Categories (P2.5)
 
 `wingfoil paths [category]` queries `paths` by the six category names **sources, tests, docs, config,
@@ -403,3 +424,12 @@ field, and a new *`format`* section gives its default (absent = 1), its bump rul
 refusal. `version`'s row, which called it the "config-file format version", now calls it the content
 revision (`dl-047`). Every file valid before stays valid. Edited in place, with no `version:` bump
 (`dl-047`); pending the approver's sign-off at `task-251`'s review.
+
+**Revision (2026-10-05, `task-193-keep-dna-yaml-comments-when-dna-set-dna`) — a new section, *Writes
+keep the file's text, or are refused*, per approver ruling R20/Q9 (`release-planning-rel-v0.3-plan`)
+and `bug-019` / `bug-126`.** The write path used to fall back to a whole-file re-serialization that
+dropped every comment at exit `0` with no signal: for a block-scalar value (`project.north_star`), and
+for the first entry of a collection the file did not declare (`team.agents`). Those shapes are now
+edited in place, a CRLF file under any `core.autocrlf` setting included, and what is left of the
+fallback is refused unless `--force`. The schema itself is
+unchanged. Edited in place without a supersede or a state change (`dl-047`).

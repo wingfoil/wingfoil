@@ -53,6 +53,7 @@ import { describeDocumentChanges } from '../memory';
 import {
   changedPathsBetween,
   commitParent,
+  committedBlobMatches,
   pathPorcelainStatus,
   readDocument,
   readPathAtRev,
@@ -328,8 +329,11 @@ export function undeclaredCommittedPaths(
  *
  * `verifyCommittedScope` delegates its content half to `verifyDocumentEdit`, which compares *owned
  * frontmatter fields* and a body. `dna.yaml` and `roles.yaml` have no frontmatter block at all, so
- * for them the right — and strictly stronger — question is byte equality: the commit must carry, for
- * each declared path, exactly the text this operation wrote, and nothing else.
+ * for them the right — and strictly stronger — question is content equality: the commit must carry, for
+ * each declared path, exactly the text this operation wrote, and nothing else. "Exactly" is judged as
+ * git stores it: when the bytes differ from `git show`'s, the written text is hashed through git's
+ * filters for that path and compared with the committed blob (`committedBlobMatches`), so a CRLF file
+ * that `core.autocrlf=true` stores LF is not reported as a foreign change (task-193 review).
  *
  * Same shape as `task-080`'s lockfile guard and `task-088`'s post-condition: assert the diff, not the
  * end state. Reading the file back from disk answers "does `dna.yaml` now say `Renamed`?" — true no
@@ -357,7 +361,10 @@ export function verifyCommittedPaths(
       if (after !== null) problems.push(`it still contains '${path}', which this operation removed`);
     } else if (after === null) {
       problems.push(`it does not contain '${path}'`);
-    } else if (after !== content) {
+    } else if (after !== content && !committedBlobMatches(root, sha, path, content)) {
+      // A byte difference alone is not a foreign change: git may have stored the written text through
+      // its filters (`core.autocrlf=true` keeps a CRLF file LF in the blob, task-193 review). Only a
+      // blob that the written bytes do not hash to, under those same filters, is one.
       problems.push(`'${path}' at the commit differs from what this operation wrote`);
     }
   }

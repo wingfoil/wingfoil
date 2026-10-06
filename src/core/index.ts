@@ -91,7 +91,7 @@ import { amendReservedFields, requireAmendableEdit, requireAmendableType, requir
 import { resolveAddType } from './memory-add-type';
 import { committedScopeError, requireAbsentTarget, requireUnmodifiedTarget } from './write-guard';
 import { UsageError } from './usage-error';
-import type { CoreFn, CoreModule, CoreOption } from './registry';
+import type { CoreFlag, CoreFn, CoreModule, CoreOption } from './registry';
 import { missingOperandReason } from './registry';
 import { coreErr, coreOk } from './types';
 import type { CoreError, CoreResult } from './types';
@@ -385,7 +385,29 @@ export interface DnaSetParams {
   readonly root: string;
   readonly positionals?: readonly string[];
   readonly options?: Readonly<Record<string, string>>;
+  /** `--force` (task-193): authorize the whole-file rewrite of `dna.yaml` ({@link dnaRewriteConflict}). */
+  readonly force?: boolean;
 }
+
+/**
+ * The refusal of a DNA write the in-place editor cannot express, when `--force` was not given
+ * (task-193, approver ruling R20/Q9 of `release-planning-rel-v0.3-plan`: the same rule as
+ * `dl-062` for `roles.yaml`, task-169's `rolesRewriteConflict`). `CONFLICT`, exit 1, nothing
+ * written. Pinned in `spec-008` §6.
+ */
+export function dnaRewriteConflict(field: string): string {
+  return `dna.yaml cannot be updated in place; edit ${field} by hand, or pass --force to rewrite the whole file`;
+}
+
+/**
+ * The warning a `--force`d whole-file rewrite of `dna.yaml` carries on its success (task-193), on
+ * task-169's success-warning channel (`CoreResult.warnings`). It names what the `js-yaml` `dump` of
+ * the parsed document does not keep — the list `ROLES_REWRITE_WARNING` gives for `roles.yaml`,
+ * since the two files go through the same `dump`. Pinned in `spec-008` §6.
+ */
+export const DNA_REWRITE_WARNING =
+  'dna.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, ' +
+  'blank lines, line endings or number formatting (1.0 becomes 1)';
 
 /**
  * The shared body of every DNA mutation (`dna set`, and `dna add|remove|update` since
@@ -421,8 +443,13 @@ export interface DnaSetParams {
  *    in-place textual edit, so every comment survives — including the inline `[SPEC]`/`[AUTHORING]`
  *    field-provenance annotations a whole-file re-serialization deletes
  *    (bug-004-dna-set-strips-yaml-comments, task-063). When no provably-minimal edit exists it returns
- *    `undefined` and this FALLS BACK to `dump(dna, { lineWidth: -1 })` — correct, but comment-stripping.
- *    Both paths are deterministic (REQ-SYS-07).
+ *    `undefined`, and the only other candidate is the whole-file `dump(dna, { lineWidth: -1 })` —
+ *    correct, but it keeps no comment. Both are deterministic (REQ-SYS-07). Since task-193 (`bug-019`,
+ *    `bug-126`; ruling R20/Q9, as `dl-062`) that rewrite is **refused** (`CONFLICT`, exit 1,
+ *    {@link dnaRewriteConflict}) unless `force` authorizes it, and a forced one succeeds with
+ *    {@link DNA_REWRITE_WARNING}. The refusal comes after step 7, so a write the schema would refuse
+ *    anyway is reported as the `VALIDATION` it is, not as something `--force` could fix. `force`
+ *    authorizes the rewrite and does not demand it: an in-place edit is still made in place, unwarned.
  * 7. **Re-validate the written bytes** against `DnaYaml` (spec-002) BEFORE persisting — re-parsing the
  *    serialized form, not the in-memory object, so the check honours YAML's own scalar coercion and
  *    validates the exact bytes about to be written (`dna set version 2` writes `version: '2'` and
@@ -443,6 +470,7 @@ async function runDnaMutation(
   request: DnaMutationRequest,
   subject: string = dnaCommitSubject(request),
   scalarOnly = false,
+  force = false,
 ): Promise<CoreResult<{ key: string; value?: string }>> {
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
@@ -474,7 +502,8 @@ async function runDnaMutation(
 
   const dnaPath = join(root, DNA_YAML_PATH);
   const current = readDocument(dnaPath);
-  const serialized = applyDnaEditInText(current, applied.edit, applied.dna) ?? dump(applied.dna, { lineWidth: -1 });
+  const inPlace = applyDnaEditInText(current, applied.edit, applied.dna);
+  const serialized = inPlace ?? dump(applied.dna, { lineWidth: -1 });
 
   // Labelled repository-relative, as every working-tree loader labels it (task-179, `bug-245`).
   const parsed = DnaYaml.safeParse(parseYaml(serialized, DNA_YAML_PATH));
@@ -486,11 +515,17 @@ async function runDnaMutation(
   const outcome = { key: request.field, value: request.value };
   if (current === serialized) return coreOk(outcome);
 
+  const warnings: string[] = [];
+  if (inPlace === undefined) {
+    if (!force) return coreErr({ code: 'CONFLICT', message: dnaRewriteConflict(request.field) });
+    warnings.push(DNA_REWRITE_WARNING);
+  }
+
   writeDocument(dnaPath, serialized);
   const sha = commitPaths(root, [DNA_YAML_PATH], subject);
   const leaked = committedScopeError(root, sha, DNA_YAML_PATH, serialized);
   if (leaked) return leaked;
-  return coreOk(outcome, { sha, message: subject });
+  return coreOk(outcome, { sha, message: subject }, warnings);
 }
 
 /**
@@ -562,7 +597,7 @@ const DNA_SURPLUS_HINT = 'the value travels in --value';
  * write the field.
  */
 const dnaSetFn: CoreFn<unknown, { key: string; value?: string }> = async (params) => {
-  const { root, positionals, options } = params as DnaSetParams;
+  const { root, positionals, options, force } = params as DnaSetParams;
 
   const keyPath = dnaPathPositional(positionals);
   const value = options?.value;
@@ -574,7 +609,7 @@ const dnaSetFn: CoreFn<unknown, { key: string; value?: string }> = async (params
   // reader (and `git log --grep`) sees the command that was run, not the verb it delegates to. The
   // scalar-only restriction, `dl-080`(B)'s dirty-target guard (task-092) and the committed-tree
   // post-condition all live in the shared pipeline now, on the one document it loads.
-  return runDnaMutation(root, { verb: 'update', field: keyPath, value }, `wf(dna): set ${keyPath}`, true);
+  return runDnaMutation(root, { verb: 'update', field: keyPath, value }, `wf(dna): set ${keyPath}`, true, force === true);
 };
 
 /**
@@ -590,6 +625,8 @@ export interface DnaMutationParams {
   readonly root: string;
   readonly positionals?: readonly string[];
   readonly options?: Readonly<Record<string, string>>;
+  /** `--force` (task-193): authorize the whole-file rewrite of `dna.yaml` ({@link dnaRewriteConflict}). */
+  readonly force?: boolean;
 }
 
 /** Split a verb's invocation into the positional `<path>`, `--value` and the per-entry `--entry-<field>` values. */
@@ -624,20 +661,23 @@ function dnaMutationRequest(
 
 /** `dna add` — create an entry, or append to a list (`dl-081` option (E); spec-006 §3, Tool `dna.add`). */
 const dnaAddFn: CoreFn<unknown, { key: string; value?: string }> = async (params) => {
-  const { root, positionals, options } = params as DnaMutationParams;
-  return runDnaMutation(root, dnaMutationRequest('add', positionals, options));
+  const { root, positionals, options, force } = params as DnaMutationParams;
+  const request = dnaMutationRequest('add', positionals, options);
+  return runDnaMutation(root, request, dnaCommitSubject(request), false, force === true);
 };
 
 /** `dna remove` — drop an entry, a value from a list, or an optional field (Tool `dna.remove`). */
 const dnaRemoveFn: CoreFn<unknown, { key: string; value?: string }> = async (params) => {
-  const { root, positionals, options } = params as DnaMutationParams;
-  return runDnaMutation(root, dnaMutationRequest('remove', positionals, options));
+  const { root, positionals, options, force } = params as DnaMutationParams;
+  const request = dnaMutationRequest('remove', positionals, options);
+  return runDnaMutation(root, request, dnaCommitSubject(request), false, force === true);
 };
 
 /** `dna update` — change a value, a list, or the fields of one entry (Tool `dna.update`). */
 const dnaUpdateFn: CoreFn<unknown, { key: string; value?: string }> = async (params) => {
-  const { root, positionals, options } = params as DnaMutationParams;
-  return runDnaMutation(root, dnaMutationRequest('update', positionals, options));
+  const { root, positionals, options, force } = params as DnaMutationParams;
+  const request = dnaMutationRequest('update', positionals, options);
+  return runDnaMutation(root, request, dnaCommitSubject(request), false, force === true);
 };
 
 /**
@@ -669,6 +709,14 @@ const DNA_SET_VALUE_OPTION: CoreOption = {
   name: 'value',
   required: true,
   description: 'the new value for <path> (scalar fields only — use dna update for collections and lists)',
+};
+/**
+ * `--force` on the four DNA write verbs (task-193, ruling R20/Q9): the opt-in to the whole-file rewrite
+ * the in-place editor would otherwise refuse. A per-command flag, listed in `spec-008` §12.
+ */
+const DNA_FORCE_FLAG: CoreFlag = {
+  name: 'force',
+  description: 'rewrite the whole dna.yaml when it cannot be edited in place (comments and formatting are not kept)',
 };
 const DNA_ENTRY_OPTIONS: readonly CoreOption[] = dnaEntryOptionNames().map((field) => ({
   name: dnaEntryOptionName(field),
@@ -2076,6 +2124,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         positional: { name: 'path', required: true, description: 'the collection (e.g. team.members) or list (e.g. paths.sources) to add to', surplusHint: DNA_SURPLUS_HINT },
         options: [DNA_VALUE_OPTION, ...DNA_ENTRY_OPTIONS],
         example: 'wingfoil dna add team.members --value "Ada Lovelace" --entry-email ada@example.com --entry-roles approver',
+        flags: [DNA_FORCE_FLAG],
         fn: dnaAddFn,
       },
       // `remove` declares no entry-field options: it takes what to drop, never what to write.
@@ -2086,6 +2135,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         positional: { name: 'path', required: true, description: 'the entry to remove (<collection>.<name>), or the list to remove the --value values from', surplusHint: DNA_SURPLUS_HINT },
         options: [DNA_VALUE_OPTION],
         example: 'wingfoil dna remove paths.docs --value README.md',
+        flags: [DNA_FORCE_FLAG],
         fn: dnaRemoveFn,
       },
       // The FIRST `mutates: true` operation in production (spec-006 §3 dna table) — by construction an
@@ -2099,6 +2149,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         positional: { name: 'path', required: true, description: 'the dotted path of the scalar field, e.g. project.name (double-quote a segment that contains a dot)', surplusHint: DNA_SURPLUS_HINT },
         options: [DNA_SET_VALUE_OPTION],
         example: 'wingfoil dna set project.name --value "My Project"',
+        flags: [DNA_FORCE_FLAG],
         fn: dnaSetFn,
       },
       dnaShow: {
@@ -2116,6 +2167,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         positional: { name: 'path', required: true, description: 'the entry (<collection>.<name>), or one of its fields (<collection>.<name>.<field>) with --value', surplusHint: DNA_SURPLUS_HINT },
         options: [DNA_VALUE_OPTION, ...DNA_ENTRY_OPTIONS],
         example: 'wingfoil dna update modules.api --entry-description "Public HTTP API"',
+        flags: [DNA_FORCE_FLAG],
         fn: dnaUpdateFn,
       },
     },
