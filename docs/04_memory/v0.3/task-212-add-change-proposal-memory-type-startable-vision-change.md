@@ -8,7 +8,7 @@ kind: "feature"
 priority: "medium"
 tags: ["v0.3", "workflow", "memory", "vision", "configuration", "process"]
 ref: "dl-132"
-bug: []
+bug: ["bug-270"]
 depends_on: ["task-199-align-wingfoil-workflows-custom-v0-3-schema-commands"]
 tmpl_version: 260703
 ---
