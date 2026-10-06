@@ -2,7 +2,7 @@
 id: "task-184-bring-test-guard-prose-overclaims-line-what-asserts"
 type: task
 title: "Bring the test guard prose that overclaims in line with what it asserts (T1 instances)"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "fix"
 priority: "medium"
