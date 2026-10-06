@@ -176,6 +176,7 @@ describe('CORE_MODULES directive.directiveCreate — P3.1 fit criteria (initiali
   it("AC3: `--name 'bad name!'` throws a UsageError (exit 2) with the exact message and creates no file", async () => {
     const before = customDirectiveNames(repo);
     const shaBefore = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     await expect(directiveCreateFn()({ root: repo, options: { name: 'bad name!' } })).rejects.toThrow(UsageError);
     let thrown: unknown;
@@ -192,6 +193,7 @@ describe('CORE_MODULES directive.directiveCreate — P3.1 fit criteria (initiali
     // "no file is created" — the custom/ directory is untouched, and nothing was committed.
     expect(customDirectiveNames(repo)).toEqual(before);
     expect(head(repo)).toBe(shaBefore);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it.each(['../escape', 'sub/dir', '/absolute', '..'])(

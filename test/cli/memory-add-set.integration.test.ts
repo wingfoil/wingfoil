@@ -14,6 +14,7 @@ import { join } from 'node:path';
 
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 types:
@@ -78,10 +79,12 @@ describe('wingfoil memory add --set (task-110, spec-008 §10)', () => {
 
   it('a malformed --set is a usage error: exit 2, one error line, nothing committed', () => {
     const before = git(repo, ['rev-parse', 'HEAD']).trim();
+    const unchanged = snapshotPersistence(repo);
     const run = wingfoil(repo, 'memory', 'add', '--type', 'release', '--title', 'X', '--set', 'version');
     expect(run.status).toBe(2);
     expect(run.stderr).toBe('error: invalid flag value: --set expects <name>=<value>, got "version"\n');
     expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a missing token is exit 1 and names the option that supplies it', () => {

@@ -29,6 +29,7 @@ import type { CoreFn } from '../../src/core/registry';
 import { loadMemoryYaml } from '../../src/core/loaders';
 import { splitFrontmatter } from '../../src/storage';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /** This repository's root: its `.wingfoil/` is the configuration WingFoil develops itself with. */
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -178,12 +179,14 @@ ${body}`;
 
   it('refuses to submit a task without `kind`: VALIDATION naming the field, nothing committed', async () => {
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
     const result = await operation('memorySubmit')({ root: repo, positional: 'task-901-no-kind', positionals: ['task-901-no-kind'] });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toMatchObject({ code: 'VALIDATION', message: 'missing required field on submit: kind' });
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(readFileSync(join(repo, NO_KIND), 'utf-8')).toBe(taskDoc('task-901-no-kind', 'draft', 'v0.3', null));
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('submits a task that declares `kind` (draft → pending, one commit)', async () => {

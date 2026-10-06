@@ -21,6 +21,7 @@ import { exitCodeForResult } from '../../src/core/exit-code';
 import { verifyTransitionConsistency } from '../../src/memory/audit';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 types:
@@ -355,6 +356,7 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
   it('an uncommitted edit of the approved element is refused as before, with the trigger firing at HEAD', async () => {
     writeFileSync(join(repo, ADR_B), `${readFileSync(join(repo, ADR_B), 'utf-8')}\nan uncommitted paragraph\n`);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await approve({ root: repo, positional: 'adr-2-new', options: { reason: 'ok' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -362,6 +364,7 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
     expect(result.error.message).toMatch(/^refusing to commit/);
     expect(head(repo)).toBe(before);
     expect(readFileSync(join(repo, ADR_A), 'utf-8')).toMatch(/^status: accepted/m);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('decides from HEAD: an uncommitted supersedes: on B is neither read nor committed', async () => {
@@ -370,9 +373,11 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
     // never fires the trigger from the working tree's value.
     writeFixtureFile(repo, ADR_B, doc({ id: 'adr-2-new', type: 'adr', status: 'pending', supersedes: '"adr-1-old"' }));
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await approve({ root: repo, positional: 'adr-2-new', options: { reason: 'ok' } });
     expect(result.ok).toBe(false);
     expect(head(repo)).toBe(before);
     expect(readFileSync(join(repo, ADR_A), 'utf-8')).toMatch(/^status: accepted/m);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });

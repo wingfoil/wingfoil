@@ -42,6 +42,7 @@ import type { CoreResult } from '../../src/core/types';
 import { renderCustomDirective } from '../../src/directives/create';
 import * as storage from '../../src/storage';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 type AnyFn = CoreFn<unknown, unknown>;
 
@@ -217,6 +218,7 @@ describe('the six requireUnmodifiedTarget call sites refuse before any write (bu
       const real = aliasConfig(placement);
       const bytes = readFileSync(join(real, 'dna.yaml'), 'utf-8');
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = (await op('dna', 'dnaSet')({
         root: repo,
@@ -227,6 +229,7 @@ describe('the six requireUnmodifiedTarget call sites refuse before any write (bu
       expectVerbRefusal(result, DNA, placement);
       expect(readFileSync(join(real, 'dna.yaml'), 'utf-8')).toBe(bytes);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     /**
@@ -245,6 +248,7 @@ describe('the six requireUnmodifiedTarget call sites refuse before any write (bu
       const real = aliasConfig(placement);
       const bytes = readFileSync(join(real, 'roles.yaml'), 'utf-8');
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = (await op('directive', 'directiveAssign')({
         root: repo,
@@ -255,6 +259,7 @@ describe('the six requireUnmodifiedTarget call sites refuse before any write (bu
       expect(exitCodeForResult(result)).toBe(1);
       expect(readFileSync(join(real, 'roles.yaml'), 'utf-8')).toBe(bytes);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('directive assign — the guard itself refuses roles.yaml beyond the symlink', () => {
@@ -266,24 +271,28 @@ describe('the six requireUnmodifiedTarget call sites refuse before any write (bu
       const real = placement === 'inside' ? join(repo, 'elsewhere') : join(outside, 'custom');
       aliasDirectory(repo, CUSTOM_DIR, real);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = (await op('directive', 'directiveCreate')({ root: repo, options: { name: 'delta' } })) as CoreResult<unknown>;
 
       expectVerbRefusal(result, `${CUSTOM_DIR}/delta.md`, placement);
       expect(existsSync(join(real, 'delta.md'))).toBe(false);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('initWingfoilStorage — refuses and writes no scaffold file', () => {
       const real = aliasConfig(placement);
       const bytes = readFileSync(join(real, 'dna.yaml'), 'utf-8');
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = initWingfoilStorage(repo);
 
       expectVerbRefusal(result, '.wingfoil/', placement);
       expect(readFileSync(join(real, 'dna.yaml'), 'utf-8')).toBe(bytes);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 
@@ -296,6 +305,7 @@ describe('the six requireUnmodifiedTarget call sites refuse before any write (bu
     aliasDirectory(repo, CUSTOM_DIR, real);
     const bytes = readFileSync(join(real, 'legacy-rule.md'), 'utf-8');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = (await op('directive', 'directiveRemove')({ root: repo, positional: 'legacy-rule' })) as CoreResult<unknown>;
 
@@ -304,6 +314,7 @@ describe('the six requireUnmodifiedTarget call sites refuse before any write (bu
     expect(readFileSync(join(real, 'legacy-rule.md'), 'utf-8')).toBe(bytes);
     expect(head(repo)).toBe(before);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 
@@ -408,12 +419,14 @@ describe('memory transition verbs — a document in an in-root symlinked type di
     aliasDirectory(repo, TYPE_DIR, real);
     const bytes = readFileSync(join(real, `${DOC_ID}.md`), 'utf-8');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = (await op('memory', operation)({ root: repo, positional: DOC_ID, ...params })) as CoreResult<unknown>;
 
     expectUninspectableRefusal(result, DOC_PATH);
     expect(readFileSync(join(real, `${DOC_ID}.md`), 'utf-8')).toBe(bytes);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 
@@ -433,6 +446,7 @@ describe('memory add — a NEW target in an in-root symlinked type directory is 
     const real = join(repo, 'notes-real');
     aliasDirectory(repo, TYPE_DIR, real);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = (await op('memory', 'memoryAdd')({ root: repo, options: { type: 'note', title: 'X' } })) as CoreResult<unknown>;
 
@@ -441,6 +455,7 @@ describe('memory add — a NEW target in an in-root symlinked type directory is 
     expect(errorMessage(result)).toContain('symbolic link');
     expect(gitOut(repo, ['ls-files', '--others', '--exclude-standard'])).toBe('');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 
@@ -467,6 +482,7 @@ describe('content-carrying verbs refuse a staged version that differs from both 
       gitOut(repo, ['add', '--', DOC_PATH]);
       writeFileSync(join(repo, DOC_PATH), noteDoc(from, 'WORKTREE'), 'utf-8');
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = (await op('memory', operation)({ root: repo, positional: DOC_ID, ...params })) as CoreResult<unknown>;
 
@@ -477,6 +493,7 @@ describe('content-carrying verbs refuse a staged version that differs from both 
       expect(head(repo)).toBe(before);
       expect(gitOut(repo, ['show', `:0:${DOC_PATH}`])).toContain('STAGED');
       expect(readFileSync(join(repo, DOC_PATH), 'utf-8')).toContain('WORKTREE');
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('characterization: a staged version EQUAL to the working tree is committed as before', async () => {

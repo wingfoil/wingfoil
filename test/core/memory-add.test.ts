@@ -184,6 +184,7 @@ describe('CORE_MODULES memory.memoryAdd — P1.3 fit criteria (repo with a confi
 
   it('AC(b): an undefined type writes no file, exits 1, with the exact BDD message', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryAddFn()({ root: repo, options: { type: 'unicorn', title: 'X' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -193,10 +194,12 @@ describe('CORE_MODULES memory.memoryAdd — P1.3 fit criteria (repo with a confi
     // Nothing written, no commit.
     expect(head(repo)).toBe(before);
     expect(existsSync(join(repo, 'docs/memory/unicorn'))).toBe(false);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC(c): a missing --title throws a UsageError (exit 2), writing no file and making no commit', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     await expect(memoryAddFn()({ root: repo, options: { type: 'decision' } })).rejects.toBeInstanceOf(UsageError);
     try {
       await memoryAddFn()({ root: repo, options: { type: 'decision' } });
@@ -208,18 +211,21 @@ describe('CORE_MODULES memory.memoryAdd — P1.3 fit criteria (repo with a confi
     }
     expect(head(repo)).toBe(before);
     expect(existsSync(join(repo, 'docs/memory/decision'))).toBe(false);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('an id_pattern the title cannot satisfy is a logic error (ValidationError -> VALIDATION, exit 1), not a crash', async () => {
     // `nv-{version}` needs a `{version}` value `memory add` does not supply from a title — `generateId`
     // throws a ValidationError, which the op maps to a CoreResult.error (exit 1), never an escaped throw.
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryAddFn()({ root: repo, options: { type: 'needs-version', title: 'X' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('VALIDATION');
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('an unresolved path placeholder (a workflow-seeded type) is a StorageError -> IO (exit 1), writing nothing', async () => {

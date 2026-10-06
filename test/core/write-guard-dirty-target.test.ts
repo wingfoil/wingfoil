@@ -282,6 +282,7 @@ describe('directive create — refuses a target still at HEAD but absent from th
     commitAll(repo, 'fixture: author the delta body');
     rmSync(join(repo, DELTA)); // an uncommitted deletion — `documentExists` no longer sees the file
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await op('directive', 'directiveCreate')({ root: repo, options: { name: 'delta' } });
 
@@ -289,6 +290,7 @@ describe('directive create — refuses a target still at HEAD but absent from th
     expect(exitCodeForResult(result)).toBe(1);
     expect(errorMessage(result)).toContain(DELTA);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC4: on a clean tree it still creates, and the commit carries exactly the new file', async () => {
@@ -314,6 +316,7 @@ describe('directive remove — refuses rather than destroying an uncommitted edi
     expect(created.ok).toBe(true);
     dirty(repo, GAMMA, PRECIOUS);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await op('directive', 'directiveRemove')({ root: repo, positional: 'gamma' });
 
@@ -322,6 +325,7 @@ describe('directive remove — refuses rather than destroying an uncommitted edi
     expect(errorMessage(result)).toContain(GAMMA);
     expect(head(repo)).toBe(before);
     expect(readFile(repo, GAMMA)).toContain(PRECIOUS);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC4: on a clean tree it still removes, and the commit carries exactly that deletion', async () => {
@@ -350,6 +354,7 @@ describe('memory add — the target must be ABSENT, not merely unmodified (bug-0
     dirty(repo, NOTE_X, 'CONTENT the author wrote into note-x.');
     commitAll(repo, 'fixture: author note-x');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await op('memory', 'memoryAdd')({ root: repo, options: { type: 'note', title: 'X' } });
 
@@ -358,6 +363,7 @@ describe('memory add — the target must be ABSENT, not merely unmodified (bug-0
     expect(errorMessage(result)).toContain(NOTE_X);
     expect(head(repo)).toBe(before);
     expect(readFile(repo, NOTE_X)).toContain('CONTENT the author wrote into note-x.');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC2/AC3: refuses a target still at HEAD but deleted in the working tree — no "add" that removes lines', async () => {
@@ -365,17 +371,20 @@ describe('memory add — the target must be ABSENT, not merely unmodified (bug-0
     expect(first.ok).toBe(true);
     rmSync(join(repo, NOTE_X));
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await op('memory', 'memoryAdd')({ root: repo, options: { type: 'note', title: 'X' } });
 
     expect(result.ok).toBe(false);
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC2/AC3: refuses to clobber an UNTRACKED draft sitting at the target path', async () => {
     writeFixtureFile(repo, NOTE_X, 'a hand-started draft, never committed');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await op('memory', 'memoryAdd')({ root: repo, options: { type: 'note', title: 'X' } });
 
@@ -383,6 +392,7 @@ describe('memory add — the target must be ABSENT, not merely unmodified (bug-0
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
     expect(readFile(repo, NOTE_X)).toBe('a hand-started draft, never committed');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC4: adding a NEW element still works while ANOTHER element carries uncommitted modifications', async () => {
@@ -427,6 +437,7 @@ describe('init — scoped out on the wingfoil init path, guarded on the library 
     commitAll(repo, 'seed: a committed dna.yaml');
     writeFileSync(join(repo, DNA), '# hand-edited since, never committed\n', 'utf-8');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = initWingfoilStorage(repo);
 
@@ -435,6 +446,7 @@ describe('init — scoped out on the wingfoil init path, guarded on the library 
     expect(errorMessage(result)).toContain(DNA);
     expect(head(repo)).toBe(before);
     expect(readFile(repo, DNA)).toBe('# hand-edited since, never committed\n');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC4: `initWingfoilStorage` still works when every target it writes is absent', () => {

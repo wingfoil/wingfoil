@@ -237,6 +237,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     commitAll(repo, 'registry only — the scaffold is deliberately left untracked');
     writeFixtureFile(repo, SCAFFOLD_PATH, COMMITTED_SCAFFOLD);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await add(repo, 'adr', 'Probe');
 
@@ -247,6 +248,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     expect(result.error.message).toContain(SCAFFOLD_PATH);
     expect(result.error.message).toContain('is in no commit');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // AC4 — fail-closed, half one: nothing committed to read. Today the working-tree copy simply serves.
@@ -257,6 +259,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     writeFixtureFile(repo, MEMORY_YAML_PATH, MEMORY_YAML);
     writeFixtureFile(repo, SCAFFOLD_PATH, COMMITTED_SCAFFOLD);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await add(repo, 'adr', 'Probe');
 
@@ -267,6 +270,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     expect(result.error.message).toContain('cannot resolve the memory type registry');
     expect(result.error.message).toContain('is not committed at HEAD');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // AC4 — fail-closed, half two: a committed registry that does not validate, while the working-tree
@@ -343,6 +347,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     const NOTE_X = 'docs/memory/note/note-x.md';
     writeFixtureFile(repo, NOTE_X, 'a hand-started draft, never committed\n');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await add(repo, 'note', 'X');
 
@@ -352,6 +357,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     expect(result.error.message).toContain(NOTE_X);
     expect(head(repo)).toBe(before);
     expect(readFileSync(join(repo, NOTE_X), 'utf-8')).toBe('a hand-started draft, never committed\n');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC5: adding a NEW element still works while ANOTHER element carries uncommitted modifications', async () => {

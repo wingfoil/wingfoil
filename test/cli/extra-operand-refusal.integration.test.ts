@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import { CORE_MODULES } from '../../src/core';
 import { deriveVerb, enumerateOperations } from '../../src/core/registry';
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
 
@@ -78,6 +79,7 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
     const [first, second] = tasks;
     expect(statusOf(repo, first!.path)).toBe('pending');
     const before = snapshot(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = runCli(repo, ['memory', 'approve', first!.id, second!.id, '--reason', 'x']);
 
@@ -87,6 +89,7 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
     expect(snapshot(repo)).toBe(before);
     expect(statusOf(repo, first!.path)).toBe('pending');
     expect(statusOf(repo, second!.path)).toBe('pending');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('`workflow list x` and `directives list developer` exit 2 (bug-131)', () => {
@@ -104,6 +107,7 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
     '`wingfoil %s` with one operand too many',
     (name, args, count) => {
       const before = snapshot(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = runCli(repo, args);
 
@@ -111,6 +115,7 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
       expect(result.stderr).toContain(`wingfoil ${name} takes `);
       expect(result.stderr).toContain(`(got ${count} positional${count === 1 ? '' : 's'})`);
       expect(snapshot(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     },
   );
 
@@ -120,12 +125,14 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
   // `P5.1.4-cli-ux.feature`'s "a bootstrap command refuses an operand in the same words" is this case.
   it.each([['init'], ['mcp']] as const)('`wingfoil %s extra` gives the shared refusal (bug-179)', (name) => {
     const before = snapshot(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = runCli(repo, [name, 'extra']);
 
     expect(result.status).toBe(2);
     expect(result.stderr).toBe(`error: wingfoil ${name} takes no positional (got 1 positional)\n`);
     expect(snapshot(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('`dna set`\'s migration message is unchanged (characterization)', () => {

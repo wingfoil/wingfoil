@@ -33,6 +33,7 @@ import { readPathAtRev } from '../../src/storage/commit';
 import { ValidationError } from '../../src/validation';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /** This repository's root: its `.wingfoil/` is the configuration WingFoil develops itself with. */
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -151,6 +152,7 @@ describe('dl-123 (A) — the committed bug machine declines a triaged or planned
 
   it.each(DECLINE_CASES)('`memory approve` from `$state` is still refused, because the state is `waiting` as well as gated', async ({ state, id }) => {
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
     const original = readFileSync(join(repo, bugPath(id)), 'utf-8');
     const result = await memoryOperation('memoryApprove')({
       root: repo,
@@ -167,6 +169,7 @@ describe('dl-123 (A) — the committed bug machine declines a triaged or planned
     );
     expect(readFileSync(join(repo, bugPath(id)), 'utf-8')).toBe(original);
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 

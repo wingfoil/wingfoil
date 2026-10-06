@@ -214,6 +214,7 @@ describe('CORE_MODULES memory.memoryDeprecate — P1.9 fit criteria', () => {
     expect(first.ok).toBe(true);
     const afterFirst = head(repo);
     const before = readFileSync(join(repo, 'docs/memory/decisions/decision-12.md'), 'utf-8');
+    const unchanged = snapshotPersistence(repo);
 
     const result = await memoryDeprecateFn()({ root: repo, positional: 'decision-12', options: { reason: 'x' } });
     expect(result.ok).toBe(false);
@@ -223,6 +224,7 @@ describe('CORE_MODULES memory.memoryDeprecate — P1.9 fit criteria', () => {
     expect(readFileSync(join(repo, 'docs/memory/decisions/decision-12.md'), 'utf-8')).toBe(before);
     expect(head(repo)).toBe(afterFirst);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('spec-010: `rejection_reason` (and every other field) is left untouched — `status` is the only write', async () => {

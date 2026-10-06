@@ -30,6 +30,7 @@ import { join } from 'node:path';
 
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const ROLES_PATH = '.wingfoil/roles.yaml';
 const GHOST_PATH = '.wingfoil/directives/custom/ghost.md';
@@ -68,6 +69,7 @@ describe('the CLI resolves the directive inventory and its references at HEAD (b
       'utf-8',
     );
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
 
     const run = wingfoil(repo, 'directive', 'assign', '--directive', 'ghost', '--role', 'developer');
 
@@ -75,6 +77,7 @@ describe('the CLI resolves the directive inventory and its references at HEAD (b
     expect(run.stderr.trim()).toBe('error: unknown directive: ghost');
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(gitOut(repo, ['show', `HEAD:${ROLES_PATH}`])).not.toContain('ghost');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('assign: committing the directive first makes the very same command succeed', () => {
@@ -105,6 +108,7 @@ describe('the CLI resolves the directive inventory and its references at HEAD (b
       'utf-8',
     );
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
 
     const run = wingfoil(repo, 'directive', 'remove', 'determinism');
 
@@ -114,6 +118,7 @@ describe('the CLI resolves the directive inventory and its references at HEAD (b
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     // The committed record still binds it — the invariant REQ-SEC-07 (b) exists to keep.
     expect(gitOut(repo, ['show', `HEAD:${ROLES_PATH}`])).toContain('- determinism');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('remove: committing the unbinding first makes the very same command succeed', () => {

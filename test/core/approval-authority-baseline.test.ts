@@ -163,6 +163,7 @@ describe('approval authority is resolved from the committed dna.yaml (bug-079, R
     repo = seedRepo(NO_MEMBERS_DNA);
     writeUncommittedDna(repo, APPROVER_DNA);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await memoryFn('memoryReject')({
       root: repo,
@@ -175,6 +176,7 @@ describe('approval authority is resolved from the committed dna.yaml (bug-079, R
     expect(exitCodeForResult(result)).toBe(1);
     expect(result.error.message).toMatch(/^user not authorized to approve type 'adr'/);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // M1 (design §) — red-first: dna.yaml need not be modified; it need not be TRACKED.
@@ -186,6 +188,7 @@ describe('approval authority is resolved from the committed dna.yaml (bug-079, R
     writeFileSync(join(repo, DNA_PATH), APPROVER_DNA, 'utf-8');
     expect(gitOut(repo, ['status', '--porcelain', '--', DNA_PATH])).toBe(`?? ${DNA_PATH}`);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await memoryFn('memoryApprove')({ root: repo, positional: 'adr-001', options: { reason: 'r' } });
 
@@ -195,6 +198,7 @@ describe('approval authority is resolved from the committed dna.yaml (bug-079, R
     expect(result.error.message).toContain('cannot resolve approval authority');
     expect(result.error.message).toContain(DNA_PATH);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // Red-first: a committed baseline that cannot be parsed fails CLOSED, even though the working
@@ -203,6 +207,7 @@ describe('approval authority is resolved from the committed dna.yaml (bug-079, R
     repo = seedRepo('version: 1.1\nthis is: [not, a, dna file\n');
     writeUncommittedDna(repo, APPROVER_DNA);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await memoryFn('memoryApprove')({ root: repo, positional: 'adr-001', options: { reason: 'r' } });
 
@@ -211,6 +216,7 @@ describe('approval authority is resolved from the committed dna.yaml (bug-079, R
     expect(exitCodeForResult(result)).toBe(1);
     expect(result.error.message).toContain('cannot resolve approval authority');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // M2 (design §) — red-first, and a deliberate BEHAVIOUR CHANGE: today the verb refuses here.

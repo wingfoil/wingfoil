@@ -107,6 +107,7 @@ describe('initWingfoilStorage (P1.1, REQ-SYS-01)', () => {
       writeFixtureFile(repo, DNA, HAND_AUTHORED);
       commitAll(repo, 'seed: a committed, hand-authored dna.yaml');
       const before = head();
+      const unchanged = snapshotPersistence(repo);
 
       const result = initWingfoilStorage(repo);
 
@@ -115,6 +116,7 @@ describe('initWingfoilStorage (P1.1, REQ-SYS-01)', () => {
       expect(readFileSync(join(repo, DNA), 'utf-8')).toBe(HAND_AUTHORED);
       expect(head()).toBe(before);
       expect(git(repo, ['status', '--porcelain']).trim()).toBe('');
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('refuses a project initialized by its own earlier run — the second call commits nothing', () => {

@@ -27,6 +27,7 @@ import { UsageError } from '../../src/core/usage-error';
 import { renderCustomDirective } from '../../src/directives/create';
 import { deriveMcpToolName } from '../../src/mcp/registrar';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const ROLES = '.wingfoil/roles.yaml';
 const CUSTOM_DIR = '.wingfoil/directives/custom';
@@ -167,6 +168,7 @@ describe('CORE_MODULES directive.directiveRemove — P3.3 scenarios (initialized
     bind(repo, 'developer', 'legacy-rule');
     const file = join(repo, CUSTOM_DIR, 'legacy-rule.md');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await directiveRemoveFn()({ root: repo, positional: 'legacy-rule' });
 
@@ -183,6 +185,7 @@ describe('CORE_MODULES directive.directiveRemove — P3.3 scenarios (initialized
     expect(existsSync(file)).toBe(true);
     expect(head(repo)).toBe(before);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // BDD Scenario 3: "Error - removing a built-in directive" (REQ-SEC-07 clause (a), task-042).
@@ -191,6 +194,7 @@ describe('CORE_MODULES directive.directiveRemove — P3.3 scenarios (initialized
     // Guard the premise: task-057 really does ship this built-in into a fresh project.
     expect(existsSync(file)).toBe(true);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const bytes = readFileSync(file, 'utf-8');
 
     const result = await directiveRemoveFn()({ root: repo, positional: 'testing' });
@@ -206,6 +210,7 @@ describe('CORE_MODULES directive.directiveRemove — P3.3 scenarios (initialized
     expect(existsSync(file)).toBe(true);
     expect(readFileSync(file, 'utf-8')).toBe(bytes);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('refuses every one of the six shipped built-ins by name (task-057)', async () => {
@@ -220,12 +225,14 @@ describe('CORE_MODULES directive.directiveRemove — P3.3 scenarios (initialized
 
   it('an unknown directive name is NOT_FOUND — exit 1, nothing touched', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await directiveRemoveFn()({ root: repo, positional: 'ghost' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toEqual({ code: 'NOT_FOUND', message: 'unknown directive: ghost' });
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // task-143 review finding 3: the loader's skipped-entry warnings ride the refusal's `details` (the
@@ -257,6 +264,7 @@ describe('CORE_MODULES directive.directiveRemove — P3.3 scenarios (initialized
 
   it('a traversal-shaped name resolves to no directive — refused before any path is built', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     for (const name of ['../../etc/passwd', 'custom/legacy-rule', '..', 'built-in/testing']) {
       const result = await directiveRemoveFn()({ root: repo, positional: name });
       expect(result.ok).toBe(false);
@@ -266,6 +274,7 @@ describe('CORE_MODULES directive.directiveRemove — P3.3 scenarios (initialized
     }
     expect(head(repo)).toBe(before);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it.each([['an omitted', undefined], ['a blank', '   ']])(
@@ -394,6 +403,7 @@ describe('CORE_MODULES directive.directiveRemove — dl-037 / spec-012 §5.1: re
     try {
       addCustomDirective(fresh, 'security');
       const before = head(fresh);
+      const unchanged = snapshotPersistence(repo);
       const result = await directiveRemoveFn()({ root: fresh, positional: 'security' });
       expect(result.ok).toBe(false);
       if (result.ok) return;
@@ -403,6 +413,7 @@ describe('CORE_MODULES directive.directiveRemove — dl-037 / spec-012 §5.1: re
       });
       expect(existsSync(join(fresh, CUSTOM_DIR, 'security.md'))).toBe(true);
       expect(head(fresh)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     } finally {
       removeTempDir(fresh);
     }

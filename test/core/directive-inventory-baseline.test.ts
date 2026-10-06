@@ -39,6 +39,7 @@ import { loadDirectivesAtHead, loadRolesYamlAtHead } from '../../src/core/loader
 import type { CoreFn } from '../../src/core/registry';
 import * as storage from '../../src/storage';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const DNA_PATH = '.wingfoil/dna.yaml';
 const ROLES_PATH = '.wingfoil/roles.yaml';
@@ -157,6 +158,7 @@ describe('directive assign resolves the directive inventory at HEAD (bug-086, dl
     repo = seedRepo();
     writeFixtureFile(repo, '.wingfoil/directives/custom/ghost.md', directiveMd('ghost', 'custom'));
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await assign(repo, 'ghost');
 
@@ -166,6 +168,7 @@ describe('directive assign resolves the directive inventory at HEAD (bug-086, dl
     expect(result.error.message).toContain('unknown directive: ghost');
     expect(head(repo)).toBe(before);
     expect(gitOut(repo, ['show', `HEAD:${ROLES_PATH}`])).not.toContain('ghost');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC3/AC6: a directive whose id exists only in the WORKING TREE copy of a committed file is refused', async () => {
@@ -200,6 +203,7 @@ describe('directive assign resolves the directive inventory at HEAD (bug-086, dl
     // cannot answer must not fall back to the file on disk, which is the defect itself.
     writeFileSync(join(repo, SPARE_PATH), directiveMd('spare', 'custom'), 'utf-8');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await assign(repo, 'testing', 'architect');
 
@@ -208,6 +212,7 @@ describe('directive assign resolves the directive inventory at HEAD (bug-086, dl
     expect(exitCodeForResult(result)).toBe(1);
     expect(result.error.message).toContain('HEAD');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC5: assigning a COMMITTED directive to a COMMITTED role still works, in one scoped commit', async () => {
@@ -241,12 +246,14 @@ describe('directive assign resolves the directive inventory at HEAD (bug-086, dl
     repo = seedRepo();
     writeFileSync(join(repo, DNA_PATH), DNA_YAML.replace('    - name: approver\n', '    - name: approver\n    - name: qa\n'), 'utf-8');
 
+    const unchanged = snapshotPersistence(repo);
     const result = await assign(repo, 'testing', 'qa');
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(exitCodeForResult(result)).toBe(1);
     expect(result.error.message.startsWith("unknown role 'qa' (not defined in dna.yaml)")).toBe(true);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC5: an unknown directive id is still reported with P3.2 Sc.3 wording, verbatim', async () => {
@@ -279,6 +286,7 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
     repo = seedRepo();
     editRolesInWorkingTreeOnly(repo, ROLES_WITHOUT_TESTING);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await remove(repo, 'testing');
 
@@ -289,6 +297,7 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
     expect(existsSync(join(repo, TESTING_PATH))).toBe(true);
     expect(head(repo)).toBe(before);
     expect(gitOut(repo, ['show', `HEAD:${ROLES_PATH}`])).toContain('testing');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it("AC3/AC6: the same holds for a `global` binding withdrawn only in the working tree", async () => {
@@ -297,6 +306,7 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
     repo = seedRepo();
     editRolesInWorkingTreeOnly(repo, ROLES_WITHOUT_GLOBAL_RULE);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await remove(repo, 'global-rule');
 
@@ -308,6 +318,7 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
     );
     expect(existsSync(join(repo, GLOBAL_RULE_PATH))).toBe(true);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC5: removing a directive whose reference was removed AND COMMITTED still works, in one scoped commit', async () => {
@@ -354,6 +365,7 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
     repo = seedRepo({ [ROLES_PATH]: 'version: 1\nassignments: "not a mapping"\n' });
     writeFileSync(join(repo, ROLES_PATH), ROLES_YAML, 'utf-8');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await remove(repo, 'spare');
 
@@ -363,6 +375,7 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
     expect(result.error.message).toContain('HEAD');
     expect(existsSync(join(repo, SPARE_PATH))).toBe(true);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // --- AC4: the directive file itself uncommitted ------------------------------------------------
@@ -375,6 +388,7 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
     repo = seedRepo();
     writeFixtureFile(repo, '.wingfoil/directives/custom/ghost.md', directiveMd('ghost', 'custom'));
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await remove(repo, 'ghost');
 
@@ -385,6 +399,7 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
     expect(result.error.message).toContain("[git status '??']");
     expect(existsSync(join(repo, '.wingfoil/directives/custom/ghost.md'))).toBe(true);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC4: a COMMITTED directive carrying an uncommitted edit is not removable either', async () => {

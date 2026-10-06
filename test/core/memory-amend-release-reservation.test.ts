@@ -28,6 +28,7 @@ import { amendReservedFields } from '../../src/core/memory-amend';
 import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const TEST_EMAIL = 'wf-test@example.invalid';
 const TEST_NAME = 'WingFoil Test';
@@ -149,6 +150,7 @@ describe('memory amend — `release` is reserved only where the committed scaffo
   it.each(STAMPED)('a %s still refuses a change to `release` (exit 1, naming the field)', async (type) => {
     const edited = editLine(type, `${type}-1`, 'release: "v0.2"', 'release: "v0.3"');
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
     const result = await amend()({ root: repo, positional: `${type}-1`, options: { reason: 'r' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -156,6 +158,7 @@ describe('memory amend — `release` is reserved only where the committed scaffo
     expect(result.error.message).toContain("frontmatter field 'release'");
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(readFileSync(join(repo, pathOf(type, `${type}-1`)), 'utf-8')).toBe(edited);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a type whose scaffold is not committed keeps `release` reserved (fail safe)', async () => {

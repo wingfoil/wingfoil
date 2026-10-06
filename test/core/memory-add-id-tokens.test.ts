@@ -229,6 +229,7 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
 
     it('a value outside the id character class is a validation error naming the token (exit 1)', async () => {
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await memoryAddFn()({
         root: repo,
         options: { type: 'release', title: 'X', set: ['kind=patch', 'version=V0.2', 'release-line=v1'] },
@@ -238,10 +239,12 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
       expect(result.error.code).toBe('VALIDATION');
       expect(result.error.message).toBe('value for token {version} is not a valid [a-z0-9-.] piece: "V0.2"');
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('a --set name the type has no token for is refused (exit 1), naming the type', async () => {
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await memoryAddFn()({
         root: repo,
         options: { type: 'release-line', title: 'X', set: ['version=v2', 'pillar=P1'] },
@@ -252,6 +255,7 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
       expect(result.error.message).toBe("--set pillar: memory type 'release-line' has no token {pillar} in its id_pattern or path");
       expect(exitCodeForResult(result)).toBe(1);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('field tokens materialize BEFORE {n}: the counter sees the fully-materialized prefix (spec-001 order)', async () => {
@@ -335,8 +339,10 @@ describe('memory add — id_pattern tokens sourced from --set (task-110, dl-107 
       ],
     ])('--set %j → %s', async (set, message) => {
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       expect(await usageError(repo, { type: 'release-line', title: 'X', set })).toBe(message);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 });

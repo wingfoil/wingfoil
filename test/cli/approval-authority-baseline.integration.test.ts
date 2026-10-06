@@ -27,6 +27,7 @@ import { join } from 'node:path';
 
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const DNA_PATH = '.wingfoil/dna.yaml';
 
@@ -70,6 +71,7 @@ describe('memory approve through the real CLI — an uncommitted `dna.yaml` gran
     grantApproverInWorkingTree(repo);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe(`M ${DNA_PATH}`);
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
 
     const run = wingfoil(repo, 'memory', 'approve', 'adr-001-repro-target', '--reason', 'authority from an uncommitted file');
 
@@ -81,6 +83,7 @@ describe('memory approve through the real CLI — an uncommitted `dna.yaml` gran
     // Nothing happened: no commit, and the committed record still shows nobody is an approver.
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(gitOut(repo, ['show', `HEAD:${DNA_PATH}`])).toContain('members: []');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // AC4 — the bootstrap flow every new user hits, driven the way a user drives it.

@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import { CORE_MODULES } from '../../src/core';
 import { deriveVerb, enumerateOperations } from '../../src/core/registry';
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
 
@@ -74,6 +75,7 @@ describe('task-179 — one shape for missing-operand and unknown-command refusal
       '`wingfoil %s` with no operand',
       (name, operand, usage) => {
         const before = snapshot(repo);
+        const unchanged = snapshotPersistence(repo);
 
         const result = runCli(repo, name.split(' '));
 
@@ -81,6 +83,7 @@ describe('task-179 — one shape for missing-operand and unknown-command refusal
         expect(result.stderr).toBe(`error: missing required argument: <${operand}>\nhint: usage: ${usage}\n`);
         expect(result.stdout).toBe('');
         expect(snapshot(repo)).toBe(before);
+        assertPersistenceUnchanged(repo, unchanged);
       },
     );
 
@@ -167,9 +170,11 @@ describe('task-179 — one shape for missing-operand and unknown-command refusal
 
     it('`dna set ..language --value python` still reports the malformed path (P2.1-dna-set.feature)', () => {
       const before = snapshot(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = runCli(repo, ['dna', 'set', '..language', '--value', 'python']);
       expect([result.status, result.stderr]).toEqual([2, "error: invalid key path: '..language'\n"]);
       expect(snapshot(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 

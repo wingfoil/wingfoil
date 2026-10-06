@@ -207,13 +207,9 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'memory.reject',
       'memory.submit',
     ]);
-    // No mutating op is ALSO a Resource — derived from the registry, so the list cannot fall behind it.
-    const mutatingUris = CORE_MODULES.flatMap((module) =>
-      Object.values(module.operations)
-        .filter((operation) => operation.mutates)
-        .map((operation) => `wingfoil://${module.name}/${deriveVerb(module.name, operation.name)}`),
-    );
-    expect(mutatingUris).toHaveLength(tools.length);
-    for (const uri of mutatingUris) expect(resources.map((r) => r.uri)).not.toContain(uri);
+    // No mutating op is ALSO a Resource: the exact Resources list above already excludes them. The
+    // cross-check below ties the Tools count to the registry's `mutates: true` count.
+    const mutatingCount = CORE_MODULES.flatMap((module) => Object.values(module.operations)).filter((operation) => operation.mutates).length;
+    expect(tools).toHaveLength(mutatingCount);
   });
 });

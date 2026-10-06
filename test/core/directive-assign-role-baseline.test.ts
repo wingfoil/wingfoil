@@ -25,6 +25,7 @@ import * as loaders from '../../src/core/loaders';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const DNA_PATH = '.wingfoil/dna.yaml';
 const ROLES_PATH = '.wingfoil/roles.yaml';
@@ -110,6 +111,7 @@ describe('directive assign validates `--role` at HEAD (bug-082, dl-080 (B))', ()
     writeFileSync(join(repo, DNA_PATH), DNA_WITH_EXTRA_ROLE, 'utf-8');
     expect(gitOut(repo, ['status', '--porcelain'])).toBe(`M ${DNA_PATH}`);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const rolesBefore = readFileSync(join(repo, ROLES_PATH), 'utf-8');
 
     const result = await assign(repo, 'FABRICATED-ROLE');
@@ -122,6 +124,7 @@ describe('directive assign validates `--role` at HEAD (bug-082, dl-080 (B))', ()
     expect(result.error.message).toContain(DNA_PATH);
     expect(head(repo)).toBe(before);
     expect(readFileSync(join(repo, ROLES_PATH), 'utf-8')).toBe(rolesBefore);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // AC4 — the ordinary flow under (B), and the one `dl-080` knowingly costs a step: commit, then assign.
@@ -170,6 +173,7 @@ describe('directive assign validates `--role` at HEAD (bug-082, dl-080 (B))', ()
     git(repo, ['rm', '--cached', '--quiet', '--', DNA_PATH]);
     git(repo, ['commit', '--quiet', '-m', 'untrack the DNA, keep it on disk']);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await assign(repo, 'developer');
 
@@ -178,6 +182,7 @@ describe('directive assign validates `--role` at HEAD (bug-082, dl-080 (B))', ()
     expect(exitCodeForResult(result)).toBe(1);
     expect(result.error.message).toContain(DNA_PATH);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC4: a committed `dna.yaml` that does not validate is refused even though the working-tree copy is fine', async () => {

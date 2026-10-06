@@ -16,6 +16,7 @@ import { load } from 'js-yaml';
 
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const ROLES_PATH = '.wingfoil/roles.yaml';
 
@@ -51,6 +52,7 @@ describe('`wingfoil directive assign` — refuse the whole-file rewrite unless -
   // P3.2 "Error - roles.yaml cannot be edited in place".
   it('AC1: without --force a comment-free file the editor cannot edit is refused at exit 1; file and HEAD unchanged', () => {
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
     const run = wingfoil(repo, 'directive', 'assign', '--directive', 'testing', '--role', 'developer');
 
     expect(run.status).toBe(1);
@@ -59,6 +61,7 @@ describe('`wingfoil directive assign` — refuse the whole-file rewrite unless -
     expect(git(repo, ['status', '--porcelain'])).toBe('');
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(readFileSync(join(repo, ROLES_PATH), 'utf-8')).toBe(FLOW_ROLES);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // P3.2 "Rewrite roles.yaml as a whole file with --force".

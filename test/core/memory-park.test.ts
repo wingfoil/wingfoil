@@ -156,6 +156,7 @@ describe('CORE_MODULES memory.memoryPark (task-180, dl-110 P1 (a))', () => {
     'a missing or blank --reason (%p) is a usage error, exit 2, nothing written',
     async (options) => {
       const before = gitOut(repo, ['rev-parse', 'HEAD']);
+      const unchanged = snapshotPersistence(repo);
       let thrown: unknown;
       try {
         await park(repo, 'task-001', options as Record<string, string> | undefined);
@@ -165,6 +166,7 @@ describe('CORE_MODULES memory.memoryPark (task-180, dl-110 P1 (a))', () => {
       expect(exitCodeForThrow(thrown).exitCode).toBe(2);
       expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
       expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+      assertPersistenceUnchanged(repo, unchanged);
     },
   );
 
@@ -173,12 +175,14 @@ describe('CORE_MODULES memory.memoryPark (task-180, dl-110 P1 (a))', () => {
     const path = join(repo, 'docs/memory/tasks/task-001.md');
     const edited = readFileSync(path, 'utf-8') + '\nAn unrelated paragraph.\n';
     writeFileSync(path, edited);
+    const unchanged = snapshotPersistence(repo);
     const result = await park(repo, 'task-001', { reason: 'not now' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(exitCodeForResult(result)).toBe(1);
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(readFileSync(path, 'utf-8')).toBe(edited);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a missing <id> is a usage error, exit 2', async () => {

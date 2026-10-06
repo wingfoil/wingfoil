@@ -193,6 +193,7 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
 
   it('P1.7 sc.2: omitting `--reason` exits 2 with the exact REQ-SEC-04 message and changes nothing', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const original = readFileSync(join(repo, 'docs/memory/v0.2/task-101.md'), 'utf-8');
     for (const options of [undefined, {}, { format: 'json' }]) {
       await expect(memoryApproveFn()({ root: repo, positional: 'task-101', options })).rejects.toBeInstanceOf(UsageError);
@@ -205,12 +206,14 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-101.md'), 'utf-8')).toBe(original);
     expect(head(repo)).toBe(before);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('P1.7 sc.3: a caller holding no `approver` role exits 1 with the REQ-SEC-03 message, state unchanged', async () => {
     writeFixtureFile(repo, '.wingfoil/dna.yaml', REVIEWER_ONLY_DNA);
     commitAll(repo, 'reviewer-only dna');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const original = readFileSync(join(repo, 'docs/memory/v0.2/task-101.md'), 'utf-8');
 
     const result = await memoryApproveFn()({ root: repo, positional: 'task-101', options: { reason: 'ok' } });
@@ -222,6 +225,7 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-101.md'), 'utf-8')).toBe(original);
     expect(head(repo)).toBe(before);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('P1.7 sc.3: the refusal names the document\'s OWN type, not a fixed one', async () => {
@@ -252,6 +256,7 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
 
   it('a non-existent document exits 1 with `document not found: task-999`', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryApproveFn()({ root: repo, positional: 'task-999', options: { reason: 'ok' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -259,6 +264,7 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
     expect(result.error.message).toBe('document not found: task-999');
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a missing or blank `<id>` is a usage error (exit 2) — spec-008 §5/§7', async () => {

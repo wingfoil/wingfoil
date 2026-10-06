@@ -110,17 +110,20 @@ describe('CORE_MODULES dna.dnaSet — P2.1 fit criteria (repo with a configured 
     expect(firstResult.ok).toBe(true);
     const afterFirst = dnaText(repo);
     const headAfterFirst = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const secondResult = await dnaSetFn()({ root: repo, positionals: ['project.license'], options: { value: 'MIT' } });
     expect(secondResult.ok).toBe(true);
     if (secondResult.ok) expect(secondResult.commit).toBeUndefined(); // no-op: no new commit
     expect(dnaText(repo)).toBe(afterFirst); // re-serialization is stable (REQ-SYS-07)
     expect(head(repo)).toBe(headAfterFirst);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC(c): an invalid key path throws a UsageError (exit 2), leaving the file unchanged and making no commit', async () => {
     const before = head(repo);
     const beforeText = dnaText(repo);
+    const unchanged = snapshotPersistence(repo);
 
     await expect(dnaSetFn()({ root: repo, positionals: ['..language'], options: { value: 'python' } })).rejects.toBeInstanceOf(
       UsageError,
@@ -136,11 +139,13 @@ describe('CORE_MODULES dna.dnaSet — P2.1 fit criteria (repo with a configured 
 
     expect(head(repo)).toBe(before);
     expect(dnaText(repo)).toBe(beforeText);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a value that fails the DnaYaml schema is a logic error (CoreResult.error VALIDATION -> exit 1), file unchanged', async () => {
     const before = head(repo);
     const beforeText = dnaText(repo);
+    const unchanged = snapshotPersistence(repo);
 
     // `version` must be a positive number; a non-numeric string re-parses as a string and fails Zod.
     const result = await dnaSetFn()({ root: repo, positionals: ['version'], options: { value: 'not-a-number' } });
@@ -151,14 +156,17 @@ describe('CORE_MODULES dna.dnaSet — P2.1 fit criteria (repo with a configured 
 
     expect(head(repo)).toBe(before);
     expect(dnaText(repo)).toBe(beforeText);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a missing value is a usage error (exit 2), file unchanged', async () => {
     const beforeText = dnaText(repo);
+    const unchanged = snapshotPersistence(repo);
     await expect(dnaSetFn()({ root: repo, positionals: ['project.license'] })).rejects.toBeInstanceOf(
       UsageError,
     );
     expect(dnaText(repo)).toBe(beforeText);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 
@@ -178,6 +186,7 @@ describe('CORE_MODULES dna.dnaSet — bug-084: an unschema\'d path is refused, n
   it("the measured reproduction — `dna set tech_stack.cli.framework Commander` — now fails instead of committing", async () => {
     const before = head(repo);
     const beforeText = dnaText(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await dnaSetFn()({ root: repo, positionals: ['tech_stack.cli.framework'], options: { value: 'Commander' } });
     expect(result.ok).toBe(false);
@@ -190,14 +199,17 @@ describe('CORE_MODULES dna.dnaSet — bug-084: an unschema\'d path is refused, n
     expect(head(repo)).toBe(before);
     expect(dnaText(repo)).toBe(beforeText);
     expect(dnaText(repo)).not.toContain('cli:');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('the general case — `dna set nonsense.at.any.depth --value value` — is refused at exit 1 too', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await dnaSetFn()({ root: repo, positionals: ['nonsense.at.any.depth'], options: { value: 'value' } });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('`dna set` on an array-valued field is refused by NAME rather than by a type mismatch (bug-083)', async () => {

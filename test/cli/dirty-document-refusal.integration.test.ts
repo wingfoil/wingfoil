@@ -26,6 +26,7 @@ import { join } from 'node:path';
 
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /** Spawn the real published entry point; captures stderr on EVERY run, including a 0-exit one. */
 function wingfoil(cwd: string, ...args: readonly string[]): SpawnedRun {
@@ -73,6 +74,7 @@ INJECTED BODY PARAGRAPH — never mentioned by any commit subject.
       'utf-8',
     );
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
 
     const run = wingfoil(repo, 'memory', 'approve', 'adr-001-repro-target', '--reason', 'state change only, allegedly');
 
@@ -89,6 +91,7 @@ INJECTED BODY PARAGRAPH — never mentioned by any commit subject.
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(readFileSync(absolute, 'utf-8')).toContain('status: pending');
     expect(gitOut(repo, ['status', '--porcelain', '--', DOC])).toBe(`M ${DOC}`);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC3: after committing those edits, the same `approve` succeeds and its commit differs from its parent by the status line alone', () => {

@@ -14,6 +14,7 @@ import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const UPGRADE = 'this file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil';
 
@@ -77,6 +78,7 @@ describe('writers refuse a newer format and never write one', () => {
   it.each([['2'], ['1.5']])('`dna set format --value %s` is refused: the edit would produce a file this build cannot read', async (value) => {
     const text = readFileSync(join(repo, '.wingfoil/dna.yaml'), 'utf-8');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = (await operation('dna', 'dnaSet')({ root: repo, positionals: ['format'], options: { value } })) as CoreResult<unknown>;
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -84,5 +86,6 @@ describe('writers refuse a newer format and never write one', () => {
     expect(result.error.message).toMatch(/format/);
     expect(readFileSync(join(repo, '.wingfoil/dna.yaml'), 'utf-8')).toBe(text);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });

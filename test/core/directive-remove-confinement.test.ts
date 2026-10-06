@@ -28,6 +28,7 @@ import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { renderCustomDirective } from '../../src/directives/create';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const CUSTOM_DIR = '.wingfoil/directives/custom';
 
@@ -90,9 +91,11 @@ describe('directive remove — confinement to the project root (REQ-SEC-06, bug-
     // AC2 + AC5: resolve, compare, refuse — all before any filesystem mutation.
     it('does not delete the outside file', async () => {
       const before = readFileSync(outsideFile, 'utf-8');
+      const unchanged = snapshotPersistence(repo);
       await call(repo, 'legacy-rule');
       expect(existsSync(outsideFile)).toBe(true);
       expect(readFileSync(outsideFile, 'utf-8')).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     // AC3: a mapped `CoreError` at exit 1, naming the path, saying it resolves outside the project.
@@ -111,8 +114,10 @@ describe('directive remove — confinement to the project root (REQ-SEC-06, bug-
     // AC2: a refusal writes no history either — the verb's whole contract is one commit or none.
     it('creates no commit', async () => {
       const sha = head(repo);
+      const unchanged = snapshotPersistence(repo);
       await call(repo, 'legacy-rule');
       expect(head(repo)).toBe(sha);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 

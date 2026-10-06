@@ -190,12 +190,14 @@ describe('Memory transition verbs — the commit carries the declared change and
   it('AC2: `approve` refuses an uncommitted FRONTMATTER field it does not own, naming the field', async () => {
     dirtyFrontmatter(repo, TASK_101, 'tags: ["INJECTED-BY-A-DIRTY-TREE"]');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await memoryOp('memoryApprove')({ root: repo, positional: 'task-101', options: { reason: 'state change only, allegedly' } });
 
     expect(result.ok).toBe(false);
     expect(errorMessage(result)).toContain("frontmatter field 'tags'");
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC2: `approve` refuses when `status` ITSELF was hand-edited but never committed — the subject would declare a transition history does not support', async () => {
@@ -203,12 +205,14 @@ describe('Memory transition verbs — the commit carries the declared change and
     // emits `[in-review → approved]` while the committed diff reads `pending → approved`.
     writeFileSync(join(repo, TASK_101), taskDoc({ id: 'task-101', status: 'in-review' }), 'utf-8');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await memoryOp('memoryApprove')({ root: repo, positional: 'task-101', options: { reason: 'the from-state came from the worktree' } });
 
     expect(result.ok).toBe(false);
     expect(errorMessage(result)).toContain("frontmatter field 'status'");
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC2: `approve` refuses when the INDEX holds a version of the document the worktree no longer has', async () => {
@@ -216,6 +220,7 @@ describe('Memory transition verbs — the commit carries the declared change and
     execFileSync('git', ['-C', repo, 'add', '--', TASK_101], { encoding: 'utf-8' });
     dirtyBody(repo, TASK_101, 'WORKTREE-ONLY LINE (never staged by the user)');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await memoryOp('memoryApprove')({ root: repo, positional: 'task-101', options: { reason: 'measuring the index' } });
 
@@ -224,11 +229,13 @@ describe('Memory transition verbs — the commit carries the declared change and
     expect(head(repo)).toBe(before);
     // The user's staged version is still staged — it was not silently discarded by a `git add`.
     expect(gitOut(repo, ['show', `:0:${TASK_101}`])).toContain('STAGED-VERSION-ONLY LINE');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC2: `approve` refuses a document that is not tracked at HEAD at all', async () => {
     writeFixtureFile(repo, 'docs/memory/v0.2/task-777.md', taskDoc({ id: 'task-777', status: 'pending' }));
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await memoryOp('memoryApprove')({ root: repo, positional: 'task-777', options: { reason: 'never committed' } });
 
@@ -237,28 +244,33 @@ describe('Memory transition verbs — the commit carries the declared change and
     expect(errorMessage(result)).toContain('docs/memory/v0.2/task-777.md is not committed at HEAD');
     expect(errorMessage(result)).toContain('memory add');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC5: `reject` refuses a dirty document too — the guard is on the write path, not on one verb', async () => {
     dirtyBody(repo, TASK_101, 'INJECTED BODY PARAGRAPH.');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await memoryOp('memoryReject')({ root: repo, positional: 'task-101', options: { reason: 'needs work' } });
 
     expect(result.ok).toBe(false);
     expect(errorMessage(result)).toContain('the body');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC5: `deprecate` refuses a dirty document too', async () => {
     dirtyFrontmatter(repo, TASK_101, 'tags: ["INJECTED-BY-A-DIRTY-TREE"]');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await memoryOp('memoryDeprecate')({ root: repo, positional: 'task-101', options: { reason: 'retiring' } });
 
     expect(result.ok).toBe(false);
     expect(errorMessage(result)).toContain("frontmatter field 'tags'");
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // --- AC3: the happy paths, asserted against the PARENT COMMIT ---------------------------------

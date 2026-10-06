@@ -21,6 +21,7 @@ import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const DNA_PATH = '.wingfoil/dna.yaml';
 
@@ -87,6 +88,7 @@ describe('dna verbs — the whole-file rewrite is refused unless --force (task-1
 
     it('without --force: CONFLICT (exit 1), the file and HEAD unchanged, no commit', async () => {
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await op('dnaAdd')({ root: repo, positionals: ['paths.tests'], options: { value: 'test/' } });
 
       expect(result.ok).toBe(false);
@@ -95,6 +97,7 @@ describe('dna verbs — the whole-file rewrite is refused unless --force (task-1
       expect(exitCodeForResult(result)).toBe(1);
       expect(dnaText(repo)).toBe(FLOW_PATHS);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('with --force: the whole file is rewritten and committed, and the success carries the warning', async () => {

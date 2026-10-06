@@ -272,6 +272,7 @@ describe('refusals — exit 1 for a path or an entry the document/schema does no
     ['an entry that is not there', 'team.members.nobody.roles', { value: 'developer' }],
   ])('%s is refused at exit 1, naming the path, leaving the file and HEAD untouched', async (_case, path, options) => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const text = dnaText(repo);
     const result = await dnaOp('dnaAdd')({ root: repo, positionals: [path], options });
     expect(result.ok).toBe(false);
@@ -280,6 +281,7 @@ describe('refusals — exit 1 for a path or an entry the document/schema does no
     expect(result.error.message).toContain(path);
     expect(head(repo)).toBe(before);
     expect(dnaText(repo)).toBe(text);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a duplicate entry name is refused rather than written (AC4 at the verb)', async () => {

@@ -26,6 +26,7 @@ import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const TYPE_DIR = 'docs/memory/note';
 
@@ -167,11 +168,13 @@ describe('memory transition verbs — confinement to the project root (REQ-SEC-0
 
     it('creates no commit', async () => {
       const sha = head(repo);
+      const unchanged = snapshotPersistence(repo);
       await call().then(
         () => undefined,
         () => undefined,
       );
       expect(head(repo)).toBe(sha);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 

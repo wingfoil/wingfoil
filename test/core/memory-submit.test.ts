@@ -184,6 +184,7 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
 
   it('P1.6 sc.2: an illegal `submit` from `approved` leaves the state unchanged and exits 1 with the pinned message', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const original = readFileSync(join(repo, 'docs/memory/v0.2/task-200.md'), 'utf-8');
     const result = await memorySubmitFn()({ root: repo, positional: 'task-200' });
     expect(result.ok).toBe(false);
@@ -194,10 +195,12 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-200.md'), 'utf-8')).toBe(original);
     expect(head(repo)).toBe(before);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('P1.6 sc.3: a non-existent document exits 1 with `document not found: task-999`', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await memorySubmitFn()({ root: repo, positional: 'task-999' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -205,6 +208,7 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
     expect(result.error.message).toBe('document not found: task-999');
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a missing or blank `<id>` is a usage error (exit 2) — spec-008 §5/§7', async () => {
@@ -561,6 +565,7 @@ describe('CORE_MODULES memory.memorySubmit — configuration with no `states` an
 
   it('still refuses an illegal verb on that machine — the fallback adds a machine, not permissiveness', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     // `approved` is the last state of the default `sequence`: no forward edge for `submit`.
     const result = await memorySubmitFn()({ root: repo, positional: 'task-2' });
     expect(result.ok).toBe(false);
@@ -568,6 +573,7 @@ describe('CORE_MODULES memory.memorySubmit — configuration with no `states` an
     expect(result.error.code).toBe('INVALID_TRANSITION');
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 

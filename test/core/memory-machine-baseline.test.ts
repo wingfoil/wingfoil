@@ -243,6 +243,7 @@ describe('memory transitions resolve their state machine at HEAD (bug-081, dl-08
     git(repo, ['commit', '--quiet', '-m', 'untrack the machine, keep it on disk']);
     expect(gitOut(repo, ['status', '--porcelain', '--', MEMORY_YAML_PATH])).toBe(`?? ${MEMORY_YAML_PATH}`);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await memoryFn('memorySubmit')({ root: repo, positional: 'adr-001' });
 
@@ -253,6 +254,7 @@ describe('memory transitions resolve their state machine at HEAD (bug-081, dl-08
     expect(result.error.message).toContain('not committed at HEAD');
     expect(head(repo)).toBe(before);
     expect(statusOf(repo)).toBe('draft');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC4: a committed `memory.yaml` that does not validate is refused even though the working-tree copy is fine', async () => {

@@ -23,6 +23,7 @@ import * as memory from '../../src/memory';
 import * as storage from '../../src/storage';
 import { DiagnosticsError } from '../../src/validation';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const memoryYaml = (firstState: string): string => `
 version: 1.1
@@ -159,12 +160,14 @@ describe('…AtRev loaders — the configuration as one commit holds it (task-13
 
   it('reading at a revision leaves the working tree and the index untouched', () => {
     const before = git(repo, ['status', '--porcelain']);
+    const unchanged = snapshotPersistence(repo);
     loadDnaYamlAtRev(repo, first);
     loadMemoryYamlAtRev(repo, first);
     loadDirectivesAtRev(repo, first);
     loadRolesYamlAtRev(repo, first);
     loadWorkflowsYamlAtRev(repo, first);
     expect(git(repo, ['status', '--porcelain'])).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('two calls with the same (root, rev) are deep-equal (REQ-SYS-07)', () => {

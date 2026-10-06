@@ -23,6 +23,7 @@ import { CORE_MODULES } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 defaults:
@@ -156,6 +157,7 @@ describe('task-132 AC1 — one identity for the authority check, the Approver: l
       setUp(dna(CONFIG, ENV));
       prepare?.(repo);
       const before = gitOut(repo, ['rev-parse', 'HEAD']);
+      const unchanged = snapshotPersistence(repo);
 
       const result = (await operation(op)({ root: repo, positional: id, options: { reason: 'Looks right.' } })) as CoreResult<unknown>;
 
@@ -164,17 +166,20 @@ describe('task-132 AC1 — one identity for the authority check, the Approver: l
       } else {
         expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
       }
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('checks authority against the GIT_AUTHOR_* identity git would author with, and refuses when it is not an approver', async () => {
       setUp(dna(CONFIG, ENV));
       prepare?.(repo);
       const before = gitOut(repo, ['rev-parse', 'HEAD']);
+      const unchanged = snapshotPersistence(repo);
 
       const result = (await operation(op)({ root: repo, positional: id, options: { reason: 'Looks right.' } })) as CoreResult<unknown>;
 
       expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION', message: expect.stringMatching(/^user not authorized to approve type 'note'/) } });
       expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('authorizes, records and authors as the GIT_AUTHOR_* identity when that identity is the approver', async () => {

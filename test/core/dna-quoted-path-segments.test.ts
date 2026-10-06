@@ -31,6 +31,7 @@ import { exitCodeForThrow } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import { UsageError } from '../../src/core/usage-error';
 import { makeTempGitRepo, removeTempDir, writeFixtureFile, commitAll } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /**
  * A fixture carrying the two dotted `stacks.technologies` names and the dotted `team.agents` name
@@ -107,6 +108,7 @@ async function usageError(op: string, path: string, value = 'x'): Promise<UsageE
   writeFixtureFile(repo, '.wingfoil/dna.yaml', DNA_FIXTURE);
   commitAll(repo, 'seed dna.yaml');
   const before = head(repo);
+  const unchanged = snapshotPersistence(repo);
   try {
     await dnaOp(op)({ root: repo, positionals: [path], options: { value } });
   } catch (error) {
@@ -114,6 +116,7 @@ async function usageError(op: string, path: string, value = 'x'): Promise<UsageE
     // A usage error is decided before anything is written: no commit, file byte-identical.
     expect(head(repo)).toBe(before);
     expect(dnaText(repo)).toBe(DNA_FIXTURE);
+    assertPersistenceUnchanged(repo, unchanged);
     removeTempDir(repo);
     return error as UsageError;
   }

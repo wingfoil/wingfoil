@@ -205,8 +205,10 @@ describe('memory add — {date}, {author} and {n:N} (task-163; bug-158, bug-176)
       ],
     ])('--set %s → %s', async (set, message) => {
       const before = gitOut(repo, ['rev-parse', 'HEAD']);
+      const unchanged = snapshotPersistence(repo);
       expect(await usageError(repo, { type: 'dated', title: 'x', set: [set] })).toBe(message);
       expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 
