@@ -740,14 +740,19 @@ types:
       );
     });
 
+    /** The refusable verbs the sweep drives (`deprecate` is never refused; `park` is task-180's). */
+    const OPS = ['submit', 'approve', 'reject', 'park'] as const;
+    type Op = (typeof OPS)[number];
+
     /**
      * The reason the engine gives for refusing `op` from `state`, by category of the state — derived
      * from the machine here, independently of the engine, so the sweep pins each category's text.
      */
-    function expectedReason(machine: StateMachine, state: string, op: 'submit' | 'approve' | 'reject'): string {
+    function expectedReason(machine: StateMachine, state: string, op: Op): string {
       const gate = (machine.gates ?? {})[state] !== undefined;
       const waiting = (machine.waiting ?? []).includes(state);
       const last = machine.sequence.indexOf(state) === machine.sequence.length - 1;
+      if (op === 'park') return 'not a `returns` state — `park` is only legal from a state that declares a return edge';
       if (op === 'reject') return 'not a `gates` state — `reject` is only legal from a gate';
       if (op === 'approve') {
         if (!gate) return 'not a `gates` state — `approve` is only legal from a gate';
@@ -774,7 +779,7 @@ types:
       for (const typeName of Object.keys(file.types).sort()) {
         const machine = resolveStateMachine(file, typeName);
         for (const state of machine.sequence) {
-          for (const op of ['submit', 'approve', 'reject'] as const) {
+          for (const op of OPS) {
             let target: string | undefined;
             try {
               target = resolveTransitionTarget(machine, state, op);
@@ -798,6 +803,29 @@ types:
       // Vacuity guards: the sweep really exercised both outcomes on this file.
       expect(refusals).toBeGreaterThan(0);
       expect(legal).toBeGreaterThan(0);
+    });
+
+    it('`park` is refused with `(none)` from every state of a machine that declares no `returns` (scaffold, custom)', () => {
+      for (const [file, typeName] of [[scaffold, 'task'], [custom, 'item']] as const) {
+        const machine = resolveStateMachine(file, typeName);
+        expect(machine.returns).toBeUndefined();
+        for (const state of machine.sequence) {
+          expectContract(
+            () => resolveTypeTransition(file, typeName, state, 'park'),
+            `illegal transition ${state} -> (none) for type '${typeName}'`,
+            /not a `returns` state/,
+          );
+        }
+      }
+    });
+
+    it('`park` on the real `task` machine: legal only from `in-progress` (-> backlog), `(none)` elsewhere', () => {
+      expect(resolveTypeTransition(memoryYaml, 'task', 'in-progress', 'park')).toBe('backlog');
+      expectContract(
+        () => resolveTypeTransition(memoryYaml, 'task', 'in-review', 'park'),
+        "illegal transition in-review -> (none) for type 'task'",
+        /^illegal `park` from "in-review": not a `returns` state — `park` is only legal from a state that declares a return edge$/,
+      );
     });
   });
 

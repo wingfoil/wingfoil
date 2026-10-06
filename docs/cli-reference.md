@@ -688,8 +688,8 @@ $ wingfoil memory park task-001-my-first-task --reason "Blocked on the schema de
   written, and the message names the documents holding the state:
   `error: WIP limit reached for 'in-progress' on type 'task' (limit 3): held by task-004-…, task-007-…, task-009-…. Move one of them out of 'in-progress', then retry.`
 - **Errors:** missing or blank `--reason` → exit `2`; the document's state declares no `returns` edge →
-  exit `1`, with the illegal-transition error naming the state it was refused from and the type; the
-  target state is at its WIP limit → exit `1`.
+  exit `1` (`error: illegal transition in-review -> (none) for type 'task'`); the target state is at
+  its WIP limit → exit `1`.
 
 ### `wingfoil memory amend`
 

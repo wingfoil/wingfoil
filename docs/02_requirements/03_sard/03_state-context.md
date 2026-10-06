@@ -19,14 +19,14 @@
   rides as the issue's detail rather than replacing it. The exit code is **`1`**, per BDD P1.6 and
   REQ-INT-04 (an illegal transition is a logic error, not a usage/argument error); `spec-009` §3 has been
   rewritten to key exit codes on the nature of the failure rather than on the detecting pass.
-  `<to>` is what the verb the user typed (`submit`, `approve`, `reject`) reaches **from `<from>`**. A verb names
+  `<to>` is what the verb the user typed (`submit`, `approve`, `reject`, `park`) reaches **from `<from>`**. A verb names
   no target of its own, and a call is illegal exactly when the verb has no edge from `<from>`, so on a refusal `<to>`
   is always `(none)` (`illegal transition approved -> (none) for type 'task'`, the string BDD P1.6 and P5.2.3 pin).
   It is never a target the verb reaches from some other state: the earlier rule (the verb's **canonical edge**,
   `dl-053-illegal-transition-target-for-verbless-edges` option 1) printed backward moves (`approve` on a `planned`
   bug → `planned -> triaged`) and skips (`triaged -> resolved`), misinforming exactly the user who has just made an
   illegal call (`bug-165`, `bug-127`). Why the verb has no edge — a gate needing `approve`, a `waiting` state whose
-  edge only a Workflow action fires, the last state of `sequence` — is the issue's detail, shown under the message.
+  edge only a Workflow action fires, the last state of `sequence`, a state with no `returns` edge for `park` — is the issue's detail, shown under the message.
   Ratified by `dl-154-an-illegal-transition-prints-none-as-its-target-replacing-dl-053-s-canonical-edge` (2026-10-06, option A), which replaces `dl-053`; implemented by
   `task-181-name-attempted-move-not-verb-canonical-edge-illegal`. A pure function of `(machine, from, verb)`, per
   REQ-SYS-07.

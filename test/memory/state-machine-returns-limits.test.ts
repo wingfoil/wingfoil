@@ -127,7 +127,7 @@ describe('the `park` edge in the engine', () => {
       expect(error).toBeInstanceOf(ValidationError);
       const issue = (error as ValidationError).issues[0]!;
       expect(issue.code).toBe(E_INVALID_TRANSITION);
-      expect(issue.message).toMatch(/^illegal transition in-review -> \S+ for type 'task'$/);
+      expect(issue.message).toBe("illegal transition in-review -> (none) for type 'task'"); // task-181, dl-154
       expect(issue.detail).toContain('not a `returns` state');
       expect((error as ValidationError).exitCode).toBe(1);
     }
@@ -136,7 +136,7 @@ describe('the `park` edge in the engine', () => {
   it('on a machine with no `returns` at all, `park` is refused the same way', () => {
     const memoryYaml = MemoryYaml.parse({ version: 1, types: { note: { path: 'docs/{id}.md' } } });
     expect(() => resolveTypeTransition(memoryYaml, 'note', 'draft', 'park')).toThrow(
-      /illegal transition draft -> \S+ for type 'note'$/,
+      /illegal transition draft -> \(none\) for type 'note'$/, // task-181, dl-154
     );
   });
 
