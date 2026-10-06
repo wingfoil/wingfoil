@@ -63,6 +63,23 @@ describe('task-256 — AgentEntry.email and a trailer-safe name (schema)', () =>
     expect(issuePaths(withAgent({ email }))).toContain('team.agents.0.email');
   });
 
+  // Approver ruling F1 (2026-10-06): a GitHub noreply address is accepted only in its id-qualified form,
+  // `<id>+<login>@users.noreply.github.com`; the bare `<login>@…` form names a login anyone can claim.
+  it.each(['12345678+wingfoil-agent@users.noreply.github.com', 'noreply@anthropic.com'])('accepts %j', (email) => {
+    expect(DnaYaml.safeParse(withAgent({ email })).success).toBe(true);
+  });
+
+  it.each(['wingfoil-agent@users.noreply.github.com', 'Wingfoil-Agent@Users.NoReply.GitHub.com', 'abc+wingfoil-agent@users.noreply.github.com'])(
+    'refuses a GitHub noreply address without the numeric `<id>+` prefix (%j), naming team.agents.0.email',
+    (email) => {
+      const result = DnaYaml.safeParse(withAgent({ email }));
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      const issue = result.error.issues.find((i) => i.path.join('.') === 'team.agents.0.email');
+      expect(issue?.message).toContain('<id>+<login>@users.noreply.github.com');
+    },
+  );
+
   it.each(['AI <agent>', 'agent>', 'two\nlines', 'cr\rhere'])('refuses an agent name that would break the trailer (%j)', (name) => {
     expect(issuePaths(withAgent({ name }))).toContain('team.agents.0.name');
   });
