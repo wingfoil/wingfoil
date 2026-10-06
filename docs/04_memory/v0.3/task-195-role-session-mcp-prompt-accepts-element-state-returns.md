@@ -2,7 +2,7 @@
 id: "task-195-role-session-mcp-prompt-accepts-element-state-returns"
 type: task
 title: "The `{role}-session` MCP Prompt accepts `element` and `state` and returns the `spec-012` §7 payload at that commit"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "high"
