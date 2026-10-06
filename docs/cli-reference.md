@@ -214,7 +214,10 @@ server checks the project and reads the role set from `dna.yaml`; the role set t
 server restarts (a change of directive assignments shows on the next Prompt request). With no
 `.wingfoil/` at the project root it exits `1` without starting: `error: WingFoil not initialized (no
 .wingfoil/ directory at the project root): run 'wingfoil init' first`. A `dna.yaml` that cannot be
-loaded also exits `1`, with the reason.
+loaded also exits `1`, with the reason. The `<role>-session` Prompts take two optional arguments,
+`element="<type>:<id>"` and `state="<commit sha>"`, given together: the Prompt then returns the
+execution context for that element at that commit. Memory Resource reads and those Prompts report the
+documents that could not be read in a `warnings` array beside the content.
 
 ---
 
