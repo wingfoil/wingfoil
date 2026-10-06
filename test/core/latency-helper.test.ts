@@ -4,7 +4,25 @@
  * the refusal of fewer than REQ-PERF's 20 runs, and the run-aligned shape of a marginal measurement.
  * Asserts nothing about elapsed values, so it reads no clock of its own and cannot flake on load.
  */
-import { describeSamples, median, MIN_RUNS, P95_BUDGET_MS, p95, RUNS, sampleLatency, sampleMarginalLatency } from './helpers/latency';
+import {
+  describeSamples,
+  type MarginalLatencySamples,
+  median,
+  MIN_RUNS,
+  P95_BUDGET_MS,
+  p95,
+  PROCESS_LEVEL_QUANTITIES,
+  processLevelVerdict,
+  RUNS,
+  sampleLatency,
+  sampleMarginalLatency,
+} from './helpers/latency';
+
+/** A synthetic one-call measurement: `floor`, `total` and `marginal` each `MIN_RUNS` copies of one value. */
+function measuredAt(floor: number, total: number, marginal: number): MarginalLatencySamples {
+  const copies = (value: number): number[] => Array.from({ length: MIN_RUNS }, () => value);
+  return { floor: copies(floor), total: [copies(total)], marginal: [copies(marginal)] };
+}
 
 describe('latency helper — REQ-PERF measurement conditions in code', () => {
   it('declares the SARD conditions: >= 20 runs, 25 taken, 1,000 ms budget', () => {
@@ -64,6 +82,31 @@ describe('latency helper — REQ-PERF measurement conditions in code', () => {
       marginal.forEach((value, run) => expect(value).toBeCloseTo(measured.total[call]![run]! - median(measured.floor), 9));
     });
     await expect(sampleMarginalLatency(MIN_RUNS - 1, () => undefined, [])).rejects.toThrow(/>= 20 runs/);
+  });
+
+  it('a spawned command is budgeted on two quantities, the total and the marginal (dl-146 (C), REQ-PERF-02)', () => {
+    expect(PROCESS_LEVEL_QUANTITIES).toEqual(['total', 'marginal']);
+  });
+
+  it('processLevelVerdict judges the quantity it is given, each against 1,000 ms at p95, and neither through the other', () => {
+    // Total over, marginal under: the total verdict fails and the marginal one passes …
+    const totalOver = measuredAt(900, P95_BUDGET_MS + 100, 200);
+    expect(processLevelVerdict(totalOver, 0, 'total')).toMatch(/^over budget: total p95 1100 ms/);
+    expect(processLevelVerdict(totalOver, 0, 'marginal')).toBe('within budget');
+    // … and the other way round (synthetic: a real marginal never exceeds its total).
+    const marginalOver = measuredAt(0, 300, P95_BUDGET_MS);
+    expect(processLevelVerdict(marginalOver, 0, 'marginal')).toMatch(/^over budget: marginal p95 1000 ms/);
+    expect(processLevelVerdict(marginalOver, 0, 'total')).toBe('within budget');
+    // The budget is strict (`< 1,000 ms`): 999 passes.
+    expect(processLevelVerdict(measuredAt(0, 999, 999), 0, 'total')).toBe('within budget');
+  });
+
+  it('an over-budget verdict names all three distributions, so a red says whether the command or the machine moved', () => {
+    const verdict = processLevelVerdict(measuredAt(950, 1200, 250), 0, 'total');
+    expect(verdict).toContain('floor p95 950 ms');
+    expect(verdict).toContain('total p95 1200 ms');
+    expect(verdict).toContain('marginal p95 250 ms');
+    expect(() => processLevelVerdict(measuredAt(1, 2, 1), 1, 'total')).toThrow(/no call 1/);
   });
 
   it('describeSamples names p95, n, min and max in whole milliseconds', () => {
