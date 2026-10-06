@@ -169,6 +169,38 @@ Gates, with the `dl-114` amendment in the working tree:
   `paths.runs: `, which still says "Memory entries" though the run log is not Memory.
 - Same-class sweep in touched files: none found.
 
+### Review fixes (A)
+
+Coordinator review, 2026-10-06: **APPROVE WITH FIXES**, in two phases. The task stays `in-review`.
+Phase A is done here. Phase B is on hold until `task-210` merges: it swaps the hand-written write +
+`commitPaths` + `unstagePaths` for `task-210`'s `writeAndCommit`, which settles F1/F2 and the empty
+runs directory left behind.
+
+- Red: `75fd4352`. `npx jest test/agent/run-log.test.ts` → **8 failed, 61 passed** (the F3/F5/F6 and
+  decision-6 cases, plus the pins that recorded the omission). Green: `f1f8333a` → **69 passed**.
+- **F3.** Every `recordRun` refusal after serialization carries `details: {run_id, record, issues:
+  [{detail: <line>}]}`: the basename mismatch, confinement, the symlinked path, the dirty log, the
+  invalid log at `HEAD`, the collision and the failed commit. An invalid record has no line to give
+  back, so it gets no details.
+- **F5.** `requireWritableRunLog(root, logPath)` checks a confined write target, then
+  `requireInspectableTarget` (task-131), then unmodified (`CONFLICT` `run log <path> has uncommitted
+  changes`, untracked files included). `recordRun` calls it, so a symlinked `docs/runs` inside the
+  project is refused (tested) instead of failing open. `runLogPreflight(root, paths.runs, elementId)`
+  combines declared + confined + inspectable + unmodified and returns the path. Both are exported for
+  `agent execute` (task-228) to run before the spawn.
+- **F6.** The writer and the reader both refuse an id that is not `<elementIdOf(element)>/<phase>/<n>`
+  of the record's own element and phase, and an `element` that is not `<type>:<id>`. `recordRun` also
+  refuses a record whose element is not the log's basename. So `E/design/1` with phase `red` is refused
+  and cannot block later runs.
+- **Decision 6.** `resolveRunLogPath` confines with `requireConfinedTarget(root, path, 'write')`. The
+  message is `cannot write '<path>': it resolves to '<real>', outside the project root …`, with no
+  "Memory entries" wording.
+- **F4.** The `.wingfoil/dna.yaml` paths header now says `runs` is declared below. It uses the same
+  1.7 bump; `test/lint/version-bump.test.ts` is green.
+- Gates: `npm run lint` 0; `npx tsc --noEmit -p tsconfig.json` 0; `npx tsc -p tsconfig.build.json
+  --noEmit` 0; `npm run docs:api` 0; `npx jest test/agent test/storage test/lint` → 39 suites, **549
+  passed**; `node scripts/check-governance.cjs --base ed4607a4` 0.
+
 ### Pending amendments (approver)
 
 - `dl-114-recording-agent-token-consumption` — proposed `--reason`: "Adds the agent's session id to Q2
