@@ -104,26 +104,40 @@ const REMEDY_SPAWN =
 /**
  * Rule 3 (dl-146 (C)): a suite in `test/latency-suites.cjs` times a spawned command, and REQ-PERF-02
  * budgets two quantities of it, the **total** (process start included) and the **marginal** over
- * process start. The suite must judge both through the helper: outside its imports it names
- * `PROCESS_LEVEL_QUANTITIES` (the helper's list of the two) and calls `processLevelVerdict(`; it passes
- * no quantity as a literal, and takes no `p95(` of its own. Dropping a quantity silently would take
- * a literal, a p95 computed by hand, or no longer naming the list, and each of those fails here.
- * A same-file textual check, with rules 1 and 2's limits: it does not prove the list is iterated
- * whole (a `.filter` on it would pass), only that the plain ways of dropping one are caught.
+ * process start. The suite must judge both through the helper. Read with its imports and comments
+ * removed (a header that names the list proves nothing), its source must iterate the helper's list
+ * whole — `PROCESS_LEVEL_QUANTITIES.map(`, `.flatMap(`, `.forEach(`, `it.each(PROCESS_LEVEL_QUANTITIES`
+ * or `for (const … of PROCESS_LEVEL_QUANTITIES)`, so a `.slice`/`.filter` chained before the
+ * iteration does not count — and call `processLevelVerdict(`; it may not index the list, write
+ * `'total'` or `'marginal'` as a string literal anywhere, or take a `p95(` of its own.
+ * A same-file textual check, with rules 1 and 2's limits. What it still does not see: a callback that
+ * iterates the list but ignores its element, a quantity built at run time (string concatenation,
+ * `.filter`/`.slice` on a copy held in another variable), or an iteration whose result is unused.
  */
 const REMEDY_BOTH =
   'judge each command with processLevelVerdict(measured, index, quantity) for every quantity in PROCESS_LEVEL_QUANTITIES ' +
   '(test/core/helpers/latency.ts), as test/cli/command-latency.test.ts does';
 
+/** How the list may be iterated whole: a direct call on it, or it as the iterable itself. */
+const WHOLE_ITERATION =
+  /PROCESS_LEVEL_QUANTITIES\s*\.\s*(?:map|flatMap|forEach)\(|\.each\(\s*PROCESS_LEVEL_QUANTITIES\s*\)|\bof\s+PROCESS_LEVEL_QUANTITIES\s*\)/;
+
+/** A suite's source without its import statements and comments: what rule 3 reads. */
+function codeOnly(source: string): string {
+  return source
+    .replace(/^import[\s\S]*?from\s+['"][^'"]+['"];?$/gm, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+}
+
 /** What rule 3 finds wrong in a latency suite's source text, as messages; empty when it holds. */
 function processLevelProblems(suitePath: string, source: string): string[] {
-  const body = source.replace(/^import[\s\S]*?from\s+['"][^'"]+['"];?$/gm, '');
+  const body = codeOnly(source);
   const problems: string[] = [];
-  if (!body.includes('PROCESS_LEVEL_QUANTITIES')) problems.push(`${suitePath} does not use PROCESS_LEVEL_QUANTITIES: ${REMEDY_BOTH}`);
+  if (!WHOLE_ITERATION.test(body)) problems.push(`${suitePath} does not iterate PROCESS_LEVEL_QUANTITIES whole: ${REMEDY_BOTH}`);
+  if (/PROCESS_LEVEL_QUANTITIES\s*\[/.test(body)) problems.push(`${suitePath} indexes PROCESS_LEVEL_QUANTITIES: ${REMEDY_BOTH}`);
   if (!body.includes('processLevelVerdict(')) problems.push(`${suitePath} does not call processLevelVerdict: ${REMEDY_BOTH}`);
-  if (/processLevelVerdict\([^)]*['"`](?:total|marginal)['"`]/.test(body)) {
-    problems.push(`${suitePath} passes a quantity to processLevelVerdict as a literal: ${REMEDY_BOTH}`);
-  }
+  if (/(['"`])(?:total|marginal)\1/.test(body)) problems.push(`${suitePath} writes a quantity as a literal: ${REMEDY_BOTH}`);
   if (/(?<![\w.])p95\(/.test(body)) problems.push(`${suitePath} computes a p95 of its own: ${REMEDY_BOTH}`);
   return problems;
 }
@@ -214,14 +228,32 @@ describe('latency budgets: one clock, no timed spawn without a documented exempt
 
   it('rule 3 catches the plain ways of dropping one of the two quantities (guards the guard)', () => {
     const imports = "import { PROCESS_LEVEL_QUANTITIES, processLevelVerdict } from '../core/helpers/latency';\n";
-    const both = `${imports}it.each(PROCESS_LEVEL_QUANTITIES)('%s', (q) => expect(processLevelVerdict(m, 0, q)).toBe('within budget'));`;
+    const header = '/** Judges every quantity in PROCESS_LEVEL_QUANTITIES through processLevelVerdict(. */\n';
+    const judge = "expect(processLevelVerdict(m, 0, q)).toBe('within budget')";
+    const both = `${imports}${header}it.each(PROCESS_LEVEL_QUANTITIES)('%s', (q) => ${judge});`;
     expect(processLevelProblems('s', both)).toEqual([]);
-    const literal = `${imports}PROCESS_LEVEL_QUANTITIES;\nexpect(processLevelVerdict(m, 0, 'marginal')).toBe('within budget');`;
-    expect(processLevelProblems('s', literal)).toEqual([expect.stringMatching(/as a literal/)]);
-    const ownP95 = `${imports}PROCESS_LEVEL_QUANTITIES; processLevelVerdict(m, 0, q);\nexpect(p95(m.marginal[0]) < 1000).toBe(true);`;
+    expect(processLevelProblems('s', `${imports}PROCESS_LEVEL_QUANTITIES.flatMap((q) => [q]).map((q) => ${judge});`)).toEqual([]);
+    const notIterated = (problems: string[]): void =>
+      expect(problems).toContainEqual(expect.stringMatching(/does not iterate PROCESS_LEVEL_QUANTITIES whole/));
+    // M4: a literal list in place of the helper's (the total silently dropped).
+    const m4 = processLevelProblems('s', `${imports}${header}(['marginal'] as const).map((q) => ${judge});`);
+    notIterated(m4);
+    expect(m4).toContainEqual(expect.stringMatching(/as a literal/));
+    // M1: one quantity held in a constant and passed through a variable.
+    const m1 = `${imports}const ONLY = 'marginal' as const;\nPROCESS_LEVEL_QUANTITIES.map(() => processLevelVerdict(m, 0, ONLY));`;
+    expect(processLevelProblems('s', m1)).toEqual([expect.stringMatching(/as a literal/)]);
+    // M3: the list sliced (or filtered) before it is iterated.
+    notIterated(processLevelProblems('s', `${imports}${header}PROCESS_LEVEL_QUANTITIES.slice(1).map((q) => ${judge});`));
+    notIterated(processLevelProblems('s', `${imports}PROCESS_LEVEL_QUANTITIES.filter((q) => q !== QT).map((q) => ${judge});`));
+    // The list indexed rather than iterated, and a p95 taken by hand.
+    expect(processLevelProblems('s', `${imports}PROCESS_LEVEL_QUANTITIES.map(() => processLevelVerdict(m, 0, PROCESS_LEVEL_QUANTITIES[1]));`)).toEqual([
+      expect.stringMatching(/indexes PROCESS_LEVEL_QUANTITIES/),
+    ]);
+    const ownP95 = `${imports}PROCESS_LEVEL_QUANTITIES.map((q) => processLevelVerdict(m, 0, q));\nexpect(p95(m.marginal[0]) < 1000).toBe(true);`;
     expect(processLevelProblems('s', ownP95)).toEqual([expect.stringMatching(/p95 of its own/)]);
-    expect(processLevelProblems('s', imports)).toEqual([
-      expect.stringMatching(/does not use PROCESS_LEVEL_QUANTITIES/),
+    // Names in comments or imports alone prove nothing.
+    expect(processLevelProblems('s', `${imports}${header}// PROCESS_LEVEL_QUANTITIES.map( processLevelVerdict(\n`)).toEqual([
+      expect.stringMatching(/does not iterate PROCESS_LEVEL_QUANTITIES whole/),
       expect.stringMatching(/does not call processLevelVerdict/),
     ]);
   });
