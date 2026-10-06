@@ -116,3 +116,10 @@ tolerant since `task-171` (`W_MEMORY_UNREADABLE`). `RelevantMemoryResult` has no
   `src/core/memory-transition.ts:397`, a single-file read of the document the verb names (strict by contract,
   `loadMemoryDocumentSummary`'s doc comment), not a scan; no other strict working-tree scan in `src/core`.
 - Pending amendments (approver): none.
+- **Review fixes (2026-10-06, independent review: APPROVE plus one addition):** the new public `loadMemoryDocuments` had
+  no test of its own and its `options = {}` default branch was never taken. `test/memory/query-tolerant.test.ts`
+  now pins that on a committed tree holding a link and a malformed document, `loadMemoryDocuments(root, memoryYaml)`
+  without options equals `loadMemoryDocumentsAtRev(root, 'HEAD', memoryYaml)`, and that with listeners both report
+  the same diagnostics (bug-189's one rule). `npx jest test/memory/query-tolerant.test.ts` → 18 passed;
+  `query.ts:316` is no longer listed as uncovered (`npx jest --coverage --collectCoverageFrom=src/memory/query.ts
+  test/memory/query-tolerant.test.ts`); `npm run lint` and `npx tsc --noEmit -p tsconfig.json` → exit 0.
