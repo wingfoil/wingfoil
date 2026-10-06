@@ -50,7 +50,7 @@ describe('P1.11 scenario 1 — Memory store is ready after initialization', () =
     for (const [name, entry] of types) {
       // Every `{token}` of the pattern takes a probe value: resolving it must stay inside the root.
       const probe: Record<string, string> = {};
-      for (const [, token] of entry.path.matchAll(/\{([^}]+)\}/g)) probe[token] = 'probe';
+      for (const match of entry.path.matchAll(/\{([^}]+)\}/g)) probe[match[1] as string] = 'probe';
       const target = resolveConfinedMemoryPath(repo, entry.path, probe);
       expect(relative(repo, target).startsWith('..')).toBe(false);
       // No document is declared under the configuration folder.
