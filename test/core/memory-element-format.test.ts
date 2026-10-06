@@ -234,7 +234,8 @@ describe('(characterization) an absent format reads as 1: the verbs and amend wo
 
 describe('(characterization) a committed template with an empty frontmatter block has no fields to read', () => {
   it('memory add resolves the type; memory amend keeps `release` reserved (fail safe), as before', () => {
-    writeFixtureFile(repo, TEMPLATE_PATH, '---\n---\n\n## Body\n');
+    // A block holding only a comment: present, and parsed to no value at all.
+    writeFixtureFile(repo, TEMPLATE_PATH, '---\n# no fields\n---\n\n## Body\n');
     commitAll(repo, 'empty template frontmatter');
     expect(resolveAddType(repo, 'task').ok).toBe(true);
     const memoryYaml = loadMemoryYamlAtHead(repo);

@@ -205,8 +205,9 @@ function templateFormatRefusal(type: string, scaffold: string, label: string): C
  * - A format newer than this build reads is refused for its format alone (`E_INVALID_FORMAT`), and a
  *   `format` that is not a positive integer as a schema error naming the field — both `VALIDATION`,
  *   exit 1, `cannot read the scaffold for memory type '<type>': …` (`dl-149`, task-251).
- * - A scaffold with no frontmatter, one whose frontmatter is not YAML, and one whose frontmatter is not
- *   a mapping yield `null`: there are no fields to read. They are left as they were before the key
+ * - A scaffold with no frontmatter, one whose frontmatter is not YAML, and one whose frontmatter block
+ *   is empty yield `null`: there are no fields to read. A frontmatter that is a list or a scalar is
+ *   refused by the schema, as `memory add` refused it before. They are left as they were before the key
  *   existed — `renderAddDocument` refuses the first, the second is copied as text.
  * - Otherwise, the parsed fields.
  */
@@ -231,5 +232,6 @@ export function readTemplateFrontmatter(type: string, scaffold: string, label: s
       details: { issues: refusal.issues },
     });
   }
-  return coreOk(data !== null && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : null);
+  // The schema admitted a mapping (an object schema refuses a list or a scalar) or an empty block.
+  return coreOk((data ?? null) as Record<string, unknown> | null);
 }
