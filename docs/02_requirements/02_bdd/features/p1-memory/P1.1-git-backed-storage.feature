@@ -1,6 +1,7 @@
 Feature: P1.1 (US-0A-01) - Git-Backed Storage
-  As Alex, I want all project state stored in a centralized git repository under
-  .wingfoil/ so I have a single, versioned source of truth from day one.
+  As Alex, I want all project state stored in a centralized git repository — the configuration
+  under .wingfoil/, the Memory documents at the paths .wingfoil/memory.yaml declares (its
+  templates in .wingfoil/memory/templates/) — so I have a single, versioned source of truth from day one.
 
   Background:
     Given a project directory that is a git repository

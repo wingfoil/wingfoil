@@ -165,7 +165,7 @@ Notifications and alerts across all features.
 
 | Feature ID | Feature                               | Complexity | Dependencies       | MVP Risk | Priority | Why                                    | Notes                                              |
 |------------|---------------------------------------|------------|--------------------|----------|----------|----------------------------------------|----------------------------------------------------|
-| P1.1       | Git-Backed Storage (foundational)     | Low        | Git                | Low      | Critical | Foundation for all pillars             | Stores all project state in `.wingfoil/`           |
+| P1.1       | Git-Backed Storage (foundational)     | Low        | Git                | Low      | Critical | Foundation for all pillars             | Stores all project state in git: configuration in `.wingfoil/`, Memory documents at the paths `.wingfoil/memory.yaml` declares |
 | P1.2       | Versioning & Audit Trail              | Low        | Git                | Low      | Critical | Enables change tracking and audit      | Via git commits automatically                      |
 | P1.3       | `wingfoil memory add`                 | Low        | Git                | Low      | Critical | Core user workflow                     | Essential for all personas                         |
 | P1.5       | `wingfoil memory search`              | Medium     | Memory, file I/O   | Medium   | Critical | Find decisions quickly                 | Keyword search MVP; semantic post-MVP              |
