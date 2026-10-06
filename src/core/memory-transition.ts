@@ -40,7 +40,7 @@ import {
 } from '../memory';
 import type { DocumentScope, MemoryYaml, StateMachine, TransitionOp } from '../memory';
 import { commitPaths, pathPorcelainStatus, readDocument, readPathAtRev, writeDocument } from '../storage';
-import { type Diagnostic, E_INVALID_FORMAT, formatDiagnostic, ValidationError } from '../validation';
+import { type Diagnostic, formatDiagnostic, isNewerFormatError, ValidationError } from '../validation';
 
 import { requireConfinedWriteTarget } from './confinement';
 import { requireGitIdentity, type GitIdentity } from './git-identity';
@@ -136,11 +136,6 @@ function unreadableNote(unreadable: readonly Diagnostic[]): string {
   if (unreadable.length === 0) return '';
   const named = unreadable.map((diagnostic) => `HEAD:${diagnostic.file} (${diagnostic.message.slice(diagnostic.message.indexOf(': ') + 2)})`);
   return ` — it may be in a Memory document committed at HEAD that could not be read: ${named.join('; ')}`;
-}
-
-/** Whether `error` is the `dl-149` refusal of a document written in a newer format (`E_INVALID_FORMAT`). */
-function isNewerFormatError(error: unknown): error is ValidationError {
-  return error instanceof ValidationError && error.issues.some((issue) => issue.code === E_INVALID_FORMAT);
 }
 
 /**

@@ -85,3 +85,12 @@ export function refuseNewerFormat(data: unknown, highest: number, file: string):
   const issue = newerFormatIssue(data, highest, file);
   if (issue !== null) throw new ValidationError([issue], EXIT_VALIDATION);
 }
+
+/**
+ * Whether `error` is a newer-format refusal ({@link refuseNewerFormat}'s `ValidationError` carrying
+ * {@link E_INVALID_FORMAT}) — what a reader that turns the refusal into its own message checks before
+ * it does, so that no other failure is labelled as a newer format (task-257 review F2).
+ */
+export function isNewerFormatError(error: unknown): error is ValidationError {
+  return error instanceof ValidationError && error.issues.some((issue) => issue.code === E_INVALID_FORMAT);
+}

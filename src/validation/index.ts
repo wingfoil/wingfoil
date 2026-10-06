@@ -32,6 +32,7 @@ export {
   WORKFLOW_FORMAT,
   WORKFLOWS_YAML_FORMAT,
   formatField,
+  isNewerFormatError,
   newerFormatIssue,
   newerFormatMessage,
   refuseNewerFormat,

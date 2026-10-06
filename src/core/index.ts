@@ -15,7 +15,7 @@ import { join, relative, sep } from 'path';
 
 import { dump } from 'js-yaml';
 
-import { type Diagnostic, DiagnosticsError, formatDiagnostic, generateId, parseYaml, patternTokens, toValidationError, ValidationError } from '../validation';
+import { type Diagnostic, DiagnosticsError, formatDiagnostic, generateId, isNewerFormatError, parseYaml, patternTokens, toValidationError, ValidationError } from '../validation';
 import type { Paths } from '../dna/schema';
 import { DnaYaml } from '../dna/schema';
 import { applyDnaEditInText } from '../dna/edit';
@@ -1111,13 +1111,14 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
   try {
     found = findMemoryDocumentById(root, loaded.value, id, { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) });
   } catch (error) {
-    // The lookup throws only the `dl-149` refusal of the element it names (task-257, `bug-241`): a
-    // document written in a newer format is not read by today's rules.
-    const refusal = error as ValidationError;
+    // The `dl-149` refusal of the element the lookup names (task-257, `bug-241`): a document written in
+    // a newer format is not read by today's rules. Any other failure (an unreadable directory) is not
+    // that refusal and propagates as it did (review F2).
+    if (!isNewerFormatError(error)) throw error;
     return coreErr({
       code: 'VALIDATION',
-      message: `cannot read the history of ${id}: its document is written in a newer format: ${refusal.message}`,
-      details: { issues: refusal.issues },
+      message: `cannot read the history of ${id}: its document is written in a newer format: ${error.message}`,
+      details: { issues: error.issues },
     });
   }
   if (!found) {
