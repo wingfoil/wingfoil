@@ -3,11 +3,12 @@
  * `bug-011-cli-latency-assertion-measures-spawn-contention` (task-067-fix-cli-latency-assertion);
  * given one statistical shape and an honest statement of its reach by
  * `task-154-give-latency-budgets-statistical-shape-guard-says-what` (`bug-012`, `bug-013`, `bug-014`);
- * rule 3 added by `task-248-assert-req-perf-02-s-total-and-marginal-budgets-on-an-idle-machine` (`dl-146`).
+ * rule 3 added by `task-248-assert-req-perf-02-s-total-and-marginal-budgets-on-an-idle-machine` (`dl-146`);
+ * rule 4 by `task-263-record-the-machine-load-in-the-req-perf-02-latency-pass-and-flag-a-loaded-run` (`bug-276`).
  *
  * **What it enforces — a same-file, textual check.** For every `.ts`/`.cjs` file under `test/` (this
  * file excepted), it reads that file's own source text and asserts two rules, and a third on the
- * exempted suites:
+ * exempted suites and a fourth on them too:
  *
  * 1. **One clock.** No file but `test/core/helpers/latency.ts` contains a wall-clock marker
  *    ({@link WALL_CLOCK_MARKERS}). Every timing suite therefore measures through that module, whose
@@ -29,6 +30,11 @@
  *    REQ-PERF-02 budgets (`dl-146` (C)): the total, process start included, and the marginal cost over
  *    process start, through the helper's `processLevelVerdict` over `PROCESS_LEVEL_QUANTITIES`
  *    ({@link processLevelProblems}), so neither can be dropped silently.
+ * 4. **The idle condition is checked, not presumed.** Each exempted suite reads the load average
+ *    around its measurement (`readLoadAverage(`) and judges the run through `idleMachineVerdict(`
+ *    ({@link idleConditionProblems}), so a run on a loaded machine is refused rather than counted.
+ *    Like rule 3 it reads the code only (imports and comments removed), and it checks that the two
+ *    calls are present, not what their results are used for.
  *
  * **What it does not see.** The check reads one file at a time and follows no import other than the
  * two named above. A spawn reached through any other module is invisible to it: the git calls inside
@@ -139,6 +145,25 @@ function processLevelProblems(suitePath: string, source: string): string[] {
   if (!body.includes('processLevelVerdict(')) problems.push(`${suitePath} does not call processLevelVerdict: ${REMEDY_BOTH}`);
   if (/(['"`])(?:total|marginal)\1/.test(body)) problems.push(`${suitePath} writes a quantity as a literal: ${REMEDY_BOTH}`);
   if (/(?<![\w.])p95\(/.test(body)) problems.push(`${suitePath} computes a p95 of its own: ${REMEDY_BOTH}`);
+  return problems;
+}
+
+/**
+ * Rule 4 (bug-276): a latency suite's budgets presuppose an otherwise idle machine (the SARD's
+ * measurement conditions, `dl-146`), so the suite must read the load around its measurement and
+ * judge the run with the helper's idle check. Read like rule 3 (imports and comments removed): its
+ * code must call `readLoadAverage(` and `idleMachineVerdict(`.
+ */
+const REMEDY_IDLE =
+  'read readLoadAverage() before and after the measurement and assert idleMachineVerdict(floor, load) is ' +
+  "'otherwise idle' (test/core/helpers/latency.ts), as test/cli/command-latency.test.ts does";
+
+/** What rule 4 finds wrong in a latency suite's source text, as messages; empty when it holds. */
+function idleConditionProblems(suitePath: string, source: string): string[] {
+  const body = codeOnly(source);
+  const problems: string[] = [];
+  if (!body.includes('readLoadAverage(')) problems.push(`${suitePath} does not record the load average: ${REMEDY_IDLE}`);
+  if (!body.includes('idleMachineVerdict(')) problems.push(`${suitePath} does not check the idle condition: ${REMEDY_IDLE}`);
   return problems;
 }
 
@@ -264,4 +289,22 @@ describe('latency budgets: one clock, no timed spawn without a documented exempt
       expect(processLevelProblems(suitePath, readFileSync(join(TEST_ROOT, '..', suitePath), 'utf-8'))).toEqual([]);
     },
   );
+
+  it('rule 4 catches a suite that presumes the idle machine instead of checking it (guards the guard)', () => {
+    const imports = "import { idleMachineVerdict, readLoadAverage } from '../core/helpers/latency';\n";
+    const checked = `${imports}const before = readLoadAverage();\nexpect(idleMachineVerdict(m.floor, { before, after: readLoadAverage() })).toBe('otherwise idle');`;
+    expect(idleConditionProblems('s', checked)).toEqual([]);
+    expect(idleConditionProblems('s', `${imports}expect(idleMachineVerdict(m.floor, w)).toBe('otherwise idle');`)).toEqual([
+      expect.stringMatching(/does not record the load average/),
+    ]);
+    expect(idleConditionProblems('s', `${imports}const load = readLoadAverage();`)).toEqual([
+      expect.stringMatching(/does not check the idle condition/),
+    ]);
+    // Names in imports or comments alone prove nothing.
+    expect(idleConditionProblems('s', `${imports}/** readLoadAverage( idleMachineVerdict( */\n// idleMachineVerdict(\n`)).toHaveLength(2);
+  });
+
+  it.each([...LATENCY_SUITES].sort())('%s records the load and refuses a run on a loaded machine (bug-276, rule 4)', (suitePath) => {
+    expect(idleConditionProblems(suitePath, readFileSync(join(TEST_ROOT, '..', suitePath), 'utf-8'))).toEqual([]);
+  });
 });
