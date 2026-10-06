@@ -188,21 +188,36 @@ export function resolveAddType(root: string, type: string): CoreResult<ResolvedA
 }
 
 /**
- * The template's `format` check (`dl-149`, task-251), or `null` when the scaffold may be copied: a
- * format newer than this build reads is refused for its format alone (`E_INVALID_FORMAT`), and a
- * `format` that is not a positive integer is refused as a schema error naming the field — both
- * `VALIDATION`, exit 1, before anything is written. A scaffold with no frontmatter, or one that is not
- * YAML, is left as it was before the key existed: `renderAddDocument` refuses the first, and the second
- * is copied as text.
+ * The template's `format` check (`dl-149`, task-251), or `null` when the scaffold may be copied — the
+ * refusal half of {@link readTemplateFrontmatter}.
  */
 function templateFormatRefusal(type: string, scaffold: string, label: string): CoreResult<never> | null {
+  const read = readTemplateFrontmatter(type, scaffold, label);
+  return read.ok ? null : read;
+}
+
+/**
+ * The one reader of a Memory template's frontmatter (task-257, `bug-243`), shared by `memory add`,
+ * which copies the scaffold, and `memory amend`, which reads which fields the type declares — so the
+ * two cannot disagree on whether a template is readable. `label` names the file in a refusal
+ * (`HEAD:<path>` for a committed template).
+ *
+ * - A format newer than this build reads is refused for its format alone (`E_INVALID_FORMAT`), and a
+ *   `format` that is not a positive integer as a schema error naming the field — both `VALIDATION`,
+ *   exit 1, `cannot read the scaffold for memory type '<type>': …` (`dl-149`, task-251).
+ * - A scaffold with no frontmatter, one whose frontmatter is not YAML, and one whose frontmatter is not
+ *   a mapping yield `null`: there are no fields to read. They are left as they were before the key
+ *   existed — `renderAddDocument` refuses the first, the second is copied as text.
+ * - Otherwise, the parsed fields.
+ */
+export function readTemplateFrontmatter(type: string, scaffold: string, label: string): CoreResult<Record<string, unknown> | null> {
   const frontmatter = extractFrontmatter(scaffold);
-  if (frontmatter === null) return null;
+  if (frontmatter === null) return coreOk(null);
   let data: unknown;
   try {
     data = parseYaml(frontmatter, label);
   } catch {
-    return null;
+    return coreOk(null);
   }
   try {
     refuseNewerFormat(data, MEMORY_TEMPLATE_FORMAT, label);
@@ -216,5 +231,5 @@ function templateFormatRefusal(type: string, scaffold: string, label: string): C
       details: { issues: refusal.issues },
     });
   }
-  return null;
+  return coreOk(data !== null && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : null);
 }
