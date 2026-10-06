@@ -34,6 +34,7 @@ The rulings that reshape `dev-loop`: `red` moves to role `qa` (black-box, and it
 - **Notes:** Proposal key: A19. The stop-the-line `start.checks.pre` (`dl-133` Q4 (i)) and the other v0.3 gates (`dl-044`, `dl-097`, `dl-098`, `dl-102` §4, `dl-115`, `dl-116`) are task-221's single v1.6 revision, after this task. Coordinate with task-139 (`testing.md` T1/T2) on the same file. `dl-133`'s `kind` field is task-150.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
 - **Handover from wave 2 B2 (2026-10-05, `bug-248`).** As the next writer of `.wingfoil/directives/custom/testing.md`, add one line pointing to `security-secrets` S1 (fixtures that look like secrets are built at runtime, `task-182`), as `dl-073` Action 3 asks.
+- **Handover from wave 2 B3 (2026-10-06, `dl-156` ratified Q1 (a), Q2 (i); `bug-250`).** WIP limits must count holders across every ref, and `reject` and `returns` edges are exempt from the limit: implement both where this task touches the dev-loop rules, or name the task that will. Add BDD scenarios under `p1-memory/` for `memory park` and WIP limits, including the `supersedes:` trigger path (bug-250).
 
 ## Execution Notes
 
