@@ -6,7 +6,7 @@
  * (task-220) are its callers; none of them exists yet, so every case drives the library directly over
  * a scratch repository.
  */
-import { chmodSync, existsSync, readFileSync, writeFileSync } from 'fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import {
@@ -24,6 +24,7 @@ import {
   recordRun,
   resolveRunLogPath,
   RUN_RECORD_KEYS,
+  runLogPreflight,
   RUN_TOKEN_KEYS,
   serializeRunRecord,
   type RunRecord,
@@ -295,8 +296,18 @@ describe('strict reader (spec-016 §4.5)', () => {
   });
 
   it('refuses an id whose element segment is not the file basename', () => {
-    const other = line({ id: 'task-002-other/design/1' });
+    const other = JSON.stringify({ ...asObject(), id: 'task-002-other/design/1', element: 'task:task-002-other' });
     expect(refusal(`${other}\n`)).toEqual(invalid(1, `'id' 'task-002-other/design/1' is not a run id of element '${ELEMENT_ID}' (the file's basename)`));
+  });
+
+  it('refuses an id that disagrees with its own element or phase (F6)', () => {
+    expect(refusal(`${JSON.stringify({ ...asObject(), phase: 'red' })}\n`)).toEqual(
+      invalid(1, `'id' '${ELEMENT_ID}/design/1' does not match element '${ELEMENT}' and phase 'red'`),
+    );
+    expect(refusal(`${JSON.stringify({ ...asObject(), element: 'task:task-002-other' })}\n`)).toEqual(
+      invalid(1, `'id' '${ELEMENT_ID}/design/1' does not match element 'task:task-002-other' and phase 'design'`),
+    );
+    expect(refusal(`${JSON.stringify({ ...asObject(), element: ELEMENT_ID })}\n`)).toEqual(invalid(1, "'element' must be <type>:<id>"));
   });
 
   it('refuses a malformed id', () => {
@@ -360,7 +371,8 @@ describe('run-log location (spec-016 §4.1)', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('VALIDATION');
-        expect(result.error.message).toMatch(/must reside within the project root/);
+        expect(result.error.message).toMatch(/^cannot write '.*': it resolves to '.*', outside the project root/);
+        expect(result.error.message).not.toMatch(/Memory/);
       }
     }
   });
@@ -483,14 +495,22 @@ describe('recording a run (spec-016 §4.3 collision, §4.4 commit, §3.7)', () =
     commitAll(repo, 'run');
     writeFileSync(join(repo, LOG), `${line()}\nhand edit\n`, 'utf-8');
     const result = recordRun(repo, LOG, record({ id: `${ELEMENT_ID}/design/2` }));
-    expect(result).toEqual({ ok: false, error: { code: 'CONFLICT', message: `run log ${LOG} has uncommitted changes` } });
+    const ours = record({ id: `${ELEMENT_ID}/design/2` });
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'CONFLICT', message: `run log ${LOG} has uncommitted changes`, details: { run_id: ours.id, record: ours, issues: [{ detail: serializeRunRecord(ours).trimEnd() }] } },
+    });
     expect(readFileSync(join(repo, LOG), 'utf-8')).toBe(`${line()}\nhand edit\n`);
   });
 
   it('refuses a record that is not of this log’s element', () => {
-    const result = recordRun(repo, LOG, record({ id: 'task-002-other/design/1' }));
+    const other = record({ id: 'task-002-other/design/1', element: 'task:task-002-other' });
+    const result = recordRun(repo, LOG, other);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('VALIDATION');
+    if (!result.ok) {
+      expect(result.error.code).toBe('VALIDATION');
+      expect(errorDetails(result.error)).toEqual([{ detail: serializeRunRecord(other).trimEnd() }]);
+    }
     expect(existsSync(join(repo, LOG))).toBe(false);
   });
 
@@ -500,11 +520,45 @@ describe('recording a run (spec-016 §4.3 collision, §4.4 commit, §3.7)', () =
     expect(existsSync(join(repo, LOG))).toBe(false);
   });
 
+  it('refuses a record whose id disagrees with its phase or element, which would wedge later runs (F6)', () => {
+    for (const bad of [record({ phase: 'red' }), record({ element: 'task:task-002-other' })]) {
+      expect(() => serializeRunRecord(bad)).toThrow(/does not match element/);
+      const result = recordRun(repo, LOG, bad);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe('VALIDATION');
+    }
+    expect(existsSync(join(repo, LOG))).toBe(false);
+  });
+
+  it('refuses a run-log directory that is a symbolic link inside the project, with the record in details (F5)', () => {
+    mkdirSync(join(repo, 'docs', 'elsewhere'), { recursive: true });
+    symlinkSync('elsewhere', join(repo, 'docs', 'runs'));
+    const result = recordRun(repo, LOG, record());
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('VALIDATION');
+      expect(result.error.message).toMatch(/'docs\/runs' is a symbolic link/);
+      expect(errorDetails(result.error)).toEqual([{ detail: line() }]);
+    }
+    expect(existsSync(join(repo, 'docs', 'elsewhere', `${ELEMENT_ID}.jsonl`))).toBe(false);
+  });
+
+  it('the step-6 pre-flight: declared, confined, inspectable, unmodified (F5)', () => {
+    expect(runLogPreflight(repo, ['docs/runs/'], ELEMENT_ID)).toEqual({ ok: true, value: LOG });
+    expect(runLogPreflight(repo, undefined, ELEMENT_ID)).toEqual({ ok: false, error: { code: 'VALIDATION', message: 'dna.yaml declares no run log (paths.runs)' } });
+    writeFixtureFile(repo, LOG, 'untracked\n');
+    expect(runLogPreflight(repo, ['docs/runs/'], ELEMENT_ID)).toEqual({ ok: false, error: { code: 'CONFLICT', message: `run log ${LOG} has uncommitted changes` } });
+  });
+
   it('refuses when the log at HEAD is not a valid run log', () => {
     writeFixtureFile(repo, LOG, 'garbage\n');
     commitAll(repo, 'bad');
     const result = recordRun(repo, LOG, record());
-    expect(result).toEqual({ ok: false, error: { code: 'VALIDATION', message: `run log ${LOG}: line 1 is not a valid run record: not JSON` } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatchObject({ code: 'VALIDATION', message: `run log ${LOG}: line 1 is not a valid run record: not JSON` });
+      expect(errorDetails(result.error)).toEqual([{ detail: line() }]);
+    }
   });
 });
 
