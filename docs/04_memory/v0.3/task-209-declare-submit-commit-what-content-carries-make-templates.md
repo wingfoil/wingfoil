@@ -150,6 +150,36 @@ and is task-195's file in this batch, so it is not touched.
 
 Self-review findings: none open.
 
+#### Review fixes (review verdict: approve with fixes)
+
+- **F1 (defect).** Under `core.autocrlf=true` the committed LF blob was compared byte for byte with the
+  CRLF working tree, so a pure transition declared "the frontmatter text …, the body". Red `fd30d141`
+  (`npx jest test/memory/submit-commit-body.test.ts test/core/memory-submit-content.test.ts` → 5
+  failed, 17 passed); fix `3d5be037`. `describeSubmitContent` normalizes CRLF → LF on both sides;
+  `memory submit` then asks git, through the new `storesAsBlob` (`src/storage/commit.ts`: `git
+  hash-object --path=<path>` of the rendering vs `--no-filters` of the rendered committed copy, the
+  `committedBlobMatches` class), whether line endings alone change the blob, and declares that as
+  `the line endings`. Rows for `autocrlf=true`, `input` and `false`. The `false` row pins the setting
+  in its temp repository: this machine's global config sets `core.autocrlf=input`
+  (`git config --show-origin --get-all core.autocrlf` → `~/.gitconfig input`), under which git
+  normalizes too.
+- **F2.** `spec-010` "Document template shape" now says what `renderAddDocument` sets (`id`, `title`,
+  `status`, `--tags`/`--set`) and that `type`/`tmpl_version` stay as the scaffold has them; the author
+  fills the other required fields (pending amendment, reason updated below).
+- **F3.** The built-in `adr`/`tech-spec` note and `docs/cli-reference.md` say the `sequence` must end in
+  a `gates` state, then the `waiting` state, then `superseded`: the trigger fires only when `approve`
+  lands in the waiting state. Pinned in `template-wording.test.ts`.
+- **F4.** `escapeCarriesItem` doubles a backslash and writes a comma as `\u{002C}`, so `, ` only
+  separates items; tested.
+- `spec-008`'s paragraph lists `the file content` (the `describeDocumentChanges` fallback) and `the
+  line endings`, and states the normalization and the escaping. `docs/cli-reference.md` says the same (`c6e3d4eb`).
+
+Gates after the fixes (pending amendments in the working tree): `npm run -s lint`, both `tsc`,
+`npm run -s docs:api` exit 0; `npx jest test/memory test/core/memory-submit.test.ts
+test/core/memory-submit-content.test.ts test/storage test/lint test/docs
+test/cli/fresh-init-transitions.test.ts` → 78 suites / 1121 tests passed;
+`node scripts/check-governance.cjs --base ed4607a4` exit 0, 0 findings.
+
 **Pending amendments (approver)** — coordinator runs `memory amend`:
-- `spec-008-cli-grammar` — `--reason "task-209 (dl-106 W1 (a), Action 1): §2 declares the submit body, one Carries content: line naming what the commit carries beyond the state move; the subject stays plain under dl-054 and ruling R20. Revision note 2026-10-06."`
-- `spec-010-memory-frontmatter-schema` — `--reason "task-209 (dl-106 W1 (a), Action 1; bug-146): the template-shape paragraph no longer says submit fills fields and replaces placeholders, and the submit ownership row says which fields the verb writes and which ride in from the author. Revision note 2026-10-06."`
+- `spec-008-cli-grammar` — `--reason "task-209 (dl-106 W1 (a), Action 1): §2 declares the submit body, one Carries content: line naming what the commit carries beyond the state move, with line endings normalized and the line endings declared only when git would store them differently; items are escaped. The subject stays plain under dl-054 and ruling R20. Revision note 2026-10-06."`
+- `spec-010-memory-frontmatter-schema` — `--reason "task-209 (dl-106 W1 (a), Action 1; bug-146): the template-shape paragraph now says what add sets (id, title, status and any --tags or --set value, with type and tmpl_version left as the scaffold has them) and no longer says submit fills fields and replaces placeholders; the submit ownership row says which fields the verb writes and which ride in from the author. Revision note 2026-10-06."`
