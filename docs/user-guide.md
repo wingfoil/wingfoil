@@ -471,7 +471,7 @@ The server has **no Tools**: an agent cannot change anything through MCP. It wri
 like a person — and never approves. Unreleased (v0.3): `tools/list` answers an empty list, and the
 server reads the role list from `dna.yaml` when it starts — restart it after adding or removing a
 role. Also unreleased (v0.3): `<role>-session` takes two optional arguments, `element="<type>:<id>"`
-and `state="<commit sha>"`; given together, the Prompt returns the agent's execution context for that
+and `state="<commit>"` (any name of one commit; a sha is recommended); given together, the Prompt returns the agent's execution context for that
 element as the commit holds it (later commits and uncommitted edits do not change it). A Memory
 Resource read, and such a Prompt, list the documents WingFoil could not read in a `warnings` array next
 to the content. Full script: [`examples/04-mcp-server`](examples/04-mcp-server/run.sh).
