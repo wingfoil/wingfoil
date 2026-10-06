@@ -152,3 +152,14 @@ the MCP case; the context cases called `assembleExecutionContext` and `serialize
   joining the `WingFoil-Version:` paragraph; nothing pushed). Two submit commits (`bug-256`, `bug-257`) were
   also amended in content while still `HEAD` and unpushed, to correct a line count and a `grep` command
   measured after the submit; their subjects and trailers are unchanged. No other CLI discrepancy was found.
+- **triage done (2026-10-06, approver: "triage come proposto")** — each bug `approve [open → triaged]`, `assign
+  release`, and for an absorbed bug the task's `memory amend` (its `bug:` list) and `sync [triaged → planned]`:
+  - v0.3: `bug-256` and `bug-257` → new `task-259` (fix, wave 2 batch B4b; `add`, `submit`, `approve [pending →
+    backlog]`); `bug-258` and `bug-259` → `task-239`; `bug-263` → `task-195`.
+  - v0.4, no task: `bug-260`, `bug-261`, `bug-262`, `bug-264`, `bug-265`, `bug-266`, `bug-267`.
+  - `dl-158`: release v0.3; it stays `in-discussion` until the approver rules on it (recommended Rule 1 (a),
+    Rule 2 (ii)), before `task-218`.
+  - Handover notes (approver `memory amend`): `task-195` (`bug-263`, the newer-format case of `bug-231`, `bug-265`),
+    `task-218` (`bug-265`, `dl-158`), `task-239` (`bug-258`, `bug-259`); `bug-227` gains the B4a CHANGELOG items
+    (item 15). Item 16 goes to the W3 batch notes.
+  - This plan stays `active` until `dl-158` is ruled.
