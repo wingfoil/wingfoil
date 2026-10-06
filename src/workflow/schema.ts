@@ -210,7 +210,9 @@ export const Phase = z
       .object({ pre: z.array(Check).optional(), post: z.array(Check).optional() })
       .passthrough()
       .optional(),
-    approval: z.object({ by_role: z.string() }).passthrough().optional(),
+    // task-194: exactly one of `by_role` / `by_person` (spec-003 Layer 2 `approval`, BDD P4.14 sc. 2); the
+    // core checks resolve each against `dna.yaml` (E_PHASE_ROLE_UNKNOWN, E_PHASE_APPROVER_UNKNOWN).
+    approval: z.union([z.object({ by_role: z.string() }).strict(), z.object({ by_person: z.string() }).strict()]).optional(),
     fallback: z.object({ step: z.string(), set_state: z.string().optional() }).passthrough().optional(),
     // task-185 (spec-003 § "Execution independence", § "Recurring phases"):
     mode: z.enum(PHASE_MODES).optional(),

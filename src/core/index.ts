@@ -71,9 +71,9 @@ import {
   loadDirectiveInventory,
   loadDnaYaml,
   loadMemoryYaml,
-  loadWorkflowsYaml,
   type WorkflowsLoadResult,
 } from './loaders';
+import { loadWorkflowRegistry } from './workflow-registry';
 import { loadDirectiveListing, type DirectiveListing } from './directives-list';
 import { selectDirectivesById } from './context';
 import { checkAssignable, checkUnreferenced, updateRoleAssignments } from './directive-assign';
@@ -127,6 +127,13 @@ export {
   loadWorkflowsYamlAtRev,
 } from './loaders';
 export { isWellFormedRevision, resolveRevision, RevisionError } from './revision';
+// task-194: the workflow registry with spec-003's core checks, and the exit-state computation
+// (spec-017 §4.4) task-198's deduction reuses.
+export { loadWorkflowRegistry, loadWorkflowRegistryAtHead, loadWorkflowRegistryAtRev } from './workflow-registry';
+export { workflowCoreDiagnostics } from './workflow-core-checks';
+export type { CheckedRegistry, WorkflowCoreInputs } from './workflow-core-checks';
+export { iterationStartState, machineStates, workflowExitStates } from './workflow-exit-state';
+export type { ExitStart, HeldGate, InstanceState, PhaseExitState, UndeterminedAction } from './workflow-exit-state';
 export type { DirectiveFile, WorkflowsLoadResult } from './loaders';
 export {
   assembleExecutionContext,
@@ -2388,7 +2395,10 @@ export const CORE_MODULES: readonly CoreModule[] = [
         mutates: false,
         description: 'print the workflow manifest (workflows.yaml) and every workflow it includes, with their phases',
         example: 'wingfoil workflow list',
-        fn: wrapReadOnly<WorkflowsLoadResult>(loadWorkflowsYaml),
+        // task-194 (`bug-150`): the loader's result plus the core checks (`memory.yaml` types, `dna.yaml`
+        // roles and members, tokens, exit states, fallbacks), read from the working tree — the command's
+        // baseline until task-204 moves it to `HEAD` (spec-017 §1.1, ruling R15) with its new payload.
+        fn: wrapReadOnly<WorkflowsLoadResult>(loadWorkflowRegistry),
       },
     },
   },

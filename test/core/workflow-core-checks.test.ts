@@ -178,6 +178,11 @@ describe('spec-003 § Diagnostics — the core rows (task-194)', () => {
     ]);
   });
 
+  it('approval declares exactly one of by_role / by_person: both is a structural error (spec-003 Layer 2)', () => {
+    writeProject(repo, { [MAIN_FILE]: 'name: main\nkind: main\nphases:\n  - name: a\n    approval: { by_role: approver, by_person: Roberto }\n' });
+    expect(diagnosticsAtHead(repo).map((d) => `${d.code} ${d.path}`)).toEqual(['E_VALIDATION phases[0].approval']);
+  });
+
   it('E_WORKFLOW_ELEMENT_TYPE_UNKNOWN — element, Memory iterate_over, memory.add type, produces owner', () => {
     writeProject(repo, {
       [MAIN_FILE]:
