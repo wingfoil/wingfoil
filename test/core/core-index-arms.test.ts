@@ -55,12 +55,12 @@ describe('src/core/index.ts arms with no other test (task-189, bug-161)', () => 
   it('dna remove with no options object removes an optional leaf (the MCP Tool may send no options)', async () => {
     const added = await op('dna', 'dnaUpdate')({ root: repo, positionals: ['project.license'], options: { value: 'MIT' } });
     expect(added.ok).toBe(true);
-    expect(loadDnaYaml(repo).project.license).toBe('MIT');
+    expect(loadDnaYaml(repo).project?.license).toBe('MIT');
 
     const removed = await op('dna', 'dnaRemove')({ root: repo, positionals: ['project.license'] });
 
     expect(removed.ok).toBe(true);
-    expect(loadDnaYaml(repo).project.license).toBeUndefined();
+    expect(loadDnaYaml(repo).project?.license).toBeUndefined();
     expect(subject(repo)).toBe('wf(dna): remove project.license');
   });
 
