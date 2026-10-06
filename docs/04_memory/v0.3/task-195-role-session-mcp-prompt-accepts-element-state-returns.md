@@ -8,7 +8,7 @@ kind: "feature"
 priority: "high"
 tags: ["v0.3", "agent", "mcp", "context"]
 ref: "spec-016"
-bug: ["bug-231"]
+bug: ["bug-231", "bug-263"]
 depends_on: ["task-174-settle-mcp-prompts-contract-server-preflight-answer-tools", "task-176-complete-spec-012-context-builder-dna-selection-relevance"]
 tmpl_version: 260703
 ---
@@ -43,6 +43,12 @@ tmpl_version: 260703
   never re-serialize the context yourself. `CONTEXT_PAYLOAD_FORMAT` and `WrittenTimestamp` are re-exported from
   `src/core`: a YAML date in the carried frontmatter is a `WrittenTimestamp` holding the text as written, not a `Date`,
   and its `toJSON()` returns that text, so a `--format json` rendering keeps the document's own spelling.
+- **Handover from the W2 B4a triage (2026-10-06).** `bug-263` is absorbed here: a subject element in a newer
+  `format:` must answer `E_INVALID_FORMAT`, not the unknown-element refusal. `bug-231`'s silent drop in the MCP
+  `wingfoil://memory/{type}` listing now also hides a newer-format element (`task-257` routes it to the same
+  `W_MEMORY_UNREADABLE` path), so fixing `bug-231` covers it. `bug-265` (v0.4): the payload's body markers are not
+  unique (a Memory document whose frontmatter says `type: directive`, or two documents with one `type:id`), so do
+  not index the payload's bodies by marker key alone.
 
 ## Execution Notes
 

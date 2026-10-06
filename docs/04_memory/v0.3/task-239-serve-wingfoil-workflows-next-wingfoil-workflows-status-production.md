@@ -8,7 +8,7 @@ kind: "feature"
 priority: "medium"
 tags: ["v0.3", "workflow", "mcp"]
 ref: "spec-017"
-bug: []
+bug: ["bug-258", "bug-259"]
 depends_on: ["task-147-detect-created-files-commits-req-sec-05-nopersistence", "task-225-add-workflow-status-pending-approvals-role-routing-fallback"]
 tmpl_version: 260703
 ---
@@ -31,6 +31,11 @@ The two read-only Resources are registered next to `registerWorkflowResources` i
 - **Features:** P4.4, P4.5.
 - **Notes:** Proposal key: A11.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from the W2 B4a triage (2026-10-06).** `bug-258` and `bug-259` are absorbed here. With this task's
+  `spec-004` §4.1 amendment: the nine mutating verbs as rows (`dna set`, `add`, `update`, `remove`; `directive
+  create`, `assign`, `remove`; `memory amend`, `memory park`), §4.2's Memory sentence, and `spec-005` §Context's
+  noun list gaining `directives`; remove the matching entries from `test/docs/enumeration-parity.allowlist.ts`.
+  Both specs are approved elements: their amendments are recorded by the approver at the gate.
 
 ## Execution Notes
 

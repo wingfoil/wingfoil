@@ -48,6 +48,10 @@ This task builds the pre-launch half of `agent execute`, for the stepless (`adho
 - **Features:** P5.3.1, P5.4.2, P5.4.3, P5.4.4.
 - **Notes:** Proposal key: B09. `src/agent/execute.ts`, `src/core/index.ts` (operation `agentExecute`, `mutates: true`, CLI only; no MCP exposure in v0.3, spec-016 §8). The stderr warnings (dl-050 option 4) go through task-169's success-warning renderer, so directive-assign warnings and context warnings share one convention.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from the W2 B4a triage (2026-10-06).** `bug-265` (v0.4): the context payload's body markers are not
+  unique, so do not index its bodies by marker key alone. `dl-158` (in discussion, release v0.3) decides which
+  `team.agents` entry signs and what an entry without an email writes under git-conventions §7: apply its ruling to
+  the agents this task launches.
 
 ## Execution Notes
 
