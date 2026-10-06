@@ -53,8 +53,11 @@ export interface StagingEffects {
   createToken(paths: StagingPaths): Promise<void>;
   /** Run `npm <args>`; throws on a non-zero exit. */
   npm(args: readonly string[], env: NodeJS.ProcessEnv, paths: StagingPaths): void;
-  /** Run the dl-023 smoke against the installed `wingfoil`. */
-  smoke(env: NodeJS.ProcessEnv, version: string): SmokeReport;
+  /**
+   * Run the dl-023 smoke against the installed `wingfoil`. With `commit`, `wingfoil --version` must be
+   * exactly `<version> (<commit>)` (task-254, `bug-235`).
+   */
+  smoke(env: NodeJS.ProcessEnv, version: string, commit?: string): SmokeReport;
   /** Progress sink. */
   log(line: string): void;
 }
@@ -67,6 +70,11 @@ export interface StagingOptions {
   readonly version: string;
   /** A pre-built tarball to stage instead of packing (CI: the gate job's artifact). */
   readonly tarball?: string;
+  /**
+   * The commit the tarball was built from (`--expect-commit`; CI: `GITHUB_SHA`). The smoke then
+   * requires the installed build stamp to name it; omitted, the stamp's commit is not checked.
+   */
+  readonly commit?: string;
   /** The effects to run. */
   readonly effects: StagingEffects;
   /** Environment to derive the staging environment from (defaults to `process.env`). */
@@ -129,8 +137,10 @@ export function stagingEnv(base: NodeJS.ProcessEnv, paths: StagingPaths): NodeJS
 export function publishArgs(tarball: string): string[];
 /** argv globally installing the exact staged version from staging. */
 export function installArgs(name: string, version: string): string[];
-/** Parse `[--tarball <path>]`. */
-export function parseArgs(argv: readonly string[]): { tarball?: string };
+/** Parse `[--tarball <path>] [--expect-commit <sha>]`; throws on a bad argument or commit name. */
+export function parseArgs(argv: readonly string[]): { tarball?: string; expectCommit?: string };
+/** The real effects: a filesystem work dir, a Verdaccio child process, npm subprocesses, the smoke. */
+export function realEffects(repoRoot: string, log: (line: string) => void): StagingEffects;
 /** Run the staging flow; resolves to the exit code. Teardown runs on every path. */
 export function runStaging(options: StagingOptions): Promise<number>;
 /** Stop a child: `SIGTERM`, bounded wait, `SIGKILL` — always resolves (dl-057 item c). */

@@ -12,6 +12,9 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   REGISTRY_STOP_TIMEOUT_MS,
@@ -21,6 +24,7 @@ import {
   installTeardownHandlers,
   parseArgs,
   publishArgs,
+  realEffects,
   runStaging,
   stagingEnv,
   stagingPaths,
@@ -70,8 +74,8 @@ function fakeEffects(failAt?: string): { readonly effects: StagingEffects; reado
       calls.push(`npm ${args[0]}`);
       maybeFail(`npm ${args[0]}`);
     },
-    smoke: (_env, version) => {
-      calls.push(`smoke ${version}`);
+    smoke: (_env, version, commit) => {
+      calls.push(commit === undefined ? `smoke ${version}` : `smoke ${version} ${commit}`);
       return { ok: failAt !== 'smoke', checks: [{ label: 'wingfoil --help', ok: failAt !== 'smoke', detail: '' }] };
     },
     log: () => undefined,
@@ -146,6 +150,84 @@ describe('publish:staging (task-060) — pure builders', () => {
     expect(parseArgs(['--tarball', 'dist-pack/wingfoil-0.2.0.tgz'])).toEqual({ tarball: 'dist-pack/wingfoil-0.2.0.tgz' });
     expect(() => parseArgs(['--tarball'])).toThrow('--tarball');
     expect(() => parseArgs(['--registry', 'x'])).toThrow('--registry');
+  });
+
+  it('parses an optional --expect-commit (task-254)', () => {
+    const sha = '0123456789abcdef0123456789abcdef01234567';
+    expect(parseArgs(['--expect-commit', sha])).toEqual({ expectCommit: sha });
+    expect(parseArgs(['--tarball', 't.tgz', '--expect-commit', sha])).toEqual({ tarball: 't.tgz', expectCommit: sha });
+    expect(() => parseArgs(['--expect-commit'])).toThrow('--expect-commit');
+    // An empty `"$GITHUB_SHA"` must stop the stage, never run it unchecked.
+    expect(() => parseArgs(['--expect-commit', ''])).toThrow('--expect-commit');
+    for (const bad of ['unknown', `${sha}-dirty`, 'main']) {
+      expect(() => parseArgs(['--expect-commit', bad])).toThrow('not a commit name');
+    }
+  });
+});
+
+/**
+ * task-254 (`bug-235`, `dl-111`): the stage requires the stamp to name the commit it staged, given as
+ * `--expect-commit`. `publish.yml`'s stage step passes `"$GITHUB_SHA"`, the commit the gate job of the
+ * same run built (`test/cli/publish-pipeline.test.ts` pins the step).
+ */
+describe('publish:staging (task-254) — the expected commit reaches the smoke', () => {
+  const SHA = '0123456789abcdef0123456789abcdef01234567';
+  const OTHER = 'fedcba9876543210fedcba9876543210fedcba98';
+
+  it('passes the expected commit to the smoke with the version', async () => {
+    const { effects, calls } = fakeEffects();
+    await expect(runStaging({ name: 'wingfoil', version: '0.3.0', effects, commit: SHA })).resolves.toBe(0);
+    expect(calls).toContain(`smoke 0.3.0 ${SHA}`);
+  });
+
+  it('logs that the commit is not checked when none is expected (a local run)', async () => {
+    const { effects, calls } = fakeEffects();
+    const lines: string[] = [];
+    await expect(runStaging({ name: 'wingfoil', version: '0.3.0', effects: { ...effects, log: (l) => lines.push(l) } })).resolves.toBe(0);
+    expect(calls).toContain('smoke 0.3.0');
+    expect(lines).toContain('no --expect-commit: the build stamp\'s commit is not checked');
+  });
+
+  describe('the real smoke effect, against a stub `wingfoil` on PATH', () => {
+    let bin: string;
+    beforeAll(() => {
+      bin = mkdtempSync(join(tmpdir(), 'wf-staging-stub-'));
+      const stub = join(bin, 'wingfoil');
+      writeFileSync(
+        stub,
+        [
+          `#!${process.execPath}`,
+          'const [a] = process.argv.slice(2);',
+          "if (a === '--help') { console.log('Usage: wingfoil'); process.exit(0); }",
+          "if (a === '--version') { console.log(process.env.SMOKE_STAMP); process.exit(0); }",
+          "console.log(JSON.stringify({ id: 'task-001-stub', from: 'draft', to: 'pending' }));",
+          '',
+        ].join('\n'),
+      );
+      chmodSync(stub, 0o755);
+    });
+    afterAll(() => rmSync(bin, { recursive: true, force: true }));
+
+    const smoke = (stamp: string, commit?: string) =>
+      realEffects(process.cwd(), () => undefined).smoke(
+        { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, SMOKE_STAMP: stamp },
+        '0.3.0',
+        commit,
+      );
+
+    it.each([['0.3.0 (unknown)'], [`0.3.0 (${SHA}-dirty)`], [`0.3.0 (${OTHER})`]])(
+      'fails the stage on %s when the commit is expected',
+      (stamp) => {
+        const report = smoke(stamp, SHA);
+        expect(report.ok).toBe(false);
+        expect(report.checks[report.checks.length - 1]).toMatchObject({ label: `wingfoil --version = 0.3.0 (${SHA})`, ok: false });
+      },
+    );
+
+    it('passes the stage on the exact stamp', () => {
+      const report = smoke(`0.3.0 (${SHA})`, SHA);
+      expect(report.checks.filter((c) => !c.ok)).toEqual([]);
+    });
   });
 });
 

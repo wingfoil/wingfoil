@@ -157,6 +157,16 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
     expect(download?.with?.name).toBe(upload?.with?.name);
   });
 
+  it('stage requires the stamp to name the commit the run built (task-254, bug-235)', () => {
+    const { parsed } = readWorkflow();
+    const step = parsed.jobs.stage?.steps.find((s) => s.run?.includes('npm run publish:staging'));
+    expect(step?.run).toBe('npm run publish:staging -- --tarball dist-pack/*.tgz --expect-commit "$GITHUB_SHA"');
+    // GITHUB_SHA must stay the one GitHub Actions sets for the run: nothing in the workflow overrides it.
+    for (const env of [parsed.env, parsed.jobs.gate?.env, parsed.jobs.stage?.env]) {
+      expect(Object.keys(env ?? {})).not.toContain('GITHUB_SHA');
+    }
+  });
+
   it('promote stages the same tarball with provenance, skipped under act (task-113, spec-015 §3 stage 4)', () => {
     const { parsed } = readWorkflow();
     const promote = parsed.jobs.promote;

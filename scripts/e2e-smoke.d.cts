@@ -36,8 +36,18 @@ export interface SmokeOptions {
   readonly commandArgs?: readonly string[];
   /** Environment for every spawned process (defaults to `process.env`). */
   readonly env?: NodeJS.ProcessEnv;
-  /** When given, `wingfoil --version` must print exactly this. */
+  /**
+   * When given, `wingfoil --version` must print this semver: bare, or as the build stamp
+   * `<semver> (<commit>)` with any commit (`unknown` and `-dirty` included) unless
+   * {@link expectedCommit} is given too.
+   */
   readonly expectedVersion?: string;
+  /**
+   * When given, `wingfoil --version` must print exactly `<expectedVersion> (<expectedCommit>)`
+   * (task-254, `bug-235`). Requires {@link expectedVersion}; must be a hex commit name of 7–64 digits,
+   * never `unknown` or `-dirty`. {@link runSmoke} throws otherwise.
+   */
+  readonly expectedCommit?: string;
   /** Progress sink, one line per check. */
   readonly log?: (line: string) => void;
 }
@@ -48,5 +58,16 @@ export const SMOKE_TEMPLATES: readonly string[];
 /** The per-template CLI steps, `init` first. */
 export function smokeSteps(template: string): readonly SmokeStep[];
 
-/** Run the dl-023 smoke; stops at the first failing check. */
+/** Run the dl-023 smoke; stops at the first failing check. Throws on an invalid `expectedCommit`. */
 export function runSmoke(options: SmokeOptions): SmokeReport;
+
+/** Throw unless `commit` is a hex commit name of 7–64 digits (no `-dirty`, not `unknown`). */
+export function assertCommitName(commit: string): void;
+
+/** Parse `[--expect-version X [--expect-commit SHA]] [-- command args...]`; throws on a bad argument. */
+export function parseSmokeArgs(argv: readonly string[]): {
+  command: string;
+  commandArgs: string[];
+  expectedVersion?: string;
+  expectedCommit?: string;
+};
