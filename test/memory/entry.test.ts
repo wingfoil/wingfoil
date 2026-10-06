@@ -89,7 +89,7 @@ describe('P1.11 scenario 2 — Each Memory entry is individually versioned', () 
   });
 });
 
-describe('P1.11 scenario 3 — Error: writing a Memory entry to a path outside the configured store', () => {
+describe('P1.11 scenario 3 — Error: writing a Memory entry to a path outside the project root', () => {
   let repo: string;
   afterEach(() => removeTempDir(repo));
 
