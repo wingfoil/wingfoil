@@ -36,6 +36,7 @@
     "publish:staging": "node scripts/publish-staging.cjs",
     "check:lockfile": "node scripts/check-lockfile-pins.cjs",
     "check:audit": "npm audit --omit=dev --audit-level=high",
+    "check:audit:all": "npm audit --audit-level=high",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.build.json",
     "docs:api": "typedoc --options typedoc.json",

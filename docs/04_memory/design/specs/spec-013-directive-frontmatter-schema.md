@@ -38,8 +38,9 @@ Two upstream anchors bound this shape:
 - **P3.8 (built-in directive templates)** — the official P3.8 templates ship since
   `task-057-builtin-directive-templates`: `wingfoil init` installs them under `directives/built-in/`
   with `kind: built-in`. This repository's own configuration predates them and still keeps the six
-  as `kind: custom` stand-ins citing `ref: [P3.8]` (`.wingfoil/README.md`; reconciling the two is
-  `bug-040`). The schema accepts both `kind` values without change.
+  as `kind: custom` stand-ins citing `ref: [P3.8]` (`.wingfoil/README.md`). Reconciling the two is
+  out of scope of `bug-040`, which corrected only the documentation that said the templates did not
+  exist, and is not scheduled. The schema accepts both `kind` values without change.
 
 > **Note on the `task-004` Acceptance Criteria wording.** REQ-SYS-02's AC (and `task-004`'s copy of
 > it) writes the fourth pillar as `directives/*.yaml`. The real files are **`.md` with YAML
@@ -193,3 +194,11 @@ are twelve.
 newer-format refusal, and the same key in `roles.yaml`. Every directive valid before stays valid.
 Edited in place without a supersede or a state change (`dl-047`); pending the approver's sign-off at
 `task-251`'s review.
+
+**Revision (2026-10-05, `task-188-correct-spec-011-bindings-id-stale-builtin-templates`) — who owns
+the stand-in reconciliation.** The P3.8 anchor said reconciling the stand-ins with the shipped
+templates "is `bug-040`". `bug-040` corrected only the documentation that called the templates
+unimplemented; the reconciliation is out of its scope and not scheduled, as the stand-ins' own note,
+`roles.yaml`'s header and `spec-011`'s `built-in/` paragraph now say. No field, rule or other section
+changed. Edited in place without a supersede or a state change (`dl-047`); pending the approver's
+sign-off at `task-188`'s review.

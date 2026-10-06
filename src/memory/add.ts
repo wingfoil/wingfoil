@@ -195,7 +195,7 @@ export function nextSequenceNumber(root: string, pathPattern: string, idPattern:
   return highestSequenceNumber(sequenceCandidatePaths(root, prefix), pathPattern, idPattern) + 1;
 }
 
-/** The fields `memory.add` pins on the freshly-created draft document (P1.3 memory.add / spec-010). */
+/** The fields `memory.add` pins on the freshly-created document (P1.3 memory.add / spec-010). */
 export interface AddDocumentFields {
   readonly id: string;
   readonly title: string;
@@ -207,6 +207,12 @@ export interface AddDocumentFields {
    * or appended when the scaffold has none.
    */
   readonly fields?: readonly (readonly [string, string])[];
+  /**
+   * The initial `status`: the head of the type's machine (`spec-001`; `bug-214`, task-180), which
+   * `memory add` resolves from the committed `memory.yaml`. Defaults to `draft`, the head of the
+   * built-in default machine.
+   */
+  readonly status?: string;
 }
 
 /**
@@ -218,7 +224,8 @@ function escapeRegExp(value: string): string {
 /**
  * Copy a type's `template.file` scaffold verbatim and fill only the frontmatter skeleton `memory.add`
  * pins (P1.3; spec-010-memory-frontmatter-schema): the generated `id`, the `--title`, the
- * initial `status: draft`, when `--tags` was supplied the `tags` flow sequence, and the `--set` fields
+ * initial `status` (the head of the type's machine, {@link AddDocumentFields.status}), when `--tags`
+ * was supplied the `tags` flow sequence, and the `--set` fields
  * {@link AddDocumentFields.fields} carries (task-110). Every other
  * field (notably `type` and `tmpl_version`, spec-010: not touched by add) and the whole body are left
  * exactly as the scaffold had them. `title`/`tags` are JSON-quoted (valid YAML double-quoted scalars /
@@ -241,7 +248,7 @@ export function renderAddDocument(scaffold: string, fields: AddDocumentFields): 
   let document = `---\n${frontmatter}\n---\n${body}`;
   document = setFrontmatterEntry(document, 'id', fields.id);
   document = setFrontmatterEntry(document, 'title', JSON.stringify(fields.title));
-  document = setFrontmatterEntry(document, 'status', 'draft');
+  document = setFrontmatterEntry(document, 'status', fields.status ?? 'draft');
   if (fields.tags !== undefined) {
     const flow = `[${fields.tags.map((tag) => JSON.stringify(tag)).join(',')}]`;
     document = setFrontmatterEntry(document, 'tags', flow);

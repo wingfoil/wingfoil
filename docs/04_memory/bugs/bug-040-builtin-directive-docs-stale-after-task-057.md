@@ -2,7 +2,7 @@
 id: "bug-040-builtin-directive-docs-stale-after-task-057"
 type: bug
 title: "Documentation that says the P3.8 built-in directive templates are \"not yet implemented\" becomes stale when task-057 merges"
-status: planned
+status: closed
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"

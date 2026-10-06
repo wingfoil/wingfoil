@@ -136,8 +136,14 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
     ]);
   });
 
-  it('`dna set ..language python` still reports the malformed path first (P2.1-dna-set.feature)', () => {
+  it('`dna set ..language python` is refused for the surplus, like every command (task-179, bug-180)', () => {
+    // Until task-179 the DNA path verbs refused the surplus themselves, after their path check, so this
+    // reported `invalid key path`; `P2.1-dna-set.feature` now writes the malformed-path case with
+    // `--value` (`test/cli/operand-error-shape.integration.test.ts`).
     const result = runCli(repo, ['dna', 'set', '..language', 'python']);
-    expect([result.status, result.stderr]).toEqual([2, "error: invalid key path: '..language'\n"]);
+    expect([result.status, result.stderr]).toEqual([
+      2,
+      'error: wingfoil dna set takes one positional <path>; the value travels in --value (got 2 positionals)\n',
+    ]);
   });
 });

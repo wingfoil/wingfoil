@@ -2,7 +2,7 @@
 id: bug-168-missing-positional-messages-disagree
 type: bug
 title: "The missing-operand error has two shapes: `missing required argument: memory submit <id>` for Memory and directive verbs, but `missing required argument: wingfoil dna update <path> --value <value>` for the DNA verbs"
-status: planned
+status: closed
 severity: "low"
 release-origin: "v0.2.2"
 release: "v0.3"

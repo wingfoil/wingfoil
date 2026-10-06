@@ -1,8 +1,10 @@
 # WingFoil — Directive role assignments (P3.2, P3.7)
 # Binds directives to roles defined in .wingfoil/dna.yaml. One directive may bind to many roles.
 # NOTE: this hand-authored configuration predates the P3.8 built-in templates `wingfoil init` now
-# installs, so the P3.8 templates live in `custom/` as stand-ins (bug-040). Approval/directives bind to
-# roles, never to people (REQ-SYS-08).
+# installs, so the P3.8 templates live in `custom/` as stand-ins. Reconciling them with the shipped
+# templates is not scheduled (bug-040 corrected only the documentation saying they did not exist).
+# Bindings name directive ids (`frontmatter.id`), never `name` (dl-060, spec-011). Approval/directives
+# bind to roles, never to people (REQ-SYS-08).
 #
 # `security` (the P3.8 Security template, REQ-SEC-08) is global since task-133 (dl-059 option 1), as
 # the `init` scaffold binds it; its WingFoil elaboration `security-secrets` stays global beside it.
@@ -16,7 +18,7 @@
 # `git-conventions` (dl-119 Q2 (b), task-178) is global: its subject, identity and attribution clauses
 # bind whoever commits — the approver's approve commits, the facilitator's and product-owner's captures
 # — not only the developer. Declared global here and by `scope: global` in its file (task-144).
-version: 1.3
+version: 1.4
 
 assignments:
   developer:

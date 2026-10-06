@@ -85,14 +85,14 @@ import { requireCustomAsset } from './builtin-asset';
 import { requireConfinedTarget, requireConfinedWriteTarget } from './confinement';
 import { APPROVER_ROLE, requireApprovalAuthority } from './approval-authority';
 import { optionalReason, requireReason } from './require-reason';
-import { beginMemoryTransition, checkMemoryTransition, commitMemoryTransition } from './memory-transition';
+import { beginMemoryTransition, checkMemoryTransition, commitMemoryTransition, requireWipSlot } from './memory-transition';
 import { prepareSupersede, supersedeReason } from './memory-supersede';
 import { amendReservedFields, requireAmendableEdit, requireAmendableType, requireRequiredFieldsKept } from './memory-amend';
 import { resolveAddType } from './memory-add-type';
 import { committedScopeError, requireAbsentTarget, requireUnmodifiedTarget } from './write-guard';
 import { UsageError } from './usage-error';
-import type { CoreFn, CoreModule, CoreOption } from './registry';
-import { extraOperandsReason } from './registry';
+import type { CoreFlag, CoreFn, CoreModule, CoreOption } from './registry';
+import { missingOperandReason } from './registry';
 import { coreErr, coreOk } from './types';
 import type { CoreError, CoreResult } from './types';
 
@@ -100,6 +100,8 @@ import type { CoreError, CoreResult } from './types';
 export const MODULE_NAME = 'core' as const;
 
 export {
+  // A missing working-tree configuration file, named repository-relative (task-179, `bug-245`).
+  ConfigFileMissingError,
   DIRECTIVES_DIR_PATH,
   DNA_YAML_PATH,
   MEMORY_YAML_PATH,
@@ -262,9 +264,20 @@ export function coreErrorOf(error: unknown): CoreError | null {
  * (`bug-035`); an unreadable or invalid `dna.yaml` is refused as every read-only query refuses it.
  */
 export function loadDnaRoleSet(root: string): CoreResult<readonly string[]> {
+  return loadConfigOrError(root, () => loadDnaYaml(root).team.roles.map(({ name }) => name));
+}
+
+/**
+ * {@link loadOrError} for a read that needs the project's configuration: a root with no `.wingfoil/` is
+ * refused first with the shared not-initialized message ({@link requireInitializedProject}, task-143),
+ * which names no path; otherwise the loader runs and its failures map as `loadOrError` maps them — a
+ * missing file as `ConfigFileMissingError`'s repository-relative message (task-179, `bug-198`,
+ * `bug-245`).
+ */
+function loadConfigOrError<R>(root: string, loader: () => R): CoreResult<R> {
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
-  return loadOrError(() => loadDnaYaml(root).team.roles.map(({ name }) => name));
+  return loadOrError(loader);
 }
 
 /** Adapt a synchronous, throwing pillar loader into a `CoreFn` taking just `{ root }` (spec-006 §2). */
@@ -320,7 +333,7 @@ export interface PathsShowResult {
  */
 const pathsFn: CoreFn<unknown, PathsShowResult | Paths> = async (params) => {
   const { root, positional: category } = params as PathsParams;
-  const loaded: CoreResult<DnaYaml> = loadOrError(() => loadDnaYaml(root));
+  const loaded: CoreResult<DnaYaml> = loadConfigOrError(root, () => loadDnaYaml(root));
   if (!loaded.ok) return loaded;
   if (category === undefined) return coreOk(loaded.value.paths);
 
@@ -347,7 +360,7 @@ const pathsFn: CoreFn<unknown, PathsShowResult | Paths> = async (params) => {
  */
 const dnaShowFn: CoreFn<unknown, unknown> = async (params) => {
   const { root, positional: section } = params as RootParams & { positional?: string };
-  const loaded: CoreResult<DnaYaml> = loadOrError(() => loadDnaYaml(root));
+  const loaded: CoreResult<DnaYaml> = loadConfigOrError(root, () => loadDnaYaml(root));
   if (!loaded.ok || section === undefined) return loaded;
 
   const key = DNA_KEY_ALIASES[section] ?? section;
@@ -372,7 +385,29 @@ export interface DnaSetParams {
   readonly root: string;
   readonly positionals?: readonly string[];
   readonly options?: Readonly<Record<string, string>>;
+  /** `--force` (task-193): authorize the whole-file rewrite of `dna.yaml` ({@link dnaRewriteConflict}). */
+  readonly force?: boolean;
 }
+
+/**
+ * The refusal of a DNA write the in-place editor cannot express, when `--force` was not given
+ * (task-193, approver ruling R20/Q9 of `release-planning-rel-v0.3-plan`: the same rule as
+ * `dl-062` for `roles.yaml`, task-169's `rolesRewriteConflict`). `CONFLICT`, exit 1, nothing
+ * written. Pinned in `spec-008` §6.
+ */
+export function dnaRewriteConflict(field: string): string {
+  return `dna.yaml cannot be updated in place; edit ${field} by hand, or pass --force to rewrite the whole file`;
+}
+
+/**
+ * The warning a `--force`d whole-file rewrite of `dna.yaml` carries on its success (task-193), on
+ * task-169's success-warning channel (`CoreResult.warnings`). It names what the `js-yaml` `dump` of
+ * the parsed document does not keep — the list `ROLES_REWRITE_WARNING` gives for `roles.yaml`,
+ * since the two files go through the same `dump`. Pinned in `spec-008` §6.
+ */
+export const DNA_REWRITE_WARNING =
+  'dna.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, ' +
+  'blank lines, line endings or number formatting (1.0 becomes 1)';
 
 /**
  * The shared body of every DNA mutation (`dna set`, and `dna add|remove|update` since
@@ -408,8 +443,13 @@ export interface DnaSetParams {
  *    in-place textual edit, so every comment survives — including the inline `[SPEC]`/`[AUTHORING]`
  *    field-provenance annotations a whole-file re-serialization deletes
  *    (bug-004-dna-set-strips-yaml-comments, task-063). When no provably-minimal edit exists it returns
- *    `undefined` and this FALLS BACK to `dump(dna, { lineWidth: -1 })` — correct, but comment-stripping.
- *    Both paths are deterministic (REQ-SYS-07).
+ *    `undefined`, and the only other candidate is the whole-file `dump(dna, { lineWidth: -1 })` —
+ *    correct, but it keeps no comment. Both are deterministic (REQ-SYS-07). Since task-193 (`bug-019`,
+ *    `bug-126`; ruling R20/Q9, as `dl-062`) that rewrite is **refused** (`CONFLICT`, exit 1,
+ *    {@link dnaRewriteConflict}) unless `force` authorizes it, and a forced one succeeds with
+ *    {@link DNA_REWRITE_WARNING}. The refusal comes after step 7, so a write the schema would refuse
+ *    anyway is reported as the `VALIDATION` it is, not as something `--force` could fix. `force`
+ *    authorizes the rewrite and does not demand it: an in-place edit is still made in place, unwarned.
  * 7. **Re-validate the written bytes** against `DnaYaml` (spec-002) BEFORE persisting — re-parsing the
  *    serialized form, not the in-memory object, so the check honours YAML's own scalar coercion and
  *    validates the exact bytes about to be written (`dna set version 2` writes `version: '2'` and
@@ -430,6 +470,7 @@ async function runDnaMutation(
   request: DnaMutationRequest,
   subject: string = dnaCommitSubject(request),
   scalarOnly = false,
+  force = false,
 ): Promise<CoreResult<{ key: string; value?: string }>> {
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
@@ -442,7 +483,7 @@ async function runDnaMutation(
   const unmodified = requireUnmodifiedTarget(root, DNA_YAML_PATH);
   if (!unmodified.ok) return unmodified;
 
-  const loaded: CoreResult<DnaYaml> = loadOrError(() => loadDnaYaml(root));
+  const loaded: CoreResult<DnaYaml> = loadConfigOrError(root, () => loadDnaYaml(root));
   if (!loaded.ok) return loaded;
 
   if (scalarOnly) {
@@ -461,22 +502,30 @@ async function runDnaMutation(
 
   const dnaPath = join(root, DNA_YAML_PATH);
   const current = readDocument(dnaPath);
-  const serialized = applyDnaEditInText(current, applied.edit, applied.dna) ?? dump(applied.dna, { lineWidth: -1 });
+  const inPlace = applyDnaEditInText(current, applied.edit, applied.dna);
+  const serialized = inPlace ?? dump(applied.dna, { lineWidth: -1 });
 
-  const parsed = DnaYaml.safeParse(parseYaml(serialized, dnaPath));
+  // Labelled repository-relative, as every working-tree loader labels it (task-179, `bug-245`).
+  const parsed = DnaYaml.safeParse(parseYaml(serialized, DNA_YAML_PATH));
   if (!parsed.success) {
-    const validationError = toValidationError(parsed.error, dnaPath);
+    const validationError = toValidationError(parsed.error, DNA_YAML_PATH);
     return coreErr({ code: 'VALIDATION', message: validationError.message, details: { issues: validationError.issues } });
   }
 
   const outcome = { key: request.field, value: request.value };
   if (current === serialized) return coreOk(outcome);
 
+  const warnings: string[] = [];
+  if (inPlace === undefined) {
+    if (!force) return coreErr({ code: 'CONFLICT', message: dnaRewriteConflict(request.field) });
+    warnings.push(DNA_REWRITE_WARNING);
+  }
+
   writeDocument(dnaPath, serialized);
   const sha = commitPaths(root, [DNA_YAML_PATH], subject);
   const leaked = committedScopeError(root, sha, DNA_YAML_PATH, serialized);
   if (leaked) return leaked;
-  return coreOk(outcome, { sha, message: subject });
+  return coreOk(outcome, { sha, message: subject }, warnings);
 }
 
 /**
@@ -494,42 +543,41 @@ function dnaCommitSubject(request: DnaMutationRequest): string {
  * agree on where their target comes from (`dl-082-cli-parameter-shape`: a positional carries the
  * identity of the target).
  *
- * Three usage errors, in the order they are checked, and the order is load-bearing:
+ * Two usage errors, in the order they are checked:
  *
- * 1. **Missing** — nothing to act on.
+ * 1. **Missing** — nothing to act on: {@link missingOperandReason}'s `missing required argument: <path>`,
+ *    the wording every command uses (task-179, `bug-168`). The CLI registrar refuses it first, with the
+ *    usage hint; this is the same refusal for a caller that reaches core without the registrar.
  * 2. **Unparseable** — whatever `splitDnaPath` (`src/dna/set.ts`) refuses, reported with **its own**
  *    message rather than a flat one, because the three cases are not the same complaint: an empty
  *    segment (the BDD's `..language`) is malformed, an unterminated quote is a typo in the
  *    delimiters, and a `"` no delimiter can account for means the *name* has no spelling at all
- *    (`dl-083-dotted-entry-names-in-paths`, task-099). Checked BEFORE the extra-positional rule below
- *    so that `dna set ..language python`, which is `P2.1-dna-set.feature`'s third scenario verbatim,
- *    keeps reporting `invalid key path: '..language'` rather than the migration hint. A stale
- *    invocation that is also malformed is malformed first.
- * 3. **Extra positionals** — the old `dna set <key> <value>` spelling, and any slip of the same
- *    shape on the three new verbs. It gets a named message rather than being ignored, because
- *    `dl-082` is a breaking change to a shipped command and silently dropping the second word would
- *    make `dna set project.license MIT` look like it worked (`--value` absent, the write refused for
- *    a reason that names neither the second word nor the new grammar). Since task-129 the registrar
- *    refuses a surplus operand for every other command before the root is resolved; the four DNA
- *    path verbs declare `refusesExtraItself` so that rule 2 keeps coming first, and word the refusal
- *    with the same `extraOperandsReason` plus the migration hint.
+ *    (`dl-083-dotted-entry-names-in-paths`, task-099).
  *
- * All three are exit `2` (`UsageError` → `exitCodeForThrow`, `spec-005-cli-command-contract` §1).
+ * A surplus operand — the old `dna set <key> <value>` spelling — is not checked here: since task-179
+ * (`bug-180`) the registrar refuses it before the project root is resolved, as for every command, with
+ * the `the value travels in --value` migration hint the four verbs declare ({@link DNA_SURPLUS_HINT}).
+ *
+ * Both are exit `2` (`UsageError` → `exitCodeForThrow`, `spec-005-cli-command-contract` §1).
  */
-function dnaPathPositional(verb: string, positionals: readonly string[] | undefined): string {
+function dnaPathPositional(positionals: readonly string[] | undefined): string {
   const path = positionals?.[0];
   if (path === undefined) {
-    throw new UsageError(`missing required argument: wingfoil dna ${verb} <path> --value <value>`);
+    throw new UsageError(missingOperandReason('path'));
   }
   const split = splitDnaPath(path);
   if (!split.ok) {
     throw new UsageError(split.message);
   }
-  if ((positionals?.length ?? 0) > 1) {
-    throw new UsageError(extraOperandsReason(`dna ${verb}`, 'path', positionals!.length, 'the value travels in --value'));
-  }
   return path;
 }
+
+/**
+ * What the surplus-operand refusal of the four DNA path verbs adds (`CorePositional.surplusHint`): the
+ * value moved out of a second positional into `--value` (`dl-082`, task-093), so a stale
+ * `dna set <key> <value>` is told where it goes.
+ */
+const DNA_SURPLUS_HINT = 'the value travels in --value';
 
 /**
  * `dna set <path> --value <v>` `CoreOperation.fn` (P2.1) — kept, and still the scalar spelling
@@ -549,9 +597,9 @@ function dnaPathPositional(verb: string, positionals: readonly string[] | undefi
  * write the field.
  */
 const dnaSetFn: CoreFn<unknown, { key: string; value?: string }> = async (params) => {
-  const { root, positionals, options } = params as DnaSetParams;
+  const { root, positionals, options, force } = params as DnaSetParams;
 
-  const keyPath = dnaPathPositional('set', positionals);
+  const keyPath = dnaPathPositional(positionals);
   const value = options?.value;
   if (value === undefined) {
     throw new UsageError('missing required argument: --value');
@@ -561,7 +609,7 @@ const dnaSetFn: CoreFn<unknown, { key: string; value?: string }> = async (params
   // reader (and `git log --grep`) sees the command that was run, not the verb it delegates to. The
   // scalar-only restriction, `dl-080`(B)'s dirty-target guard (task-092) and the committed-tree
   // post-condition all live in the shared pipeline now, on the one document it loads.
-  return runDnaMutation(root, { verb: 'update', field: keyPath, value }, `wf(dna): set ${keyPath}`, true);
+  return runDnaMutation(root, { verb: 'update', field: keyPath, value }, `wf(dna): set ${keyPath}`, true, force === true);
 };
 
 /**
@@ -577,6 +625,8 @@ export interface DnaMutationParams {
   readonly root: string;
   readonly positionals?: readonly string[];
   readonly options?: Readonly<Record<string, string>>;
+  /** `--force` (task-193): authorize the whole-file rewrite of `dna.yaml` ({@link dnaRewriteConflict}). */
+  readonly force?: boolean;
 }
 
 /** Split a verb's invocation into the positional `<path>`, `--value` and the per-entry `--entry-<field>` values. */
@@ -585,7 +635,7 @@ function dnaMutationRequest(
   positionals: readonly string[] | undefined,
   options: Readonly<Record<string, string>> | undefined,
 ): DnaMutationRequest {
-  const field = dnaPathPositional(verb, positionals);
+  const field = dnaPathPositional(positionals);
   if (verb === 'add' && options?.value === undefined) throw new UsageError('missing required argument: --value');
 
   // Every remaining option is an entry field, carried under its `--entry-<field>` name (see
@@ -611,20 +661,23 @@ function dnaMutationRequest(
 
 /** `dna add` — create an entry, or append to a list (`dl-081` option (E); spec-006 §3, Tool `dna.add`). */
 const dnaAddFn: CoreFn<unknown, { key: string; value?: string }> = async (params) => {
-  const { root, positionals, options } = params as DnaMutationParams;
-  return runDnaMutation(root, dnaMutationRequest('add', positionals, options));
+  const { root, positionals, options, force } = params as DnaMutationParams;
+  const request = dnaMutationRequest('add', positionals, options);
+  return runDnaMutation(root, request, dnaCommitSubject(request), false, force === true);
 };
 
 /** `dna remove` — drop an entry, a value from a list, or an optional field (Tool `dna.remove`). */
 const dnaRemoveFn: CoreFn<unknown, { key: string; value?: string }> = async (params) => {
-  const { root, positionals, options } = params as DnaMutationParams;
-  return runDnaMutation(root, dnaMutationRequest('remove', positionals, options));
+  const { root, positionals, options, force } = params as DnaMutationParams;
+  const request = dnaMutationRequest('remove', positionals, options);
+  return runDnaMutation(root, request, dnaCommitSubject(request), false, force === true);
 };
 
 /** `dna update` — change a value, a list, or the fields of one entry (Tool `dna.update`). */
 const dnaUpdateFn: CoreFn<unknown, { key: string; value?: string }> = async (params) => {
-  const { root, positionals, options } = params as DnaMutationParams;
-  return runDnaMutation(root, dnaMutationRequest('update', positionals, options));
+  const { root, positionals, options, force } = params as DnaMutationParams;
+  const request = dnaMutationRequest('update', positionals, options);
+  return runDnaMutation(root, request, dnaCommitSubject(request), false, force === true);
 };
 
 /**
@@ -656,6 +709,14 @@ const DNA_SET_VALUE_OPTION: CoreOption = {
   name: 'value',
   required: true,
   description: 'the new value for <path> (scalar fields only — use dna update for collections and lists)',
+};
+/**
+ * `--force` on the four DNA write verbs (task-193, ruling R20/Q9): the opt-in to the whole-file rewrite
+ * the in-place editor would otherwise refuse. A per-command flag, listed in `spec-008` §12.
+ */
+const DNA_FORCE_FLAG: CoreFlag = {
+  name: 'force',
+  description: 'rewrite the whole dna.yaml when it cannot be edited in place (comments and formatting are not kept)',
 };
 const DNA_ENTRY_OPTIONS: readonly CoreOption[] = dnaEntryOptionNames().map((field) => ({
   name: dnaEntryOptionName(field),
@@ -711,9 +772,11 @@ function singleOption(options: MemoryAddParams['options'], name: string): string
  *    every folder the committed `path` pattern can resolve to, plus one (task-128, `dl-101` §2 (a),
  *    `bug-087`, `bug-162`). That read is wider than `HEAD` on purpose — it can only raise the number —
  *    and is the declared baseline `command-baseline` records for it.
- * 5. **Fill the committed scaffold's bytes** with only the `id`/`status: draft`/`--title`/`--tags`
+ * 5. **Fill the committed scaffold's bytes** with only the `id`/`status`/`--title`/`--tags`
  *    skeleton (P1.3; spec-010-memory-frontmatter-schema) plus the `--set` fields (a context token only
- *    where the scaffold declares it), then **write + commit** through task-022's
+ *    where the scaffold declares it). `status` is the head of the type's committed machine
+ *    (`spec-001`; `bug-214`, task-180), and a WIP limit declared on that state is checked
+ *    (`requireWipSlot`, `CONFLICT`, exit 1). Then **write + commit** through task-022's
  *    confined `writeMemoryEntry` (REQ-SEC-06 refuse-before-write + one scoped commit
  *    `wf(<type>): add <id>`); the returned sha rides `CoreResult.commit`.
  *
@@ -741,7 +804,7 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
   // a working-tree copy, in the same way task-091 made that true of the four transition verbs.
   const resolved = resolveAddType(root, type);
   if (!resolved.ok) return resolved;
-  const { pathPattern, idPattern, scaffold } = resolved.value;
+  const { pathPattern, idPattern, scaffold, initialState, memoryYaml: committedMemoryYaml } = resolved.value;
 
   const unknown = unknownSetNames(set.values, idPattern, pathPattern);
   if (unknown.length > 0) {
@@ -763,7 +826,7 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
       ? nextSequenceNumber(root, pathPattern, materialized)
       : 0;
     const id = generateId(materialized, { slug: slugifyTitle(title), n: sequence });
-    const content = renderAddDocument(scaffold, { id, title, tags, fields: writtenFields(scaffold, set.values) });
+    const content = renderAddDocument(scaffold, { id, title, tags, fields: writtenFields(scaffold, set.values), status: initialState });
     const pathValues = { ...set.values, id };
     const message = `wf(${type}): add ${id}`;
 
@@ -779,6 +842,10 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
     const targetPath = relative(root, resolveConfinedMemoryPath(root, pathPattern, pathValues)).split(sep).join('/');
     const absent = requireAbsentTarget(root, targetPath);
     if (!absent.ok) return absent;
+    // `add` is the verb that enters the initial state, so a WIP limit declared there holds here too
+    // (task-180, `dl-110` P3 (a)), counted in the commit the type was resolved at.
+    const slot = requireWipSlot(root, 'HEAD', committedMemoryYaml, type, initialState);
+    if (!slot.ok) return slot;
 
     const { path, sha } = writeMemoryEntry(root, pathPattern, pathValues, content, message, {
       author: identity.value,
@@ -788,7 +855,7 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
     });
     const leaked = committedScopeError(root, sha, targetPath, content);
     if (leaked) return leaked;
-    return coreOk({ id, path: relative(root, path) }, { sha, message });
+    return coreOk({ id, path: relative(root, path) }, { sha, message }, slot.value.map(formatDiagnostic));
   } catch (error) {
     if (error instanceof StorageError) {
       // One rule, one code (task-130, `bug-123`, `spec-005` §3): a confinement refusal is `VALIDATION`
@@ -898,7 +965,7 @@ const memorySearchFn: CoreFn<unknown, MemorySearchResult> = async (params) => {
   if (positional !== undefined) validateSearchQuery(positional);
   const query = positional ?? '';
 
-  const loaded: CoreResult<MemoryYaml> = loadOrError(() => loadMemoryYaml(root));
+  const loaded: CoreResult<MemoryYaml> = loadConfigOrError(root, () => loadMemoryYaml(root));
   if (!loaded.ok) return loaded;
 
   const tag = options?.tag;
@@ -1031,10 +1098,10 @@ export interface MemoryHistoryResult {
 const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => {
   const { root, positional: id } = params as MemoryHistoryParams;
   if (id === undefined || id.trim().length === 0) {
-    throw new UsageError('missing required argument: memory history <id>');
+    throw new UsageError(missingOperandReason('id'));
   }
 
-  const loaded: CoreResult<MemoryYaml> = loadOrError(() => loadMemoryYaml(root));
+  const loaded: CoreResult<MemoryYaml> = loadConfigOrError(root, () => loadMemoryYaml(root));
   if (!loaded.ok) return loaded;
 
   const diagnostics: Diagnostic[] = [];
@@ -1127,7 +1194,7 @@ const memorySubmitFn: CoreFn<unknown, MemorySubmitResult> = async (params) => {
   const { root, positional: id } = params as MemorySubmitParams;
 
   if (id === undefined || id.trim().length === 0) {
-    throw new UsageError('missing required argument: memory submit <id>');
+    throw new UsageError(missingOperandReason('id'));
   }
 
   const prepared = beginMemoryTransition(root, id, 'submit');
@@ -1236,7 +1303,7 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
   const { root, positional: id, options } = params as MemoryApproveParams;
 
   if (id === undefined || id.trim().length === 0) {
-    throw new UsageError('missing required argument: memory approve <id>');
+    throw new UsageError(missingOperandReason('id'));
   }
   const reason = requireReason(options);
 
@@ -1388,7 +1455,7 @@ const memoryRejectFn: CoreFn<unknown, MemoryRejectResult> = async (params) => {
   const { root, positional: id, options } = params as MemoryRejectParams;
 
   if (id === undefined || id.trim().length === 0) {
-    throw new UsageError('missing required argument: memory reject <id>');
+    throw new UsageError(missingOperandReason('id'));
   }
   const reason = requireReason(options);
 
@@ -1487,7 +1554,7 @@ const memoryDeprecateFn: CoreFn<unknown, MemoryDeprecateResult> = async (params)
   const { root, positional: id, options } = params as MemoryDeprecateParams;
 
   if (id === undefined || id.trim().length === 0) {
-    throw new UsageError('missing required argument: memory deprecate <id>');
+    throw new UsageError(missingOperandReason('id'));
   }
   // `--reason` is optional here (`dl-027`), but a reason that IS given must be recordable in the
   // trailer — blank, carrying a control character other than tab or newline, or trailer-shaped is a
@@ -1503,6 +1570,71 @@ const memoryDeprecateFn: CoreFn<unknown, MemoryDeprecateResult> = async (params)
   }
 
   const message = formatMemoryCommitMessage({ type, op: 'deprecate', ids: [id], transition: { from, to }, reason });
+  const rendered = setFrontmatterField(content, 'status', to);
+  const committed = commitMemoryTransition(root, prepared.value, rendered, message);
+  if (!committed.ok) return committed;
+  return coreOk({ id, path, from, to, reason }, { sha: committed.value, message }, prepared.value.warnings);
+};
+
+/**
+ * `wingfoil memory park <id> --reason <text>` params (task-180, `dl-110` P1 (a)). The id rides the bare
+ * `ParamsContext.positional` seam (`spec-008-cli-grammar` §7) and `--reason` the value-bearing
+ * `options` seam. Both are optional only because the seams are; {@link memoryParkFn} refuses either
+ * absent.
+ */
+export interface MemoryParkParams {
+  readonly root: string;
+  readonly positional?: string;
+  readonly options?: Readonly<Record<string, string>>;
+}
+
+/** `memory park` success shape: the document, the return edge it took, and the reason recorded. */
+export interface MemoryParkResult {
+  readonly id: string;
+  /** Root-relative path of the parked document. */
+  readonly path: string;
+  readonly from: string;
+  /** The `returns.<from>` target of the type's machine. */
+  readonly to: string;
+  /** The `--reason` text, exactly as given. */
+  readonly reason: string;
+}
+
+/**
+ * `memory park` `CoreOperation.fn` (task-180, `mutates: true`; `dl-110` P1 (a)) — return a started
+ * element to an earlier state along its type's declared `returns` edge (`spec-001`), e.g. a `task` from
+ * `in-progress` back to `backlog`. Returning is not rejecting (`dl-110` Rationale): the commit says the
+ * work is not being done now, not that it was wrong, so `memory history` keeps the two apart. Order,
+ * every refusal before the single write (`spec-006` §7):
+ *
+ * 1. **`<id>`** absent or blank, then **`requireReason`** (`dl-067`) → `UsageError` (exit `2`), before
+ *    the identity is read (task-125, `bug-172`). The reason is mandatory: a park records why.
+ * 2. **{@link beginMemoryTransition}** with op `park` — identity (REQ-SEC-01), then the document and
+ *    its edge at `HEAD` (`dl-080`): a state with no `returns` edge is `INVALID_TRANSITION` with the
+ *    `dl-032` contract message (exit `1`), and a WIP limit declared on the target state is checked
+ *    there too (`requireWipSlot`, `CONFLICT`, exit `1`).
+ * 3. **Edit + commit** — `status` set to the target and nothing else (`spec-010` field-write ownership,
+ *    enforced by `commitMemoryTransition`'s post-condition), one commit scoped to that file:
+ *    `wf(<type>): park <id> [<from> → <to>]` with a `Reason:` block (`spec-008` §2).
+ *
+ * Deliberately absent: no `Approver:` line and no authority check. A park is a scheduling decision, not
+ * an approval gate; `dl-110` names no approver for it. What parking does to the work around the element
+ * under `dev-loop` (the task's worktree, its bugs' `sync_state`) is `dl-110` P2, owned by the workflow,
+ * not by this verb.
+ */
+const memoryParkFn: CoreFn<unknown, MemoryParkResult> = async (params) => {
+  const { root, positional: id, options } = params as MemoryParkParams;
+
+  if (id === undefined || id.trim().length === 0) {
+    throw new UsageError(missingOperandReason('id'));
+  }
+  const reason = requireReason(options);
+
+  const prepared = beginMemoryTransition(root, id, 'park');
+  if (!prepared.ok) return prepared;
+  const { type, path, from, to, content } = prepared.value;
+
+  const message = formatMemoryCommitMessage({ type, op: 'park', ids: [id], transition: { from, to }, reason });
   const rendered = setFrontmatterField(content, 'status', to);
   const committed = commitMemoryTransition(root, prepared.value, rendered, message);
   if (!committed.ok) return committed;
@@ -1572,7 +1704,7 @@ const memoryAmendFn: CoreFn<unknown, MemoryAmendResult> = async (params) => {
   const { root, positional: id, options } = params as MemoryAmendParams;
 
   if (id === undefined || id.trim().length === 0) {
-    throw new UsageError('missing required argument: memory amend <id>');
+    throw new UsageError(missingOperandReason('id'));
   }
   const reason = requireReason(options);
 
@@ -1812,7 +1944,7 @@ export interface DirectiveRemoveResult {
  * strictly **before** anything on disk changes:
  *
  * 1. `<name>` presence — a missing or blank positional is a `UsageError` → exit **2**
- *    (`missing required argument: directive remove <name>`, the `memory submit <id>` precedent).
+ *    (`missing required argument: <name>`, the one missing-operand wording, task-179).
  * 2. `requireGitIdentity` pre-flight (REQ-SEC-01), after the usage check (task-125, `bug-172`).
  * 3. **Resolve the name to a real file**, never to a constructed path. `loadDirectives` reads every
  *    installed directive and {@link selectDirectivesById} picks the winner for that id under
@@ -1863,7 +1995,7 @@ const directiveRemoveFn: CoreFn<unknown, DirectiveRemoveResult> = async (params)
   const { root, positional: name } = params as DirectiveRemoveParams;
 
   if (name === undefined || name.trim().length === 0) {
-    throw new UsageError('missing required argument: directive remove <name>');
+    throw new UsageError(missingOperandReason('name'));
   }
 
   const identity = requireGitIdentity(root);
@@ -1989,9 +2121,10 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'dnaAdd',
         mutates: true,
         description: 'add an entry to a collection, or values to a list',
-        positional: { name: 'path', required: true, description: 'the collection (e.g. team.members) or list (e.g. paths.sources) to add to', refusesExtraItself: true },
+        positional: { name: 'path', required: true, description: 'the collection (e.g. team.members) or list (e.g. paths.sources) to add to', surplusHint: DNA_SURPLUS_HINT },
         options: [DNA_VALUE_OPTION, ...DNA_ENTRY_OPTIONS],
         example: 'wingfoil dna add team.members --value "Ada Lovelace" --entry-email ada@example.com --entry-roles approver',
+        flags: [DNA_FORCE_FLAG],
         fn: dnaAddFn,
       },
       // `remove` declares no entry-field options: it takes what to drop, never what to write.
@@ -1999,9 +2132,10 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'dnaRemove',
         mutates: true,
         description: 'remove a collection entry, or values from a list',
-        positional: { name: 'path', required: true, description: 'the entry to remove (<collection>.<name>), or the list to remove the --value values from', refusesExtraItself: true },
+        positional: { name: 'path', required: true, description: 'the entry to remove (<collection>.<name>), or the list to remove the --value values from', surplusHint: DNA_SURPLUS_HINT },
         options: [DNA_VALUE_OPTION],
         example: 'wingfoil dna remove paths.docs --value README.md',
+        flags: [DNA_FORCE_FLAG],
         fn: dnaRemoveFn,
       },
       // The FIRST `mutates: true` operation in production (spec-006 §3 dna table) — by construction an
@@ -2012,9 +2146,10 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'dnaSet',
         mutates: true,
         description: 'set one scalar field',
-        positional: { name: 'path', required: true, description: 'the dotted path of the scalar field, e.g. project.name (double-quote a segment that contains a dot)', refusesExtraItself: true },
+        positional: { name: 'path', required: true, description: 'the dotted path of the scalar field, e.g. project.name (double-quote a segment that contains a dot)', surplusHint: DNA_SURPLUS_HINT },
         options: [DNA_SET_VALUE_OPTION],
         example: 'wingfoil dna set project.name --value "My Project"',
+        flags: [DNA_FORCE_FLAG],
         fn: dnaSetFn,
       },
       dnaShow: {
@@ -2029,9 +2164,10 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'dnaUpdate',
         mutates: true,
         description: 'change fields of an existing collection entry',
-        positional: { name: 'path', required: true, description: 'the entry (<collection>.<name>), or one of its fields (<collection>.<name>.<field>) with --value', refusesExtraItself: true },
+        positional: { name: 'path', required: true, description: 'the entry (<collection>.<name>), or one of its fields (<collection>.<name>.<field>) with --value', surplusHint: DNA_SURPLUS_HINT },
         options: [DNA_VALUE_OPTION, ...DNA_ENTRY_OPTIONS],
         example: 'wingfoil dna update modules.api --entry-description "Public HTTP API"',
+        flags: [DNA_FORCE_FLAG],
         fn: dnaUpdateFn,
       },
     },
@@ -2049,7 +2185,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
       memoryAdd: {
         name: 'memoryAdd',
         mutates: true,
-        description: "create a document in its type's initial state (draft) from the type's template",
+        description: "create a document in its type's initial state (the first state of its sequence; draft by default) from the type's template",
         options: [
           { name: 'type', required: true, valueName: 'type', description: 'the Memory type, as the committed memory.yaml declares it' },
           { name: 'title', required: true, valueName: 'title', description: 'the document title; also the source of the {slug} token' },
@@ -2149,6 +2285,19 @@ export const CORE_MODULES: readonly CoreModule[] = [
         options: [{ name: 'reason', valueName: 'text', description: "why the document is retired, recorded as the commit's Reason: (not blank when given)" }],
         example: 'wingfoil memory deprecate dl-001-use-postgresql --reason "Superseded by the hosted-DB decision."',
         fn: memoryDeprecateFn,
+      },
+      // task-180 (`dl-110` P1 (a)) — `mutates: true`: CLI `wingfoil memory park <id> --reason <text>` + MCP
+      // Tool `memory.park`.
+      // `--reason` is `required` (metadata; `memoryParkFn` enforces it via `requireReason`). The id
+      // rides the bare `positional` seam (spec-008 §7).
+      memoryPark: {
+        name: 'memoryPark',
+        mutates: true,
+        description: "return a started document to an earlier state along its type's declared returns edge (for a task, in-progress → backlog)",
+        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task' },
+        options: [{ name: 'reason', required: true, valueName: 'text', description: "why the work stops for now, recorded as the commit's Reason:" }],
+        example: 'wingfoil memory park task-001-my-first-task --reason "Blocked on the schema decision; back to the backlog."',
+        fn: memoryParkFn,
       },
       // task-127 (`dl-108`) — `mutates: true`: CLI `wingfoil memory amend <id> --reason <text>` + MCP
       // Tool `memory.amend`. Approver-gated like `memoryApprove`, so `--reason` is `required`

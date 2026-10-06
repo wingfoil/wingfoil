@@ -39,7 +39,7 @@ import { join } from 'node:path';
 // Type-only; commander is ESM-only, hence the explicit resolution-mode attribute — see module doc above.
 import type { Command } from 'commander' with { 'resolution-mode': 'import' };
 
-import { extraOperandsReason, type CoreModule, type CorePositional } from '../core/registry';
+import { extraOperandsReason, missingOperandReason, type CoreModule, type CorePositional } from '../core/registry';
 // Direct module import, not the `../core` barrel — the same path `./registrar.ts` already uses for the
 // other two exit-code mappings (task-101; keeps this file out of the barrel's merge surface).
 import { classifyParseOutcome } from '../core/exit-code';
@@ -50,7 +50,8 @@ import { runInit, createReadlinePrompt } from './init-command';
 import { runMcp } from './mcp-command';
 import { emitError } from './error';
 import { DeferredExit, exitWith } from './exit';
-import { isValidFormat, type OutputFormat } from './output';
+import { invalidFormatReason, isValidFormat, type OutputFormat } from './output';
+import { closestCommand, unknownCommandHint } from './suggest';
 
 /**
  * The CLI version, read from `package.json` deterministically (REQ-SYS-07 — no wall-clock, no
@@ -101,7 +102,10 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
   // set before it dispatches) with the global options removed.
   program.exitOverride((error) => {
     const termination = classifyParseOutcome(error);
-    if (termination.needsErrorLine) emitError(incompleteInvocationReason(program.args), { format: activeFormat(program) });
+    if (termination.needsErrorLine) {
+      const { reason, hint } = incompleteInvocationReason(program.args);
+      emitError(reason, { format: activeFormat(program), ...(hint !== undefined ? { hint } : {}) });
+    }
     const deferred = exitWith(termination.exitCode);
     // Commander ends the process itself, at ITS code, as soon as this callback returns. When the exit
     // is waiting for queued output to drain (task-249, `bug-222` — e.g. a long `--help` into a pipe),
@@ -111,10 +115,12 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
   });
   // Commander's own refusals in the active `--format` (task-130, `bug-114`, spec-005 §3.2). Commander
   // writes an error through `outputError` and the help it prints for an incomplete invocation through
-  // `writeErr`, so these two hooks are the whole parse path's stderr. Under `console` both are what
-  // Commander would do anyway, byte for byte. Under `json`/`yaml` the message becomes the same
-  // `{error, hint?}` object a WingFoil refusal is (`commanderRefusal`), and the help text — which would
-  // bury that object — is not written: `--help` itself writes to stdout and is unaffected.
+  // `writeErr`, so these two hooks are the whole parse path's stderr. Every error goes through
+  // `emitError` (`src/cli/error.ts`) in every format, so it has spec-005 §3's shape: the `error:` line,
+  // then a `hint:` line when a suggestion applies (task-179, `bug-104`; `commanderRefusal`). Under
+  // `json`/`yaml` the message becomes the same `{error, hint?}` object a WingFoil refusal is, and the
+  // help text — which would bury that object — is not written: `--help` itself writes to stdout and is
+  // unaffected.
   // `--format` is read when the error fires; Commander has parsed the root program's options by then,
   // wherever on the command line they stand. Installed before the first `.command()`, like the callback
   // above, because `copyInheritedSettings` copies the output configuration at registration time.
@@ -122,13 +128,8 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
     writeErr: (text) => {
       if (activeFormat(program) === 'console') process.stderr.write(text);
     },
-    outputError: (text, write) => {
-      const format = activeFormat(program);
-      if (format === 'console') {
-        write(text);
-        return;
-      }
-      emitError(...commanderRefusal(text, format));
+    outputError: (text) => {
+      emitError(...commanderRefusal(program, text, activeFormat(program)));
     },
   });
   // How a command is listed under its parent (task-120, `bug-128`). Commander's own `subcommandTerm`
@@ -169,7 +170,7 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
     .addHelpText('after', leafHelpFooter(`wingfoil init --template ${TEMPLATE_NAMES[0] ?? '<name>'}`))
     .allowExcessArguments(true)
     .action(async (localOpts: { template?: string }, command: Command) => {
-      if (refusedSurplus(program, 'init', command.args)) return;
+      if (refusedInvalidFormat(program) || refusedSurplus(program, 'init', command.args)) return;
       const globalOpts = program.opts<{ format: string; interactive: boolean }>();
       let root: string;
       try {
@@ -197,10 +198,8 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
     .addHelpText('after', leafHelpFooter('wingfoil mcp'))
     .allowExcessArguments(true)
     .action(async (_localOpts: unknown, command: Command) => {
-      if (refusedSurplus(program, 'mcp', command.args)) return;
-      const globalOpts = program.opts<{ format: string }>();
-      const format = isValidFormat(globalOpts.format) ? globalOpts.format : 'console';
-      await runMcp({ resolveRoot: options.resolveRoot, version: readPackageVersion(), format });
+      if (refusedInvalidFormat(program) || refusedSurplus(program, 'mcp', command.args)) return;
+      await runMcp({ resolveRoot: options.resolveRoot, version: readPackageVersion(), format: activeFormat(program) });
     });
 
   const nounCommands = new Map<string, Command>();
@@ -214,15 +213,13 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
     // The operand (task-025's `positionals` seam, named by task-120). PARSING is the same for every
     // derived command whatever it declares: Commander accepts any number of operands and WingFoil
     // decides what to refuse, with its own message — `dl-082-cli-parameter-shape` gives each command at
-    // most ONE positional, the identity of its target, and `./registrar.ts` refuses a surplus operand
-    // at exit `2` before anything is read (task-129, `bug-171`, `bug-131`; the DNA path verbs refuse it
-    // themselves, after `resolveRoot()` and their own path check — `CorePositional.refusesExtraItself`),
-    // rather than leave it to a Commander arity error, whose wording would differ from command to
-    // command. A declared
-    // positional is registered as an OPTIONAL variadic argument under its declared name: marking it
-    // required to Commander would replace core's `missing required argument: memory submit <id>` with
-    // Commander's own refusal, so required-ness is RENDERED (the usage line below, `subcommandTerm`)
-    // and never enforced here. A command that declares none registers no argument — so `--help` shows
+    // most ONE positional, the identity of its target, and `./registrar.ts` refuses a surplus operand,
+    // and a missing required one, at exit `2` before anything is read (task-129, `bug-171`, `bug-131`;
+    // task-179, `bug-180`, `bug-168`), rather than leave it to a Commander arity error, whose wording
+    // would differ from command to command. A declared positional is registered as an OPTIONAL variadic
+    // argument under its declared name: marking it required to Commander would replace WingFoil's
+    // `missing required argument: <id>` with Commander's own refusal, so required-ness is RENDERED here
+    // (the usage line below, `subcommandTerm`) and enforced by the registrar. A command that declares none registers no argument — so `--help` shows
     // none — and allows excess arguments, so that the surplus reaches the registrar's refusal.
     if (command.positional) {
       target.argument(`[${command.positional.name}...]`, command.positional.description);
@@ -315,6 +312,22 @@ function leafHelpFooter(example: string): string {
 }
 
 /**
+ * The invalid-`--format` refusal of the two hand-wired bootstrap commands (task-179, `bug-226`): checked
+ * FIRST, before the surplus operand, as the registrar checks it first for every derived command — the
+ * value decides how every later error is rendered, so one order holds for every command
+ * (`spec-008-cli-grammar` §1). Console text at exit `2`, the same {@link invalidFormatReason} line
+ * (`spec-005` §2). `mcp` used to fall back to `console` and start; it is refused like any command.
+ *
+ * @returns `true` when the invocation was refused (the caller returns).
+ */
+function refusedInvalidFormat(program: Command): boolean {
+  const value = program.opts<{ format: string }>().format;
+  if (isValidFormat(value)) return false;
+  exitWith(2, `error: ${invalidFormatReason(value)}`);
+  return true;
+}
+
+/**
  * The surplus-operand refusal of the two hand-wired bootstrap commands (`bug-179`, task-165). `init`
  * and `mcp` declare no positional, so any operand is a surplus (`spec-008-cli-grammar` §1): refused at
  * exit `2` with the same {@link extraOperandsReason} wording the registrar gives every `CORE_MODULES`
@@ -342,50 +355,76 @@ function activeFormat(program: Command): OutputFormat {
 }
 
 /**
- * Commander's error text as {@link emitError} arguments (task-130, `bug-114`). Commander writes
- * `error: <reason>\n`, and for an unknown command or option the closest match on a line of its own,
- * `(Did you mean <name>?)`. The first line without its `error: ` prefix is the reason; the suggestion,
- * without its parentheses, is the `hint` spec-005 §3.2 gives it a field for. Its WORDING stays
- * Commander's — reconciling it with spec-005 §3.1's `did you mean "<name>"?` is `bug-104`'s. Any other
- * line is kept, joined to the reason, so nothing Commander said is dropped.
+ * Commander's error text as {@link emitError} arguments (task-130, `bug-114`; task-179, `bug-104`).
+ * Commander writes `error: <reason>\n`, and for an unknown command or option its closest match on a
+ * line of its own, `(Did you mean <name>?)`. The first line without its `error: ` prefix is the reason.
+ * The `hint` is spec-005 §3.1's `did you mean "<name>"?`:
+ *
+ * - for an **unknown command**, WingFoil's own match (`./suggest.ts`, Levenshtein distance ≤ 2,
+ *   `spec-008` §1) against the commands of the level the token was typed at; Commander's suggestion,
+ *   from a different algorithm, is dropped;
+ * - for an **unknown option**, Commander's match, re-worded into the same `hint:` shape — `spec-008` §1
+ *   fixes the algorithm for commands only, and Commander knows every option a command inherits.
+ *
+ * Any other line is kept, joined to the reason, so nothing Commander said is dropped.
  */
-function commanderRefusal(text: string, format: OutputFormat): Parameters<typeof emitError> {
+function commanderRefusal(program: Command, text: string, format: OutputFormat): Parameters<typeof emitError> {
   const [first = '', ...rest] = text.split('\n').map((line) => line.trim()).filter((line) => line !== '');
-  const suggestion = /^\((Did you mean .*)\)$/;
-  const hint = rest.map((line) => suggestion.exec(line)?.[1]).find((match) => match !== undefined);
+  const suggestion = /^\(Did you mean (.*)\?\)$/;
   const reason = [first.replace(/^error: /, ''), ...rest.filter((line) => !suggestion.test(line))].join(' ');
-  return [reason, { format, ...(hint !== undefined ? { hint } : {}) }];
+  const unknownCommand = /^unknown command '(.*)'$/.exec(reason)?.[1];
+  const suggested =
+    unknownCommand !== undefined
+      ? closestCommand(unknownCommand, commandsBeside(program))
+      : rest.map((line) => suggestion.exec(line)?.[1]).find((match) => match !== undefined);
+  return [reason, { format, ...(suggested !== undefined ? { hint: unknownCommandHint(suggested) } : {}) }];
 }
 
 /**
- * The `error: <reason>` text (spec-005 §3.1) for an invocation Commander found incomplete —
+ * The names (and aliases) of the commands an unknown command was typed among: walk the root program's
+ * operands from the top, descending into each known command, and stop at the first operand no command
+ * at that level answers to — the one Commander refused. The list is the one Commander itself would
+ * consider there (`Help#visibleCommands`, its built-in `help` included).
+ */
+function commandsBeside(program: Command): string[] {
+  let level = program;
+  for (const operand of program.args) {
+    const next = level.commands.find((command) => command.name() === operand || command.aliases().includes(operand));
+    if (next === undefined) break;
+    level = next;
+  }
+  return program
+    .createHelp()
+    .visibleCommands(level)
+    .flatMap((command) => [command.name(), ...command.aliases()]);
+}
+
+/**
+ * The refusal (spec-005 §3.1) for an invocation Commander found incomplete —
  * task-103-a-missing-verb-exits-2-with-an-error-line (`bug-103`). Commander supplies no message on
  * this path, so the wording is a **ruling**, recorded here rather than left to the reader:
  *
- * - `wingfoil dna`, `wingfoil memory`, and `wingfoil` with no arguments at all →
- *   `missing required argument: wingfoil dna <command>` / `missing required argument: wingfoil
- *   <command>`. The key is the one `spec-005` §1 already lists among its malformed invocations, and
- *   the shape is the one WingFoil already emits for a missing positional (`src/core/index.ts`'s
- *   `missing required argument: wingfoil dna set <path> --value <value>`, task-093): the incomplete
- *   invocation echoed back with the token that would complete it. `<command>` rather than `<verb>`
- *   matches Commander's own placeholder in the usage line printed directly above it.
- * - `wingfoil help nosuchnoun` → `unknown command 'nosuchnoun'`, byte-for-byte what `wingfoil
- *   nosuchnoun` already emits (Commander's `unknownCommand()`), because asking about an unknown noun
- *   through `help` is the same mistake and a script should have one shape to grep. The single quotes
- *   are Commander's; `spec-005` §4's example shows double ones, and reconciling the two spellings
- *   (along with the missing `hint:` suggestion) is `bug-104`'s, which owns both lines at once. Picking
- *   a third spelling here would make that reconciliation harder, not easier.
+ * - `wingfoil dna`, `wingfoil memory`, and `wingfoil` with no arguments at all → the one
+ *   missing-operand shape every command uses (task-179, `bug-168`; `missingOperandReason`):
+ *   `missing required argument: <command>`, with the incomplete invocation and the token that would
+ *   complete it as the `hint:` line, `usage: wingfoil dna <command>`. `<command>` rather than `<verb>`
+ *   matches Commander's own placeholder in the usage line it prints above, under `console`.
+ * - `wingfoil help nosuchnoun` → `unknown command 'nosuchnoun'`, byte-for-byte the reason `wingfoil
+ *   nosuchnoun` emits, because asking about an unknown noun through `help` is the same mistake and a
+ *   script should have one shape to grep. It carries no `hint:` line: the suggestion on this path is
+ *   `bug-115`'s (v0.4), out of task-179's scope.
  *
  * @param operands - the root program's `args`: the invocation's operands, global options already
  *   removed by Commander itself. This function never re-parses argv.
+ * @returns the reason, and the hint when there is one.
  */
-function incompleteInvocationReason(operands: readonly string[]): string {
+function incompleteInvocationReason(operands: readonly string[]): { reason: string; hint?: string } {
   const [first, second] = operands;
   // `help <name>` reaches the incomplete-invocation path only when `<name>` matched no command —
   // `Command#_dispatchHelpCommand` falls through to `_dispatchSubcommand`, whose `if (!subCommand)`
   // raises it. `help` alone and `help <known-noun>` exit 0 and never arrive here.
-  if (first === 'help' && second !== undefined) return `unknown command '${second}'`;
-  return `missing required argument: ${['wingfoil', ...operands].join(' ')} <command>`;
+  if (first === 'help' && second !== undefined) return { reason: `unknown command '${second}'` };
+  return { reason: missingOperandReason('command'), hint: `usage: ${['wingfoil', ...operands, '<command>'].join(' ')}` };
 }
 
 /**

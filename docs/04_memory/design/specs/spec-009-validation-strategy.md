@@ -59,7 +59,9 @@ elsewhere:
   another's; it runs as a `.superRefine()` step (still inside the Zod schema, logically Pass 2)
   or as a caller-supplied semantic-check function once Pass 1 has produced a typed object.
 - Cross-file — e.g. (Memory frontmatter) *"`wingfoil.type` must be a key registered in
-  `memory.yaml`"*, *"`wingfoil.status` must be a member of that type's `states.values`"*: these
+  `memory.yaml`"*, *"`wingfoil.status` must be a state of that type's machine — a member of its
+  `sequence`, a `gates` reject target, or `deprecated`"* (`spec-001`'s `sequence`/`gates`/`waiting`
+  encoding, or `defaults.states` for a type that declares none): these
   require the caller to have already loaded `memory.yaml`, so they run as a list of
   caller-supplied `SemanticCheck` functions executed by the validation pipeline after Pass 1.
 - Character-class checks that reference another artefact's rule set — e.g. (`memory.yaml`)
@@ -269,3 +271,9 @@ points to the `{slug}` rule.** `dl-107` Action 1 asked to amend a slug rule in �
 (`bug-157`). The rule lives in `spec-001`'s `{slug}` row since `dl-107` was ratified; §1's
 character-class bullet now names that row instead of restating it, so the two specs cannot drift. No
 other section changed.
+
+**Revision (2026-10-05, `task-188-correct-spec-011-bindings-id-stale-builtin-templates`) — §1's
+cross-file example names a field that exists, per `bug-213`.** The example said a status must be a
+member of the type's `states.values`, a key of the `values`/`initial`/`transitions` encoding `spec-001`
+retired; no machine in `memory.yaml` uses it (`grep -n "transitions:\|initial:" .wingfoil/memory.yaml`
+→ no output). It now names the states of `spec-001`'s machine. No other section changed.

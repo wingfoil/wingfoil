@@ -11,7 +11,6 @@
  * Each kind is driven through its working-tree loader and its committed-baseline (`HEAD`) loader.
  * Determinism (REQ-SYS-07): fixed fixture texts, fixed step order.
  */
-import { join } from 'path';
 
 import { exitCodeForResult } from '../../src/core/exit-code';
 import {
@@ -41,11 +40,13 @@ interface Kind {
   readonly text: (format: FormatLine, broken?: boolean) => string;
   readonly load: (repo: string) => unknown;
   readonly loadAtHead: (repo: string) => unknown;
-  /** The `file` an issue of this kind names: absolute on disk, `HEAD:`-prefixed at HEAD, `.wingfoil/`-relative for workflows. */
+  /** The `file` an issue of this kind names: repository-relative on disk, `HEAD:`-prefixed at HEAD, `.wingfoil/`-relative for workflows. */
   readonly file: (repo: string, atHead: boolean) => string;
 }
 
-const onDisk = (relative: string) => (repo: string, atHead: boolean) => (atHead ? `HEAD:${relative}` : join(repo, relative));
+// Both baselines label the file repository-relative: `HEAD:<path>` at HEAD, `<path>` in the working tree
+// (task-179, `bug-245`: never the host's absolute path).
+const onDisk = (relative: string) => (_repo: string, atHead: boolean) => (atHead ? `HEAD:${relative}` : relative);
 
 const KINDS: readonly Kind[] = [
   {

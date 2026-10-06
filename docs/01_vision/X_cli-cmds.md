@@ -1,6 +1,6 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 1.4
+**Version:** 1.5
 **Date:** 2026-10-05  
 **Status:** Approved
 
@@ -75,7 +75,7 @@ decomposition, and `dl-082` fixed the spelling.
 
 > **On interactivity.** No DNA command prompts. `init` is the only command with a prompt layer — the negatable global
 > `--interactive` is read only by it — and every other command fails immediately on a missing required argument, at exit
-> `2`: `wingfoil dna set` → `error: missing required argument: wingfoil dna set <path> --value <value>`,
+> `2`: `wingfoil dna set` → `error: missing required argument: <path>` (then `hint: usage: wingfoil dna set <path> --value <value>`),
 > `wingfoil dna set project.license` → `error: missing required argument: --value`. The prompt layer is not abandoned
 > scope: it stays specified for all commands in `spec-008-cli-grammar` §4 ("Interactive-prompt rules"), which is where a
 > reader should look for the intended behaviour. What is written above is what ships; §4 is what is intended.

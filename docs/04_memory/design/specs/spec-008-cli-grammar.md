@@ -51,7 +51,10 @@ wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init
 - Unknown `<noun>` or `<noun> <verb>` tokens produce `E_UNKNOWN_COMMAND` (exit `2`, REQ-INT-04) with a
   closest-match suggestion when Levenshtein distance ≤ 2 (ground-truth BDD:
   `p5-interaction/P5.1.4-cli-ux.feature` — `wingfoil memroy add` → `"unknown command 'memroy'"` suggests
-  `"memory"`, exit `2`).
+  `"memory"`, exit `2`). The suggestion is matched against the commands at the level the token was
+  typed (the nouns, or the verbs of the noun before it) and is `spec-005-cli-command-contract` §3.1's
+  `hint:` line, `hint: did you mean "memory"?`, computed by WingFoil (`src/cli/suggest.ts`) rather than
+  the argument parser's own `(Did you mean memory?)`.
 - `[args]` is **at most one positional**: the identity of the command's target
   (`dl-082-cli-parameter-shape` — a positional identifies the target, an option carries an attribute).
   An operand beyond the one a command declares — any operand at all, for a command that declares none
@@ -60,17 +63,23 @@ wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init
   (`error: wingfoil memory approve takes one positional <id> (got 2 positionals)`,
   `error: wingfoil workflow list takes no positional (got 1 positional)`). The rule holds for every
   command, present and future, the bootstrap commands included (`error: wingfoil init takes no
-  positional (got 1 positional)`). For every command except the four DNA path verbs it is enforced
-  where commands are registered, before the project root is resolved, so before anything is read or
-  written. **The exception:** `dna set`, `dna add`, `dna update` and `dna remove` refuse the surplus
-  inside the operation, after the project root is resolved and after their own `<path>` check. A
-  malformed `<path>` is therefore reported before the surplus (§9). An invocation that fails to
-  resolve the root fails on that first, at exit `1`: `E_NOT_AT_GIT_ROOT` from a subdirectory, and
-  `E_NO_GIT_ROOT` outside a repository. Their surplus message adds the migration hint
-  `the value travels in --value`. They still write nothing.
+  positional (got 1 positional)`). For every command it is enforced where commands are registered,
+  before the project root is resolved, so before anything is read or written — the four DNA path
+  verbs included: `dna set ..language python` is refused for its surplus, and §5 writes the
+  malformed-path case with `--value`. Their surplus message adds the migration hint
+  `the value travels in --value`, which each of them declares (`CorePositional.surplusHint`,
+  `spec-006-core-domain-api` §2).
+- **A missing required operand** is refused at exit `2` in one form for every command:
+  `missing required argument: <name>`, with the command's usage on `spec-005` §3.1's `hint:` line
+  (§4). It is enforced where commands are registered too, right after the surplus check.
+- **One order of usage checks.** Every command, the bootstrap ones included, checks in this order: the
+  global `--format` value — it decides how every later error is rendered, so an invalid one is refused
+  first, in console text (`spec-005` §2); then the operand count, a surplus before a missing operand;
+  then the project root (`E_NOT_AT_GIT_ROOT`, `E_NO_GIT_ROOT`, exit `1`); then the operation's own
+  checks.
 - **One id per call.** The Memory transition verbs (`memory submit`, `approve`, `reject`, `deprecate`),
-  `memory amend` and `memory history` act on exactly one document per invocation; transitioning several documents
-  takes one invocation, and one commit, each. The multi-id commit subject `wf({type}): {verb} {id1},
+  `memory amend`, `memory park` and `memory history` act on exactly one document per invocation;
+  transitioning several documents takes one invocation, and one commit, each. The multi-id commit subject `wf({type}): {verb} {id1},
   {id2}, ...` is **historical only**: it records batch operations written by hand before the verbs
   shipped, and no command produces it.
 
@@ -85,7 +94,7 @@ it. A flag a single command declares is not listed here: it is in §12.
 | `--help`, `-h`    | flag                   | —         | Print context-sensitive help (synopsis, args, flags, example) and exit `0`. Takes precedence over all other flags. |
 | `--version`       | flag                   | —         | Print the build stamp `<semver> (<sha>)` and exit `0`: `package.json`'s `version`, then the commit the running `dist/` was built from as `dist/build-info.json` records it, as the full hex object name (`<sha>-dirty` when `git status --porcelain` lists a change, tracked or untracked, under a build input — `src/`, `package.json`, `package-lock.json`, `tsconfig*.json` or the record's writer `scripts/write-build-info.cjs` — so it means "this `dist/` does not match the sha", and a change elsewhere (documentation, Memory) does not set it; `unknown` when no record exists, when the build could not read git, or when the record's commit is malformed or not a hex object name) — the value of every commit's `WingFoil-Version:` trailer (`dl-111` Action 3). Takes precedence over all other flags except `--help`. |
 | `--format <fmt>`  | `console\|json\|yaml`  | `console` | Output encoding. `console` for humans; `json`/`yaml` for scripting/CI (REQ-INT-05). **Today, on success, `console` prints the payload `json` prints, indented by two spaces, with no colour** (errors and warnings keep their §6 `error:`/`warning:` lines): its human rendering (colour, `✓`/`⚠`/`✗` prefixes) is P5.1.4's, and how it is built is `dl-043`'s decision, deferred to v0.4. That change will alter the default output, so a script passes `--format json`. An unsupported value exits `2` with `error: invalid --format value "<value>"`. |
-| `--reason <text>` | string                 | —         | **Required** on approval-gate commands (`memory approve`, `memory reject`, `memory amend`); optional elsewhere (e.g. `memory deprecate`). Recorded in the resulting git commit body (P1.7) as a `Reason:` **block** — the remainder of the `Reason:` line plus every following body line, up to (exclusive) git's trailing trailer paragraph or the end of the body — in the **declared normal form**, not as the raw argument (`dl-067-reason-trailer-contract`; see the Notes). Omitted where required exits `2` with `error: missing required argument: --reason` (ground-truth BDD `P1.7-memory-approve.feature`). |
+| `--reason <text>` | string                 | —         | **Required** on approval-gate commands (`memory approve`, `memory reject`, `memory amend`) and on `memory park`; optional elsewhere (e.g. `memory deprecate`). Recorded in the resulting git commit body (P1.7) as a `Reason:` **block** — the remainder of the `Reason:` line plus every following body line, up to (exclusive) git's trailing trailer paragraph or the end of the body — in the **declared normal form**, not as the raw argument (`dl-067-reason-trailer-contract`; see the Notes). Omitted where required exits `2` with `error: missing required argument: --reason` (ground-truth BDD `P1.7-memory-approve.feature`). |
 | `--reason` (unrecordable value) | —        | —         | A reason that cannot be recorded faithfully in the trailer is refused at the CLI boundary with exit `2`, before anything is read or written, on **every** verb that takes the flag — `memory deprecate` included, where the flag is optional but a declared-and-empty value is still a usage error (`dl-067` S2). Four cases, judged in this order on the declared normal form, each with its own message, none of them `missing required argument: --reason` (which answers the *omitted* case above): blank or whitespace-only → `error: invalid flag value: --reason must not be blank`; a C0 control character other than tab (`U+0009`) and newline (`U+000A`), DEL (`U+007F`), a C1 control (`U+0080` to `U+009F`) or a Unicode line or paragraph separator (`U+2028`, `U+2029`) → `error: invalid flag value: --reason must not contain a control character other than tab or newline (found U+XXXX)`, naming the first one by code point (`dl-078` (A) and its Amendment of 2026-10-01; a carriage return is not refused, because the normal form has already turned it into a newline); a line starting with one of the **reserved trailer keys** `Approver:`, `Reason:` or `WingFoil-Version:`, in any letter case (git reads trailer keys case-insensitively) → `error: invalid flag value: --reason must not contain a line starting with "Approver:", "Reason:" or "WingFoil-Version:"` (`dl-111` Q1 (A) reserves the third); a final paragraph made entirely of `Key: value` lines → `error: invalid flag value: --reason must not end in a paragraph of "Key: value" lines; add a closing sentence after it, or fold those lines into prose` (`dl-070` S4). |
 | `--verbose`       | flag                   | `false`   | Emit diagnostic logs to stderr in plain text, even under `--format json`/`yaml`. Never alters stdout.  |
 | `--color` (negatable) | boolean flag        | `true`    | ANSI colour on stdout. Pass `--no-color` to disable; also disabled automatically when `NO_COLOR` is set to any non-empty string (https://no-color.org/) — an explicitly empty `NO_COLOR=` does **not** disable colour. **Today no output is coloured** (see `--format`), so `--no-color` and `NO_COLOR` are accepted and change nothing; the rule above is the one the colour P5.1.4 adds must honour. Commander itself already honours `NO_COLOR` (it strips colour from its help, which has none) but not `--no-color`, so that rendering must read both. |
@@ -165,7 +174,7 @@ wf({type}): {verb} {id1}, {id2}[ [{s0} → {s1}( → {sN})*]]
 | `finalize`  | a `set_state` into the last state of the type's `sequence`; `workflow end` for a plan; the `supersedes:` trigger of `memory approve` (below) | `[from → to]` |
 | `sync`      | `<type>.sync_state` (`bug.sync_state`, `dl-045`)                           | `[from → to]`, or a chain `[s0 → s1 → … → sN]` |
 | `amend`     | `memory amend` (`dl-108`)                                                  | `[s → s]` |
-| `park`      | `memory park` (`dl-110`)                                                   | `[in-progress → backlog]` |
+| `park`      | `memory park` (`dl-110`)                                                   | `[from → to]`, `to` the type's `returns.<from>` (this repository's `task`: `[in-progress → backlog]`) |
 | `assign`    | `element.set_release` (below)                                              | none |
 
 **Which verb a `set_state` emits** (`spec-003` verb table). `approve` when the phase declares
@@ -224,10 +233,34 @@ Approver: {name} <{email}> (approver)
 Reason: {reason}
 ```
 
+**`memory park` emits `park`** (`dl-110` P1 (a); `task-180`). It takes the declared return edge of the
+document's state, `returns.<from>` in the type's machine (`spec-001`), and writes `status` and
+nothing else. A park is a scheduling decision, not an approval: the body carries a `Reason:` block,
+mandatory as on `approve` (§2 above), and no `Approver:` line, and no authority is checked. Its
+refusals: a missing or blank `--reason` exits `2`; a state with no `returns` edge exits `1` with the
+illegal-transition message (`dl-032`); a target state at its WIP limit (`spec-001` `limits`) exits
+`1`, naming the elements that hold it.
+
+```
+wf({type}): park {id} [{from} → {to}]
+
+Reason: {reason}
+```
+
+**A WIP limit binds every verb that enters the state** (`dl-110` P3 (a); `task-180`). When the type's
+machine declares `limits: { <state>: N }` and N documents of the type are in `<state>` in the commit
+the transition is decided at, a verb that would move another one there — `add` for the initial state,
+`submit`, `approve`, `reject`, `park`, and the `supersedes:` trigger — refuses with `CONFLICT` (exit
+`1`) before anything is written:
+
+```
+WIP limit reached for '<state>' on type '<type>' (limit <N>): held by <id1>, <id2>. Move one of them out of '<state>', then retry.
+```
+
 **A chained bracket** is read from its first state to its last. Those two states are compared with
 the frontmatter before and after the commit. Given the type's machine, every hop must be one of its
-edges: the forward edge `sequence[i] → sequence[i+1]`, a `gates` reject target, or the implicit edge to
-`deprecated`. A hop that is none of these is an `illegal-hop` finding of
+edges: the forward edge `sequence[i] → sequence[i+1]`, a `gates` reject target, a `returns` target
+(`task-180`), or the implicit edge to `deprecated`. A hop that is none of these is an `illegal-hop` finding of
 `verifyTransitionConsistency` (`src/memory/audit.ts`, `bug-155`). `sync` is the only verb that
 emits a chain. The reader reads a chain, and checks its hops, whatever the verb.
 
@@ -300,6 +333,13 @@ rendering.
 | Required arg missing, stdout is a TTY, `--interactive` (default)  | Readline prompt for each missing arg, one at a time                  |
 | Required arg missing, stdout is **not** a TTY (CI/pipe/non-interactive) | Fail immediately: exit `2`, `error: missing required argument: --<name>`; where the argument takes one of a closed set of values, the line ends with ` (one of: <v1>, <v2>, …)`, read from the same registry the command validates against (e.g. `init`: `missing required argument: --template (one of: Scrum, Kanban)`) |
 | `--no-interactive` passed (any TTY state)                         | Fail immediately, same as the non-TTY case — no prompt is attempted  |
+
+A missing **positional** is never prompted for, on any terminal: no command collects one interactively.
+It is refused at exit `2` as `missing required argument: <name>` — the placeholder `--help` shows,
+e.g. `<id>`, `<path>`, `<name>` — followed by the command's usage, its required options included, on
+`spec-005` §3.1's `hint:` line (`hint: usage: wingfoil memory approve <id> --reason <text>`). The form
+is the same for every command; a noun invoked without its verb is the same case with `<command>`
+(§5).
 
 Wizard-style multi-step collection (`wingfoil init` with no `--mode params` flags) is command-specific:
 it runs the same present/missing × TTY/non-TTY matrix per field, in the field order the command defines.
@@ -374,6 +414,7 @@ Q2 option 1):
 | Command | Exit | Reason |
 |---------|------|--------|
 | `directive assign` | `1` | `roles.yaml cannot be updated in place; edit assignments.<role> by hand, or pass --force to rewrite the whole file` — the in-place editor cannot apply the edit and `--force` was not given, whether or not the file has comments. Nothing is written. |
+| `dna set`, `dna add`, `dna update`, `dna remove` | `1` | `dna.yaml cannot be updated in place; edit <path> by hand, or pass --force to rewrite the whole file` — the in-place editor cannot express the change and `--force` was not given, whether or not the file has comments (task-193, ruling R20/Q9: `dl-062`'s rule applied to `dna.yaml`). Nothing is written. A change the schema refuses is reported as that validation failure first. |
 | `directive remove` | `1` | `cannot remove '<id>': still assigned to every role via roles.yaml 'global'` — the directive is bound through `roles.yaml`'s `global` list. A per-role binding gives `P3.3-directive-remove.feature`'s `cannot remove '<id>': still assigned to role '<role>'`. |
 
 **Warnings on a successful command.** A command that succeeds may also have something to tell the
@@ -389,11 +430,12 @@ them, and never change the exit code. So stderr can be non-empty on exit `0`, an
 `json`/`yaml` a refusal can follow warnings. `spec-005` §3.2 still says stderr under `json`/`yaml`
 carries "the one object and nothing else". That sentence is about refusals and predates warnings.
 Its amendment, together with §2's, is the task that implements `spec-016` §3.4 (task-218), and this
-paragraph is the rule until then. The text of the one warning shipped today is pinned:
+paragraph is the rule until then. The text of each warning shipped today is pinned:
 
 | Command | Warning |
 |---------|---------|
 | `directive assign --force`, when the whole file was rewritten | `roles.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, blank lines, line endings or number formatting (1.0 becomes 1)` |
+| `dna set\|add\|update\|remove --force`, when the whole file was rewritten | `dna.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, blank lines, line endings or number formatting (1.0 becomes 1)` |
 
 An MCP Tool has no stderr: its result carries the warnings as `structuredContent` (`spec-004` §4.3
 item 5). The shipped `wingfoil mcp` registers no Tools before P5.2.3 (v0.4), so on that surface the
@@ -590,7 +632,7 @@ CLI reference's *Git side effects* says the same to users.
 
 | Baseline | Commands | Why |
 |----------|----------|-----|
-| **committed at `HEAD`** | `memory add`, `memory submit`, `memory approve`, `memory reject`, `memory deprecate`, `memory amend` (their `memory.yaml`, the document the `<id>` names and its status, and approver authority — the content `submit` and `amend` commit is the working tree's); `dna set`, `dna add`, `dna update`, `dna remove`; `directive assign`; `directive remove`'s referrer check; `workflow next` (v0.3) | a read that can refuse the command or change what it writes (`spec-006` §6 items 1–2). When the working tree defines a type the commit does not, `memory add`'s refusal says the change is not committed (`dl-084` (D), `task-095`); the `dna` verbs first refuse a `dna.yaml` that differs from `HEAD`, so what they then read is `HEAD`'s; `memory add`'s `{n}` counter reads the wider baseline the `command-baseline` directive declares, which can only raise the number |
+| **committed at `HEAD`** | `memory add`, `memory submit`, `memory approve`, `memory reject`, `memory deprecate`, `memory park`, `memory amend` (their `memory.yaml`, the document the `<id>` names and its status, and approver authority — the content `submit` and `amend` commit is the working tree's); `dna set`, `dna add`, `dna update`, `dna remove`; `directive assign`; `directive remove`'s referrer check; `workflow next` (v0.3) | a read that can refuse the command or change what it writes (`spec-006` §6 items 1–2). When the working tree defines a type the commit does not, `memory add`'s refusal says the change is not committed (`dl-084` (D), `task-095`); the `dna` verbs first refuse a `dna.yaml` that differs from `HEAD`, so what they then read is `HEAD`'s; `memory add`'s `{n}` counter reads the wider baseline the `command-baseline` directive declares, which can only raise the number |
 | **committed at `HEAD`, declared** (v0.3, as each ships) | `workflow status`, `workflow list`, `workflow show`, `agent list`, `agent show` | approver ruling R15: one deduction, one baseline; a working tree that differs is reported as the warning `W_UNCOMMITTED_INPUTS`, and never decides the answer (`spec-006` §6 item 6, `spec-017` §1.2) |
 | **working tree** | `dna show`, `paths`, `directives list`, `memory search`, `memory history`; `workflow list` until its v0.3 reshape | a read that gates nothing: a draft you have not committed is what `memory search` exists to find (`spec-006` §6 item 4). `memory history` reads git's log for the entries and the working tree's `memory.yaml` |
 | **filesystem** | the confinement and symlink guards of every command that writes or deletes a file; `directive create`'s check that its target does not exist | the read predicts where a syscall will land, which no commit records (`spec-006` §6 item 5, `dl-086`) |
@@ -612,6 +654,7 @@ reference entry. A command that does not declare it refuses it as an unknown opt
 |---------|------|-----------|
 | `paths` | `--list` | Accepted for the planned drill-down view; it does not change the output yet. |
 | `directive assign` | `--force` | Authorizes the whole-file rewrite of `roles.yaml` when the in-place edit cannot apply (`dl-062` Q1 option 3). Without it that case is §6's `CONFLICT` refusal. With it the file is written again from its parsed content in the one `wf(directive): assign …` commit, and the success carries §6's warning. `--force` does not force a rewrite: an edit the in-place editor can make is made in place, with no warning. A missing `roles.yaml` is written whole without the flag, since there is nothing to preserve. |
+| `dna set`, `dna add`, `dna update`, `dna remove` | `--force` | Authorizes the whole-file rewrite of `dna.yaml` when the in-place edit cannot express the change (task-193, ruling R20/Q9, as `dl-062`). Without it that case is §6's `CONFLICT` refusal. With it the file is written again from its parsed content in the verb's one `wf(dna): …` commit, and the success carries §6's warning. As for `directive assign`, `--force` does not force a rewrite: an edit the in-place editor can make is made in place, with no warning. `dna.yaml` always exists when these verbs run, so there is no unflagged whole-file write. |
 
 ## Consequences
 
@@ -777,9 +820,11 @@ The distinction is not one an argument parser draws for free. Measured on comman
 terminate through the *same* non-error identifier, `commander.help`, and are separated only by the
 exit code it suggests alongside it: `1` where `Command#help({ error: true })` was reached because there
 was nothing to run, `0` where the user asked. `wingfoil dna` → `error: missing required argument:
-wingfoil dna <command>`; `wingfoil help nosuchnoun` → `error: unknown command 'nosuchnoun'`, the line
+wingfoil dna <command>` (superseded on 2026-10-05 by `task-179`: `missing required argument: <command>`,
+then `hint: usage: wingfoil dna <command>`); `wingfoil help nosuchnoun` → `error: unknown command 'nosuchnoun'`, the line
 `wingfoil nosuchnoun` already emitted. The `hint: ` suggestion §1 asks for is still absent from both,
-and still `bug-104`; this revision changes exit codes and adds error lines, and the wording of that
+and still `bug-104` (which `task-179` closed for the unknown-command line; the `help <unknown>` path is
+`bug-115`'s); this revision changes exit codes and adds error lines, and the wording of that
 suggestion is not its to pick.
 
 §9's unprefixed-option bullets are untouched, and so is the second bullet of the revision above: a
@@ -1003,3 +1048,45 @@ approver's ruling at the triage of `bug-185`).** DEL (`U+007F`), the C1 controls
 controls other than tab and newline, with the same message, naming the first one by code point. No
 exit code, message or other rule changed. Edited in place without a supersede or a state change
 (`dl-047`).
+
+**Revision (2026-10-05, `task-180-add-memory-park-declared-returns-edge-optional-per`) — `memory park`
+and WIP limits, per `dl-110` (`ready`; P1 (a), P3 (a), approve `6d12740d`).** §2's `park` row names its
+bracket by rule — the type's `returns` target — rather than by this repository's one edge. The
+paragraph after the `amend` rule declares the verb: its subject and body, no `Approver:`, and its
+refusals. A second paragraph declares the WIP-limit refusal and the verbs it binds, and the chained
+bracket's edge list gains the `returns` edge. The `--reason` row names `park` among the commands that
+require it; §1's one-document sentence and §11's committed-baseline row name `memory park`. No other
+rule changed. Edited in place without a supersede or a state change (`dl-047`); pending the approver's
+`memory amend` at `task-180`'s review.
+
+**Revision (2026-10-05, `task-179-give-missing-operand-unknown-command-errors-shape-spec`) — one shape
+for the usage refusals a user meets first, per `bug-104`, `bug-168`, `bug-180` and `bug-226`.** §1's
+unknown-command bullet now says what the suggestion is: `spec-005` §3.1's `hint:` line, matched at the
+level the token was typed, computed by WingFoil at the distance this bullet names, instead of the
+argument parser's own suffix (`bug-104`). §1 drops the DNA path verbs' surplus exception: they refuse a
+surplus where every other command does, before the root is resolved, with the migration hint each
+declares (`bug-180`); `P2.1-dna-set.feature`'s malformed-path scenario is written with `--value`, as §5
+already wrote it. §1 gains the missing-operand bullet and the order of usage checks, which the two
+bootstrap commands now follow too: they checked the operand count before `--format`, and `mcp` let an
+invalid `--format` through (`bug-226`). §4 states the one missing-positional form (`bug-168`), which
+had been `memory submit <id>` for the Memory and directive verbs and `wingfoil dna set <path> --value
+<value>` for the DNA verbs. A noun invoked without its verb takes the same form, which supersedes the
+wording `task-103` ruled in the 2026-09-25 revision (`missing required argument: wingfoil dna
+<command>`), for the approver to confirm at the review gate. Three exit codes change, all
+toward `2` and all because a usage check now runs before something that used to fail first: the
+operand checks (a surplus, then a missing required operand) run before the project root is resolved,
+so from a subdirectory or outside a repository `memory submit` or `dna set` with no operand, and
+`dna set project.name bogus --value y`, exit `2` instead of `1` (`E_NOT_AT_GIT_ROOT` /
+`E_NO_GIT_ROOT`); and the bootstrap commands check `--format` first, so `wingfoil mcp --format bogus`
+exits `2` instead of starting the server (`0`) or refusing an uninitialized project (`1`), and
+`wingfoil init --format bogus` outside a repository exits `2` instead of `1`. Each is the code §1
+already assigns to a malformed invocation; no rule of the exit-code table changed. Edited in place without a
+supersede or a state change (`dl-047`).
+
+**Revision (2026-10-05, `task-193-keep-dna-yaml-comments-when-dna-set-dna`) — the four DNA write verbs
+take `--force`, per approver ruling R20/Q9 (`release-planning-rel-v0.3-plan`: "`dna.yaml` refuses the
+whole-file rewrite unless `--force` (as `dl-062`)").** §6 gains the `dna.yaml` refusal, pinned word for
+word beside `directive assign`'s, and the `dna.yaml` warning beside the `roles.yaml` one; §12 gains the
+`--force` row for `dna set`, `dna add`, `dna update` and `dna remove`. The behaviour is
+`directive assign --force`'s, applied to the file `bug-019` and `bug-126` found rewritten without a
+warning. No other section changed. Edited in place without a supersede or a state change (`dl-047`).

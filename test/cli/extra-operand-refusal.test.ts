@@ -34,8 +34,7 @@ describe('the registrar refuses an operand beyond the declared one, before any r
     resolveRoot = jest.fn(() => '/fixture-root');
     buildParams = jest.fn((ctx: { root: string; positionals?: readonly string[] }) => ({ root: ctx.root, positionals: ctx.positionals }));
     fn = jest.fn(async () => coreOk({ done: true }));
-    // Not an object literal at the use site, so the fixture compiles before the field exists (red phase).
-    const refusesItself = { name: 'path', required: true, description: 'p', refusesExtraItself: true };
+    const dnaPath = { name: 'path', required: true, description: 'p', surplusHint: 'the value travels in --value' };
     const modules: CoreModule[] = [
       {
         name: 'memory',
@@ -48,7 +47,7 @@ describe('the registrar refuses an operand beyond the declared one, before any r
       {
         name: 'dna',
         operations: {
-          dnaSet: { name: 'dnaSet', mutates: true, positional: refusesItself, fn },
+          dnaSet: { name: 'dnaSet', mutates: true, positional: dnaPath, fn },
         },
       },
     ];
@@ -103,9 +102,22 @@ describe('the registrar refuses an operand beyond the declared one, before any r
     expect(exitSpy).not.toHaveBeenCalledWith(2);
   });
 
-  it('an operation that refuses an extra operand itself receives the full list (dna set keeps its own ordering)', async () => {
+  it('a declared surplusHint follows what the command takes, and is refused before any read too (task-179, bug-180)', async () => {
     await find(commands, 'dna', 'set').run('console', ['project.name', 'bogus']);
+    expectRefusedBeforeAnyRead('wingfoil dna set takes one positional <path>; the value travels in --value (got 2 positionals)');
+  });
+
+  it('a missing required operand: `missing required argument: <id>` and the usage hint, before any read (task-179, bug-168)', async () => {
+    await find(commands, 'memory', 'approve').run('console', []);
+    expect(stderrSpy).toHaveBeenNthCalledWith(1, 'error: missing required argument: <id>\n');
+    expect(stderrSpy).toHaveBeenNthCalledWith(2, 'hint: usage: wingfoil memory approve <id>\n');
+    expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(resolveRoot).not.toHaveBeenCalled();
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('an optional positional may be omitted', async () => {
+    await find(commands, 'paths', '').run('console', []);
     expect(fn).toHaveBeenCalledTimes(1);
-    expect(buildParams).toHaveBeenCalledWith(expect.objectContaining({ positionals: ['project.name', 'bogus'] }));
   });
 });

@@ -1,6 +1,6 @@
 # WingFoil — Product Vision (docs/vision)
 
-**Last indexed:** 2026-10-01
+**Last indexed:** 2026-10-05
 
 This folder holds the **product-vision specification** for WingFoil, produced through a Lean Inception workshop (see
 [`X_lean-inception-plan.md`](X_lean-inception-plan.md)). This README is a **navigation index**: it tells you which
@@ -42,7 +42,7 @@ line count (`awk 'END{print NR}'`).
 | [`03_is-isnot.md`](03_is-isnot.md)                     | 1.3 | 2026-10-01 | Approved | 59    | Scope boundaries: what WingFoil IS / IS NOT / DOES / DOES NOT                                                           |
 | [`04_personas.md`](04_personas.md)                     | 1.0 | 2026-06-15 | Approved | 113   | The 6 personas (Alex, Sam, Jordan, Morgan, Casey, Taylor) with pains and goals                                          |
 | [`05_journeys.md`](05_journeys.md)                     | 1.3 | 2026-10-01 | Approved | 286   | 8 end-to-end user journeys (0a, 0b, 1–6): steps, obstacles, success                                                     |
-| [`06_features.md`](06_features.md)                     | 1.7 | 2026-10-01 | Approved | 518   | 63 features (by pillar + by release) and the data-model / implementation notes                                          |
+| [`06_features.md`](06_features.md)                     | 1.8 | 2026-10-05 | Approved | 518   | 63 features (by pillar + by release) and the data-model / implementation notes                                          |
 | [`07_sequencer.md`](07_sequencer.md)                   | 1.8 | 2026-10-01 | Approved | 471   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
 | [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.6 | 2026-10-01 | Approved | 213   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
 | [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.3 | 2026-09-24 | Approved | 393   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |

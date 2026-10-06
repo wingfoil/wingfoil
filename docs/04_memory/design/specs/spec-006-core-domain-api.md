@@ -99,6 +99,13 @@ export interface CoreOperation {
   readonly positional?: CorePositional;        // the operand it reads (e.g. <id>, [section]) and whether required
   readonly example?: string;                   // one complete invocation shown under "Example:" (spec-008 §8)
 }
+
+export interface CorePositional {
+  readonly name: string;                       // the placeholder --help shows: id, path, name, section
+  readonly required?: boolean;                 // the CLI registrar refuses its absence (spec-008 §4); absent = optional
+  readonly description: string;                // what --help says the operand is
+  readonly surplusHint?: string;               // a clause the surplus refusal adds (spec-008 §1), e.g. dna's "the value travels in --value"
+}
 ```
 
 `warnings` is the success-warning channel: what a successful operation wants the operator told,
@@ -154,6 +161,8 @@ exemption).
 | `memoryApprove`      | `memory`               | true    | `wingfoil memory approve`| Tool `memory.approve`         |
 | `memoryReject`       | `memory`               | true    | `wingfoil memory reject` | Tool `memory.reject`          |
 | `memoryDeprecate`    | `memory`               | true    | `wingfoil memory deprecate` | Tool `memory.deprecate`    |
+| `memoryAmend`        | `memory`               | true    | `wingfoil memory amend`  | Tool `memory.amend`           |
+| `memoryPark`         | `memory`               | true    | `wingfoil memory park`   | Tool `memory.park`            |
 | `memoryHistory`      | `memory`               | false   | `wingfoil memory history`| Resource `wingfoil://memory/history/{id}` |
 
 **DNA pillar** (P2, `src/dna`):
@@ -393,17 +402,21 @@ Symbols in this section read at `9642ab5f`; items 4–6 and the table at `e942e8
 
 ### 7. Pre-flight of the memory transition verbs, and the one identity they use
 
-`memory submit`, `approve`, `reject`, `deprecate` and `amend` — every registered `memory` operation
-that moves or amends an existing document — run their refusals in one declared order, each before
+`memory submit`, `approve`, `reject`, `deprecate`, `park` and `amend` — every registered `memory`
+operation that moves or amends an existing document — run their refusals in one declared order, each before
 the single write, so "the state is unchanged" holds on every refusal by construction:
 
 1. **Usage checks** — the `<id>` operand, then `--reason` (required on `approve`, `reject` and
-   `amend` by REQ-SEC-04; optional on `deprecate`, where a given reason must still be recordable) →
+   `amend` by REQ-SEC-04, and on `park` by `dl-110`; optional on `deprecate`, where a given reason
+   must still be recordable) →
    `UsageError`, exit `2`. They read nothing, so a malformed invocation exits `2` whether or not git
    has an identity (`task-125`, `bug-172`).
 2. **Identity** (REQ-SEC-01) → exit `1` when no name or no email resolves.
 3. **Transition legality** — the document located, its type and state resolved against the
    `memory.yaml` committed at `HEAD` (§6), the verb's edge resolved (`dl-032`, `dl-053`) → exit `1`.
+   When the target state declares a WIP limit (`spec-001` `limits`) that the documents of the type
+   in that commit already reach, the transition is refused here too (`CONFLICT`, exit `1`), whichever
+   verb or engine action asked for it (`requireWipSlot`, `task-180`).
 4. **Authority** (REQ-SEC-03), on `approve` and `reject` → exit `1`,
    `user not authorized to approve type '<type>'`, read from the `dna.yaml` committed at `HEAD`.
 5. **Write** — one commit, scoped to the document. An `approve` that fires the `supersedes:` trigger
@@ -420,7 +433,8 @@ transition, not about authority. Both refusals exit `1` (every `CoreErrorCode` m
 `src/core/exit-code.ts`) and neither writes anything, which is what makes the order safe; a future
 `CoreErrorCode` mapped to another exit code would make it observable and must revisit this clause.
 The order is declared for `approve` and `reject`, the two approval gates. `deprecate` and `submit`
-have no step 4 (`dl-027`: `deprecate` is not an approval gate). `amend` runs the same authority
+have no step 4 (`dl-027`: `deprecate` is not an approval gate), nor does `park` (`dl-110`: a
+scheduling decision, not an approval). `amend` runs the same authority
 check (`dl-108` A2 (i)), after step 3 and its confinement check (REQ-SEC-06), and before its own
 amendability checks.
 
@@ -773,3 +787,22 @@ MCP exposure note no longer says the production server answers `tools/list` with
 `tools/list` answers `{tools: []}` (`spec-014` §3). No Tool is served, so the note's point stands; only
 its description of the refusal changed. Tech-specs carry no `version:` field (`dl-047`); edited in
 place without a supersede or a state change.
+
+**Revision (2026-10-05, `task-180-add-memory-park-declared-returns-edge-optional-per`) — `memory park`
+and the WIP-limit check, per `dl-110` (`ready`; P1 (a), P3 (a)).** §3's Memory table gains
+`memoryPark`, and `memoryAmend`, which `task-127` registered without a row. §7 names `park` among the
+verbs it orders: its `--reason` is required, it has no authority step, and step 3 also refuses a
+transition into a state at its WIP limit. Tech-specs carry no `version:` field (`dl-047`); edited in
+place without a supersede or a state change, pending the approver's `memory amend` at `task-180`'s
+review.
+
+**Revision (2026-10-05, `task-179-give-missing-operand-unknown-command-errors-shape-spec`) — §2 declares
+`CorePositional`, per `bug-180`.** The registry carried an undeclared flag that let the four DNA path
+verbs refuse a surplus operand inside the operation instead of at registration. The flag is removed: the CLI registrar refuses a surplus, and a missing required operand,
+for every command before the project root is resolved (`spec-008-cli-grammar` §1), and a verb that
+must say where the extra operand belongs declares a `surplusHint` the registrar appends. §2 now lists
+the positional's four fields. No function or surface changed. One exit code changes for the four DNA
+path verbs: a surplus operand from a subdirectory or outside a repository now exits `2` (refused
+before the root is resolved) instead of `1` (`E_NOT_AT_GIT_ROOT` / `E_NO_GIT_ROOT`), the code
+`spec-008` §5 assigns to a malformed invocation. Edited in place without a
+supersede or a state change (`dl-047`).

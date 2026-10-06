@@ -249,14 +249,14 @@ describe('CORE_MODULES memory.memoryDeprecate — P1.9 fit criteria', () => {
     const before = head(repo);
     for (const positional of [undefined, '', '   ']) {
       await expect(memoryDeprecateFn()({ root: repo, positional })).rejects.toThrow(
-        'missing required argument: memory deprecate <id>',
+        'missing required argument: <id>',
       );
     }
     try {
       await memoryDeprecateFn()({ root: repo });
     } catch (error) {
       expect(error).toBeInstanceOf(UsageError);
-      expect(exitCodeForThrow(error)).toEqual({ reason: 'missing required argument: memory deprecate <id>', exitCode: 2 });
+      expect(exitCodeForThrow(error)).toEqual({ reason: 'missing required argument: <id>', exitCode: 2 });
     }
     expect(head(repo)).toBe(before);
   });

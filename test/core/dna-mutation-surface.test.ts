@@ -312,46 +312,33 @@ describe('usage errors — a malformed invocation is exit 2 (spec-005 §1, spec-
 
   afterEach(() => removeTempDir(repo));
 
-  it.each(['dnaAdd', 'dnaRemove', 'dnaUpdate'])('%s without a <path> positional is a usage error naming the grammar', async (name) => {
+  it.each(['dnaAdd', 'dnaRemove', 'dnaUpdate'])('%s without a <path> positional is a usage error, in the one missing-operand wording', async (name) => {
     try {
       await dnaOp(name)({ root: repo, options: {} });
       throw new Error('expected a UsageError');
     } catch (error) {
       expect(error).toBeInstanceOf(UsageError);
-      expect((error as UsageError).message).toMatch(/^missing required argument: wingfoil dna \w+ <path> --value <value>$/);
+      // task-179 (`bug-168`): one wording for every command; the CLI registrar adds the usage as a hint.
+      expect((error as UsageError).message).toBe('missing required argument: <path>');
       expect(exitCodeForThrow(error).exitCode).toBe(2);
     }
   });
 
   // `dl-082` takes a positional away from a SHIPPED command, so the old spelling has to fail loudly
   // rather than silently drop its second word — `dna set project.license MIT` would otherwise refuse
-  // for a reason naming neither the word nor the new grammar.
-  it.each([
-    ['dnaSet', 'set'],
-    ['dnaAdd', 'add'],
-    ['dnaRemove', 'remove'],
-    ['dnaUpdate', 'update'],
-  ])('%s refuses a second positional, naming the new grammar (dl-082 migration)', async (name, verb) => {
-    const before = head(repo);
-    try {
-      await dnaOp(name)({ root: repo, positionals: ['project.license', 'MIT'], options: {} });
-      throw new Error('expected a UsageError');
-    } catch (error) {
-      expect(error).toBeInstanceOf(UsageError);
-      expect((error as UsageError).message).toBe(
-        `wingfoil dna ${verb} takes one positional <path>; the value travels in --value (got 2 positionals)`,
-      );
-      expect(exitCodeForThrow(error).exitCode).toBe(2);
-    }
-    expect(head(repo)).toBe(before);
+  // for a reason naming neither the word nor the new grammar. Since task-179 (`bug-180`) the CLI
+  // registrar refuses the surplus for every command before the root is resolved, so each DNA path verb
+  // DECLARES the migration hint the registrar appends (`test/cli/extra-operand-refusal*.test.ts` drive it).
+  it.each(['dnaSet', 'dnaAdd', 'dnaRemove', 'dnaUpdate'])('%s declares the dl-082 migration hint for a surplus operand', (name) => {
+    const dna = CORE_MODULES.find((module) => module.name === 'dna')!;
+    expect(dna.operations[name]!.positional).toEqual(
+      expect.objectContaining({ name: 'path', required: true, surplusHint: 'the value travels in --value' }),
+    );
   });
 
-  // The ORDER of the two checks is the contract, not an accident: `P2.1-dna-set.feature`'s third
-  // scenario runs `dna set ..language python` — two positionals AND a malformed path — and pins
-  // `invalid key path`. Malformed wins.
-  it('a malformed path beats the extra-positional rule, so the BDD scenario keeps its message', async () => {
+  it('`dna set ..language --value python` reports the malformed path (P2.1-dna-set.feature)', async () => {
     try {
-      await dnaOp('dnaSet')({ root: repo, positionals: ['..language', 'python'], options: {} });
+      await dnaOp('dnaSet')({ root: repo, positionals: ['..language'], options: { value: 'python' } });
       throw new Error('expected a UsageError');
     } catch (error) {
       expect((error as UsageError).message).toBe("invalid key path: '..language'");

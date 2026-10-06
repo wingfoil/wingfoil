@@ -266,7 +266,7 @@ describe('CORE_MODULES memory.memoryApprove — P1.7 fit criteria', () => {
       try {
         await memoryApproveFn()({ root: repo, positional, options: { reason: 'ok' } });
       } catch (error) {
-        expect(exitCodeForThrow(error)).toEqual({ reason: 'missing required argument: memory approve <id>', exitCode: 2 });
+        expect(exitCodeForThrow(error)).toEqual({ reason: 'missing required argument: <id>', exitCode: 2 });
       }
     }
   });

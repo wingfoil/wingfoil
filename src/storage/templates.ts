@@ -52,10 +52,12 @@ const SCRUM: TemplateDefinition = {
 
 const KANBAN: TemplateDefinition = {
   name: 'Kanban',
-  description: 'Continuous-flow delivery with work-in-progress limits.',
+  description: 'Continuous-flow delivery; work-in-progress limits are declared per state with `limits:` in memory.yaml.',
   methodologies: ['Kanban', 'Specification by Example (BDD)', 'TDD'],
   slug: 'kanban',
-  cadence: 'Work flows continuously across the board under explicit WIP limits; there are no timeboxed iterations.',
+  cadence:
+    'Work flows continuously across the board; there are no timeboxed iterations. A state takes a WIP limit when its ' +
+    "type's machine in .wingfoil/memory.yaml declares one with `limits:` (the commented `bug` example shows how).",
 };
 
 /** The built-in methodology templates. Order fixed for deterministic listing (REQ-SYS-07). */
@@ -300,7 +302,8 @@ paths:
  * scaffold keeps one shared `defaults` machine and does not commit a new project to any lifecycle, but
  * shows the override mechanism (`adr-008`'s per-type machines) where a user will meet it. Uncommented,
  * it is a valid `spec-001` machine (`test/storage/templates.test.ts` loads it); its states are an
- * example, not a recommendation.
+ * example, not a recommendation. It also shows a `returns` edge and a WIP limit (task-180, `dl-110`),
+ * which is where the Kanban template's cadence points.
  */
 const BUG_STATES_EXAMPLE = `
     # Example — uncomment to give \`bug\` its own state machine instead of \`defaults\` (spec-001):
@@ -308,7 +311,9 @@ const BUG_STATES_EXAMPLE = `
     #   sequence: [ draft, open, in-progress, resolved, closed ]
     #   gates:
     #     open: { reject: closed }
-    #     resolved: { reject: in-progress }`;
+    #     resolved: { reject: in-progress }
+    #   returns: { in-progress: open }    # memory park: back to open, with a reason
+    #   limits: { in-progress: 3 }        # at most 3 bugs in progress at once`;
 
 /**
  * The scaffolded `memory.yaml` (P1.13, `spec-001-memory-yaml-schema`) — type registry **plus** the

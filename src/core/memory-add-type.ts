@@ -25,7 +25,7 @@
  */
 import { join } from 'path';
 
-import { MemoryTemplateFrontmatter, type MemoryYaml, type TemplateConfig } from '../memory';
+import { MemoryTemplateFrontmatter, resolveStateMachine, type MemoryYaml, type TemplateConfig } from '../memory';
 import { documentExists, extractFrontmatter, readPathAtRev } from '../storage';
 import { parseYaml, toValidationError, ValidationError } from '../validation';
 import { MEMORY_TEMPLATE_FORMAT, refuseNewerFormat } from '../validation/format';
@@ -47,6 +47,14 @@ export interface ResolvedAddType {
   readonly templatePath: string;
   /** The scaffold's bytes **as committed at `HEAD`**, the text `renderAddDocument` fills in. */
   readonly scaffold: string;
+  /**
+   * The state the new element starts in: the head of the type's machine — its own `states.sequence`,
+   * else `defaults.states.sequence`, else the built-in default's (REQ-STATE-08) — from `HEAD`
+   * (`spec-001`: "`sequence[0]` is the state `memory.add` assigns"; `bug-214`, task-180).
+   */
+  readonly initialState: string;
+  /** The committed `memory.yaml` all of the above came from — what the WIP-limit check reads. */
+  readonly memoryYaml: MemoryYaml;
 }
 
 /** The directory every `template.file` path is relative to, matching `MEMORY_YAML_PATH`'s prefix. */
@@ -175,7 +183,8 @@ export function resolveAddType(root: string, type: string): CoreResult<ResolvedA
   const unreadable = templateFormatRefusal(type, scaffold, `HEAD:${templatePath}`);
   if (unreadable) return unreadable;
 
-  return coreOk({ type, pathPattern, idPattern, template, templatePath, scaffold });
+  const initialState = resolveStateMachine(committed, type).sequence[0] as string;
+  return coreOk({ type, pathPattern, idPattern, template, templatePath, scaffold, initialState, memoryYaml: committed });
 }
 
 /**

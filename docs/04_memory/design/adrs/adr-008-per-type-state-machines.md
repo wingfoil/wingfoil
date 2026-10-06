@@ -37,6 +37,20 @@ state. In the current config, `release-line`, `release`, `task`, `adr`, `tech-sp
 declare their own `states` block; `decision-log` declares none and therefore runs on the default
 machine.
 
+> **Correction (2026-10-05) — the encoding, the default machine and `decision-log`'s machine are
+> `spec-001`'s, not the ones named above.** A machine is encoded as `sequence` (the forward chain),
+> `gates` (`{state: {reject: target}}`, a state whose forward edge needs `approve`) and `waiting`
+> (states advanced by no CLI verb), per `spec-001-memory-yaml-schema`; the `values` / `initial` /
+> `transitions` keys this ADR names are used by no machine in `.wingfoil/memory.yaml`
+> (`grep -n "transitions:\|initial:" .wingfoil/memory.yaml` → no output). The default machine is
+> `draft → pending → approved` with `pending` rejecting to `draft`: there is no `rejected` state, and
+> `deprecated` is the reserved implicit target every state reaches, declared in no machine.
+> `decision-log` has its own machine, `draft → in-discussion → ready` (`dl-012`, `dl-017`), so no type
+> in this repository runs on the default. Wherever this document says `values`, `initial`,
+> `transitions` or `rejected`, read the encoding and states above. The decision of this ADR is
+> unchanged: each type declares its own machine, with a shared default for a type that declares none.
+> The text above is left as written (`bug-213`, `task-188`).
+
 The CLI verbs (`memory submit` / `approve` / `reject` / `deprecate`) and the workflow
 `element.set_state` action are both validated against the type's declared graph before the
 transition is applied: a target state must appear in that type's `values`, and the move from the

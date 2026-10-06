@@ -19,6 +19,13 @@ Run `wingfoil` from the **root of a git repository** that has been initialized w
 Outside a git repository a command fails with `error: E_NO_GIT_ROOT: not inside a git repository`; in a
 subdirectory it fails with `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project root` (both exit `1`).
 
+Unreleased (v0.3): a command that reads the configuration, run where there is no `.wingfoil/`, exits `1`
+with `error: WingFoil not initialized (no .wingfoil/ directory at the project root): run 'wingfoil init'
+first`. When `.wingfoil/` exists but lacks the file the command needs, the error names that file from
+the project root — `error: .wingfoil/dna.yaml is missing: restore it from git, or re-create it (…)` —
+and a file that does not validate is named the same way (`(.wingfoil/dna.yaml)`), never by its path on
+your machine.
+
 ### Argument grammar
 
 - **The positional argument is the target** — the thing the command acts on: a document id
@@ -29,6 +36,19 @@ subdirectory it fails with `error: E_NOT_AT_GIT_ROOT: run wingfoil from the proj
   that declares none — is refused with exit `2` before anything is written:
   `wingfoil memory approve task-001 task-002 --reason ok` →
   `error: wingfoil memory approve takes one positional <id> (got 2 positionals)`.
+  Unreleased (v0.3): the four `dna` path verbs refuse it the same way, from any directory, and add
+  where the value goes — `error: wingfoil dna set takes one positional <path>; the value travels in
+  --value (got 2 positionals)`.
+- Unreleased (v0.3): **a missing positional** is refused with exit `2` in one form for every command,
+  the command's usage following on a `hint:` line:
+  ```
+  $ wingfoil memory approve
+  error: missing required argument: <id>
+  hint: usage: wingfoil memory approve <id> --reason <text>
+  ```
+  A missing option keeps its own form, `error: missing required argument: --title`.
+- The global `--format` value is checked first: an invalid one is refused before anything else,
+  whatever command it is given to (Unreleased (v0.3): `init` and `mcp` too).
 - **Options are attributes** — the values the command writes or filters by (`--value`, `--reason`,
   `--type`, `--role`, …).
 - A **DNA path** is dotted: `project.name`, `modules.api`, `stacks.technologies.TypeScript`. A segment
@@ -61,6 +81,10 @@ Every invocation ends with exactly one of three codes:
 
 A non-zero exit always prints one `error: <reason>` line to stderr — or, under `--format json`/`yaml`,
 the object `{"error": "<reason>"}`, whichever part of the CLI refused (an unknown command or option too).
+A suggestion follows on a `hint:` line (the object's `hint` field). Unreleased (v0.3): an unknown command
+within two edits of a known one is answered in that form —
+`error: unknown command 'memroy'` then `hint: did you mean "memory"?` — where it used to print
+`(Did you mean memory?)`.
 When the refusal names a file or explains itself, indented lines follow the `error:` line, one per
 finding (`<file>: <detail>`); under `--format json`/`yaml` they are a `details` array of
 `{"file", "detail"}` entries beside `error`.
@@ -72,7 +96,7 @@ workflow moves on, the last state). 0.2.x printed, in place of `(none)`, a state
 somewhere else in the machine, which could read as a backward move (`planned -> triaged`).
 
 Unreleased (v0.3): a command that succeeds can also print **warnings** — something it did that you
-should know about, such as `directive assign --force` rewriting a whole file. A warning goes to stderr
+should know about, such as `directive assign --force` or `dna add --force` rewriting a whole file. A warning goes to stderr
 only, as a `warning: <text>` line, or under `--format json`/`yaml` as one `{"warning": "<text>"}`
 document per warning (under `yaml`, each closed by `...`, so a following error is a separate
 document). Stdout is the same with or without warnings, so a script parsing it is not affected.
@@ -99,7 +123,7 @@ lines collapsed, lines starting with `#` kept).
 Which state a command reads depends on whether that state can stop it:
 
 - **Commands that change the project read the configuration as committed at `HEAD`** — `memory add`,
-  `submit`, `approve`, `reject`, `deprecate`, `amend`, the `dna` verbs `set`, `add`, `update`,
+  `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, the `dna` verbs `set`, `add`, `update`,
   `remove`, and `directive assign`. If you edit `dna.yaml`, `memory.yaml` or `roles.yaml` by hand,
   commit it before running the command that depends on it — otherwise the command fails and says the
   change is not committed.
@@ -113,7 +137,7 @@ Which state a command reads depends on whether that state can stop it:
   example, whether a path leads outside the project through a symbolic link — because that is what
   the write will follow.
 
-The Memory transition verbs (`submit`, `approve`, `reject`, `deprecate`, `amend`) find the document
+The Memory transition verbs (`submit`, `approve`, `reject`, `deprecate`, `park`, `amend`) find the document
 their `<id>` names, and read its current status, as committed at `HEAD`; what `submit` and `amend`
 commit is the file in your working tree. A document you created by hand and never committed is
 refused (exit `1`) with a message naming `memory add`, and editing `status` by hand does not change
@@ -200,6 +224,21 @@ loaded also exits `1`, with the reason.
 `roles`, `agents`) and `paths`. **Scalar** fields are written with `dna set`; **collections and lists**
 with `dna add` / `dna update` / `dna remove`.
 
+**Comments are kept, or the write is refused** (Unreleased (v0.3)). The four write commands edit
+`dna.yaml` in place: only the lines of the field or entry they change are written, and every comment
+stays. This now includes the first entry of a collection the file does not list yet (the first
+`team.agents` entry), a field whose value is a `>-` or `|` block, and a file with CRLF line endings,
+which 0.2.2 rewrote without a single comment. A file whose every line ends in CRLF keeps CRLF in your
+working tree, with `core.autocrlf` set to `true` or `false`; the commit stores it as that setting says
+(LF under `true`). When a change still cannot be made in place (for
+example, `paths` is written inline as `paths: { sources: [src/] }` and you add `paths.tests`), the
+command exits `1`, writes nothing, and says
+`error: dna.yaml cannot be updated in place; edit <path> by hand, or pass --force to rewrite the whole file`.
+**`--force`** allows that rewrite: the whole file is written again from its parsed content, in the
+same one commit, and a warning on stderr names what was not kept:
+`warning: dna.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, blank lines, line endings or number formatting (1.0 becomes 1)`.
+`--force` changes nothing when the in-place edit works.
+
 ### `wingfoil dna show`
 
 Print `dna.yaml`, or one top-level section of it.
@@ -228,7 +267,7 @@ $ wingfoil dna show project
 Set one scalar field.
 
 ```
-wingfoil dna set <path> --value <value>
+wingfoil dna set <path> --value <value> [--force]
 ```
 
 ```console
@@ -240,14 +279,17 @@ $ wingfoil dna set project.name --value "My Project"
 ```
 
 - **Commit:** `wf(dna): set <path>`
-- **Errors:** `<path>` names a collection or list → exit `1`, pointing you to `dna add|remove|update`.
+- **Errors:** `<path>` names a collection or list → exit `1`, pointing you to `dna add|remove|update`;
+  a change that cannot be made in place → exit `1` unless `--force` (see above).
+- **`--force`** — allow the whole-file rewrite of `dna.yaml` when the in-place edit cannot apply; the
+  success then carries the warning above.
 
 ### `wingfoil dna add`
 
 Add an entry to a collection, or values to a list.
 
 ```
-wingfoil dna add <path> --value <name-or-values> [--entry-<field> <value> ...]
+wingfoil dna add <path> --value <name-or-values> [--entry-<field> <value> ...] [--force]
 ```
 
 - When `<path>` is a **collection** (`modules`, `stacks.technologies`, `stacks.methodologies`,
@@ -285,6 +327,8 @@ $ wingfoil dna add paths.sources --value src
   an entry of that name already in the collection → exit `1`, nothing written
   (`error: 'modules' already carries an entry named 'core' — …`; for `team.roles`,
   `error: role already defined: reviewer`).
+- **`--force`** — allow the whole-file rewrite of `dna.yaml` when the in-place edit cannot apply
+  (see above). The first `team.agents` entry no longer needs it: it is added in place.
 - A role added to `team.roles` is usable as soon as the command returns, because its commit is what
   `directive assign` reads: `wingfoil directive assign --directive <name> --role <role>` accepts it next. A role you add to
   `dna.yaml` by hand is refused until you commit it.
@@ -294,8 +338,8 @@ $ wingfoil dna add paths.sources --value src
 Change fields of an existing collection entry.
 
 ```
-wingfoil dna update <collection>.<name> [--entry-<field> <value> ...]
-wingfoil dna update <collection>.<name>.<field> --value <value>
+wingfoil dna update <collection>.<name> [--entry-<field> <value> ...] [--force]
+wingfoil dna update <collection>.<name>.<field> --value <value> [--force]
 ```
 
 The second form sets one field of an entry; `dna set` on the same path is equivalent for a scalar
@@ -310,14 +354,15 @@ $ wingfoil dna update modules.api --entry-description "Public HTTP API"
 
 - **Commit:** `wf(dna): update <path>`
 - **Errors:** no entry with that name → exit `1` (`error: no entry named 'x' in 'modules'`).
+- **`--force`** — allow the whole-file rewrite of `dna.yaml` when the in-place edit cannot apply (see above).
 
 ### `wingfoil dna remove`
 
 Remove a collection entry, or values from a list.
 
 ```
-wingfoil dna remove <collection>.<name>
-wingfoil dna remove <list-path> --value <values>
+wingfoil dna remove <collection>.<name> [--force]
+wingfoil dna remove <list-path> --value <values> [--force]
 ```
 
 ```console
@@ -334,6 +379,7 @@ $ wingfoil dna remove paths.docs --value README.md
 
 - **Commit:** `wf(dna): remove <path>[ <value>]`
 - **Errors:** no such entry → exit `1`.
+- **`--force`** — allow the whole-file rewrite of `dna.yaml` when the in-place edit cannot apply (see above).
 
 ### `wingfoil paths`
 
@@ -371,7 +417,7 @@ A Memory document is a Markdown file with YAML frontmatter. Its **type** (declar
 fixes its path, its id pattern, its template and its state machine; its **state** is the `status:` field
 of its frontmatter. The verbs below are the only supported way to change a state.
 
-Unreleased (v0.3): the transition verbs (`submit`, `approve`, `reject`, `deprecate`, `amend`) look an
+Unreleased (v0.3): the transition verbs (`submit`, `approve`, `reject`, `deprecate`, `park`, `amend`) look an
 id up among the documents committed at `HEAD`. A committed document whose frontmatter is not valid
 YAML, or a symbolic link, no longer stops a verb acting on a different document. It is skipped, and the
 verb still succeeds, printing a `W_MEMORY_UNREADABLE` warning on stderr that names the file. If the id
@@ -381,7 +427,12 @@ them.
 
 ### `wingfoil memory add`
 
-Create a document in its type's initial state (`draft`) from the type's template.
+Create a document in its type's initial state (the first state of its sequence; `draft` by default) from the type's template.
+
+Unreleased (v0.3): the initial state is the first state of the type's `sequence` in the committed
+`memory.yaml` (or of `defaults.states` for a type with no machine of its own); until then `add` wrote
+`draft` whatever the machine (`bug-214`). When that state declares a WIP limit (`limits:`, see
+[`memory park`](#wingfoil-memory-park)) that its documents have reached, `add` is refused at exit `1`.
 
 ```
 wingfoil memory add --type <type> --title <title> [--tags <t1,t2>] [--set <name>=<value> ...]
@@ -603,6 +654,43 @@ $ wingfoil memory deprecate dl-001-use-postgresql --reason "Superseded by the ho
 
 - **Commit:** `wf(<type>): deprecate <id> [<from> → deprecated]`, with a `Reason:` body line when given.
 
+### `wingfoil memory park`
+
+Return a started document to an earlier state along its type's declared `returns` edge (for a `task`, `in-progress → backlog`).
+
+**Unreleased (v0.3)** — not in 0.2.2.
+
+```
+wingfoil memory park <id> --reason <text>
+```
+
+A type's state machine in `memory.yaml` may declare return edges next to `gates` and `waiting`:
+`returns: { in-progress: backlog }`. Each target must be an earlier state of the `sequence`. `park`
+takes that edge: the work is not being done now, which is not the same as rejecting it. `--reason` is
+required. No approver role is required.
+
+```console
+$ wingfoil memory park task-001-my-first-task --reason "Blocked on the schema decision; back to the backlog."
+{
+  "id": "task-001-my-first-task",
+  "path": "docs/memory/task/task-001-my-first-task.md",
+  "from": "in-progress",
+  "to": "backlog",
+  "reason": "Blocked on the schema decision; back to the backlog."
+}
+```
+
+- **Commit:** `wf(<type>): park <id> [<from> → <to>]` with a `Reason:` body line; `wingfoil memory
+  history` reports it as `"operation": "park"`.
+- **WIP limits.** A machine may also declare `limits: { in-progress: 3 }`: at most that many documents
+  of the type in that state. Every command that moves a document into a limited state (`add`, `submit`,
+  `approve`, `reject`, `park`) is refused at exit `1` once the limit is reached, before anything is
+  written, and the message names the documents holding the state:
+  `error: WIP limit reached for 'in-progress' on type 'task' (limit 3): held by task-004-…, task-007-…, task-009-…. Move one of them out of 'in-progress', then retry.`
+- **Errors:** missing or blank `--reason` → exit `2`; the document's state declares no `returns` edge →
+  exit `1`, with the illegal-transition error naming the state it was refused from and the type; the
+  target state is at its WIP limit → exit `1`.
+
 ### `wingfoil memory amend`
 
 Record an uncommitted correction to a document as an amendment, leaving its state unchanged.
@@ -654,7 +742,7 @@ Other modified or staged files are left as they are and are not committed.
   the type is not amendable → exit `1` (`error: type 'release' is not amendable: …`); not an approver →
   exit `1` (`error: user not authorized to approve type 'tech-spec'`).
 
-#### Rules for `--reason` (approve, reject, deprecate, amend)
+#### Rules for `--reason` (approve, reject, deprecate, park, amend)
 
 - It may span several lines, but it may not be blank.
 - No line of it may begin with `Approver:` or `Reason:` — those keys are reserved for the commit trailer.

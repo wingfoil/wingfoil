@@ -2,7 +2,7 @@
 id: "bug-019-dna-set-fallback-silently-strips-comments"
 type: bug
 title: "When `dna set` falls back to the whole-file dump it strips every comment with no warning at all"
-status: planned
+status: closed
 severity: "medium"
 release-origin: "v0.2"
 release: "v0.3"
