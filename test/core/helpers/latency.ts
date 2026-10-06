@@ -16,12 +16,16 @@
  *   so a budget cannot be checked against a single sample through this module.
  * - {@link PROCESS_LEVEL_QUANTITIES} and {@link processLevelVerdict} are REQ-PERF-02's two budgets for
  *   a spawned command, the total and the marginal over process start (`dl-146` (C)).
+ * - {@link readLoadAverage}, {@link idleMachineVerdict} and {@link latencyReport} are the "otherwise
+ *   idle machine" condition, recorded and checked rather than presumed (`bug-276`, task-263): the
+ *   load average read around a measurement, and a run whose process-start floor is loaded refused.
  *
  * It is also the **only test source that reads the wall clock** — `test/core/latency-budget-placement.test.ts`
  * fails any other file that does. A suite that times something imports this module, which is what
  * lets that guard recognise it as a timing suite by its import rather than by the clock API it no
  * longer names.
  */
+import { loadavg } from 'os';
 import { performance } from 'perf_hooks';
 
 /** The SARD's minimum sample count: "p95 over >= 20 runs" (REQ-PERF measurement conditions). */
@@ -159,4 +163,79 @@ export function describeSamples(samples: readonly number[]): string {
   const sorted = [...samples].sort((a, b) => a - b);
   const ms = (value: number): string => `${Math.round(value)} ms`;
   return `p95 ${ms(p95(samples))} (n=${samples.length}, min ${ms(sorted[0]!)}, max ${ms(sorted[sorted.length - 1]!)})`;
+}
+
+/** The machine's 1- and 5-minute load averages at one moment, rounded to hundredths (`os.loadavg()`). */
+export interface LoadAverage {
+  readonly oneMinute: number;
+  readonly fiveMinute: number;
+}
+
+/** The load averages read immediately before and immediately after one measurement. */
+export interface LoadWindow {
+  readonly before: LoadAverage;
+  readonly after: LoadAverage;
+}
+
+/**
+ * Read the 1- and 5-minute load averages through `read` (default `os.loadavg`, whose third figure,
+ * the 15-minute one, is not used), rounded to hundredths. On a platform without load averages
+ * (Windows) `os.loadavg()` answers zeros, so the figures are then no evidence.
+ */
+export function readLoadAverage(read: () => readonly number[] = loadavg): LoadAverage {
+  const [oneMinute = 0, fiveMinute = 0] = read();
+  const hundredths = (value: number): number => Math.round(value * 100) / 100;
+  return { oneMinute: hundredths(oneMinute), fiveMinute: hundredths(fiveMinute) };
+}
+
+/** One-line statement of a load window: `load average (1-min / 5-min): before a / b, after c / d`. */
+export function describeLoad(load: LoadWindow): string {
+  const pair = (value: LoadAverage): string => `${value.oneMinute.toFixed(2)} / ${value.fiveMinute.toFixed(2)}`;
+  return `load average (1-min / 5-min): before ${pair(load.before)}, after ${pair(load.after)}`;
+}
+
+/**
+ * The bound on the process-start floor's p95 under which a run counts as taken on an otherwise idle
+ * machine (`bug-276`). The floor (the compiled CLI answering `--version`) measures the same spawn path
+ * as the commands, under the same conditions, so it is the deciding signal: idle it measured 194 and
+ * 203 ms (task-248 run 3, task-154), loaded 826 and 886 ms (task-248 runs 1 and 2). The load average is
+ * recorded, not judged: it lags, it scales with the core count and background, and it did not separate
+ * the two (task-154's idle run at a load of 3.75, task-248's loaded run 2 at a 5-minute 4.13). The
+ * bound is relative to this repository's reference machine; it is not a REQ-PERF budget.
+ */
+export const IDLE_FLOOR_P95_BOUND_MS = 500;
+
+/**
+ * Judge whether a measurement was taken on an otherwise idle machine, REQ-PERF-02's measurement
+ * condition: `'otherwise idle'` when the floor's p95 is under {@link IDLE_FLOOR_P95_BOUND_MS},
+ * otherwise `'loaded: …'` naming the floor distribution and the load window, so the refusal is its own
+ * evidence. Pure: it reads only what it is given.
+ */
+export function idleMachineVerdict(floor: readonly number[], load: LoadWindow): string {
+  if (p95(floor) < IDLE_FLOOR_P95_BOUND_MS) return 'otherwise idle';
+  return (
+    `loaded: floor ${describeSamples(floor)} >= ${IDLE_FLOOR_P95_BOUND_MS} ms; ${describeLoad(load)}; ` +
+    'not a REQ-PERF-02 measurement (an otherwise idle machine): rerun when the floor is idle'
+  );
+}
+
+/**
+ * The latency pass's report (`WINGFOIL_LATENCY_REPORT=1`): the load window, the idle verdict, the
+ * floor, and per command (named in `commands`, in the order of `measured`'s calls) its marginal and
+ * total distributions. The commands are sampled interleaved, round by round, so one window covers
+ * every command's sampling.
+ */
+export function latencyReport(measured: MarginalLatencySamples, commands: readonly string[], load: LoadWindow): string {
+  if (commands.length !== measured.total.length) {
+    throw new Error(`the measurement has ${measured.total.length} calls but ${commands.length} command names`);
+  }
+  return [
+    `${describeLoad(load)} (one window: the commands are sampled interleaved)`,
+    `machine: ${idleMachineVerdict(measured.floor, load)}`,
+    `floor (--version): ${describeSamples(measured.floor)}`,
+    ...commands.map(
+      (command, index) =>
+        `${command}: marginal ${describeSamples(measured.marginal[index]!)}; total ${describeSamples(measured.total[index]!)}`,
+    ),
+  ].join('\n');
 }

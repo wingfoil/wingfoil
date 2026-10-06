@@ -32,17 +32,32 @@
  * file runs only when asked for: it is listed in `test/latency-suites.cjs`, which `jest.config.js` ignores and `jest.latency.config.js`
  * selects (one worker), and it runs through `npm run test:latency`, `WINGFOIL_LATENCY=1 npm test`, or
  * `npm test -- test/cli/command-latency.test.ts` — never from CI or `prepublishOnly`
- * (`scripts/run-tests.cjs`). `WINGFOIL_LATENCY_REPORT=1` prints the three distributions measured.
+ * (`scripts/run-tests.cjs`).
+ *
+ * **The idle condition is checked, not presumed** (`bug-276`, task-263). The suite reads the 1- and
+ * 5-minute load averages (`os.loadavg()`, through `readLoadAverage`) immediately before and after the
+ * measurement; the commands are sampled interleaved, round by round, so that one window covers every
+ * command's sampling. The deciding signal is the **floor's p95**, held under `IDLE_FLOOR_P95_BOUND_MS`
+ * (500 ms; idle about 200 ms, loaded 826-886 ms in task-248): the floor measures the same spawn path
+ * as the commands, under the same conditions, while the load average lags and did not separate an idle
+ * run from a loaded one in the runs measured so far. A run whose floor p95 reaches the bound is
+ * **refused**: its own case fails with the floor and the load window (`idleMachineVerdict`), so the
+ * pass is red even when every budget case is green — a loaded run is not a REQ-PERF-02 measurement.
+ * The load average is recorded as evidence, not judged. `WINGFOIL_LATENCY_REPORT=1` prints the load
+ * window, the idle verdict and the three distributions measured.
  *
  * This file is the one documented exemption from `test/core/latency-budget-placement.test.ts`'s
  * spawn-plus-timing rule, and the exemption records why.
  */
 import { runCliHarness, type SpawnedRun } from './helpers/spawn-cli';
 import {
-  describeSamples,
+  idleMachineVerdict,
+  latencyReport,
+  type LoadWindow,
   type MarginalLatencySamples,
   PROCESS_LEVEL_QUANTITIES,
   processLevelVerdict,
+  readLoadAverage,
   RUNS,
   sampleMarginalLatency,
 } from '../core/helpers/latency';
@@ -72,6 +87,7 @@ describe('REQ-PERF-02 — command-level p95 of the total and of the marginal cos
   let root: string;
   let historyTarget: string;
   let measured: MarginalLatencySamples;
+  let load: LoadWindow;
   const lastStdout = new Map<Command, string>();
 
   beforeAll(async () => {
@@ -82,22 +98,20 @@ describe('REQ-PERF-02 — command-level p95 of the total and of the marginal cos
       'dna show': ['dna', 'show', '--format', 'json'],
       'memory history': ['memory', 'history', historyTargetId, '--format', 'json'],
     };
+    const before = readLoadAverage();
     measured = await sampleMarginalLatency(
       RUNS,
       () => runOk(root, FLOOR_ARGS),
       COMMANDS.map((command) => () => lastStdout.set(command, runOk(root, argv[command]).stdout)),
     );
+    load = { before, after: readLoadAverage() };
   });
 
   afterAll(() => {
-    // Opt-in: print the three distributions, so a run's numbers can be quoted (and the load it ran
-    // under compared) without the suite failing first. Off by default — output only, no assertion.
+    // Opt-in: print the load window, the idle verdict and the three distributions, so a run's numbers
+    // can be quoted without the suite failing first. Off by default — output only, no assertion.
     if (process.env.WINGFOIL_LATENCY_REPORT === '1' && measured) {
-      const lines = COMMANDS.map(
-        (command, index) =>
-          `${command}: marginal ${describeSamples(measured.marginal[index]!)}; total ${describeSamples(measured.total[index]!)}`,
-      );
-      console.log([`floor (--version): ${describeSamples(measured.floor)}`, ...lines].join('\n'));
+      console.log(latencyReport(measured, COMMANDS, load));
     }
     removeTempDir(root);
   });
@@ -105,6 +119,12 @@ describe('REQ-PERF-02 — command-level p95 of the total and of the marginal cos
   it('the floor is a real, successful spawn of the compiled CLI that runs no command', () => {
     expect(runOk(root, FLOOR_ARGS).stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
     expect(measured.floor).toHaveLength(RUNS);
+  });
+
+  // bug-276: a run on a loaded machine is refused, not counted. On failure the received string names
+  // the floor distribution and the load window.
+  it('the run was taken on an otherwise idle machine: the floor p95 is under the idle bound', () => {
+    expect(idleMachineVerdict(measured.floor, load)).toBe('otherwise idle');
   });
 
   it.each(COMMANDS.flatMap((command, index) => PROCESS_LEVEL_QUANTITIES.map((quantity) => ({ command, index, quantity }))))(
