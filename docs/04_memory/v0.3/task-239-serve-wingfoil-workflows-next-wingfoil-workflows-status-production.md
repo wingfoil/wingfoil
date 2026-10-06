@@ -8,7 +8,7 @@ kind: "feature"
 priority: "medium"
 tags: ["v0.3", "workflow", "mcp"]
 ref: "spec-017"
-bug: ["bug-258"]
+bug: ["bug-258", "bug-259"]
 depends_on: ["task-147-detect-created-files-commits-req-sec-05-nopersistence", "task-225-add-workflow-status-pending-approvals-role-routing-fallback"]
 tmpl_version: 260703
 ---
