@@ -288,10 +288,10 @@ and MCP paths identically, since item 2 makes their commit shape one and the sam
 // → success: { "committed": true, "commit": "<sha>", "old_state": "in-review", "new_state": "approved" }
 // → illegal transition (the same call on a `task` in `draft`): MCP tool-error, message identical
 //   to the CLI's — REQ-STATE-01's pinned string, `dl-032` option (c):
-//   "illegal transition draft -> backlog for type 'task'"
-//   `<to>` is `approve`'s canonical edge on the `task` machine (`pending -> backlog`), not the next
-//   state in `sequence`, per `dl-053-illegal-transition-target-for-verbless-edges`; the engine's
-//   explanation ("not a `gates` state — `approve` is only legal from a gate") rides as the detail.
+//   "illegal transition draft -> (none) for type 'task'"
+//   `<to>` is what `approve` reaches from `draft`: nothing, so `(none)` — never `approve`'s edge
+//   from another state (REQ-STATE-01, dl-154); the engine's explanation ("not a `gates` state —
+//   `approve` is only legal from a gate") rides as the detail.
 ```
 
 ## Consequences
@@ -427,3 +427,16 @@ already gave (`-32602`, exact messages) and the details a failed read carries (`
 says when the "fixed set derived from DNA at server start" is read: once, in `wingfoil mcp`'s pre-flight
 (`spec-014` §1), with no `listChanged`; the server had been reading it per request. Edited in place
 without a supersede or a state change, per `dl-047` (no `version:` field).
+
+**Revision (2026-10-06, `task-181-name-attempted-move-not-verb-canonical-edge-illegal`) — §4.3's
+illegal-transition example names `(none)` as `<to>`, per `dl-154-an-illegal-transition-prints-none-as-its-target-replacing-dl-053-s-canonical-edge`
+(option A, `ready`), which replaces `dl-053-illegal-transition-target-for-verbless-edges` (`bug-165`,
+`bug-127`).** The example showed
+`illegal transition draft -> backlog for type 'task'`: `<to>` was `approve`'s canonical edge, a target
+reached from `pending`, not from `draft`. On machines with `waiting` states that rule printed backward
+moves (`planned -> triaged` on a `bug`). REQ-STATE-01 now gives `<to>` as what the typed verb reaches
+from `<from>`, which on a refusal is always `(none)`; the example shows that string, verified against
+`resolveTypeTransition` and this repository's `.wingfoil/memory.yaml` by
+`test/memory/state-machine.test.ts`. No Tool, Resource or rule of this spec changed: §4.3 item 3's
+"rejected identically to the CLI path" holds. Edited in place without a supersede or a state change,
+per `dl-047` (no `version:` field).
