@@ -77,7 +77,9 @@ the no-commit log line; `realEffects(...).smoke` against a stub `wingfoil` on PA
 bad stamps and passes on the exact one), `test/cli/publish-pipeline.test.ts` (stage step is exactly
 `npm run publish:staging -- --tarball dist-pack/*.tgz --expect-commit "$GITHUB_SHA"`; no workflow/job
 `env` overrides `GITHUB_SHA`). The `.d.cts` declarations were updated in the same commit so the
-failures are behavioural. `npx jest test/cli/e2e-smoke.test.ts test/cli/publish-staging.test.ts
+tests compile; most failures are behavioural (wrong label, nothing refused), but a few were
+`TypeError`s because `parseSmokeArgs` (`e2e-smoke.cjs`) and `realEffects` (`publish-staging.cjs`) were
+not yet exported (corrected at review, see below). `npx jest test/cli/e2e-smoke.test.ts test/cli/publish-staging.test.ts
 test/cli/publish-pipeline.test.ts` → **17 failed, 66 passed** (83); the AC3 characterization case passed.
 
 ### green (developer)
@@ -108,9 +110,27 @@ Real build: `node scripts/e2e-smoke.cjs --expect-version 0.2.2 --expect-commit <
   the `publish.yml` header line describing `stage` was updated; the 2026-09-21 revision's quoted step
   is a dated record and is left as written (the new Revision note says so).
 
+### review fixes (independent review: APPROVE with three fixes, applied in-task, status stays in-review)
+
+1. `COMMIT_NAME_RE` was `^[0-9a-f]{7,64}$`; a 7–39-digit name can never equal a stamp, since
+   `write-build-info.cjs` records the full `git rev-parse HEAD`. Now `^(?:[0-9a-f]{40}|[0-9a-f]{64})$`.
+   An abbreviated sha is refused as an argument: `runSmoke` throws, `parseSmokeArgs` throws, the CLI exits 2,
+   and `publish-staging.cjs parseArgs` throws. The "abbreviated stamp fails" case was replaced by these
+   refusal cases. The design bullet above saying "7–64 lowercase hex" is superseded by this. The `.d.cts`
+   comments and the pending spec-015 §3 text now say "full sha".
+2. `test/cli/publish-pipeline.test.ts` also checks the stage step's own `env` for a `GITHUB_SHA`
+   override (`WorkflowStep.env` added to the test's type).
+3. The red-phase claim is corrected above: a few failures were missing-export `TypeError`s.
+
+Commit `27d2591e`. Gates were run again with the spec edit in the working tree:
+- `npx jest test/cli/e2e-smoke.test.ts test/cli/publish-staging.test.ts test/cli/publish-pipeline.test.ts` → 82 passed. That is one fewer case: the abbreviated-stamp `it.each` row moved into the refusal tests.
+- `npm test` → 270 suites, 5027 passed.
+- `npm run lint`, `npx tsc --noEmit -p tsconfig.json` and `npx tsc -p tsconfig.build.json --noEmit` → each exit 0.
+- `node scripts/check-governance.cjs --base 02fd6102` → 0 findings.
+
 ### Pending amendments (approver)
 
-- `spec-015-packaging-publishing` — §3 stage 2's command and stage 3's commit check, plus *Revision
+- `spec-015-packaging-publishing` (text updated by review fix 1: "not a full sha (40 or 64 hex digits)") — §3 stage 2's command and stage 3's commit check, plus *Revision
   (2026-10-06, task-254…)*. Proposed `--reason`: `task-254 (bug-235): spec-015 §3 states that the staging
   smoke requires the build stamp to name the commit the stage was given, which publish.yml passes as
   GITHUB_SHA; edited in place with a dated Revision note.`
