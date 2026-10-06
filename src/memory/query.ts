@@ -54,6 +54,13 @@
  * never parsed, by either baseline, `bug-189`), are left out and reported to the caller's
  * {@link MemoryScanOptions.onDiagnostic} as {@link W_MEMORY_UNREADABLE}, in path order. Only the
  * single-file read {@link loadMemoryDocumentSummary} still throws: its caller named that file.
+ *
+ * **The `format` key (task-257, `bug-241`, `dl-149`).** An element keeps the `format` of the template
+ * it was copied from and reads with that counter, `MEMORY_TEMPLATE_FORMAT`; absent reads as `1`. An
+ * element written in a newer format is not read by today's rules: a collection scan leaves it out and
+ * reports it as {@link W_MEMORY_UNREADABLE}, naming the file and the "upgrade WingFoil" refusal; a
+ * single-file read, and a lookup by id that reaches the element it names, throw that refusal
+ * (`ValidationError`, `E_INVALID_FORMAT`, exit `1`); a lookup reports one it passes on its way.
  */
 import { existsSync, lstatSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';

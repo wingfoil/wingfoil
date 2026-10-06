@@ -20,7 +20,9 @@ import { join } from 'node:path';
 
 import { CORE_MODULES } from '../../src/core';
 import { exitCodeForResult } from '../../src/core/exit-code';
+import { loadMemoryYamlAtHead } from '../../src/core/loaders';
 import { resolveAddType } from '../../src/core/memory-add-type';
+import { amendReservedFields } from '../../src/core/memory-amend';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -229,3 +231,15 @@ describe('(characterization) an absent format reads as 1: the verbs and amend wo
     );
   });
 });
+
+describe('(characterization) a committed template with an empty frontmatter block has no fields to read', () => {
+  it('memory add resolves the type; memory amend keeps `release` reserved (fail safe), as before', () => {
+    writeFixtureFile(repo, TEMPLATE_PATH, '---\n---\n\n## Body\n');
+    commitAll(repo, 'empty template frontmatter');
+    expect(resolveAddType(repo, 'task').ok).toBe(true);
+    const memoryYaml = loadMemoryYamlAtHead(repo);
+    if (memoryYaml === null) throw new Error('fixture bug: no memory.yaml at HEAD');
+    expect(amendReservedFields(repo, memoryYaml, 'task')).toContain('release');
+  });
+});
+
