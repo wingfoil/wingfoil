@@ -11,10 +11,11 @@
  *
  * AC 3 (the exit-state function) is `workflow-exit-state.test.ts`.
  */
+import { rmSync } from 'fs';
 import { join } from 'path';
 
-import { CORE_MODULES } from '../../src/core';
-import { loadWorkflowRegistry, loadWorkflowRegistryAtHead, loadWorkflowRegistryAtRev } from '../../src/core/workflow-registry';
+// Through the `src/core` barrel: the public surface task-198/199/204/211 import.
+import { CORE_MODULES, loadWorkflowRegistry, loadWorkflowRegistryAtHead, loadWorkflowRegistryAtRev, workflowCoreDiagnostics } from '../../src/core';
 import { ValidationError } from '../../src/validation';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
@@ -202,7 +203,7 @@ describe('spec-003 § Diagnostics — the core rows (task-194)', () => {
       repo,
       {
         [MAIN_FILE]:
-          'name: main\nkind: main\nphases:\n  - name: a\n    include: sub\n    iterate_over: dna:nothing.here\n  - name: b\n    include: sub\n    iterate_over: bindings:missing\n  - name: c\n    include: sub\n    iterate_over: dna:modules\n  - name: d\n    include: sub\n    iterate_over: bindings:templates\n',
+          'name: main\nkind: main\nphases:\n  - name: a\n    include: sub\n    iterate_over: dna:nothing.here\n  - name: b\n    include: sub\n    iterate_over: bindings:missing\n  - name: c\n    include: sub\n    iterate_over: dna:modules\n  - name: d\n    include: sub\n    iterate_over: bindings:templates\n  - name: e\n    include: sub\n    iterate_over: dna:paths.sources\n',
         [SUB_FILE]: 'name: sub\nkind: sub\nphases:\n  - name: go\n',
       },
       {
@@ -218,6 +219,21 @@ describe('spec-003 § Diagnostics — the core rows (task-194)', () => {
         'E_WORKFLOW_COLLECTION_UNRESOLVED',
         "collection 'dna:modules' entry 1: collection key 'Bad Key' is outside the ID characters [a-z0-9-.]",
       ),
+      err(
+        'phases[4].iterate_over',
+        'E_WORKFLOW_COLLECTION_UNRESOLVED',
+        "collection 'dna:paths.sources' entry 0: collection key 'src/' is outside the ID characters [a-z0-9-.]",
+      ),
+    ]);
+  });
+
+  it('E_WORKFLOW_COLLECTION_UNRESOLVED — with no bindings.yaml, a bindings: collection names nothing', () => {
+    writeProject(repo, {
+      [MAIN_FILE]: 'name: main\nkind: main\nphases:\n  - name: a\n    include: sub\n    iterate_over: bindings:templates\n',
+      [SUB_FILE]: 'name: sub\nkind: sub\nphases:\n  - name: go\n',
+    });
+    expect(core(diagnosticsAtHead(repo))).toEqual([
+      err('phases[0].iterate_over', 'E_WORKFLOW_COLLECTION_UNRESOLVED', "collection 'bindings:templates' names no collection in bindings.yaml"),
     ]);
   });
 
@@ -261,9 +277,81 @@ describe('spec-003 § Diagnostics — the core rows (task-194)', () => {
     ]);
   });
 
+  it('W_PHASE_TOKEN_OUT_OF_SCOPE — {element.<f>} names the innermost element, {item…} is a collection entry, an unbound workflow has no scope', () => {
+    writeProject(repo, {
+      [MAIN_FILE]:
+        'name: main\nkind: main\nphases:\n  - name: a\n    actions:\n      - git.create_branch("x/{element.id}")\n      - git.create_branch("x/{item.name}")\n  - name: b\n    include: sub\n    iterate_over: task\n',
+      [SUB_FILE]: 'name: sub\nkind: sub\nelement: task\nphases:\n  - name: go\n    actions:\n      - git.create_branch("x/{element.release}")\n      - git.create_branch("x/{element.nofield}")\n',
+    });
+    expect(core(diagnosticsAtHead(repo))).toEqual([
+      warn('phases[0].actions[0]', 'W_PHASE_TOKEN_OUT_OF_SCOPE', "token '{element.id}' names no enclosing element (in scope: none)"),
+      warn('phases[0].actions[1]', 'W_PHASE_TOKEN_OUT_OF_SCOPE', "token '{element.nofield}': the task template declares no field 'nofield'", SUB_FILE),
+    ]);
+  });
+
+  it('a workflow no startable one reaches: its exit states are checked from its type\'s first state, its tokens are not', () => {
+    writeProject(repo, {
+      [MAIN_FILE]: 'name: main\nkind: main\nphases:\n  - name: go\n',
+      [SUB_FILE]: 'name: sub\nkind: sub\nelement: task\nphases:\n  - name: go\n    actions:\n      - git.create_branch("x/{bug.id}")\n      - memory.approve\n',
+      'workflows/custom/loose.yaml': 'name: loose\nkind: sub\nphases:\n  - name: go\n    actions:\n      - memory.submit\n',
+    });
+    expect(core(diagnosticsAtHead(repo))).toEqual([
+      warn(
+        'phases[0].actions[1]',
+        'W_PHASE_EXIT_STATE_UNDETERMINED',
+        'cannot apply \'memory.approve\' to task from state \'draft\': illegal `approve` from "draft": not a `gates` state — `approve` is only legal from a gate',
+        SUB_FILE,
+      ),
+    ]);
+  });
+
+  it('a diagnostic raised on two include paths is reported once, with the first path\'s message', () => {
+    writeProject(repo, {
+      [MAIN_FILE]: 'name: main\nkind: main\nelement: task\nphases:\n  - name: one\n    include: sub\n',
+      'workflows/custom/other.yaml': 'name: other\nkind: main\nelement: bug\nphases:\n  - name: one\n    include: sub\n',
+      [SUB_FILE]: 'name: sub\nkind: sub\nphases:\n  - name: go\n    actions:\n      - git.create_branch("x/{dl.id}")\n',
+    });
+    expect(core(diagnosticsAtHead(repo))).toEqual([
+      warn('phases[0].actions[0]', 'W_PHASE_TOKEN_OUT_OF_SCOPE', "token '{dl.id}' names no enclosing element (in scope: task)", SUB_FILE),
+    ]);
+  });
+
+  it('templates: one outside .wingfoil/, one with no frontmatter, one whose frontmatter is not a map — no field is checked', () => {
+    const memory = MEMORY_YAML.replace(
+      '  bug:\n    path: "docs/bugs/{id}.md"\n',
+      '  bug:\n    path: "docs/bugs/{id}.md"\n    template:\n      frontmatter:\n        required: [ title ]\n      file: "../outside.md"\n',
+    ).replace(
+      '  release-line:\n    path: "docs/rl/{id}.md"\n',
+      '  release-line:\n    path: "docs/rl/{id}.md"\n    template:\n      frontmatter:\n        required: [ title ]\n      file: "memory/templates/rl.md"\n',
+    );
+    const workflows = {
+      [MAIN_FILE]:
+        'name: main\nkind: main\nelement: task\nphases:\n  - name: a\n    include: sub\n    iterate_over: bug\n  - name: b\n    include: rl\n    iterate_over: release-line\n',
+      [SUB_FILE]: 'name: sub\nkind: sub\nelement: bug\nphases:\n  - name: go\n    produces: [ "x/{bug.nofield}" ]\n',
+      'workflows/custom/rl.yaml': 'name: rl\nkind: sub\nelement: release-line\nphases:\n  - name: go\n    produces: [ "x/{release-line.nofield}" ]\n',
+    };
+    writeProject(repo, workflows, { '.wingfoil/memory.yaml': memory, '.wingfoil/memory/templates/rl.md': 'no frontmatter\n', 'outside.md': '---\nid: x\n---\n' });
+    expect(core(diagnosticsAtHead(repo))).toEqual([]);
+    expect(core([...(loadWorkflowRegistry(repo).diagnostics as Diag[])])).toEqual([]);
+    writeFixtureFile(repo, '.wingfoil/memory/templates/rl.md', '---\n- a list\n---\n');
+    commitAll(repo, 'list frontmatter');
+    expect(core(diagnosticsAtHead(repo))).toEqual([]);
+  });
+
+  it('the working tree reads the templates from disk, and an invalid dna.yaml is refused, not skipped', () => {
+    writeProject(repo, { [MAIN_FILE]: 'name: main\nkind: main\nelement: task\nphases:\n  - name: a\n    produces: [ "x/{task.nofield}" ]\n' });
+    expect(core([...(loadWorkflowRegistry(repo).diagnostics as Diag[])])).toEqual([
+      warn('phases[0].produces[0]', 'W_PHASE_TOKEN_OUT_OF_SCOPE', "token '{task.nofield}': the task template declares no field 'nofield'"),
+    ]);
+    rmSync(join(repo, '.wingfoil/memory/templates/task.md'));
+    expect(core([...(loadWorkflowRegistry(repo).diagnostics as Diag[])])).toEqual([]);
+    writeFixtureFile(repo, '.wingfoil/dna.yaml', 'version: 1.0\n');
+    expect(() => loadWorkflowRegistry(repo)).toThrow(ValidationError);
+  });
+
   it('W_PHASE_EXIT_STATE_UNDETERMINED — an action the machine cannot apply from the state the previous phase leaves', () => {
     writeProject(repo, {
-      [MAIN_FILE]: 'name: main\nkind: main\nelement: task\nphases:\n  - name: a\n    actions:\n      - memory.submit\n  - name: b\n    actions:\n      - memory.submit\n',
+      [MAIN_FILE]: 'name: main\nkind: main\nelement: task\nphases:\n  - name: a\n    actions:\n      - memory.submit\n  - name: b\n    actions:\n      - memory.submit\n  - name: c\n    actions:\n      - memory.approve\n',
     });
     expect(core(diagnosticsAtHead(repo))).toEqual([
       warn(
@@ -271,6 +359,7 @@ describe('spec-003 § Diagnostics — the core rows (task-194)', () => {
         'W_PHASE_EXIT_STATE_UNDETERMINED',
         'cannot apply \'memory.submit\' to task from state \'pending\': illegal `submit` from "pending": a `gates` state — its forward edge requires `approve`, not `submit`',
       ),
+      warn('phases[2].actions[0]', 'W_PHASE_EXIT_STATE_UNDETERMINED', "cannot apply 'memory.approve' to task: the state it starts from is undetermined"),
     ]);
   });
 
@@ -320,8 +409,9 @@ describe('spec-003 § Diagnostics — the core rows (task-194)', () => {
   });
 
   it('a check whose input is absent is not decided: no dna.yaml, no memory.yaml → no core diagnostic', () => {
-    writeFixtureFile(repo, '.wingfoil/workflows.yaml', `version: 1.0\ninclude:\n  - ${MAIN_FILE}\n`);
-    writeFixtureFile(repo, `.wingfoil/${MAIN_FILE}`, "name: main\nkind: main\nphases:\n  - name: a\n    role: nobody\n    actions:\n      - 'memory.add(type: nonsense)'\n");
+    writeFixtureFile(repo, '.wingfoil/workflows.yaml', `version: 1.0\ninclude:\n  - ${MAIN_FILE}\n  - ${SUB_FILE}\n`);
+    writeFixtureFile(repo, `.wingfoil/${MAIN_FILE}`, "name: main\nkind: main\nphases:\n  - name: a\n    role: nobody\n    actions:\n      - 'memory.add(type: nonsense)'\n  - name: b\n    include: sub\n    iterate_over: dna:modules");
+    writeFixtureFile(repo, `.wingfoil/${SUB_FILE}`, 'name: sub\nkind: sub\nphases:\n  - name: go\n');
     commitAll(repo, 'fixture');
     expect(core(diagnosticsAtHead(repo))).toEqual([]);
     expect(core([...(loadWorkflowRegistry(repo).diagnostics as Diag[])])).toEqual([]);
@@ -332,6 +422,12 @@ describe('spec-003 § Diagnostics — the core rows (task-194)', () => {
     writeFixtureFile(repo, 'README.md', 'x\n');
     commitAll(repo, 'init');
     expect(loadWorkflowRegistryAtHead(repo)).toEqual({ manifest: null, workflows: [], bindings: null, diagnostics: [] });
+  });
+});
+
+describe('workflowCoreDiagnostics — pure', () => {
+  it('reads only its arguments: an empty registry, or no memory.yaml and no dna.yaml, gives nothing', () => {
+    expect(workflowCoreDiagnostics({ include: [], workflows: [], bindings: null }, { memoryYaml: null, dnaYaml: null, templateFields: () => null })).toEqual([]);
   });
 });
 

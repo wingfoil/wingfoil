@@ -33,7 +33,7 @@
 import type { MemoryYaml } from '../memory/schema';
 import { DEPRECATED_STATE, resolveStateMachine, resolveTransitionTarget, type TransitionOp } from '../memory/state-machine';
 import type { StateMachine } from '../memory/schema';
-import { ValidationError } from '../validation';
+import type { ValidationError } from '../validation';
 import { memoryAddType, tokenName } from '../workflow/bindings';
 import { workflowFacts, type Workflow } from '../workflow/schema';
 
@@ -135,7 +135,7 @@ export function iterationStartState(memoryYaml: MemoryYaml, type: string, where:
   const raw = where?.['status'];
   const statuses = (Array.isArray(raw) ? raw : raw === undefined ? [] : [raw]).map(String);
   const positions = statuses.map((status) => machine.sequence.indexOf(status)).filter((index) => index !== -1);
-  return positions.length > 0 ? machine.sequence[Math.min(...positions)]! : (machine.sequence[0] ?? null);
+  return machine.sequence[positions.length > 0 ? Math.min(...positions) : 0]!; // a sequence is never empty (spec-001)
 }
 
 /** The first state of `type`, or `null` for an unregistered type. */
@@ -204,7 +204,7 @@ function compute(
     const entry = bound?.state ?? null;
     const held: HeldGate[] = [];
     const created: Tracked[] = [];
-    const run: Tracked[] = [];
+    const run = new Set<Tracked>();
     let undetermined: UndeterminedAction | null = null;
 
     const hold = (type: string, gate: string, reject: string): void => {
@@ -244,8 +244,8 @@ function compute(
       try {
         to = resolveTransitionTarget(machine, from, op);
       } catch (error) {
-        if (!(error instanceof ValidationError)) throw error;
-        return refuse(error.issues[0]?.message ?? String(error));
+        // `resolveTransitionTarget` refuses only with an `E_INVALID_TRANSITION` ValidationError.
+        return refuse((error as ValidationError).issues[0]!.message);
       }
       const leftGate = machine.gates?.[from];
       if ((op === 'approve' || op === 'reject') && leftGate) hold(target.type, from, leftGate.reject);
@@ -306,7 +306,7 @@ function compute(
         }
         for (const element of earlier.filter((candidate) => candidate.type === type)) {
           apply(element, a, op);
-          if (!run.includes(element)) run.push(element);
+          run.add(element);
         }
       }
     });
@@ -331,7 +331,7 @@ function compute(
       exit: bound?.state ?? null,
       undetermined,
       created: created.map((element) => ({ type: element.type, action: element.action, state: element.state })),
-      run: run.map((element) => ({ type: element.type, action: element.action, state: element.state })),
+      run: [...run].map((element) => ({ type: element.type, action: element.action, state: element.state })),
       held,
     });
   });

@@ -218,14 +218,18 @@ interface Context {
 
 function contextChecks(out: Collector, registry: CheckedRegistry, memoryYaml: MemoryYaml, inputs: WorkflowCoreInputs): void {
   const byName = new Map<string, number>();
-  registry.workflows.forEach((workflow, i) => {
-    if (!byName.has(workflow.name)) byName.set(workflow.name, i);
-  });
+  // Names are unique and every phase include resolves: the loader refuses a registry where either
+  // fails (E_WORKFLOW_DUPLICATE_NAME, E_WORKFLOW_INCLUDE_UNRESOLVED), and the core checks run only on
+  // an accepted one.
+  registry.workflows.forEach((workflow, i) => byName.set(workflow.name, i));
   const workflowsByName = new Map(registry.workflows.map((workflow) => [workflow.name, workflow] as const));
   const done = new Set<string>();
   const reached = new Set<number>();
 
-  const visit = (i: number, context: Context, stack: ReadonlySet<number>, tokens: boolean): void => {
+  // Termination: a position is visited once (`done`), and a position is a finite combination (scope
+  // types are deduplicated, states are a machine's), so even an include cycle — which the loader
+  // refuses anyway (E_WORKFLOW_INCLUDE_CYCLE) — could not loop.
+  const visit = (i: number, context: Context, tokens: boolean): void => {
     const key = `${i}|${context.scope.join(',')}|${context.start.boundType}|${context.start.state}|${context.start.instance}|${tokens}`;
     if (done.has(key)) return;
     done.add(key);
@@ -243,8 +247,7 @@ function contextChecks(out: Collector, registry: CheckedRegistry, memoryYaml: Me
 
     workflow.phases.forEach((phase, p) => {
       if (phase.include === undefined) return;
-      const target = byName.get(phase.include);
-      if (target === undefined || stack.has(target)) return;
+      const target = byName.get(phase.include)!;
       const sub = registry.workflows[target]!;
       const over = phase.iterate_over;
       let start: ExitStart;
@@ -259,7 +262,7 @@ function contextChecks(out: Collector, registry: CheckedRegistry, memoryYaml: Me
         const same = type !== null && type === states[p]!.boundType;
         start = { boundType: type, state: same ? states[p]!.entry : null, instance: false };
       }
-      visit(target, { scope: subScope, start }, new Set([...stack, target]), tokens);
+      visit(target, { scope: subScope, start }, tokens);
     });
   };
 
@@ -271,7 +274,7 @@ function contextChecks(out: Collector, registry: CheckedRegistry, memoryYaml: Me
         state: element === null ? null : iterationStartState(memoryYaml, element, undefined),
         instance: true,
       };
-      visit(i, { scope: [], start }, new Set([i]), true);
+      visit(i, { scope: [], start }, true);
     }
   });
   // A workflow no startable one reaches still gets its exit states checked, from its type's first
@@ -279,7 +282,7 @@ function contextChecks(out: Collector, registry: CheckedRegistry, memoryYaml: Me
   registry.workflows.forEach((workflow, i) => {
     if (reached.has(i)) return;
     const element = workflow.element ?? null;
-    visit(i, { scope: [], start: { boundType: element, state: element === null ? null : iterationStartState(memoryYaml, element, undefined), instance: false } }, new Set([i]), false);
+    visit(i, { scope: [], start: { boundType: element, state: element === null ? null : iterationStartState(memoryYaml, element, undefined), instance: false } }, false);
   });
 }
 
@@ -290,7 +293,7 @@ function stateDiagnostics(out: Collector, i: number, workflow: Workflow, states:
     const at = (field: string): string => `phases[${p}].${field}`;
     const undetermined = state.undetermined;
     if (undetermined) {
-      const action = (phase.actions ?? [])[undetermined.action]!;
+      const action = phase.actions![undetermined.action]!; // an undetermined action is one of them
       const message =
         undetermined.from === null
           ? `cannot apply '${action}' to ${undetermined.type}: ${undetermined.reason}`

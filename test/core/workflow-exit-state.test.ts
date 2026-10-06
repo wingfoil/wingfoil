@@ -6,7 +6,7 @@
  * spec-003's verb rule (it yields its argument). task-198 reuses it for `state` / `created` evidence.
  */
 import { MemoryYaml } from '../../src/memory/schema';
-import { iterationStartState, workflowExitStates, type PhaseExitState } from '../../src/core/workflow-exit-state';
+import { iterationStartState, machineStates, workflowExitStates, type PhaseExitState } from '../../src/core';
 import { parseYaml } from '../../src/validation';
 import { Workflow } from '../../src/workflow/schema';
 
@@ -218,11 +218,46 @@ describe('workflowExitStates — spec-017 §4.4', () => {
     expect(states['ship']).toMatchObject({ entry: 'in-development', exit: 'releasing' });
   });
 
+  it('edge shapes: a bare set_state, a bare memory.add, deprecate from an unknown state, nothing bound, an unknown type', () => {
+    const wf = workflow(
+      "name: w\nkind: sub\nelement: task\nphases:\n  - name: a\n    actions: [ memory.approve, memory.deprecate ]\n  - name: b\n    actions: [ element.set_state, task.set_state ]\n  - name: c\n    actions: [ memory.add, 'memory.add(type: ghost)', memory.submit ]\n",
+    );
+    const states = byPhase(workflowExitStates(wf, MEMORY, { boundType: 'task', state: 'draft', instance: false }));
+    expect(states['a']).toMatchObject({ exit: 'deprecated', undetermined: { action: 0 } });
+    expect(states['b']!.undetermined).toMatchObject({ action: 0, reason: "'' is not a state of task" });
+    // `memory.add` with no type creates nothing trackable; one of an unregistered type is not moved.
+    expect(states['c']).toMatchObject({ undetermined: null, created: [{ type: 'ghost', action: 1, state: null }] });
+
+    const unbound = workflow('name: u\nkind: sub\nphases:\n  - name: a\n    actions: [ memory.submit ]\n');
+    expect(workflowExitStates(unbound, MEMORY, { boundType: null, state: null, instance: false })[0]).toMatchObject({ boundType: null, exit: null, undetermined: null });
+    const ghost = workflow('name: g\nkind: sub\nelement: ghost\nphases:\n  - name: a\n    actions: [ memory.submit ]\n');
+    expect(workflowExitStates(ghost, MEMORY, { boundType: 'ghost', state: null, instance: false })[0]).toMatchObject({ undetermined: null });
+  });
+
+  it('a typed set_state reaches earlier-created elements once; a selection without status or of an unknown type holds no gate', () => {
+    const wf = workflow(
+      "name: w\nkind: sub\nelement: release\nphases:\n  - name: add\n    actions: [ 'memory.add(type: task)', memory.submit ]\n  - name: move\n    actions: [ task.set_state(backlog), task.set_state(in-progress) ]\n  - name: sweep\n    where: { type: [bug, ghost] }\n    actions: [ memory.approve ]\n",
+    );
+    const states = byPhase(workflowExitStates(wf, MEMORY, { boundType: 'release', state: 'draft', instance: false }));
+    expect(states['move']!.run).toEqual([{ type: 'task', action: 0, state: 'in-progress' }]);
+    expect(states['sweep']).toMatchObject({ held: [], exit: 'draft' });
+  });
+
+  it('a plain include of a sub declaring its own element, from an unbound workflow, starts at that type\'s first state', () => {
+    const outer = workflow('name: outer\nkind: sub\nphases:\n  - name: plan\n    include: release-planning\n');
+    const states = workflowExitStates(outer, MEMORY, { boundType: null, state: null, instance: false }, new Map([['release-planning', RELEASE_PLANNING]]));
+    expect(states).toEqual([{ phase: 'plan', boundType: null, entry: null, exit: null, undetermined: null, created: [], run: [], held: [] }]);
+  });
+
   it('iterationStartState: the lowest-sequence status of where.status, else the first state', () => {
     expect(iterationStartState(MEMORY, 'release', { status: ['in-development', 'draft', 'planning'] })).toBe('draft');
     expect(iterationStartState(MEMORY, 'release', { status: 'planning' })).toBe('planning');
     expect(iterationStartState(MEMORY, 'release', undefined)).toBe('draft');
     expect(iterationStartState(MEMORY, 'nonsense', undefined)).toBeNull();
+  });
+
+  it('machineStates: the sequence, the reject and return targets, and deprecated', () => {
+    expect([...machineStates(MEMORY.types['bug']!.states!)]).toEqual(['draft', 'open', 'triaged', 'planned', 'in-progress', 'in-review', 'resolved', 'closed', 'deprecated']);
   });
 
   it('is deterministic: two runs give deep-equal results', () => {
