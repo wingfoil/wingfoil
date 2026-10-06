@@ -31,6 +31,11 @@ The CLI vision reference declares sync against the retired `tech-stack` key, rep
 - **Features:** P2.5, P4.2, P4.3, P4.4, P4.5, P4.6, P4.7, P4.8, P4.9, P5.3.1.
 - **Notes:** Proposal key: D29. Single owner of `X_cli-cmds.md` in v0.3 (task-138, task-228 and the workflow tasks hand their rows here); runs late on purpose.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from the W2 B4b triage (2026-10-06).** `bug-274` and `bug-275` are absorbed here. `bug-275`: nine
+  vision lines still give the default state machine a `rejected` state (`X_cli-cmds.md`, `06_features.md`,
+  `07_sequencer.md`, `08_mvp-canvas.md`), and `X_cli-cmds.md`'s 1.5 bump (`833ec080`, `task-179`) wrote no revision
+  entry. `bug-274`: `docs/design.md:138` places tasks under `.wingfoil/memory/task/`; widen `task-259`'s
+  `test/docs/memory-store-location-text.test.ts` guard to `docs/*.md` with the fix.
 
 ## Execution Notes
 
