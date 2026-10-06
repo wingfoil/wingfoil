@@ -34,7 +34,7 @@ import {
   renderCustomDirective,
 } from '../directives/create';
 import { parseDirectiveIds, withAssignedDirectives } from '../directives/roles-edit';
-import { commitPaths, documentExists, readDocument, removeDocument, StorageError, writeDocument } from '../storage';
+import { documentExists, readDocument, StorageError, writeAndCommit, writeDocument } from '../storage';
 // Not re-exported by the `../storage` barrel, imported directly per that module's own convention
 // (same as `src/memory/entry.ts`): `memory add` needs the CONFINED target path before it writes, to
 // run task-092's absence guard on it.
@@ -164,6 +164,8 @@ export * from './require-reason';
 export * from './builtin-asset';
 export * from './confinement';
 export * from './usage-error';
+export { DRY_RUN_FLAG, runAsDryRun } from './dry-run';
+export type { DryRunPlan } from './dry-run';
 export {
   initWingfoilStorage,
   initWingfoilProject,
@@ -526,8 +528,7 @@ async function runDnaMutation(
     warnings.push(DNA_REWRITE_WARNING);
   }
 
-  writeDocument(dnaPath, serialized);
-  const sha = commitPaths(root, [DNA_YAML_PATH], subject);
+  const sha = writeAndCommit(root, [{ path: DNA_YAML_PATH, content: serialized }], subject);
   const leaked = committedScopeError(root, sha, DNA_YAML_PATH, serialized);
   if (leaked) return leaked;
   return coreOk(outcome, { sha, message: subject }, warnings);
@@ -1380,8 +1381,12 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
   try {
     finalized = commitMemoryTransition(root, superseded, renderedSuperseded, finalizeMessage);
   } catch (error) {
-    // `String` of an `Error` is its `name: message`, which keeps the failing git command's text.
+    // `String` of an `Error` is its `name: message`, which keeps git's own explanation.
     finalized = coreErr({ code: 'IO', message: String(error) });
+    // The commit primitive put the file back when git refused the commit (task-210, `bug-217`); the
+    // recovery below commits the file as it stands, so write the finalized status into it again — the
+    // one write here meant to outlive a failed commit, because the approve has already happened.
+    writeDocument(join(root, superseded.path), renderedSuperseded);
   }
   if (!finalized.ok) {
     // Reachable only when git itself fails between the two commits (a hook, a full disk): every
@@ -1852,9 +1857,8 @@ const directiveCreateFn: CoreFn<unknown, { name: string; path: string }> = async
   if (!unmodified.ok) return unmodified;
 
   const content = renderCustomDirective(name);
-  writeDocument(absolutePath, content);
   const message = `wf(directive): create ${name}`;
-  const sha = commitPaths(root, [relativePath], message);
+  const sha = writeAndCommit(root, [{ path: relativePath, content }], message);
   const leaked = committedScopeError(root, sha, relativePath, content);
   if (leaked) return leaked;
   return coreOk({ name, path: relativePath }, { sha, message });
@@ -2068,9 +2072,8 @@ const directiveRemoveFn: CoreFn<unknown, DirectiveRemoveResult> = async (params)
   const unmodified = requireUnmodifiedTarget(root, relativePath);
   if (!unmodified.ok) return unmodified;
 
-  removeDocument(join(root, relativePath));
   const message = `wf(directive): remove ${name}`;
-  const sha = commitPaths(root, [relativePath], message);
+  const sha = writeAndCommit(root, [{ path: relativePath, content: null }], message);
   const leaked = committedScopeError(root, sha, relativePath, null);
   if (leaked) return leaked;
   return coreOk({ name, path: relativePath }, { sha, message });

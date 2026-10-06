@@ -57,7 +57,7 @@ import { isRoleDefined, UnknownRoleError } from '../dna/roles';
 import type { DnaYaml } from '../dna/schema';
 import { setRoleAssignmentsInText } from '../directives/roles-edit';
 import { RolesYaml } from '../directives/schema';
-import { commitPaths, documentExists, readDocument, writeDocument } from '../storage';
+import { documentExists, readDocument, writeAndCommit } from '../storage';
 import { parseYaml, toValidationError, ValidationError } from '../validation';
 import { newerFormatIssue, ROLES_YAML_FORMAT } from '../validation/format';
 
@@ -397,8 +397,7 @@ export function updateRoleAssignments(
     warnings.push(ROLES_REWRITE_WARNING);
   }
 
-  writeDocument(filePath, serialized);
-  const sha = commitPaths(root, [ROLES_YAML_PATH], message);
+  const sha = writeAndCommit(root, [{ path: ROLES_YAML_PATH, content: serialized }], message);
   const leaked = committedScopeError(root, sha, ROLES_YAML_PATH, serialized);
   if (leaked) return leaked;
   return coreOk({ assignments: next }, { sha, message }, warnings);

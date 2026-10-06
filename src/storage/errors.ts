@@ -59,3 +59,12 @@ export const E_GIT_READ_FAILED = 'E_GIT_READ_FAILED';
  * onto the wrong paths; a `:` changes which path is read; a NUL cannot travel at all.
  */
 export const E_INVALID_REVISION = 'E_INVALID_REVISION';
+
+/**
+ * Raised by `writeAndCommit` (`./commit.ts`, task-210, `bug-217`) when git refuses or fails the commit
+ * of a write — a refusing hook, a full disk, an author date git cannot parse. Raised only after the
+ * primitive has put the working tree and the index of every path it wrote back as they were, so the
+ * message says that nothing was committed and nothing is left behind. It names the paths repository-
+ * relative and carries git's own explanation with the project root removed (the `bug-251` class).
+ */
+export const E_COMMIT_FAILED = 'E_COMMIT_FAILED';

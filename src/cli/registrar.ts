@@ -20,6 +20,7 @@ import { commandUsage, deriveVerb, enumerateOperations, extraOperandsReason, mis
 import type { CoreResult } from '../core/types';
 import { exitCodeForResult, exitCodeForThrow } from '../core/exit-code';
 import { errorDetails } from '../core/error-details';
+import { DRY_RUN_FLAG, runAsDryRun } from '../core/dry-run';
 
 import { emitError } from './error';
 import { exitWith } from './exit';
@@ -95,7 +96,9 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
       description: operation.description,
       positional: operation.positional,
       example: operation.example,
-      flags: operation.flags,
+      // `--dry-run` (task-210, `dl-106` W2, spec-008 §2): every operation that mutates takes it, and
+      // none declares it — it is derived here from `mutates`, so an operation added later inherits it.
+      flags: operation.mutates ? [...(operation.flags ?? []), DRY_RUN_FLAG] : operation.flags,
       options: operation.options,
       run: async (
         formatValue: string,
@@ -132,6 +135,10 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
           return;
         }
 
+        // The operation's own flags reach `buildParams`; `--dry-run` is the registrar's, not the operation's.
+        const dryRun = operation.mutates && flags?.[DRY_RUN_FLAG.name] === true;
+        const operationFlags = operation.mutates && flags !== undefined ? withoutDryRun(flags) : flags;
+
         let result: CoreResult<unknown>;
         try {
           // `resolveRoot()` / `buildParams()` run INSIDE the try so an ambient failure — e.g. a
@@ -146,12 +153,12 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
             // is the full list a multi-input op (`dnaSet`) reads (task-025-implement-dna-set).
             positional: positionals?.[0],
             positionals,
-            flags,
+            flags: operationFlags,
             // Value-bearing `--{name} <value>` options a data-mutating op reads (task-020's `memoryAdd`
             // reads `type`/`title`/`tags`). Undefined for every op declaring none.
             options: optionValues,
           });
-          result = await operation.fn(params);
+          result = dryRun ? await runAsDryRun(() => operation.fn(params)) : await operation.fn(params);
         } catch (error) {
           // Core owns exit-code selection for a thrown error too (spec-008 Consequences): a UsageError
           // (a malformed argument, e.g. `dna set`'s invalid key path) surfaces as exit 2, everything
@@ -188,4 +195,13 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
  */
 export function listRegisteredCliCommands(commands: readonly CliCommand[]): string[] {
   return commands.map((command) => (command.verb ? `${command.noun} ${command.verb}` : command.noun)).sort();
+}
+
+/**
+ * `flags` without the registrar's `--dry-run`, or `undefined` when nothing else is left — the shape an
+ * operation that declares no flags of its own was always called with.
+ */
+function withoutDryRun(flags: Readonly<Record<string, boolean>>): Readonly<Record<string, boolean>> | undefined {
+  const rest = Object.fromEntries(Object.entries(flags).filter(([name]) => name !== DRY_RUN_FLAG.name));
+  return Object.keys(rest).length > 0 ? rest : undefined;
 }

@@ -9,6 +9,8 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
 
+import { refuseDuringDryRun } from './dry-run';
+
 /** Read a document's full contents as UTF-8 text. */
 export function readDocument(absolutePath: string): string {
   return readFileSync(absolutePath, 'utf-8');
@@ -24,6 +26,7 @@ export function documentExists(absolutePath: string): boolean {
  * directory is created or touched — the write is exactly this one path, nothing else.
  */
 export function writeDocument(absolutePath: string, content: string): void {
+  refuseDuringDryRun('writeDocument');
   mkdirSync(dirname(absolutePath), { recursive: true });
   writeFileSync(absolutePath, content, 'utf-8');
 }
@@ -45,5 +48,6 @@ export function writeDocument(absolutePath: string, content: string): void {
  *   programmer error rather than a domain outcome to swallow.
  */
 export function removeDocument(absolutePath: string): void {
+  refuseDuringDryRun('removeDocument');
   unlinkSync(absolutePath);
 }

@@ -29,7 +29,7 @@
  * primitive in (see the task's Execution Notes for that scoping decision).
  */
 import type { CommitOptions } from '../storage';
-import { commitPaths, writeDocument } from '../storage';
+import { writeAndCommit } from '../storage';
 import { resolveConfinedMemoryPath } from '../storage/memory-path';
 
 /** The result of a single {@link writeMemoryEntry} call. */
@@ -65,7 +65,6 @@ export function writeMemoryEntry(
   options: CommitOptions = {},
 ): MemoryEntryWrite {
   const path = resolveConfinedMemoryPath(root, pattern, values);
-  writeDocument(path, content);
-  const sha = commitPaths(root, [path], message, options);
+  const sha = writeAndCommit(root, [{ path, content }], message, options);
   return { path, sha };
 }

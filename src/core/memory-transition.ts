@@ -39,7 +39,7 @@ import {
   verifyDocumentEdit,
 } from '../memory';
 import type { DocumentScope, MemoryYaml, StateMachine, TransitionOp } from '../memory';
-import { commitPaths, pathPorcelainStatus, readDocument, readPathAtRev, writeDocument } from '../storage';
+import { pathPorcelainStatus, readDocument, readPathAtRev, writeAndCommit } from '../storage';
 import { type Diagnostic, formatDiagnostic, isNewerFormatError, ValidationError } from '../validation';
 
 import { requireConfinedWriteTarget } from './confinement';
@@ -701,8 +701,7 @@ export function commitMemoryTransition(
   const checked = checkMemoryTransition(root, prepared, content, expected, scope);
   if (!checked.ok) return checked;
   const owned = { status: prepared.to, ...expected };
-  writeDocument(join(root, prepared.path), content);
-  const sha = commitPaths(root, [prepared.path], message, { author: prepared.identity });
+  const sha = writeAndCommit(root, [{ path: prepared.path, content }], message, { author: prepared.identity });
 
   const leaked = verifyCommittedScope(root, sha, prepared.path, owned, scope);
   if (leaked.length > 0) {

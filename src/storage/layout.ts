@@ -13,8 +13,7 @@
  */
 import { join } from 'path';
 
-import { commitPaths } from './commit';
-import { writeDocument } from './document';
+import { writeAndCommit } from './commit';
 
 /** The WingFoil root directory name, relative to the project (git) root (spec-011-storage-layout). */
 export const WINGFOIL_DIR = '.wingfoil';
@@ -93,8 +92,5 @@ export function initStorage(
   files: readonly ScaffoldFile[] = scaffoldFiles(),
   message: string = INIT_COMMIT_MESSAGE,
 ): string {
-  for (const file of files) {
-    writeDocument(join(root, file.path), file.content);
-  }
-  return commitPaths(root, files.map((file) => file.path), message);
+  return writeAndCommit(root, files.map((file) => ({ path: file.path, content: file.content })), message);
 }
