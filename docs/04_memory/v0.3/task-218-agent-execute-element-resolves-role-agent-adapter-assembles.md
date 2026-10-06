@@ -23,20 +23,7 @@ This task builds the pre-launch half of `agent execute`, for the stepless (`adho
 - (red-first) No flag at all → exit `2` `error: missing required argument: --next or --element`. `--resume`/`--ref` → exit 2 as unknown options (v0.4, §3.1).
 - (red-first) The role defaults to `developer` with a `warning:` line when neither a step nor `--role` gives one. P5.3.1 sc. 2's fixture holds a matching full id.
 - (red-first) dl-050 option 4: a role with a dangling binding prints `spec-012` §5.1's warnings on stderr, in order, before the MCP pre-flight, and nothing on stdout.
-- (red-first) The bootstrap bytes equal §2.4's template for `(role, element, run id, state_ref)`. Two runs from the same `HEAD` render identical bootstrap bytes. The handoff line depends on the type template's `
-- **Handover from wave 1 B3 (2026-10-02, `task-169`).** Reuse the success-warning channel: `coreOk(value, commit?, warnings?)` in `src/core/types.ts` and the single CLI renderer `src/cli/warning.ts` (`emitWarning`, `emitWarnings`; console `warning: …`, json one object per line, yaml documents closed by `...` so a following error is its own document). `spec-008` §6 records where this departs from `spec-005` §3.2 (stderr may be non-empty on exit 0) until this task amends `spec-005`.
-- **Handover from wave 2 B1 (2026-10-05, `task-171` and `task-176`).** `assembleExecutionContext`
-  (`src/core/context.ts`) reads Memory tolerantly: an unreadable document is left out and reported as
-  `W_MEMORY_UNREADABLE` in the result's `warnings` (`CoreResult`, third argument of `coreOk`), and a malformed subject
-  element comes back as `NOT_FOUND` with `details.unreadable`. Neither is in the payload. Forward both to the
-  surface this task builds (stderr / `--format json` warnings, or the MCP response), so they are never dropped.
-- **Handover from wave 2 B4a (2026-10-06, `task-255`).** The context payload's bytes are pinned as format 1
-  (`spec-012` §7, `dl-150` (B)): consume them only as `task-255` left them, through `assembleExecutionContext`, and
-  never re-serialize the context yourself. `CONTEXT_PAYLOAD_FORMAT` and `WrittenTimestamp` are re-exported from
-  `src/core`: a YAML date in the carried frontmatter is a `WrittenTimestamp` holding the text as written, not a `Date`,
-  and its `toJSON()` returns that text, so a `--format json` rendering keeps the document's own spelling.
-
-## Execution Notes` heading.
+- (red-first) The bootstrap bytes equal §2.4's template for `(role, element, run id, state_ref)`. Two runs from the same `HEAD` render identical bootstrap bytes. The handoff line depends on the type template's `## Execution Notes` heading.
 - (red-first) Temporary files are created under the OS temp dir, never inside the repository, and are removed on every exit path, refusals included.
 - (characterization) The MCP pre-flight spawns the running build (`node <dist/cli.js> mcp`, §2.5). A project's `.mcp.json` is neither read nor modified.
 - (characterization) BDD `P5.4.3-context-preloading.feature` sc. 1–2 are amended (`doc-versioning` note) to §3.1's reading: WingFoil assembles, validates and proves the context fetchable before the spawn. The sc. 3 message is kept.
@@ -48,6 +35,17 @@ This task builds the pre-launch half of `agent execute`, for the stepless (`adho
 - **Features:** P5.3.1, P5.4.2, P5.4.3, P5.4.4.
 - **Notes:** Proposal key: B09. `src/agent/execute.ts`, `src/core/index.ts` (operation `agentExecute`, `mutates: true`, CLI only; no MCP exposure in v0.3, spec-016 §8). The stderr warnings (dl-050 option 4) go through task-169's success-warning renderer, so directive-assign warnings and context warnings share one convention.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from wave 1 B3 (2026-10-02, `task-169`).** Reuse the success-warning channel: `coreOk(value, commit?, warnings?)` in `src/core/types.ts` and the single CLI renderer `src/cli/warning.ts` (`emitWarning`, `emitWarnings`; console `warning: …`, json one object per line, yaml documents closed by `...` so a following error is its own document). `spec-008` §6 records where this departs from `spec-005` §3.2 (stderr may be non-empty on exit 0) until this task amends `spec-005`.
+- **Handover from wave 2 B1 (2026-10-05, `task-171` and `task-176`).** `assembleExecutionContext`
+  (`src/core/context.ts`) reads Memory tolerantly: an unreadable document is left out and reported as
+  `W_MEMORY_UNREADABLE` in the result's `warnings` (`CoreResult`, third argument of `coreOk`), and a malformed subject
+  element comes back as `NOT_FOUND` with `details.unreadable`. Neither is in the payload. Forward both to the
+  surface this task builds (stderr / `--format json` warnings, or the MCP response), so they are never dropped.
+- **Handover from wave 2 B4a (2026-10-06, `task-255`).** The context payload's bytes are pinned as format 1
+  (`spec-012` §7, `dl-150` (B)): consume them only as `task-255` left them, through `assembleExecutionContext`, and
+  never re-serialize the context yourself. `CONTEXT_PAYLOAD_FORMAT` and `WrittenTimestamp` are re-exported from
+  `src/core`: a YAML date in the carried frontmatter is a `WrittenTimestamp` holding the text as written, not a `Date`,
+  and its `toJSON()` returns that text, so a `--format json` rendering keeps the document's own spelling.
 - **Handover from the W2 B4a triage (2026-10-06).** `bug-265` (v0.4): the context payload's body markers are not
   unique, so do not index its bodies by marker key alone. `dl-158` (in discussion, release v0.3) decides which
   `team.agents` entry signs and what an entry without an email writes under git-conventions §7: apply its ruling to
