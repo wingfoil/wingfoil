@@ -163,3 +163,7 @@ the MCP case; the context cases called `assembleExecutionContext` and `serialize
     `task-218` (`bug-265`, `dl-158`), `task-239` (`bug-258`, `bug-259`); `bug-227` gains the B4a CHANGELOG items
     (item 15). Item 16 goes to the W3 batch notes.
   - This plan stays `active` until `dl-158` is ruled.
+- **`dl-158` ruled (2026-10-06, approver)**: ratified as recommended, Rule 1 (a) and Rule 2 (ii), `in-discussion →
+  ready`. Its Actions 2 and 3 (the `git-conventions` §7 amendment, the `AgentEntry` refinement, the Rule 1
+  selection in `spec-016` by `task-218`) are scheduled separately. Every completion criterion is met; this plan
+  is `done`.
