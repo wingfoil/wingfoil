@@ -1,7 +1,7 @@
 # User Journeys — WingFoil
 
-**Version:** 1.3
-**Date:** 2026-10-01
+**Version:** 1.4
+**Date:** 2026-10-06
 **Status:** Approved
 
 ---
@@ -49,7 +49,7 @@ manual work.
 |------|----------------------------------|-----------------------------------------------------------|--------------------------------------------------------------------|
 | 1    | Audit current project state      | CLI: `wingfoil audit`                                     | Understand structure, tech stack, implicit conventions             |
 | 2    | Run interactive migration wizard | CLI: `wingfoil init --mode infer` (interactive wizard)    | Wizard guides: DNA infer, directives, Memory seed, workflow config |
-|      | - Infer DNA from codebase        | Proposes structure, human approves/refines                | DNA reflects reality: actual modules, tech stack, conventions      |
+|      | - Infer DNA from codebase        | Proposes structure, human approves/refines                | DNA reflects reality: actual modules, stacks, team, paths          |
 |      | - Deduce from git history        | Analyzes commits/authors to suggest initial team roles    | Directives suggested from observed patterns; customize as needed   |
 |      | - Seed Memory with defaults      | Creates initial Memory structure; user fills in decisions | Memory ready for documenting decisions (not importing old docs)    |
 |      | - Configure workflow             | Select built-in template, adapt to team process           | Workflow reflects current process + future improvements            |

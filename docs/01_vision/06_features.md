@@ -1,7 +1,7 @@
 # Features — WingFoil
 
-**Version:** 1.8
-**Date:** 2026-10-05  
+**Version:** 1.9
+**Date:** 2026-10-06  
 **Status:** Approved
 
 ---
@@ -40,14 +40,14 @@ persist their configuration and state files.
 
 ### **Pillar 2: Project DNA (P2)**
 
-Structural map of project (modules, tech stack, conventions, team structure in `.wingfoil/dna.yaml`).
+Structural map of project (modules, stacks, team structure, resource paths in `.wingfoil/dna.yaml`; rules are Directives).
 
 | ID   | Feature                         | Journey         | User         | Description                                                                                                                           | Type           |
 |------|---------------------------------|-----------------|--------------|---------------------------------------------------------------------------------------------------------------------------------------|----------------|
 | P2.1 | `wingfoil dna set/add/update/remove`| 0a, 6           | All          | Define/update project DNA: `set` writes scalar fields; `add`/`update`/`remove` edit collection entries (`dl-081`, `dl-082`). `set` and `update` both stay — `set` is `update` with a scalar-only guard whose refusal names the verb that works (`bug-092` ruling)                                                                                                             | Command        |
 | P2.2 | `wingfoil dna show`             | 3, 5            | All          | Query and display project DNA                                                                                                         | Command        |
 | P2.3 | `wingfoil dna infer`            | 0b              | Morgan, Alex | Auto-scan codebase and propose DNA structure (human reviews/approves)                                                                 | Command        |
-| P2.4 | Project DNA (structured config) | 0a, 0b, 1, 2, 3 | All          | Define project anatomy (modules, tech stack, team members, conventions) in `.wingfoil/dna.yaml`                                       | Infrastructure |
+| P2.4 | Project DNA (structured config) | 0a, 0b, 1, 2, 3 | All          | Define project anatomy (modules, stacks, team, resource paths) in `.wingfoil/dna.yaml`                                                | Infrastructure |
 | P2.5 | `wingfoil paths [category]`     | 0a, 0b, 5       | All          | Query project resource paths by category (sources, tests, docs, config, governance, runs — `spec-002` Categories); drill-down support; formats: console, json, yaml | Command        |
 
 ---
