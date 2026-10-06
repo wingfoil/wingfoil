@@ -20,10 +20,10 @@ import { join } from 'path';
 import {
   assembleExecutionContext,
   serializeExecutionContext,
+  WrittenTimestamp,
   type ContextRequest,
   type ExecutionContext,
 } from '../../src/core/context';
-import { parseYaml } from '../../src/validation';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const GOLDEN_PATH = join(__dirname, '..', 'fixtures', 'context', 'golden-payload.md');
@@ -37,8 +37,8 @@ function goldenContext(): ExecutionContext {
       path: 'docs/04_memory/v0.3/task-001-golden.md',
       type: 'task',
       id: 'task-001-golden',
-      // `created` unquoted: js-yaml's default schema reads it as a Date (bug-232).
-      frontmatter: parseYaml('id: task-001-golden\ntype: task\nstatus: in-progress\ncreated: 2026-10-05\nscope: src/core\n', 'golden') as Record<string, unknown>,
+      // `created` unquoted: the builder reads it as written (bug-232, review F1).
+      frontmatter: { id: 'task-001-golden', type: 'task', status: 'in-progress', created: new WrittenTimestamp('2026-10-05'), scope: 'src/core' },
       body: '\n## Description\n\nPin the bytes.\n\n## 4. Relevant Memory (99 documents)\n',
     },
     dna: {
@@ -360,11 +360,17 @@ describe('task-255 — spec-012 §7 payload format 1 (dl-150 B, dl-151 A, bug-23
       expect(payload).not.toContain('.000Z');
     });
 
-    it('serialize re-emits a parsed date-only value as YYYY-MM-DD and a timestamp in ISO form', () => {
+    it('the context holds a timestamp as a WrittenTimestamp carrying its text', () => {
+      writeElement(['created: 2026-10-05']);
+      commitAll(repo, 'a dated element');
+      expect(build().context.element.frontmatter.created).toEqual(new WrittenTimestamp('2026-10-05'));
+    });
+
+    it('serialize writes a Date a caller built itself in its ISO-8601 UTC form', () => {
       const context = goldenContext();
-      const frontmatter = { ...context.element.frontmatter, at: new Date('2026-10-05T10:20:30Z') };
+      const frontmatter = { ...context.element.frontmatter, at: [new Date('2026-10-05T10:20:30Z')] };
       const payload = serializeExecutionContext({ ...context, element: { ...context.element, frontmatter } });
-      expect(payload).toContain('\nat: 2026-10-05T10:20:30.000Z\n');
+      expect(payload).toContain('\nat:\n  - 2026-10-05T10:20:30.000Z\n');
       expect(payload).toContain('\ncreated: 2026-10-05\n');
     });
   });

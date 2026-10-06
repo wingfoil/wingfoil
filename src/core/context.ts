@@ -16,12 +16,12 @@
  * `isArchivedStatus`.
  */
 import * as jsYaml from 'js-yaml';
-import { CORE_SCHEMA, dump, type Type } from 'js-yaml';
+import { CORE_SCHEMA, dump, load, Type } from 'js-yaml';
 
 import type { RolesYaml } from '../directives/schema';
 import type { DnaYaml, Module, Paths, Project, Stacks, Team } from '../dna/schema';
 import { isArchivedStatus, loadMemoryDocumentsAtRev, memoryUnreadableDiagnostic, type MemoryDocumentSummary } from '../memory';
-import { readPathAtRev, splitFrontmatter } from '../storage';
+import { readPathAtRev, readPathsAtRev, splitFrontmatter } from '../storage';
 import { formatDiagnostic, parseYaml, type Diagnostic } from '../validation';
 
 import { isRemovableCustomAssetPath } from './builtin-asset';
@@ -314,38 +314,68 @@ export function validateExecutionContext(candidate: unknown): CoreResult<Executi
 export const CONTEXT_PAYLOAD_FORMAT = 1;
 
 /**
- * The schema the payload's YAML is dumped with: js-yaml's default minus the implicit timestamp type, so
- * a date-shaped string is written plain (`2026-10-05`), never quoted as a would-be timestamp
- * (`bug-232`). Explicit `!!timestamp`, binary, omap, pairs and set stay dumpable.
+ * A YAML timestamp scalar exactly as its document wrote it (`bug-232`, review F1 of task-255): the
+ * frontmatter the payload carries holds one of these where js-yaml's default schema would hold a
+ * `Date`, so `2026-10-05`, `2026-10-05T00:00:00Z` and `2026-10-05 10:00:00 +02:00` are re-emitted
+ * unchanged rather than normalized to an instant.
  */
+export class WrittenTimestamp {
+  constructor(
+    /** The scalar's text, as written. */
+    readonly text: string,
+  ) {}
+}
+
 // js-yaml 4 exports its built-in types as `types`; `@types/js-yaml` does not declare that export.
 const types = (jsYaml as unknown as { readonly types: Readonly<Record<'merge' | 'binary' | 'omap' | 'pairs' | 'set' | 'timestamp', Type>> }).types;
-const PAYLOAD_YAML_SCHEMA = CORE_SCHEMA.extend({
-  implicit: [types.merge],
-  explicit: [types.binary, types.omap, types.pairs, types.set, types.timestamp],
+
+/** js-yaml's timestamp tag and resolution, constructing a {@link WrittenTimestamp} instead of a `Date`. */
+const WRITTEN_TIMESTAMP_TYPE = new Type('tag:yaml.org,2002:timestamp', {
+  kind: 'scalar',
+  resolve: (data: unknown) => types.timestamp.resolve(data),
+  construct: (data: string) => new WrittenTimestamp(data),
+  instanceOf: WrittenTimestamp,
+  represent: (value: object) => (value as WrittenTimestamp).text,
 });
 
 /**
- * A YAML timestamp as text (`bug-232`): js-yaml reads an unquoted `2026-10-05` as midnight UTC, which
- * goes back to `2026-10-05`; any other instant is its ISO-8601 UTC form.
+ * The schema the payload's frontmatter is read and dumped with: js-yaml's default schema (same implicit
+ * and explicit types, so it accepts what the scan accepted) with {@link WRITTEN_TIMESTAMP_TYPE} in place
+ * of the timestamp type. A timestamp is written back as written; a quoted date is a string that a reader
+ * could take for a timestamp, so the dump keeps it quoted.
  */
-function timestampText(date: Date): string {
-  const iso = date.toISOString();
-  return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso;
+const PAYLOAD_YAML_SCHEMA = CORE_SCHEMA.extend({
+  implicit: [WRITTEN_TIMESTAMP_TYPE, types.merge],
+  explicit: [types.binary, types.omap, types.pairs, types.set],
+});
+
+/** `value` with every `Date` — a value a caller built itself, never one the builder read — as its
+ * ISO-8601 UTC text, at any depth, so {@link serializeExecutionContext} accepts it. */
+function withDatesAsWritten(value: unknown): unknown {
+  if (value instanceof WrittenTimestamp) return value;
+  if (value instanceof Date) return new WrittenTimestamp(value.toISOString());
+  if (Array.isArray(value)) return value.map(withDatesAsWritten);
+  if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, withDatesAsWritten(entry)]));
+  return value;
 }
 
-/** `value` with every `Date` replaced by {@link timestampText}, at any depth. */
-function withTimestampsAsText(value: unknown): unknown {
-  if (value instanceof Date) return timestampText(value);
-  if (Array.isArray(value)) return value.map(withTimestampsAsText);
-  if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, withTimestampsAsText(entry)]));
-  return value;
+/**
+ * The frontmatter of each document at `paths`, as commit `sha` holds it, read with
+ * {@link PAYLOAD_YAML_SCHEMA} so its timestamps keep their text (`bug-232`). Every path was read and
+ * parsed at `sha` by the scan already, with a schema that accepts the same documents, and each one
+ * has a frontmatter block: the element is found, and a document carried, by its frontmatter's `type`
+ * and `id`.
+ */
+function writtenFrontmatter(root: string, sha: string, paths: readonly string[]): Record<string, unknown>[] {
+  return readPathsAtRev(root, sha, [...paths]).map(
+    (raw) => load(splitFrontmatter(raw!).frontmatter!, { schema: PAYLOAD_YAML_SCHEMA }) as Record<string, unknown>,
+  );
 }
 
 /** YAML for the payload: keys sorted ascending (§7), no line folding and no anchors, dates as written
  * (`bug-232`), so the text is a function of the value alone. */
 function canonicalYaml(value: unknown): string {
-  return dump(withTimestampsAsText(value), { schema: PAYLOAD_YAML_SCHEMA, sortKeys: true, lineWidth: -1, noRefs: true });
+  return dump(withDatesAsWritten(value), { schema: PAYLOAD_YAML_SCHEMA, sortKeys: true, lineWidth: -1, noRefs: true });
 }
 
 function yamlBlock(value: unknown): string {
@@ -783,13 +813,18 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
       ? undefined
       : selectRelevantMemoryDocuments(candidates.carried, { ...wanted, frontmatter }, request.limits ?? DEFAULT_CONTEXT_LIMITS);
 
+  // The payload carries the frontmatter as written (`bug-232`): the element and the selected documents
+  // are re-read at the commit with the payload's schema. Selection above used the scan's parse.
+  const carried = [...(element === undefined ? [] : [element]), ...(relevant?.documents ?? [])];
+  const written = writtenFrontmatter(root, sha, carried.map((doc) => doc.path));
+  const offset = carried.length - (relevant?.documents.length ?? 0);
   const validated = validateExecutionContext({
     role,
     stateRef: sha,
-    element,
+    element: element === undefined ? undefined : { ...element, frontmatter: written[0]! },
     dna,
     directives,
-    memory: relevant?.documents,
+    memory: relevant?.documents.map((doc, index) => ({ ...doc, frontmatter: written[offset + index]! })),
     warnings: resolution?.warnings ?? [],
   });
   if (!validated.ok) {
