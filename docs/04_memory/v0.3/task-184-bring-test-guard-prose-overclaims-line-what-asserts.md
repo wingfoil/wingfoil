@@ -92,7 +92,7 @@ by seeding before the snapshot. No verb wrote anything.
   - **Unasserted (T1):** "a mutating Tool call rejected on an illegal transition, identical to the
     CLI" (task-016's AC case). `grep -rn "callTool" test` finds only synthetic or stubbed ops for
     that case, and the production server registers no Tool. The module doc now says so instead of
-    "awaits task-018+". This is a candidate bug.
+    "awaits task-018+". To be filed as a bug at the gate (coordinator).
   - `derived-option-namespace`: both comments claimed `--version` is absent from `program.options`.
     The test now asserts `globals.has('--version') === true` and `globals.has('--help') === false`,
     and adds only `help`/`--help` by hand. Its two writes-nothing cases use the shared snapshot.
@@ -135,10 +135,69 @@ With the two pending amendments present (uncommitted) in the working tree:
 
 ### Pending amendments (approver)
 
-- `spec-008-cli-grammar` (§9 and the 2026-09-23 revision note cite "§1's precedence"; now §1
-  placement + §2 `--version` precedence; dated Revision note appended). Proposed `--reason`:
+- `spec-008-cli-grammar`: §9 cited "§1's precedence rule"; it now cites §1 for placement and §2 for
+  `--version` precedence ("all three working as specified"). The second 2026-09-24 Revision note says
+  the same thing ("§1 gives a global precedence"); it is left as written and corrected in the appended
+  2026-10-06 Revision note (review fix 2). Proposed `--reason`:
   "Correct the citation behind §9's second outcome: §1 gives a global's placement, §2's --version row
   gives its precedence (bug-096, task-184). No rule changed."
 - `task-093-dna-mutation-surface-add-remove-update` (dated Correction note appended; the notes said
   `--version` is outside `program.options`). Proposed `--reason`: "Record that --version is in
   program.options, as measured by task-184 (bug-096); the earlier notes are kept as written."
+
+### review fixes (independent review: APPROVE WITH FIXES)
+
+1. **bug-194, the whole class.** The first pass followed title phrases ("writes nothing" and the
+   like). Refusal tests worded differently still checked only `HEAD` or one file. The same conversion
+   is now applied wherever a test checks that state did not change:
+   - a positive `toBe(<var>)` on a line that reads `HEAD` (`head(`, `'HEAD'`, `rev-parse`), with the
+     variable captured in the test and not also used in a `not.toBe(<var>)`;
+   - the per-file helpers `expectUnchanged(before…)` (memory-wip-limits) and
+     `expectNothingWritten(before…)` (memory-amend);
+   - the `usageError` helper in dna-quoted-path-segments;
+   - by hand: the "state unchanged" CLI scenarios in `program.integration` (memory submit sc.2,
+     approve sc.2 and sc.3, reject sc.2, sc.3 and REQ-SEC-03, deprecate sc.3) and
+     directive-inventory-baseline's AC5 `--role` refusal.
+
+   Every case the reviewer named is converted: the 6 listed files, the 8 single tests, and the 6 in
+   files I had already touched. In the memory-park bug-076 guard, the generated snapshot preceded the
+   fixture edit and failed on it, so it was moved after the edit. No converted test found a write.
+
+   Counts (`toBe(before` vs `assertPersistenceUnchanged(` per file in `test/core` + `test/cli`):
+
+   | Point | Files with `toBe(before` | `toBe(before` | `assertPersistenceUnchanged(` in those files |
+   |---|---|---|---|
+   | before the fixes (`32660984`) | 60 | 188 | 53 |
+   | after | 60 | 188 | 206 |
+
+   Across all of `test/core` + `test/cli`, `assertPersistenceUnchanged(` went from 59 (`033b12d3`) to
+   212.
+
+   What remains unconverted, with the reason:
+   - the `toBe(before` checks still outside a snapshot are `directive-assign.test.ts` AC4 (`:182`)
+     and `--force … CAN edit` (`:678`). Both are successes that compare the written file with an
+     expected edit of `before`;
+   - every other unconverted `toBe(<var>)` on a `HEAD` line is a success path that commits, so
+     "nothing persisted" does not apply;
+   - `memory-add-confinement` / `memory-add-symlink-target` "outside the project root" assert exactly
+     their claim on the outside directory;
+   - `test/memory/entry.test.ts:96` stays unconverted because task-259 edits that file;
+   - `memory-supersede`'s git-failure-between-commits case keeps the approve commit by design.
+2. **spec-008 pending amendment.** The second 2026-09-24 Revision note is restored as it was. The
+   correction now sits in the new 2026-10-06 Revision note, which names that note. §9 reads "all
+   three working as specified" and is re-wrapped. Both amendments remain uncommitted.
+3. **parity nit.** The derived `not.toContain` loop is removed, because the exact Resources list
+   already excludes every mutating op. The cross-check `expect(tools).toHaveLength(<registry
+   mutates: true count>)` is kept.
+
+The task-016 case (a real `CORE_MODULES` mutating Tool refusing an illegal transition) is to be filed
+as a bug at the gate.
+
+Gates after the fixes, with both amendments in the working tree:
+- `npm test`: exit 0, 271 suites, 5025 tests;
+- `npm run lint`: clean;
+- `npx tsc --noEmit -p tsconfig.json` and `npx tsc -p tsconfig.build.json --noEmit`: clean;
+- `npm run docs:api`: exit 0;
+- `node scripts/check-governance.cjs --base 02fd6102`: exit 0, 0 findings.
+
+The task stays `in-review`.
