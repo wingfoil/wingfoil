@@ -225,10 +225,22 @@ prints `draft -> backlog`: `resolveTypeTransition` from `node_modules/wingfoil-r
   resolves once `main` is merged (coordinator's instruction: record and leave). `npm run lint` 0, both
   `tsc` 0.
 
-### Pending amendments (approver)
+### integration with main (2026-10-06)
 
-Uncommitted in the worktree; `memory amend` at the review gate:
+- `git merge main` → `780d4935`, no conflict (task-180's `park` op and `returns` edges landed in
+  `resolveTransitionTarget`; `resolveTypeTransition` already prints `NO_TARGET` for every refused op,
+  so `park` refusals read `<from> -> (none)` with no code change). The pending amendments were set
+  aside as a patch before the merge and re-applied with `git apply --3way` (clean); the
+  `spec-004`/`spec-005` Revision notes stay in date order (`grep -o "^\*\*Revision ([0-9-]*"` → the
+  2026-10-06 note last). `npm ci` re-run (task-190's lock).
+- `park` in the sweep: `OPS` gains `park`, with its reason by category; new tests: `park` refused with
+  `(none)` from every state of the scaffold and the custom machine (no `returns`), and on the real
+  `task` machine legal only from `in-progress` (→ `backlog`). task-180's target-agnostic park pins
+  (`state-machine-returns-limits`, `memory-park`) now pin `(none)` exactly. REQ-STATE-01 names `park`
+  among the verbs and "no `returns` edge" among the reasons; `docs/cli-reference.md`'s `memory park`
+  errors show the line. No versioned config file touched (`git diff --stat 780d4935 -- .wingfoil` → empty).
+- Gates: `npm run test:coverage` → rc 0, **259 suites, 4861 tests, all passed** (name-resolvability
+  included: `dl-154` now resolves); `All files` 99.11 / 96.33 / 96.27 / 99.69. `npm run lint` 0,
+  both `tsc` 0, `npm run typecheck` 0, `node scripts/check-governance.cjs --base 0cf8b131` → 91 `wf()`
+  commits, 0 findings.
 
-- `spec-004-mcp-surface-contract` — `--reason "§4.3's illegal-transition example names (none) as <to>, per dl-154 (option A), which replaces dl-053: the canonical edge draft -> backlog was reached from pending, not from draft (bug-165, task-181). Dated Revision note added; no Tool, Resource or rule changed."`
-- `spec-005-cli-command-contract` — `--reason "§3.1's details example names (none) as <to>, per dl-154 (option A), which replaces dl-053: pending was submit's edge from draft, not from approved (bug-165, task-181). Dated Revision note added; no exit code, format or rule changed."`
-- `dl-053-illegal-transition-target-for-verbless-edges` — `--reason "Editorial pointer under dl-108 A3: replaced on 2026-10-06 by dl-154 (option A, (none)). The decision text is unchanged; the element is deprecated separately."`
