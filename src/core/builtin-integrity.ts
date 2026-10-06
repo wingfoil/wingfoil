@@ -18,9 +18,12 @@
  * secret in a shipped template would be installed into every new project. It is a regex scan of
  * the content, not a digest, so the paragraph above still holds.
  *
+ * Since task-196 it also checks the built-in agent adapter manifests `init` installs under
+ * `.wingfoil/agents/built-in/` (kind `adapter`, `spec-016` §2.1), against the task-177 manifest schema.
+ *
  * A cross-pillar concern by construction — checking a directive source needs the Directives pillar's
  * `DirectiveFrontmatter` schema, checking a workflow source needs the Workflow pillar's `Workflow`
- * schema — so, per `src/core/loaders.ts`'s own precedent ("Cross-file concerns ... need the caller to
+ * schema and its loader rules, an adapter source the `agent` module's manifest parser — so, per `src/core/loaders.ts`'s own precedent ("Cross-file concerns ... need the caller to
  * have actually loaded the referenced files ... live in the loader, not [a pillar] schema module"),
  * this lives in `core`, not in either pillar module or in `storage` (which only carries the raw
  * {@link BuiltinTemplateSource} shape — see `src/storage/templates.ts`). Reuses the exact same
