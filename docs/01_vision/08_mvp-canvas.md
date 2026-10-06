@@ -1,6 +1,6 @@
 # MVP Canvas — WingFoil v1.0 (MVP Complete)
 
-**Version:** 1.7
+**Version:** 1.8
 **Date:** 2026-10-06
 **Status:** Approved
 

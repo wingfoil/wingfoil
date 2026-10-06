@@ -1,6 +1,6 @@
 # Features — WingFoil
 
-**Version:** 1.9
+**Version:** 1.10
 **Date:** 2026-10-06  
 **Status:** Approved
 
