@@ -51,9 +51,100 @@ Implements `dl-150` (option B) and `dl-151` (option A), ratified on 2026-10-05, 
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+### design (architect)
+
+- **Inputs.** `depends_on: []`. `dl-150` is `ready` (option B, approve commit `5cf99303`) and `dl-151` is
+  `ready` (option A, `afd3fdf4`): `git log --format='%h %s' -- docs/04_memory/design/dls/dl-15[01]*`.
+  `spec-012` is `approved` (`grep -n '^status' docs/04_memory/design/specs/spec-012-*.md`). Both bugs
+  were `in-progress` at the start (`48f0ae6d`, `c52da643`).
+- **Format 1, as ruled.** Header `<!-- format: 1 | role | element | state -->`; fenced ```` ```yaml ````
+  blocks; `### <section>` per DNA section; one blank line between blocks (no block is ever empty now);
+  every body — the task's too, since a task body carries `## Description` — between
+  `<!-- begin:<key> -->`/`<!-- end:<key> -->`, key `<type>:<id>` (element, Memory) or `directive:<id>`;
+  an empty body leaves the markers adjacent. Splitting rule: outside a pair, `#`/`##`/`###` lines are
+  structure; inside, up to the first line equal to its own end marker.
+- **Decisions beyond the DLs (approver to confirm).**
+  1. *No-id/no-type document* (`dl-150` "skipped with W_MEMORY_UNREADABLE-style diagnostics"): left out
+     **before** §6 bounds the set (it never takes a slot), and reported only when §6 would have found it
+     relevant. Reporting all would add 14 warnings to every context here — the frontmatter-less
+     `docs/05_plans/X_*` and v0.1 plans (count by `loadMemoryDocumentsAtRev` at HEAD, 772 docs). Code
+     `W_MEMORY_UNREADABLE` reused (no new code, so `spec-017` is untouched).
+  2. *A body holding its own end marker* (the one way to forge structure under markers): a Memory
+     document is left out and always reported; an element or directive refuses the context
+     (`VALIDATION`) — §5 never drops a directive. A Memory `type`/`id` or a directive id holding a
+     control character or `-->` is treated the same way (it could not sit in a marker).
+  3. *Dates* (`bug-232`): fixed in the serializer, not in `parseYaml` (changing the shared parse would
+     touch every reader; `src/memory/submit.ts:31` relies on `Date`). A parsed timestamp is re-emitted as
+     `YYYY-MM-DD` when it is midnight UTC, else ISO-8601 UTC; YAML is dumped with a schema whose
+     timestamps are explicit only, so `2026-10-05` is written plain. Limit: `2026-10-05T10:00:00Z` comes
+     back as `2026-10-05T10:00:00.000Z` (stated in §7).
+  4. *Module matching* (`bug-233`): parenthesised text set aside, split on commas, each entry read by
+     its leading token with quotes/backticks and trailing `.,;:!?` stripped; a token selects by name or
+     by path in both directions at segment boundaries. Every token is **not** read: prose words such as
+     `memory` or `core` would select modules (the AC keeps prose falling back to all modules).
+  5. *In-place amendment* despite spec-012's Consequences ("MUST supersede"): `dl-150`/`dl-151` argue no
+     consumer has shipped (`task-218`, `task-195` are `backlog`: `grep -h '^status' docs/04_memory/v0.3/task-{218,195}*.md`);
+     the Revision note says so. A superseding spec instead is the approver's call.
+- `relevance.ts` is **not** edited: the partition is done in `context.ts` (`payloadCandidates`), so
+  `task-253`'s edit of `filterRelevantMemoryDocuments` does not overlap; the working-tree filter still
+  returns id-less documents (it builds no payload).
+- **BDD.** No step definitions exist (`grep -rln '\.feature' test` lists Jest suites that cite
+  scenarios); the P5.4.4 sc. 1 presence of `stacks` is asserted in `test/core/context-builder.test.ts`
+  and the new suite. No `.feature` edit.
+
+| AC | Classification | Why |
+|----|----------------|-----|
+| 1 byte format, headings cannot break structure, byte identity | red-first (identity: characterization) | markers/format header new; determinism already held |
+| 2 `stacks` in declared order | red-first | `grep -n stacks src/core/context.ts` found nothing on main |
+| 3 unquoted date verbatim | red-first | reproduced: `created: 2026-10-05T00:00:00.000Z` in the golden diff |
+| 4 spec-014 scope → `mcp-server`, `cli`; prose falls back | red-first (fallback: characterization) | bug-233 repro |
+| 5 spec-012 §4/§7 + deliberate test updates | characterization | documentation |
+
+### red (developer)
+
+- `7ee85a68`: `test/core/context-payload-format.test.ts` + golden fixture `test/fixtures/context/golden-payload.md`
+  (hand-authored to format 1). `npx jest test/core/context-payload-format.test.ts --json` → **15 failed,
+  5 passed** of 20. The 5 passing are guards that must keep holding (byte identity, irrelevant id-less
+  document not reported, parenthesised comma, prose fallback with note, mid-segment selects nothing).
+
+### green (developer)
+
+- `dec1e980`: `src/core/context.ts` — `CONTEXT_PAYLOAD_FORMAT`, `markedBody`/`closesItself`,
+  `PAYLOAD_YAML_SCHEMA` + `withTimestampsAsText`, `entryTokens`/`tokenSelectsModule`, `stacks` in
+  `DnaSelection`, `payloadCandidates`. Three `context-builder.test.ts` tests updated deliberately: the
+  header (`format: 1`, dl-150), the DNA key order (`stacks`, dl-151), and the old "headed by its path"
+  case (now adjacent markers + reported, dl-150).
+- `@types/js-yaml` does not declare js-yaml 4's runtime `types` export; it is read through a typed cast.
+- On this repository at HEAD (`npm run -s build`, then `assembleExecutionContext` from `dist/`):
+  `spec-014` → modules `cli,mcp-server`, no note (was all ten + note); `task-218`'s payload has 162
+  lines starting `## `, of which the splitting rule yields exactly the 4 literals.
+
+### refactor (developer)
+
+- `6facdd08`: unreachable fallbacks removed, report order and serializer refusal covered.
+- Gates (with the spec-012 amendment in the working tree): `npm test` → 260 suites, **4885 passed**;
+  `npm run test:coverage` → All files 99.12 / 96.33 / 96.34 / 99.69 (main `1abafadd` in a temporary
+  worktree: 99.11 / 96.30 / 96.27 / 99.69), `context.ts` 100 / 98.75 / 100 / 100;
+  `npm run lint` 0; `npm run docs:api` 0; `npx tsc --noEmit -p tsconfig.json` 0;
+  `npx tsc -p tsconfig.build.json --noEmit` 0; `node scripts/check-governance.cjs --base 1abafadd` 0.
+- `test/docs/name-resolvability.test.ts` failed once on a backticked `src/co` in the spec text; the
+  example was reworded (no backticked non-existent path).
+
+### review (reviewer)
+
+- Every AC maps to a test in `test/core/context-payload-format.test.ts` (AC1: golden, header, hostile
+  bodies, adjacent markers, byte identity; AC2: stacks; AC3: both date tests; AC4: the five bug-233
+  tests) plus the updated `context-builder.test.ts`. No CLI surface changed, so `docs/cli-reference.md`
+  is untouched. No config file of the four versioned ones changed.
+- Same-class check in touched files: every body the serializer writes goes through `markedBody`; every
+  name written into a heading or marker is checked by `headerFieldProblem` (role, element, directive id)
+  or `isNameable` (Memory).
+
+### Pending amendments (approver)
+
+- `spec-012-context-loader-relevance-filtering` (uncommitted in this worktree): §4 (`stacks`, module
+  matching), §7 (format 1, dates, splitting rule, what never enters a payload, normative example), and a
+  Revision note dated 2026-10-06. Proposed `--reason`: "Pins the context payload's byte format (format 1:
+  body markers, format header, fenced YAML, blank-line joins, no path headings) per dl-150 option B,
+  carries the DNA stacks per dl-151 option A, and states the date and module-matching rules that close
+  bug-232 and bug-233, as implemented by task-255. Edited in place because no payload consumer has shipped."
