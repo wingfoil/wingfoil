@@ -31,6 +31,10 @@ Ratified: every operation registered `mutates: true` in `CORE_MODULES` (28 today
 - **Features:** P5.1.4.
 - **Notes:** Proposal key: C24.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from the W2 B4b triage (2026-10-06, `bug-217`).** A refusing pre-commit hook makes `memory add` print
+  git's raw `error: Command failed: git -C <absolute path> commit --only ...` text, the absolute path included, before
+  the hook's stderr; `bug-217` quotes it with the path elided. The raw text is the same class as `bug-251` (Node or git
+  text with an absolute path on stderr): reword the refusal when fixing the staged leftover, or say why not.
 
 ## Execution Notes
 
