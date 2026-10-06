@@ -186,6 +186,84 @@ describe('the alarm is reachable — a pre-commit hook that rewrites the target 
     expect(exitCodeForResult(result)).toBe(1);
     expect(result.ok === false && result.error.message).toContain('carries more than the change it declares');
   });
+
+  // task-189 (bug-161): the three remaining write sites in `src/core/index.ts` whose alarm no test
+  // reached. Same trigger, same report; each names the path it wrote and keeps the commit it made.
+  it('`directive create` reports the same way', async () => {
+    const scaffolded = initWingfoilProject(repo, 'Scrum');
+    expect(scaffolded.ok).toBe(true);
+    const target = '.wingfoil/directives/custom/hooked.md';
+
+    const hook = join(repo, '.git', 'hooks', 'pre-commit');
+    writeFileSync(hook, `#!/bin/sh\nprintf "\\n<!-- rewritten by a pre-commit hook -->\\n" >> ${target}\ngit add ${target}\n`, 'utf-8');
+    chmodSync(hook, 0o755);
+
+    const operation = CORE_MODULES.find((module) => module.name === 'directive')?.operations.directiveCreate;
+    const result = await operation!.fn({ root: repo, options: { name: 'hooked' } });
+
+    expect(result.ok).toBe(false);
+    expect(exitCodeForResult(result)).toBe(1);
+    const message = result.ok === false ? result.error.message : '';
+    expect(message).toContain('carries more than the change it declares');
+    expect(message).toContain(target);
+    expect(execFileSync('git', ['-C', repo, 'log', '-1', '--format=%s'], { encoding: 'utf-8' }).trim()).toBe(
+      'wf(directive): create hooked',
+    );
+  });
+
+  it('`directive remove` reports a removal commit that carries an extra path', async () => {
+    const scaffolded = initWingfoilProject(repo, 'Scrum');
+    expect(scaffolded.ok).toBe(true);
+    const created = await CORE_MODULES.find((module) => module.name === 'directive')?.operations.directiveCreate!.fn({
+      root: repo,
+      options: { name: 'doomed' },
+    });
+    expect(created?.ok).toBe(true);
+
+    // A removal has no bytes for a hook to rewrite, so the hook stages a file of its own instead —
+    // the other half of the same post-condition ("and nothing else").
+    const hook = join(repo, '.git', 'hooks', 'pre-commit');
+    writeFileSync(hook, '#!/bin/sh\nprintf "hook\\n" > hook-output.txt\ngit add hook-output.txt\n', 'utf-8');
+    chmodSync(hook, 0o755);
+
+    const operation = CORE_MODULES.find((module) => module.name === 'directive')?.operations.directiveRemove;
+    const result = await operation!.fn({ root: repo, positional: 'doomed' });
+
+    expect(result.ok).toBe(false);
+    expect(exitCodeForResult(result)).toBe(1);
+    const message = result.ok === false ? result.error.message : '';
+    expect(message).toContain('carries more than the change it declares');
+    expect(message).toContain("it also contains 'hook-output.txt'");
+    expect(execFileSync('git', ['-C', repo, 'log', '-1', '--format=%s'], { encoding: 'utf-8' }).trim()).toBe(
+      'wf(directive): remove doomed',
+    );
+  });
+
+  it('`memory add` reports the same way', async () => {
+    const scaffolded = initWingfoilProject(repo, 'Scrum');
+    expect(scaffolded.ok).toBe(true);
+
+    // The hook cannot know the id in advance, so it rewrites whatever Memory file the commit stages.
+    const hook = join(repo, '.git', 'hooks', 'pre-commit');
+    writeFileSync(
+      hook,
+      '#!/bin/sh\nfor f in $(git diff --cached --name-only -- docs/memory); do\n  printf "\\n<!-- rewritten by a pre-commit hook -->\\n" >> "$f"\n  git add "$f"\ndone\n',
+      'utf-8',
+    );
+    chmodSync(hook, 0o755);
+
+    const operation = CORE_MODULES.find((module) => module.name === 'memory')?.operations.memoryAdd;
+    const result = await operation!.fn({ root: repo, options: { type: 'bug', title: 'Hooked' } });
+
+    expect(result.ok).toBe(false);
+    expect(exitCodeForResult(result)).toBe(1);
+    const message = result.ok === false ? result.error.message : '';
+    expect(message).toContain('carries more than the change it declares');
+    expect(message).toContain('docs/memory/bug/bug-001-hooked.md');
+    expect(execFileSync('git', ['-C', repo, 'log', '-1', '--format=%s'], { encoding: 'utf-8' }).trim()).toBe(
+      'wf(bug): add bug-001-hooked',
+    );
+  });
 });
 
 describe('requireUnmodifiedTarget / requireAbsentTarget — what the refusals name', () => {

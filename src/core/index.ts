@@ -473,9 +473,9 @@ export const DNA_REWRITE_WARNING =
 async function runDnaMutation(
   root: string,
   request: DnaMutationRequest,
-  subject: string = dnaCommitSubject(request),
-  scalarOnly = false,
-  force = false,
+  subject: string,
+  scalarOnly: boolean,
+  force: boolean,
 ): Promise<CoreResult<{ key: string; value?: string }>> {
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
@@ -870,8 +870,10 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
       return coreErr({ code: confinement ? 'VALIDATION' : 'IO', message: error.message });
     }
     if (error instanceof ValidationError) {
-      const reason = error.issues.length > 0 ? error.issues.map((issue) => issue.message).join('; ') : error.message;
-      return coreErr({ code: 'VALIDATION', message: reason });
+      // Every `ValidationError` src/ builds carries at least one issue (task-189: each construction
+      // site passes a literal issue, is guarded by `issues.length > 0`, or maps a failed Zod parse),
+      // so the issues ARE the reason; there is no issue-less fallback to choose.
+      return coreErr({ code: 'VALIDATION', message: error.issues.map((issue) => issue.message).join('; ') });
     }
     throw error;
   }
