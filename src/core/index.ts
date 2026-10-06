@@ -183,6 +183,7 @@ export type {
   RelevanceElementRef,
   RelevantMemoryDocument,
   RelevantMemoryResult,
+  WorkingTreeRelevantMemoryResult,
 } from './relevance';
 // `prepareMemoryTransition` is deliberately not re-exported: outside `./memory-transition` a transition
 // starts at `beginMemoryTransition`, which runs the identity pre-flight first (task-132 review).

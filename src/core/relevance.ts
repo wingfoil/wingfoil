@@ -34,9 +34,10 @@
  * then part of its input. See {@link selectRelevantMemoryDocuments} for the exact ordering/bounding
  * contract.
  */
-import { listMemoryDocumentPaths, loadMemoryDocumentSummary, type MemoryDocumentSummary } from '../memory/query';
+import { loadMemoryDocuments, type MemoryDocumentSummary } from '../memory/query';
 import type { MemoryYaml } from '../memory/schema';
 import { isArchivedStatus } from '../memory/state-machine';
+import type { Diagnostic } from '../validation';
 
 /**
  * Caps that keep an assembled context "bounded, not a full dump" (spec-012 §6) — the defaults match
@@ -98,6 +99,18 @@ export const NO_RELEVANT_MEMORY_NOTE = 'no relevant Memory found for task';
 export interface RelevantMemoryResult {
   readonly documents: readonly RelevantMemoryDocument[];
   readonly note?: string;
+}
+
+/**
+ * {@link filterRelevantMemoryDocuments}'s result: the ranking of {@link RelevantMemoryResult}, plus the
+ * files the working-tree read left out (task-253, `bug-230`, `spec-017` §1.4). Each entry is a
+ * `W_MEMORY_UNREADABLE` diagnostic naming a repository-relative path — a document whose frontmatter
+ * does not parse, or a symbolic link — in path order; empty when every document was read. The
+ * diagnostics are about the read, not part of the ranking, which is why
+ * {@link selectRelevantMemoryDocuments}, reading nothing, returns none.
+ */
+export interface WorkingTreeRelevantMemoryResult extends RelevantMemoryResult {
+  readonly diagnostics: readonly Diagnostic[];
 }
 
 /**
@@ -232,19 +245,24 @@ function isSameReleaseScope(elementRelease: string | undefined, documentPath: st
 
 /**
  * Rank and bound the Memory documents relevant to `element` (spec-012 §6, REQ-PERF-05), scanning the
- * **working tree** under `root`: every document `memoryYaml` declares, in
- * {@link listMemoryDocumentPaths}'s already-sorted order (task-008), handed to
- * {@link selectRelevantMemoryDocuments}. An execution context does not use this reader: it ranks the
- * snapshot read at its `stateRef` (`./context.ts`).
+ * **working tree** under `root`: every document `memoryYaml` declares, in sorted path order
+ * (`loadMemoryDocuments`, task-008), handed to {@link selectRelevantMemoryDocuments}. An execution
+ * context does not use this reader: it ranks the snapshot read at its `stateRef` (`./context.ts`).
+ *
+ * The read is tolerant like every other Memory scan (task-171; task-253, `bug-230`; `spec-017` §1.4):
+ * a document whose frontmatter does not parse, and a symbolic link, are left out of the ranking and
+ * reported in the result's `diagnostics` as `W_MEMORY_UNREADABLE`, so one malformed document never
+ * fails the filter for every element.
  */
 export function filterRelevantMemoryDocuments(
   root: string,
   memoryYaml: MemoryYaml,
   element: RelevanceElementRef,
   limits: ContextLimits = DEFAULT_CONTEXT_LIMITS,
-): RelevantMemoryResult {
-  const documents = listMemoryDocumentPaths(root, memoryYaml).map((path) => loadMemoryDocumentSummary(root, path));
-  return selectRelevantMemoryDocuments(documents, element, limits);
+): WorkingTreeRelevantMemoryResult {
+  const diagnostics: Diagnostic[] = [];
+  const documents = loadMemoryDocuments(root, memoryYaml, { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) });
+  return { ...selectRelevantMemoryDocuments(documents, element, limits), diagnostics };
 }
 
 /**
