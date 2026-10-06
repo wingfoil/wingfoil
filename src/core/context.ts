@@ -15,11 +15,12 @@
  * and archived candidates are dropped by the relevance filter — both through the shared
  * `isArchivedStatus`.
  */
-import { dump } from 'js-yaml';
+import * as jsYaml from 'js-yaml';
+import { CORE_SCHEMA, dump, type Type } from 'js-yaml';
 
 import type { RolesYaml } from '../directives/schema';
-import type { DnaYaml, Module, Paths, Project, Team } from '../dna/schema';
-import { isArchivedStatus, loadMemoryDocumentsAtRev, type MemoryDocumentSummary } from '../memory';
+import type { DnaYaml, Module, Paths, Project, Stacks, Team } from '../dna/schema';
+import { isArchivedStatus, loadMemoryDocumentsAtRev, memoryUnreadableDiagnostic, type MemoryDocumentSummary } from '../memory';
 import { readPathAtRev, splitFrontmatter } from '../storage';
 import { formatDiagnostic, parseYaml, type Diagnostic } from '../validation';
 
@@ -34,7 +35,13 @@ import {
   loadRolesYamlAtRev,
   type DirectiveFile,
 } from './loaders';
-import { DEFAULT_CONTEXT_LIMITS, selectRelevantMemoryDocuments, type ContextLimits, type RelevantMemoryDocument } from './relevance';
+import {
+  DEFAULT_CONTEXT_LIMITS,
+  selectRelevantMemoryDocuments,
+  type ContextLimits,
+  type RelevanceElementRef,
+  type RelevantMemoryDocument,
+} from './relevance';
 import { resolveRevision, RevisionError } from './revision';
 import { coreErr, coreOk, type CoreError, type CoreResult } from './types';
 
@@ -221,6 +228,8 @@ export interface DnaSelection {
   readonly project?: Project;
   /** The element's `modules:`/`scope:` entries, or every module when it declares neither. */
   readonly modules: readonly Module[];
+  /** Whole, technologies and methodologies (`dl-151` option A). */
+  readonly stacks?: Stacks;
   readonly team?: Team;
   /** Every category, `runs` included. */
   readonly paths?: Paths;
@@ -298,19 +307,99 @@ export function validateExecutionContext(candidate: unknown): CoreResult<Executi
   return coreOk(candidate as unknown as ExecutionContext);
 }
 
-/** YAML for the payload: keys sorted ascending (§7), no line folding and no anchors, so the text is a
- * function of the value alone. */
+/**
+ * The payload's format version (`dl-150` option B, the `dl-149` format key): the first field of the
+ * header comment. A change to the bytes §7 pins is a new format.
+ */
+export const CONTEXT_PAYLOAD_FORMAT = 1;
+
+/**
+ * The schema the payload's YAML is dumped with: js-yaml's default minus the implicit timestamp type, so
+ * a date-shaped string is written plain (`2026-10-05`), never quoted as a would-be timestamp
+ * (`bug-232`). Explicit `!!timestamp`, binary, omap, pairs and set stay dumpable.
+ */
+// js-yaml 4 exports its built-in types as `types`; `@types/js-yaml` does not declare that export.
+const types = (jsYaml as unknown as { readonly types: Readonly<Record<'merge' | 'binary' | 'omap' | 'pairs' | 'set' | 'timestamp', Type>> }).types;
+const PAYLOAD_YAML_SCHEMA = CORE_SCHEMA.extend({
+  implicit: [types.merge],
+  explicit: [types.binary, types.omap, types.pairs, types.set, types.timestamp],
+});
+
+/**
+ * A YAML timestamp as text (`bug-232`): js-yaml reads an unquoted `2026-10-05` as midnight UTC, which
+ * goes back to `2026-10-05`; any other instant is its ISO-8601 UTC form.
+ */
+function timestampText(date: Date): string {
+  const iso = date.toISOString();
+  return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso;
+}
+
+/** `value` with every `Date` replaced by {@link timestampText}, at any depth. */
+function withTimestampsAsText(value: unknown): unknown {
+  if (value instanceof Date) return timestampText(value);
+  if (Array.isArray(value)) return value.map(withTimestampsAsText);
+  if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, withTimestampsAsText(entry)]));
+  return value;
+}
+
+/** YAML for the payload: keys sorted ascending (§7), no line folding and no anchors, dates as written
+ * (`bug-232`), so the text is a function of the value alone. */
 function canonicalYaml(value: unknown): string {
-  return dump(value, { sortKeys: true, lineWidth: -1, noRefs: true });
+  return dump(withTimestampsAsText(value), { schema: PAYLOAD_YAML_SCHEMA, sortKeys: true, lineWidth: -1, noRefs: true });
 }
 
 function yamlBlock(value: unknown): string {
   return '```yaml\n' + canonicalYaml(value) + '```';
 }
 
-/** A body as §7 carries it: verbatim, without the blank lines around it. */
+/** A body as §7 carries it: verbatim, without the blank lines before it or the whitespace after it. */
 function trimBody(body: string): string {
   return body.replace(/^(?:[ \t]*\r?\n)+/, '').trimEnd();
+}
+
+/** The line that closes the body keyed `key` (`dl-150` B). */
+function endMarker(key: string): string {
+  return `<!-- end:${key} -->`;
+}
+
+/**
+ * A body between its markers: `<!-- begin:<key> -->`, the trimmed body, `<!-- end:<key> -->`, each on
+ * its own line; an empty body leaves the two markers adjacent.
+ */
+function markedBody(key: string, body: string): string {
+  const trimmed = trimBody(body);
+  return [`<!-- begin:${key} -->`, ...(trimmed.length > 0 ? [trimmed] : []), endMarker(key)].join('\n');
+}
+
+/**
+ * Whether `body`, once canonicalized (§7), holds the line that closes it — the one body a reader could
+ * not split by `dl-150` B's rule, so it never enters a payload.
+ */
+function closesItself(key: string, body: string): boolean {
+  const marker = endMarker(key);
+  return canonicalize(body).split('\n').includes(marker);
+}
+
+function selfClosingProblem(what: string, key: string): string {
+  return `${what} cannot enter an execution context: its body holds the line ${JSON.stringify(endMarker(key))} that closes it`;
+}
+
+/** The marker key of a directive body. */
+function directiveKey(id: string): string {
+  return `directive:${id}`;
+}
+
+/** Whether a Memory document can be named in the payload: a string `type` and `id`, each fit for a
+ * heading and a marker (no control character, no `-->`). */
+function isNameable(type: unknown, id: unknown): boolean {
+  return (
+    typeof type === 'string' &&
+    typeof id === 'string' &&
+    type.length > 0 &&
+    id.length > 0 &&
+    headerFieldProblem('type', type) === undefined &&
+    headerFieldProblem('id', id) === undefined
+  );
 }
 
 /** §7's canonicalization: LF only, no trailing whitespace on any line, exactly one trailing `\n`. */
@@ -336,15 +425,34 @@ function headerFieldProblem(name: string, value: string): string | undefined {
   return undefined;
 }
 
+/** The first body in `context` that {@link closesItself}, as its refusal; `undefined` when none does.
+ * The element first, then directives in payload order. */
+function selfClosingBody(context: ExecutionContext): string | undefined {
+  const { element } = context;
+  const elementKey = `${element.type}:${element.id}`;
+  if (closesItself(elementKey, element.body)) return selfClosingProblem(`element '${elementKey}'`, elementKey);
+  for (const directive of context.directives) {
+    const key = directiveKey(directive.frontmatter.id);
+    if (closesItself(key, directive.body)) return selfClosingProblem(`directive '${directive.frontmatter.id}'`, key);
+  }
+  return undefined;
+}
+
 /**
- * Render a context as `spec-012` §7's canonical Markdown payload — the bytes §8 holds identical across
- * builds. Fixed headings in a fixed order; frontmatter and DNA sections as YAML with sorted keys;
- * directive and document bodies verbatim; ids rather than paths; the header names only role, element
+ * Render a context as `spec-012` §7's canonical Markdown payload, format {@link CONTEXT_PAYLOAD_FORMAT}
+ * (`dl-150` option B) — the bytes §8 holds identical across builds. Fixed headings in a fixed order,
+ * one blank line between blocks; frontmatter and DNA sections as fenced YAML with sorted keys; every
+ * directive and document body verbatim between `<!-- begin:<key> -->`/`<!-- end:<key> -->` markers
+ * (`<type>:<id>` for the element and Memory, `directive:<id>` for a directive), so a body's own
+ * headings never pass for §7's; ids rather than paths; the header names only the format, role, element
  * and the resolved sha. `warnings` are not rendered.
  *
  * @throws Error `invalid execution context: missing '<section>' section` when `context` does not
  *   validate ({@link validateExecutionContext}): a partial payload is never rendered. Error `invalid
- *   role …` (or `element type`/`element id`) when a header field holds a control character or `-->`.
+ *   role …` (or `element type`/`element id`/`directive id`) when a header field or a directive id holds
+ *   a control character or `-->`; `invalid Memory document <path>: …` for a document it cannot name;
+ *   `… cannot enter an execution context: its body holds the line … that closes it` for a body that
+ *   holds its own end marker.
  */
 export function serializeExecutionContext(context: ExecutionContext): string {
   const valid = validateExecutionContext(context);
@@ -352,29 +460,37 @@ export function serializeExecutionContext(context: ExecutionContext): string {
   const unsafe =
     headerFieldProblem('role', context.role) ??
     headerFieldProblem('element type', context.element.type) ??
-    headerFieldProblem('element id', context.element.id);
+    headerFieldProblem('element id', context.element.id) ??
+    context.directives.map((directive) => headerFieldProblem('directive id', directive.frontmatter.id)).find((problem) => problem !== undefined) ??
+    selfClosingBody(context);
   if (unsafe !== undefined) throw new Error(unsafe);
 
   const { role, stateRef, element, dna, directives, memory } = context;
   // The header comment sits on the title's next line, as §7's template shows.
   const blocks: string[] = [
-    `# WingFoil Agent Context\n<!-- role: ${role} | element: ${element.type}:${element.id} | state: ${stateRef} -->`,
+    `# WingFoil Agent Context\n<!-- format: ${CONTEXT_PAYLOAD_FORMAT} | role: ${role} | element: ${element.type}:${element.id} | state: ${stateRef} -->`,
   ];
-  const push = (...items: string[]): void => {
-    for (const item of items) if (item.length > 0) blocks.push(item);
-  };
 
-  push('## 1. Task', yamlBlock(element.frontmatter), trimBody(element.body));
+  blocks.push('## 1. Task', yamlBlock(element.frontmatter), markedBody(`${element.type}:${element.id}`, element.body));
 
-  push('## 2. Project DNA');
-  for (const [name, value] of Object.entries(dna)) push(`### ${name}`, yamlBlock(value));
+  blocks.push('## 2. Project DNA');
+  for (const [name, value] of Object.entries(dna)) blocks.push(`### ${name}`, yamlBlock(value));
 
-  push(`## 3. Directives (${role} + global)`);
-  for (const directive of directives) push(`### ${directive.frontmatter.id}`, trimBody(directive.body));
+  blocks.push(`## 3. Directives (${role} + global)`);
+  for (const directive of directives) {
+    blocks.push(`### ${directive.frontmatter.id}`, markedBody(directiveKey(directive.frontmatter.id), directive.body));
+  }
 
-  push(`## 4. Relevant Memory (${memory.length} documents)`);
+  blocks.push(`## 4. Relevant Memory (${memory.length} documents)`);
   for (const doc of memory) {
-    push(`### ${doc.type ?? ''}:${doc.id ?? doc.path}`, yamlBlock(doc.frontmatter), trimBody(doc.body));
+    if (!isNameable(doc.type, doc.id)) {
+      throw new Error(
+        `invalid Memory document ${doc.path}: an execution context names a document by a type and an id that hold no control character and no '-->'`,
+      );
+    }
+    const key = `${doc.type!}:${doc.id!}`;
+    if (closesItself(key, doc.body)) throw new Error(selfClosingProblem(`Memory document '${key}'`, key));
+    blocks.push(`### ${key}`, yamlBlock(doc.frontmatter), markedBody(key, doc.body));
   }
 
   return canonicalize(blocks.join('\n\n'));
@@ -390,19 +506,47 @@ function normalizePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/\/+$/, '');
 }
 
+/** Leading characters an entry's token never starts with: quotes and backticks. */
+const TOKEN_LEAD = /^[`'"]+/;
+/** Trailing characters an entry's token never ends with: list and sentence punctuation, quotes and
+ * backticks (`bug-233`). */
+const TOKEN_TRAIL = /[`'".,;:!?]+$/;
+
 /**
- * Whether one `modules:`/`scope:` entry selects `module` (`spec-012` §4, approver ruling D3,
- * 2026-10-05). The entry is read by its leading token — `src/workflow — the engine` is
- * `src/workflow` — which matches the module's `name`, or its `path` when equal to it or a prefix of it
- * at a segment boundary (`src` selects `src/core`; `src/co` selects nothing).
+ * The tokens one `modules:`/`scope:` value names (`spec-012` §4, `bug-233`): parenthesised text is
+ * set aside, the rest is split on commas into entries, and each entry is read by its leading token
+ * with surrounding quotes, backticks and trailing punctuation stripped — `src/mcp/server.ts, src/cli
+ * (the \`wingfoil mcp\` command)` names `src/mcp/server.ts` and `src/cli`.
  */
-function entrySelectsModule(entry: string, module: Module): boolean {
-  const token = entry.trim().split(/\s+/)[0]!;
+function entryTokens(entry: string): string[] {
+  let text = entry;
+  for (let previous = ''; previous !== text; ) {
+    previous = text;
+    text = text.replace(/\([^()]*\)/g, ' ');
+  }
+  return text
+    .split(',')
+    .map((part) => (part.trim().split(/\s+/)[0] ?? '').replace(TOKEN_LEAD, '').replace(TOKEN_TRAIL, ''))
+    .filter((token) => token.length > 0);
+}
+
+/** Whether `inner` equals `outer` or lies under it at a segment boundary. */
+function isAtOrUnder(inner: string, outer: string): boolean {
+  return outer.length > 0 && (inner === outer || inner.startsWith(`${outer}/`));
+}
+
+/**
+ * Whether one token of a `modules:`/`scope:` entry selects `module` (`spec-012` §4, approver ruling D3
+ * and `bug-233`): it equals the module's `name`, or — as a path, compared at segment boundaries — the
+ * module's `path` equals it, lies under it (`src` selects `src/core`), or holds it (`src/mcp/server.ts`
+ * selects `src/mcp`). `src/co` selects nothing.
+ */
+function tokenSelectsModule(token: string, module: Module): boolean {
   if (token === module.name) return true;
   if (module.path === undefined) return false;
-  const prefix = normalizePath(token);
+  const named = normalizePath(token);
   const path = normalizePath(module.path);
-  return prefix.length > 0 && (path === prefix || path.startsWith(`${prefix}/`));
+  return isAtOrUnder(path, named) || isAtOrUnder(named, path);
 }
 
 /** The note recorded when the element names modules and none of them matches (ruling D3). */
@@ -417,8 +561,9 @@ function declaredKeyOrder(raw: string, label: string): string[] {
 }
 
 /**
- * `spec-012` §4, the `dna-loader`: `project` and `team` always, `paths` whole (every category), and
- * the `modules` the element's `modules:`/`scope:` entries select ({@link entrySelectsModule}), in
+ * `spec-012` §4, the `dna-loader`: `project`, `stacks` (`dl-151` A) and `team` always, `paths` whole
+ * (every category), and the `modules` the tokens of the element's `modules:`/`scope:` entries select
+ * ({@link entryTokens}, {@link tokenSelectsModule}), in
  * `dna.yaml` order. Every module when it names none — and also when it names some and none matches,
  * which then returns a note (ruling D3) for the caller's diagnostics. Sections are inserted in
  * `declaredOrder`, the file's own key order.
@@ -429,11 +574,13 @@ function selectDnaSections(
   frontmatter: Record<string, unknown>,
 ): { readonly selection: DnaSelection; readonly note?: string } {
   const entries = [...asNames(frontmatter.modules), ...asNames(frontmatter.scope)];
-  const matched = dna.modules.filter((module) => entries.some((entry) => entrySelectsModule(entry, module)));
+  const tokens = entries.flatMap(entryTokens);
+  const matched = dna.modules.filter((module) => tokens.some((token) => tokenSelectsModule(token, module)));
   const unmatched = entries.length > 0 && matched.length === 0;
   const sections: Record<string, unknown> = {
     project: dna.project,
     modules: matched.length === 0 ? dna.modules : matched,
+    stacks: dna.stacks,
     team: dna.team,
     paths: dna.paths,
   };
@@ -490,6 +637,48 @@ function requestProblem(request: ContextRequest): CoreError | undefined {
   return undefined;
 }
 
+/** What `payloadCandidates` returns: the documents §6 may rank, and the reports of those left out. */
+interface PayloadCandidates {
+  readonly carried: readonly MemoryDocumentSummary[];
+  /** `W_MEMORY_UNREADABLE` diagnostics, in path order. */
+  readonly left: readonly Diagnostic[];
+}
+
+/** Ranks with no bound: used only to learn which unnameable documents would have been relevant. */
+const UNBOUNDED: ContextLimits = { maxDocs: Number.MAX_SAFE_INTEGER, maxBytes: Number.MAX_SAFE_INTEGER };
+
+/**
+ * The Memory documents §7 can carry (`dl-150` B), before §6 ranks them: a document needs a nameable
+ * `type` and `id` ({@link isNameable}) for its heading and markers, and a body that does not hold its
+ * own end marker ({@link closesItself}). An unnameable document is reported only when §6 would have
+ * found it relevant — a repository's frontmatter-less files (grandfathered plans) would otherwise be
+ * reported in every context; a self-closing one is always reported. Neither takes a slot in the
+ * bounds, so the documents carried are what §6 selects among the rest.
+ */
+function payloadCandidates(documents: readonly MemoryDocumentSummary[], element: RelevanceElementRef): PayloadCandidates {
+  const carried: MemoryDocumentSummary[] = [];
+  const unnamed: MemoryDocumentSummary[] = [];
+  const left: { readonly path: string; readonly diagnostic: Diagnostic }[] = [];
+  for (const doc of documents) {
+    const { type, id } = doc.frontmatter;
+    if (!isNameable(type, id)) {
+      unnamed.push(doc);
+      continue;
+    }
+    const key = `${type as string}:${id as string}`;
+    if (closesItself(key, doc.body)) {
+      const reason = `its body holds the line ${JSON.stringify(endMarker(key))} that closes it in an execution context`;
+      left.push({ path: doc.path, diagnostic: memoryUnreadableDiagnostic(doc.path, reason) });
+    } else carried.push(doc);
+  }
+  for (const doc of selectRelevantMemoryDocuments(unnamed, element, UNBOUNDED).documents) {
+    const reason = 'no string type and id, so an execution context cannot name it';
+    left.push({ path: doc.path, diagnostic: memoryUnreadableDiagnostic(doc.path, reason) });
+  }
+  left.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return { carried, left: left.map((entry) => entry.diagnostic) };
+}
+
 /**
  * Build the execution context for `request` — `spec-012`'s single public entry (§1), the context
  * `agent execute` (task-218) and the `{role}-session` Prompt (task-195) hand an agent.
@@ -500,18 +689,23 @@ function requestProblem(request: ContextRequest): CoreError | undefined {
  *    (`loadMemoryDocumentsAtRev`); the element is found in that snapshot. Absent → `NOT_FOUND`;
  *    archived (`isArchivedStatus`) → `VALIDATION`, since an archived document never enters a context
  *    (REQ-STATE-06). A `draft` element assembles.
- * 2. **load-dna** (§4): see `selectDnaSections`; modules match by name or path (ruling D3).
+ * 2. **load-dna** (§4): see `selectDnaSections`; modules match by name or path (ruling D3, `bug-233`).
  * 3. **load-directives** (§5): {@link resolveRoleDirectives} over the directives and `roles.yaml` at the
  *    commit; its warnings become `context.warnings`.
  * 4. **filter-memory** (§6): `selectRelevantMemoryDocuments` over the same snapshot, within
- *    `request.limits`.
+ *    `request.limits`, among the documents §7 can carry (`dl-150` B, `payloadCandidates`): one with
+ *    no nameable `type` and `id` is left out, and reported only when it would have been relevant; one
+ *    whose body holds its own end marker is left out and reported. Both reports are
+ *    `W_MEMORY_UNREADABLE` lines on the success warnings, after the scan's own, in path order.
  * 5. **validate** (P5.4.4 sc. 3) and **serialize** (§7).
  *
  * A pillar file the commit does not hold leaves its section unset, and step 5 refuses the context:
  * no `roles.yaml` → `missing 'directives'`, no `dna.yaml` → `missing 'dna'`, no `memory.yaml` →
  * `missing 'element'`; the refusal's `details.cause` names the file (`no .wingfoil/roles.yaml at <sha>`).
  * Before any read, a role or element field holding a control character or `-->`, or limits that are
- * not positive integers, are refused as `VALIDATION`.
+ * not positive integers, are refused as `VALIDATION`. After the reads, an element or directive body
+ * that holds its own end marker, or a directive id holding a control character or `-->`, refuses the
+ * context as `VALIDATION`: neither may be dropped (§5 never truncates a directive).
  *
  * A Memory document that does not parse is left out and reported (task-171): as a `W_MEMORY_UNREADABLE`
  * line in the result's `warnings` on success, and in `details.unreadable` of a `NOT_FOUND` refusal, so
@@ -581,10 +775,12 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   const resolution = rolesYaml === null ? undefined : resolveRoleDirectives(loadDirectivesAtRev(root, sha), rolesYaml, role);
   const directives = resolution === undefined ? undefined : withBodies(root, sha, resolution.directives);
 
+  const candidates =
+    documents === null ? undefined : payloadCandidates(documents, { ...wanted, frontmatter });
   const relevant =
-    documents === null
+    candidates === undefined
       ? undefined
-      : selectRelevantMemoryDocuments(documents, { ...wanted, frontmatter }, request.limits ?? DEFAULT_CONTEXT_LIMITS);
+      : selectRelevantMemoryDocuments(candidates.carried, { ...wanted, frontmatter }, request.limits ?? DEFAULT_CONTEXT_LIMITS);
 
   const validated = validateExecutionContext({
     role,
@@ -604,9 +800,14 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   }
 
   const context = validated.value;
+  const unfit =
+    context.directives.map((directive) => headerFieldProblem('directive id', directive.frontmatter.id)).find((problem) => problem !== undefined) ??
+    selfClosingBody(context);
+  if (unfit !== undefined) return coreErr({ code: 'VALIDATION', message: unfit });
   // In §3 stage order: the DNA note (ruling D3), then the relevance note (P5.3.3 sc. 3).
   const notes = [dnaSelected?.note, relevant?.note].filter((note): note is string => note !== undefined);
   // Unreadable files are about the repository, not the context: they ride the success-warning channel
   // (task-169), as `memory search` carries them (task-171), and never enter the payload.
-  return coreOk({ context, payload: serializeExecutionContext(context), notes }, undefined, unreadable);
+  const warnings = [...unreadable, ...(candidates?.left.map(formatDiagnostic) ?? [])];
+  return coreOk({ context, payload: serializeExecutionContext(context), notes }, undefined, warnings);
 }
