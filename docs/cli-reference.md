@@ -19,6 +19,13 @@ Run `wingfoil` from the **root of a git repository** that has been initialized w
 Outside a git repository a command fails with `error: E_NO_GIT_ROOT: not inside a git repository`; in a
 subdirectory it fails with `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project root` (both exit `1`).
 
+Unreleased (v0.3): a command that reads the configuration, run where there is no `.wingfoil/`, exits `1`
+with `error: WingFoil not initialized (no .wingfoil/ directory at the project root): run 'wingfoil init'
+first`. When `.wingfoil/` exists but lacks the file the command needs, the error names that file from
+the project root — `error: .wingfoil/dna.yaml is missing: restore it from git, or re-create it (…)` —
+and a file that does not validate is named the same way (`(.wingfoil/dna.yaml)`), never by its path on
+your machine.
+
 ### Argument grammar
 
 - **The positional argument is the target** — the thing the command acts on: a document id
@@ -29,6 +36,19 @@ subdirectory it fails with `error: E_NOT_AT_GIT_ROOT: run wingfoil from the proj
   that declares none — is refused with exit `2` before anything is written:
   `wingfoil memory approve task-001 task-002 --reason ok` →
   `error: wingfoil memory approve takes one positional <id> (got 2 positionals)`.
+  Unreleased (v0.3): the four `dna` path verbs refuse it the same way, from any directory, and add
+  where the value goes — `error: wingfoil dna set takes one positional <path>; the value travels in
+  --value (got 2 positionals)`.
+- Unreleased (v0.3): **a missing positional** is refused with exit `2` in one form for every command,
+  the command's usage following on a `hint:` line:
+  ```
+  $ wingfoil memory approve
+  error: missing required argument: <id>
+  hint: usage: wingfoil memory approve <id> --reason <text>
+  ```
+  A missing option keeps its own form, `error: missing required argument: --title`.
+- The global `--format` value is checked first: an invalid one is refused before anything else,
+  whatever command it is given to (Unreleased (v0.3): `init` and `mcp` too).
 - **Options are attributes** — the values the command writes or filters by (`--value`, `--reason`,
   `--type`, `--role`, …).
 - A **DNA path** is dotted: `project.name`, `modules.api`, `stacks.technologies.TypeScript`. A segment
@@ -61,6 +81,10 @@ Every invocation ends with exactly one of three codes:
 
 A non-zero exit always prints one `error: <reason>` line to stderr — or, under `--format json`/`yaml`,
 the object `{"error": "<reason>"}`, whichever part of the CLI refused (an unknown command or option too).
+A suggestion follows on a `hint:` line (the object's `hint` field). Unreleased (v0.3): an unknown command
+within two edits of a known one is answered in that form —
+`error: unknown command 'memroy'` then `hint: did you mean "memory"?` — where it used to print
+`(Did you mean memory?)`.
 When the refusal names a file or explains itself, indented lines follow the `error:` line, one per
 finding (`<file>: <detail>`); under `--format json`/`yaml` they are a `details` array of
 `{"file", "detail"}` entries beside `error`.

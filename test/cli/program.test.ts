@@ -77,7 +77,7 @@ const FIXTURE_MODULES: CoreModule[] = [
       dnaSet: {
         name: 'dnaSet',
         mutates: true,
-        positional: { name: 'path', required: true, description: 'the dotted path', refusesExtraItself: true },
+        positional: { name: 'path', required: true, description: 'the dotted path' },
         options: [{ name: 'value' }],
         fn: async () => coreOk({ committed: true }),
       },
@@ -295,10 +295,11 @@ describe('buildProgram — command tree derivation (spec-006 §4, spec-008 §1)'
     expect(exitSpy).toHaveBeenCalledWith(2);
   });
 
-  it('forwards every operand to an operation that refuses a surplus itself (the DNA path verbs, task-129)', async () => {
+  it('refuses a surplus for the DNA path verbs too, before buildParams (task-179, bug-180)', async () => {
     const program = await buildFixtureProgram();
     await program.parseAsync(['node', 'wingfoil', 'dna', 'set', 'project.license', 'extra', '--value', 'MIT']);
-    expect(seenContexts[0]).toMatchObject({ positional: 'project.license', positionals: ['project.license', 'extra'], options: { value: 'MIT' } });
+    expect(seenContexts).toEqual([]);
+    expect(exitSpy).toHaveBeenCalledWith(2);
   });
 
   it('registers one `--{flag}` per declared boolean flag and one `--{name} <value>` per declared option', async () => {
@@ -504,10 +505,20 @@ describe('buildProgram — the special bootstrap commands `init` and `mcp`', () 
     expect(jest.mocked(runMcp).mock.calls[0]?.[0]).toMatchObject({ version: PKG_VERSION, format: 'yaml' });
   });
 
-  it('`mcp` with an unusable `--format` falls back to `console` rather than forwarding garbage', async () => {
+  it('`mcp` with an unusable `--format` is refused at exit 2 and never starts, like every command (task-179, bug-226)', async () => {
     const program = await buildFixtureProgram();
     await program.parseAsync(['node', 'wingfoil', 'mcp', '--format', 'xml']);
-    expect(jest.mocked(runMcp).mock.calls[0]?.[0]).toMatchObject({ format: 'console' });
+    expect(runMcp).not.toHaveBeenCalled();
+    expect(written(stderrSpy)).toBe('error: invalid --format value "xml", expected one of: console, json, yaml\n');
+    expect(exitSpy).toHaveBeenCalledWith(2);
+  });
+
+  it('`init` checks an unusable `--format` before a surplus operand (task-179, bug-226)', async () => {
+    const program = await buildFixtureProgram();
+    await program.parseAsync(['node', 'wingfoil', 'init', 'extra', '--format', 'xml']);
+    expect(runInit).not.toHaveBeenCalled();
+    expect(written(stderrSpy)).toBe('error: invalid --format value "xml", expected one of: console, json, yaml\n');
+    expect(exitSpy).toHaveBeenCalledWith(2);
   });
 });
 
@@ -561,14 +572,14 @@ describe("buildProgram — the exit callback's own behaviour (task-103, `bug-103
   it('a noun invoked with no verb asks for exit 2 and writes the error line commander does not', async () => {
     const program = await buildFixtureProgramWithRealExitCallback();
     await parseIgnoringFallout(program, 'dna');
-    expect(written(stderrSpy)).toContain('error: missing required argument: wingfoil dna <command>');
+    expect(written(stderrSpy)).toContain('error: missing required argument: <command>\nhint: usage: wingfoil dna <command>\n');
     expect(exitSpy).toHaveBeenCalledWith(2);
   });
 
   it('`wingfoil` with no arguments at all is the same case one level up', async () => {
     const program = await buildFixtureProgramWithRealExitCallback();
     await parseIgnoringFallout(program);
-    expect(written(stderrSpy)).toContain('error: missing required argument: wingfoil <command>');
+    expect(written(stderrSpy)).toContain('error: missing required argument: <command>\nhint: usage: wingfoil <command>\n');
     expect(exitSpy).toHaveBeenCalledWith(2);
   });
 
@@ -590,15 +601,26 @@ describe("buildProgram — the exit callback's own behaviour (task-103, `bug-103
     expect(exitSpy).toHaveBeenCalledWith(2);
   });
 
-  it("commander's suggestion becomes `hint`, and the help of an incomplete invocation is not written (task-130)", async () => {
+  it("the closest command becomes `hint`, and the help of an incomplete invocation is not written (task-130, task-179)", async () => {
     const program = await buildFixtureProgramWithRealExitCallback();
     await parseIgnoringFallout(program, '--format', 'yaml', 'dnaa');
-    expect(written(stderrSpy)).toBe("error: unknown command 'dnaa'\nhint: Did you mean dna?\n");
+    expect(written(stderrSpy)).toBe(`error: unknown command 'dnaa'\nhint: did you mean "dna"?\n`);
 
     stderrSpy.mockClear();
     const incomplete = await buildFixtureProgramWithRealExitCallback();
     await parseIgnoringFallout(incomplete, '--format', 'json', 'dna');
-    expect(written(stderrSpy)).toBe(`${JSON.stringify({ error: 'missing required argument: wingfoil dna <command>' })}\n`);
+    expect(written(stderrSpy)).toBe(`${JSON.stringify({ error: 'missing required argument: <command>', hint: 'usage: wingfoil dna <command>' })}\n`);
+  });
+
+  it('an unknown verb is matched against its noun\'s verbs, and an unknown option keeps the parser\'s match, both as `hint:` (task-179)', async () => {
+    const program = await buildFixtureProgramWithRealExitCallback();
+    await parseIgnoringFallout(program, 'dna', 'sett', 'project.name');
+    expect(written(stderrSpy)).toBe(`error: unknown command 'sett'\nhint: did you mean "set"?\n`);
+
+    stderrSpy.mockClear();
+    const option = await buildFixtureProgramWithRealExitCallback();
+    await parseIgnoringFallout(option, 'dna', 'show', '--formt', 'json');
+    expect(written(stderrSpy)).toBe(`error: unknown option '--formt'\nhint: did you mean "--format"?\n`);
   });
 
   it('an explicit `help` writes NO error line and asks for exit 0 — the trap, at the callback level', async () => {

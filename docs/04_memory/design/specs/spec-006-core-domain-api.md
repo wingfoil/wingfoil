@@ -99,6 +99,13 @@ export interface CoreOperation {
   readonly positional?: CorePositional;        // the operand it reads (e.g. <id>, [section]) and whether required
   readonly example?: string;                   // one complete invocation shown under "Example:" (spec-008 §8)
 }
+
+export interface CorePositional {
+  readonly name: string;                       // the placeholder --help shows: id, path, name, section
+  readonly required?: boolean;                 // the CLI registrar refuses its absence (spec-008 §4); absent = optional
+  readonly description: string;                // what --help says the operand is
+  readonly surplusHint?: string;               // a clause the surplus refusal adds (spec-008 §1), e.g. dna's "the value travels in --value"
+}
 ```
 
 `warnings` is the success-warning channel: what a successful operation wants the operator told,
@@ -788,3 +795,14 @@ verbs it orders: its `--reason` is required, it has no authority step, and step 
 transition into a state at its WIP limit. Tech-specs carry no `version:` field (`dl-047`); edited in
 place without a supersede or a state change, pending the approver's `memory amend` at `task-180`'s
 review.
+
+**Revision (2026-10-05, `task-179-give-missing-operand-unknown-command-errors-shape-spec`) — §2 declares
+`CorePositional`, per `bug-180`.** The registry carried an undeclared flag that let the four DNA path
+verbs refuse a surplus operand inside the operation instead of at registration. The flag is removed: the CLI registrar refuses a surplus, and a missing required operand,
+for every command before the project root is resolved (`spec-008-cli-grammar` §1), and a verb that
+must say where the extra operand belongs declares a `surplusHint` the registrar appends. §2 now lists
+the positional's four fields. No function or surface changed. One exit code changes for the four DNA
+path verbs: a surplus operand from a subdirectory or outside a repository now exits `2` (refused
+before the root is resolved) instead of `1` (`E_NOT_AT_GIT_ROOT` / `E_NO_GIT_ROOT`), the code
+`spec-008` §5 assigns to a malformed invocation. Edited in place without a
+supersede or a state change (`dl-047`).

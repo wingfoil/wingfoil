@@ -160,10 +160,44 @@ function listMarkdownFilesSorted(dir: string): { readonly entries: WalkEntry[]; 
   return { entries };
 }
 
+/**
+ * A configuration file the read needs is not in the working tree (task-179, `bug-245`): a `.wingfoil/`
+ * exists — the absent case is `requireInitializedProject`'s — but this pillar's file does not. The
+ * message names the file repository-relative and what to do, never the host's absolute path, so the
+ * output is the same on every machine and safe to paste into an issue. It keeps Node's `code: 'ENOENT'`,
+ * so every caller that maps a missing file (`coreErrorOf` → `NOT_FOUND`, exit `1`) still does.
+ */
+export class ConfigFileMissingError extends Error {
+  /** Node's code for a missing file, kept so existing `ENOENT` mappings still apply. */
+  readonly code = 'ENOENT';
+
+  /** @param relativePath - the missing file, relative to the repository root (`.wingfoil/dna.yaml`). */
+  constructor(readonly relativePath: string) {
+    super(
+      `${relativePath} is missing: restore it from git, or re-create it ('wingfoil init' scaffolds a complete .wingfoil/ in a project that has none)`,
+    );
+    this.name = 'ConfigFileMissingError';
+  }
+}
+
+/**
+ * Read a working-tree configuration file named repository-relative (`.wingfoil/dna.yaml`): a missing one
+ * is a {@link ConfigFileMissingError}, any other failure propagates unchanged. The relative path is also
+ * the label every parse and validation issue carries (task-179, `bug-245`), as the `HEAD:`-labelled
+ * readers already do.
+ */
+function readConfigFile(root: string, relativePath: string): string {
+  try {
+    return readDocument(join(root, relativePath));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') throw new ConfigFileMissingError(relativePath);
+    throw error;
+  }
+}
+
 /** Load and validate `.wingfoil/memory.yaml` in isolation (spec-001-memory-yaml-schema). */
 export function loadMemoryYaml(root: string): MemoryYaml {
-  const filePath = join(root, '.wingfoil', 'memory.yaml');
-  return parseMemoryYaml(readDocument(filePath), filePath);
+  return parseMemoryYaml(readConfigFile(root, MEMORY_YAML_PATH), MEMORY_YAML_PATH);
 }
 
 /**
@@ -246,7 +280,7 @@ function extractYamlErrorLine(message: string): number | null {
  * `parseYaml`/`ValidationError`'s shared behavior for `memory.yaml`/`workflows.yaml`/directives.
  */
 export function loadDnaYaml(root: string): DnaYaml {
-  return parseDnaYaml(readDocument(join(root, '.wingfoil', 'dna.yaml')), join(root, '.wingfoil', 'dna.yaml'));
+  return parseDnaYaml(readConfigFile(root, DNA_YAML_PATH), DNA_YAML_PATH);
 }
 
 /**
@@ -423,7 +457,8 @@ export function loadWorkflowsYaml(root: string): WorkflowsLoadResult {
       const path = join(configDir, file);
       return documentExists(path) ? readDocument(path) : null;
     },
-    label: (file) => join(configDir, file),
+    // Repository-relative, never the host path (task-179, `bug-245`).
+    label: (file) => `.wingfoil/${file}`,
   });
 }
 
@@ -662,7 +697,7 @@ export function loadDirectiveInventory(root: string): DirectiveInventory {
       continue;
     }
     files.push(
-      parseDirectiveFile(raw, absolute, entry.relative, (warning) =>
+      parseDirectiveFile(raw, `.wingfoil/directives/${entry.relative}`, entry.relative, (warning) =>
         warnings.push(`directive '.wingfoil/directives/${entry.relative}': ${warning}`),
       ),
     );
@@ -764,11 +799,10 @@ export const ROLES_YAML_PATH = '.wingfoil/roles.yaml' as const;
  * `stateRef`.
  */
 export function loadRolesYaml(root: string): RolesYaml {
-  const filePath = join(root, '.wingfoil', 'roles.yaml');
-  const raw = readDocument(filePath);
-  const data = parseYaml(raw, filePath);
-  refuseNewerFormat(data, ROLES_YAML_FORMAT, filePath);
-  return runValidation(RolesYaml, data, filePath);
+  const raw = readConfigFile(root, ROLES_YAML_PATH);
+  const data = parseYaml(raw, ROLES_YAML_PATH);
+  refuseNewerFormat(data, ROLES_YAML_FORMAT, ROLES_YAML_PATH);
+  return runValidation(RolesYaml, data, ROLES_YAML_PATH);
 }
 
 /**

@@ -273,7 +273,7 @@ describe('CORE_MODULES directive.directiveRemove — P3.3 scenarios (initialized
     async (_label, positional) => {
       const thrown = await thrownBy(directiveRemoveFn()({ root: repo, positional }));
       expect(thrown).toBeInstanceOf(UsageError);
-      expect((thrown as UsageError).message).toBe('missing required argument: directive remove <name>');
+      expect((thrown as UsageError).message).toBe('missing required argument: <name>');
       expect(exitCodeForThrow(thrown).exitCode).toBe(2);
     },
   );

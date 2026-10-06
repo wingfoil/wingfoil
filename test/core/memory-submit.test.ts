@@ -210,7 +210,7 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
       try {
         await memorySubmitFn()({ root: repo, positional });
       } catch (error) {
-        expect(exitCodeForThrow(error)).toEqual({ reason: 'missing required argument: memory submit <id>', exitCode: 2 });
+        expect(exitCodeForThrow(error)).toEqual({ reason: 'missing required argument: <id>', exitCode: 2 });
       }
     }
   });

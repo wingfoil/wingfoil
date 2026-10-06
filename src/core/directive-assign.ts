@@ -375,7 +375,8 @@ export function updateRoleAssignments(
   let raw: Record<string, unknown> = { version: 1, assignments: {}, global: [] };
   let current: readonly string[] = [];
   if (exists) {
-    const parsed = parseRoles(text, filePath);
+    // Labelled repository-relative, never by the host path (task-179 review F5, `bug-245` class).
+    const parsed = parseRoles(text, ROLES_YAML_PATH);
     if (!parsed.ok) return parsed;
     raw = parsed.value.raw;
     current = Object.prototype.hasOwnProperty.call(parsed.value.roles.assignments, role)

@@ -51,7 +51,10 @@ wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init
 - Unknown `<noun>` or `<noun> <verb>` tokens produce `E_UNKNOWN_COMMAND` (exit `2`, REQ-INT-04) with a
   closest-match suggestion when Levenshtein distance ≤ 2 (ground-truth BDD:
   `p5-interaction/P5.1.4-cli-ux.feature` — `wingfoil memroy add` → `"unknown command 'memroy'"` suggests
-  `"memory"`, exit `2`).
+  `"memory"`, exit `2`). The suggestion is matched against the commands at the level the token was
+  typed (the nouns, or the verbs of the noun before it) and is `spec-005-cli-command-contract` §3.1's
+  `hint:` line, `hint: did you mean "memory"?`, computed by WingFoil (`src/cli/suggest.ts`) rather than
+  the argument parser's own `(Did you mean memory?)`.
 - `[args]` is **at most one positional**: the identity of the command's target
   (`dl-082-cli-parameter-shape` — a positional identifies the target, an option carries an attribute).
   An operand beyond the one a command declares — any operand at all, for a command that declares none
@@ -60,14 +63,20 @@ wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init
   (`error: wingfoil memory approve takes one positional <id> (got 2 positionals)`,
   `error: wingfoil workflow list takes no positional (got 1 positional)`). The rule holds for every
   command, present and future, the bootstrap commands included (`error: wingfoil init takes no
-  positional (got 1 positional)`). For every command except the four DNA path verbs it is enforced
-  where commands are registered, before the project root is resolved, so before anything is read or
-  written. **The exception:** `dna set`, `dna add`, `dna update` and `dna remove` refuse the surplus
-  inside the operation, after the project root is resolved and after their own `<path>` check. A
-  malformed `<path>` is therefore reported before the surplus (§9). An invocation that fails to
-  resolve the root fails on that first, at exit `1`: `E_NOT_AT_GIT_ROOT` from a subdirectory, and
-  `E_NO_GIT_ROOT` outside a repository. Their surplus message adds the migration hint
-  `the value travels in --value`. They still write nothing.
+  positional (got 1 positional)`). For every command it is enforced where commands are registered,
+  before the project root is resolved, so before anything is read or written — the four DNA path
+  verbs included: `dna set ..language python` is refused for its surplus, and §5 writes the
+  malformed-path case with `--value`. Their surplus message adds the migration hint
+  `the value travels in --value`, which each of them declares (`CorePositional.surplusHint`,
+  `spec-006-core-domain-api` §2).
+- **A missing required operand** is refused at exit `2` in one form for every command:
+  `missing required argument: <name>`, with the command's usage on `spec-005` §3.1's `hint:` line
+  (§4). It is enforced where commands are registered too, right after the surplus check.
+- **One order of usage checks.** Every command, the bootstrap ones included, checks in this order: the
+  global `--format` value — it decides how every later error is rendered, so an invalid one is refused
+  first, in console text (`spec-005` §2); then the operand count, a surplus before a missing operand;
+  then the project root (`E_NOT_AT_GIT_ROOT`, `E_NO_GIT_ROOT`, exit `1`); then the operation's own
+  checks.
 - **One id per call.** The Memory transition verbs (`memory submit`, `approve`, `reject`, `deprecate`),
   `memory amend`, `memory park` and `memory history` act on exactly one document per invocation;
   transitioning several documents takes one invocation, and one commit, each. The multi-id commit subject `wf({type}): {verb} {id1},
@@ -324,6 +333,13 @@ rendering.
 | Required arg missing, stdout is a TTY, `--interactive` (default)  | Readline prompt for each missing arg, one at a time                  |
 | Required arg missing, stdout is **not** a TTY (CI/pipe/non-interactive) | Fail immediately: exit `2`, `error: missing required argument: --<name>`; where the argument takes one of a closed set of values, the line ends with ` (one of: <v1>, <v2>, …)`, read from the same registry the command validates against (e.g. `init`: `missing required argument: --template (one of: Scrum, Kanban)`) |
 | `--no-interactive` passed (any TTY state)                         | Fail immediately, same as the non-TTY case — no prompt is attempted  |
+
+A missing **positional** is never prompted for, on any terminal: no command collects one interactively.
+It is refused at exit `2` as `missing required argument: <name>` — the placeholder `--help` shows,
+e.g. `<id>`, `<path>`, `<name>` — followed by the command's usage, its required options included, on
+`spec-005` §3.1's `hint:` line (`hint: usage: wingfoil memory approve <id> --reason <text>`). The form
+is the same for every command; a noun invoked without its verb is the same case with `<command>`
+(§5).
 
 Wizard-style multi-step collection (`wingfoil init` with no `--mode params` flags) is command-specific:
 it runs the same present/missing × TTY/non-TTY matrix per field, in the field order the command defines.
@@ -801,9 +817,11 @@ The distinction is not one an argument parser draws for free. Measured on comman
 terminate through the *same* non-error identifier, `commander.help`, and are separated only by the
 exit code it suggests alongside it: `1` where `Command#help({ error: true })` was reached because there
 was nothing to run, `0` where the user asked. `wingfoil dna` → `error: missing required argument:
-wingfoil dna <command>`; `wingfoil help nosuchnoun` → `error: unknown command 'nosuchnoun'`, the line
+wingfoil dna <command>` (superseded on 2026-10-05 by `task-179`: `missing required argument: <command>`,
+then `hint: usage: wingfoil dna <command>`); `wingfoil help nosuchnoun` → `error: unknown command 'nosuchnoun'`, the line
 `wingfoil nosuchnoun` already emitted. The `hint: ` suggestion §1 asks for is still absent from both,
-and still `bug-104`; this revision changes exit codes and adds error lines, and the wording of that
+and still `bug-104` (which `task-179` closed for the unknown-command line; the `help <unknown>` path is
+`bug-115`'s); this revision changes exit codes and adds error lines, and the wording of that
 suggestion is not its to pick.
 
 §9's unprefixed-option bullets are untouched, and so is the second bullet of the revision above: a
@@ -1037,3 +1055,27 @@ bracket's edge list gains the `returns` edge. The `--reason` row names `park` am
 require it; §1's one-document sentence and §11's committed-baseline row name `memory park`. No other
 rule changed. Edited in place without a supersede or a state change (`dl-047`); pending the approver's
 `memory amend` at `task-180`'s review.
+
+**Revision (2026-10-05, `task-179-give-missing-operand-unknown-command-errors-shape-spec`) — one shape
+for the usage refusals a user meets first, per `bug-104`, `bug-168`, `bug-180` and `bug-226`.** §1's
+unknown-command bullet now says what the suggestion is: `spec-005` §3.1's `hint:` line, matched at the
+level the token was typed, computed by WingFoil at the distance this bullet names, instead of the
+argument parser's own suffix (`bug-104`). §1 drops the DNA path verbs' surplus exception: they refuse a
+surplus where every other command does, before the root is resolved, with the migration hint each
+declares (`bug-180`); `P2.1-dna-set.feature`'s malformed-path scenario is written with `--value`, as §5
+already wrote it. §1 gains the missing-operand bullet and the order of usage checks, which the two
+bootstrap commands now follow too: they checked the operand count before `--format`, and `mcp` let an
+invalid `--format` through (`bug-226`). §4 states the one missing-positional form (`bug-168`), which
+had been `memory submit <id>` for the Memory and directive verbs and `wingfoil dna set <path> --value
+<value>` for the DNA verbs. A noun invoked without its verb takes the same form, which supersedes the
+wording `task-103` ruled in the 2026-09-25 revision (`missing required argument: wingfoil dna
+<command>`), for the approver to confirm at the review gate. Three exit codes change, all
+toward `2` and all because a usage check now runs before something that used to fail first: the
+operand checks (a surplus, then a missing required operand) run before the project root is resolved,
+so from a subdirectory or outside a repository `memory submit` or `dna set` with no operand, and
+`dna set project.name bogus --value y`, exit `2` instead of `1` (`E_NOT_AT_GIT_ROOT` /
+`E_NO_GIT_ROOT`); and the bootstrap commands check `--format` first, so `wingfoil mcp --format bogus`
+exits `2` instead of starting the server (`0`) or refusing an uninitialized project (`1`), and
+`wingfoil init --format bogus` outside a repository exits `2` instead of `1`. Each is the code §1
+already assigns to a malformed invocation; no rule of the exit-code table changed. Edited in place without a
+supersede or a state change (`dl-047`).
