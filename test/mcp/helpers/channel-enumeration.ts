@@ -12,10 +12,6 @@
  * working-tree status (untracked and ignored files included), `HEAD`, its symbolic target, and every
  * ref. See {@link PersistenceSnapshot} for exactly what is and is not compared (task-147).
  */
-import { execFileSync } from 'child_process';
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -24,6 +20,11 @@ import { z } from 'zod';
 import type { CoreModule } from '../../../src/core';
 import { registerCoreModules, registerReadOnlyResources } from '../../../src/mcp';
 import { WRITE_INTENT_META_KEY } from '../../../src/mcp/read-only';
+import {
+  assertPersistenceUnchanged,
+  snapshotPersistence,
+  type PersistenceSnapshot,
+} from '../../storage/helpers/persistence-snapshot';
 
 export interface ChannelEnumerationClient {
   readonly client: Client;
@@ -63,68 +64,24 @@ export async function connectCoreModuleSurface(
 }
 
 /**
- * What a no-persistence check compares before and after a read-only round trip (REQ-SEC-05,
- * spec-004 §2.3 / §3.3 "persists nothing"), over a fixture that is a committed git working tree:
- *
- * - `files` — the raw bytes of each caller-listed, root-relative file;
- * - `status` — `git status --porcelain --untracked-files=all --ignored`, which {@link snapshotFiles}
- *   requires to be EMPTY: any file created, deleted or modified anywhere in the working tree
- *   afterwards — ignored paths included, whichever ignore rule (the fixture's own or a machine's
- *   global `core.excludesFile`) matches them — makes it non-empty;
- * - `head` — `git rev-parse HEAD` (a commit on the current branch, even an empty one);
- * - `symbolicHead` — `git rev-parse --symbolic-full-name HEAD` (a checkout of another branch, or a
- *   detach, even at the same commit);
- * - `refs` — `git for-each-ref --format='%(refname) %(objectname)'` (a branch, tag, note or stash
- *   created, moved or deleted, including a commit written to another branch without touching `HEAD`).
- *
- * Out of scope — NOT compared: `.git/config`, hooks, the reflog, and loose or packed objects that no
- * ref points to. A handler that writes only those passes this check.
- *
- * `files` alone was the whole check until task-147 (bug-036): a handler that created a file or made a
- * commit passed it.
+ * What a no-persistence check compares: the shared snapshot of `test/storage/helpers/persistence-snapshot.ts`
+ * (task-184 moved it there from this file, bug-194, so the core and CLI "writes nothing" assertions
+ * compare the same things this channel's do). Re-exported for this file's callers.
  */
-export interface PersistenceSnapshot {
-  readonly files: ReadonlyMap<string, Buffer>;
-  readonly status: string;
-  readonly head: string;
-  readonly symbolicHead: string;
-  readonly refs: string;
-}
-
-/**
- * Run a read-only `git` query in `root`. `--no-optional-locks` keeps `git status` from refreshing and
- * rewriting `.git/index`, so taking the snapshot is not itself a write.
- */
-function gitQuery(root: string, args: readonly string[]): string {
-  return execFileSync('git', ['--no-optional-locks', ...args], { cwd: root, encoding: 'utf-8' });
-}
-
-/** The repository-level state of {@link PersistenceSnapshot}, everything but `files`. */
-function gitState(root: string): Omit<PersistenceSnapshot, 'files'> {
-  return {
-    status: gitQuery(root, ['status', '--porcelain', '--untracked-files=all', '--ignored']),
-    head: gitQuery(root, ['rev-parse', 'HEAD']).trim(),
-    symbolicHead: gitQuery(root, ['rev-parse', '--symbolic-full-name', 'HEAD']).trim(),
-    refs: gitQuery(root, ['for-each-ref', '--format=%(refname) %(objectname)']),
-  };
-}
+export type { PersistenceSnapshot } from '../../storage/helpers/persistence-snapshot';
 
 /**
  * Snapshot a set of root-relative files' raw bytes plus the repository state, for
  * {@link assertFilesUnchanged}. Throws if the working tree is not clean (untracked and ignored files
- * included): the fixture must be committed, or a handler rewriting an already-dirty file would leave
- * the status unchanged and pass.
+ * included): this channel's fixtures are committed, and the stricter precondition is kept from
+ * task-147 rather than relying on the shared snapshot's dirty-file bytes.
  */
 export function snapshotFiles(root: string, relativePaths: readonly string[]): PersistenceSnapshot {
-  const state = gitState(root);
-  if (state.status !== '') {
-    throw new Error(`channel-enumeration: fixture must be committed before a snapshot; git status:\n${state.status}`);
+  const snapshot = snapshotPersistence(root, relativePaths);
+  if (snapshot.status !== '') {
+    throw new Error(`channel-enumeration: fixture must be committed before a snapshot; git status:\n${snapshot.status}`);
   }
-  const files = new Map<string, Buffer>();
-  for (const relativePath of relativePaths) {
-    files.set(relativePath, readFileSync(join(root, relativePath)));
-  }
-  return { files, ...state };
+  return snapshot;
 }
 
 /**
@@ -133,29 +90,7 @@ export function snapshotFiles(root: string, relativePaths: readonly string[]): P
  * check throws its own message, in that order.
  */
 export function assertFilesUnchanged(root: string, snapshot: PersistenceSnapshot): void {
-  for (const [relativePath, before] of snapshot.files) {
-    const after = readFileSync(join(root, relativePath));
-    if (!after.equals(before)) {
-      throw new Error(`channel-enumeration: file changed after a refused write attempt: ${relativePath}`);
-    }
-  }
-  const after = gitState(root);
-  if (after.status !== snapshot.status) {
-    throw new Error(`channel-enumeration: working tree changed after a refused write attempt:\n${after.status}`);
-  }
-  if (after.head !== snapshot.head) {
-    throw new Error(`channel-enumeration: HEAD moved after a refused write attempt: ${snapshot.head} -> ${after.head}`);
-  }
-  if (after.symbolicHead !== snapshot.symbolicHead) {
-    throw new Error(
-      `channel-enumeration: HEAD switched after a refused write attempt: ${snapshot.symbolicHead} -> ${after.symbolicHead}`,
-    );
-  }
-  if (after.refs !== snapshot.refs) {
-    throw new Error(
-      `channel-enumeration: refs changed after a refused write attempt:\n--- before\n${snapshot.refs}--- after\n${after.refs}`,
-    );
-  }
+  assertPersistenceUnchanged(root, snapshot, 'channel-enumeration');
 }
 
 /**
