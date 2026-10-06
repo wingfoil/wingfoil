@@ -159,6 +159,14 @@ Implements `dl-150` (option B) and `dl-151` (option A), ratified on 2026-10-05, 
   `npm run test:coverage` → All files 99.12 / 96.34 / 96.37 / 99.69, `context.ts` 100 / 98.81 / 100 / 100;
   `npm run lint`, `npm run docs:api`, both `tsc --noEmit`, `node scripts/check-governance.cjs --base 1abafadd`
   → 0. On this repository `spec-014` still selects `cli,mcp-server`.
+- **Focused re-review fix** (`cc2016fb`): `WrittenTimestamp` and `CONTEXT_PAYLOAD_FORMAT` re-exported
+  from `src/core/index.ts`; `WrittenTimestamp.toJSON()` returns the text (so `JSON.stringify` of a
+  context renders `2026-10-05 10:00:00 +02:00` as written); `ContextElementDocument.frontmatter` and
+  `ExecutionContext.memory` documented as holding `WrittenTimestamp`, never `Date` (the doc comment sits
+  on `ExecutionContext.memory`, not on `RelevantMemoryDocument` in `relevance.ts`, whose working-tree
+  filter still holds the scan's `Date`s and which `task-253` edits). Two tests added (JSON, barrel).
+  Gates: context suites (5) → 180 passed; `test/docs` → 34 passed; `npm run lint`, `npm run docs:api`,
+  both `tsc --noEmit`, `node scripts/check-governance.cjs --base 1abafadd` → 0.
 
 ### Pending amendments (approver)
 
