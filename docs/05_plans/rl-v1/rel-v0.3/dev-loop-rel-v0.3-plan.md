@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.13"
+version: "1.14"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -613,3 +613,44 @@ commit, right after the task's transition and on the task branch:
     `service` element of `task-182` waits for the approver's verify run.
   - **Fix share:** 13 open fix tasks of 69 open (18.8%; the three new fix tasks 253–255 included), under the threshold.
   - **Next:** B3 (`179`, `180`, `181`, `188`, `193`, `190`, `183`).
+- **2026-10-05 — W2 B2 follow-ups triaged** (`bug-ingest-rel-v0.3-w2b2-review-findings-plan`, `done`):
+  `task-255` (dl-150 B, dl-151 A; bug-232, bug-233) approved into B4; `bug-242` → `task-200`, `bug-245` →
+  `task-179`, `bug-248` → handover on `task-205`, `bug-246`/`bug-247` → v0.4; new `task-256` (`bug-240` +
+  `dl-152`), `task-257` (`bug-241`, `bug-243`), `task-258` (`bug-244`) in B4; `dl-152` and `dl-153` ratified
+  (handover on `task-199`); `bug-227` gains the CHANGELOG list. `task-252` (dl-137 part (a)) carries the WingFoil-
+  Templates `base` marker pair; `dl-148` corrected (all four showcased projects public).
+- **2026-10-06 — batch B3 `done`** (`task-180`, `179`, `193`, `188`, `190`, `183`, `181`).
+  - **Review.** Every task had an independent review: "approve" for `190`, "approve with fixes" for the rest, every
+    fix applied in-task. Focused re-reviews: `180` (twice: the governance check first accepted `park` along any edge),
+    `193` (the CRLF post-write check, a shared write-guard change), `181` (after `dl-154`). Two API rate limits
+    stopped `179` and `180` mid-fix; both resumed.
+  - **Semantic conflict caught in review:** `task-180` pinned the old canonical edge for an illegal `park`, which
+    `task-181` changes to `(none)`; `180`'s pins were made target-agnostic before submit and `181` re-pinned them after
+    merging `main`.
+  - **Approver rulings:**
+    - `task-181`: D1 option A (`(none)`), D2 a new decision-log: `dl-154` (ratified, release v0.3); `dl-053` gets a
+      pointer note and is deprecated (`a4fe6ce1`); REQ-STATE-01 and the BDD cite `dl-154`.
+    - `task-179`: the missing-verb form supersedes `task-103`'s wording; the P2.1 scenario rewrite is ratified.
+    - Confirmed at the gate: every developer decision the approve Reasons name.
+  - **Amendments: 17** — `180`: spec-001, 003, 006, 008, 010; `179`: spec-005, 008, 006; `193`: spec-008, 002;
+    `188`: spec-011, 009, 013, adr-008; `181`: spec-004, 005, dl-053.
+  - **Bugs closed:** bug-019, bug-040, bug-104, bug-126, bug-143, bug-165, bug-168, bug-180, bug-191, bug-198,
+    bug-213, bug-214, bug-225, bug-226, bug-238, bug-245.
+  - **Merges,** in order 180 → 179 → 193 → 188 → 190 → 183 → 181. Conflicts: Revision notes in spec-006 and spec-008
+    (kept), the `src/core/index.ts` import block (179 × 193, `CoreFlag` + `missingOperandReason` kept).
+    - **Integration fix** `6667fe5f`: `memory park`'s core missing-operand message takes the one form task-179 gave
+      every operation (179 × 180).
+    - **Gate finding** `d74b5a7a`: a critical advisory published during the batch (`proxy-addr`
+      GHSA-jqcg-44mw-7w3h, via `@modelcontextprotocol/sdk` → `express`) turned `check:audit` red on `main`; the lock
+      moves `proxy-addr` 2.0.7 → 2.0.8 only (approver). The dev tree now carries a `sprintf-js` advisory whose fix is
+      breaking, so the scheduled `check:audit:all` is red: follow-up.
+  - **`svc-015`** (push-protection bypasses for the secret-scan fixture, `task-182`'s prepared element) added and
+    approved after the approver's verify: secret scanning and push protection enabled, 0 alerts.
+  - **Gates on `main`** (`29d2aea2`): `test:coverage` 259 suites, 4861 tests, coverage 99.11 / 96.30 / 96.27 /
+    99.69; lint, `docs:api`, both `tsc`, `npm run typecheck`, `check:audit` (0 vulnerabilities) exit 0; e2e smoke
+    19/19.
+  - **Governance check:** `--base 0cf8b131` gives 102 gated `wf()` commits, 0 findings.
+  - **Follow-ups:** filed by `bug-ingest-rel-v0.3-w2b3-review-findings-plan` (in progress).
+  - **Fix share:** 10 open fix tasks of 65 open (15.4%), under the threshold.
+  - **Next:** B4 (`184`, `186`, `187`, `189`, `248`, `253`, `254`, `255`, `256`, `257`, `258`), to be split in two
+    batches at its opening.
