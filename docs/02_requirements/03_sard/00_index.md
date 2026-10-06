@@ -94,7 +94,7 @@ chain is recorded in each requirement's `Traceability` field in the part files 0
 | REQ-SEC-03 | Role-based approval authority         | Unauthorized approve rejected    | P1.7, P4.14             |
 | REQ-SEC-04 | Mandatory reason on verbs             | Missing --reason → exit 2        | P1.7, P1.8, P1.9        |
 | REQ-SEC-05 | Read-only agent read channel          | Cross-ref REQ-INT-01/03          | P5.2.1, P5.2.3          |
-| REQ-SEC-06 | Storage confinement                   | Write outside memory/ refused    | P1.11                   |
+| REQ-SEC-06 | Storage confinement                   | Write outside project root refused | P1.3, P1.6–P1.9, P1.11, P2.1, P3.1, P3.2, P5.1.1 |
 | REQ-SEC-07 | Immutable built-in assets             | Built-in remove rejected         | P3.3, P4.9              |
 | REQ-SEC-08 | Secret/credential hygiene             | 0 secret patterns committed      | P3.8                    |
 | REQ-SEC-09 | Human approval before inferred writes | Nothing persisted until approved | P2.3, P5.1.2            |

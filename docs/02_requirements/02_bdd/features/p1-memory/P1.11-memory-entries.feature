@@ -16,7 +16,7 @@ Feature: P1.11 (US-0A-03) - Memory Entries (git-backed)
     Then the change is captured as a distinct git commit for that file
     And prior versions remain retrievable from git history
 
-  Scenario: Error - writing a Memory entry to a path outside the configured store
+  Scenario: Error - writing a Memory entry to a path outside the project root
     When a process attempts to write a Memory entry to "/tmp/decision-x.md"
     Then the write is refused
-    And the system returns message "Memory entries must reside under .wingfoil/memory/"
+    And the system returns message "Memory entries must reside within the project root"
