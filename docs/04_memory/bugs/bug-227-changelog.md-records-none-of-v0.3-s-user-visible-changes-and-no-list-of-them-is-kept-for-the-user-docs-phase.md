@@ -87,3 +87,11 @@ batch B6 (`dev-loop-rel-v0.3-plan`), reproduced against `main` at `ccccc227`.
   `paths` has five categories (a scaffolded `dna.yaml` declares six, `runs` included; `bug-191` corrected every
   other copy), and section 11 still lists the comment loss of `dna add` on a new collection (`bug-126`) as a
   known limitation, which `task-193` fixed.
+- **Added at the W2 B4a triage (2026-10-06, `bug-ingest-rel-v0.3-w2b4a-review-findings-plan` item 15).**
+  User-visible changes of W2 B4a the CHANGELOG must list: a Memory element written in a newer `format:` is refused
+  by the transition verbs, `memory amend` and `memory history` with `E_INVALID_FORMAT` at exit 1 and reported by the
+  scans as `W_MEMORY_UNREADABLE`, and `memory amend` checks the template's `format:` as `memory add` does
+  (`task-257`); `team.agents[].email` in `dna.yaml`, optional (`task-256`; already in `docs/user-guide.md` §4.2).
+  For library users: `filterRelevantMemoryDocuments` reports the documents it leaves out in its result's
+  `diagnostics` (`task-253`), and `CONTEXT_PAYLOAD_FORMAT` and `WrittenTimestamp` are exported from the core
+  entry, the context payload being pinned as format 1 (`task-255`).
