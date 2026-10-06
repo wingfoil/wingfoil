@@ -1,7 +1,7 @@
 # Is / Is Not / Does / Does Not — WingFoil
 
-**Version:** 1.3
-**Date:** 2026-10-01
+**Version:** 1.4
+**Date:** 2026-10-06
 **Status:** Approved
 
 ---
@@ -40,7 +40,7 @@
 - Exposes CLI commands for querying and updating all project state
 - Exposes MCP tools, resources, and prompts for AI agents
 - Launches the configured AI agents with auto-loaded context (orchestration wrapper; does not perform the work itself)
-- Auto-syncs built-in Directives and Workflow templates when DNA (tech-stack/methodology) changes
+- Auto-syncs built-in Directives and Workflow templates when DNA `stacks` (technologies/methodologies) change
 - Runs shallow workflow checks (frontmatter state/field values, file/section existence) pre/post step to keep the
   workflow and its files aligned — run as a separate command after the agent runs, not a correctness review of the work
 - Makes the process of independent development runs deterministic — the same context for the same inputs, and the

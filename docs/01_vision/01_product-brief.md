@@ -1,7 +1,7 @@
 # Product Brief — WingFoil
 
-**Version:** 1.6
-**Date:** 2026-10-01  
+**Version:** 1.7
+**Date:** 2026-10-06  
 **Status:** Approved
 
 ---
@@ -48,7 +48,7 @@ a **structured, authoritative interface** to any software project:
     - Audit trail of who decided what and when
 
 2. **Project DNA** — Structural map of the project
-    - Modules, tech stack, conventions, resource paths
+    - Modules, stacks (technologies and methodologies), team, resource paths; the team's rules are Directives
     - Source of truth for project anatomy; enables agents to navigate without full codebase scans
 
 3. **Project Directives** — Role-based rules that both humans and agents respect
@@ -105,6 +105,18 @@ produce specifications, plans and code rather than competing with them (`dl-112-
 
 ## Target Users
 
+Morgan is the **primary persona**: the only production use so far, WingFoil's own repository, has Morgan's shape, with
+AI agents as the team (`dl-113-personas-revisited`; the full profiles are in [`04_personas.md`](04_personas.md)).
+
+### Morgan — Tech Lead (primary)
+
+- **Profile:** Senior developer leading a team of 3–8. Sets architecture, reviews PRs, defines conventions. The team may
+  consist mostly of AI agents directed by one person.
+- **Pain:** Agents don't respect established rules unless explicitly reminded. Governance is manual and leaky. Difficult
+  to keep team and agents synchronized on progress.
+- **Goal with WingFoil:** Encode team rules once; have them auto-loaded and enforced. Track and communicate workflow
+  state to the entire team.
+
 ### Alex — Solo Developer
 
 - **Profile:** Full-stack developer, works alone on side projects or freelance. Daily driver: Claude Code or Cursor.
@@ -129,19 +141,19 @@ produce specifications, plans and code rather than competing with them (`dl-112-
 - **Goal with WingFoil:** Follow team directives automatically; stay aligned on project state without constant manual
   updates.
 
-### Morgan — Tech Lead
-
-- **Profile:** Senior developer leading a team of 3–8. Sets architecture, reviews PRs, defines conventions.
-- **Pain:** Agents don't respect established rules unless explicitly reminded. Governance is manual and leaky. Difficult
-  to keep team and agents synchronized on progress.
-- **Goal with WingFoil:** Encode team rules once; have them auto-loaded and enforced. Track and communicate workflow
-  state to the entire team.
-
 ### Casey — Non-Technical Manager
 
 - **Profile:** Product manager, team lead, or stakeholder. Does not write code. Cares about delivery and velocity.
 - **Pain:** Unclear what's been decided, what the process is, what risks exist, and what the team's actual progress is.
-- **Goal with WingFoil:** Understand decisions and methodology; see clear audit trail; track project state and blockers.
+- **Goal with WingFoil:** Read-only views over Memory and workflow state: decisions and their reasons, pending
+  approvals, release progress. Casey reads the project's state and never changes it.
+
+### The Maintainer — Receiving AI-Generated Contributions
+
+- **Profile:** Maintains an open-source project; more and more of the contributions it receives are AI-generated.
+- **Pain:** Volume outruns review; a contribution arrives as code with no record of the intent or the decision behind it.
+- **Goal with WingFoil:** Receive contributions as intent (a `bug`, a `decision-log`) under `dl-020-contribution-model`;
+  trace every accepted change to an approval the maintainer made; have the project's rules reach the contributor's agent.
 
 ---
 
@@ -217,7 +229,9 @@ rather than adding a new one.
 **Phase 4 (v0.4):** + Interaction Layer (polish & stabilization)
 
 - CLI UX refinement, MCP stability, documentation
-- Target: Broader adoption, production readiness; non-technical stakeholders (Casey) gain decision visibility
+- Target: Broader adoption, production readiness; non-technical stakeholders (Casey) gain read-only views over
+  decisions and their reasons, pending approvals and release progress, through read commands (a user interface stays
+  out of the MVP, `dl-008-cli-first-no-gui`)
 - Focus: User experience, reliability
 
 **Version 1.0 (MVP Complete):** All five pillars integrated, stable, and battle-tested
