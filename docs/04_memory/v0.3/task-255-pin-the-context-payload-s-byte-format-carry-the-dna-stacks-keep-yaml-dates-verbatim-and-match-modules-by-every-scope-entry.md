@@ -73,11 +73,9 @@ Implements `dl-150` (option B) and `dl-151` (option A), ratified on 2026-10-05, 
      document is left out and always reported; an element or directive refuses the context
      (`VALIDATION`) — §5 never drops a directive. A Memory `type`/`id` or a directive id holding a
      control character or `-->` is treated the same way (it could not sit in a marker).
-  3. *Dates* (`bug-232`): fixed in the serializer, not in `parseYaml` (changing the shared parse would
-     touch every reader; `src/memory/submit.ts:31` relies on `Date`). A parsed timestamp is re-emitted as
-     `YYYY-MM-DD` when it is midnight UTC, else ISO-8601 UTC; YAML is dumped with a schema whose
-     timestamps are explicit only, so `2026-10-05` is written plain. Limit: `2026-10-05T10:00:00Z` comes
-     back as `2026-10-05T10:00:00.000Z` (stated in §7).
+  3. *Dates* (`bug-232`): fixed in the context builder, not in `parseYaml` (changing the shared parse
+     would touch every reader; `src/memory/submit.ts:31` relies on `Date`). The first pass normalized
+     timestamps; superseded by review F1 below (timestamps carried exactly as written).
   4. *Module matching* (`bug-233`): parenthesised text set aside, split on commas, each entry read by
      its leading token with quotes/backticks and trailing `.,;:!?` stripped; a token selects by name or
      by path in both directions at segment boundaries. Every token is **not** read: prose words such as
@@ -140,11 +138,35 @@ Implements `dl-150` (option B) and `dl-151` (option A), ratified on 2026-10-05, 
   name written into a heading or marker is checked by `headerFieldProblem` (role, element, directive id)
   or `isNameable` (Memory).
 
+### review fixes (independent review: approve with fixes)
+
+- **F1 dates (`bug-232`).** The first pass (`timestampText`) wrote every midnight-UTC instant as
+  date-only and normalized the rest, and a quoted date became plain. Now `writtenFrontmatter` re-reads
+  the carried frontmatter (element + selected documents) at the commit with `PAYLOAD_YAML_SCHEMA`:
+  js-yaml's default schema with its timestamp type replaced by one that constructs a
+  `WrittenTimestamp` holding the scalar's text, and the dump uses the same schema, so
+  `2026-10-05T00:00:00Z`, `2026-10-05 10:00:00 +02:00`, `2026-10-05T10:20:30.5Z` and `2026-10-05`
+  come back unchanged and `"2026-10-05"` stays quoted (`'2026-10-05'`). `parseYaml` is untouched;
+  `timestampText` is gone; a `Date` a caller builds itself is written in ISO form (`withDatesAsWritten`,
+  tested). Red `0b2b0da5` (`npx jest test/core/context-payload-format.test.ts` → 2 failed, 21 passed),
+  green `b31f15b2`. The golden payload is byte-identical (its context now holds
+  `new WrittenTimestamp('2026-10-05')`, which is what the builder produces). `context.element.frontmatter`
+  values that are timestamps are now `WrittenTimestamp` instances (exported from `src/core/context.ts`).
+- **F2.** spec-012 Consequences: a change to the envelope bumps `format:` (the deliberate baseline
+  reset); caps, tiers and ordering still supersede the spec. **F3.** §7 states the golden fixture
+  prevails over the illustrative template. Both in the pending amendment; the Revision note says so.
+- Gates after the fixes (amendment in the working tree): `npm test` → 260 suites, **4887 passed**;
+  `npm run test:coverage` → All files 99.12 / 96.34 / 96.37 / 99.69, `context.ts` 100 / 98.81 / 100 / 100;
+  `npm run lint`, `npm run docs:api`, both `tsc --noEmit`, `node scripts/check-governance.cjs --base 1abafadd`
+  → 0. On this repository `spec-014` still selects `cli,mcp-server`.
+
 ### Pending amendments (approver)
 
 - `spec-012-context-loader-relevance-filtering` (uncommitted in this worktree): §4 (`stacks`, module
   matching), §7 (format 1, dates, splitting rule, what never enters a payload, normative example), and a
-  Revision note dated 2026-10-06. Proposed `--reason`: "Pins the context payload's byte format (format 1:
-  body markers, format header, fenced YAML, blank-line joins, no path headings) per dl-150 option B,
-  carries the DNA stacks per dl-151 option A, and states the date and module-matching rules that close
-  bug-232 and bug-233, as implemented by task-255. Edited in place because no payload consumer has shipped."
+  Revision note dated 2026-10-06. Proposed `--reason`: "Pins the context payload's byte format (format 1: body markers, format header,
+  fenced YAML, blank-line joins, no path headings, the golden fixture prevailing over the template) per
+  dl-150 option B, carries the DNA stacks per dl-151 option A, and states the rules that close bug-232
+  (frontmatter timestamps carried exactly as written) and bug-233 (every scope entry read), as
+  implemented by task-255. A later envelope change bumps the payload format; edited in place because no
+  payload consumer has shipped."
