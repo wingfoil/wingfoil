@@ -85,6 +85,21 @@ export async function withRefusalDetails<T>(read: () => T | Promise<T>): Promise
 }
 
 /**
+ * `result` with the read's diagnostics as a top-level `warnings` array (task-195, `bug-231`,
+ * spec-004 §2.2 / §3.2): the read-only twin of a Tool's `structuredContent.warnings` (§4.3 item 5).
+ * MCP's result objects are loose (the SDK's `ResultSchema` is a `looseObject`), so the field reaches
+ * the client beside `contents` or `messages`. No warnings, no field — the shape a read always had.
+ */
+export function withWarnings<T extends object>(result: T, warnings: readonly string[]): T & { warnings?: string[] } {
+  return warnings.length > 0 ? { ...result, warnings: [...warnings] } : result;
+}
+
+/** One `error.data.details` entry per diagnostic line (`{detail}`), as {@link readRefusalError} carries them. */
+export function warningDetails(warnings: readonly string[]): ErrorDetail[] {
+  return warnings.map((detail) => ({ detail }));
+}
+
+/**
  * The `ReadResourceResult` shape every JSON-bodied Resource in `memory-resource.ts` (collection
  * listing), `dna-resource.ts`, and `workflow-resource.ts` returns — one `contents[]` entry,
  * `mimeType: 'application/json'`, `value` serialized as its `text`. Factored here purely to avoid

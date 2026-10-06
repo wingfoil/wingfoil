@@ -28,7 +28,7 @@ import { errorDetails } from '../core/error-details';
 import type { CoreModule, ParamsBuilder } from '../core/registry';
 import { deriveVerb, enumerateOperations } from '../core/registry';
 
-import { readRefusalError } from './read-only';
+import { readRefusalError, withWarnings } from './read-only';
 
 /** Ambient dependencies {@link registerCoreModules} needs: how to resolve the project root and how to shape each operation's params. */
 export interface RegisterCoreModulesOptions {
@@ -66,8 +66,9 @@ export function deriveMcpResourceUri(moduleName: string, verb: string): string {
  * Either way the error's operator-facing details (`../core/error-details.ts`) travel with it — as the
  * read error's JSON-RPC `error.data.details`, or as the tool result's `structuredContent` (task-130).
  * A successful Tool result carries the operation's `CoreResult.warnings`, when it has any, as
- * `structuredContent: {value, warnings}` (task-169). A Resource read has no such field: no read-only
- * operation returns warnings today, so a Resource's warnings are not rendered. Note that the shipped
+ * `structuredContent: {value, warnings}` (task-169). A successful Resource read carries them as a
+ * top-level `warnings` array beside `contents` (task-195, `bug-231`: since task-171 a read-only scan does
+ * report the documents it left out). Note that the shipped
  * `wingfoil mcp` server (`./server.ts`) does not call this function and registers no Tools (P5.2.3,
  * v0.4), so the Tool warning field is reachable only where this registrar is used; when Tools ship,
  * `directive.assign` and the four `dna` write Tools (task-193) also need `force` as a Tool input
@@ -140,7 +141,9 @@ export function registerCoreModules(
         async (readUri) => {
           const outcome = await callCore();
           if (outcome.ok) {
-            return { contents: [{ uri: readUri.toString(), mimeType: 'application/json', text: outcome.text }] };
+            // Its warnings ride beside `contents` (task-195, same class as `bug-231`): `memorySearch`
+            // reports the documents its scan left out (task-171), which a client must not lose.
+            return withWarnings({ contents: [{ uri: readUri.toString(), mimeType: 'application/json', text: outcome.text }] }, outcome.warnings);
           }
           // A failed read IS a JSON-RPC error; the SDK forwards an `Error`'s `data` as `error.data`
           // (task-130, `dl-055` option 1). No details, no `data` — the shape it always had.

@@ -20,9 +20,16 @@ import { CORE_SCHEMA, dump, load, Type } from 'js-yaml';
 
 import type { RolesYaml } from '../directives/schema';
 import type { DnaYaml, Module, Paths, Project, Stacks, Team } from '../dna/schema';
-import { isArchivedStatus, loadMemoryDocumentsAtRev, memoryUnreadableDiagnostic, type MemoryDocumentSummary } from '../memory';
+import {
+  findMemoryDocumentByTypeAndIdAtRev,
+  isArchivedStatus,
+  loadMemoryDocumentsAtRev,
+  memoryUnreadableDiagnostic,
+  type MemoryDocumentSummary,
+} from '../memory';
+import type { MemoryYaml } from '../memory/schema';
 import { readPathAtRev, readPathsAtRev, splitFrontmatter } from '../storage';
-import { formatDiagnostic, parseYaml, type Diagnostic } from '../validation';
+import { formatDiagnostic, isNewerFormatError, parseYaml, type Diagnostic } from '../validation';
 
 import { isRemovableCustomAssetPath } from './builtin-asset';
 import {
@@ -719,6 +726,34 @@ function payloadCandidates(documents: readonly MemoryDocumentSummary[], element:
 }
 
 /**
+ * The refusal of a subject that commit `sha` holds in a `format:` newer than this build reads (task-195,
+ * `bug-263`), or `undefined`. The tolerant scan leaves such a document out as `W_MEMORY_UNREADABLE`, so
+ * the subject looks absent; the lookup by (`type`, `id`) refuses exactly that case with the `dl-149`
+ * `ValidationError` (`E_INVALID_FORMAT`), which becomes `VALIDATION` here, as every verb that names the
+ * element refuses it. Called only when the scan did not find the subject, so a context that builds pays
+ * nothing for it.
+ */
+function newerFormatSubject(
+  root: string,
+  sha: string,
+  memoryYaml: MemoryYaml,
+  wanted: ExecutionContextElement,
+  label: string,
+): CoreError | undefined {
+  try {
+    findMemoryDocumentByTypeAndIdAtRev(root, sha, memoryYaml, wanted.type, wanted.id, { includeArchived: true });
+  } catch (error) {
+    if (!isNewerFormatError(error)) throw error;
+    return {
+      code: 'VALIDATION',
+      message: `element '${label}' at ${sha} is written in a newer format: ${error.message}`,
+      details: { issues: error.issues },
+    };
+  }
+  return undefined;
+}
+
+/**
  * Build the execution context for `request` — `spec-012`'s single public entry (§1), the context
  * `agent execute` (task-218) and the `{role}-session` Prompt (task-195) hand an agent.
  *
@@ -745,6 +780,9 @@ function payloadCandidates(documents: readonly MemoryDocumentSummary[], element:
  * not positive integers, are refused as `VALIDATION`. After the reads, an element or directive body
  * that holds its own end marker, or a directive id holding a control character or `-->`, refuses the
  * context as `VALIDATION`: neither may be dropped (§5 never truncates a directive).
+ *
+ * A subject the commit holds in a `format:` newer than this build reads is refused as `VALIDATION` with
+ * the `dl-149` `E_INVALID_FORMAT` text (task-195, `bug-263`), not reported as absent.
  *
  * A Memory document that does not parse is left out and reported (task-171): as a `W_MEMORY_UNREADABLE`
  * line in the result's `warnings` on success, and in `details.unreadable` of a `NOT_FOUND` refusal, so
@@ -782,6 +820,9 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
     (doc) => stringField(doc.frontmatter, 'type') === wanted.type && stringField(doc.frontmatter, 'id') === wanted.id,
   );
   if (documents !== null && found === undefined) {
+    // A subject written in a newer format exists: it is refused for its format (`bug-263`).
+    const newer = newerFormatSubject(root, sha, memoryYaml!, wanted, label);
+    if (newer !== undefined) return coreErr(newer);
     // A subject whose own frontmatter does not parse is among the unreadable files: name them, so the
     // refusal does not read as a bare "not found".
     return coreErr({

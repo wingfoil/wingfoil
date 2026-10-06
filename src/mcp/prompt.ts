@@ -32,11 +32,12 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ErrorCode, GetPromptRequestSchema, ListPromptsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { loadDirectives, loadRolesYaml, resolveRoleDirectives } from '../core';
-import type { DirectiveFile } from '../core';
+import { assembleExecutionContext, loadDirectives, loadRolesYaml, resolveRevision, resolveRoleDirectives, RevisionError } from '../core';
+import type { CoreError, DirectiveFile, ExecutionContextElement } from '../core';
+import { errorDetails, type ErrorDetail } from '../core/error-details';
 import { readDocument, splitFrontmatter, WINGFOIL_DIR } from '../storage';
 
-import { withRefusalDetails } from './read-only';
+import { readRefusalError, warningDetails, withRefusalDetails, withWarnings } from './read-only';
 
 /** Options for {@link registerRolePrompts}. */
 export interface RegisterRolePromptsOptions {
@@ -76,6 +77,98 @@ export function roleSessionPromptName(role: string): string {
  */
 function promptRequestError(message: string): Error {
   return Object.assign(new Error(message), { code: ErrorCode.InvalidParams });
+}
+
+/** {@link promptRequestError} carrying `details` as `error.data.details` when there are any (spec-004 §3.4). */
+function promptRequestErrorWithDetails(message: string, details: readonly ErrorDetail[]): Error {
+  const error = promptRequestError(message);
+  return details.length > 0 ? Object.assign(error, { data: { details } }) : error;
+}
+
+/**
+ * The two optional arguments of every `{role}-session` Prompt (task-195, `spec-016` §2.4, approver
+ * ruling R18, spec-004 §3.1): given together, they turn the Prompt into the carrier of the `spec-012` §7
+ * execution context for `(role, element, state)`; given neither, the Prompt is the role header and
+ * directive blocks it always was.
+ */
+const ROLE_PROMPT_ARGUMENTS = [
+  {
+    name: 'element',
+    description: "the Memory element to build the execution context for, as <type>:<id> (e.g. task:task-042-foo); given together with 'state'",
+    required: false,
+  },
+  {
+    name: 'state',
+    description: "the commit the execution context is read at (a sha, as agent execute passes it); given together with 'element'",
+    required: false,
+  },
+] as const;
+
+const ROLE_PROMPT_ARGUMENT_NAMES: readonly string[] = ROLE_PROMPT_ARGUMENTS.map((argument) => argument.name);
+
+/**
+ * `spec-008` §7's element-ref, `<type>:<id>`: exactly one `:`, both sides non-empty, and no whitespace,
+ * control character or `-->` (the payload header could not carry one, `spec-012` §7).
+ */
+// eslint-disable-next-line no-control-regex
+const ELEMENT_REF = /^([^:\s\u0000-\u001f\u007f]+):([^:\s\u0000-\u001f\u007f]+)$/;
+
+/** The element `ref` names, or the spec-004 §3.4 malformed-element-ref refusal. */
+function parseElementRef(ref: string): ExecutionContextElement {
+  const match = ELEMENT_REF.exec(ref);
+  if (match === null || ref.includes('-->')) {
+    throw promptRequestError(`malformed element-ref ${JSON.stringify(ref)}: expected <type>:<id>`);
+  }
+  return { type: match[1]!, id: match[2]! };
+}
+
+/**
+ * The details of a context refusal that is a failed read: the issues `errorDetails` selects, then the
+ * `details.cause` of an absent pillar file (`assembleExecutionContext`), which no `issues` carries.
+ */
+function contextRefusalDetails(error: CoreError): ErrorDetail[] {
+  const cause = error.details?.cause;
+  return [...errorDetails(error), ...(typeof cause === 'string' ? [{ detail: cause }] : [])];
+}
+
+/**
+ * The `prompts/get` result for `role` with `element` and `state` (task-195, spec-004 §3.2): one `user`
+ * message whose text is `assembleExecutionContext`'s §7 payload, as returned — never re-serialized, and
+ * never indexed by its body markers (`bug-265`). `state` is resolved once, here, and the builder reads
+ * everything at that sha, so neither a later commit nor an uncommitted edit changes the answer.
+ *
+ * The context's diagnostics ride beside `messages` as `warnings`, never inside the payload: the
+ * directive-resolution warnings (`spec-012` §5.1 order), then the builder's notes (§3 stage order), then
+ * the `W_MEMORY_UNREADABLE` lines of the files the scan left out (path order, task-171).
+ *
+ * Refusals (spec-004 §3.4): a `state` that is not a commit and an element the commit does not hold are
+ * request errors, `-32602` — the latter with the unreadable files as `error.data.details`, so a subject
+ * that does not parse is not reported as merely absent. Every other refusal is about the repository (an
+ * archived subject, one in a newer `format:`, a missing pillar file) and is a failed read, as a failed
+ * Resource read is: the core message with its details.
+ */
+function buildContextPrompt(root: string, role: string, element: ExecutionContextElement, state: string): GetPromptResult {
+  let sha: string;
+  try {
+    sha = resolveRevision(root, state);
+  } catch (error) {
+    if (error instanceof RevisionError) throw promptRequestError(error.message);
+    throw error;
+  }
+  const result = assembleExecutionContext(root, { role, element, stateRef: sha });
+  if (!result.ok) {
+    const { error } = result;
+    if (error.code === 'NOT_FOUND') {
+      const unreadable = error.details?.unreadable;
+      throw promptRequestErrorWithDetails(error.message, warningDetails(Array.isArray(unreadable) ? (unreadable as string[]) : []));
+    }
+    throw readRefusalError(error.message, contextRefusalDetails(error));
+  }
+  const { payload, context, notes } = result.value;
+  return withWarnings(
+    { messages: [{ role: 'user', content: { type: 'text', text: payload } }] },
+    [...context.warnings, ...notes, ...(result.warnings ?? [])],
+  );
 }
 
 /**
@@ -227,7 +320,8 @@ export function registerRolePrompts(server: McpServer, options: RegisterRoleProm
   server.server.setRequestHandler(ListPromptsRequestSchema, () => ({
     prompts: roles.map((role) => ({
       name: roleSessionPromptName(role),
-      description: `session instructions for the '${role}' role, embedding its assigned directives (read-only)`,
+      description: `session instructions for the '${role}' role, embedding its assigned directives (read-only); with element and state, the execution context for that element at that commit`,
+      arguments: ROLE_PROMPT_ARGUMENTS.map((argument) => ({ ...argument })),
     })),
   }));
   server.server.setRequestHandler(GetPromptRequestSchema, (request) => {
@@ -237,6 +331,24 @@ export function registerRolePrompts(server: McpServer, options: RegisterRoleProm
     }
     const role = name.slice(0, -ROLE_PROMPT_NAME_SUFFIX.length);
     if (!roles.includes(role)) throw undefinedRolePromptError(role);
-    return withRefusalDetails(() => buildRolePrompt(options.resolveRoot(), role));
+    // task-195: the two optional arguments (spec-004 §3.1); an unknown name is refused rather than
+    // ignored, so a misspelt `State` never falls back to the argument-less Prompt. Sorted: the first
+    // unknown name reported does not depend on the client's key order (REQ-SYS-07).
+    const args = request.params.arguments ?? {};
+    const unknown = Object.keys(args).sort().find((key) => !ROLE_PROMPT_ARGUMENT_NAMES.includes(key));
+    if (unknown !== undefined) {
+      throw promptRequestError(`unknown prompt argument '${unknown}': '${name}' takes only 'element' and 'state'`);
+    }
+    const { element, state } = args;
+    if (element === undefined && state === undefined) {
+      return withRefusalDetails(() => buildRolePrompt(options.resolveRoot(), role));
+    }
+    if (element === undefined || state === undefined) {
+      throw promptRequestError(
+        `prompt arguments 'element' and 'state' go together: '${element === undefined ? 'element' : 'state'}' is missing`,
+      );
+    }
+    const ref = parseElementRef(element);
+    return withRefusalDetails(() => buildContextPrompt(options.resolveRoot(), role, ref, state));
   });
 }
