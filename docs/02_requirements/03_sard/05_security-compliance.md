@@ -105,7 +105,8 @@
   argv in the project's history, so two clones launch the same agent the same way (REQ-SYS-07).
 * **Fit Criterion:** `directive remove` / `workflow remove` on a built-in is rejected ("built-in … cannot be removed");
   removal of a still-referenced custom asset is rejected naming the referrer. No command removes or rewrites a built-in
-  agent adapter: 0 operations in the command surface do, and a future one is held to the same refusal.
+  agent adapter: 0 operations in the command surface do (`npx jest test/core/builtin-adapter-writers.test.ts`),
+  and a future one is held to the same refusal.
 * **Traceability:** Feature P3.3 (US-6-07, BDD `p3-directives/P3.3-directive-remove.feature`); Feature P4.9 (US-6-11,
   BDD `p4-workflow/P4.9-workflow-remove.feature`). Built-in agent adapters added by `task-196` per
   `spec-016-agent-execution` §2.1 and Consequences (Features P5.1.1, P5.3.1).
