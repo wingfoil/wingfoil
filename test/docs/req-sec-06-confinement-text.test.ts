@@ -10,7 +10,8 @@
  *
  * - the Memory writers' refusal (`resolveConfinedMemoryPath`, `E_PATH_ESCAPES_ROOT`);
  * - the configuration and transition writers' refusal (`requireConfinedTarget`, the first check of
- *   `requireConfinedWriteTarget`);
+ *   `requireConfinedWriteTarget`), which `directive remove` prints too with `remove` as its action
+ *   (`task-102`, `bug-044`) — a delete, so the symlinked-target clause is not asked of it;
  * - the symlinked-target refusal every writer shares (`symlinkTargetRefusal`).
  *
  * Each is rendered with placeholder spellings (`<path>`, `<real path>`, `<action>`) and cut at the
@@ -58,6 +59,7 @@ function section(markdown: string, id: string): string {
 let sandbox: string;
 let memoryRefusal: string;
 let writerRefusal: string;
+let removeRefusal: string;
 
 beforeAll(() => {
   sandbox = mkdtempSync(join(tmpdir(), 'wf-req-sec-06-'));
@@ -90,6 +92,15 @@ beforeAll(() => {
       .replace(`'linked/file.md'`, `'<path>'`)
       .replace(/it resolves to '[^']*'/, `it resolves to '<real path>'`),
   );
+
+  // `directive remove`'s refusal: the same guard, asked with the `remove` action (src/core/index.ts).
+  const removed = requireConfinedTarget(root, 'linked/file.md', 'remove');
+  if (removed.ok) throw new Error('requireConfinedTarget accepted a removal through a link leaving the root');
+  removeRefusal = throughBoundaryClause(
+    removed.error.message
+      .replace(`'linked/file.md'`, `'<path>'`)
+      .replace(/it resolves to '[^']*'/, `it resolves to '<real path>'`),
+  );
 });
 
 afterAll(() => {
@@ -114,6 +125,15 @@ describe('REQ-SEC-06 states the project-root boundary with the messages the code
     expect(requirement()).toContain(writerRefusal);
   });
 
+  it('covers directive remove with the same refusal and remove as its action, without the symlink clause', () => {
+    expect(removeRefusal).toBe(writerRefusal.replace('<action>', 'remove'));
+    expect(requirement()).toContain('`wingfoil directive remove`');
+    expect(requirement()).toContain('`<action>` is `remove`');
+    expect(requirement()).toContain('(not on `wingfoil directive remove`)');
+    expect(requirement()).toContain('P3.3');
+    expect(requirement()).toContain('`task-102`');
+  });
+
   it('quotes the symlinked-target refusal', () => {
     const firstSentence = symlinkTargetRefusal('<action>', '<path>').split('. ')[0];
     expect(requirement()).toContain(`${firstSentence}.`);
@@ -135,6 +155,7 @@ describe('REQ-SEC-06 states the project-root boundary with the messages the code
       .find((line) => line.startsWith('| REQ-SEC-06 '));
     expect(row).toBeDefined();
     expect(row).toContain('project root');
+    expect(row).toContain('P3.3');
     expect(row).not.toContain('memory/');
   });
 });

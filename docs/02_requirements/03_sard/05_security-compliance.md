@@ -68,27 +68,31 @@
 
 ### REQ-SEC-06 — Storage confinement
 
-* **Description:** Every operation that writes the project's state writes only inside the **project root** — the
-  root of the git repository WingFoil runs in — judged on the filesystem, after symbolic links are resolved, and
-  before anything on disk changes. The rule covers every pillar's writers: the Memory writers (`wingfoil memory add`,
-  every state-transition verb and `wingfoil memory amend`) and the configuration writers (`wingfoil dna set`/`add`/
-  `update`/`remove` on `.wingfoil/dna.yaml`, `wingfoil directive create`, `wingfoil directive assign` on
-  `.wingfoil/roles.yaml`, and the `wingfoil init` scaffold). A write also refuses a target that is itself a symbolic
-  link, wherever the link points, because the write would follow it.
+* **Description:** Every operation that writes or deletes the project's state acts only inside the **project root**
+  — the root of the git repository WingFoil runs in — judged on the filesystem, after symbolic links are resolved,
+  and before anything on disk changes. The rule covers every pillar's writers: the Memory writers (`wingfoil memory
+  add`, every state-transition verb and `wingfoil memory amend`) and the configuration writers (`wingfoil dna set`/
+  `add`/`update`/`remove` on `.wingfoil/dna.yaml`, `wingfoil directive create`, `wingfoil directive assign` on
+  `.wingfoil/roles.yaml`, and the `wingfoil init` scaffold), and the configuration delete `wingfoil directive remove`.
+  A write also refuses a target that is itself a symbolic link, wherever the link points, because the write would
+  follow it; a delete does not, because it acts on the link and leaves its target alone.
 * **Rationale:** Prevent state leakage outside the managed, versioned store: what WingFoil writes is project truth
   only while it lands in the repository that versions it (REQ-SYS-01).
-* **Fit Criterion:** An attempt to write a Memory entry, or a configuration file, to a path that resolves outside the
-  project root — through `../` traversal or through a symlinked directory on the way — is refused at exit `1`, and
-  nothing is written or committed. The refusal names the path as given and the path it resolves to:
+* **Fit Criterion:** An attempt to write a Memory entry or a configuration file, or to delete a configuration file,
+  at a path that resolves outside the project root — through `../` traversal or through a symlinked directory on the
+  way — is refused at exit `1`, and nothing is written, deleted or committed. The refusal names the path as given and
+  the path it resolves to. Each quote is the refusal's leading clause; the message continues with a remedy:
   * a Memory entry (`E_PATH_ESCAPES_ROOT`):
     `"Memory entries must reside within the project root: '<path>' resolves to '<real path>', outside the project root"`;
-  * a configuration file, or a Memory document a transition verb rewrites:
+  * a configuration file, or a Memory document a transition verb rewrites (`<action>` is `write`), and a directive
+    `wingfoil directive remove` deletes (`<action>` is `remove`):
     `"cannot <action> '<path>': it resolves to '<real path>', outside the project root"`;
-  * a target that is itself a symbolic link, on any of these writers:
+  * a write target that is itself a symbolic link, on any of the writers (not on `wingfoil directive remove`):
     `"cannot <action> '<path>': the target is itself a symbolic link."`
 * **Traceability:** Feature P1.11 (US-0A-03, BDD `p1-memory/P1.11-memory-entries.feature`), and the writers' features
-  P1.3, P1.6–P1.9, P2.1, P3.1, P3.2 and P5.1.1. The boundary is the project root since `task-017` (its acceptance
-  criterion corrected by the approver from the narrower Memory-store boundary), decided on the filesystem since `task-105`, with the
+  P1.3, P1.6–P1.9, P2.1, P3.1, P3.2, P3.3 and P5.1.1. The boundary is the project root since `task-017` (its
+  acceptance criterion corrected by the approver from the narrower Memory-store boundary); `task-102` decided it on
+  the filesystem for `wingfoil directive remove` (`bug-044`), `task-105` for the Memory store, with the
   symlinked-target refusal from `task-106`; `task-172` extended it to the configuration writers. Brought to the
   implemented boundary by `task-258` (`bug-244`), which `dl-022` had noted as stale text.
 
