@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.17"
+version: "1.18"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -170,6 +170,32 @@ work first (`task-175` and `task-185` → 38 later tasks each, `task-192` → 18
 entered B4 from the W2 B1 triage and the B2 gate.
 
 Fix share at the opening of W2: 14 open fix tasks of 77 open (18%).
+
+**Wave 3** (opened 2026-10-06, the approver's choice of batches; the last wave): `task-194` … `task-246`,
+`task-260` (`dl-158` Actions 2–3, absorbing `bug-261`) and the three tasks of the W2 B4b triage, `task-261`
+(`bug-268`, `bug-269`), `task-262` (`bug-273`) and `task-263` (`bug-276`): 57 tasks, 6 of them fixes. Every
+`depends_on` outside the wave is `done`; inside it the graph has seven levels, so the batches run in sequence.
+They were built from a read-only analysis of the files each task will write, with the rules of the earlier
+waves: one writer per batch of `memory.yaml`, `dna.yaml`, `workflows.yaml`, `roles.yaml` and of each directive,
+and the tasks that unblock the most later work first (`task-194` → 37 later tasks, `task-199` → 22, `task-198`
+→ 15, `task-203` → 11, `task-206` → 10).
+
+| Batch | Tasks, in merge order | Shared files |
+|---|---|---|
+| **B1** | 262, 194, 210, 206, 195, 196, 209, 201, 263 | `210` before `206` (commit primitive); `196` → `209` (`src/storage/templates.ts`) → `201` (`templates/task.md`); `206` the only writer of `dna.yaml` |
+| **B2** | 199, 198, 200, 220, 223, 260, 261 | `199` the only writer of `workflows.yaml`, first `bindings.yaml`; `223` of `memory.yaml` (if the approver confirms its branch patterns); `260` of `git-conventions.md` |
+| **B3** | 203, 202, 204, 207, 218, 213, 205, 214 | `203` → `202` (deduction modules); `204` → `207` (`scripts/e2e-smoke.cjs`); `205` the only writer of `roles.yaml`, `testing.md` |
+| **B4** | 216, 228, 219, 222, 221, 212, 197, 208 | `222` → `221` (`bindings.yaml`); `219`, `222`, `212` (`WORKFLOW.md`); `222` writes `dna.yaml`, `212` `memory.yaml` and `workflows.yaml`, `197` `traceability.md`, `208` `code-review.md`, `git-conventions.md` |
+| **B5** | 225, 217, 226, 227, 235, 229, 231, 224 | `217` the only writer of `memory.yaml`; `229` first of three writers of `publish.yml` |
+| **B6** | 211, 240, 239, 238, 232, 233, 230 | `232` → `233` (`scripts/release-health/`); `230` the only writer of `memory.yaml`; `238` after `229` |
+| **B7** | 215, 236, 237, 243, 244, 241, 234 | `236` the only writer of `dna.yaml`; `244` last on `publish.yml` |
+| **B8** | 242, 245, 246 | `245` (`X_cli-cmds.md`) after every command task |
+
+Chains across batches: `dev-loop.yaml` 199 → 205 → 221; `publish.yml` 229 → 238 → 244; `user-docs.yaml` 199 →
+214 → 224 → 234 → 246; `08_mvp-canvas.md` 261 → 245. Latency runs (`263`, `216`, `228`, `232`) are taken at the
+gate on an otherwise idle machine.
+
+Fix share at the opening of W3: 6 open fix tasks of 58 open (10%; `task-252` is open in `user-docs`).
 
 **Amending approved Memory elements during a task (from W1 on).** `memory amend` exists since
 `task-127`, so an edit to an element past its first state (a spec's Revision note, a ready
@@ -732,3 +758,12 @@ commit, right after the task's transition and on the task branch:
   - **Wave 2 totals:** 34 tasks in five batches (B1, B2, B3, B4a, B4b): the 26 it opened with and 8 added by the
     approver's triages during the wave (`251`, `253`–`259`). **Next:** wave 3 (`task-194` … `task-246`, `task-260`; 54 tasks), in
     a new session; `task-252` stays in the `user-docs` phase.
+- **2026-10-06 — wave 3 opened** (session "DEV v0.3 - D. dev-loop W3", `main` `5d716f28`).
+  - Batches B1–B8 approved by the approver (§3).
+  - `task-206` and `task-218` repaired before start: the W2 handover amends `a798494e` and `45780905` had
+    inserted their bullets before an inline `` `## Execution Notes` `` inside an Acceptance Criterion, splitting it
+    and leaving a second Execution Notes heading (`grep -c '^## Execution Notes'` → 2). Two `memory amend` commits
+    (`c66ec975`, `ada962a4`) rejoin the criteria and move the bullets, unchanged, to Implementation Notes; merged
+    `--no-ff` at `264dfa45`. From now on the coordinator anchors insertions on the line `^## Execution Notes$`.
+  - `bug-277` (`memory add` with a long title, `ENAMETOOLONG` and an absolute path) filed `open` by the approver
+    (`50c5a835`); triage pending.
