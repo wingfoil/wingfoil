@@ -1,7 +1,7 @@
 # Product Vision — WingFoil
 
-**Version:** 1.2
-**Date:** 2026-10-01
+**Version:** 1.3
+**Date:** 2026-10-06
 **Status:** Approved
 
 ---
@@ -51,7 +51,7 @@ processes without designing from scratch.
     - Workflow phases and state transitions
     - Default directives for common roles (developer, reviewer, QA, etc.)
     - Suggested Memory structure (ADRs, decisions, risks)
-    - Initial DNA with methodology-specific conventions
+    - Initial DNA `stacks.methodologies`, with methodology-specific directives
 3. **Customization** — All generated artifacts can be customized:
     - Modify phases, approval gates, roles
     - Override directives to match team style

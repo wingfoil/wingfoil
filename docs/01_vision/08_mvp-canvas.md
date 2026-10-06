@@ -27,7 +27,7 @@ WingFoil is an open-source harness that gives humans and AI agents a **structure
 project:
 
 - **Project Memory** — git-backed storage for decisions and artifacts
-- **Project DNA** — structural map of the project (modules, tech stack, conventions)
+- **Project DNA** — structural map of the project (modules, stacks, team, resource paths)
 - **Project Directives** — role-based rules that both humans and agents respect
 - **Project Workflow** — unified tracking and communication of project flow, ensuring all actors maintain
   shared understanding of progress and blockers
@@ -67,7 +67,7 @@ project:
 
 **Pillar 2: Project DNA (v0.1)**
 ✓ Structured project map (`.wingfoil/dna.yaml`)  
-✓ Tech stack, modules, conventions, team  
+✓ Modules, stacks, team  
 ✓ Queryable resource paths (`wingfoil paths`)
 
 **Pillar 3: Project Directives (v0.2)**

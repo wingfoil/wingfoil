@@ -52,6 +52,11 @@ This task builds the pre-launch half of `agent execute`, for the stepless (`adho
   unique, so do not index its bodies by marker key alone. `dl-158` (in discussion, release v0.3) decides which
   `team.agents` entry signs and what an entry without an email writes under git-conventions §7: apply its ruling to
   the agents this task launches.
+- **Handover from the approver's ruling on `dl-158` (2026-10-06, Rule 1 (a)).** The `team.agents` entry that signs
+  an agent's commits under `git-conventions` §7 is the one `agent execute` launches, resolved by its adapter: state
+  that selection in `spec-016` where this task resolves the entry, and pass that entry's `name <email>` to the
+  launched agent. A hand session uses the entry whose `name` is the agent's own and, with no such entry, the first
+  entry, saying so in the commit body. The directive text and the email rule (Rule 2 (ii)) are `task-260`'s.
 
 ## Execution Notes
 
