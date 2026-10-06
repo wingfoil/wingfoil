@@ -141,8 +141,8 @@ describe('CORE_MODULES memory.memoryPark (task-180, dl-110 P1 (a))', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('INVALID_TRANSITION');
-    // The `<to>` is not pinned (task-181, bug-165): the refusal names the state and the type, and why.
-    expect(result.error.message).toMatch(new RegExp(`^illegal transition ${state} -> \\S+ for type '${type}'$`));
+    // `<to>` is `(none)`: `park` reaches nothing from this state (task-181, bug-165, dl-154).
+    expect(result.error.message).toBe(`illegal transition ${state} -> (none) for type '${type}'`);
     expect(JSON.stringify(result.error.details)).toContain('not a `returns` state');
     expect(exitCodeForResult(result)).toBe(1);
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);

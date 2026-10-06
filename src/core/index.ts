@@ -1269,7 +1269,7 @@ export interface MemoryApproveResult {
  *    `HEAD` itself (task-091, `dl-080` (B); task-247, `bug-187`); no committed machine, an unreadable one, not found, unknown type,
  *    invalid state, or an illegal transition, each a `CoreResult.error` (exit 1); an illegal one
  *    carries the pinned `illegal transition <from> -> <to> for type '<type>'` (`dl-032`), whose `<to>`
- *    is `approve`'s own next legal edge (`dl-053`).
+ *    is `(none)`: `approve` reaches nothing from `<from>` (task-181, `bug-165`).
  * 6. **`requireApprovalAuthority`** (REQ-SEC-03, task-040) — exit 1 with
  *    `user not authorized to approve type '<type>'` (P1.7 sc.3). It runs after step 5 because its
  *    message interpolates the document's type, which is only knowable once the document is located,

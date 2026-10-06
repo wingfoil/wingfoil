@@ -153,7 +153,7 @@ describe('a freshly `wingfoil init`-ed project runs every Memory transition verb
         // this far.
         const run = wingfoil(repo, 'memory', 'reject', documentId, '--reason', 'too late');
         expect(run.status).toBe(1);
-        expect(run.stderr).toContain("illegal transition approved -> draft for type 'task'");
+        expect(run.stderr).toContain("illegal transition approved -> (none) for type 'task'");
         expect(statusOf(repo, documentPath)).toBe('approved');
       });
 

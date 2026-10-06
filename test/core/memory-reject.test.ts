@@ -235,9 +235,9 @@ describe('CORE_MODULES memory.memoryReject — P1.8 fit criteria', () => {
     expect(result.error.code).toBe('INVALID_TRANSITION');
     expect(exitCodeForResult(result)).toBe(1);
     // The message is the REQ-STATE-01 / dl-032 contract string, NOT P1.8 sc.2's machine-specific
-    // wording (see this task's design notes, "SPEC CONFLICT"). `<to>` is dl-053's rule, which
-    // `task-046` owns and is changing in `contractTarget` — asserted as a shape, not re-pinned here.
-    expect(result.error.message).toMatch(/^illegal transition draft -> \S+ for type 'task'$/);
+    // wording (see this task's design notes, "SPEC CONFLICT"). `<to>` is `(none)`: `reject` has no
+    // edge from `draft` (task-181, bug-165).
+    expect(result.error.message).toBe("illegal transition draft -> (none) for type 'task'");
     // The engine's explanation still rides as the issue detail (dl-032 option c).
     expect((result.error.details as { issues: { detail?: string }[] }).issues[0]?.detail).toContain('`reject` is only legal from a gate');
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-200.md'), 'utf-8')).toBe(original);

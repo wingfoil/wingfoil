@@ -159,7 +159,7 @@ error: <reason>
   `error: ` line stays first and unchanged, and a continuation line of a multi-line detail is
   indented too, so no detail line can begin with `error: ` or `hint: `:
   ```
-  error: illegal transition approved -> pending for type 'task'
+  error: illegal transition approved -> (none) for type 'task'
     docs/memory/task/task-200.md: illegal `submit` from "approved": a `waiting` state — its forward edge fires only via a Workflow action, not `submit`
   ```
 - **Unknown-command suggestion:** when a command token — the first one after `wingfoil` (and any
@@ -411,3 +411,12 @@ Grounded directly in the ground-truth requirements `docs/02_requirements/03_sard
 success / `1` user-or-logic error / `2` usage-or-argument error) with no dedicated dry-run or interrupt
 code. Its error-format prefix (`error: <reason>`, all-lowercase, no symbolic `E_*` code) follows
 REQ-INT-08's literal fit criterion.
+
+**Revision (2026-10-06, `task-181-name-attempted-move-not-verb-canonical-edge-illegal`) — §3.1's
+details example names `(none)` as `<to>`, per `dl-154-an-illegal-transition-prints-none-as-its-target-replacing-dl-053-s-canonical-edge` (option A, `ready`), which
+replaces `dl-053`, and REQ-STATE-01 as it now reads (`bug-165`).** The
+example's contract line was `illegal transition approved -> pending for type 'task'`, where `pending`
+was `submit`'s canonical edge (reached from `draft`), not a state `submit` reaches from `approved`. A
+refused verb has no edge from the current state, so `<to>` is now `(none)` and the indented detail
+line, unchanged, says why. No exit code, format or other rule changed. Edited in place without a
+supersede or a state change, per `dl-047-tech-specs-carry-no-version-field`.

@@ -11,11 +11,12 @@ Feature: P1.8 (US-4-11) - wingfoil memory reject
     And the git commit records the rejecter identity, timestamp, and reason "tests missing"
     And the command exits with code 0
 
+  # dl-154-an-illegal-transition-prints-none-as-its-target-replacing-dl-053-s-canonical-edge (option A, replacing dl-053), task-181: a refused verb reaches nothing from <from>, so <to> is (none).
   Scenario: Error - rejecting a document that is not pending
     Given the document "task-101" has "status: draft"
     When I run "wingfoil memory reject task-101 --reason 'x'"
     Then the state is unchanged
-    And the command exits with code 1 and message "illegal transition draft -> in-progress for type 'task'"
+    And the command exits with code 1 and message "illegal transition draft -> (none) for type 'task'"
 
   Scenario: Error - rejecting without a reason
     When I run "wingfoil memory reject task-101"

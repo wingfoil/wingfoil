@@ -11,11 +11,12 @@ Feature: P5.2.3 (US-2-11) - MCP Tools (state management)
     Then "task-101" transitions to "status: pending"
     And the change is committed to git with the agent as author
 
+  # dl-154-an-illegal-transition-prints-none-as-its-target-replacing-dl-053-s-canonical-edge (option A, replacing dl-053), task-181: a refused verb reaches nothing from <from>, so <to> is (none).
   Scenario: MCP tool state changes are validated against the type machine
     Given "task-101" has "status: approved"
     When the agent invokes "memory.submit" for "task-101"
-    And approved -> pending is not allowed for type "task"
-    Then the tool returns error "illegal transition approved -> pending for type 'task'"
+    And type "task" has no "submit" edge from approved
+    Then the tool returns error "illegal transition approved -> (none) for type 'task'"
     And the state is unchanged
 
   Scenario: Error - invoking a tool with a missing required argument

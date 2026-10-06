@@ -2,7 +2,7 @@
 id: bug-165-illegal-approve-names-a-wrong-target
 type: bug
 title: "The illegal-transition error names the verb's canonical edge instead of the attempted move, so `approve` on a `planned` bug reads `planned -> triaged`, a backward step"
-status: planned
+status: closed
 severity: "low"
 release-origin: "v0.2.2"
 release: "v0.3"

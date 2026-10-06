@@ -22,7 +22,7 @@ import type { CoreModule } from '../../src/core/registry';
 import { coreErr } from '../../src/core/types';
 import { registerCoreModules } from '../../src/mcp/registrar';
 
-const CONTRACT = "illegal transition draft -> backlog for type 'task'";
+const CONTRACT = "illegal transition draft -> (none) for type 'task'";
 const FILE = 'docs/memory/task/task-001-x.md';
 const DETAIL = 'not a `gates` state: `approve` is only legal from a gate';
 const ISSUES = [{ code: 'E_INVALID_TRANSITION', path: 'status', file: FILE, message: CONTRACT, detail: DETAIL }];
