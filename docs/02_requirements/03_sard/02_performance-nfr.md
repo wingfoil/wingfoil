@@ -9,8 +9,8 @@ they are **not** asserted by the cited BDD scenarios, which fix only the thresho
 > Measurement conditions defined by this requirement set (not by the BDD scenarios): latency targets are evaluated as
 > **p95 over ≥ 20 runs** on a reference repository of **1,000 Memory documents**, **on an otherwise idle machine**,
 > unless otherwise stated. A wall-clock time that includes process start-up is not reproducible under load (`dl-146`:
-> the same unchanged commands measured 287 ms idle and 1,028 ms at a 1-minute load average of about 18), so the
-> condition is part of the requirement, not a convenience of the test that measures it.
+> the same unchanged commands' total p95 was at most 287 ms idle and up to 1,028 ms at a 1-minute load average of
+> about 18), so the condition is part of the requirement, not a convenience of the test that measures it.
 
 ---
 
