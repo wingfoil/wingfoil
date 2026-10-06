@@ -526,7 +526,7 @@ function entryTokens(entry: string): string[] {
   }
   return text
     .split(',')
-    .map((part) => (part.trim().split(/\s+/)[0] ?? '').replace(TOKEN_LEAD, '').replace(TOKEN_TRAIL, ''))
+    .map((part) => part.trim().split(/\s+/)[0]!.replace(TOKEN_LEAD, '').replace(TOKEN_TRAIL, ''))
     .filter((token) => token.length > 0);
 }
 
@@ -675,7 +675,8 @@ function payloadCandidates(documents: readonly MemoryDocumentSummary[], element:
     const reason = 'no string type and id, so an execution context cannot name it';
     left.push({ path: doc.path, diagnostic: memoryUnreadableDiagnostic(doc.path, reason) });
   }
-  left.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  // A path is reported at most once, so no two compare equal.
+  left.sort((a, b) => (a.path < b.path ? -1 : 1));
   return { carried, left: left.map((entry) => entry.diagnostic) };
 }
 
@@ -808,6 +809,7 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   const notes = [dnaSelected?.note, relevant?.note].filter((note): note is string => note !== undefined);
   // Unreadable files are about the repository, not the context: they ride the success-warning channel
   // (task-169), as `memory search` carries them (task-171), and never enter the payload.
-  const warnings = [...unreadable, ...(candidates?.left.map(formatDiagnostic) ?? [])];
+  // `candidates` is set whenever `memory.yaml` is, and without it the context was refused above.
+  const warnings = [...unreadable, ...candidates!.left.map(formatDiagnostic)];
   return coreOk({ context, payload: serializeExecutionContext(context), notes }, undefined, warnings);
 }

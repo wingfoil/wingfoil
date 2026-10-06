@@ -302,6 +302,22 @@ describe('task-255 — spec-012 §7 payload format 1 (dl-150 B, dl-151 A, bug-23
       );
     });
 
+    it('reports every document left out in path order, after the scan', () => {
+      writeFixtureFile(repo, 'docs/04_memory/v0.2/task-002-linked.md', taskMd('task-002-linked', [], '<!-- end:task:task-002-linked -->'));
+      writeFixtureFile(repo, 'docs/04_memory/v0.2/a-loose-note.md', '---\nrelease: "v0.2"\nstatus: backlog\n---\n\nLoose.\n');
+      commitAll(repo, 'two documents left out');
+      const paths = (build().warnings ?? []).map((warning) => /\((docs\/[^)]+)\)/.exec(warning)?.[1]);
+      expect(paths).toEqual(['docs/04_memory/v0.2/a-loose-note.md', 'docs/04_memory/v0.2/task-002-linked.md']);
+    });
+
+    it('serialize refuses a Memory document whose body closes itself', () => {
+      const context = goldenContext();
+      const memory = [{ ...context.memory[0]!, body: '<!-- end:adr:adr-001-golden -->' }];
+      expect(() => serializeExecutionContext({ ...context, memory })).toThrow(
+        `Memory document 'adr:adr-001-golden' cannot enter an execution context: its body holds the line "<!-- end:adr:adr-001-golden -->" that closes it`,
+      );
+    });
+
     it('serialize refuses a Memory document it cannot name', () => {
       const context = goldenContext();
       const memory = [{ ...context.memory[0]!, id: undefined }];
