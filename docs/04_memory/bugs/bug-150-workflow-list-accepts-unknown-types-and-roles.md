@@ -2,7 +2,7 @@
 id: "bug-150-workflow-list-accepts-unknown-types-and-roles"
 type: bug
 title: "`workflow list` accepts a phase action naming a Memory type `memory.yaml` never defines, and a `role` no role list names, with no warning and exit 0"
-status: planned
+status: in-progress
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
