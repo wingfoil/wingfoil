@@ -20,12 +20,12 @@
 import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, posix, relative, resolve, sep } from 'node:path';
 
-import { commitPaths, pathPorcelainStatus, readPathAtRev, StorageError, unstagePaths } from '../storage';
-import { resolveConfinedMemoryPath } from '../storage/memory-path';
+import { commitPaths, pathPorcelainStatus, readPathAtRev, unstagePaths } from '../storage';
 import { isIdPiece } from '../validation/id';
-import { requireConfinedWriteTarget } from '../core/confinement';
+import { requireConfinedTarget, requireConfinedWriteTarget } from '../core/confinement';
 import { resolveRevision, RevisionError } from '../core/revision';
-import { coreErr, coreOk, type CoreResult } from '../core/types';
+import { coreErr, coreOk, type CoreError, type CoreResult } from '../core/types';
+import { requireInspectableTarget, type WriteTargetContract } from '../core/write-guard';
 
 /** The literal of a value the agent did not report (§2.6): never `0`, `null` or an absent key. */
 export const NOT_REPORTED = 'not-reported' as const;
@@ -113,6 +113,12 @@ const PHASE_SOURCE = '[a-z][a-z0-9-]*';
 const COUNT_SOURCE = '[1-9][0-9]*';
 const SIGNAL_RE = /^signal:[A-Z][A-Z0-9]*$/;
 
+/** `element`'s `<type>:<id>` shape (`spec-008` §7): two non-empty parts. */
+const ELEMENT_REF_RE = /^[^:\s]+:[^:\s]+$/;
+
+/** The element id `<type>:<id>`'s id: everything after the first `:`. */
+const elementIdOf = (element: string): string => element.slice(element.indexOf(':') + 1);
+
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
@@ -189,12 +195,15 @@ function fieldDefect(key: (typeof RUN_RECORD_KEYS)[number], value: unknown, orde
 }
 
 /**
- * The first defect of `value` as a run record of element `elementId`, or `null`.
+ * The first defect of `value` as a run record, or `null`. Its id must be the one its own `element` and
+ * `phase` produce.
  *
+ * @param fileElementId - The log file's basename, which the id's element segment must equal (§4.5);
+ *   `null` for a record not read from a file.
  * @param ordered - `true` for a line read back (§4.5: keys in the declared order); `false` for an
  *   object a caller built, whose key order the writer fixes itself.
  */
-function recordDefect(value: unknown, elementId: string, ordered: boolean): string | null {
+function recordDefect(value: unknown, fileElementId: string | null, ordered: boolean): string | null {
   if (!isPlainObject(value)) return 'not a JSON object';
   const keys = Object.keys(value);
   const order = ordered
@@ -205,13 +214,19 @@ function recordDefect(value: unknown, elementId: string, ordered: boolean): stri
     const defect = fieldDefect(key, value[key], ordered);
     if (defect !== null) return defect;
   }
-  const id = value.id as string;
-  if (!isRunId(id, elementId)) return `'id' '${id}' is not a run id of element '${elementId}' (the file's basename)`;
+  const [id, element, phase] = [value.id as string, value.element as string, value.phase as string];
+  if (!ELEMENT_REF_RE.test(element)) return "'element' must be <type>:<id>";
+  if (fileElementId !== null && !isRunId(id, fileElementId)) {
+    return `'id' '${id}' is not a run id of element '${fileElementId}' (the file's basename)`;
+  }
+  // The id must be the one this record's own element and phase produce (task-206 review F6): an id
+  // that disagrees is counted under another (element, phase) and wedges every later run of its own.
+  if (!isRunId(id, elementIdOf(element)) || !id.startsWith(`${elementIdOf(element)}/${phase}/`)) {
+    return `'id' '${id}' does not match element '${element}' and phase '${phase}'`;
+  }
   return null;
 }
 
-/** The element id `<type>:<id>`'s id: everything after the first `:`. */
-const elementIdOf = (element: string): string => element.slice(element.indexOf(':') + 1);
 
 /** `record` as an object whose keys, and whose token keys, are in §4.2 order. */
 function ordered(record: RunRecord): Record<string, unknown> {
@@ -233,7 +248,7 @@ function ordered(record: RunRecord): Record<string, unknown> {
  * @throws Error `run record is not valid: <detail>` — a caller defect.
  */
 export function serializeRunRecord(record: RunRecord): string {
-  const defect = recordDefect(record, typeof record?.id === 'string' ? record.id.split('/')[0]! : '', false);
+  const defect = recordDefect(record, null, false);
   if (defect !== null) throw new Error(`run record is not valid: ${defect}`);
   return `${JSON.stringify(ordered(record))}\n`;
 }
@@ -315,15 +330,54 @@ export function resolveRunLogPath(root: string, runs: readonly string[] | undefi
     return coreErr({ code: 'VALIDATION', message: `not an element id: '${elementId}'` });
   }
   const joined = posix.join(dir.split(sep).join('/'), `${elementId}.jsonl`);
-  let target: string;
-  try {
-    // The joined path is the token's value, not the pattern, so a `{` in paths.runs is not a placeholder.
-    target = resolveConfinedMemoryPath(root, '{log}', { log: joined });
-  } catch (error) {
-    if (error instanceof StorageError) return coreErr({ code: 'VALIDATION', message: `paths.runs: ${error.message}` });
-    throw error;
+  const relativePath = relative(resolve(root), resolve(root, joined)).split(sep).join('/');
+  // The run log is not Memory: the neutral confinement refusal, not REQ-SEC-06's Memory-entry text
+  // (task-206 review, decision 6). A textual escape and a symlinked ancestor leaving the root both fail.
+  const confined = requireConfinedTarget(root, relativePath, 'write');
+  if (!confined.ok) return confined;
+  return coreOk(relativePath);
+}
+
+/** How the write guards name the run log and its commit (`requireInspectableTarget`). */
+const RUN_LOG_CONTRACT: WriteTargetContract = {
+  noun: 'run log',
+  owner: 'run record',
+  records: 'An `agent: record` commit records one run and nothing else',
+};
+
+/**
+ * Whether the run log `logPath` may be appended to and committed now: confined to the project root
+ * with no symlinked leaf (`requireConfinedWriteTarget`), inspectable by git — no directory on the way
+ * to it is a symbolic link, which would make an empty `git status` mean nothing
+ * (`requireInspectableTarget`, task-131) — and unmodified against `HEAD` in the index and the working
+ * tree, an untracked file included (`CONFLICT` `run log <path> has uncommitted changes`, §3.7).
+ * {@link recordRun} asks it again at step 17.
+ */
+export function requireWritableRunLog(root: string, logPath: string): CoreResult<undefined> {
+  const confined = requireConfinedWriteTarget(root, logPath, 'write');
+  if (!confined.ok) return confined;
+  const inspectable = requireInspectableTarget(root, logPath, RUN_LOG_CONTRACT);
+  if (!inspectable.ok) return inspectable;
+  if (pathPorcelainStatus(root, logPath) !== '') {
+    return coreErr({ code: 'CONFLICT', message: `run log ${logPath} has uncommitted changes` });
   }
-  return coreOk(relative(resolve(root), target).split(sep).join('/'));
+  return coreOk(undefined);
+}
+
+/**
+ * The run-log pre-flight of `agent execute`'s pipeline step 6 (`spec-016` §3.3), for a caller to run
+ * **before the spawn**, so a run whose record could not be committed is refused before it starts:
+ * the log is declared (`NO_RUN_LOG`), confined, inspectable and unmodified ({@link resolveRunLogPath},
+ * then {@link requireWritableRunLog}).
+ *
+ * @param runs - `dna.yaml` `paths.runs`, read at `HEAD`.
+ * @returns The root-relative run-log path the record will be committed to.
+ */
+export function runLogPreflight(root: string, runs: readonly string[] | undefined, elementId: string): CoreResult<string> {
+  const path = resolveRunLogPath(root, runs, elementId);
+  if (!path.ok) return path;
+  const writable = requireWritableRunLog(root, path.value);
+  return writable.ok ? path : writable;
 }
 
 /** What {@link nextRunId} counts. */
@@ -467,13 +521,14 @@ function gitCause(error: unknown): string {
  * trailer; there is no other body.
  *
  * Refusals, in order, none of which writes anything:
- * - `VALIDATION` — `record` is not a valid record, or not one of this log's element (its id's element
- *   segment is not the file's basename); the log path leaves the project root or is a symlink;
- * - `CONFLICT` `run log <path> has uncommitted changes` — the file differs from `HEAD` in the index or
- *   the working tree, which the append would overwrite;
- * - the strict reader's `VALIDATION` for the log at `HEAD`;
- * - `CONFLICT` `run id <run-id> already recorded at HEAD`, the full record as a `details` line, so the
- *   run is not lost (§4.3).
+ * - `VALIDATION` — `record` is not a valid record, including an id that is not the one its own
+ *   `element` and `phase` produce (no `details`: there is no line to give back);
+ * - every later refusal carries the record as a `details` line, so the run is not lost (§3.7, §4.3):
+ *   `VALIDATION` for a record not of this log's element (its id's element segment is not the file's
+ *   basename), a log path that leaves the project root, is a symlink, or lies beyond a symlinked
+ *   directory; `CONFLICT` `run log <path> has uncommitted changes` ({@link requireWritableRunLog});
+ *   the strict reader's `VALIDATION` for the log at `HEAD`; `CONFLICT` `run id <run-id> already
+ *   recorded at HEAD`.
  *
  * A commit that fails (a refusing hook, …) is `IO` `run <run-id> not recorded: <cause>` with the record
  * as a `details` line; the file and its index entry are put back as `HEAD` holds them.
@@ -485,28 +540,23 @@ export function recordRun(root: string, logPath: string, record: RunRecord): Cor
   } catch (error) {
     return coreErr({ code: 'VALIDATION', message: (error as Error).message });
   }
+  // From here on every refusal carries the record, so the run is never lost (§3.7, §4.3; review F3).
+  const keep = (error: CoreError): CoreResult<RecordedRun> => coreErr({ ...error, details: recordDetails(record, line) });
   const elementId = basename(logPath, '.jsonl');
   if (!isRunId(record.id, elementId)) {
-    return coreErr({
+    return keep({
       code: 'VALIDATION',
       message: `run log ${logPath}: run id ${record.id} is not a run id of element '${elementId}' (the file's basename)`,
     });
   }
-  const confined = requireConfinedWriteTarget(root, logPath, 'write');
-  if (!confined.ok) return confined;
-  if (pathPorcelainStatus(root, logPath) !== '') {
-    return coreErr({ code: 'CONFLICT', message: `run log ${logPath} has uncommitted changes` });
-  }
+  const writable = requireWritableRunLog(root, logPath);
+  if (!writable.ok) return keep(writable.error);
 
   const atHead = readPathAtRev(root, 'HEAD', logPath);
   const existing = atHead === null ? coreOk<RunRecord[]>([]) : parseRunLog(atHead, logPath);
-  if (!existing.ok) return existing;
+  if (!existing.ok) return keep(existing.error);
   if (existing.value.some((recorded) => recorded.id === record.id)) {
-    return coreErr({
-      code: 'CONFLICT',
-      message: `run id ${record.id} already recorded at HEAD`,
-      details: recordDetails(record, line),
-    });
+    return keep({ code: 'CONFLICT', message: `run id ${record.id} already recorded at HEAD` });
   }
 
   const absolute = join(root, logPath);
@@ -520,10 +570,6 @@ export function recordRun(root: string, logPath: string, record: RunRecord): Cor
     if (atHead === null) unlinkSync(absolute);
     else writeFileSync(absolute, atHead, 'utf-8');
     unstagePaths(root, [logPath]);
-    return coreErr({
-      code: 'IO',
-      message: `run ${record.id} not recorded: ${gitCause(error)}`,
-      details: recordDetails(record, line),
-    });
+    return keep({ code: 'IO', message: `run ${record.id} not recorded: ${gitCause(error)}` });
   }
 }

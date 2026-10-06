@@ -27,9 +27,11 @@ export {
   parseRunLog,
   readRunLogAt,
   recordRun,
+  requireWritableRunLog,
   resolveRunLogPath,
   RUN_RECORD_KEYS,
   RUN_TOKEN_KEYS,
+  runLogPreflight,
   serializeRunRecord,
 } from './run-log';
 export type {

@@ -172,7 +172,7 @@ team:
 # ---------------------------------------------------------------------------
 # Resource paths — queried by `wingfoil paths [category]` (P2.5)   [SPEC: P2.5]
 # Category names (sources, tests, docs, config, governance, runs) are [SPEC] (spec-002 Categories, X_cli-cmds.md);
-# entries are [AUTHORING]. `runs` (the agent run log, spec-016 §4.1) is not declared here: no category is required.
+# entries are [AUTHORING]. No category is required; `runs` (the agent run log, spec-016 §4.1) is declared below.
 # ---------------------------------------------------------------------------
 paths:
   sources:
