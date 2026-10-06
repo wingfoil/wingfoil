@@ -15,7 +15,7 @@
  * fixtures and expectations, `it.each` rows in a fixed order.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CORE_MODULES } from '../../src/core';
@@ -240,6 +240,30 @@ describe('(characterization) a committed template with an empty frontmatter bloc
     const memoryYaml = loadMemoryYamlAtHead(repo);
     if (memoryYaml === null) throw new Error('fixture bug: no memory.yaml at HEAD');
     expect(amendReservedFields(repo, memoryYaml, 'task')).toContain('release');
+  });
+});
+
+describe('(review F2) only the format refusal is labelled as one; any other failure is not dressed up as it', () => {
+  it('(red-first) memory history over an unreadable directory rethrows the filesystem error (EACCES), not a newer-format refusal', async () => {
+    const locked = join(repo, 'docs/memory/task/locked');
+    mkdirSync(locked);
+    chmodSync(locked, 0o000);
+    try {
+      await expect(op('memoryHistory')({ root: repo, positional: 'task-999-absent' })).rejects.toThrow(/EACCES/);
+    } finally {
+      chmodSync(locked, 0o755);
+    }
+  });
+
+  it('(characterization) a transition whose working-tree frontmatter does not parse keeps its YAML refusal, not the format one', async () => {
+    const id = 'task-004-pending-absent';
+    writeFixtureFile(repo, pathOf(id), '---\nid: task-004-pending-absent\ntype: task\ntitle: "unterminated\nstatus: pending\n---\n');
+    const result = (await op('memoryApprove')({ root: repo, positional: id, options: { reason: 'Approve it.' } })) as Result;
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('VALIDATION');
+    expect(result.error.message).not.toContain('newer format');
+    expect(result.error.message).not.toContain('E_INVALID_FORMAT');
   });
 });
 
