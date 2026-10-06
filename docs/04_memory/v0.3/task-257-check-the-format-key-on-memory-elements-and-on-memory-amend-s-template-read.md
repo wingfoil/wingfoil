@@ -107,8 +107,10 @@ frontmatter block is empty (`memory add` resolves, `release` stays reserved), wh
 of `readTemplateFrontmatter`. Gates, with the `spec-001` amendment in the working tree:
 - `npm test` → **261 suites, 4894 passed** (includes `typecheck` and the control-character lint).
 - `npm run test:coverage` (before the empty-frontmatter test) → **4893 passed**; All files
-  **99.1 | 96.28 | 96.33 | 99.69**, against the last figure recorded on `main` (`task-251`,
-  `98.99 | 96.13 | 96.1 | 99.59`): no regression. `query.ts` 100 | 99.19 | 100 | 100, `memory-amend.ts` 100 all.
+  **99.10 | 96.26 | 96.33 | 99.69** (branches corrected from a misread 96.28 at review, F3). The comparison
+  against `task-251`'s recorded figure was wrong: `main` at `1abafadd`, measured by the reviewer, is
+  `99.11 | 96.30 | 96.27 | 99.69`, so this pass regressed statements −0.01 and branches −0.04. Re-measured
+  after the review fixes, below. `query.ts` 100 | 99.19 | 100 | 100, `memory-amend.ts` 100 all.
 - `npm run lint` → 0; `npm run docs:api` → 0; `npx tsc --noEmit -p tsconfig.json` → 0;
   `npx tsc -p tsconfig.build.json --noEmit` → 0; `node scripts/check-governance.cjs --base 1abafadd` → 0.
 - End to end (`npm run build`, scratch repo, `node dist/cli.js init --template Scrum`, `memory add --type task
@@ -161,3 +163,37 @@ reader remains (`grep -rn "load(extractFrontmatter" src` → nothing).
   that reader should report an `E_INVALID_FORMAT` throw from `loadMemoryDocumentSummary` the way it reports a YAML
   error. Both edit `src/memory/query.ts`'s scan area only if 253 touches it; this branch changes the scan
   generators' element type (`ScannedDocument`).
+
+### review fixes (independent review: APPROVE WITH FIXES)
+
+- **F2** — `memoryHistoryFn` labelled *every* lookup failure "written in a newer format" (an `EACCES` on a
+  subdirectory, reproduced by the reviewer). Red first, `f37ca4ec`: `memory history` over a `chmod 000`
+  directory must reject with `EACCES` → **1 failed** (`Received promise resolved instead of rejected`); with it, a
+  characterization row pinning that a transition whose working-tree frontmatter does not parse keeps its YAML
+  refusal (the rethrow in `newerFormatRefusal`), which passed. Fix `8fc21efa`: `isNewerFormatError` moves to
+  `src/validation/format.ts` (exported through `src/validation`), and both `memory-transition.ts` and
+  `memoryHistoryFn` use it; anything else is rethrown as before this task. `npx jest
+  test/core/memory-element-format.test.ts test/memory/query-element-format.test.ts test/validation/format.test.ts
+  test/core/memory-scan-tolerant.test.ts` → **71 passed**.
+- **F3** — coverage restated above. `readTemplateFrontmatter`'s last line tested `Array.isArray` on a value the
+  schema had already admitted as a mapping or nothing, a branch no input reaches; `1a50807a` returns
+  `data ?? null`, and the empty-block test now writes a block holding only a comment (the earlier `---\n---`
+  fixture is no frontmatter at all to `extractFrontmatter`, so it never reached the reader). Re-measured with
+  `npx jest --coverage --coverageReporters=json-summary` on this branch and on a detached worktree at `1abafadd`
+  (same `node_modules`), totals main → branch: statements 5946/5999 (99.11) → 5982/6035 (99.12); branches
+  3336/3463 (96.33) → 3350/3476 (96.37); functions 1035/1075 (96.27) → 1050/1090 (96.33); lines 5158/5174
+  (99.69) → 5186/5202 (99.69). Uncovered statements 53 → 53, branches 127 → 126: no regression. (This main run
+  gave branches 96.33, the reviewer's 96.30; the counts above are from one machine, one run each.)
+- **F4** — the pending `spec-001` Revision note said a newer element is "refused by every verb that reads or writes
+  the element", which is wrong for `memory search` (it reports). Reworded to match the body paragraph: refused
+  by the transition verbs, `memory amend` and `memory history` (the element it is asked about); reported, not
+  refused, by the scans. Still uncommitted, a pending amendment.
+- Gates after the fixes: `npx jest --coverage` → **261 suites, 4896 passed**; `npm run lint` → 0;
+  `npx tsc --noEmit -p tsconfig.json` → 0; `npx tsc -p tsconfig.build.json --noEmit` → 0;
+  `node scripts/check-governance.cjs --base 1abafadd` → 0.
+- Merge note (coordinator): after `task-253` lands, its working-tree reader becomes
+  `return [...readableDocuments(scanWorkingTreeDocuments(root, memoryYaml, options), options)];` — applied when
+  the coordinator asks for the merge of `main`.
+
+**Pending amendment (approver), final reason** — `spec-001-memory-yaml-schema`:
+`--reason "dl-149: an element keeps its template's format and reads with MEMORY_TEMPLATE_FORMAT; a newer one is refused by the transition verbs and memory amend (as HEAD records it or as the working tree would commit it) and by memory history for the element it names (E_INVALID_FORMAT, exit 1), and reported, not refused, by the scans as W_MEMORY_UNREADABLE; memory amend reads the committed template with memory add's check (task-257, bug-241, bug-243)."`
