@@ -305,7 +305,7 @@ wingfoil dna add <path> --value <name-or-values> [--entry-<field> <value> ...] [
 | `stacks.methodologies` | `phase`, `notes` |
 | `team.members` | `email`, `roles` (comma-separated) |
 | `team.roles` | `description` |
-| `team.agents` | `email` (one address, `local@domain.tld`: the agent's `Co-Authored-By:` identity, `git-conventions` §7), `executes_as` (comma-separated), `approval_authority` (`true`/`false`), `adapter` (the agent's adapter name: lowercase letters, digits, `-` and `.`) |
+| `team.agents` | `email` (one address, `local@domain.tld`: the agent's `Co-Authored-By:` identity, by default the vendor's published address; a GitHub noreply address must be id-qualified, `<id>+<login>@users.noreply.github.com`), `executes_as` (comma-separated), `approval_authority` (`true`/`false`), `adapter` (the agent's adapter name: lowercase letters, digits, `-` and `.`) |
 
 ```console
 $ wingfoil dna add team.members --value "Ada Lovelace" --entry-email ada@example.com --entry-roles approver,developer

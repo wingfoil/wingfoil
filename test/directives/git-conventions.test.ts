@@ -47,6 +47,12 @@ describe('git-conventions §7 — bug-240', () => {
     expect(s7).toContain('AI-Model:');
   });
 
+  it('defaults the email to the vendor address, allows an id-qualified machine account, and omits Co-Authored-By without an email (approver ruling F1)', () => {
+    expect(s7).toContain('noreply@anthropic.com');
+    expect(s7).toContain('<id>+<login>@users.noreply.github.com');
+    expect(s7).toContain('omit the `Co-Authored-By:` line and keep `AI-Model:`');
+  });
+
   it("applies to hand sessions from task-256's merge", () => {
     expect(s7).toContain('Hand sessions');
     expect(s7).toContain('task-256');

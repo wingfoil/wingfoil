@@ -126,18 +126,25 @@ rule; this clause only keeps a test identity from leaking into it.
   operations performed on the approver's instruction included — carries AI co-authorship, **except
   `approve` and `reject` commits**: those record the approver's decision and carry no AI co-author even
   when an agent typed them (`dna.yaml` declares every agent `approval_authority: false`).
-- **Which name.** The `Co-Authored-By:` trailer names the agent entry declared in `dna.yaml`
+- **Which name.** The `Co-Authored-By:` identity is the agent entry declared in `dna.yaml`
   `team.agents`, written as its `name` and `email`: `Co-Authored-By: <name> <<email>>` (`bug-240`). When
-  `team.agents` declares more than one entry, it is the entry the running agent executes as. The name
-  stays stable across model upgrades. A separate `AI-Model:` trailer, in the same trailer paragraph,
-  carries the model identifier the running agent reports. A commit an agent co-authors ends with this
-  trailer paragraph, the values read from `dna.yaml` (`wingfoil dna show team`), never typed
-  from memory:
+  `team.agents` declares more than one entry, it is the entry the running agent executes as. A separate
+  `AI-Model:` trailer, in the same trailer paragraph, carries the model identifier the running agent
+  reports. A commit an agent co-authors ends with this trailer paragraph, the values read from
+  `dna.yaml` (`wingfoil dna show team`), never typed from memory:
 
   ```
   Co-Authored-By: <team.agents name> <<team.agents email>>
   AI-Model: <the model identifier the running agent reports>
   ```
+
+  If the entry declares no `email`, omit the `Co-Authored-By:` line and keep `AI-Model:`.
+- **Which email** (approver ruling F1, `task-256`). `email` is optional. By default it is the address
+  the agent's vendor publishes for co-authorship (for Claude, `noreply@anthropic.com`). A project may
+  instead trace every agent under one account of its own: a machine account, in GitHub's id-qualified
+  noreply form `<id>+<login>@users.noreply.github.com`, or any address the project owns. `dna.yaml`
+  refuses a bare `<login>@users.noreply.github.com`: an unregistered login can be claimed by anyone, who
+  would then be credited with every commit naming it.
 - **Who applies it.** Hand sessions — an agent writing commits with `git commit` — apply this section
   from `task-256-give-team.agents-an-email-and-state-the-intake-prefix-and-on-main-operations-in-git-conventions`'s
   merge on, in place of the model-named trailer they wrote before. A commit written by `wingfoil`
