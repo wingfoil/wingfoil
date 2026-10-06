@@ -104,3 +104,16 @@ of "tech stack" as a concept (`05_journeys.md` L15, L31, L50). `README.md`'s per
 - `08_mvp-canvas.md` *Target Users* table still lists Alex first and has no Persona 7 row; dl-113 names only the
   personas file, the brief and the index, so it was not changed here.
 - The vision index still has no test: `X_cli-cmds.md` drifted on main within a day of task-141's re-index.
+
+### review fixes (independent review: approve with fixes, 2026-10-06)
+
+Applied in `2c874368`, with no re-bump of files already bumped on this branch: (1) claim-evidence — the
+primary-persona note said Morgan's notification goal shipped in v0.2; X1 has no code (`grep -rli notif src` →
+nothing), so it now says rule encoding shipped in v0.2 and notification (X1) arrives in v0.3. (2) Same class as
+bug-212 — `02_product-vision.md` L54 put conventions inside DNA (1.2 → **1.3**, 2026-10-06); the sweep
+`grep -n -i "conventions\|tech.stack" docs/01_vision/*.md | grep -i dna` also found `05_journeys.md` L62 (DNA
+inference "may miss implicit conventions") and L223 (`dna show` → "tech stack"), both reworded; L15 is left, since it
+already maps conventions to directives. L223's "current phase, risks" stays a candidate finding. (3) One of the two
+consecutive `---` before Persona 7 removed, so Taylor is now L111–126 and Persona 7 L127–147 (147 lines). Index rows
+and ranges updated; task-141's index check → `mismatches: []`; `node scripts/check-governance.cjs --base 02fd6102`
+exit 0. Status stays `in-review`.
