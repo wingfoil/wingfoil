@@ -24,6 +24,26 @@ function mentions(text: string, name: string): boolean {
   return new RegExp(`(?<![A-Za-z0-9_-])${escaped}(?![A-Za-z0-9_-])`).test(text);
 }
 
+const FIXTURE = join(__dirname, 'fixtures', 'enumeration-parity', 'workflow-md-drift.md');
+
+/** The `workflow/phase` pairs of `phases` that `text` does not document, sorted. */
+function undocumentedPhases(text: string, phases: ReadonlyArray<readonly [string, string]>): string[] {
+  const reference = text.replace(/\\n/g, ' ');
+  return phases.filter(([, phase]) => !mentions(reference, phase)).map(([workflow, phase]) => `${workflow}/${phase}`).sort();
+}
+
+describe('WORKFLOW.md parity — the phase predicate, on a fixture (bug-206)', () => {
+  it('does not count a dotted action or an unrelated section as a mention of a phase', () => {
+    const phases = [
+      ['release-cycle', 'planning'],
+      ['release-cycle', 'submit'],
+      ['e2e-smoke', 'fresh-init'],
+      ['e2e-smoke', 'gate'],
+    ] as const;
+    expect(undocumentedPhases(readFileSync(FIXTURE, 'utf8'), phases)).toEqual(['e2e-smoke/gate', 'release-cycle/submit']);
+  });
+});
+
 describe('WORKFLOW.md parity with workflows.yaml (.wingfoil/WORKFLOW.md)', () => {
   // A Mermaid label writes its line breaks as the two characters `\n`; read them as whitespace, so a
   // name that opens a label line counts as a whole word.
