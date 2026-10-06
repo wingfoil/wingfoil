@@ -133,12 +133,11 @@ team:
   # authority; approvals route to the `approver` role (Roberto).
   agents:                        # [AUTHORING] agent execution model (concept ← REQ-SYS-08; field shape authoring)
     # name + email are the agent's commit identity: git-conventions §7 writes them as the
-    # `Co-Authored-By: <name> <<email>>` trailer (dl-117 Q2 (c), bug-240, task-256). The name is
-    # vendor-neutral so it stays stable across model upgrades; the model goes in the `AI-Model:` trailer.
-    - name: WingFoil Agent
-      # [AUTHORING] PLACEHOLDER (task-256): proposed address, not yet a registered identity. The approver confirms
-      # or replaces it at task-256's review (options in its Execution Notes) before §7 is used with it.
-      email: wingfoil-agent@users.noreply.github.com
+    # `Co-Authored-By: <name> <<email>>` trailer (dl-117 Q2 (c), bug-240, task-256); the model identifier
+    # goes in the separate `AI-Model:` trailer. email [AUTHORING], optional: the address the vendor
+    # publishes for co-authorship (approver ruling F1, task-256).
+    - name: Claude
+      email: noreply@anthropic.com
       executes_as: [ developer, reviewer, qa, architect ]
       approval_authority: false
   # Available agent roles (P5.4.1); nested under `team` so `dna show team` surfaces them.

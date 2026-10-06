@@ -163,6 +163,10 @@ describe("task-256 — this repository's dna.yaml declares a usable agent identi
     expect(agents.length).toBeGreaterThan(0);
   });
 
+  it("declares Claude with the vendor's published co-authorship address (approver ruling F1)", () => {
+    expect(agents.map((agent) => [agent.name, agent.email])).toContainEqual(['Claude', 'noreply@anthropic.com']);
+  });
+
   it.each(agents.map((agent) => [agent.name, agent] as const))('%s has a plain name and an email that form a valid `Co-Authored-By:` identity', (_name, agent) => {
     expect(agent.name).not.toMatch(/[()/<>]/);
     expect(agent.email).toBeDefined();

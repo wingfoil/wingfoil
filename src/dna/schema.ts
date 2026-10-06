@@ -127,6 +127,18 @@ export type TeamMember = z.infer<typeof TeamMember>;
  */
 export const AGENT_EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 
+/**
+ * Whether `email` is acceptable as a GitHub noreply address — trivially true for any other domain. A
+ * `@users.noreply.github.com` address must carry GitHub's numeric account id, `<id>+<login>@…`: the bare
+ * `<login>@…` form names a login, and an unregistered login can be claimed by anyone, who would then be
+ * credited with every commit the trailer names (approver ruling F1, task-256).
+ */
+export function isIdQualifiedGitHubNoreply(email: string): boolean {
+  const at = email.lastIndexOf('@');
+  if (email.slice(at + 1).toLowerCase() !== 'users.noreply.github.com') return true;
+  return /^[0-9]+\+[^+]+$/.test(email.slice(0, at));
+}
+
 /** Whether `name` can be the name part of a trailer: no `<`, `>`, CR or LF (task-256). */
 function isTrailerSafeName(name: string): boolean {
   return !/[<>\r\n]/.test(name);
@@ -143,8 +155,9 @@ function isTrailerSafeName(name: string): boolean {
  *
  * `name` and `email` together are the agent's commit identity: `git-conventions` §7 writes them as the
  * `Co-Authored-By: <name> <<email>>` trailer (`dl-117` Q2 (c), task-256, `bug-240`). So a `name` may
- * not hold `<`, `>` or a line break, and `email` (optional: an agent can be declared before it has an
- * address) must be one mailbox, {@link AGENT_EMAIL_RE}.
+ * not hold `<`, `>` or a line break, and `email` — optional; by default the address the agent's vendor
+ * publishes for co-authorship, or a project-owned machine account — must be one mailbox
+ * ({@link AGENT_EMAIL_RE}) and, on GitHub's noreply domain, id-qualified ({@link isIdQualifiedGitHubNoreply}).
  */
 export const AgentEntry = z
   .object({
@@ -155,6 +168,9 @@ export const AgentEntry = z
       .string()
       .refine((value) => AGENT_EMAIL_RE.test(value), {
         message: 'an agent email must be one address, local@domain.tld, with no whitespace or angle brackets',
+      })
+      .refine(isIdQualifiedGitHubNoreply, {
+        message: 'a GitHub noreply agent email must be id-qualified, <id>+<login>@users.noreply.github.com (a bare login can be claimed by anyone)',
       })
       .optional(),
     executes_as: z.array(z.string()),
