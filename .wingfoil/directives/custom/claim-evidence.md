@@ -82,6 +82,15 @@ The citation rule is stated in full in the `documentation` directive, clause D1 
   historical note, unless it says it is one (`bug-096` item 3). Settled scope is not a licence for an
   untrue sentence.
 
+## Sentences written in response to a reject
+
+**Before resubmitting after a reject, apply this directive to every sentence written in response to
+the reject, not only to new work** (`dl-098` §3): the rewritten Execution Notes, the corrected
+comment or TSDoc, the amended spec sentence, the answer to each item of the reject's `Reason:`. The
+sentence written to fix a false sentence is the likeliest place for the next one: in `minor-v0.2`,
+three of the four tasks rejected twice were rejected the second time for the first reject's class,
+twice inside the passage written to fix it (`task-054`, `task-072`, `task-034`; `dl-098` *Context*).
+
 ## Why this is written down
 
 Measured in one week of `minor-v0.2`, all with element ids:
