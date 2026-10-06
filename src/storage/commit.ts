@@ -131,6 +131,19 @@ export function commitPaths(
   return runGit(root, ['rev-parse', 'HEAD'], options).trim();
 }
 
+/**
+ * Reset the index entries of `paths` to `HEAD` (`git reset --quiet -- <paths>`), leaving the working
+ * tree alone: the undo of the `git add` {@link commitPaths} runs before its commit, for a caller whose
+ * commit failed and who restores the working-tree file itself (task-206, the run record's failed
+ * commit, `spec-016` §3.7). A path absent at `HEAD` leaves the index; one present returns to its
+ * committed blob.
+ *
+ * @throws whatever `git` raises (via `execFileSync`).
+ */
+export function unstagePaths(root: string, paths: readonly string[], options: CommitOptions = {}): void {
+  runGit(root, ['reset', '--quiet', '--', ...paths], options);
+}
+
 // --- Read primitives for asserting what a commit CONTAINS (task-088, bug-076) ------------------
 //
 // `commitPaths` above bounds a commit by *pathspec*; nothing bounded it by *content*, so a path that

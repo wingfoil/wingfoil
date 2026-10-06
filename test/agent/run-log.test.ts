@@ -298,7 +298,7 @@ describe('strict reader (spec-016 §4.5)', () => {
   });
 
   it('refuses a malformed id', () => {
-    expect(refusal(`${line({ id: `${ELEMENT_ID}/design/0` })}\n`)).toEqual(
+    expect(refusal(`${JSON.stringify({ ...asObject(), id: `${ELEMENT_ID}/design/0` })}\n`)).toEqual(
       invalid(1, `'id' '${ELEMENT_ID}/design/0' is not a run id of element '${ELEMENT_ID}' (the file's basename)`),
     );
   });
@@ -444,8 +444,8 @@ describe('recording a run (spec-016 §4.3 collision, §4.4 commit, §3.7)', () =
   it('a failed commit is IO `run <run-id> not recorded: <cause>`, with the record as a details line, and leaves nothing behind', () => {
     writeFixtureFile(repo, '.hooks/pre-commit', '#!/bin/sh\necho "hook says no" >&2\nexit 1\n');
     chmodSync(join(repo, '.hooks/pre-commit'), 0o755);
-    git(repo, ['config', 'core.hooksPath', '.hooks']);
     commitAll(repo, 'hooks');
+    git(repo, ['config', 'core.hooksPath', '.hooks']);
     const before = show(['rev-parse', 'HEAD']).trim();
 
     const result = recordRun(repo, LOG, record());
@@ -463,8 +463,8 @@ describe('recording a run (spec-016 §4.3 collision, §4.4 commit, §3.7)', () =
     writeFixtureFile(repo, LOG, `${line()}\n`);
     writeFixtureFile(repo, '.hooks/pre-commit', '#!/bin/sh\nexit 1\n');
     chmodSync(join(repo, '.hooks/pre-commit'), 0o755);
-    git(repo, ['config', 'core.hooksPath', '.hooks']);
     commitAll(repo, 'hooks and a run');
+    git(repo, ['config', 'core.hooksPath', '.hooks']);
 
     const result = recordRun(repo, LOG, record({ id: `${ELEMENT_ID}/design/2` }));
     expect(result.ok).toBe(false);
@@ -504,7 +504,7 @@ describe('the notes field (spec-016 §4.2 key 18, dl-135 Q2 (c))', () => {
     `---\nid: ${ELEMENT_ID}\nstatus: in-progress\n---\n\n## Description\n\nd\n\n## Execution Notes\n\n${notes}\n${tail}`;
 
   it('extracts the section by its heading line, up to the next heading of level 1 or 2, outside code fences', () => {
-    expect(executionNotesSection(element('one\n### sub\ntwo', '## Next\nafter\n'))).toBe('\none\n### sub\ntwo\n\n');
+    expect(executionNotesSection(element('one\n### sub\ntwo', '## Next\nafter\n'))).toBe('\none\n### sub\ntwo\n');
     expect(executionNotesSection('a\n`## Execution Notes` inline\n')).toBeNull();
     expect(executionNotesSection('## Execution Notes\n```\n## not a heading\n```\nkept\n## End\n')).toBe('```\n## not a heading\n```\nkept\n');
     expect(executionNotesSection('---\ntitle: "## Execution Notes"\n---\nbody\n')).toBeNull();
