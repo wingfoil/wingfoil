@@ -37,9 +37,13 @@ export {
   builtinTemplateSources,
   BUILTIN_DIRECTIVES_DIR,
   BUILTIN_WORKFLOWS_DIR,
+  BUILTIN_ADAPTERS_DIR,
+  CUSTOM_ADAPTERS_DIR,
 } from './templates';
 export type { TemplateDefinition, BuiltinTemplateKind, BuiltinTemplateSource } from './templates';
 export { BUILTIN_DIRECTIVE_TEMPLATES, BUILTIN_DIRECTIVE_IDS, builtinDirectiveMd } from './builtin-directives';
 export type { BuiltinDirectiveTemplate } from './builtin-directives';
+export { BUILTIN_ADAPTERS } from './builtin-adapters';
+export type { BuiltinAdapterManifest } from './builtin-adapters';
 export { computeStateSnapshot, serializeSnapshot } from './snapshot';
 export type { SnapshotEntry } from './snapshot';
