@@ -42,10 +42,10 @@
  * **What this file does not cover: the commands themselves.** REQ-PERF-02's Fit Criterion is worded
  * against `wingfoil memory search`, `dna show` and `memory history`; this file times the operations
  * they dispatch to, which leaves out the compiled CLI's own dispatch and output. That level is
- * `test/cli/command-latency.test.ts` (task-154, `bug-013`): the same reference repository, the same
- * 1,000 ms at p95, asserted on each spawned command's marginal cost over a measured process-start
- * floor — not on the total the requirement words, a deviation pending a decision-log — and run only
- * when asked for, on an otherwise idle machine.
+ * `test/cli/command-latency.test.ts` (task-154, `bug-013`; task-248, `dl-146` (C)): the same reference
+ * repository, the same 1,000 ms at p95, asserted on each spawned command's total, process start-up
+ * included, and on its marginal cost over a measured process-start floor — and run only when asked
+ * for, on an otherwise idle machine.
  *
  * `P1.10-memory-history.feature`'s "And the query returns in under 1 second" clause lands here for the
  * same reason and was never written anywhere else: `test/cli/program.integration.test.ts` owns P1.10's
