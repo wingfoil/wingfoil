@@ -2,7 +2,7 @@
 id: "bug-096-dna-surface-comments-assert-unmeasured-facts"
 type: bug
 title: "The comment justifying the manual `version` global says `--version` is absent from `program.options`, and it is not — plus one present-tense comment still in the retired `dna set` grammar"
-status: in-progress
+status: in-review
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
