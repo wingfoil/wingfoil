@@ -32,6 +32,9 @@ import {
   filterRelevantMemoryDocuments,
   NO_RELEVANT_MEMORY_NOTE,
 } from '../../src/core/relevance';
+import { symlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { memoryUnreadableDiagnostic, W_MEMORY_UNREADABLE } from '../../src/memory/query';
 import { ARCHIVED_STATUSES } from '../../src/memory/state-machine';
 import type { MemoryYaml } from '../../src/memory/schema';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -633,6 +636,55 @@ describe('filterRelevantMemoryDocuments (task-035-bounded-context-relevance, REQ
         const ids = filterRelevantMemoryDocuments(root, SERVICE_YAML, element).documents.map((doc) => doc.id);
 
         expect(ids).toEqual(['svc-902-legacy']);
+      } finally {
+        removeTempDir(root);
+      }
+    });
+  });
+
+  describe('task-253 (bug-230) — the working-tree reader is tolerant and reports what it left out (spec-017 §1.4)', () => {
+    const BUG_DOC = (id: string): string =>
+      ['---', `id: ${id}`, 'type: bug', `title: "${id}"`, 'status: triaged', 'severity: "low"', '---', '', fillerBody(0), ''].join('\n');
+    const element = { type: 'task', id: 'task-host', frontmatter: { release: 'v0.3', bug: ['bug-222-real'] } };
+
+    it('leaves out a malformed document and a symbolic link, reports each as W_MEMORY_UNREADABLE, and never throws', () => {
+      const root = makeTempGitRepo();
+      try {
+        writeFixtureFile(root, 'docs/04_memory/bugs/bug-222-real.md', BUG_DOC('bug-222-real'));
+        // A frontmatter js-yaml cannot parse: before task-253 this aborted the whole filter (E_YAML_PARSE_ERROR).
+        writeFixtureFile(root, 'docs/04_memory/bugs/bug-900-bad.md', '---\nid: bug-900\ntitle: [unclosed\n---\nbody\n');
+        // A link to a real document: before task-253 it was dropped with no report.
+        symlinkSync('bug-222-real.md', join(root, 'docs/04_memory/bugs/bug-901-link.md'));
+        commitAll(root, 'seed unreadable-document fixture');
+
+        const result = filterRelevantMemoryDocuments(root, MEMORY_YAML, element);
+
+        expect(result.documents.map((doc) => doc.id)).toEqual(['bug-222-real']);
+        expect(result.diagnostics).toEqual([
+          {
+            code: W_MEMORY_UNREADABLE,
+            severity: 'warning',
+            file: 'docs/04_memory/bugs/bug-900-bad.md',
+            path: '',
+            message: expect.stringMatching(/^unreadable frontmatter in docs\/04_memory\/bugs\/bug-900-bad\.md: \S/),
+          },
+          memoryUnreadableDiagnostic('docs/04_memory/bugs/bug-901-link.md', 'a symbolic link is not read as a Memory document'),
+        ]);
+      } finally {
+        removeTempDir(root);
+      }
+    });
+
+    it('reports no diagnostics when every document is readable', () => {
+      const root = makeTempGitRepo();
+      try {
+        writeFixtureFile(root, 'docs/04_memory/bugs/bug-222-real.md', BUG_DOC('bug-222-real'));
+        commitAll(root, 'seed readable fixture');
+
+        const result = filterRelevantMemoryDocuments(root, MEMORY_YAML, element);
+
+        expect(result.documents.map((doc) => doc.id)).toEqual(['bug-222-real']);
+        expect(result.diagnostics).toEqual([]);
       } finally {
         removeTempDir(root);
       }
