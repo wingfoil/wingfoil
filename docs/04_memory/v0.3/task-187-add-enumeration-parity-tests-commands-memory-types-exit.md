@@ -2,7 +2,7 @@
 id: "task-187-add-enumeration-parity-tests-commands-memory-types-exit"
 type: task
 title: "Add enumeration parity tests for commands, Memory types, exit codes and MCP surfaces"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "medium"
