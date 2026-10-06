@@ -57,7 +57,7 @@ function marks(text: string, name: string): boolean {
  * a phase list, so a word there names no phase (review fix F1).
  */
 function chains(label: string, name: string): boolean {
-  const chained = label.match(/(?<=→\s*)[a-z][a-z0-9-]*|[a-z][a-z0-9-]*(?=\s*(?:\(opt\.\))?\s*→)/g) ?? [];
+  const chained: readonly string[] = label.match(/(?<=→\s*)[a-z][a-z0-9-]*|[a-z][a-z0-9-]*(?=\s*(?:\(opt\.\))?\s*→)/g) ?? [];
   return chained.includes(name);
 }
 
