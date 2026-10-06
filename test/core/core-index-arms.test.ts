@@ -46,6 +46,9 @@ describe('src/core/index.ts arms with no other test (task-189, bug-161)', () => 
   it('loadOrError: a loader failure that is not an expected domain failure propagates as a throw', async () => {
     // A directory where `dna.yaml` should be: the read fails with EISDIR, which is neither a
     // `ValidationError` nor ENOENT, so no `CoreResult` describes it.
+    // Pins CURRENT behaviour pending bug-251 (`readConfigFile` maps only ENOENT; the CLI then prints a
+    // bare `EISDIR` naming no file). bug-251's fix must move this test's trigger to another non-domain
+    // error: the arm itself (`refusal === null` -> throw) stays correct for programmer errors.
     rmSync(join(repo, '.wingfoil', 'dna.yaml'));
     mkdirSync(join(repo, '.wingfoil', 'dna.yaml'));
 
@@ -77,6 +80,8 @@ describe('src/core/index.ts arms with no other test (task-189, bug-161)', () => 
   it('memory add: a failure that is neither a StorageError nor a ValidationError propagates as a throw', async () => {
     // A pre-commit hook that refuses the commit: `commitPaths` throws git's own error (by design,
     // src/storage/commit.ts), which `memory add` does not translate into a domain refusal.
+    // Pins CURRENT behaviour pending bug-217 (owned by task-210), which may turn this raw git throw
+    // into a `CoreResult`; that fix must then find this arm another trigger or re-justify it.
     const hook = join(repo, '.git', 'hooks', 'pre-commit');
     writeFileSync(hook, '#!/bin/sh\nexit 1\n', 'utf-8');
     chmodSync(hook, 0o755);
