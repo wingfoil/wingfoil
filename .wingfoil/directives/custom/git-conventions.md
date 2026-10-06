@@ -6,13 +6,13 @@ kind: custom
 title: "Git conventions: branches, sync, tags, subjects, identity, id allocation, attribution"
 tags: [custom, git, process, security]
 scope: global
-version: "1.0"
+version: "1.1"
 ref: [P3.5, P3.7, REQ-SEC-01, REQ-SYS-08]
 ---
 
 # Directive — Git conventions
 
-**Date:** 2026-10-05
+**Date:** 2026-10-06
 
 Custom WingFoil rule. Applies to **every role**: whoever writes a commit or names a branch in this
 repository — a `developer` on a task branch, the `approver` whose `approve` commit an agent types, a
@@ -23,6 +23,8 @@ Ratified as `dl-119-a-git-conventions-directive` (`ready`), which gathers rules 
 directive is where they are met; each decision-log is where its rule is argued, and stays `ready`:
 
 - `dl-024-git-branch-tag-conventions` — branches and the version tag (§1, §3);
+- `dl-152-ratify-the-intake-branch-prefix-and-the-commits-made-directly-on-main-and-settle-the-design-versus-qa-and-docs-overlap-in-git-conventions-section-1`
+  — the `intake/` prefix, the operations made directly on `main`, and which phase prefix wins (§1);
 - `dl-035-task-branch-sync-with-main` — staying current with `main` (§2);
 - `dl-054-submit-commit-subject-bracket` — the `wf()` subject bracket (§4);
 - `dl-094-one-author-identity-per-act` — whose identity an act carries (§5);
@@ -36,11 +38,11 @@ Do not re-open a choice here — if you believe a rule is wrong for your case, f
 do not deviate. The general commit bullet of `code-quality` (conventional messages, one state change
 per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules on top of it.
 
-## 1. Branches (`dl-024` rule 1, as amended by `dl-119` Q1 (b))
+## 1. Branches (`dl-024` rule 1, as amended by `dl-119` Q1 (b) and `dl-152`)
 
 - A `dev-loop` task runs on `task/<task-id>`, cut from `main`. A workflow phase runs on its own branch.
   Both merge into `main` with `git merge --no-ff`, never fast-forward, so every unit of work stays one
-  revertible merge commit.
+  revertible merge commit. The one exception is `intake/` (below), which reaches `main` by fast-forward.
 - A branch name starts with one prefix from this **closed list**; an unlisted prefix is a deviation
   to fix, not a new convention:
 
@@ -53,6 +55,21 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
   | `docs/`    | a documentation-only change                                                      |
   | `qa/`      | a quality gate (e.g. the `e2e-smoke` phase)                                      |
   | `backlog/` | scheduling work (filing or re-planning tasks and bugs)                          |
+  | `intake/`  | a capture-only session that files Memory elements, never code; reaches `main` by **fast-forward**, because each of its commits is already one `wf()` operation and a merge commit adds nothing to them (`dl-152` Q2 (a)) |
+
+- **The specific prefix wins** (`dl-152` Q3 (i)). A quality-gate phase (`e2e-smoke`) runs on `qa/`, a
+  documentation phase (`user-docs`) on `docs/`, and every other lifecycle phase on `design/`, although
+  `e2e-smoke` and `user-docs` are `release-cycle` phases too.
+- **Commits made directly on `main`** (`dl-152` Q1 (A)). This **closed list** of operations is
+  committed on `main` itself, with no branch and no merge commit, because each is one `wf()` commit
+  whose subject, `Approver:` and `Reason:` already are the record (P1.7, P1.10):
+  1. the approver's `approve` and `reject` commits;
+  2. the triage mechanics that follow them: `assign`, `sync`, and the `amend` of the tasks that
+     absorb an approved change;
+  3. the `dev-loop` coordinator's `docs(plans)` bookkeeping of a plan already merged.
+
+  Everything else — captures, new elements, content, code — goes through a branch. A commit on
+  `main` outside this list is a deviation to fix, not a new convention.
 
 ## 2. Staying current (`dl-035`)
 
@@ -110,8 +127,21 @@ rule; this clause only keeps a test identity from leaking into it.
   `approve` and `reject` commits**: those record the approver's decision and carry no AI co-author even
   when an agent typed them (`dna.yaml` declares every agent `approval_authority: false`).
 - **Which name.** The `Co-Authored-By:` trailer names the agent entry declared in `dna.yaml`
-  `team.agents` (its `name:`), so the name stays stable across model upgrades. A separate `AI-Model:`
-  trailer, in the same trailer paragraph, carries the model identifier the running agent reports.
+  `team.agents`, written as its `name` and `email`: `Co-Authored-By: <name> <<email>>` (`bug-240`). When
+  `team.agents` declares more than one entry, it is the entry the running agent executes as. The name
+  stays stable across model upgrades. A separate `AI-Model:` trailer, in the same trailer paragraph,
+  carries the model identifier the running agent reports. A commit an agent co-authors ends with this
+  trailer paragraph, the values read from `dna.yaml` (`wingfoil dna show team`), never typed
+  from memory:
+
+  ```
+  Co-Authored-By: <team.agents name> <<team.agents email>>
+  AI-Model: <the model identifier the running agent reports>
+  ```
+- **Who applies it.** Hand sessions — an agent writing commits with `git commit` — apply this section
+  from `task-256-give-team.agents-an-email-and-state-the-intake-prefix-and-on-main-operations-in-git-conventions`'s
+  merge on, in place of the model-named trailer they wrote before. A commit written by `wingfoil`
+  keeps its `WingFoil-Version:` trailer and takes these two in the same paragraph (§8).
 - **Past commits are not rewritten.** The policy applies from `dl-117`'s ratification. `agent execute`
   carries this rule to the agents it launches (approver ruling R20, `release-planning-rel-v0.3-plan`).
 
