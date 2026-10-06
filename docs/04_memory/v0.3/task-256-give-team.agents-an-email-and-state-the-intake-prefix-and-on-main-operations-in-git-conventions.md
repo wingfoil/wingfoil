@@ -153,3 +153,15 @@ and vendors. The agent `name` `WingFoil Agent` is also an authoring choice for t
 - AC3 met: `npm test` green; `directives list` loads the directive (command above).
 - Same-class check in touched files: `docs/cli-reference.md` lists every `team.agents` field again;
   `docs/user-guide.md:163`'s `dna add team.agents` example stays valid (email optional).
+
+### review fixes (2026-10-06, independent review: approve with fixes)
+
+- **F3** — `src/dna/path.ts` TSDoc still listed `AI agent (Claude/Cursor/etc.)` as a name this repository's
+  `dna.yaml` carries; it now reads "until task-256".
+- **F4** — the `.wingfoil/dna.yaml` comment above `roles:` named `dna show --section team`, which does not exist
+  (`node dist/cli.js dna show --section team` → `error: unknown option '--section'`); it now names
+  `dna show team`. Same branch, so no second `version:` bump (stays 1.6).
+- **F1 held** — the email value and whether §7 applies before an email is confirmed are the approver's decision;
+  nothing changed there.
+- Re-run: `npx jest test/dna test/lint/version-bump.test.ts` → 12 suites, 272 passed; `npm run lint` → exit 0;
+  `node scripts/check-governance.cjs --base 1abafadd` → exit 0 (see the final report).
