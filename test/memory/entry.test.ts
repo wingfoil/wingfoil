@@ -16,10 +16,12 @@
  * (`wingfoil memory add`) concern, not this library primitive's (see the task's Execution Notes for
  * the scoping decision).
  */
-import { existsSync } from 'fs';
-import { join, relative } from 'path';
+import { relative } from 'path';
 
+import { initWingfoilProject } from '../../src/core/init';
+import { loadMemoryYaml } from '../../src/core/loaders';
 import { StorageError, initStorage } from '../../src/storage';
+import { resolveConfinedMemoryPath } from '../../src/storage/memory-path';
 import { writeMemoryEntry } from '../../src/memory';
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 
@@ -32,16 +34,41 @@ describe('P1.11 scenario 1 — Memory store is ready after initialization', () =
   let repo: string;
   afterEach(() => removeTempDir(repo));
 
-  it('.wingfoil/memory/ exists and is tracked by git right after init', () => {
+  // task-259 (bug-256): the store is the set of paths `memory.yaml` declares, resolved against the
+  // project root (task-017, task-172) — not a `.wingfoil/memory/` directory, which holds only the type
+  // templates. "An initialized WingFoil project" is what `wingfoil init` builds (`initWingfoilProject`).
+  it('memory.yaml declares a path inside the project root for every type, and the templates are tracked', () => {
     repo = makeTempGitRepo();
-    initStorage(repo);
+    const init = initWingfoilProject(repo, 'Scrum');
+    expect(init.ok).toBe(true);
 
-    // Already guaranteed by task-018's initStorage/scaffoldFiles (test/storage/git-backed-storage.test.ts
-    // proves the full skeleton); this is the thin P1.11-scoped assertion over the same contract, not a
-    // duplicate of that suite.
-    expect(existsSync(join(repo, '.wingfoil', 'memory'))).toBe(true);
-    const tracked = git(repo, ['ls-files', '.wingfoil/memory']).trim();
-    expect(tracked.length).toBeGreaterThan(0);
+    const memoryYaml = loadMemoryYaml(repo);
+    const types = Object.entries(memoryYaml.types).sort(([a], [b]) => a.localeCompare(b));
+    expect(types.length).toBeGreaterThan(0);
+
+    const templates: string[] = [];
+    for (const [name, entry] of types) {
+      // Every `{token}` of the pattern takes a probe value: resolving it must stay inside the root.
+      const probe: Record<string, string> = {};
+      for (const [, token] of entry.path.matchAll(/\{([^}]+)\}/g)) probe[token] = 'probe';
+      const target = resolveConfinedMemoryPath(repo, entry.path, probe);
+      expect(relative(repo, target).startsWith('..')).toBe(false);
+      // No document is declared under the configuration folder.
+      expect(`${name}: ${entry.path}`).not.toMatch(/: \.wingfoil\//);
+      // `template.file` is relative to `.wingfoil/` (spec-001; `committedScaffoldFrontmatter` reads it so).
+      if (entry.template) templates.push(`.wingfoil/${entry.template.file}`);
+    }
+
+    // Both are tracked by git: memory.yaml, and each declared template under .wingfoil/memory/templates/.
+    expect(git(repo, ['ls-files', '.wingfoil/memory.yaml']).trim()).toBe('.wingfoil/memory.yaml');
+    expect(templates.length).toBeGreaterThan(0);
+    for (const file of templates) {
+      expect(file.startsWith('.wingfoil/memory/templates/')).toBe(true);
+      expect(git(repo, ['ls-files', file]).trim()).toBe(file);
+    }
+    // .wingfoil/memory/ holds the templates and nothing else.
+    const underMemory = git(repo, ['ls-files', '.wingfoil/memory/']).trim().split('\n');
+    expect(underMemory.every((path) => path.startsWith('.wingfoil/memory/templates/'))).toBe(true);
   });
 });
 
