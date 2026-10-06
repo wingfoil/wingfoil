@@ -55,3 +55,7 @@ Two wall-clock p95 budgets remain in the parallel pass, where `task-141` saw one
 Captured on 2026-10-05 by `bug-ingest-rel-v0.3-w1b5-review-findings-plan`, from the independent reviews of wave 1
 batch B5 (`dev-loop-rel-v0.3-plan`), reproduced against `main` at `1127a0fd` with the code build
 (`npm run -s build && node dist/cli.js`).
+- **Added at the W2 B4b triage (2026-10-06).** Since `task-248` the SARD makes "an otherwise idle machine" part of
+  REQ-PERF-02's measurement conditions (`docs/02_requirements/03_sard/02_performance-nfr.md`): the in-process
+  REQ-PERF-02/04 budgets that still run in `npm test`'s parallel pass (`npx jest --listTests | grep -i latency`)
+  measure under a condition the requirement now excludes, which strengthens the case for moving both suites.
