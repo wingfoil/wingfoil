@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.16"
+version: "1.17"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -699,3 +699,36 @@ commit, right after the task's transition and on the task branch:
     task, or `task-187`'s parity gates fail on an unlisted finding.
   - **Fix share:** 6 open fix tasks of 59 open (10.2%), under the threshold.
   - **Next:** B4b (`184`, `186`, `189`, `254`, `248`; `189` last, `248` alone on an idle machine).
+- **2026-10-06 — W2 B4a follow-ups triaged and `dl-158` ruled.**
+  - Triage as proposed (`bug-ingest-rel-v0.3-w2b4a-review-findings-plan`, `done`): new `task-259` (`bug-256`,
+    `bug-257`) entered B4b; `bug-258`/`bug-259` → `task-239`; `bug-263` → `task-195`; `bug-260`, `262`, `264`–`267`
+    → v0.4. Handover notes on `task-195`, `218`, `239`; `bug-227` gains the B4a CHANGELOG items.
+  - `dl-158` ratified (Rule 1 (a), Rule 2 (ii)); its Actions 2–3 became `task-260` (wave 3, absorbing `bug-261`,
+    moved from v0.4 to v0.3), and a handover on `task-218` (the signing entry's selection in `spec-016`).
+  - From B4b on, the coordinator's kit writes git-conventions §7's trailers (`Co-Authored-By: Claude
+    <noreply@anthropic.com>`, `AI-Model: claude-opus-5-5`) on every hand commit.
+- **2026-10-06 — batch B4b `done`** (`task-186`, `259`, `254`, `184`, `189`, `248`); **wave 2 complete (34/34).**
+  - **Review.** Every task had an independent review: "approve" for `254`, "approve with fixes" for the rest, every
+    fix applied in-task. `184` had two focused re-reviews: its "writes nothing" snapshot was first applied by title
+    wording, then to every refusal with a file check (59 → over 220 sites; the scan ends at 4 stated exclusions).
+    `248`'s guard was hardened after the review's mutations dropped a budget unnoticed.
+  - **Approver rulings:** no shared version bump: `task-259` merged `main` after `task-186` and moved
+    `06_features.md` to 1.10 and `08_mvp-canvas.md` to 1.8 (1.9 and 1.7 being `186`'s), re-syncing the vision
+    index. Confirmed at the gate: every developer decision the approve Reasons name.
+  - **Amendments: 4** — `254`: spec-015; `184`: spec-008 (a new dated Revision note; the earlier note kept as
+    written), task-093 (also gains `kind: "feature"`, required since `dl-133`); `248`: spec-015.
+  - **Bugs closed:** bug-045, bug-096, bug-161, bug-194, bug-212, bug-235, bug-256, bug-257.
+  - **Merges,** in order 186 → 259 → 254 → 184 → 189 → 248; one conflict, the two spec-015 Revision notes (both
+    kept, `254`'s first).
+  - **Latency:** `task-248`'s idle run (1-minute load 1.36): floor 194 ms, totals 219/182/249 ms, marginals
+    58/21/88 ms p95, 8/8; a loaded run (load ≈ 15) failed the `memory history` total at 1,021 ms, the condition
+    `dl-146` describes.
+  - **Gates on `main`** (`f15096a2`): `test:coverage` 273 suites, 5065 tests, coverage 99.23 / 96.72 / 96.53 /
+    99.71; lint, `docs:api`, both `tsc`, `npm run typecheck`, `check:audit` (0 vulnerabilities) exit 0; e2e smoke
+    19/19.
+  - **Governance check:** `--base 02fd6102` gives 101 `wf()` commits, 0 findings.
+  - **Follow-ups:** being filed by `bug-ingest-rel-v0.3-w2b4b-review-findings-plan`; the approver triages them later.
+  - **Fix share:** 3 open fix tasks of 55 open (5.5%), under the threshold.
+  - **Wave 2 totals:** 34 tasks in five batches (B1, B2, B3, B4a, B4b): the 26 it opened with and 8 added by the
+    approver's triages during the wave (`251`, `253`–`259`). **Next:** wave 3 (`task-194` … `task-246`, `task-260`; 54 tasks), in
+    a new session; `task-252` stays in the `user-docs` phase.
