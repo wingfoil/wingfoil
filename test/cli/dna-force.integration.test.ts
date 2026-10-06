@@ -19,6 +19,7 @@ import { load } from 'js-yaml';
 
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const DNA_PATH = '.wingfoil/dna.yaml';
 
@@ -129,6 +130,7 @@ describe('`wingfoil dna` — keep dna.yaml\'s comments, or refuse the rewrite un
     // P2.1 "Error - dna.yaml cannot be edited in place".
     it('without --force: exit 1, the refusal on stderr, file and HEAD unchanged', () => {
       const before = gitOut(repo, ['rev-parse', 'HEAD']);
+      const unchanged = snapshotPersistence(repo);
       const run = wingfoil(repo, 'dna', 'add', 'paths.tests', '--value', 'test/');
 
       expect(run.status).toBe(1);
@@ -137,6 +139,7 @@ describe('`wingfoil dna` — keep dna.yaml\'s comments, or refuse the rewrite un
       expect(git(repo, ['status', '--porcelain'])).toBe('');
       expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
       expect(dnaText(repo)).toBe(flow);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     // P2.1 "Rewrite dna.yaml as a whole file with --force".

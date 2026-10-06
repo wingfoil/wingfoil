@@ -32,6 +32,7 @@ import { join } from 'node:path';
 
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_PATH = '.wingfoil/memory.yaml';
 const DNA_PATH = '.wingfoil/dna.yaml';
@@ -98,6 +99,7 @@ describe('the CLI resolves gating reads at HEAD (bug-081, bug-082)', () => {
     git(repo, ['rm', '--cached', '--quiet', '--', MEMORY_PATH]);
     git(repo, ['commit', '--quiet', '-m', 'untrack the machine, keep it on disk']);
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
 
     const run = wingfoil(repo, 'memory', 'submit', 'adr-001-probe');
 
@@ -106,6 +108,7 @@ describe('the CLI resolves gating reads at HEAD (bug-081, bug-082)', () => {
     expect(run.stderr).toContain(MEMORY_PATH);
     expect(run.stdout).toBe('');
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // AC1's bug-082 reproduction, as a test.
@@ -114,6 +117,7 @@ describe('the CLI resolves gating reads at HEAD (bug-081, bug-082)', () => {
     writeFileSync(dna, readFileSync(dna, 'utf-8').replace('  roles:\n', '  roles:\n    - name: FABRICATED-ROLE\n'), 'utf-8');
     expect(gitOut(repo, ['status', '--porcelain'])).toBe(`M ${DNA_PATH}`);
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
 
     const run = wingfoil(repo, 'directive', 'assign', '--directive', 'determinism', '--role', 'FABRICATED-ROLE');
 
@@ -122,6 +126,7 @@ describe('the CLI resolves gating reads at HEAD (bug-081, bug-082)', () => {
     expect(run.stderr).toContain(DNA_PATH);
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(gitOut(repo, ['show', `HEAD:${ROLES_PATH}`])).not.toContain('FABRICATED-ROLE');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // AC4 — the flow `dl-080` knowingly costs one extra step: edit, commit, then assign.

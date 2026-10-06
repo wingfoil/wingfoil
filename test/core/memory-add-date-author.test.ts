@@ -14,6 +14,7 @@ import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import { UsageError } from '../../src/core/usage-error';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const typeEntry = (name: string, idPattern: string): string => `  ${name}:
     path: "docs/memory/${name}/{id}.md"
@@ -110,6 +111,7 @@ describe('memory add — {date}, {author} and {n:N} (task-163; bug-158, bug-176)
     it('a GIT_AUTHOR_DATE git cannot parse fails the add (exit 1), writing nothing', async () => {
       process.env.GIT_AUTHOR_DATE = 'not a date';
       const before = gitOut(repo, ['rev-parse', 'HEAD']);
+      const unchanged = snapshotPersistence(repo);
       const result = await memoryAddFn()({ root: repo, options: { type: 'dated', title: 'x' } });
       expect(result.ok).toBe(false);
       if (result.ok) return;
@@ -117,6 +119,7 @@ describe('memory add — {date}, {author} and {n:N} (task-163; bug-158, bug-176)
       expect(exitCodeForResult(result)).toBe(1);
       expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
       expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     // Review fix 1: git re-parses a bare `<seconds> <offset>` only from 9 digits of seconds up, so
@@ -158,6 +161,7 @@ describe('memory add — {date}, {author} and {n:N} (task-163; bug-158, bug-176)
     it('a name with no [a-z0-9] character is a validation error naming the token (exit 1), writing nothing', async () => {
       process.env.GIT_AUTHOR_NAME = '李四';
       const before = gitOut(repo, ['rev-parse', 'HEAD']);
+      const unchanged = snapshotPersistence(repo);
       const result = await memoryAddFn()({ root: repo, options: { type: 'authored', title: 'x' } });
       expect(result.ok).toBe(false);
       if (result.ok) return;
@@ -165,6 +169,7 @@ describe('memory add — {date}, {author} and {n:N} (task-163; bug-158, bug-176)
       expect(result.error.message).toBe('value for token {author} is empty once the git author name "李四" is slugged');
       expect(exitCodeForResult(result)).toBe(1);
       expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 
@@ -200,8 +205,10 @@ describe('memory add — {date}, {author} and {n:N} (task-163; bug-158, bug-176)
       ],
     ])('--set %s → %s', async (set, message) => {
       const before = gitOut(repo, ['rev-parse', 'HEAD']);
+      const unchanged = snapshotPersistence(repo);
       expect(await usageError(repo, { type: 'dated', title: 'x', set: [set] })).toBe(message);
       expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 

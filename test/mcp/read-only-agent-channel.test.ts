@@ -9,10 +9,12 @@
  * registers no Tool and persists nothing across a `prompts/list` + `prompts/get` round trip. The
  * structural mechanisms already exist (task-006 registrar + task-011 resources + task-039/058 prompts);
  * this suite asserts the REQ-SEC-05 property
- * end-to-end over a real MCP `Client`. The remaining AC case — a *mutating* Tool call rejected on an
- * illegal state-machine transition, identical to the CLI — awaits a real mutating operation (task-018+;
- * `CORE_MODULES` is read-only today); the registrar's `isError` error-parity mechanism it depends on is
- * proven here with a synthetic op. See this task's Execution Notes.
+ * end-to-end over a real MCP `Client`. The AC case of a *mutating* Tool call rejected on an illegal
+ * state-machine transition, identical to the CLI, is asserted here only through the registrar's
+ * `isError` mechanism, with a synthetic op: no test calls a real `CORE_MODULES` mutating Tool into
+ * an illegal-transition refusal (task-184 recorded it as unasserted, dl-121 T1). The production
+ * server registers no Tool at all (see the last `describe`), and the registry's mutating operations
+ * are asserted below as the Tool set the operation-derived surface would advertise.
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -78,24 +80,15 @@ describe('REQ-SEC-05 — Tools is the only channel a mutation is registered unde
   });
 });
 
-describe('REQ-SEC-05 — the real surface exposes the mutating Tools today (directive.assign|create|remove, dna.add|remove|set|update, memory.add|amend|approve|deprecate|park|reject|submit — task-051/050/052/093/025/020/046/048/047/045/127/180)', () => {
-  it('the Tools write-channel is advertised, and the real registry contributes all fourteen mutating ops — `directive.assign|create|remove`, `dna.add|remove|set|update` + `memory.add|amend|approve|deprecate|park|reject|submit`', async () => {
+describe('REQ-SEC-05 — the operation-derived surface over the real CORE_MODULES registers its mutating ops as Tools', () => {
+  it('the Tools write-channel is advertised, the registry\'s `mutates: true` ops are exactly the ones listed, and the advertised Tools are exactly the listed names', async () => {
     const { client } = await connectCoreModuleSurface(CORE_MODULES, UNUSED_ROOT);
 
     // The sole write channel (Tools) is structurally present/advertised...
     expect(client.getServerCapabilities()?.tools).toBeDefined();
-    // ...and task-025 (`dna.dnaSet`), task-020 (`memory.memoryAdd`), task-050
-    // (`directive.directiveCreate`), task-051 (`directive.directiveAssign`), task-052
-    // (`directive.directiveRemove`) + task-045 (`memory.memorySubmit`) are among the mutating core
-    // ops, so they — and only the mutating ones — are registered under Tools. task-021's
-    // `memory.memorySearch` is `mutates: false` (a read, per spec-006 §3), so it registers as a
-    // Resource, not a Tool, and does not widen this list.
+    // ...and only the `mutates: true` ops are registered under Tools: a read-only op such as
+    // `memory.memorySearch` (spec-006 §3) registers as a Resource and does not widen this list.
     const mutatingOps = CORE_MODULES.flatMap((module) => Object.values(module.operations)).filter((op) => op.mutates);
-    // task-045-memory-submit adds `memory.memorySubmit` (P1.6); task-051-directive-assign adds
-    // `directive.directiveAssign` (P3.2); task-046-memory-approve and task-047-memory-reject add
-    // `memory.memoryApprove` (P1.7) and `memory.memoryReject` (P1.8), the approver-gated Tools;
-    // task-048-memory-deprecate adds `memory.memoryDeprecate` (P1.9), the retire verb;
-    // task-052-directive-remove adds `directive.directiveRemove` (P3.3), the first deleting Tool.
     expect(mutatingOps.map((op) => op.name).sort()).toEqual([
       'directiveAssign',
       'directiveCreate',

@@ -25,6 +25,7 @@ import type { CoreFn } from '../../src/core/registry';
 import { UsageError } from '../../src/core/usage-error';
 import { deriveMcpToolName } from '../../src/mcp/registrar';
 import { makeTempGitRepo, removeTempDir, writeFixtureFile, commitAll } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /** A comment-bearing fixture: the provenance annotations are part of what a write must not destroy. */
 const DNA_FIXTURE = `# Project DNA (P2.4)
@@ -243,11 +244,13 @@ describe('dna add | remove | update — all four path shapes, end to end (AC3, A
   it('a no-op update writes nothing and makes no commit (idempotent success, as `dna set`)', async () => {
     const before = head(repo);
     const text = dnaText(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await dnaOp('dnaUpdate')({ root: repo, positionals: ['project.license'], options: { value: 'MIT' } });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.commit).toBeUndefined();
     expect(head(repo)).toBe(before);
     expect(dnaText(repo)).toBe(text);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 
@@ -269,6 +272,7 @@ describe('refusals — exit 1 for a path or an entry the document/schema does no
     ['an entry that is not there', 'team.members.nobody.roles', { value: 'developer' }],
   ])('%s is refused at exit 1, naming the path, leaving the file and HEAD untouched', async (_case, path, options) => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const text = dnaText(repo);
     const result = await dnaOp('dnaAdd')({ root: repo, positionals: [path], options });
     expect(result.ok).toBe(false);
@@ -277,6 +281,7 @@ describe('refusals — exit 1 for a path or an entry the document/schema does no
     expect(result.error.message).toContain(path);
     expect(head(repo)).toBe(before);
     expect(dnaText(repo)).toBe(text);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a duplicate entry name is refused rather than written (AC4 at the verb)', async () => {

@@ -18,6 +18,7 @@ import {
   initWingfoilProject,
 } from '../../src/core/init';
 import { makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const NOT_A_GIT_REPO = "not a git repository: run 'git init' first";
 
@@ -71,6 +72,7 @@ describe('initWingfoilProject — already initialized (P5.1.1 AC (c))', () => {
     const dnaBefore = readFileSync(dnaPath, 'utf-8');
     const shaBefore = headSha(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = initWingfoilProject(repo, 'Kanban');
 
     expect(result).toMatchObject({
@@ -88,6 +90,7 @@ describe('initWingfoilProject — already initialized (P5.1.1 AC (c))', () => {
     // Nothing overwritten: the Scrum dna.yaml and HEAD are untouched.
     expect(readFileSync(dnaPath, 'utf-8')).toBe(dnaBefore);
     expect(headSha(repo)).toBe(shaBefore);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 
@@ -106,10 +109,12 @@ describe('initWingfoilProject — guards inherited from the write path', () => {
   it('rejects an unknown template (defense-in-depth VALIDATION) and writes nothing', () => {
     const repo = makeTempGitRepo();
     try {
+      const unchanged = snapshotPersistence(repo);
       const result = initWingfoilProject(repo, 'NopeTemplate');
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error.code).toBe('VALIDATION');
       expect(existsSync(join(repo, '.wingfoil'))).toBe(false);
+      assertPersistenceUnchanged(repo, unchanged);
     } finally {
       removeTempDir(repo);
     }
@@ -193,6 +198,7 @@ describe('initWingfoilProject — REQ-SEC-10 unrecognized built-in kind fails cl
         { name: 'mystery', kind: 'plugin', content: 'anything\n' },
       ] as unknown as readonly BuiltinTemplateSource[];
 
+      const unchanged = snapshotPersistence(repo);
       let result: ReturnType<typeof initWingfoilProject> | undefined;
       expect(() => {
         result = initWingfoilProject(repo, 'Scrum', alien);
@@ -202,6 +208,7 @@ describe('initWingfoilProject — REQ-SEC-10 unrecognized built-in kind fails cl
       expect(result && !result.ok ? result.error.message : '').toContain('mystery');
       expect(exitCodeForResult(result!)).toBe(1);
       expect(existsSync(join(repo, '.wingfoil'))).toBe(false);
+      assertPersistenceUnchanged(repo, unchanged);
     } finally {
       removeTempDir(repo);
     }

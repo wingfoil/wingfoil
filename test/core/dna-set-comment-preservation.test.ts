@@ -22,6 +22,7 @@ import { join } from 'node:path';
 import { CORE_MODULES } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import { makeTempGitRepo, removeTempDir, writeFixtureFile, commitAll } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /** WingFoil's own dogfooding Project DNA — the realistic comment-rich fixture bug-004 describes. */
 const REAL_DNA = readFileSync(
@@ -147,9 +148,11 @@ describe('dna.dnaSet — bug-004: a comment-rich dna.yaml survives a set (task-0
 
   it('a set to the current value stays an idempotent no-op on the comment-rich file (byte-identical, no commit)', async () => {
     const before = dnaText(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await dnaSetFn()({ root: repo, positionals: ['project.name'], options: { value: 'WingFoil' } });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.commit).toBeUndefined();
     expect(dnaText(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });

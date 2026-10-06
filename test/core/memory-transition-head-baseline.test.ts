@@ -26,6 +26,7 @@ import { CORE_MODULES } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const TEST_EMAIL = 'wf-test@example.invalid';
 const TEST_NAME = 'WingFoil Test';
@@ -157,6 +158,7 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     writeFileSync(path, edited);
     const before = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await run('memorySubmit', repo, 'bug-001');
 
     expect(result.ok).toBe(false);
@@ -166,6 +168,7 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     expect(result.error.message).toContain('illegal transition open -> ');
     expect(head(repo)).toBe(before);
     expect(readFileSync(path, 'utf-8')).toBe(edited);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC3: submit commits the working-tree content, with the state decided from HEAD (an uncommitted status edit does not decide `from`)', async () => {
@@ -205,6 +208,7 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     commitAll(repo, 'task-002 at pending');
     writeFixtureFile(repo, 'docs/memory/v0.1/task-002.md', taskDoc('task-002', 'draft'));
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await run('memorySubmit', repo, 'task-002');
 
@@ -213,6 +217,7 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     expect(result.error.code).toBe('INVALID_TRANSITION');
     expect(result.error.message).toContain('illegal transition pending -> ');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // Resolved at HEAD, the document is a regular file; the working tree swapped it for a link out of
@@ -230,6 +235,7 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
         unlinkSync(join(repo, path));
         symlinkSync(target, join(repo, path));
         const before = head(repo);
+        const unchanged = snapshotPersistence(repo);
 
         const result = await run(verb, repo, id);
 
@@ -239,6 +245,7 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
         expect(result.error.message).toContain(path);
         expect(readFileSync(target, 'utf-8')).toBe(planted);
         expect(head(repo)).toBe(before);
+        assertPersistenceUnchanged(repo, unchanged);
       } finally {
         removeTempDir(outside);
       }
@@ -251,9 +258,11 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     ['a staged rename (git mv)', ['mv', 'docs/memory/bugs/bug-001.md', 'docs/memory/bugs/bug-001-renamed.md']],
   ])('review: after %s, the refusal names a restore command that works', async (_label, args) => {
     gitOut(repo, args);
+    const unchanged = snapshotPersistence(repo);
     const result = await run('memoryApprove', repo, 'bug-001');
     expect(result.ok).toBe(false);
     if (result.ok) return;
+    assertPersistenceUnchanged(repo, unchanged);
     const hint = 'git restore --source=HEAD --staged --worktree -- docs/memory/bugs/bug-001.md';
     expect(result.error.message).toContain(hint);
     gitOut(repo, hint.split(' ').slice(1));
@@ -265,6 +274,7 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     unlinkSync(join(repo, 'docs/memory/bugs/bug-001.md'));
     symlinkSync(join(repo, 'no-such-target.md'), join(repo, 'docs/memory/bugs/bug-001.md'));
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await run('memorySubmit', repo, 'bug-001');
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -272,6 +282,7 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     expect(result.error.message).toContain('symbolic link');
     expect(result.error.message).not.toContain('deleted in the working tree');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // Review fix 5 (task-247), amended by task-171 (bug-031): a malformed document committed at HEAD,
@@ -293,6 +304,7 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     writeFixtureFile(repo, 'docs/memory/bugs/bug-000.md', '---\nid: [unclosed\n---\n');
     commitAll(repo, 'a malformed document');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await run('memorySubmit', repo, 'bug-000');
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -301,11 +313,13 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     expect(result.error.message.startsWith('document not found: bug-000')).toBe(true);
     expect(result.error.message).toContain('HEAD:docs/memory/bugs/bug-000.md');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it.each(VERBS)('AC3: %s on a document HEAD holds but the working tree deleted is not "document not found"', async (verb) => {
     unlinkSync(join(repo, 'docs/memory/bugs/bug-001.md'));
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await run(verb, repo, 'bug-001');
 
@@ -317,6 +331,7 @@ describe('task-247 — a transition decides from the status committed at HEAD (b
     expect(result.error.message).toContain('deleted in the working tree');
     expect(head(repo)).toBe(before);
     expect(existsSync(join(repo, 'docs/memory/bugs/bug-001.md'))).toBe(false);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 
@@ -346,6 +361,7 @@ describe('task-247 — a document with no commit at HEAD is refused by every tra
     writeFixtureFile(repo, 'docs/memory/bugs/bug-009.md', content);
     const before = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await run(verb, repo, 'bug-009');
 
     expect(result.ok).toBe(false);
@@ -355,12 +371,14 @@ describe('task-247 — a document with no commit at HEAD is refused by every tra
     expect(result.error.message).toContain('docs/memory/bugs/bug-009.md');
     expect(head(repo)).toBe(before);
     expect(readFileSync(join(repo, 'docs/memory/bugs/bug-009.md'), 'utf-8')).toBe(content);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC2: a hand-made document that is staged but not committed is refused the same way', async () => {
     writeFixtureFile(repo, 'docs/memory/bugs/bug-009.md', bugDoc('bug-009', 'draft'));
     gitOut(repo, ['add', 'docs/memory/bugs/bug-009.md']);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await run('memorySubmit', repo, 'bug-009');
 
@@ -369,6 +387,7 @@ describe('task-247 — a document with no commit at HEAD is refused by every tra
     expect(exitCodeForResult(result)).toBe(1);
     expect(result.error.message).toContain('memory add');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('an unparsable working-tree document elsewhere cannot change the refusal: the explaining scan is best-effort', async () => {
@@ -385,6 +404,7 @@ describe('task-247 — a document with no commit at HEAD is refused by every tra
     commitAll(repo, 'bug-001');
     writeFixtureFile(repo, 'docs/memory/bugs/bug-001.md', bugDoc('bug-002', 'draft'));
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await run('memorySubmit', repo, 'bug-002');
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -392,6 +412,7 @@ describe('task-247 — a document with no commit at HEAD is refused by every tra
     expect(result.error.message).toContain("frontmatter field 'id'");
     expect(result.error.message).toContain("'bug-001'");
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('an id that no commit and no working-tree document carries keeps the P1.6 sc.3 message', async () => {

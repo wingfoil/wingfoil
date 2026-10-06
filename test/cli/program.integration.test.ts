@@ -61,6 +61,7 @@ import { renderCustomDirective } from '../../src/directives/create';
 import { makeTempGitRepo, removeTempDir, writeFixtureFile, commitAll } from '../storage/helpers/git-fixture';
 import { distBuildStamp, distStampTrailer } from './helpers/dist-stamp';
 import { CLI_FIXTURE_ROOT, DIST_DIR, runCliHarness, type SpawnedRun } from './helpers/spawn-cli';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 
 /** Spawn the real, compiled CLI wiring against a given project root and capture exit code/stdout/stderr. */
@@ -297,19 +298,23 @@ paths:
 
     it('refuses a path no schema declares at exit 1, writing and committing nothing (bug-084, task-093)', () => {
       const before = readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8');
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'dna', 'set', 'tech_stack.cli.framework', '--value', 'Commander');
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('tech_stack.cli.framework');
       expect(readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8')).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('an invalid dotted key path exits 2 with the exact BDD message, leaving the file unchanged (AC(c))', () => {
       const before = readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8');
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'dna', 'set', '..language', '--value', 'python');
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("error: invalid key path: '..language'\n");
       expect(result.stdout).toBe('');
       expect(readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8')).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 
@@ -385,10 +390,12 @@ paths:
 
     it('refuses a field no schema declares at exit 1, naming it, and commits nothing', () => {
       const before = readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8');
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'dna', 'add', 'tech_stack.cli', '--value', 'Commander');
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('tech_stack.cli');
       expect(readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8')).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('a missing <path> is a usage error at exit 2, with the usage as the hint (spec-008 §4, §5, §9; task-179)', () => {
@@ -403,12 +410,14 @@ paths:
     // that names neither the extra word nor the new grammar.
     it('the old `dna set <key> <value>` spelling is refused at exit 2, naming the new grammar', () => {
       const before = readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8');
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'dna', 'set', 'project.license', 'MIT');
       expect(result.status).toBe(2);
       expect(result.stderr).toBe(
         'error: wingfoil dna set takes one positional <path>; the value travels in --value (got 2 positionals)\n',
       );
       expect(readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8')).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it("`--help` shows the positional and states --value's two meanings rather than leaving them inferred (AC6)", () => {
@@ -622,6 +631,7 @@ types:
     });
 
     it('sc.2 `memory submit task-200` (approved) exits 1 with "illegal transition approved -> (none) for type \'task\'", state unchanged', () => {
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'memory', 'submit', 'task-200');
       expect(result.status).toBe(1);
       // The contract line is the first line, byte-exact; since task-130 (`dl-055` option 1) the engine's
@@ -631,6 +641,7 @@ types:
           '  docs/memory/task/task-200.md: illegal `submit` from "approved": a `waiting` state — its forward edge fires only via a Workflow action, not `submit`\n',
       );
       expect(readFileSync(join(repo, 'docs/memory/task/task-200.md'), 'utf-8')).toContain('status: approved');
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('sc.3 `memory submit task-999` exits 1 with "document not found: task-999"', () => {
@@ -708,19 +719,23 @@ paths:
     it('sc.2 `memory approve task-101` without `--reason` exits 2 and leaves the state unchanged', () => {
       seedApproveRepo('approver');
       const before = execFileSync('git', ['-C', approveRepo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
+      const unchanged = snapshotPersistence(approveRepo);
       const result = runCliInRoot(approveRepo, 'memory', 'approve', 'task-101');
       expect(result.status).toBe(2);
       expect(result.stderr).toBe('error: missing required argument: --reason\n');
       expect(readFileSync(join(approveRepo, 'docs/memory/task/task-101.md'), 'utf-8')).toContain('status: pending');
       expect(execFileSync('git', ['-C', approveRepo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim()).toBe(before);
+      assertPersistenceUnchanged(approveRepo, unchanged);
     });
 
     it('sc.3 a caller holding no approver role exits 1 with the REQ-SEC-03 message, state unchanged', () => {
       seedApproveRepo('reviewer');
+      const unchanged = snapshotPersistence(approveRepo);
       const result = runCliInRoot(approveRepo, 'memory', 'approve', 'task-101', '--reason', 'ok');
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("error: user not authorized to approve type 'task'\n");
       expect(readFileSync(join(approveRepo, 'docs/memory/task/task-101.md'), 'utf-8')).toContain('status: pending');
+      assertPersistenceUnchanged(approveRepo, unchanged);
     });
   });
 
@@ -786,27 +801,33 @@ paths:
     });
 
     it('sc.2 `memory reject task-200` on a document in no gate state exits 1, state unchanged', () => {
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'memory', 'reject', 'task-200', '--reason', 'x');
       expect(result.status).toBe(1);
       // dl-032's contract message; `<to>` is `(none)`: `reject` has no edge from `draft` (task-181).
       // Contract line first (task-130 appends the indented `dl-032` detail line after it).
       expect(result.stderr).toMatch(/^error: illegal transition draft -> \(none\) for type 'task'\n {2}docs\/memory\/task\/task-200\.md: illegal `reject` from "draft": .+\n$/);
       expect(readFileSync(join(repo, 'docs/memory/task/task-200.md'), 'utf-8')).toContain('status: draft');
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('sc.3 `memory reject task-101` without `--reason` exits 2 (REQ-SEC-04), state unchanged', () => {
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'memory', 'reject', 'task-101');
       expect(result.status).toBe(2);
       expect(result.stderr).toBe('error: missing required argument: --reason\n');
       expect(readFileSync(join(repo, 'docs/memory/task/task-101.md'), 'utf-8')).toContain('status: pending');
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('REQ-SEC-03: a git identity holding no `approver` role exits 1, state unchanged', () => {
       execFileSync('git', ['-C', repo, 'config', 'user.email', 'ray@example.invalid'], { encoding: 'utf-8' });
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'memory', 'reject', 'task-101', '--reason', 'x');
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("error: user not authorized to approve type 'task'\n");
       expect(readFileSync(join(repo, 'docs/memory/task/task-101.md'), 'utf-8')).toContain('status: pending');
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 
@@ -859,10 +880,12 @@ types:
     });
 
     it('sc.3 `memory deprecate decision-88` (already deprecated) exits 1, state unchanged', () => {
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'memory', 'deprecate', 'decision-88', '--reason', 'x');
       expect(result.status).toBe(1);
       expect(result.stderr).toBe('error: document already deprecated: decision-88\n');
       expect(readFileSync(join(repo, 'docs/memory/decisions/decision-88.md'), 'utf-8')).toBe(doc('decision-88', 'deprecated'));
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 
@@ -903,11 +926,13 @@ types:
       const created = join(repo, '.wingfoil', 'directives', 'custom', 'no-direct-db-access.md');
       const before = readFileSync(created, 'utf-8');
 
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'directive', 'create', '--name', 'no-direct-db-access');
       expect(result.status).toBe(1);
       expect(result.stderr).toBe('error: directive already exists: no-direct-db-access\n');
       expect(result.stdout).toBe('');
       expect(readFileSync(created, 'utf-8')).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it("an invalid name exits 2 with the exact BDD message and creates no file (BDD \"Error - invalid directive name\")", () => {
@@ -984,8 +1009,10 @@ types:
       expect(runCliInRoot(repo, 'directive', 'assign', '--directive', 'testing', '--role', 'developer').status).toBe(0);
       const head = (): string => execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
       const before = head();
+      const unchanged = snapshotPersistence(repo);
       expect(runCliInRoot(repo, 'directive', 'assign', '--directive', 'testing', '--role', 'developer').status).toBe(0);
       expect(head()).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     // task-056-role-based-directive-assignment (P3.7, US-4-06) — the SAME verb, `--directive` widened
@@ -1012,11 +1039,13 @@ types:
     it('P3.7 Sc.3: an unknown id anywhere in the list exits 1, names it, and persists nothing', () => {
       const head = (): string => execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
       const before = head();
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'directive', 'assign', '--directive', 'testing,ghost', '--role', 'developer');
       expect(result.status).toBe(1);
       expect(result.stderr).toBe('error: unknown directive: ghost\n');
       expect(result.stdout).toBe('');
       expect(head()).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('P3.7: the success payload carries `directives` as a list under --format json', () => {
@@ -1069,19 +1098,23 @@ types:
 
     it('a directive still assigned to a role exits 1 with the exact BDD message (BDD Sc.2)', () => {
       expect(runCliInRoot(repo, 'directive', 'assign', '--directive', 'legacy-rule', '--role', 'developer').status).toBe(0);
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'directive', 'remove', 'legacy-rule');
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("error: cannot remove 'legacy-rule': still assigned to role 'developer'\n");
       expect(result.stdout).toBe('');
       expect(existsSync(join(repo, CUSTOM))).toBe(true);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it("a built-in directive exits 1 with REQ-SEC-07's exact message (BDD Sc.3)", () => {
+      const unchanged = snapshotPersistence(repo);
       const result = runCliInRoot(repo, 'directive', 'remove', 'testing');
       expect(result.status).toBe(1);
       expect(result.stderr).toBe('error: built-in directives cannot be removed\n');
       expect(result.stdout).toBe('');
       expect(existsSync(join(repo, '.wingfoil', 'directives', 'built-in', 'testing.md'))).toBe(true);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('a missing <name> exits 2 (usage error, spec-008 §5)', () => {

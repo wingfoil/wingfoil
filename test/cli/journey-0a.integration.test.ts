@@ -28,6 +28,7 @@ import { load as yamlLoad } from 'js-yaml';
 
 import { makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { DIST_DIR, runCliHarness, type SpawnedRun } from './helpers/spawn-cli';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /** Spawn the real, compiled CLI wiring against a given project root (a fresh throwaway git repo here,
  *  never this repository's own `.wingfoil/` — same rule the manual walkthrough follows). */
@@ -143,9 +144,11 @@ describe('Journey 0a (v0.1-scoped slice) — real CLI, fresh throwaway project (
     // Until task-093 this was a documented dead end: the write failed with the schema re-validation's
     // `E_VALIDATION … expected array, received string`, which says nothing about how to write the
     // field, and no other command in the surface could write it either (bug-083).
+    const unchanged = snapshotPersistence(repo);
     const viaSet = runCliInRoot(repo, 'dna', 'set', 'paths.sources', '--value', 'src');
     expect(viaSet.status).toBe(1);
     expect(viaSet.stderr).toContain('dna add|remove|update');
+    assertPersistenceUnchanged(repo, unchanged);
 
     const viaAdd = runCliInRoot(repo, 'dna', 'add', 'paths.sources', '--value', 'src');
     expect(viaAdd.status).toBe(0);

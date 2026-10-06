@@ -18,6 +18,7 @@ import { CORE_MODULES, loadDnaYaml } from '../../src/core';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
 
@@ -85,6 +86,7 @@ describe('task-138 — the DNA declarations spec-016 needs', () => {
 
     it('an adapter name outside the id class is refused at exit 1, leaving the file and HEAD untouched', async () => {
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const text = dnaText(repo);
       const result = await operation('dna', 'dnaUpdate').fn({
         root: repo,
@@ -97,6 +99,7 @@ describe('task-138 — the DNA declarations spec-016 needs', () => {
       expect(result.error.message).toContain('team.agents.0.adapter');
       expect(head(repo)).toBe(before);
       expect(dnaText(repo)).toBe(text);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('a document carrying a non-string adapter does not load', () => {
@@ -124,6 +127,7 @@ describe('task-138 — the DNA declarations spec-016 needs', () => {
       const first = await operation('dna', 'dnaAdd').fn({ root: repo, positionals: ['paths.runs'], options: { value: 'docs/runs/' } });
       expect(first.ok).toBe(true);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const second = await operation('dna', 'dnaAdd').fn({ root: repo, positionals: ['paths.runs'], options: { value: 'var/runs/' } });
       expect(second.ok).toBe(false);
@@ -131,6 +135,7 @@ describe('task-138 — the DNA declarations spec-016 needs', () => {
       expect(exitCodeForResult(second)).toBe(1);
       expect(second.error.message).toContain('paths.runs');
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('a document declaring two run-log directories does not load, and the error names paths.runs', () => {

@@ -22,6 +22,7 @@ import { CORE_MODULES } from '../../src/core';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 defaults:
@@ -133,12 +134,14 @@ describe('task-132 review — the identity check refuses an author with no commi
   it.each(CASES)('%s exits 1 with the REQ-SEC-01 message, HEAD unmoved and the working tree clean', async (_label, module, name, params) => {
     const before = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
 
+    const unchanged = snapshotPersistence(repo);
     const result = await operation(module, name)({ root: repo, ...params });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION', message: 'git identity not configured (user.name/user.email)' } });
     expect(exitCodeForResult(result)).toBe(1);
     expect(execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim()).toBe(before);
     expect(execFileSync('git', ['-C', repo, 'status', '--porcelain'], { encoding: 'utf-8' })).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('succeeds once a committer resolves (GIT_COMMITTER_*), authored as the GIT_AUTHOR_* identity', async () => {

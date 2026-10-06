@@ -33,6 +33,7 @@ import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const TYPE_DIR = 'docs/memory/note';
 
@@ -136,9 +137,11 @@ describe('memory add — a symlinked target is refused before the write (bug-120
      */
     it('creates no commit', async () => {
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       await addIgnoringThrow(repo);
       expect(head(repo)).toBe(before);
       expect(log(repo)).not.toContain(`add ${TARGET_ID}`);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     /** AC2/AC3: the refusal precedes the write, through a link `existsSync` cannot see. */
@@ -179,9 +182,11 @@ describe('memory add — a symlinked target is refused before the write (bug-120
      */
     it('leaves the linked file byte-identical and creates no commit', async () => {
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       await addIgnoringThrow(repo);
       expect(readFileSync(linkTarget, 'utf-8')).toBe(planted);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     /**

@@ -26,6 +26,7 @@ import { amendReservedFields } from '../../src/core/memory-amend';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const TEST_EMAIL = 'wf-test@example.invalid';
 const TEST_NAME = 'WingFoil Test';
@@ -200,6 +201,7 @@ describe('(red-first) memory amend reads the committed template with memory add\
     const path = pathOf('task-004-pending-absent');
     writeFixtureFile(repo, path, readFileSync(join(repo, path), 'utf-8').replace('Original body.', 'Corrected body.'));
     const head = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
     const result = (await op('memoryAmend')({ root: repo, positional: 'task-004-pending-absent', options: { reason: 'Correct the body.' } })) as Result;
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -207,6 +209,7 @@ describe('(red-first) memory amend reads the committed template with memory add\
     expect(result.error.code).toBe('VALIDATION');
     expect(result.error.message).toBe(add.error.message);
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(head);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 

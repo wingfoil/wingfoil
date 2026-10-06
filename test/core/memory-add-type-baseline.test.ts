@@ -40,6 +40,7 @@ import * as loaders from '../../src/core/loaders';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML_PATH = '.wingfoil/memory.yaml';
 const SCAFFOLD_PATH = '.wingfoil/memory/templates/adr.md';
@@ -139,6 +140,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     writeFixtureFile(repo, '.wingfoil/memory/templates/fabricated.md', COMMITTED_SCAFFOLD);
     const before = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await add(repo, 'fabricated-type', 'Probe');
 
     expect(result.ok).toBe(false);
@@ -151,6 +153,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     // Nothing committed, and no element file created anywhere.
     expect(head(repo)).toBe(before);
     expect(existsSync(join(repo, 'docs/memory/fabricated'))).toBe(false);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // D4: the second sentence appears ONLY because the working tree and HEAD actually disagree.
@@ -234,6 +237,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     commitAll(repo, 'registry only — the scaffold is deliberately left untracked');
     writeFixtureFile(repo, SCAFFOLD_PATH, COMMITTED_SCAFFOLD);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await add(repo, 'adr', 'Probe');
 
@@ -244,6 +248,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     expect(result.error.message).toContain(SCAFFOLD_PATH);
     expect(result.error.message).toContain('is in no commit');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // AC4 — fail-closed, half one: nothing committed to read. Today the working-tree copy simply serves.
@@ -254,6 +259,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     writeFixtureFile(repo, MEMORY_YAML_PATH, MEMORY_YAML);
     writeFixtureFile(repo, SCAFFOLD_PATH, COMMITTED_SCAFFOLD);
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await add(repo, 'adr', 'Probe');
 
@@ -264,6 +270,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     expect(result.error.message).toContain('cannot resolve the memory type registry');
     expect(result.error.message).toContain('is not committed at HEAD');
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // AC4 — fail-closed, half two: a committed registry that does not validate, while the working-tree
@@ -340,6 +347,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     const NOTE_X = 'docs/memory/note/note-x.md';
     writeFixtureFile(repo, NOTE_X, 'a hand-started draft, never committed\n');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await add(repo, 'note', 'X');
 
@@ -349,6 +357,7 @@ describe('memory add resolves its type registry, path and template at HEAD (bug-
     expect(result.error.message).toContain(NOTE_X);
     expect(head(repo)).toBe(before);
     expect(readFileSync(join(repo, NOTE_X), 'utf-8')).toBe('a hand-started draft, never committed\n');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC5: adding a NEW element still works while ANOTHER element carries uncommitted modifications', async () => {

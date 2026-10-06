@@ -507,8 +507,9 @@ global wins silently, which is the whole reason for the prefix:
 - A name §2 **does** declare is consumed by the global instead and is never reported. Today the overlap
   is exactly one name, `version` (`TechEntry` declares it), and because `--version` is an *action* flag
   the result is a silent no-op: `wingfoil dna add stacks.technologies --value Go --version 1.22` prints
-  the CLI version and exits `0` having written nothing — §1's precedence rule and `spec-005` §1's exit
-  code, both working as specified. A global that merely carries a value (`--format`) or sets a boolean
+  the CLI version and exits `0` having written nothing — §1's placement rule (a global may appear
+  anywhere after `wingfoil`), §2's `--version` precedence and `spec-005` §1's exit code, all three
+  working as specified. A global that merely carries a value (`--format`) or sets a boolean
   (`--verbose`) would instead swallow the value and let the command run with that field absent.
 
 The second outcome is what the prefix removes **by construction**, for every present and future name on
@@ -1090,3 +1091,13 @@ word beside `directive assign`'s, and the `dna.yaml` warning beside the `roles.y
 `--force` row for `dna set`, `dna add`, `dna update` and `dna remove`. The behaviour is
 `directive assign --force`'s, applied to the file `bug-019` and `bug-126` found rewritten without a
 warning. No other section changed. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-06, `task-184-bring-test-guard-prose-overclaims-line-what-asserts`) — the citation
+behind §9's second outcome (`bug-096`).** §9 credited "§1's precedence rule" for `--version` winning
+over an unprefixed entry field. §1 says only that a global may appear anywhere after `wingfoil`; the
+word *precedence* is §2's, in the `--version` row ("Takes precedence over all other flags except
+`--help`"). §9 now cites the two clauses separately. The same mis-citation stands in the second
+2026-09-24 revision note above (§9 rewritten to `dl-082`'s grammar), which says "§1 gives a global
+precedence"; that note is left as written, and is corrected here: §1 gives a global its placement and
+§2 gives `--version` its precedence. No behaviour or rule changed. Edited in place without a supersede
+or a state change (`dl-047`).

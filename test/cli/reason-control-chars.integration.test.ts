@@ -23,6 +23,7 @@ import { join } from 'path';
 
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { CLI_ENTRY, runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /** ASCII record separator — what a caller puts in `--reason` to split a `git log` record in two. */
 const RS = String.fromCharCode(0x1e);
@@ -74,7 +75,8 @@ describe('`memory history` after an approval whose reason carries framing contro
   let repo = '';
   let documentId = '';
   let refused: SpawnedRun = { status: 0, stdout: '', stderr: '' };
-  let headMoved = true;
+  /** What the shared writes-nothing check reported for the refused approve (`''`: nothing persisted). */
+  let persisted = 'not checked';
   const reason = `real reason${RS}${FORGED}${US}trailing`;
 
   beforeAll(() => {
@@ -92,9 +94,14 @@ describe('`memory history` after an approval whose reason carries framing contro
     expect([submitted.status, submitted.stderr]).toEqual([0, '']);
     const path = (JSON.parse(submitted.stdout) as { path: string }).path;
 
-    const before = git(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
     refused = wingfoil(repo, 'memory', 'approve', documentId, '--reason', reason, '--format', 'json');
-    headMoved = git(repo, ['rev-parse', 'HEAD']) !== before;
+    try {
+      assertPersistenceUnchanged(repo, unchanged);
+      persisted = '';
+    } catch (error) {
+      persisted = (error as Error).message;
+    }
 
     // The commit the verb no longer writes, written by hand exactly as it used to write it.
     const documentPath = join(repo, path);
@@ -117,7 +124,7 @@ describe('`memory history` after an approval whose reason carries framing contro
   it('the verb refuses the reason at exit 2, naming the first control character, and writes nothing (task-166)', () => {
     expect(refused.status).toBe(2);
     expect(refused.stderr).toContain('control character other than tab or newline (found U+001E)');
-    expect(headMoved).toBe(false);
+    expect(persisted).toBe('');
   });
 
   it('prints no `fatal: invalid object name` on stderr — no caller text is ever passed to git as a sha', () => {

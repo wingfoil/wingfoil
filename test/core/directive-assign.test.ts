@@ -36,6 +36,7 @@ import { deriveVerb, enumerateOperations } from '../../src/core/registry';
 import { UsageError } from '../../src/core/usage-error';
 import { deriveMcpToolName } from '../../src/mcp/registrar';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const ROLES = '.wingfoil/roles.yaml';
 
@@ -188,6 +189,7 @@ describe('CORE_MODULES directive.directiveAssign — P3.2 scenarios (initialized
   // BDD Scenario 2: "Error - assigning to a role not defined in DNA".
   it('Sc.2: an undefined role exits 1 with the exact message and makes no assignment', async () => {
     const before = readRoles(repo);
+    const unchanged = snapshotPersistence(repo);
     const sha = head(repo);
     const result = await directiveAssignFn()({ root: repo, options: { directive: 'testing', role: 'wizard' } });
 
@@ -197,11 +199,13 @@ describe('CORE_MODULES directive.directiveAssign — P3.2 scenarios (initialized
     expect(exitCodeForResult(result)).toBe(1);
     expect(readRoles(repo)).toBe(before);
     expect(head(repo)).toBe(sha);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // BDD Scenario 3: "Error - assigning a non-existent directive".
   it('Sc.3: a non-existent directive exits 1 with the exact message and makes no assignment', async () => {
     const before = readRoles(repo);
+    const unchanged = snapshotPersistence(repo);
     const sha = head(repo);
     const result = await directiveAssignFn()({ root: repo, options: { directive: 'ghost', role: 'developer' } });
 
@@ -211,6 +215,7 @@ describe('CORE_MODULES directive.directiveAssign — P3.2 scenarios (initialized
     expect(exitCodeForResult(result)).toBe(1);
     expect(readRoles(repo)).toBe(before);
     expect(head(repo)).toBe(sha);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('checks the role before the directive when both are unknown (deterministic first failure)', async () => {
@@ -227,6 +232,7 @@ describe('CORE_MODULES directive.directiveAssign — P3.2 scenarios (initialized
     const bytes = readRoles(repo);
     const sha = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const again = await directiveAssignFn()({ root: repo, options: { directive: 'testing', role: 'developer' } });
     expect(again.ok).toBe(true);
     if (!again.ok) return;
@@ -240,6 +246,7 @@ describe('CORE_MODULES directive.directiveAssign — P3.2 scenarios (initialized
     expect(readRoles(repo)).toBe(bytes);
     expect(head(repo)).toBe(sha);
     expect((loadRolesYaml(repo).assignments.developer ?? []).filter((id) => id === 'testing')).toHaveLength(1);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // AC7 — dl-029: a role defined in DNA with no `assignments` entry yet.
@@ -260,33 +267,39 @@ describe('CORE_MODULES directive.directiveAssign — P3.2 scenarios (initialized
     [{}, 'missing required argument: --directive'],
   ])('AC9: options %p is a usage error (exit 2) and writes nothing', async (options, reason) => {
     const before = readRoles(repo);
+    const unchanged = snapshotPersistence(repo);
     const thrown = await thrownBy(directiveAssignFn()({ root: repo, options }));
     expect(thrown).toBeInstanceOf(UsageError);
     expect(exitCodeForThrow(thrown)).toEqual({ reason, exitCode: 2 });
     expect(readRoles(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a roles.yaml that is not valid YAML is a VALIDATION error (exit 1), nothing written', async () => {
     writeFixtureFile(repo, ROLES, 'assignments:\n  developer: [unclosed\n');
     commitAll(repo, 'fixture: unparseable roles.yaml');
+    const unchanged = snapshotPersistence(repo);
     const result = await directiveAssignFn()({ root: repo, options: { directive: 'testing', role: 'developer' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('VALIDATION');
     expect(exitCodeForResult(result)).toBe(1);
     expect(readRoles(repo)).toBe('assignments:\n  developer: [unclosed\n');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a schema-invalid roles.yaml is a VALIDATION error (exit 1), nothing written or committed', async () => {
     writeFixtureFile(repo, ROLES, 'assignments:\n  developer: not-a-list\n');
     commitAll(repo, 'fixture: break roles.yaml');
     const sha = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await directiveAssignFn()({ root: repo, options: { directive: 'testing', role: 'developer' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('VALIDATION');
     expect(readRoles(repo)).toBe('assignments:\n  developer: not-a-list\n');
     expect(head(repo)).toBe(sha);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // task-179 (bug-245 class, independent review F5): the refusal names roles.yaml from the project root,
@@ -374,6 +387,7 @@ describe('CORE_MODULES directive.directiveAssign — P3.7 scenarios (multi-direc
     const bytes = readRoles(repo);
     const sha = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const again = await directiveAssignFn()({
       root: repo,
       options: { directive: 'testing,code-quality', role: 'developer' },
@@ -387,6 +401,7 @@ describe('CORE_MODULES directive.directiveAssign — P3.7 scenarios (multi-direc
     const listed = loadRolesYaml(repo).assignments.developer ?? [];
     expect(listed.filter((id) => id === 'testing')).toHaveLength(1);
     expect(listed.filter((id) => id === 'code-quality')).toHaveLength(1);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('Sc.2: a PARTIALLY overlapping list appends only the ids not already bound, leaving the existing ones in place', async () => {
@@ -445,6 +460,7 @@ describe('CORE_MODULES directive.directiveAssign — P3.7 scenarios (multi-direc
   // BDD Scenario 3: "Error - the assignment set contains an unknown directive".
   it('Sc.3: one unknown id in the list persists NO partial assignment — exit 1, message names the unknown id', async () => {
     const before = readRoles(repo);
+    const unchanged = snapshotPersistence(repo);
     const sha = head(repo);
     const result = await directiveAssignFn()({
       root: repo,
@@ -459,6 +475,7 @@ describe('CORE_MODULES directive.directiveAssign — P3.7 scenarios (multi-direc
     expect(readRoles(repo)).toBe(before);
     expect(head(repo)).toBe(sha);
     expect(loadRolesYaml(repo).assignments.developer).toBeUndefined();
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('Sc.3: names the FIRST unknown id in argument order when several are unknown (deterministic — REQ-SYS-07)', async () => {
@@ -496,12 +513,14 @@ describe('CORE_MODULES directive.directiveAssign — P3.7 scenarios (multi-direc
     'D3: `--directive %p` contributes no ids and is a usage error (exit 2), writing nothing',
     async (directive) => {
       const before = readRoles(repo);
+      const unchanged = snapshotPersistence(repo);
       const sha = head(repo);
       const thrown = await thrownBy(directiveAssignFn()({ root: repo, options: { directive, role: 'developer' } }));
       expect(thrown).toBeInstanceOf(UsageError);
       expect(exitCodeForThrow(thrown)).toEqual({ reason: 'missing required argument: --directive', exitCode: 2 });
       expect(readRoles(repo)).toBe(before);
       expect(head(repo)).toBe(sha);
+      assertPersistenceUnchanged(repo, unchanged);
     },
   );
 
@@ -596,6 +615,7 @@ describe('CORE_MODULES directive.directiveAssign — built-in assets, missing an
     writeFixtureFile(repo, ROLES, text);
     commitAll(repo, 'fixture: flow-style roles.yaml without comments');
     const sha = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await directiveAssignFn()({ root: repo, options: { directive: 'testing', role: 'developer' } });
     expect(result.ok).toBe(false);
@@ -605,6 +625,7 @@ describe('CORE_MODULES directive.directiveAssign — built-in assets, missing an
     expect(readRoles(repo)).toBe(text);
     expect(head(repo)).toBe(sha);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // D6 — bug-019's lesson: never a silent comment loss.
@@ -613,6 +634,7 @@ describe('CORE_MODULES directive.directiveAssign — built-in assets, missing an
     writeFixtureFile(repo, ROLES, text);
     commitAll(repo, 'fixture: flow-style roles.yaml with comments');
     const sha = head(repo);
+    const unchanged = snapshotPersistence(repo);
 
     const result = await directiveAssignFn()({ root: repo, options: { directive: 'testing', role: 'developer' } });
     expect(result.ok).toBe(false);
@@ -621,6 +643,7 @@ describe('CORE_MODULES directive.directiveAssign — built-in assets, missing an
     expect(exitCodeForResult(result)).toBe(1);
     expect(readRoles(repo)).toBe(text);
     expect(head(repo)).toBe(sha);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // task-169 / dl-062 Q1 option 3: `--force` authorizes the whole-file rewrite, and the success
@@ -667,6 +690,7 @@ describe('CORE_MODULES directive.directiveAssign — built-in assets, missing an
     commitAll(repo, 'fixture: flow-style roles.yaml');
     const sha = head(repo);
 
+    const unchanged = snapshotPersistence(repo);
     const result = await directiveAssignFn()({ root: repo, options: { directive: 'code-quality', role: 'developer' }, force: true });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -674,6 +698,7 @@ describe('CORE_MODULES directive.directiveAssign — built-in assets, missing an
     expect(result.commit).toBeUndefined();
     expect(readRoles(repo)).toBe(text);
     expect(head(repo)).toBe(sha);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // REQ-SYS-07: the written bytes are a pure function of (file, role, directive).

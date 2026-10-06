@@ -38,6 +38,7 @@ import { buildProgram } from '../../src/cli/program';
 import { CORE_MODULES, dnaEntryOptionName } from '../../src/core';
 import { dnaEntryOptionNames } from '../../src/dna/path';
 import { makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /** Commander's `Command`, taken from `buildProgram`'s own return type — the package is ESM-only, so a
  * direct `import type { Command } from 'commander'` needs a resolution-mode attribute that this test
@@ -63,10 +64,13 @@ describe('the invariant: a derived option never shadows a global flag (spec-008 
     });
 
     const globals = new Set(program.options.map((option) => option.long).filter((long): long is string => Boolean(long)));
-    // `--version` is registered by `program.version()` rather than `.option()`, and `--help` by
-    // Commander itself; neither shows up in `program.options`, and both are exactly the two that
-    // TAKE AN ACTION and exit, so they are the most damaging to shadow.
-    globals.add('--version').add('--help');
+    // Measured, not assumed (task-184, bug-096): `program.version()` DOES register `--version` in
+    // `program.options`; only `--help`, which Commander adds itself, is absent. So `--version` is
+    // derived here like every other global, and `--help` is the one name added by hand. Both TAKE AN
+    // ACTION and exit, so they are the most damaging to shadow.
+    expect(globals.has('--version')).toBe(true);
+    expect(globals.has('--help')).toBe(false);
+    globals.add('--help');
     expect(globals.size).toBeGreaterThan(2);
 
     const collisions: string[] = [];
@@ -215,16 +219,17 @@ describe('the drive: every declared entry-field option lands, through the real c
       const globals = new Set(
         program.options.map((option) => option.long?.replace(/^--(no-)?/, '')).filter((name): name is string => Boolean(name)),
       );
-      // `--version` and `--help` are registered by `program.version()` / commander itself rather than
-      // by `.option()`, so they are absent from `program.options` — and they are precisely the two that
-      // take an ACTION and exit, i.e. the damaging ones.
-      globals.add('version').add('help');
+      // `version` is derived: `program.version()` registers `--version` in `program.options` (asserted
+      // by the invariant above, task-184, bug-096). Only `help` is added by hand — Commander adds
+      // `--help` itself, outside `program.options` — and both take an ACTION and exit.
+      globals.add('help');
       return dnaEntryOptionNames().filter((field) => globals.has(field));
     }
 
     it('a name no global declares is refused as an unknown option at exit 2, writing nothing', async () => {
       const shadowed = await shadowedFields();
       expect(dnaEntryOptionNames().filter((field) => !shadowed.includes(field))).toContain('category');
+      const unchanged = snapshotPersistence(repo);
       const result = runCli(['dna', 'add', 'stacks.technologies', '--value', 'Go', '--category', 'language']);
       // `2`, not the `1` this asserted before task-101-route-commander-parse-errors-through-the-exit-code-contract
       // (`bug-098`): an unknown option is a usage error under spec-005 §1, and Commander's parse errors
@@ -233,6 +238,7 @@ describe('the drive: every declared entry-field option lands, through the real c
       expect(result.status).toBe(2);
       expect(result.stderr).toContain("unknown option '--category'");
       expect((dna().stacks as unknown as { technologies: unknown[] }).technologies).toEqual([]);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('a name a global DOES declare is consumed by the global, never reported — the case the prefix removes', async () => {
@@ -242,6 +248,7 @@ describe('the drive: every declared entry-field option lands, through the real c
       expect(shadowed).toEqual(['version']);
 
       const before = readFileSync(join(repo, DNA), 'utf-8');
+      const unchanged = snapshotPersistence(repo);
       const result = runCli(['dna', 'add', 'stacks.technologies', '--value', 'Go', '--version', '1.22']);
 
       // NOT an unknown option, NOT the exit 2 an unknown option gets: the program's own `-V, --version`
@@ -252,6 +259,7 @@ describe('the drive: every declared entry-field option lands, through the real c
       // And the whole point: nothing was written, at a success exit code.
       expect(readFileSync(join(repo, DNA), 'utf-8')).toBe(before);
       expect((dna().stacks as unknown as { technologies: unknown[] }).technologies).toEqual([]);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('the SAME field under its prefixed name is written instead, which is what makes the prefix the fix', () => {

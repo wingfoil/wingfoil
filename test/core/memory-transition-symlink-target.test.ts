@@ -30,6 +30,7 @@ import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const TYPE_DIR = 'docs/memory/note';
 const DOC_PATH = `${TYPE_DIR}/note-001-planted.md`;
@@ -164,8 +165,10 @@ describe('memory transition verbs — a symlinked document is refused before the
     /** AC4: and no history is written either — pinned on `git log`, not on the exit code. */
     it('creates no commit', async () => {
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       await callIgnoringThrow();
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('refuses with a mapped CoreError at exit 1 naming the path and the symlink', async () => {

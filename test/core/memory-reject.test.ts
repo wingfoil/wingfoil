@@ -33,6 +33,7 @@ import { normalizeReason } from '../../src/memory/commit-message';
 import { splitFrontmatter } from '../../src/storage';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 defaults:
@@ -228,6 +229,7 @@ describe('CORE_MODULES memory.memoryReject — P1.8 fit criteria', () => {
 
   it('P1.8 sc.2: rejecting a document that is not in a gate state leaves it unchanged and exits 1', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const original = readFileSync(join(repo, 'docs/memory/v0.2/task-200.md'), 'utf-8');
     const result = await memoryRejectFn()({ root: repo, positional: 'task-200', options: { reason: 'x' } });
     expect(result.ok).toBe(false);
@@ -243,10 +245,12 @@ describe('CORE_MODULES memory.memoryReject — P1.8 fit criteria', () => {
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-200.md'), 'utf-8')).toBe(original);
     expect(head(repo)).toBe(before);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('P1.8 sc.3: omitting `--reason` is a usage error (exit 2, REQ-SEC-04) and the state is unchanged', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const original = readFileSync(join(repo, 'docs/memory/v0.2/task-101.md'), 'utf-8');
     for (const options of [undefined, {}, { tag: 'x' }]) {
       await expect(memoryRejectFn()({ root: repo, positional: 'task-101', options })).rejects.toBeInstanceOf(UsageError);
@@ -258,6 +262,7 @@ describe('CORE_MODULES memory.memoryReject — P1.8 fit criteria', () => {
     }
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-101.md'), 'utf-8')).toBe(original);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a missing or blank `<id>` is a usage error (exit 2) — spec-008 §5/§7', async () => {
@@ -273,6 +278,7 @@ describe('CORE_MODULES memory.memoryReject — P1.8 fit criteria', () => {
 
   it('a non-existent document exits 1 with `document not found: task-999`', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryRejectFn()({ root: repo, positional: 'task-999', options: { reason: 'x' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -280,6 +286,7 @@ describe('CORE_MODULES memory.memoryReject — P1.8 fit criteria', () => {
     expect(result.error.message).toBe('document not found: task-999');
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('REQ-SEC-03: a principal holding no `approver` role is refused (exit 1) and nothing is written', async () => {
@@ -287,6 +294,7 @@ describe('CORE_MODULES memory.memoryReject — P1.8 fit criteria', () => {
     gitOut(repo, ['config', 'user.name', 'Reviewer Ray']);
     const before = head(repo);
     const original = readFileSync(join(repo, 'docs/memory/v0.2/task-101.md'), 'utf-8');
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryRejectFn()({ root: repo, positional: 'task-101', options: { reason: 'x' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -295,6 +303,7 @@ describe('CORE_MODULES memory.memoryReject — P1.8 fit criteria', () => {
     expect(exitCodeForResult(result)).toBe(1);
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-101.md'), 'utf-8')).toBe(original);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('REQ-SEC-03: an email matching no `team.members` entry at all is refused the same way', async () => {
@@ -410,11 +419,13 @@ describe('CORE_MODULES memory.memoryReject — REQ-SEC-01 git-identity pre-fligh
   });
 
   it('refuses with the exact REQ-SEC-01 message (exit 1) before any authority check, writing nothing', async () => {
+    const unchanged = snapshotPersistence(repo);
     const result = await memoryRejectFn()({ root: repo, positional: 'task-101', options: { reason: 'x' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toBe('git identity not configured (user.name/user.email)');
     expect(exitCodeForResult(result)).toBe(1);
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-101.md'), 'utf-8')).toContain('status: pending');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });

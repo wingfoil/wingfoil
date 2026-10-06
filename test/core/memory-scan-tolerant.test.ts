@@ -19,6 +19,7 @@ import { ValidationError } from '../../src/validation';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 types:
@@ -176,11 +177,13 @@ describe('strict reads and refusal wording over unreadable documents (task-171 r
     commitAll(repo, 'commit a malformed document');
     writeFixtureFile(repo, BROKEN, doc('task-002-broken', 'draft', 'Repaired'));
     const before = git(repo, ['rev-parse', 'HEAD']).trim();
+    const unchanged = snapshotPersistence(repo);
     const result = (await op('memorySubmit')({ root: repo, positional: 'task-002-broken' })) as Result;
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe('NOT_FOUND');
     expect(result.error?.message).toContain(`${BROKEN} is not committed at HEAD`);
     expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 

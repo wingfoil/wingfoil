@@ -28,6 +28,7 @@ import { coreErr } from '../../src/core/types';
 import { UsageError } from '../../src/core/usage-error';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 types:
@@ -226,48 +227,56 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
   describe('AC2 — refusals, each before anything is written', () => {
     it('no content change → exit 1', async () => {
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await amend()({ root: repo, positional: 'spec-001', options: { reason: 'r' } });
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(exitCodeForResult(result)).toBe(1);
       expect(result.error.message).toBe(`nothing to amend: ${SPEC} carries no uncommitted change`);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('a working-tree edit that changes `status` → exit 1 naming the field', async () => {
       const edited = doc({ id: 'spec-001', type: 'tech-spec', status: 'superseded' }, 'Corrected body.\n');
       writeFixtureFile(repo, SPEC, edited);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await amend()({ root: repo, positional: 'spec-001', options: { reason: 'r' } });
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(exitCodeForResult(result)).toBe(1);
       expect(result.error.message).toContain("frontmatter field 'status'");
       expectNothingWritten(before, SPEC, edited);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('a working-tree edit that changes `id` → exit 1 naming the field (the element is renamed, not amended)', async () => {
       const edited = doc({ id: 'spec-002', type: 'tech-spec', status: 'approved' }, 'Corrected body.\n');
       writeFixtureFile(repo, SPEC, edited);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await amend()({ root: repo, positional: 'spec-002', options: { reason: 'r' } });
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(exitCodeForResult(result)).toBe(1);
       expect(result.error.message).toContain("frontmatter field 'id'");
       expectNothingWritten(before, SPEC, edited);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('a working-tree edit that changes `type` → exit 1 naming the field (a new type is a new element)', async () => {
       const edited = doc({ id: 'note-1', type: 'tech-spec', status: 'approved' }, 'Corrected body.\n');
       writeFixtureFile(repo, NOTE, edited);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await amend()({ root: repo, positional: 'note-1', options: { reason: 'r' } });
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(exitCodeForResult(result)).toBe(1);
       expect(result.error.message).toContain("frontmatter field 'type'");
       expectNothingWritten(before, NOTE, edited);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it.each([
@@ -280,12 +289,14 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
         const edited = doc({ id: 'spec-001', type: 'tech-spec', status: 'approved', ...change });
         writeFixtureFile(repo, SPEC, edited);
         const before = head(repo);
+        const unchanged = snapshotPersistence(repo);
         const result = await amend()({ root: repo, positional: 'spec-001', options: { reason: 'r' } });
         expect(result.ok).toBe(false);
         if (result.ok) return;
         expect(exitCodeForResult(result)).toBe(1);
         expect(result.error.message).toBe(`missing required field on amend: ${field}`);
         expectNothingWritten(before, SPEC, edited);
+        assertPersistenceUnchanged(repo, unchanged);
       },
     );
 
@@ -306,12 +317,14 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
       const edited = doc({ id: 'spec-001', type: 'tech-spec', status: 'approved', ...change });
       writeFixtureFile(repo, SPEC, edited);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await amend()({ root: repo, positional: 'spec-001', options: { reason: 'r' } });
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(exitCodeForResult(result)).toBe(1);
       expect(result.error.message).toBe(message);
       expectNothingWritten(before, SPEC, edited);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('review F1 — a document still in its initial state (draft) may leave a required field empty, as submit allows', async () => {
@@ -338,12 +351,14 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
         const edited = withLine(editedLine);
         writeFixtureFile(repo, SPEC, edited);
         const before = head(repo);
+        const unchanged = snapshotPersistence(repo);
         const result = await amend()({ root: repo, positional: 'spec-001', options: { reason: 'r' } });
         expect(result.ok).toBe(false);
         if (result.ok) return;
         expect(exitCodeForResult(result)).toBe(1);
         expect(result.error.message).toContain(`frontmatter field '${field}'`);
         expectNothingWritten(before, SPEC, edited);
+        assertPersistenceUnchanged(repo, unchanged);
       },
     );
 
@@ -353,12 +368,14 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
       const edited = doc({ id: 'spec-001', type: 'tech-spec', status: 'approved' }, 'Corrected body.\n');
       writeFixtureFile(repo, SPEC, edited);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await amend()({ root: repo, positional: 'spec-001', options: { reason: 'r' } });
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(exitCodeForResult(result)).toBe(1);
       expect(result.error.message).toBe("user not authorized to approve type 'tech-spec'");
       expectNothingWritten(before, SPEC, edited);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it.each([
@@ -369,12 +386,14 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
       const edited = doc({ id, type, status }, 'Corrected body.\n');
       writeFixtureFile(repo, path, edited);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await amend()({ root: repo, positional: id, options: { reason: 'r' } });
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(exitCodeForResult(result)).toBe(1);
       expect(result.error.message).toBe(`type '${type}' is not amendable: its memory.yaml entry ${why}`);
       expectNothingWritten(before, path, edited);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('amendability is read from the committed memory.yaml, not the working tree (command-baseline)', async () => {
@@ -382,9 +401,11 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
       const edited = doc({ id: 'minor-v0.1', type: 'release', status: 'released' }, 'Corrected body.\n');
       writeFixtureFile(repo, RELEASE, edited);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await amend()({ root: repo, positional: 'minor-v0.1', options: { reason: 'r' } });
       expect(result.ok).toBe(false);
       expectNothingWritten(before, RELEASE, edited);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it.each([
@@ -395,6 +416,7 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
       const edited = doc({ id: 'spec-001', type: 'tech-spec', status: 'approved' }, 'Corrected body.\n');
       writeFixtureFile(repo, SPEC, edited);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       let thrown: unknown;
       try {
         await amend()({ root: repo, positional: 'spec-001', options });
@@ -404,6 +426,7 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
       expect(thrown).toBeInstanceOf(UsageError);
       expect(exitCodeForThrow(thrown)).toEqual({ reason: message, exitCode: 2 });
       expectNothingWritten(before, SPEC, edited);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('a missing `<id>` → exit 2', async () => {
@@ -436,6 +459,7 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
       const fresh = doc({ id: 'spec-009', type: 'tech-spec', status: 'approved' });
       writeFixtureFile(repo, path, fresh);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
       const result = await amend()({ root: repo, positional: 'spec-009', options: { reason: 'r' } });
       expect(result.ok).toBe(false);
       if (result.ok) return;
@@ -443,6 +467,7 @@ describe('CORE_MODULES memory.memoryAmend — task-127 (dl-108)', () => {
       expect(result.error.message).toContain(`${path} is not committed at HEAD`);
       expect(result.error.message).toContain('memory add');
       expectNothingWritten(before, path, fresh);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     // task-247: the HEAD preamble now refuses such a document before amend's own check runs, so the

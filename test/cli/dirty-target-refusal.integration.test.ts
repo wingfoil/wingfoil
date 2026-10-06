@@ -24,6 +24,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
 const DNA = '.wingfoil/dna.yaml';
@@ -49,6 +50,7 @@ describe('CLI — a write verb refuses a dirty target at exit 1 (bug-078, spec-0
     appendFileSync(join(repo, DNA), unrelated, 'utf-8');
     const before = git(repo, ['rev-parse', 'HEAD']).trim();
 
+    const unchanged = snapshotPersistence(repo);
     const result = runCli(repo, ['dna', 'set', 'project.name', '--value', 'Renamed']);
 
     expect(result.status).toBe(1);
@@ -56,6 +58,7 @@ describe('CLI — a write verb refuses a dirty target at exit 1 (bug-078, spec-0
     expect(result.stderr).toContain('commit or stash');
     expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(before);
     expect(readFileSync(join(repo, DNA), 'utf-8')).toContain('UNRELATED UNCOMMITTED COMMENT');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('`dna set` on a clean tree still exits 0 and commits exactly its own path', () => {

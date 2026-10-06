@@ -34,6 +34,7 @@ import { join } from 'node:path';
 
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_PATH = '.wingfoil/memory.yaml';
 
@@ -93,6 +94,7 @@ describe('the CLI resolves `memory add`\'s type at HEAD (bug-085)', () => {
   it('AC1/AC3/AC6: an uncommitted type cannot produce a committed element, and the refusal exits 1', () => {
     fabricateTypeInWorkingTree(repo);
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
 
     const run = wingfoil(repo, 'memory', 'add', '--type', 'fabricated-type', '--title', 'Probe');
 
@@ -101,6 +103,7 @@ describe('the CLI resolves `memory add`\'s type at HEAD (bug-085)', () => {
     expect(run.stderr).toContain(`commit '${MEMORY_PATH}' first`);
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(existsSync(join(repo, 'docs/memory/fabricated'))).toBe(false);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   // spec-008 § 6's worked example, byte for byte, with no second sentence: nothing disagrees here.

@@ -26,6 +26,7 @@ import { exitCodeForResult, exitCodeForThrow } from '../../src/core/exit-code';
 import { UsageError } from '../../src/core/usage-error';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 defaults:
@@ -159,6 +160,7 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
     const before = head(repo);
     const path = join(repo, 'docs/memory/v0.2/task-101.md');
     const original = readFileSync(path, 'utf-8');
+    const unchanged = snapshotPersistence(repo);
     const prepared = beginMemoryTransition(repo, 'task-101', 'submit');
     expect(prepared.ok).toBe(true);
     if (!prepared.ok) return;
@@ -177,10 +179,12 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
     expect(exitCodeForResult(result)).toBe(1);
     expect(readFileSync(path, 'utf-8')).toBe(original);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('P1.6 sc.2: an illegal `submit` from `approved` leaves the state unchanged and exits 1 with the pinned message', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const original = readFileSync(join(repo, 'docs/memory/v0.2/task-200.md'), 'utf-8');
     const result = await memorySubmitFn()({ root: repo, positional: 'task-200' });
     expect(result.ok).toBe(false);
@@ -191,10 +195,12 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-200.md'), 'utf-8')).toBe(original);
     expect(head(repo)).toBe(before);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('P1.6 sc.3: a non-existent document exits 1 with `document not found: task-999`', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await memorySubmitFn()({ root: repo, positional: 'task-999' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -202,6 +208,7 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
     expect(result.error.message).toBe('document not found: task-999');
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a missing or blank `<id>` is a usage error (exit 2) — spec-008 §5/§7', async () => {
@@ -219,6 +226,7 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
     writeFixtureFile(repo, 'docs/memory/v0.2/task-102.md', taskDoc({ id: 'task-102', status: 'draft', title: '', release: '' }));
     commitAll(repo, 'seed 102');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await memorySubmitFn()({ root: repo, positional: 'task-102' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -227,6 +235,7 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-102.md'), 'utf-8')).toContain('status: draft');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('spec-010: a resubmit after a reject removes `rejection_reason` from the frontmatter', async () => {
@@ -267,6 +276,7 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
     writeFixtureFile(repo, 'docs/memory/v0.2/task-105.md', taskDoc({ id: 'task-105', status: 'shipped' }));
     commitAll(repo, 'seed 105');
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     const result = await memorySubmitFn()({ root: repo, positional: 'task-105' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -274,6 +284,7 @@ describe('CORE_MODULES memory.memorySubmit — P1.6 fit criteria', () => {
     expect(result.error.message).toBe("invalid state 'shipped' for type 'task'");
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('a document with no `status` at all is an invalid state (exit 1), reported without the text `undefined`', async () => {
@@ -364,7 +375,10 @@ Body.
   });
 
   it('AC1: bare `n/a` in a declared field is refused (exit 1) naming the field, nothing written', async () => {
-    const result = await submitWith({ pillar: 'n/a' });
+    writeFixtureFile(repo, PATH, release({ pillar: 'n/a' }));
+    commitAll(repo, 'seed');
+    const unchanged = snapshotPersistence(repo);
+    const result = await memorySubmitFn()({ root: repo, positional: 'patch-v0.9.1' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(exitCodeForResult(result)).toBe(1);
@@ -374,6 +388,7 @@ Body.
     );
     expect(gitOut(repo, ['log', '-1', '--format=%s'])).toBe('seed');
     expect(readFileSync(join(repo, PATH), 'utf-8')).toContain('status: draft');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('AC1: an undeclared required field (`kind`) holding a not-applicable value is refused (exit 1) naming the field', async () => {
@@ -468,10 +483,12 @@ describe('CORE_MODULES memory.memorySubmit — empty required list vs untouched 
     writeFixtureFile(repo, '.wingfoil/memory.yaml', config);
     writeFixtureFile(repo, PATH, fromScaffold('features: []'));
     commitAll(repo, 'seed');
+    const unchanged = snapshotPersistence(repo);
     const result = await memorySubmitFn()({ root: repo, positional: 'minor-v9.9' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toBe('missing required field on submit: features');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('re-review ruling 2: a mapping or a list in a scalar field (task kind) is missing', async () => {
@@ -550,6 +567,7 @@ describe('CORE_MODULES memory.memorySubmit — configuration with no `states` an
 
   it('still refuses an illegal verb on that machine — the fallback adds a machine, not permissiveness', async () => {
     const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
     // `approved` is the last state of the default `sequence`: no forward edge for `submit`.
     const result = await memorySubmitFn()({ root: repo, positional: 'task-2' });
     expect(result.ok).toBe(false);
@@ -557,6 +575,7 @@ describe('CORE_MODULES memory.memorySubmit — configuration with no `states` an
     expect(result.error.code).toBe('INVALID_TRANSITION');
     expect(exitCodeForResult(result)).toBe(1);
     expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 
@@ -587,11 +606,13 @@ describe('CORE_MODULES memory.memorySubmit — REQ-SEC-01 git-identity pre-fligh
   });
 
   it('refuses with the exact REQ-SEC-01 message (exit 1), writing nothing', async () => {
+    const unchanged = snapshotPersistence(repo);
     const result = await memorySubmitFn()({ root: repo, positional: 'task-101' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toBe('git identity not configured (user.name/user.email)');
     expect(exitCodeForResult(result)).toBe(1);
     expect(readFileSync(join(repo, 'docs/memory/v0.2/task-101.md'), 'utf-8')).toContain('status: draft');
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });

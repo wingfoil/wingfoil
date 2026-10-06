@@ -42,6 +42,7 @@ import { parseCommitReason, reconstructMemoryTransitions } from '../../src/memor
 import { normalizeReason } from '../../src/memory/commit-message';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { STAMP_TRAILER } from '../storage/helpers/stamp-trailer';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const TEST_NAME = 'WingFoil Test';
 const TEST_EMAIL = 'wf-test@example.invalid';
@@ -117,6 +118,7 @@ describe('dl-067 across the four transition verbs — a blank `--reason` is refu
   /** Asserts the refusal AND that it happened before any write — bug-042 F2's whole point. */
   async function expectUsageRefusal(operation: string, reason: string): Promise<UsageError> {
     let thrown: unknown;
+    const unchanged = snapshotPersistence(repo);
     try {
       await operationFn(operation)({ root: repo, positional: 'decision-12', options: { reason } });
     } catch (error) {
@@ -127,6 +129,7 @@ describe('dl-067 across the four transition verbs — a blank `--reason` is refu
     expect(head(repo)).toBe(before);
     expect(readFileSync(join(repo, docPath), 'utf-8')).toBe(onDisk);
     expect(gitOut(repo, ['status', '--porcelain'])).toBe('');
+    assertPersistenceUnchanged(repo, unchanged);
     return thrown as UsageError;
   }
 

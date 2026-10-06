@@ -17,6 +17,7 @@ import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import { prepareMemoryTransition } from '../../src/core/memory-transition';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
 types:
@@ -129,6 +130,7 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
 
   it('`submit` into a full state exits 1 and names the holder', async () => {
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
     const result = await verb('memorySubmit', repo, 'card-002');
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -139,20 +141,24 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
         "Move one of them out of 'in-progress', then retry.",
     );
     expectUnchanged(before, 'docs/memory/cards/card-002.md', doc('card-002', 'card', 'draft'));
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('`reject` into a full state is refused the same way', async () => {
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
     const result = await verb('memoryReject', repo, 'card-003', { reason: 'tests missing' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('CONFLICT');
     expect(result.error.message).toContain('held by card-001');
     expectUnchanged(before, 'docs/memory/cards/card-003.md', doc('card-003', 'card', 'in-review'));
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('`park` into a full state is refused the same way', async () => {
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
     const result = await verb('memoryPark', repo, 'task-002', { reason: 'not now' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -161,6 +167,7 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
       "WIP limit reached for 'backlog' on type 'task' (limit 1): held by task-001. Move one of them out of 'backlog', then retry.",
     );
     expectUnchanged(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('every holder is named, in path order, when more than the limit already hold the state', async () => {
@@ -246,6 +253,7 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
 
   it('`memory add` into a full initial state is refused: no commit, no file', async () => {
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const unchanged = snapshotPersistence(repo);
     const result = await operation('memoryAdd')({ root: repo, options: { type: 'slot', title: 'Second slot' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -255,5 +263,6 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
     );
     expectUnchanged(before);
     expect(existsSync(join(repo, 'docs/memory/slots/slot-002.md'))).toBe(false);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });

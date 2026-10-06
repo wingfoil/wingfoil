@@ -27,6 +27,7 @@ import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const TYPE_DIR = 'docs/memory/note';
 
@@ -139,8 +140,10 @@ describe('memory add — confinement to the project root (REQ-SEC-06, bug-117)',
      */
     it('creates no commit', async () => {
       const sha = head(repo);
+      const unchanged = snapshotPersistence(repo);
       await addIgnoringThrow(repo, 'escape probe');
       expect(head(repo)).toBe(sha);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 

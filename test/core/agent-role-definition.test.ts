@@ -24,6 +24,7 @@ import type { CoreFn } from '../../src/core/registry';
 import { applyDnaMutation } from '../../src/dna/mutate';
 import { assertRoleDefined } from '../../src/dna/roles';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const DNA_PATH = '.wingfoil/dna.yaml';
 const ROLES_PATH = '.wingfoil/roles.yaml';
@@ -126,6 +127,7 @@ describe('P5.4.1 — Agent Role Definition', () => {
     const before = gitOut(repo, ['rev-parse', 'HEAD']);
     const bytesBefore = readFileSync(join(repo, DNA_PATH), 'utf-8');
 
+    const unchanged = snapshotPersistence(repo);
     const result = await defineRole(repo, 'reviewer');
 
     expect(result.ok).toBe(false);
@@ -135,6 +137,7 @@ describe('P5.4.1 — Agent Role Definition', () => {
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(readFileSync(join(repo, DNA_PATH), 'utf-8')).toBe(bytesBefore);
     expect(loadDnaYaml(repo).team.roles.filter((entry) => entry.name === 'reviewer')).toHaveLength(1);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 
   it('Sc. 3 at the mutation layer: the refusal is the same text, and no other collection changes its message', () => {

@@ -34,6 +34,7 @@ import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 type AnyFn = CoreFn<unknown, unknown>;
 
@@ -104,6 +105,7 @@ describe('the config writers refuse a target symlinked outside the project root,
       const target = join(outside, 'dna.yaml');
       const bytes = linkFileTo(repo, DNA, target);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = (await op('dna', 'dnaSet')({
         root: repo,
@@ -115,12 +117,14 @@ describe('the config writers refuse a target symlinked outside the project root,
       expect(errorMessage(result)).toContain('symbolic link');
       expect(readFileSync(target, 'utf-8')).toBe(bytes);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('dna set — a dna.yaml linked to a file INSIDE the project is refused too: the write would follow the link', async () => {
       const target = join(repo, 'elsewhere-dna.yaml');
       const bytes = linkFileTo(repo, DNA, target);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = (await op('dna', 'dnaSet')({
         root: repo,
@@ -131,6 +135,7 @@ describe('the config writers refuse a target symlinked outside the project root,
       expectRefusal(result, DNA);
       expect(readFileSync(target, 'utf-8')).toBe(bytes);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('directive create — through a committed DANGLING link: exits 1, nothing is created outside, no commit', async () => {
@@ -138,6 +143,7 @@ describe('the config writers refuse a target symlinked outside the project root,
       symlinkSync(target, join(repo, `${CUSTOM_DIR}/delta.md`));
       commitAll(repo, 'fixture: dangling directive link');
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = (await op('directive', 'directiveCreate')({ root: repo, options: { name: 'delta' } })) as CoreResult<unknown>;
 
@@ -145,12 +151,14 @@ describe('the config writers refuse a target symlinked outside the project root,
       expect(existsSync(target)).toBe(false);
       expect(readdirSync(outside)).toEqual([]);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('directive assign — exits 1, the outside roles.yaml is byte-identical, no commit', async () => {
       const target = join(outside, 'roles.yaml');
       const bytes = linkFileTo(repo, ROLES, target);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = (await op('directive', 'directiveAssign')({
         root: repo,
@@ -161,6 +169,7 @@ describe('the config writers refuse a target symlinked outside the project root,
       expect(errorMessage(result)).toContain('symbolic link');
       expect(readFileSync(target, 'utf-8')).toBe(bytes);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 
@@ -179,6 +188,7 @@ describe('the config writers refuse a target symlinked outside the project root,
       const destination = join(outside, 'cfg');
       repo = repoWithLinkedConfig(destination);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = initWingfoilProject(repo, 'Scrum');
 
@@ -186,6 +196,7 @@ describe('the config writers refuse a target symlinked outside the project root,
       expect(errorMessage(result)).toContain('outside the project root');
       expect(readdirSync(destination)).toEqual([]);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('initWingfoilProject — inside (same class, bug-118): exits 1 before writing, no commit', () => {
@@ -196,6 +207,7 @@ describe('the config writers refuse a target symlinked outside the project root,
       mkdirSync(destination);
       symlinkSync(destination, join(repo, '.wingfoil'));
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = initWingfoilProject(repo, 'Scrum');
 
@@ -203,18 +215,21 @@ describe('the config writers refuse a target symlinked outside the project root,
       expect(errorMessage(result)).toContain('symbolic link');
       expect(readdirSync(destination)).toEqual([]);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
 
     it('initWingfoilStorage — outside: exits 1, the outside directory stays empty, no commit', () => {
       const destination = join(outside, 'cfg');
       repo = repoWithLinkedConfig(destination);
       const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
 
       const result = initWingfoilStorage(repo);
 
       expectRefusal(result, '.wingfoil/');
       expect(readdirSync(destination)).toEqual([]);
       expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
     });
   });
 });
