@@ -170,3 +170,28 @@ full during all three runs (`free -m`: 2,027 / 2,047 MB).
   total and the marginal over process start, so the 2026-10-03 revision's pending deviation is settled; a new
   dated Revision note records it, and how the suites run is unchanged."
 
+
+### review fixes (independent review: approve with fixes)
+
+- **(should-fix) Guard rule 3 could be fooled** — this supersedes the rule 3 description under *design*. The
+  reviewer's mutations of `test/cli/command-latency.test.ts` still passed: M4 `(['marginal'] as const).map(`
+  in place of the list, M1 `const ONLY = 'marginal' as const` passed as the quantity, M3 `.slice(1)` on the
+  list. Cause: comments were not stripped (the suite header names the list), and literals were checked only
+  inside the call. Fix `62f1ae41`: rule 3 reads the source without imports **and comments** (`codeOnly`);
+  requires the list iterated whole (`PROCESS_LEVEL_QUANTITIES.map(` / `.flatMap(` / `.forEach(`,
+  `it.each(PROCESS_LEVEL_QUANTITIES)`, `for (… of PROCESS_LEVEL_QUANTITIES)`, so a `.slice`/`.filter`
+  chained before the iteration fails); refuses indexing the list and any `'total'`/`'marginal'` string literal
+  anywhere in the body. The self-test gains M4, M1, M3, a `.filter`, indexing and names in comments only. The
+  doc comment states the remaining reach: a callback that ignores its element, a quantity built at run time, an
+  unused iteration. Mutations re-run on the real suite (each applied with `sed`, then
+  `npx jest test/core/latency-budget-placement.test.ts -t "rule 3"`, then `git checkout` of the file): M4 →
+  1 failed ("does not iterate … whole" + "writes a quantity as a literal"); M1 → 1 failed (literal); M3 → 1
+  failed (not iterated whole); unmutated → 2 passed.
+- **(nit) SARD evidence** `8c95abe7`: 287 ms (`memory history`, idle) and 1,028 ms (`memory search`, load ≈ 18)
+  are worst cases of different commands; the sentence now says the total p95 was "at most 287 ms idle and up
+  to 1,028 ms" under load.
+- Checks after the fixes: `npx jest test/core/latency-budget-placement.test.ts test/core/latency-helper.test.ts`
+  → 601 passed; `npm run lint` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0 (it type-checks
+  `test/cli/command-latency.test.ts` too); `test/docs/name-resolvability.test.ts` 11 passed. The latency pass
+  was not re-run (coordinator's instruction); `command-latency.test.ts` was not changed by the fixes.
+  spec-015's amendment stays uncommitted.
