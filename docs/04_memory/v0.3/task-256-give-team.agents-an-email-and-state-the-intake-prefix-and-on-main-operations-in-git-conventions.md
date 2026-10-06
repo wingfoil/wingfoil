@@ -165,3 +165,39 @@ and vendors. The agent `name` `WingFoil Agent` is also an authoring choice for t
   nothing changed there.
 - Re-run: `npx jest test/dna test/lint/version-bump.test.ts` → 12 suites, 272 passed; `npm run lint` → exit 0;
   `node scripts/check-governance.cjs --base 1abafadd` → exit 0 (see the final report).
+
+### approver ruling F1 (2026-10-06)
+
+The ruling replaces the "Decision for the approver" section above (its placeholder and options are superseded).
+
+- **Rule.** `team.agents[].email` stays optional. Default: the address the agent's vendor publishes for
+  co-authorship (Claude: `noreply@anthropic.com`). Optional alternative: a project-owned machine account, in
+  GitHub's id-qualified noreply form `<id>+<login>@users.noreply.github.com`, or any address the project owns.
+- **red** (`0dc53e8d`): `test/dna/agent-identity.test.ts` gains the accept cases (`12345678+wingfoil-agent@…`,
+  `noreply@anthropic.com`) and three refusals (bare login, mixed-case domain, non-numeric prefix).
+  `npx jest test/dna/agent-identity.test.ts` → **3 failed, 20 passed, 23 total** (exactly the three refusals).
+- **green** (`9f8691cb`): `isIdQualifiedGitHubNoreply` (`src/dna/schema.ts`; domain compared case-insensitively,
+  local part must be `<digits>+<login>`) as a second refinement on `email`, naming `team.agents.<i>.email`.
+  `.wingfoil/dna.yaml`'s agent is now `name: Claude`, `email: noreply@anthropic.com`, PLACEHOLDER marker
+  dropped, still `version: 1.6` (one bump per branch). The live-file test pins `['Claude', 'noreply@anthropic.com']`.
+- **docs** (`f9f439cd`): `git-conventions` §7 (stays 1.1) states the identity is the entry's `name <email>`, the
+  vendor-address default, the optional machine account and why the bare login form is refused, and that an
+  entry with no `email` omits `Co-Authored-By:` and keeps `AI-Model:`; hand sessions apply §7 from this task's
+  merge. `docs/user-guide.md` §4.2 gains "Agent commit identity (Unreleased (v0.3))" with both options;
+  `docs/cli-reference.md`'s `team.agents` row states the rule. `docs/agents.md` documents no commit trailers
+  (`grep -n -i 'co-authored\|trailer' docs/agents.md` → nothing), so it is unchanged.
+- **Hand-commit trailers after merge.** A commit an agent co-authors by hand (not `approve`/`reject`) ends with:
+
+  ```
+  Co-Authored-By: Claude <noreply@anthropic.com>
+  AI-Model: claude-opus-5-5
+  ```
+- **Pending amendment, updated (uncommitted).** `spec-002`'s `AgentEntry` listing and its 2026-10-06 Revision
+  note now state the rule and the refusal. Proposed `--reason`: "task-256 (bug-240, dl-117 Q2 (c), approver
+  ruling F1): team.agents entries gain an optional email, by default the address the agent's vendor publishes
+  for co-authorship or optionally a project-owned machine account, and the schema refuses a bare GitHub noreply
+  login address, an agent name holding angle brackets or a line break, and any email that is not one address."
+- **Re-run** (with the amendment in the tree): `npx jest test/dna test/directives test/docs
+  test/lint/version-bump.test.ts` → 23 suites, 423 passed; `npm run lint`, `npm run docs:api`,
+  `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` → exit 0;
+  `node scripts/check-governance.cjs --base 1abafadd` → exit 0.
