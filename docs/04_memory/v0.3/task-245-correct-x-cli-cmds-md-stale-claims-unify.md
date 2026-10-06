@@ -8,7 +8,7 @@ kind: "fix"
 priority: "medium"
 tags: ["v0.3", "process", "docs", "vision"]
 ref: ""
-bug: ["bug-099", "bug-100"]
+bug: ["bug-099", "bug-100", "bug-274"]
 depends_on: ["task-127-add-memory-amend-id-reason-approver-gated-verb", "task-138-dna-yaml-declares-team-agents-adapter-runs-paths", "task-169-make-directive-assign-refuse-whole-file-rewrite-unless", "task-180-add-memory-park-declared-returns-edge-optional-per", "task-204-reshape-workflow-list-add-workflow-show-both-answering", "task-210-add-dry-run-mutating-verb-through-commit-primitive", "task-211-add-workflow-create-workflow-remove-req-sec", "task-216-add-workflow-next-naming-next-step-verb-role", "task-217-add-workflow-start-workflow-end-recording-instance-plan", "task-220-wingfoil-agent-show-run-id-prints-recorded-run", "task-225-add-workflow-status-pending-approvals-role-routing-fallback", "task-226-add-workflow-finalize-which-records-checkpoint-or-uncarried", "task-227-link-added-element-workflow-step-memory-add-workflow", "task-228-agent-execute-launches-agent-forwards-right-signals-records", "task-235-agent-execute-next-workflow-ref-step-key-take", "task-240-wingfoil-agent-list-past-waiting-lists-recorded-runs"]
 tmpl_version: 260703
 ---
