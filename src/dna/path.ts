@@ -26,8 +26,8 @@
  * - **A path segment may be quoted, and a quoted segment is taken verbatim, dots included**
  *   (`dl-083-dotted-entry-names-in-paths`, task-099). `stacks.technologies."Node.js".version`
  *   addresses the entry named `Node.js` — a name this repository's own `dna.yaml` carries, along with
- *   `Commander.js` and `AI agent (Claude/Cursor/etc.)`, which is why the alternative of forbidding
- *   dots in `name` was declined. The grammar lives in `splitDnaPath` (`./set.ts`); this module is one
+ *   `Commander.js` (and, until task-256, `AI agent (Claude/Cursor/etc.)`), which is why the alternative
+ *   of forbidding dots in `name` was declined. The grammar lives in `splitDnaPath` (`./set.ts`); this module is one
  *   of its three callers and adds nothing to it.
  * - **The schema is the only source of truth.** The traversal reads `DnaYaml` itself (Zod v4 exposes
  *   `def.shape` / `def.element` / `def.innerType`, and does so through `.passthrough()` and

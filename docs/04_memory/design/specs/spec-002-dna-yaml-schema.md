@@ -119,7 +119,13 @@ const TeamMember = z.object({
 }).passthrough();
 
 const AgentEntry = z.object({
-  name:               z.string(),
+  // name + email are the agent's commit identity, written as `Co-Authored-By: <name> <<email>>`
+  // (git-conventions §7, dl-117 Q2 (c)): the name may not hold `<`, `>` or a line break, and the
+  // optional email is one address, local@domain.tld, with no whitespace or angle brackets — by default
+  // the address the agent's vendor publishes for co-authorship, or a project-owned machine account;
+  // on GitHub's noreply domain only the id-qualified <id>+<login>@users.noreply.github.com. [AUTHORING]
+  name:               z.string().refine(isTrailerSafeName),
+  email:              z.string().regex(AGENT_EMAIL_RE).refine(isIdQualifiedGitHubNoreply).optional(),
   executes_as:        z.array(z.string()),
   approval_authority: z.boolean().optional(),  // always false — agents never approve (REQ-SYS-08)
   // The adapter manifest that says HOW the agent is launched: its basename under
@@ -433,3 +439,18 @@ for the first entry of a collection the file did not declare (`team.agents`). Th
 edited in place, a CRLF file under any `core.autocrlf` setting included, and what is left of the
 fallback is refused unless `--force`. The schema itself is
 unchanged. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-06, `task-256`, the task that gives `team.agents` an email)
+— `team.agents[].email`, and an agent `name` that fits a trailer, per `bug-240` and `dl-117` Q2 (c).**
+`git-conventions` §7 writes the declared agent as a `Co-Authored-By: <name> <<email>>` trailer, and the
+entry had no address to write. `AgentEntry` gains an optional `[AUTHORING]` `email` (one address,
+`local@domain.tld`, no whitespace or angle brackets) and refuses a `name` holding `<`, `>` or a line
+break. Per the approver's ruling at `task-256`'s review, the email is by default the address the agent's
+vendor publishes for co-authorship (for Claude, `noreply@anthropic.com`), or optionally a machine account
+the project owns; an address on `users.noreply.github.com` must be GitHub's id-qualified form,
+`<id>+<login>@users.noreply.github.com`, and the bare `<login>@…` form is refused, because an
+unregistered login can be claimed by anyone. Every refusal names the field (`team.agents.<i>.email` /
+`.name`). Declaring `email` also makes it
+writable (`dna update team.agents.<name> --entry-email <address>`), which the *Unknown keys* section
+refused before. A document valid before stays valid unless an agent's name carries one of those three
+characters or its email is a bare GitHub noreply address. Edited in place without a supersede or a state change (`dl-047`).

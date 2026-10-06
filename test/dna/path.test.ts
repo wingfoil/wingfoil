@@ -122,6 +122,7 @@ describe('resolveDnaPath — the four path shapes dl-081 enumerates (AC3, AC5)',
     ]);
     expect(target('team.agents').entryFields).toEqual([
       { name: 'name', kind: 'string', required: true },
+      { name: 'email', kind: 'string', required: false }, // task-256, bug-240
       { name: 'executes_as', kind: 'string-list', required: true },
       { name: 'approval_authority', kind: 'boolean', required: false },
       { name: 'adapter', kind: 'string', required: false },
