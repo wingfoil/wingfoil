@@ -200,4 +200,43 @@ Gates after the fixes, with both amendments in the working tree:
 - `npm run docs:api`: exit 0;
 - `node scripts/check-governance.cjs --base 02fd6102`: exit 0, 0 findings.
 
+**Second review fix (focused re-review).** Nine more refusal tests checked only one file, a file's
+continued existence or the `dna.yaml` text, and took no snapshot. They now do:
+- `directive-create` AC3 path-traversal names;
+- `directive-remove`: the six built-ins, the alphabetically first role, the `global` binding, and the
+  missing git identity;
+- `directive-inventory-baseline` AC4;
+- the built-in refusal in `program.integration`;
+- the bare dotted name in `dna-quoted-path-segments`;
+- the schema-refused `--force` case in `dna-whole-file-rewrite`.
+
+The rule actually applied across both passes: **every test in `test/core` and `test/cli` that drives
+a write-path operation into a refusal (`ok: false`, exit `1`/`2`, a thrown `UsageError`), or into a
+no-op success, and checks any file, `HEAD` or `dna.yaml` text afterwards, takes `snapshotPersistence`
+before the operation and asserts `assertPersistenceUnchanged` after it.** Titles and wording are not
+the criterion.
+
+The scan that checks the rule is in the scratchpad, not the repo. It lists every `it`/`test` block
+that has a refusal marker (`.ok).toBe(false)`, `status).toBe(1|2)`, `toBeInstanceOf(UsageError)` or
+`rejects.toThrow`) and a file check (`readFileSync`, `existsSync`, `dnaText(`, `readRoles(`, `head(`,
+`rev-parse`, `readFile(` or `customDirectiveNames`), but no `snapshotPersistence`. The same pass also
+converted:
+- `journey-0a`'s `dna set` refusal (before its successful `dna add`);
+- `program.integration`'s "still assigned" removal;
+- `directive-create`'s missing `--name`;
+- `memory-submit`'s re-review ruling 1;
+- `memory-transition-head-baseline`'s restore-hint refusals, snapshotted before the refusal and
+  checked before the restore.
+
+**Final count: 4** remaining, all excluded with a reason:
+- `test/cli/mcp-registration.test.ts:156`, `:161`, `:167` are the `check:mcp` script, which runs on
+  no write path;
+- `test/core/memory-supersede.test.ts:315` keeps the approve commit by design (a git failure between
+  the two commits).
+
+`test/memory/entry.test.ts:96` sits outside the scan's directories and stays for task-259.
+
+After this pass, the affected suites (9 suites, 221 tests), `npm run lint` and
+`npx tsc --noEmit -p tsconfig.json` all pass.
+
 The task stays `in-review`.
