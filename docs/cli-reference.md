@@ -532,7 +532,20 @@ $ wingfoil memory submit task-001-my-first-task
 }
 ```
 
-- **Commit:** `wf(<type>): submit <id>`
+- **Commit:** `wf(<type>): submit <id>`, with no `[from → to]` bracket. Unreleased (v0.3): when the
+  document carries edits beyond the state move, the commit body says which, in one line — the
+  frontmatter fields that changed, sorted by name, then the body:
+
+  ```
+  wf(task): submit task-001-my-first-task
+
+  Carries content: frontmatter field 'title', the body
+  ```
+
+  A submit that only moves `status` (and clears `rejection_reason`) has no such line. The edits are
+  measured against the document as committed at `HEAD`, with line endings normalized, so a CRLF
+  working tree under `core.autocrlf` is not content; a change of line endings that git would commit
+  is declared as `the line endings`, after any other item.
 - **Errors:** unknown id → exit `1`; the current state is a **gate** (its forward step needs
   `memory approve`) or the end of the sequence → exit `1` (`error: illegal transition …`); a required
   field is empty → exit `1` (`error: missing required field on submit: <fields>`). Unreleased (v0.3):
@@ -597,6 +610,17 @@ exit `1`, and neither commit is written, when the named element does not exist, 
 is not `accepted` (`approved` for a `tech-spec`), or has uncommitted edits:
 `error: cannot approve adr-2-new: its supersedes: field names adr-9, which cannot be superseded: document not found: adr-9`.
 Leave `supersedes:` empty when nothing is replaced. A `superseded` element can still be deprecated.
+`supersedes:` holds the element's **full id** (`adr-2-git-backed-storage`); a short form such as
+`adr-2` is not resolved, and the approve is refused with `document not found`.
+
+Unreleased (v0.3): a project scaffolded by `wingfoil init` has neither half of the trigger. Its `adr`
+and `tech-spec` templates have no `supersedes:` field, and its `memory.yaml` gives every type the
+default machine, which has no `superseded` state; their template comments say so. To use the trigger,
+add `supersedes: ""` to the type's template and give the type its own `states:` whose `sequence` ends
+in a state listed in `gates`, then an approved state listed in `waiting`, then `superseded`. The
+trigger fires only when `memory approve` lands in that `waiting` state, and `approve` moves a document
+only out of a gate. Otherwise retire the replaced element with
+`memory deprecate`, naming its replacement in `--reason`.
 
 The approve reads `supersedes:` as committed, so it cannot be corrected in place. If it names an
 element that can no longer be superseded, for example one already `deprecated`, the approve is

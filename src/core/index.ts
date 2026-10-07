@@ -34,7 +34,7 @@ import {
   renderCustomDirective,
 } from '../directives/create';
 import { parseDirectiveIds, withAssignedDirectives } from '../directives/roles-edit';
-import { commitFailureSummary, documentExists, readDocument, StorageError, writeAndCommit, writeDocument } from '../storage';
+import { commitFailureSummary, documentExists, readDocument, readPathAtRev, storesAsBlob, StorageError, writeAndCommit, writeDocument } from '../storage';
 // Not re-exported by the `../storage` barrel, imported directly per that module's own convention
 // (same as `src/memory/entry.ts`): `memory add` needs the CONFINED target path before it writes, to
 // run task-092's absence guard on it.
@@ -56,7 +56,10 @@ import {
   renderAddDocument,
   REJECTION_REASON_FIELD,
   renderRejectDocument,
+  describeSubmitContent,
+  LINE_ENDINGS_ITEM,
   renderSubmitDocument,
+  withLineEndingsOf,
   searchMemoryDocuments,
   setFrontmatterField,
   slugifyTitle,
@@ -1227,7 +1230,9 @@ export interface MemorySubmitResult {
  *    `not-applicable value on submit: …` naming the field (`dl-124`, task-168, {@link requireRequiredFields}).
  * 6. **Edit + commit** — `status` set to the target and `rejection_reason` removed (spec-010 field-write
  *    ownership; every other byte kept), then one commit scoped to that file, subject
- *    `wf(<type>): submit <id>` with no bracket and no body (spec-004 §4.3). The rendered document is
+ *    `wf(<type>): submit <id>` with no bracket (spec-004 §4.3, `dl-054`) and, when the author's edits
+ *    ride along, one body line `Carries content: …` naming them (`describeSubmitContent`; task-209,
+ *    `dl-106` W1 (a), `spec-008` §2); a pure transition has no body. The rendered document is
  *    re-parsed first (`commitMemoryTransition`'s post-condition: `status` is the target, no
  *    `rejection_reason`, nothing else changed); a failure is `VALIDATION` (exit 1) with nothing written. No `--reason`: spec-008 §2
  *    requires it only on the approval gates (`dl-027`).
@@ -1246,8 +1251,24 @@ const memorySubmitFn: CoreFn<unknown, MemorySubmitResult> = async (params) => {
   const fieldsFilled = requireRequiredFields(prepared.value.memoryYaml, type, frontmatter, 'submit');
   if (!fieldsFilled.ok) return fieldsFilled;
 
-  const message = formatMemoryCommitMessage({ type, op: 'submit', ids: [id] });
+  // The subject stays plain (`dl-054`, ruling R20); the body declares the content the commit carries
+  // beyond the state move, measured against the document committed at the sha the transition was
+  // decided at (task-209, `dl-106` W1 (a)). A pure transition gets no body line.
   const rendered = renderSubmitDocument(content, to);
+  const committedContent = readPathAtRev(root, prepared.value.sha, path);
+  const described = describeSubmitContent(committedContent, content, to);
+  // `describeSubmitContent` compares line-ending-normalized text; whether the line endings change the
+  // blob is git's answer, after its own filters (`core.autocrlf`, `.gitattributes`; review F1). It is
+  // asked whatever else changed (re-review 1): against the rendered committed copy when nothing else
+  // did, otherwise against this rendering written in the committed document's line endings.
+  let lineEndingsChanged = false;
+  if (committedContent !== null) {
+    const baseline =
+      described.length === 0 ? renderSubmitDocument(committedContent, to) : withLineEndingsOf(rendered, committedContent);
+    lineEndingsChanged = !storesAsBlob(root, path, rendered, baseline);
+  }
+  const carries = lineEndingsChanged ? [...described, LINE_ENDINGS_ITEM] : described;
+  const message = formatMemoryCommitMessage({ type, op: 'submit', ids: [id], carries });
   // `carries-content`: submit is the ONE verb entitled to bring the author's body and required fields
   // into its commit (spec-010's field-write ownership row), so it is not guarded against a modified
   // working tree and its commit need not differ from HEAD~1 by `status` alone (task-088, bug-076 AC4).

@@ -7,8 +7,14 @@ context: ""            # optional — short label for the context, e.g. "retrosp
 release: ""            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
-tmpl_version: 260703   # Orignal template version
+tmpl_version: 261006   # Orignal template version
 ---
+
+<!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
+     `--tags` or `--set` value). Fill the required frontmatter fields and replace these placeholder
+     comments yourself; `wingfoil memory submit` then checks the required fields, moves `status`
+     forward and commits the document as you left it, naming in the commit body the content it
+     carries. -->
 
 ## Context
 

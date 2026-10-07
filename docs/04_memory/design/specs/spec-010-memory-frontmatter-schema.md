@@ -89,11 +89,14 @@ tmpl_version: 260703   # Orignal template version
 ## <body sections, template placeholder comments>
 ```
 
-`memory.add` resolves `id` from `"{auto}"`, sets `type`/`status`/`tmpl_version`, and otherwise
-copies the scaffold verbatim — the body stays as template placeholder comments, with no content
-written yet at this step. `memory.submit` fills `title` and all
-other required fields and replaces every placeholder comment with real content, moving `status` to
-the type's post-submit state.
+`memory.add` sets `id` (generated from the type's `id_pattern`, replacing the scaffold's placeholder),
+`title` (from `--title`), `status` (the head of the type's machine) and any `--tags` or `--set`
+value, and otherwise copies the scaffold verbatim: `type` and `tmpl_version` keep the scaffold's
+values, and the body stays as template placeholder comments, with no content written yet at this
+step. The author then fills the other required fields and replaces the placeholder comments by hand;
+`memory.submit` writes none of that. It checks the required fields,
+moves `status` to the type's post-submit state, and commits the document as the author left it,
+declaring in the commit body the content it carries (`spec-008` §2; `dl-106` W1 (a), `bug-146`).
 
 ### No document-version counter, no in-frontmatter audit array
 
@@ -124,8 +127,8 @@ grounds for the departure:
 
 | Operation           | Fields it may change                                                        |
 |----------------------|-------------------------------------------------------------------------------|
-| `memory.add`         | `id` (from placeholder), `type`, `status` (the head of the type's machine; `draft` for every type declared here), `tmpl_version`, any field the specific add action pins (e.g. `version` for a `release-line`); everything else stays at template defaults |
-| `memory.submit`      | `title`, all other required type-specific fields, `status` (→ the type's post-submit state), body content, and clears `rejection_reason` if present (removes the key) |
+| `memory.add`         | `id` (from placeholder), `title` (from `--title`), `status` (the head of the type's machine; `draft` for every type declared here), `tags` (when `--tags` is given), any field the specific add action pins (`--set`, e.g. `version` for a `release-line`); everything else, `type` and `tmpl_version` included, stays as the scaffold has it |
+| `memory.submit`      | `title`, all other required type-specific fields, `status` (→ the type's post-submit state), body content, and clears `rejection_reason` if present (removes the key). The verb itself writes only `status` and `rejection_reason`; the other fields and the body are the author's uncommitted edits, which the commit carries and its body declares (`Carries content: …`, `spec-008` §2; `dl-106` W1 (a)) |
 | `memory.approve`     | `status` only (frontmatter); approver identity + reason live in the commit message, not frontmatter. When it fires the `supersedes:` trigger, the superseded element's `status` (→ `superseded`) changes too, in a `finalize` commit of its own (below) |
 | `memory.reject`      | `status` (frontmatter) and `rejection_reason` (set to the `--reason` text); approver identity + reason also live in the commit message per P1.7 — the frontmatter copy is a convenience, not a replacement |
 | `memory.deprecate`   | `status: deprecated` — for every type, `adr`/`tech-spec` included (`spec-001`'s implicit wildcard edge; never `superseded`) |
@@ -294,3 +297,14 @@ ownership row says the same; the rule itself is unchanged. `memory park` (`dl-11
 `status` writers and gets an ownership row: `status` only. Edited in place
 without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-180`'s
 review.
+
+**Revision (2026-10-06, `task-209-declare-submit-commit-what-content-carries-make-templates`) —
+what `memory.add` and `memory.submit` write, and what submit declares.** `dl-106` W1 (a), Action 1;
+`bug-146`. "Document template shape" said `memory.add` sets `type`/`tmpl_version`, and `memory.submit`
+fills the required fields and replaces every placeholder comment. Neither was true: `add` sets `id`,
+`title`, `status` and any `--tags`/`--set` value and leaves `type` and `tmpl_version` as the scaffold
+has them (`renderAddDocument`, `src/memory/add.ts`), and the author fills the fields and the body,
+which the submit commits. The paragraph and the `memory.add` ownership row now say so (the row had listed `type` and
+`tmpl_version` among the fields `add` may change), and the `memory.submit` ownership row says which of its fields the verb writes and which ride in from the
+author, declared in the commit body (`spec-008` §2). The rows now describe what the code does; no behaviour changes. Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-209`'s review.

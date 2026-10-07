@@ -4,12 +4,18 @@ type: adr
 title: ""              # REQUIRED — e.g. "Git-backed storage as single source of truth"
 status: draft          # auto-set by wingfoil
 sard_ref: ""           # REQUIRED — REQ-* code or feature ID, e.g. "REQ-SYS-01"
-supersedes: ""         # optional — id of the ADR this one replaces, e.g. "adr-002"
+supersedes: ""         # optional — the full id of the ADR this one replaces, e.g. "adr-002-modular-monolith-dual-interface"; a short form is not resolved
 release: ""            # optional — implementation release this ADR is assigned to (stamped by release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
-tmpl_version: 260703   # Orignal template version
+tmpl_version: 261006   # Orignal template version
 ---
+
+<!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
+     `--tags` or `--set` value). Fill the required frontmatter fields and replace these placeholder
+     comments yourself; `wingfoil memory submit` then checks the required fields, moves `status`
+     forward and commits the document as you left it, naming in the commit body the content it
+     carries. -->
 
 ## Context
 

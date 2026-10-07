@@ -342,11 +342,41 @@ export interface MemoryCommitMessageInput {
    * read back.
    */
   readonly reason?: string;
+  /**
+   * When non-empty, a `Carries content: <item>, <item>` body line naming the content the commit
+   * carries besides its state move — `memory submit`'s declaration (task-209, `dl-106` W1 (a)), the
+   * items from `describeSubmitContent` (`./submit`). Written only on a commit with no `Approver:` or
+   * `Reason:` body; its key holds a space, so no trailer reader takes it for a trailer.
+   */
+  readonly carries?: readonly string[];
+}
+
+/** The key of the content declaration line; not trailer-shaped (a space in the token), on purpose. */
+const CARRIES_KEY = 'Carries content:';
+
+/**
+ * One content-declaration item made safe for a single body line: every character
+ * {@link firstControlCharacter} would refuse in a reason, plus tab and newline, and the comma that
+ * separates items, is written as the text `\u{XXXX}`, so a frontmatter key holding a line break
+ * cannot add a line (an `Approver:`, a `Reason:`) to the commit body, and a key holding `, ` cannot
+ * read as two items. A backslash is doubled, so a key that literally holds `\u{000A}` cannot read
+ * as an escaped character (task-209 review F4).
+ */
+function escapeCarriesItem(item: string): string {
+  let escaped = '';
+  for (const character of item) {
+    const code = character.charCodeAt(0);
+    const asCode = code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029 || character === ',';
+    if (character === '\\') escaped += '\\\\';
+    else escaped += asCode ? `\\u{${code.toString(16).toUpperCase().padStart(4, '0')}}` : character;
+  }
+  return escaped;
 }
 
 /**
- * Format a Memory transition commit message: the subject, then — only when an approver or reason is
- * given — a blank line and the `Approver:` / `Reason:` lines in that order.
+ * Format a Memory transition commit message: the subject, then — only when an approver, a reason or
+ * a content declaration is given — a blank line and the `Approver:` / `Reason:` lines in that order,
+ * or the one `Carries content:` line (never both shapes in one message).
  *
  * The reason is emitted in its declared normal form and, when it carries a defect
  * ({@link reasonDefect}), refused rather than written. The CLI boundary
@@ -356,10 +386,15 @@ export interface MemoryCommitMessageInput {
  *
  * @throws `Error` when `ids` is empty: a transition commit always names what it moved.
  * @throws `Error` when `reason` cannot be recorded in the trailer, carrying that defect's message.
+ * @throws `Error` when `carries` is non-empty next to an `approver` or a `reason`.
  */
 export function formatMemoryCommitMessage(input: MemoryCommitMessageInput): string {
   if (input.ids.length === 0) {
     throw new Error('a Memory transition commit must name at least one id');
+  }
+  const carries = input.carries ?? [];
+  if (carries.length > 0 && (input.approver !== undefined || input.reason !== undefined)) {
+    throw new Error('a content declaration (carries) is written only on a commit with no Approver: or Reason: body');
   }
   const refusal = input.reason === undefined ? null : reasonRefusalMessage(input.reason);
   if (refusal !== null) {
@@ -369,6 +404,9 @@ export function formatMemoryCommitMessage(input: MemoryCommitMessageInput): stri
   const subject = `wf(${input.type}): ${input.op} ${input.ids.join(', ')}${bracket}`;
 
   const body: string[] = [];
+  if (carries.length > 0) {
+    body.push(`${CARRIES_KEY} ${carries.map(escapeCarriesItem).join(', ')}`);
+  }
   if (input.approver) {
     body.push(`Approver: ${input.approver.name} <${input.approver.email}> (${input.approver.role})`);
   }

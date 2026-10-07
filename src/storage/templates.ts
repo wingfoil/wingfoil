@@ -479,6 +479,34 @@ ${d.summary}
 `;
 }
 
+/**
+ * What the starter `adr`/`tech-spec` scaffolds say about the `supersedes:` trigger (task-209,
+ * `bug-219`). The starter project has neither its field nor its edge — {@link memoryTemplateMd} writes
+ * no `supersedes:` key and {@link memoryYaml} gives every type the default machine, which has no
+ * `superseded` state — so the scaffold says so, and how to add both, rather than leave a reader of the
+ * CLI reference to find out from a trigger that never fires (`src/core/memory-supersede.ts`).
+ */
+function supersedesNote(type: string): string {
+  if (type !== 'adr' && type !== 'tech-spec') return '';
+  return `
+<!-- Replacing an earlier ${type}? This starter scaffold has no \`supersedes:\` field, and the starter
+     \`memory.yaml\` no \`superseded\` state, so approving this ${type} retires nothing. To use the
+     trigger, add \`supersedes: ""\` to this scaffold (it holds the full id of the replaced element, e.g.
+     "${type === 'adr' ? 'adr-2-git-backed-storage' : 'spec-2-memory-yaml-schema'}", never a short form) and give the type its own \`states:\` in
+     \`memory.yaml\` whose \`sequence\` ends in a state listed in \`gates\`, then an approved state
+     listed in \`waiting\`, then \`superseded\`: the trigger fires only when \`memory approve\` lands
+     in that \`waiting\` state, and approve moves only out of a gate. Otherwise retire the replaced element with \`wingfoil memory deprecate\`, naming
+     this one in \`--reason\`. -->
+`;
+}
+
+/**
+ * One scaffolded Memory template. Its body comment states what the two verbs that touch it actually
+ * do (task-209, `bug-146`): `memory add` sets `id`, `title`, `status` and any `--tags` / `--set` value
+ * (`renderAddDocument`, `src/memory/add.ts`), and `memory submit` checks the required fields, moves
+ * `status` and commits the document as the author left it (`renderSubmitDocument`,
+ * `src/memory/submit.ts`) — neither fills a field nor replaces a placeholder.
+ */
 function memoryTemplateMd(type: string): string {
   return `---
 id: ""
@@ -488,9 +516,12 @@ status: draft
 format: ${MEMORY_TEMPLATE_FORMAT}
 ---
 
-<!-- ${type} body. \`wingfoil memory add\` copies this scaffold verbatim; \`memory submit\` replaces
-     these placeholder comments with real content and fills the required frontmatter fields. -->
-`;
+<!-- ${type} body. \`wingfoil memory add\` copies this scaffold, setting only \`id\`, \`title\` and
+     \`status\` (and any \`--tags\` or \`--set\` value). Fill the required frontmatter fields and replace
+     these placeholder comments yourself; \`wingfoil memory submit\` then checks the required fields,
+     moves \`status\` forward and commits the document as you left it, naming in the commit body the
+     content it carries. -->
+${supersedesNote(type)}`;
 }
 
 function mainWorkflowYaml(name: string, description: string, phasesYaml: string): string {

@@ -10,8 +10,14 @@ pillar: ""             # REQUIRED — primary feature pillar, e.g. "P1"
 features:              # REQUIRED — feature IDs covered by this release, e.g. [P1.1, P1.2, P1.13]; [] if none. Left empty so an untouched scaffold fails submit (bug-147)
 requirements: ""       # REQUIRED — path to per-release backlog JSON, e.g. "docs/03_backlog/04_backlog/by-release/v0.1.json"
 release-line: ""       # REQUIRED — version of the parent release-line, e.g. "v1"; the file sits under the release-line's id, planning/rl-v1/ (memory.yaml `release` path)
-tmpl_version: 261005   # Orignal template version
+tmpl_version: 261006   # Orignal template version
 ---
+
+<!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
+     `--tags` or `--set` value). Fill the required frontmatter fields and replace these placeholder
+     comments yourself; `wingfoil memory submit` then checks the required fields, moves `status`
+     forward and commits the document as you left it, naming in the commit body the content it
+     carries. -->
 
 ## Scope
 

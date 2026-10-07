@@ -4,12 +4,18 @@ type: tech-spec
 title: ""              # REQUIRED — e.g. "workflows.yaml schema"
 status: draft          # auto-set by wingfoil
 scope: ""              # REQUIRED — the artefact this spec covers: file format, schema, constant set, or module API, e.g. ".wingfoil/workflows.yaml"
-supersedes: ""         # optional — id of the tech-spec this one replaces, e.g. "spec-002"
+supersedes: ""         # optional — the full id of the tech-spec this one replaces, e.g. "spec-002-dna-yaml-schema"; a short form is not resolved
 release: ""            # optional — implementation release this spec is assigned to (stamped by release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
-tmpl_version: 260703   # Orignal template version
+tmpl_version: 261006   # Orignal template version
 ---
+
+<!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
+     `--tags` or `--set` value). Fill the required frontmatter fields and replace these placeholder
+     comments yourself; `wingfoil memory submit` then checks the required fields, moves `status`
+     forward and commits the document as you left it, naming in the commit body the content it
+     carries. -->
 
 ## Context
 

@@ -12,7 +12,7 @@
  *
  * Deterministic (REQ-SYS-07): results follow the declared field order, never object-key order.
  */
-import { removeFrontmatterField, setFrontmatterField } from './frontmatter-edit';
+import { describeDocumentChanges, removeFrontmatterField, setFrontmatterField } from './frontmatter-edit';
 
 /** The frontmatter key `memory.reject` sets and `memory.submit` removes (spec-010). */
 export const REJECTION_REASON_FIELD = 'rejection_reason';
@@ -116,3 +116,44 @@ export function notApplicableRefusals(
 export function renderSubmitDocument(content: string, target: string): string {
   return removeFrontmatterField(setFrontmatterField(content, 'status', target), REJECTION_REASON_FIELD);
 }
+
+/**
+ * What a submit carries besides its own edit (task-209, `dl-106` W1 (a)): every way the author's
+ * working-tree document differs from the one committed at `HEAD`, worded by `describeDocumentChanges`
+ * — "the body", a `frontmatter field '<name>'` per moved field, sorted by name — the function that
+ * already words the gated verbs' refusal of the same edits. Both copies are first rendered by the same
+ * transition ({@link renderSubmitDocument}), so the submit's own fields, `status` and a cleared
+ * `rejection_reason`, never count: a pure transition carries nothing (`[]`).
+ *
+ * `committed` is `null` when no commit holds the document; the verb refuses that case before asking.
+ * Pure and deterministic (REQ-SYS-07).
+ */
+export function describeSubmitContent(committed: string | null, content: string, target: string): string[] {
+  const after = renderSubmitDocument(toLf(content), target);
+  if (committed === null) return describeDocumentChanges(null, after);
+  return describeDocumentChanges(renderSubmitDocument(toLf(committed), target), after);
+}
+
+/** CRLF → LF: the comparison is of content, so line endings are compared separately (task-209 review F1). */
+function toLf(text: string): string {
+  return text.replace(/\r\n/g, '\n');
+}
+
+/**
+ * `text` rewritten in the line-ending style of `like`: CRLF when `like` holds any CRLF, LF otherwise
+ * (task-209 re-review 1). `memory submit` compares the blob git would store for its rendering with the
+ * blob of the same rendering in the committed document's style, which isolates a line-ending
+ * conversion from the content edits made with it. Pure.
+ */
+export function withLineEndingsOf(text: string, like: string): string {
+  const lf = toLf(text);
+  return like.includes('\r\n') ? lf.replace(/\n/g, '\r\n') : lf;
+}
+
+/**
+ * The item a submit declares, after every other item, when git — after its own line-ending filters —
+ * would store the rendered document with line endings other than the committed one's (`storesAsBlob`,
+ * `src/storage`): the one change {@link describeSubmitContent} cannot see, because it compares
+ * line-ending-normalized text.
+ */
+export const LINE_ENDINGS_ITEM = 'the line endings';

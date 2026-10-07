@@ -8,8 +8,14 @@ workflow: ""           # REQUIRED — the workflow this plan executes, e.g. "dev
 phase: ""              # REQUIRED — the phase/scope this plan covers, e.g. "rel-v0.1" or "retrospective"
 element: ""            # optional — the Memory element this phase iterates (e.g. a release id)
 release: ""            # optional — target release, e.g. "v0.1"
-tmpl_version: 260703   # Orignal template version
+tmpl_version: 261006   # Orignal template version
 ---
+
+<!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
+     `--tags` or `--set` value). Fill the required frontmatter fields and replace these placeholder
+     comments yourself; `wingfoil memory submit` then checks the required fields, moves `status`
+     forward and commits the document as you left it, naming in the commit body the content it
+     carries. -->
 
 ## Context
 
