@@ -16,7 +16,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { deduceWorkflowStateAtHead, loadWorkflowRegistryAtHead, selectWorkflowInstance, type Deduction, type InstanceDeduction } from '../../src/core';
+import { deduceWorkflowStateAtHead, loadWorkflowRegistryAtHead, readDeductionSnapshotAtHead, selectWorkflowInstance, W_UNCOMMITTED_INPUTS, type Deduction, type InstanceDeduction } from '../../src/core';
 import { resolveStateMachine, validateFrontmatterState } from '../../src/memory/state-machine';
 import { MemoryYaml } from '../../src/memory/schema';
 import { parseYaml, ValidationError } from '../../src/validation';
@@ -571,5 +571,44 @@ describe('task-198 review F3 — this repository: the six pre-dl-019 plans witho
       'docs/05_plans/rl-v1/rel-v0.1/release-submit-rel-v0.1-plan.md',
       'docs/05_plans/rl-v1/rel-v0.1/retrospective-and-config-bootstrap-plan.md',
     ]);
+  });
+});
+
+describe('task-198 — the HEAD snapshot reader at its edges (spec-017 §1.1–§1.2)', () => {
+  it('a committed repository with no .wingfoil/ reads an empty registry, no Memory and no instance', () => {
+    const repo = makeTempGitRepo();
+    try {
+      commitFiles(repo, { 'README.md': '# bare\n' }, 'bare');
+      writeFixtureFile(repo, 'docs/x.md', 'untracked\n');
+      const snapshot = readDeductionSnapshotAtHead(repo);
+      expect(snapshot).toMatchObject({ workflows: [], workflowFiles: [], memoryYaml: null, documents: [], starts: new Map(), records: new Map(), dirty: [] });
+      expect(deduceWorkflowStateAtHead(repo)).toMatchObject({ active: null, instances: [], diagnostics: [] });
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+
+  it('a produces pattern that starts with a token adds no pathspec; dna.yaml without paths.runs adds none; a plan with no status is no candidate', () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeFixtureFile(repo, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/top.yaml\n');
+      writeFixtureFile(repo, '.wingfoil/workflows/custom/top.yaml', 'name: top\nkind: main\nphases:\n  - name: only\n    produces: [ "{id}.txt", "out/{id}/" ]\n');
+      writeFixtureFile(repo, '.wingfoil/memory.yaml', MEMORY_YAML);
+      writeFixtureFile(repo, '.wingfoil/dna.yaml', DNA_YAML.replace('  runs: [ docs/06_runs/ ]\n', ''));
+      writeFixtureFile(repo, 'docs/plans/p-none.md', '---\nid: "p-none"\ntype: plan\ntitle: "p"\nworkflow: "top"\n---\n');
+      commitAll(repo, 'fixture');
+      writeFixtureFile(repo, 'out/x/a.txt', 'a\n');
+      writeFixtureFile(repo, 'p.txt', 'p\n');
+      writeFixtureFile(repo, 'docs/06_runs/r.jsonl', '{}\n');
+      const snapshot = readDeductionSnapshotAtHead(repo);
+      expect(snapshot.starts.size).toBe(0);
+      expect(snapshot.dirty).toEqual(['out/x/a.txt']);
+      const deduction = deduceWorkflowStateAtHead(repo);
+      expect(deduction.instances).toEqual([]);
+      expect(deduction.diagnostics.filter((d) => d.code === W_UNCOMMITTED_INPUTS).map((d) => d.file)).toEqual(['out/x/a.txt']);
+      expect(deduction.diagnostics.map((d) => d.message)).toContain("unreadable frontmatter in docs/plans/p-none.md: no 'status' field");
+    } finally {
+      removeTempDir(repo);
+    }
   });
 });

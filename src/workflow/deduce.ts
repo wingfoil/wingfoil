@@ -672,7 +672,9 @@ class Deducer {
     const contextElement = id === null ? null : this.findAny(id);
     const context = contextElement === null ? null : refOf(contextElement);
     const creating = creatingPhaseIndex(workflow);
-    const type = creating === -1 ? null : ((workflow.phases[creating]!.actions ?? []).map(memoryAddType).find((t): t is string => t !== null) ?? null);
+    // The creating phase is the one holding the first `memory.add`, so it has actions; a `memory.add` with
+    // no `type:` names no type, and the instance then has no frame.
+    const type = creating === -1 ? null : (workflow.phases[creating]!.actions!.map(memoryAddType).find((t): t is string => t !== null) ?? null);
     return {
       frames: type === null ? [] : [{ type, element: null, pending: true }],
       start: { boundType: null, state: null, instance: true },
@@ -698,15 +700,15 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
   const open = deducer
     .plans()
     .filter((plan) => OPEN_PLAN_STATUSES.includes(plan.status) && scalarText(plan.frontmatter['parent']) === null)
-    .map((plan) => ({ plan, workflowName: scalarText(plan.frontmatter['workflow']) ?? '', start: snapshot.starts.get(plan.path) }))
+    .map((plan) => {
+      const start = snapshot.starts.get(plan.path);
+      return { plan, workflowName: scalarText(plan.frontmatter['workflow']) ?? '', start, position: start?.position ?? Number.MAX_SAFE_INTEGER };
+    })
     .filter(({ workflowName }) => {
       const workflow = deducer.workflow(workflowName);
       return workflow === undefined || workflowFacts(workflow).startable;
     })
-    .sort(
-      (a, b) =>
-        (a.start?.position ?? Number.MAX_SAFE_INTEGER) - (b.start?.position ?? Number.MAX_SAFE_INTEGER) || compareText(a.plan.id, b.plan.id),
-    );
+    .sort((a, b) => a.position - b.position || compareText(a.plan.id, b.plan.id));
 
   const unknownDiagnostics: Diagnostic[] = [];
   const stepDiagnostics: Diagnostic[] = [];
