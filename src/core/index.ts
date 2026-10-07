@@ -59,6 +59,7 @@ import {
   describeSubmitContent,
   LINE_ENDINGS_ITEM,
   renderSubmitDocument,
+  withLineEndingsOf,
   searchMemoryDocuments,
   setFrontmatterField,
   slugifyTitle,
@@ -1236,11 +1237,17 @@ const memorySubmitFn: CoreFn<unknown, MemorySubmitResult> = async (params) => {
   const rendered = renderSubmitDocument(content, to);
   const committedContent = readPathAtRev(root, prepared.value.sha, path);
   const described = describeSubmitContent(committedContent, content, to);
-  // `describeSubmitContent` compares line-ending-normalized text; whether the line endings alone change
-  // the blob is git's answer, after its own filters (`core.autocrlf`, `.gitattributes`; review F1).
-  const lineEndingsOnly =
-    described.length === 0 && committedContent !== null && !storesAsBlob(root, path, rendered, renderSubmitDocument(committedContent, to));
-  const carries = lineEndingsOnly ? [LINE_ENDINGS_ITEM] : described;
+  // `describeSubmitContent` compares line-ending-normalized text; whether the line endings change the
+  // blob is git's answer, after its own filters (`core.autocrlf`, `.gitattributes`; review F1). It is
+  // asked whatever else changed (re-review 1): against the rendered committed copy when nothing else
+  // did, otherwise against this rendering written in the committed document's line endings.
+  let lineEndingsChanged = false;
+  if (committedContent !== null) {
+    const baseline =
+      described.length === 0 ? renderSubmitDocument(committedContent, to) : withLineEndingsOf(rendered, committedContent);
+    lineEndingsChanged = !storesAsBlob(root, path, rendered, baseline);
+  }
+  const carries = lineEndingsChanged ? [...described, LINE_ENDINGS_ITEM] : described;
   const message = formatMemoryCommitMessage({ type, op: 'submit', ids: [id], carries });
   // `carries-content`: submit is the ONE verb entitled to bring the author's body and required fields
   // into its commit (spec-010's field-write ownership row), so it is not guarded against a modified

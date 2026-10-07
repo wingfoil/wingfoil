@@ -534,8 +534,8 @@ $ wingfoil memory submit task-001-my-first-task
 
   A submit that only moves `status` (and clears `rejection_reason`) has no such line. The edits are
   measured against the document as committed at `HEAD`, with line endings normalized, so a CRLF
-  working tree under `core.autocrlf` is not content; a change of line endings alone that git would
-  commit is declared as `the line endings`.
+  working tree under `core.autocrlf` is not content; a change of line endings that git would commit
+  is declared as `the line endings`, after any other item.
 - **Errors:** unknown id → exit `1`; the current state is a **gate** (its forward step needs
   `memory approve`) or the end of the sequence → exit `1` (`error: illegal transition …`); a required
   field is empty → exit `1` (`error: missing required field on submit: <fields>`). Unreleased (v0.3):

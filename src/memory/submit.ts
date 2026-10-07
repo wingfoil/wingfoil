@@ -140,9 +140,20 @@ function toLf(text: string): string {
 }
 
 /**
- * The item a submit declares when its rendered document differs from the committed one in line
- * endings alone, and git — after its own line-ending filters — would store it differently
- * (`storesAsBlob`, `src/storage`): the one change {@link describeSubmitContent} cannot see, because it
- * compares line-ending-normalized text.
+ * `text` rewritten in the line-ending style of `like`: CRLF when `like` holds any CRLF, LF otherwise
+ * (task-209 re-review 1). `memory submit` compares the blob git would store for its rendering with the
+ * blob of the same rendering in the committed document's style, which isolates a line-ending
+ * conversion from the content edits made with it. Pure.
+ */
+export function withLineEndingsOf(text: string, like: string): string {
+  const lf = toLf(text);
+  return like.includes('\r\n') ? lf.replace(/\n/g, '\r\n') : lf;
+}
+
+/**
+ * The item a submit declares, after every other item, when git — after its own line-ending filters —
+ * would store the rendered document with line endings other than the committed one's (`storesAsBlob`,
+ * `src/storage`): the one change {@link describeSubmitContent} cannot see, because it compares
+ * line-ending-normalized text.
  */
 export const LINE_ENDINGS_ITEM = 'the line endings';
