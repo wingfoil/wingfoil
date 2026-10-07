@@ -2,7 +2,7 @@
 id: task-265-accept-a-release-tag-on-origin-release-x.y-matching-the-tag-s-major.minor-in-the-publish-gate
 type: task
 title: "Accept a release tag on origin/release/X.Y matching the tag's major.minor in the publish gate"
-status: pending
+status: backlog
 release: "v0.3"
 kind: "feature"
 priority: "high"
