@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.19"
+version: "1.20"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -183,13 +183,14 @@ and the tasks that unblock the most later work first (`task-194` → 37 later ta
 | Batch | Tasks, in merge order | Shared files |
 |---|---|---|
 | **B1** | 262, 194, 210, 206, 195, 196, 209, 201, 263 | `210` before `206` (commit primitive); `196` → `209` (`src/storage/templates.ts`) → `201` (`templates/task.md`); `206` the only writer of `dna.yaml` |
-| **B2** | 199, 198, 200, 220, 223, 260, 261 | `199` the only writer of `workflows.yaml`, first `bindings.yaml`; `223` of `memory.yaml` (if the approver confirms its branch patterns); `260` of `git-conventions.md` |
+| **B2** | 264, 199, 198, 200, 261, 220, 223, 260 | `199` the only writer of `workflows.yaml`, first `bindings.yaml`; `223` of `memory.yaml` (if the approver confirms its branch patterns); `260` of `git-conventions.md`; `264` (added at the B1 triage) first, `199` keeps its check green; `261` → `220` (`00_index.md`) |
 | **B3** | 203, 202, 204, 207, 218, 213, 205, 214 | `203` → `202` (deduction modules); `204` → `207` (`scripts/e2e-smoke.cjs`); `205` the only writer of `roles.yaml`, `testing.md` |
 | **B4** | 216, 228, 219, 222, 221, 212, 197, 208 | `222` → `221` (`bindings.yaml`); `219`, `222`, `212` (`WORKFLOW.md`); `222` writes `dna.yaml`, `212` `memory.yaml` and `workflows.yaml`, `197` `traceability.md`, `208` `code-review.md`, `git-conventions.md` |
 | **B5** | 225, 217, 226, 227, 235, 229, 231, 224 | `217` the only writer of `memory.yaml`; `229` first of three writers of `publish.yml` |
 | **B6** | 211, 240, 239, 238, 232, 233, 230 | `232` → `233` (`scripts/release-health/`); `230` the only writer of `memory.yaml`; `238` after `229` |
 | **B7** | 215, 236, 237, 243, 244, 241, 234 | `236` the only writer of `dna.yaml`; `244` last on `publish.yml` |
 | **B8** | 242, 245, 246 | `245` (`X_cli-cmds.md`) after every command task |
+| **B9** | 265, 266, 267 | `dl-159` (parallel release lines), added 2026-10-07; starts only once `dl-159` is `ready`; `publish.yml` 244 → 265 → 266, `ci.yml` 207 → 267 |
 
 Chains across batches: `dev-loop.yaml` 199 → 205 → 221; `publish.yml` 229 → 238 → 244; `user-docs.yaml` 199 →
 214 → 224 → 234 → 246; `08_mvp-canvas.md` 261 → 245. Latency runs (`263`, `216`, `228`, `232`) are taken at the
@@ -798,3 +799,13 @@ commit, right after the task's transition and on the task branch:
     spec-017 §2/§12), `task-204` (`workflow list` to `HEAD`), `task-245` (`--dry-run` per command).
   - **Follow-ups:** being filed by `bug-ingest-rel-v0.3-w3b1-review-findings-plan`; triage by the approver.
   - **Fix share:** 4 open fix tasks of 49 open (8%), under the threshold.
+- **2026-10-07 — B1 follow-ups triaged; `dl-159` filed; B2 opened.**
+  - Triage (`bug-ingest-rel-v0.3-w3b1-review-findings-plan`, `done`): `bug-278` … `bug-288` filed; v0.4: 278, 279,
+    280, 283, 286, 287; v0.3: 281 → `task-204`, 284 → `task-252`, 288 → `task-228`, 285 user-docs; `bug-282` →
+    new `task-264` (fix, B2); `bug-200` closed (fixed by `task-195`). `main` pushed to `0962f85f` before it.
+  - `dl-159` (parallel release lines; supersedes `dl-002` point 3 and `dl-092`'s partial freeze) filed
+    `in-discussion` at a request relayed from another session and confirmed by the approver; its tasks `task-265`,
+    `266`, `267` approved into the backlog as batch **B9**, which waits for the ratification. Handover notes on
+    `task-207`, `219`, `223`, `229`, `230`, `238`, `244` (merge `1810ca9a`).
+  - W3 is now 61 tasks (57 + `264`, `265`, `266`, `267`); fix share 5 open of 52 (10%).
+  - B2 opened with eight tasks; the B1 latency run is still owed (the machine stayed loaded by other sessions).
