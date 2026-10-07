@@ -136,6 +136,28 @@ export function listAdaptersAtRev(root: string, rev: string): AdapterEntry[] {
   return entries;
 }
 
+/**
+ * The refusal of a name declared in both adapter directories at `rev` (§2.1), in {@link loadAdapter}'s
+ * shape — `adapter '<first name>': declared in both …`, every duplicated name a `dl-055` detail line —
+ * or `undefined` when every name is unique. `agent execute` asks it where it lists the adapter tree
+ * (§3.3 step 2), before it resolves the element, the role or the agent.
+ *
+ * @param rev - A revision naming one commit (a sha, or `HEAD`; at `HEAD` a repository with no commit has
+ *   no adapter).
+ */
+export function duplicateAdapterRefusal(root: string, rev: string): CoreResult<never> | undefined {
+  const sha = rev === 'HEAD' ? atHeadOr(root, () => resolveRevision(root, rev), null) : resolveRevision(root, rev);
+  if (sha === null) return undefined;
+  const duplicates = duplicateIssues(entriesAtCommit(root, sha), `${rev}:${ADAPTERS_DIR_PATH}`);
+  if (duplicates.length === 0) return undefined;
+  const [first] = duplicates;
+  return coreErr({
+    code: 'VALIDATION',
+    message: `adapter '${first!.name}': ${first!.issue.message}`,
+    details: { issues: duplicates.map(({ issue }) => ({ ...issue, detail: render(issue) })) },
+  });
+}
+
 /** An issue in the form a refusal shows it: `<path>: <message>`, or the message alone at the root. */
 function render(issue: ValidationIssue): string {
   return issue.path === '' ? issue.message : `${issue.path}: ${issue.message}`;

@@ -57,7 +57,7 @@ import { DNA_YAML_PATH, loadDnaYamlAtRev, loadMemoryYamlAtRev, MEMORY_YAML_PATH 
 import { resolveRevision, RevisionError } from '../core/revision';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
 
-import { adapterTreeDiagnosticsAtRev, loadAdapter, type LoadedAdapter } from './discovery';
+import { adapterTreeDiagnosticsAtRev, duplicateAdapterRefusal, loadAdapter, type LoadedAdapter } from './discovery';
 import { ADHOC_PHASE, executionNotesSection, nextRunId, NO_WORKFLOW, recordSubject, runLogPreflight } from './run-log';
 
 /** The role of a run with no step and no `--role` (`X_cli-cmds.md:223`, approver ruling R18). */
@@ -404,6 +404,9 @@ export async function agentExecutePipeline<T>(
   if (!config.ok) return config;
   const { dna, memoryYaml } = config.value;
   for (const diagnostic of adapterTreeDiagnosticsAtRev(root, sha)) reportWarning(formatDiagnostic(diagnostic));
+  // A name in both built-in/ and custom/ is refused where the tree is listed (§2.1), before resolution.
+  const duplicate = duplicateAdapterRefusal(root, 'HEAD');
+  if (duplicate !== undefined) return duplicate;
 
   // Step 3 — resolution (§3.2 steps 2–5).
   const elementRef = `${request.element.type}:${request.element.id}`;

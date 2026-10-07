@@ -235,3 +235,40 @@ describe('mcpPreflight (§3.3 step 11) — any failure is MCP_UNREACHABLE', () =
 function runningBuildFromDist(): { command: string; args: string[] } {
   return { command: process.execPath, args: [CLI_ENTRY, 'mcp'] };
 }
+
+describe('mcpPreflight — a server that answers the Prompt with no text is unreachable (§3.3 step 11)', () => {
+  it('an empty messages list: MCP_UNREACHABLE naming the empty prompt', async () => {
+    const root = makeTempGitRepo();
+    try {
+      // A minimal stdio MCP server: initialize, then an empty prompt for any prompts/get.
+      writeFixtureFile(
+        root,
+        'stub-server.cjs',
+        [
+          "const rl = require('readline').createInterface({ input: process.stdin });",
+          "const send = (m) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');",
+          "rl.on('line', (line) => {",
+          '  const m = JSON.parse(line);',
+          "  if (m.method === 'initialize') send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { prompts: {} }, serverInfo: { name: 'stub', version: '1' } } });",
+          "  else if (m.method === 'prompts/get') send({ id: m.id, result: { messages: [] } });",
+          '});',
+          '',
+        ].join('\n'),
+      );
+      const result = await mcpPreflight({
+        root,
+        server: { command: process.execPath, args: [join(root, 'stub-server.cjs')] },
+        role: 'developer',
+        element: 'task:task-001-a',
+        stateRef: SHA,
+        timeoutMs: 20000,
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toBe('context pre-load failed: MCP server unreachable');
+      expect(result.error.details?.['cause']).toBe('the developer-session prompt returned no context text');
+    } finally {
+      removeTempDir(root);
+    }
+  }, 30000);
+});

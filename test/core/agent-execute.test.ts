@@ -195,3 +195,30 @@ describe('agentExecuteFn — what follows the pre-launch checks in this build', 
     expect((outcome.result.value as AgentLaunchPlan).bootstrap).toContain("Record your handoff in the element's body and in your commit messages.");
   }, 60000);
 });
+
+describe('agentExecuteFn — review fixes (task-218 review F1, F3)', () => {
+  it('a name in both built-in/ and custom/ is refused at step 2, before a missing element', async () => {
+    const repo = fixture((root) => writeFixtureFile(root, '.wingfoil/agents/built-in/fake.yaml', manifest('fake')));
+    const error = refusal(await run(repo, { element: 'task:task-999-absent', role: 'developer' }));
+    expect(error?.code).toBe('VALIDATION');
+    expect(error?.message).toMatch(/^adapter 'fake': declared in both \.wingfoil\/agents\/built-in\/fake\.yaml and \.wingfoil\/agents\/custom\/fake\.yaml/);
+  }, 60000);
+
+  it('step 8: a dangling binding’s warnings are raised in §5.1 order, before the plan', async () => {
+    const repo = fixture((root) =>
+      writeFixtureFile(root, '.wingfoil/roles.yaml', 'version: 1.0\nassignments:\n  developer:\n    - testing\n    - zz-absent\n    - aa-absent\nglobal:\n  - doc-versioning\n'),
+    );
+    const outcome = await run(repo, { element: TASK_REF, role: 'developer' });
+    expect(outcome.result.ok).toBe(true);
+    expect(outcome.warnings).toEqual([
+      "directive 'aa-absent' bound to role 'developer' has no directive file",
+      "directive 'zz-absent' bound to role 'developer' has no directive file",
+    ]);
+  }, 60000);
+
+  it('no surface sets AgentExecuteParams.host: neither buildParams of the CLI nor the MCP registrar names it', () => {
+    const { readFileSync } = jest.requireActual<typeof import('node:fs')>('node:fs');
+    const src = join(__dirname, '..', '..', 'src');
+    for (const file of ['cli.ts', 'cli/registrar.ts', 'mcp/registrar.ts']) expect(readFileSync(join(src, file), 'utf-8')).not.toMatch(/\bhost\b/);
+  });
+});

@@ -13,7 +13,7 @@ export { E_ADAPTER_MANIFEST, parseAdapterManifest } from './manifest';
 export type { AdapterKind, AdapterSource } from './manifest';
 export { ADAPTER_PLACEHOLDERS, E_ADAPTER_PLACEHOLDER, placeholderIssues, requiredPlaceholderIssues } from './placeholders';
 export type { AdapterPlaceholder } from './placeholders';
-export { adapterTreeDiagnosticsAtRev, ADAPTERS_DIR_PATH, E_ADAPTER_DUPLICATE, listAdaptersAtRev, loadAdapter, W_ADAPTER_IGNORED } from './discovery';
+export { adapterTreeDiagnosticsAtRev, ADAPTERS_DIR_PATH, duplicateAdapterRefusal, E_ADAPTER_DUPLICATE, listAdaptersAtRev, loadAdapter, W_ADAPTER_IGNORED } from './discovery';
 export type { AdapterEntry, LoadedAdapter } from './discovery';
 export {
   ADHOC_PHASE,
