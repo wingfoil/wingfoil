@@ -456,6 +456,14 @@ Used consistently in every context that names a document *by type*:
 | Context                                    | Syntax        | Example              |
 |---------------------------------------------|---------------|-----------------------|
 | `--element` flag (`agent execute`)          | `<type>:<id>` | `--element task:202` |
+| `element` argument (`{role}-session` MCP Prompt, `spec-004` §3.1) | `<type>:<id>` | `element="task:task-202"` |
+
+An element-ref has exactly one `:`, a non-empty `<type>` before it and a non-empty `<id>` after it, and
+holds no whitespace, no control character and no `-->` (the `spec-012` §7 payload header and markers
+could not carry one). Anything else is refused as `malformed element-ref "<ref>": expected <type>:<id>`,
+the ref written as a JSON string. Whether `<type>` is a declared type and `<id>` an existing element is
+decided by the command that resolves the ref, not by the grammar. One parser applies it everywhere
+(`parseElementRef`, `src/core`).
 
 Commands whose noun already scopes the type (`memory submit <id>`, `memory approve <id> --reason ...`,
 `memory reject <id> --reason ...`, `memory deprecate <id>`) take the **bare `<id>`** as the positional
@@ -1101,3 +1109,12 @@ word *precedence* is §2's, in the `--version` row ("Takes precedence over all o
 precedence"; that note is left as written, and is corrected here: §1 gives a global its placement and
 §2 gives `--version` its precedence. No behaviour or rule changed. Edited in place without a supersede
 or a state change (`dl-047`).
+
+**Revision (2026-10-06, `task-195-role-session-mcp-prompt-accepts-element-state-returns`) — §7 states
+the element-ref grammar.** §7 gave the form `<type>:<id>` and examples, but not what makes a ref
+malformed. The `{role}-session` Prompt's `element` argument (`spec-004` §3.1, approver ruling R18) is a
+second surface that takes one, beside `agent execute --element` (`spec-016`); §7 now lists it, states
+the grammar (one `:`, both sides non-empty, no whitespace, control character or `-->`) and the refusal
+text, and names the one core parser both surfaces use, so `task-218` inherits the same rules. No command,
+flag or exit code changed. Edited in place without a supersede or a state change, as this file's
+earlier Revision notes are.
