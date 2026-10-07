@@ -72,6 +72,9 @@ disposition. The open choices below remain for the approver.
 - **(x) in `retrospective.yaml`**: `explore` lists every secondary source it was given, and
   `additional-points` gains a `checks.pre`: every item that is a proposal has one of the four
   outcomes above. A proposal is never read as a finding.
+  *(Amended 2026-10-07, approver, with `dl-163`.)* For a consumer feedback note (`dl-163`) the outcome set is six:
+  the four above plus `declined` (the approver does not take it up, with a reason) and `needs-info` (the note is
+  sent back to its consumer for more information); the check accepts all six for such notes.
 - **(y) in the `claim-evidence` directive**, as a general rule for any gate fed by a secondary
   source, not only retrospectives.
 
