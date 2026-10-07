@@ -2,7 +2,7 @@
 id: "task-205-rewrite-dev-loop-yaml-v1-5-red"
 type: task
 title: "Rewrite `dev-loop.yaml` as v1.5: `red` by `qa`, executor independence, the reject bug-sync, parking and the main-sync on resume"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "high"
