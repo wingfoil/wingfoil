@@ -222,3 +222,22 @@ describe('dl-110 P2 — parking is declared in the header (handover from task-18
     expect(text).toMatch(/in-progress → planned/);
   });
 });
+
+describe('review fixes (task-205 review F1, F2)', () => {
+  it('F1: the park sync `[in-progress → planned]` is a declared bug edge — `returns: { in-progress: planned }` (dl-110 P1 (a))', () => {
+    const memoryYaml = loadMemoryYamlAtHead(ROOT);
+    expect(memoryYaml).not.toBeNull();
+    const machine = resolveStateMachine(memoryYaml!, 'bug');
+    expect(machine.returns).toEqual({ 'in-progress': 'planned' });
+    expect(isMachineEdge(machine, 'in-progress', 'planned')).toBe(true);
+    const subject = 'wf(bug): sync bug-001-example [in-progress → planned]';
+    expect(parseMemoryOperation(subject)).toBe('sync');
+    expect(parseBracketHops(subject)).toEqual([{ from: 'in-progress', to: 'planned' }]);
+  });
+
+  it("F2: the header says red's first-action sync also runs after done's fallback, whose task edge is dl-053's question", () => {
+    expect(header()).toMatch(/also runs after `done`'s fallback/);
+    expect(header()).toMatch(/dl-053/);
+    expect(header()).not.toMatch(/gets no sync here/);
+  });
+});
