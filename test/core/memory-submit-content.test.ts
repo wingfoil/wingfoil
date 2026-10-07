@@ -129,6 +129,22 @@ describe('memory submit declares the content it carries (task-209, dl-106 W1 (a)
   describe('line endings (review F1)', () => {
     const crlf = (text: string): string => text.replace(/\n/g, '\r\n');
 
+    it('no line-ending filter: a field edit plus a CRLF conversion declares the field AND the line endings (re-review 1)', async () => {
+      git(repo, ['config', 'core.autocrlf', 'false']);
+      writeFileSync(join(repo, PATH), crlf(taskDoc({ extra: 'priority: "high"\n' })));
+      const result = await submit();
+      expect(result.ok).toBe(true);
+      expect(result.commit?.message).toBe("wf(task): submit task-101\n\nCarries content: frontmatter field 'priority', the line endings");
+    });
+
+    it('core.autocrlf=true: a field edit on a CRLF working tree declares the field only', async () => {
+      git(repo, ['config', 'core.autocrlf', 'true']);
+      writeFileSync(join(repo, PATH), crlf(taskDoc({ extra: 'priority: "high"\n' })));
+      const result = await submit();
+      expect(result.ok).toBe(true);
+      expect(result.commit?.message).toBe("wf(task): submit task-101\n\nCarries content: frontmatter field 'priority'");
+    });
+
     it('core.autocrlf=input normalizes as well: a CRLF working tree over an LF blob declares nothing', async () => {
       git(repo, ['config', 'core.autocrlf', 'input']);
       writeFileSync(join(repo, PATH), crlf(taskDoc()));
