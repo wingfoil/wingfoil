@@ -67,9 +67,11 @@ from `elementKey` / `hasRecord` (restored here), and its reading 9 (an `iterate_
 1. Vacuous `iterate_over` = no candidate **eligible, entered or complete**. §4.6's "zero candidates" is
    unreachable for P4.16 sc. 3: its `where` has only `status`, so the scope filter is empty and every task is a
    candidate.
-2. "Entered" needs a phase of the sub complete **other than vacuously**; otherwise a sub that starts with an
-   empty selection would put every ignored candidate on the frontier.
-3. Vacuous leaf = complete, declares `selection`, and every other kind is an empty `created`; a plain `include`
+2. "Entered" needs a phase of the sub **before the sub's current phase** complete **other than vacuously**
+   (corrected at review, F1: the code always read it this way, the first amendment text did not); otherwise a sub
+   that starts with an empty selection would put every ignored candidate on the frontier, and a later phase's
+   state evidence would re-open released work.
+3. Vacuous leaf = complete, declares `selection`, the step created nothing, and every other kind is `created`; a plain `include`
    is vacuous when its sub completed only vacuously.
 4. Late (§4.7): an `iterate_over` closed by a later phase counts its eligible + entered candidates in
    `iterations.late`; element candidates are listed in the instance's `late` (collection entries are not
@@ -78,9 +80,10 @@ from `elementKey` / `hasRecord` (restored here), and its reading 9 (an `iterate_
 5. Optional (§4.10): an optional current phase's frontier also carries the following not-complete phases up to
    and including the next non-optional one ("together with the next non-optional phase").
 6. Abandoned (§4.11): `abandoned: true`, `complete: false`, no phase progress, empty frontier. A selection never
-   matches an archived element either. This changes task-198's selection on real repositories: the `HEAD` scan
-   (`loadMemoryDocumentsAtRev`) never filtered archived documents, so a `deprecated` bug used to keep a selection
-   open.
+   matches an archived element either — a rule added to spec-017 §4.3 and spec-003 § "Selections" (review F2).
+   On this repository it changes nothing today: every selection filters `status` to non-archived states
+   (`grep -n "where:" .wingfoil/workflows/custom/*.yaml`); the `HEAD` scan (`loadMemoryDocumentsAtRev`) does
+   return archived documents, so a selection without a `status` key would have matched them.
 7. Iteration order (§1.3): an id the type's `{n}` pattern does not match iterates after every id it does; ties
    on `{n}` by byte-wise id.
 8. A `where` token with no value leaves the `iterate_over` phase one unexpanded step (missing `include`) and
@@ -181,14 +184,43 @@ Same-class sweep in touched files: `elementKey` (one caller each in the step key
 builders share `reporter()`. No other reader of the old `PhaseProgress` states exists (`grep -rn "PhaseProgress"
 src` → `src/workflow/deduce.ts` and the barrel only).
 
+### Review fixes (independent review: approve with fixes, F1–F6)
+
+- **F1** — "entered" counts only phases before the sub's current phase: the code's reading, kept; spec-017 §4.6
+  reworded (pending amendment) and the reviewer's probe P2 pinned (sub `kickoff` checkpoint, then `start` complete
+  for an `in-progress` task → the task is ignored, the loop vacuous). Red-first does not apply: the behaviour
+  already held (characterization).
+- **F2** — the revision note claimed "no rule changed"; two rules were added and are now stated as such:
+  a selection never matches an archived element (spec-017 §4.3 row, §4.11; spec-003 § "Selections", new pending
+  amendment), and an abandoned instance is `complete: false` (§4.9's exception list, §4.11). Reading 6's claim
+  about a deprecated bug keeping a selection open was overstated and is corrected above.
+- **F3** — `evaluate()` treats a selection as vacuous only when `leaf.step.created` is empty too. Today `created`
+  is always `[]` (linkage is task-203's), so the test pins the empty half (a selection with a `memory.add`,
+  matching nothing, does not skip an earlier optional phase); the non-empty half becomes testable when task-203
+  is merged into this branch.
+- **F4** (approver decision) — spec-017 §12 records the late `ready` decision-logs of `build-backlog`'s
+  never-empty selection (reviewer's probe on this repository: 124 late, 87 of them `ready` decision-logs) as the
+  known consequence until `dl-160`'s actions (post-v0.3).
+- **F6** — spec-017 §12 records that an instance started mid-release reports done tasks' record checkpoints
+  again, since records older than the start commit do not count (§4.8, §4.9).
+- Commit `791d31cc`. After it: `npx jest test/workflow test/core/workflow-deduction test/docs` → 177 passed;
+  `npm run lint`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit`,
+  `npm run docs:api` exit 0 (spec amendments in the working tree).
+
 ### Pending amendments (approver)
 
-- `spec-017-workflow-commands-and-state-deduction` (uncommitted in this worktree; record after task-203's
-  spec-017 amendment, merge order 203 → 202) — proposed `--reason`: "task-202: readings the iterate_over,
-  live-query, optional and archived rules needed. §4.6: a candidate is entered once a sub phase is complete other
-  than vacuously; the note and vacuous completion apply when no candidate is eligible, entered or complete, since
-  an empty scope filter makes every element a candidate; an unresolved where token leaves one unexpanded step.
-  §1.3: an id the {n} pattern does not match iterates last. §4.7: which candidates are late, how they are counted
-  and listed, which completions are vacuous. §4.10: an optional current phase's frontier carries the phases up to
-  the next non-optional one. §4.11: an abandoned instance has no phase progress and is not complete. No rule the
-  spec states changed."
+- `spec-017-workflow-commands-and-state-deduction` (uncommitted; record after task-203's spec-017 amendment,
+  merge order 203 → 202) — proposed `--reason`: "task-202: readings the iterate_over, live-query, optional and
+  archived rules needed, and rules added. Readings: §4.6, a candidate is entered once a phase before the sub's
+  current phase is complete other than vacuously; the note and vacuous completion apply when no candidate is
+  eligible, entered or complete; an unresolved where token leaves one unexpanded step. §1.3, an id the {n}
+  pattern does not match iterates last. §4.7, which candidates are late, how they are counted and listed, and
+  which completions are vacuous. §4.10, an optional current phase's frontier carries the phases up to the next
+  non-optional one. Rules added: §4.3 and §4.11, a selection never matches an archived element; §4.9 and §4.11,
+  an abandoned instance has no phase progress and is reported complete: false. §12 records the late ready
+  decision-logs of build-backlog's selection until dl-160, and the record checkpoints an instance started
+  mid-release reports again."
+- `spec-003-workflows-yaml-schema` (uncommitted; record after task-264's, task-199's and task-198's
+  amendments) — proposed `--reason`: "task-202 (review F2): § Selections states the rule spec-017 §4.3 and §4.11
+  add, that a deprecated or superseded document never matches a selection, as it is never an iterate_over
+  candidate. No diagnostic changed."
