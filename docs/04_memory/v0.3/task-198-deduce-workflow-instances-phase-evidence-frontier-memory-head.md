@@ -38,9 +38,129 @@ The heart of v0.3: one pure deduction over `HEAD` that every consumer (`next`, `
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+### design (architect)
+
+**`depends_on` read (dl-015).** `task-137`, `task-171`, `task-175`, `task-194` are `done` (`grep -m1 "^status"` over each).
+Taken from their handovers: resolve `HEAD` once and read every input at that sha (`resolveRevision`, task-137);
+`loadMemoryDocumentsAtRev(..., { onDiagnostic })` is the tolerant scan and `memoryUnreadableDiagnostic` the one
+`W_MEMORY_UNREADABLE` builder (task-171, which left reporting the frontmatter-less plans to this task);
+`tokenName` / `memoryAddType` and the `produces` ownership rule (task-175); `loadWorkflowRegistryAtRev` and
+`workflowExitStates` (task-194, B1 handover above).
+
+**Specs.** `spec-017` and `spec-003` are `approved`, `adr-007` / `adr-008` `accepted` (`grep -m1 "^status"`). No
+spec is missing; no spec edit, no pending amendment (readings below are for the approver to confirm).
+
+**Scope boundary** (Description): §4.6–§4.7, §4.10–§4.11 are task-202's; linkage, re-entry and the single union
+walk of §4.8 are task-203's; §5 approvals are task-225's; §6 action/check views are the `next`/`status` tasks'.
+
+**Design.**
+- `src/workflow/deduce.ts` — pure `deduceWorkflowState(snapshot): Deduction` and `resolveInstanceRef`. Shapes follow
+  `spec-017` §8 (`Instance`, `ElementRef`, `ScopeRef`, `TrailEntry`, `PhaseProgress`; `DeducedStep` is the part of
+  §8's `Step` deduction decides). The four codes are exported constants. It imports `workflow-exit-state` and
+  `workflow-diagnostics` as **modules**, not through the `src/core` barrel the handover names, because the barrel
+  re-exports this module (an import cycle otherwise).
+- `src/core/workflow-deduction.ts` — `readDeductionSnapshotAtHead(root)` (the one impure step: registry, `memory.yaml`,
+  `dna.yaml`, Memory scan, `HEAD` tree, start commits, phase records, dirty input paths), `deduceWorkflowStateAtHead`,
+  and `selectWorkflowInstance(deduction, ref?)` → `NOT_FOUND` `workflow is not open: <ref>`. All exported from `src/core`.
+- `src/core/workflow-diagnostics.ts` — `creatingPhaseIndex` exported and `isImplicitOwnerProduces` extracted from the
+  `W_PHASE_PRODUCES_OWNER_IMPLICIT` row, so loader and deduction apply one implicit-owner rule.
+- Git: start commits by one `git log --topo-order --no-renames --diff-filter=A` over the candidate plan paths (the
+  order of its commits is `rev-list --topo-order`'s, so it gives the position too); records by one
+  `git log -E --grep=^WingFoil-Phase:` bounded by the oldest start's parents, then one `rev-list <sha> --not <start>^@`
+  per distinct start only when a candidate record exists; `git status --porcelain=v1 -z --no-renames
+  --untracked-files=all` over literal pathspecs for `W_UNCOMMITTED_INPUTS`.
+
+**Readings taken (approver to confirm; none needs a spec change to implement):**
+1. §1.4 codes: no frontmatter, no `type`, a type `memory.yaml` does not declare, no `id`, no `status` →
+   `W_MEMORY_UNREADABLE` with that reason; a status outside the machine → `W_MEMORY_INVALID_STATE` (path `status`). On
+   this repository that reports the 14 grandfathered pre-`dl-019` plans (measured below), as §1.4 asks.
+2. `where` match: an absent field reads as `""` (so `release: ["", "{release.version}"]` selects an element with no
+   `release`), a list field matches on a shared element, values compared as strings.
+3. `created` without linkage: every step has created nothing, so the kind is satisfied when the phase declares other
+   evidence, else the step completes by a `record` (§4.3's rule for a step that created no element).
+4. `awaits` and a checkpoint report the missing kind as `record`; `finalizable` = missing is exactly `[record]`.
+5. A step's `trail` runs from the instance down to and including the step itself.
+6. `ProducesView` carries an extra `evidence: boolean` (§8 has no field telling "shown but not evidence" apart from an
+   entry of a workflow with no element, both `owner: null`).
+7. An instance whose workflow the registry does not load is `complete: false` with an empty frontier.
+8. `W_UNRESOLVED_TOKEN` is emitted for `produces` and `where` tokens of frontier steps only; action-argument tokens
+   are interpolated by `next` (§6.1), not here. A self-creating instance's tokens are pending, never reported.
+9. An `iterate_over` phase is reported as its own leaf (kind `include`, missing) until task-202 expands it.
+
+**AC classification (T1, `testing` directive)** — `grep -rln "deduce\|Deduction" src` before the change found only a
+comment in `src/memory/query.ts`: no deduction existed.
+
+| AC | Class | Why |
+|---|---|---|
+| 1 instances / `<ref>` | red-first | no instance reader existed |
+| 2 evidence kinds, implicit owner, checkpoint | red-first | new |
+| 3 tolerant reads | red-first | the scan reports parse failures only; `W_MEMORY_INVALID_STATE` and the no-status/no-frontmatter reports are new |
+| 4 `W_UNCOMMITTED_INPUTS` | red-first | new |
+| 5 determinism (+ grep test) | red-first | the module did not exist (the grep test's "covers the deduction module" case fails) |
+| 6 BDD P4.13 sc. 1–2 | red-first | new |
+| 7 BDD P4.11 sc. 1–3 | characterization | pinned by `test/memory/state-machine.test.ts` since task-036; the new test checks the deduction calls `validateFrontmatterState` and spells no message of its own |
+
+### red
+
+`test/core/workflow-deduction.test.ts` (AC 1–4, 6, 7; fixture git repositories) and
+`test/workflow/deduce-determinism.test.ts` (AC 5, grep over `src/workflow/*.ts` + `src/core/workflow-deduction.ts`
+for `Date.now(`, `new Date(`, `Math.random(`, `performance.now(`, `process.hrtime`, `crypto.random*`, `randomUUID(`).
+`npx jest test/core/workflow-deduction.test.ts test/workflow/deduce-determinism.test.ts` → **19 failed, 4 passed, 23
+total** (`deduceWorkflowStateAtHead is not a function`, `ENOENT src/workflow/deduce.ts`; the passing four are the
+grep over the existing workflow files and AC 7's message pin). Commit `3208d17e`.
+
+### green
+
+Implementation as designed; same command → **24 passed, 24 total** (the grep test gains `src/workflow/deduce.ts`).
+Commit `785baef3`.
+
+Measured on this repository (ts-node, three runs at the branch head, load average ~60 from 8 parallel agents,
+`uptime`): 7 open instances (6 `decision-log-ingest`, 1 `service-ingest`, each `element: null`, context
+`release:minor-v0.3`, frontier `<w>.capture` — linkage is task-203's), 14 `W_MEMORY_UNREADABLE` (the grandfathered
+plans), no other deduction code. Time: snapshot 3.4–6.7 s, of which registry load 1.7–2.4 s and Memory scan
+1.3–2.0 s (both existing primitives, task-194 / task-137); the reads this task adds (start commits, records, status)
+cost ~0.2 s; the pure deduction 29–107 ms. A first version ran one `git log -- <path>` per open plan (+1.6 s under
+the same load); replaced by one `git log --topo-order` before commit. REQ-PERF-03 (`workflow next` < 1,000 ms p95)
+is not measurable on this machine now; see the report.
+
+### refactor
+
+- `test/workflow/deduce.test.ts` (pure, synthetic snapshots): every §1.4 exclusion reason, every §4.1 token rule
+  (`{element.<f>}`, `{<type>.<f>}`, `{item}`, out-of-scope type, blank field, `/` pattern), the self-creating and
+  context bindings, a typed `<T>.set_state`, a selection token, an unexpanded `iterate_over`, a `{ type, path }`
+  entry, and the empty answer of a repository with no commit. Commit `4ca79c9c`.
+- `test/docs/name-resolvability.allowlist.ts`: removed the 7 `planned` entries this task resolves (`W_UNCOMMITTED_INPUTS`
+  in spec-006/008/016/017, `W_MEMORY_INVALID_STATE`, `W_UNRESOLVED_TOKEN`, `W_INSTANCE_WORKFLOW_UNKNOWN` in spec-017),
+  listed as `stale` by `npx jest test/docs/name-resolvability.test.ts` before the edit and absent after.
+
+Gates at `4ca79c9c` (logs kept private to this worktree; load average ~60):
+- `npm test` → 293 suites / 5452 tests passed (at `785baef3` + the allowlist edit); `npm run test:coverage` at
+  `4ca79c9c` → **294 suites, 5459 tests passed**; All files **99.23 % stmts / 96.53 % branches / 96.85 % funcs /
+  99.73 % lines**. New files: `src/workflow/deduce.ts` 98.25 / 89.87 / 100 / 100, `src/core/workflow-deduction.ts`
+  98.07 / 82.69 / 100 / 100; `src/core/workflow-diagnostics.ts` 100 / 99.44 / 100 / 100.
+- `npm run lint` exit 0; `npm run docs:api` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
+  `npx tsc -p tsconfig.build.json --noEmit` exit 0.
+- BDD: P4.13 sc. 1–3 are pinned by `test/core/workflow-deduction.test.ts` (AC 6, AC 3, scenario titles quoted); P4.11
+  sc. 1–3 stay pinned by `test/memory/state-machine.test.ts` (unchanged). No feature file edited.
+- No CLI command, option, exit code or Memory type added: no parity, `cli-reference.md` or dry-run row applies.
+
+### review (self, reviewer)
+
+Each AC against its evidence:
+1. AC 1 — "AC 1" describe: two open mains out of five plans (done / `parent` / sub-workflow plans ignored), newest
+   first, first active; tie by id; `<ref>` by name, by id, `workflow is not open: <ref>` (NOT_FOUND); unknown workflow
+   → empty frontier + `W_INSTANCE_WORKFLOW_UNKNOWN`.
+2. AC 2 — `produces` (file and `site/` pattern), `selection`, plain `include` (trail into `helper.only`), `record`
+   (and records of another instance / another phase / not `completed` / with a scope trailer do not count; a record
+   older than the start commit does not count), `state`; implicit owner shown with `evidence: false`.
+3. AC 3 — unparsable, no status, illegal status (exact P4.13 sc. 3 message + ` in <file>`), no frontmatter: excluded,
+   reported in path order, no throw.
+4. AC 4 — dirty Memory file, untracked `produces` targets, a workflow file and a `paths.runs` file reported, `README.md`
+   and `src/` not; the answer equals the clean one.
+5. AC 5 — byte-identical `JSON.stringify` on two runs; `W_MEMORY_*` in sorted path order; grep test green.
+6. AC 6 — P4.13 sc. 1 (`implement` current for an `in-progress` task) and sc. 2 (`releasing` phase), a committed
+   `.wingfoil/state/index.json` changes nothing.
+7. AC 7 — source check: imports and calls `validateFrontmatterState`, spells no `invalid state '` text.
+
+Same-class sweep in touched files: the implicit-owner rule now lives once (`isImplicitOwnerProduces`), used by the
+loader row and the deduction. No other change outside the deduction.
