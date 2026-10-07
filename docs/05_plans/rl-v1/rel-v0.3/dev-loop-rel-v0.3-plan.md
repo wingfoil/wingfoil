@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.18"
+version: "1.19"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -767,3 +767,34 @@ commit, right after the task's transition and on the task branch:
     `--no-ff` at `264dfa45`. From now on the coordinator anchors insertions on the line `^## Execution Notes$`.
   - `bug-277` (`memory add` with a long title, `ENAMETOOLONG` and an absolute path) filed `open` by the approver
     (`50c5a835`); triage pending.
+- **2026-10-07 — batch B1 `done`** (`task-262`, `194`, `210`, `206`, `195`, `196`, `209`, `201`, `263`).
+  - **Interruptions.** The agents of B1 stopped twice (a usage limit on 2026-10-06, then the end of the session)
+    and were resumed from their worktrees; no work was lost. `task-263`'s developer was refused the §7 trailer
+    amend and the bug sync by a permission check: the coordinator ran both, on the approver's instruction.
+  - **Review.** Every task had an independent review: "approve" for `201` and `263`, "approve with fixes" for
+    the rest, every fix applied in-task. Focused re-reviews for `194`, `195`, `209`, `210` (twice) and `206`
+    (both fix phases). Defects found by review and fixed: `194` dropped distinct diagnostics on one path;
+    `209` declared content on a pure transition under `core.autocrlf=true`; `210`'s rollback left
+    `.wingfoil/` behind after a refused `init`, threw on a held `index.lock`, and its dry-run diff read the
+    operator's global config (then lost `safe.directory`); `206` lost the run record on a refused or failed
+    write, and accepted an id that would wedge later runs. `206` was rebuilt on `210`'s `writeAndCommit` by
+    merging `210`'s branch before the gate.
+  - **Approver:** all nine approved on 2026-10-07, with every developer decision the approve Reasons name.
+  - **Amendments: 9** — `194`: spec-003; `210`: spec-008; `206`: dl-114; `195`: spec-004, spec-008; `196`:
+    spec-011, spec-016; `209`: spec-008, spec-010. Every tool-written commit of the gate (amend, approve)
+    carries the §7 trailers.
+  - **Bugs closed:** bug-146, bug-150, bug-183, bug-217, bug-219, bug-231, bug-263, bug-273, bug-276.
+  - **Merges,** in order 262 → 194 → 210 → 206 → 195 → 196 → 209 → 201 → 263 (last `a1d2ec12`); conflicts
+    only in spec-008's Revision notes (both kept, merge order) and the `src/core` / `src/storage` export and
+    import lists (union).
+  - **Gates on `main`** (`a1d2ec12`, clean worktree): `test:coverage` 291 suites, 5424 tests, coverage
+    99.29 / 97.05 / 97.11 / 99.72; lint, `docs:api`, both `tsc`, `npm run typecheck`, `check:audit` exit 0;
+    e2e smoke exit 0. Governance `--base ed4607a4 --json`: 74 `wf()` commits checked, 0 findings (the console
+    summary's "on 0 commits" counts only commits with findings — filed as a follow-up).
+  - **Latency:** not taken. Another session's benchmark run kept the machine loaded (load ≈ 10), which
+    `task-263`'s new check refuses by design; the idle run is taken before the next gate.
+  - **Handovers** (amends merged at `7522577b`): `task-218` (`parseElementRef`, `runLogPreflight`,
+    `REVIEWED_AGENT_WRITERS`, dry-run table), `task-228`, `task-198`, `task-199` (the pinned warning set,
+    spec-017 §2/§12), `task-204` (`workflow list` to `HEAD`), `task-245` (`--dry-run` per command).
+  - **Follow-ups:** being filed by `bug-ingest-rel-v0.3-w3b1-review-findings-plan`; triage by the approver.
+  - **Fix share:** 4 open fix tasks of 49 open (8%), under the threshold.
