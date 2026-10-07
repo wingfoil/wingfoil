@@ -53,9 +53,120 @@ an `email` on an RFC 2606 reserved domain, an identity the attribution audit (`i
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+### design (architect, 2026-10-07)
+
+- **Sources read.** `dl-158` is `ready` (Rule 1 (a), Rule 2 (ii)); `spec-002-dna-yaml-schema` is `approved`;
+  `dl-117` is `ready` (`grep -n "^status" docs/04_memory/design/{specs/spec-002,dls/dl-158,dls/dl-117}*.md`).
+  `depends_on: []`. Handover read: `task-218`'s Implementation Notes keep the Rule 1 selection inside
+  `agent execute` (`spec-016`) for `task-218`; this task writes the directive text and the email rule.
+- **bug-261 reproduced** on the worktree base (`npm run -s build`, then the bug's `node -e` loop): the first
+  four pairs print `true false` (schema accepts, audit rejects), `Claude noreply@anthropic.com` prints
+  `true true`; an entry with `adapter: claude-code` and no `email` parses (`true`).
+- **The shared rule (AC 2).** `src/dna` imports only `src/validation` (`grep -rn "from '\.\./" src/dna/*.ts`), and
+  `src/memory/audit.ts` already imports `src/validation`, so the rule moves to a new `src/validation/identity.ts`:
+  the RFC 2606 reserved-TLD list and `hasReservedDomain` move out of `audit.ts` verbatim, beside
+  `isBlankIdentityName` (empty after trimming) and `isPlaceholderIdentity(name, email)` (either half).
+  `isValidAttribution` keeps its base `isConfiguredIdentity` call (the rule it shares with `requireGitIdentity`,
+  REQ-SEC-01) and replaces its own reserved-domain check with `isPlaceholderIdentity`; `AgentEntry` refines `name`
+  with `isBlankIdentityName` and `email` with `hasReservedDomain`, each with a message naming the field. A test
+  pins the agreement (every pair the table holds: the schema refuses it iff the audit rejects it) and that the
+  TLD list is defined exactly once under `src/`. `bug-193` (second-level `example.com`, v0.4) will then reach
+  both through the one function.
+- **Rule 2 (ii)'s enforcement point (AC 3) — decision for the approver.** `email` stays optional for an entry
+  that signs nothing yet (ruling F1). An entry *signs* in two ways under Rule 1 (a): `agent execute` launches it
+  (only an entry with an `adapter` can be launched, `spec-016` §3.7 `NO_ADAPTER`), or a hand session selects it
+  (its own `name`, else the first entry). The schema can see the first and not the second, so:
+  - **schema:** an entry that declares an `adapter` must declare an `email`; the refusal names
+    `team.agents.<i>.email` (red-first). It gives `task-218` an entry whose `name <email>` always exists.
+  - **directive:** §7 says a hand session whose selected entry has no `email` declares one
+    (`wingfoil dna update team.agents.<name> --entry-email …`) before committing; it never drops the
+    `Co-Authored-By:` line.
+  Existing tests that declare an `adapter` with no `email` (`test/dna/schema.test.ts` task-138 block,
+  `test/core/dna-agent-adapter-runs.test.ts`, `test/cli/derived-option-namespace.test.ts`) gain an `email`, since
+  the behaviour they exercise (the adapter field) is not the one this rule changes. This repository's entry has
+  no `adapter` and has an email (`node dist/cli.js dna show team`), so it stays valid.
+- **AC classification** (`testing` directive):
+
+  | AC | Class | Why |
+  |----|-------|-----|
+  | 1 — §7 states Rule 1 (a) and Rule 2 (ii), cites `dl-158`, drops the "omit" sentence, bumps `version:` | characterization | directive text; `test/directives/git-conventions.test.ts` pins it |
+  | 2 — blank `name` / reserved-TLD `email` refused, rule shared with `isValidAttribution` | red-first | the schema accepts all four today (repro above) |
+  | 3 — Rule 2 (ii): an `adapter` entry without `email` refused by the schema | red-first | parses today (repro above) |
+  | 4 — `spec-002` Revision note, user guide §4.2 | characterization | documentation |
+
+- **Files.** `src/validation/identity.ts` (new), `src/validation/index.ts`, `src/dna/schema.ts`,
+  `src/memory/audit.ts`; `.wingfoil/directives/custom/git-conventions.md` (1.1 → 1.2, date); `.wingfoil/dna.yaml`
+  (the `agents:` comment says `email` is optional; it becomes "required with an `adapter`": 1.7 → 1.8);
+  `docs/user-guide.md` §4.2; `spec-002` (pending amendment, uncommitted).
+
+### red (developer, 2026-10-07)
+
+- `test/dna/agent-identity-placeholder.test.ts` (new): blank `name` (3 cases) and reserved-TLD `email` (6 cases)
+  refused naming the field; three ordinary addresses still accepted; an 8-row agreement table (schema verdict
+  == `isValidAttribution` verdict); an `adapter` entry with no `email` refused at `team.agents.0.email`; the
+  RFC 2606 list defined in exactly one file under `src/` (`src/validation/identity.ts`).
+- `npx jest test/dna/agent-identity-placeholder.test.ts` → **17 failed, 7 passed** (24): every refusal and
+  agreement row with a placeholder failed, the single-definition test received `["src/memory/audit.ts"]`;
+  the 7 accept cases passed, as they should on unchanged code. Commit `7869bc6b`.
+
+### green (developer, 2026-10-07)
+
+- `src/validation/identity.ts` (new): the reserved-TLD list and `hasReservedDomain`, moved verbatim from
+  `src/memory/audit.ts`, plus `isBlankIdentityName` and `isPlaceholderIdentity`; exported from the
+  `src/validation` barrel. `isValidAttribution` now ends `return !isPlaceholderIdentity(trimmedName, trimmedEmail)`
+  (its `isConfiguredIdentity` base and `.(none)`/`EMAIL_RE` checks unchanged). `AgentEntry` refines `name` with
+  `isBlankIdentityName`, `email` with `hasReservedDomain`, and a `superRefine` refuses `adapter` without
+  `email` at path `email`, message citing `dl-158 Rule 2 (ii)`.
+- Zod 4 keeps a refined object a `ZodObject` (`def.type === 'object'`), so `src/dna/path.ts`'s entry-field
+  introspection is unaffected: `npx jest test/cli/derived-option-namespace.test.ts` green.
+- Three existing tests declared an `adapter` without an `email` and failed as the design predicted
+  (`npx jest test/dna test/memory/audit test/core/dna-agent-adapter-runs.test.ts test/cli/derived-option-namespace.test.ts test/directives`
+  → 3 failed, 487 passed): `test/dna/schema.test.ts` (task-138 `withAgent`), `test/core/dna-agent-adapter-runs.test.ts`
+  (fixture), `test/cli/derived-option-namespace.test.ts` (the `team.agents` drive, now also passing
+  `--entry-email`). Each gains an `email`; rerun → 43/43. `test/validation/identity.test.ts` (new, 22 tests) pins
+  the predicates. Commit `65d285cb`.
+- Docs (commit `b9d1200b`): `git-conventions` §7 → 1.2, dated 2026-10-07: heading and sources list cite `dl-158`;
+  the "executes as" sentence and the "omit the `Co-Authored-By:` line" sentence are gone; new bullets
+  "Which entry signs" (Rule 1 (a)) and "The signing entry declares an email" (Rule 2 (ii)); "Which email" names
+  the placeholder refusals. `test/directives/git-conventions.test.ts`: the F1 test no longer expects the
+  removed sentence; a new `dl-158` block pins the rulings, the removals and `version: "1.2"`.
+  `.wingfoil/dna.yaml` 1.7 → 1.8 (the `agents:` comment). `docs/user-guide.md` §4.2 and the `team.agents` row of
+  `docs/cli-reference.md` state the new refusals.
+
+### refactor (developer, 2026-10-07; load average ~70, `uptime`)
+
+- `npm test` → 293 suites; first run 2 failed / 5478 passed: `test/lint/lint-clean.test.ts` (`no-regex-spaces` in
+  my new directive test) and `test/docs/name-resolvability.test.ts` (the spec-002 Revision note named the task by
+  its full id, whose `team.agents` segment classifies as a config path — the task-256 note above it names
+  `task-256` short for the same reason). Fixed (`d295b79f`, and the uncommitted spec-002 heading); both suites
+  rerun green (`npx jest test/docs/name-resolvability.test.ts test/directives/git-conventions.test.ts` → 24/24).
+- `npm run test:coverage` (after the fixes) → **293 suites, 5480/5480 passed**; All files 99.29 stmts / 97.05
+  branches / 97.12 funcs / 99.72 lines, vs the W3 B1 gate's 99.29 / 97.05 / 97.11 / 99.72
+  (`devloop-kit/gate-w3b1-cov.log`): not regressing. `src/validation/identity.ts` 100/100/100/100,
+  `src/dna/schema.ts` 100/100/100/100.
+- `npm run lint` exit 0; `npm run docs:api` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
+  `npx tsc -p tsconfig.build.json --noEmit` exit 0.
+- This repository's own DNA still loads: `node dist/cli.js dna show team` exit 0, agent `Claude <noreply@anthropic.com>`
+  (no `adapter`).
+- BDD: the only `team.agents` scenario under `features/p2-dna/` (`grep -rn "agents" docs/02_requirements/02_bdd/features/p2-dna/`)
+  is P2.1's `dna add team.agents --value claude …` with no `adapter`, which the new rules leave valid; the ACs
+  ask for no new scenario.
+
+### review (reviewer, 2026-10-07)
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| 1 | met | §7 text + `version: "1.2"`; `test/directives/git-conventions.test.ts` `dl-158` block (13/13) |
+| 2 | met | `test/dna/agent-identity-placeholder.test.ts` refusals + agreement table; single definition under `src/` |
+| 3 | met | schema refuses `adapter` without `email` (same file, "Rule 2 (ii)" block); directive covers hand sessions |
+| 4 | met | spec-002 Zod listing + Revision note 2026-10-07 (pending amendment); user guide §4.2; CLI reference row |
+
+- Same-class sweep in touched files: the old Rule 2 sentence existed only in the directive and its test
+  (`grep -rn 'omit the \`Co-Authored-By' .wingfoil docs test src` → only `dl-158`'s quotation of it and the
+  test's `not.toContain`, besides this task file); `email` "optional" in the dna.yaml comment and the directive's "Which email" bullet both
+  corrected.
+- **Pending amendments (approver):**
+  - `spec-002-dna-yaml-schema` — Zod listing of `AgentEntry` + Revision (2026-10-07). Proposed `--reason`:
+    "task-260 (bug-261, dl-158 Rule 2 (ii)): AgentEntry refuses a blank name and an email on an RFC 2606
+    reserved top-level domain through the rule isValidAttribution applies, and an entry with an adapter must
+    declare an email. Recorded as a dated Revision note."
