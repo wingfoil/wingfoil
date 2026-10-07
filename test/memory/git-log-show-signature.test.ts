@@ -19,7 +19,7 @@ import { join } from 'path';
 
 import { auditAttribution } from '../../src/memory/audit';
 import { walkGitLogFields } from '../../src/memory/git-log';
-import { collectHistoricalPaths, findElementCreationSha, getMemoryHistory } from '../../src/memory/history';
+import { collectHistoricalPaths, findElementCreationSha, getMemoryHistory, parseHistoricalPaths } from '../../src/memory/history';
 import { E_GIT_READ_FAILED, StorageError } from '../../src/storage';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { enableSigning, installSignatureForcingGit, isolateGitConfig, setShowSignature } from '../storage/helpers/signed-commits';
@@ -108,6 +108,25 @@ describe('task-268 — Memory git log readers on signed commits (bug-291)', () =
       const error = thrownBy(() => read(repo));
       expect(error.code).toBe(E_GIT_READ_FAILED);
       expect(error.message).toMatch(/printed "No signature.*" where a commit name was expected/);
+    });
+  });
+
+  describe('parseHistoricalPaths (pure)', () => {
+    const A = 'a'.repeat(40);
+    const B = 'b'.repeat(64);
+
+    it('maps each name to the last field of its first status line, a SHA-256 name included', () => {
+      const out = `${B}\n\nM\tdocs/new.md\n${A}\n\nR100\tdocs/old.md\tdocs/new.md\nA\tdocs/other.md\n`;
+      expect([...parseHistoricalPaths(out)]).toEqual([[B, 'docs/new.md'], [A, 'docs/new.md']]);
+    });
+
+    it.each([
+      ['signature text', `No signature\n${A}\n\nA\tdocs/x.md\n`, '"No signature"'],
+      ['a status line before any name', `A\tdocs/x.md\n${A}\n`, '"A\\tdocs/x.md"'],
+    ])('refuses %s with E_GIT_READ_FAILED', (_label, out, quoted) => {
+      const error = thrownBy(() => parseHistoricalPaths(out));
+      expect(error.code).toBe(E_GIT_READ_FAILED);
+      expect(error.message).toBe(`E_GIT_READ_FAILED: git log --follow --name-status printed ${quoted} where a commit name was expected`);
     });
   });
 });

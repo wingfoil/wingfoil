@@ -212,6 +212,19 @@ export function collectHistoricalPaths(root: string, relativePath: string): Map<
     `git log --follow --name-status failed for ${relativePath}: cannot establish where the element lived at each commit`,
   );
 
+  return parseHistoricalPaths(stdout);
+}
+
+/**
+ * Parse {@link collectHistoricalPaths}' `git log --follow --name-status --format=%H` output into
+ * sha → the path at that commit. Pure: no git. Every line without a tab must be a full commit name and
+ * a status line must follow one; anything else is refused with `StorageError` `E_GIT_READ_FAILED`
+ * (`requireCommitName`) rather than skipped (`task-268`, `bug-291`).
+ *
+ * @param stdout - The probe's output.
+ * @returns sha → the root-relative path the document occupied at that commit (first status line wins).
+ */
+export function parseHistoricalPaths(stdout: string): Map<string, string> {
   const pathBySha = new Map<string, string>();
   let currentSha: string | null = null;
   for (const line of stdout.split('\n')) {
@@ -222,7 +235,9 @@ export function collectHistoricalPaths(root: string, relativePath: string): Map<
       currentSha = requireCommitName(line, 'git log --follow --name-status');
       continue;
     }
-    if (currentSha === null || pathBySha.has(currentSha)) continue;
+    // A status line before any name is not what `--format=%H` prints: refused like any other line.
+    if (currentSha === null) currentSha = requireCommitName(line, 'git log --follow --name-status');
+    if (pathBySha.has(currentSha)) continue;
     const fields = line.split('\t');
     pathBySha.set(currentSha, fields[fields.length - 1] as string);
   }
