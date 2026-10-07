@@ -463,9 +463,7 @@ describe('task-198 AC 4 — W_UNCOMMITTED_INPUTS, answered from HEAD (spec-017 �
     // The registry's diagnostics first, then W_UNCOMMITTED_INPUTS before every other deduction code (spec-017 §1.3).
     const registryCount = loadWorkflowRegistryAtHead(repo).diagnostics.length;
     expect(dirty.diagnostics.slice(registryCount, registryCount + uncommitted.length)).toEqual(uncommitted);
-    const { diagnostics: _dirty, ...dirtyAnswer } = dirty;
-    const { diagnostics: _clean, ...cleanAnswer } = clean;
-    expect(dirtyAnswer).toEqual(cleanAnswer);
+    expect({ ...dirty, diagnostics: [] }).toEqual({ ...clean, diagnostics: [] });
     expect(keys(only(dirty, 'plan-d'))).toEqual(['doc-flow.write']);
   });
 });
