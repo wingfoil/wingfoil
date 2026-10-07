@@ -40,10 +40,9 @@ export interface DryRunPlan {
   readonly diff: string;
 }
 
-/** The per-run store: the plan, once the primitive has recorded it, and the warnings handed with it. */
+/** The per-run store: the plan, once the primitive has recorded it, with the warnings handed with it. */
 interface DryRunStore {
-  plan?: DryRunPlan;
-  warnings?: readonly string[];
+  recorded?: { readonly plan: DryRunPlan; readonly warnings: readonly string[] };
 }
 
 const context = new AsyncLocalStorage<DryRunStore>();
@@ -71,10 +70,7 @@ export function isDryRunActive(): boolean {
 export function stopWithPlan(plan: DryRunPlan, warnings: readonly string[] = []): never {
   const store = context.getStore();
   if (store === undefined) throw new Error('stopWithPlan called outside a dry run');
-  if (store.plan === undefined) {
-    store.plan = plan;
-    store.warnings = warnings;
-  }
+  store.recorded ??= { plan, warnings };
   throw new DryRunStop();
 }
 
@@ -104,7 +100,7 @@ export async function captureDryRun<T>(run: () => Promise<T>): Promise<DryRunOut
   } catch (error) {
     outcome = { kind: 'threw', error };
   }
-  return store.plan !== undefined ? { kind: 'planned', plan: store.plan, warnings: store.warnings ?? [] } : outcome;
+  return store.recorded !== undefined ? { kind: 'planned', ...store.recorded } : outcome;
 }
 
 /**

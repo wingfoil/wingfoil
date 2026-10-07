@@ -289,6 +289,18 @@ export class CommitFailure extends StorageError {
   }
 }
 
+/**
+ * The reason a caller quotes for a failed write it reports in its own words (approve's supersede
+ * recovery, task-210 review F5): for a {@link CommitFailure}, `E_COMMIT_FAILED: git did not commit
+ * <paths>: <explanation>` — without the clause saying the working tree is as it was, which such a caller
+ * is about to make untrue — plus the index problem, if any; for anything else, `String(error)`.
+ */
+export function commitFailureSummary(error: unknown): string {
+  if (!(error instanceof CommitFailure)) return String(error);
+  const index = error.indexProblem === undefined ? '' : ` (the index entries could not be put back: ${error.indexProblem})`;
+  return `${E_COMMIT_FAILED}: git did not commit ${error.paths.join(', ')}: ${error.gitDetail}${index}`;
+}
+
 /** `git ls-files -s -z` of `paths`: the `mode oid stage\tpath` records the index holds for them. */
 function indexEntries(root: string, paths: readonly string[], options: CommitOptions): string[] {
   return runGit(root, ['ls-files', '-s', '-z', '--', ...paths], options)

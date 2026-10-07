@@ -34,7 +34,7 @@ import {
   renderCustomDirective,
 } from '../directives/create';
 import { parseDirectiveIds, withAssignedDirectives } from '../directives/roles-edit';
-import { CommitFailure, documentExists, E_COMMIT_FAILED, readDocument, StorageError, writeAndCommit, writeDocument } from '../storage';
+import { commitFailureSummary, documentExists, readDocument, StorageError, writeAndCommit, writeDocument } from '../storage';
 // Not re-exported by the `../storage` barrel, imported directly per that module's own convention
 // (same as `src/memory/entry.ts`): `memory add` needs the CONFINED target path before it writes, to
 // run task-092's absence guard on it.
@@ -1389,12 +1389,7 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
     // A refused commit is worded from its parts, without the primitive's "the working tree and the index
     // are as they were": the next statement makes the working tree differ on purpose (task-210 review,
     // F5). Any other error keeps `String`'s `name: message`.
-    const reason =
-      error instanceof CommitFailure
-        ? `${E_COMMIT_FAILED}: git did not commit ${error.paths.join(', ')}: ${error.gitDetail}` +
-          (error.indexProblem === undefined ? '' : ` (its index entry could not be put back: ${error.indexProblem})`)
-        : String(error);
-    finalized = coreErr({ code: 'IO', message: reason });
+    finalized = coreErr({ code: 'IO', message: commitFailureSummary(error) });
     // The commit primitive put the file back when git refused the commit (task-210, `bug-217`); the
     // recovery below commits the file as it stands, so write the finalized status into it again — the
     // one write here meant to outlive a failed commit, because the approve has already happened.

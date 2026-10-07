@@ -7,8 +7,8 @@
  * three outcomes `captureDryRun` reports. Deterministic: fixed fixture text and identity.
  */
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { devNull } from 'node:os';
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { devNull, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
@@ -19,6 +19,7 @@ import {
   removeDocument,
   StorageError,
   CommitFailure,
+  commitFailureSummary,
   planDiff,
   writeAndCommit,
   writeDocument,
@@ -217,6 +218,46 @@ describe('writeAndCommit — review fixes (task-210 review)', () => {
     expect(outcome.kind === 'planned' && outcome.plan.diff).toBe('');
   });
 
+  itOnPosix('a root reached through a symbolic link longer than the real path: neither spelling reaches the message', () => {
+    refuseCommits('echo "refused in $(pwd)" >&2; exit 1');
+    const link = join(tmpdir(), `wf-storage-a-much-longer-link-name-than-the-real-directory-${process.pid}`);
+    symlinkSync(repo, link);
+    try {
+      let thrown: unknown;
+      try {
+        writeAndCommit(link, [{ path: 'docs/linked.md', content: 'l\n' }], 'refused');
+      } catch (error) {
+        thrown = error;
+      }
+      const message = (thrown as CommitFailure).message;
+      expect(message).toContain('git did not commit docs/linked.md: refused in .');
+      expect(message).not.toContain(link);
+      expect(message).not.toContain(realpathSync(repo));
+    } finally {
+      unlinkSync(link);
+    }
+  });
+
+  it('a dry run keeps the first commit it reaches, even when the operation goes on to another', async () => {
+    const outcome = await captureDryRun(async () => {
+      try {
+        writeAndCommit(repo, [{ path: 'docs/first.md', content: '1\n' }], 'first');
+      } catch {
+        // An operation that swallowed the stop and went on.
+      }
+      return writeAndCommit(repo, [{ path: 'docs/second.md', content: '2\n' }], 'second');
+    });
+    expect(outcome.kind === 'planned' && outcome.plan.subject).toBe('first');
+  });
+
+  it('commitFailureSummary quotes a CommitFailure without its "as it was" clause, and anything else as String does', () => {
+    expect(commitFailureSummary(new CommitFailure(repo, ['a.md'], `no in ${repo}`, undefined))).toBe('E_COMMIT_FAILED: git did not commit a.md: no in .');
+    expect(commitFailureSummary(new CommitFailure(repo, ['a.md'], 'no', 'locked'))).toBe(
+      'E_COMMIT_FAILED: git did not commit a.md: no (the index entries could not be put back: locked)',
+    );
+    expect(commitFailureSummary(new Error('plain'))).toBe('Error: plain');
+  });
+
   it('F4: the warnings handed to the primitive reach the dry run\'s outcome', async () => {
     const outcome = await captureDryRun(async () => writeAndCommit(repo, [{ path: 'docs/w.md', content: 'w\n' }], 'warned', { warnings: ['careful'] }));
     expect(outcome.kind === 'planned' && outcome.warnings).toEqual(['careful']);
@@ -242,6 +283,10 @@ describe('planDiff', () => {
 
   it('stopWithPlan outside a dry run is a programming error', () => {
     expect(() => stopWithPlan({ dryRun: true, subject: 's', message: 's', paths: [], diff: '' })).toThrow('stopWithPlan called outside a dry run');
+  });
+
+  it('a new empty file plans its headers and no hunk', () => {
+    expect(planDiff(repo, 'empty.md', '')).toBe('--- /dev/null\n+++ b/empty.md\n');
   });
 
   it('marks a missing final newline the way git does, on a repository with no commit yet', () => {
