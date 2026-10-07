@@ -154,8 +154,8 @@ export function placeholderIssues(manifest: ManifestInput, file: string): Valida
 }
 
 /** Whether some element of `args` is exactly the placeholder `name`. */
-function carries(args: readonly string[] | undefined, name: AdapterPlaceholder): boolean {
-  return (args ?? []).includes(`{${name}}`);
+function carries(args: readonly string[], name: AdapterPlaceholder): boolean {
+  return args.includes(`{${name}}`);
 }
 
 /**
