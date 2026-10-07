@@ -112,7 +112,7 @@ without its MCP registration.
 | Field | Type | Req. | Meaning |
 |---|---|---|---|
 | `name` | string, `spec-009` id class | yes | Equals the file basename. |
-| `format` | integer | yes | Manifest format version; `1` in this spec. |
+| `format` | integer | yes | Manifest format version; `1` in this spec. A manifest in a newer format is refused for its format alone, before the structural pass: the one issue `E_INVALID_FORMAT` on `format`, with `dl-149`'s message (`this file is written in format <n>; this WingFoil reads up to format 1: upgrade WingFoil`). An absent `format`, or one that is not a positive integer, is a structural error. |
 | `command` | string | yes | Executable name or repository-relative path. It is resolved on `PATH` and never run through a shell. |
 | `verified_with` | string | built-in: yes | The agent CLI version the built-in was checked against by hand (`adr-012` Consequences). Informational. |
 | `version_args` | string[] | no | Argv that prints the agent CLI's version on stdout, recorded as `agent_version`. Absent → `not-reported`. |
@@ -120,14 +120,14 @@ without its MCP registration.
 | `launch.interactive.terminal` | `required` \| `optional` | no (default `required`) | Whether the interactive launch needs a terminal on stdin and stdout (§3.3 step 12, `NO_TERMINAL`). `required` for every agent CLI that owns a terminal session, and for every built-in. `optional` declares an executable that runs to completion on inherited, non-terminal stdio; the fake adapter declares it, which is how the interactive success path runs under Jest and CI with no pseudo-terminal (§2.7). |
 | `launch.headless.args` | string[] | no | Argv template for the headless launch. Read from v1.0 (§3.5). |
 | `launch.headless.output` | `json` \| `none` | with `headless` | How stdout is read after a headless run. |
-| `prompt.via` | `arg` \| `stdin` \| `file` | yes | How the bootstrap (§2.4) reaches the agent: as the `{bootstrap}` argument, on stdin, or as a file whose path is `{bootstrap_file}`. `stdin` is legal only for `headless`, because an interactive agent owns stdin. |
+| `prompt.via` | `arg` \| `stdin` \| `file` | yes | How the bootstrap (§2.4) reaches the agent: as the `{bootstrap}` argument, on stdin, or as a file whose path is `{bootstrap_file}`. `stdin` is legal only for `headless`, because an interactive agent owns stdin. Every format-1 manifest declares `launch.interactive`, so a format-1 manifest declaring `stdin` is refused; the value is kept so that v1.0 can make `launch.interactive` optional for a headless-only adapter (§3.5) without changing this enum. |
 | `mcp.via` | `config-file` \| `args` | yes | How the `wingfoil` MCP server is registered for the launched process (§2.5). There is no `none`: an adapter that cannot register the server is refused (`adr-012` Consequences). |
 | `mcp.template` | string | `config-file`: yes | The body of the registration file, with placeholders (§2.3). Rendered to a file outside the repository, and its path passed as `{mcp_config_file}`. |
 | `session.id` | `assign` \| `output` \| `lookup` \| `none` | yes | How the session id is obtained (§2.6). |
 | `session.assign_args` | string[] | `assign`: yes | Argv fragment carrying `{session_id}`, appended to the launch argv. |
 | `session.lookup_args` | string[] | `lookup`: yes | Argv run after the agent exits. Its stdout is one JSON value. |
 | `session.field` | JSON path | `output`/`lookup`: yes | Where the id sits in that JSON. |
-| `session.resume` | `{ supported: bool, args?: string[] }` | yes | Resume support and argv, with `{session_id}` (`dl-135` point 5). Read from v0.4 (§7). |
+| `session.resume` | `{ supported: bool, args?: string[] }` | yes | Resume support and argv, with `{session_id}` (`dl-135` point 5). `args` is required with `supported: true`. Read from v0.4 (§7). |
 | `usage.from` | `output` \| `lookup` \| `none` | yes | Where token usage and model come from (`dl-114` Q3 (i)). |
 | `usage.lookup_args` | string[] | `lookup`: yes | As `session.lookup_args`; may be the same argv. |
 | `usage.fields` | map | `output`/`lookup`: yes | JSON paths for `model`, `input`, `output`, `cache_read`, `cache_write`. A path not declared, or absent in the JSON, yields `not-reported`, never `0`. |
@@ -152,6 +152,18 @@ error (`dl-090` Q3 (a): "argv, no shell. … Interpolation fills whole arguments
 | `{mcp_command}` | the MCP server executable (§2.5) | `mcp.template`; `launch.*.args` when `mcp.via: args` |
 | `{mcp_args}` | the MCP server's argv; expands to **several** elements in `args`, to a JSON array in `mcp.template` | same as `{mcp_command}` |
 | `{session_id}` | the assigned or recorded session id | `session.assign_args`, `session.resume.args`; `session.lookup_args` and `usage.lookup_args` only when `session.id: assign` (under `lookup` or `output` the id is not known before the lookup, and using it there is a manifest validation error) |
+
+Some placeholders are also **required**, so that a manifest that validates can launch. A missing one
+is a manifest validation error naming the field:
+
+- every declared `launch.*.args` carries the placeholder its `prompt.via` names (`{bootstrap}` for
+  `arg`, `{bootstrap_file}` for `file`; `stdin` names none) and the ones its `mcp.via` names
+  (`{mcp_config_file}` for `config-file`; both `{mcp_command}` and `{mcp_args}` for `args`). Without
+  them the agent starts without its bootstrap, or without the `wingfoil` server `adr-012` makes
+  mandatory;
+- `session.assign_args` carries `{session_id}` when `session.id` is `assign`. Without it the assigned
+  id never reaches the agent, and the run record names a session that does not exist;
+- `session.resume.args` carries `{session_id}` when `session.resume.supported` is `true`.
 
 Temporary files (`{bootstrap_file}`, `{mcp_config_file}`) are created in the operating system's
 temporary directory, never inside the repository, and are removed when `agent execute` exits.
@@ -245,7 +257,10 @@ that the path tests exercise is the one every project adapter takes:
 - The `e2e-smoke` gate (`dl-023`, `dl-099`) uses the same fake from a fresh `init` project, so the
   packaged tarball is exercised without an agent.
 
-The exact script paths are the implementing task's choice. What this section fixes is that the fake
+The exact script paths are the implementing task's choice. `task-200` chose
+`test/fixtures/agents/fake-agent.cjs` for the script, whose header documents its argv and the
+environment variables a test declares its behaviour with, and `test/fixtures/agents/custom/fake.yaml`
+and `custom/fake-terminal.yaml` for the two manifests. What this section fixes is that the fake
 is a **custom** adapter, that it covers every §2.2 field, and that no test needs a terminal. A real
 agent's terminal behaviour is covered only by the built-in adapter's `verified_with` pass by hand
 (§2.8).
@@ -460,6 +475,7 @@ P4.12:
 | `NO_AGENT` (no `--agent`, and no agent with an adapter executes the role) | `VALIDATION` | `1` | `no agent in dna.yaml with an adapter executes as role '<r>'` |
 | `--agent` names no agent, or one whose `executes_as` lacks the role | `VALIDATION` | `1` | `unknown agent '<name>'` / `agent '<name>' does not execute as role '<r>'` |
 | `NO_ADAPTER` (`--agent` names an agent without `adapter`) | `VALIDATION` | `1` | `agent '<name>' declares no adapter` |
+| the agent's `adapter` is in neither directory at `HEAD` | `NOT_FOUND` | `1` | `adapter '<name>': no .wingfoil/agents/built-in/<name>.yaml or .wingfoil/agents/custom/<name>.yaml at HEAD` |
 | manifest invalid | `VALIDATION` | `1` | `adapter '<name>': <zod issue>` (`dl-055` detail lines) |
 | `AGENT_NOT_FOUND` | `IO` | `1` | `agent command '<command>' not found (adapter '<name>')` |
 | git identity missing | as `requireGitIdentity` | `1` | as `requireGitIdentity` |
@@ -897,3 +913,18 @@ longer calls the rule an analogy, and its line-offset citation of the SARD file 
 section name (`dl-075`). Nothing about the manifest, the commands or the run record changes. Edited in
 place without a supersede or a state change (`dl-047`); pending the approver's sign-off at `task-196`'s
 review, and dropped if the approver keeps §2.1's analogy.
+
+**Revision (2026-10-07, `task-200-fake-agent-custom-adapter-let-agent-execute-path`) — a manifest that
+validates can launch; a newer format is refused as one; the fake's paths (`bug-234`, `bug-242`).**
+§2.3 gains the placeholders a declared choice makes required (each `via` its placeholder in every
+declared `launch.*.args`, `{session_id}` in `session.assign_args` under `assign` and in
+`session.resume.args` under `supported: true`), and §2.2 makes `session.resume.args` required with
+`supported: true`. Format 1 accepted those manifests, yet the format is not bumped (`dl-149`): no
+released build reads adapter manifests — no tag from `v0.2.0` to `v0.2.2` contains `src/agent/schema.ts`,
+added in `e0c9e958` (`task-177`) — so no manifest written for a released WingFoil is refused.
+§2.2's `format` row states the `dl-149` refusal of a newer format, which the validator now runs before
+the structural pass, and its `prompt.via` row says why `stdin` stays in the enum. §3.7 gains the row
+for an adapter found in neither directory, with the message the code already gave. §2.7 records the
+paths `task-200` chose. `bug-234`'s third gap, discovery passing over non-adapter files without a word,
+is split out of `bug-234` into its own element: no command enumerates adapters yet. Edited in place without a
+supersede or a state change (`dl-047`); recorded with `memory amend`.
