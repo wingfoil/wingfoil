@@ -153,9 +153,10 @@ rule; this clause only keeps a test identity from leaking into it.
   instead trace every agent under one account of its own: a machine account, in GitHub's id-qualified
   noreply form `<id>+<login>@users.noreply.github.com`, or any address the project owns. `dna.yaml`
   refuses a bare `<login>@users.noreply.github.com`: an unregistered login can be claimed by anyone, who
-  would then be credited with every commit naming it. It also refuses the identities the attribution
-  audit calls placeholders, through the same rule (`bug-261`): an empty or blank `name`, and an `email`
-  on an RFC 2606 reserved top-level domain (`.test`, `.example`, `.invalid`, `.localhost`).
+  would then be credited with every commit naming it. It also refuses, through the same rule, every
+  identity the attribution audit rejects (`bug-261`): an empty or blank `name`, and an `email`
+  on an RFC 2606 reserved top-level domain (`.test`, `.example`, `.invalid`, `.localhost`) or carrying
+  git's guessed `.(none)` domain.
 - **Who applies it.** Hand sessions — an agent writing commits with `git commit` — apply this section
   from `task-256-give-team.agents-an-email-and-state-the-intake-prefix-and-on-main-operations-in-git-conventions`'s
   merge on, in place of the model-named trailer they wrote before. A commit written by `wingfoil`

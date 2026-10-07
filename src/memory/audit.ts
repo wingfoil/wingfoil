@@ -30,7 +30,7 @@
  *   derived from git log ... no drift" -> {@link verifyTransitionConsistency}.
  */
 import { isConfiguredIdentity } from '../core';
-import { isPlaceholderIdentity, parseYaml, ValidationError } from '../validation';
+import { isAttributableIdentity, parseYaml, ValidationError } from '../validation';
 
 import { parseApproverTrailerLine, parseReasonBlock, parseVersionTrailer } from './commit-message';
 import { getMemoryHistory } from './history';
@@ -53,12 +53,6 @@ export interface AttributionEntry {
   readonly valid: boolean;
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@()]+$/;
-// The literal marker git itself appends to an author email when it falls back to a guessed identity
-// (user@hostname) and cannot determine a real domain — e.g. "root@buildhost.(none)". A commit
-// carrying this is not a deliberately-configured identity, so it counts as "unknown author".
-const GIT_GUESSED_DOMAIN_MARKER = '.(none)';
-
 /**
  * Whether `name`/`email` look like a real, deliberately-configured git identity rather than an
  * empty or git-guessed placeholder, as recorded on a *historical* commit. The base check — non-empty
@@ -69,11 +63,12 @@ const GIT_GUESSED_DOMAIN_MARKER = '.(none)';
  * *historical* commits rather than live config — `requireGitIdentity` has no need for either, because
  * it only ever looks at the identity a caller is about to write with:
  *
- *  - Rejects the `GIT_GUESSED_DOMAIN_MARKER` (`.(none)`): git appends this to an author email when it
+ *  - Rejects git's guessed-domain marker (`.(none)`): git appends this to an author email when it
  *    fell back to a guessed identity at commit time. `requireGitIdentity` now PREVENTS this going
  *    forward (task-014), but older history predating that guard can still carry it, so the read audit
  *    must flag it — it is a legacy-history concern, not part of the live write-time rule.
- *  - Rejects a non-empty-but-malformed email (`EMAIL_RE`): `requireGitIdentity` never needs this check
+ *  - Rejects a non-empty-but-malformed email (one `@`, a dotted domain, no whitespace, no parenthesis in
+ *    the top-level label): `requireGitIdentity` never needs this check
  *    because it only reads a git config value (itself always syntactically well-formed or absent);
  *    historical commit authors, however, can carry hand-edited or otherwise malformed values, so the
  *    audit validates the shape too.
@@ -82,10 +77,11 @@ const GIT_GUESSED_DOMAIN_MARKER = '.(none)';
  *    as unattributed as one carrying `.(none)`. Only the top-level label counts — `test.example.com`
  *    is an ordinary domain. The write-time check does not apply this rule: test fixtures and scratch
  *    repositories commit under these domains on purpose, and the audit is where they must show up.
- *    This rule, with the blank-name half the base check already covers, is
- *    {@link isPlaceholderIdentity} (`src/validation/identity.ts`, task-260, `bug-261`): the same
- *    predicate the `team.agents` schema applies, so an agent identity `dna.yaml` accepts is one this
- *    audit accepts too.
+ *
+ * The three augmentations, with a blank-name check the base already covers, are
+ * {@link isAttributableIdentity} (`src/validation/identity.ts`, task-260, `bug-261`), the rule the
+ * `team.agents` schema applies too: after the base check this function adds nothing else, so an agent
+ * identity `dna.yaml` accepts is one this audit accepts.
  *
  * Pure predicate — no filesystem/git access.
  */
@@ -93,9 +89,7 @@ export function isValidAttribution(name: string, email: string): boolean {
   const trimmedName = name.trim();
   const trimmedEmail = email.trim();
   if (!isConfiguredIdentity(trimmedName, trimmedEmail)) return false;
-  if (trimmedEmail.includes(GIT_GUESSED_DOMAIN_MARKER)) return false;
-  if (!EMAIL_RE.test(trimmedEmail)) return false;
-  return !isPlaceholderIdentity(trimmedName, trimmedEmail);
+  return isAttributableIdentity(trimmedName, trimmedEmail);
 }
 
 const AUDIT_LOG_FIELDS = ['%H', '%an', '%ae', '%aI', '%s'];

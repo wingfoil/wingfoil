@@ -7,8 +7,9 @@
  * the very identities `isValidAttribution` (`src/memory/audit.ts`, task-132, `bug-153`) calls placeholders;
  * and an entry with an `adapter` (so launchable, `spec-016` §3.7) could omit its `email`, which would make
  * its commits drop the co-authorship `dl-117` Q1 (B) requires. The rule is shared, not restated: the
- * agreement table below holds the schema and the audit to the same verdict, and the reserved-TLD list is
- * defined once under `src/`.
+ * agreement table below shows the schema and the audit reach the same verdict on its rows (agreement on
+ * those rows, not a proof of equivalence: the schema is stricter by design, e.g. angle brackets), and the
+ * reserved-TLD list and git's `.(none)` marker are defined once under `src/`.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -113,7 +114,7 @@ describe('task-260 — an entry agent execute can launch declares an email (dl-1
   });
 });
 
-describe('task-260 — the placeholder rule is defined once (bug-261: shared, not restated)', () => {
+describe('task-260 — the attribution rule is defined once (bug-261: shared, not restated)', () => {
   function sourceFiles(dir: string): string[] {
     return readdirSync(dir)
       .sort()
@@ -124,10 +125,13 @@ describe('task-260 — the placeholder rule is defined once (bug-261: shared, no
       });
   }
 
-  it("the RFC 2606 reserved-TLD list appears in exactly one file under src/, src/validation's", () => {
+  it("the RFC 2606 reserved-TLD list and git's .(none) marker appear in exactly one file under src/, src/validation's", () => {
     const root = join(__dirname, '..', '..');
     const holders = sourceFiles(join(root, 'src'))
-      .filter((file) => /\[\s*'invalid',\s*'example',\s*'test',\s*'localhost'\s*\]/.test(readFileSync(file, 'utf-8')))
+      .filter((file) => {
+        const text = readFileSync(file, 'utf-8');
+        return /\[\s*'invalid',\s*'example',\s*'test',\s*'localhost'\s*\]/.test(text) || text.includes("'.(none)'");
+      })
       .map((file) => file.slice(root.length + 1).split('\\').join('/'));
     expect(holders).toEqual(['src/validation/identity.ts']);
   });

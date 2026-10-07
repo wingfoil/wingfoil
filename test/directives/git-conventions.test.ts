@@ -88,8 +88,9 @@ describe('git-conventions §7 — dl-158 (task-260)', () => {
     expect(s7).not.toContain('it is the entry the running agent executes as');
   });
 
-  it('states the placeholder identities dna.yaml refuses (bug-261)', () => {
+  it('states the identities the audit rejects that dna.yaml refuses (bug-261)', () => {
     expect(s7).toContain('an empty or blank `name`, and an `email`\n  on an RFC 2606 reserved top-level domain');
+    expect(s7).toContain("git's guessed `.(none)` domain");
   });
 
   it('bumps the directive version to 1.2', () => {
