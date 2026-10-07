@@ -718,7 +718,7 @@ Fixed here so that v0.3 does not foreclose it (`dl-135` release split, plan R5):
 |---|---|---|---|---|
 | `agentExecute` | `agent` *(planned)* | true | `wingfoil agent execute` | Tool `agent.execute` *(v0.4; refuses until v1.0, §7)* |
 | `agentList` | `agent` *(planned)* | false | `wingfoil agent list` | Resource `wingfoil://agent/list` *(v0.4; URI per `dl-040`)* |
-| `agentShow` | `agent` *(planned)* | false | `wingfoil agent show` | Resource `wingfoil://agent/show/{run-id}` *(v0.4; URI per `dl-040`, encoding per §7)* |
+| `agentShow` | `agent` | false | `wingfoil agent show` | Resource `wingfoil://agent/show/{run-id}` *(v0.4; URI per `dl-040`, encoding per §7)* |
 
 These rows are the ones `spec-006` §3 carries, cell for cell. The production server does not run
 `registerCoreModules` (`src/mcp/server.ts`; `spec-006` §3, "MCP exposure"), so no `agent` operation
@@ -897,3 +897,9 @@ longer calls the rule an analogy, and its line-offset citation of the SARD file 
 section name (`dl-075`). Nothing about the manifest, the commands or the run record changes. Edited in
 place without a supersede or a state change (`dl-047`); pending the approver's sign-off at `task-196`'s
 review, and dropped if the approver keeps §2.1's analogy.
+
+**Revision (2026-10-07, `task-220-wingfoil-agent-show-run-id-prints-recorded-run`) — §8's `agentShow`
+row is registered.** `agent show` ships (§6), registered in `CORE_MODULES` under `agent`, so its
+module cell loses *(planned)*, as `spec-006` §3's row does in the same task: the two tables stay cell
+for cell. §6's contract is implemented as written. Edited in place without a supersede or a state
+change (`dl-047`).
