@@ -37,3 +37,17 @@ A decision whether second-level reserved domains count as placeholders, and the 
 
 Captured on 2026-10-02 by `bug-ingest-rel-v0.3-w1b2-review-findings-plan`, from the independent reviews of wave 1
 batch B2 (`dev-loop-rel-v0.3-plan`).
+
+- **Handover added at the W3 B2 ingest (2026-10-07, `bug-ingest-rel-v0.3-w3b2-review-findings-plan`).** Since
+  `task-260` (W3 B2, `bug-261`), `dna.yaml`'s `AgentEntry` refuses an agent email through the same rule the audit
+  applies (`attributionEmailIssue` in `src/validation/identity.ts`, imported by `src/dna/schema.ts`). Adding the
+  RFC 2606 second-level domains to that rule therefore also refuses `example.com`, `example.net` and `example.org`
+  agent emails in `dna.yaml`, a user-visible change to a file that loads today. Whoever fixes this updates, on
+  `main` at `c485e433`: `test/validation/identity.test.ts` line 14 (`'a@test.example.com'` and `'a@example.org'` are
+  asserted *not* reserved); `test/dna/agent-identity-placeholder.test.ts` line 74 (`'agent@test.example.com'` and
+  `'bot@example.org'` "keep accepting") and line 88 (the agreement-table row `agent@test.example.com`); the
+  `agent@example.org` fixtures of `test/dna/agent-identity.test.ts` (lines 49, 51, 137 and 142 expect it accepted;
+  lines 56–60 use it only inside malformed addresses); a Revision note in `spec-002` (the `AgentEntry` email rule,
+  last revised by `task-260`); and `docs/user-guide.md` §4.2, whose *Agent commit identity* paragraph lists the
+  refused domains. Member emails are not affected: `team.members` has no such rule (`DnaYaml.safeParse` on this build accepts
+  a member with `a@b.test`), and the guide's `ada@example.com` examples are member emails.
