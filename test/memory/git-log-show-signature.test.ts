@@ -14,15 +14,12 @@
  * The git configuration is isolated (`isolateGitConfig`): no global or system configuration of the
  * developer is read or written.
  */
-import { mkdirSync } from 'fs';
-import { join } from 'path';
-
 import { auditAttribution } from '../../src/memory/audit';
 import { walkGitLogFields } from '../../src/memory/git-log';
 import { collectHistoricalPaths, findElementCreationSha, getMemoryHistory, parseHistoricalPaths } from '../../src/memory/history';
 import { E_GIT_READ_FAILED, StorageError } from '../../src/storage';
-import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
-import { enableSigning, installSignatureForcingGit, isolateGitConfig, setShowSignature } from '../storage/helpers/signed-commits';
+import { removeTempDir } from '../storage/helpers/git-fixture';
+import { commitSigned, installSignatureForcingGit, isolatedGit, isolateGitConfig, makeSignedRepo, setShowSignature } from '../storage/helpers/signed-commits';
 
 const TEMPLATE = '.wingfoil/memory/templates/bug.md';
 const ELEMENT = 'docs/bugs/bug-1.md';
@@ -30,15 +27,12 @@ const BODY = `---\nid: ""\ntype: bug\ntitle: ""\nstatus: draft\n---\n\n## Summar
 
 /** A template, an element copied from it (a `C` edge for `--follow`), a status change and a rename. */
 function seed(repo: string): void {
-  writeFixtureFile(repo, TEMPLATE, BODY);
-  commitAll(repo, 'scaffold');
-  writeFixtureFile(repo, 'docs/old/bug-1.md', BODY.replace('id: ""', 'id: "bug-1"'));
-  commitAll(repo, 'wf(bug): add bug-1');
-  mkdirSync(join(repo, 'docs/bugs'), { recursive: true });
-  git(repo, ['mv', 'docs/old/bug-1.md', ELEMENT]);
-  git(repo, ['commit', '-q', '-m', 'move bug-1']);
-  writeFixtureFile(repo, ELEMENT, BODY.replace('id: ""', 'id: "bug-1"').replace('status: draft', 'status: open'));
-  commitAll(repo, 'wf(bug): submit bug-1');
+  commitSigned(repo, 'scaffold', { [TEMPLATE]: BODY });
+  commitSigned(repo, 'wf(bug): add bug-1', { 'docs/old/bug-1.md': BODY.replace('id: ""', 'id: "bug-1"') });
+  commitSigned(repo, 'keep the target directory', { 'docs/bugs/.keep': '' });
+  isolatedGit(repo, ['mv', 'docs/old/bug-1.md', ELEMENT]);
+  commitSigned(repo, 'move bug-1');
+  commitSigned(repo, 'wf(bug): submit bug-1', { [ELEMENT]: BODY.replace('id: ""', 'id: "bug-1"').replace('status: draft', 'status: open') });
 }
 
 /** Each reader's answer, in one value so the two settings compare at once. */
@@ -68,8 +62,7 @@ describe('task-268 — Memory git log readers on signed commits (bug-291)', () =
 
   beforeAll(() => {
     restore = isolateGitConfig();
-    repo = makeTempGitRepo();
-    enableSigning(repo);
+    repo = makeSignedRepo();
     seed(repo);
   });
 

@@ -1,10 +1,12 @@
 /**
- * Every `git log` reader in `src/` ignores `log.showSignature` (task-268 AC 2, `bug-291`).
+ * Every `git log` reader in `src/` and `scripts/` ignores `log.showSignature` (task-268 AC 2, `bug-291`;
+ * the scripts are the same class: `check-governance.cjs` reads `wf()` commits the same way).
  *
  * With `log.showSignature=true` in any git configuration level, `git log` (and `git show` of a
  * commit) prints the signature status on stdout among the formatted lines, where WingFoil's parsers
  * read it as commit names. `--no-show-signature` turns the setting off for the one invocation. This
- * gate enumerates the readers textually — every `'log'` argument in a `src/` TypeScript source — and
+ * gate enumerates the readers textually — every `'log'` argument in a `src/` TypeScript source or a
+ * `scripts/` CommonJS script — and
  * fails, with the file and line, on one whose next argument is not `'--no-show-signature'`, so a new
  * reader without the flag fails here before it reaches a user who signs.
  *
@@ -21,16 +23,19 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
-const SRC_ROOT = join(__dirname, '..', '..', 'src');
+const REPO_ROOT = join(__dirname, '..', '..');
 
-/** Every `.ts` source under `dir`, sorted, depth first. */
-function sources(dir: string): readonly string[] {
+/** The trees scanned and the extension of the sources in each: `src/`, and the repository scripts. */
+const SCANNED: readonly (readonly [string, string])[] = [['src', '.ts'], ['scripts', '.cjs']];
+
+/** Every `extension` source under `dir`, sorted, depth first. */
+function sources(dir: string, extension: string): readonly string[] {
   const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1));
   const found: string[] = [];
   for (const entry of entries) {
     const full = join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...sources(full));
-    else if (entry.name.endsWith('.ts')) found.push(full);
+    if (entry.isDirectory()) found.push(...sources(full, extension));
+    else if (entry.name.endsWith(extension)) found.push(full);
   }
   return found;
 }
@@ -46,6 +51,8 @@ const NO_SIGNATURE_NEXT = /^\s*,\s*'--no-show-signature'/;
 /** A `'show'` git argument, and the blob read that must follow it. */
 const SHOW_ARG = /(['"`])show\1/g;
 const BLOB_NEXT = /^\s*,\s*`\$\{\w+\}:\$\{\w+\}`/;
+/** A WingFoil command noun right before `'show'` (`dna show`, `agent show`): a CLI argument list, not git. */
+const WINGFOIL_NOUN_BEFORE = /'(dna|agent|workflow|memory|directive|directives)',\s*$/;
 /** git commands that print commits and have no business in a parser here. */
 const PORCELAIN_LOGS = /(['"`])(whatchanged|shortlog|reflog)\1/;
 
@@ -67,6 +74,7 @@ function scan(path: string, source: string): { readers: readonly string[]; findi
       }
     }
     for (const match of line.matchAll(SHOW_ARG)) {
+      if (WINGFOIL_NOUN_BEFORE.test(line.slice(0, match.index))) continue;
       if (!BLOB_NEXT.test(line.slice(match.index + match[0].length))) findings.push({ at, problem: "'show' of something other than a <rev>:<path> blob" });
     }
     if (PORCELAIN_LOGS.test(line)) findings.push({ at, problem: 'a porcelain log command' });
@@ -74,9 +82,9 @@ function scan(path: string, source: string): { readers: readonly string[]; findi
   return { readers, findings };
 }
 
-describe('every git log reader in src/ passes --no-show-signature (task-268, bug-291)', () => {
-  const results = sources(SRC_ROOT).map((file) =>
-    scan(relative(SRC_ROOT, file).split(sep).join('/'), readFileSync(file, 'utf-8')),
+describe('every git log reader in src/ and scripts/ passes --no-show-signature (task-268, bug-291)', () => {
+  const results = SCANNED.flatMap(([dir, extension]) => sources(join(REPO_ROOT, dir), extension)).map((file) =>
+    scan(relative(REPO_ROOT, file).split(sep).join('/'), readFileSync(file, 'utf-8')),
   );
 
   it('no reader is missing the flag, shows a commit, or runs a porcelain log', () => {
@@ -85,7 +93,13 @@ describe('every git log reader in src/ passes --no-show-signature (task-268, bug
 
   it('enumerates the readers it guards (the scan is not vacuous)', () => {
     const files = [...new Set(results.flatMap((result) => result.readers).map((at) => at.replace(/:\d+$/, '')))];
-    expect(files).toEqual(['core/agent-show.ts', 'core/workflow-deduction.ts', 'memory/git-log.ts', 'memory/history.ts']);
+    expect(files).toEqual([
+      'src/core/agent-show.ts',
+      'src/core/workflow-deduction.ts',
+      'src/memory/git-log.ts',
+      'src/memory/history.ts',
+      'scripts/check-governance.cjs',
+    ]);
   });
 
   it('can fail: flags a log without the flag, a commit show and a porcelain log; passes the guarded forms', () => {
@@ -96,6 +110,7 @@ describe('every git log reader in src/ passes --no-show-signature (task-268, bug
       "runGitRead(root, ['show', sha]);",
       'runGitRead(root, [\'show\', `${rev}:${path}`]);',
       "runGitRead(root, ['shortlog']);",
+      "run(['dna', 'show', '--format', 'json']);",
       " * a comment naming 'log' is not a reader",
     ].join('\n');
     const { readers, findings } = scan('x.ts', sample);

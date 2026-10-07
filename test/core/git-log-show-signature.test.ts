@@ -17,8 +17,8 @@ import { CORE_MODULES, deduceWorkflowStateAtHead, type InstanceDeduction } from 
 import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import { E_GIT_READ_FAILED, StorageError } from '../../src/storage';
-import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
-import { enableSigning, installSignatureForcingGit, isolateGitConfig, setShowSignature } from '../storage/helpers/signed-commits';
+import { removeTempDir } from '../storage/helpers/git-fixture';
+import { commitSigned, installSignatureForcingGit, isolateGitConfig, makeSignedRepo, setShowSignature } from '../storage/helpers/signed-commits';
 
 const MEMORY_YAML = `version: 1.0
 types:
@@ -61,18 +61,16 @@ function doc(type: string, id: string, status: string, extra = ''): string {
 
 /** The fixture project: configuration, one bug with two transitions, an open plan and one phase record. */
 function seed(repo: string): void {
-  writeFixtureFile(repo, '.wingfoil/memory.yaml', MEMORY_YAML);
-  writeFixtureFile(repo, '.wingfoil/dna.yaml', DNA_YAML);
-  writeFixtureFile(repo, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/flow.yaml\n');
-  writeFixtureFile(repo, '.wingfoil/workflows/custom/flow.yaml', FLOW);
-  commitAll(repo, 'fixture configuration');
-  writeFixtureFile(repo, 'docs/bugs/bug-1.md', doc('bug', 'bug-1', 'draft'));
-  commitAll(repo, 'wf(bug): add bug-1');
-  writeFixtureFile(repo, 'docs/bugs/bug-1.md', doc('bug', 'bug-1', 'open'));
-  commitAll(repo, 'wf(bug): submit bug-1');
-  writeFixtureFile(repo, 'docs/plans/plan-a.md', doc('plan', 'plan-a', 'active', 'workflow: "flow"\nphase: "first"\nelement: ""\n'));
-  commitAll(repo, 'start plan-a');
-  git(repo, ['commit', '--allow-empty', '-q', '-m', 'workflow: finalize', '-m', 'WingFoil-Phase: flow.first completed\nWingFoil-Instance: plan-a']);
+  commitSigned(repo, 'fixture configuration', {
+    '.wingfoil/memory.yaml': MEMORY_YAML,
+    '.wingfoil/dna.yaml': DNA_YAML,
+    '.wingfoil/workflows.yaml': 'version: 1.0\ninclude:\n  - workflows/custom/flow.yaml\n',
+    '.wingfoil/workflows/custom/flow.yaml': FLOW,
+  });
+  commitSigned(repo, 'wf(bug): add bug-1', { 'docs/bugs/bug-1.md': doc('bug', 'bug-1', 'draft') });
+  commitSigned(repo, 'wf(bug): submit bug-1', { 'docs/bugs/bug-1.md': doc('bug', 'bug-1', 'open') });
+  commitSigned(repo, 'start plan-a', { 'docs/plans/plan-a.md': doc('plan', 'plan-a', 'active', 'workflow: "flow"\nphase: "first"\nelement: ""\n') });
+  commitSigned(repo, 'workflow: finalize\n\nWingFoil-Phase: flow.first completed\nWingFoil-Instance: plan-a');
 }
 
 function memoryHistoryFn(): CoreFn<unknown, { entries: readonly { sha: string; operation: string | null }[] }> {
@@ -93,8 +91,7 @@ describe('task-268 — src/core git log consumers on signed commits (bug-291)', 
 
   beforeAll(() => {
     restore = isolateGitConfig();
-    repo = makeTempGitRepo();
-    enableSigning(repo);
+    repo = makeSignedRepo();
     seed(repo);
   });
 

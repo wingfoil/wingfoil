@@ -15,9 +15,14 @@
  */
 import { existsSync } from 'fs';
 
-import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
-import { enableSigning, isolateGitConfig, setShowSignature } from '../storage/helpers/signed-commits';
-import { CLI_ENTRY, runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
+import { removeTempDir } from '../storage/helpers/git-fixture';
+import { isolatedGit, isolateGitConfig, makeSignedRepo, setShowSignature } from '../storage/helpers/signed-commits';
+import { CLI_ENTRY, spawnCapture, type SpawnedRun } from './helpers/spawn-cli';
+
+/** The compiled CLI in `cwd`, with the test's `process.env` (the isolated git configuration) handed on. */
+function runCliEntry(cwd: string, args: readonly string[]): SpawnedRun {
+  return spawnCapture('node', [CLI_ENTRY, ...args], { cwd, env: process.env });
+}
 
 describe('task-268 — `memory history` is independent of log.showSignature (bug-291)', () => {
   let restore: () => void = () => undefined;
@@ -27,8 +32,7 @@ describe('task-268 — `memory history` is independent of log.showSignature (bug
   beforeAll(() => {
     expect(existsSync(CLI_ENTRY)).toBe(true);
     restore = isolateGitConfig();
-    repo = makeTempGitRepo();
-    enableSigning(repo);
+    repo = makeSignedRepo();
     setShowSignature(repo, false);
     const init = runCliEntry(repo, ['init', '--template', 'scrum']);
     expect([init.status, init.stderr]).toEqual([0, '']);
@@ -51,7 +55,7 @@ describe('task-268 — `memory history` is independent of log.showSignature (bug
   it('the fixture commits are signed: git reports signature text for them when log.showSignature is on', () => {
     // The signature text the readers must not parse — the reproduction's precondition, not the fix.
     setShowSignature(repo, true);
-    expect(git(repo, ['log', '-1', '--format=%H'])).toMatch(/signature/i);
+    expect(isolatedGit(repo, ['log', '-1', '--format=%H'])).toMatch(/signature/i);
   });
 
   it.each(['json', 'yaml', 'console'])('AC 1/AC 3: exits 0 and prints byte-identical %s output with log.showSignature on and off', (format) => {
