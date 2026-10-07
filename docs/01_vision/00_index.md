@@ -1,6 +1,6 @@
 # WingFoil — Product Vision (docs/vision)
 
-**Last indexed:** 2026-10-06
+**Last indexed:** 2026-10-07
 
 This folder holds the **product-vision specification** for WingFoil, produced through a Lean Inception workshop (see
 [`X_lean-inception-plan.md`](X_lean-inception-plan.md)). This README is a **navigation index**: it tells you which
@@ -41,10 +41,10 @@ line count (`awk 'END{print NR}'`).
 | [`02_product-vision.md`](02_product-vision.md)         | 1.3 | 2026-10-06 | Approved | 103   | Vision statement, key decisions, and the reference-workflow/methodology-template model                                  |
 | [`03_is-isnot.md`](03_is-isnot.md)                     | 1.4 | 2026-10-06 | Approved | 59    | Scope boundaries: what WingFoil IS / IS NOT / DOES / DOES NOT                                                           |
 | [`04_personas.md`](04_personas.md)                     | 1.1 | 2026-10-06 | Approved | 147   | The primary persona (Morgan) and the 7 personas (Alex, Sam, Jordan, Morgan, Casey, Taylor, the maintainer)              |
-| [`05_journeys.md`](05_journeys.md)                     | 1.4 | 2026-10-06 | Approved | 286   | 8 end-to-end user journeys (0a, 0b, 1–6): steps, obstacles, success                                                     |
+| [`05_journeys.md`](05_journeys.md)                     | 1.5 | 2026-10-07 | Approved | 287   | 8 end-to-end user journeys (0a, 0b, 1–6): steps, obstacles, success                                                     |
 | [`06_features.md`](06_features.md)                     | 1.10 | 2026-10-06 | Approved | 518   | 63 features (by pillar + by release) and the data-model / implementation notes                                          |
 | [`07_sequencer.md`](07_sequencer.md)                   | 1.8 | 2026-10-01 | Approved | 471   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
-| [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.8 | 2026-10-06 | Approved | 213   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
+| [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.9 | 2026-10-07 | Approved | 220   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
 | [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.6 | 2026-10-06 | Approved | 408   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
 | [`X_lean-inception-plan.md`](X_lean-inception-plan.md) | —   | 2026-06-11 | —        | 42    | Workshop plan: sessions, key decisions, output list                                                                     |
 
@@ -56,9 +56,9 @@ line count (`awk 'END{print NR}'`).
 |---------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|
 | The vision statement                                                | `01_product-brief` L9–21 · `02_product-vision` L9–19 · `08_mvp-canvas` Value Proposition L38–45        |
 | The core problem WingFoil solves                                    | `01_product-brief` L22–38 · `08_mvp-canvas` L9–23                                                      |
-| The 5 pillars (Memory, DNA, Directives, Workflow, Interaction)      | `01_product-brief` L39–79 · `08_mvp-canvas` L58–97                                                     |
+| The 5 pillars (Memory, DNA, Directives, Workflow, Interaction)      | `01_product-brief` L39–79 · `08_mvp-canvas` L65–104                                                    |
 | Scope boundaries (is / is-not / does / does-not)                    | `03_is-isnot` (whole file, L9–59)                                                                      |
-| The primary persona (Morgan) and why                                | `04_personas` L9–20 · `01_product-brief` note L108                                                     |
+| The primary persona (Morgan) and why                                | `04_personas` L9–20 · `01_product-brief` note L108 · `08_mvp-canvas` note L57                          |
 | Persona details (pains, goals, AI-usage)                            | `04_personas` L9–147 · quick summary `01_product-brief` L106–159                                       |
 | End-to-end user flows                                               | `05_journeys` (per-journey ranges below)                                                               |
 | The full feature list + feature IDs (P1.x…X1.x)                     | `06_features` L9–159                                                                                   |
@@ -68,9 +68,9 @@ line count (`awk 'END{print NR}'`).
 | Reference workflow templates (Scrum/Kanban/Lean/Trunk-Based)        | `02_product-vision` L31–103 · `06_features` P4.18–P4.20 (L102–104)                                     |
 | Schedule: active-day budgets, actuals, forecast                     | `07_sequencer` L9–133 · original plan L134–145 · `01_product-brief` L248–264                           |
 | Definition of Done per release                                      | `07_sequencer` L369–438                                                                                |
-| Success metrics & criteria                                          | `01_product-brief` L160–195 & L265–311 · `08_mvp-canvas` L98–123 & L154–193                            |
-| The Determinism Index (I, P, O) and who controls each component     | `01_product-brief` North Star L162–182 and Solution L39–79 · `08_mvp-canvas` L100–110 · `03_is-isnot`  |
-| Competitive differentiators (Replaces / Works with)                 | `01_product-brief` L80–105 · `08_mvp-canvas` L124–142                                                  |
+| Success metrics & criteria                                          | `01_product-brief` L160–195 & L265–311 · `08_mvp-canvas` L105–130 & L161–200                           |
+| The Determinism Index (I, P, O) and who controls each component     | `01_product-brief` North Star L162–182 and Solution L39–79 · `08_mvp-canvas` L107–117 · `03_is-isnot`  |
+| Competitive differentiators (Replaces / Works with)                 | `01_product-brief` L80–105 · `08_mvp-canvas` L131–149                                                  |
 | Tech stack & constraints                                            | `01_product-brief` L312–336                                                                            |
 
 ---
@@ -126,9 +126,9 @@ line count (`awk 'END{print NR}'`).
 - Journey 2 — Sam: review workflow + AI review agent — L105–138
 - Journey 3 — Jordan: team task with auto-loaded directives — L139–173
 - Journey 4 — Morgan: enforce conventions / detect violations — L174–206
-- Journey 5 — Casey: decisions & alignment notifications — L207–242
-- Journey 6 — Morgan: define & evolve workflow — L243–274
-- Key Observations across journeys — L275–286
+- Journey 5 — Casey: decisions & alignment notifications (step 4.5: release progress as a read-only view) — L207–243
+- Journey 6 — Morgan: define & evolve workflow — L244–275
+- Key Observations across journeys — L276–287
 
 ### `06_features.md`
 
@@ -162,13 +162,13 @@ line count (`awk 'END{print NR}'`).
 - Problem — L9–23
 - Solution — L24–37
 - Value Proposition — L38–45
-- Target Users — L46–57
-- Key Features (all 5 pillars) — L58–97
-- Metrics of Success (North Star L100, Supporting Indicators L111) — L98–123
-- Competitive Advantage (Replaces / Works with) — L124–142
-- Risks & Mitigations — L143–153
-- Success & Next Steps (criteria L156, if succeeds L173, if stalls L184) — L154–193
-- Appendix: Documentation Reference — L194–213
+- Target Users (Morgan primary first, the maintainer's row; primary-persona note L57) — L46–64
+- Key Features (all 5 pillars) — L65–104
+- Metrics of Success (North Star L107, Supporting Indicators L118) — L105–130
+- Competitive Advantage (Replaces / Works with) — L131–149
+- Risks & Mitigations — L150–160
+- Success & Next Steps (criteria L163, if succeeds L180, if stalls L191) — L161–200
+- Appendix: Documentation Reference — L201–220
 
 ### `X_cli-cmds.md`
 
