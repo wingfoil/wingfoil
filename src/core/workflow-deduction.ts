@@ -161,8 +161,7 @@ function readDirty(root: string, memoryYaml: MemoryYaml | null, dnaYaml: DnaYaml
  * The entries of every collection a loaded workflow iterates over (`spec-003` § "Collections", `dl-104`
  * D2 (b)), by reference in byte order: `dna:<path>` from `dna.yaml` (the `spec-008` §9 path syntax),
  * `bindings:<name>` from `workflows/bindings.yaml`'s `collections`, both at the snapshot's commit. A
- * reference that names no list is left out (the registry reports it, `E_WORKFLOW_COLLECTION_UNRESOLVED`,
- * except a `dna:` reference with no `dna.yaml`, which has no candidates).
+ * `dna:` reference with no `dna.yaml` is left out: it has no candidates.
  */
 function readCollections(workflows: readonly Workflow[], dnaYaml: DnaYaml | null, bindings: BindingsYaml | null): Map<string, readonly CollectionEntry[]> {
   const references = new Set<string>();
@@ -173,16 +172,14 @@ function readCollections(workflows: readonly Workflow[], dnaYaml: DnaYaml | null
   }
   const collections = new Map<string, readonly CollectionEntry[]>();
   for (const reference of [...references].sort()) {
-    let entries: unknown = undefined;
+    // Every reference resolves to a list here: the registry refuses one that does not
+    // (`E_WORKFLOW_COLLECTION_UNRESOLVED`), except a `dna:` reference without `dna.yaml`, which is undecided
+    // there and has no candidates here.
     if (reference.startsWith('bindings:')) {
-      const name = reference.slice('bindings:'.length);
-      const declared = bindings?.collections ?? {};
-      if (Object.prototype.hasOwnProperty.call(declared, name)) entries = declared[name];
+      collections.set(reference, bindings!.collections![reference.slice('bindings:'.length)]!);
     } else if (dnaYaml !== null) {
-      const resolved = resolveDnaPath(dnaYaml, reference.slice('dna:'.length));
-      if (resolved.ok) entries = resolved.target.value;
+      collections.set(reference, (resolveDnaPath(dnaYaml, reference.slice('dna:'.length)) as { target: { value: CollectionEntry[] } }).target.value);
     }
-    if (Array.isArray(entries)) collections.set(reference, entries as CollectionEntry[]);
   }
   return collections;
 }

@@ -7,7 +7,7 @@
  * `p4-workflow/P4.16-include-composition.feature` sc. 1 and sc. 3 on a real repository.
  */
 import { deduceWorkflowStateAtHead, readDeductionSnapshotAtHead } from '../../src/core';
-import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const MEMORY_YAML = `version: 1.0
 types:
@@ -162,6 +162,17 @@ describe('task-202 — iterate_over at HEAD (spec-017 §4.6, §4.11)', () => {
     ]);
     const entry = deduceWorkflowStateAtHead(repo).instances[0]!;
     expect(entry.frontier.map((step) => step.key)).toEqual(['per-entry.write@dna:modules#cli']);
+  });
+
+  it('a dna: collection without dna.yaml has no candidates', () => {
+    repo = makeTempGitRepo();
+    writeProject(repo, { 'docs/plans/p1.md': plan('p1', 'mods') });
+    // Remove dna.yaml in a later commit: the registry cannot decide a dna: reference then (spec-003).
+    git(repo, ['rm', '-q', '.wingfoil/dna.yaml']);
+    git(repo, ['commit', '-q', '-m', 'no dna']);
+    expect([...readDeductionSnapshotAtHead(repo).collections!.keys()]).toEqual(['bindings:templates']);
+    const entry = deduceWorkflowStateAtHead(repo).instances[0]!;
+    expect(entry.phases[0]).toMatchObject({ phase: 'each-module', state: 'complete', vacuous: true });
   });
 
   it('an archived bound element at HEAD abandons the instance', () => {

@@ -35,6 +35,8 @@ types:
     path: "docs/bugs/{id}.md"
     states:
       sequence: [ draft, open, closed ]
+      gates:
+        open: { reject: wontfix }
   adr:
     path: "docs/adrs/{id}.md"
     states:
@@ -220,6 +222,13 @@ phases:
       snapshot([CYCLE, DEV], [task('legacy-a', 'backlog', { tags: ['v1'] }), task('task-12-b', 'backlog', { tags: ['v1'] }), task('task-3-c', 'backlog', { tags: ['v1'] }), release('r1', 'in-development'), plan('p1', 'cycle', 'r1')]),
     );
     expect(keys(entry)).toEqual(['dev.start@task:task-3-c', 'dev.start@task:task-12-b', 'dev.start@task:legacy-a']);
+  });
+
+  it('two ids with the same {n} iterate in byte-wise id order', () => {
+    const entry = first(
+      snapshot([CYCLE, DEV], [task('task-3-b', 'backlog', { tags: ['v1'] }), task('task-3-a', 'backlog', { tags: ['v1'] }), release('r1', 'in-development'), plan('p1', 'cycle', 'r1')]),
+    );
+    expect(keys(entry)).toEqual(['dev.start@task:task-3-a', 'dev.start@task:task-3-b']);
   });
 
   it('candidates with no {n} token in the id_pattern iterate in byte-wise id order', () => {
@@ -431,6 +440,39 @@ phases:
     expect(keys(entry)).toEqual(['opt.develop@release:r1']);
   });
 
+  it('consecutive optional phases are all reported, up to and including the next non-optional one', () => {
+    const twoOptional = wf(`name: opt3
+kind: main
+phases:
+  - name: one
+    optional: true
+  - name: two
+    optional: true
+  - name: three
+  - name: four
+`);
+    expect(keys(first(snapshot([twoOptional], [plan('p1', 'opt3')])))).toEqual(['opt3.one', 'opt3.two', 'opt3.three']);
+  });
+
+  it('a selection matching nothing whose other evidence is satisfied is complete, not vacuously', () => {
+    const sweep = wf(`name: sweep2
+kind: main
+phases:
+  - name: extra
+    optional: true
+  - name: sweep
+    where: { type: bug, status: [ open ] }
+    produces: [ "out/report.md" ]
+  - name: last
+`);
+    const entry = first(snapshot([sweep], [plan('p1', 'sweep2')], { tree: ['out/report.md'] }));
+    expect(entry.phases).toEqual([
+      { phase: 'extra', state: 'skipped' },
+      { phase: 'sweep', state: 'complete' },
+      { phase: 'last', state: 'current' },
+    ]);
+  });
+
   it('a vacuous later completion does not skip it', () => {
     const optVacuous = wf(`name: opt2
 kind: main
@@ -477,6 +519,19 @@ phases:
     expect(entry.phases[0]).toMatchObject({ state: 'complete', vacuous: true });
     const tasks = first(snapshot([REL, DEV], [task('task-1-a', 'deprecated'), release('r1', 'in-development'), plan('p1', 'rel', 'r1')]));
     expect(tasks.phases[0]).toMatchObject({ state: 'complete', vacuous: true });
+  });
+
+  it('a bound element in a reject state outside its sequence is at no exit state (state evidence unsatisfied)', () => {
+    const triage = wf(`name: triage
+kind: main
+element: bug
+phases:
+  - name: open-it
+    actions:
+      - element.set_state(open)
+`);
+    const entry = first(snapshot([triage], [doc('docs/bugs/bug-1.md', { id: 'bug-1', type: 'bug', status: 'wontfix' }), plan('p1', 'triage', 'bug-1')]));
+    expect(keys(entry)).toEqual(['triage.open-it@bug:bug-1']);
   });
 
   it('an archived element never matches a selection', () => {
