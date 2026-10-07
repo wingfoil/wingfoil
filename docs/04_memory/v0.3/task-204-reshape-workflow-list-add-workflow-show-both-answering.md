@@ -2,7 +2,7 @@
 id: "task-204-reshape-workflow-list-add-workflow-show-both-answering"
 type: task
 title: "Reshape `workflow list` and add `workflow show`, both answering from `HEAD`"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "high"
