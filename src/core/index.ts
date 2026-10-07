@@ -134,15 +134,8 @@ export { isWellFormedRevision, resolveRevision, RevisionError } from './revision
 // (spec-017 §4.4) task-198's deduction reuses.
 export { loadWorkflowRegistry, loadWorkflowRegistryAtHead, loadWorkflowRegistryAtRev } from './workflow-registry';
 // task-204: `workflow list` / `workflow show` at `HEAD` (`spec-017` §7.5–§7.6, §8).
-export {
-  declaredEvidenceKinds,
-  listWorkflows,
-  NO_WORKFLOWS_DEFINED,
-  showWorkflow,
-  unknownWorkflowMessage,
-  workflowListAtHead,
-  workflowShowAtHead,
-} from './workflow-list-show';
+// The functions stay module-internal until a consumer needs them (task-216's `next` may import
+// `declaredEvidenceKinds`); the operations are `CORE_MODULES`' `workflowList` / `workflowShow`.
 export type { CheckTokenView, ListEntry, ListResult, PhaseView, ShowInputs, ShowResult, TokenView, WorkflowView } from './workflow-list-show';
 export { W_WORKFLOW_CHECKS_NOT_RUN, workflowCoreDiagnostics } from './workflow-core-checks';
 export type { CheckedRegistry, WorkflowCoreInputs } from './workflow-core-checks';
