@@ -173,7 +173,7 @@ average 20.5, `uptime`). Status stays `in-review`: no re-submit.
 
 ### Pending amendments (approver)
 
-- `spec-003-workflows-yaml-schema` (uncommitted in the worktree): `--reason "task-194 implements the core rows of the Diagnostics table. Open question 3 left the cadence event code unnamed, so the table gains E_PHASE_CADENCE_EVENT_UNKNOWN (core, error) with its path, message and the states an event may name, and Recurring phases names it. The Order paragraph changes: it interleaved the core rows with the loader rows per field, and now puts every core diagnostic after every loader diagnostic, in spec-003 order among themselves, as task-194 AC 1 asks and because the core checks run only on a load the loader accepted. Where each check runs names the two files, drops roles.yaml, which no core row reads, and says a core check is not decided without its input. No code, severity or message changes."`
+- `spec-003-workflows-yaml-schema` (uncommitted in the worktree): `--reason "task-194 implements the core rows of the Diagnostics table. Open question 3 left the cadence event code unnamed, so the table gains E_PHASE_CADENCE_EVENT_UNKNOWN (core, error) with its path, message and the states an event may name, and Recurring phases names it. The Order paragraph changes: it interleaved the core rows with the loader rows per field, and now puts every core diagnostic after every loader diagnostic, in spec-003 order among themselves, as task-194 AC 1 asks and because the core checks run only on a load the loader accepted. Where each check runs names the two files, drops roles.yaml, which no core row reads, and says a core check is not decided without its input. No other code, severity or message changes."`
 
 ### Decisions for the approver
 
