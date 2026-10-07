@@ -30,6 +30,7 @@ Retrospective input is reconstructed after the release. The task, bug and plan t
 - **Features:** P4.1.
 - **Notes:** Proposal key: D07.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from `dl-163` (2026-10-07, approver; `dl-115` amended the same day).** The `additional-points` check this task adds accepts six outcomes for a consumer feedback note: `dl-115`'s four plus `declined` and `needs-info`. A later task (dl-163 S3d, batch B5) adds the `collect-feedback` phase to `retrospective.yaml` after this task and `task-222`; keep the check written so that phase's notes can be listed as a secondary source of `explore`.
 
 ## Execution Notes
 
