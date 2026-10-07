@@ -2,7 +2,7 @@
 id: "bug-133-e2e-smoke-never-revalidates-what-a-command-wrote"
 type: bug
 title: "The dl-023 smoke never re-loads a written artifact through its own loader, so \"no schema-invalid artifact produced by any command\" is only proxied"
-status: in-progress
+status: in-review
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
