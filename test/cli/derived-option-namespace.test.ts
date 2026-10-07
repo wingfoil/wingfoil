@@ -168,9 +168,11 @@ describe('the drive: every declared entry-field option lands, through the real c
         'dna', 'add', 'team.agents', '--value', 'agent',
         '--entry-executes_as', 'developer,qa', '--entry-approval_authority', 'false',
         '--entry-adapter', 'claude-code',
+        // An agent with an adapter must declare an email (dl-158 Rule 2 (ii), task-260).
+        '--entry-email', 'noreply@anthropic.com',
       ],
       expect: (document) => (document.team as unknown as { agents: unknown[] }).agents[0],
-      value: { name: 'agent', executes_as: ['developer', 'qa'], approval_authority: false, adapter: 'claude-code' },
+      value: { name: 'agent', executes_as: ['developer', 'qa'], approval_authority: false, adapter: 'claude-code', email: 'noreply@anthropic.com' },
     },
   ];
 

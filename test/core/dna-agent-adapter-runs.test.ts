@@ -36,6 +36,7 @@ team:
       roles: [ approver ]
   agents:
     - name: claude
+      email: noreply@anthropic.com
       executes_as: [ developer ]
       approval_authority: false
   roles:

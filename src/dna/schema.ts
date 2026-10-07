@@ -11,6 +11,7 @@ import { z } from 'zod';
 
 import { DNA_YAML_FORMAT, formatField } from '../validation/format';
 import { ID_CHAR_CLASS, isIdPiece } from '../validation/id';
+import { hasReservedDomain, isBlankIdentityName } from '../validation/identity';
 
 /**
  * An array of named entries in which **no two entries share a `name`**.
@@ -158,12 +159,24 @@ function isTrailerSafeName(name: string): boolean {
  * not hold `<`, `>` or a line break, and `email` — optional; by default the address the agent's vendor
  * publishes for co-authorship, or a project-owned machine account — must be one mailbox
  * ({@link AGENT_EMAIL_RE}) and, on GitHub's noreply domain, id-qualified ({@link isIdQualifiedGitHubNoreply}).
+ *
+ * The identity must also be one the attribution audit accepts (task-260, `bug-261`): a blank `name` and an
+ * `email` on an RFC 2606 reserved top-level domain are refused through the placeholder rule
+ * `isValidAttribution` applies (`src/validation/identity.ts`), shared rather than restated. And an entry
+ * that declares an `adapter` — one `agent execute` can launch, so one whose commits carry its trailer —
+ * must declare an `email` (`dl-158` Rule 2 (ii)); without an `adapter` the `email` stays optional, since
+ * the entry signs nothing yet (approver ruling F1, task-256).
  */
 export const AgentEntry = z
   .object({
-    name: z.string().refine(isTrailerSafeName, {
-      message: 'an agent name may not contain "<", ">" or a line break (it is written into a Co-Authored-By: trailer)',
-    }),
+    name: z
+      .string()
+      .refine(isTrailerSafeName, {
+        message: 'an agent name may not contain "<", ">" or a line break (it is written into a Co-Authored-By: trailer)',
+      })
+      .refine((value) => !isBlankIdentityName(value), {
+        message: 'an agent name may not be empty or blank (the attribution audit rejects a blank name, bug-261)',
+      }),
     email: z
       .string()
       .refine((value) => AGENT_EMAIL_RE.test(value), {
@@ -171,6 +184,10 @@ export const AgentEntry = z
       })
       .refine(isIdQualifiedGitHubNoreply, {
         message: 'a GitHub noreply agent email must be id-qualified, <id>+<login>@users.noreply.github.com (a bare login can be claimed by anyone)',
+      })
+      .refine((value) => !hasReservedDomain(value), {
+        message:
+          'an agent email may not be on a reserved top-level domain (.test, .example, .invalid, .localhost: RFC 2606 names no mailbox there, and the attribution audit rejects it, bug-261)',
       })
       .optional(),
     executes_as: z.array(z.string()),
@@ -180,7 +197,16 @@ export const AgentEntry = z
       .refine(isIdPiece, { message: `an adapter name must be non-empty and use only [${ID_CHAR_CLASS}] (spec-009 id class)` })
       .optional(),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((value, ctx) => {
+    if (value.adapter !== undefined && value.email === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `an agent with an adapter must declare an email: agent execute can launch it, and its commits carry a Co-Authored-By: <name> <<email>> trailer (dl-158 Rule 2 (ii))`,
+        path: ['email'],
+      });
+    }
+  });
 /** Parsed shape of the {@link AgentEntry} schema. */
 export type AgentEntry = z.infer<typeof AgentEntry>;
 

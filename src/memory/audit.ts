@@ -30,7 +30,7 @@
  *   derived from git log ... no drift" -> {@link verifyTransitionConsistency}.
  */
 import { isConfiguredIdentity } from '../core';
-import { parseYaml, ValidationError } from '../validation';
+import { isPlaceholderIdentity, parseYaml, ValidationError } from '../validation';
 
 import { parseApproverTrailerLine, parseReasonBlock, parseVersionTrailer } from './commit-message';
 import { getMemoryHistory } from './history';
@@ -58,18 +58,6 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@()]+$/;
 // (user@hostname) and cannot determine a real domain — e.g. "root@buildhost.(none)". A commit
 // carrying this is not a deliberately-configured identity, so it counts as "unknown author".
 const GIT_GUESSED_DOMAIN_MARKER = '.(none)';
-// RFC 2606 §2 reserves these four top-level domains for testing, documentation, invalid addresses and
-// loopback. No mailbox exists under them, so an author on one is a placeholder — the same class of
-// "not a deliberately-configured identity" as git's guessed-domain marker (task-132, bug-153).
-const RFC2606_RESERVED_TLDS: readonly string[] = ['invalid', 'example', 'test', 'localhost'];
-
-/** Whether `email`'s domain is, or ends in, an RFC 2606 reserved top-level domain (case-insensitive). */
-function hasReservedDomain(email: string): boolean {
-  // A trailing dot is the fully-qualified spelling of the same domain (`foo.test.` is `foo.test`).
-  const domain = email.slice(email.lastIndexOf('@') + 1).toLowerCase().replace(/\.+$/, '');
-  const tld = domain.slice(domain.lastIndexOf('.') + 1);
-  return RFC2606_RESERVED_TLDS.includes(tld);
-}
 
 /**
  * Whether `name`/`email` look like a real, deliberately-configured git identity rather than an
@@ -94,6 +82,10 @@ function hasReservedDomain(email: string): boolean {
  *    as unattributed as one carrying `.(none)`. Only the top-level label counts — `test.example.com`
  *    is an ordinary domain. The write-time check does not apply this rule: test fixtures and scratch
  *    repositories commit under these domains on purpose, and the audit is where they must show up.
+ *    This rule, with the blank-name half the base check already covers, is
+ *    {@link isPlaceholderIdentity} (`src/validation/identity.ts`, task-260, `bug-261`): the same
+ *    predicate the `team.agents` schema applies, so an agent identity `dna.yaml` accepts is one this
+ *    audit accepts too.
  *
  * Pure predicate — no filesystem/git access.
  */
@@ -103,7 +95,7 @@ export function isValidAttribution(name: string, email: string): boolean {
   if (!isConfiguredIdentity(trimmedName, trimmedEmail)) return false;
   if (trimmedEmail.includes(GIT_GUESSED_DOMAIN_MARKER)) return false;
   if (!EMAIL_RE.test(trimmedEmail)) return false;
-  return !hasReservedDomain(trimmedEmail);
+  return !isPlaceholderIdentity(trimmedName, trimmedEmail);
 }
 
 const AUDIT_LOG_FIELDS = ['%H', '%an', '%ae', '%aI', '%s'];
