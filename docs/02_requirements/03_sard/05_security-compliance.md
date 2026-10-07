@@ -98,13 +98,18 @@
 
 ### REQ-SEC-07 — Immutable built-in assets
 
-* **Description:** Built-in directives and built-in workflow templates cannot be removed; custom assets can be removed
-  only when unreferenced.
-* **Rationale:** Protect the baseline; prevent dangling references.
+* **Description:** Built-in directives, built-in workflow templates and built-in agent adapters cannot be removed;
+  custom assets can be removed only when unreferenced. What is built-in is decided by location: a file under
+  `.wingfoil/{directives,workflows,agents}/built-in/`.
+* **Rationale:** Protect the baseline; prevent dangling references. An installed built-in adapter also pins the launch
+  argv in the project's history, so two clones launch the same agent the same way (REQ-SYS-07).
 * **Fit Criterion:** `directive remove` / `workflow remove` on a built-in is rejected ("built-in … cannot be removed");
-  removal of a still-referenced custom asset is rejected naming the referrer.
+  removal of a still-referenced custom asset is rejected naming the referrer. No command removes or rewrites a built-in
+  agent adapter: 0 operations in the command surface do (`npx jest test/core/builtin-adapter-writers.test.ts`),
+  and a future one is held to the same refusal.
 * **Traceability:** Feature P3.3 (US-6-07, BDD `p3-directives/P3.3-directive-remove.feature`); Feature P4.9 (US-6-11,
-  BDD `p4-workflow/P4.9-workflow-remove.feature`).
+  BDD `p4-workflow/P4.9-workflow-remove.feature`). Built-in agent adapters added by `task-196` per
+  `spec-016-agent-execution` §2.1 and Consequences (Features P5.1.1, P5.3.1).
 
 ### REQ-SEC-08 — Secret/credential hygiene
 
@@ -127,15 +132,16 @@
 
 ### REQ-SEC-10 — Schema checks on built-in templates
 
-* **Description:** Built-in directive and workflow templates are schema-checked before installation during
-  `init`.
+* **Description:** Built-in directive and workflow templates, and built-in agent adapter manifests, are schema-checked
+  before installation during `init`.
 * **Rationale:** A corrupted baseline must not partially install.
 * **Fit Criterion:** A corrupted or schema-invalid built-in template aborts `init` before writing partial assets, with a
   message naming the failing template.
 * **Traceability:** Feature P3.8 (US-0A-09, BDD `p3-directives/P3.8-builtin-directive-templates.feature`); Feature P4.17
   (US-0A-21, BDD `p4-workflow/P4.17-builtin-workflow-templates.feature`). Scoped to schema validation by
   `dl-031-req-sec-10-integrity-depth`: the threat addressed is accidental corruption, not post-install
-  tampering — distribution-channel assurance lives in `adr-009`/`spec-015` (npm provenance).
+  tampering — distribution-channel assurance lives in `adr-009`/`spec-015` (npm provenance). Built-in agent adapter
+  manifests (`spec-016-agent-execution` §2.1–§2.2) joined by `task-196`, checked against the adapter manifest schema.
 
 ### REQ-SEC-11 — Notification routing authority by role / decision-type
 

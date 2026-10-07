@@ -2,7 +2,7 @@
 id: bug-183-built-in-workflow-templates-pass-the-p4.17-integrity-check-without-being-startable-or-includable
 type: bug
 title: "Built-in workflow templates pass the P4.17 integrity check without being startable or includable"
-status: planned
+status: closed
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)

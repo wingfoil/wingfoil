@@ -88,11 +88,12 @@ that changes from task to task.
   validation error. It is not an override: the same name in both directories would make which one
   launched ambiguous in the run record.
 - `built-in/` versus `custom/` is the same structural discriminator that `REQ-SEC-07` keys
-  removability on for directives and workflow templates (`05_security-compliance.md:77-85`,
-  `spec-011-storage-layout`, `directives/{built-in,custom}/` and `workflows/{built-in,custom}/`),
-  applied here **by analogy**: `REQ-SEC-07` names built-in directives and workflow templates only, and
-  no `adapter remove` command exists or is planned. Extending the requirement to adapters is an
-  amendment listed under Consequences. `wingfoil init` installs the
+  removability on for directives and workflow templates (`05_security-compliance.md`, section
+  "REQ-SEC-07 — Immutable built-in assets"; `spec-011-storage-layout`, `directives/{built-in,custom}/`,
+  `workflows/{built-in,custom}/` and `agents/{built-in,custom}/`). Since `task-196`, `REQ-SEC-07` names
+  built-in agent adapters beside built-in directives and workflow templates, keyed on the
+  `agents/built-in/` location, and `REQ-SEC-10` names the adapter manifests `init` schema-checks. No
+  `adapter remove` command exists or is planned, so there is nothing to refuse today. `wingfoil init` installs the
   built-ins, as it installs the P3.8 directive templates (`task-057`). The installed copy pins the
   launch flags in the project's git history, so two clones launch the same argv (`REQ-SYS-07`).
 - `dna.yaml` `team.agents[]` gains one optional field, **`adapter: <adapter-name>`** (`spec-002`
@@ -886,3 +887,13 @@ section names, per `dl-075-no-bare-line-offsets-in-memory` and `task-161-revise-
 citations in §5.1 and in Q9 of the open questions named lines that no longer held the quoted text (they had already drifted with
 `task-128`'s 1.1). Each now names the section or bullet it meant. No rule changed. Edited in place
 without a supersede or a state change (`dl-047`); recorded with `memory amend`.
+
+**Revision (2026-10-06, `task-196-wingfoil-init-installs-builtin-adapters-protected-builtin-assets`) —
+§2.1's `REQ-SEC-07` analogy becomes the requirement, per this spec's Consequences.** The Consequences
+bullet on `REQ-SEC-07` landed in `task-196`: `REQ-SEC-07`'s description, rationale and fit criterion
+now name built-in agent adapters, keyed on the `agents/built-in/` location, and `REQ-SEC-10`'s
+description names the adapter manifests `wingfoil init` schema-checks before writing them. §2.1 no
+longer calls the rule an analogy, and its line-offset citation of the SARD file is replaced by the
+section name (`dl-075`). Nothing about the manifest, the commands or the run record changes. Edited in
+place without a supersede or a state change (`dl-047`); pending the approver's sign-off at `task-196`'s
+review, and dropped if the approver keeps §2.1's analogy.

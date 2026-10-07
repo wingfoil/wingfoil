@@ -1,8 +1,10 @@
 /**
  * Immutable built-in assets pre-flight check (REQ-SEC-07 — task-042-immutable-builtin-assets).
  *
- * **The rule is REQ-SEC-07's, the layout is spec-011's.** REQ-SEC-07 states that built-in directives
- * and built-in workflow templates cannot be removed; `spec-011-storage-layout` supplies the structure
+ * **The rule is REQ-SEC-07's, the layout is spec-011's.** REQ-SEC-07 states that built-in directives,
+ * built-in workflow templates and (since task-196) built-in agent adapters cannot be removed. This
+ * module checks the first two only: no operation removes an adapter (`spec-016` §2.1), and
+ * `test/core/builtin-adapter-writers.test.ts` keeps it so. `spec-011-storage-layout` supplies the structure
  * that rule is expressed over — the `directives/{built-in,custom}/` and `workflows/{built-in,custom}/`
  * split, where `built-in/` holds the official templates shipped by the `wingfoil` npm package (the P3.8
  * directive templates `wingfoil init` installs, task-057; no workflow templates ship yet) and `custom/`
@@ -48,7 +50,7 @@
  */
 import { coreErr, coreOk, type CoreResult } from './types';
 
-/** The two pillars REQ-SEC-07 protects — `built-in/` is immutable in both. */
+/** The two pillars whose removal this check guards — `built-in/` is immutable in both (REQ-SEC-07 also names built-in agent adapters, which no operation removes). */
 export type AssetKind = 'directive' | 'workflow';
 
 /** The `.wingfoil/` top-level directory that holds each pillar's assets (spec-011 layout). */

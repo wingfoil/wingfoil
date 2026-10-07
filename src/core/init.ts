@@ -34,6 +34,7 @@ import {
   resolveTemplate,
   scaffoldFiles,
   templateScaffold,
+  type BuiltinAdapterManifest,
   type BuiltinTemplateSource,
   type ScaffoldFile,
 } from '../storage';
@@ -265,13 +266,22 @@ export interface InitProjectValue {
  *      beyond one ({@link requireScaffoldTargets}, REQ-SEC-06, task-172 / `bug-121`) — a `.wingfoil`
  *      linked to an empty directory passes guard 2 and would otherwise receive the whole scaffold.
  *
+ * The scaffold includes `.wingfoil/agents/built-in/<name>.yaml` for every shipped built-in adapter
+ * manifest and an empty `agents/custom/` (`spec-016` §2.1, task-196); guard 5 checks those manifests
+ * too (kind `adapter`: the task-177 schema as a built-in, then the secret scan), because they are
+ * derived from the same `files`.
+ *
  * @param builtinTemplates - test-only override for guard 5's source list, exercising the abort path
  *   without real built-in content on disk. Omit it in production: the derived set is the contract.
+ * @param builtinAdapters - test-only override for the built-in adapter manifests the scaffold installs
+ *   (and guard 5 therefore checks): none ships yet, so a test drives the mechanism with a fixture. Omit
+ *   it in production: the shipped list, `BUILTIN_ADAPTERS`, is the contract.
  */
 export function initWingfoilProject(
   root: string,
   templateName: string,
   builtinTemplates?: readonly BuiltinTemplateSource[],
+  builtinAdapters?: readonly BuiltinAdapterManifest[],
 ): CoreResult<InitProjectValue> {
   if (!existsSync(join(root, '.git'))) {
     return coreErr({ code: 'VALIDATION', message: NOT_A_GIT_REPO });
@@ -289,7 +299,7 @@ export function initWingfoilProject(
   // Guard 5 — REQ-SEC-10. `templateScaffold` is pure (no I/O), so the exact file list about to be
   // written is available to check BEFORE anything is written; deriving the sources from it is what
   // keeps "installed" and "checked" the same set.
-  const files = templateScaffold(template);
+  const files = templateScaffold(template, builtinAdapters);
   const integrityFailure = verifyBuiltinTemplates(builtinTemplates ?? builtinTemplateSources(files));
   if (integrityFailure) {
     return coreErr({ code: 'VALIDATION', message: integrityFailure.message });

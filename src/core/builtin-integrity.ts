@@ -18,9 +18,12 @@
  * secret in a shipped template would be installed into every new project. It is a regex scan of
  * the content, not a digest, so the paragraph above still holds.
  *
+ * Since task-196 it also checks the built-in agent adapter manifests `init` installs under
+ * `.wingfoil/agents/built-in/` (kind `adapter`, `spec-016` §2.1), against the task-177 manifest schema.
+ *
  * A cross-pillar concern by construction — checking a directive source needs the Directives pillar's
  * `DirectiveFrontmatter` schema, checking a workflow source needs the Workflow pillar's `Workflow`
- * schema — so, per `src/core/loaders.ts`'s own precedent ("Cross-file concerns ... need the caller to
+ * schema and its loader rules, an adapter source the `agent` module's manifest parser — so, per `src/core/loaders.ts`'s own precedent ("Cross-file concerns ... need the caller to
  * have actually loaded the referenced files ... live in the loader, not [a pillar] schema module"),
  * this lives in `core`, not in either pillar module or in `storage` (which only carries the raw
  * {@link BuiltinTemplateSource} shape — see `src/storage/templates.ts`). Reuses the exact same
@@ -32,10 +35,13 @@
  * randomness) — the same corrupted input always yields the same failure, and callers may pass a
  * fixture list in tests via {@link BuiltinTemplateSource} without touching disk.
  */
+import { parseAdapterManifest } from '../agent/manifest';
 import { DirectiveFrontmatter } from '../directives/schema';
-import { extractFrontmatter, type BuiltinTemplateKind, type BuiltinTemplateSource } from '../storage';
+import { BUILTIN_ADAPTERS_DIR, extractFrontmatter, type BuiltinTemplateKind, type BuiltinTemplateSource } from '../storage';
 import { parseYaml, runValidation, scanText } from '../validation';
 import { Workflow } from '../workflow/schema';
+
+import { workflowFileDiagnostics } from './workflow-diagnostics';
 
 export type { BuiltinTemplateKind, BuiltinTemplateSource } from '../storage';
 
@@ -75,13 +81,41 @@ function isValidDirectiveSource(source: BuiltinTemplateSource): boolean {
 }
 
 /**
- * `true` iff `source.content` parses as YAML and validates against the `Workflow` schema (the same
- * schema `core/loaders.ts`'s `loadWorkflowsYaml` runs every included workflow file through).
+ * `true` iff `source.content` parses as YAML, validates against the `Workflow` schema (the same
+ * schema `core/loaders.ts`'s `loadWorkflowsYaml` runs every included workflow file through), and
+ * raises no error under the loader's per-file rules (`workflowFileDiagnostics`, spec-003 §
+ * "Diagnostics") — so a template that passes integrity also loads (task-196, `bug-183`: a template
+ * with neither `kind` nor `startable`/`includable` used to pass here and be refused by the loader).
+ *
+ * The template is checked as the only file of a registry whose names are NOT complete: a rule that
+ * needs another file (an `include` naming a workflow outside the template) is undecidable here, and
+ * the loader's own rule is to report nothing it cannot decide. Warnings never fail it, as they never
+ * fail a load.
  */
 function isValidWorkflowSource(source: BuiltinTemplateSource): boolean {
+  let workflow: Workflow;
   try {
-    const data = parseYaml(source.content, source.name);
-    runValidation(Workflow, data, source.name);
+    workflow = runValidation(Workflow, parseYaml(source.content, source.name), source.name);
+  } catch {
+    return false;
+  }
+  const index = { byName: new Map([[workflow.name, 0]]), namesComplete: false };
+  const loaded = [{ file: source.name, workflow, rawName: workflow.name }];
+  return !workflowFileDiagnostics(loaded, index, 0).some((diagnostic) => diagnostic.severity === 'error');
+}
+
+/**
+ * `true` iff `source.content` is a valid BUILT-IN adapter manifest (`spec-016` §2.2–§2.3, task-196):
+ * the task-177 parser `loadAdapter` runs, with kind `built-in` (so `verified_with` is required) and
+ * the source's name as the file basename the manifest's `name` must equal.
+ */
+function isValidAdapterSource(source: BuiltinTemplateSource): boolean {
+  try {
+    parseAdapterManifest(source.content, {
+      name: source.name,
+      kind: 'built-in',
+      file: `${BUILTIN_ADAPTERS_DIR}/${source.name}.yaml`,
+    });
     return true;
   } catch {
     return false;
@@ -98,8 +132,9 @@ interface IntegrityPolicy {
  * Per-kind schema-check policy: the `isValid` predicate to apply and the exact REQ-SEC-10 abort-message
  * builder to use when it fails. Keyed by {@link BuiltinTemplateKind} so each kind's validator and its
  * BDD wording live together and `verifyBuiltinTemplates` branches on `kind` exactly once. The message
- * strings are verbatim BDD contracts — P3.8 "Error - a built-in template fails its integrity check"
- * and P4.17 "Error - a built-in workflow template is structurally invalid" — do not reword.
+ * strings of the first two kinds are verbatim BDD contracts — P3.8 "Error - a built-in template fails
+ * its integrity check" and P4.17 "Error - a built-in workflow template is structurally invalid" — do
+ * not reword. The `adapter` kind (task-196) follows the directive message's shape.
  *
  * Declared as an EXHAUSTIVE `Record` so widening {@link BuiltinTemplateKind} is a compile error until
  * the new kind gets a policy; look it up only through {@link policyFor}, never by bare indexing.
@@ -112,6 +147,11 @@ const INTEGRITY_POLICY: Readonly<Record<BuiltinTemplateKind, IntegrityPolicy>> =
   workflow: {
     isValid: isValidWorkflowSource,
     message: (name) => `built-in workflow template invalid: ${name}`,
+  },
+  // task-196: the built-in directive's message shape; no BDD scenario pins this wording yet.
+  adapter: {
+    isValid: isValidAdapterSource,
+    message: (name) => `built-in adapter template integrity check failed: ${name}`,
   },
 };
 

@@ -8,7 +8,7 @@ Feature: P5.1.1 (US-0A-06) - wingfoil init
 
   Scenario: Initialize with the wizard and a selected template
     When I run "wingfoil init" and select the "Scrum" template through the wizard
-    Then a complete ".wingfoil/" structure is created (dna, memory, directives, workflows)
+    Then a complete ".wingfoil/" structure is created (dna, memory, directives, workflows, agents)
     And no manual YAML editing was required
     And the command exits with code 0
 

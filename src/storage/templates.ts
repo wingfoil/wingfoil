@@ -15,6 +15,7 @@
  * so `wingfoil init --template X` is byte-identical run to run (REQ-SYS-07), and the returned list is
  * sorted by path so callers may diff the set safely.
  */
+import { BUILTIN_ADAPTERS, type BuiltinAdapterManifest } from './builtin-adapters';
 import { BUILTIN_DIRECTIVE_TEMPLATES, builtinDirectiveMd } from './builtin-directives';
 import {
   DIRECTIVE_FORMAT,
@@ -84,11 +85,12 @@ export function initProjectCommitMessage(def: TemplateDefinition): string {
 
 /**
  * Which pillar a {@link BuiltinTemplateSource} belongs to — `directive` for a P3.8 built-in directive
- * `.md` file, `workflow` for a P4.17 built-in workflow `.yaml` file. Drives which pillar schema
- * `core/builtin-integrity.ts`'s `verifyBuiltinTemplates` checks the source against, and which of
- * REQ-SEC-10's two exact abort-message shapes a failure produces.
+ * `.md` file, `workflow` for a P4.17 built-in workflow `.yaml` file, `adapter` for a built-in agent
+ * adapter manifest (`spec-016` §2.1, task-196). Drives which schema `core/builtin-integrity.ts`'s
+ * `verifyBuiltinTemplates` checks the source against, and which REQ-SEC-10 abort message a failure
+ * produces.
  */
-export type BuiltinTemplateKind = 'directive' | 'workflow';
+export type BuiltinTemplateKind = 'directive' | 'workflow' | 'adapter';
 
 /**
  * One shipped built-in template asset, as raw content — a directive's full `.md` text (frontmatter +
@@ -110,6 +112,12 @@ export const BUILTIN_DIRECTIVES_DIR = `${WINGFOIL_DIR}/directives/built-in`;
 /** Scaffold directory holding the P4.17 built-in workflow templates (spec-011 storage layout). */
 export const BUILTIN_WORKFLOWS_DIR = `${WINGFOIL_DIR}/workflows/built-in`;
 
+/** Scaffold directory holding the built-in agent adapter manifests (`spec-016` §2.1, task-196). */
+export const BUILTIN_ADAPTERS_DIR = `${WINGFOIL_DIR}/agents/built-in`;
+
+/** Scaffold directory for the project's own adapter manifests, scaffolded empty (`spec-016` §2.1). */
+export const CUSTOM_ADAPTERS_DIR = `${WINGFOIL_DIR}/agents/custom`;
+
 /**
  * The built-in source one scaffold file contributes, or `null` when the file is not a built-in
  * template asset.
@@ -127,6 +135,7 @@ function builtinSourceOf(file: ScaffoldFile): BuiltinTemplateSource | null {
   let kind: BuiltinTemplateKind;
   if (file.path.startsWith(`${BUILTIN_DIRECTIVES_DIR}/`)) kind = 'directive';
   else if (file.path.startsWith(`${BUILTIN_WORKFLOWS_DIR}/`)) kind = 'workflow';
+  else if (file.path.startsWith(`${BUILTIN_ADAPTERS_DIR}/`)) kind = 'adapter';
   else return null;
 
   const dot = base.lastIndexOf('.');
@@ -160,7 +169,8 @@ function builtinSourceOf(file: ScaffoldFile): BuiltinTemplateSource | null {
  *
  * What it returns is a fact about the scaffold CONTENT, not a property of this function: for
  * {@link templateScaffold} it is the six P3.8 built-in directives `task-057-builtin-directive-templates`
- * ships (`./builtin-directives`, rendered by `builtinDirectiveMd`), for `scaffoldFiles` it is `[]` (a
+ * ships (`./builtin-directives`, rendered by `builtinDirectiveMd`) plus one `adapter` source per shipped
+ * built-in adapter manifest (`./builtin-adapters`, none yet; task-196), for `scaffoldFiles` it is `[]` (a
  * `.gitkeep` only), and the workflows built-in directory still holds a `.gitkeep` only. Any asset added
  * later is checked with no edit here. Each shipped built-in must satisfy its pillar schema on its own —
  * `test/storage/builtin-directives.test.ts` runs every directive template through the real guard.
@@ -512,17 +522,39 @@ phases:
 }
 
 /**
+ * The `agents/{built-in,custom}/` part of the scaffold (`spec-016` §2.1, task-196): one
+ * `built-in/<name>.yaml` per shipped adapter, written verbatim, and `custom/` reserved empty with a
+ * `.gitkeep`. While no adapter ships, `built-in/` is reserved with a `.gitkeep` too, as
+ * `workflows/built-in/` is, so both directories exist after `init`.
+ */
+function adapterScaffold(adapters: readonly BuiltinAdapterManifest[]): ScaffoldFile[] {
+  const builtIn =
+    adapters.length === 0
+      ? [{ path: `${BUILTIN_ADAPTERS_DIR}/.gitkeep`, content: '' }]
+      : adapters.map((adapter) => ({ path: `${BUILTIN_ADAPTERS_DIR}/${adapter.name}.yaml`, content: adapter.content }));
+  return [...builtIn, { path: `${CUSTOM_ADAPTERS_DIR}/.gitkeep`, content: '' }];
+}
+
+/**
  * The COMPLETE spec-011 `.wingfoil/` layout for `def`, as a `ScaffoldFile[]` sorted by path
  * (deterministic — REQ-SYS-07). Consumed by `initStorage(root, files, message)`; every path is under
  * `.wingfoil/` so init never writes outside the WingFoil root.
+ *
+ * @param adapters - the built-in adapter manifests to install; {@link BUILTIN_ADAPTERS} (the shipped
+ *   list) unless a test passes a fixture list, since no real built-in ships yet (task-196).
  */
-export function templateScaffold(def: TemplateDefinition): ScaffoldFile[] {
+export function templateScaffold(
+  def: TemplateDefinition,
+  adapters: readonly BuiltinAdapterManifest[] = BUILTIN_ADAPTERS,
+): ScaffoldFile[] {
   const files: ScaffoldFile[] = [
     // Top-level pillar config (spec-011 "Top-level config files").
     { path: wf('dna.yaml'), content: dnaYaml(def) },
     { path: wf('memory.yaml'), content: memoryYaml() },
     { path: wf('roles.yaml'), content: rolesYaml() },
     { path: wf('workflows.yaml'), content: workflowsYaml(def) },
+    // Agent adapters built-in/custom split (spec-016 §2.1, task-196).
+    ...adapterScaffold(adapters),
     // Directives built-in/custom split (spec-011): the six P3.8 built-ins (task-057) + custom starters.
     ...BUILTIN_DIRECTIVE_TEMPLATES.map((t) => ({ path: `${BUILTIN_DIRECTIVES_DIR}/${t.id}.md`, content: builtinDirectiveMd(t) })),
     ...DIRECTIVES.map((d) => ({ path: wf(`directives/custom/${d.name}.md`), content: directiveMd(d) })),
