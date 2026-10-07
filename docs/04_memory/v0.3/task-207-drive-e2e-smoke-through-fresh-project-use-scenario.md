@@ -207,3 +207,11 @@ nothing.
 **Decisions for the approver.** (1) The report path `docs/07_gates/rl-{release-line}/rel-{version}-e2e-smoke.md`
 (a new numbered folder for gate evidence). (2) AC 5 reclassified red-first. (3) The CI job runs beside
 `packaging-gate` (no `needs:`), with `--expect-commit "$GITHUB_SHA"`.
+
+### Review fixes
+
+- Review (APPROVE WITH FIXES): F1 — `bindings.yaml`'s `args.report` pattern accepted `/etc/passwd`, `../../x.md`
+  and `-rf`; it is now `^(?![/-])(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]+$` (still 1.1), with those refusals pinned
+  in `test/cli/e2e-smoke.test.ts`. F2 — the pending `spec-015` Revision note no longer says the old script
+  "asserted only exit 0" (`git show 1ce84a54:scripts/e2e-smoke.cjs`: JSON parsing, a `submit` edge at line 63, a
+  final clean-tree check at line 153); the proposed `--reason` is unchanged.
