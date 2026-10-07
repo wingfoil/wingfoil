@@ -1,0 +1,42 @@
+# Proposal — shaped on `decision-log-ingest`: its `capture` phase records a decision's context, the
+# decision and its rationale (.wingfoil/memory/templates/decision-log.md), so the form asks for the
+# context, the options seen and the one preferred (dl-127; pinned by test/docs/community-health.test.ts).
+name: Proposal
+description: Propose a change to WingFoil's product or process. It is captured as a `decision-log` element.
+title: "proposal: "
+labels: ["proposal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        WingFoil records decisions as Memory elements
+        ([COLLABORATION.md](https://github.com/wingfoil/wingfoil/blob/main/COLLABORATION.md)): a maintainer or an
+        agent captures this proposal as a `decision-log`, with your GitHub handle as its `contributor` and this
+        issue's URL beside it. The approver then ratifies one option, or declines it, and the decision is
+        delivered by a later release.
+
+        The issue title is the decision-log's title: the question or the change, in one line.
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: The situation or the problem that prompts the proposal. What happens today, and why it is not enough.
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: The options you see, including leaving things as they are, each with its main trade-off.
+      placeholder: |
+        - (a) ...
+        - (b) ...
+    validations:
+      required: true
+  - type: textarea
+    id: preferred
+    attributes:
+      label: Preferred option
+      description: The option you prefer and why — it becomes the decision-log's Decision and Rationale.
+    validations:
+      required: true

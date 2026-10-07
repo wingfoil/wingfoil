@@ -9,9 +9,10 @@ name: user-docs
 kind: sub
 description: >-
   Ensure the release's user-facing documentation is written and aligned before the release is
-  assembled: README, user guide, CLI reference, working examples, CHANGELOG. Makes documentation a
-  hard release blocker (dl-013) instead of an unenforced convention.
-version: 1.3                     # 1.1 dl-025: + align-agent-docs; 1.2 bug-170: align-agent-docs produces .wingfoil/WORKFLOW.md (task-148); 1.3 dl-025 (task-199): align-agent-docs includes the agent-docs workflow, which release-line-cycle reuses
+  assembled: README, user guide, CLI reference, working examples, CHANGELOG, and the community
+  health files a contributor meets (dl-127). Makes documentation a hard release blocker (dl-013)
+  instead of an unenforced convention.
+version: 1.4                     # 1.1 dl-025: + align-agent-docs; 1.2 bug-170: align-agent-docs produces .wingfoil/WORKFLOW.md (task-148); 1.3 dl-025 (task-199): align-agent-docs includes the agent-docs workflow, which release-line-cycle reuses; 1.4 dl-127 Q4 (a) (task-214): align-user-docs produces COLLABORATION.md and the community health files
 element: release
 
 phases:
@@ -31,6 +32,15 @@ phases:
       - "docs/cli-reference.md"
       - "docs/examples/"
       - "CHANGELOG.md"
+      # dl-127 Q4 (a): the community health files, re-checked each release; COLLABORATION.md is the
+      # canonical contribution model CONTRIBUTING.md points at (dl-020), and documents dl-163's
+      # contributor / reported_by split.
+      - "COLLABORATION.md"
+      - "CONTRIBUTING.md"
+      - "CODE_OF_CONDUCT.md"
+      - "SECURITY.md"
+      - ".github/ISSUE_TEMPLATE/"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
     checks:
       post: ["user-facing docs aligned with the release's shipped CLI/feature surface"]
     approval: { by_role: approver }

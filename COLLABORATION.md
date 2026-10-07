@@ -1,6 +1,6 @@
 # Contributing to WingFoil — through Memory, not (only) code
 
-**Version:** 1.2 · **Date:** 2026-09-29
+**Version:** 1.3 · **Date:** 2026-10-07
 
 WingFoil is a harness for **AI-assisted, deterministic software development**. It manages its own
 development the same way it asks other projects to (dogfooding): every change flows through
@@ -38,11 +38,25 @@ agent implements it under the `dev-loop` (TDD + BDD, `code-review`/`code-quality
 The `wingfoil` CLI ships (npm `wingfoil`), but it cannot run a workflow yet, so the ingest workflows
 are still run by a maintainer or an agent. The current path is:
 
-1. **Open a GitHub issue** describing the bug / decision / spec you have in mind (see the README’s
-   *Contributing* section).
+1. **Open a GitHub issue** with one of the two issue forms (`.github/ISSUE_TEMPLATE/`):
+   - **Bug report**, for a defect. Its fields are the `bug` element's: the issue title is the bug's
+     `title`, then `severity`, the WingFoil version (`release-origin`), Summary, Steps to Reproduce,
+     Expected Behavior, Actual Behavior and Notes. `bug-ingest`'s `capture` runs from it as written.
+   - **Proposal**, for a product or process decision: the context, the options you see and the one you
+     prefer, which `decision-log-ingest`'s `capture` records as the `decision-log`'s Context, Decision
+     and Rationale.
+
+   Blank issues are off. Questions go to
+   [Discussions](https://github.com/wingfoil/wingfoil/discussions/categories/q-a), and a vulnerability
+   goes through [`SECURITY.md`](SECURITY.md), never into a public issue.
 2. A maintainer or agent **captures it as the matching Memory artifact** through the ingest workflow,
-   recording you as its `contributor` (below).
+   recording you as its `contributor` and the issue's URL beside it (*Credit*, below).
 3. You are kept in the loop as it is ratified and delivered.
+
+A pull request is welcome too: its template (`.github/PULL_REQUEST_TEMPLATE.md`) asks for the Memory
+element the change implements, as the `traceability` directive requires. Everyone follows the
+[Code of Conduct](CODE_OF_CONDUCT.md). [`CONTRIBUTING.md`](CONTRIBUTING.md) is the short pointer to
+this document that GitHub shows contributors (`dl-127`).
 
 Once workflow execution ships, you (or an agent on your behalf) will run the ingest workflow directly.
 
@@ -98,6 +112,11 @@ it, and it never rewrites git history):
 - Every ingested artifact (`bug`, `decision-log`, `adr`, `tech-spec`) carries an optional
   **`contributor:`** frontmatter field — your name/handle, set when the artifact originates from
   someone other than the committing git identity — plus an optional **`credit:`** note.
+- **An artifact captured from a GitHub issue** records you as `contributor:` (your GitHub handle) and
+  the issue URL in `credit:` (e.g. `reported in https://github.com/wingfoil/wingfoil/issues/<n>`). A
+  GitHub issue is not a registered feedback inbox, so it never gets a `reported_by:` field: that field
+  is only for notes filed in a registered consumer repository's inbox
+  ([`dl-163`](docs/04_memory/design/dls/dl-163-consumer-projects-feedback-sources-and-the-feedback-loop.md)).
 - When an agent turns your ratified artifact into delivered work (tasks reaching `done`), **you are
   credited** as the source of that AI-generated output. Because a task traces back to the artifact it
   implements, the credit stays attached to the specific `bug`/`DL`/`ADR`/`tech-spec` id.
