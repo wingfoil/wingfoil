@@ -199,7 +199,7 @@ flowchart TD
 
     RP2["**publishing** → `release-publishing`\ntag → publish → mark-released\ngit tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released"]
 
-    RT["**retrospective** → `retrospective`\nexplore → additional-points → capture → approve\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
+    RT["**retrospective** → `retrospective`\nexplore → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115)\n✔ pre additional-points: every proposal has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
 
     RP --> DL --> UD --> ES --> RS --> RP2 --> RT
 ```

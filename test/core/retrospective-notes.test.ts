@@ -104,8 +104,9 @@ describe('AC 2 — retrospective.yaml: explore lists its secondary sources; addi
     expect([...four].sort((a, b) => a - b)).toEqual(four);
     // … and the two dl-163 adds, for a consumer feedback note only.
     expect(check).toMatch(/consumer feedback note[^;]*declined \([^)]*\) \| needs-info \(/);
-    // Written over the sources explore lists, so a later phase's record (dl-163 S3d collect-feedback) is one more source.
-    expect(check).toMatch(/every secondary source the friction inventory lists/);
+    // Written over every source listed before the gate, so a read-only phase added between explore and this one
+    // (dl-163 S3d collect-feedback) brings one more source with no change to the check.
+    expect(check).toMatch(/every secondary source listed before this gate \(the friction inventory's list, and the read record of any read-only phase run between explore and this one\)/);
   });
 
   it('the other phases keep their shape (task-199 pins approve; capture keeps its one post check)', () => {
