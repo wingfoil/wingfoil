@@ -42,6 +42,7 @@ There is still no workflow engine: a workflow phase is carried out by hand again
 | `roles.yaml`                   | Directives (P3.2/P3.7) | Role → directive bindings                                      |
 | `workflows.yaml`               | Workflow (P4.1)        | Main config; `include()`s the workflow files                   |
 | `workflows/custom/`            | Workflow (P4.1)        | 5 `main` (`sw-life-cycle` + 4 ingest) + the `sub` workflows they compose |
+| `workflows/bindings.yaml`      | Workflow (P4.10/P4.12) | The command (or `manual: true`) each project-bound `actions:` / `checks:` token runs (spec-003 Layer 3, dl-090; `format: 1`, dl-153) |
 | `WORKFLOW.md`                  | Workflow (P4.1)        | Human-readable reference of the workflows above (diagrams, phase by phase); produced by `align-agent-docs`, and `test/docs/workflow-md.test.ts` requires it to name every workflow and phase |
 
 > **Directives — built-in vs custom (interim decision):** when this config was written, WingFoil's
@@ -86,11 +87,12 @@ sw-life-cycle (main)
 │                              │     │                      → build-backlog → commit-backlog)
 │                              │     ├── dev-loop  (design gate + TDD, iterate_over: task; gate runs BDD;
 │                              │     │              fix tasks keep their source bug in sync via bug.sync_state)
-│                              │     ├── user-docs  (align-user-docs + align-agent-docs — dl-013, dl-025)
+│                              │     ├── user-docs  (align-user-docs + align-agent-docs → agent-docs — dl-013, dl-025)
 │                              │     ├── e2e-smoke  (fresh-init + CLI end-to-end smoke gate + mcp-registration — dl-023)
 │                              │     ├── release-submit
 │                              │     ├── release-publishing
 │                              │     └── retrospective  (→ decision-log)
+│                              ├── align-agent-docs    → agent-docs  (dl-025: the same phase at release-line close)
 │                              └── plan-next-release-line  (once all releases are `released`:
 │                                                            close this release-line, self-seed the next)
 └── sunset                  → end-of-life            (→ decision-log)

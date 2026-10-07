@@ -102,7 +102,7 @@ Workflow execution does not exist yet (§6).
 | `docs/04_memory/planning/rl-{release-line}/{id}.md`        | Memory (P1.11)         | That release-line's **minor releases** (v0.1→v1.0 for `rl-v1`), derived from `docs/03_backlog/`                                                                                                      |
 | `.wingfoil/directives/custom/`                             | Directives (P3.5/P3.8) | Rules: P3.8 template **stand-ins** (`code-quality, testing, code-review, architecture, security, documentation`) + WingFoil-specific (`determinism, doc-versioning, security-secrets, traceability, command-baseline, claim-evidence, git-conventions`) |
 | `.wingfoil/roles.yaml`                                     | Directives (P3.2/P3.7) | Role → directive bindings                                                                                                                                                                            |
-| `.wingfoil/workflows.yaml` + `workflows/custom/`           | Workflow (P4.1)        | `sw-life-cycle` (main) + sub-workflows + four ingest mains                                                                                                                                           |
+| `.wingfoil/workflows.yaml` + `workflows/custom/` + `workflows/bindings.yaml` | Workflow (P4.1) | `sw-life-cycle` (main) + sub-workflows + four ingest mains; the command each project token runs (dl-090)                                                                                                                                           |
 
 > The tool now ships the official P3.8 **built-in** directive templates (`task-057`, `done`:
 > `wingfoil init` installs them under `.wingfoil/directives/built-in/`), but this hand-authored config
@@ -362,6 +362,7 @@ non-blank (`--reason` itself stays optional, `dl-027`).
     - `release-line-cycle` *(iterate_over: release-line)* — one iteration per major version:
       `approve` (planning → active) → `initial-design` (`seed-releases` + optional
       `seed-adrs`/`seed-dls`/`seed-specs`, scoped to this release-line) → `delivery` →
+      `align-agent-docs` (the `agent-docs` workflow `user-docs` also includes, dl-025) →
       `plan-next-release-line` (closes this release-line to `done`, self-seeds the next one once
       every one of its releases is `released`).
         - `delivery` → `release-cycle` *(iterate_over: release, scoped to this release-line)* →
@@ -371,8 +372,8 @@ non-blank (`--reason` itself stays optional, `dl-027`).
           `dev-loop` *(design gate + TDD,
           iterate_over: task; `refactor` runs coverage + API-docs + `lint.clean`; review gate runs unit
           + **BDD** tests; keeps a fix task's source `bug` in sync via `bug.sync_state`)* → `user-docs`
-          *(dl-013 — `align-user-docs`, the user-facing documentation gate; dl-025 — `align-agent-docs`,
-          this file, `.wingfoil/README.md` and `.wingfoil/WORKFLOW.md`)* → `e2e-smoke`
+          *(dl-013 — `align-user-docs`, the user-facing documentation gate; dl-025 — `align-agent-docs`
+          (the `agent-docs` workflow), this file, `.wingfoil/README.md` and `.wingfoil/WORKFLOW.md`)* → `e2e-smoke`
           *(dl-023 — fresh-init + CLI end-to-end smoke gate, plus the `mcp-registration` check of `.mcp.json`)* → `release-submit` → `release-publishing` → `retrospective`.
     - `sunset` → `end-of-life`.
 - **`bug-ingest`, `decision-log-ingest`, `adr-ingest`, `service-ingest`** — capture a single element on demand. If started

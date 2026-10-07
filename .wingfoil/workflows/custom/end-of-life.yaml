@@ -23,7 +23,8 @@ phases:
     role: tech-lead
     # Selection (spec-003 § "Selections"): every release not yet released and every ADR and decision-log
     # not yet archived — the elements `memory.deprecate` acts on (spec-017 §4.2). The phase is complete
-    # when none is left (`superseded` is not a deprecate target: CLAUDE.md §5.1's rule, spec-001).
+    # when none is left. `superseded` is no deprecate target: only a later element's `supersedes:` reaches it
+    # (memory.yaml `adr` `waiting: [ accepted ]`).
     where:
       type: [release, adr, decision-log]
       status: [draft, planning, in-development, releasing, pending, accepted, in-discussion, ready]

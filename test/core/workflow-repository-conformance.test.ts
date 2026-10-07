@@ -25,7 +25,7 @@ import { join } from 'node:path';
 
 import { loadWorkflowRegistryAtHead } from '../../src/core';
 import { MEMORY_OPERATIONS } from '../../src/memory/audit';
-import { resolveToken, tokenName, type BindingsYaml } from '../../src/workflow/bindings';
+import { isBuiltinToken, resolveToken, tokenName, type BindingsYaml } from '../../src/workflow/bindings';
 import type { Workflow } from '../../src/workflow/schema';
 
 const ROOT = join(__dirname, '..', '..');
@@ -137,13 +137,15 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
     expect(unboundActions).toEqual([]);
   });
 
-  it('no action token keeps a positional argument or a partial interpolation (spec-003 open question 6, dl-090 Q3 (a))', () => {
+  it('no project action token keeps a positional argument or a shell separator (spec-003 open question 6, dl-090 Q3 (a))', () => {
+    // The built-in `set_state(<s>)` / `set_release(<v>)` forms are spec-003's own; open question 6 is about
+    // the tokens a binding must pass to a command.
     const offenders: string[] = [];
     for (const workflow of registry().workflows) {
       workflow.phases.forEach((phase) => {
         for (const action of phase.actions ?? []) {
           const args = /\((.*)\)$/.exec(action)?.[1];
-          if (args === undefined) continue;
+          if (args === undefined || isBuiltinToken(tokenName(action))) continue;
           // `key: value` pairs only: the first argument starts with a key, and no value embeds a shell separator.
           if (!/^[a-z_]+\s*:/.test(args) || /;/.test(args)) offenders.push(`${workflow.name}.${phase.name}: ${action}`);
         }
