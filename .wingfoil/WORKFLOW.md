@@ -122,16 +122,18 @@ Memory state, REQ-SYS-03 — never a fixed snapshot), just not previously exerci
 
 Iterated once per release-line (`iterate_over: release-line`, `where: status ∈ [planning, active]`).
 Composes the release-line-scoped setup (`initial-design`) with the per-release delivery loop
-(`delivery`), then closes the release-line and self-seeds the next one.
+(`delivery`), re-aligns the agent-facing docs (`align-agent-docs`, the `agent-docs` workflow user-docs
+runs per release, dl-025), then closes the release-line and self-seeds the next one.
 
 ```mermaid
 flowchart TD
     AP["**approve** *(tech-lead)*\nmemory.approve\nrelease-line: planning → active\n🔑 Approval gate — *approver*\n↩ REJECT → approve"]
     ID["**initial-design**\nseed-releases + optional ADRs/DLs/tech-specs\n(see Phase 5a below)"]
     DL["**delivery** *(iterate_over: release)*\nwhere: release-line={release-line.version}, status∈[draft,planning,in-development]\n— release-cycle per minor release (see Phase 6 below) —"]
-    PN["**plan-next-release-line** *(product-owner)*\nelement.set_state(done); IF another major planned:\nmemory.add(release-line) → memory.submit (self-seed)\n✔ pre-check: all its releases are `released`"]
+    AA2["**align-agent-docs** → `agent-docs`\nthe same phase user-docs runs per release (dl-025)\n🔑 Approval gate — *approver*"]
+    PN["**plan-next-release-line** *(product-owner)*\nelement.set_state(done); IF another major planned:\nmemory.add(release-line) → memory.submit (self-seed)\n✔ pre-check: all its releases are `released`\n`{ type: release-line, path: docs/04_memory/planning/{release-line.id}.md }`"]
 
-    AP --> ID --> DL --> PN
+    AP --> ID --> DL --> AA2 --> PN
 ```
 
 ### Phase 5a — Initial Design: `initial-design`
@@ -144,16 +146,16 @@ artefact specs already implied by it. `seed-releases` is required; the other thr
 flowchart TD
     IN2["`approve` output\nrelease-line: active"]
 
-    P2b["**seed-releases** *(product-owner)*\nmemory.add(type: release, release-line: {release-line.version}, kind: minor) × N\nstatus: draft (no pending state)\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n`docs/04_memory/planning/rl-{release-line}/{id}.md`"]
+    P2b["**seed-releases** *(product-owner)*\nmemory.add(type: release, release-line: {release-line.version}, kind: minor) × N\nstatus: draft (no pending state)\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n`{ type: release, path: docs/04_memory/planning/rl-{release-line.version}/{release.id}.md }`"]
     SC2b{{"Stop-Check\nN files · all draft\nfeatures list complete per release"}}
 
-    P3["**seed-adrs** *(architect)* · **OPTIONAL**\nmemory.add(type: adr)\ndraft → pending → accepted\n✔ P4.12: [title, sard_ref]\n`docs/04_memory/design/adrs/{id}.md`"]
+    P3["**seed-adrs** *(architect)* · **OPTIONAL**\nmemory.add(type: adr)\ndraft → pending → accepted\n✔ P4.12: [title, sard_ref]\n`{ type: adr, path: docs/04_memory/design/adrs/{adr.id}.md }`"]
     SC3{{"Stop-Check\nSARD ref present · Context/Decision/Consequences\nall ADRs status: accepted"}}
 
-    P4["**seed-dls** *(architect)* · **OPTIONAL**\nmemory.add(type: decision-log)\ndraft → in-discussion → ready\n✔ P4.12: [title]\n`docs/04_memory/design/dls/{id}.md`"]
+    P4["**seed-dls** *(architect)* · **OPTIONAL**\nmemory.add(type: decision-log)\ndraft → in-discussion → ready\n✔ P4.12: [title]\n`{ type: decision-log, path: docs/04_memory/design/dls/{decision-log.id}.md }`"]
     SC4{{"Stop-Check\nContext/Decision/Consequences\nall DLs status: approved"}}
 
-    P5["**seed-specs** *(architect)* · **OPTIONAL**\nagent.survey_specs (this release-line) → memory.add(type: tech-spec)\ndraft → pending → approved\n✔ P4.12: [title, scope]\n`docs/04_memory/design/specs/{id}.md`"]
+    P5["**seed-specs** *(architect)* · **OPTIONAL**\nagent.execute: survey (this release-line) → memory.add(type: tech-spec)\ndraft → pending → approved\n✔ P4.12: [title, scope]\n`{ type: tech-spec, path: docs/04_memory/design/specs/{tech-spec.id}.md }`"]
     SC5{{"Stop-Check\nnot already covered by an approved spec\nall specs status: approved"}}
 
     IN2 --> P2b --> SC2b --> P3 --> SC3 --> P4 --> SC4 --> P5 --> SC5
@@ -197,7 +199,7 @@ flowchart TD
 
     RP2["**publishing** → `release-publishing`\ntag → publish → mark-released\ngit tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released"]
 
-    RT["**retrospective** → `retrospective`\nexplore → additional-points → capture → approve\n✔ P4.12: [title]\n🔑 Approval gates — *approver*\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
+    RT["**retrospective** → `retrospective`\nexplore → additional-points → capture → approve\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
 
     RP --> DL --> UD --> ES --> RS --> RP2 --> RT
 ```
@@ -213,7 +215,7 @@ names by design, so no separate bug-fix workflow is needed).
 
 ```mermaid
 flowchart TD
-    ST["**start** *(developer)*\ngit branch {task.id}\ntask: backlog → in-progress\n↳ bug.sync_state: source bug planned → in-progress"]
+    ST["**start** *(developer)*\ngit.create_branch(task: {task.id}) → branch task/{task.id}\ntask: backlog → in-progress\n↳ bug.sync_state: source bug planned → in-progress"]
     DES["📐 **design** *(architect)* · safety net\nverify a tech-spec exists + is approved for every\nfile format/schema/constant/API the task implements\n✔ P4.12: [title, scope] (if scaffolded) + tech-spec: approved"]
     RED["🔴 **red** *(developer)*\nwrite failing test\n✔ tests.exist + tests.failing"]
     GREEN["🟢 **green** *(developer)*\nmin code to pass\n✔ tests.passing"]
@@ -242,13 +244,13 @@ the releases added before dl-092 (`minor-v0.1` … `minor-v1.0`) from `kind`, wh
 
 ```mermaid
 flowchart TD
-    AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(wingfoil-released)\nforward only, published builds only\n✔ check:lockfile · check:mcp"]
+    AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only\n✔ check:lockfile · check:mcp"]
     DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)"]
     TB["**triage-bugs** *(tech-lead)*\nmemory.approve: bug open → triaged\n🔑 Approval gate — *approver*\n↩ REJECT → closed"]
     RG["**reconcile-governance** *(product-owner)*\nmemory.approve: decision-log in-discussion → ready\nadr pending → accepted\n🔑 Approval gate — *approver*\n↩ REJECT → draft"]
-    RA["**record-adrs** *(architect)* · **OPTIONAL**\nmemory.add(type: adr) → memory.submit → memory.approve\n✔ spec-review.passed · P4.12: [title, sard_ref]\n🔑 Approval gate — *approver*\n`docs/04_memory/design/adrs/{id}.md`"]
-    IS["**identify-specs** *(architect)*\nagent.survey_specs → memory.add(type: tech-spec) → memory.submit\n✔ P4.12: [title, scope]\n🔑 Approval gate — *approver*\n`docs/04_memory/design/specs/{id}.md`"]
-    BB["**build-backlog** *(product-owner)*\nmemory.add(type: task) → memory.submit\nper ready DL / selected triaged bug: memory.add(type: task, dl/bug) → memory.submit\n→ bug.set_state(planned) · element.set_release\n✔ P4.12: [title, release, kind]\n`docs/04_memory/{release}/{id}.md`"]
+    RA["**record-adrs** *(architect)* · **OPTIONAL**\nmemory.add(type: adr) → memory.submit → memory.approve\n✔ spec-review.passed · P4.12: [title, sard_ref]\n🔑 Approval gate — *approver*\n`{ type: adr, path: docs/04_memory/design/adrs/{adr.id}.md }`"]
+    IS["**identify-specs** *(architect)*\nagent.execute: survey → memory.add(type: tech-spec) → memory.submit\n✔ P4.12: [title, scope]\n🔑 Approval gate — *approver*\n`{ type: tech-spec, path: docs/04_memory/design/specs/{tech-spec.id}.md }`"]
+    BB["**build-backlog** *(product-owner)*\nselection: in-scope ready decision-logs + triaged bugs\nmemory.add(type: task) → memory.submit\nper selected DL / bug: memory.add(type: task, dl: {decision-log.id} / bug: {bug.id}) → memory.submit\n→ bug.set_state(planned) · element.set_release\n✔ P4.12: [title, release, kind]\n`{ type: task, path: docs/04_memory/{task.release}/{task.id}.md }`"]
     CB["**commit-backlog** *(tech-lead)*\ntask.set_state(backlog) · release.set_state(in-development)\n🔑 Approval gate — *approver*"]
 
     AB --> DS --> TB --> RG --> RA --> IS --> BB --> CB
@@ -272,13 +274,24 @@ agent-facing documents (dl-025). It starts only once every task of the release i
 flowchart TD
     CI["**check-implementation-complete** *(tech-lead)*\n✔ pre: every task tagged {release.version} is done"]
     AU["**align-user-docs** *(developer)*\nREADME.md · docs/user-guide.md · docs/cli-reference.md\ndocs/examples/ · CHANGELOG.md\n✔ aligned with the shipped CLI/feature surface\n🔑 Approval gate — *approver*"]
-    AA["**align-agent-docs** *(architect)*\nCLAUDE.md · .wingfoil/README.md · .wingfoil/WORKFLOW.md\n✔ status, element/state tables, workflow list and role bindings\nmatch CORE_MODULES, memory.yaml, workflows.yaml, roles.yaml\n✔ WORKFLOW.md names every workflow and phase\n🔑 Approval gate — *approver*"]
+    AA["**align-agent-docs** → `agent-docs`\n(see Agent Docs below)"]
 
     CI --> AU --> AA
 ```
 
-dl-025 leaves open whether `align-agent-docs` also runs at `plan-next-release-line`, when a
-release-line closes; today only `user-docs` declares it.
+### Agent Docs — `agent-docs`
+
+The agent-facing documentation gate (dl-025, shape B), a workflow of one phase so that two callers
+run the same phase: `user-docs` per release, and `release-line-cycle` right before
+`plan-next-release-line` closes a release-line (dl-025's open question, ratified: structural changes
+land at release-line boundaries). It declares no `element`, so either caller may include it.
+
+```mermaid
+flowchart TD
+    subgraph AD["agent-docs"]
+        AGD["**align-agent-docs** *(architect)*\nCLAUDE.md · .wingfoil/README.md · .wingfoil/WORKFLOW.md\n✔ status, element/state tables, workflow list and role bindings\nmatch CORE_MODULES, memory.yaml, workflows.yaml, roles.yaml\n✔ workflow-md.complete: WORKFLOW.md names every workflow and phase\n🔑 Approval gate — *approver*"]
+    end
+```
 
 ### E2E Smoke — `e2e-smoke`
 
@@ -305,8 +318,8 @@ content, REQ-STATE-06).
 ```mermaid
 flowchart TD
     AN["**announce** *(product-owner)*\nmemory.add(type: decision-log) 'End-of-life plan'\n✔ P4.12: [title]\n🔑 Approval gate — *approver*"]
-    DE["**deprecate** *(tech-lead)*\nmemory.deprecate on active releases + ADRs\n✔ deprecated content excluded from agent context"]
-    AR["**archive** *(tech-lead)*\ngit.commit('end-of-life: archive')\nfreeze the repository line"]
+    DE["**deprecate** *(tech-lead)*\nselection: releases, ADRs, decision-logs still in force\nmemory.deprecate on each selected element\n✔ deprecated content excluded from agent context"]
+    AR["**archive** *(tech-lead)*\ngit.commit(message: 'end-of-life: archive')\nfreeze the repository line"]
 
     AN --> DE --> AR
 ```
@@ -323,7 +336,7 @@ flowchart LR
     subgraph BI["bug-ingest"]
         direction TB
         B1["**capture** *(developer)*\nmemory.add(type: bug)\nmemory.submit\n✔ P4.12: [title, severity]\ndraft → open"]
-        B2["**triage** *(tech-lead)*\nmemory.approve\n🔑 *approver*\nopen → triaged"]
+        B2["**triage** *(tech-lead)*\nmemory.approve\n🔑 *approver*\nopen → triaged (reject: open → closed)"]
         B1 --> B2
     end
 
@@ -355,6 +368,22 @@ flowchart LR
 | `decision-log-ingest` | `docs/04_memory/design/dls/{id}.md` | Ad-hoc product/process decision |
 | `adr-ingest` | `docs/04_memory/design/adrs/{id}.md` | Architectural decision during any phase |
 | `service-ingest` | `docs/04_memory/services/{id}.md` | External state set up (account, credential by reference, listing, setting, domain, handle — `dl-088`) |
+
+---
+
+## Token Bindings — `workflows/bindings.yaml`
+
+Every `actions:` and `checks:` token resolves through a binding (spec-003 Layer 3, dl-090). The
+`memory.*`, `set_state` / `sync_state`, `element.set_release`, `config.init` and `agent.*` tokens are
+built in (`agent.*` is `wingfoil agent execute` under the phase's role; the instruction is the phase's
+`description`). Every other token is bound in `.wingfoil/workflows/bindings.yaml` (`format: 1`,
+dl-153): a check to an argument vector (`npm test`, `npm run lint`, `npm run docs:api`,
+`npm run typecheck`, `npm run check:lockfile`, `npm run check:mcp`, `node scripts/e2e-smoke.cjs`, …),
+an action to a command or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
+`approver.execute`). Token arguments are `key: value` pairs, substituted as whole argv elements, never
+through a shell. The prose checks no command asserts yet (`frontmatter.required: […]`,
+`spec-review.passed`, the specification-phase quality criteria, …) stay unbound: `workflow list` reports
+each as a `W_WORKFLOW_UNBOUND_TOKEN` warning, which fails closed once the engine runs checks (v1.0).
 
 ---
 

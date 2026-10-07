@@ -7,7 +7,7 @@ description: >-
   governance into their gated states, identify and spec shared artefacts up front, pull backlog
   tasks for the release, and stamp each included element with its `release`. Set the release
   element to `planning` then `in-development`.
-version: 1.6                     # dl-016: added triage-bugs + reconcile-governance, record-adrs approve, build-backlog release-stamping; 1.2 dl-092: define-scope check gains `kind`; 1.3 dl-095 Q3 (B): + advance-pinned-build (task-112); 1.4 dl-133 Q1 (b): build-backlog check gains the task `kind` (task-150); 1.5 bug-175: define-scope check exempts the pre-dl-092 minors from `kind` (task-148); 1.6 bug-163: define-scope produces under rl-{release-line}/, as memory.yaml 2.3 files a release (task-164)
+version: 1.6                     # dl-016: added triage-bugs + reconcile-governance, record-adrs approve, build-backlog release-stamping; 1.2 dl-092: define-scope check gains `kind`; 1.3 dl-095 Q3 (B): + advance-pinned-build (task-112); 1.4 dl-133 Q1 (b): build-backlog check gains the task `kind` (task-150); 1.5 bug-175: define-scope check exempts the pre-dl-092 minors from `kind` (task-148); 1.6 bug-163: define-scope produces under rl-{release-line}/, as memory.yaml 2.3 files a release (task-164); 1.7 spec-003 alignment (task-199): record-adrs/identify-specs/build-backlog name their produces owner as { type, path } (dl-104 D3), build-backlog derives its DL and fix tasks from a selection, npm.pin_advance takes a key: value argument and the lockfile/MCP post-checks are two bound tokens (dl-090), agent.survey_specs becomes agent.execute
 element: release
 
 # Selection filter (dl-016 §1) — every phase that considers accumulated elements picks those whose
@@ -27,13 +27,14 @@ phases:
       (move to a published fix; if none exists, work by hand, record it, file a bug for the next patch).
     role: tech-lead
     actions:
-      - 'npm.pin_advance("wingfoil-released")'   # no-op when the pin already is the newest published version
+      - 'npm.pin_advance(package: wingfoil-released)'   # no-op when the pin already is the newest published version; manual (workflows/bindings.yaml): the version to pin is read from `npm view`
     checks:
       pre: ["`npm run -s wingfoil -- --version` == the version package.json pins (the build in use is the pinned one)"]
       post:
         - "new pin >= old pin, and `npm view wingfoil versions` lists it (forward only, published only)"
         - "the switch commit changes only package.json and package-lock.json"
-        - "`npm run check:lockfile` exit 0; `npm run check:mcp` exit 0"
+        - "lockfile.pinned"           # `npm run check:lockfile` exit 0 (bound in workflows/bindings.yaml)
+        - "mcp.registered"            # `npm run check:mcp` exit 0 (bound in workflows/bindings.yaml)
 
   - name: define-scope
     description: "Confirm pillar focus + feature scope for the release (from the release Memory doc)."
@@ -82,7 +83,7 @@ phases:
       - memory.submit                          # adr: draft -> pending
       - memory.approve                         # adr: pending -> accepted (dl-016 — tasks never cite an unaccepted ADR)
     produces:
-      - "docs/04_memory/design/adrs/{id}.md"
+      - { type: adr, path: "docs/04_memory/design/adrs/{adr.id}.md" }   # dl-104 D3: the ADRs this phase adds
     checks:
       pre: ["spec-review.passed"]     # dl-022 — internal + cross-spec + BDD/vision + traceability review before accept
       post: ["frontmatter.required: [title, sard_ref]"]
@@ -96,11 +97,11 @@ phases:
       approved (or at least pending) specs instead of discovering gaps task-by-task.
     role: architect
     actions:
-      - agent.survey_specs             # enumerate artefacts implied by the release scope/features
+      - agent.execute                  # dl-090 Q6: the survey above, run under the architect's session prompt
       - 'memory.add(type: tech-spec)'  # for each uncovered artefact: scaffold a new draft
       - memory.submit                  # fill spec content; move each spec draft -> pending
     produces:
-      - "docs/04_memory/design/specs/{id}.md"
+      - { type: tech-spec, path: "docs/04_memory/design/specs/{tech-spec.id}.md" }   # dl-104 D3: the tech-specs this phase adds
     checks:
       pre: ["spec-review.passed"]     # dl-022 — internal + cross-spec + BDD/vision + traceability review before approve
       post: ["frontmatter.required: [title, scope]"]
@@ -117,17 +118,22 @@ phases:
       (dev-loop's `bug.sync_state`). Assignment (dl-016 §4): stamp `release = {release.version}` on
       every included decision-log, bug, tech-spec, adr, and task.
     role: product-owner
+    # Selection (dl-016 §1, spec-003 § "Selections"): the in-scope `ready` decision-logs and `triaged` bugs
+    # the derived tasks come from. `{decision-log.id}` / `{bug.id}` name each selected element of that type
+    # (spec-017 §4.1); `bug.set_state` acts on the selected bugs (§4.2).
+    where: { type: [decision-log, bug], status: [ready, triaged], release: ["", "{release.version}"] }
     actions:
-      - 'memory.add(type: task, tags: ["{release.version}"])'                   # tasks created in draft
-      - memory.submit                                                          # task: draft -> pending
-      - 'memory.add(type: task, tags: ["{release.version}"], dl: "{dl.id}")'    # task(s) derived from each in-scope `ready` DL (DL stays ready — dl-017)
+      - 'memory.add(type: task, tags: ["{release.version}"])'                                # tasks created in draft
+      - memory.submit                                                                       # task: draft -> pending
+      - 'memory.add(type: task, tags: ["{release.version}"], dl: "{decision-log.id}")'       # task(s) derived from each selected `ready` DL (DL stays ready — dl-017)
       - memory.submit
-      - 'memory.add(type: task, tags: ["{release.version}"], bug: "{bug.id}")'  # one or more fix tasks per selected triaged bug
-      - memory.submit                                                          # fix task(s): draft -> pending
-      - bug.set_state(planned)                                                 # selected bugs: triaged -> planned (fix task(s) now exist)
-      - element.set_release("{release.version}")                               # stamp `release` on every included DL, bug, tech-spec, adr, task (dl-016 §4)
+      - 'memory.add(type: task, tags: ["{release.version}"], bug: "{bug.id}")'               # one or more fix tasks per selected triaged bug
+      - memory.submit                                                                       # fix task(s): draft -> pending
+      - bug.set_state(planned)                                                              # selected bugs: triaged -> planned (fix task(s) now exist)
+      - element.set_release("{release.version}")                                            # stamp `release` on every included DL, bug, tech-spec, adr, task (dl-016 §4)
     produces:
-      - "docs/04_memory/{release}/{id}.md"
+      # dl-104 D3: the tasks this phase adds, filed under their own `release` (memory.yaml `task` path)
+      - { type: task, path: "docs/04_memory/{task.release}/{task.id}.md" }
     checks:
       post: ["frontmatter.required: [title, release, kind]"]   # dl-133 Q1 (b): + kind (feature | fix), set here; mirrors memory.yaml `task` template.frontmatter.required
 

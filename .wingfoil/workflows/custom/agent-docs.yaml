@@ -1,0 +1,42 @@
+# WingFoil — agent-docs (SUB workflow)
+# dl-025 — the agent-facing documentation gate, shape (B): one phase, `align-agent-docs`, role architect.
+# Include-only, and included twice — the approver's ruling on dl-025's open question ("reuse the same phase
+# from plan-next-release-line rather than defining a second one"):
+#   - user-docs.align-agent-docs, once per release (after align-user-docs, before release-submit);
+#   - release-line-cycle.align-agent-docs, once per release-line, right before plan-next-release-line
+#     closes it, because structural changes (a new Memory type, a changed state machine, a new pillar)
+#     land at release-line boundaries and are exactly what CLAUDE.md's element/state tables stop matching.
+# A phase cannot include one phase of another workflow (spec-003 Layer 2 `include` names a workflow), so the
+# phase lives here, in a workflow of its own, and both callers include it (task-199). It declares no
+# `element`: its deliverables are the repository's agent-facing files, owned by no Memory element, so either
+# caller (a release, a release-line) may include it (spec-003 E_WORKFLOW_ELEMENT_MISMATCH).
+name: agent-docs
+kind: sub
+description: >-
+  Verify and align the agent-facing entry point (CLAUDE.md, .wingfoil/README.md, .wingfoil/WORKFLOW.md)
+  against the configuration it projects, so an agent's first contact describes the tool as it is.
+version: 1.0                     # 1.0 dl-025 (task-199): align-agent-docs moved here from user-docs 1.2, unchanged, so release-line-cycle can include the same phase
+
+phases:
+  - name: align-agent-docs                   # [SPEC] dl-025 — agent-facing docs gate (shape B)
+    description: >-
+      Verify and align the agent-facing entry point against the config it projects, so an agent's
+      first contact describes the tool as it is. Runs per release (user-docs, after align-user-docs
+      and before release-submit) and at release-line close (release-line-cycle, before
+      plan-next-release-line), because structural changes — a new Memory type, a changed state
+      machine, a new pillar — land at release-line boundaries and are exactly what the
+      element/state tables stop matching.
+    role: architect                          # [SPEC] dl-025 — roles.yaml binds architect to
+                                             #   architecture, determinism and traceability
+    produces:
+      - "CLAUDE.md"
+      - ".wingfoil/README.md"
+      - ".wingfoil/WORKFLOW.md"              # bug-170 — the workflow reference drifted while in no produces:
+    checks:
+      post:
+        - "CLAUDE.md project status matches the shipped command surface (CORE_MODULES)"
+        - "CLAUDE.md element/state tables match memory.yaml"
+        - "CLAUDE.md workflow list matches workflows.yaml"
+        - "CLAUDE.md role-directive bindings match roles.yaml"
+        - "workflow-md.complete"             # .wingfoil/WORKFLOW.md names every workflow and phase workflows.yaml includes (test/docs/workflow-md.test.ts; bound in workflows/bindings.yaml)
+    approval: { by_role: approver }

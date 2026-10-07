@@ -343,21 +343,39 @@ function stateDiagnostics(out: Collector, i: number, workflow: Workflow, states:
 }
 
 /**
+ * The types a phase's **selection** names (`spec-003` § "Selections": `where` without `iterate_over`; its
+ * `type` key, a scalar or a list), in declared order, minus those already in `scope`. Empty for any other
+ * phase: an iterating phase's `where` filters candidates and binds the iterated type in the sub instead.
+ */
+function selectedTypes(phase: Workflow['phases'][number], scope: readonly string[]): string[] {
+  if (phase.where === undefined || phase.iterate_over !== undefined) return [];
+  const declared = phase.where['type'];
+  const types = (Array.isArray(declared) ? declared : declared === undefined ? [] : [declared]).map(String);
+  return types.filter((type, k) => !scope.includes(type) && types.indexOf(type) === k);
+}
+
+/**
  * `W_PHASE_TOKEN_OUT_OF_SCOPE` for one workflow on one include path: every `{<type>.<field>}` token in
  * a `where` value, a `produces` pattern or an action argument, visited in that order. `{element.<f>}`
- * names the innermost scope; inside a `{ type: T, path }` entry, `T` is in scope (`dl-104` D3).
+ * names the innermost scope; inside a `{ type: T, path }` entry, `T` is in scope (`dl-104` D3); in an
+ * action argument of a phase that declares a selection, each type it selects is in scope too — the
+ * token names each selected element of that type (`spec-017` §4.1, task-199) — while `{element.<f>}`
+ * still names the innermost bound element.
  */
 function tokenDiagnostics(out: Collector, i: number, workflow: Workflow, scope: readonly string[], inputs: WorkflowCoreInputs): void {
   workflow.phases.forEach((phase, p) => {
     const at = (field: string): string => `phases[${p}].${field}`;
-    const check = (text: string, path: string, extra: string | null): void => {
+    const check = (text: string, path: string, extra: string | null, selected: readonly string[] = []): void => {
       const local = extra === null || scope.includes(extra) ? scope : [...scope, extra];
       for (const match of text.matchAll(TYPED_TOKEN_RE)) {
         const [token, named, field] = match as unknown as [string, string, string];
         if (named === 'item') continue;
-        const type = named === 'element' ? (local[local.length - 1] ?? null) : local.includes(named) ? named : null;
+        const type =
+          named === 'element' ? (local[local.length - 1] ?? null) : local.includes(named) || selected.includes(named) ? named : null;
         if (type === null) {
-          out.add(i, p, 'W_PHASE_TOKEN_OUT_OF_SCOPE', path, `token '${token}' names no enclosing element (in scope: ${local.length > 0 ? local.join(', ') : 'none'})`, token);
+          const inScope = local.length > 0 ? local.join(', ') : 'none';
+          const where = selected.length > 0 ? `${inScope}; selected: ${selected.join(', ')}` : inScope;
+          out.add(i, p, 'W_PHASE_TOKEN_OUT_OF_SCOPE', path, `token '${token}' names no enclosing element (in scope: ${where})`, token);
           continue;
         }
         const fields = inputs.templateFields(type);
@@ -374,8 +392,9 @@ function tokenDiagnostics(out: Collector, i: number, workflow: Workflow, scope: 
       if (typeof entry === 'string') check(entry, at(`produces[${k}]`), null);
       else check(entry.path, at(`produces[${k}].path`), entry.type);
     });
+    const selected = selectedTypes(phase, scope);
     (phase.actions ?? []).forEach((action, a) => {
-      if (tokenName(action) !== action) check(action, at(`actions[${a}]`), null);
+      if (tokenName(action) !== action) check(action, at(`actions[${a}]`), null, selected);
     });
   });
 }

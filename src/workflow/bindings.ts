@@ -17,6 +17,7 @@
  */
 import { z } from 'zod';
 
+import { BINDINGS_YAML_FORMAT, formatField } from '../validation/format';
 import { ID_CHAR_CLASS } from '../validation/id';
 
 /** The bindings file, relative to `.wingfoil/` — the `file` of its diagnostics (spec-003 Layer 3). */
@@ -114,10 +115,15 @@ export function collectionKeyIssues(entries: readonly CollectionEntry[]): Collec
   return issues;
 }
 
-/** Layer 3 — `.wingfoil/workflows/bindings.yaml`. Optional: an absent file is no bindings. */
+/**
+ * Layer 3 — `.wingfoil/workflows/bindings.yaml`. Optional: an absent file is no bindings. A `dl-149` file
+ * kind (`dl-153` (A)): `format` is optional (absent = 1), and a newer one is refused by the loader before
+ * this structural pass.
+ */
 export const BindingsYaml = z
   .object({
     version: z.number().positive().optional(),
+    format: formatField(BINDINGS_YAML_FORMAT),
     checks: z.record(z.string(), CheckBinding).optional(),
     actions: z.record(z.string(), ActionBinding).optional(),
     collections: z.record(z.string(), Collection).optional(),

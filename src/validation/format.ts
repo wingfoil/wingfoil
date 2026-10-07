@@ -32,6 +32,8 @@ export const DIRECTIVE_FORMAT = 1 as const;
 export const WORKFLOWS_YAML_FORMAT = 1 as const;
 /** A workflow file the manifest includes, Layer 2 (`spec-003`). */
 export const WORKFLOW_FORMAT = 1 as const;
+/** `.wingfoil/workflows/bindings.yaml`, the Layer-3 token bindings (`spec-003`; `dl-153` (A), task-199). */
+export const BINDINGS_YAML_FORMAT = 1 as const;
 /**
  * An agent adapter manifest (`spec-016` §2.2 `format`, task-177) — the first kind that carried the key.
  * Unlike the others it is required and read as a literal (`src/agent/schema.ts`).
