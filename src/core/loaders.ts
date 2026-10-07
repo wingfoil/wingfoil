@@ -29,6 +29,7 @@ import {
   ValidationError,
 } from '../validation';
 import {
+  BINDINGS_YAML_FORMAT,
   DIRECTIVE_FORMAT,
   DNA_YAML_FORMAT,
   MEMORY_YAML_FORMAT,
@@ -574,8 +575,9 @@ function loadWorkflowsFrom(source: WorkflowSource): WorkflowsLoadResult {
 
 /**
  * Layer 3 (spec-003, task-175): `workflows/bindings.yaml` through the same source as the workflow
- * files. Absent → no bindings and no diagnostic. Not YAML → one `E_YAML_PARSE_ERROR`; structurally
- * invalid → its Zod issues as `E_VALIDATION`; either way the tokens' bindings are left undecided.
+ * files. Absent → no bindings and no diagnostic. Not YAML → one `E_YAML_PARSE_ERROR`; a newer `format`
+ * (`dl-153` (A)) → one `E_INVALID_FORMAT` in place of the structural pass; structurally invalid → its Zod
+ * issues as `E_VALIDATION`; in all three cases the tokens' bindings are left undecided.
  * Otherwise the file's loader rows ({@link bindingsFileDiagnostics}).
  */
 function loadBindingsFrom(source: WorkflowSource): { context: BindingsContext; diagnostics: Diagnostic[] } {
@@ -584,6 +586,9 @@ function loadBindingsFrom(source: WorkflowSource): { context: BindingsContext; d
   const undecided: BindingsContext = { bindings: null, decided: false };
   const yaml = parseYamlOrDiagnostic(raw, source.label(BINDINGS_FILE), BINDINGS_FILE);
   if (yaml.diagnostic) return { context: undecided, diagnostics: [yaml.diagnostic] };
+  // A bindings file from a newer WingFoil is refused for its format alone (`dl-153` (A), task-199).
+  const newerFormat = newerFormatIssue(yaml.data, BINDINGS_YAML_FORMAT, BINDINGS_FILE);
+  if (newerFormat) return { context: undecided, diagnostics: [{ ...newerFormat, severity: 'error' }] };
   const result = BindingsYaml.safeParse(yaml.data ?? {});
   if (!result.success) return { context: undecided, diagnostics: zodDiagnostics(result.error.issues, BINDINGS_FILE) };
   emitUnknownFieldWarning((yaml.data ?? {}) as Record<string, unknown>, BindingsYaml as unknown as HasShape, source.label(BINDINGS_FILE));

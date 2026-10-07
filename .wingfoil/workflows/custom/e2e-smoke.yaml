@@ -8,7 +8,7 @@ description: >-
   scaffolded artifacts. Would have caught bug-005 at release time instead of at the last task.
   STAGED per the dl-014 B-DECISION (Option 2): warn on failure until the gate runs green for a
   release, then flip to hard-reject.
-version: 1.2                     # dl-082: `dna set` respelled to `<path> --value <v>` (task-093); 1.2 dl-026: + mcp-registration (task-112)
+version: 1.3                     # dl-082: `dna set` respelled to `<path> --value <v>` (task-093); 1.2 dl-026: + mcp-registration (task-112); 1.3 spec-003 alignment (task-199): cli.run takes a key: value argument, and the `memory add ...; memory submit ...` step is two tokens (dl-090 Q3 (a): no shell)
 element: release
 
 phases:
@@ -16,7 +16,7 @@ phases:
     description: "Run `wingfoil init` (each supported template) into a throwaway directory."
     role: qa
     actions:
-      - 'cli.run("wingfoil init")'
+      - 'cli.run(command: "wingfoil init")'
     checks:
       post: ["exit-code-zero", "scaffolded dna.yaml/memory.yaml/directives round-trip their own loaders (schema-valid)"]
 
@@ -26,11 +26,12 @@ phases:
       paths, directives list — against spec-005-cli-command-contract.
     role: qa
     actions:
-      - 'cli.run("dna show")'
-      - 'cli.run("dna set <path> --value <v>")'
-      - 'cli.run("memory add ...; memory submit ...")'
-      - 'cli.run("paths <category>")'
-      - 'cli.run("directives list")'
+      - 'cli.run(command: "dna show")'
+      - 'cli.run(command: "dna set <path> --value <v>")'
+      - 'cli.run(command: "memory add ...")'
+      - 'cli.run(command: "memory submit ...")'
+      - 'cli.run(command: "paths <category>")'
+      - 'cli.run(command: "directives list")'
     checks:
       post: ["exit-codes match spec-005-cli-command-contract", "no schema-invalid artifact produced by any command"]
 
@@ -43,7 +44,7 @@ phases:
       purpose, or this step fails.
     role: qa
     actions:
-      - 'cli.run("npm run check:mcp")'
+      - 'cli.run(command: "npm run check:mcp")'
     checks:
       post: ["exit-code-zero", "registered server version == package.json pin", "advertised channel set == EXPECTED_CHANNELS, every advertised list answers"]
 

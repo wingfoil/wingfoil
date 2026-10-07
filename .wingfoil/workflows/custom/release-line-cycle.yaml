@@ -14,7 +14,7 @@ kind: sub
 description: >-
   Deliver one release-line end to end: approve its scope -> initial-design (roadmap + ADRs/DLs/
   tech-specs) -> one release-cycle per minor release -> close it and seed the next release-line.
-version: 1.0
+version: 1.1                     # 1.1 dl-025 (task-199): + align-agent-docs before plan-next-release-line (the agent-docs workflow user-docs includes); dl-104 D3: plan-next-release-line names its produces owner as { type, path }
 element: release-line   # the iterated element provided by sw-life-cycle (iterate_over: release-line)
 
 phases:
@@ -36,6 +36,13 @@ phases:
     iterate_over: release
     where: { release-line: "{release-line.version}", status: [draft, planning, in-development] }
 
+  - name: align-agent-docs                   # dl-025 — the open question, ratified: agent-facing docs re-align at release-line close too
+    description: >-
+      Before the release-line closes, re-align the agent-facing entry point with the configuration:
+      the same phase user-docs runs per release (the agent-docs workflow), reused rather than
+      defined twice (dl-025).
+    include: agent-docs
+
   - name: plan-next-release-line
     description: >-
       Once every release under this release-line is `released`: close this release-line, and — if
@@ -47,7 +54,9 @@ phases:
       - 'memory.add(type: release-line)'  # OPTIONAL: only if another major version is planned
       - memory.submit                     # next release-line (if created): draft -> planning
     produces:
-      - "docs/04_memory/planning/{id}.md"
+      # dl-104 D3: owned by the release-line this phase adds — inside the entry, {release-line.id} is the
+      # created element, not the iterated one (whose own file exists from the start).
+      - { type: release-line, path: "docs/04_memory/planning/{release-line.id}.md" }
     checks:
       pre: ["all releases where release-line={release-line.version} are status: released"]
       post: ["frontmatter.required: [title, version]"]

@@ -5,7 +5,7 @@ kind: sub
 description: >-
   Publish an approved release: tag, build, publish to the npm registry, and mark the release
   element as released.
-version: 1.1
+version: 1.2                     # 1.2 spec-003 alignment (task-199): the two agent.execute steps are one (the instructions are the description, dl-090 Q6 (b)), git and approver tokens take key: value arguments (spec-003 open question 6)
 element: release
 
 phases:
@@ -18,8 +18,8 @@ phases:
     checks:
       pre: ["on-branch-is-main", "release-branch-merged-to-main"]   # dl-024
     actions:
-      - 'git.commit("release {release.version}")'
-      - 'git.tag("{release.version}", on: main)'      # dl-024 — tag on main, not on a design/release_* branch
+      - 'git.commit(message: "release {release.version}")'
+      - 'git.tag(name: "{release.version}", on: main)'      # dl-024 — tag on main, not on a design/release_* branch
 
   - name: publish
     description: >-
@@ -33,9 +33,8 @@ phases:
       registry-side setup this step presupposes.
     role: tech-lead
     actions:
-      - agent.execute        # push the tag; publish.yml runs gate → stage → promote (`npm stage publish`)
-      - agent.execute        # after the run: report the stage id promote printed; nothing is live yet
-      - 'approver.execute("npm stage approve <stage-id>")'   # 2FA on npm — the version goes live (adr-011 point 3)
+      - agent.execute        # push the tag (publish.yml runs gate → stage → promote, `npm stage publish`), then report the stage id promote printed; nothing is live yet
+      - 'approver.execute(command: "npm stage approve <stage-id>")'   # 2FA on npm — the version goes live (adr-011 point 3)
     checks:
       pre: ["tests.passing"]
       post: ["staged version approved on npm and live on the npm registry"]

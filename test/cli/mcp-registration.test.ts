@@ -202,7 +202,7 @@ describe('the workflow steps that run these checks (task-112 AC 3, AC 4)', () =>
     const names = phases('e2e-smoke').map((phase) => phase.name);
     expect(names.indexOf('mcp-registration')).toBe(names.indexOf('gate') - 1);
     expect(phases('e2e-smoke').find((phase) => phase.name === 'mcp-registration')?.actions).toEqual([
-      'cli.run("npm run check:mcp")',
+      'cli.run(command: "npm run check:mcp")', // key: value form since task-199 (spec-003 open question 6)
     ]);
   });
 

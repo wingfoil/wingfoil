@@ -5,7 +5,7 @@ kind: sub
 description: >-
   Retire the product (or a major line) at end of life: announce, deprecate active Memory and
   releases, and archive. Documents remain in the repo (agents ignore deprecated content).
-version: 1.0
+version: 1.1                     # 1.1 spec-003 alignment (task-199): deprecate acts on a selection — the closing release-line's unreleased releases (W_PHASE_ACTION_UNTARGETED; approver ruling 2026-10-07), git.commit takes a key: value argument
 
 phases:
   - name: announce
@@ -19,10 +19,19 @@ phases:
     approval: { by_role: approver }
 
   - name: deprecate
-    description: "Deprecate active releases and superseded ADRs / decision-logs."
+    description: "Deprecate the releases of the release-line being closed that are not yet released."
     role: tech-lead
+    # Selection (spec-003 § "Selections"): the releases of the release-line being closed (sw-life-cycle's
+    # bound release-line; dl-159 keeps release lines parallel, so the scope is one line, not the project)
+    # that are not yet released — the elements `memory.deprecate` acts on (spec-017 §4.2). The phase is
+    # complete when none is left. How ADRs and decision-logs are retired at end of life is a follow-up
+    # decision-log's (approver ruling 2026-10-07, task-199 review).
+    where:
+      type: release
+      release-line: "{release-line.version}"
+      status: [draft, planning, in-development, releasing]
     actions:
-      - memory.deprecate                        # any state -> deprecated / superseded
+      - memory.deprecate                        # each selected release: any state -> deprecated
     checks:
       post: ["deprecated content excluded from agent context and default search (REQ-STATE-06)"]
 
@@ -30,4 +39,4 @@ phases:
     description: "Final commit; freeze the repository line."
     role: tech-lead
     actions:
-      - 'git.commit("end-of-life: archive")'
+      - 'git.commit(message: "end-of-life: archive")'

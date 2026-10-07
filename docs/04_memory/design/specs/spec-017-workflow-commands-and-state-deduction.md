@@ -136,8 +136,8 @@ frontmatter (for example `docs/05_plans/rl-v1/initial-design-rl-v1-plan.md`) are
 ### 2. The workflow registry and its diagnostics
 
 The registry is the loader's result (`spec-003` Layers 1–3) plus `spec-003`'s *core* checks, which need
-`memory.yaml`, `dna.yaml` or `roles.yaml` at `HEAD` and therefore run in the workflow operations of
-`src/core`, not in the loader (`spec-003` § "Diagnostics", "Runs in"). Every load-time code, its
+`memory.yaml` or `dna.yaml` at `HEAD` (none reads `roles.yaml`) and therefore run in the workflow
+operations of `src/core`, not in the loader (`spec-003` § "Diagnostics", "Runs in"). Every load-time code, its
 severity, its message and its order are `spec-003`'s; this spec adds none.
 
 Deduction raises its own diagnostics, in the same shape (`spec-003`: `{ code, severity, file, path,
@@ -223,7 +223,12 @@ value, a `produces` pattern or an action argument:
 - `{item}` and `{item.<field>}` resolve to the innermost collection entry's key and field
   (`spec-003` § "Collections");
 - inside a `{ type: T, path }` `produces` entry, `{T.<field>}` resolves against each element the step
-  created of type `T` (`dl-104` D3).
+  created of type `T` (`dl-104` D3);
+- in an action argument of a phase that declares a selection (`spec-003` § "Selections"),
+  `{T.<field>}` for a type `T` the selection selects resolves against each selected element of type
+  `T`, so the action runs once per such element (`release-planning.build-backlog`'s
+  `memory.add(type: task, …, bug: "{bug.id}")`: one fix task per selected bug); `{element.<field>}`
+  still names the innermost bound element.
 
 A token with no value leaves its pattern unresolved: the evidence that uses it is not satisfied, and
 `W_UNRESOLVED_TOKEN` names it. A token whose type is in no enclosing scope is caught at load time
@@ -243,7 +248,7 @@ and its token:
 | every other token (`agent.*`, `git.*`, `tests.*`, `cli.run`, …) | nothing |
 
 An untyped Memory action with no target at all is `spec-003`'s load-time `W_PHASE_ACTION_UNTARGETED`
-(`end-of-life.deprecate` today).
+(none on this repository since `task-199` gave `end-of-life.deprecate` a selection).
 
 **4.3 Evidence** (`spec-003` § "Evidence", `dl-104` D1 (c), D3, D4). A phase is **complete** when every
 kind of evidence it declares is satisfied:
@@ -386,9 +391,10 @@ The approval is given when no carried element awaits any more — by `memory app
 §4.4) on each of them — and the phase's other evidence is satisfied. A phase whose actions carry
 **no** element through a gate has its approval recorded by `workflow finalize` with approver
 authority (§7.9): the step awaits that record once its other evidence is satisfied. On this repository
-those are `user-docs.align-user-docs`, `user-docs.align-agent-docs`, `e2e-smoke.gate`,
-`release-submit.approve-release`, `release-publishing.publish`, `retrospective.additional-points` and
-`retrospective.approve` (§12).
+those are `user-docs.align-user-docs`, `agent-docs.align-agent-docs` (included by `user-docs` and
+`release-line-cycle`), `e2e-smoke.gate`, `release-submit.approve-release`, `release-publishing.publish`
+and `retrospective.additional-points` (§12); `retrospective.approve` carries its decision-log since
+`task-199` (`decision-log.set_state(ready)`, the run elements row).
 
 A **pending approval** is a frontier step with at least one awaiting carried element, or awaiting its
 approval record. It is routed per `spec-003`'s `approval`: `by_role: R` to every `dna.yaml`
@@ -413,8 +419,9 @@ declares. WingFoil does not apply `set_state` in v0.3: the element's state after
 `dev-loop.review`, `release-planning.triage-bugs`, `release-planning.reconcile-governance`, checked
 against `.wingfoil/memory.yaml:120-121,137-138,153-154,187-188`), the reject itself produced it; a
 difference is `spec-003`'s load-time `W_PHASE_FALLBACK_STATE_MISMATCH`. A reject whose target lies
-forward (`bug-ingest.triage`: bug `open → closed`) completes the phase instead of re-entering it
-(`spec-003` `W_PHASE_FALLBACK_NOT_REENTRANT`). `dev-loop.done`'s fallback (`dev-loop.yaml:106`)
+forward (`bug-ingest.triage`: bug `open → closed`) completes the phase instead of re-entering it; a
+`fallback.step` naming an earlier phase there is `spec-003`'s `W_PHASE_FALLBACK_NOT_REENTRANT`
+(`bug-ingest.triage` declared one until `task-199`). `dev-loop.done`'s `fallback`
 answers a failed merge, which is P4.10 (v1.0), not a reject, and is reported only. A `fallback.step`
 that names no phase is a load-time error (`E_PHASE_FALLBACK_STEP_UNKNOWN`), not a runtime refusal of
 the reject: `memory reject` reads no workflow.
@@ -764,7 +771,8 @@ list --format json` with the pinned build 0.2.2 loads the same 23 workflows and 
   (`initial-design.yaml:33,46,60,77`), `release-line-cycle.plan-next-release-line` (`:50`),
   `release-planning.record-adrs|identify-specs|build-backlog` (`release-planning.yaml:80,98,125`),
   `dev-loop.design` (`dev-loop.yaml:54`).
-- `W_PHASE_TOKEN_OUT_OF_SCOPE` × 2: `release-planning.yaml:118,120` (`{dl.id}` names no Memory type;
+- `W_PHASE_TOKEN_OUT_OF_SCOPE` × 2: `release-planning.yaml:118,120` (`build-backlog`'s third and fifth
+  actions; `:123,125` at `4fd77678`; `{dl.id}` names no Memory type;
   no enclosing scope is a `bug` for `{bug.id}`).
 - `W_PHASE_ACTION_UNTARGETED` × 1: `end-of-life.deprecate` (`end-of-life.yaml:25`).
 - `W_PHASE_FALLBACK_NOT_REENTRANT` × 1: `bug-ingest.triage` (bug `open` rejects to `closed`, forward;
@@ -793,8 +801,8 @@ list --format json` with the pinned build 0.2.2 loads the same 23 workflows and 
   reconcile-governance|record-adrs|identify-specs|commit-backlog`, `dev-loop.design|review`,
   `end-of-life.announce`.
 - *Implicit owners:* `{id}` in a phase that adds an element is ambiguous until the entry takes
-  `dl-104` D3's `{ type, path }` form. Until the alignment task rewrites the nine entries, they are
-  not evidence (§4.3): `dev-loop.design`, `release-planning.record-adrs|identify-specs|build-backlog`
+  `dl-104` D3's `{ type, path }` form. Until the alignment task rewrote the nine entries (`task-199`,
+  below), they were not evidence (§4.3): `dev-loop.design`, `release-planning.record-adrs|identify-specs|build-backlog`
   and the four `initial-design` seeds complete through their `created` evidence (or, having created
   nothing, through `finalize`), and `plan-next-release-line` through its `state` evidence
   (release-line `done`). Read with D3's default instead, `dev-loop.design`'s pattern would name a
@@ -813,9 +821,45 @@ list --format json` with the pinned build 0.2.2 loads the same 23 workflows and 
   instance, where §3.4 binds one (ruling R16): under the v0.3 commands each is its own instance, or
   is added without `--workflow`. No `sw-life-cycle` instance exists until someone starts one.
 
-A characterization test pins these figures (one error and the listed warnings at this configuration;
-zero errors once the alignment task lands) against the committed configuration, so a regression in
-either the files or the loader is caught.
+**Re-measured after the alignment** (`task-199`, at its `HEAD`, through `loadWorkflowRegistryAtHead`
+— the loader and the core checks at one commit). The configuration is 24 workflows and 87 phases:
+`agent-docs` (one phase, `align-agent-docs`, `dl-025`) is new, and `release-line-cycle` includes it
+before `plan-next-release-line`.
+- Load-time diagnostics: **0 errors, 61 warnings**, every one a `W_WORKFLOW_UNBOUND_TOKEN` on a
+  check that no command asserts yet (`frontmatter.required: […]` × 17, `spec-review.passed` × 4, the
+  specification-phase quality criteria × 12, the release-state queries × 4, …; the task's Execution
+  Notes give each a reason). Every action token resolves, built in or through the first
+  `workflows/bindings.yaml`. The nine implicit owners take the `{ type, path }` form, the two
+  out-of-scope tokens are rewritten against `build-backlog`'s selection (§4.1),
+  `end-of-life.deprecate` selects what it deprecates, and `bug-ingest.triage` has no fallback (§5.2).
+- *A selection that never empties:* `build-backlog`'s selection matches its `ready` decision-logs
+  after the phase too (a decision-log stays `ready`, `dl-017`, and keeps its `release`), so its
+  `selection` evidence is never satisfied on its own. The phase completes through §4.7 once
+  `commit-backlog`'s `state` evidence holds (the release `in-development`); until then `status` and
+  `next` show `build-backlog` on the frontier (approver ruling 2026-10-07, `task-199` review).
+- *Checkpoints:* 27 phases — the 28 above less `end-of-life.deprecate`, whose selection (the closing
+  release-line's releases not yet released) is evidence.
+  `retrospective.approve` stays one: its `decision-log.set_state(ready)` acts on the decision-log
+  `capture` created (§4.2), which none of §4.3's kinds observes, so it completes by `workflow
+  finalize` once the decision-log is approved.
+- *Approvals recorded by `finalize` with approver authority:* 6 phases, listed in §5.1 —
+  `retrospective.approve` now carries its decision-log, and `align-agent-docs` lives in `agent-docs`.
+- *Implicit owners, rewritten:* `dev-loop.design`'s entry is `{ type: tech-spec, path:
+  ".../{tech-spec.id}.md" }`, so it names the specs the step creates, never a task-named file;
+  `plan-next-release-line`'s is `{ type: release-line, path: ".../{release-line.id}.md" }`, the
+  release-line the step creates, never the iterated one's own file; `build-backlog`'s owner is the
+  task, whose `release` field the template declares (`{task.release}`); `seed-releases` files under
+  `rl-{release-line.version}/` (`bug-224`).
+
+The pinned build 0.2.2 no longer loads the workflow files: its schema reads a `produces` entry as a
+string only, so `workflow list` exits `1` on the four `{ type, path }` entries of `initial-design.yaml`
+(`E_VALIDATION`), and the `.mcp.json` server of the same build fails `wingfoil://workflows`; the
+measurement above is the code build's, and the pinned build reads the workflows again once
+`advance-pinned-build` moves the pin past 0.2.2.
+
+`test/core/workflow-repository-conformance.test.ts` pins these figures against the committed
+configuration (zero errors, the exact warning set, the two phase lists, the `{ type, path }` owners),
+so a regression in either the files or the loader is caught.
 
 ### 13. Open questions
 
@@ -960,3 +1004,17 @@ section names, per `dl-075-no-bare-line-offsets-in-memory` and `task-161-revise-
 citations in §1.1, §1.2 and OQ-10 named lines that no longer held the quoted text (they had already drifted with
 `task-128`'s 1.1). Each now names the section or bullet it meant. No rule changed. Edited in place
 without a supersede or a state change (`dl-047`); recorded with `memory amend`.
+
+**Revision (2026-10-07, `task-199-align-wingfoil-workflows-custom-v0-3-schema-commands`) — this
+repository's workflows aligned; a selection's types in scope.** §4.1 gains the rule the workflow
+alignment needed to rewrite `release-planning.build-backlog`'s `{dl.id}` / `{bug.id}` "against a
+selection" (`spec-003` Consequences): in an action argument of a selecting phase, `{T.<field>}` names
+each selected element of type `T`; `spec-003`'s `W_PHASE_TOKEN_OUT_OF_SCOPE` row follows. §12 is
+re-measured after the alignment (zero errors, 61 unbound checks, 27 checkpoints, 6 approvals
+recorded by `finalize`; `build-backlog`'s selection never empties and the phase completes through
+§4.7; the pinned build 0.2.2 no longer loads the workflow files), §5.1's list and §4.2's untargeted example follow it, §5.2 records that
+`bug-ingest.triage` no longer declares a fallback, and §2 no longer names `roles.yaml` among the core
+checks' inputs (`spec-003` § "Where each check runs", task-194). The two out-of-scope citations of §12
+gain the phase they named and their offsets at `4fd77678`; `dev-loop.done`'s fallback is cited by key
+(`dl-075` (A), fix on touch). No command contract, code or diagnostic changes. Edited in place without
+a supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-199`'s review.

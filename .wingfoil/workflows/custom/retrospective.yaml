@@ -6,7 +6,7 @@ description: >-
   Close the release loop: EXPLORE the release's Execution Notes for friction, let the approver add
   points, capture what went well / what to improve as Memory, and feed adjustments into the next
   release planning.
-version: 1.2                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175)
+version: 1.3                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175); 1.3 dl-104 Action 2 (task-199): approve declares the Memory transition it stands for, explore's agent.mine_execution_notes becomes agent.execute (dl-090 Q6)
 element: release
 
 phases:
@@ -18,7 +18,7 @@ phases:
       source-cited friction inventory grouped by theme. Parallelizable (cheap-model miners + synthesis).
     role: facilitator
     actions:
-      - agent.mine_execution_notes
+      - agent.execute                  # dl-090 Q6: the mining above, run under the facilitator's session prompt
     produces:
       # The source-cited friction inventory, grouped by theme, outside every Memory path (approver
       # ruling 2026-10-05; dl-104 D3: a produces entry is a path pattern an engine can test for existence).
@@ -46,4 +46,9 @@ phases:
   - name: approve
     description: "Approve the retrospective so its actions are committed."
     role: approver
+    actions:
+      # dl-104 Context §1: the approval IS a Memory transition, `wf(decision-log): approve retro-{version}`.
+      # The typed set_state acts on the decision-log `capture` created (spec-017 §4.2) and, under
+      # `approval:`, emits `approve` (spec-003's verb rule).
+      - decision-log.set_state(ready)          # retro-{version}: in-discussion -> ready
     approval: { by_role: approver }

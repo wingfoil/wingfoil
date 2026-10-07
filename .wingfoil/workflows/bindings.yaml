@@ -1,0 +1,65 @@
+# WingFoil — token bindings (spec-003 Layer 3; dl-090 Q1 (a))
+# Declares which command each project-bound `actions:` / `checks:` token of `workflows/custom/*.yaml` runs.
+# The built-in tokens (memory.*, element.* / <type>.set_state, <type>.sync_state, element.set_release,
+# config.init, agent.*) are WingFoil's and may not be rebound here (E_BINDING_BUILTIN_TOKEN).
+#
+# Rules (spec-003 Layer 3, dl-090):
+#   - `run` is an argument vector, never passed to a shell (Q3 (a)); a placeholder fills a WHOLE element.
+#   - a check exits 0 = pass, 1 = fail (routes to `fallback`), 2 = binding misconfiguration (Q4);
+#     `severity` is `reject` unless declared `warn`. No check is bound to `wingfoil agent execute` (Q6).
+#   - an action with no command is `manual: true`: WingFoil names the step, a human performs it (Q2 (c)).
+#   - changed only through a task reviewed at dev-loop's `review` gate, never by an ordinary docs commit (Q5 (c)).
+# Nothing runs a binding in v0.3: `workflow list` validates them and reports what is still unbound
+# (W_WORKFLOW_UNBOUND_TOKEN, a warning until P4.10/P4.12 ship in v1.0).
+#
+# Deliberately unbound: the prose checks (`frontmatter.required: […]`, `spec-review.passed`, the
+# specification-phase quality criteria, the release/branch state queries, …) have no command that asserts
+# them today; each is listed with its reason in task-199's Execution Notes and stays a
+# W_WORKFLOW_UNBOUND_TOKEN warning, which in v1.0 fails closed (dl-090 Q2 (c)).
+version: 1.0                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry
+format: 1                        # dl-153 (A): a dl-149 file kind (BINDINGS_YAML_FORMAT)
+
+checks:
+  # dev-loop.refactor (dl-014 G5, dl-013, dl-034): the commands its comment named.
+  tests.passing:            { run: [npm, test] }
+  # The 80 % threshold is jest.config.js's coverageThreshold (global: branches, functions, lines,
+  # statements); the token's `min:` argument restates it, and test/core/workflow-repository-conformance.test.ts
+  # holds the two equal, since `jest --coverage` takes no threshold argument.
+  tests.coverage:           { run: [npm, run, "test:coverage"] }
+  docs.api.public-complete: { run: [npm, run, "docs:api"] }   # TypeDoc notDocumented + treatWarningsAsErrors (typedoc.json)
+  docs.api.build:           { run: [npm, run, "docs:api"] }
+  lint.clean:               { run: [npm, run, lint] }
+  # release-submit.pre-release-checks (dl-044, task-173).
+  typecheck.clean:          { run: [npm, run, typecheck] }
+  # dev-loop.review: the BDD scenarios are pinned by jest suites that cite their feature files
+  # (docs/02_requirements/02_bdd/features/); there is no separate BDD runner.
+  tests.bdd.passing:        { run: [npm, test] }
+  # e2e-smoke.gate (dl-023: hard-reject from v0.3): the executable form of e2e-smoke.yaml, driving `wingfoil` on PATH.
+  e2e-smoke-passed:         { run: [node, scripts/e2e-smoke.cjs] }
+  # release-planning.advance-pinned-build (dl-095 Q3 (B), dl-026).
+  lockfile.pinned:          { run: [npm, run, "check:lockfile"] }
+  mcp.registered:           { run: [npm, run, "check:mcp"] }
+  # agent-docs.align-agent-docs (bug-170): WORKFLOW.md names every workflow and phase workflows.yaml includes.
+  workflow-md.complete:     { run: [npm, test, --, test/docs/workflow-md.test.ts] }
+
+actions:
+  # dev-loop.review (dl-014): the BDD acceptance scenarios run inside the jest suite.
+  tests.bdd.run:            { run: [npm, test] }
+  # dev-loop start/done (dl-014 G1–G3). The branch is `task/<id>` (git-conventions §1): a prefix around
+  # a placeholder is a partial interpolation no argv binding may express (spec-003 open question 6), so
+  # these stay manual until a command takes the task id as a whole argument.
+  git.create_branch:        { manual: true }
+  git.create_worktree:      { manual: true }
+  git.merge:                { manual: true }   # switch to `to`, then `git merge --no-ff` the task branch: two commands
+  git.remove_worktree:      { manual: true }
+  # release-publishing.tag (dl-024) and end-of-life.archive: the commit message and the tag are the
+  # approver's, on main.
+  git.commit:               { manual: true }
+  git.tag:                  { manual: true }
+  # release-planning.advance-pinned-build (dl-095 Q3): the version to pin is read from `npm view` first.
+  npm.pin_advance:          { manual: true }
+  # e2e-smoke: each step names one CLI call; scripts/e2e-smoke.cjs is their executable form (spec-015 §3
+  # stage 3). A command string is not an argument vector (dl-090 Q3 (a)), so the step is manual.
+  cli.run:                  { manual: true }
+  # release-publishing.publish: the 2FA `npm stage approve` no command can perform (dl-087, adr-011 point 3).
+  approver.execute:         { manual: true }

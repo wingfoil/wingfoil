@@ -5,7 +5,7 @@
 name: bug-ingest
 kind: main
 description: Capture a single defect report (bug) into Memory.
-version: 1.0
+version: 1.1                     # 1.1 spec-003 alignment (task-199): triage has no fallback — a reject at the open gate closes the bug (memory.yaml `bug` gates: open -> closed), so there is no capture to return to (W_PHASE_FALLBACK_NOT_REENTRANT, spec-017 §5.2)
 # No fixed `element:` — started standalone this main creates a top-level bug. When invoked while
 # another workflow with an active `element` context is running, the created Memory file inherits that
 # element (e.g. a bug raised during dev-loop inherits the active `task`).
@@ -22,9 +22,8 @@ phases:
       post: ["frontmatter.required: [title, severity]"]
 
   - name: triage
-    description: "Triage and accept the bug for work (approval gate; reject = back to capture)."
+    description: "Triage and accept the bug for work (approval gate; a reject closes it: duplicate, not a bug, wontfix)."
     role: tech-lead
     actions:
-      - memory.approve                         # bug: open -> triaged
+      - memory.approve                         # bug: open -> triaged (a reject: open -> closed, the decision taken)
     approval: { by_role: approver }
-    fallback: { step: capture }

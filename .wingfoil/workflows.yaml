@@ -6,7 +6,7 @@
 # allows multiple open mains); every non-main is `kind: sub` (include-only, run when a phase
 # include()s it). See REQ-SYS-06.
 # Source: docs/01_vision/06_features.md (P4.x), docs/02_requirements/01_user_story_map/07_workflow-config.md
-version: 1.2
+version: 1.3                     # 1.3 dl-025 (task-199): + workflows/custom/agent-docs.yaml (align-agent-docs, included by user-docs and release-line-cycle)
 
 # `include:` (singular) is the canonical manifest key — matches the P4.1 prose and the `include:`
 # phase field of the per-file Workflow DSL, so the manifest key and the phase-composition key read
@@ -37,6 +37,7 @@ include:
   - workflows/custom/release-planning.yaml
   - workflows/custom/dev-loop.yaml
   - workflows/custom/user-docs.yaml            # dl-013 — user-facing docs gate (between implementation and submit)
+  - workflows/custom/agent-docs.yaml           # dl-025 — agent-facing docs gate (user-docs per release, release-line-cycle at its close)
   - workflows/custom/e2e-smoke.yaml            # dl-023 — fresh-init + CLI end-to-end smoke gate (before submit)
   - workflows/custom/release-submit.yaml
   - workflows/custom/release-publishing.yaml

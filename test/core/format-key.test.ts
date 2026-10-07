@@ -1,5 +1,6 @@
 /**
- * task-251 (`dl-149`) — every WingFoil file kind's loader reads the `format:` key.
+ * task-251 (`dl-149`) — every WingFoil file kind's loader reads the `format:` key (task-199, `dl-153` (A):
+ * `workflows/bindings.yaml` too).
  *
  * - AC 1: an optional integer; absent reads as format 1 and loads exactly as before, and `format: 1`
  *   loads without spec-009's unknown-field warning.
@@ -101,6 +102,15 @@ const KINDS: readonly Kind[] = [
     load: loadWorkflowsYaml,
     loadAtHead: (repo) => loadWorkflowsYamlAtRev(repo, 'HEAD'),
     file: () => 'workflows/custom/sub.yaml',
+  },
+  {
+    // task-199, `dl-153` (A): the token-binding file is a `dl-149` kind (spec-003 Layer 3 / § "Format").
+    name: 'workflows/bindings.yaml',
+    path: '.wingfoil/workflows/bindings.yaml',
+    text: (format, broken) => `version: 1\n${line(format)}${broken ? 'checks: 7\n' : 'checks:\n  lint.clean: { run: [npm, run, lint] }\n'}`,
+    load: loadWorkflowsYaml,
+    loadAtHead: (repo) => loadWorkflowsYamlAtRev(repo, 'HEAD'),
+    file: () => 'workflows/bindings.yaml',
   },
 ];
 

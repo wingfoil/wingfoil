@@ -23,7 +23,7 @@ description: >-
   Generate this release-line's minor-release roadmap, then record the initial Architectural
   Decision Records, Decision Logs, and Technical Specifications that formalize choices already
   implied by it — before this release-line's delivery begins.
-version: 1.2                     # 1.1 bug-169: header describes the shipped CLI/MCP; bug-175: seed-releases states the release `kind` (task-148); 1.2 bug-163: seed-releases produces under rl-{release-line}/, as memory.yaml 2.3 files a release (task-164)
+version: 1.3                     # 1.1 bug-169: header describes the shipped CLI/MCP; bug-175: seed-releases states the release `kind` (task-148); 1.2 bug-163: seed-releases produces under rl-{release-line}/, as memory.yaml 2.3 files a release (task-164); 1.3 dl-104 D3, dl-090 Q6 (task-199): the four seeds name their produces owner as { type, path } (bug-224: the release folder is the release-line's version), agent.survey_specs becomes agent.execute
 
 phases:
   - name: seed-releases
@@ -34,7 +34,10 @@ phases:
     # No submit: the `release` machine has no `pending`; releases stay `draft` and `release-planning`
     # performs draft -> planning when delivery reaches each release.
     produces:
-      - "docs/04_memory/planning/rl-{release-line}/{id}.md"   # mirrors memory.yaml `release` path (bug-163)
+      # dl-104 D3: owned by the releases this phase adds. The folder is `rl-` + the iterated release-line's
+      # version, the value each release's `release-line` field carries (memory.yaml `release` path, bug-163);
+      # a bare `{release-line}` read as this workflow's element would name `rl-rl-v1` (bug-224).
+      - { type: release, path: "docs/04_memory/planning/rl-{release-line.version}/{release.id}.md" }
     checks:
       # field list mirrors memory.yaml `release` template.frontmatter.required, and the exemption
       # release-planning's define-scope states (bug-175, release-planning-rel-v0.3-plan R20)
@@ -49,7 +52,7 @@ phases:
       - memory.submit                  # draft -> pending
       - memory.approve                 # pending -> accepted (approver role)
     produces:
-      - "docs/04_memory/design/adrs/{id}.md"
+      - { type: adr, path: "docs/04_memory/design/adrs/{adr.id}.md" }   # dl-104 D3: the ADRs this phase adds
     checks:
       pre: ["spec-review.passed"]     # dl-022 — internal + cross-spec + BDD/vision + traceability review before accept
       post: ["frontmatter.required: [title, sard_ref]"]
@@ -63,24 +66,24 @@ phases:
       - memory.submit                     # draft -> in-discussion
       - memory.approve                    # in-discussion -> ready (approver role)
     produces:
-      - "docs/04_memory/design/dls/{id}.md"
+      - { type: decision-log, path: "docs/04_memory/design/dls/{decision-log.id}.md" }   # dl-104 D3: the decision-logs this phase adds
     checks:
       post: ["frontmatter.required: [title]"]
 
   - name: seed-specs
     description: >-
       Survey this whole release-line (not one release) for shared file formats, schemas, constant
-      sets, and module APIs already implied by its roadmap + the config; scaffold a tech-spec for
-      each one not yet covered by an approved spec.
+      sets, and module APIs already implied by its roadmap + the config (e.g. memory.yaml's own
+      schema); scaffold a tech-spec for each one not yet covered by an approved spec.
     role: architect
     optional: true
     actions:
-      - agent.survey_specs             # enumerate release-line-wide artefacts (e.g. memory.yaml's own schema)
+      - agent.execute                  # dl-090 Q6: the survey above, run under the architect's session prompt
       - 'memory.add(type: tech-spec)'  # for each uncovered artefact: scaffold a new draft
       - memory.submit                  # draft -> pending
       - memory.approve                 # pending -> approved (approver role)
     produces:
-      - "docs/04_memory/design/specs/{id}.md"
+      - { type: tech-spec, path: "docs/04_memory/design/specs/{tech-spec.id}.md" }   # dl-104 D3: the tech-specs this phase adds
     checks:
       pre: ["spec-review.passed"]     # dl-022 — internal + cross-spec + BDD/vision + traceability review before approve
       post: ["frontmatter.required: [title, scope]"]
