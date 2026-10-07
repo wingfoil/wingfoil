@@ -31,6 +31,7 @@ This task writes `claude-code.yaml` from the Claude Code CLI's own help output a
 - **Features:** P5.3.1, P5.4.3.
 - **Notes:** Proposal key: B14. CI cannot run it (`adr-012` Consequences). `verified_with` is the only version pin.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from the W3 B1 triage (2026-10-07, `task-196`'s review).** No BDD scenario pins the refusal `init` prints when a built-in adapter manifest fails its integrity check or its secret scan (`built-in adapter template integrity check failed: <name>`, `… secret scan failed: <name> (<rule>, line <n>)`; `grep -rli adapter docs/02_requirements/02_bdd/` finds nothing). With the first real built-in adapter, add that scenario under P5.1.1 or P5.3.1.
 
 ## Execution Notes
 
