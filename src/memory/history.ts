@@ -27,7 +27,7 @@
  * {@link findElementCreationSha} for the distinction that resolves it and why rename-following is
  * kept rather than traded away.
  */
-import { E_GIT_READ_FAILED, runGitRead, StorageError } from '../storage';
+import { E_GIT_READ_FAILED, requireCommitName, runGitRead, StorageError } from '../storage';
 
 import { walkGitLogFields } from './git-log';
 
@@ -79,6 +79,9 @@ function readOrExplain(root: string, args: readonly string[], what: string): str
  * records by field arity over a stream of `<field>NUL` groups, so anything git appends outside the
  * `--format` string — `--name-status` output, for instance — would be read as the next record's
  * first field (task-086).
+ *
+ * Like every `git log` reader, it runs with `--no-show-signature` (`task-268`, `bug-291`): under
+ * `log.showSignature` git printed "No signature" here as the first line, read as the creation commit.
  */
 const CREATION_PROBE_ARGS = ['--follow', '--diff-filter=C', '--format=%H'];
 
@@ -119,12 +122,12 @@ const CREATION_PROBE_ARGS = ['--follow', '--diff-filter=C', '--format=%H'];
 export function findElementCreationSha(root: string, relativePath: string): string | null {
   const stdout = readOrExplain(
     root,
-    ['log', ...CREATION_PROBE_ARGS, '--', relativePath],
+    ['log', '--no-show-signature', ...CREATION_PROBE_ARGS, '--', relativePath],
     `git log --follow --diff-filter=C failed for ${relativePath}: cannot establish where the element was created`,
   );
 
   const newestCopy = stdout.split('\n').find((line) => line.trim().length > 0);
-  return newestCopy === undefined ? null : newestCopy.trim();
+  return newestCopy === undefined ? null : requireCommitName(newestCopy.trim(), 'git log --follow --diff-filter=C');
 }
 
 /**
@@ -171,13 +174,11 @@ export function dropPreCreationAncestry(
  * path carrying non-ASCII bytes arrives as its own UTF-8 rather than as git's `"\303\251"` escape
  * form — the parser would otherwise have to un-escape it to hand `git show` something that resolves.
  * Load-bearing, and pinned: `test/memory/history-rename-path.test.ts` (task-142 AC3, `bug-097`) goes
- * red when the flag is removed.
+ * red when the flag is removed. `--no-show-signature`, as on every `git log` reader (`task-268`,
+ * `bug-291`), keeps signature text out of the lines parsed as names.
  */
 const PATH_PROBE_ARGS = ['-c', 'core.quotePath=false'];
 const PATH_PROBE_LOG_ARGS = ['--follow', '--name-status', '--format=%H'];
-
-/** A full sha on a line of its own — git's `--format=%H` output, which carries nothing else. */
-const SHA_LINE_RE = /^[0-9a-f]{40}$/;
 
 /**
  * Where `relativePath`'s document lived at each commit of its `--follow` walk, keyed by sha.
@@ -207,18 +208,21 @@ const SHA_LINE_RE = /^[0-9a-f]{40}$/;
 export function collectHistoricalPaths(root: string, relativePath: string): Map<string, string> {
   const stdout = readOrExplain(
     root,
-    [...PATH_PROBE_ARGS, 'log', ...PATH_PROBE_LOG_ARGS, '--', relativePath],
+    [...PATH_PROBE_ARGS, 'log', '--no-show-signature', ...PATH_PROBE_LOG_ARGS, '--', relativePath],
     `git log --follow --name-status failed for ${relativePath}: cannot establish where the element lived at each commit`,
   );
 
   const pathBySha = new Map<string, string>();
   let currentSha: string | null = null;
   for (const line of stdout.split('\n')) {
-    if (SHA_LINE_RE.test(line)) {
-      currentSha = line;
+    if (line === '') continue;
+    // A line with no tab is `--format=%H`'s: a commit name, or refused — never skipped (task-268,
+    // `bug-291`: signature text printed under `log.showSignature` was skipped here, silently).
+    if (!line.includes('\t')) {
+      currentSha = requireCommitName(line, 'git log --follow --name-status');
       continue;
     }
-    if (currentSha === null || !line.includes('\t') || pathBySha.has(currentSha)) continue;
+    if (currentSha === null || pathBySha.has(currentSha)) continue;
     const fields = line.split('\t');
     pathBySha.set(currentSha, fields[fields.length - 1] as string);
   }

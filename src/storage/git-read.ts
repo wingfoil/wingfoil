@@ -100,3 +100,31 @@ export function runGitReadBytes(root: string, args: readonly string[], options: 
   }
   return { status: run.status, stdout: run.stdout as Buffer, stderr };
 }
+
+/** A full commit name: 40 hexadecimal digits (SHA-1), or 64 (SHA-256). */
+const FULL_COMMIT_NAME_RE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
+/**
+ * `name`, checked to be a full commit name, as a reader of `git log --format=%H` output takes it
+ * (`task-268`, `bug-291`).
+ *
+ * Every `git log` reader passes `--no-show-signature`, so a `log.showSignature` configuration cannot
+ * print signature text ("No signature", "Good … signature for …") among the formatted lines. This is
+ * the second half: whatever still arrives where a name was expected is refused, never used — a
+ * garbled name used as a sha silently drops the commit it should have named (a phase record left
+ * uncounted) or surfaces as an unrelated error ("creation commit No signature is not present …").
+ * `agent show` makes the same check on its own reader (`task-220` review F1).
+ *
+ * @param name - The text the reader parsed as a commit name.
+ * @param command - The git command that printed it, for the message (e.g. `git log --follow`).
+ * @returns `name`, unchanged.
+ * @throws {@link StorageError} `E_GIT_READ_FAILED` — `IO` at the core boundary — when `name` is not a
+ *   full commit name: `<command> printed "<name>" where a commit name was expected`, `name` quoted as a
+ *   JSON string so a line break in it stays visible.
+ */
+export function requireCommitName(name: string, command: string): string {
+  if (!FULL_COMMIT_NAME_RE.test(name)) {
+    throw new StorageError(E_GIT_READ_FAILED, `${command} printed ${JSON.stringify(name)} where a commit name was expected`);
+  }
+  return name;
+}
