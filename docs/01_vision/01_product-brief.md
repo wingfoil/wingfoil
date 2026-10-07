@@ -251,7 +251,7 @@ rather than adding a new one.
 - **Release sequence:** v0.1 (Project Memory + Project DNA) → v0.2 (+ Project Directives) → v0.3 (+ Project
   Workflow) → v0.4 (+ Interaction Layer) → v1.0 (MVP Complete), each centered on a pillar (some releases deliver
   shared infrastructure or span two pillars).
-- **Estimate:** ~13 story points (v0.1), ~64 across the full MVP; roadmap TBD post-validation
+- **Estimate:** ~13 story points (v0.1), ~63 across the full MVP; roadmap TBD post-validation
 - **Schedule:** release budgets are stated in **active development days**, and the calendar is a forecast that
   states its cadence assumption. Budgets, actuals and the current forecast live in one place,
   [`07_sequencer.md`](07_sequencer.md) (*Re-baseline on active days*), which this brief does not repeat
