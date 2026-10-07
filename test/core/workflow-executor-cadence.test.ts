@@ -270,11 +270,19 @@ describe('characterization — the parsed shape and the v0.3 release boundary', 
     ]);
   });
 
-  it("this repository's workflows load unchanged: every phase reads cadence once and declares no mode", () => {
+  it("this repository's workflows: every phase reads cadence once; only dev-loop v1.5 declares executor attributes (task-205, dl-134 §4 (c))", () => {
     const loaded = loadWorkflowsYaml(join(__dirname, '..', '..'));
-    const phases = loaded.workflows.flatMap((w) => w.phases);
+    const phases = loaded.workflows.flatMap((w) => w.phases.map((p) => ({ workflow: w.name, phase: p })));
     expect(phases.length).toBeGreaterThan(0);
-    expect(phases.every((p) => p.cadence === 'once' && p.mode === undefined && p.distinct_from === undefined)).toBe(true);
+    expect(phases.every(({ phase }) => phase.cadence === 'once')).toBe(true);
+    const declared = phases
+      .filter(({ phase }) => phase.mode !== undefined || phase.distinct_from !== undefined)
+      .map(({ workflow, phase }) => ({ at: `${workflow}.${phase.name}`, mode: phase.mode, distinct_from: phase.distinct_from }));
+    expect(declared).toEqual([
+      { at: 'dev-loop.green', mode: undefined, distinct_from: ['red'] },
+      { at: 'dev-loop.refactor', mode: 'resume', distinct_from: undefined },
+      { at: 'dev-loop.review', mode: undefined, distinct_from: ['red', 'green', 'refactor'] },
+    ]);
   });
 
   it('no v0.3 code path reads distinct_from beyond the schema and its loader validation (enforcement is P4.12, v1.0)', () => {
