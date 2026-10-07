@@ -45,9 +45,73 @@ lists Alex first, does not mark Morgan primary, has no row for Persona 7, and it
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+### design (architect, 2026-10-07)
+
+- **Inputs.** `depends_on: []`. The source is `task-186`'s Execution Notes ("Candidate findings (not filed)": L223's
+  "current phase, risks"; the canvas's Target Users), which became `bug-268` and `bug-269`. `dl-113` is `ready`
+  (`grep -m1 '^status' docs/04_memory/design/dls/dl-113-*.md`), ratified Q1 (A), Q2 (a), Q3 (x). `spec-002` defines
+  the DNA's top-level fields; `dna show` returns `version, project, modules, stacks, team, paths` (`npm run -s
+  wingfoil -- dna show --format json`, keys), so no phase and no risks. No spec edit is needed.
+- **AC classification.** All three ACs are documentation: **characterization**. No `src/` or `test/` file changes
+  (`git diff --stat 4fd77678..HEAD -- src test` prints nothing), so no red is fabricated.
+- **Doc-versioning.** Both vision files were committed on main before this edit (`git log -1 --format=%h 4fd77678 --
+  docs/01_vision/<f>.md`: journeys `2c874368`, canvas `3ef714db`), so each bumps once, dated 2026-10-07.
+  `00_index.md` has no version; its *Last indexed* date moves.
+- **Baseline.** task-141's one-line index check (its Execution Notes, run in `docs/01_vision/`) on the branch before
+  any edit → `mismatches: []`.
+
+### red / green (2026-10-07)
+
+No red (characterization only). One commit, `b4b8d4ef` `docs(vision)`:
+- `05_journeys.md` 1.4 → **1.5**: Journey 5 step 4 is now "Check who builds the project and with what" → `wingfoil
+  dna show` → "team size, stacks", what the command returns. A new **step 4.5** "Check release progress (read-only
+  view)" names the current phase and risks as a view over workflow state: `wingfoil workflow status` (P4.5, planned;
+  `06_features.md` L84 already lists Journey 5 for it) or, until it ships, `wingfoil memory search --type release`
+  (shipped: on this repository it lists the five releases with their status, `npm run -s wingfoil -- memory search
+  --type release`). Inserting a row (like the journey's existing step 1.5) moves Journey 6 and Key Observations by
+  one line (287 lines).
+- `08_mvp-canvas.md` 1.8 → **1.9**: *Target Users* lists **Morgan first, marked primary**; Casey's solution is
+  "Read-only views: decisions, approvals, progress" (Q2 (a), the three views of `04_personas.md`); a row for **the
+  maintainer (Persona 7)** with Q3 (x)'s pain and goals; a note under the table cites `dl-113` and says Taylor
+  (future) has no row, the call `bug-269`'s Notes leave to the fixer (the personas file's closing note keeps Taylor
+  out of the MVP focus). The appendix row now reads "7 personas: Morgan (primary), Alex, Sam, Jordan, Casey, Taylor,
+  the maintainer" (`grep -c '^## Persona' docs/01_vision/04_personas.md` → 7); that table was re-padded. The file
+  grows by 7 lines (220).
+- `00_index.md`: both document-map rows, every range of `05_journeys` (Journey 5–Key Observations) and of
+  `08_mvp-canvas` (Target Users onward, sub-heading lines included), the four quick-lookup cells that cite canvas
+  ranges, and the primary-persona quick-lookup row now also points to the canvas note (L57).
+
+### refactor (gates, 2026-10-07, branch at b4b8d4ef)
+
+- `npm test`: 291 suites, **5424 / 5424 passed**.
+- `npm run test:coverage`: All files **99.29 stmts / 97.07 branches / 97.11 funcs / 99.72 lines**; no `src/` or
+  `test/` change, so identical to main by construction.
+- `npm run lint` exit 0; `npm run docs:api` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
+  `npx tsc -p tsconfig.build.json --noEmit` exit 0; `node scripts/check-governance.cjs --base 4fd77678` exit 0
+  (3 wf() commits checked, 0 findings).
+- BDD: no feature file covers the vision documents (task-186's check, `grep -rln 01_vision test/`).
+- Vision index check (task-141's script, in `docs/01_vision/`) → `mismatches: []`.
+
+### review (self, reviewer, 2026-10-07)
+
+| AC | Status | Evidence |
+|---|---|---|
+| 1 — Journey 5 step 4 (`bug-268`) | met | `sed -n 223,224p docs/01_vision/05_journeys.md`; `grep -n 'current phase, risks' docs/01_vision/05_journeys.md` → only L224 (step 4.5, workflow-state view) |
+| 2 — canvas Target Users (`bug-269`) | met | `sed -n 46,62p docs/01_vision/08_mvp-canvas.md` (Morgan first + primary, Casey read-only views, the maintainer's row); `grep -n '7 personas' docs/01_vision/08_mvp-canvas.md` → L212 |
+| 3 — doc-versioning + index | met | `grep -n '^\*\*Version\|^\*\*Date' docs/01_vision/0{5,8}_*.md` → 1.5/1.9, 2026-10-07; index script → `mismatches: []` |
+
+Same-class sweep in the touched files: `grep -n 'dna show' docs/01_vision/05_journeys.md` → L153 (Jordan, "team
+architecture", which `dna show` does hold: modules) and L223 only; `grep -n 'Casey\|primary' docs/01_vision/08_mvp-canvas.md`
+→ nothing else pre-dl-113. `grep -rn -i '6 personas' docs/01_vision README.md` → nothing.
+
+Left as written, on purpose (decision for the approver): Journey 5 **step 8** has Casey run `memory approve` /
+`memory reject`, while `04_personas.md` (task-186's wording of Q2 (a)) says Casey "needs to read the project's state,
+never to change it". `dl-113` Q2 (a) itself restates only Casey's *goals* as views (it lists "pending approvals" as a
+view), and says the journeys follow "on their own terms"; whether a stakeholder approval step survives is a vision
+change, not this bug's cell.
+
+### Candidate findings (not filed)
+
+- Journey 5 step 8 (Casey approves/rejects) vs `04_personas.md`'s "never to change it" — above.
+- The vision index still has no test (task-186's finding, unchanged): every range in this task was re-derived by
+  hand and checked with the one-line script.
