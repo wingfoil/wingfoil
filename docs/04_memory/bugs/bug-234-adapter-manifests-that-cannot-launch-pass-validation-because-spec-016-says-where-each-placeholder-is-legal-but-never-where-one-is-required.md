@@ -88,3 +88,10 @@ Captured on 2026-10-05 by `bug-ingest-rel-v0.3-w2b1-review-findings-plan`, from 
 batch B1 (`dev-loop-rel-v0.3-plan`: `task-177` review), reproduced against `main` at `0b297169` with the code
 build (`npm run -s build && node dist/cli.js`). The finding's "`agent list` should warn" is corrected above:
 `agent list` does not list adapters.
+
+- **Split at the W3 B2 ingest (2026-10-07, `bug-ingest-rel-v0.3-w3b2-review-findings-plan`).** The discovery gap of
+  the *Summary*'s last bullet and of the *Expected Behavior*'s last sentence (files under `.wingfoil/agents/` that
+  are not adapters, and names outside the id class, reported where adapters are enumerated) was not fixed when this
+  bug closed: `listAdaptersAtRev` still skips `a.yml` and `nested/b.yaml` silently and lists `Bad Name`, reproduced
+  on `main` at `c485e433`. It is carried by `bug-290-adapter-discovery-skips-yml-and-nested-files-silently-and-lists-names-outside-the-id-class-that-loadadapter-refuses`
+  (`open`), found again in `task-200`'s review.
