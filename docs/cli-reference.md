@@ -139,6 +139,9 @@ Which state a command reads depends on whether that state can stop it:
   `memory search` should find. So `memory add --type <t>` can refuse a type your working copy of
   `memory.yaml` declares, while `memory search` searches the documents that same working copy
   declares — the type is on disk and in no commit; commit `memory.yaml` and the two agree.
+- Unreleased (v0.3): **`agent show` reads `HEAD`**, though it changes nothing: it answers from the
+  same commit as the run ids `agent execute` counts, and when only your working tree holds the run it
+  is asked for, it says so on a `hint:` line instead of showing it.
 - **Safety checks on the file about to be written or deleted look at the disk itself** — for
   example, whether a path leads outside the project through a symbolic link — because that is what
   the write will follow.
@@ -1037,3 +1040,67 @@ the load's own in `diagnostics`. Because the command reads `dna.yaml` and `memor
 it now also fails (exit `1`) when either of them is present but invalid.
 
 - **Commit:** none.
+
+## Agent
+
+Unreleased (v0.3). Agent runs are recorded in a run log, one JSON Lines file per element under the
+directory `dna.yaml` declares in `paths.runs` (`docs/runs/` in a project `wingfoil init` scaffolds),
+each record committed on its own as `agent: record <run-id>`. A run id is
+`<element-id>/<phase>/<n>`: the element's id without its type, the workflow phase (or `adhoc` for a
+run outside a workflow step), and a count from 1, e.g. `task-042-login-form/red/1`.
+
+### `wingfoil agent show`
+
+Print one recorded agent run and the commit that added it.
+
+```
+wingfoil agent show <run-id>
+```
+
+Unreleased (v0.3). Read-only. It reads the run log, and `dna.yaml`'s `paths.runs`, **as committed at
+`HEAD`**, not the working tree (see [Git side effects](#git-side-effects)): the run ids `agent execute`
+counts are counted at `HEAD` too, so the two never disagree about which runs exist.
+
+`console` (the default) prints one `key: value` line per field of the record, in the record's order,
+with the token counts on four lines (`tokens.input`, `tokens.output`, `tokens.cache_read`,
+`tokens.cache_write`), then the commit that added the record:
+
+```console
+$ wingfoil agent show task-042-login-form/red/1
+id: task-042-login-form/red/1
+element: task:task-042-login-form
+workflow: dev-loop
+phase: red
+role: developer
+mode: fresh
+agent: claude
+adapter: built-in/claude-code
+agent_version: not-reported
+model: not-reported
+session: not-reported
+tokens.input: not-reported
+tokens.output: not-reported
+tokens.cache_read: not-reported
+tokens.cache_write: not-reported
+wingfoil: 0.3.0 (4f1c2d9b7e3a5c80d61f2a94b7c3e5d08a1f9e9a)
+state_ref: 9b1e0c4d2a7f3e5b6c8d0a1f2e3d4c5b6a7f8e9d
+duration_ms: 61000
+exit_status: 130
+result: n/a
+notes: task-042-login-form#execution-notes
+commit: 3c5d7e9f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d
+```
+
+This is the one command whose `console` output is not the indented JSON of
+[`--format`](#global-options). `--format json` and `--format yaml` print
+`{"baseline": {"rev": "HEAD", "commit": "<sha>"}, "run": {…the record…}, "commit": "<sha>"}`:
+`baseline.commit` is the `HEAD` it read, `commit` the commit that added the record. A value the
+agent did not report is the string `not-reported`, never `0` or `null`.
+
+- **Commit:** none.
+- **Errors:** missing run id → exit `2`; a run id that is not `<element-id>/<phase>/<n>` → exit `2`,
+  `error: invalid run id "<value>", expected <element-id>/<phase>/<n>`; a run the log at `HEAD` does
+  not hold → exit `1`, `error: run not found: <run-id>`. When the run is in the working tree's log but
+  not committed, a `hint:` line says so, and the command still exits `1`: commit the run log, then run
+  it again. A run log at `HEAD` that is not valid JSON Lines exits `1`, naming the file and the line;
+  a `dna.yaml` with no `paths.runs` exits `1` with `error: dna.yaml declares no run log (paths.runs)`.

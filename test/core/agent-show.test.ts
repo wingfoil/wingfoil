@@ -24,6 +24,10 @@ const DNA = (runs: string): string => `version: 1
 modules:
   - name: core
     path: src/core
+stacks:
+  technologies:
+    - name: TypeScript
+      category: language
 team:
   members:
     - name: ada
