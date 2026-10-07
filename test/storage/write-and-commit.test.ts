@@ -213,6 +213,20 @@ describe('writeAndCommit — review fixes (task-210 review)', () => {
     expect(hunks(outcome.plan.diff)).toEqual(hunks(shown));
   });
 
+  it('F7: a repository owned by another user, trusted through the global safe.directory, plans as it commits', async () => {
+    const globalConfig = join(repo, '.git', 'isolated-global.gitconfig');
+    writeFileSync(globalConfig, '[safe]\n\tdirectory = *\n');
+    // git's own test switch: every repository counts as owned by someone else, so only safe.directory admits it.
+    const env = { GIT_CONFIG_GLOBAL: globalConfig, GIT_TEST_ASSUME_DIFFERENT_OWNER: '1' };
+
+    const outcome = await captureDryRun(async () => writeAndCommit(repo, [{ path: 'docs/kept.md', content: 'one\n2\nthree\n' }], 'owned', { env }));
+
+    expect(outcome.kind).toBe('planned');
+    expect(outcome.kind === 'planned' && outcome.plan.diff).toBe(
+      ['--- a/docs/kept.md', '+++ b/docs/kept.md', '@@ -1,3 +1,3 @@', ' one', '-two', '+2', ' three', ''].join('\n'),
+    );
+  });
+
   it('F3: a write git would store as the blob HEAD holds plans an empty diff', async () => {
     const outcome = await captureDryRun(async () => writeAndCommit(repo, [{ path: 'docs/kept.md', content: 'one\ntwo\nthree\n' }], 'same'));
     expect(outcome.kind === 'planned' && outcome.plan.diff).toBe('');

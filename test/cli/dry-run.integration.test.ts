@@ -263,10 +263,12 @@ describe('a dry run reports the warnings the real run would (task-210 review F4)
 
       expect(dry.status).toBe(0);
       assertPersistenceUnchanged(repo, before, 'dry run with a warning');
-      expect(dry.stderr).toMatch(/^warning: dna\.yaml was rewritten as a whole file \(--force\)/);
+      // A plan words the warning for what would happen; the real run, for what did (review nit).
+      expect(dry.stderr).toMatch(/^warning: dna\.yaml would be rewritten as a whole file \(--force\)/);
       const real = wingfoil(repo, ['dna', 'add', 'paths.tests', '--value', 'test/', '--force']);
       expect(real.status).toBe(0);
-      expect(dry.stderr).toBe(real.stderr);
+      expect(real.stderr).toMatch(/^warning: dna\.yaml was rewritten as a whole file \(--force\)/);
+      expect(dry.stderr).toBe(real.stderr.replace('dna.yaml was rewritten', 'dna.yaml would be rewritten'));
     } finally {
       removeTempDir(repo);
     }
