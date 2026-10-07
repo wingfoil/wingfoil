@@ -3,7 +3,7 @@ id: decision-log-ingest-rel-v0.3-parallel-release-lines-plan
 type: plan
 title: "Decision-log-ingest — rel-v0.3 parallel release lines"
 status: active
-version: "1.0"
+version: "1.1"
 workflow: "decision-log-ingest"
 phase: "rel-v0.3-parallel-release-lines"
 element: "minor-v0.3"
@@ -124,3 +124,15 @@ Every fact the decision-log and the tasks state is checked at capture, against `
   4. The branch prefix (`design/` for an ingest run, see *Context*).
   5. `task-266`: whether `npm stage approve` applies the `--tag` given at staging is not settled offline; if design
      cannot settle it, it is checked with `npm view wingfoil dist-tags` after `0.3.0` is approved.
+
+**Approver rulings (2026-10-07).**
+- The seven handover notes were recorded with the proposed reasons (`memory amend` on `task-207`, `219`, `223`,
+  `229`, `230`, `238`, `244`).
+- `task-265`, `task-266`, `task-267` approved into the v0.3 backlog (wave 3, batch B9).
+- `dl-159` stays `in-discussion`: the approver ratifies it later, before B9 starts and before the `v0.3.0` tag; at
+  ratification `dl-002` and `dl-092` get a dated "partially superseded by `dl-159`" note.
+- `task-267`: the concurrency group protects `release/*` runs as it does `main`'s; the publish-environment / trusted
+  publisher check is the approver's, at that task's review; the staged dist-tag is checked with `npm view wingfoil
+  dist-tags` after `0.3.0` if not settled earlier (amend on `task-267`).
+- The branch was renamed `design/parallel-release-lines` → `ingest/parallel-release-lines` (git-conventions §1).
+- The plan stays `active` until `dl-159` is ratified.
