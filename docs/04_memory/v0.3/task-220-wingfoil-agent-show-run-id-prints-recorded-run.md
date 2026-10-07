@@ -58,7 +58,8 @@ repository's `paths.runs: [docs/06_runs/]`; both are used as given.
 `runIdElementId(value)` (the run-id parse for a caller that only has the id) and an `action`
 parameter on `resolveRunLogPath` (`'write'` default, `'read'` for this reader's confinement wording).
 Baseline: `HEAD` resolved once; `dna.yaml` and the log are read at that sha (`spec-016` §5.1, declared).
-The adding commit is `git log -S '{"id":"<run-id>",' --format=%H <head> -- <log>`, first line.
+The adding commit is found with `git log -S '{"id":"<run-id>",' --format=%H <head> -- <log>` (refined
+by review F2 below: the first listed commit whose log blob holds the line).
 
 **Parity.** `spec-005` Context already names the `agent` noun, `spec-008` §1 and §11 already name
 `agent show` (`grep -n agent` on both), so neither needs an enumeration amendment: the three
@@ -153,14 +154,54 @@ Gates, with the pending amendments in the working tree:
   already and was left as is; (5) the `git log` `IO` message carries git's text including the absolute
   root, as `memory history`'s does.
 
+### Review fixes
+
+Coordinator review, 2026-10-07: **APPROVE WITH FIXES**; the task stays `in-review`, no re-submit.
+
+- Red `1ec2ea83`: `npx jest test/core/agent-show.test.ts -t "review fixes"` → **2 failed, 2 passed**.
+  - F1: with `log.showSignature=true` and an ssh-signed record commit, `commit` was `"No signature"`.
+  - F2: a side branch that drops the record and is merged keeping both records (so the merge equals
+    neither parent and `git log -- <log>` walks both) made `commit` the removing commit.
+  - F7 (characterization, passes on first run): the working tree's log path is a directory, or a
+    symbolic link to a log that holds the run → `NOT_FOUND`, exit 1, no hint (`agent-show.ts`'s
+    `lstatSync(...).isFile()` arm).
+- Green `d965cf23`: `git log --no-show-signature -S …`; every listed name must match
+  `^[0-9a-f]{40}([0-9a-f]{24})?$`, else `IO`; the listed shas are walked in order and the first whose
+  log blob (`readPathAtRev`) holds the record's exact serialized line is the adding commit; docstring
+  rewritten. `npx jest test/core/agent-show.test.ts` → **33 passed**.
+- F3/F6 `f521a77c`: the `--format` help text (`src/cli/program.ts`, pinned in
+  `test/cli/program.test.ts`) is `console prints indented JSON for now, unless the command defines its
+  own`; `renderSuccess`'s docstring names the `renderConsole` exception; the `agent` module's
+  description is `read recorded agent runs (launching an agent arrives with agent execute)`.
+- F3/F4 in `spec-008` (pending amendment, reason updated below): §3's quoted help text matches the
+  new one; §2's exception is a sentence of its own after the P5.1.4 sentence, so "its human rendering"
+  no longer reads as `agent show`'s.
+- F5 `e82d7a4c`: `01_product-brief.md` 1.7 → 1.8 (2026-10-07), `~63` → `~64` (Estimate) and `63
+  features` → `64 features` (document list); its `00_index.md` row follows (line count unchanged).
+  task-141's index script (excluded lines `(382,416)`) → `mismatches: []`. `08_mvp-canvas.md:207` is
+  task-261's and is left to the gate merge.
+- Defensive arms left untested, by design: the non-`RevisionError` rethrow after `resolveRevision`,
+  the non-`ValidationError` rethrow after `loadDnaYamlAtRev`, the non-`StorageError` rethrow after
+  `git log` (each a defect, not a refusal), and in `addingCommit` the non-sha name and the "no commit
+  adds its line" `IO` — with `--no-show-signature` and `%H` git prints only names, and a line `HEAD`
+  holds was added by some commit `git log -S` lists.
+- Same class (F1), reported not fixed: `src/memory/git-log.ts` (`walkGitLogFields`) and
+  `src/memory/history.ts` (the `--follow` probes) run `git log --format=…` without
+  `--no-show-signature`; `git -c log.showSignature=true log --format=%H` on the reviewer's `g3` prints
+  `No signature` on stdout before the shas.
+- Gates: `npx jest` on the touched suites + `test/docs` + `test/agent` (28 suites) → **395 passed**;
+  `npm run lint` 0; both `tsc` 0; `npm run docs:api` 0; `node scripts/check-governance.cjs --base
+  4fd77678` → 0 findings.
+
 ### Pending amendments (approver)
 
 - `spec-006-core-domain-api` — proposed `--reason`: "agentShow ships (task-220): its spec-006 §3 row
   loses the planned marker and gains P5.3.5, and §2 declares the optional CoreError.hint and
   CoreOperation.renderConsole that spec-016 §6 needs; no other function or surface changes."
 - `spec-008-cli-grammar` — proposed `--reason`: "agent show ships (task-220) with the console
-  rendering spec-016 §6 defines, so §2's --format row names it as the one exception to indented JSON;
-  flags, exit codes and the error format are unchanged."
+  rendering spec-016 §6 defines, so §2's --format row names it, in a sentence of its own, as the one
+  exception to indented JSON, and §3's --format help text says so too; flags, exit codes and the error
+  format are unchanged."
 - `spec-016-agent-execution` — proposed `--reason`: "agentShow is registered (task-220), so §8's
   module cell loses the planned marker, keeping §8 equal to spec-006 §3 cell for cell."
 - `minor-v0.3` `features:` gains `P5.3.5` — **`memory amend` refuses it**: the `release` type is
