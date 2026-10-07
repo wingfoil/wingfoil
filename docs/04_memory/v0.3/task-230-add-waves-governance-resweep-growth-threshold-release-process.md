@@ -33,6 +33,14 @@ v0.2 grew 134 % after planning with no trigger. A wave becomes a declared unit o
 - **Planning ruling:** Approver ruling 2026-09-30 (plan R19): `dl-100` §5 (a WIP limit on decision-logs) is dropped — no limit on decision-logs is implemented.
 - **Notes:** Proposal key: D11. dl-100 §5 (WIP limit on DLs) has **no option recorded** in `edd953ed`'s `Reason:`; excluded until the approver rules (recommended (b) + (a) backstop). dl-100 §4 (a) is a catalogue measure (task-222). `bug-175` (the define-scope `kind` check) moved to task-148, which fixes it in wave 1.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from the parallel-release-lines decision (2026-10-07):** `dl-159` (`in-discussion`, to be ratified before the
+  `v0.3.0` tag) opens `release/X.Y` maintenance lines beside `main`: patches land on `release/X.Y` and are merged
+  forward into `main` with `--no-ff`, never cherry-picked or back-merged; patch tags go on the pushed `release/X.Y`.
+  A patch (`kind: patch`, `dl-092` Q2 (ii)) will run its own release-cycle on `release/X.Y` while the next minor
+  runs on `main`. Declare the wave, the `re-sweep` and the growth threshold per `release` element (its
+  `backlog_committed`, the elements with `release: <this release>`), never per branch or as "the tasks on `main`",
+  so two open release-cycles do not count each other's work. The `release` `branch` field and the patch-seeding
+  action are `dl-159` A2.3 (deferred): do not add them here.
 
 ## Execution Notes
 
