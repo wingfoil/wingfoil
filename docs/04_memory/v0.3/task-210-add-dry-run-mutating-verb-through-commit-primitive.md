@@ -63,12 +63,14 @@ Ratified: every operation registered `mutates: true` in `CORE_MODULES` (28 today
   run for real. spec-008 §2 gets a row that names the commands, like `--reason`'s (the existing §2 exception).
   `task-245` (X_cli-cmds) says "global flag": it should describe it as above.
 - **Plan shape.** `{dryRun: true, subject, message, paths, diff}`: AC3's three fields plus the full message (Reason/
-  Approver body and the `WingFoil-Version:` trailer) and a discriminator. The diff is git's (`git diff --no-index`
-  between two temp files outside the repo, `--diff-algorithm=myers --unified=3`, colour/ext-diff/textconv off), with
-  `--- a/<path>`/`+++ b/<path>` headers. `console` prints the payload as indented JSON, like every success today.
+  Approver body and the `WingFoil-Version:` trailer) and a discriminator. The diff is git's (first pass: `git diff
+  --no-index` between two temp files; corrected at review, F3 below, to a blob-to-blob diff of the blobs the commit
+  would record), with `--- a/<path>`/`+++ b/<path>` headers. `console` prints the payload as indented JSON, like every success today.
 - **Known limits (in spec-008's row).** Git hooks are not run; `memory approve` whose `supersedes:` trigger fires
-  plans only the approve commit (the finalize commit's message names the approve sha); success warnings computed after
-  the commit (`--force` rewrites) are not shown in a dry run.
+  plans only the approve commit (the finalize commit's message names the approve sha). The first pass also said "success
+  warnings computed after the commit are not shown in a dry run", and that this was in spec-008's row: both false —
+  the warnings were computed BEFORE the commit and every one was dropped, and the row did not say so (review F4, fixed
+  below: they are now carried).
 - **bug-217.** On a write or commit failure the primitive restores, for every path, the working-tree bytes (deletes a
   created file and the directories it created) and the index entry (`git ls-files -s` before, `update-index
   --force-remove` + `--index-info` after) — for the transition verbs too, which answers the bug's open question:
@@ -143,3 +145,64 @@ Gates (with the spec-008 amendment in the working tree):
   "dl-106 W2, carried out by task-210: §2 gains the --dry-run row every mutating command takes, registered from the
   registry's mutates flag rather than on the root command, and the Revision note records bug-217's E_COMMIT_FAILED
   refusal that replaces git's raw text."
+
+### Review fixes (2026-10-07)
+
+Review verdict: approve with fixes F1–F6, all in this task; status stays `in-review` (no re-submit). Red commit
+`065b4e24`; fixes `8b13ac6a`, `fb6168b9`. Red evidence: the four behavioural tests (F1 init, F2 `index.lock`, F4
+warnings, F5 supersede wording) run against the pre-fix head `180998f5` (`git archive` to a scratch copy, the new test
+files copied in, `npx jest test/cli/commit-failure-rollback.integration.test.ts test/cli/dry-run.integration.test.ts
+test/core/memory-supersede.test.ts`) → **4 failed, 45 passed**, each on its finding. The storage unit tests for F1/F3 import
+`CommitFailure`/`planDiff`, which the pre-fix head does not export (red by construction); the F3 behaviour is the
+reviewer's repro (`crlf2.json` in `devloop-kit/task-210-review`): the old `unifiedDiff` compared the raw CRLF text
+with the LF blob, so every line differed.
+
+- **F1 (defect, fixed).** `removeCreatedDirectories` now collects every directory each file's write created (from the
+  file's directory up to the first one `mkdirSync` created) and removes them deepest first across all files, skipping
+  a non-empty one instead of stopping. Tests: `init` refused by a hook leaves no `.wingfoil/` and `docs/` (checked on
+  the filesystem) and the retry succeeds; a two-file write whose files share a created parent leaves nothing.
+- **F2 (defect, fixed).** The working tree is restored first; the index is then compared with its prior entries
+  (`git ls-files -s`, which a held lock does not block) and rewritten only when it differs, best effort. A failure
+  there is reported in the `CommitFailure` message (root stripped): `…but the index entries of <paths> could not be
+  put back (<git>): check them with git status`. Tests: `memory add` under a held `.git/index.lock` → exit 1,
+  `E_COMMIT_FAILED`, no absolute path, no `Command failed`, file gone; a hook that replaces `.git/index` with a
+  directory → the index problem reported, the working tree restored.
+- **F3 (claim false, fixed).** `planDiff` (`src/storage/dry-run.ts`) hashes the new side with `git hash-object
+  --path=<path> -w` in the repository under the operator's environment — so `core.autocrlf` at any level and
+  `.gitattributes` apply as in the commit — into a temporary object directory (`GIT_OBJECT_DIRECTORY`, the repository's
+  objects as an alternate; the repository gains no object), and diffs blob to blob with `GIT_CONFIG_NOSYSTEM=1`,
+  `GIT_CONFIG_GLOBAL=<devnull>` and `-c` pins for `diff.context`, `diff.interHunkContext`, `diff.indentHeuristic`,
+  `diff.suppressBlankEmpty`, `diff.algorithm`. Stated in spec-008 §2 and the CLI reference: the hunks are `git show`'s
+  under git's default diff settings; an operator's own `diff.*` can lay out `git show` differently, never with
+  different content. Test: an isolated `GIT_CONFIG_GLOBAL` with `core.autocrlf=input`, `diff.interHunkContext=10`,
+  `diff.suppressBlankEmpty=true`, `diff.context=10`, `diff.indentHeuristic=false`; a CRLF rewrite with two one-line
+  changes plans exactly two 1-line hunks, equal to `git show` of the real commit run with system/global config off.
+- **F4 (claim false, fixed — carried, the preferred option).** `CommitOptions.warnings`: the dna verbs, `directive
+  assign`, `memory add` (the `limits` scan's diagnostics) and every transition verb (`commitMemoryTransition`'s new
+  `warnings` parameter, defaulting to the lookup's `W_MEMORY_UNREADABLE` lines; `memory approve` passes both lookups'
+  when the supersede trigger fires) hand the primitive the warnings they will report; `runAsDryRun` returns them on the
+  plan result. Test: `dna add --force` on a flow-mapping `dna.yaml` — the dry run's stderr equals the real run's, and
+  nothing is written. spec-008 §2 and the CLI reference say so; the design bullet above is corrected.
+- **F5 (fixed).** The supersede recovery quotes `commitFailureSummary(error)`: `E_COMMIT_FAILED: git did not commit
+  <paths>: <git>` (+ the index problem, if any), without the "as they were" clause. Test: the existing
+  `memory-supersede.test.ts` failure case now pins that wording and the clause's absence.
+- **F6 (fixed).** spec-008 §6 "Pinned refusal strings" gains the normative `E_COMMIT_FAILED` row (every writing
+  command and `init`, exit `1`, message shape, rollback, root stripping, the index variant, the supersede quote); the
+  Revision note points to it. Pending amendment, uncommitted.
+
+Gates on head `fb6168b9`, spec-008 amendment in the working tree:
+- `npm run test:coverage` (load average 4.9 → 13.2, `uptime` before/after) → exit 0, 278 suites / 5133 tests; All files
+  **99.26 / 96.78 / 96.74 / 99.72**. Main `ed4607a4` (same command, `git archive` copy, recorded above):
+  99.23 / 96.72 / 96.53 / 99.71 — no regression on any column. Before review, the pre-review head measured 96.74 branches in
+  this worktree and 96.71 in the reviewer's run — the second is below main's 96.72; this head measures 96.78, above
+  main, after the review fixes removed unreachable arms and tested every new one (`fb6168b9`). New files: `src/storage/dry-run.ts` 100/100/100/100,
+  `src/core/dry-run.ts` 100; `src/storage/commit.ts` branches 97.27 (main 97.27).
+- `npm run lint` → 0; `npm run docs:api` → 0; `npx tsc --noEmit -p tsconfig.json` → 0;
+  `npx tsc -p tsconfig.build.json --noEmit` → 0; `node scripts/check-governance.cjs --base ed4607a4` → 0 findings.
+
+Pending amendment, updated reason (replaces the one above):
+- `spec-008-cli-grammar` — "dl-106 W2, carried out by task-210: §2 gains the --dry-run row every mutating command
+  takes, registered from the registry's mutates flag rather than on the root command, with the plan's diff computed
+  from the blobs the commit would record under pinned diff settings and the real run's warnings carried; §6 gains the
+  normative E_COMMIT_FAILED row for bug-217's rollback, which replaces git's raw text; the Revision note records both."
+
