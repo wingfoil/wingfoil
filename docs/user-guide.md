@@ -183,7 +183,11 @@ identifier). The field is optional, and there are two ways to fill it:
   `<login>@users.noreply.github.com` is refused: a login nobody has registered can be claimed by anyone,
   who would then be credited with every commit that names it.
 
-An agent's `name` may not contain `<`, `>` or a line break, since it is written into the trailer.
+An agent's `name` may not be empty or blank, nor contain `<`, `>` or a line break, since it is written
+into the trailer. An `email` on a top-level domain RFC 2606 reserves (`.test`, `.example`, `.invalid`,
+`.localhost`) is refused: no mailbox exists there, and WingFoil's attribution audit treats such
+an identity as a placeholder. The `email` is required on an entry that declares an `adapter`: that
+agent can be launched, and every commit it co-authors names it.
 
 ### 4.3 Modules, stacks, paths
 
