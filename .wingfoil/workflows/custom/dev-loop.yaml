@@ -45,7 +45,8 @@
 # recorded once, on the approver's commit. Whoever performs `memory.reject` on a task whose `bug:` list
 # is not empty emits both commits, the reject and then the sync, in that order (dl-061 C.1): under the
 # no-engine regime the person or agent running the reject is the engine. `done`'s fallback (a failed
-# merge, dl-014 G4) gets no sync here: whether its task edge is legal is dl-053's question (dl-061
+# merge, dl-014 G4) also re-enters at `red`, so red's sync also runs after `done`'s fallback; whether
+# that fallback's task edge (`approved → in-progress`) is legal is dl-053's question (dl-061
 # ratification).
 #
 # Parking (dl-110 P2). `memory park <task> --reason <text>` moves a started task back along its
@@ -53,7 +54,8 @@
 # (spec-003 verb table). Whoever parks: the branch `task/{task.id}` is kept, the task's worktree is
 # removed (`git.remove_worktree`), the park reason goes into the task's Execution Notes as well as the
 # commit, and each linked bug is synced `in-progress → planned` (`wf(bug): sync <bug> [in-progress →
-# planned]`). A parked task re-enters at `start`, on its kept branch.
+# planned]`, along the bug `returns` edge, memory.yaml 2.6). A parked task re-enters at `start`, on
+# its kept branch.
 #
 # Main-sync on resume (dl-035; the rule text is git-conventions §2, task-178). A task branch merges
 # `main` (`git merge --no-edit main`, never a rebase) when it resumes after a reject or a park, before
@@ -168,4 +170,4 @@ phases:
       - git.remove_worktree                    # dl-014 G2 — remove the per-task worktree after merge, before branch delete
       - element.set_state(done)                # task: approved -> done
       - 'bug.sync_state(for_each: task.bug)'        # keep every linked bug in sync: in-review -> resolved -> closed (once all ITS tasks are done)
-    fallback: { step: red, set_state: in-progress }   # dl-014 G4 — a conflicted/failed merge (REQ-INT-06: abort clean, mark failed) routes back to red; no bug sync here (dl-053, dl-061 ratification)
+    fallback: { step: red, set_state: in-progress }   # dl-014 G4 — a conflicted/failed merge (REQ-INT-06: abort clean, mark failed) routes back to red, whose first action syncs the bugs; whether this task edge is legal is dl-053's question

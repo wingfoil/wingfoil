@@ -515,7 +515,7 @@ stateDiagram-v2
     in_progress --> in_review : bug.sync_state (dev-loop, ALL fix tasks in review)
     in_review --> resolved : bug.sync_state (dev-loop, ALL fix tasks done)
     in_review --> in_progress : memory.reject (reopen); bug.sync_state (dev-loop red, after a task reject, dl-061)
-    in_progress --> planned : bug.sync_state (dev-loop, the fix task is parked, dl-110)
+    in_progress --> planned : bug.sync_state (dev-loop, the fix task is parked, dl-110) — the bug `returns` edge
     resolved --> closed : bug.sync_state (dev-loop, ALL fix tasks done)
     resolved --> in_progress : memory.reject (reopen)
     closed --> deprecated : memory.deprecate
