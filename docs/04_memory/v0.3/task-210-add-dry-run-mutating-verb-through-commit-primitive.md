@@ -200,9 +200,18 @@ Gates on head `fb6168b9`, spec-008 amendment in the working tree:
 - `npm run lint` → 0; `npm run docs:api` → 0; `npx tsc --noEmit -p tsconfig.json` → 0;
   `npx tsc -p tsconfig.build.json --noEmit` → 0; `node scripts/check-governance.cjs --base ed4607a4` → 0 findings.
 
+- **F7 (re-review, fixed).** `planDiff` no longer sets `GIT_CONFIG_NOSYSTEM`/`GIT_CONFIG_GLOBAL`: that switch-off also
+  dropped the operator's `safe.directory`, so in a repository another user owns the dry run failed with
+  `E_GIT_READ_FAILED` where the real run committed; the hunk-shaping `diff.*` keys stay pinned with `-c`, which wins
+  over every level. Nit: a dry run's `dna`/`roles` rewrite warning reads "would be rewritten"
+  (`CommitOptions.plannedWarnings`), the real run's text unchanged. Red `ed904bd2` (`GIT_TEST_ASSUME_DIFFERENT_OWNER=1`
+  with an isolated global `safe.directory=*` → `threw`; the dry-run warning test → "was rewritten"), fix `95be29f3`;
+  `npm test` → 278 suites / 5135 passed; lint, docs:api, both tsc → 0; governance `--base ed4607a4` → 0 findings.
+
 Pending amendment, updated reason (replaces the one above):
 - `spec-008-cli-grammar` — "dl-106 W2, carried out by task-210: §2 gains the --dry-run row every mutating command
   takes, registered from the registry's mutates flag rather than on the root command, with the plan's diff computed
-  from the blobs the commit would record under pinned diff settings and the real run's warnings carried; §6 gains the
+  from the blobs the commit would record under pinned diff settings and the real run's warnings carried, a rewrite
+  warning worded as a plan; §6 gains the
   normative E_COMMIT_FAILED row for bug-217's rollback, which replaces git's raw text; the Revision note records both."
 
