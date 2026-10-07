@@ -63,11 +63,100 @@ computation (`src/core/workflow-exit-state.ts`) then reasons from an action that
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+Branch `task/task-264-…`, worktree `../.wf2-wt/task-264`, cut from `main` at `4fd77678` (W3 B2).
+
+### design (architect)
+
+- **Depends on `task-194`** (`done`): read its Execution Notes. Its review left this bug to the follow-ups ("an
+  unknown `T` in `<T>.set_state` / `sync_state` / `where.type`"); its F3 made `<T>.set_state` fall back to a
+  selection of `T` in `src/core/workflow-exit-state.ts`, whose `machineOf` already skips a type `memory.yaml` does
+  not register — so the exit-state computation needs no change (AC 3).
+- **Specs:** `spec-003` and `spec-017` are `approved` (`grep -n '^status' docs/04_memory/design/specs/spec-00{3,17}-*.md`).
+- **Row, not a new code** (AC 1 decision): the `E_WORKFLOW_ELEMENT_TYPE_UNKNOWN` row is widened. A misspelt type
+  is the same mistake wherever it is written, so it reports the same code, severity and message
+  (`unknown memory type '<T>' (not defined in memory.yaml)`); no consumer of the code changes. The row now also
+  states each form's path and the field order within a phase: `iterate_over`, `where.type`
+  (`where.type[<k>]` for a list), `actions[<a>]` (a `memory.add(type: T)` and a typed action alike, in action
+  order), `produces[<k>].type`.
+- **Scope of `where.type`:** only a **selection** (`where` without `iterate_over`, spec-003 § "Selections"). Under
+  `iterate_over`, `where` filters the iteration and over a collection `type` is an entry field
+  (`dna.yaml` nodes are `.passthrough()`, `src/dna/schema.ts:7`, so an entry may carry one), so it stays unchecked. A value carrying a `{…}` token is not decided
+  (it names no type until it is interpolated).
+- **`element`:** `element.set_state` / `element.sync_state` name the bound element, not a type — accepted, as
+  `resolveToken` already treats them (`expectedCommit.type: null`, `src/workflow/bindings.ts`).
+- **Grammar reused, not copied:** the typed-action regex lives in `src/workflow/bindings.ts` (`TYPED_STATE_RE`,
+  which `isBuiltinToken` / `builtinBinding` use); a new exported `typedStateType(token)` returns its `T` (or `null`
+  for `element.*` and any other token), next to `memoryAddType`.
+- **This repository:** `grep -ohE "[a-z][a-z0-9-]*\.(set_state|sync_state)" .wingfoil/workflows/custom/*.yaml | sort | uniq -c`
+  → `bug.set_state` 1, `bug.sync_state` 7, `element.set_state` 5, `release.set_state` 1, `task.set_state` 1;
+  `grep -rn "where:" .wingfoil/workflows/custom/*.yaml | grep type` → two selections, `type: bug` and
+  `type: [decision-log, adr]`. All are `memory.yaml` types, so AC 4 is a characterization.
+- **AC classification** (testing directive, `dl-014`/T1):
+
+| AC | Class | Why |
+|---|---|---|
+| 1 | characterization | spec text; pending amendment below |
+| 2 | red-first | new behaviour: no diagnostic today (bug-282's reproduction) |
+| 3 | **characterization** (task says red-first) | accepting `element.*` and declared types is today's behaviour; a red would have to be fabricated. The tests guard the new check against over-reach and pass on first run |
+| 4 | characterization | `task-194`'s AC 5 test, unchanged |
+
+### red (developer)
+
+`test/core/workflow-core-checks.test.ts`, new `describe('task-264 — …')`: one fixture per form (typed
+`set_state`, typed `sync_state`, `where.type` scalar and list entry), `bug-282`'s step 1 through the registry at
+`HEAD` (load throws `ValidationError`, two errors in field order), and a field-order fixture; each asserts code,
+severity, file, path and message. Plus two AC 3 tests (accepted forms; no `memory.yaml` → nothing decided).
+Commit `e32d6757`. `npx jest test/core/workflow-core-checks.test.ts -t "task-264"` → **5 failed, 2 passed**
+(29 skipped): the five got `[]` / "did not throw"; the two passing are the AC 3 characterizations.
+
+### green (developer)
+
+Commit `b05572a5`: `staticChecks` (`src/core/workflow-core-checks.ts`) checks a selection's `where.type` values
+after `iterate_over`, and the action loop checks `memoryAddType(action) ?? typedStateType(action)`;
+`typedStateType` added to `src/workflow/bindings.ts`. `npx jest test/core/workflow-core-checks.test.ts` → 36
+passed. `src/core/workflow-exit-state.ts` and `test/core/workflow-exit-state.test.ts` untouched
+(`git diff 4fd77678 --stat` lists neither).
+
+### refactor (developer)
+
+Gates, with the spec-003 pending amendment in the working tree (load average 46 at the start, `uptime`):
+
+- `npm test` → first run 1 failure: `test/docs/name-resolvability.test.ts` read my Revision note's full task id
+  (it ends in `.where.type`) as an unresolved config name. The note now cites `task-264`; that suite → 11 passed.
+- `npm run test:coverage` → 291 suites, **5431 tests passed**; All files 99.29 / 97.08 / 97.11 / 99.72
+  (statements / branches / functions / lines) vs `main` `a1d2ec12`'s 99.29 / 97.05 / 97.11 / 99.72 and 5424 tests
+  (`dev-loop-rel-v0.3-plan`, B1 gate); `workflow-core-checks.ts` and `bindings.ts` 100 / 100 / 100 / 100.
+- `npm run lint`, `npm run docs:api`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit`
+  → exit 0. `node scripts/check-governance.cjs --base 4fd77678` → 2 `wf()` commits checked, 0 findings.
+- BDD: no feature file covers the workflow core rows (`grep -rln "ELEMENT_TYPE_UNKNOWN" docs/02_requirements/02_bdd/features/`
+  → only P1.3, `memory add`'s own unknown type); none added.
+- No CLI command, option or exit code changes: `docs/cli-reference.md` and the parity allowlists untouched.
+
+### review (reviewer)
+
+| AC | Status | Evidence |
+|---|---|---|
+| 1 | met (pending amendment) | `spec-003` row widened, dated Revision note (2026-10-07) — `git diff -- docs/04_memory/design/specs/spec-003-*.md` |
+| 2 | met | the five red-first tests above pass after `b05572a5`; each asserts code, severity `error`, file, path, message |
+| 3 | met | `element.set_state` / `element.sync_state`, declared typed actions, a declared `where.type` (scalar, list), a `{…}` value and a `where` under `iterate_over` → no type error (test "… are accepted"); exit-state files unchanged |
+| 4 | met | `npx jest test/core/workflow-core-checks.test.ts -t "AC 5"` passes unchanged in the full run |
+
+Same-class check in the touched files: every other place `staticChecks` reads a type (`element`, `iterate_over`,
+`memory.add`, `produces`) was already checked; `fallback.set_state` names a state, not a type. Determinism: no
+clock or randomness added (`git diff 4fd77678 -- src | grep -n "Date\|random"` → nothing); iteration follows
+declared order.
+
+### Pending amendments (approver)
+
+- `spec-003-workflows-yaml-schema` (uncommitted in the worktree): `--reason "task-264 closes bug-282. The E_WORKFLOW_ELEMENT_TYPE_UNKNOWN row listed element, a Memory iterate_over, a memory.add type and a produces owner type, but the T of a typed set_state or sync_state action and a selection's where.type also name a Memory type and were in no row, so a misspelt type there passed every check. The row now names them, keeps element.* as the bound element rather than a type, leaves a where.type value with a token undecided, and states each form's path and the field order within a phase. No new code, severity or message: a typo in a type reports the same diagnostic wherever it is written."`
+
+### Decisions for the approver
+
+1. Widen the existing row rather than add a code (same code, severity, message).
+2. `where.type` is checked only on a selection; under `iterate_over` it is a filter and stays unchecked.
+3. AC 3 reclassified red-first → characterization (accepting `element.*` is today's behaviour).
+
+### Candidate findings (not filed)
+
+- A `where.type` under a Memory `iterate_over` naming a type other than the iterated one selects nothing, silently
+  (design point 2): no row covers it.
