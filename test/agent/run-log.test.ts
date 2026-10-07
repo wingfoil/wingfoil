@@ -6,7 +6,7 @@
  * (task-220) are its callers; none of them exists yet, so every case drives the library directly over
  * a scratch repository.
  */
-import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import {
@@ -30,6 +30,7 @@ import {
   type RunRecord,
 } from '../../src/agent';
 import { errorDetails } from '../../src/core/error-details';
+import { captureDryRun } from '../../src/storage';
 import { getMemoryHistory } from '../../src/memory/history';
 import { parseMemoryOperation } from '../../src/memory/audit';
 import { cloneTempRepo, commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -473,7 +474,50 @@ describe('recording a run (spec-016 §4.3 collision, §4.4 commit, §3.7)', () =
     expect(errorDetails(result.error)).toEqual([{ detail: line() }]);
     expect(show(['rev-parse', 'HEAD']).trim()).toBe(before);
     expect(existsSync(join(repo, LOG))).toBe(false);
+    expect(existsSync(join(repo, 'docs', 'runs'))).toBe(false);
     expect(show(['status', '--porcelain'])).toBe('');
+  });
+
+  it('a refusing hook that prints the project root: the cause names no absolute path (review F2)', () => {
+    writeFixtureFile(repo, '.hooks/pre-commit', '#!/bin/sh\necho "refused in $(pwd)/docs/runs" >&2\nexit 1\n');
+    chmodSync(join(repo, '.hooks/pre-commit'), 0o755);
+    commitAll(repo, 'hooks');
+    git(repo, ['config', 'core.hooksPath', '.hooks']);
+
+    const result = recordRun(repo, LOG, record());
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('IO');
+    expect(result.error.message).toBe(`run ${ELEMENT_ID}/design/1 not recorded: refused in docs/runs`);
+    expect(result.error.message).not.toContain(repo);
+    expect(result.error.message).not.toContain(realpathSync(repo));
+    expect(errorDetails(result.error)).toEqual([{ detail: line() }]);
+  });
+
+  it('a stale index.lock: IO, no throw, no absolute path, the record kept, nothing left behind (review F1)', () => {
+    writeFileSync(join(repo, '.git', 'index.lock'), '');
+    const before = show(['rev-parse', 'HEAD']).trim();
+
+    const result = recordRun(repo, LOG, record());
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('IO');
+    expect(result.error.message).toMatch(new RegExp(`^run ${ELEMENT_ID}/design/1 not recorded: .*index\\.lock`));
+    expect(result.error.message).not.toContain(repo);
+    expect(result.error.message).not.toContain(realpathSync(repo));
+    expect(errorDetails(result.error)).toEqual([{ detail: line() }]);
+    expect(show(['rev-parse', 'HEAD']).trim()).toBe(before);
+    expect(existsSync(join(repo, 'docs', 'runs'))).toBe(false);
+  });
+
+  it('under a dry run, plans the record commit and writes nothing (task-210)', async () => {
+    const outcome = await captureDryRun(async () => recordRun(repo, LOG, record()));
+    expect(outcome.kind).toBe('planned');
+    if (outcome.kind === 'planned') {
+      expect(outcome.plan.subject).toBe(`agent: record ${ELEMENT_ID}/design/1`);
+      expect(outcome.plan.paths).toEqual([LOG]);
+    }
+    expect(existsSync(join(repo, 'docs', 'runs'))).toBe(false);
   });
 
   it('a failed commit restores a log that existed at HEAD', () => {
