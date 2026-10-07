@@ -37,6 +37,7 @@ The minor-v0.3 success criterion: every workflow under `.wingfoil/workflows/cust
   `{release-line}` is in scope here (bind it to the release-line's id or version explicitly). Refusing a
   `memory add` release-line value that names no release-line is a separate v0.4 bug.
 - **Handover from wave 2 B2 (2026-10-05, `dl-153`, ratified (A)).** `workflows/bindings.yaml` is a `dl-149` file kind: the first `bindings.yaml` this task writes carries `format: 1`, and the loader checks it like the other kinds (`src/validation/format.ts`, `task-251`).
+- **Handover from wave 3 B1 (2026-10-07, `task-194`).** `test/core/workflow-core-checks.test.ts` (AC 5) pins this repository's current warning set: 1 × `W_PHASE_FALLBACK_NOT_REENTRANT` (`bug-ingest` `phases[1].fallback.step`) and 2 × `W_PHASE_TOKEN_OUT_OF_SCOPE` (`release-planning` `phases[6].actions[2]` and `[4]`): update it when this task removes them. `spec-017` §12 cites `release-planning.yaml:118,120` (now 123 and 125) and §2 still names `roles.yaml` as a core-check input, which `spec-003` no longer does: correct both. Load through `loadWorkflowRegistryAtHead` from `src/core`.
 
 ## Execution Notes
 
