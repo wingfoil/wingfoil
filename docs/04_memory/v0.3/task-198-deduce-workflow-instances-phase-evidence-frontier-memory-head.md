@@ -34,6 +34,7 @@ The heart of v0.3: one pure deduction over `HEAD` that every consumer (`next`, `
 - **Features:** P4.13, P4.16, P4.11.
 - **Notes:** Proposal key: A05. new `src/workflow/deduce*.ts` (pure, fed a HEAD snapshot) + a `src/core` reader for the snapshot and the git walk. Spec-017 §1.4's tolerant read is local to deduction; `bug-031` (search/by-id) stays with the Memory domain's task.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from wave 3 B1 (2026-10-07, `task-194`).** Load through `loadWorkflowRegistryAtRev` / `loadWorkflowRegistryAtHead` and reuse `workflowExitStates` / `iterationStartState`, all from the `src/core` barrel: every input is read at one sha. Since `task-194`'s review, a typed `<T>.set_state(s)` on a selection of type `T` moves nothing and holds each selected gate whose approve target is `s` (`spec-017` §4.2, §5.1); `run` and `created` are unchanged.
 
 ## Execution Notes
 

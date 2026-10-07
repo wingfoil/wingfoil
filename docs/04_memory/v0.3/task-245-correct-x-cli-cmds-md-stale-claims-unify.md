@@ -36,6 +36,7 @@ The CLI vision reference declares sync against the retired `tech-stack` key, rep
   `07_sequencer.md`, `08_mvp-canvas.md`), and `X_cli-cmds.md`'s 1.5 bump (`833ec080`, `task-179`) wrote no revision
   entry. `bug-274`: `docs/design.md:138` places tasks under `.wingfoil/memory/task/`; widen `task-259`'s
   `test/docs/memory-store-location-text.test.ts` guard to `docs/*.md` with the fix.
+- **Handover from wave 3 B1 (2026-10-07, `task-210`, `task-209`).** `--dry-run` is not a root or global flag: it is registered on each of the 14 mutating commands, after the verb, and read commands, `init` and `mcp` refuse it (exit `2`). The `X_cli-cmds.md` row must say so (`spec-008` §2). A refused commit now fails with `E_COMMIT_FAILED` (`spec-008` §6), and `memory submit`'s commit body may carry one `Carries content:` line (`spec-008` §2).
 
 ## Execution Notes
 
