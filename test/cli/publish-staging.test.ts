@@ -224,9 +224,25 @@ describe('publish:staging (task-254) — the expected commit reaches the smoke',
       },
     );
 
-    it('passes the stage on the exact stamp', () => {
-      const report = smoke(`0.3.0 (${SHA})`, SHA);
-      expect(report.checks.filter((c) => !c.ok)).toEqual([]);
+    it('passes the stage on the exact stamp, through the whole use scenario (task-207)', () => {
+      // The scenario after the stamp needs a real CLI (dl-099 §3): this `wingfoil` forwards every other
+      // invocation to the compiled dist/cli.js (test/fixtures/smoke/wingfoil-proxy.cjs).
+      const proxyBin = mkdtempSync(join(tmpdir(), 'wf-staging-proxy-'));
+      try {
+        const proxy = join(proxyBin, 'wingfoil');
+        const target = join(__dirname, '..', 'fixtures', 'smoke', 'wingfoil-proxy.cjs');
+        writeFileSync(proxy, `#!${process.execPath}\nrequire(${JSON.stringify(target)});\n`);
+        chmodSync(proxy, 0o755);
+        const report = realEffects(process.cwd(), () => undefined).smoke(
+          { ...process.env, PATH: `${proxyBin}:${process.env.PATH ?? ''}`, SMOKE_STAMP: `0.3.0 (${SHA})` },
+          '0.3.0',
+          SHA,
+        );
+        expect(report.checks.filter((c) => !c.ok)).toEqual([]);
+        expect(report.checks.map((c) => c.label)).toContain('[Kanban] wingfoil memory history task-003-deprecated-task --format json');
+      } finally {
+        rmSync(proxyBin, { recursive: true, force: true });
+      }
     });
   });
 });

@@ -16,7 +16,7 @@
 # specification-phase quality criteria, the release/branch state queries, …) have no command that asserts
 # them today; each is listed with its reason in task-199's Execution Notes and stays a
 # W_WORKFLOW_UNBOUND_TOKEN warning, which in v1.0 fails closed (dl-090 Q2 (c)).
-version: 1.0                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry
+version: 1.1                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry; 1.1 bug-134 (task-207): e2e-smoke-passed writes its report and states severity: reject (dl-023)
 format: 1                        # dl-153 (A): a dl-149 file kind (BINDINGS_YAML_FORMAT)
 
 checks:
@@ -35,7 +35,9 @@ checks:
   # (docs/02_requirements/02_bdd/features/); there is no separate BDD runner.
   tests.bdd.passing:        { run: [npm, test] }
   # e2e-smoke.gate (dl-023: hard-reject from v0.3): the executable form of e2e-smoke.yaml, driving `wingfoil` on PATH.
-  e2e-smoke-passed:         { run: [node, scripts/e2e-smoke.cjs] }
+  # task-207 (bug-134): it writes the report the gate declares under produces:, passed as the check's
+  # `report:` argument, rendered (a repository-relative path, so the pattern refuses anything else).
+  e2e-smoke-passed:         { run: [node, scripts/e2e-smoke.cjs, --report, "{report}"], severity: reject, args: { report: "^[A-Za-z0-9._/-]+$" } }
   # release-planning.advance-pinned-build (dl-095 Q3 (B), dl-026).
   lockfile.pinned:          { run: [npm, run, "check:lockfile"] }
   mcp.registered:           { run: [npm, run, "check:mcp"] }
