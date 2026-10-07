@@ -5,7 +5,12 @@
  * Asserts nothing about elapsed values, so it reads no clock of its own and cannot flake on load.
  */
 import {
+  describeLoad,
   describeSamples,
+  IDLE_FLOOR_P95_BOUND_MS,
+  idleMachineVerdict,
+  latencyReport,
+  type LoadWindow,
   type MarginalLatencySamples,
   median,
   MIN_RUNS,
@@ -13,6 +18,7 @@ import {
   p95,
   PROCESS_LEVEL_QUANTITIES,
   processLevelVerdict,
+  readLoadAverage,
   RUNS,
   sampleLatency,
   sampleMarginalLatency,
@@ -22,6 +28,14 @@ import {
 function measuredAt(floor: number, total: number, marginal: number): MarginalLatencySamples {
   const copies = (value: number): number[] => Array.from({ length: MIN_RUNS }, () => value);
   return { floor: copies(floor), total: [copies(total)], marginal: [copies(marginal)] };
+}
+
+/** A synthetic measurement window: the 1- and 5-minute load averages read before and after it. */
+function windowOf(before: [number, number], after: [number, number]): LoadWindow {
+  return {
+    before: { oneMinute: before[0], fiveMinute: before[1] },
+    after: { oneMinute: after[0], fiveMinute: after[1] },
+  };
 }
 
 describe('latency helper — REQ-PERF measurement conditions in code', () => {
@@ -111,5 +125,66 @@ describe('latency helper — REQ-PERF measurement conditions in code', () => {
 
   it('describeSamples names p95, n, min and max in whole milliseconds', () => {
     expect(describeSamples([1.4, 2.6, 900.2])).toBe('p95 900 ms (n=3, min 1 ms, max 900 ms)');
+  });
+});
+
+describe('latency helper — the otherwise-idle machine REQ-PERF-02 presupposes, recorded and checked (bug-276)', () => {
+  it('readLoadAverage takes the 1- and 5-minute figures of os.loadavg(), rounded to hundredths', () => {
+    expect(readLoadAverage(() => [1.364, 2.9449, 7.5])).toEqual({ oneMinute: 1.36, fiveMinute: 2.94 });
+    // The default reader is the machine's own: two finite, non-negative numbers.
+    const real = readLoadAverage();
+    for (const value of [real.oneMinute, real.fiveMinute]) {
+      expect(Number.isFinite(value) && value >= 0).toBe(true);
+    }
+  });
+
+  it('describeLoad states the window: 1- and 5-minute load average, before and after', () => {
+    expect(describeLoad(windowOf([1.36, 2.94], [1.77, 2.9]))).toBe(
+      'load average (1-min / 5-min): before 1.36 / 2.94, after 1.77 / 2.90',
+    );
+  });
+
+  it('the idle signal is the floor p95, bounded at 500 ms (idle floor about 200 ms, loaded 826-886 ms in task-248)', () => {
+    expect(IDLE_FLOOR_P95_BOUND_MS).toBe(500);
+  });
+
+  it('idleMachineVerdict calls a run otherwise idle when the floor p95 is under the bound, whatever the load average', () => {
+    const floor = (value: number): number[] => Array.from({ length: MIN_RUNS }, () => value);
+    expect(idleMachineVerdict(floor(194), windowOf([1.36, 2.94], [1.77, 2.9]))).toBe('otherwise idle');
+    // A high load average alone does not refuse the run: the floor is the deciding signal …
+    expect(idleMachineVerdict(floor(203), windowOf([12, 9], [12, 9]))).toBe('otherwise idle');
+    // … and the bound is strict: 499 passes, 500 does not.
+    expect(idleMachineVerdict(floor(IDLE_FLOOR_P95_BOUND_MS - 1), windowOf([0, 0], [0, 0]))).toBe('otherwise idle');
+    expect(idleMachineVerdict(floor(IDLE_FLOOR_P95_BOUND_MS), windowOf([0, 0], [0, 0]))).toMatch(/^loaded:/);
+  });
+
+  it('a loaded verdict names the floor and the load window, so the refusal is evidence (task-248 run 2: 1-min dip, floor 886)', () => {
+    const run2 = [...Array.from({ length: MIN_RUNS - 1 }, () => 200), 886, 886];
+    const verdict = idleMachineVerdict(run2, windowOf([1.94, 4.13], [4.61, 4.3]));
+    expect(verdict).toMatch(/^loaded: floor p95 886 ms/);
+    expect(verdict).toContain('>= 500 ms');
+    expect(verdict).toContain('before 1.94 / 4.13, after 4.61 / 4.30');
+    expect(verdict).toContain('not a REQ-PERF-02 measurement');
+    // The refusal names its calibration, so a genuinely idle but slower machine is not sent into endless reruns.
+    expect(verdict).toContain("calibrated on this repository's reference machine (idle floor about 200 ms)");
+    expect(verdict).toContain('no rerun passes and the bound, not the load, is the cause');
+    expect(() => idleMachineVerdict([], windowOf([0, 0], [0, 0]))).toThrow(/empty/);
+  });
+
+  it('latencyReport records the load window and the idle verdict beside the floor, total and marginal of every command', () => {
+    const measured: MarginalLatencySamples = {
+      floor: Array.from({ length: MIN_RUNS }, () => 200),
+      total: [Array.from({ length: MIN_RUNS }, () => 260), Array.from({ length: MIN_RUNS }, () => 210)],
+      marginal: [Array.from({ length: MIN_RUNS }, () => 60), Array.from({ length: MIN_RUNS }, () => 10)],
+    };
+    const report = latencyReport(measured, ['memory search', 'dna show'], windowOf([1.36, 2.94], [1.77, 2.9]));
+    expect(report.split('\n')).toEqual([
+      'load average (1-min / 5-min): before 1.36 / 2.94, after 1.77 / 2.90 (one window: the commands are sampled interleaved)',
+      'machine: otherwise idle',
+      'floor (--version): p95 200 ms (n=20, min 200 ms, max 200 ms)',
+      'memory search: marginal p95 60 ms (n=20, min 60 ms, max 60 ms); total p95 260 ms (n=20, min 260 ms, max 260 ms)',
+      'dna show: marginal p95 10 ms (n=20, min 10 ms, max 10 ms); total p95 210 ms (n=20, min 210 ms, max 210 ms)',
+    ]);
+    expect(() => latencyReport(measured, ['memory search'], windowOf([0, 0], [0, 0]))).toThrow(/2 calls.*1 command/);
   });
 });
