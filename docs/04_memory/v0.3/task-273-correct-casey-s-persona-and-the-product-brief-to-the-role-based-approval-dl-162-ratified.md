@@ -55,12 +55,60 @@ are corrected, and `dl-113` gets a dated note on how its Q2 (a) is now read.
 - **Related:** `bug-289` (US-5-06, v0.4) stays out of scope.
 
 ## Execution Notes
+### design (architect, 2026-10-07)
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+- **Sources read.** `dl-162` is `ready` (`git log --format='%h %ad %s' --date=short -- docs/04_memory/design/dls/dl-162-*.md`
+  → `329dac85 2026-10-07 wf(decision-log): approve … [in-discussion → ready]`), option (B); `dl-113` is `ready`, Q2 (a).
+  `depends_on: []`, no tech-spec is cited, so there is no spec to confirm and no Execution Notes to inherit (`dl-015`).
+- **AC classification.** All five ACs are **characterization**: documentation only, no behaviour exists or changes,
+  no code and no test are added (testing directive: never fabricate a red). The index AC is verified by task-141's
+  index script, the grep AC by the grep itself.
+- **Scope check.** `grep -rn -i casey docs/01_vision | grep -i "read-only\|never\|only read"` lists, besides the two
+  sentences corrected here, `01_product-brief.md:233` (v0.4 phase: Casey "gain read-only views") and
+  `08_mvp-canvas.md:54,58` ("Read-only views", "Casey is served through read-only views"). They describe Casey's own
+  goals, which `dl-162` keeps as views, and make no claim that Casey never changes state, so they stay (AC 5: no
+  other layer changes). Journey 5 step 8, US-5-10, P4.14 and X1.2 are untouched (`git diff adc0c0ea --stat` lists
+  only the files below).
+
+### red / green
+
+- No red phase: no AC is red-first. The edits are one commit, `b4777bbe docs(vision): task-273 — …`:
+  - `04_personas.md` 1.1 → **1.2**, date 2026-10-06 → 2026-10-07: Casey's *Goals with WingFoil* now open with
+    "Casey's own goals are read-only views …" and say Casey "changes state only through an approval the DNA assigns
+    to Casey (the `approver` role, or an approval naming Casey), as `dl-162` rules", citing REQ-SYS-08 (+2 lines).
+  - `01_product-brief.md` 1.8 → **1.9** (date already 2026-10-07 on main, `git show adc0c0ea:docs/01_vision/01_product-brief.md | sed -n 3,4p`):
+    "Casey reads the project's state and never changes it" replaced the same way (+1 line).
+  - `00_index.md`: version/date/line-count rows of both files (362, 149 by `awk 'END{print NR}'`), every
+    `01_product-brief` reference after line 149 shifted by 1 and every `04_personas` reference after line 101 by 2,
+    in the quick-lookup table and the per-document maps (the sub-anchors checked by `sed -n <n>p`: L108, L111, L120,
+    L126, L135, L144, L152, L163, L184, L203, L268, L277, L283, L289, L297, L305 each land on the named heading or
+    note); Casey's map line now reads "own goals as read-only views, approves when the DNA assigns it".
+- **Index check.** task-141's script (`docs/04_memory/v0.3/task-141-*.md`, the `python3 -c` line under "bug-160
+  verification"), with the `06_features.md` excluded lines updated from `(380,414)` to `(382,416)` (`sed -n 382p;416p
+  06_features.md` → the two `#` lines inside YAML fences), run in `docs/01_vision/`: before the index edit it
+  reported the 13 expected mismatches of the two edited files; after, it prints **`mismatches: []`**.
+- **AC 5 grep.** `grep -rn "never change" docs/01_vision` → no output (exit 1).
+- **dl-113 note.** Written in the worktree and left uncommitted (pending amendment, below): a dated paragraph at the
+  end of *Actions* and a *Relations* line "Read through: `dl-162`".
+
+### refactor (gates, 2026-10-07, on b4777bbe with the dl-113 amendment in the working tree)
+
+- `npx jest test/docs test/lint`: 25 suites, **158 / 158 passed**.
+- `npm run lint`: exit 0.
+- `npm test`: **300 suites, 5712 / 5712 passed** (load average 27.32 at start, `uptime`).
+- Coverage, `docs:api`, `tsc`: not run — no file under `src/` or `test/` changed (`git diff adc0c0ea --stat`), so
+  they cannot move; `npm test` includes the typecheck (task-173).
+
+### review (self, reviewer)
+
+- AC 1 met: `sed -n 101,105p docs/01_vision/04_personas.md`; bump 1.2 / 2026-10-07.
+- AC 2 met: `sed -n 148,150p docs/01_vision/01_product-brief.md`; bump 1.9 / 2026-10-07.
+- AC 3 met: index script prints `mismatches: []`.
+- AC 4 met as a pending amendment (coordinator), see below.
+- AC 5 met: the `never change` grep is empty; no other vision, story-map or BDD file changed.
+
+### Pending amendments (approver)
+
+- `dl-113-personas-revisited` — proposed `--reason`: "dl-162 (B), ratified 2026-10-07, Action 2: a dated note
+  records that Q2 (a) is read as Casey's own goals being views, while approval follows the role (REQ-SYS-08).
+  Applied by task-273 together with the persona and product-brief corrections."
