@@ -11,6 +11,7 @@ import { join } from 'path';
 import { dump, load } from 'js-yaml';
 
 import {
+  ADAPTER_MANIFEST_FORMAT,
   ADAPTER_PLACEHOLDERS,
   E_ADAPTER_MANIFEST,
   E_ADAPTER_PLACEHOLDER,
@@ -18,6 +19,7 @@ import {
   type AdapterKind,
 } from '../../src/agent';
 import { ValidationError, type ValidationIssue } from '../../src/validation';
+import { E_INVALID_FORMAT, newerFormatMessage } from '../../src/validation/format';
 
 const FIXTURE = join(__dirname, '..', 'fixtures', 'agents', 'custom', 'fake.yaml');
 
@@ -386,5 +388,116 @@ describe('the module surface', () => {
     manifest.launch.interactive.args.push('{nope}');
     const codes = new Set(issuesOf(manifest).map((issue) => issue.code));
     expect([...codes].sort()).toEqual([E_ADAPTER_MANIFEST, E_ADAPTER_PLACEHOLDER].sort());
+  });
+});
+
+describe('bug-234 — a manifest that validates can launch: each `via` requires its placeholder', () => {
+  it.each([
+    ['launch.interactive.args', (m: Manifest) => (m.launch.interactive.args = m.launch.interactive.args.filter((a: string) => a !== '{mcp_config_file}'))],
+    ['launch.headless.args', (m: Manifest) => (m.launch.headless.args = m.launch.headless.args.filter((a: string) => a !== '{mcp_config_file}'))],
+  ])('mcp.via: config-file without {mcp_config_file} in %s is refused', (path, mutate) => {
+    const manifest = fake();
+    mutate(manifest);
+    expectIssue(issuesOf(manifest), path, /\{mcp_config_file\}.*required.*mcp\.via: config-file/);
+  });
+
+  it.each([['{mcp_command}'], ['{mcp_args}']])('mcp.via: args without %s in launch.interactive.args is refused', (missing) => {
+    const manifest = fake();
+    manifest.mcp.via = 'args';
+    delete manifest.mcp.template;
+    manifest.launch.interactive.args = ['--mcp', '{mcp_command}', '{mcp_args}', '{bootstrap}'].filter((a) => a !== missing);
+    manifest.launch.headless.args = ['--mcp', '{mcp_command}', '{mcp_args}', '{bootstrap}'];
+    expectIssue(issuesOf(manifest), 'launch.interactive.args', new RegExp(`\\${missing.slice(0, -1)}\\}.*required.*mcp\\.via: args`));
+  });
+
+  it('prompt.via: arg without {bootstrap} in a launch is refused', () => {
+    const manifest = fake();
+    manifest.launch.interactive.args = manifest.launch.interactive.args.filter((a: string) => a !== '{bootstrap}');
+    expectIssue(issuesOf(manifest), 'launch.interactive.args', /\{bootstrap\}.*required.*prompt\.via: arg/);
+  });
+
+  it('prompt.via: file without {bootstrap_file} in a launch is refused', () => {
+    const manifest = fake();
+    manifest.prompt.via = 'file';
+    manifest.launch.interactive.args = manifest.launch.interactive.args.filter((a: string) => a !== '{bootstrap}');
+    manifest.launch.headless.args[5] = '{bootstrap_file}';
+    expectIssue(issuesOf(manifest), 'launch.interactive.args', /\{bootstrap_file\}.*required.*prompt\.via: file/);
+    expect(issuesOf(manifest)).toHaveLength(1);
+  });
+
+  it('session.id: assign with session.assign_args carrying no {session_id} is refused', () => {
+    const manifest = fake();
+    manifest.session.assign_args = ['--session', 'fixed'];
+    expectIssue(issuesOf(manifest), 'session.assign_args', /\{session_id\}.*required.*session\.id: assign/);
+  });
+
+  it('session.resume.supported: true needs session.resume.args, and they must carry {session_id}', () => {
+    const absent = fake();
+    delete absent.session.resume.args;
+    expectIssue(issuesOf(absent), 'session.resume.args', /required.*session\.resume\.supported: true/);
+
+    const noId = fake();
+    noId.session.resume.args = ['--resume', 'last'];
+    expectIssue(issuesOf(noId), 'session.resume.args', /\{session_id\}.*required.*session\.resume\.supported: true/);
+  });
+
+  it('session.resume.supported: false needs no args', () => {
+    const manifest = fake();
+    manifest.session.resume = { supported: false };
+    expect(issuesOf(manifest)).toEqual([]);
+  });
+
+  it('the four manifests of the bug’s reproduction are refused', () => {
+    const baseline = (): Manifest => ({
+      name: 'x',
+      format: 1,
+      command: 'x',
+      launch: { interactive: { args: ['{bootstrap}', '--mcp', '{mcp_config_file}'] } },
+      prompt: { via: 'arg' },
+      mcp: { via: 'config-file', template: '{"mcpServers": {"wingfoil": {"command": "{mcp_command}", "args": {mcp_args}}}}' },
+      session: { id: 'none', resume: { supported: false } },
+      usage: { from: 'none' },
+    });
+    expect(issuesOf(baseline(), 'custom', 'x')).toEqual([]);
+    const variants: ((m: Manifest) => void)[] = [
+      (m) => (m.launch.interactive.args = ['{bootstrap}']),
+      (m) => (m.launch.interactive.args = ['--mcp', '{mcp_config_file}']),
+      (m) => (m.session = { id: 'assign', assign_args: ['--session', 'fixed'], resume: { supported: false } }),
+      (m) => (m.session = { id: 'none', resume: { supported: true } }),
+    ];
+    for (const mutate of variants) {
+      const manifest = baseline();
+      mutate(manifest);
+      expect(issuesOf(manifest, 'custom', 'x').length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('bug-242 — a newer format is refused for its format alone (dl-149)', () => {
+  it('format: 2 is the one issue E_INVALID_FORMAT on `format`, with the upgrade-WingFoil message, before the structural pass', () => {
+    const manifest = fake();
+    manifest.format = 2;
+    delete manifest.command;
+    expect(issuesOf(manifest)).toEqual([
+      {
+        code: E_INVALID_FORMAT,
+        path: 'format',
+        file: 'HEAD:.wingfoil/agents/custom/fake.yaml',
+        message: newerFormatMessage(2, ADAPTER_MANIFEST_FORMAT),
+      },
+    ]);
+  });
+
+  it.each([[0], ['1'], [1.5]])('format: %p is still a structural error on `format`', (format) => {
+    const manifest = fake();
+    manifest.format = format;
+    const issues = issuesOf(manifest);
+    expect(issues.some((issue) => issue.path === 'format' && issue.code !== E_INVALID_FORMAT)).toBe(true);
+  });
+
+  it('an absent format stays a structural error: format is required for manifests (spec-016 §2.2)', () => {
+    const manifest = fake();
+    delete manifest.format;
+    expect(issuesOf(manifest).some((issue) => issue.path === 'format' && issue.code !== E_INVALID_FORMAT)).toBe(true);
   });
 });
