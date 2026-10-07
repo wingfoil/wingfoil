@@ -290,7 +290,11 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
       expect(bound?.run).toEqual(['node', 'scripts/e2e-smoke.cjs', '--report', '{report}']);
       // The pattern judges the rendered path the engine passes, its `{…}` tokens filled in.
       expect(REPORT_PATH.replace(/\{[^}]+\}/g, 'v0.3')).toMatch(new RegExp(bound?.args?.report ?? '^$'));
-      expect('docs/x; rm -rf /').not.toMatch(new RegExp(bound?.args?.report ?? '^$'));
+      // Anything but a repository-relative path is refused (review F1): a shell fragment, an absolute
+      // path, a `..` segment anywhere, an option.
+      for (const bad of ['docs/x; rm -rf /', '/etc/passwd', '../../x.md', 'docs/../x.md', 'docs/..', '-rf', '--report']) {
+        expect(bad).not.toMatch(new RegExp(bound?.args?.report ?? '^$'));
+      }
       expect(`${workflow.description} ${gate?.description ?? ''}`).not.toMatch(/\bwarn\b/i);
     });
 

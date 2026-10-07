@@ -36,8 +36,9 @@ checks:
   tests.bdd.passing:        { run: [npm, test] }
   # e2e-smoke.gate (dl-023: hard-reject from v0.3): the executable form of e2e-smoke.yaml, driving `wingfoil` on PATH.
   # task-207 (bug-134): it writes the report the gate declares under produces:, passed as the check's
-  # `report:` argument, rendered (a repository-relative path, so the pattern refuses anything else).
-  e2e-smoke-passed:         { run: [node, scripts/e2e-smoke.cjs, --report, "{report}"], severity: reject, args: { report: "^[A-Za-z0-9._/-]+$" } }
+  # `report:` argument, rendered: a repository-relative path, so the pattern refuses an absolute path
+  # (leading `/`), an option (leading `-`), a `..` segment and any character outside [A-Za-z0-9._/-].
+  e2e-smoke-passed:         { run: [node, scripts/e2e-smoke.cjs, --report, "{report}"], severity: reject, args: { report: '^(?![/-])(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]+$' } }
   # release-planning.advance-pinned-build (dl-095 Q3 (B), dl-026).
   lockfile.pinned:          { run: [npm, run, "check:lockfile"] }
   mcp.registered:           { run: [npm, run, "check:mcp"] }
