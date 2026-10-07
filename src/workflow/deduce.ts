@@ -221,6 +221,21 @@ function compareText(a: string, b: string): number {
   return Number(a > b) - Number(a < b);
 }
 
+/**
+ * A `memory.yaml` type `path` pattern as a whole-path regular expression. A token in the file name is one
+ * name; a token in a directory is one or more directories, since a value such as the plan's `{scope}`
+ * nests (`rl-v1/rel-v0.3`, `.wingfoil/memory.yaml` `plan.path`).
+ */
+function pathPatternRegExp(pattern: string): RegExp {
+  const slash = pattern.lastIndexOf('/');
+  const convert = (part: string, token: string): string =>
+    part
+      .split(/\{[^{}]+\}/)
+      .map((piece) => piece.replace(/[.*+?^$()|[\]\\]/g, '\\$&'))
+      .join(token);
+  return new RegExp(`^${convert(pattern.slice(0, slash + 1), '[^/]+(?:/[^/]+)*')}${convert(pattern.slice(slash + 1), '[^/]+')}$`);
+}
+
 /** A frontmatter value as a non-blank string, or `null`. */
 function scalarText(value: unknown): string | null {
   if (typeof value === 'string') return value.trim() === '' ? null : value;
@@ -242,13 +257,16 @@ function readElements(snapshot: DeductionSnapshot): { elements: Element[]; diagn
   const elements: Element[] = [];
   const diagnostics: Diagnostic[] = [...snapshot.scanDiagnostics];
   const { memoryYaml } = snapshot;
+  const typePaths = Object.values(memoryYaml?.types ?? {}).map((entry) => pathPatternRegExp(entry.path));
   for (const document of snapshot.documents) {
     const { path, frontmatter } = document;
     const unreadable = (reason: string): void => {
       diagnostics.push(memoryUnreadableDiagnostic(path, reason));
     };
     if (Object.keys(frontmatter).length === 0) {
-      unreadable('no frontmatter');
+      // A file on no type's path is not a Memory document at all — the `X_*` plans `dl-019` grandfathers at
+      // the top of `docs/05_plans/` — and is left out silently; one on a type's path is a document §1.4 reports.
+      if (typePaths.some((pattern) => pattern.test(path))) unreadable('no frontmatter');
       continue;
     }
     const type = scalarText(frontmatter['type']);
@@ -282,6 +300,15 @@ function readElements(snapshot: DeductionSnapshot): { elements: Element[]; diagn
   // By path; a stable sort keeps one file's reports in the order they were made.
   diagnostics.sort((a, b) => compareText(a.file, b.file));
   return { elements, diagnostics };
+}
+
+/**
+ * `<type>:<id>` of an element scope. A collection-entry scope (`WingFoil-Item`, `@<collection>#<key>`)
+ * arrives with `iterate_over` (task-202); until then deduction builds element scopes only.
+ */
+function elementKey(scope: ScopeRef): string {
+  const { element } = scope as { element: ElementRef };
+  return `${element.type}:${element.id}`;
 }
 
 function refOf(element: Element): ElementRef {
@@ -413,11 +440,10 @@ class Deducer {
     private readonly snapshot: DeductionSnapshot,
     elements: readonly Element[],
   ) {
+    // Names are unique: the registry refuses a duplicate at load time (`spec-003`), so no entry is overwritten.
     snapshot.workflows.forEach((workflow, i) => {
-      if (!this.byName.has(workflow.name)) {
-        this.byName.set(workflow.name, workflow);
-        this.fileOf.set(workflow.name, snapshot.workflowFiles[i] ?? '');
-      }
+      this.byName.set(workflow.name, workflow);
+      this.fileOf.set(workflow.name, snapshot.workflowFiles[i]!);
     });
     this.tree = new Set(snapshot.tree);
     this.elements = elements;
@@ -446,15 +472,19 @@ class Deducer {
     return this.snapshot.tree.some((file) => file.startsWith(path));
   }
 
-  private firstState(type: string): string | null {
-    const { memoryYaml } = this.snapshot;
-    return hasType(memoryYaml, type) ? resolveStateMachine(memoryYaml, type).sequence[0]! : null;
+  /**
+   * The first state of `type`. Called only to bind an instance, i.e. for a plan element, which exists only
+   * when `memory.yaml` does; and a workflow's `element` type is one `memory.yaml` declares, or the registry
+   * refuses it (`E_WORKFLOW_ELEMENT_TYPE_UNKNOWN`).
+   */
+  private firstState(type: string): string {
+    return resolveStateMachine(this.snapshot.memoryYaml!, type).sequence[0]!;
   }
 
   /** Run a workflow on `frames`, from `start` (§4.4), under `trail`. */
   run(instanceId: string, startCommit: string, workflow: Workflow, frames: readonly Frame[], start: ExitStart, trail: readonly TrailEntry[]): WorkflowResult {
-    const { memoryYaml } = this.snapshot;
-    const exits: readonly (PhaseExitState | undefined)[] = memoryYaml === null ? [] : workflowExitStates(workflow, memoryYaml, start, this.byName);
+    // `memory.yaml` is present: a workflow runs only for an open plan, an element of a declared type.
+    const exits = workflowExitStates(workflow, this.snapshot.memoryYaml!, start, this.byName);
     const phases: PhaseProgress[] = [];
     let frontier: DeducedStep[] = [];
     let diagnostics: Diagnostic[] = [];
@@ -470,25 +500,23 @@ class Deducer {
       const here: TrailEntry = { workflow: workflow.name, phase: phase.name, scope };
 
       // A plain `include` (§4.5): the sub runs on the same element, from the state this phase starts in.
+      // The include resolves: the registry refuses one naming no loaded workflow (`spec-003` loader rows).
       if (phase.include !== undefined && phase.iterate_over === undefined) {
-        const sub = this.byName.get(phase.include);
-        if (sub !== undefined) {
-          const exit = exits[p];
-          const boundType = sub.element ?? exit?.boundType ?? frame?.type ?? null;
-          const result = this.run(instanceId, startCommit, sub, frames, { boundType, state: exit?.entry ?? null, instance: false }, [...trail, here]);
-          if (result.complete) {
-            phases.push({ phase: phase.name, state: 'complete' });
-            return;
-          }
-          current = true;
-          phases.push({ phase: phase.name, state: 'current' });
-          frontier = result.frontier;
-          diagnostics = result.diagnostics;
+        const sub = this.byName.get(phase.include)!;
+        const exit = exits[p]!;
+        const result = this.run(instanceId, startCommit, sub, frames, { boundType: sub.element ?? exit.boundType, state: exit.entry, instance: false }, [...trail, here]);
+        if (result.complete) {
+          phases.push({ phase: phase.name, state: 'complete' });
           return;
         }
+        current = true;
+        phases.push({ phase: phase.name, state: 'current' });
+        frontier = result.frontier;
+        diagnostics = result.diagnostics;
+        return;
       }
 
-      const leaf = this.leaf(instanceId, startCommit, workflow, p, frames, exits[p], [...trail, here], scope);
+      const leaf = this.leaf(instanceId, startCommit, workflow, p, frames, exits[p]!, [...trail, here], scope);
       if (leaf.step.evidence.missing.length === 0) {
         phases.push({ phase: phase.name, state: 'complete' });
         return;
@@ -508,12 +536,12 @@ class Deducer {
     workflow: Workflow,
     p: number,
     frames: readonly Frame[],
-    exit: PhaseExitState | undefined,
+    exit: PhaseExitState,
     trail: readonly TrailEntry[],
     scope: ScopeRef | null,
   ): { step: DeducedStep; diagnostics: Diagnostic[] } {
     const phase = workflow.phases[p]!;
-    const file = this.fileOf.get(workflow.name) ?? '';
+    const file = this.fileOf.get(workflow.name)!;
     const stepName = `${workflow.name}.${phase.name}`;
     const diagnostics: Diagnostic[] = [];
     const report = (path: string, resolved: Resolved): void => {
@@ -532,14 +560,10 @@ class Deducer {
     }
 
     // state — the bound element at or after the phase's exit state (§4.4).
-    const boundType = exit?.boundType ?? frame?.type ?? null;
-    if (declaresState(phase, boundType)) {
+    if (declaresState(phase, exit.boundType)) {
       kinds.push('state');
       const element = frame?.element ?? null;
-      const target = exit?.exit ?? null;
-      const { memoryYaml } = this.snapshot;
-      const satisfied =
-        element !== null && target !== null && hasType(memoryYaml, element.type) && atOrAfter(resolveStateMachine(memoryYaml, element.type), element.status, target);
+      const satisfied = element !== null && exit.exit !== null && atOrAfter(resolveStateMachine(this.snapshot.memoryYaml!, element.type), element.status, exit.exit);
       if (!satisfied) missing.push('state');
     }
 
@@ -598,15 +622,15 @@ class Deducer {
     // awaits — evaluated from v1.0 (P4.12); the step completes by a record (§5.4).
     if (phase.awaits !== undefined) kinds.push('awaits');
 
-    // record — a checkpoint, an `awaits`, or a `created` step with no other evidence (§4.3).
-    const decisive = kinds.filter((kind) => kind !== 'created' && kind !== 'awaits');
-    const recordNeeded = decisive.length === 0;
+    // record — a checkpoint, an `awaits` (always, §4.3 `awaits` row, §5.4), or a `created` step with no
+    // other evidence (§4.3).
+    const recordNeeded = phase.awaits !== undefined || !kinds.some((kind) => kind !== 'created');
     if (recordNeeded) {
       kinds.push('record');
       if (!this.hasRecord(instanceId, startCommit, stepName, scope)) missing.push('record');
     }
 
-    const key = scope !== null && 'element' in scope ? `${stepName}@${scope.element.type}:${scope.element.id}` : stepName;
+    const key = scope === null ? stepName : `${stepName}@${elementKey(scope)}`;
     return {
       step: {
         key,
@@ -627,10 +651,9 @@ class Deducer {
 
   /** Whether the instance's walk holds a record of step `stepName` on `scope` (§4.8 records). */
   private hasRecord(instanceId: string, startCommit: string, stepName: string, scope: ScopeRef | null): boolean {
-    const element = scope !== null && 'element' in scope ? `${scope.element.type}:${scope.element.id}` : null;
-    const item = scope !== null && 'item' in scope ? `${scope.item.collection}#${scope.item.key}` : null;
+    const element = scope === null ? null : elementKey(scope);
     return (this.snapshot.records.get(startCommit) ?? []).some(
-      (record) => record.phase === stepName && record.instance === instanceId && record.element === element && record.item === item,
+      (record) => record.phase === stepName && record.instance === instanceId && record.element === element && record.item === null,
     );
   }
 
