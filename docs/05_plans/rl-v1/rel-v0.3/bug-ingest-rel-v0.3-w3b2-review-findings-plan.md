@@ -192,3 +192,8 @@ the server `.mcp.json` registers; B-10 used `GIT_TRACE`.
 - Amendments recorded: `bug-193`, `bug-227`, `bug-234`.
 - `dl-160` and `dl-162` are explained to the approver before any ruling; `dl-161` is v0.4. The plan stays `active`
   until `dl-160` and `dl-162` are ruled.
+
+**Rulings (approver, 2026-10-07).** `dl-160` ratified `ready`, option (B) with (A)'s computation as the load-time
+warning; its actions after v0.3 unless brought forward. `dl-162` ratified `ready`, option (B): Casey approves when
+the DNA gives Casey the `approver` role for that decision; its follow-through (two sentences in `04_personas.md` and
+`01_product-brief.md`, a dated note on `dl-113`) is still to be scheduled.
