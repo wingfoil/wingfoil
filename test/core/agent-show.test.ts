@@ -317,6 +317,38 @@ describe('task-220 — agent show <run-id> (spec-016 §6)', () => {
       expect(result.value.commit).toBe(added);
     });
 
+    it.each([
+      ['a \\u escape', (line: string) => line.replace('"model":"not-reported"', '"model":"caf\\u00e9"')],
+      ['a CRLF line ending', (line: string) => `${line}\r`],
+    ])('R1: a valid record written with %s is attributed to the commit that wrote those bytes', async (_label, rewrite) => {
+      // Store the bytes as written, whatever the developer's global `core.autocrlf` says.
+      execFileSync('git', ['-C', repo, 'config', 'core.autocrlf', 'false']);
+      const run = record();
+      const raw = rewrite(serializeRunRecord(run).replace(/\n$/, ''));
+      writeFixtureFile(repo, LOG, `${raw}\n`);
+      commitAt(`agent: record ${run.id}`, 1_900_000_000);
+      const added = head(repo);
+      writeFixtureFile(repo, 'README.md', 'later\n');
+      commitAt('later', 1_900_000_100);
+      const result = await show(repo, run.id);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.commit).toBe(added);
+    });
+
+    it('R1: a line edited after it was added (same id, other bytes) matches no listed commit: IO', async () => {
+      const run = record();
+      recorded(repo, run);
+      writeFixtureFile(repo, LOG, serializeRunRecord({ ...run, model: 'edited-by-hand' }));
+      commitAll(repo, 'edit the record by hand');
+      const result = await show(repo, run.id);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'IO',
+        message: `run ${run.id}: no commit in the history of HEAD adds its line to ${LOG}`,
+      });
+    });
+
     it('F1: with log.showSignature=true and a signed record commit, commit is the bare sha', async () => {
       const key = join(repo, '.git', 'test-signing-key');
       execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
