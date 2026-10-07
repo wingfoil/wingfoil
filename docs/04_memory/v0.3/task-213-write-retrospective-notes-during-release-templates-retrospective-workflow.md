@@ -42,8 +42,11 @@ Retrospective input is reconstructed after the release. The task, bug and plan t
   `HEAD` (61 rows before this task). So the two new checks are unbound and the suite gains two rows.
 - **Decisions read:** `dl-115` (`ready`) Q1 (A), Q3 (x), with its 2026-10-07 amendment (six outcomes for a consumer
   note); `dl-163` (`ready`) S3d-b and the handover (the check must let `task-272`'s `collect-feedback` read record be
-  one more source). Q2 (a), the `done` existence check, is `task-221`'s. No tech-spec governs Memory templates'
-  bodies or the retrospective workflow's checks: no spec edit, no pending amendment.
+  one more source). Q2 (a), the `done` existence check, is `task-221`'s. No tech-spec governs the retrospective
+  workflow's checks. *Corrected at review (F1):* one spec does depend on a template's body —
+  `spec-016` §2.4 (`{handoff_line}`) and §4.2 key 18 (`notes`) choose behaviour by whether a type's
+  template has a `## Execution Notes` heading, and §2.4 listed `plan` among the templates without it.
+  The plan template change therefore needs a `spec-016` amendment (pending, below).
 - **Where the subsection goes:** task → end of `## Execution Notes`; bug → end of `## Triage & Execution Notes`
   (its closing running log); plan → the template has no running log (`## Handoff` is last), so it gains
   `## Execution Notes` closed by `### Retrospective`. Most plans already end that way by hand (for example
@@ -107,14 +110,37 @@ test/docs/workflow-md.test.ts` → **33 passed, 33**.
 Every AC is pinned by `test/core/retrospective-notes.test.ts` (AC 1 six cases, AC 2 four, AC 3 three) and the
 conformance suite (zero errors, exact warning set). Same-class check in the files touched: no other template or
 workflow phase claims the retrospective reads something it does not; the task template's existing comment ("Raw
-material for … the retrospective, not the retrospective itself") still holds beside the subsection. No pending
-amendments.
+material for … the retrospective, not the retrospective itself") still holds beside the subsection. Pending amendments: see
+*Review fixes* below.
 
 **Decisions for the approver:**
 - D1 — the plan template gains a `## Execution Notes` section (the AC's "equivalent closing section" did not exist;
-  `## Handoff` is a checklist, not a running log).
-- D2 — the outcome names `covered | element | restated | superseded` (+ `declined | needs-info`) are this task's
-  labels for dl-115's four prose outcomes; `task-272`'s read record should reuse them.
+  `## Handoff` is a checklist, not a running log). Two effects (review F1, `spec-016`): an `agent execute` run on a
+  plan gets the `## Execution Notes` `{handoff_line}` instead of the fallback line (§2.4, task-218's handoff line),
+  and its run record's `notes` key (§4.2 key 18, `notesField` / `executionNotesSection` in `src/agent/run-log.ts`)
+  can now be `<plan-id>#execution-notes` instead of always `none`. `executionNotesSection` ends the section at the
+  next level-1/2 heading, so `### Retrospective` lies inside it (`grep -n SECTION_END_RE src/agent/run-log.ts`).
+- D2 — the outcome labels `covered | element | restated | superseded` (+ `declined | needs-info`) are made
+  authoritative by a dated note on `dl-115` (pending amendment, below); `task-272`'s read record reuses them.
+
+### Review fixes (2026-10-07, coordinator review: approve with fixes)
+
+- **F1** — the design note's "no tech-spec governs template bodies" was false: `spec-016` §2.4 and §4.2 key 18
+  key on the `## Execution Notes` heading (`grep -n "Execution Notes" docs/04_memory/design/specs/spec-016-agent-execution.md`).
+  Corrected above; D1 names both effects; `spec-016` §2.4 moves `plan` to the templates with the section and gains
+  a dated Revision note (pending amendment). `grep -l "^## Execution Notes$" .wingfoil/memory/templates/*` →
+  `plan.md`, `release-line.md`, `release.md`, `task.md`.
+- **F2** — `c706fcbf`: `proposals.disposed` now reads "every item that is a proposal, and every consumer feedback
+  note (dl-163)", since a defect note is not a proposal; `additional-points`' description, the header reason and
+  `WORKFLOW.md`'s node follow; the test pins the opening clause. Version stays 1.4 (this branch's bump).
+- **D2** — `dl-115` gains a dated note naming the six labels (pending amendment).
+- Runs: `npx jest test/core/retrospective-notes.test.ts test/core/workflow-repository-conformance.test.ts
+  test/docs/workflow-md.test.ts test/agent test/docs` → 22 suites, **331 passed**, with both amendments in the
+  working tree; `npm run lint` → exit 0.
+
+**Pending amendments (approver)** — uncommitted in the worktree, for `memory amend`:
+- `spec-016-agent-execution` — `--reason "task-213: the plan template gains a ## Execution Notes section (dl-115 Q1 (A)), so §2.4 lists plan among the templates that have it; a run on a plan gets the Execution Notes handoff line and its run record's notes key can name the section. See the 2026-10-07 Revision note."`
+- `dl-115-retrospective-notes-written-during-the-release` — `--reason "task-213 review: the outcomes get fixed labels, covered, element, restated and superseded, plus declined and needs-info for a consumer feedback note (dl-163); every consumer note gets one, a defect note included. See the dated note under Q3 (x)."`
 
 ### Retrospective
 
