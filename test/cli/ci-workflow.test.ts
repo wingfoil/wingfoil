@@ -78,12 +78,14 @@ describe('ci workflow (task-140) — dl-076 (D): the packaging gate on every pus
     for (const job of Object.values(parsed.jobs)) expect(job.permissions).toBeUndefined();
   });
 
-  it('runs one job on ubuntu-24.04, the runner publish.yml’s gate uses', () => {
+  it('runs two jobs, the packaging gate and the e2e smoke (task-207), on ubuntu-24.04, the runner publish.yml’s gate uses', () => {
     const ci = read(CI_PATH).parsed;
     const publish = read(PUBLISH_PATH).parsed;
-    expect(Object.keys(ci.jobs)).toEqual(['packaging-gate']);
-    expect(ci.jobs['packaging-gate']?.['runs-on']).toBe('ubuntu-24.04');
-    expect(ci.jobs['packaging-gate']?.['runs-on']).toBe(publish.jobs.gate?.['runs-on']);
+    expect(Object.keys(ci.jobs)).toEqual(['packaging-gate', 'e2e-smoke']);
+    for (const job of Object.values(ci.jobs)) {
+      expect(job['runs-on']).toBe('ubuntu-24.04');
+      expect(job['runs-on']).toBe(publish.jobs.gate?.['runs-on']);
+    }
   });
 
   it('pins the same Node as publish.yml — equal `env.NODE_VERSION`, fed to setup-node, no cache', () => {
@@ -158,10 +160,49 @@ describe('ci workflow (task-140) — dl-076 (D): the packaging gate on every pus
 
   it('checks out without persisting credentials, and carries no registry credential', () => {
     const { raw, parsed } = read(CI_PATH);
-    const checkout = parsed.jobs['packaging-gate']?.steps.find((s) => s.uses?.startsWith('actions/checkout@'));
-    expect(checkout?.with?.['persist-credentials']).toBe(false);
+    for (const job of Object.values(parsed.jobs)) {
+      const checkout = job.steps.find((s) => s.uses?.startsWith('actions/checkout@'));
+      expect(checkout?.with?.['persist-credentials']).toBe(false);
+    }
     for (const secret of ['secrets.', 'NPM_TOKEN', 'NODE_AUTH_TOKEN', '_authToken', 'id-token']) {
       expect(raw).not.toContain(secret);
     }
+  });
+
+  /**
+   * task-207 (`dl-099` §4 (c), smoke part): the e2e smoke runs on every push and pull request, against
+   * the tarball `npm pack` makes — what a user installs — not the working tree. The staging rehearsal
+   * (`publish:staging`, a local registry) stays out of CI. The job inherits the workflow's `on:` and
+   * names no branch of its own (`dl-159`: `release/X.Y` lines run it too once `task-267` widens `on:`).
+   */
+  describe('the e2e-smoke job (task-207)', () => {
+    const job = () => read(CI_PATH).parsed.jobs['e2e-smoke'];
+    const runs = () => (job()?.steps ?? []).filter((s) => s.run !== undefined).map((s) => s.run!.trim());
+
+    it('packs the candidate, installs that tarball into a throwaway prefix, and smokes the installed bin', () => {
+      expect(runs()).toEqual([
+        'npm ci',
+        'mkdir -p "$RUNNER_TEMP/pack"\nnpm pack --pack-destination "$RUNNER_TEMP/pack"',
+        'npm install --global --prefix "$RUNNER_TEMP/wingfoil" "$RUNNER_TEMP"/pack/wingfoil-*.tgz',
+        'node scripts/e2e-smoke.cjs --expect-version "$(node -p "require(\'./package.json\').version")" --expect-commit "$GITHUB_SHA" -- "$RUNNER_TEMP/wingfoil/bin/wingfoil"',
+      ]);
+    });
+
+    it('sets up the same Node as the packaging gate, without a cache', () => {
+      const setup = job()?.steps.find((s) => s.uses?.startsWith('actions/setup-node@'));
+      expect(setup?.with?.['node-version']).toBe('${{ env.NODE_VERSION }}');
+      expect(setup?.with?.['package-manager-cache']).toBe(false);
+    });
+
+    it('declares no trigger, condition or dependency of its own, names no branch, and never stages', () => {
+      const smoke = job() as unknown as Record<string, unknown>;
+      expect(smoke.if).toBeUndefined();
+      expect(smoke.needs).toBeUndefined();
+      for (const step of job()?.steps ?? []) expect(step.if).toBeUndefined();
+      const text = JSON.stringify(smoke);
+      expect(text).not.toMatch(/\bmain\b/);
+      expect(text).not.toContain('publish:staging');
+      expect(text).not.toContain('verdaccio');
+    });
   });
 });
