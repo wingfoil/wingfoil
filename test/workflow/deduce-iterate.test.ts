@@ -13,7 +13,7 @@
  *   never closes an earlier phase.
  * - AC 5: §4.10 optional skip; §4.11 archived elements and `abandoned: true`.
  */
-import { deduceWorkflowState, type DeductionSnapshot, type InstanceDeduction } from '../../src/core';
+import { deduceWorkflowState, NO_ITERATION_NOTE, type DeductionSnapshot, type InstanceDeduction } from '../../src/core';
 import { MemoryYaml } from '../../src/memory/schema';
 import { parseYaml } from '../../src/validation';
 import { Workflow } from '../../src/workflow/schema';
@@ -166,6 +166,7 @@ phases:
       vacuous: true,
       iterations: { eligible: 0, entered: 0, complete: 0, late: 0, note: 'no elements matched the iterate_over filter' },
     });
+    expect(NO_ITERATION_NOTE).toBe('no elements matched the iterate_over filter');
     expect(keys(entry)).toEqual(['rel.wrap@release:r1']);
   });
 });
