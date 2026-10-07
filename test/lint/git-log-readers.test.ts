@@ -10,6 +10,13 @@
  * fails, with the file and line, on one whose next argument is not `'--no-show-signature'`, so a new
  * reader without the flag fails here before it reaches a user who signs.
  *
+ * **Write the flag as the literal string `'--no-show-signature'`, as the argument right after `'log'`.**
+ * The rule is textual: a constant (`'log', NO_SIGNATURE, …`) or a spread holding the flag is flagged as a
+ * missing flag. That is safe by design — the gate can only vouch for what it can read — so authors must
+ * not introduce one. Known blind spot: an argument list built dynamically (string concatenation, a
+ * template literal assembling `log`, a shell command string) holds no `'log'` token and is not seen; a
+ * reader written that way escapes the gate and must be avoided.
+ *
  * The other ways git could print a commit are pinned too: a `'show'` must read a blob
  * (`` `${rev}:${path}` ``, which prints no signature), and the porcelain log variants
  * (`whatchanged`, `shortlog`, `reflog`) are absent. `rev-list` is not listed: it does not read
