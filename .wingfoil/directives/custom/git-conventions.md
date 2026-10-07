@@ -6,13 +6,13 @@ kind: custom
 title: "Git conventions: branches, sync, tags, subjects, identity, id allocation, attribution"
 tags: [custom, git, process, security]
 scope: global
-version: "1.1"
+version: "1.2"
 ref: [P3.5, P3.7, REQ-SEC-01, REQ-SYS-08]
 ---
 
 # Directive — Git conventions
 
-**Date:** 2026-10-06
+**Date:** 2026-10-07
 
 Custom WingFoil rule. Applies to **every role**: whoever writes a commit or names a branch in this
 repository — a `developer` on a task branch, the `approver` whose `approve` commit an agent types, a
@@ -30,6 +30,8 @@ directive is where they are met; each decision-log is where its rule is argued, 
 - `dl-094-one-author-identity-per-act` — whose identity an act carries (§5);
 - `dl-101-id-allocation-across-refs` §1 — allocating a Memory id (§6);
 - `dl-117-ai-attribution-policy` — AI co-authorship (§7);
+- `dl-158-decide-whether-git-conventions-section-7-keeps-the-two-attribution-rules-task-256-wrote-beyond-dl-117-and-the-approver-s-rulings-which-team.agents-entry-signs-and-what-an-entry-without-an-email-writes`
+  — which `team.agents` entry signs, and that the signing entry declares an email (§7);
 - `bug-236-a-wingfoil-commit-amended-by-hand-with-a-separate-co-authored-by-paragraph-loses-its-wingfoil-version-trailer-and-reads-it-into-the-reason-block` — amending a tool-written commit (§8); the mechanism it protects is
   `dl-111-tool-signature-in-commits` (the `WingFoil-Version:` trailer) and `dl-067-reason-trailer-contract`
   (the `Reason:` block).
@@ -120,17 +122,16 @@ rule; this clause only keeps a test identity from leaking into it.
 5. **Agents do not allocate in parallel worktrees.** They report the elements they propose, and one
    orchestrating session files them.
 
-## 7. AI attribution (`dl-117` Q1 (B), Q2 (c))
+## 7. AI attribution (`dl-117` Q1 (B), Q2 (c); `dl-158` Rule 1 (a), Rule 2 (ii))
 
 - **Which commits.** Every commit whose content an agent produced, in whole or in part — Memory
   operations performed on the approver's instruction included — carries AI co-authorship, **except
   `approve` and `reject` commits**: those record the approver's decision and carry no AI co-author even
   when an agent typed them (`dna.yaml` declares every agent `approval_authority: false`).
 - **Which name.** The `Co-Authored-By:` identity is the agent entry declared in `dna.yaml`
-  `team.agents`, written as its `name` and `email`: `Co-Authored-By: <name> <<email>>` (`bug-240`). When
-  `team.agents` declares more than one entry, it is the entry the running agent executes as. A separate
-  `AI-Model:` trailer, in the same trailer paragraph, carries the model identifier the running agent
-  reports. A commit an agent co-authors ends with this trailer paragraph, the values read from
+  `team.agents`, written as its `name` and `email`: `Co-Authored-By: <name> <<email>>` (`bug-240`).
+  A separate `AI-Model:` trailer, in the same trailer paragraph, carries the model identifier the
+  running agent reports. A commit an agent co-authors ends with this trailer paragraph, the values read from
   `dna.yaml` (`wingfoil dna show team`), never typed from memory:
 
   ```
@@ -138,13 +139,24 @@ rule; this clause only keeps a test identity from leaking into it.
   AI-Model: <the model identifier the running agent reports>
   ```
 
-  If the entry declares no `email`, omit the `Co-Authored-By:` line and keep `AI-Model:`.
-- **Which email** (approver ruling F1, `task-256`). `email` is optional. By default it is the address
-  the agent's vendor publishes for co-authorship (for Claude, `noreply@anthropic.com`). A project may
+- **Which entry signs** (`dl-158` Rule 1 (a)). The entry `agent execute` launches signs that agent's
+  commits: its `adapter` resolves it (`spec-016`). A hand session signs with the entry whose `name` is
+  the agent's own; when no entry has that name, it signs with the first entry and says so in the commit
+  body, naming the entry it used.
+- **The signing entry declares an email** (`dl-158` Rule 2 (ii)). Every commit an agent co-authors keeps
+  its `Co-Authored-By:` line (`dl-117` Q1 (B)); there is no form of it without an address. `dna.yaml`
+  refuses an entry that declares an `adapter` but no `email`. A hand session whose signing entry has no
+  `email` declares one first (`wingfoil dna update team.agents.<name> --entry-email <address>`, its own
+  commit) and only then commits. An entry that signs nothing yet may still omit it (approver ruling F1).
+- **Which email** (approver ruling F1, `task-256`). By default it is the address the agent's vendor
+  publishes for co-authorship (for Claude, `noreply@anthropic.com`). A project may
   instead trace every agent under one account of its own: a machine account, in GitHub's id-qualified
   noreply form `<id>+<login>@users.noreply.github.com`, or any address the project owns. `dna.yaml`
   refuses a bare `<login>@users.noreply.github.com`: an unregistered login can be claimed by anyone, who
-  would then be credited with every commit naming it.
+  would then be credited with every commit naming it. It also refuses, through the same rule, every
+  identity the attribution audit rejects (`bug-261`): an empty or blank `name`, and an `email`
+  on an RFC 2606 reserved top-level domain (`.test`, `.example`, `.invalid`, `.localhost`) or carrying
+  git's guessed `.(none)` domain.
 - **Who applies it.** Hand sessions — an agent writing commits with `git commit` — apply this section
   from `task-256-give-team.agents-an-email-and-state-the-intake-prefix-and-on-main-operations-in-git-conventions`'s
   merge on, in place of the model-named trailer they wrote before. A commit written by `wingfoil`
@@ -167,5 +179,6 @@ be the last one, and a reader of the `Reason:` block (`dl-067-reason-trailer-con
   trailer to add.
 
 > Source: `dl-119-a-git-conventions-directive` (Actions 2–4), `dl-117-ai-attribution-policy` (Action 2),
+> `dl-158` (Action 2),
 > `dl-101-id-allocation-across-refs` (Action 2). Features P3.5, P3.7; REQ-SEC-01 (every state change
 > carries a git identity), REQ-SYS-08 (bindings by role).

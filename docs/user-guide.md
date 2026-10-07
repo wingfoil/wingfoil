@@ -169,7 +169,8 @@ wingfoil dna add team.agents --value claude --entry-executes_as developer,review
 **Agent commit identity** (Unreleased (v0.3)). An agent entry may also carry an `email`; with its
 `name`, it is the identity written in the `Co-Authored-By: <name> <<email>>` trailer of the commits the
 agent co-authors (WingFoil's own `git-conventions` directive adds an `AI-Model:` trailer with the model
-identifier). The field is optional, and there are two ways to fill it:
+identifier). The field is optional unless the entry declares an `adapter` (below), and there are two
+ways to fill it:
 
 - **The vendor's address (the default).** Use the address the agent's vendor publishes for
   co-authorship — for Claude, `noreply@anthropic.com`:
@@ -183,7 +184,11 @@ identifier). The field is optional, and there are two ways to fill it:
   `<login>@users.noreply.github.com` is refused: a login nobody has registered can be claimed by anyone,
   who would then be credited with every commit that names it.
 
-An agent's `name` may not contain `<`, `>` or a line break, since it is written into the trailer.
+An agent's `name` may not be empty or blank, nor contain `<`, `>` or a line break, since it is written
+into the trailer. An `email` on a top-level domain RFC 2606 reserves (`.test`, `.example`, `.invalid`,
+`.localhost`), or carrying git's guessed `.(none)` domain, is refused: no mailbox exists there, and
+WingFoil's attribution audit treats such an identity as unattributed. The `email` is required on an entry that declares an `adapter`: that
+agent can be launched, and every commit it co-authors names it.
 
 ### 4.3 Modules, stacks, paths
 

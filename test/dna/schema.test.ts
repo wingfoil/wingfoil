@@ -118,7 +118,8 @@ describe('DnaYaml — team.agents[].adapter (task-138, spec-016 §2.1)', () => {
       ...MINIMAL_VALID,
       team: {
         members: [{ name: 'X', roles: ['developer'] }],
-        agents: [{ name: 'claude', executes_as: ['developer'], ...agent }],
+        // An agent with an adapter must declare an email (dl-158 Rule 2 (ii), task-260).
+        agents: [{ name: 'claude', email: 'noreply@anthropic.com', executes_as: ['developer'], ...agent }],
         roles: [{ name: 'developer' }, { name: 'approver' }],
       },
     };
