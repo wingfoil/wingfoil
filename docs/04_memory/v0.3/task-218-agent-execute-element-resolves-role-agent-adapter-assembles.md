@@ -196,8 +196,8 @@ Gates (pending amendments on disk; load average 38–61, `uptime` around the run
   `d6d8c704`) had 4 failures: the roster, the name-resolvability finding, and `query-latency` /
   `resource-latency` at load ≈96; both latency suites passed in the second run.
 - `npm run lint` 0; `npx tsc --noEmit -p tsconfig.json` 0; `npx tsc -p tsconfig.build.json --noEmit` 0;
-  `npm run docs:api` 0; `node scripts/check-governance.cjs --base 1ce84a54` → 3 `wf()` commits, 0
-  findings.
+  `npm run docs:api` 0; `node scripts/check-governance.cjs --base 1ce84a54` → 3 `wf()` commits at that point (6 after submit
+  and the bug syncs), 0 findings.
 
 ### review (reviewer, self)
 
@@ -212,13 +212,14 @@ Gates (pending amendments on disk; load average 38–61, `uptime` around the run
   `issues` detail line. `docs/cli-reference.md`'s `--dry-run` row and *Git side effects* bullet list
   `agent execute`, as spec-008 §2/§11 now do.
 - **Unasserted (T1):** §3.7's "git identity missing" row is asserted on the CLI only (the in-process
-  suite cannot isolate git's global config); REQ-PERF-01's budget is task-228's AC.
+  suite could set `GIT_CONFIG_GLOBAL` in `process.env`, which reaches the spawned git, but does not);
+  REQ-PERF-01's budget is task-228's AC.
 
 **Pending amendments (approver)** — uncommitted in the worktree, proposed `--reason`s:
-- `spec-016-agent-execution`: "task-218: §2.1 requires email on an agents entry that declares adapter (dl-158 Rule 2 (ii), task-260) and reports every entry under .wingfoil/agents/ that is not an adapter as W_ADAPTER_IGNORED where the tree is listed (bug-290); §3.2 gives the default-role warning text and states the selected entry signs the agent's commits (dl-158 Rule 1 (a)); §3.3 step 2 reads the workflow registry only when a step is resolved, step 8 names what is printed, and a paragraph gives the --dry-run launch plan; §8's agentExecute row is registered."
-- `spec-008-cli-grammar`: "task-218: section 2's --dry-run row lists agent execute and states its plan, the launch without message or diff because the commit records the agent's exit; section 11's committed-HEAD row names agent execute."
+- `spec-016-agent-execution`: "task-218: §2.1 requires email on an agents entry that declares adapter (dl-158 Rule 2 (ii), task-260) and reports every entry under .wingfoil/agents/ that is not an adapter as W_ADAPTER_IGNORED where the tree is listed (bug-290); §3.2 gives the default-role warning text and states the selected entry signs the agent's commits (dl-158 Rule 1 (a)); §3.3 step 2 reads the workflow registry only when a step is resolved, refuses a duplicate adapter name before any resolution and leaves roles.yaml to the context builder at step 7, step 8 names what is printed, step 11 declares that the pre-flight server reads the working tree's dna.yaml at start-up (spec-014 §1), and a paragraph gives the --dry-run launch plan; §8's agentExecute row is registered."
+- `spec-008-cli-grammar`: "task-218: section 2's --dry-run row lists agent execute and states its plan, the launch without message or diff because the commit records the agent's exit; section 11's committed-HEAD row names agent execute with its one declared exception, the MCP pre-flight server's start-up read of the working tree's dna.yaml (spec-014 §1); section 6 drops its interim sentence, says a warning raised during a command is written when raised (bug-202), and pins the default-role, W_ADAPTER_IGNORED and unknown-field warning texts."
 - `spec-005-cli-command-contract`: "task-218: section 3.2 says warnings, each its own document, may precede the error object on stderr and accompany exit 0, as task-169 left to the task implementing spec-016 section 3.4 (bug-202)."
-- `spec-009-validation-strategy`: "task-218: section 2's unknown-field warning is raised through a warning sink the CLI renders in the active format instead of being suppressed under json and yaml, which the code never did (bug-202)."
+- `spec-009-validation-strategy`: "task-218: section 2's unknown-field warning is raised through a warning sink the CLI renders in the active format instead of being suppressed under json and yaml, which the code never did, and its code listing calls reportWarning (bug-202)."
 - `spec-006-core-domain-api`: "task-218: section 3's agentExecute row is registered, so its module cell loses planned, cell for cell with spec-016 section 8."
 - `spec-004-mcp-surface-contract`: "task-218: section 4.1 lists agent.execute, the Tool spec-016 section 7 schedules for v0.4 that refuses every call until v1.0, so section 4.2's parity rule has its pair."
 
@@ -252,7 +253,50 @@ Gates (pending amendments on disk; load average 38–61, `uptime` around the run
 - The MCP pre-flight uses the SDK client; the fake agent (task-200) has its own hand-written client —
   two clients of one protocol in the repo.
 
-**Merge-order notes.** 218 merges after 204 (both amend spec-005/008 and `docs/cli-reference.md`, and
+**Merge-order notes.** task-213 also amends spec-016 (§2.4's template list: `plan` gains `## Execution
+Notes`) and merges after 218: its amendment is recorded after this one. 218 merges after 204 (both amend spec-005/008 and `docs/cli-reference.md`, and
 both touch `CORE_MODULES` rosters: `production-registry`, `parity`, `read-only-agent-channel`, the
 dry-run table count 15). `src/cli/registrar.ts` gains the warning sink around every operation — any B3
 task editing the registrar's call site conflicts there. spec-016 is touched by no other B3 task.
+
+### Review fixes (independent review: approve with fixes, 2026-10-08)
+
+Status stays `in-review`; no re-submit.
+- **F1 (a)** — spec-016 §3.3 step 2 no longer says `roles.yaml` is loaded there: the context builder
+  reads it at step 7, which is why a missing `roles.yaml` is `INVALID_CONTEXT` (pending amendment).
+- **F1 (b)** — a name in both `built-in/` and `custom/` is now refused at step 2, before the element,
+  role and agent: `duplicateAdapterRefusal` (`src/agent/discovery.ts`, `loadAdapter`'s refusal shape),
+  called right after the adapter-tree listing. Test: `test/core/agent-execute.test.ts` › "a name in both
+  built-in/ and custom/ is refused at step 2, before a missing element" (element `task-999-absent`).
+- **F2** — the pre-flight's server is `wingfoil mcp`, whose start-up check reads the working tree's
+  `dna.yaml` (`spec-014` §1); that is how the MCP_UNREACHABLE CLI case is provoked. Declared, behaviour
+  unchanged: spec-016 §3.3 step 11 and the spec-008 §11 row name the exception (pending amendments).
+- **F3** — new tests: the registrar renders a warning raised mid-operation before the refusal
+  (console and json, `test/cli/registrar.test.ts` › "the warning sink"); step 8's loop with a dangling
+  binding (`test/core/agent-execute.test.ts`); a stub stdio server answering `prompts/get` with no
+  messages → MCP_UNREACHABLE with cause `the developer-session prompt returned no context text`
+  (`test/agent/execute.test.ts`); no surface names `host` (`src/cli.ts`, `src/cli/registrar.ts`,
+  `src/mcp/registrar.ts`).
+  Coverage against the real base `1ce84a54` (reviewer's figures for All files; `src/agent` from the
+  W3 B2 gate run, `devloop-kit/gate-w3b2-cov.log`, written 13:57 after the last `src/agent` change
+  before the base, `e629c709` 13:51 — `git log -3 1ce84a54 -- src/agent`):
+
+  | | base `1ce84a54` | before fixes (`d6d8c704`) | after fixes |
+  |---|---|---|---|
+  | All files | 99.29 \| 97.25 \| 97.4 \| 99.71 | 99.14 \| 96.86 \| 97.21 \| 99.61 | 99.16 \| 96.87 \| 97.28 \| 99.66 |
+  | `src/agent` | 99.04 \| 96.36 \| 100 \| 99.42 | 97.47 \| 92.94 \| 98.01 \| 98.47 | 97.68 \| 93.08 \| 98.07 \| 98.87 |
+
+  Lines left uncovered in `src/agent/execute.ts`: 144 (a template token other than the two names —
+  the manifest validator admits none, defensive), 325 (`processHasTerminal`, the process's own stdio:
+  every test injects the answer), 343 and 401 (rethrow of an error that is not a `ValidationError` /
+  `RevisionError`, a defect path). `src/agent/discovery.ts:201` is the same kind of rethrow.
+- **F4** — spec-009 §2's listing calls `reportWarning`; spec-008 §6 drops the "until task-218"
+  sentence and pins the default-role, `W_ADAPTER_IGNORED` and unknown-field warning texts. The
+  proposed reasons above are updated. The new §6 row first named the adapter directory as a backticked
+  path, which `test/docs/name-resolvability.test.ts` flagged (no such directory in this repository):
+  reworded to "the adapter tree".
+- Gates after the fixes (pending amendments on disk): `npm run test:coverage` → 304 suites, 5810 passed
+  and 1 failed (the name-resolvability finding above, fixed after the run: `npx jest
+  test/docs/name-resolvability.test.ts` → 11 passed; `npx jest test/docs` → 72 passed). `npm run lint`,
+  both `tsc`, `npm run docs:api` exit 0; `node scripts/check-governance.cjs --base 1ce84a54` → 6 `wf()`
+  commits, 0 findings. Code and tests: `28f8df41`.
