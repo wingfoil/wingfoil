@@ -166,7 +166,7 @@ wf({type}): {verb} {id1}, {id2}[ [{s0} → {s1}( → {sN})*]]
 | verb        | emitted by                                                                 | bracket |
 |-------------|----------------------------------------------------------------------------|---------|
 | `add`       | `memory add`                                                               | none |
-| `submit`    | `memory submit`                                                            | none (`dl-054`; kept over `dl-106` W1 (a), ruling R20) |
+| `submit`    | `memory submit`                                                            | none (`dl-054`; kept over `dl-106` W1 (a), ruling R20); the content it carries is declared in the body (below) |
 | `approve`   | `memory approve`; a `set_state` in a phase that declares `approval:`       | `[from → to]` |
 | `reject`    | `memory reject`; a `fallback.set_state` routed by a reject                 | `[from → to]` |
 | `deprecate` | `memory deprecate`                                                         | `[from → deprecated]` |
@@ -176,6 +176,32 @@ wf({type}): {verb} {id1}, {id2}[ [{s0} → {s1}( → {sN})*]]
 | `amend`     | `memory amend` (`dl-108`)                                                  | `[s → s]` |
 | `park`      | `memory park` (`dl-110`)                                                   | `[from → to]`, `to` the type's `returns.<from>` (this repository's `task`: `[in-progress → backlog]`) |
 | `assign`    | `element.set_release` (below)                                              | none |
+
+**`memory submit` declares the content it carries** (`dl-106` W1 (a), with `dl-054` kept for the
+subject, ruling R20; `task-209`). A submit commits the document as the author left it
+(`spec-010` § Field-write ownership), so its commit may carry more than the state move. When it does,
+the body is one line naming that content:
+
+```
+wf({type}): submit {id}
+
+Carries content: {item}, {item}
+```
+
+Each item is what `describeDocumentChanges` reports between the document committed at `HEAD` and the
+working tree, both first rendered by the submit's own edit, so `status` and a cleared
+`rejection_reason` never count, and both with line endings normalized (CRLF → LF), so a working tree
+that `core.autocrlf` keeps in CRLF over an LF blob carries nothing: `frontmatter field '<name>'` per
+changed field, sorted by name, then `the frontmatter text (comments or formatting)` when only comments
+or formatting moved, then `the body`; `the file content` when the two differ in none of those parts
+(`describeDocumentChanges`'s fallback). When git, after its own line-ending filters
+(`core.autocrlf`, `.gitattributes`), would store the document with line endings other than the
+committed copy's, `the line endings` is added after every other item — alone when nothing else
+changed, so a CRLF conversion is declared whether or not it comes with a content edit. A pure transition has no body. The key holds a space, so the line is not
+trailer-shaped: no reader takes it for an `Approver:`, a `Reason:` or the build signature. Items are
+separated by `, `. In an item, a control character or line break, and a comma, are written as the
+text `\u{XXXX}`, and a backslash as `\\`, so an item can neither add a line nor read as two items or
+as an escape it does not hold. The line is never written next to an `Approver:` or `Reason:` body.
 
 **Which verb a `set_state` emits** (`spec-003` verb table). `approve` when the phase declares
 `approval:`. Otherwise `finalize` when the target is the last state of the type's `sequence`.
@@ -1101,3 +1127,9 @@ word *precedence* is §2's, in the `--version` row ("Takes precedence over all o
 precedence"; that note is left as written, and is corrected here: §1 gives a global its placement and
 §2 gives `--version` its precedence. No behaviour or rule changed. Edited in place without a supersede
 or a state change (`dl-047`).
+
+**Revision (2026-10-06, `task-209-declare-submit-commit-what-content-carries-make-templates`) — the
+`submit` body.** `dl-106` W1 (a), Action 1: §2's operation list gains the paragraph "`memory submit`
+declares the content it carries", and the `submit` row of the verb table points to it. The subject is
+unchanged and keeps no bracket (`dl-054`, release-planning ruling R20). Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-209`'s review.
