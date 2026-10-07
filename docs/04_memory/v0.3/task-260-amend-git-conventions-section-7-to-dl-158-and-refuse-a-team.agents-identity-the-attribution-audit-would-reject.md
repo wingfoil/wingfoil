@@ -166,7 +166,40 @@ an `email` on an RFC 2606 reserved domain, an identity the attribution audit (`i
   test's `not.toContain`, besides this task file); `email` "optional" in the dna.yaml comment and the directive's "Which email" bullet both
   corrected.
 - **Pending amendments (approver):**
-  - `spec-002-dna-yaml-schema` — Zod listing of `AgentEntry` + Revision (2026-10-07). Proposed `--reason`:
-    "task-260 (bug-261, dl-158 Rule 2 (ii)): AgentEntry refuses a blank name and an email on an RFC 2606
-    reserved top-level domain through the rule isValidAttribution applies, and an entry with an adapter must
-    declare an email. Recorded as a dated Revision note."
+  - `spec-002-dna-yaml-schema` — Zod listing of `AgentEntry` + Revision (2026-10-07). Proposed `--reason`
+    (updated by the review fixes below):
+    "task-260 (bug-261, dl-158 Rule 2 (ii)): AgentEntry refuses a blank name and every email the attribution
+    audit rejects (an RFC 2606 reserved top-level domain, git's guessed .(none) domain, a parenthesis in the
+    top-level domain) through the rule isValidAttribution applies, and an entry with an adapter must declare
+    an email. Recorded as a dated Revision note."
+
+### Review fixes (2026-10-07, coordinator review: approve with fixes)
+
+- **F1 (claim-evidence).** The notes, `src/validation/identity.ts`, `src/memory/audit.ts` and the spec-002 Zod
+  comment said an agent identity `dna.yaml` accepts is one the audit accepts; it was false: `AgentEntry` accepted
+  `Claude <root@host.(none)>` and `Claude <a@b.c(d)>`, which `isValidAttribution` refuses (git's `.(none)` marker
+  and the audit's address shape, which bars a parenthesis in the top-level label). Made true rather than narrowed:
+  - red: three rows added to the agreement table (`root@host.(none)`, `root@host.(none).com`, `a@b.c(d)`), two
+    field-named refusals for the marker, one for the parenthesis, one "one issue per refused email" test.
+    `npx jest test/dna/agent-identity-placeholder.test.ts` → 6 failed, 25 passed (31). Commit `1f6fdc92`.
+  - green: the audit's address regex and `.(none)` marker moved from `src/memory/audit.ts` to
+    `src/validation/identity.ts`; `isPlaceholderIdentity` is replaced by `attributionEmailIssue(email)`
+    (`guessed-domain` | `malformed` | `reserved-domain` | `null`) and `isAttributableIdentity(name, email)`.
+    `isValidAttribution` is now `isConfiguredIdentity(trimmed…)` then `isAttributableIdentity(trimmed…)` and
+    nothing else; `AgentEntry`'s `email` refuses every `attributionEmailIssue` with a message per reason (skipped
+    when `AGENT_EMAIL_RE` already refused, so one issue per email). An agent email has no whitespace
+    (`AGENT_EMAIL_RE`), so the audit's trims are no-ops on it, and the name rule is the same blank check: by
+    construction, an identity the schema accepts passes the audit. The agreement table shows agreement on its
+    rows, not equivalence: the schema is stricter by design (angle brackets, bare GitHub noreply logins).
+    The single-definition test now also requires `'.(none)'` to appear only in `src/validation/identity.ts`.
+  - wording aligned: directive §7 "Which email" (still 1.2, bumped once on this branch), `dna.yaml` comment (still
+    1.8), user guide §4.2, CLI reference `team.agents` row, spec-002 Zod comment and Revision note (pending).
+- **F2.** `docs/user-guide.md` §4.2 said "The field is optional"; it now says "optional unless the entry declares
+  an `adapter` (below)".
+- Gates after the fixes (commit `40f5c1dc`): touched suites `npx jest test/dna test/validation test/memory
+  test/directives test/lint/version-bump.test.ts test/docs/name-resolvability.test.ts
+  test/core/dna-agent-adapter-runs.test.ts test/cli/derived-option-namespace.test.ts test/docs/cli-reference.test.ts`
+  → 57 suites, 1261/1261; `test/lint/lint-clean.test.ts` + `typecheck-clean.test.ts` 6/6; `npm run lint`,
+  `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit`, `npm run docs:api` all exit 0;
+  `src/validation/identity.ts` 100/100/100/100 (`npx jest test/validation/identity.test.ts test/dna test/memory/audit
+  --coverage --collectCoverageFrom=src/validation/identity.ts …`). Status stays `in-review` (no re-submit).
