@@ -202,6 +202,44 @@ phases:
     expect(entry.phases[0]).toEqual({ phase: 'loop', state: 'current', iterations: { eligible: 1, entered: 1, complete: 1, late: 0 } });
   });
 
+  it('review F1 (probe P2): only a phase before the sub\'s current phase makes a candidate entered', () => {
+    const dev2 = wf(`name: dev2
+kind: sub
+element: task
+phases:
+  - name: kickoff
+  - name: start
+    actions:
+      - element.set_state(in-progress)
+  - name: finish
+    actions:
+      - element.set_state(done)
+`);
+    const rel2 = wf(`name: rel2
+kind: main
+element: release
+phases:
+  - name: loop
+    include: dev2
+    iterate_over: task
+    where: { status: [ backlog ] }
+  - name: wrap
+    actions:
+      - element.set_state(releasing)
+`);
+    // `start` is complete for the in-progress task, but `kickoff` (a checkpoint with no record) is the sub's
+    // current phase: nothing before it is complete, so the task is not entered, and outside the entry filter
+    // it is ignored.
+    const entry = first(snapshot([rel2, dev2], [task('task-1-a', 'in-progress'), release('r1', 'in-development'), plan('p1', 'rel2', 'r1')]));
+    expect(entry.phases[0]).toEqual({
+      phase: 'loop',
+      state: 'complete',
+      vacuous: true,
+      iterations: { eligible: 0, entered: 0, complete: 0, late: 0, note: NO_ITERATION_NOTE },
+    });
+    expect(keys(entry)).toEqual(['rel2.wrap@release:r1']);
+  });
+
   it('the phase is complete when no candidate is eligible or entered, and the workflow moves on', () => {
     const entry = first(snapshot([CYCLE, DEV], [task('task-8-finished', 'done', { tags: ['v1'] }), release('r1', 'in-development'), plan('p1', 'cycle', 'r1')]));
     expect(entry.phases).toEqual([{ phase: 'loop', state: 'complete', iterations: { eligible: 0, entered: 0, complete: 1, late: 0 } }]);
@@ -472,6 +510,29 @@ phases:
       { phase: 'sweep', state: 'complete' },
       { phase: 'last', state: 'current' },
     ]);
+  });
+
+  it('review F3: a selection matching nothing whose step created nothing is vacuous, even beside a memory.add', () => {
+    const addSweep = wf(`name: add-sweep
+kind: main
+phases:
+  - name: extra
+    optional: true
+  - name: sweep
+    where: { type: bug, status: [ open ] }
+    actions:
+      - 'memory.add(type: task)'
+  - name: last
+`);
+    // The step created no element (no linkage before task-203): `created` is empty, so the completion is
+    // vacuous and does not skip `extra`. A step that created an element is not vacuous (deduce.ts, evaluate()).
+    const entry = first(snapshot([addSweep], [plan('p1', 'add-sweep')]));
+    expect(entry.phases).toEqual([
+      { phase: 'extra', state: 'current' },
+      { phase: 'sweep', state: 'pending' },
+      { phase: 'last', state: 'pending' },
+    ]);
+    expect(keys(entry)).toEqual(['add-sweep.extra', 'add-sweep.last']);
   });
 
   it('a vacuous later completion does not skip it', () => {

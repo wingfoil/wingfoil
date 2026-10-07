@@ -683,7 +683,7 @@ class Deducer {
     return {
       complete,
       // A selection that matches nothing, with no other evidence than an empty `created` (§4.7).
-      vacuous: complete && selection && kinds.every((kind) => kind === 'selection' || kind === 'created'),
+      vacuous: complete && selection && leaf.step.created.length === 0 && kinds.every((kind) => kind === 'selection' || kind === 'created'),
       liveQuery: selection,
       frontier: [leaf.step],
       diagnostics: leaf.diagnostics,
