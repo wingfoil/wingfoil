@@ -405,3 +405,58 @@ describe('exit-code matrix (REQ-INT-04, task-012) — dispatch routes 0/1/2 thro
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('an operation\'s own console rendering and a core hint (task-220, spec-016 §6, spec-005 §3.1)', () => {
+  const MODULES: CoreModule[] = [
+    {
+      name: 'agent',
+      operations: {
+        agentShow: {
+          name: 'agentShow',
+          mutates: false,
+          fn: async () => coreOk({ id: 'x/red/1' }),
+          renderConsole: (value) => `id: ${(value as { id: string }).id}\n`,
+        },
+        agentHint: {
+          name: 'agentHint',
+          mutates: false,
+          fn: async () => coreErr({ code: 'NOT_FOUND', message: 'run not found: x/red/2', hint: 'commit the run log' }),
+        },
+      },
+    },
+  ];
+  let exitSpy: jest.SpyInstance;
+  let stdoutSpy: jest.SpyInstance;
+  let stderrSpy: jest.SpyInstance;
+  const written = (spy: jest.SpyInstance): string => spy.mock.calls.map(([chunk]) => String(chunk)).join('');
+  const command = (verb: string): CliCommand =>
+    findCommand(buildCliCommands(MODULES, { resolveRoot: () => '/fixture-root', buildParams: () => ({}) }), 'agent', verb);
+
+  beforeEach(() => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    exitSpy.mockRestore();
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+
+  it('console prints renderConsole\'s text', async () => {
+    await command('show').run('console');
+    expect(written(stdoutSpy)).toBe('id: x/red/1\n');
+  });
+
+  it('json ignores renderConsole and prints the payload', async () => {
+    await command('show').run('json');
+    expect(written(stdoutSpy)).toBe('{"id":"x/red/1"}\n');
+  });
+
+  it('a CoreError hint is the hint: line under the error, and the exit code stays 1', async () => {
+    await command('hint').run('console');
+    expect(written(stderrSpy)).toBe('error: run not found: x/red/2\nhint: commit the run log\n');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+});

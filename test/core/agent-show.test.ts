@@ -8,7 +8,7 @@
  * line, exit codes) are pinned by `test/cli/agent-show.integration.test.ts`.
  */
 import { execFileSync } from 'node:child_process';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { NOT_REPORTED, recordRun, serializeRunRecord, type RunRecord } from '../../src/agent';
@@ -305,6 +305,16 @@ describe('task-220 — agent show <run-id> (spec-016 §6)', () => {
       expect(result.error).toEqual({ code: 'VALIDATION', message: 'dna.yaml declares no run log (paths.runs)' });
     });
 
+    it('a dna.yaml at HEAD that does not validate: VALIDATION, with its issues as details', async () => {
+      writeFixtureFile(repo, '.wingfoil/dna.yaml', 'version: 1\n');
+      commitAll(repo, 'an invalid dna.yaml');
+      const result = await show(repo, `${ELEMENT_ID}/design/1`);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('VALIDATION');
+      expect(Array.isArray(result.error.details?.['issues'])).toBe(true);
+    });
+
     it('no dna.yaml at HEAD (here: written but never committed): NOT_FOUND, naming the file and the baseline', async () => {
       const fresh = makeTempGitRepo();
       try {
@@ -318,6 +328,20 @@ describe('task-220 — agent show <run-id> (spec-016 §6)', () => {
       } finally {
         removeTempDir(fresh);
       }
+    });
+
+    it('a history git cannot walk while it searches for the adding commit: IO, never a throw', async () => {
+      const seedTree = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD^{tree}'], { encoding: 'utf-8' }).trim();
+      const run = record();
+      recorded(repo, run);
+      // HEAD's own tree and blob stay readable; the seed commit's root tree, which `git log -S` must
+      // read to diff the seed commit, is gone.
+      rmSync(join(repo, '.git', 'objects', seedTree.slice(0, 2), seedTree.slice(2)));
+      const result = await show(repo, run.id);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('IO');
+      expect(result.error.message).toContain('git log');
     });
 
     it('an uninitialized project: the shared not-initialized refusal', async () => {
