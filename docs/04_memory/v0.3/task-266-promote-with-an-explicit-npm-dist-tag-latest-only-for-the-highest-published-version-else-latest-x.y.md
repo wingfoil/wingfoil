@@ -2,7 +2,7 @@
 id: task-266-promote-with-an-explicit-npm-dist-tag-latest-only-for-the-highest-published-version-else-latest-x.y
 type: task
 title: "Promote with an explicit npm dist-tag: latest only for the highest published version, else latest-X.Y"
-status: pending
+status: backlog
 release: "v0.3"
 kind: "feature"
 priority: "high"
