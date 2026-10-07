@@ -2,7 +2,7 @@
 id: "task-220-wingfoil-agent-show-run-id-prints-recorded-run"
 type: task
 title: "`wingfoil agent show <run-id>` prints one recorded run and the commit that added it"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "medium"
