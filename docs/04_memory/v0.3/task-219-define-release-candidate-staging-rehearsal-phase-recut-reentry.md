@@ -32,6 +32,14 @@ v0.2's gates found defects only when they ran. A candidate is any commit propose
 - **Features:** P4.1.
 - **Notes:** Proposal key: D10.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from the parallel-release-lines decision (2026-10-07):** `dl-159` (`in-discussion`, to be ratified before the
+  `v0.3.0` tag) opens `release/X.Y` maintenance lines beside `main`: patches land on `release/X.Y` and are merged
+  forward into `main` with `--no-ff`, never cherry-picked or back-merged; patch tags go on the pushed `release/X.Y`.
+  The `tag` phase's `pre: ["on-branch-is-main", …]` and `git.tag(…, on: main)` become a parametric base branch later
+  (`dl-159` A2.4, deferred to the v0.3 retrospective and `patch-v0.3.1`). Write the `staging-rehearsal` phase, the
+  re-cut re-entry rule and the no-identity check in terms of the candidate commit and the release's integration
+  branch, not `main` by name, so A2.4 changes one parameter; the `spec-015` Revision note this task adds does not
+  restate "tag on `main`" (`task-267` amends §3/§4 in B9).
 
 ## Execution Notes
 

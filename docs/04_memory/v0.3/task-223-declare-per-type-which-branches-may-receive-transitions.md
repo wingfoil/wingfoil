@@ -30,6 +30,15 @@ Branch conventions (`task` transitions on `task/*`, `dl-014` G1; releases on `ma
 - **Features:** P1.13.
 - **Notes:** Proposal key: C25.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from the parallel-release-lines decision (2026-10-07):** `dl-159` (`in-discussion`, to be ratified before the
+  `v0.3.0` tag) opens `release/X.Y` maintenance lines beside `main`: patches land on `release/X.Y` and are merged
+  forward into `main` with `--no-ff`, never cherry-picked or back-merged; patch tags go on the pushed `release/X.Y`.
+  The per-type branch patterns this task declares must not refuse the maintenance line: the pattern grammar accepts
+  `release/*`, and the patterns this repository declares (if the approver confirms them in design) admit a release's
+  and a bug's transitions on `release/X.Y` as on `main`, and `task/*` branches cut from either line. A `wf()` commit
+  made on `release/X.Y` reaches `main` through a merge commit; the check runs at commit time on the current branch,
+  so do not make it read the branch from history. `dl-159` Decision 3 (an element changes state only on the line
+  that owns its fix) is not this key's job; the `release` `branch` field is `dl-159` A2.3, deferred.
 
 ## Execution Notes
 

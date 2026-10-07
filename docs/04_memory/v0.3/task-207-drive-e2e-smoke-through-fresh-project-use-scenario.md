@@ -32,6 +32,13 @@ The smoke asserts only exit 0, never re-loads what a command wrote, and its phas
 - **Features:** X1.2 (smoke gate).
 - **Notes:** Proposal key: D09. spec-015 §3's staging smoke uses the same script; confirm the publish-staging gate still passes (`npm run publish:staging` transcript in Execution Notes). Single owner of the smoke-gate cluster `bug-132`/`bug-133`/`bug-134` (Appendix A): the `produces:` fix needs the report the reworked script writes, so it is not an task-199 alignment edit.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from the parallel-release-lines decision (2026-10-07):** `dl-159` (`in-discussion`, to be ratified before the
+  `v0.3.0` tag) opens `release/X.Y` maintenance lines beside `main`: patches land on `release/X.Y` and are merged
+  forward into `main` with `--no-ff`, never cherry-picked or back-merged; patch tags go on the pushed `release/X.Y`.
+  `task-267` (B9) adds `release/**` to `ci.yml` `on.pull_request.branches` and may make the concurrency group spare
+  `release/*` pushes as it spares `main`. The smoke job inherits the workflow's `on:` and declares no trigger or
+  `if:` of its own that names `main`, nor compares against `origin/main`; keep `test/cli/ci-workflow.test.ts`'s
+  trigger assertion a single expectation `task-267` can widen.
 
 ## Execution Notes
 
