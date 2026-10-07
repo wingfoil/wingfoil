@@ -10,7 +10,7 @@ export const MODULE_NAME = 'agent' as const;
 export { ADAPTER_MANIFEST_FORMAT, AdapterManifest } from './schema';
 export { E_ADAPTER_MANIFEST, parseAdapterManifest } from './manifest';
 export type { AdapterKind, AdapterSource } from './manifest';
-export { ADAPTER_PLACEHOLDERS, E_ADAPTER_PLACEHOLDER, placeholderIssues } from './placeholders';
+export { ADAPTER_PLACEHOLDERS, E_ADAPTER_PLACEHOLDER, placeholderIssues, requiredPlaceholderIssues } from './placeholders';
 export type { AdapterPlaceholder } from './placeholders';
 export { ADAPTERS_DIR_PATH, E_ADAPTER_DUPLICATE, listAdaptersAtRev, loadAdapter } from './discovery';
 export type { AdapterEntry, LoadedAdapter } from './discovery';

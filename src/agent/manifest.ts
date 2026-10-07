@@ -6,9 +6,10 @@
 import type { z } from 'zod';
 
 import { parseYaml, runValidation, ValidationError, type ValidationIssue } from '../validation';
+import { refuseNewerFormat } from '../validation/format';
 
-import { placeholderIssues } from './placeholders';
-import { AdapterManifest } from './schema';
+import { placeholderIssues, requiredPlaceholderIssues } from './placeholders';
+import { ADAPTER_MANIFEST_FORMAT, AdapterManifest } from './schema';
 
 /** Where an adapter is declared: `built-in/` ships with the package, `custom/` is the project's (§2.1). */
 export type AdapterKind = 'built-in' | 'custom';
@@ -64,6 +65,8 @@ function crossFieldIssues(manifest: ManifestInput, source: AdapterSource): Valid
   if (session.id === 'output' || session.id === 'lookup') {
     required(session.field !== undefined, 'session.field', `session.id: ${session.id}`);
   }
+  // Resume is read from v0.4 (§7), but a manifest that declares it supported must say how (bug-234).
+  if (session.resume.supported) required(session.resume.args !== undefined, 'session.resume.args', 'session.resume.supported: true');
 
   const usage = manifest.usage;
   if (usage.from === 'lookup') required(usage.lookup_args !== undefined, 'usage.lookup_args', 'usage.from: lookup');
@@ -76,6 +79,11 @@ function crossFieldIssues(manifest: ManifestInput, source: AdapterSource): Valid
 /**
  * Parse and validate one adapter manifest's text (`spec-016` §2.2–§2.3).
  *
+ * A manifest written in a newer format than {@link ADAPTER_MANIFEST_FORMAT} is refused for its format
+ * alone, before the structural pass, as the one issue `E_INVALID_FORMAT` on `format` with `dl-149`'s
+ * upgrade-WingFoil message (task-200, `bug-242`) — not as whatever of its content today's schema
+ * misreads. `format` stays required: an absent one is a structural error.
+ *
  * @param text - The manifest's YAML, as read from the baseline the caller chose.
  * @param source - Its name, kind and file label (see {@link AdapterSource}).
  * @returns The validated manifest, `launch.interactive.terminal` defaulted to `required`.
@@ -84,12 +92,17 @@ function crossFieldIssues(manifest: ManifestInput, source: AdapterSource): Valid
  */
 export function parseAdapterManifest(text: string, source: AdapterSource): AdapterManifest {
   const raw = parseYaml(text, source.file);
+  refuseNewerFormat(raw, ADAPTER_MANIFEST_FORMAT, source.file);
   return runValidation(AdapterManifest, raw, source.file, {
     semanticChecks: [
       () => {
         // Pass 1 has accepted `raw`, so it has the input shape.
         const manifest = raw as ManifestInput;
-        const issues = [...crossFieldIssues(manifest, source), ...placeholderIssues(manifest, source.file)];
+        const issues = [
+          ...crossFieldIssues(manifest, source),
+          ...placeholderIssues(manifest, source.file),
+          ...requiredPlaceholderIssues(manifest, source.file),
+        ];
         if (issues.length > 0) throw new ValidationError(issues);
       },
     ],

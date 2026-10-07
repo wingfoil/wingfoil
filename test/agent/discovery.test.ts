@@ -17,8 +17,8 @@ const FAKE = readFileSync(join(__dirname, '..', 'fixtures', 'agents', 'custom', 
 /** The fake manifest renamed to `name`. */
 const renamed = (name: string): string => FAKE.replace(/^name: fake$/m, `name: ${name}`);
 
-/** A minimal built-in manifest (built-ins must carry `verified_with`). */
-const builtIn = (name: string): string => `${renamed(name)}verified_with: "fake 1.0.0"\n`;
+/** A built-in manifest: built-ins must carry `verified_with`, which the fake fixture declares (task-200). */
+const builtIn = (name: string): string => renamed(name);
 
 describe('adapter discovery and loading', () => {
   let repo: string;
@@ -153,7 +153,7 @@ describe('adapter discovery and loading', () => {
       writeFixtureFile(
         repo,
         '.wingfoil/agents/custom/fake.yaml',
-        FAKE.replace(/^format: 1$/m, 'format: 2').replace(/^command: node\n/m, ''),
+        FAKE.replace(/^format: 1$/m, 'format: 0').replace(/^command: node\n/m, ''),
       );
       commitAll(repo, 'broken adapter');
       const result = loadAdapter(repo, 'fake');
@@ -165,6 +165,29 @@ describe('adapter discovery and loading', () => {
       expect(details).toHaveLength(2);
       for (const entry of details) expect(entry.file).toBe('HEAD:.wingfoil/agents/custom/fake.yaml');
       expect(details.map((entry) => entry.detail?.split(':')[0]).sort()).toEqual(['command', 'format']);
+    });
+
+    it('a manifest in a newer format is refused for its format alone, with the upgrade-WingFoil message (bug-242, dl-149)', () => {
+      writeFixtureFile(
+        repo,
+        '.wingfoil/agents/custom/fake.yaml',
+        FAKE.replace(/^format: 1$/m, 'format: 2').replace(/^command: node\n/m, ''),
+      );
+      commitAll(repo, 'newer adapter');
+      const result = loadAdapter(repo, 'fake');
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('VALIDATION');
+      expect(result.error.message).toBe(
+        "adapter 'fake': format: this file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil",
+      );
+      const details = errorDetails(result.error);
+      expect(details).toHaveLength(1);
+      expect(details[0]).toEqual({
+        file: 'HEAD:.wingfoil/agents/custom/fake.yaml',
+        detail: 'format: this file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil',
+      });
+      expect(result.error.details?.issues).toEqual([expect.objectContaining({ code: 'E_INVALID_FORMAT', path: 'format', file: 'HEAD:.wingfoil/agents/custom/fake.yaml' })]);
     });
 
     it('a manifest that is not YAML is refused with the same prefix', () => {
