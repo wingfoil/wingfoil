@@ -172,6 +172,26 @@ included.
   workflows cannot be started directly; only `workflows.yaml`'s `includes:` list — not the
   subdirectory a file lives in — determines what is loaded.
 
+### `agents/{built-in,custom}/` split
+
+Agent adapter manifests (`spec-016-agent-execution` §2.1) follow the same split as directives and
+workflows:
+
+```
+.wingfoil/agents/
+├── built-in/<adapter>.yaml    ← shipped by the npm package; installed by `wingfoil init`
+└── custom/<adapter>.yaml      ← written by the project; `wingfoil init` scaffolds it empty (.gitkeep)
+```
+
+- `built-in/` — the adapter manifests the `wingfoil` package ships, which `wingfoil init` writes in the
+  init commit after the REQ-SEC-10 schema check and the `spec-007` §4 step 5 secret scan, as it does for
+  the P3.8 directive templates (`task-196`). While no built-in adapter ships, `init` reserves it with a
+  `.gitkeep`, as it reserves `workflows/built-in/`. REQ-SEC-07 keys removability on this directory.
+- `custom/` — the project's own adapters. A name present in both directories is a validation error,
+  not an override (`spec-016` §2.1).
+- This repository's own `.wingfoil/` has no `agents/` directory: its hand-authored configuration was
+  not produced by `wingfoil init` (measured with `ls .wingfoil/`), so the tree above does not list it.
+
 ### `memory/templates/`
 
 One Markdown scaffold per Memory element type declared in `memory.yaml`'s `types:` map — currently
@@ -318,3 +338,13 @@ tree's `security.md` line says it is global since `task-133`, because both listi
 there: 13, measured with `ls .wingfoil/directives/custom/*.md | wc -l`. Nothing about the layout, the
 file names or the root-detection algorithm changes. Edited in place without a supersede or a state
 change (the `spec-001` precedent `dl-041` cites); pending the approver's sign-off at `task-188`'s review.
+
+**Revision (2026-10-06, `task-196-wingfoil-init-installs-builtin-adapters-protected-builtin-assets`) —
+the `agents/{built-in,custom}/` split, per `spec-016-agent-execution` §2.1 and Consequences.** `wingfoil
+init` now writes `.wingfoil/agents/built-in/<adapter>.yaml` for every shipped adapter (a `.gitkeep` while
+none ships) and an empty `agents/custom/`, under the same pre-write integrity pass as the built-in
+directive templates. The new subsection states the split; the layout tree is unchanged, because it
+enumerates this repository's `.wingfoil/`, which has no `agents/` directory. Nothing about the existing
+files, the root-detection algorithm or the init-marker algorithm changes. Edited in place without a
+supersede or a state change (the `spec-001` precedent `dl-041` cites); pending the approver's sign-off at
+`task-196`'s review.
