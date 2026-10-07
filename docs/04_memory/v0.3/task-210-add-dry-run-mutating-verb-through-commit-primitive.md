@@ -2,7 +2,7 @@
 id: "task-210-add-dry-run-mutating-verb-through-commit-primitive"
 type: task
 title: "Add `--dry-run` to every mutating verb through the commit primitive"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "medium"
