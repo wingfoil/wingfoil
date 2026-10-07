@@ -457,21 +457,126 @@ describe('the fake script (spec-016 §2.7)', () => {
       stdio: 'ignore',
       env: { ...process.env, WINGFOIL_FAKE_AGENT_RECORD: recordFile, WINGFOIL_FAKE_AGENT_WAIT: 'signal' },
     });
-    const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-      child.on('exit', (code, signal) => resolve({ code, signal }));
-    });
-    // The record is written before the wait starts; poll for it rather than sleeping a fixed time.
-    for (let tries = 0; tries < 200; tries += 1) {
-      try {
-        if (records(recordFile).length === 1) break;
-      } catch {
-        // not written yet
+    try {
+      const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+        child.on('exit', (code, signal) => resolve({ code, signal }));
+      });
+      // The record is written before the wait starts; poll for it rather than sleeping a fixed time.
+      for (let tries = 0; tries < 200; tries += 1) {
+        try {
+          if (records(recordFile).length === 1) break;
+        } catch {
+          // not written yet
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(records(recordFile)).toHaveLength(1);
+      expect(child.exitCode).toBeNull();
+      child.kill('SIGTERM');
+      expect(await ended).toEqual({ code: null, signal: 'SIGTERM' });
+    } finally {
+      // Never leave the waiting child behind when an assertion above fails (review F6).
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     }
-    expect(records(recordFile)).toHaveLength(1);
-    expect(child.exitCode).toBeNull();
-    child.kill('SIGTERM');
-    expect(await ended).toEqual({ code: null, signal: 'SIGTERM' });
   }, 30000);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Review fixes (task-200 review F1–F4): what task-218/228 need from the fake
+// ---------------------------------------------------------------------------------------------
+
+/** A stub MCP server script in a scratch directory, and an MCP config that registers it as `wingfoil`. */
+function stubServer(source: string): string {
+  const dir = scratchDir();
+  const script = join(dir, 'server.cjs');
+  writeFileSync(script, source);
+  const config = join(dir, 'mcp.json');
+  writeFileSync(config, JSON.stringify({ mcpServers: { wingfoil: { command: process.execPath, args: [script] } } }));
+  return config;
+}
+
+/** Answers `initialize`, then `prompts/get` with `text`, its bytes written in two chunks cut at byte `cutAfter(buf)`. */
+const SPLIT_SERVER = `
+const rl = require('readline').createInterface({ input: process.stdin });
+rl.on('line', (line) => {
+  const m = JSON.parse(line);
+  if (m.method === 'initialize') process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result: { serverInfo: { name: 'wingfoil', version: 'x' }, protocolVersion: '2025-06-18', capabilities: {} } }) + '\n');
+  if (m.method === 'prompts/get') {
+    const buf = Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: m.id, result: { messages: [{ role: 'user', content: { type: 'text', text: 'a\u2014b' } }] } }) + '\n');
+    const cut = buf.indexOf(0xe2) + 1;
+    process.stdout.write(buf.subarray(0, cut));
+    setTimeout(() => process.stdout.write(buf.subarray(cut)), 200);
+  }
+});
+`;
+
+const NOISY_SERVER = `
+process.stdout.write('not json\n');
+process.stdin.resume();
+setInterval(() => undefined, 1000);
+`;
+
+describe('review fixes — the fake is usable by agent execute (F1–F4)', () => {
+  const connect = { WINGFOIL_FAKE_AGENT_CONNECT: '1' };
+  const prompt = bootstrap('developer', 'task:x', 'run-1', 'abc');
+
+  it('F1: WAIT and EXIT apply to a launch only — --version, --lookup and --summary still answer and exit 0', () => {
+    const env = { WINGFOIL_FAKE_AGENT_WAIT: 'signal', WINGFOIL_FAKE_AGENT_EXIT: '3' };
+    for (const args of [['--version'], ['--lookup', 's1'], ['--summary']]) {
+      const recordFile = join(scratchDir(), 'record.jsonl');
+      const run = spawnSync('node', [FAKE_SCRIPT, ...args], {
+        encoding: 'utf-8',
+        timeout: 20000,
+        env: { ...process.env, WINGFOIL_FAKE_AGENT_RECORD: recordFile, ...env },
+      });
+      expect([args[0], run.signal, run.status]).toEqual([args[0], null, 0]);
+    }
+  });
+
+  it('F1: WINGFOIL_FAKE_AGENT_LOOKUP=fail makes --lookup exit 1 with nothing on stdout, and leaves a launch alone', () => {
+    const lookup = runFake(['--lookup', 's1'], { WINGFOIL_FAKE_AGENT_LOOKUP: 'fail' });
+    expect(lookup.status).toBe(1);
+    expect(lookup.stdout).toBe('');
+    expect(lookup.records).toHaveLength(1);
+    const launch = runFake(['--mcp-config', '/unused.json', '--prompt', 'p'], { WINGFOIL_FAKE_AGENT_LOOKUP: 'fail' });
+    expect(launch.status).toBe(0);
+  });
+
+  it('F1: WINGFOIL_FAKE_AGENT_LOOKUP=hang makes --lookup wait until killed, after writing its record', () => {
+    const recordFile = join(scratchDir(), 'record.jsonl');
+    const run = spawnSync('node', [FAKE_SCRIPT, '--lookup', 's1'], {
+      encoding: 'utf-8',
+      timeout: 3000,
+      env: { ...process.env, WINGFOIL_FAKE_AGENT_RECORD: recordFile, WINGFOIL_FAKE_AGENT_LOOKUP: 'hang' },
+    });
+    expect(run.signal).toBe('SIGTERM');
+    expect(run.stdout).toBe('');
+    expect(records(recordFile)).toHaveLength(1);
+  });
+
+  it('F2: a multi-byte character split across two stdout chunks is recorded intact', () => {
+    const run = runFake(['--mcp-config', stubServer(SPLIT_SERVER), '--prompt', prompt], connect);
+    expect(run.status).toBe(0);
+    expect(run.records[0]!.mcp?.text).toBe('a\u2014b');
+  }, 30000);
+
+  it('F3: a non-JSON line from the server fails the fake with a record, instead of crashing it', () => {
+    const recordFile = join(scratchDir(), 'record.jsonl');
+    const run = spawnSync('node', [FAKE_SCRIPT, '--mcp-config', stubServer(NOISY_SERVER), '--prompt', prompt], {
+      encoding: 'utf-8',
+      timeout: 20000,
+      env: { ...process.env, WINGFOIL_FAKE_AGENT_RECORD: recordFile, ...connect },
+    });
+    expect(run.signal).toBeNull();
+    expect(run.status).toBe(1);
+    expect(run.stderr).toMatch(/^fake-agent: non-JSON line from server: not json/);
+    expect(records(recordFile)[0]!.failure).toMatch(/^non-JSON line from server: not json/);
+  }, 30000);
+
+  it('F4: a declared document without session_id gets the session asked for; one with it is kept', () => {
+    const withoutId = runFake(['--lookup', 's1'], { WINGFOIL_FAKE_AGENT_DOCUMENT: JSON.stringify({ model: 'm' }) });
+    expect(JSON.parse(withoutId.stdout)).toEqual({ model: 'm', session_id: 's1' });
+    const withId = runFake(['--lookup', 's1'], { WINGFOIL_FAKE_AGENT_DOCUMENT: JSON.stringify({ session_id: 'other' }) });
+    expect(JSON.parse(withId.stdout)).toEqual({ session_id: 'other' });
+  });
 });
