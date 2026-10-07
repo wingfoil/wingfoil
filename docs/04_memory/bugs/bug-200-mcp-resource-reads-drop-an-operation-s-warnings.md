@@ -2,7 +2,7 @@
 id: bug-200-mcp-resource-reads-drop-an-operation-s-warnings
 type: bug
 title: "MCP Resource reads drop an operation's warnings"
-status: triaged
+status: closed
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.4"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
@@ -11,6 +11,7 @@ contributor: ""        # optional — who originated this contribution, if not t
 credit: ""             # optional — free-text credit note (dl-020)
 tmpl_version: 260703   # Orignal template version
 tags: ["v0.3"]
+rejection_reason: "Closed at the approver's triage of the W3 B1 review findings on 2026-10-07 as already fixed: since task-195 (merged 2026-10-07), Resource reads derived from core operations carry the operation's warnings as a top-level warnings array (src/mcp/registrar.ts, withWarnings over outcome.warnings), which is what this bug asked for; no v0.3 or v0.4 task needs to carry it."
 ---
 
 ## Summary
