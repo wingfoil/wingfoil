@@ -494,6 +494,17 @@ describe('workflowCoreDiagnostics — pure', () => {
     ]);
   });
 
+  it('task-199: a selection\'s scalar `type` is in scope; a type already in scope or repeated is listed once; a type-less where selects nothing', () => {
+    const selecting = (where: Record<string, unknown>) =>
+      pure([{ name: 'main', kind: 'main', element: 'task', phases: [{ name: 'a', where, actions: ['git.x(a: "{bug.id}", b: "{foo.id}")'] }] }]).map((d) => d.message);
+    expect(selecting({ type: 'bug' })).toEqual(["token '{foo.id}' names no enclosing element (in scope: task; selected: bug)"]);
+    expect(selecting({ type: ['task', 'bug', 'bug'] })).toEqual(["token '{foo.id}' names no enclosing element (in scope: task; selected: bug)"]);
+    expect(selecting({ status: 'open' })).toEqual([
+      "token '{bug.id}' names no enclosing element (in scope: task)",
+      "token '{foo.id}' names no enclosing element (in scope: task)",
+    ]);
+  });
+
   it('F3: a typed set_state on a selection of its type holds the gate it approves out of (fallback mismatch fires as for memory.approve)', () => {
     const phase = (action: string) => ({
       name: 'a',
