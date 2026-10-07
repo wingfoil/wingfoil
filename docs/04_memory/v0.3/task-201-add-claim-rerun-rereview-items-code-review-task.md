@@ -2,7 +2,7 @@
 id: "task-201-add-claim-rerun-rereview-items-code-review-task"
 type: task
 title: "Add the claim re-run and re-review items to code-review and the task template"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "medium"
