@@ -1,7 +1,7 @@
 # MVP Canvas — WingFoil v1.0 (MVP Complete)
 
-**Version:** 1.8
-**Date:** 2026-10-06
+**Version:** 1.9
+**Date:** 2026-10-07
 **Status:** Approved
 
 ---
@@ -45,13 +45,20 @@ project:
 
 ## Target Users
 
-| User                         | Problem                                                    | Solution                                    | Success                                             |
-|------------------------------|------------------------------------------------------------|---------------------------------------------|-----------------------------------------------------|
-| **Alex** (solo dev)          | Re-explains context every session                          | Load relevant info in 30 seconds            | Agent is pre-loaded; work starts immediately        |
-| **Sam** (code reviewer)      | Reviews are manual, slow, inconsistent with team standards | Launch AI review agent with team directives | Reviews are fast, auditable, and tied to standards  |
-| **Jordan** (team developer)  | Doesn't know team rules; agents ignore them                | Auto-loaded team directives per role        | Submits work aligned with team standards first time |
-| **Morgan** (tech lead)       | Conventions drift; governance is leaky                     | Encode rules once; auto-load for agents     | Rules are enforced; violations are caught early     |
-| **Casey** (non-tech manager) | Decisions are scattered; visibility is poor                | Query decisions and audit trail             | Can answer strategic questions in minutes           |
+| User                            | Problem                                                    | Solution                                        | Success                                             |
+|---------------------------------|------------------------------------------------------------|-------------------------------------------------|-----------------------------------------------------|
+| **Morgan** (tech lead, primary) | Conventions drift; governance is leaky                     | Encode rules once; auto-load for agents         | Rules are enforced; violations are caught early     |
+| **Alex** (solo dev)             | Re-explains context every session                          | Load relevant info in 30 seconds                | Agent is pre-loaded; work starts immediately        |
+| **Sam** (code reviewer)         | Reviews are manual, slow, inconsistent with team standards | Launch AI review agent with team directives     | Reviews are fast, auditable, and tied to standards  |
+| **Jordan** (team developer)     | Doesn't know team rules; agents ignore them                | Auto-loaded team directives per role            | Submits work aligned with team standards first time |
+| **Casey** (non-tech manager)    | Decisions are scattered; visibility is poor                | Read-only views: decisions, approvals, progress | Can answer strategic questions in minutes           |
+| **The maintainer** (Persona 7)  | Contributions outrun review; arrive as bare code           | Contributions arrive as intent (bug, DL)        | Every accepted change traces to an approval         |
+
+Morgan is the primary persona (`dl-113-personas-revisited`, Q1 (A)): the only production use so far is WingFoil's own
+repository, run by one person directing AI agents. Casey is served through read-only views over Memory and workflow
+state (Q2 (a)); the maintainer receiving AI-generated contributions (Q3 (x)) is served by `dl-020-contribution-model`
+and has no journeys yet. Taylor (architect, Persona 6) is a future persona and has no row here; the full profiles are
+in [`04_personas.md`](04_personas.md).
 
 ---
 
@@ -197,17 +204,17 @@ This MVP Canvas is part of a comprehensive product specification created via Lea
 Each document's version, date and status are listed in one place, the document map of
 [`00_index.md`](00_index.md), which reads them from each file's header; this appendix does not repeat them.
 
-| Document                   | Content                                                    |
-|----------------------------|------------------------------------------------------------|
-| `01_product-brief.md`      | Executive summary, vision, success metrics, timeline, GTM  |
-| `02_product-vision.md`     | Vision statement, key decisions, reference workflows       |
-| `03_is-isnot.md`           | What WingFoil is/isn't, does/doesn't do                    |
-| `04_personas.md`           | 6 personas: Alex, Sam, Jordan, Morgan, Casey, Taylor       |
-| `05_journeys.md`           | 8 user journeys (0a, 0b, 1–6) with scenarios and obstacles |
-| `06_features.md`           | 63 features across 5 pillars, organized by release version |
-| `07_sequencer.md`          | Active-day budgets, actuals, forecast; original plan       |
-| `08_mvp-canvas.md`         | This file — MVP canvas with success criteria               |
-| `X_cli-cmds.md`            | CLI commands reference (all pillars)                       |
-| `X_lean-inception-plan.md` | Lean Inception workshop plan and session log               |
+| Document                   | Content                                                                        |
+|----------------------------|--------------------------------------------------------------------------------|
+| `01_product-brief.md`      | Executive summary, vision, success metrics, timeline, GTM                      |
+| `02_product-vision.md`     | Vision statement, key decisions, reference workflows                           |
+| `03_is-isnot.md`           | What WingFoil is/isn't, does/doesn't do                                        |
+| `04_personas.md`           | 7 personas: Morgan (primary), Alex, Sam, Jordan, Casey, Taylor, the maintainer |
+| `05_journeys.md`           | 8 user journeys (0a, 0b, 1–6) with scenarios and obstacles                     |
+| `06_features.md`           | 63 features across 5 pillars, organized by release version                     |
+| `07_sequencer.md`          | Active-day budgets, actuals, forecast; original plan                           |
+| `08_mvp-canvas.md`         | This file — MVP canvas with success criteria                                   |
+| `X_cli-cmds.md`            | CLI commands reference (all pillars)                                           |
+| `X_lean-inception-plan.md` | Lean Inception workshop plan and session log                                   |
 
 **All outputs are versioned in git and open for refinement as development progresses.**

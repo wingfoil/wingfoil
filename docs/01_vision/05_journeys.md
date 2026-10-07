@@ -1,7 +1,7 @@
 # User Journeys — WingFoil
 
-**Version:** 1.4
-**Date:** 2026-10-06
+**Version:** 1.5
+**Date:** 2026-10-07
 **Status:** Approved
 
 ---
@@ -220,7 +220,8 @@ tests/releases, and reviews an audit trail showing who decided and when.
 | 1.5  | Explore project documentation structure         | CLI: `wingfoil paths docs` or `wingfoil paths governance`                                                                  | Casey sees where to find architecture, data models, team info, stakeholders     |
 | 2    | Search or browse decisions by topic             | CLI: `wingfoil memory search api-design`                                                                                   | Casey finds the API design decision quickly                                     |
 | 3    | Read the decision document (ADR, RFC)           | Memory file                                                                                                                | Casey understands what, why, and who decided                                    |
-| 4    | Check current project DNA for status            | CLI: `wingfoil dna show`                                                                                                   | Casey knows: team size, stacks, current phase, risks                            |
+| 4    | Check who builds the project and with what      | CLI: `wingfoil dna show`                                                                                                   | Casey knows: team size, stacks                                                  |
+| 4.5  | Check release progress (read-only view)         | CLI: `wingfoil workflow status` (P4.5, planned); until it ships, `wingfoil memory search --type release`                   | Each release's state (current phase), what is pending or blocking               |
 | 5    | Review traceability configured in workflow      | Configured in workflow + Memory metadata                                                                                   | Traceability shows req→test→release links (defined at setup, not auto-inferred) |
 | 6    | Query audit trail for decisions and changes     | CLI: `wingfoil memory history [document-id]`                                                                               | Casey sees who decided what, when, why, and what changed                        |
 | 7    | Agent or developer triggers "human needed" flag | Notification system (CLI hooks, email)                                                                                     | Casey is notified: specific action needed (e.g., "Approve database migration")  |
