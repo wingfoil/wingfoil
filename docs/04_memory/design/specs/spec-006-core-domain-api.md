@@ -78,6 +78,7 @@ export interface CoreError {
   code: "NOT_FOUND" | "INVALID_TRANSITION" | "VALIDATION" | "CONFLICT" | "IO";
   message: string;
   details?: Record<string, unknown>;
+  hint?: string;                      // one suggestion; the CLI's hint: line (spec-005 §3.1). Never changes the refusal
 }
 
 // src/core/registry.ts
@@ -98,6 +99,7 @@ export interface CoreOperation {
   readonly description?: string;               // the one-line --help summary (= cli-reference first sentence)
   readonly positional?: CorePositional;        // the operand it reads (e.g. <id>, [section]) and whether required
   readonly example?: string;                   // one complete invocation shown under "Example:" (spec-008 §8)
+  readonly renderConsole?: (value: unknown) => string; // the command's own --format console text, where its spec defines one (spec-008 §2)
 }
 
 export interface CorePositional {
@@ -244,7 +246,7 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
 |-------------------|------------------------|---------|-----------------------------|----------------------------------------------|---------|
 | `agentExecute`    | `agent` *(planned)*    | true    | `wingfoil agent execute`    | Tool `agent.execute` *(v0.4; refuses until v1.0)* | P5.3.1  |
 | `agentList`       | `agent` *(planned)*    | false   | `wingfoil agent list`       | Resource `wingfoil://agent/list` *(v0.4; URI per `dl-040`)* | `dl-135` point 4 |
-| `agentShow`       | `agent` *(planned)*    | false   | `wingfoil agent show`       | Resource `wingfoil://agent/show/{run-id}` *(v0.4; URI per `dl-040`)* | `dl-135` point 4 |
+| `agentShow`       | `agent`                | false   | `wingfoil agent show`       | Resource `wingfoil://agent/show/{run-id}` *(v0.4; URI per `dl-040`)* | P5.3.5  |
 
 - **`agentExecute` is `mutates: true`** because it commits the run record of `dl-114` (Q2 (b), with
   the session id `dl-135` point 2 adds), under the subject `agent: record <run-id>`, after launching
@@ -258,7 +260,7 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
   `--waiting` ship in v0.3, `--active` (the git-ignored `.wingfoil/run/` registry, `dl-135` Q1 (a))
   in v0.4; `agent show` takes a run id `<element-id>/<phase>/<n>` (`dl-135` Q3 (a)). The `feature`
   cells carry `dl-135` until `06_features.md` gains the P5.3 rows `dl-135` Action 3 asks for; the new
-  ids then replace it.
+  ids then replace it (`agentShow`: P5.3.5, task-220).
 
 **MCP exposure of the v0.3 rows.** v0.3 ships every operation above on the **CLI**. On MCP:
 
@@ -806,3 +808,16 @@ path verbs: a surplus operand from a subdirectory or outside a repository now ex
 before the root is resolved) instead of `1` (`E_NOT_AT_GIT_ROOT` / `E_NO_GIT_ROOT`), the code
 `spec-008` §5 assigns to a malformed invocation. Edited in place without a
 supersede or a state change (`dl-047`).
+
+**Revision (2026-10-07, `task-220-wingfoil-agent-show-run-id-prints-recorded-run`) — §3's `agentShow`
+row is registered and gains its feature id; §2's `CoreError` gains `hint` and `CoreOperation` gains
+`renderConsole`, per `spec-016` §6.** `agentShow` is now in `CORE_MODULES` under `agent`, so its module
+cell loses *(planned)*, and its `feature` cell is `P5.3.5`, the row `06_features.md` gained for it
+(`dl-135` Action 3). `spec-016` §6 asks for two things no core result could express: a refusal that
+keeps its code and exit status while a `hint:` line says the working tree holds the run (the
+`command-baseline` directive: the working tree may explain a refusal, never decide it), and a console
+rendering of its own (`key: value` lines) where every other command prints the indented JSON
+`spec-008` §2 declares. `hint` is optional on every error and the CLI prints it as `spec-005` §3.1's
+`hint:` line; `renderConsole` is optional on every operation, used only by the CLI under `--format
+console`, never under `json`/`yaml` or on MCP. No other function or surface changed. Edited in place
+without a supersede or a state change (`dl-047`).
