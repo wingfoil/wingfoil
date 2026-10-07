@@ -205,6 +205,23 @@ phases:
     expect(entry.complete).toBe(true);
   });
 
+  it('a `where` token with no value leaves the phase one unexpanded step and reports the token', () => {
+    const deduction = deduceWorkflowState(snapshot([CYCLE, DEV], [task('task-5-waiting', 'backlog', { tags: ['v1'] }), release('r1', 'in-development', { version: '' }), plan('p1', 'cycle', 'r1')]));
+    const step = deduction.instances[0]!.frontier[0]!;
+    expect([step.key, step.evidence]).toEqual(['cycle.loop@release:r1', { kinds: ['include'], missing: ['include'], finalizable: false }]);
+    expect(deduction.instances[0]!.phases).toEqual([{ phase: 'loop', state: 'current' }]);
+    expect(deduction.diagnostics.map((d) => [d.path, d.message])).toEqual([
+      ['phases[0].where.tags', "token '{release.version}' of cycle.loop has no value: release:r1 has no value for 'version'"],
+    ]);
+  });
+
+  it('an id that does not match the {n} id_pattern iterates after every one that does', () => {
+    const entry = first(
+      snapshot([CYCLE, DEV], [task('legacy-a', 'backlog', { tags: ['v1'] }), task('task-12-b', 'backlog', { tags: ['v1'] }), task('task-3-c', 'backlog', { tags: ['v1'] }), release('r1', 'in-development'), plan('p1', 'cycle', 'r1')]),
+    );
+    expect(keys(entry)).toEqual(['dev.start@task:task-3-c', 'dev.start@task:task-12-b', 'dev.start@task:legacy-a']);
+  });
+
   it('candidates with no {n} token in the id_pattern iterate in byte-wise id order', () => {
     const overReleases = wf(`name: line
 kind: main

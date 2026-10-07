@@ -180,7 +180,8 @@ phases:
 
     documents[1] = doc('docs/bugs/b1.md', { id: 'b1', type: 'bug', status: 'open', release: 'v2' });
     step = deduceWorkflowState(snapshot([flow, sub], documents)).instances[0]!.frontier[0]!;
-    expect([step.key, step.evidence]).toEqual(['typed.many@task:t1', { kinds: ['include'], missing: ['include'], finalizable: false }]);
+    // task-202 expands the `iterate_over` phase (spec-017 §4.6): the sub runs on the open bug.
+    expect([step.key, step.evidence]).toEqual(['typed-sub.fix@bug:b1', { kinds: ['created', 'record'], missing: ['record'], finalizable: true }]);
   });
 
   it('review F2: a phase with `awaits` needs a record even when its other evidence is satisfied (spec-017 §4.3, §5.4)', () => {
@@ -246,7 +247,7 @@ phases:
     ]);
   });
 
-  it('state evidence is unsatisfied for a status outside the sequence (deprecated) and for an undetermined exit state', () => {
+  it('a deprecated bound element abandons the instance (task-202, spec-017 §4.11); an undetermined exit state leaves state evidence unsatisfied', () => {
     const flow = wf(`name: rel
 kind: main
 element: release
@@ -260,7 +261,7 @@ phases:
 `);
     const at = (status: string): string[] =>
       deduceWorkflowState(snapshot([flow], [doc('docs/releases/r1.md', { id: 'r1', type: 'release', status }), plan('p1', 'rel', 'r1')])).instances[0]!.frontier.map((step) => step.key);
-    expect(at('deprecated')).toEqual(['rel.plan@release:r1']);
+    expect(at('deprecated')).toEqual([]);
     expect(at('released')).toEqual(['rel.odd@release:r1']);
   });
 

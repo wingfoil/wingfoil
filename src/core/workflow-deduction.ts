@@ -15,6 +15,7 @@
  */
 import { posix } from 'path';
 
+import { resolveDnaPath } from '../dna/path';
 import type { DnaYaml } from '../dna/schema';
 import { walkGitLogFields } from '../memory/git-log';
 import { computeMemoryContentRoots, loadMemoryDocumentsAtRev } from '../memory/query';
@@ -32,6 +33,7 @@ import {
   type PhaseRecord,
   type StartCommit,
 } from '../workflow/deduce';
+import type { BindingsYaml, CollectionEntry } from '../workflow/bindings';
 import { producesPath, type Workflow } from '../workflow/schema';
 
 import { loadDnaYamlAtRev, loadMemoryYamlAtRev } from './loaders';
@@ -155,6 +157,36 @@ function readDirty(root: string, memoryYaml: MemoryYaml | null, dnaYaml: DnaYaml
   return [...new Set(dirty)].sort();
 }
 
+/**
+ * The entries of every collection a loaded workflow iterates over (`spec-003` § "Collections", `dl-104`
+ * D2 (b)), by reference in byte order: `dna:<path>` from `dna.yaml` (the `spec-008` §9 path syntax),
+ * `bindings:<name>` from `workflows/bindings.yaml`'s `collections`, both at the snapshot's commit. A
+ * reference that names no list is left out (the registry reports it, `E_WORKFLOW_COLLECTION_UNRESOLVED`,
+ * except a `dna:` reference with no `dna.yaml`, which has no candidates).
+ */
+function readCollections(workflows: readonly Workflow[], dnaYaml: DnaYaml | null, bindings: BindingsYaml | null): Map<string, readonly CollectionEntry[]> {
+  const references = new Set<string>();
+  for (const workflow of workflows) {
+    for (const phase of workflow.phases) {
+      if (phase.iterate_over !== undefined && /^(dna|bindings):/.test(phase.iterate_over)) references.add(phase.iterate_over);
+    }
+  }
+  const collections = new Map<string, readonly CollectionEntry[]>();
+  for (const reference of [...references].sort()) {
+    let entries: unknown = undefined;
+    if (reference.startsWith('bindings:')) {
+      const name = reference.slice('bindings:'.length);
+      const declared = bindings?.collections ?? {};
+      if (Object.prototype.hasOwnProperty.call(declared, name)) entries = declared[name];
+    } else if (dnaYaml !== null) {
+      const resolved = resolveDnaPath(dnaYaml, reference.slice('dna:'.length));
+      if (resolved.ok) entries = resolved.target.value;
+    }
+    if (Array.isArray(entries)) collections.set(reference, entries as CollectionEntry[]);
+  }
+  return collections;
+}
+
 /** The snapshot of a repository with nothing committed: no instance can be open. */
 function emptySnapshot(): DeductionSnapshot {
   return {
@@ -169,6 +201,7 @@ function emptySnapshot(): DeductionSnapshot {
     starts: new Map(),
     records: new Map(),
     dirty: [],
+    collections: new Map(),
   };
 }
 
@@ -186,6 +219,8 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
   const memoryYaml = loadMemoryYamlAtRev(root, sha);
   const dnaYaml = loadDnaYamlAtRev(root, sha);
   const scanDiagnostics: Diagnostic[] = [];
+  // The whole scan keeps archived documents: an archived bound element abandons its instance (§4.11), and
+  // the deduction keeps them out of every selection and iteration itself.
   const documents = memoryYaml === null ? [] : loadMemoryDocumentsAtRev(root, sha, memoryYaml, { onDiagnostic: (diagnostic) => scanDiagnostics.push(diagnostic) });
 
   // The plans that may be open instances (§3.2's status and `parent` rules; the workflow rule is the deduction's).
@@ -209,6 +244,7 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
     starts,
     records: readRecords(root, sha, [...starts.values()]),
     dirty: readDirty(root, memoryYaml, dnaYaml, registry.workflows),
+    collections: readCollections(registry.workflows, dnaYaml, registry.bindings),
   };
 }
 

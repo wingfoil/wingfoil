@@ -1,6 +1,7 @@
 /**
- * Workflow state deduction (task-198, `spec-017` §1, §3.1–§3.5, §4.1–§4.5, §4.8 records, §4.9;
- * `adr-007` stateless state derivation, `adr-008` per-type state machines; P4.13, P4.11).
+ * Workflow state deduction (task-198, task-202; `spec-017` §1, §3.1–§3.5, §4.1–§4.11 except linkage
+ * and re-entry; `adr-007` stateless state derivation, `adr-008` per-type state machines; P4.13, P4.16,
+ * P4.11).
  *
  * One **pure** function, {@link deduceWorkflowState}, answers every consumer — `workflow next`,
  * `status`, `list`, the MCP Resources and `agent execute --next` — from one {@link DeductionSnapshot}:
@@ -17,28 +18,38 @@
  *   workflow the registry does not load is listed with an empty frontier (`W_INSTANCE_WORKFLOW_UNKNOWN`).
  * - **The bound element** (§3.4 "Declared" and "None"; §3.5 the context). A self-creating workflow's
  *   element is bound by step linkage, which is task-203's: until then it is `null` and its `{id}`
- *   tokens are pending, never unresolved.
- * - **Evidence** (§4.3): `state`, `produces`, `selection`, `include` (plain) and `record` decide a
- *   phase; `awaits` and a checkpoint complete by a record; an implicit-owner `produces` is shown and is
- *   not evidence. `created` is declared by a `memory.add`; with no linkage read yet (task-203) a step
- *   has created nothing, so the kind is satisfied when the phase declares other evidence and otherwise
+ *   tokens are pending, never unresolved. An archived bound element (`deprecated`, or `superseded`)
+ *   abandons the instance (§4.11).
+ * - **Evidence** (§4.3): `state`, `produces`, `selection`, `include` and `record` decide a phase;
+ *   `awaits` and a checkpoint complete by a record; an implicit-owner `produces` is shown and is not
+ *   evidence. `created` is declared by a `memory.add`; with no linkage read yet (task-203) a step has
+ *   created nothing, so the kind is satisfied when the phase declares other evidence and otherwise
  *   completes by a record — the rule §4.3 gives a step that created no element.
- * - **The frontier** (§4.9): phases are sequential; a plain `include` descends into its sub. An
- *   `iterate_over` phase is reported as its own leaf, unexpanded: the iteration of §4.6 is task-202's.
+ * - **`iterate_over`** (§4.6): over a Memory type, the `where` splits into the entry filter (`status`)
+ *   and the scope filter, and each candidate is eligible, entered, complete or ignored; over a
+ *   collection (`dna:<path>`, `bindings:<name>`, `dl-104` D2 (b)) every matching entry is a candidate,
+ *   keyed per `spec-003` § "Collections" and interpolated as `{item}` / `{item.<field>}`. Zero counted
+ *   candidates make the phase **vacuously** complete, with the note
+ *   {@link NO_ITERATION_NOTE}.
+ * - **Live queries and optional phases** (§4.7, §4.10): a selection or `iterate_over` phase is also
+ *   complete once a later phase of the same pass is complete other than vacuously, its open candidates
+ *   reported `late`; an optional phase is then skipped instead. A vacuous completion closes nothing.
+ * - **The frontier** (§4.9): phases are sequential; a plain `include` descends into its sub, an
+ *   `iterate_over` into the sub once per eligible or entered candidate, in iteration order. An optional
+ *   current phase is reported together with the phases up to the next non-optional one.
  *
- * Not here: §4.6–§4.7 (task-202), linkage and re-entry (§4.8, task-203), optional and archived
- * phases (§4.10–§4.11, task-202), approvals and routing (§5, task-225), action/check views and
- * directives (§6, the `next`/`status` tasks).
+ * Not here: linkage and re-entry (§4.8, task-203), approvals and routing (§5, task-225), action/check
+ * views and directives (§6, the `next`/`status` tasks).
  */
 import type { MemoryYaml, StateMachine } from '../memory/schema';
 import { memoryUnreadableDiagnostic, type MemoryDocumentSummary } from '../memory/query';
-import { resolveStateMachine, validateFrontmatterState } from '../memory/state-machine';
-import type { Diagnostic, ValidationError } from '../validation';
+import { isArchivedStatus, resolveStateMachine, validateFrontmatterState } from '../memory/state-machine';
+import { isNumericToken, patternToSource, type Diagnostic, type ValidationError } from '../validation';
 // The modules, not the `../core` barrel: `src/core` imports this one.
 import { creatingPhaseIndex, isImplicitOwnerProduces } from '../core/workflow-diagnostics';
-import { workflowExitStates, type ExitStart, type PhaseExitState } from '../core/workflow-exit-state';
+import { iterationStartState, workflowExitStates, type ExitStart, type PhaseExitState } from '../core/workflow-exit-state';
 
-import { memoryAddType, tokenName } from './bindings';
+import { collectionEntryKey, memoryAddType, tokenName, type CollectionEntry } from './bindings';
 import { workflowFacts, type Phase, type Workflow } from './schema';
 
 /** `W_UNCOMMITTED_INPUTS` (`spec-017` §1.2): a deduction input differs from `HEAD`; the answer is `HEAD`'s. */
@@ -49,6 +60,9 @@ export const W_MEMORY_INVALID_STATE = 'W_MEMORY_INVALID_STATE';
 export const W_UNRESOLVED_TOKEN = 'W_UNRESOLVED_TOKEN';
 /** `W_INSTANCE_WORKFLOW_UNKNOWN` (`spec-017` §2): an open plan names a workflow the registry does not load. */
 export const W_INSTANCE_WORKFLOW_UNKNOWN = 'W_INSTANCE_WORKFLOW_UNKNOWN';
+
+/** The note of an `iterate_over` phase no candidate was counted for (`spec-017` §4.6, P4.16 sc. 3). */
+export const NO_ITERATION_NOTE = 'no elements matched the iterate_over filter';
 
 /** The plan statuses of an open instance (`spec-017` §3.2). */
 export const OPEN_PLAN_STATUSES: readonly string[] = ['draft', 'active'];
@@ -102,6 +116,12 @@ export interface DeductionSnapshot {
   readonly records: ReadonlyMap<string, readonly PhaseRecord[]>;
   /** The deduction inputs that differ from `HEAD` in the working tree, sorted (§1.2). */
   readonly dirty: readonly string[];
+  /**
+   * The entries of each collection a loaded workflow iterates over (`dna:<path>`, `bindings:<name>`,
+   * `spec-003` § "Collections"), in declared order, by reference. A reference with no entry here has
+   * no candidates. Absent: no collection is iterated.
+   */
+  readonly collections?: ReadonlyMap<string, readonly CollectionEntry[]>;
 }
 
 /** The baseline an answer comes from (`spec-017` §8, `dl-084` (A)). */
@@ -133,7 +153,7 @@ export interface Instance {
   readonly planStatus: 'draft' | 'active';
   readonly startCommit: string;
   readonly active: boolean;
-  /** §4.11 (task-202); always `false` here. */
+  /** `true` when the bound element is archived (`deprecated`, `superseded`): the frontier is empty (§4.11). */
   readonly abandoned: boolean;
 }
 
@@ -179,10 +199,26 @@ export interface DeducedStep {
   };
 }
 
-/** One top-level phase of an instance (`spec-017` §7.4). */
+/** How an `iterate_over` phase's candidates stand (`spec-017` §4.6, §4.7, §8). */
+export interface IterationCounts {
+  readonly eligible: number;
+  readonly entered: number;
+  readonly complete: number;
+  /** The candidates still open when a later phase closed the live query (§4.7). */
+  readonly late: number;
+  /** {@link NO_ITERATION_NOTE} when no candidate was counted (P4.16 sc. 3). */
+  readonly note?: string;
+}
+
+/** One top-level phase of an instance (`spec-017` §7.4, §8). */
 export interface PhaseProgress {
   readonly phase: string;
-  readonly state: 'complete' | 'current' | 'pending';
+  /** `skipped`: an optional phase a later non-vacuous completion passed over (§4.10). */
+  readonly state: 'complete' | 'current' | 'pending' | 'skipped';
+  /** `true` on a phase complete only vacuously (§4.7): a live query that found nothing. */
+  readonly vacuous?: boolean;
+  /** The candidates of an `iterate_over` phase, once it is complete or current. */
+  readonly iterations?: IterationCounts;
 }
 
 /** One open instance, deduced. */
@@ -192,6 +228,8 @@ export interface InstanceDeduction {
   readonly complete: boolean;
   readonly phases: readonly PhaseProgress[];
   readonly frontier: readonly DeducedStep[];
+  /** The elements a live query matches after a later phase closed it (§4.7), ascending `(type, id)`. */
+  readonly late: readonly ElementRef[];
 }
 
 /** The whole answer at one commit. */
@@ -302,28 +340,50 @@ function readElements(snapshot: DeductionSnapshot): { elements: Element[]; diagn
   return { elements, diagnostics };
 }
 
-/**
- * `<type>:<id>` of an element scope. A collection-entry scope (`WingFoil-Item`, `@<collection>#<key>`)
- * arrives with `iterate_over` (task-202); until then deduction builds element scopes only.
- */
-function elementKey(scope: ScopeRef): string {
-  const { element } = scope as { element: ElementRef };
-  return `${element.type}:${element.id}`;
+/** `<type>:<id>` of an element scope, `<collection>#<key>` of a collection-entry scope (`spec-017` §4.8, §4.9). */
+function scopeKey(scope: ScopeRef): string {
+  if ('item' in scope) return `${scope.item.collection}#${scope.item.key}`;
+  return `${scope.element.type}:${scope.element.id}`;
 }
 
 function refOf(element: Element): ElementRef {
   return { type: element.type, id: element.id, status: element.status };
 }
 
+/** Ascending `(type, id)` (`spec-017` §1.3, "elements a step created or awaits"). */
+function compareRefs(a: ElementRef, b: ElementRef): number {
+  return compareText(a.type, b.type) || compareText(a.id, b.id);
+}
+
 // --- Scope and tokens (§4.1) -------------------------------------------------------------------------
 
 /** One enclosing scope: the element a workflow runs on. */
-interface Frame {
+interface ElementFrame {
+  readonly kind: 'element';
   readonly type: string;
   /** `null` when the element is not found, or (with `pending`) not yet created. */
   readonly element: Element | null;
   /** A self-creating workflow before its element exists: its tokens are pending, not unresolved (§3.4). */
   readonly pending: boolean;
+}
+
+/** One enclosing scope: the collection entry an `iterate_over` over a collection runs on (§4.6). */
+interface ItemFrame {
+  readonly kind: 'item';
+  /** The `iterate_over` reference, `dna:<path>` or `bindings:<name>`. */
+  readonly collection: string;
+  readonly key: string;
+  readonly entry: CollectionEntry;
+}
+
+type Frame = ElementFrame | ItemFrame;
+
+/** The scope a step runs on: its innermost frame's element or collection entry (§4.9). */
+function scopeOf(frames: readonly Frame[]): ScopeRef | null {
+  const frame = frames[frames.length - 1];
+  if (frame === undefined) return null;
+  if (frame.kind === 'item') return { item: { collection: frame.collection, key: frame.key } };
+  return frame.element === null ? null : { element: refOf(frame.element) };
 }
 
 /** A pattern after token substitution. */
@@ -337,30 +397,46 @@ interface Resolved {
 
 const TOKEN_RE = /\{([^{}]+)\}/g;
 
+/** A collection reference (`dna:<path>`, `bindings:<name>`) rather than a Memory type (`spec-003` § "Collections"). */
+const COLLECTION_REF_RE = /^(dna|bindings):/;
+
+/** `{item}` / `{item.<field>}` against the innermost collection entry (§4.1, `spec-003` § "Collections"). */
+function itemValue(inner: string, frames: readonly Frame[]): { value: string } | { reason: string } {
+  const frame = [...frames].reverse().find((candidate): candidate is ItemFrame => candidate.kind === 'item');
+  if (frame === undefined) return { reason: 'no collection entry in scope' };
+  if (inner === 'item') return { value: frame.key };
+  const field = inner.slice('item.'.length);
+  const raw = typeof frame.entry === 'object' && frame.entry !== null ? scalarText(frame.entry[field]) : null;
+  return raw === null ? { reason: `${frame.collection}#${frame.key} has no value for '${field}'` } : { value: raw };
+}
+
 /**
  * Substitute the `{…}` tokens of `text` against `frames` (innermost last), as whole values, never
  * evaluated (`dl-090` Q3 (a)): `{<type>.<field>}` against the nearest element of `<type>`; `{id}`,
- * `{<field>}` and `{element.<field>}` against the innermost one. `{item…}` needs a collection scope,
- * which only `iterate_over` gives (task-202), so it has no value here.
+ * `{<field>}` and `{element.<field>}` against the innermost element; `{item}` and `{item.<field>}`
+ * against the innermost collection entry.
  */
 function resolveTokens(text: string, frames: readonly Frame[]): Resolved {
   const unresolved: { token: string; reason: string }[] = [];
   let pending = false;
+  const elementFrames = frames.filter((frame): frame is ElementFrame => frame.kind === 'element');
   const value = text.replace(TOKEN_RE, (token, inner: string) => {
-    let frame: Frame | undefined;
+    let frame: ElementFrame | undefined;
     let field: string;
     const dot = inner.indexOf('.');
     if (inner === 'item' || inner.startsWith('item.')) {
-      unresolved.push({ token, reason: 'no collection entry in scope' });
+      const item = itemValue(inner, frames);
+      if ('value' in item) return item.value;
+      unresolved.push({ token, reason: item.reason });
       return token;
     }
     if (dot === -1) {
-      frame = frames[frames.length - 1];
+      frame = elementFrames[elementFrames.length - 1];
       field = inner;
     } else {
       const head = inner.slice(0, dot);
       field = inner.slice(dot + 1);
-      frame = head === 'element' ? frames[frames.length - 1] : [...frames].reverse().find((candidate) => candidate.type === head);
+      frame = head === 'element' ? elementFrames[elementFrames.length - 1] : [...elementFrames].reverse().find((candidate) => candidate.type === head);
     }
     if (frame === undefined) {
       unresolved.push({ token, reason: 'no element in scope' });
@@ -423,10 +499,30 @@ function matches(field: unknown, wanted: readonly string[]): boolean {
 /** What one evaluation of a workflow on a scope yields. */
 interface WorkflowResult {
   readonly complete: boolean;
+  /** `true` when some phase is complete other than vacuously (§4.6 "entered", §4.7). */
+  readonly progressed: boolean;
   readonly phases: PhaseProgress[];
   readonly frontier: DeducedStep[];
   /** The `W_UNRESOLVED_TOKEN`s of the frontier steps, in frontier order. */
   readonly diagnostics: Diagnostic[];
+  /** The late elements (§4.7) of the phases that ran, unsorted. */
+  readonly late: ElementRef[];
+}
+
+/** One phase, evaluated on its own, before the sequence rules of §4.7, §4.9 and §4.10 apply. */
+interface PhaseEval {
+  readonly complete: boolean;
+  /** Complete only because a live query found nothing (§4.7). */
+  readonly vacuous: boolean;
+  /** A selection or an `iterate_over` phase: a live query §4.7 may close. */
+  readonly liveQuery: boolean;
+  readonly frontier: DeducedStep[];
+  readonly diagnostics: Diagnostic[];
+  readonly iterations?: IterationCounts;
+  /** The late elements its subs report while it is complete or current. */
+  readonly late: ElementRef[];
+  /** When a later phase closes it (§4.7): the elements reported `late`, and how many candidates that is. */
+  readonly closed: { readonly late: ElementRef[]; readonly count: number };
 }
 
 /** The read-only context of one deduction. */
@@ -481,55 +577,263 @@ class Deducer {
     return resolveStateMachine(this.snapshot.memoryYaml!, type).sequence[0]!;
   }
 
-  /** Run a workflow on `frames`, from `start` (§4.4), under `trail`. */
+  /**
+   * Run a workflow on `frames`, from `start` (§4.4), under `trail`. In declared order, a phase is complete
+   * when its evidence is; a live query (§4.7) is also complete, and an optional phase (§4.10) skipped,
+   * when a later phase is complete other than vacuously; the first other phase is current and gives the
+   * frontier. A phase is evaluated only when one of these rules needs it, at most once.
+   */
   run(instanceId: string, startCommit: string, workflow: Workflow, frames: readonly Frame[], start: ExitStart, trail: readonly TrailEntry[]): WorkflowResult {
     // `memory.yaml` is present: a workflow runs only for an open plan, an element of a declared type.
     const exits = workflowExitStates(workflow, this.snapshot.memoryYaml!, start, this.byName);
+    const scope = scopeOf(frames);
+    const evals: PhaseEval[] = [];
+    const evaluated = (p: number): PhaseEval =>
+      (evals[p] ??= this.evaluate(instanceId, startCommit, workflow, p, frames, exits[p]!, [...trail, { workflow: workflow.name, phase: workflow.phases[p]!.name, scope }], scope));
+    const closedFrom = (p: number): boolean => {
+      for (let q = p + 1; q < workflow.phases.length; q += 1) {
+        const later = evaluated(q);
+        if (later.complete && !later.vacuous) return true;
+      }
+      return false;
+    };
+
     const phases: PhaseProgress[] = [];
     let frontier: DeducedStep[] = [];
     let diagnostics: Diagnostic[] = [];
+    const late: ElementRef[] = [];
     let current = false;
+    let progressed = false;
 
     workflow.phases.forEach((phase, p) => {
       if (current) {
         phases.push({ phase: phase.name, state: 'pending' });
         return;
       }
-      const frame = frames[frames.length - 1];
-      const scope: ScopeRef | null = frame?.element ? { element: refOf(frame.element) } : null;
-      const here: TrailEntry = { workflow: workflow.name, phase: phase.name, scope };
-
-      // A plain `include` (§4.5): the sub runs on the same element, from the state this phase starts in.
-      // The include resolves: the registry refuses one naming no loaded workflow (`spec-003` loader rows).
-      if (phase.include !== undefined && phase.iterate_over === undefined) {
-        const sub = this.byName.get(phase.include)!;
-        const exit = exits[p]!;
-        const result = this.run(instanceId, startCommit, sub, frames, { boundType: sub.element ?? exit.boundType, state: exit.entry, instance: false }, [...trail, here]);
-        if (result.complete) {
-          phases.push({ phase: phase.name, state: 'complete' });
-          return;
-        }
-        current = true;
-        phases.push({ phase: phase.name, state: 'current' });
-        frontier = result.frontier;
-        diagnostics = result.diagnostics;
+      const evaluation = evaluated(p);
+      if (evaluation.complete) {
+        phases.push(progress(phase.name, 'complete', evaluation.vacuous, evaluation.iterations));
+        late.push(...evaluation.late);
+        progressed ||= !evaluation.vacuous;
         return;
       }
-
-      const leaf = this.leaf(instanceId, startCommit, workflow, p, frames, exits[p]!, [...trail, here], scope);
-      if (leaf.step.evidence.missing.length === 0) {
-        phases.push({ phase: phase.name, state: 'complete' });
+      if (evaluation.liveQuery && closedFrom(p)) {
+        const { iterations } = evaluation;
+        const closed = iterations === undefined ? undefined : { eligible: 0, entered: 0, complete: iterations.complete, late: evaluation.closed.count };
+        phases.push(progress(phase.name, 'complete', false, closed));
+        late.push(...evaluation.closed.late);
+        progressed = true;
+        return;
+      }
+      if (phase.optional && closedFrom(p)) {
+        phases.push({ phase: phase.name, state: 'skipped' });
         return;
       }
       current = true;
-      phases.push({ phase: phase.name, state: 'current' });
-      frontier = [leaf.step];
-      diagnostics = leaf.diagnostics;
+      phases.push(progress(phase.name, 'current', false, evaluation.iterations));
+      late.push(...evaluation.late);
+      frontier = [...evaluation.frontier];
+      diagnostics = [...evaluation.diagnostics];
+      // An optional current phase is reported together with the phases up to the next non-optional one (§4.10).
+      for (let q = p + 1; phase.optional && q < workflow.phases.length; q += 1) {
+        const later = evaluated(q);
+        if (later.complete) continue;
+        frontier.push(...later.frontier);
+        diagnostics.push(...later.diagnostics);
+        if (!workflow.phases[q]!.optional) break;
+      }
     });
-    return { complete: !current, phases, frontier, diagnostics };
+    return { complete: !current, progressed, phases, frontier, diagnostics, late };
   }
 
-  /** Evaluate one phase as a leaf step: its evidence, its `produces`, its unresolved tokens. */
+  /** Evaluate phase `p` on its own: a plain `include`, an `iterate_over` or a leaf step. */
+  private evaluate(
+    instanceId: string,
+    startCommit: string,
+    workflow: Workflow,
+    p: number,
+    frames: readonly Frame[],
+    exit: PhaseExitState,
+    trail: readonly TrailEntry[],
+    scope: ScopeRef | null,
+  ): PhaseEval {
+    const phase = workflow.phases[p]!;
+    // The include resolves: the registry refuses one naming no loaded workflow (`spec-003` loader rows).
+    if (phase.include !== undefined && phase.iterate_over !== undefined) {
+      return this.iterate(instanceId, startCommit, workflow, p, frames, exit, trail, scope);
+    }
+    // A plain `include` (§4.5): the sub runs on the same element, from the state this phase starts in.
+    if (phase.include !== undefined) {
+      const sub = this.byName.get(phase.include)!;
+      const result = this.run(instanceId, startCommit, sub, frames, { boundType: sub.element ?? exit.boundType, state: exit.entry, instance: false }, trail);
+      return {
+        complete: result.complete,
+        vacuous: result.complete && !result.progressed,
+        liveQuery: false,
+        frontier: result.frontier,
+        diagnostics: result.diagnostics,
+        late: result.late,
+        closed: { late: [], count: 0 },
+      };
+    }
+    const leaf = this.leaf(instanceId, startCommit, workflow, p, frames, exit, trail, scope);
+    const { kinds, missing } = leaf.step.evidence;
+    const complete = missing.length === 0;
+    const selection = kinds.includes('selection');
+    return {
+      complete,
+      // A selection that matches nothing, with no other evidence than an empty `created` (§4.7).
+      vacuous: complete && selection && kinds.every((kind) => kind === 'selection' || kind === 'created'),
+      liveQuery: selection,
+      frontier: [leaf.step],
+      diagnostics: leaf.diagnostics,
+      late: [],
+      closed: { late: leaf.selected, count: leaf.selected.length },
+    };
+  }
+
+  /** The `where` values of `phase`, resolved against `frames`, by key in byte order; `null` when a token has no value. */
+  private wanted(phase: Phase, p: number, frames: readonly Frame[], report: (path: string, resolved: Resolved) => void): [string, string[]][] | null {
+    const wanted: [string, string[]][] = [];
+    let decidable = true;
+    for (const key of Object.keys(phase.where ?? {}).sort()) {
+      const raw = phase.where![key]!;
+      const values = (Array.isArray(raw) ? raw : [raw]).map((value) => {
+        if (typeof value !== 'string') return String(value);
+        const resolved = resolveTokens(value, frames);
+        report(`phases[${p}].where.${key}`, resolved);
+        if (resolved.value === null) decidable = false;
+        return resolved.value ?? value;
+      });
+      wanted.push([key, values]);
+    }
+    return decidable ? wanted : null;
+  }
+
+  /** The `W_UNRESOLVED_TOKEN` reporter of one step of `workflow`. */
+  private reporter(workflow: Workflow, stepName: string, diagnostics: Diagnostic[]): (path: string, resolved: Resolved) => void {
+    const file = this.fileOf.get(workflow.name)!;
+    return (path, resolved) => {
+      for (const { token, reason } of resolved.unresolved) {
+        diagnostics.push({ code: W_UNRESOLVED_TOKEN, severity: 'warning', file, path, message: `token '${token}' of ${stepName} has no value: ${reason}` });
+      }
+    };
+  }
+
+  /**
+   * Comparator of the iteration order over `type` (`spec-017` §1.3): ascending by the `{n}` token of the
+   * type's `id_pattern` when it has one — an id that does not match the pattern after every one that
+   * does — else byte-wise ascending `id`.
+   */
+  private iterationOrder(type: string): (a: Element, b: Element) => number {
+    const pattern = this.snapshot.memoryYaml!.types[type]!.id_pattern;
+    const numeric = pattern !== undefined && [...pattern.matchAll(TOKEN_RE)].some((match) => isNumericToken(match[1]!));
+    const byId = (a: Element, b: Element): number => compareText(a.id, b.id);
+    if (!numeric) return byId;
+    const re = new RegExp(`^${patternToSource(pattern, { captureNumeric: true })}$`);
+    const n = (element: Element): number => {
+      const match = re.exec(element.id);
+      return match === null ? Number.POSITIVE_INFINITY : Number(match[1]);
+    };
+    return (a, b) => {
+      const [x, y] = [n(a), n(b)];
+      return x === y ? byId(a, b) : x < y ? -1 : 1;
+    };
+  }
+
+  /**
+   * An `iterate_over` phase (§4.6): the sub once per candidate, in iteration order. Over a Memory type the
+   * `status` key of `where` is the entry filter and the other keys the scope filter; archived elements are
+   * never candidates (§4.11). Over a collection every entry matching `where` is a candidate. A candidate is
+   * complete when the sub is, entered when one of its phases is complete other than vacuously, eligible
+   * when it matches the entry filter, otherwise ignored. A `where` token with no value leaves the phase a
+   * single unexpanded step, reported with the token.
+   */
+  private iterate(
+    instanceId: string,
+    startCommit: string,
+    workflow: Workflow,
+    p: number,
+    frames: readonly Frame[],
+    exit: PhaseExitState,
+    trail: readonly TrailEntry[],
+    scope: ScopeRef | null,
+  ): PhaseEval {
+    const phase = workflow.phases[p]!;
+    const over = phase.iterate_over!;
+    const sub = this.byName.get(phase.include!)!;
+    const whereDiagnostics: Diagnostic[] = [];
+    const wanted = this.wanted(phase, p, frames, this.reporter(workflow, `${workflow.name}.${phase.name}`, whereDiagnostics));
+    if (wanted === null) {
+      const leaf = this.leaf(instanceId, startCommit, workflow, p, frames, exit, trail, scope);
+      return { complete: false, vacuous: false, liveQuery: true, frontier: [leaf.step], diagnostics: [...whereDiagnostics, ...leaf.diagnostics], late: [], closed: { late: [], count: 0 } };
+    }
+
+    // Each candidate: the frame it adds, the state its sub starts from, whether it passes the entry filter.
+    const candidates: { frame: Frame; start: ExitStart; entry: boolean; ref: ElementRef | null }[] = [];
+    if (COLLECTION_REF_RE.test(over)) {
+      for (const item of this.snapshot.collections?.get(over) ?? []) {
+        // Every key exists: the registry refuses a collection with a key problem (`E_BINDING_COLLECTION_KEY`,
+        // `E_WORKFLOW_COLLECTION_UNRESOLVED`).
+        const key = collectionEntryKey(item)!;
+        const fields = typeof item === 'object' && item !== null ? item : {};
+        if (!wanted.every(([field, values]) => matches(fields[field], values))) continue;
+        candidates.push({ frame: { kind: 'item', collection: over, key, entry: item }, start: { boundType: null, state: null, instance: false }, entry: true, ref: null });
+      }
+    } else {
+      const status = wanted.find(([key]) => key === 'status')?.[1];
+      const scopeFilter = wanted.filter(([key]) => key !== 'status');
+      const start: ExitStart = { boundType: sub.element ?? over, state: iterationStartState(this.snapshot.memoryYaml!, over, phase.where), instance: false };
+      this.elements
+        .filter((element) => element.type === over && !isArchivedStatus(element.status) && scopeFilter.every(([key, values]) => matches(element.frontmatter[key], values)))
+        .sort(this.iterationOrder(over))
+        .forEach((element) => {
+          candidates.push({
+            frame: { kind: 'element', type: over, element, pending: false },
+            start,
+            entry: status === undefined || status.includes(element.status),
+            ref: refOf(element),
+          });
+        });
+    }
+
+    const counts = { eligible: 0, entered: 0, complete: 0 };
+    const frontier: DeducedStep[] = [];
+    const diagnostics: Diagnostic[] = [];
+    const late: ElementRef[] = [];
+    const completeLate: ElementRef[] = [];
+    const open: ElementRef[] = [];
+    let openCount = 0;
+    for (const candidate of candidates) {
+      const result = this.run(instanceId, startCommit, sub, [...frames, candidate.frame], candidate.start, trail);
+      if (result.complete) {
+        counts.complete += 1;
+        completeLate.push(...result.late);
+        continue;
+      }
+      if (result.progressed) counts.entered += 1;
+      else if (candidate.entry) counts.eligible += 1;
+      else continue;
+      openCount += 1;
+      if (candidate.ref !== null) open.push(candidate.ref);
+      frontier.push(...result.frontier);
+      diagnostics.push(...result.diagnostics);
+      late.push(...result.late);
+    }
+    const counted = counts.eligible + counts.entered + counts.complete;
+    return {
+      complete: openCount === 0,
+      vacuous: counted === 0,
+      liveQuery: true,
+      frontier,
+      diagnostics,
+      iterations: { ...counts, late: 0, ...(counted === 0 ? { note: NO_ITERATION_NOTE } : {}) },
+      late: [...completeLate, ...late],
+      closed: { late: [...completeLate, ...open], count: openCount },
+    };
+  }
+
+  /** Evaluate one phase as a leaf step: its evidence, its `produces`, its unresolved tokens, what its selection matches. */
   private leaf(
     instanceId: string,
     startCommit: string,
@@ -539,21 +843,18 @@ class Deducer {
     exit: PhaseExitState,
     trail: readonly TrailEntry[],
     scope: ScopeRef | null,
-  ): { step: DeducedStep; diagnostics: Diagnostic[] } {
+  ): { step: DeducedStep; diagnostics: Diagnostic[]; selected: ElementRef[] } {
     const phase = workflow.phases[p]!;
-    const file = this.fileOf.get(workflow.name)!;
     const stepName = `${workflow.name}.${phase.name}`;
     const diagnostics: Diagnostic[] = [];
-    const report = (path: string, resolved: Resolved): void => {
-      for (const { token, reason } of resolved.unresolved) {
-        diagnostics.push({ code: W_UNRESOLVED_TOKEN, severity: 'warning', file, path, message: `token '${token}' of ${stepName} has no value: ${reason}` });
-      }
-    };
-    const frame = frames[frames.length - 1];
+    const report = this.reporter(workflow, stepName, diagnostics);
+    const last = frames[frames.length - 1];
+    const frame = last?.kind === 'element' ? last : undefined;
     const kinds: EvidenceKind[] = [];
     const missing: EvidenceKind[] = [];
+    let selected: ElementRef[] = [];
 
-    // An `iterate_over` phase is a leaf until task-202 expands its candidates (§4.6).
+    // An `iterate_over` phase whose `where` cannot be resolved stays one unexpanded step (§4.6).
     if (phase.iterate_over !== undefined) {
       kinds.push('include');
       missing.push('include');
@@ -599,24 +900,16 @@ class Deducer {
       if (producesMissing) missing.push('produces');
     }
 
-    // selection — no Memory document at HEAD matches the phase's `where`.
+    // selection — no Memory document at HEAD matches the phase's `where`; an archived one never does (§4.11).
     if (phase.where !== undefined && phase.iterate_over === undefined) {
       kinds.push('selection');
-      const wanted: [string, string[]][] = [];
-      let decidable = true;
-      for (const key of Object.keys(phase.where).sort()) {
-        const raw = phase.where[key]!;
-        const values = (Array.isArray(raw) ? raw : [raw]).map((value) => {
-          if (typeof value !== 'string') return String(value);
-          const resolved = resolveTokens(value, frames);
-          report(`phases[${p}].where.${key}`, resolved);
-          if (resolved.value === null) decidable = false;
-          return resolved.value ?? value;
-        });
-        wanted.push([key, values]);
+      const wanted = this.wanted(phase, p, frames, report);
+      if (wanted !== null) {
+        selected = this.elements
+          .filter((element) => !isArchivedStatus(element.status) && wanted.every(([key, values]) => matches(element.frontmatter[key], values)))
+          .map(refOf);
       }
-      const selected = decidable && this.elements.some((element) => wanted.every(([key, values]) => matches(element.frontmatter[key], values)));
-      if (!decidable || selected) missing.push('selection');
+      if (wanted === null || selected.length > 0) missing.push('selection');
     }
 
     // awaits — evaluated from v1.0 (P4.12); the step completes by a record (§5.4).
@@ -630,7 +923,7 @@ class Deducer {
       if (!this.hasRecord(instanceId, startCommit, stepName, scope)) missing.push('record');
     }
 
-    const key = scope === null ? stepName : `${stepName}@${elementKey(scope)}`;
+    const key = scope === null ? stepName : `${stepName}@${scopeKey(scope)}`;
     return {
       step: {
         key,
@@ -646,26 +939,28 @@ class Deducer {
         evidence: { kinds, missing, finalizable: missing.length === 1 && missing[0] === 'record' },
       },
       diagnostics,
+      selected,
     };
   }
 
-  /** Whether the instance's walk holds a record of step `stepName` on `scope` (§4.8 records). */
+  /** Whether the instance's walk holds a record of step `stepName` on `scope` (§4.8 records): `WingFoil-Element` or `WingFoil-Item`. */
   private hasRecord(instanceId: string, startCommit: string, stepName: string, scope: ScopeRef | null): boolean {
-    const element = scope === null ? null : elementKey(scope);
+    const element = scope !== null && 'element' in scope ? scopeKey(scope) : null;
+    const item = scope !== null && 'item' in scope ? scopeKey(scope) : null;
     return (this.snapshot.records.get(startCommit) ?? []).some(
-      (record) => record.phase === stepName && record.instance === instanceId && record.element === element && record.item === null,
+      (record) => record.phase === stepName && record.instance === instanceId && record.element === element && record.item === item,
     );
   }
 
   /** The frames an instance of `workflow` starts with, its bound element and its context (§3.4, §3.5). */
-  bind(workflow: Workflow, plan: Element): { frames: Frame[]; start: ExitStart; element: ElementRef | null; context: ElementRef | null } {
+  bind(workflow: Workflow, plan: Element): { frames: Frame[]; start: ExitStart; element: Element | null; context: ElementRef | null } {
     const id = scalarText(plan.frontmatter['element']);
     if (workflow.element !== undefined) {
       const element = id === null ? null : this.find(workflow.element, id);
       return {
-        frames: [{ type: workflow.element, element, pending: false }],
+        frames: [{ kind: 'element', type: workflow.element, element, pending: false }],
         start: { boundType: workflow.element, state: this.firstState(workflow.element), instance: true },
-        element: element === null ? null : refOf(element),
+        element,
         context: null,
       };
     }
@@ -676,12 +971,17 @@ class Deducer {
     // no `type:` names no type, and the instance then has no frame.
     const type = creating === -1 ? null : (workflow.phases[creating]!.actions!.map(memoryAddType).find((t): t is string => t !== null) ?? null);
     return {
-      frames: type === null ? [] : [{ type, element: null, pending: true }],
+      frames: type === null ? [] : [{ kind: 'element', type, element: null, pending: true }],
       start: { boundType: null, state: null, instance: true },
       element: null,
       context,
     };
   }
+}
+
+/** A phase's progress entry, with `vacuous` and `iterations` only where they apply. */
+function progress(phase: string, state: PhaseProgress['state'], vacuous: boolean, iterations: IterationCounts | undefined): PhaseProgress {
+  return { phase, state, ...(vacuous ? { vacuous: true } : {}), ...(iterations !== undefined ? { iterations } : {}) };
 }
 
 // --- The deduction -----------------------------------------------------------------------------------
@@ -731,16 +1031,23 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
         path: 'workflow',
         message: `open plan ${plan.id} names workflow '${workflowName}', which the registry does not load`,
       });
-      return { instance: { ...base, element: null, context: null }, complete: false, phases: [], frontier: [] };
+      return { instance: { ...base, element: null, context: null }, complete: false, phases: [], frontier: [], late: [] };
     }
     const bound = deducer.bind(workflow, plan);
+    const element = bound.element === null ? null : refOf(bound.element);
+    // An archived bound element abandons the instance: nothing is deduced for it (§4.11).
+    if (bound.element !== null && isArchivedStatus(bound.element.status)) {
+      return { instance: { ...base, element, context: bound.context, abandoned: true }, complete: false, phases: [], frontier: [], late: [] };
+    }
     const result = deducer.run(plan.id, base.startCommit, workflow, bound.frames, bound.start, []);
     stepDiagnostics.push(...result.diagnostics);
+    const late = new Map(result.late.map((ref) => [`${ref.type}:${ref.id}`, ref] as const));
     return {
-      instance: { ...base, element: bound.element, context: bound.context },
+      instance: { ...base, element, context: bound.context },
       complete: result.complete,
       phases: result.phases,
       frontier: result.frontier,
+      late: [...late.values()].sort(compareRefs),
     };
   });
 
