@@ -244,7 +244,7 @@ describe('workflowExitStates — spec-017 §4.4', () => {
   });
 
   it('F3: a typed set_state on a phase that selects its type holds the selected gate whose approve target it names', () => {
-    const wf = workflow('name: w\nkind: sub\nelement: release\nphases:\n  - name: c\n    where: { type: task, status: [pending, in-review] }\n    actions: [ task.set_state(backlog) ]\n');
+    const wf = workflow('name: w\nkind: sub\nelement: release\nphases:\n  - name: c\n    where: { type: [task, ghost], status: [pending, in-review] }\n    actions: [ task.set_state(backlog), ghost.set_state(x) ]\n');
     expect(workflowExitStates(wf, MEMORY, { boundType: 'release', state: 'draft', instance: false })[0]).toMatchObject({
       exit: 'draft',
       held: [{ type: 'task', gate: 'pending', reject: 'draft' }],

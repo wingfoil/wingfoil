@@ -73,8 +73,10 @@ rule and the gates a phase holds. Open question 3 left the cadence code unnamed:
   accepted.
 - `workflow list` (`src/core/index.ts`) now calls `loadWorkflowRegistry` (closes `bug-150`'s reproduction).
 - Readings settled here: (a) "in spec-003 order after the loader diagnostics" = every loader diagnostic,
-  then the core ones in spec-003's order among themselves (spec-017 §1.3's order; spec-003's Order
-  paragraph amended to say so); (b) no core row reads `roles.yaml` (roles are `dna.yaml` `team.roles`);
+  then the core ones in spec-003's order among themselves — a **change** to spec-003's Order paragraph,
+  which interleaved them per field, grounded on AC 1's wording and on the core checks running only on a
+  load the loader accepted (corrected at review, F2: an earlier version of this note claimed spec-017
+  §1.3 already ordered them so; §1.3's "this spec's" are the deduction codes); (b) no core row reads `roles.yaml` (roles are `dna.yaml` `team.roles`);
   (c) a core check is not decided when its input is absent (no `dna.yaml` / `memory.yaml` / template);
   (d) a token is checked on every include path from a startable workflow; a workflow no startable one
   reaches gets its exit states (from its type's first state) but no token check; (e) an event's state may
@@ -140,9 +142,38 @@ BDD: no scenario covers these codes (`grep -rln "E_PHASE_ROLE_UNKNOWN\|by_person
 Determinism: `grep -rn "Date.now\|Math.random\|new Date" src/core/workflow-*.ts` → nothing; the walk is in
 manifest and phase order; a deep-equal two-run test.
 
+### Review fixes (approve with fixes, 2026-10-07)
+
+Red `3b048787` (`npx jest test/core/workflow-core-checks.test.ts test/core/workflow-exit-state.test.ts -t "F1|F3"`
+→ 4 failed: the second token and the 2nd–4th key problems missing, no `held` gate and no mismatch for a
+typed `set_state` on a selection); fix `de8dfc41`; the unregistered-type arm of the selection fallback is covered by the same test (`workflow-exit-state.ts` branches 151/151, `workflow-core-checks.ts` 182/182, `workflow-registry.ts` 27/27 — `npx jest --coverage --collectCoverageFrom='src/core/workflow-*.ts' test/core/workflow`).
+
+- **F1 (defect).** The collector deduped on `(file, path, code)`, dropping distinct problems that share a
+  path (`git.x(a: "{foo.id}", b: "{bar.id}")` reported only `{foo.id}`; a `dna:modules` list with a bad, a
+  duplicate and a missing key reported only entry 0). The key now also carries the problem: the token for
+  `W_PHASE_TOKEN_OUT_OF_SCOPE`, the message for `E_WORKFLOW_COLLECTION_UNRESOLVED`. The same token raised on
+  a second include path is still reported once, with the first path's message (the existing test still
+  passes). Tests: one per case, through `workflowCoreDiagnostics`.
+- **F2.** The claim that spec-017 §1.3 already orders the core rows after the loader's was wrong (its "this
+  spec's" are the deduction codes). Design reading (a), the spec-003 Revision note and the proposed reason
+  now say the Order paragraph **changes**, grounded on AC 1 and on the core checks running only on a load
+  the loader accepted.
+- **F3.** `<T>.set_state(s)` now falls back to the phase's selection when it selects `T` (spec-017 §4.2): the
+  selection is not moved, and the phase holds each selected gate state whose approve target is `s` (§5.1),
+  so `where { type: task, status: pending }` + `task.set_state(backlog)` + `fallback.set_state: done` raises
+  `W_PHASE_FALLBACK_STATE_MISMATCH` exactly as `memory.approve` does (test runs both actions). Header comment
+  of `workflow-exit-state.ts` updated.
+- **F7.** `docs/cli-reference.md` (`workflow list`): it now fails when `dna.yaml` or `memory.yaml` is invalid.
+- Left to the coordinator's follow-ups, as instructed: the silent skip when a core input is absent; an unknown
+  `T` in `<T>.set_state` / `sync_state` / `where.type`; spec-017 §2's `roles.yaml` mention and §12's line cites.
+
+Gates after the fixes: `npx jest test/core test/docs` → 112 suites, 2461 tests passed; `npm run lint`,
+both `tsc --noEmit`, `npm run docs:api` and `node scripts/check-governance.cjs --base ed4607a4` exit 0 (load
+average 20.5, `uptime`). Status stays `in-review`: no re-submit.
+
 ### Pending amendments (approver)
 
-- `spec-003-workflows-yaml-schema` (uncommitted in the worktree): `--reason "task-194 implements the core rows of the Diagnostics table. Open question 3 left the cadence event code unnamed, so the table gains E_PHASE_CADENCE_EVENT_UNKNOWN (core, error) with its path, message and the states an event may name, and Recurring phases names it. The Order paragraph states that the core rows follow every loader diagnostic, as spec-017 1.3 already orders them, and Where each check runs names the two files, drops roles.yaml, which no core row reads, and says a core check is not decided without its input. No other code, severity or message changes."`
+- `spec-003-workflows-yaml-schema` (uncommitted in the worktree): `--reason "task-194 implements the core rows of the Diagnostics table. Open question 3 left the cadence event code unnamed, so the table gains E_PHASE_CADENCE_EVENT_UNKNOWN (core, error) with its path, message and the states an event may name, and Recurring phases names it. The Order paragraph changes: it interleaved the core rows with the loader rows per field, and now puts every core diagnostic after every loader diagnostic, in spec-003 order among themselves, as task-194 AC 1 asks and because the core checks run only on a load the loader accepted. Where each check runs names the two files, drops roles.yaml, which no core row reads, and says a core check is not decided without its input. No code, severity or message changes."`
 
 ### Decisions for the approver
 
