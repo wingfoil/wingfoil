@@ -134,6 +134,12 @@ On ratification, with W1–W3 chosen in the approve commit's `Reason:`:
 
 v0.3 `release-planning` (`build-backlog`) derives the tasks. None are created here.
 
+**Note (2026-10-07, approver).** Action 2 (W3 (b)) is deferred to v0.4: `task-223` stopped at design in wave 3
+and was deprecated. A per-type branch list would only be the union of the prefixes this repository practises
+(its design notes count them), so it would add little; the rule worth enforcing, `dl-014` G1, needs a policy per
+starting state, and `dl-159`'s maintenance lines change the branch model it must describe. v0.4 planning
+re-creates the task from `task-223`'s Execution Notes. W1 and W2 are delivered (`task-209`, `task-210`).
+
 ## Relations
 
 - **Filed by:** `retro-v0.2` (external-use finding "`submit` sweeps uncommitted edits", and the
