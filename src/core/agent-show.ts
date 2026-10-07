@@ -23,9 +23,10 @@ import {
   RUN_RECORD_KEYS,
   RUN_TOKEN_KEYS,
   runIdElementId,
+  serializeRunRecord,
   type RunRecord,
 } from '../agent/run-log';
-import { runGitRead, StorageError } from '../storage';
+import { readPathAtRev, runGitRead, StorageError } from '../storage';
 import { ValidationError } from '../validation';
 import { requireInitializedProject } from './init';
 import { DNA_YAML_PATH, loadDnaYamlAtRev } from './loaders';
@@ -73,26 +74,43 @@ function workingTreeHint(root: string, logPath: string, runId: string): string |
   return `the working tree's ${logPath} holds ${runId}, but HEAD does not: agent show reads HEAD; commit the run log to show it`;
 }
 
+/** A full object name as `--format=%H` prints it: SHA-1 (40 hex) or SHA-256 (64 hex). */
+const FULL_SHA_RE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
 /**
- * The commit that added `record`'s line to `logPath`, searched from `commit` back (`git log -S`, the
- * search §4.2 names). The line opens with its `id` (§4.2 key 1, written with no whitespace), so the
- * needle `{"id":"<run-id>",` occurs once per line of that run. The newest commit that changed the
- * needle's count is the one that added the line `HEAD` holds; a merge is not diffed, so a record that
- * arrived through one is attributed to the commit on its branch that wrote it.
+ * The commit that added `record`'s line to `logPath`, searched from `commit` back.
+ *
+ * `git log -S` (the search §4.2 names) lists every commit that changed how often the needle
+ * `{"id":"<run-id>",` occurs — the line opens with its `id`, §4.2 key 1, written with no whitespace —
+ * newest first. That list holds the commits that removed a copy of the line too: a side branch that
+ * dropped or reverted it and was merged keeping it, since a merge that equals neither parent makes
+ * git walk both (task-220 review F2). So each listed commit is checked in order, and the first whose
+ * log blob holds the record's exact line is the one that added the line `HEAD` holds. A merge itself
+ * is not diffed, so a record that arrived through one is attributed to the commit on its branch that
+ * wrote it.
+ *
+ * `--no-show-signature` keeps a `log.showSignature` configuration from printing signature text in
+ * place of the names, and every name is checked to be a full sha (review F1); anything else is `IO`.
  */
 function addingCommit(root: string, commit: string, logPath: string, record: RunRecord): CoreResult<string> {
   const needle = `{"id":${JSON.stringify(record.id)},`;
+  const line = serializeRunRecord(record).replace(/\n$/, '');
   let stdout: string;
   try {
-    stdout = runGitRead(root, ['log', '-S', needle, '--format=%H', commit, '--', logPath]).stdout;
+    stdout = runGitRead(root, ['log', '--no-show-signature', '-S', needle, '--format=%H', commit, '--', logPath]).stdout;
   } catch (error) {
     if (!(error instanceof StorageError)) throw error;
     return coreErr({ code: 'IO', message: error.message });
   }
-  const sha = stdout.split('\n')[0]?.trim() ?? '';
-  return sha === ''
-    ? coreErr({ code: 'IO', message: `run ${record.id}: no commit in the history of HEAD adds its line to ${logPath}` })
-    : coreOk(sha);
+  const shas = stdout.split('\n').filter((name) => name !== '');
+  for (const sha of shas) {
+    if (!FULL_SHA_RE.test(sha)) {
+      return coreErr({ code: 'IO', message: `run ${record.id}: git log printed '${sha}' where a commit name was expected` });
+    }
+    const text = readPathAtRev(root, sha, logPath);
+    if (text !== null && text.split('\n').includes(line)) return coreOk(sha);
+  }
+  return coreErr({ code: 'IO', message: `run ${record.id}: no commit in the history of HEAD adds its line to ${logPath}` });
 }
 
 /**
