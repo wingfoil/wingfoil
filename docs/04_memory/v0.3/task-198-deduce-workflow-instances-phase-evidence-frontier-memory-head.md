@@ -73,7 +73,8 @@ walk of §4.8 are task-203's; §5 approvals are task-225's; §6 action/check vie
 **Readings taken (approver to confirm; none needs a spec change to implement):**
 1. §1.4 codes: no frontmatter, no `type`, a type `memory.yaml` does not declare, no `id`, no `status` →
    `W_MEMORY_UNREADABLE` with that reason; a status outside the machine → `W_MEMORY_INVALID_STATE` (path `status`). On
-   this repository that reports the 14 grandfathered pre-`dl-019` plans (measured below), as §1.4 asks.
+   this repository the first pass reported 14 files, which was **wrong** (review F3): 8 of them are the top-level
+   `docs/05_plans/X_*.md` plans `dl-019` grandfathers, not the six §1.4 counts. Fixed in review (below).
 2. `where` match: an absent field reads as `""` (so `release: ["", "{release.version}"]` selects an element with no
    `release`), a list field matches on a shared element, values compared as strings.
 3. `created` without linkage: every step has created nothing, so the kind is satisfied when the phase declares other
@@ -116,8 +117,8 @@ Commit `785baef3`.
 
 Measured on this repository (ts-node, three runs at the branch head, load average ~60 from 8 parallel agents,
 `uptime`): 7 open instances (6 `decision-log-ingest`, 1 `service-ingest`, each `element: null`, context
-`release:minor-v0.3`, frontier `<w>.capture` — linkage is task-203's), 14 `W_MEMORY_UNREADABLE` (the grandfathered
-plans), no other deduction code. Time: snapshot 3.4–6.7 s, of which registry load 1.7–2.4 s and Memory scan
+`release:minor-v0.3`, frontier `<w>.capture` — linkage is task-203's), 14 `W_MEMORY_UNREADABLE` at that pass (six after
+the review F3 fix), no other deduction code. Time: snapshot 3.4–6.7 s, of which registry load 1.7–2.4 s and Memory scan
 1.3–2.0 s (both existing primitives, task-194 / task-137); the reads this task adds (start commits, records, status)
 cost ~0.2 s; the pure deduction 29–107 ms. A first version ran one `git log -- <path>` per open plan (+1.6 s under
 the same load); replaced by one `git log --topo-order` before commit. REQ-PERF-03 (`workflow next` < 1,000 ms p95)
@@ -164,3 +165,53 @@ Each AC against its evidence:
 
 Same-class sweep in touched files: the implicit-owner rule now lives once (`isImplicitOwnerProduces`), used by the
 loader row and the deduction. No other change outside the deduction.
+
+### review fixes (independent review: approve with fixes, F1–F5)
+
+- **F2 (behaviour, red-first).** A phase with `awaits` completed without a record when its other evidence was
+  satisfied; §4.3's `awaits` row and §5.4 need a record. Red `6f1a1add` (`npx jest test/workflow/deduce.test.ts`
+  → 2 failed, 5 passed: F2 and F3), fix `b4e73b4b`: `recordNeeded = phase.awaits !== undefined || only created`.
+- **F3 (behaviour, red-first).** A file with no frontmatter is reported only when its path matches a type's `path`
+  pattern (a file-name token one name, a directory token one or more directories, since `{scope}` nests). Red
+  `6f1a1add` also adds a characterization on this repository: exactly the six §1.4 plans
+  (`initial-design-rl-v1-plan.md` and the five `rl-v1/rel-v0.1/` plans), it failed with 14 before and passes after
+  (`npx jest test/core/workflow-deduction.test.ts -t "review F3"`). Fix `b4e73b4b`.
+- **F1 (coverage).** Unreachable branches removed with the reason in a code comment, not tested: duplicate workflow
+  names and an unresolved `include` (both refused by the registry at load), `memory.yaml` absent while a plan exists
+  (a plan is an element of a declared type), an unknown `element` type (`E_WORKFLOW_ELEMENT_TYPE_UNKNOWN`), the
+  `exits[p]` / `fileOf` lookups (built from the same registry), the creating phase's `actions` (it holds the
+  `memory.add`), the item scope in `hasRecord` and the step key (no collection scope until task-202). Reachable
+  branches tested (`5b3a8534`): the `where` rule (absent `""`, shared list element, non-string value), an unresolved
+  `where` token, `awaits`, a status outside the sequence (`deprecated`) and an undetermined exit, a numeric field
+  token, an unknown context id, an empty declared element, a plan with no workflow and one with no start commit, a
+  typeless `memory.add`, no `memory.yaml`; on the reader: a repository with no `.wingfoil/`, a `produces` pattern
+  starting with a token, `dna.yaml` without `paths.runs`, a plan with no status. The six barrel exports the review
+  named are now used by tests through `src/core` (`W_*` constants, `readDeductionSnapshotAtHead`,
+  `resolveInstanceRef`). Targeted run: `npx jest test/workflow test/core/workflow-deduction.test.ts --coverage
+  --collectCoverageFrom=src/workflow/deduce.ts --collectCoverageFrom=src/core/workflow-deduction.ts` → both files
+  100 / 100 / 100 / 100.
+- **F4 (pending amendments, uncommitted, approver).** `ProducesView.evidence` is kept public and goes into
+  `spec-017` §8 (the `next`/`status` views need it to say "shown but not evidence").
+  - `spec-017` (record after task-199's spec-017 amendment) — proposed `--reason`: "task-198 (review F3/F4): §1.4
+    names every W_MEMORY_UNREADABLE reason and leaves out a no-frontmatter file that lies on no type's path pattern,
+    so the six pre-dl-019 plans are reported and the grandfathered top-level X_* plans are not; §4.9 states that an
+    instance of an unloaded workflow is complete: false despite its empty frontier; §8 adds produces[].evidence. No
+    deduction rule changed."
+  - `spec-003` (record after task-264's and task-199's) — proposed `--reason`: "task-198 (review F4): the Layer 2
+    where row states that values compare as text and that a field a document does not carry reads as an empty
+    string, the reading dl-016's release-empty filter needs and spec-017's deduction applies. No diagnostic
+    changed."
+- **F5 (for downstream tasks).**
+  - `selectWorkflowInstance` returns only `workflow is not open: <ref>` (NOT_FOUND). §10's
+    `unknown workflow: <name>` for a `<ref>` naming no loaded workflow is task-204's / task-216's to add.
+  - `W_UNCOMMITTED_INPUTS` is **one diagnostic per dirty path** (`file` = the path, `path` = `''`), in sorted order.
+  - `readRecords` runs one `rev-list <sha> --not <start>^@` per distinct start commit, and only when a record
+    candidate exists. task-203's single union walk replaces it.
+  - The snapshot cost is dominated by the registry load and the Memory scan (figures under green), not by the reads
+    this task adds. That is a REQ-PERF-03 risk for task-216 (`workflow next` < 1,000 ms p95), to be measured on an
+    idle machine.
+- **Gates after the fixes**, run with the two pending amendments in the working tree: `npx jest --coverage` gave 294
+  suites and 5469 tests passed. All files were 99.33 % statements, 97.25 % branches, 97.29 % functions and 99.73 %
+  lines, against main `4fd77678`'s 99.29 / 97.07 / 97.11 / 99.72 by the same command (reviewer's figures). No figure
+  regresses. `npm run lint`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` and
+  `npm run docs:api` each exit 0.
