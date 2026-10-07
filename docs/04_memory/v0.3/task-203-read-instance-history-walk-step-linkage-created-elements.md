@@ -2,7 +2,7 @@
 id: "task-203-read-instance-history-walk-step-linkage-created-elements"
 type: task
 title: "Read the instance history walk: step linkage, created elements, self-creating workflows and re-entry after reject or park"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "high"
