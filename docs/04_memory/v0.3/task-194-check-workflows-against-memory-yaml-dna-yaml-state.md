@@ -2,7 +2,7 @@
 id: "task-194-check-workflows-against-memory-yaml-dna-yaml-state"
 type: task
 title: "Check workflows against `memory.yaml`, `dna.yaml` and the state machines at `HEAD`"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "high"
