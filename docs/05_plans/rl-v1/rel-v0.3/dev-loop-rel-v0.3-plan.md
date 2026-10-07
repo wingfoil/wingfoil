@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.21"
+version: "1.22"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -184,9 +184,9 @@ and the tasks that unblock the most later work first (`task-194` → 37 later ta
 |---|---|---|
 | **B1** | 262, 194, 210, 206, 195, 196, 209, 201, 263 | `210` before `206` (commit primitive); `196` → `209` (`src/storage/templates.ts`) → `201` (`templates/task.md`); `206` the only writer of `dna.yaml` |
 | **B2** | 264, 199, 198, 200, 261, 220, 223, 260 | `199` the only writer of `workflows.yaml`, first `bindings.yaml`; `223` of `memory.yaml` (if the approver confirms its branch patterns); `260` of `git-conventions.md`; `264` (added at the B1 triage) first, `199` keeps its check green; `261` → `220` (`00_index.md`) |
-| **B3** | 203, 202, 204, 207, 218, 213, 205, 214 | `203` → `202` (deduction modules); `204` → `207` (`scripts/e2e-smoke.cjs`); `205` the only writer of `roles.yaml`, `testing.md` |
-| **B4** | 216, 228, 219, 222, 221, 212, 197, 208 | `222` → `221` (`bindings.yaml`); `219`, `222`, `212` (`WORKFLOW.md`); `222` writes `dna.yaml`, `212` `memory.yaml` and `workflows.yaml`, `197` `traceability.md`, `208` `code-review.md`, `git-conventions.md` |
-| **B5** | 225, 217, 226, 227, 235, 229, 231, 224 | `217` the only writer of `memory.yaml`; `229` first of three writers of `publish.yml` |
+| **B3** | 203, 202, 204, 207, 218, 213, 205, 214, 268 | `203` → `202` (deduction modules); `204` → `207` (`scripts/e2e-smoke.cjs`); `205` the only writer of `roles.yaml`, `testing.md` |
+| **B4** | 216, 228, 219, 222, 221, 212, 197, 208, 269, 270 | `222` → `221` (`bindings.yaml`); `219`, `222`, `212` (`WORKFLOW.md`); `222` writes `dna.yaml`, `212` `memory.yaml` and `workflows.yaml`, `197` `traceability.md`, `208` `code-review.md`, `git-conventions.md` |
+| **B5** | 225, 217, 226, 227, 235, 229, 231, 224, 271, 272 | `217` the only writer of `memory.yaml`; `229` first of three writers of `publish.yml` |
 | **B6** | 211, 240, 239, 238, 232, 233, 230 | `232` → `233` (`scripts/release-health/`); `230` the only writer of `memory.yaml`; `238` after `229` |
 | **B7** | 215, 236, 237, 243, 244, 241, 234 | `236` the only writer of `dna.yaml`; `244` last on `publish.yml` |
 | **B8** | 242, 245, 246 | `245` (`X_cli-cmds.md`) after every command task |
@@ -843,3 +843,16 @@ commit, right after the task's transition and on the task branch:
   - **Fix share:** 3 open fix tasks of 44 open (7%).
   - **Pause:** after the B2 triage the dev-loop stops before B3, at the approver's request, for the feedback
     mechanism a separate session introduces between batches.
+- **2026-10-07 — consumer feedback loop (`dl-163`) and patch scope.**
+  - At the approver's request the dev-loop paused after B2 for a feedback mechanism agreed between batches.
+    `dl-163` (consumer projects' feedback sources and the feedback loop) was filed through `decision-log-ingest`,
+    checked against the remaining v0.3 work, revised with the approver's rulings and ratified `ready`.
+  - Its actions became four tasks: `task-269` (services of kind `repository` with `feedback_inbox`, B4),
+    `task-270` (global `wingfoil-cli` directive: code build for Memory operations here, pinned build for reads and
+    MCP; B4, after `task-205`), `task-271` (`reported_by:`, B5) and `task-272` (`collect-feedback` phase, B5, after
+    `task-213` and `task-222`); S3f goes to `align-user-docs`. `task-268` (`bug-291`) joins B3.
+  - Amended with it: `dl-159` point 1 and A2 (`release/X.Y` is cut from the commit that closes the minor's
+    retrospective when that retrospective plans the patch; the retrospective selects the patch scope by hand and
+    promotes only bugs and decision-logs), `dl-115` (six outcomes for consumer notes), `task-213` (handover).
+    `bug-299` (three `docs/06_*` folders) filed, triage pending.
+  - W3 is now 66 tasks (61 + `268`–`272`; `task-223` deprecated).
