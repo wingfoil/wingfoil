@@ -174,12 +174,19 @@ Self-review findings: none open.
 - `spec-008`'s paragraph lists `the file content` (the `describeDocumentChanges` fallback) and `the
   line endings`, and states the normalization and the escaping. `docs/cli-reference.md` says the same (`c6e3d4eb`).
 
+- **Re-review (2 same-class fixes).** (1) With `core.autocrlf=false`, a field edit plus a CRLF
+  conversion declared only the field: red `b8b32715` (1 failed, 11 passed), fix `3b179003` — the
+  `storesAsBlob` check runs whatever else changed (baseline: the rendering in the committed document's
+  line endings, `withLineEndingsOf`) and appends `the line endings` after every other item. (2) The
+  `spec-010` `memory.add` ownership row listed `type`/`tmpl_version`; it now matches the paragraph
+  (pending amendment). Re-run of the gates below: 78 suites / 1124 tests.
+
 Gates after the fixes (pending amendments in the working tree): `npm run -s lint`, both `tsc`,
 `npm run -s docs:api` exit 0; `npx jest test/memory test/core/memory-submit.test.ts
 test/core/memory-submit-content.test.ts test/storage test/lint test/docs
-test/cli/fresh-init-transitions.test.ts` → 78 suites / 1121 tests passed;
+test/cli/fresh-init-transitions.test.ts` → 78 suites / 1124 tests passed (1121 before the re-review fixes);
 `node scripts/check-governance.cjs --base ed4607a4` exit 0, 0 findings.
 
 **Pending amendments (approver)** — coordinator runs `memory amend`:
-- `spec-008-cli-grammar` — `--reason "task-209 (dl-106 W1 (a), Action 1): §2 declares the submit body, one Carries content: line naming what the commit carries beyond the state move, with line endings normalized and the line endings declared only when git would store them differently; items are escaped. The subject stays plain under dl-054 and ruling R20. Revision note 2026-10-06."`
-- `spec-010-memory-frontmatter-schema` — `--reason "task-209 (dl-106 W1 (a), Action 1; bug-146): the template-shape paragraph now says what add sets (id, title, status and any --tags or --set value, with type and tmpl_version left as the scaffold has them) and no longer says submit fills fields and replaces placeholders; the submit ownership row says which fields the verb writes and which ride in from the author. Revision note 2026-10-06."`
+- `spec-008-cli-grammar` — `--reason "task-209 (dl-106 W1 (a), Action 1): §2 declares the submit body, one Carries content: line naming what the commit carries beyond the state move, compared with line endings normalized, and naming the line endings, after any other item, whenever git would store them differently; items are escaped. The subject stays plain under dl-054 and ruling R20. Revision note 2026-10-06."`
+- `spec-010-memory-frontmatter-schema` — `--reason "task-209 (dl-106 W1 (a), Action 1; bug-146): the template-shape paragraph and the memory.add ownership row now say what add sets (id, title, status and any --tags or --set value, with type and tmpl_version left as the scaffold has them), the paragraph no longer says submit fills fields and replaces placeholders, and the submit ownership row says which fields the verb writes and which ride in from the author. Revision note 2026-10-06."`
