@@ -328,6 +328,10 @@ describe('memory approve — the `supersedes:` trigger (task-162, dl-065 Q1.1)',
     expect(gitOut(repo, ['log', '-1', '--format=%s'])).toBe('wf(adr): approve adr-2-new [pending → accepted]');
     expect(result.error.message).toContain(`adr-2-new was approved in ${approveSha}, but the commit moving adr-1-old to superseded failed`);
     expect(result.error.message).toContain('wf(adr): finalize adr-1-old [accepted → superseded]');
+    // task-210 review F5: the refused commit is named, without the primitive's "as they were", which the
+    // rewritten working tree below would contradict.
+    expect(result.error.message).toContain(`but the commit moving adr-1-old to superseded failed: E_COMMIT_FAILED: git did not commit ${ADR_A}: hook says no. Its status`);
+    expect(result.error.message).not.toContain('as they were');
     expect(readFileSync(join(repo, ADR_A), 'utf-8')).toMatch(/^status: superseded/m);
 
     // The recovery is paste-ready: plain lines, no JSON escapes, and running it completes the pair.

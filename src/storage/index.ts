@@ -7,7 +7,7 @@
  */
 export const MODULE_NAME = 'storage' as const;
 
-export { StorageError, E_GIT_READ_FAILED, E_INVALID_REVISION, E_NO_GIT_ROOT, E_NOT_AT_GIT_ROOT, E_MISSING_PATH_VALUE } from './errors';
+export { StorageError, E_COMMIT_FAILED, E_GIT_READ_FAILED, E_INVALID_REVISION, E_NO_GIT_ROOT, E_NOT_AT_GIT_ROOT, E_MISSING_PATH_VALUE } from './errors';
 export { findGitRoot, resolveProjectRoot } from './git-root';
 export { detectInitState } from './init-state';
 export type { InitState } from './init-state';
@@ -19,9 +19,11 @@ export type { RealPathResolution } from './confinement';
 export { extractFrontmatter, splitFrontmatter } from './frontmatter';
 export type { FrontmatterSplit } from './frontmatter';
 export { readDocument, documentExists, removeDocument, writeDocument } from './document';
-export { changedPathsBetween, commitParent, commitPaths, committedBlobMatches, EMPTY_TREE_SHA, listBlobEntriesAtRev, listPathsAtRev, listPathsAtRevs, pathPorcelainStatus, readPathAtRev, readPathsAtRev, resolveCommitAtRev } from './commit';
+export { changedPathsBetween, CommitFailure, commitFailureSummary, commitParent, commitPaths, committedBlobMatches, writeAndCommit, EMPTY_TREE_SHA, listBlobEntriesAtRev, listPathsAtRev, listPathsAtRevs, pathPorcelainStatus, readPathAtRev, readPathsAtRev, resolveCommitAtRev } from './commit';
 export type { BlobEntry } from './commit';
-export type { CommitOptions } from './commit';
+export type { CommitOptions, PathChange } from './commit';
+export { captureDryRun, isDryRunActive, planDiff } from './dry-run';
+export type { DryRunOutcome, DryRunPlan } from './dry-run';
 export { formatVersionTrailer, readBuildStamp, WINGFOIL_VERSION_TRAILER_KEY } from './build-stamp';
 export { GIT_READ_MAX_BUFFER, runGitRead, runGitReadBytes } from './git-read';
 export type { GitReadOptions, GitReadResult } from './git-read';
