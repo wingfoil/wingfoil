@@ -124,15 +124,24 @@ const AgentEntry = z.object({
   // optional email is one address, local@domain.tld, with no whitespace or angle brackets — by default
   // the address the agent's vendor publishes for co-authorship, or a project-owned machine account;
   // on GitHub's noreply domain only the id-qualified <id>+<login>@users.noreply.github.com. [AUTHORING]
-  name:               z.string().refine(isTrailerSafeName),
-  email:              z.string().regex(AGENT_EMAIL_RE).refine(isIdQualifiedGitHubNoreply).optional(),
+  // Neither half may be one the attribution audit rejects (bug-261): the name is not empty or blank, and
+  // the email has no attributionEmailIssue — git's guessed `.(none)` domain, a parenthesis in the
+  // top-level domain, an RFC 2606 reserved TLD. That is the rule isValidAttribution applies after its
+  // non-empty base check (src/validation/identity.ts), shared, not restated: an identity this schema
+  // accepts is one the audit accepts. [SPEC: REQ-SEC-02, dl-158]
+  name:               z.string().refine(isTrailerSafeName).refine(not(isBlankIdentityName)),
+  email:              z.string().regex(AGENT_EMAIL_RE).refine(isIdQualifiedGitHubNoreply)
+                        .superRefine(noAttributionEmailIssue).optional(),
   executes_as:        z.array(z.string()),
   approval_authority: z.boolean().optional(),  // always false — agents never approve (REQ-SYS-08)
   // The adapter manifest that says HOW the agent is launched: its basename under
   // .wingfoil/agents/{built-in,custom}/, held to the shared id class [a-z0-9-.] (spec-009 §1).
   // Optional — an agent without one can be named but not launched. [SPEC: spec-016 §2.1]
   adapter:            z.string().refine(isIdPiece).optional(),
-}).passthrough();
+}).passthrough()
+  // An entry with an adapter can be launched by `agent execute`, so its commits carry its trailer: it must
+  // declare an email (dl-158 Rule 2 (ii)); the issue is reported at `email`. [SPEC: dl-158]
+  .superRefine(adapterRequiresEmail);
 
 const RoleEntry = z.object({
   name:        z.string(),              // [SPEC: REQ-SYS-08] canonical role name
@@ -454,3 +463,19 @@ unregistered login can be claimed by anyone. Every refusal names the field (`tea
 writable (`dna update team.agents.<name> --entry-email <address>`), which the *Unknown keys* section
 refused before. A document valid before stays valid unless an agent's name carries one of those three
 characters or its email is a bare GitHub noreply address. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-07, `task-260`, the task that amends `git-conventions` §7 to `dl-158`)
+— `AgentEntry` refuses an identity the attribution audit rejects and an adapter entry without an email, per `bug-261` and
+`dl-158` Rule 2 (ii).** `git-conventions` §7 writes an agent entry into every `Co-Authored-By:` trailer, and
+the schema accepted an empty or blank `name` and an `email` on an RFC 2606 reserved top-level domain
+(`.test`, `.example`, `.invalid`, `.localhost`), carrying git's guessed `.(none)` domain, or with a
+parenthesis in its top-level domain: identities the attribution audit (`isValidAttribution`, REQ-SEC-02)
+rejects as unattributed. All are now refused through the one rule the audit applies after its non-empty
+base check (`src/validation/identity.ts`), so an identity the schema accepts is one the audit accepts,
+and a later refinement of the rule reaches both. `dl-158` Rule 2 (ii) makes an
+entry used for commits declare an email; the schema enforces it where it can see a signing entry: an
+entry that declares an `adapter` (one `agent execute` can launch) must declare an `email`. Without an
+`adapter` the `email` stays optional (approver ruling F1, `task-256`), and a hand session's signing entry
+is governed by the directive. Every refusal names the field (`team.agents.<i>.name` / `.email`). A
+document valid before stays valid unless an agent carries one of those identities or an `adapter`
+without an `email`. Edited in place without a supersede or a state change (`dl-047`).
