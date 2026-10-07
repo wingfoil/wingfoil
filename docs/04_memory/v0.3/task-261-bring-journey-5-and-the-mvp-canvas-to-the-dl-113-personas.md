@@ -65,10 +65,12 @@ lists Alex first, does not mark Morgan primary, has no row for Persona 7, and it
 No red (characterization only). One commit, `b4b8d4ef` `docs(vision)`:
 - `05_journeys.md` 1.4 → **1.5**: Journey 5 step 4 is now "Check who builds the project and with what" → `wingfoil
   dna show` → "team size, stacks", what the command returns. A new **step 4.5** "Check release progress (read-only
-  view)" names the current phase and risks as a view over workflow state: `wingfoil workflow status` (P4.5, planned;
+  view)" gives each release's state (current phase) and what is pending or blocking, as a view over workflow
+  state (wording after review fix F1): `wingfoil workflow status` (P4.5, planned;
   `06_features.md` L84 already lists Journey 5 for it) or, until it ships, `wingfoil memory search --type release`
-  (shipped: on this repository it lists the five releases with their status, `npm run -s wingfoil -- memory search
-  --type release`). Inserting a row (like the journey's existing step 1.5) moves Journey 6 and Key Observations by
+  (shipped: on this repository it lists six releases, minor-v0.1 to minor-v1.0 and patch-v0.2.2, each with its
+  status, `npm run -s wingfoil -- memory search --type release | grep -c '"id"'` → 6). Inserting a row (like the
+  journey's existing step 1.5) moves Journey 6 and Key Observations by
   one line (287 lines).
 - `08_mvp-canvas.md` 1.8 → **1.9**: *Target Users* lists **Morgan first, marked primary**; Casey's solution is
   "Read-only views: decisions, approvals, progress" (Q2 (a), the three views of `04_personas.md`); a row for **the
@@ -89,14 +91,16 @@ No red (characterization only). One commit, `b4b8d4ef` `docs(vision)`:
 - `npm run lint` exit 0; `npm run docs:api` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
   `npx tsc -p tsconfig.build.json --noEmit` exit 0; `node scripts/check-governance.cjs --base 4fd77678` exit 0
   (3 wf() commits checked, 0 findings).
-- BDD: no feature file covers the vision documents (task-186's check, `grep -rln 01_vision test/`).
+- BDD: no feature file covers the vision documents. `grep -rln 01_vision test/` prints two test files, neither a BDD
+  feature: `test/cli/journey-0a.integration.test.ts` (comments) and `test/docs/memory-store-location-text.test.ts`
+  (scans `docs/01_vision` text); both are in the green `npm test` run above.
 - Vision index check (task-141's script, in `docs/01_vision/`) → `mismatches: []`.
 
 ### review (self, reviewer, 2026-10-07)
 
 | AC | Status | Evidence |
 |---|---|---|
-| 1 — Journey 5 step 4 (`bug-268`) | met | `sed -n 223,224p docs/01_vision/05_journeys.md`; `grep -n 'current phase, risks' docs/01_vision/05_journeys.md` → only L224 (step 4.5, workflow-state view) |
+| 1 — Journey 5 step 4 (`bug-268`) | met | `sed -n 223,224p docs/01_vision/05_journeys.md`; `grep -n 'current phase, risks' docs/01_vision/05_journeys.md` → nothing; `grep -n -i 'risk' docs/01_vision/05_journeys.md` → only L213 (the scenario's question), no step promises risks |
 | 2 — canvas Target Users (`bug-269`) | met | `sed -n 46,62p docs/01_vision/08_mvp-canvas.md` (Morgan first + primary, Casey read-only views, the maintainer's row); `grep -n '7 personas' docs/01_vision/08_mvp-canvas.md` → L212 |
 | 3 — doc-versioning + index | met | `grep -n '^\*\*Version\|^\*\*Date' docs/01_vision/0{5,8}_*.md` → 1.5/1.9, 2026-10-07; index script → `mismatches: []` |
 
@@ -109,6 +113,15 @@ Left as written, on purpose (decision for the approver): Journey 5 **step 8** ha
 never to change it". `dl-113` Q2 (a) itself restates only Casey's *goals* as views (it lists "pending approvals" as a
 view), and says the journeys follow "on their own terms"; whether a stakeholder approval step survives is a vision
 change, not this bug's cell.
+
+### review fixes (coordinator review: approve with fixes, 2026-10-07)
+
+No re-bump (the same-day first edit already bumped `05_journeys.md`). F1: step 4.5's outcome promised "risks", which
+neither `memory search --type release` (id, title, type, status, tags, path) nor P4.5 `workflow status`
+(`06_features.md` L84: open main workflows and pending approvals) returns; it now reads "Each release's state
+(current phase), what is pending or blocking", in `04_personas.md` L106's terms (release progress and its
+bottlenecks). Line count unchanged (287), index script → `mismatches: []`. F2: the two notes claims above corrected
+(six releases, not five; the `grep -rln 01_vision test/` output described). Status stays `in-review`.
 
 ### Candidate findings (not filed)
 
