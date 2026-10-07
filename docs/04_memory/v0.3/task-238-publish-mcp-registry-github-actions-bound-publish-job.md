@@ -35,6 +35,16 @@ The first registry publish was refused (403): the registry's OAuth app cannot se
 - **Planning ruling:** Approver ruling 2026-09-30 (plan R20, Q3): the registry job waits for the version to be live on npm with a bounded poll (`npm view wingfoil@<version>`, a declared timeout), not with a second environment approval.
 - **Notes:** Proposal key: D24 (merged: E2). Merged with proposal E2 (`dl-057` (b)/(d)): both edit `.github/workflows/publish.yml`. `npm run check:mcp` and the existing publish-pipeline tests stay green; `act` is not required.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from the parallel-release-lines decision (2026-10-07):** `dl-159` (`in-discussion`, to be ratified before the
+  `v0.3.0` tag) opens `release/X.Y` maintenance lines beside `main`: patches land on `release/X.Y` and are merged
+  forward into `main` with `--no-ff`, never cherry-picked or back-merged; patch tags go on the pushed `release/X.Y`.
+  `task-265` (B9) extends `scripts/check-release-tag.cjs`, or a sibling, with the line check (`origin/main` or
+  `origin/release/X.Y`, `X.Y` from the tag): keep the lightweight-tag refusal its own exported function and leave
+  the gate's "Tag commit is on main" a single step `task-265` replaces. `task-266` (B9) decides whether the
+  `mcp-registry` job skips or flags a version that is not `latest`, so the listing never advertises a 0.3.x over a
+  0.4.x: give the job one `if:` it can extend, record in Execution Notes what you read about how the Registry marks
+  a server's latest version, and wait for the exact version on npm, not `wingfoil@latest`. Do not hard-code `latest`
+  anywhere in the job.
 
 ## Execution Notes
 
