@@ -528,3 +528,109 @@ describe('bug-281 — a core check that did not run says so (spec-003 "Where eac
     }
   });
 });
+
+describe('task-204 — show resolves every declared form, with and without the other pillars', () => {
+  const EDGE_MAIN = `name: edge-main
+startable: true
+element: release
+phases:
+  - name: seed
+    role: developer
+    mode: resume
+    approval: { by_person: Roberto }
+    actions:
+      - "memory.add(type: task)"
+    produces:
+      - { type: task, path: "docs/tasks/{task.id}.md" }
+      - "docs/out/{id}.md"
+  - name: mods
+    iterate_over: "dna:modules"
+    include: per-module
+  - name: same
+    include: rel-sub
+`;
+  const PER_MODULE = `name: per-module
+includable: true
+phases:
+  - name: check
+`;
+  const REL_SUB = `name: rel-sub
+includable: true
+element: release
+phases:
+  - name: x
+    actions:
+      - element.set_state(releasing)
+`;
+
+  it('a non-fresh mode, by_person, a { type, path } and an implicit owner, a collection iteration, a typed sub', async () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeProject(repo, ['workflows/custom/report-bug.yaml']);
+      const files = ['workflows/custom/edge-main.yaml', 'workflows/custom/per-module.yaml', 'workflows/custom/rel-sub.yaml'];
+      commitFiles(
+        repo,
+        {
+          '.wingfoil/workflows.yaml': manifest(['workflows/custom/report-bug.yaml', ...files]),
+          '.wingfoil/workflows/custom/edge-main.yaml': EDGE_MAIN,
+          '.wingfoil/workflows/custom/per-module.yaml': PER_MODULE,
+          '.wingfoil/workflows/custom/rel-sub.yaml': REL_SUB,
+        },
+        'edge workflows',
+      );
+      const [seed, mods, same] = ok(await show(repo, 'edge-main')).workflow.phases;
+      expect(seed).toMatchObject({
+        mode: 'resume',
+        allowedModes: ['fresh', 'resume'],
+        approval: { byPerson: 'Roberto' },
+        produces: [
+          { pattern: 'docs/tasks/{task.id}.md', owner: 'task', evidence: false },
+          { pattern: 'docs/out/{id}.md', owner: null, evidence: false },
+        ],
+        evidence: ['created', 'record'],
+      });
+      expect(mods).toMatchObject({ iterate: { over: 'dna:modules', where: null }, evidence: ['include'], sub: { name: 'per-module' } });
+      expect(same.sub).toMatchObject({ name: 'rel-sub', element: 'release' });
+      expect(same.sub.phases[0].evidence).toEqual(['state']);
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+
+  it('without memory.yaml and roles.yaml at HEAD: declarations still resolve, each role says why it has no directive', async () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeProject(repo);
+      rmSync(join(repo, '.wingfoil/memory.yaml'));
+      rmSync(join(repo, '.wingfoil/roles.yaml'));
+      commitAll(repo, 'no memory.yaml, no roles.yaml');
+      const releaseCycle = ok(await show(repo, 'release-cycle')).workflow;
+      expect(releaseCycle.phases[0]).toMatchObject({
+        directives: [],
+        directiveWarnings: ["roles.yaml is absent: no directive resolved for role 'developer'"],
+        evidence: ['state'],
+      });
+      expect(releaseCycle.phases[1].sub.phases[1].produces).toEqual([{ pattern: 'docs/reviews/{id}.md', owner: 'release', evidence: true }]);
+      const sprint = ok(await show(repo, 'sprint')).workflow;
+      expect(sprint.phases[0].sub).toMatchObject({ name: 'task-loop', element: 'task' });
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+
+  it('a repository with no commit: show refuses the name, list lists nothing', async () => {
+    const repo = makeTempGitRepo();
+    try {
+      const result = await show(repo, 'release-cycle');
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toMatchObject({ code: 'NOT_FOUND', message: 'unknown workflow: release-cycle' });
+      expect(ok(await list(repo))).toMatchObject({ workflows: [], message: 'no workflows defined' });
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+
+  it('called without <ref>, workflowShow throws the one missing-operand usage error (exit 2)', async () => {
+    await expect(operation('workflowShow').fn({ root: '/nonexistent' })).rejects.toThrow('missing required argument: <ref>');
+  });
+});

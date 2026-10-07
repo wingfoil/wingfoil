@@ -1037,7 +1037,7 @@ development phase. An open workflow is a `plan` document in `draft` or `active` 
 
 ```console
 $ wingfoil workflow list --format json
-{"baseline":{"rev":"HEAD","commit":"<sha>"},"workflows":[{"name":"bug-ingest","startable":true,"includable":false,"description":"Capture a single defect report (bug) into Memory.","executableNow":true}, …],"diagnostics":[…]}
+{"baseline":{"rev":"HEAD","commit":"<sha>"},"workflows":[{"name":"adr-ingest","startable":true,"includable":false,"description":"Capture a single Architectural Decision Record (ADR) into Memory.","executableNow":true}, …],"diagnostics":[…]}
 ```
 
 With no `workflows.yaml` at `HEAD` it lists nothing and adds `"message": "no workflows defined"`, exit `0`.
