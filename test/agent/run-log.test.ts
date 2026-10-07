@@ -510,6 +510,26 @@ describe('recording a run (spec-016 §4.3 collision, §4.4 commit, §3.7)', () =
     expect(existsSync(join(repo, 'docs', 'runs'))).toBe(false);
   });
 
+  it('a filesystem failure on the write is IO with the record in details and no absolute path (re-review)', () => {
+    mkdirSync(join(repo, 'docs', 'runs'), { recursive: true });
+    chmodSync(join(repo, 'docs', 'runs'), 0o555);
+    try {
+      const before = show(['rev-parse', 'HEAD']).trim();
+      const result = recordRun(repo, LOG, record());
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('IO');
+      expect(result.error.message).toMatch(new RegExp(`^run ${ELEMENT_ID}/design/1 not recorded: .*EACCES`));
+      expect(result.error.message).toContain(LOG);
+      expect(result.error.message).not.toContain(repo);
+      expect(result.error.message).not.toContain(realpathSync(repo));
+      expect(errorDetails(result.error)).toEqual([{ detail: line() }]);
+      expect(show(['rev-parse', 'HEAD']).trim()).toBe(before);
+    } finally {
+      chmodSync(join(repo, 'docs', 'runs'), 0o755);
+    }
+  });
+
   it('under a dry run, plans the record commit and writes nothing (task-210)', async () => {
     const outcome = await captureDryRun(async () => recordRun(repo, LOG, record()));
     expect(outcome.kind).toBe('planned');
