@@ -14,6 +14,9 @@
  * The git configuration is isolated (`isolateGitConfig`): no global or system configuration of the
  * developer is read or written.
  */
+import { mkdirSync } from 'fs';
+import { join } from 'path';
+
 import { auditAttribution } from '../../src/memory/audit';
 import { walkGitLogFields } from '../../src/memory/git-log';
 import { collectHistoricalPaths, findElementCreationSha, getMemoryHistory } from '../../src/memory/history';
@@ -31,6 +34,7 @@ function seed(repo: string): void {
   commitAll(repo, 'scaffold');
   writeFixtureFile(repo, 'docs/old/bug-1.md', BODY.replace('id: ""', 'id: "bug-1"'));
   commitAll(repo, 'wf(bug): add bug-1');
+  mkdirSync(join(repo, 'docs/bugs'), { recursive: true });
   git(repo, ['mv', 'docs/old/bug-1.md', ELEMENT]);
   git(repo, ['commit', '-q', '-m', 'move bug-1']);
   writeFixtureFile(repo, ELEMENT, BODY.replace('id: ""', 'id: "bug-1"').replace('status: draft', 'status: open'));
