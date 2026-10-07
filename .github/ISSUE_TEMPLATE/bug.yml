@@ -1,6 +1,8 @@
 # Bug report — the fields are the `bug` Memory element's (.wingfoil/memory/templates/bug.md), so that
 # `bug-ingest`'s `capture` phase can be run from the issue without asking the reporter again
-# (dl-127; pinned by test/docs/community-health.test.ts).
+# (dl-127; pinned by test/docs/community-health.test.ts). Two answers are mapped at capture, not copied:
+# the title loses its `bug: ` prefix, and the installed version becomes the `release-origin` release id
+# of the release that published it (0.2.1 -> v0.2 for a minor's build, 0.2.2 -> v0.2.2 for a patch).
 name: Bug report
 description: Report a defect in WingFoil. It is captured as a `bug` element in the project's Memory.
 title: "bug: "
@@ -14,7 +16,8 @@ body:
         agent captures this issue as a `bug` element, with your GitHub handle as its `contributor` and this
         issue's URL beside it, so you are credited for the work derived from it.
 
-        The issue title is the bug's title: one short line, e.g. "memory submit crashes on missing frontmatter".
+        The issue title, without its `bug: ` prefix, is the bug's title: one short line, e.g.
+        "memory submit crashes on missing frontmatter".
         For a vulnerability, do not use this form: follow
         [SECURITY.md](https://github.com/wingfoil/wingfoil/blob/main/SECURITY.md).
   - type: dropdown
@@ -33,7 +36,9 @@ body:
     id: release-origin
     attributes:
       label: WingFoil version
-      description: The version where you found the bug — the output of `wingfoil --version`.
+      description: >-
+        The version where you found the bug — the output of `wingfoil --version`. At capture it is
+        recorded as the release that published it (e.g. 0.2.2 → `v0.2.2`).
       placeholder: "0.2.2"
     validations:
       required: true

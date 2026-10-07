@@ -15,7 +15,8 @@ body:
         issue's URL beside it. The approver then ratifies one option, or declines it, and the decision is
         delivered by a later release.
 
-        The issue title is the decision-log's title: the question or the change, in one line.
+        The issue title, without its `proposal: ` prefix, is the decision-log's title: the question or the
+        change, in one line.
   - type: textarea
     id: context
     attributes:

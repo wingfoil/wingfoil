@@ -41,10 +41,13 @@ are still run by a maintainer or an agent. The current path is:
 1. **Open a GitHub issue** with one of the two issue forms (`.github/ISSUE_TEMPLATE/`):
    - **Bug report**, for a defect. Its fields are the `bug` element's: the issue title is the bug's
      `title`, then `severity`, the WingFoil version (`release-origin`), Summary, Steps to Reproduce,
-     Expected Behavior, Actual Behavior and Notes. `bug-ingest`'s `capture` runs from it as written.
+     Expected Behavior, Actual Behavior and Notes. `bug-ingest`'s `capture` copies every answer
+     except two, which it maps: the title loses its `bug: ` prefix, and the installed version you
+     give (`wingfoil --version`, e.g. `0.2.2`) becomes the `release-origin` id of the release that
+     published it (`v0.2` for a minor's build such as `0.2.1`, `v0.2.2` for a patch release).
    - **Proposal**, for a product or process decision: the context, the options you see and the one you
      prefer, which `decision-log-ingest`'s `capture` records as the `decision-log`'s Context, Decision
-     and Rationale.
+     and Rationale (the title loses its `proposal: ` prefix).
 
    Blank issues are off. Questions go to
    [Discussions](https://github.com/wingfoil/wingfoil/discussions/categories/q-a), and a vulnerability
