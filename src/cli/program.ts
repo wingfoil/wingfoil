@@ -460,7 +460,7 @@ function buildFlagValues(
   if (flagNames.length === 0) return undefined;
   const flagValues: Record<string, boolean> = {};
   for (const name of flagNames) {
-    flagValues[name] = Boolean(options[name]);
+    flagValues[name] = Boolean(options[commanderKey(name)]);
   }
   return flagValues;
 }

@@ -11,10 +11,7 @@
  * task-029's wizard can pass its own richer, spec-011-complete file set (with real content) through
  * the exact same write+commit path.
  */
-import { join } from 'path';
-
-import { commitPaths } from './commit';
-import { writeDocument } from './document';
+import { writeAndCommit } from './commit';
 
 /** The WingFoil root directory name, relative to the project (git) root (spec-011-storage-layout). */
 export const WINGFOIL_DIR = '.wingfoil';
@@ -26,7 +23,7 @@ export const INIT_COMMIT_MESSAGE = 'chore(wingfoil): initialize .wingfoil/ stora
 export interface ScaffoldFile {
   /** Path relative to the project root, always under `.wingfoil/`, POSIX-separated. */
   readonly path: string;
-  /** Initial file content written verbatim (bytes-only — see {@link writeDocument}). */
+  /** Initial file content written verbatim (bytes-only, written by {@link writeAndCommit}). */
   readonly content: string;
 }
 
@@ -81,7 +78,7 @@ export function scaffoldFiles(): ScaffoldFile[] {
 
 /**
  * Write every file in `files` (default: {@link scaffoldFiles}) under `root` and stage exactly those
- * paths as a **single** commit (via {@link commitPaths}), returning the new commit's sha.
+ * paths as a **single** commit (via {@link writeAndCommit}, which also puts the files back when git refuses that commit — task-210, `bug-217`), returning the new commit's sha.
  *
  * Pure mechanism: it assumes `root` is already a validated git root (the "not a git repository" guard
  * and the git-identity pre-flight live in the `CoreResult` wrapper, `src/core/init.ts`, so both the
@@ -93,8 +90,5 @@ export function initStorage(
   files: readonly ScaffoldFile[] = scaffoldFiles(),
   message: string = INIT_COMMIT_MESSAGE,
 ): string {
-  for (const file of files) {
-    writeDocument(join(root, file.path), file.content);
-  }
-  return commitPaths(root, files.map((file) => file.path), message);
+  return writeAndCommit(root, files.map((file) => ({ path: file.path, content: file.content })), message);
 }

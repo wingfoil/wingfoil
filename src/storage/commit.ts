@@ -17,9 +17,12 @@
  * env silently drops `GIT_*` overrides a test sets (the task-014 env-isolation gotcha).
  */
 import { execFileSync, spawnSync } from 'child_process';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmdirSync, unlinkSync, writeFileSync } from 'fs';
+import { dirname, isAbsolute, join, relative, sep } from 'path';
 
 import { formatVersionTrailer, readBuildStamp } from './build-stamp';
-import { E_GIT_READ_FAILED, E_INVALID_REVISION, StorageError } from './errors';
+import { isDryRunActive, planDiff, refuseDuringDryRun, stopWithPlan } from './dry-run';
+import { E_COMMIT_FAILED, E_GIT_READ_FAILED, E_INVALID_REVISION, StorageError } from './errors';
 import { runGitRead, runGitReadBytes } from './git-read';
 import type { GitReadOptions } from './git-read';
 
@@ -35,13 +38,26 @@ export interface CommitOptions {
    * that string, so a `<` in the name moved the email it recorded (task-132 review, finding 2).
    */
   readonly author?: { readonly name: string; readonly email: string };
+  /**
+   * The success warnings the operation has collected before it commits (task-210 review, F4). The real
+   * run ignores them — the operation reports them itself — while a dry run, which stops at the commit,
+   * carries them into its result, so `--dry-run` warns about what the real run would warn about.
+   */
+  readonly warnings?: readonly string[];
+  /**
+   * {@link CommitOptions.warnings} as a dry run words them, when a warning reports something done ("was
+   * rewritten") that a plan only intends ("would be rewritten"). Absent, a dry run carries `warnings`.
+   */
+  readonly plannedWarnings?: readonly string[];
+}
+
+/** The environment git runs with: `process.env`, with {@link CommitOptions.env} merged over it. */
+function gitEnv(options: CommitOptions): NodeJS.ProcessEnv {
+  return options.env ? { ...process.env, ...options.env } : process.env;
 }
 
 function runGit(root: string, args: readonly string[], options: CommitOptions): string {
-  return execFileSync('git', ['-C', root, ...args], {
-    encoding: 'utf-8',
-    env: options.env ? { ...process.env, ...options.env } : process.env,
-  });
+  return execFileSync('git', ['-C', root, ...args], { encoding: 'utf-8', env: gitEnv(options) });
 }
 
 /**
@@ -57,11 +73,7 @@ function runGit(root: string, args: readonly string[], options: CommitOptions): 
  * has not been created yet. A non-zero exit still raises through `execFileSync` exactly as before.
  */
 function probeGit(root: string, args: readonly string[], options: CommitOptions): string {
-  return execFileSync('git', ['-C', root, ...args], {
-    encoding: 'utf-8',
-    env: options.env ? { ...process.env, ...options.env } : process.env,
-    stdio: ['ignore', 'pipe', 'ignore'],
-  });
+  return execFileSync('git', ['-C', root, ...args], { encoding: 'utf-8', env: gitEnv(options), stdio: ['ignore', 'pipe', 'ignore'] });
 }
 
 /** git's exit status for `fatal:` — an absent path, an unresolvable revision, no repository. */
@@ -106,6 +118,9 @@ function stampedMessage(message: string): string {
  * a context-building read path (the determinism rule targets read/derivation paths, e.g.
  * `computeStateSnapshot`), so it is correct and intended here.
  *
+ * A mutating operation commits through {@link writeAndCommit}, which writes, commits and undoes a
+ * refused commit in one place; during a dry run this function throws instead of committing (task-210).
+ *
  * @throws whatever `git` raises (via `execFileSync`) — e.g. nothing staged to commit, or `root` is
  *   not a git repository. Callers that must translate those into a `CoreResult` do so at their layer
  *   (see `src/core/init.ts`); this primitive stays a thin, throwing mechanism by design.
@@ -116,7 +131,18 @@ export function commitPaths(
   message: string,
   options: CommitOptions = {},
 ): string {
-  runGit(root, ['add', '--', ...paths], options);
+  refuseDuringDryRun('commitPaths');
+  return commitPathsNow(root, paths, message, options);
+}
+
+/**
+ * {@link commitPaths} without the dry-run guard — what {@link writeAndCommit} runs once it has decided
+ * this is a real run. git's stderr is captured rather than inherited (task-210, `bug-217`): a refusing
+ * hook's text reaches the caller inside the error, which {@link writeAndCommit} rewords, instead of
+ * being printed raw to the operator's terminal before WingFoil's own message.
+ */
+function commitPathsNow(root: string, paths: readonly string[], message: string, options: CommitOptions): string {
+  quietGit(root, ['add', '--', ...paths], options);
   // `--only -- <paths>` records exactly these paths, whatever else is staged: anything a caller or
   // another tool already staged stays staged and uncommitted (bug-027). A plain `git commit` would
   // commit the whole index under a subject that names only this operation.
@@ -127,21 +153,236 @@ export function commitPaths(
   // runs collapsed, a `#` line kept — is the tool's, whatever `commit.cleanup` the operator's or the
   // repository's git config sets. Unpinned, `strip` deleted a reason line opening with `#` and
   // `verbatim` kept what `dl-067` clause 3 declares removed.
-  runGit(root, ['commit', '--only', '--quiet', '--cleanup=whitespace', '-m', stampedMessage(message), '--', ...paths], commitOptions);
+  quietGit(root, ['commit', '--only', '--quiet', '--cleanup=whitespace', '-m', stampedMessage(message), '--', ...paths], commitOptions);
   return runGit(root, ['rev-parse', 'HEAD'], options).trim();
 }
 
+/** {@link runGit} with stderr captured into the thrown error instead of inherited by the terminal. */
+function quietGit(root: string, args: readonly string[], options: CommitOptions): string {
+  return execFileSync('git', ['-C', root, ...args], { encoding: 'utf-8', env: gitEnv(options), stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+// --- The one write-and-commit primitive (task-210, dl-106 W2, bug-217) -------------------------
+
 /**
- * Reset the index entries of `paths` to `HEAD` (`git reset --quiet -- <paths>`), leaving the working
- * tree alone: the undo of the `git add` {@link commitPaths} runs before its commit, for a caller whose
- * commit failed and who restores the working-tree file itself (task-206, the run record's failed
- * commit, `spec-016` §3.7). A path absent at `HEAD` leaves the index; one present returns to its
- * committed blob.
- *
- * @throws whatever `git` raises (via `execFileSync`).
+ * One path a write changes: its new `content`, or `null` to delete it. `path` is root-relative or
+ * absolute, as {@link commitPaths} accepts it.
  */
-export function unstagePaths(root: string, paths: readonly string[], options: CommitOptions = {}): void {
-  runGit(root, ['reset', '--quiet', '--', ...paths], options);
+export interface PathChange {
+  readonly path: string;
+  readonly content: string | null;
+}
+
+/** A path as {@link writeAndCommit} handles it: both spellings, and its state before the write. */
+interface PlannedChange {
+  readonly absolute: string;
+  readonly relative: string;
+  readonly content: string | null;
+}
+
+/** `path` relative to `root`, with `/` separators — the spelling git and the plan use. */
+function repoRelative(root: string, path: string): string {
+  return (isAbsolute(path) ? relative(root, path) : path).split(sep).join('/');
+}
+
+/**
+ * Write `changes` and commit exactly those paths as one commit with `message`, returning its sha — the
+ * single primitive every mutating operation writes through (task-210), so that two behaviours are
+ * implemented once for all of them:
+ *
+ * - **Dry run** (`dl-106` W2, `spec-008` §2 `--dry-run`). Inside `captureDryRun` (`./dry-run`), nothing
+ *   is written: the commit the call would make — subject, full message with the `WingFoil-Version:`
+ *   trailer, sorted root-relative paths, and the diff from `HEAD` to the blobs it would record
+ *   (`planDiff`) — is recorded with {@link CommitOptions.warnings}, and the operation stops here. Every
+ *   guard and refusal the operation runs before its write has already run, so a dry run of a refused
+ *   operation is refused the same way.
+ * - **A failed commit leaves nothing behind** (`bug-217`). When writing a file or git's `add`/`commit`
+ *   fails (a refusing hook, a full disk, an unparseable author date, a held `index.lock`), the working
+ *   tree is put back first — a created file is deleted, then every directory the write created, deepest
+ *   first across all paths; an overwritten or deleted file gets its bytes back — and then, when it
+ *   differs from what it was, the index entry of every path, whatever the operator had staged there. So
+ *   a retry of `memory add` gets the same id and nothing rides into the operator's next commit. A git
+ *   failure is then reported as {@link CommitFailure} (`E_COMMIT_FAILED`), naming the paths repository-
+ *   relative and quoting git's explanation with the project root removed — and, if the index could not
+ *   be put back, saying so. A filesystem failure is rethrown as it was raised (the index is untouched by
+ *   then).
+ *
+ * Callers run their confinement and dirty-target guards before calling: this primitive writes where it
+ * is told.
+ */
+export function writeAndCommit(root: string, changes: readonly PathChange[], message: string, options: CommitOptions = {}): string {
+  const planned: PlannedChange[] = changes.map((change) => ({
+    absolute: isAbsolute(change.path) ? change.path : join(root, change.path),
+    relative: repoRelative(root, change.path),
+    content: change.content,
+  }));
+  if (isDryRunActive()) {
+    const sorted = [...planned].sort((a, b) => Number(a.relative > b.relative) - Number(a.relative < b.relative));
+    stopWithPlan(
+      {
+        dryRun: true,
+        subject: (/^.*/.exec(message) as RegExpExecArray)[0],
+        message: stampedMessage(message),
+        paths: sorted.map((change) => change.relative),
+        diff: sorted.map((change) => planDiff(root, change.relative, change.content, gitEnv(options))).join(''),
+      },
+      options.plannedWarnings ?? options.warnings,
+    );
+  }
+
+  const relativePaths = planned.map((change) => change.relative);
+  const indexBefore = indexEntries(root, relativePaths, options);
+  const bytesBefore = planned.map((change) => (existsSync(change.absolute) ? readFileSync(change.absolute) : null));
+  const createdDirectories: { readonly file: string; readonly created: string }[] = [];
+  const restoreWorkingTree = (): void => {
+    planned.forEach((change, index) => {
+      const bytes = bytesBefore[index] ?? null;
+      if (bytes !== null) writeFileSync(change.absolute, bytes);
+      else if (existsSync(change.absolute)) unlinkSync(change.absolute);
+    });
+    removeCreatedDirectories(createdDirectories);
+  };
+
+  try {
+    for (const change of planned) {
+      if (change.content === null) {
+        unlinkSync(change.absolute);
+      } else {
+        const created = mkdirSync(dirname(change.absolute), { recursive: true });
+        if (created !== undefined) createdDirectories.push({ file: change.absolute, created });
+        writeFileSync(change.absolute, change.content, 'utf-8');
+      }
+    }
+  } catch (error) {
+    restoreWorkingTree();
+    throw error;
+  }
+  try {
+    return commitPathsNow(root, changes.map((change) => change.path), message, options);
+  } catch (error) {
+    restoreWorkingTree();
+    const indexProblem = restoreIndexIfChanged(root, relativePaths, indexBefore, options);
+    throw new CommitFailure(root, relativePaths, gitExplanation(error), indexProblem === undefined ? undefined : withoutRoot(root, indexProblem));
+  }
+}
+
+/**
+ * `E_COMMIT_FAILED` (task-210, `bug-217`): git did not make the commit of a write, and
+ * {@link writeAndCommit} has put the working tree back. Carries its parts so a caller that must word
+ * the failure differently (approve's supersede recovery) does not parse the message.
+ */
+export class CommitFailure extends StorageError {
+  /** The repository-relative paths the commit would have contained. */
+  readonly paths: readonly string[];
+  /** git's explanation, on one line, with the project root removed. */
+  readonly gitDetail: string;
+  /** Why the index entries could not be put back, when they could not; `undefined` when they were. */
+  readonly indexProblem: string | undefined;
+
+  constructor(root: string, paths: readonly string[], raw: string, indexProblem: string | undefined) {
+    const gitDetail = withoutRoot(root, raw);
+    const outcome =
+      indexProblem === undefined
+        ? 'nothing was committed, and the working tree and the index are as they were'
+        : `nothing was committed and the working tree is as it was, but the index entries of ${paths.join(', ')} could not be put back (${indexProblem}): check them with git status`;
+    super(E_COMMIT_FAILED, `git did not commit ${paths.join(', ')}: ${gitDetail} — ${outcome}`);
+    this.name = 'CommitFailure';
+    this.paths = paths;
+    this.gitDetail = gitDetail;
+    this.indexProblem = indexProblem;
+    Object.setPrototypeOf(this, CommitFailure.prototype);
+  }
+}
+
+/**
+ * The reason a caller quotes for a failed write it reports in its own words (approve's supersede
+ * recovery, task-210 review F5): for a {@link CommitFailure}, `E_COMMIT_FAILED: git did not commit
+ * <paths>: <explanation>` — without the clause saying the working tree is as it was, which such a caller
+ * is about to make untrue — plus the index problem, if any; for anything else, `String(error)`.
+ */
+export function commitFailureSummary(error: unknown): string {
+  if (!(error instanceof CommitFailure)) return String(error);
+  const index = error.indexProblem === undefined ? '' : ` (the index entries could not be put back: ${error.indexProblem})`;
+  return `${E_COMMIT_FAILED}: git did not commit ${error.paths.join(', ')}: ${error.gitDetail}${index}`;
+}
+
+/** `git ls-files -s -z` of `paths`: the `mode oid stage\tpath` records the index holds for them. */
+function indexEntries(root: string, paths: readonly string[], options: CommitOptions): string[] {
+  return runGit(root, ['ls-files', '-s', '-z', '--', ...paths], options)
+    .split('\0')
+    .filter((record) => record.length > 0);
+}
+
+/**
+ * Put the index entries of `paths` back to `entries` when they differ from them now — drop what was not
+ * there, reinstate what was. Best effort: a failure (a held `index.lock`) is returned as git's
+ * explanation rather than thrown, so the caller still reports the commit failure in its own words.
+ */
+function restoreIndexIfChanged(root: string, paths: readonly string[], entries: readonly string[], options: CommitOptions): string | undefined {
+  try {
+    if (indexEntries(root, paths, options).join('\0') === entries.join('\0')) return undefined;
+    quietGit(root, ['update-index', '--force-remove', '--', ...paths], options);
+    if (entries.length > 0) {
+      execFileSync('git', ['-C', root, 'update-index', '-z', '--index-info'], {
+        input: entries.map((entry) => `${entry}\0`).join(''),
+        env: gitEnv(options),
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    }
+    return undefined;
+  } catch (error) {
+    return gitExplanation(error);
+  }
+}
+
+/**
+ * Remove every directory a write created — for each file, from its own directory up to and including the
+ * first directory `mkdirSync({recursive})` created for it — **deepest first across all files**, so a
+ * directory emptied by removing a deeper one is removed in turn. One that is not empty stays: something
+ * else now lives there, and it is not this write's to remove.
+ */
+function removeCreatedDirectories(created: readonly { readonly file: string; readonly created: string }[]): void {
+  const directories = new Set<string>();
+  for (const entry of created) {
+    for (let directory = dirname(entry.file); ; directory = dirname(directory)) {
+      directories.add(directory);
+      if (directory === entry.created || dirname(directory) === directory) break;
+    }
+  }
+  const depth = (path: string): number => path.split(sep).length;
+  for (const directory of [...directories].sort((a, b) => depth(b) - depth(a) || Number(a < b) - Number(a > b))) {
+    try {
+      rmdirSync(directory);
+    } catch {
+      // Not empty: it holds something this write did not create.
+    }
+  }
+}
+
+/** git's explanation of a failed run: its stderr when it wrote one, else the error's own message. */
+function gitExplanation(error: unknown): string {
+  const captured = (error as { stderr?: unknown }).stderr;
+  // A commit with nothing to record explains itself on stdout only; the message (`Command failed: git
+  // -C <root> …`) is then what there is, and its root is removed by `withoutRoot`.
+  return typeof captured === 'string' && captured.trim().length > 0 ? captured : (error as Error).message;
+}
+
+/**
+ * `text` on one line, with every spelling of the project root removed — `<root>/x` becomes `x`, a bare
+ * `<root>` becomes `.` — so no absolute path reaches the operator (the `bug-251` class).
+ */
+function withoutRoot(root: string, text: string): string {
+  // The longer spelling first, so that one spelling being a prefix of the other leaves no fragment.
+  const real = realpathSync(root);
+  let detail = text;
+  for (const spelling of real.length >= root.length ? [real, root] : [root, real]) {
+    detail = detail.split(`${spelling}${sep}`).join('').split(spelling).join('.');
+  }
+  return detail
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join('; ');
 }
 
 // --- Read primitives for asserting what a commit CONTAINS (task-088, bug-076) ------------------

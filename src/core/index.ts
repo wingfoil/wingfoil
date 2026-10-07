@@ -34,7 +34,7 @@ import {
   renderCustomDirective,
 } from '../directives/create';
 import { parseDirectiveIds, withAssignedDirectives } from '../directives/roles-edit';
-import { commitPaths, documentExists, readDocument, removeDocument, StorageError, writeDocument } from '../storage';
+import { commitFailureSummary, documentExists, readDocument, StorageError, writeAndCommit, writeDocument } from '../storage';
 // Not re-exported by the `../storage` barrel, imported directly per that module's own convention
 // (same as `src/memory/entry.ts`): `memory add` needs the CONFINED target path before it writes, to
 // run task-092's absence guard on it.
@@ -164,6 +164,8 @@ export * from './require-reason';
 export * from './builtin-asset';
 export * from './confinement';
 export * from './usage-error';
+export { DRY_RUN_FLAG, runAsDryRun } from './dry-run';
+export type { DryRunPlan } from './dry-run';
 export {
   initWingfoilStorage,
   initWingfoilProject,
@@ -412,6 +414,9 @@ export const DNA_REWRITE_WARNING =
   'dna.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, ' +
   'blank lines, line endings or number formatting (1.0 becomes 1)';
 
+/** {@link DNA_REWRITE_WARNING} as a `--dry-run` words it: the rewrite is planned, not done (task-210 review). */
+export const DNA_REWRITE_PLANNED_WARNING = DNA_REWRITE_WARNING.replace('dna.yaml was rewritten', 'dna.yaml would be rewritten');
+
 /**
  * The shared body of every DNA mutation (`dna set`, and `dna add|remove|update` since
  * task-093-dna-mutation-surface-add-remove-update) — the mutating-op template `dna set` established
@@ -521,13 +526,17 @@ async function runDnaMutation(
   if (current === serialized) return coreOk(outcome);
 
   const warnings: string[] = [];
+  const plannedWarnings: string[] = [];
   if (inPlace === undefined) {
     if (!force) return coreErr({ code: 'CONFLICT', message: dnaRewriteConflict(request.field) });
     warnings.push(DNA_REWRITE_WARNING);
+    plannedWarnings.push(DNA_REWRITE_PLANNED_WARNING);
   }
 
-  writeDocument(dnaPath, serialized);
-  const sha = commitPaths(root, [DNA_YAML_PATH], subject);
+  const sha = writeAndCommit(root, [{ path: DNA_YAML_PATH, content: serialized }], subject, {
+    warnings,
+    plannedWarnings,
+  });
   const leaked = committedScopeError(root, sha, DNA_YAML_PATH, serialized);
   if (leaked) return leaked;
   return coreOk(outcome, { sha, message: subject }, warnings);
@@ -852,15 +861,17 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
     const slot = requireWipSlot(root, 'HEAD', committedMemoryYaml, type, initialState);
     if (!slot.ok) return slot;
 
+    const warnings = slot.value.map(formatDiagnostic);
     const { path, sha } = writeMemoryEntry(root, pathPattern, pathValues, content, message, {
       author: identity.value,
+      warnings,
       // `@`: git reads a bare `<seconds> <offset>` as a timestamp only from 9 digits of seconds up
       // (`0 +0000` is "invalid date format"); `@<seconds> <offset>` is a timestamp at any width.
       ...(date === undefined ? {} : { env: { GIT_AUTHOR_DATE: `@${date}` } }),
     });
     const leaked = committedScopeError(root, sha, targetPath, content);
     if (leaked) return leaked;
-    return coreOk({ id, path: relative(root, path) }, { sha, message }, slot.value.map(formatDiagnostic));
+    return coreOk({ id, path: relative(root, path) }, { sha, message }, warnings);
   } catch (error) {
     if (error instanceof StorageError) {
       // One rule, one code (task-130, `bug-123`, `spec-005` §3): a confinement refusal is `VALIDATION`
@@ -1365,9 +1376,12 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
       });
     }
   }
-  const committed = commitMemoryTransition(root, prepared.value, rendered, message);
+  // Both lookups read the same HEAD sha in path order; a file unreadable to both is named once. Known
+  // before the first commit, so a dry run, which stops there, reports them too (task-210 review, F4).
+  const warnings = superseded === null ? prepared.value.warnings : [...new Set([...prepared.value.warnings, ...superseded.warnings])];
+  const committed = commitMemoryTransition(root, prepared.value, rendered, message, {}, 'declared-fields-only', warnings);
   if (!committed.ok) return committed;
-  if (superseded === null) return coreOk({ id, path, from, to }, { sha: committed.value, message }, prepared.value.warnings);
+  if (superseded === null) return coreOk({ id, path, from, to }, { sha: committed.value, message }, warnings);
 
   const finalizeMessage = formatMemoryCommitMessage({
     type,
@@ -1380,8 +1394,14 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
   try {
     finalized = commitMemoryTransition(root, superseded, renderedSuperseded, finalizeMessage);
   } catch (error) {
-    // `String` of an `Error` is its `name: message`, which keeps the failing git command's text.
-    finalized = coreErr({ code: 'IO', message: String(error) });
+    // A refused commit is worded from its parts, without the primitive's "the working tree and the index
+    // are as they were": the next statement makes the working tree differ on purpose (task-210 review,
+    // F5). Any other error keeps `String`'s `name: message`.
+    finalized = coreErr({ code: 'IO', message: commitFailureSummary(error) });
+    // The commit primitive put the file back when git refused the commit (task-210, `bug-217`); the
+    // recovery below commits the file as it stands, so write the finalized status into it again — the
+    // one write here meant to outlive a failed commit, because the approve has already happened.
+    writeDocument(join(root, superseded.path), renderedSuperseded);
   }
   if (!finalized.ok) {
     // Reachable only when git itself fails between the two commits (a hook, a full disk): every
@@ -1407,8 +1427,7 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
       superseded: { id: superseded.id, path: superseded.path, from: superseded.from, to: superseded.to },
     },
     { sha: committed.value, message },
-    // Both lookups read the same HEAD sha in path order; a file unreadable to both is named once.
-    [...new Set([...prepared.value.warnings, ...superseded.warnings])],
+    warnings,
   );
 };
 
@@ -1852,9 +1871,8 @@ const directiveCreateFn: CoreFn<unknown, { name: string; path: string }> = async
   if (!unmodified.ok) return unmodified;
 
   const content = renderCustomDirective(name);
-  writeDocument(absolutePath, content);
   const message = `wf(directive): create ${name}`;
-  const sha = commitPaths(root, [relativePath], message);
+  const sha = writeAndCommit(root, [{ path: relativePath, content }], message);
   const leaked = committedScopeError(root, sha, relativePath, content);
   if (leaked) return leaked;
   return coreOk({ name, path: relativePath }, { sha, message });
@@ -2068,9 +2086,8 @@ const directiveRemoveFn: CoreFn<unknown, DirectiveRemoveResult> = async (params)
   const unmodified = requireUnmodifiedTarget(root, relativePath);
   if (!unmodified.ok) return unmodified;
 
-  removeDocument(join(root, relativePath));
   const message = `wf(directive): remove ${name}`;
-  const sha = commitPaths(root, [relativePath], message);
+  const sha = writeAndCommit(root, [{ path: relativePath, content: null }], message);
   const leaked = committedScopeError(root, sha, relativePath, null);
   if (leaked) return leaked;
   return coreOk({ name, path: relativePath }, { sha, message });
