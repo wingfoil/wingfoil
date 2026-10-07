@@ -1,6 +1,6 @@
 /**
- * Workflow state deduction (task-198, `spec-017` §1, §3.1–§3.5, §4.1–§4.5, §4.8 records, §4.9;
- * `adr-007` stateless state derivation, `adr-008` per-type state machines; P4.13, P4.11).
+ * Workflow state deduction (task-198, task-203; `spec-017` §1, §3.1–§3.5, §4.1–§4.5, §4.8, §4.9,
+ * §5.2 re-entry; `adr-007` stateless state derivation, `adr-008` per-type state machines; P4.13, P4.11).
  *
  * One **pure** function, {@link deduceWorkflowState}, answers every consumer — `workflow next`,
  * `status`, `list`, the MCP Resources and `agent execute --next` — from one {@link DeductionSnapshot}:
@@ -9,24 +9,28 @@
  * collection is iterated in a declared order (`spec-017` §1.3, REQ-SYS-07, REQ-STATE-09), so two runs
  * on one snapshot give the same value, byte for byte once serialized. No `.wingfoil/state/` exists or
  * is read (REQ-SYS-03): state is the frontmatter of the Memory documents, the files `HEAD` holds and
- * the phase records in history.
+ * the commit history reachable from `HEAD` (each instance's walk, §4.8).
  *
  * What is deduced here:
  * - **Instances** (§3.1–§3.3): an open main is a `plan` element (`draft`/`active`, no `parent`) whose
  *   `workflow` is startable; most recently started first, the first one active. A plan naming a
  *   workflow the registry does not load is listed with an empty frontier (`W_INSTANCE_WORKFLOW_UNKNOWN`).
- * - **The bound element** (§3.4 "Declared" and "None"; §3.5 the context). A self-creating workflow's
- *   element is bound by step linkage, which is task-203's: until then it is `null` and its `{id}`
- *   tokens are pending, never unresolved.
+ * - **The bound element** (§3.4; §3.5 the context). A self-creating workflow's element is the element
+ *   of its creating phase's type that its creating step created (step linkage, §4.8) with the oldest add
+ *   commit; until then it is `null` and its `{id}` tokens are pending, never unresolved. Further linked
+ *   elements are listed in `Instance.created` and do not rebind.
  * - **Evidence** (§4.3): `state`, `produces`, `selection`, `include` (plain) and `record` decide a
  *   phase; `awaits` and a checkpoint complete by a record; an implicit-owner `produces` is shown and is
- *   not evidence. `created` is declared by a `memory.add`; with no linkage read yet (task-203) a step
- *   has created nothing, so the kind is satisfied when the phase declares other evidence and otherwise
- *   completes by a record — the rule §4.3 gives a step that created no element.
+ *   not evidence. `created` (a `memory.add`) is satisfied when, for each type the phase adds, the step
+ *   created an element at or after the state the phase leaves it in, with each `{ type, path }` entry
+ *   committed for it; a step that created nothing leaves the kind to its other evidence, or to a record.
+ * - **Re-entries** (§4.8, §5.2): after a `reject`/`park` that moved the pass's element back, the
+ *   `record` and `state` evidence of the phases from the `fallback.step` of the phase whose gate state
+ *   was `<from>` onward counts only if newer than the re-entry; those steps report `reentered: true`.
  * - **The frontier** (§4.9): phases are sequential; a plain `include` descends into its sub. An
  *   `iterate_over` phase is reported as its own leaf, unexpanded: the iteration of §4.6 is task-202's.
  *
- * Not here: §4.6–§4.7 (task-202), linkage and re-entry (§4.8, task-203), optional and archived
+ * Not here: §4.6–§4.7 (task-202), optional and archived
  * phases (§4.10–§4.11, task-202), approvals and routing (§5, task-225), action/check views and
  * directives (§6, the `next`/`status` tasks).
  */
@@ -63,9 +67,17 @@ export interface StartCommit {
   readonly position: number;
 }
 
-/** One phase record (`spec-003` § "Evidence"): a commit carrying the `WingFoil-Phase: <w>.<p> completed` trailers. */
-export interface PhaseRecord {
+/**
+ * A commit's place in the history walk (`spec-017` §4.8): its index in the `git log --topo-order` of
+ * the union of the open instances' walks, `0` the commit at `HEAD`. A smaller position is **newer**.
+ */
+export interface WalkPosition {
   readonly commit: string;
+  readonly position: number;
+}
+
+/** One phase record (`spec-003` § "Evidence"): a commit carrying the `WingFoil-Phase: <w>.<p> completed` trailers. */
+export interface PhaseRecord extends WalkPosition {
   /** `<workflow>.<phase>`, without the trailing ` completed`. */
   readonly phase: string;
   readonly instance: string;
@@ -73,6 +85,54 @@ export interface PhaseRecord {
   readonly element: string | null;
   /** `WingFoil-Item`, `<collection>#<key>`, or `null`. */
   readonly item: string | null;
+}
+
+/**
+ * One step linkage (`spec-017` §4.8): an add commit, `wf(<type>): add <id>`, whose trailers carry
+ * `WingFoil-Instance` and `WingFoil-Step` — the element it adds was **created by** that step. One entry
+ * per id the subject names.
+ */
+export interface StepLink extends WalkPosition {
+  readonly instance: string;
+  /** The step key, `<workflow>.<phase>[@<scope>]`, as `WingFoil-Step` gives it. */
+  readonly step: string;
+  readonly type: string;
+  readonly id: string;
+}
+
+/**
+ * One re-entry (`spec-017` §4.8): a `reject` or `park` commit, `wf(<type>): reject|park <ids> [<from> → <to>]`,
+ * that moved the element to an earlier position of its type's `sequence`. One entry per id the subject names.
+ */
+export interface Reentry extends WalkPosition {
+  readonly verb: 'reject' | 'park';
+  readonly type: string;
+  readonly id: string;
+  /** The bracket's first state. */
+  readonly from: string;
+  /** The bracket's last state. */
+  readonly to: string;
+}
+
+/**
+ * A `wf(<type>): <verb> <ids> [… → <to>]` commit naming a re-entered element: the candidates for the
+ * commit that put the element in its current status (§4.8, `state` evidence after a re-entry).
+ */
+export interface TransitionCommit extends WalkPosition {
+  readonly type: string;
+  readonly id: string;
+  /** The bracket's last state. */
+  readonly to: string;
+}
+
+/** What one instance's walk holds (§4.8): the commits reachable from `HEAD` and not from its start commit's parents. */
+export interface InstanceHistory {
+  /** Its phase records, newest first. */
+  readonly records: readonly PhaseRecord[];
+  /** Its step linkages, newest first. */
+  readonly links: readonly StepLink[];
+  /** Its re-entries, newest first. */
+  readonly reentries: readonly Reentry[];
 }
 
 /**
@@ -98,8 +158,12 @@ export interface DeductionSnapshot {
   readonly tree: readonly string[];
   /** The start commit of each candidate plan, by its path. */
   readonly starts: ReadonlyMap<string, StartCommit>;
-  /** The phase records in each instance's walk (§4.8), by the instance's start commit, oldest first. */
-  readonly records: ReadonlyMap<string, readonly PhaseRecord[]>;
+  /** What each instance's walk holds (§4.8) — records, linkages, re-entries — by the instance's start commit. */
+  readonly history: ReadonlyMap<string, InstanceHistory>;
+  /** The transition commits in the walk that name a re-entered element, newest first. */
+  readonly transitions: readonly TransitionCommit[];
+  /** The latest commit in the walk that changed each re-entered element's file, by `<type>:<id>` (one lookup each). */
+  readonly lastChanges: ReadonlyMap<string, WalkPosition>;
   /** The deduction inputs that differ from `HEAD` in the working tree, sorted (§1.2). */
   readonly dirty: readonly string[];
 }
@@ -128,7 +192,7 @@ export interface Instance {
   readonly element: ElementRef | null;
   /** The context element (§3.5) of a workflow that declares no element, or `null`. */
   readonly context: ElementRef | null;
-  /** The elements the instance's steps created — none until linkage is read (task-203). */
+  /** Every element a step of the instance created (§4.8 linkage), ascending `(type, id)`; the bound one included. */
   readonly created: readonly ElementRef[];
   readonly planStatus: 'draft' | 'active';
   readonly startCommit: string;
@@ -170,6 +234,7 @@ export interface DeducedStep {
   readonly role: string | null;
   readonly optional: boolean;
   readonly produces: readonly ProducesView[];
+  /** The elements this step created (§4.8 linkage), ascending `(type, id)`. */
   readonly created: readonly ElementRef[];
   readonly evidence: {
     readonly kinds: readonly EvidenceKind[];
@@ -177,6 +242,14 @@ export interface DeducedStep {
     /** `true` when the only evidence missing is a `record` (`workflow finalize`, §7.9). */
     readonly finalizable: boolean;
   };
+  /**
+   * `true` when a re-entry of the element the pass runs on (§4.8) reaches this phase — it lies at or
+   * after the `fallback.step` of the phase whose gate the re-entry left — so its `record` and `state`
+   * evidence count only if newer than the re-entry (§5.2).
+   */
+  readonly reentered: boolean;
+  /** The newest such re-entry commit, or `null`. */
+  readonly reentryCommit: string | null;
 }
 
 /** One top-level phase of an instance (`spec-017` §7.4). */
@@ -324,6 +397,11 @@ interface Frame {
   readonly element: Element | null;
   /** A self-creating workflow before its element exists: its tokens are pending, not unresolved (§3.4). */
   readonly pending: boolean;
+  /**
+   * A self-creating workflow's element, bound by its creating step's linkage (§3.4). Before it existed
+   * the instance's steps had no scope, so a linkage written then names the unscoped key.
+   */
+  readonly selfBound?: boolean;
 }
 
 /** A pattern after token substitution. */
@@ -429,6 +507,26 @@ interface WorkflowResult {
   readonly diagnostics: Diagnostic[];
 }
 
+/** The history of an instance with nothing in its walk. */
+const EMPTY_HISTORY: InstanceHistory = { records: [], links: [], reentries: [] };
+
+/** `<type>:<id>` of an element. */
+function keyOf(element: { readonly type: string; readonly id: string }): string {
+  return `${element.type}:${element.id}`;
+}
+
+/** Ascending `(type, id)` (`spec-017` §1.3, "elements a step created"). */
+function byTypeThenId(a: Element, b: Element): number {
+  return compareText(a.type, b.type) || compareText(a.id, b.id);
+}
+
+/** The newer of two re-entry cutoffs (the smaller walk position), either possibly absent. */
+function newer(a: WalkPosition | null, b: WalkPosition | null): WalkPosition | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return b.position < a.position ? b : a;
+}
+
 /** The read-only context of one deduction. */
 class Deducer {
   private readonly byName = new Map<string, Workflow>();
@@ -481,10 +579,80 @@ class Deducer {
     return resolveStateMachine(this.snapshot.memoryYaml!, type).sequence[0]!;
   }
 
-  /** Run a workflow on `frames`, from `start` (§4.4), under `trail`. */
-  run(instanceId: string, startCommit: string, workflow: Workflow, frames: readonly Frame[], start: ExitStart, trail: readonly TrailEntry[]): WorkflowResult {
+  /** What the walk of the instance started at `startCommit` holds (§4.8). */
+  private history(startCommit: string): InstanceHistory {
+    return this.snapshot.history.get(startCommit) ?? EMPTY_HISTORY;
+  }
+
+  /**
+   * The elements an instance's steps created (§4.8 linkage): the add commits of its walk whose
+   * `WingFoil-Instance` is the instance and whose `WingFoil-Step` is one of `steps` (every step when
+   * `null`), each element once, ascending `(type, id)`. An element `HEAD` does not hold is left out.
+   */
+  createdBy(instanceId: string, startCommit: string, steps: readonly string[] | null): Element[] {
+    const found = new Map<string, Element>();
+    for (const link of this.history(startCommit).links) {
+      if (link.instance !== instanceId || (steps !== null && !steps.includes(link.step))) continue;
+      const element = this.find(link.type, link.id);
+      if (element !== null) found.set(keyOf(element), element);
+    }
+    return [...found.values()].sort(byTypeThenId);
+  }
+
+  /**
+   * The walk position of the commit that put `element` in its current status (§4.8, `state` after a
+   * re-entry): the newest transition commit naming it whose bracket ends at that status, else the newest
+   * commit in the walk that changed its file; `Infinity` (older than anything in the walk) when neither.
+   */
+  private statePosition(element: Element): number {
+    const named = this.snapshot.transitions.find((entry) => entry.type === element.type && entry.id === element.id && entry.to === element.status);
+    return named?.position ?? this.snapshot.lastChanges.get(keyOf(element))?.position ?? Number.POSITIVE_INFINITY;
+  }
+
+  /**
+   * The re-entry cutoff of each phase of a pass of `workflow` on `element` (§4.8 re-entries, §5.2): for
+   * every re-entry of the element in the instance's walk, the phase whose gate state was its `<from>` —
+   * the first phase that holds that gate (§5.1) and declares a `fallback` — names a `fallback.step`; from
+   * that phase onward the `record` and `state` evidence counts only if newer than the re-entry. A phase
+   * reached by several re-entries keeps the newest; `inherited` is the including phase's own cutoff. A
+   * re-entry from a state no phase holds as a gate with a fallback reaches no phase: the element's state
+   * alone tells the deduction where the pass stands.
+   */
+  private cutoffs(
+    startCommit: string,
+    workflow: Workflow,
+    exits: readonly PhaseExitState[],
+    element: Element | null,
+    inherited: WalkPosition | null,
+  ): (WalkPosition | null)[] {
+    const out: (WalkPosition | null)[] = workflow.phases.map(() => inherited);
+    if (element === null) return out;
+    for (const reentry of this.history(startCommit).reentries) {
+      if (reentry.type !== element.type || reentry.id !== element.id) continue;
+      const gate = workflow.phases.findIndex(
+        (phase, p) => phase.fallback !== undefined && exits[p]!.held.some((held) => held.type === reentry.type && held.gate === reentry.from),
+      );
+      if (gate === -1) continue;
+      // A `fallback.step` naming no phase is refused at load time (`E_PHASE_FALLBACK_STEP_UNKNOWN`, spec-003).
+      const from = workflow.phases.findIndex((phase) => phase.name === workflow.phases[gate]!.fallback!.step);
+      for (let q = from; q < out.length; q += 1) out[q] = newer(out[q]!, reentry);
+    }
+    return out;
+  }
+
+  /** Run a workflow on `frames`, from `start` (§4.4), under `trail`; `inherited` is the including phase's re-entry cutoff. */
+  run(
+    instanceId: string,
+    startCommit: string,
+    workflow: Workflow,
+    frames: readonly Frame[],
+    start: ExitStart,
+    trail: readonly TrailEntry[],
+    inherited: WalkPosition | null = null,
+  ): WorkflowResult {
     // `memory.yaml` is present: a workflow runs only for an open plan, an element of a declared type.
     const exits = workflowExitStates(workflow, this.snapshot.memoryYaml!, start, this.byName);
+    const cutoffs = this.cutoffs(startCommit, workflow, exits, frames[frames.length - 1]?.element ?? null, inherited);
     const phases: PhaseProgress[] = [];
     let frontier: DeducedStep[] = [];
     let diagnostics: Diagnostic[] = [];
@@ -504,7 +672,15 @@ class Deducer {
       if (phase.include !== undefined && phase.iterate_over === undefined) {
         const sub = this.byName.get(phase.include)!;
         const exit = exits[p]!;
-        const result = this.run(instanceId, startCommit, sub, frames, { boundType: sub.element ?? exit.boundType, state: exit.entry, instance: false }, [...trail, here]);
+        const result = this.run(
+          instanceId,
+          startCommit,
+          sub,
+          frames,
+          { boundType: sub.element ?? exit.boundType, state: exit.entry, instance: false },
+          [...trail, here],
+          cutoffs[p]!,
+        );
         if (result.complete) {
           phases.push({ phase: phase.name, state: 'complete' });
           return;
@@ -516,7 +692,7 @@ class Deducer {
         return;
       }
 
-      const leaf = this.leaf(instanceId, startCommit, workflow, p, frames, exits[p]!, [...trail, here], scope);
+      const leaf = this.leaf(instanceId, startCommit, workflow, p, frames, exits[p]!, [...trail, here], scope, cutoffs[p]!);
       if (leaf.step.evidence.missing.length === 0) {
         phases.push({ phase: phase.name, state: 'complete' });
         return;
@@ -529,7 +705,7 @@ class Deducer {
     return { complete: !current, phases, frontier, diagnostics };
   }
 
-  /** Evaluate one phase as a leaf step: its evidence, its `produces`, its unresolved tokens. */
+  /** Evaluate one phase as a leaf step: its evidence, its `produces`, what it created, its unresolved tokens. */
   private leaf(
     instanceId: string,
     startCommit: string,
@@ -539,10 +715,12 @@ class Deducer {
     exit: PhaseExitState,
     trail: readonly TrailEntry[],
     scope: ScopeRef | null,
+    cutoff: WalkPosition | null,
   ): { step: DeducedStep; diagnostics: Diagnostic[] } {
     const phase = workflow.phases[p]!;
     const file = this.fileOf.get(workflow.name)!;
     const stepName = `${workflow.name}.${phase.name}`;
+    const key = scope === null ? stepName : `${stepName}@${elementKey(scope)}`;
     const diagnostics: Diagnostic[] = [];
     const report = (path: string, resolved: Resolved): void => {
       for (const { token, reason } of resolved.unresolved) {
@@ -559,24 +737,41 @@ class Deducer {
       missing.push('include');
     }
 
-    // state — the bound element at or after the phase's exit state (§4.4).
+    // state — the bound element at or after the phase's exit state (§4.4), set by a commit newer than any
+    // re-entry that reaches this phase (§4.8).
     if (declaresState(phase, exit.boundType)) {
       kinds.push('state');
       const element = frame?.element ?? null;
-      const satisfied = element !== null && exit.exit !== null && atOrAfter(resolveStateMachine(this.snapshot.memoryYaml!, element.type), element.status, exit.exit);
+      const satisfied =
+        element !== null &&
+        exit.exit !== null &&
+        atOrAfter(resolveStateMachine(this.snapshot.memoryYaml!, element.type), element.status, exit.exit) &&
+        (cutoff === null || this.statePosition(element) < cutoff.position);
       if (!satisfied) missing.push('state');
     }
 
-    // created — a `memory.add`; no step has created an element until linkage is read (task-203).
-    if ((phase.actions ?? []).some((action) => tokenName(action) === 'memory.add')) kinds.push('created');
+    // What the step created (§4.8 linkage). A self-bound instance's steps had no scope before its element
+    // existed, so a linkage written then names the unscoped key.
+    const created = this.createdBy(instanceId, startCommit, frame?.selfBound ? [key, stepName] : [key]);
 
-    // produces — every string entry, resolved, names a committed path; implicit owners are shown only.
+    // produces — every string entry, resolved, names a committed path; implicit owners are shown only. A
+    // `{ type: T, path }` entry resolves against each element of `T` the step created and belongs to `created`.
     const produces: ProducesView[] = [];
     let producesEvidence = false;
     let producesMissing = false;
+    let createdPathsMissing = false;
     (phase.produces ?? []).forEach((entry, k) => {
       if (typeof entry !== 'string') {
-        produces.push({ pattern: entry.path, owner: entry.type, resolved: [], exists: false, evidence: false });
+        const owned = created.filter((element) => element.type === entry.type);
+        const resolved: string[] = [];
+        for (const element of owned) {
+          const result = resolveTokens(entry.path, [...frames, { type: entry.type, element, pending: false }]);
+          report(`phases[${p}].produces[${k}].path`, result);
+          if (result.value !== null) resolved.push(result.value);
+        }
+        const exists = owned.length > 0 && resolved.length === owned.length && resolved.every((path) => this.exists(path));
+        if (!exists) createdPathsMissing = true;
+        produces.push({ pattern: entry.path, owner: entry.type, resolved, exists, evidence: false });
         return;
       }
       const resolved = resolveTokens(entry, frames);
@@ -594,6 +789,15 @@ class Deducer {
       producesEvidence = true;
       if (!exists) producesMissing = true;
     });
+
+    // created — for each type the phase adds, the step created at least one element, each at or after the
+    // state the phase leaves it in (§4.4), with each `{ type, path }` entry committed for it (§4.3). A step
+    // that created nothing leaves the kind to its other evidence, or to a record (below).
+    if ((phase.actions ?? []).some((action) => tokenName(action) === 'memory.add')) {
+      kinds.push('created');
+      if (created.length > 0 && (createdPathsMissing || !this.createdReachTargets(exit, created))) missing.push('created');
+    }
+
     if (producesEvidence) {
       kinds.push('produces');
       if (producesMissing) missing.push('produces');
@@ -604,33 +808,32 @@ class Deducer {
       kinds.push('selection');
       const wanted: [string, string[]][] = [];
       let decidable = true;
-      for (const key of Object.keys(phase.where).sort()) {
-        const raw = phase.where[key]!;
+      for (const where of Object.keys(phase.where).sort()) {
+        const raw = phase.where[where]!;
         const values = (Array.isArray(raw) ? raw : [raw]).map((value) => {
           if (typeof value !== 'string') return String(value);
           const resolved = resolveTokens(value, frames);
-          report(`phases[${p}].where.${key}`, resolved);
+          report(`phases[${p}].where.${where}`, resolved);
           if (resolved.value === null) decidable = false;
           return resolved.value ?? value;
         });
-        wanted.push([key, values]);
+        wanted.push([where, values]);
       }
-      const selected = decidable && this.elements.some((element) => wanted.every(([key, values]) => matches(element.frontmatter[key], values)));
+      const selected = decidable && this.elements.some((element) => wanted.every(([field, values]) => matches(element.frontmatter[field], values)));
       if (!decidable || selected) missing.push('selection');
     }
 
     // awaits — evaluated from v1.0 (P4.12); the step completes by a record (§5.4).
     if (phase.awaits !== undefined) kinds.push('awaits');
 
-    // record — a checkpoint, an `awaits` (always, §4.3 `awaits` row, §5.4), or a `created` step with no
-    // other evidence (§4.3).
-    const recordNeeded = phase.awaits !== undefined || !kinds.some((kind) => kind !== 'created');
+    // record — a checkpoint, an `awaits` (always, §4.3 `awaits` row, §5.4), or a `created` step that
+    // created nothing and has no other evidence (§4.3).
+    const recordNeeded = phase.awaits !== undefined || (created.length === 0 && !kinds.some((kind) => kind !== 'created'));
     if (recordNeeded) {
       kinds.push('record');
-      if (!this.hasRecord(instanceId, startCommit, stepName, scope)) missing.push('record');
+      if (!this.hasRecord(instanceId, startCommit, stepName, scope, frame?.selfBound === true, cutoff)) missing.push('record');
     }
 
-    const key = scope === null ? stepName : `${stepName}@${elementKey(scope)}`;
     return {
       step: {
         key,
@@ -642,23 +845,55 @@ class Deducer {
         role: phase.role ?? null,
         optional: phase.optional,
         produces,
-        created: [],
+        created: created.map(refOf),
         evidence: { kinds, missing, finalizable: missing.length === 1 && missing[0] === 'record' },
+        reentered: cutoff !== null,
+        reentryCommit: cutoff?.commit ?? null,
       },
       diagnostics,
     };
   }
 
-  /** Whether the instance's walk holds a record of step `stepName` on `scope` (§4.8 records). */
-  private hasRecord(instanceId: string, startCommit: string, stepName: string, scope: ScopeRef | null): boolean {
+  /**
+   * Whether, for each type the phase adds (`exit.created`, its first `memory.add` of that type), the step
+   * created an element of it and each such element is at or after the state the phase leaves it in (§4.3,
+   * §4.4). An undetermined target state is never reached.
+   */
+  private createdReachTargets(exit: PhaseExitState, created: readonly Element[]): boolean {
+    const targets = new Map<string, string | null>();
+    for (const added of exit.created) if (!targets.has(added.type)) targets.set(added.type, added.state);
+    for (const [type, target] of targets) {
+      const owned = created.filter((element) => element.type === type);
+      if (owned.length === 0 || target === null) return false;
+      const machine = resolveStateMachine(this.snapshot.memoryYaml!, type);
+      if (!owned.every((element) => atOrAfter(machine, element.status, target))) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Whether the instance's walk holds a record of step `stepName` on `scope` (§4.8 records), newer than
+   * `cutoff` when a re-entry reaches the step. A self-bound scope also accepts a record with no element,
+   * written before the element existed.
+   */
+  private hasRecord(instanceId: string, startCommit: string, stepName: string, scope: ScopeRef | null, selfBound: boolean, cutoff: WalkPosition | null): boolean {
     const element = scope === null ? null : elementKey(scope);
-    return (this.snapshot.records.get(startCommit) ?? []).some(
-      (record) => record.phase === stepName && record.instance === instanceId && record.element === element && record.item === null,
+    return this.history(startCommit).records.some(
+      (record) =>
+        record.phase === stepName &&
+        record.instance === instanceId &&
+        (record.element === element || (selfBound && record.element === null)) &&
+        record.item === null &&
+        (cutoff === null || record.position < cutoff.position),
     );
   }
 
   /** The frames an instance of `workflow` starts with, its bound element and its context (§3.4, §3.5). */
-  bind(workflow: Workflow, plan: Element): { frames: Frame[]; start: ExitStart; element: ElementRef | null; context: ElementRef | null } {
+  bind(
+    workflow: Workflow,
+    plan: Element,
+    startCommit: string,
+  ): { frames: Frame[]; start: ExitStart; element: ElementRef | null; context: ElementRef | null } {
     const id = scalarText(plan.frontmatter['element']);
     if (workflow.element !== undefined) {
       const element = id === null ? null : this.find(workflow.element, id);
@@ -675,12 +910,19 @@ class Deducer {
     // The creating phase is the one holding the first `memory.add`, so it has actions; a `memory.add` with
     // no `type:` names no type, and the instance then has no frame.
     const type = creating === -1 ? null : (workflow.phases[creating]!.actions!.map(memoryAddType).find((t): t is string => t !== null) ?? null);
-    return {
-      frames: type === null ? [] : [{ type, element: null, pending: true }],
-      start: { boundType: null, state: null, instance: true },
-      element: null,
-      context,
-    };
+    const start: ExitStart = { boundType: null, state: null, instance: true };
+    if (type === null) return { frames: [], start, element: null, context };
+    // Self-creating (§3.4): bound to the element of `type` its creating step created with the oldest add
+    // commit (ties by ascending id); until then unbound, its tokens pending.
+    const step = `${workflow.name}.${workflow.phases[creating]!.name}`;
+    const bound =
+      this.history(startCommit)
+        .links.filter((link) => link.instance === plan.id && link.step === step && link.type === type)
+        .sort((a, b) => b.position - a.position || compareText(a.id, b.id))
+        .map((link) => this.find(link.type, link.id))
+        .find((element): element is Element => element !== null) ?? null;
+    if (bound === null) return { frames: [{ type, element: null, pending: true }], start, element: null, context };
+    return { frames: [{ type, element: bound, pending: false, selfBound: true }], start, element: refOf(bound), context };
   }
 }
 
@@ -714,12 +956,13 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
   const stepDiagnostics: Diagnostic[] = [];
   const instances = open.map(({ plan, workflowName, start }, index): InstanceDeduction => {
     const workflow = deducer.workflow(workflowName);
+    const startCommit = start?.commit ?? '';
     const base = {
       id: plan.id,
       workflow: workflowName,
-      created: [],
+      created: deducer.createdBy(plan.id, startCommit, null).map(refOf),
       planStatus: plan.status as 'draft' | 'active',
-      startCommit: start?.commit ?? '',
+      startCommit,
       active: index === 0,
       abandoned: false,
     };
@@ -733,8 +976,8 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
       });
       return { instance: { ...base, element: null, context: null }, complete: false, phases: [], frontier: [] };
     }
-    const bound = deducer.bind(workflow, plan);
-    const result = deducer.run(plan.id, base.startCommit, workflow, bound.frames, bound.start, []);
+    const bound = deducer.bind(workflow, plan, startCommit);
+    const result = deducer.run(plan.id, startCommit, workflow, bound.frames, bound.start, []);
     stepDiagnostics.push(...result.diagnostics);
     return {
       instance: { ...base, element: bound.element, context: bound.context },

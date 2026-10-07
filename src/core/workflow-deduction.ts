@@ -1,24 +1,32 @@
 /**
- * The `HEAD` snapshot workflow state deduction reads (task-198, `spec-017` §1.1–§1.3, §3.3, §4.8), and
- * the deduction at `HEAD` every workflow consumer calls.
+ * The `HEAD` snapshot workflow state deduction reads (task-198, task-203; `spec-017` §1.1–§1.3, §3.3,
+ * §4.8), and the deduction at `HEAD` every workflow consumer calls.
  *
  * {@link readDeductionSnapshotAtHead} is the one impure step: it resolves `HEAD` once and reads every
  * input at that sha — the workflow registry with its core checks (`loadWorkflowRegistryAtRev`),
  * `memory.yaml`, `dna.yaml`, every Memory document in sorted path order (tolerant, task-171), the file
- * list, each open plan's start commit and the phase records of its walk — plus, to **explain** and never
- * to decide, the working-tree paths among the inputs that differ from `HEAD` (`W_UNCOMMITTED_INPUTS`,
- * §1.2; the `command-baseline` directive). The deduction itself is the pure
- * `deduceWorkflowState` (`src/workflow/deduce.ts`).
+ * list, each open plan's start commit and what each instance's walk holds (phase records, step linkages,
+ * re-entries) — plus, to **explain** and never to decide, the working-tree paths among the inputs that
+ * differ from `HEAD` (`W_UNCOMMITTED_INPUTS`, §1.2; the `command-baseline` directive). The deduction
+ * itself is the pure `deduceWorkflowState` (`src/workflow/deduce.ts`).
+ *
+ * History is read at the cost §4.8 states (REQ-PERF-03): **one** `git log` over the union of the open
+ * instances' walks, bounded by the oldest start commit's parents, from which each instance's own walk is
+ * cut in memory through the parent links; plus one lookup per element a re-entry in the walk names.
  *
  * git is read with `runGitRead` (stderr captured, `bug-093`) and the `git log` walk with
- * `walkGitLogFields` (NUL-framed, `bug-050`). No clock, no randomness, nothing cached between calls.
+ * `walkGitLogFields` (NUL-framed, `bug-050`); every `git log` passes `--no-show-signature`, so a
+ * `log.showSignature` setting cannot put signature text among the parsed lines (`bug-291`). No clock, no
+ * randomness, nothing cached between calls.
  */
 import { posix } from 'path';
 
 import type { DnaYaml } from '../dna/schema';
+import { parseBracketHops, parseMemoryOperation } from '../memory/audit';
 import { walkGitLogFields } from '../memory/git-log';
-import { computeMemoryContentRoots, loadMemoryDocumentsAtRev } from '../memory/query';
+import { computeMemoryContentRoots, loadMemoryDocumentsAtRev, type MemoryDocumentSummary } from '../memory/query';
 import type { MemoryYaml } from '../memory/schema';
+import { resolveStateMachine } from '../memory/state-machine';
 import { runGitRead } from '../storage';
 import type { Diagnostic } from '../validation';
 import {
@@ -29,8 +37,13 @@ import {
   type Deduction,
   type DeductionSnapshot,
   type InstanceDeduction,
+  type InstanceHistory,
   type PhaseRecord,
+  type Reentry,
   type StartCommit,
+  type StepLink,
+  type TransitionCommit,
+  type WalkPosition,
 } from '../workflow/deduce';
 import { producesPath, type Workflow } from '../workflow/schema';
 
@@ -85,40 +98,179 @@ function trailerValue(block: string, key: string): string | null {
   return found;
 }
 
+/** The flag every `git log` here passes, so `log.showSignature` cannot print among parsed lines (`bug-291`). */
+const NO_SIGNATURE = '--no-show-signature';
+
+/** One commit of the history walk: its parents, subject and trailer block, at its walk position. */
+interface WalkCommit extends WalkPosition {
+  readonly parents: readonly string[];
+  readonly subject: string;
+  readonly trailers: string;
+}
+
 /**
- * The phase records each start commit's walk holds (§4.8): commits reachable from `sha` and not from
- * the start commit's parents whose trailers carry `WingFoil-Phase: <w>.<p> completed` and
- * `WingFoil-Instance`. One `git log` finds the candidates; one `rev-list` per start commit bounds them,
- * only when a candidate exists. Linkage and re-entries, and the single union walk, are task-203's.
+ * The union of the open instances' walks (§4.8): one `git log --topo-order` of the commits reachable
+ * from `sha` and not from the oldest start commit's parents, newest first, with each commit's parents,
+ * subject and trailers. The oldest start has the largest topological position, so no other start is
+ * reachable from its parents and every instance's walk lies inside this one.
  */
-function readRecords(root: string, sha: string, starts: readonly StartCommit[]): Map<string, PhaseRecord[]> {
-  const byStart = new Map<string, PhaseRecord[]>();
-  if (starts.length === 0) return byStart;
-  // Bounded by the oldest start (the largest position): no walk reaches past its parents.
+function readWalk(root: string, sha: string, starts: readonly StartCommit[]): WalkCommit[] {
+  if (starts.length === 0) return [];
   const oldest = [...starts].sort((a, b) => b.position - a.position)[0]!.commit;
-  const candidates: PhaseRecord[] = [];
-  const range = ['-E', `--grep=^${PHASE_TRAILER}: `, sha, '--not', `${oldest}^@`];
-  for (const [commit, block] of walkGitLogFields(root, ['%H', '%(trailers:only,unfold)'], [], range)) {
-    const phase = trailerValue(block!, PHASE_TRAILER);
-    const instance = trailerValue(block!, 'WingFoil-Instance');
-    if (phase === null || !phase.endsWith(RECORD_SUFFIX) || instance === null) continue;
-    candidates.push({
-      commit: commit!,
-      phase: phase.slice(0, -RECORD_SUFFIX.length).trim(),
-      instance,
-      element: trailerValue(block!, 'WingFoil-Element'),
-      item: trailerValue(block!, 'WingFoil-Item'),
-    });
+  const rows = walkGitLogFields(root, ['%H', '%P', '%s', '%(trailers:only,unfold)'], [], [NO_SIGNATURE, '--topo-order', sha, '--not', `${oldest}^@`]);
+  // `walkGitLogFields` returns oldest first; the walk position counts from `HEAD`.
+  return rows.reverse().map(([commit, parents, subject, trailers], position) => ({
+    commit: commit!,
+    position,
+    parents: parents!.split(' ').filter((parent) => parent !== ''),
+    subject: subject!,
+    trailers: trailers!,
+  }));
+}
+
+/**
+ * The commits of one instance's walk (§4.8): those of the union walk not reachable from `start`'s
+ * parents. Reachability is followed through the walk's own parent links: a commit on a path from a
+ * parent of `start` down to a commit of the union walk is itself in the union walk, so nothing outside
+ * it is needed.
+ */
+function instanceWalk(walk: readonly WalkCommit[], byCommit: ReadonlyMap<string, WalkCommit>, start: string): Set<string> {
+  const excluded = new Set<string>();
+  const pending = [...(byCommit.get(start)?.parents ?? [])];
+  while (pending.length > 0) {
+    const commit = pending.pop()!;
+    const entry = byCommit.get(commit);
+    if (entry === undefined || excluded.has(commit)) continue;
+    excluded.add(commit);
+    pending.push(...entry.parents);
   }
-  if (candidates.length === 0) return byStart;
+  return new Set(walk.filter((entry) => !excluded.has(entry.commit)).map((entry) => entry.commit));
+}
+
+/** The ids a `wf(<type>): <verb> <ids> [<bracket>]` subject names, in order. */
+function subjectIds(subject: string): string[] {
+  const rest = subject.replace(/^wf\([^)]*\):\s*\S+\s*/, '').replace(/\[[^[\]]*\]\s*$/, '');
+  return rest
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id !== '');
+}
+
+/** The scope of a `wf(<scope>): …` subject — the Memory type of a Memory operation. */
+function subjectType(subject: string): string {
+  return /^wf\(([^)]*)\)/.exec(subject)![1]!;
+}
+
+/** What one walk commit says (§4.8): a record, linkages, re-entries and transitions, each possibly empty. */
+interface CommitFacts {
+  readonly record: PhaseRecord | null;
+  readonly links: StepLink[];
+  readonly reentries: Reentry[];
+  readonly transitions: TransitionCommit[];
+}
+
+/**
+ * Read one walk commit. A re-entry is a `reject` or `park` whose bracket ends at an earlier position of
+ * the type's `sequence` than it starts from: a `bug` rejected `open → closed` moves forward, which
+ * decides the phase rather than re-entering it (§5.2).
+ */
+function readFacts(entry: WalkCommit, memoryYaml: MemoryYaml | null): CommitFacts {
+  const { commit, position, subject, trailers } = entry;
+  const phase = trailerValue(trailers, PHASE_TRAILER);
+  const instance = trailerValue(trailers, 'WingFoil-Instance');
+  const record: PhaseRecord | null =
+    phase !== null && phase.endsWith(RECORD_SUFFIX) && instance !== null
+      ? {
+          commit,
+          position,
+          phase: phase.slice(0, -RECORD_SUFFIX.length).trim(),
+          instance,
+          element: trailerValue(trailers, 'WingFoil-Element'),
+          item: trailerValue(trailers, 'WingFoil-Item'),
+        }
+      : null;
+  const facts: CommitFacts = { record, links: [], reentries: [], transitions: [] };
+  const operation = parseMemoryOperation(subject);
+  if (operation === null) return facts;
+  const type = subjectType(subject);
+  const ids = subjectIds(subject);
+  const step = trailerValue(trailers, 'WingFoil-Step');
+  if (operation === 'add' && instance !== null && step !== null) {
+    for (const id of ids) facts.links.push({ commit, position, instance, step, type, id });
+  }
+  const hops = parseBracketHops(subject);
+  if (hops === null) return facts;
+  const from = hops[0]!.from;
+  const to = hops[hops.length - 1]!.to;
+  for (const id of ids) facts.transitions.push({ commit, position, type, id, to });
+  if ((operation === 'reject' || operation === 'park') && memoryYaml !== null && Object.prototype.hasOwnProperty.call(memoryYaml.types, type)) {
+    const sequence = resolveStateMachine(memoryYaml, type).sequence;
+    const target = sequence.indexOf(to);
+    if (target !== -1 && target < sequence.indexOf(from)) {
+      for (const id of ids) facts.reentries.push({ commit, position, verb: operation, type, id, from, to });
+    }
+  }
+  return facts;
+}
+
+/**
+ * The latest commit of the walk that changed the file at `path` — one `git log -1` bounded like the
+ * walk — or `null` when no commit of the walk did.
+ */
+function readLastChange(root: string, sha: string, oldest: string, path: string, byCommit: ReadonlyMap<string, WalkCommit>): WalkPosition | null {
+  const out = runGitRead(root, ['log', NO_SIGNATURE, '--topo-order', '-1', '--format=%H', sha, '--not', `${oldest}^@`, '--', `:(literal)${path}`]).stdout.trim();
+  const entry = byCommit.get(out);
+  return entry === undefined ? null : { commit: entry.commit, position: entry.position };
+}
+
+/** What the history walk yields for the snapshot (§4.8). */
+interface HistoryRead {
+  readonly history: Map<string, InstanceHistory>;
+  readonly transitions: TransitionCommit[];
+  readonly lastChanges: Map<string, WalkPosition>;
+}
+
+/**
+ * Read the history every open instance's deduction needs (§4.8): one walk for the union of the instances'
+ * walks, each instance's records, linkages and re-entries cut from it, the transition commits naming a
+ * re-entered element, and one lookup per re-entered element (its file's latest change in the walk).
+ */
+function readHistory(
+  root: string,
+  sha: string,
+  starts: readonly StartCommit[],
+  memoryYaml: MemoryYaml | null,
+  documents: readonly MemoryDocumentSummary[],
+): HistoryRead {
+  const read: HistoryRead = { history: new Map(), transitions: [], lastChanges: new Map() };
+  const walk = readWalk(root, sha, starts);
+  if (walk.length === 0) return read;
+  const byCommit = new Map(walk.map((entry) => [entry.commit, entry]));
+  const facts = walk.map((entry) => readFacts(entry, memoryYaml));
+
+  const reentered = new Set<string>();
   for (const start of [...new Set(starts.map((entry) => entry.commit))].sort()) {
-    const walk = new Set(runGitRead(root, ['rev-list', sha, '--not', `${start}^@`]).stdout.split('\n'));
-    byStart.set(
-      start,
-      candidates.filter((record) => walk.has(record.commit)),
-    );
+    const members = instanceWalk(walk, byCommit, start);
+    const inWalk = facts.filter((_, index) => members.has(walk[index]!.commit));
+    const history: InstanceHistory = {
+      records: inWalk.flatMap((fact) => (fact.record === null ? [] : [fact.record])),
+      links: inWalk.flatMap((fact) => fact.links),
+      reentries: inWalk.flatMap((fact) => fact.reentries),
+    };
+    for (const reentry of history.reentries) reentered.add(`${reentry.type}:${reentry.id}`);
+    read.history.set(start, history);
   }
-  return byStart;
+  if (reentered.size === 0) return read;
+
+  read.transitions.push(...facts.flatMap((fact) => fact.transitions).filter((entry) => reentered.has(`${entry.type}:${entry.id}`)));
+  const oldest = [...starts].sort((a, b) => b.position - a.position)[0]!.commit;
+  for (const key of [...reentered].sort()) {
+    const document = documents.find(({ frontmatter }) => `${text(frontmatter['type'])}:${text(frontmatter['id'])}` === key);
+    if (document === undefined) continue;
+    const last = readLastChange(root, sha, oldest, document.path, byCommit);
+    if (last !== null) read.lastChanges.set(key, last);
+  }
+  return read;
 }
 
 /** The static directory (or file) a `produces` pattern names before its first token, or `null` for the whole tree. */
@@ -167,7 +319,9 @@ function emptySnapshot(): DeductionSnapshot {
     scanDiagnostics: [],
     tree: [],
     starts: new Map(),
-    records: new Map(),
+    history: new Map(),
+    transitions: [],
+    lastChanges: new Map(),
     dirty: [],
   };
 }
@@ -196,6 +350,7 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
     )
     .map((document) => document.path);
   const starts = readStarts(root, sha, candidates);
+  const { history, transitions, lastChanges } = readHistory(root, sha, [...starts.values()], memoryYaml, documents);
 
   return {
     commit: sha,
@@ -207,7 +362,9 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
     scanDiagnostics,
     tree: listPathsAtCommit(root, sha, '').sort(),
     starts,
-    records: readRecords(root, sha, [...starts.values()]),
+    history,
+    transitions,
+    lastChanges,
     dirty: readDirty(root, memoryYaml, dnaYaml, registry.workflows),
   };
 }

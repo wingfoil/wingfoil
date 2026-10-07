@@ -62,7 +62,9 @@ function snapshot(workflows: Workflow[], documents: ReturnType<typeof doc>[], ex
     scanDiagnostics: [],
     tree: [],
     starts: new Map(plans.map((p, i) => [p.path, { commit: `s${i}`, position: i }])),
-    records: new Map(),
+    history: new Map(),
+    transitions: [],
+    lastChanges: new Map(),
     dirty: [],
     ...extra,
   };
@@ -197,7 +199,7 @@ phases:
     const done = deduceWorkflowState(
       snapshot([flow], documents, {
         tree: ['dist/out.tgz'],
-        records: new Map([['s0', [{ commit: 'r1', phase: 'publish.release', instance: 'p1', element: null, item: null }]]]),
+        history: new Map([['s0', { records: [{ commit: 'r1', position: 0, phase: 'publish.release', instance: 'p1', element: null, item: null }], links: [], reentries: [] }]]),
       }),
     );
     expect(done.instances[0]!.complete).toBe(true);

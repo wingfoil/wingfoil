@@ -292,8 +292,9 @@ describe.each(['reject', 'park'])('task-203 AC 2 — re-entry after a `%s` (spec
 
     commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-review') }, 'wf(task): submit task-1');
     instance = loop();
+    // `done` lies after `fallback.step` too: the re-entry reaches it, and its evidence must be newer.
     expect(keys(instance)).toEqual(['loop.done@task:task-1']);
-    expect(instance.frontier[0]).toMatchObject({ reentered: false, reentryCommit: null });
+    expect(instance.frontier[0]).toMatchObject({ reentered: true, reentryCommit: reentry, evidence: { kinds: ['state'], missing: ['state'] } });
   });
 });
 
@@ -402,11 +403,13 @@ describe('task-203 AC 5 — one walk for the union of the open instances, one lo
       commit(repo, { 'docs/tasks/task-2.md': element('task', 'task-2', 'in-progress') }, 'wf(task): reject task-2 [in-review → in-progress]');
 
       const argv = spawned(repo);
-      expect(argv.filter((line) => line.startsWith('rev-list'))).toEqual([]);
+      // Each line is `-C <root> <subcommand> …` (`runGitRead`); the subcommand is a whole word of it.
+      const running = (subcommand: string): string[] => argv.filter((line) => line.split(' ').includes(subcommand));
+      expect(running('rev-list')).toEqual([]);
       // The walk: the one `git log` that reads parents, subjects and trailers.
-      expect(argv.filter((line) => line.startsWith('log') && line.includes('%P'))).toHaveLength(1);
+      expect(running('log').filter((line) => line.includes('%P'))).toHaveLength(1);
       // The lookup: the latest commit that changed the re-entered element's file.
-      const lookups = argv.filter((line) => line.startsWith('log') && line.includes('-1 '));
+      const lookups = running('log').filter((line) => line.split(' ').includes('-1'));
       expect(lookups).toHaveLength(1);
       expect(lookups[0]).toContain('docs/tasks/task-2.md');
     } finally {
