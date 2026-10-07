@@ -177,7 +177,6 @@ on the start walk; `test/lint/git-log-readers.test.ts` fails otherwise, and pins
 (`core/agent-show.ts`, `core/workflow-deduction.ts`, `memory/git-log.ts`, `memory/history.ts`) — a task
 adding or removing a reader file updates that list.
 
-**Candidate findings (not filed).** `scripts/check-governance.cjs` runs four `git log` readers without
-`--no-show-signature` (lines 145, 164, 183, 371: `grep -n "'log'" scripts/check-governance.cjs`); with
-`log.showSignature=true` and signed commits the governance gate would parse signature text as commit
-names. Outside AC 2's `src/` scope, so left as is.
+**Same-class fix at the coordinator's request (2026-10-07), `e55a49ce`.** `scripts/check-governance.cjs`'s four `git log` readers now pass `--no-show-signature` and refuse a non-sha name as a failure to run (exit 2); `test/lint/git-log-readers.test.ts` scans `scripts/*.cjs` too, and `test/cli/check-governance-show-signature.test.ts` runs the check on signed commits (with the old script: 3 failed; now `npx jest` on the six task-268 suites + `test/cli/check-governance.test.ts` → 67 passed, `npx jest test/lint` → 89 passed, `npm run lint` 0, `npx tsc --noEmit -p tsconfig.json` 0, `node scripts/check-governance.cjs --base 1ce84a54` → 0 findings). While doing it, the helpers were found not to isolate spawned children (jest's per-file `process.env` copy does not reach a child spawned without `env`); they now pass `env: process.env`, and `spawnCapture` has an opt-in `env`.
+
+**Candidate findings (not filed).** Test suites that set `process.env.GIT_CONFIG_GLOBAL` (e.g. `test/core/memory-submit.test.ts` §REQ-SEC-01) only isolate the children that pass `env` explicitly; any git spawned without `env` (`test/storage/helpers/git-fixture.ts`'s `git`, `spawnCapture` by default, `scripts/check-governance.cjs` in-process) reads the developer's real configuration. Observed with `execFileSync('sh', ['-c', 'echo "[$WF_PROBE]"'])` after `process.env.WF_PROBE = 'x'` in a jest test → `[]`.
