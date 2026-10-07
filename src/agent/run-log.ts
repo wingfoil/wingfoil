@@ -17,10 +17,9 @@
  * compares the element at `state_ref` with the element at `HEAD`: all committed states, never the
  * working tree, so notes an agent wrote but did not commit yield `none` (§4.2 key 18).
  */
-import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, posix, relative, resolve, sep } from 'node:path';
+import { basename, posix, relative, resolve, sep } from 'node:path';
 
-import { commitPaths, pathPorcelainStatus, readPathAtRev, unstagePaths } from '../storage';
+import { CommitFailure, pathPorcelainStatus, readPathAtRev, writeAndCommit } from '../storage';
 import { isIdPiece } from '../validation/id';
 import { requireConfinedTarget, requireConfinedWriteTarget } from '../core/confinement';
 import { resolveRevision, RevisionError } from '../core/revision';
@@ -503,13 +502,15 @@ const recordDetails = (record: RunRecord, line: string): Record<string, unknown>
   issues: [{ detail: line.replace(/\n$/, '') }],
 });
 
-/** The operator-facing cause of a failed git invocation: git's (or a hook's) first stderr line. */
-function gitCause(error: unknown): string {
-  const failure = error as { stderr?: unknown; status?: unknown };
-  const stderr = typeof failure.stderr === 'string' ? failure.stderr : Buffer.isBuffer(failure.stderr) ? failure.stderr.toString('utf-8') : '';
-  const first = stderr.split('\n').map((line) => line.trim()).find((line) => line !== '');
-  if (first !== undefined) return first;
-  return typeof failure.status === 'number' ? `git exited with status ${failure.status}` : 'git failed';
+/**
+ * The cause a failed record commit names: git's (or a hook's) explanation on one line with the project
+ * root removed (`CommitFailure.gitDetail`, task-210), plus the index problem when the index entry could
+ * not be put back.
+ */
+function commitCause(failure: CommitFailure): string {
+  return failure.indexProblem === undefined
+    ? failure.gitDetail
+    : `${failure.gitDetail} (the index entry could not be put back: ${failure.indexProblem}; check it with git status)`;
 }
 
 /**
@@ -530,8 +531,10 @@ function gitCause(error: unknown): string {
  *   the strict reader's `VALIDATION` for the log at `HEAD`; `CONFLICT` `run id <run-id> already
  *   recorded at HEAD`.
  *
- * A commit that fails (a refusing hook, …) is `IO` `run <run-id> not recorded: <cause>` with the record
- * as a `details` line; the file and its index entry are put back as `HEAD` holds them.
+ * The append and the commit go through `writeAndCommit` (task-210): under a dry run the commit is
+ * planned and nothing is written. A commit git refuses (a hook, a held `index.lock`, …) is `IO` `run
+ * <run-id> not recorded: <cause>` with the record as a `details` line, the cause naming no absolute
+ * path; the file, any directory the append created, and the index entry are put back as they were.
  */
 export function recordRun(root: string, logPath: string, record: RunRecord): CoreResult<RecordedRun> {
   let line: string;
@@ -559,17 +562,14 @@ export function recordRun(root: string, logPath: string, record: RunRecord): Cor
     return keep({ code: 'CONFLICT', message: `run id ${record.id} already recorded at HEAD` });
   }
 
-  const absolute = join(root, logPath);
-  mkdirSync(dirname(absolute), { recursive: true });
-  writeFileSync(absolute, `${atHead ?? ''}${line}`, 'utf-8');
   const message = `agent: record ${record.id}`;
   try {
-    const sha = commitPaths(root, [logPath], message);
+    // task-210's primitive: plans instead of writing under a dry run, and on a refused commit puts the
+    // file, any directory it created and the index entry back before throwing a CommitFailure.
+    const sha = writeAndCommit(root, [{ path: logPath, content: `${atHead ?? ''}${line}` }], message);
     return coreOk({ record, sha }, { sha, message });
   } catch (error) {
-    if (atHead === null) unlinkSync(absolute);
-    else writeFileSync(absolute, atHead, 'utf-8');
-    unstagePaths(root, [logPath]);
-    return keep({ code: 'IO', message: `run ${record.id} not recorded: ${gitCause(error)}` });
+    if (!(error instanceof CommitFailure)) throw error;
+    return keep({ code: 'IO', message: `run ${record.id} not recorded: ${commitCause(error)}` });
   }
 }
