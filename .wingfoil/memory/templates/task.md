@@ -44,4 +44,6 @@ tmpl_version: 261006   # Orignal template version
      Notes / the retrospective, not the retrospective itself.
      - design: tech-specs found missing/needing revision (dev-loop/design safety net).
      - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
+       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
+       shows it resolved and what that command printed; then what else changed on the next pass. -->
