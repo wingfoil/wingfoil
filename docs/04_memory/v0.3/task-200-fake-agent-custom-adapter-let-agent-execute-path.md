@@ -2,7 +2,7 @@
 id: "task-200-fake-agent-custom-adapter-let-agent-execute-path"
 type: task
 title: "A fake agent and its custom adapter let every `agent execute` path run under Jest and CI with no real agent and no terminal"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "high"
