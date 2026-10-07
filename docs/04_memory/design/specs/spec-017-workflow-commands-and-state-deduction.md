@@ -130,8 +130,14 @@ checks that its target file does not exist on disk.
 parse, has no `status`, or holds a status its type's machine does not declare is excluded from
 deduction and reported as a diagnostic, never as a crash (`W_MEMORY_INVALID_STATE`:
 `invalid state '<status>' for type '<type>' in <file>`, P4.13; `W_MEMORY_UNREADABLE`:
-`unreadable frontmatter in <file>: <reason>`). The six pre-`dl-019` plan files that carry no
-frontmatter (for example `docs/05_plans/rl-v1/initial-design-rl-v1-plan.md`) are reported this way.
+`unreadable frontmatter in <file>: <reason>`). The reasons are the parser's first line, `no frontmatter`,
+`no 'type' field`, `type '<type>' is not declared in memory.yaml`, `no 'id' field` and `no 'status' field`.
+The six pre-`dl-019` plan files that carry no frontmatter (for example
+`docs/05_plans/rl-v1/initial-design-rl-v1-plan.md`) are reported this way. A file with no frontmatter whose
+path matches no type's `path` pattern is not a Memory document and is left out silently: the top-level
+`docs/05_plans/X_*.md` plans `dl-019` grandfathers (`.wingfoil/memory.yaml` `plan.path`). In a `path` pattern a
+token in the file name stands for one name, a token in a directory for one or more directories (the plan's
+`{scope}` nests, as in `rl-v1/rel-v0.3`).
 
 ### 2. The workflow registry and its diagnostics
 
@@ -364,7 +370,9 @@ instance to the step and `scope` is the step's element or collection entry. A st
 `<workflow>.<phase>`, followed by `@<type>:<id>` or `@<collection>#<key>` when it has a scope (e.g.
 `dev-loop.red@task:task-130`); within one instance a key names one step. Several steps are ready at
 once when several iterations are in flight (parallel `dev-loop`s, `dl-014`). An instance is
-**complete** when its frontier is empty.
+**complete** when its frontier is empty, except an instance whose workflow the registry does not load
+(`W_INSTANCE_WORKFLOW_UNKNOWN`, §2): its frontier is empty because nothing can be deduced, and it is
+reported `complete: false`.
 
 **4.10 Optional phases.** A phase with `optional: true` whose evidence is unsatisfied is **skipped**
 when a later phase of the same workflow is complete other than vacuously (§4.7); otherwise it is
@@ -636,7 +644,7 @@ interface Step {
   scope: ScopeRef | null; role: string | null; agentRole: boolean; members: Member[];
   directives: { id: string; title: string }[];
   actions: ActionView[]; checks: { pre: CheckView[]; post: CheckView[] };
-  produces: { pattern: string; owner: string | null; resolved: string[]; exists: boolean }[];
+  produces: { pattern: string; owner: string | null; resolved: string[]; exists: boolean; evidence: boolean }[];  // evidence: false for an implicit-owner entry (shown, §4.3) and a created-owned one
   created: ElementRef[];
   evidence: { kinds: EvidenceKind[]; missing: EvidenceKind[]; finalizable: boolean };
   optional: boolean; awaiting: Awaiting | null;
@@ -1018,3 +1026,14 @@ checks' inputs (`spec-003` § "Where each check runs", task-194). The two out-of
 gain the phase they named and their offsets at `4fd77678`; `dev-loop.done`'s fallback is cited by key
 (`dl-075` (A), fix on touch). No command contract, code or diagnostic changes. Edited in place without
 a supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-199`'s review.
+
+**Revision (2026-10-07, `task-198-deduce-workflow-instances-phase-evidence-frontier-memory-head`) — three readings
+the first implementation of the deduction needed, stated here.** §1.4 names every `W_MEMORY_UNREADABLE`
+reason (no frontmatter, no `type`, an undeclared type, no `id`, no `status`) and leaves out silently a file with
+no frontmatter that lies on no type's `path` pattern, so this repository reports exactly the six plans §1.4
+counts and not the top-level `X_*` plans `dl-019` grandfathers; it also says how a `path` token matches
+(a file-name token one name, a directory token one or more directories). §4.9 says that an instance whose
+workflow the registry does not load is `complete: false` although its frontier is empty. §8's `produces`
+entry gains `evidence: boolean`, which tells an entry that is shown but is not evidence (§4.3) from one of a
+workflow with no element (both have `owner: null`). No deduction rule changed. Edited in place without a
+supersede or a state change (`dl-047`); recorded with `memory amend`.

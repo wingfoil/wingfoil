@@ -137,6 +137,31 @@ export { workflowCoreDiagnostics } from './workflow-core-checks';
 export type { CheckedRegistry, WorkflowCoreInputs } from './workflow-core-checks';
 export { iterationStartState, machineStates, workflowExitStates } from './workflow-exit-state';
 export type { ExitStart, HeldGate, InstanceState, PhaseExitState, UndeterminedAction } from './workflow-exit-state';
+export { deduceWorkflowStateAtHead, readDeductionSnapshotAtHead, selectWorkflowInstance } from './workflow-deduction';
+export {
+  deduceWorkflowState,
+  resolveInstanceRef,
+  W_INSTANCE_WORKFLOW_UNKNOWN,
+  W_MEMORY_INVALID_STATE,
+  W_UNCOMMITTED_INPUTS,
+  W_UNRESOLVED_TOKEN,
+} from '../workflow/deduce';
+export type {
+  Baseline,
+  DeducedStep,
+  Deduction,
+  DeductionSnapshot,
+  ElementRef,
+  EvidenceKind,
+  Instance,
+  InstanceDeduction,
+  PhaseProgress,
+  PhaseRecord,
+  ProducesView,
+  ScopeRef,
+  StartCommit,
+  TrailEntry,
+} from '../workflow/deduce';
 
 export { malformedElementRefMessage, parseElementRef } from './element-ref';
 export type { DirectiveFile, WorkflowsLoadResult } from './loaders';

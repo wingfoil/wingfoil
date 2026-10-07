@@ -355,9 +355,20 @@ const BARE_TOKEN_RE = /\{[^{}.]+\}/;
  * startable workflow with no `element` whose phases `memory.add` — the phase holding the first such
  * action. `-1` for every other workflow.
  */
-function creatingPhaseIndex(workflow: Workflow): number {
+export function creatingPhaseIndex(workflow: Workflow): number {
   if (workflow.element !== undefined || !workflowFacts(workflow).startable) return -1;
   return workflow.phases.findIndex((phase) => (phase.actions ?? []).some((action) => tokenName(action) === 'memory.add'));
+}
+
+/**
+ * Whether the string `produces` entry `entry` of phase `p` has an **implicit owner** (`dl-104` D3,
+ * `W_PHASE_PRODUCES_OWNER_IMPLICIT`): a bare `{<field>}` token in a phase that also `memory.add`s,
+ * other than a self-creating workflow's creating phase. The loader warns on it; state deduction
+ * (task-198, `spec-017` §4.3) shows it and does not count it as evidence — one rule for both.
+ */
+export function isImplicitOwnerProduces(workflow: Workflow, p: number, entry: string): boolean {
+  const adds = (workflow.phases[p]?.actions ?? []).some((action) => tokenName(action) === 'memory.add');
+  return adds && p !== creatingPhaseIndex(workflow) && BARE_TOKEN_RE.test(entry);
 }
 
 /**
@@ -408,7 +419,7 @@ function phaseEvidenceDiagnostics(file: string, workflow: Workflow, p: number, b
   const creating = creatingPhaseIndex(workflow);
   if (adds && p !== creating) {
     produces.forEach((entry, k) => {
-      if (typeof entry === 'string' && BARE_TOKEN_RE.test(entry)) {
+      if (typeof entry === 'string' && isImplicitOwnerProduces(workflow, p, entry)) {
         out.push(
           warning(file, at(`produces[${k}]`), 'W_PHASE_PRODUCES_OWNER_IMPLICIT', `produces '${entry}' in a phase that memory.adds: name its owner as { type, path } (dl-104 D3)`),
         );
