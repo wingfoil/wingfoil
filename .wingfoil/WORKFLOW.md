@@ -211,16 +211,26 @@ gate precedes the TDD red-green-refactor cycle; rejection at review sends the ta
 Every phase that changes the task's state also calls `bug.sync_state`: a no-op unless the task
 carries a `bug:` field, in which case it recomputes the source bug's own state from the aggregate
 progress of *all* its derived fix tasks (task and bug share the `in-progress`/`in-review` state
-names by design, so no separate bug-fix workflow is needed).
+names by design, so no separate bug-fix workflow is needed). The reject path has its own sync, the
+first action of `red` (`dl-061`): whoever performs the reject emits it right after, citing the
+reject commit.
+
+Separation of duties (`dl-134`, v1.5): `red` is `qa`'s, black-box, and `green` and `refactor` leave
+the files `red`'s commit touched unchanged (`tests.unchanged(since: red)`, evaluated from v1.0).
+`green` never shares an agent session with `red`, `refactor` may resume `green`'s, and `review`
+shares none with the three; the reviewer loads the developer's and `qa`'s directives too. A task
+resumed after a reject or a park merges `main` first (`dl-035`). `memory park` returns a started
+task to the backlog: its branch is kept, its worktree removed, its bugs synced back to `planned`
+(`dl-110`).
 
 ```mermaid
 flowchart TD
     ST["**start** *(developer)*\ngit.create_branch(task: {task.id}) → branch task/{task.id}\ntask: backlog → in-progress\n↳ bug.sync_state: source bug planned → in-progress"]
     DES["📐 **design** *(architect)* · safety net\nverify a tech-spec exists + is approved for every\nfile format/schema/constant/API the task implements\n✔ P4.12: [title, scope] (if scaffolded) + tech-spec: approved"]
-    RED["🔴 **red** *(developer)*\nwrite failing test\n✔ tests.exist + tests.failing"]
-    GREEN["🟢 **green** *(developer)*\nmin code to pass\n✔ tests.passing"]
-    REF["🔵 **refactor** *(developer)*\nclean code, keep tests green\n✔ tests.passing + coverage ≥ 80%"]
-    REV["📋 **review** *(reviewer)*\ntask: in-progress → in-review\n↳ bug.sync_state: source bug → in-review (once ALL its fix tasks are)\n🔑 Approval gate — *approver*"]
+    RED["🔴 **red** *(qa)* · fresh\n↳ bug.sync_state: source bug in-review → in-progress (after a reject)\nmerge main (on a resume)\nwrite the tests black-box from the ACs\n✔ tests.exist + tests.failing"]
+    GREEN["🟢 **green** *(developer)* · distinct from red\nmin code to pass\n✔ tests.passing + tests.unchanged(since: red)"]
+    REF["🔵 **refactor** *(developer)* · may resume green\nclean code, keep tests green\n✔ tests.passing + coverage ≥ 80% + tests.unchanged(since: red)"]
+    REV["📋 **review** *(reviewer)* · distinct from red, green, refactor\nmerge main (if it moved)\ntask: in-progress → in-review\n↳ bug.sync_state: source bug → in-review (once ALL its fix tasks are)\n🔑 Approval gate — *approver*"]
     DONE["✅ **done** *(developer)*\ngit merge to main\ntask: in-review → approved → done\n↳ bug.sync_state: source bug → resolved → closed (once ALL its fix tasks are done)"]
 
     ST --> DES --> RED --> GREEN --> REF --> REV
@@ -440,6 +450,7 @@ stateDiagram-v2
     in_progress --> in_review : memory.submit
     in_review --> approved : memory.approve
     in_review --> in_progress : memory.reject (back to red)
+    in_progress --> backlog : memory park (dl-110)
     approved --> done : workflow.set_state
 
     in_progress : in-progress
@@ -503,7 +514,8 @@ stateDiagram-v2
     planned --> in_progress : bug.sync_state (dev-loop, first fix task starts)
     in_progress --> in_review : bug.sync_state (dev-loop, ALL fix tasks in review)
     in_review --> resolved : bug.sync_state (dev-loop, ALL fix tasks done)
-    in_review --> in_progress : memory.reject (reopen)
+    in_review --> in_progress : memory.reject (reopen); bug.sync_state (dev-loop red, after a task reject, dl-061)
+    in_progress --> planned : bug.sync_state (dev-loop, the fix task is parked, dl-110)
     resolved --> closed : bug.sync_state (dev-loop, ALL fix tasks done)
     resolved --> in_progress : memory.reject (reopen)
     closed --> deprecated : memory.deprecate
@@ -545,8 +557,8 @@ stateDiagram-v2
 | `product-owner` | Release-line seeding/closing (`seed-first-release-line`, `plan-next-release-line`), release-line roadmap (`seed-releases`), release planning, scope definition, governance reconcile, backlog creation |
 | `tech-lead` | Config init, release-line approval, pinned-build advance, bug triage, backlog approval, implementation-complete check, release submission and publishing, deprecation |
 | `architect` | Features session, Volere requirements, ADR authoring, tech-spec identification/authoring (`identify-specs`, `dev-loop/design`), agent-facing docs (`align-agent-docs`) |
-| `developer` | TDD dev-loop (red/green/refactor), branch management, user-facing docs (`align-user-docs`), bug capture, service capture |
-| `reviewer` | Code review in dev-loop |
-| `qa` | BDD specification, end-to-end smoke (`e2e-smoke`), pre-release checks |
+| `developer` | TDD dev-loop (green/refactor), branch management, user-facing docs (`align-user-docs`), bug capture, service capture |
+| `reviewer` | Code review in dev-loop (tests and code, under the developer's and qa's directives too, `dl-134`) |
+| `qa` | BDD specification, the dev-loop `red` phase (black-box tests, `dl-134`), end-to-end smoke (`e2e-smoke`), pre-release checks |
 | `facilitator` | Lean inception sessions, retrospective exploration and capture |
 | `approver` | All approval gates (bug triage, governance reconcile, backlog commit, task review, documentation, e2e smoke, release, retrospective, end-of-life, service verification) |

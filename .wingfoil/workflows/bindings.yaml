@@ -16,7 +16,7 @@
 # specification-phase quality criteria, the release/branch state queries, …) have no command that asserts
 # them today; each is listed with its reason in task-199's Execution Notes and stays a
 # W_WORKFLOW_UNBOUND_TOKEN warning, which in v1.0 fails closed (dl-090 Q2 (c)).
-version: 1.0                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry
+version: 1.1                     # 1.1 git.merge also names dev-loop's main-sync, `from: main` (task-205, dl-035) (prev 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry)
 format: 1                        # dl-153 (A): a dl-149 file kind (BINDINGS_YAML_FORMAT)
 
 checks:
@@ -50,7 +50,9 @@ actions:
   # these stay manual until a command takes the task id as a whole argument.
   git.create_branch:        { manual: true }
   git.create_worktree:      { manual: true }
-  git.merge:                { manual: true }   # switch to `to`, then `git merge --no-ff` the task branch: two commands
+  # git.merge(to: main, ff: false): switch to `to`, then `git merge --no-ff` the task branch — two commands.
+  # git.merge(from: main) (dev-loop red/review, dl-035): `git merge --no-edit main` inside the task's worktree.
+  git.merge:                { manual: true }
   git.remove_worktree:      { manual: true }
   # release-publishing.tag (dl-024) and end-of-life.archive: the commit message and the tag are the
   # approver's, on main.

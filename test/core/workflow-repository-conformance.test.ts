@@ -101,6 +101,9 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["dev-loop", "phases[1].checks.post[2]", "depends_on.acknowledged"],
       ["dev-loop", "phases[2].checks.post[0]", "tests.exist"],
       ["dev-loop", "phases[2].checks.post[1]", "tests.failing"],
+      // task-205 (dl-134 §2): declared on green and refactor, evaluated from v1.0 (P4.12); no command asserts it yet.
+      ["dev-loop", "phases[3].checks.post[1]", "tests.unchanged"],
+      ["dev-loop", "phases[4].checks.post[5]", "tests.unchanged"],
       ["user-docs", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
       ["user-docs", "phases[1].checks.post[0]", "user-facing docs aligned with the release's shipped CLI/feature surface"],
       ["agent-docs", "phases[0].checks.post[0]", "CLAUDE.md project status matches the shipped command surface"],

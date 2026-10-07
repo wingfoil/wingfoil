@@ -18,7 +18,11 @@
 # `git-conventions` (dl-119 Q2 (b), task-178) is global: its subject, identity and attribution clauses
 # bind whoever commits — the approver's approve commits, the facilitator's and product-owner's captures
 # — not only the developer. Declared global here and by `scope: global` in its file (task-144).
-version: 1.4
+#
+# `reviewer` also loads `code-quality`, `testing` and `determinism` (dl-134 §3, task-205): it judges
+# both the tests `qa` writes in `dev-loop`'s `red` and the code the developer writes in `green` and
+# `refactor`, so it reviews under the directives of the roles it checks, beside its own.
+version: 1.5
 
 assignments:
   developer:
@@ -30,6 +34,9 @@ assignments:
     - code-review
     - traceability
     - command-baseline
+    - code-quality
+    - testing
+    - determinism
   qa:
     - testing
   architect:
