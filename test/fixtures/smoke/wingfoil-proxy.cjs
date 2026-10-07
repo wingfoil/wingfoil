@@ -46,4 +46,6 @@ if (kind === 'corrupt') {
   writeFileSync(touched, '---\nid: [unclosed\n');
   git(['commit', '--quiet', '--all', '--message', `fault: corrupt ${touched}`]);
 }
-process.exit(kind === 'exit' ? Number(fault[2]) : (run.status ?? 1));
+// A CLI killed by a signal dies the same way here (bug-197): its signal is no exit code to forward.
+if (run.signal !== null) process.kill(process.pid, run.signal);
+process.exit(kind === 'exit' ? Number(fault[2]) : run.status);
