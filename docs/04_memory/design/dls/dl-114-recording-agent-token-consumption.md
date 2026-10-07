@@ -56,7 +56,9 @@ zero. The open choices below remain for the approver.
 **Q2 — what a record holds:**
 - **(a) minimal:** element id, workflow phase, role, agent and model identifier as the agent reports
   it, input tokens, output tokens, cache tokens where reported, the WingFoil build (`dl-111`);
-- **(b) (a) plus** wall-clock duration and exit status.
+- **(b) (a) plus** wall-clock duration and exit status, and the agent's **session id**, extracted by
+  the adapter, or `not-reported` where the agent exposes none, as (i) does for tokens (amended by
+  `dl-135` point 2, 2026-10-06).
 
 **Q3 — where the numbers come from:**
 - **(i) the agent's own report**, parsed by an adapter per supported agent, with `not-reported`
