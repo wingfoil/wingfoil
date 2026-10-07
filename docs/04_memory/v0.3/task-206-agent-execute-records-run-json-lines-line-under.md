@@ -2,7 +2,7 @@
 id: "task-206-agent-execute-records-run-json-lines-line-under"
 type: task
 title: "`agent execute` records each run as one JSON Lines line under `paths.runs`, commits it as `agent: record <run-id>`, and reads it back strictly"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "high"
