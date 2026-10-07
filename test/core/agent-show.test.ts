@@ -8,8 +8,8 @@
  * line, exit codes) are pinned by `test/cli/agent-show.integration.test.ts`.
  */
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { appendFileSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { NOT_REPORTED, recordRun, serializeRunRecord, type RunRecord } from '../../src/agent';
 import { CORE_MODULES, WINGFOIL_NOT_INITIALIZED } from '../../src/core';
@@ -283,6 +283,69 @@ describe('task-220 — agent show <run-id> (spec-016 §6)', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error).toEqual({ code: 'NOT_FOUND', message: `run not found: ${ELEMENT_ID}/design/1` });
+    });
+  });
+
+  describe('review fixes (task-220 review, 2026-10-07)', () => {
+    /** Commit everything with both dates pinned, so `git log`'s newest-first order is not a tie. */
+    function commitAt(message: string, epoch: number): void {
+      execFileSync('git', ['-C', repo, 'add', '-A']);
+      const date = `${epoch} +0000`;
+      execFileSync('git', ['-C', repo, 'commit', '--quiet', '-m', message], {
+        env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
+      });
+    }
+
+    it('F2: a later commit that REMOVED the line (on a side branch merged keeping it) is not the adding commit', async () => {
+      const run = record();
+      const line = serializeRunRecord(run);
+      writeFixtureFile(repo, LOG, line);
+      commitAt(`agent: record ${run.id}`, 1_900_000_000);
+      const added = head(repo);
+      execFileSync('git', ['-C', repo, 'checkout', '--quiet', '-b', 'side']);
+      writeFixtureFile(repo, LOG, serializeRunRecord(record({ id: `${ELEMENT_ID}/design/2` })));
+      commitAt('side: drop design/1, record design/2', 1_900_000_200);
+      execFileSync('git', ['-C', repo, 'checkout', '--quiet', 'main']);
+      writeFixtureFile(repo, 'README.md', 'main moves\n');
+      commitAt('main moves', 1_900_000_100);
+      // The merge keeps both records, so it equals neither parent and `git log -- <log>` walks both.
+      execFileSync('git', ['-C', repo, 'merge', '--quiet', '--no-ff', '--no-commit', '-s', 'ours', 'side']);
+      writeFixtureFile(repo, LOG, line + serializeRunRecord(record({ id: `${ELEMENT_ID}/design/2` })));
+      commitAt('merge side keeping both records', 1_900_000_300);
+      const result = await show(repo, run.id);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.commit).toBe(added);
+    });
+
+    it('F1: with log.showSignature=true and a signed record commit, commit is the bare sha', async () => {
+      const key = join(repo, '.git', 'test-signing-key');
+      execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
+      for (const [name, value] of [['gpg.format', 'ssh'], ['user.signingkey', key], ['commit.gpgsign', 'true'], ['log.showSignature', 'true']]) {
+        execFileSync('git', ['-C', repo, 'config', name!, value!]);
+      }
+      const run = record();
+      const sha = recorded(repo, run);
+      const result = await show(repo, run.id);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.commit).toBe(sha);
+      expect(result.value.commit).toMatch(/^[0-9a-f]{40}([0-9a-f]{24})?$/);
+    });
+
+    it.each([
+      ['a directory', (path: string) => mkdirSync(path, { recursive: true })],
+      ['a symbolic link to a log that holds the run', (path: string) => {
+        const target = join(dirname(path), 'elsewhere.jsonl');
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(target, serializeRunRecord(record()));
+        symlinkSync(target, path);
+      }],
+    ])('F7: the working tree\'s log path is %s: refused (exit 1) with no hint', async (_label, make) => {
+      make(join(repo, LOG));
+      const result = await show(repo, `${ELEMENT_ID}/design/1`);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({ code: 'NOT_FOUND', message: `run not found: ${ELEMENT_ID}/design/1` });
+      expect(exitCodeForResult(result)).toBe(1);
     });
   });
 
