@@ -269,7 +269,7 @@ export async function mcpPreflight(input: McpPreflightInput): Promise<CoreResult
     const reason = error instanceof Error ? error.message : String(error);
     const said = serverStderr.trim().split('\n').filter((line) => line.trim() !== '').pop();
     const cause = withoutRoot(said === undefined ? reason : `${reason} (server: ${said})`, input.root);
-    return coreErr({ code: 'IO', message: MCP_UNREACHABLE_MESSAGE, details: { cause } });
+    return coreErr({ code: 'IO', message: MCP_UNREACHABLE_MESSAGE, details: { cause, issues: [{ detail: cause }] } });
   } finally {
     await client.close().catch(() => undefined);
   }
@@ -359,8 +359,16 @@ function requireElement(root: string, sha: string, memoryYaml: MemoryYaml, eleme
   return coreErr({
     code: 'NOT_FOUND',
     message: `element not found: ${element.type}:${element.id}`,
-    ...(unreadable.length > 0 ? { details: { unreadable: unreadable.map(formatDiagnostic) } } : {}),
+    ...(unreadable.length > 0 ? { details: unreadableDetails(unreadable.map(formatDiagnostic)) } : {}),
   });
+}
+
+/**
+ * `details` naming the documents a scan could not read: `unreadable` (task-171's key) and the same
+ * lines as `dl-055` detail lines, so the CLI and the MCP surface show them (`errorDetails`).
+ */
+function unreadableDetails(lines: readonly string[]): Record<string, unknown> {
+  return { unreadable: lines, issues: lines.map((detail) => ({ detail })) };
 }
 
 /** Whether the element type's template, at `sha`, has a `## Execution Notes` heading line (§2.4). */
@@ -427,6 +435,8 @@ export async function agentExecutePipeline<T>(
 
   // Step 7 — the context, assembled and validated at state_ref.
   const assembled = assembleExecutionContext(root, { role, element: request.element, stateRef: sha });
+  // The element was found at this same commit (step 3), so the builder's NOT_FOUND with
+  // `details.unreadable` cannot arise here; its refusals pass through as they are.
   if (!assembled.ok) return assembled;
 
   // Step 8 — its warnings, before the pre-flight (dl-050 option 4); the notes reach the agent with the Prompt.

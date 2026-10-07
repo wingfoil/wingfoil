@@ -12,7 +12,7 @@
  * The step forms (`--next`, `--workflow`, `--step`) are task-235's: until then they are not registered,
  * so Commander refuses them as unknown options (exit `2`), as it refuses v0.4's `--resume` and `--ref`.
  */
-import { agentExecutePipeline, launchPlan, type AgentLaunchPlan } from '../agent/execute';
+import { agentExecutePipeline, launchPlan, type AgentExecuteHost, type AgentLaunchPlan } from '../agent/execute';
 import { isDryRunActive } from '../storage';
 import { parseElementRef } from './element-ref';
 import { requireInitializedProject } from './init';
@@ -24,6 +24,12 @@ import { UsageError } from './usage-error';
 export interface AgentExecuteParams {
   readonly root: string;
   readonly options?: Readonly<Record<string, string | readonly string[] | undefined>>;
+  /**
+   * The host facts the pipeline reads (the MCP server to pre-flight, the terminal test, `PATH`), for an
+   * in-process caller only: no surface builds it from user input, so the CLI always runs with the
+   * process's own (`src/cli.ts`'s `buildParams` sets no such key).
+   */
+  readonly host?: AgentExecuteHost;
 }
 
 /** §3.1: none of `--next`, `--workflow`, `--step`, `--element` → exit `2` with this reason. */
@@ -40,7 +46,7 @@ function single(value: string | readonly string[] | undefined): string | undefin
  * before the project is read.
  */
 export const agentExecuteFn: CoreFn<unknown, AgentLaunchPlan> = async (params) => {
-  const { root, options } = params as AgentExecuteParams;
+  const { root, options, host } = params as AgentExecuteParams;
   const elementOption = single(options?.element);
   if (elementOption === undefined) throw new UsageError(AGENT_EXECUTE_MISSING_TARGET);
   const element = parseElementRef(elementOption);
@@ -50,7 +56,7 @@ export const agentExecuteFn: CoreFn<unknown, AgentLaunchPlan> = async (params) =
   if (!initialized.ok) return initialized;
 
   const dryRun = isDryRunActive();
-  return agentExecutePipeline(root, { element: element.value, role: single(options?.role), agent: single(options?.agent) }, {}, async (prepared) =>
+  return agentExecutePipeline(root, { element: element.value, role: single(options?.role), agent: single(options?.agent) }, host ?? {}, async (prepared) =>
     dryRun
       ? coreOk(launchPlan(prepared))
       : coreErr({
