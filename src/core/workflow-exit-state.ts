@@ -19,8 +19,9 @@
  *   (which this function does not move: a selection's elements have no single state) or else on the
  *   bound element;
  * - `<T>.set_state(s)` acts on the bound element when `T` is its type, otherwise on the elements of
- *   `T` an earlier phase of the same workflow pass created (its **run** elements), otherwise on nothing
- *   it can track;
+ *   `T` an earlier phase of the same workflow pass created (its **run** elements), otherwise on the
+ *   phase's selection when it selects `T` (not moved either; it holds each selected gate state whose
+ *   approve target is `s`, §5.1), otherwise on nothing;
  * - every other token (`<T>.sync_state`, `element.set_release`, `agent.*`, `git.*`, …) changes no
  *   state.
  *
@@ -276,6 +277,8 @@ function compute(
     const selection = phase.where !== undefined && phase.iterate_over === undefined;
     let latest: Tracked | null = null;
     let actsOnSelection = false;
+    // `<T>.set_state(s)` on the selection (§4.2 last fallback): the `(T, s)` pairs, in action order.
+    const selectionSets: { type: string; to: string }[] = [];
     (phase.actions ?? []).forEach((action, a) => {
       const name = tokenName(action);
       if (name === 'memory.add') {
@@ -304,9 +307,13 @@ function compute(
           apply(bound, a, op);
           return;
         }
-        for (const element of earlier.filter((candidate) => candidate.type === type)) {
+        const earlierOfType = earlier.filter((candidate) => candidate.type === type);
+        for (const element of earlierOfType) {
           apply(element, a, op);
           run.add(element);
+        }
+        if (earlierOfType.length === 0 && selection && asList(phase.where!['type']).includes(type)) {
+          selectionSets.push({ type, to: op.setState });
         }
       }
     });
@@ -320,6 +327,14 @@ function compute(
           const gate = machine.gates?.[status];
           if (gate) hold(type, status, gate.reject);
         }
+      }
+    }
+    for (const { type, to } of selectionSets) {
+      const machine = machineOf(memoryYaml, type);
+      if (!machine) continue;
+      for (const status of asList(phase.where!['status'])) {
+        const gate = machine.gates?.[status];
+        if (gate && machine.sequence[machine.sequence.indexOf(status) + 1] === to) hold(type, status, gate.reject);
       }
     }
 

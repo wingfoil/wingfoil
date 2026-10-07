@@ -81,10 +81,16 @@ class Collector {
 
   constructor(private readonly include: readonly string[]) {}
 
-  add(file: number, phase: number, row: Row, path: string, message: string): void {
+  /**
+   * @param problem - What tells two problems of one row at one path apart (review F1): the token for
+   *   `W_PHASE_TOKEN_OUT_OF_SCOPE`, the message for `E_WORKFLOW_COLLECTION_UNRESOLVED`; empty for the
+   *   rows that report at most one problem per path. The same problem raised again on another include
+   *   path is reported once, with the first path's message (deterministic traversal).
+   */
+  add(file: number, phase: number, row: Row, path: string, message: string, problem = ''): void {
     const code = row;
-    const key = `${file}\u0000${path}\u0000${code}`;
-    if (this.seen.has(key)) return; // the first include context that raised it wins (deterministic traversal)
+    const key = `${file}\u0000${path}\u0000${code}\u0000${problem}`;
+    if (this.seen.has(key)) return;
     this.seen.add(key);
     const severity = code.startsWith('E_') ? 'error' : 'warning';
     this.entries.push({
@@ -156,7 +162,7 @@ function staticChecks(out: Collector, i: number, workflow: Workflow, bindings: B
     }
 
     if (over !== undefined && isCollection) {
-      for (const message of collectionProblems(over, dnaYaml, bindings)) out.add(i, p, 'E_WORKFLOW_COLLECTION_UNRESOLVED', at('iterate_over'), message);
+      for (const message of collectionProblems(over, dnaYaml, bindings)) out.add(i, p, 'E_WORKFLOW_COLLECTION_UNRESOLVED', at('iterate_over'), message, message);
     }
 
     const cadence = phase.cadence as unknown;
@@ -351,12 +357,12 @@ function tokenDiagnostics(out: Collector, i: number, workflow: Workflow, scope: 
         if (named === 'item') continue;
         const type = named === 'element' ? (local[local.length - 1] ?? null) : local.includes(named) ? named : null;
         if (type === null) {
-          out.add(i, p, 'W_PHASE_TOKEN_OUT_OF_SCOPE', path, `token '${token}' names no enclosing element (in scope: ${local.length > 0 ? local.join(', ') : 'none'})`);
+          out.add(i, p, 'W_PHASE_TOKEN_OUT_OF_SCOPE', path, `token '${token}' names no enclosing element (in scope: ${local.length > 0 ? local.join(', ') : 'none'})`, token);
           continue;
         }
         const fields = inputs.templateFields(type);
         if (fields !== null && !fields.has(field)) {
-          out.add(i, p, 'W_PHASE_TOKEN_OUT_OF_SCOPE', path, `token '${token}': the ${type} template declares no field '${field}'`);
+          out.add(i, p, 'W_PHASE_TOKEN_OUT_OF_SCOPE', path, `token '${token}': the ${type} template declares no field '${field}'`, token);
         }
       }
     };

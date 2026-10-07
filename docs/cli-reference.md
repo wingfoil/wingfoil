@@ -999,6 +999,7 @@ register (in `element`, `iterate_over`, `memory.add(type: …)` or a `produces` 
 collection that resolves to no list, and a `cadence` event that can never fire are errors (exit `1`).
 A `{<type>.<field>}` token outside its scope, a phase whose actions its element's state machine cannot
 apply, and a `fallback` that does not match the reject it answers are warnings. These warnings follow
-the load's own in `diagnostics`.
+the load's own in `diagnostics`. Because the command reads `dna.yaml` and `memory.yaml` for these checks,
+it now also fails (exit `1`) when either of them is present but invalid.
 
 - **Commit:** none.
