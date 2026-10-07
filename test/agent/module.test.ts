@@ -4,7 +4,7 @@
  * `CORE_MODULES` under the name `agent`, with no operation yet — `agent execute`, `list` and `show`
  * are later tasks', so no command and no MCP Tool is derived from it today.
  */
-import { MODULE_NAME } from '../../src/agent';
+import { MODULE_NAME, resolveRunLogPath } from '../../src/agent';
 import { CORE_MODULES } from '../../src/core';
 import { enumerateOperations } from '../../src/core/registry';
 import { loadDnaYaml } from '../../src/core/loaders';
@@ -25,5 +25,14 @@ describe('the agent module', () => {
   it('is declared in this repository’s dna.yaml modules at src/agent', () => {
     const dna = loadDnaYaml(join(__dirname, '..', '..'));
     expect(dna.modules.find((module) => module.name === 'agent')?.path).toBe('src/agent');
+  });
+});
+
+describe('this repository’s run log (task-206, spec-016 §4.1)', () => {
+  it('declares paths.runs, exactly one directory, which resolves inside the repository', () => {
+    const root = join(__dirname, '..', '..');
+    const runs = (loadDnaYaml(root).paths as Record<string, string[] | undefined>).runs;
+    expect(runs).toEqual(['docs/06_runs/']);
+    expect(resolveRunLogPath(root, runs, 'task-206')).toEqual({ ok: true, value: 'docs/06_runs/task-206.jsonl' });
   });
 });

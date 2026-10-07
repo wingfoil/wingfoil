@@ -14,3 +14,32 @@ export { ADAPTER_PLACEHOLDERS, E_ADAPTER_PLACEHOLDER, placeholderIssues } from '
 export type { AdapterPlaceholder } from './placeholders';
 export { ADAPTERS_DIR_PATH, E_ADAPTER_DUPLICATE, listAdaptersAtRev, loadAdapter } from './discovery';
 export type { AdapterEntry, LoadedAdapter } from './discovery';
+export {
+  ADHOC_PHASE,
+  deriveNotesField,
+  executionNotesSection,
+  formatRunId,
+  isRunId,
+  nextRunId,
+  NO_WORKFLOW,
+  NOT_REPORTED,
+  notesField,
+  parseRunLog,
+  readRunLogAt,
+  recordRun,
+  requireWritableRunLog,
+  resolveRunLogPath,
+  RUN_RECORD_KEYS,
+  RUN_TOKEN_KEYS,
+  runLogPreflight,
+  serializeRunRecord,
+} from './run-log';
+export type {
+  DeriveNotesFieldInput,
+  NextRunIdInput,
+  NotesFieldInput,
+  RecordedRun,
+  ReportedCount,
+  RunRecord,
+  RunTokens,
+} from './run-log';
