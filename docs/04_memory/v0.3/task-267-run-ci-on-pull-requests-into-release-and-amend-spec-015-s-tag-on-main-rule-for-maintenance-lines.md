@@ -2,7 +2,7 @@
 id: task-267-run-ci-on-pull-requests-into-release-and-amend-spec-015-s-tag-on-main-rule-for-maintenance-lines
 type: task
 title: "Run CI on pull requests into release/** and amend spec-015's tag-on-main rule for maintenance lines"
-status: pending
+status: backlog
 release: "v0.3"
 kind: "feature"
 priority: "high"
