@@ -122,8 +122,8 @@ Every workflow-definition file validates against the following schema. Top-level
 one or both of `startable` / `includable`:
 
 - with `kind` only, the two facts follow the alias above, so every workflow file on disk validates
-  unchanged (23 files, each `kind: main` or `kind: sub`: `grep -L "^kind: \(main\|sub\)$"
-  .wingfoil/workflows/custom/*.yaml` → nothing);
+  unchanged (24 files since `task-199` added `agent-docs.yaml`, each `kind: main` or `kind: sub`:
+  `grep -L "^kind: \(main\|sub\)$" .wingfoil/workflows/custom/*.yaml` → nothing);
 - with the booleans, at least one of them is `true` (`E_WORKFLOW_NEITHER_STARTABLE_NOR_INCLUDABLE`);
   an absent boolean reads as `false`;
 - declaring `kind` **and** either boolean is `E_WORKFLOW_KIND_CONFLICT` — one fact, one field;
@@ -210,9 +210,9 @@ export const Workflow = z.object({
 
 #### Names
 
-Workflow names and phase names share the class `[a-z][a-z0-9-]*`. Every name on disk matches it (23
-workflow names, 85 phase names: the `E_WORKFLOW_NAME_INVALID` / `E_PHASE_NAME_INVALID` rows of the
-§ "Diagnostics" measurement report none), so no file changes. A phase is addressed across files as
+Workflow names and phase names share the class `[a-z][a-z0-9-]*`. Every name on disk matches it (24
+workflow names, 87 phase names since `task-199`: the `E_WORKFLOW_NAME_INVALID` / `E_PHASE_NAME_INVALID`
+rows of the § "Diagnostics" measurement report none), so no file changes. A phase is addressed across files as
 `<workflow>.<phase>`; because neither part contains a `.`, the split is unambiguous. The phase name
 `adhoc` is reserved: `spec-016` uses it as the phase segment of a run without a step: no `--next`,
 `--workflow` or `--step`.
@@ -269,12 +269,16 @@ string is prose, which no engine can test for existence (`E_PHASE_PRODUCES_NOT_A
 A phase that declares `where` without `iterate_over` does not iterate: its `where` is a
 **selection**, the set of Memory documents at `HEAD` whose frontmatter matches every key (§ Layer 2
 `where` row for the match rule). `dl-016` §1 introduced it for release-planning's sweeps
-(`release-planning.yaml:53,65`: `triage-bugs`, `reconcile-governance`), whose filter is "`release`
-empty or the release in planning". The phase's untyped Memory actions (`memory.approve`, …) act on
-every selected element. Because `type` is itself a frontmatter field of every Memory document, a
-selection names the type(s) it selects with a `type` key; a selection without one would select across
-every type and is `E_PHASE_SELECTION_UNTYPED`. A selection is complete when no document matches it
-(`spec-017` §4).
+(`release-planning.yaml`, the `where` of `triage-bugs` and of `reconcile-governance`), whose filter is
+"`release` empty or the release in planning"; `build-backlog`'s `where` selects the `ready`
+decision-logs and `triaged` bugs its tasks derive from, and `end-of-life.deprecate`'s what it
+deprecates (both since `task-199`). The
+phase's untyped Memory actions (`memory.approve`, …) act on every selected element. Because `type` is
+itself a frontmatter field of every Memory document, a selection names the type(s) it selects with a
+`type` key; a selection without one would select across every type and is `E_PHASE_SELECTION_UNTYPED`.
+In the phase's action arguments, each selected type is in scope: `{bug.id}` in `build-backlog`'s
+`memory.add(type: task, …, bug: "{bug.id}")` names each selected bug (`spec-017` §4.1). A selection is
+complete when no document matches it (`spec-017` §4).
 
 #### Collections (`iterate_over` over configuration, `dl-104` D2 (b))
 
@@ -332,8 +336,7 @@ Validation (all releases): each `distinct_from` entry names a phase of the **sam
 (`E_PHASE_DISTINCT_FROM_UNKNOWN`), and a phase never names itself (`E_PHASE_DISTINCT_FROM_SELF`).
 
 Worked example, the separation `dl-134` proposes for `dev-loop.yaml` v1.5 (not yet on disk: the
-file is at `version: 1.4`, `.wingfoil/workflows/custom/dev-loop.yaml:27`, with `red` at role
-`developer`, `:62`):
+file is at `version: 1.41` since `task-199`, with `red`'s `role: developer`):
 
 ```yaml
   - name: red
@@ -414,17 +417,21 @@ String tokens naming one atomic operation each. The families observed in the cur
   (release-line: `planning → active`), `element.set_state(in-progress)` (task: `backlog → in-progress`),
   and the typed form `<type>.set_state(<state>)` on the elements of a named type in scope
   (`task.set_state(backlog)`, `release.set_state(in-development)`, `bug.set_state(planned)`,
-  `.wingfoil/workflows/custom/release-planning.yaml:122,135,136`). `superseded` is not reached by any
+  the `actions` of `release-planning.yaml`'s `commit-backlog` and `build-backlog`;
+  `decision-log.set_state(ready)`, `retrospective.approve`'s). `superseded` is not reached by any
   workflow action: it is fired by the `supersedes:` engine trigger on the superseding element's
   `approve` (`dl-065` Q1.1), a Memory-engine rule owned by `spec-001` / `spec-010`, not by this schema.
 - **Element field stamping** — `element.set_release("{release.version}")`
-  (`release-planning.yaml:123`, `dl-016` §4).
+  (`release-planning.yaml`, `build-backlog`'s last action; `dl-016` §4).
 - **Element cross-sync** — `bug.sync_state(for_each: task.bug)`, recomputing a linked element's
   state from the aggregate of its derived tasks.
-- **Git operations** (P4.10) — `git.create_branch("task/{task.id}")` (`dev-loop.yaml:35`),
-  `git.merge(to: main, ff: false)`.
-- **Agent operations** — `agent.execute`, `agent.verify_specs`.
+- **Git operations** (P4.10) — `git.create_branch(task: "{task.id}")` (`dev-loop.yaml`, `start`'s first action),
+  `git.merge(to: main, ff: false)`, `git.commit(message: …)`, `git.tag(name: …, on: main)`.
+- **Agent operations** — `agent.execute`: since `task-199` the only `agent.*` token on disk, the
+  instruction being the phase's `description` (`dl-090` Q6 (b)); every `agent.<x>` stays built in.
 - **Test operations** — `tests.bdd.run`.
+- **Other project tokens** — `cli.run(command: …)`, `npm.pin_advance(package: …)`,
+  `approver.execute(command: …)`, each bound in `workflows/bindings.yaml`.
 
 Arguments use the `key: value` form and may interpolate `{element.field}` / `{<type>.field}` from the
 active element or enclosing iteration scope; `{element.<field>}` and the bare `{<field>}` both name a
@@ -432,9 +439,10 @@ field of the innermost bound element. When a token reaches a command, interpolat
 **whole argv elements only**, and each interpolated value must match `spec-009-validation-strategy`'s
 ID character class or a pattern the binding declares for that argument (`dl-090` Q3 (a)); no shell is
 involved, so a token whose argument embeds a shell separator (`e2e-smoke.yaml`'s `cli.run("…; …")`)
-is written as two tokens. `git.create_branch("task/{task.id}")` is, as written, a partial
-interpolation (a literal prefix around a placeholder), which a binding cannot express (open question
-6).
+is written as two tokens. `git.create_branch("task/{task.id}")`, as `dev-loop.yaml` wrote it until
+`task-199`, was a partial interpolation (a literal prefix around a placeholder), which a binding cannot
+express (open question 6); it is now `git.create_branch(task: "{task.id}")`, and the `task/` prefix
+is `git-conventions` §1's.
 
 **Every action token resolves through a declared binding** (Layer 3, `dl-090`). The tokens WingFoil
 implements itself are **built-in bindings**; a project may not rebind them
@@ -468,8 +476,8 @@ of the following — no other:
 | `approve`   | `memory.approve`; a `set_state` in a phase that declares `approval:` | yes             |
 | `reject`    | `memory.reject`, and a `fallback.set_state` routed by a reject  | yes                   |
 | `deprecate` | `memory.deprecate`                                             | yes                   |
-| `start`     | a `set_state` that opens work on an element (`dev-loop` `start`: task `backlog → in-progress`, `dev-loop.yaml:37`) | yes |
-| `finalize`  | a `set_state` that closes an element (`dev-loop` `done`: task `approved → done`, `dev-loop.yaml:104`); `workflow end` for a workflow instance's plan, `active → done` (`spec-017` §7.2) | yes |
+| `start`     | a `set_state` that opens work on an element (`dev-loop` `start`: task `backlog → in-progress`, its `element.set_state(in-progress)`) | yes |
+| `finalize`  | a `set_state` that closes an element (`dev-loop` `done`: task `approved → done`, its `element.set_state(done)`); `workflow end` for a workflow instance's plan, `active → done` (`spec-017` §7.2) | yes |
 | `sync`      | `<type>.sync_state` (`bug.sync_state`, `dl-045`); the bracket may chain several states (`[in-review → resolved → closed]`) | yes |
 | `amend`     | the `memory amend` verb (`dl-108`); no workflow token emits it  | yes (`[s → s]`)       |
 | `assign`    | `element.set_release`; writes only `release`, on any type, never `status`; no `Approver:` | no |
@@ -563,9 +571,9 @@ phases:
       post: ["frontmatter.required: [title, version]"]
 ```
 
-(The file on disk still writes the last `produces` entry as the string
-`"docs/04_memory/planning/{id}.md"`, `release-line-cycle.yaml:50`, which D3 reads as the iterated
-release-line's own file; the D3 form above is what the workflow-alignment task writes. Inside a
+(The file on disk also runs `align-agent-docs` before `plan-next-release-line` (`dl-025`) and writes
+the last `produces` entry in the D3 form above since `task-199`; until then it was the string
+`"docs/04_memory/planning/{id}.md"`, which D3 read as the iterated release-line's own file. Inside a
 `{ type: release-line, … }` entry, `{release-line.id}` names the created element.)
 
 And the review gate with state-resetting fallback (grounded in `dev-loop.yaml`):
@@ -604,14 +612,16 @@ collections:
   init-templates:          [ default, kanban ]   # iterate_over: bindings:init-templates
 ```
 
-The commands above are illustrative; today `dev-loop.yaml`'s `refactor.checks.post` names
-`docs.api.build` and `lint.clean` and binds them only in a YAML comment (`npm run docs:api`,
-`npm run lint`, `.wingfoil/workflows/custom/dev-loop.yaml:82-83`), which is what the first real
-bindings file replaces (`dl-090` Action 3).
+The commands above are illustrative. This repository's file (`task-199`, `dl-090` Action 3) binds
+`dev-loop.yaml`'s `refactor.checks.post` — `docs.api.build` and `lint.clean`, which until then were
+bound only in a YAML comment on that key (`npm run docs:api`, `npm run lint`) — and every
+other token a command or a manual step can carry; the prose checks no command asserts stay unbound
+(`W_WORKFLOW_UNBOUND_TOKEN`).
 
 | Field                  | Type                     | Required | Description |
 |------------------------|--------------------------|----------|-------------|
-| `version`              | number (positive)        | no       | Content revision (`dl-047`); this file has no `format` key yet (§ "Format"). |
+| `version`              | number (positive)        | no       | Content revision (`dl-047`). |
+| `format`               | integer (positive)       | no       | The file's format (`dl-149`, `dl-153` (A)); absent = `1`. See § "Format". |
 | `checks`               | map<token, CheckBinding> | no       | One entry per check token name. |
 | `actions`              | map<token, ActionBinding>| no       | One entry per action token name. |
 | `collections`          | map<name, (scalar \| map)[]> | no   | Named lists for `iterate_over: bindings:<name>`; entry keys per § "Collections". |
@@ -635,8 +645,9 @@ enforcement point.
 ### Format
 
 `version` is a file's content revision (`dl-047`); `format` (`dl-149`) is the format the file is
-written in. The manifest and the workflow files are two kinds with two counters,
-`WORKFLOWS_YAML_FORMAT` and `WORKFLOW_FORMAT` (both `1`), declared once in `src/validation/format.ts`.
+written in. The manifest, the workflow files and `workflows/bindings.yaml` are three kinds with three
+counters, `WORKFLOWS_YAML_FORMAT`, `WORKFLOW_FORMAT` and `BINDINGS_YAML_FORMAT` (all `1`; the third
+by `dl-153` (A)), declared once in `src/validation/format.ts`.
 The key is optional and an absent one reads as format `1`, so every file written before it loads
 unchanged. A value that is not a positive integer is a structural error on `format` (`E_VALIDATION`).
 A kind's format is bumped **only** on a backward-incompatible change of that kind: an additive,
@@ -645,9 +656,10 @@ whose `format` is greater than the highest this build reads is reported **instea
 pass, as one `E_INVALID_FORMAT` error on that file at path `format`, message
 `this file is written in format <N>; this WingFoil reads up to format <M>: upgrade WingFoil`; for the
 manifest that one diagnostic is the whole array, for a workflow file it takes the place of the file's
-structural diagnostics. `wingfoil init` writes `format: <current>` in the manifest and in every
-workflow file it scaffolds. `workflows/bindings.yaml` (Layer 3) is not one of `dl-149`'s file kinds and
-has no `format` key yet.
+structural diagnostics, and for `workflows/bindings.yaml` it takes the place of the file's structural
+pass and leaves its tokens' bindings undecided (as a structurally invalid one does). `wingfoil init`
+writes `format: <current>` in the manifest and in every workflow file it scaffolds; it scaffolds no
+`workflows/bindings.yaml`.
 
 ### Diagnostics (load and validation)
 
@@ -702,7 +714,7 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 | Code | Severity | Runs in | Rule | Source |
 |---|---|---|---|---|
 | `E_WORKFLOW_FILE_NOT_FOUND` | error | loader | a manifest `include` path resolves to no file | Layer 1 |
-| `E_INVALID_FORMAT` | error | loader | the manifest's or a workflow file's `format` is greater than this build reads; path `format`, message `this file is written in format <N>; this WingFoil reads up to format <M>: upgrade WingFoil`; it replaces that file's structural pass | § "Format"; `dl-149` |
+| `E_INVALID_FORMAT` | error | loader | the manifest's, a workflow file's or `workflows/bindings.yaml`'s `format` is greater than this build reads; path `format`, message `this file is written in format <N>; this WingFoil reads up to format <M>: upgrade WingFoil`; it replaces that file's structural pass | § "Format"; `dl-149` |
 | `E_WORKFLOW_INVALID_KIND` | error | loader | `kind` outside `main`/`sub`; message `invalid workflow kind '<kind>' (allowed: main, sub)` | P4.1 sc. 3 |
 | `E_WORKFLOW_NAME_INVALID` | error | loader | a workflow `name` outside `[a-z][a-z0-9-]*` | § "Names" |
 | `E_WORKFLOW_DUPLICATE_NAME` | error | loader | two files declare one `name` | registry uniqueness |
@@ -736,7 +748,7 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 | `W_WORKFLOW_UNBOUND_TOKEN` | warning | loader | an action or check token has neither a built-in nor a `bindings.yaml` binding | `dl-090` Q2 (c); open question 1, settled |
 | `W_PHASE_PRODUCES_OWNER_IMPLICIT` | warning | loader | a string `produces` entry with an `{id}` or `{<field>}` token in a phase that `memory.add`s (not a self-creating workflow's creating phase) | `dl-104` D3 |
 | `W_PHASE_ACTION_UNTARGETED` | warning | loader | an untyped Memory action (`memory.submit\|approve\|reject\|deprecate`, `element.*`) with no element to act on: the workflow binds none, no `memory.add` precedes it in the phase, and the phase has no selection | `spec-017` §4.2 |
-| `W_PHASE_TOKEN_OUT_OF_SCOPE` | warning | core | a `{<type>.<field>}` token in `where`, `produces` or an action argument whose `<type>` is no enclosing scope's element type on some include path from a startable workflow, or whose `<field>` the type's template does not declare (a self-creating workflow's `{id}` before its element exists is not reported) | `spec-017` §4.1 |
+| `W_PHASE_TOKEN_OUT_OF_SCOPE` | warning | core | a `{<type>.<field>}` token in `where`, `produces` or an action argument whose `<type>` is no enclosing scope's element type on some include path from a startable workflow (in an action argument, nor a type the phase's selection selects, § "Selections"), or whose `<field>` the type's template does not declare (a self-creating workflow's `{id}` before its element exists is not reported) | `spec-017` §4.1 |
 | `W_PHASE_EXIT_STATE_UNDETERMINED` | warning | core | the phase's state-changing actions cannot be applied along the element's machine from the state the previous phase leaves (`spec-017` §4.4) | `spec-001` |
 | `W_PHASE_FALLBACK_STATE_MISMATCH` | warning | core | `fallback.set_state` differs from `memory.yaml`'s reject target for the gate state the phase holds its element in | P4.15; `spec-001` |
 | `W_PHASE_FALLBACK_NOT_REENTRANT` | warning | core | `fallback.step` names an earlier phase, but the reject target of the phase's gate lies forward in the `sequence`, so a reject completes the phase instead of re-entering it (`spec-017` §4.8) | P4.15 |
@@ -760,6 +772,15 @@ one `W_PHASE_ACTION_UNTARGETED` (`end-of-life.deprecate`) and one `W_PHASE_FALLB
 (`bug-ingest.triage`). The per-phase list and its consequence for deduction are `spec-017` §12. The
 error is removed by the workflow-alignment task (Consequences), which `dl-104` Action 2 requires "in
 the same change".
+
+**Re-measured after the alignment** (`task-199`, through `loadWorkflowRegistryAtHead`, pinned by
+`test/core/workflow-repository-conformance.test.ts`): 24 workflows, 87 phases, **zero errors** and 61
+warnings, every one a `W_WORKFLOW_UNBOUND_TOKEN` on a **check** — the prose checks no command asserts
+yet (`frontmatter.required: […]` × 17, `spec-review.passed` × 4, the specification-phase quality
+criteria, the release-state queries, …). Every action token resolves: built in, or bound in the first
+`workflows/bindings.yaml`, to a command or as `manual`. The nine implicit owners, the two out-of-scope
+tokens (`build-backlog`'s third and fifth actions at `4fd77678`), the untargeted action and the non-reentrant
+fallback are gone.
 
 ### What v0.3 does with these fields
 
@@ -790,7 +811,10 @@ Process Notes).
    `reviewer`/`qa` phases is not open: it is `dl-135` point 3, `E_PHASE_MODE_NOT_INDEPENDENT`.)
 5. **More than one non-fresh mode per phase.** `dl-135` gives `mode` one value. *Recommendation:* one
    value in v0.3; revisit when `--resume` / `--ref` ship in v0.4.
-6. **Positional token arguments.** Tokens on disk also take unnamed arguments
+6. **Positional token arguments** — *settled by its recommendation and carried out by `task-199`:*
+   every token argument on disk is a `key: value` pair, and `git.create_branch(task: "{task.id}")`
+   leaves the `task/` prefix to `git-conventions` §1 and its binding `manual` (no argv element may
+   wrap a placeholder). The question as asked: Tokens on disk also took unnamed arguments
    (`git.create_branch("task/{task.id}")`, `dev-loop.yaml:35`), which a `{<key>}` placeholder cannot
    name, and that one is also a partial interpolation (a `task/` prefix around a placeholder), which
    `E_BINDING_PARTIAL_INTERPOLATION` forbids in a binding. *Recommendation:* rewrite them to the
@@ -826,8 +850,8 @@ Process Notes).
     only" is amended with `dl-079` (A) (bracketed `start`, `finalize`, `sync`, `amend`, `park`).
   - REQ-STATE-07's fit criterion counts collection entries as well as elements (`dl-104` Action 1,
     D2 (b)).
-  - `.wingfoil/workflows/custom/` is aligned with the commands and with `dl-104` Action 2, in one
-    task: `retrospective.explore`'s `produces` becomes a path; the nine implicit-owner `produces`
+  - *Done (`task-199`):* `.wingfoil/workflows/custom/` is aligned with the commands and with `dl-104`
+    Action 2, in one task: `retrospective.explore`'s `produces` becomes a path; the nine implicit-owner `produces`
     entries take the `{ type, path }` form; `end-of-life.deprecate` gains a selection;
     `release-planning.build-backlog`'s `{dl.id}`/`{bug.id}` arguments are rewritten against a
     selection; `git.create_branch` loses its partial interpolation (open question 6); the approval-only
@@ -1001,3 +1025,20 @@ only on a load the loader accepted. "Where each check runs" names the two files 
 decided without its input, as for the loader rows. No other code, severity or message changes.
 Edited in place without a supersede or a state change (`dl-047`); pending the approver's
 `memory amend` at `task-194`'s review.
+
+**Revision (2026-10-07, `task-199-align-wingfoil-workflows-custom-v0-3-schema-commands`) — the workflow
+files aligned; `workflows/bindings.yaml` a `dl-149` kind; a selection's types in scope.** Three rule
+changes, each with its ground: (1) `workflows/bindings.yaml` carries `format` (`dl-153` (A), ratified):
+the Layer 3 table gains the row, § "Format" names the third counter `BINDINGS_YAML_FORMAT` and what a
+newer one does, and the `E_INVALID_FORMAT` row covers the file; (2) in an action argument of a phase
+that declares a selection, the types it selects are in scope, so `W_PHASE_TOKEN_OUT_OF_SCOPE` does not
+report them — the Consequences item asked for `build-backlog`'s `{dl.id}` / `{bug.id}` to be
+"rewritten against a selection", and no token could name a selected element before (§ "Selections",
+the row, `spec-017` §4.1); (3) open question 6 is settled by its recommendation. Everything else is the
+alignment the Consequences item listed, now done: the "Measured" paragraph gains the re-measure, the
+worked example's note and the Layer 3 paragraph say what is on disk, the observed action families and
+the `task-199` counts (24 workflows, 87 phases) are updated, and the line citations into the edited
+workflow files (`release-planning.yaml`, `dev-loop.yaml`) name the phase and key they meant
+(`dl-075` (A), fix on touch; the citations anchored to a commit keep their offset). No other code,
+severity or message changes. Edited in place without a supersede or a state change (`dl-047`); pending
+the approver's `memory amend` at `task-199`'s review.
