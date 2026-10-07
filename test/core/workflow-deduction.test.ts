@@ -556,3 +556,20 @@ describe('task-198 AC 7 — BDD P4.11 sc. 1–3 still hold; deduction reuses val
     expect(message).toBe("invalid state 'shipped' for type 'task'");
   });
 });
+
+describe('task-198 review F3 — this repository: the six pre-dl-019 plans without frontmatter (spec-017 §1.4)', () => {
+  it('reports exactly the six, not the grandfathered top-level X_* plans', () => {
+    const root = join(__dirname, '../..');
+    const noFrontmatter = deduceWorkflowStateAtHead(root)
+      .diagnostics.filter((d) => d.code === 'W_MEMORY_UNREADABLE' && d.message.endsWith(': no frontmatter'))
+      .map((d) => d.file);
+    expect(noFrontmatter).toEqual([
+      'docs/05_plans/rl-v1/initial-design-rl-v1-plan.md',
+      'docs/05_plans/rl-v1/rel-v0.1/dev-loop-rel-v0.1-plan.md',
+      'docs/05_plans/rl-v1/rel-v0.1/release-implementation-rel-v0.1-plan.md',
+      'docs/05_plans/rl-v1/rel-v0.1/release-planning-rel-v0.1-plan.md',
+      'docs/05_plans/rl-v1/rel-v0.1/release-submit-rel-v0.1-plan.md',
+      'docs/05_plans/rl-v1/rel-v0.1/retrospective-and-config-bootstrap-plan.md',
+    ]);
+  });
+});

@@ -28,7 +28,7 @@ types:
     states:
       sequence: [ draft, open, closed ]
   plan:
-    path: "docs/plans/{id}.md"
+    path: "docs/plans/{scope}/{id}.md"
     states:
       sequence: [ draft, active, done ]
 `,
@@ -61,7 +61,7 @@ function snapshot(workflows: Workflow[], documents: ReturnType<typeof doc>[], ex
 }
 
 const plan = (id: string, workflow: string, element = ''): ReturnType<typeof doc> =>
-  doc(`docs/plans/${id}.md`, { id, type: 'plan', status: 'active', workflow, element });
+  doc(`docs/plans/x/${id}.md`, { id, type: 'plan', status: 'active', workflow, element });
 
 describe('task-198 — deduceWorkflowState on synthetic snapshots', () => {
   it('reports each §1.4 exclusion reason by path', () => {
@@ -173,6 +173,33 @@ phases:
     documents[1] = doc('docs/bugs/b1.md', { id: 'b1', type: 'bug', status: 'open', release: 'v2' });
     step = deduceWorkflowState(snapshot([flow, sub], documents)).instances[0]!.frontier[0]!;
     expect([step.key, step.evidence]).toEqual(['typed.many@task:t1', { kinds: ['include'], missing: ['include'], finalizable: false }]);
+  });
+
+  it('review F2: a phase with `awaits` needs a record even when its other evidence is satisfied (spec-017 §4.3, §5.4)', () => {
+    const flow = wf(`name: publish
+kind: main
+phases:
+  - name: release
+    produces: [ "dist/out.tgz" ]
+    awaits: { party: registry, evidence: registry.published }
+`);
+    const documents = [plan('p1', 'publish')];
+    const step = deduceWorkflowState(snapshot([flow], documents, { tree: ['dist/out.tgz'] })).instances[0]!.frontier[0]!;
+    expect(step.evidence).toEqual({ kinds: ['produces', 'awaits', 'record'], missing: ['record'], finalizable: true });
+    const done = deduceWorkflowState(
+      snapshot([flow], documents, {
+        tree: ['dist/out.tgz'],
+        records: new Map([['s0', [{ commit: 'r1', phase: 'publish.release', instance: 'p1', element: null, item: null }]]]),
+      }),
+    );
+    expect(done.instances[0]!.complete).toBe(true);
+  });
+
+  it('review F3: a file with no frontmatter is reported only when it lies on a type\'s path pattern (spec-017 §1.4)', () => {
+    const deduction = deduceWorkflowState(
+      snapshot([], [doc('docs/plans/X_grandfathered.md', {}), doc('docs/plans/rl-v1/old-plan.md', {}), doc('docs/tasks/deep/notes.md', {}), doc('docs/tasks/t9.md', {})]),
+    );
+    expect(deduction.diagnostics.map((d) => d.file)).toEqual(['docs/plans/rl-v1/old-plan.md', 'docs/tasks/t9.md']);
   });
 
   it('a repository with no commit has an empty answer', () => {
