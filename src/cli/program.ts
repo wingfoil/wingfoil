@@ -148,7 +148,7 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
   program
     // Until P5.1.4 gives `console` a human rendering (`dl-043`), the help says what the default prints
     // and that no output is coloured (spec-008 §2, task-156, `bug-152`, `bug-203`).
-    .option('--format <format>', 'output format (console|json|yaml); console prints indented JSON for now', 'console')
+    .option('--format <format>', 'output format (console|json|yaml); console prints indented JSON for now, unless the command defines its own', 'console')
     .option('--verbose', 'emit diagnostic logs to stderr')
     .option('--no-color', 'disable ANSI colors (accepted; no output is colored yet)')
     .option('--no-interactive', 'fail on missing args instead of prompting');

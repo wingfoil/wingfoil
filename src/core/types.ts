@@ -20,6 +20,14 @@ export interface CoreError {
   readonly code: CoreErrorCode;
   readonly message: string;
   readonly details?: Record<string, unknown>;
+  /**
+   * One sentence suggesting what to do next, which the CLI prints as `spec-005` §3.1's `hint:` line
+   * (the `hint` field under `json`/`yaml`). It never changes the refusal or its code: `agent show`
+   * says through it that only the working tree holds the run it refused (task-220, `spec-016` §6,
+   * the `command-baseline` directive: the working tree may explain a refusal, never decide it).
+   * Absent when there is nothing to suggest.
+   */
+  readonly hint?: string;
 }
 
 /**

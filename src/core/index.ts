@@ -93,6 +93,7 @@ import { prepareSupersede, supersedeReason } from './memory-supersede';
 import { amendReservedFields, requireAmendableEdit, requireAmendableType, requireReadableScaffold, requireRequiredFieldsKept } from './memory-amend';
 import { resolveAddType } from './memory-add-type';
 import { committedScopeError, requireAbsentTarget, requireUnmodifiedTarget } from './write-guard';
+import { agentShowFn, renderAgentShowConsole } from './agent-show';
 import { UsageError } from './usage-error';
 import type { CoreFlag, CoreFn, CoreModule, CoreOption } from './registry';
 import { missingOperandReason } from './registry';
@@ -2196,14 +2197,28 @@ const directivesListFn: CoreFn<unknown, DirectiveListing> = async (params) => {
  * Tool, or the diff fails.
  */
 export const CORE_MODULES: readonly CoreModule[] = [
-  // task-177 (`spec-016` §1): the `agent` module, registered under the name its operations will carry
-  // (`agentExecute`, `agentList`, `agentShow`, spec-016 §8) — with none yet. An empty `operations` map
-  // derives no command and no MCP Tool (`enumerateOperations`), so nothing reaches either surface until
-  // those tasks land. `src/agent` holds the adapter manifest they will read.
+  // task-177 (`spec-016` §1): the `agent` module, registered under the name its operations carry
+  // (`agentExecute`, `agentList`, `agentShow`, spec-016 §8). `agentShow` is the first (task-220);
+  // `agentExecute` (task-228) and `agentList` (task-240) join it. `src/agent` holds the adapter manifest
+  // and the run log they read.
   {
     name: 'agent',
-    description: 'launch an agent CLI through its declared adapter (no command yet)',
-    operations: {},
+    description: 'read recorded agent runs (launching an agent arrives with agent execute)',
+    operations: {
+      // task-220 (`spec-016` §6): read-only, and a declared `HEAD` read (§5.1, `spec-006` §6 item 6).
+      // Its console rendering is the `key: value` lines §6 defines, not the indented JSON every other
+      // command prints until P5.1.4 (`renderConsole`, spec-008 §2). Not served over MCP before v0.4
+      // (spec-016 §7): the production server does not run `registerCoreModules`.
+      agentShow: {
+        name: 'agentShow',
+        mutates: false,
+        description: 'print one recorded agent run and the commit that added it',
+        positional: { name: 'run-id', required: true, description: 'the run id, <element-id>/<phase>/<n>' },
+        example: 'wingfoil agent show task-042-login-form/red/1',
+        fn: agentShowFn,
+        renderConsole: renderAgentShowConsole,
+      },
+    },
   },
   {
     name: 'dna',

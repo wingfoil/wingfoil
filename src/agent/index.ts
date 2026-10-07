@@ -29,6 +29,7 @@ export {
   recordRun,
   requireWritableRunLog,
   resolveRunLogPath,
+  runIdElementId,
   RUN_RECORD_KEYS,
   RUN_TOKEN_KEYS,
   runLogPreflight,

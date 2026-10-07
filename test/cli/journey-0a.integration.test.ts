@@ -123,7 +123,7 @@ describe('Journey 0a (v0.1-scoped slice) — real CLI, fresh throwaway project (
     expect(show.stderr).toBe('');
   });
 
-  it('known gap (out of v0.1 scope, not a release blocker): `wingfoil workflow start`/`wingfoil agent` are not implemented — Journey 0a step 3 / Journey 1 steps 2-4', () => {
+  it('known gap (out of v0.1 scope, not a release blocker): `wingfoil workflow start`/`wingfoil agent execute` are not implemented — Journey 0a step 3 / Journey 1 steps 2-4', () => {
     expect(runCliInRoot(repo, 'init', '--template', 'Scrum').status).toBe(0);
 
     // Exit 2, not 1: an unknown command is a USAGE error under spec-005 §1, and since
@@ -133,9 +133,10 @@ describe('Journey 0a (v0.1-scoped slice) — real CLI, fresh throwaway project (
     expect(workflowStart.status).toBe(2);
     expect(workflowStart.stderr).toContain("unknown command 'start'");
 
+    // task-220 ships the `agent` noun with `agent show`; `agent execute` is still a later task's (task-228).
     const agentExecute = runCliInRoot(repo, 'agent', 'execute', '--next');
     expect(agentExecute.status).toBe(2);
-    expect(agentExecute.stderr).toContain("unknown command 'agent'");
+    expect(agentExecute.stderr).toContain("unknown command 'execute'");
   });
 
   it('`dna set` still writes scalars only — but it now names the verb that reaches an array-typed field, and that verb works (bug-083, task-093)', () => {

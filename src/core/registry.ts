@@ -188,6 +188,13 @@ export interface CoreOperation<P = unknown, R = unknown> {
   readonly positional?: CorePositional;
   /** One complete invocation `--help` shows under `Example:` (`spec-008-cli-grammar` §8), `wingfoil …` included. */
   readonly example?: string;
+  /**
+   * The command's own `--format console` rendering of a successful `value`, for an operation whose
+   * spec defines one (task-220: `agent show`'s `key: value` lines, `spec-016` §6). Absent, `console`
+   * prints the indented JSON `spec-008` §2 declares for every other command until P5.1.4. `json` and
+   * `yaml` never use it, and the MCP surface never calls it. Pure: the same value renders the same text.
+   */
+  readonly renderConsole?: (value: R) => string;
 }
 
 /** One pillar's operation group (spec-006 §2) — a `name` (the `wingfoil <noun>` segment) and its operations. */

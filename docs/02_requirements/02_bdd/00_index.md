@@ -41,7 +41,7 @@ and edge cases, expressed in Gherkin (Given-When-Then).
     ├── p2-dna/           (5 features)
     ├── p3-directives/    (8 features)
     ├── p4-workflow/      (20 features)
-    ├── p5-interaction/   (15 features)
+    ├── p5-interaction/   (16 features)
     └── x1-notification/  (2 features)
 ```
 
@@ -105,6 +105,7 @@ and edge cases, expressed in Gherkin (Given-When-Then).
 | P5.3.1  | US-1-03    | `features/p5-interaction/P5.3.1-agent-execute.feature`             |
 | P5.3.2  | US-2-07    | `features/p5-interaction/P5.3.2-agent-role-selection.feature`      |
 | P5.3.3  | US-1-10    | `features/p5-interaction/P5.3.3-relevance-filtering.feature`       |
+| P5.3.5  | —          | `features/p5-interaction/P5.3.5-agent-show.feature`                |
 | P5.4.1  | US-0A-13   | `features/p5-interaction/P5.4.1-agent-role-definition.feature`     |
 | P5.4.2  | US-3-07    | `features/p5-interaction/P5.4.2-role-directives-binding.feature`   |
 | P5.4.3  | US-1-04    | `features/p5-interaction/P5.4.3-context-preloading.feature`        |

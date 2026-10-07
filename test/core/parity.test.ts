@@ -178,6 +178,10 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
 
     const { resources } = await client.listResources();
     expect(resources.map((r) => r.uri).sort()).toEqual([
+      // task-220's `agent.agentShow` is `mutates: false`: the mechanical registrar derives a Resource
+      // here. The production server does not run `registerCoreModules`, so it serves none before v0.4
+      // (spec-016 §7, §8).
+      'wingfoil://agent/show',
       'wingfoil://directives/list',
       'wingfoil://dna/show',
       // task-049-memory-history's `memory.memoryHistory` is `mutates: false`, so the mechanical

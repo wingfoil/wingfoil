@@ -17,6 +17,8 @@ describe('CORE_MODULES — production registry', () => {
       (entry) => `${entry.module.name}.${entry.operation.name}`,
     );
     expect(flat).toEqual([
+      // task-220 (`spec-016` §6): the `agent` module's first operation, read-only.
+      'agent.agentShow',
       // task-050-directive-create registers a `directive` (SINGULAR) module, because
       // `CoreModule.name` IS the `wingfoil <noun>` segment and both the P3.1 BDD and spec-006 §3's
       // own CLI/MCP columns spell that noun `directive create` — while P3.4's list command keeps the

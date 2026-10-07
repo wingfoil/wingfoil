@@ -176,10 +176,17 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
           // The success-warning channel (task-169, `dl-062`): stderr only, before the payload, so stdout
           // is the same bytes with and without warnings under every `--format`.
           emitWarnings(result.warnings, { format });
-          process.stdout.write(renderSuccess(result.value, format));
+          // A command whose spec defines a console rendering (task-220, `agent show`) supplies it;
+          // every other command keeps `renderSuccess`'s indented JSON (spec-008 §2).
+          process.stdout.write(
+            format === 'console' && operation.renderConsole !== undefined
+              ? operation.renderConsole(result.value)
+              : renderSuccess(result.value, format),
+          );
         } else {
-          // `details` too (task-130, `dl-055` option 1): the file and the explanation core recorded.
-          emitError(result.error.message, { format, details: errorDetails(result.error) });
+          // `details` too (task-130, `dl-055` option 1): the file and the explanation core recorded;
+          // and the `hint:` line core suggested, if any (task-220, spec-005 §3.1).
+          emitError(result.error.message, { format, hint: result.error.hint, details: errorDetails(result.error) });
         }
         exitWith(exitCodeForResult(result));
       },

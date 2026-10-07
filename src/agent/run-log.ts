@@ -132,6 +132,19 @@ export function isRunId(id: string, elementId: string): boolean {
 }
 
 /**
+ * The element id of the run id `value` (§4.3), or `null` when `value` is not a run id of any element
+ * — the parse a caller that only has the id needs (`agent show <run-id>`, task-220). An element id is
+ * in `spec-009`'s ID class, which holds no `/`, so a run id has exactly three `/`-separated segments
+ * and the first one is the element's.
+ */
+export function runIdElementId(value: string): string | null {
+  const segments = value.split('/');
+  if (segments.length !== 3) return null;
+  const elementId = segments[0]!;
+  return isRunId(value, elementId) ? elementId : null;
+}
+
+/**
  * The run id `<element-id>/<phase>/<n>` (§4.3).
  *
  * @throws Error when the result would not be a run id ({@link isRunId}): a caller passing a malformed
@@ -317,11 +330,18 @@ export function readRunLogAt(root: string, rev: string, path: string): CoreResul
  * where it is resolved.
  *
  * @param runs - `dna.yaml` `paths.runs` (one directory; absent when undeclared).
+ * @param action - The verb of the confinement refusal (`cannot <action> '<path>'`): `write` for the
+ *   recorder, `read` for a reader that opens the working tree's file (`agent show`'s hint, task-220).
  * @returns The root-relative POSIX path, or `VALIDATION`: `dna.yaml declares no run log (paths.runs)`
  *   (`NO_RUN_LOG`, §3.7) for an absent or blank value; a confinement refusal; an element id outside
  *   `spec-009`'s ID class.
  */
-export function resolveRunLogPath(root: string, runs: readonly string[] | undefined, elementId: string): CoreResult<string> {
+export function resolveRunLogPath(
+  root: string,
+  runs: readonly string[] | undefined,
+  elementId: string,
+  action: 'write' | 'read' = 'write',
+): CoreResult<string> {
   const dir = runs?.[0];
   if (dir === undefined || dir.trim() === '') {
     return coreErr({ code: 'VALIDATION', message: 'dna.yaml declares no run log (paths.runs)' });
@@ -333,7 +353,7 @@ export function resolveRunLogPath(root: string, runs: readonly string[] | undefi
   const relativePath = relative(resolve(root), resolve(root, joined)).split(sep).join('/');
   // The run log is not Memory: the neutral confinement refusal, not REQ-SEC-06's Memory-entry text
   // (task-206 review, decision 6). A textual escape and a symlinked ancestor leaving the root both fail.
-  const confined = requireConfinedTarget(root, relativePath, 'write');
+  const confined = requireConfinedTarget(root, relativePath, action);
   if (!confined.ok) return confined;
   return coreOk(relativePath);
 }
