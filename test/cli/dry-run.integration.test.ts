@@ -273,5 +273,23 @@ describe('a dry run reports the warnings the real run would (task-210 review F4)
       removeTempDir(repo);
     }
   });
+
+  it('directive assign --force on a flow-style roles.yaml: the rewrite warning, worded as a plan', () => {
+    const repo = makeTempGitRepo();
+    try {
+      step(repo, 'init', '--template', 'scrum');
+      writeFileSync(join(repo, '.wingfoil', 'roles.yaml'), 'version: 1.0\n\nassignments: {developer: [code-quality]}\nglobal: ["documentation"]\n', 'utf-8');
+      git(repo, ['commit', '--quiet', '-am', 'fixture: flow-style roles.yaml']);
+      const before = snapshotPersistence(repo);
+
+      const dry = wingfoil(repo, ['directive', 'assign', '--directive', 'testing', '--role', 'developer', '--force', '--dry-run']);
+
+      expect(dry.status).toBe(0);
+      assertPersistenceUnchanged(repo, before, 'roles dry run with a warning');
+      expect(dry.stderr).toMatch(/^warning: roles\.yaml would be rewritten as a whole file \(--force\)/);
+    } finally {
+      removeTempDir(repo);
+    }
+  });
 });
 

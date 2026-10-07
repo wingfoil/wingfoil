@@ -97,6 +97,9 @@ export const ROLES_REWRITE_WARNING =
   'roles.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, ' +
   'blank lines, line endings or number formatting (1.0 becomes 1)';
 
+/** {@link ROLES_REWRITE_WARNING} as a `--dry-run` words it: the rewrite is planned, not done (task-210 review). */
+export const ROLES_REWRITE_PLANNED_WARNING = ROLES_REWRITE_WARNING.replace('roles.yaml was rewritten', 'roles.yaml would be rewritten');
+
 /** The outcome of {@link updateRoleAssignments}: the role's list as it stands afterwards. */
 export interface RoleAssignmentUpdate {
   /** `assignments.<role>` after the update (unchanged when nothing needed writing). */
@@ -391,13 +394,18 @@ export function updateRoleAssignments(
     dump({ ...raw, assignments: { ...(raw.assignments as Record<string, unknown>), [role]: next } }, { lineWidth: -1 });
   let serialized = exists ? setRoleAssignmentsInText(text, role, next) : wholeFile();
   const warnings: string[] = [];
+  const plannedWarnings: string[] = [];
   if (serialized === undefined) {
     if (!options.force) return coreErr({ code: 'CONFLICT', message: rolesRewriteConflict(role) });
     serialized = wholeFile();
     warnings.push(ROLES_REWRITE_WARNING);
+    plannedWarnings.push(ROLES_REWRITE_PLANNED_WARNING);
   }
 
-  const sha = writeAndCommit(root, [{ path: ROLES_YAML_PATH, content: serialized }], message, { warnings });
+  const sha = writeAndCommit(root, [{ path: ROLES_YAML_PATH, content: serialized }], message, {
+    warnings,
+    plannedWarnings,
+  });
   const leaked = committedScopeError(root, sha, ROLES_YAML_PATH, serialized);
   if (leaked) return leaked;
   return coreOk({ assignments: next }, { sha, message }, warnings);

@@ -44,6 +44,11 @@ export interface CommitOptions {
    * carries them into its result, so `--dry-run` warns about what the real run would warn about.
    */
   readonly warnings?: readonly string[];
+  /**
+   * {@link CommitOptions.warnings} as a dry run words them, when a warning reports something done ("was
+   * rewritten") that a plan only intends ("would be rewritten"). Absent, a dry run carries `warnings`.
+   */
+  readonly plannedWarnings?: readonly string[];
 }
 
 /** The environment git runs with: `process.env`, with {@link CommitOptions.env} merged over it. */
@@ -221,7 +226,7 @@ export function writeAndCommit(root: string, changes: readonly PathChange[], mes
         paths: sorted.map((change) => change.relative),
         diff: sorted.map((change) => planDiff(root, change.relative, change.content, gitEnv(options))).join(''),
       },
-      options.warnings,
+      options.plannedWarnings ?? options.warnings,
     );
   }
 

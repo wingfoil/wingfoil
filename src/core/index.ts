@@ -414,6 +414,9 @@ export const DNA_REWRITE_WARNING =
   'dna.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, ' +
   'blank lines, line endings or number formatting (1.0 becomes 1)';
 
+/** {@link DNA_REWRITE_WARNING} as a `--dry-run` words it: the rewrite is planned, not done (task-210 review). */
+export const DNA_REWRITE_PLANNED_WARNING = DNA_REWRITE_WARNING.replace('dna.yaml was rewritten', 'dna.yaml would be rewritten');
+
 /**
  * The shared body of every DNA mutation (`dna set`, and `dna add|remove|update` since
  * task-093-dna-mutation-surface-add-remove-update) — the mutating-op template `dna set` established
@@ -523,12 +526,17 @@ async function runDnaMutation(
   if (current === serialized) return coreOk(outcome);
 
   const warnings: string[] = [];
+  const plannedWarnings: string[] = [];
   if (inPlace === undefined) {
     if (!force) return coreErr({ code: 'CONFLICT', message: dnaRewriteConflict(request.field) });
     warnings.push(DNA_REWRITE_WARNING);
+    plannedWarnings.push(DNA_REWRITE_PLANNED_WARNING);
   }
 
-  const sha = writeAndCommit(root, [{ path: DNA_YAML_PATH, content: serialized }], subject, { warnings });
+  const sha = writeAndCommit(root, [{ path: DNA_YAML_PATH, content: serialized }], subject, {
+    warnings,
+    plannedWarnings,
+  });
   const leaked = committedScopeError(root, sha, DNA_YAML_PATH, serialized);
   if (leaked) return leaked;
   return coreOk(outcome, { sha, message: subject }, warnings);

@@ -21,7 +21,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { devNull, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { E_GIT_READ_FAILED, StorageError } from './errors';
@@ -105,7 +105,10 @@ export async function captureDryRun<T>(run: () => Promise<T>): Promise<DryRunOut
 
 /**
  * The `-c` pins of the diff step: every configuration key that changes which hunks git prints, set to
- * git's default, over whatever the repository's own `.git/config` says (`-c` wins over every file).
+ * git's default, over whatever any configuration file says (`-c` wins over system, global and repository
+ * configuration). Keys that shape only what {@link planDiff} replaces or drops — the file headers
+ * (`diff.noprefix`, `diff.mnemonicPrefix`, `diff.relative`), colour — need no pin; neither does a
+ * `diff.<driver>.xfuncname`, since a blob-to-blob diff has no path for `.gitattributes` to select one by.
  */
 const DIFF_CONFIG_PINS = [
   'diff.context=3',
@@ -144,10 +147,12 @@ function planGit(
  * written to a temporary object directory outside the repository (`GIT_OBJECT_DIRECTORY`, with the
  * repository's own objects as an alternate), so the repository gains no object.
  *
- * **The hunks are git's defaults.** The blob-to-blob diff runs with no system or global configuration
- * (`GIT_CONFIG_NOSYSTEM`, `GIT_CONFIG_GLOBAL`), every hunk-shaping key pinned ({@link DIFF_CONFIG_PINS})
- * over the repository's `.git/config`, and colour, external diff drivers and textconv off: they are what
- * `git show` prints for the real commit under git's default diff settings, on any machine (REQ-SYS-07).
+ * **The hunks are git's defaults.** The blob-to-blob diff runs with every hunk-shaping key pinned by `-c`
+ * ({@link DIFF_CONFIG_PINS}), over every configuration level, and colour, external diff drivers and
+ * textconv off: they are what `git show` prints for the real commit under git's default diff settings, on
+ * any machine (REQ-SYS-07). The configuration itself is not switched off (task-210 review F7): the
+ * operator's `safe.directory`, which lets git open a repository another user owns, must keep applying,
+ * or a dry run would fail where the real run commits.
  *
  * @throws {@link StorageError} `E_GIT_READ_FAILED` when git cannot produce the diff.
  */
@@ -164,12 +169,11 @@ export function planDiff(root: string, path: string, content: string | null, env
     const after = content === null ? null : planGit(root, path, ['hash-object', '-w', `--path=${path}`, '--stdin'], planned, [0], content).stdout.trim();
     if (before === after) return '';
     const empty = planGit(root, path, ['hash-object', '-w', '--stdin'], planned, [0], '').stdout.trim();
-    const pinned = { ...planned, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: devNull };
     const diff = planGit(
       root,
       path,
       [...DIFF_CONFIG_PINS.flatMap((pin) => ['-c', pin]), 'diff', '--no-color', '--no-ext-diff', '--no-textconv', before ?? empty, after ?? empty],
-      pinned,
+      planned,
       [0],
     ).stdout;
     const lines = diff.split('\n');
