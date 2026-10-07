@@ -2,7 +2,7 @@
 id: "task-199-align-wingfoil-workflows-custom-v0-3-schema-commands"
 type: task
 title: "Align `.wingfoil/workflows/custom/` with the v0.3 schema and commands, bind every token, and pin zero load errors"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "high"
