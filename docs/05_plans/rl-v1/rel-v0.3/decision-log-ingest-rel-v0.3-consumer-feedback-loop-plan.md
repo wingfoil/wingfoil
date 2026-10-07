@@ -3,7 +3,7 @@ id: decision-log-ingest-rel-v0.3-consumer-feedback-loop-plan
 type: plan
 title: "Decision-log-ingest — rel-v0.3 consumer feedback loop"
 status: active
-version: "1.0"
+version: "1.1"
 workflow: "decision-log-ingest"
 phase: "rel-v0.3-consumer-feedback-loop"
 element: "minor-v0.3"
@@ -71,3 +71,23 @@ repository is a source (the decision-log's R2 and R7).
      hold a consumer's paths (an untracked, git-ignored local file?).
   6. `dl-147`/`dl-148`: do they conform to R2 as written (public, tagged permalinks; a showcase by design), or
      do they need an amendment at ratification?
+
+**Approver rulings (2026-10-07) and the pending amend.**
+- The rulings (A1–A9, B, C2) are written into `dl-163` in the worktree and are **uncommitted**, for the
+  coordinator's `memory amend`. `node dist/cli.js memory amend dl-163-consumer-projects-feedback-sources-and-the-feedback-loop --reason … --dry-run`
+  prints subject `wf(decision-log): amend dl-163-… [in-discussion → in-discussion]` and no error.
+- **Proposed `--reason`:** "Applies the approver's rulings of 2026-10-07: S3b registers one service of kind repository per consumer, with a feedback_inbox field and a verify that checks the inbox README; reported_by pins the consumer commit read and is provenance only, the element restating the note in its own words; reported_by extends to change-proposal, and consumer feature requests go through vision-change; the reported_by check is a repository test in v0.3; the triage outcomes become six (dl-115's four plus declined and needs-info); R6 admits urgent fixes, urgent features and documentation into a patch; the wingfoil-cli directive, bound globally, assigns the code build to Memory operations and the pinned build to the read commands and MCP; patch v0.3.1's scope selection, with release/0.3 cut from the commit that closes the v0.3 retrospective, the S3d-a and S3d-b follow-ups, and the batch placement are added. The Context gains the 0.2.2 facts, the v0.4 element counts and the docs/06 numbering clash."
+- Conflicts 1, 2, 3 and 5 above and open questions 1–4 are settled by the rulings: S3d is a separate phase after
+  `task-213`/`task-222` (B5), the outcomes are six (S3d-a amends `dl-115`, S3d-b hands over to `task-213`), one
+  `repository` service serves D01 and the inbox, and the `reported_by:` check is a repository test. Conflict 4 is
+  stated in `dl-163` R2 (`dl-147`/D01 figures are restated measurements, not notes); `dl-147`/`dl-148` are not
+  edited. Question 5 is answered as "outside the repository".
+- **A1 revised (approver, 2026-10-07):**
+  - **The rule.** The `wingfoil-cli` directive uses the code build for Memory operations and the pinned build for
+    the read commands and MCP, so there is no open point about when it takes effect.
+  - **The 0.2.2 facts.** They stay in the Context, as the evidence for why the code build is used here.
+- **B (approver, 2026-10-07):** `release/0.3` is cut from the commit that closes the v0.3 retrospective on `main`.
+  An urgent patch needed before then is cut from the tag, and its scope is restated later. `dl-159` point 1 is
+  amended to match (coordinator).
+- **Still open:** the follow-up bug on the `docs/06_*` numbering clash (C2, filed by the coordinator).
+- This plan edit is uncommitted too, for the coordinator (`memory amend` on the plan, or with the next plan commit).
