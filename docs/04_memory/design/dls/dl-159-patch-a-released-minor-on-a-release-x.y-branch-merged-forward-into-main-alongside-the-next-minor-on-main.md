@@ -79,8 +79,12 @@ branches") and `dl-092`'s parallel-release rule, option (a) (the partial freeze)
 `dl-092` Q1 (A) and Q2 (ii) (a `release` element per patch, every phase but the retrospective) stand.
 
 1. **The lines.** `main` is the next minor: v0.4 once `v0.3.0` is tagged. `release/X.Y` (e.g. `release/0.3`) is
-   cut from the tag `vX.Y.0`, and only when the first patch of `X.Y` is needed; a minor that is never patched never
-   gets a branch.
+   cut only when the first patch of `X.Y` is needed; a minor that is never patched never gets a branch. When the
+   minor's retrospective plans the patch, the branch is cut from the commit on `main` that closes that
+   retrospective, which contains the tag `vX.Y.0` and the retrospective itself (so the patch line can read the scope
+   it was given, and `main` is never merged into it); an urgent patch needed before the retrospective closes is cut
+   from the tag `vX.Y.0`, and its scope is restated in the patch release. *(Amended 2026-10-07, approver, with
+   `dl-163`: was "cut from the tag `vX.Y.0`".)*
 2. **Merge forward, never back.** A fix lands on the **oldest** affected line first. That line is then merged into
    `main` with `git merge --no-ff`. Fixes are never cherry-picked or rebased between lines: a cherry-picked
    `wf()` approve or reject commit is a second commit for one transition, with an `Approver:` line the approver
@@ -135,6 +139,15 @@ branches") and `dl-092`'s parallel-release rule, option (a) (the partial freeze)
 
 **A2 — deferred, explicitly out of v0.3.** Owner: the v0.3 retrospective, then `patch-v0.3.1`'s prerequisites
 step, done on `release/0.3` and merged forward:
+
+0. *(Added 2026-10-07, approver, with `dl-163`.)* **The retrospective selects the patch scope, by hand, from v0.3
+   on.** In `additional-points` the approver rules on three inputs: the consumer notes `dl-163` R6 admits into a
+   patch, a review of every element whose `release` is the next minor (for v0.3: `release: "v0.4"`), and
+   release health's immediate bugs; `capture` records each in the retrospective's Dispositions with the target
+   release (`v0.3.1` or `v0.4`). Only bugs and decision-logs are promoted (`assign`); the patch's own
+   release-planning creates fresh fix tasks under its release folder, so no task is ever moved between releases.
+   The patch release element is added on `release/X.Y` once it is cut (point 1), restating the scope and citing
+   the retrospective by id and approve commit. A dedicated `select-patch-scope` phase belongs with item 4.
 
 1. `git-conventions` §1–§3: the `release/` prefix, the merge-forward rule (point 2), patch tags on
    `release/X.Y`, and the parallel-release clause `dl-092` Action 3 promised.
