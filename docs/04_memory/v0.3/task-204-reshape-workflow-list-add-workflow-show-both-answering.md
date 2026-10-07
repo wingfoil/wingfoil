@@ -33,6 +33,7 @@ tmpl_version: 260703
 - **Notes:** Proposal key: A08. `src/core/index.ts` (`workflowList` rewritten, `workflowShow` added to `CORE_MODULES`), `src/cli`. `bug-045`'s stale op counts are touched by whoever owns that bug.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
 - **Handover from wave 3 B1 (2026-10-07, `task-194`).** `workflow list` still loads the working tree, through `task-194`'s `loadWorkflowRegistry`; moving it to `HEAD` (`spec-017` §1.1, R15) is this task's: use `loadWorkflowRegistryAtHead`. Since `task-194` it also fails (exit `1`) when `dna.yaml` or `memory.yaml` is present but invalid, as `docs/cli-reference.md` says.
+- **Handover from wave 3 B2 (2026-10-07, `task-198`).** `selectWorkflowInstance` returns only `workflow is not open: <ref>`; `spec-017` §10's `unknown workflow: <name>` row for a name that no manifest declares is this command task's to implement.
 
 ## Execution Notes
 

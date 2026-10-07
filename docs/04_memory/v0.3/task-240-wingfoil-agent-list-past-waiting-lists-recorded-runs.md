@@ -33,6 +33,7 @@ tmpl_version: 260703
 - **Features:** P5.3.1 (until the new row lands), new P5.3 row "agent list.
 - **Notes:** Proposal key: B12.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from wave 3 B2 (2026-10-07, `task-198`).** `W_UNCOMMITTED_INPUTS` is emitted once per dirty input path (`spec-017` §1.2's "naming the paths" read per path); keep that form or settle it before reusing the code.
 
 ## Execution Notes
 

@@ -32,6 +32,7 @@ The bounded walk (commits reachable from `HEAD` and not from the start commit's 
 - **Features:** P4.13, P4.15.
 - **Notes:** Proposal key: A07. pairs with `bug-072` (maxBuffer on `walkGitLogFields`) if the walk reuses that function — depend on that task if so, decided at design.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from wave 3 B2 (2026-10-07, `task-198`).** `readRecords` (`src/core/workflow-deduction.ts`) runs one `rev-list` per distinct start once any record exists; §4.8 asks for one walk over the union of instances — replace it here. No linkage is read yet, so every step has created nothing: a `created` phase completes by its other evidence or a record.
 
 ## Execution Notes
 

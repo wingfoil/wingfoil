@@ -32,6 +32,7 @@ tmpl_version: 260703
 - **Features:** P4.4, P4.14, X1.1.
 - **Notes:** Proposal key: A09. B's `agent execute --next` and `agent list --waiting` consume `NextResult` / `StatusResult`; their tasks should depend on task-216/task-225.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from wave 3 B2 (2026-10-07, `task-198`).** REQ-PERF-03 risk: `readDeductionSnapshotAtHead` took 2.4–6.7 s on this repository under load (the Memory scan ~2.1 s over 834 documents, the registry load ~1 s; 47 git spawns per snapshot, 26 of them `cat-file --batch` from the registry loader, `memory.yaml` / `dna.yaml` read twice); the pure deduction takes 8–107 ms. Measure `workflow next`'s p95 on an idle machine early and share the duplicate reads if needed. `selectWorkflowInstance` returns only `workflow is not open: <ref>`; §10's `unknown workflow: <name>` is yours (or task-204's). Since `task-199`, `build-backlog`'s selection never empties: the phase completes through §4.7 (approver ruling 2026-10-07).
 
 ## Execution Notes
 
