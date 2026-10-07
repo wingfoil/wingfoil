@@ -6,7 +6,9 @@
  * removed on rollback, a filesystem failure rethrown as raised, the raw writers' dry-run guard, and the
  * three outcomes `captureDryRun` reports. Deterministic: fixed fixture text and identity.
  */
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { devNull } from 'node:os';
 import { join } from 'node:path';
 
 import {
@@ -16,7 +18,8 @@ import {
   isDryRunActive,
   removeDocument,
   StorageError,
-  unifiedDiff,
+  CommitFailure,
+  planDiff,
   writeAndCommit,
   writeDocument,
 } from '../../src/storage';
@@ -133,24 +136,115 @@ describe('writeAndCommit', () => {
   });
 });
 
-describe('unifiedDiff', () => {
-  it('is empty when nothing changes', () => {
-    expect(unifiedDiff('x.md', 'same\n', 'same\n')).toBe('');
+describe('writeAndCommit — review fixes (task-210 review)', () => {
+  let repo: string;
+
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, 'docs/kept.md', 'one\ntwo\nthree\n');
+    commitAll(repo, 'seed');
+  });
+  afterEach(() => removeTempDir(repo));
+
+  function refuseCommits(script = 'exit 1'): void {
+    writeFileSync(join(repo, '.git/hooks/pre-commit'), `#!/bin/sh\n${script}\n`);
+    chmodSync(join(repo, '.git/hooks/pre-commit'), 0o755);
+  }
+
+  itOnPosix('F1: a refused multi-file write removes every directory it created, deepest first across all files', () => {
+    refuseCommits();
+    // The first file creates `new/` (and `new/a/b`); the second creates `new/c` inside it. Removing per
+    // file in write order left `new/` behind, non-empty when the first file's chain reached it.
+    expect(() => writeAndCommit(repo, [{ path: 'new/a/b/x.md', content: 'x\n' }, { path: 'new/c/y.md', content: 'y\n' }], 'refused')).toThrow(
+      CommitFailure,
+    );
+    // `git status` does not show an empty directory: ask the filesystem.
+    expect(existsSync(join(repo, 'new'))).toBe(false);
   });
 
-  it('fails loudly, as E_GIT_READ_FAILED, when git cannot produce the diff', () => {
-    expect(() => unifiedDiff('x.md', 'a\n', 'b\n', { PATH: '' })).toThrow(/E_GIT_READ_FAILED: git diff for the dry run of x.md failed/);
+  itOnPosix('F2: an index that cannot be read back after the failure is reported, the working tree restored all the same', () => {
+    // The hook swaps the index for a directory: git refuses the commit, and every later index read fails.
+    // Hooks run at the top of the working tree, where `.git` is the repository.
+    refuseCommits('rm -f .git/index && mkdir .git/index && exit 1');
+    let thrown: unknown;
+    try {
+      writeAndCommit(repo, [{ path: 'docs/new.md', content: 'n\n' }], 'refused');
+    } catch (error) {
+      thrown = error;
+    }
+    rmSync(join(repo, '.git/index'), { recursive: true });
+    expect(thrown).toBeInstanceOf(CommitFailure);
+    const failure = thrown as CommitFailure;
+    expect(failure.code).toBe(E_COMMIT_FAILED);
+    expect(failure.indexProblem).toBeDefined();
+    expect(failure.message).toContain('nothing was committed and the working tree is as it was, but the index entries of docs/new.md could not be put back (');
+    expect(failure.message).not.toContain(repo);
+    expect(existsSync(join(repo, 'docs/new.md'))).toBe(false);
+  });
+
+  it('F3: the plan is the commit under the operator\'s global configuration — autocrlf normalization included, diff settings pinned', async () => {
+    const globalConfig = join(repo, '.git', 'isolated-global.gitconfig');
+    writeFileSync(
+      globalConfig,
+      '[core]\n\tautocrlf = input\n[diff]\n\tinterHunkContext = 10\n\tsuppressBlankEmpty = true\n\tcontext = 10\n\tindentHeuristic = false\n',
+    );
+    const env = { GIT_CONFIG_GLOBAL: globalConfig };
+    const lines = Array.from({ length: 30 }, (_, index) => `line ${index + 1}`);
+    writeFixtureFile(repo, 'docs/crlf.md', `${lines.join('\n')}\n`);
+    commitAll(repo, 'lf document');
+    const edited = [...lines];
+    edited[2] = 'line 3 changed';
+    edited[14] = '';
+    const crlf = `${edited.join('\r\n')}\r\n`;
+
+    const outcome = await captureDryRun(async () => writeAndCommit(repo, [{ path: 'docs/crlf.md', content: crlf }], 'crlf edit', { env }));
+    expect(outcome.kind).toBe('planned');
+    if (outcome.kind !== 'planned') return;
+    expect(outcome.plan.diff).not.toContain('\r');
+    expect(outcome.plan.diff.split('\n').filter((line) => line.startsWith('@@'))).toEqual(['@@ -1,6 +1,6 @@', '@@ -12,7 +12,7 @@ line 11']);
+
+    writeAndCommit(repo, [{ path: 'docs/crlf.md', content: crlf }], 'crlf edit', { env });
+    const shown = execFileSync('git', ['-C', repo, 'show', '--format=', '--no-color', 'HEAD'], {
+      encoding: 'utf-8',
+      env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: devNull },
+    });
+    const hunks = (diff: string): string[] => diff.slice(diff.indexOf('@@')).split('\n');
+    expect(hunks(outcome.plan.diff)).toEqual(hunks(shown));
+  });
+
+  it('F3: a write git would store as the blob HEAD holds plans an empty diff', async () => {
+    const outcome = await captureDryRun(async () => writeAndCommit(repo, [{ path: 'docs/kept.md', content: 'one\ntwo\nthree\n' }], 'same'));
+    expect(outcome.kind === 'planned' && outcome.plan.diff).toBe('');
+  });
+
+  it('F4: the warnings handed to the primitive reach the dry run\'s outcome', async () => {
+    const outcome = await captureDryRun(async () => writeAndCommit(repo, [{ path: 'docs/w.md', content: 'w\n' }], 'warned', { warnings: ['careful'] }));
+    expect(outcome.kind === 'planned' && outcome.warnings).toEqual(['careful']);
+  });
+});
+
+describe('planDiff', () => {
+  let repo: string;
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+  });
+  afterEach(() => removeTempDir(repo));
+
+  it('fails loudly, as E_GIT_READ_FAILED, when git cannot be run', () => {
+    expect(() => planDiff(repo, 'x.md', 'b\n', { ...process.env, PATH: '' })).toThrow(/E_GIT_READ_FAILED: git for the dry run of x.md failed/);
   });
 
   it('fails loudly with git\'s own words when git runs but errors', () => {
-    expect(() => unifiedDiff('x.md', 'a\n', 'b\n', { GIT_CONFIG_PARAMETERS: 'bogus' })).toThrow(/E_GIT_READ_FAILED: git diff for the dry run of x.md failed: .*GIT_CONFIG_PARAMETERS/);
+    expect(() => planDiff(repo, 'x.md', 'b\n', { ...process.env, GIT_CONFIG_PARAMETERS: 'bogus' })).toThrow(
+      /E_GIT_READ_FAILED: git for the dry run of x.md failed: .*GIT_CONFIG_PARAMETERS/,
+    );
   });
 
   it('stopWithPlan outside a dry run is a programming error', () => {
     expect(() => stopWithPlan({ dryRun: true, subject: 's', message: 's', paths: [], diff: '' })).toThrow('stopWithPlan called outside a dry run');
   });
 
-  it('marks a missing final newline the way git does', () => {
-    expect(unifiedDiff('x.md', 'a', 'b')).toBe(['--- a/x.md', '+++ b/x.md', '@@ -1 +1 @@', '-a', '\\ No newline at end of file', '+b', '\\ No newline at end of file', ''].join('\n'));
+  it('marks a missing final newline the way git does, on a repository with no commit yet', () => {
+    expect(planDiff(repo, 'x.md', 'b')).toBe(['--- /dev/null', '+++ b/x.md', '@@ -0,0 +1 @@', '+b', '\\ No newline at end of file', ''].join('\n'));
   });
 });

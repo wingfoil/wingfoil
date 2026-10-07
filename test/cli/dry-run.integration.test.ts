@@ -245,3 +245,31 @@ describe('--dry-run of a refused operation exits with the refusal\'s code and wr
     }
   });
 });
+
+describe('a dry run reports the warnings the real run would (task-210 review F4)', () => {
+  it('dna add --force on a file the in-place editor cannot edit: the whole-file rewrite warning, and nothing written', () => {
+    const repo = makeTempGitRepo();
+    try {
+      step(repo, 'init', '--template', 'Kanban');
+      const dnaPath = join(repo, '.wingfoil', 'dna.yaml');
+      const scaffold = readFileSync(dnaPath, 'utf-8');
+      const flow = scaffold.replace(/^paths:\n(?: {2}.*\n)+/m, 'paths: { sources: [src/], runs: [docs/runs/] }\n');
+      expect(flow).not.toBe(scaffold);
+      writeFileSync(dnaPath, flow, 'utf-8');
+      git(repo, ['commit', '--quiet', '-am', 'fixture: flow-mapping paths']);
+      const before = snapshotPersistence(repo);
+
+      const dry = wingfoil(repo, ['dna', 'add', 'paths.tests', '--value', 'test/', '--force', '--dry-run']);
+
+      expect(dry.status).toBe(0);
+      assertPersistenceUnchanged(repo, before, 'dry run with a warning');
+      expect(dry.stderr).toMatch(/^warning: dna\.yaml was rewritten as a whole file \(--force\)/);
+      const real = wingfoil(repo, ['dna', 'add', 'paths.tests', '--value', 'test/', '--force']);
+      expect(real.status).toBe(0);
+      expect(dry.stderr).toBe(real.stderr);
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+});
+
