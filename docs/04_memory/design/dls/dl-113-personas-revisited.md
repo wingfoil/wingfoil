@@ -118,6 +118,12 @@ Alternatives considered:
 4. **Journeys for Persona 7** are an input to v0.3 `release-planning`; tasks, if any, are derived by
    `build-backlog`, not created here.
 
+**Note (2026-10-07, `dl-162`).** Q2 (a) is read as "Casey's *own* goals are views": the goals this decision restated
+stay read-only views over Memory and workflow state, but they do not forbid Casey from changing state. Approval
+follows the role, not the persona (REQ-SYS-08): when the DNA assigns Casey the `approver` role, or names Casey for
+an approval, Casey approves and rejects through the same verbs (`dl-162`, option (B), ratified 2026-10-07).
+`docs/01_vision/04_personas.md` and `01_product-brief.md` say so since `task-273`.
+
 ## Relations
 
 - **Origin:** `retro-v0.2`, the persona disposition (2026-09-28).
@@ -127,3 +133,4 @@ Alternatives considered:
   retrospective; `dl-020-contribution-model`, the flow Persona 7 is on the receiving end of;
   `dl-008-cli-first-no-gui`, the user interface Casey's views would eventually use;
   `dl-125-approving-documents-that-are-not-memory-elements`.
+- **Read through:** `dl-162`, which rules how Q2 (a) applies to approvals (note above).
