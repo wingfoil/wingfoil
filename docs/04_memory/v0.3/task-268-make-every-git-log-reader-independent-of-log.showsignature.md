@@ -56,11 +56,128 @@ signature is not present in the history walk …"), because its readers (`walkGi
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+Branch `task/task-268-make-every-git-log-reader-independent-of-log.showsignature`, cut from `main` at
+`1ce84a54` (wave 3, batch B3); start `91ad61a3`, `bug-291` synced `planned → in-progress` at `5815ed41`.
+
+### design (architect)
+
+**`depends_on` (dl-015).** `[]`. The precedent is `task-220`'s review F1 (`src/core/agent-show.ts`:
+`'log', '--no-show-signature'` and a full-sha check returning `IO`), reused as the model.
+
+**Specs.** No tech-spec states how WingFoil invokes `git log` (`grep -rln "showSignature\|show-signature"
+docs/04_memory/design/specs/` → nothing), so no spec edit and no pending amendment. The P1.10 BDD
+scenarios are unchanged: the ACs add no observable behaviour to a scenario, only independence from a
+git setting.
+
+**The readers.** `grep -rn "'log'" src --include=*.ts` → five call sites: `src/memory/git-log.ts`
+(`walkGitLogFields`, used by `getMemoryHistory`, `auditAttribution` and the deduction's record walk),
+`src/memory/history.ts` ×2 (the `--diff-filter=C` creation probe, the `--name-status` path probe),
+`src/core/workflow-deduction.ts` (`readStarts`), `src/core/agent-show.ts` (already fixed). The other git
+commands that parse output were checked on a scratch repository with signed commits and
+`log.showSignature=true` (`GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1`): `git log --format=%H`
+printed `No signature` before every sha; `git rev-list HEAD` and `git rev-list --format=%H HEAD` printed
+none; `git show HEAD:a` (a blob) printed the content only. So `rev-list` (the deduction's walk bound) and
+the two `show <rev>:<path>` readers (`src/storage/commit.ts`, `src/memory/audit.ts`) are not exposed.
+
+**Shape.** `--no-show-signature` is written literally right after every `'log'` argument (so a textual
+gate can enumerate the readers), and one shared check, `requireCommitName(name, command)` in
+`src/storage/git-read.ts` (exported from `src/storage`), refuses a parsed name that is not a full sha
+(40 or 64 hex, as `agent show`'s `FULL_SHA_RE`) with `StorageError` `E_GIT_READ_FAILED` — the code
+`memory history` already maps to `IO` (exit 1). `walkGitLogFields` checks every `%H` field;
+`readStarts` checks the name after its `0x01` mark; the creation probe checks its first line; the path
+probe checks every line without a tab (previously skipped silently).
+
+**AC classification (T1).**
+
+| AC | Class | Why |
+|---|---|---|
+| 1 `memory history` exit 0, same entries, signed commits + `log.showSignature=true` | red-first | reproduces `bug-291` (exit 1) |
+| 2 every `log` reader passes the flag; non-sha name refused as `IO`; a test enumerates the readers | red-first | new behaviour (flag, refusal, gate) |
+| 3 output byte-identical with `log.showSignature=false` | characterization | the fix must not change the `false` output |
+
+### red (developer)
+
+`ce924bf8` — `test/storage/helpers/signed-commits.ts` (isolated git config: `GIT_CONFIG_GLOBAL` /
+`GIT_CONFIG_SYSTEM` an empty scratch file, `GIT_CONFIG_NOSYSTEM=1`; an ed25519 signing key in the
+fixture's `.git`; a `git` wrapper on `PATH` that turns `--no-show-signature` into `--show-signature`,
+standing for a git that does not honour the flag), `test/lint/git-log-readers.test.ts`,
+`test/memory/git-log-show-signature.test.ts`, `test/core/git-log-show-signature.test.ts`,
+`test/cli/history-show-signature.integration.test.ts`. `npx jest <those four suites>` → **16 failed, 3
+passed (19)**. The CLI failure is `bug-291` verbatim: exit 1,
+`{"error":"creation commit No signature is not present in the history walk it was derived from"}`. The
+core suite also showed a second, silent defect: with the option on, `memory.memoryHistory` returned
+entries whose `sha` was `"No signature\n<sha>"` with `to`/`from` null (no copy edge in that fixture, so
+no exit 1), and `deduceWorkflowStateAtHead` left `flow.first` on the frontier although its phase record
+was committed — the record's commit name was the signature text, so it fell outside the instance walk.
+
+`43782c1d` — a correction to the red: the Memory suite's 7 failures in `ce924bf8` came from its own
+fixture (`git mv` into a missing directory), not from the readers. With the directory created and the
+`src/` fix removed (`git checkout HEAD -- src`), the same suite → **7 failed (7)** on the readers:
+`creation commit No signature is not present …` (AC 1, `getMemoryHistory`) and `expected a
+StorageError, the read returned` (AC 2, the other five readers).
+
+### green (developer)
+
+`3482fa75` — the flag on the four readers, `requireCommitName` and its uses (design above). `npx jest
+<the four suites>` → **19 passed**; `npx jest test/memory test/core/workflow-deduction.test.ts
+test/core/memory-history.test.ts test/core/agent-show.test.ts
+test/cli/history-scaffold-phantom.integration.test.ts` → **685 passed (31 suites)**.
+
+### refactor (developer)
+
+`7a64884c` — the full run showed `src/memory/history.ts` branches 100 → 94.44 (line 225: a status
+line before any name, unreachable from git). The path probe's parse moved to the pure, exported
+`parseHistoricalPaths(stdout)`, which refuses that line too; unit tests feed it a SHA-256 name, a rename,
+signature text and a status line before a name → `history.ts` **100 | 100 | 100 | 100**.
+
+**AC 3 characterization (byte-identical with `log.showSignature=false`).** The CLI suite compares
+`--format json|yaml|console` with the option off and on. Against the code before the fix: a detached
+worktree at `43782c1d` (red tip, `src/` = main's) built with `npm run build`, and this branch's
+`dist/`, both run on this repository (no `log.showSignature` set: `git config --get log.showSignature`
+→ empty) for every 8th Memory/plan element (`find docs/04_memory docs/05_plans -name '*.md' | sort |
+awk 'NR%8==1'`, 108 ids incl. the renamed `minor-v0.1`) × `json`, `console`: `compared=216
+differing=0` (stdout+stderr+exit). The existing history suites pass unchanged (green above).
+
+Gates (the machine was loaded, load average ≈ 60–80, `uptime`):
+- `npm run test:coverage` → 304 suites, **5742 passed, 2 failed**: `test/core/query-latency.test.ts` and `test/mcp/resource-latency.test.ts` (p95 over 1,000 ms at load ≈ 70), which passed alone (`npx jest test/core/query-latency.test.ts test/mcp/resource-latency.test.ts` → 8 passed); the run before the refactor commit → 304 suites, 5741 passed, 0 failed. All files **99.28 | 97.19 | 97.34 | 99.71** against the W3 B2 gate's
+  **99.28 | 97.18 | 97.33 | 99.71** (`devloop-kit/gate-w3b2-cov.log`); the touched files
+  `git-log.ts`, `history.ts`, `git-read.ts`, `workflow-deduction.ts` are all at 100%.
+- `npm run lint` 0; `npm run docs:api` 0; `npx tsc --noEmit -p tsconfig.json` 0; `npx tsc -p
+  tsconfig.build.json --noEmit` 0; `node scripts/check-governance.cjs --base 1ce84a54` → 2 `wf()`
+  commits checked, 0 findings.
+
+### review (reviewer, self)
+
+- AC 1: met — `test/cli/history-show-signature.integration.test.ts` (exit 0, `operation: add`, the
+  compiled CLI) and `test/core/git-log-show-signature.test.ts` (`memory.memoryHistory`, `on` deep-equals
+  `off`), signed commits, `log.showSignature=true`, isolated config.
+- AC 2: met — `test/lint/git-log-readers.test.ts` enumerates every `'log'` argument in `src/` (four
+  files, pinned so the scan is not vacuous) and requires `'--no-show-signature'` next; a `'show'` must
+  read a `<rev>:<path>` blob; `whatchanged`/`shortlog`/`reflog` are absent; a self-test proves it can
+  fail. Refusal as `IO` / `E_GIT_READ_FAILED`: six Memory readers, `memory.memoryHistory` (code `IO`,
+  exit 1) and the deduction, through the signature-forcing `git` wrapper.
+- AC 3: met — characterization above.
+- Same class, files touched: `collectHistoricalPaths`' `SHA_LINE_RE` accepted SHA-1 names only, so a
+  SHA-256 repository's path probe matched no name; it now goes through `requireCommitName` (40 or 64).
+  `agent show` keeps its own `FULL_SHA_RE` and `IO` message (pinned by `test/core/agent-show.test.ts`,
+  not touched here).
+- The refusal message carries the storage code prefix, as every `E_GIT_READ_FAILED` does at `IO`:
+  `E_GIT_READ_FAILED: git log printed "No signature\n<sha>" where a commit name was expected`.
+
+**Decisions for the approver.** (1) A name that is not a full sha is an error (`IO`), not a skipped
+line, in every reader, including the path probe that used to skip — as AC 2 says. (2) The guard lives in
+`src/storage/git-read.ts` (`requireCommitName`), beside `runGitRead`, rather than a `git log` wrapper
+that injects the flag: the flag stays literal at each call site so the textual gate can see it.
+
+**Pending amendments (approver).** None.
+
+**Merge order.** Merges first in B3. `task-203` rewrites `readRecords`/`readStarts` in
+`src/core/workflow-deduction.ts`: it must keep `'log', '--no-show-signature'` and `requireCommitName`
+on the start walk; `test/lint/git-log-readers.test.ts` fails otherwise, and pins the reader files list
+(`core/agent-show.ts`, `core/workflow-deduction.ts`, `memory/git-log.ts`, `memory/history.ts`) — a task
+adding or removing a reader file updates that list.
+
+**Candidate findings (not filed).** `scripts/check-governance.cjs` runs four `git log` readers without
+`--no-show-signature` (lines 145, 164, 183, 371: `grep -n "'log'" scripts/check-governance.cjs`); with
+`log.showSignature=true` and signed commits the governance gate would parse signature text as commit
+names. Outside AC 2's `src/` scope, so left as is.
