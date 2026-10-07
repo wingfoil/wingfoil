@@ -230,6 +230,14 @@ src/storage/commit.ts` → empty).
   - F2: a hook that prints `$(pwd)/docs/runs` gives the cause `refused in docs/runs`. The message
     contains neither spelling of the root.
   - Leftover directory: the refusing-hook case also asserts that `docs/runs` is gone.
+- **Re-review, filesystem failure.** `writeAndCommit` rethrows a filesystem error unchanged
+  (`EACCES`/`ENOSPC` on the write), so `recordRun` used to rethrow it. The record was lost and Node's
+  message could carry an absolute path. Now `recordRun` rethrows only while a dry run is active
+  (`isDryRunActive()`). Any other error becomes `IO` `run <id> not recorded: <cause>`, with the record
+  in details and both spellings of the root removed from the cause. Red `e2f839fb`: an unwritable
+  `docs/runs` (mode 555) made the call throw `EACCES: … open '/tmp/…/docs/runs/…'` (1 failed). The fix
+  commit follows it. `npx jest test/agent test/storage` → 30 suites, 488 passed; lint, both `tsc` and
+  governance exit 0.
 - **Dry run.** `recordRun` is a library function, not a registered `mutates: true` operation (`agent
   execute`, task-228, will be one). So task-210's dry-run registry table needs no row for it, and no
   raw writer is reached under a dry run. Inside `captureDryRun` it plans `agent: record <id>` on the one
