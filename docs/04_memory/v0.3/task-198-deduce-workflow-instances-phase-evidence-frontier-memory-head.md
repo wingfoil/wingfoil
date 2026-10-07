@@ -2,7 +2,7 @@
 id: "task-198-deduce-workflow-instances-phase-evidence-frontier-memory-head"
 type: task
 title: "Deduce workflow instances, phase evidence and the frontier from Memory at `HEAD`"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "high"
