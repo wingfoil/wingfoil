@@ -36,6 +36,7 @@ This task adds the launch half: - step 13's banner, the spawn with `launch.inter
 - **Notes:** Proposal key: B10. `X_cli-cmds.md` Agent Execution rows are task-245's (one owner for the file). The run's warnings and errors use task-169's stderr renderer and task-130's error shape.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
 - **Handover from wave 3 B1 (2026-10-07, `task-206`, `task-210`, `task-196`).** `recordRun` writes through `task-210`'s `writeAndCommit` and, on any failure after serialization, returns `IO` / `CONFLICT` / `VALIDATION` with the record as a `details` line and the project root stripped: forward that to stderr unchanged, so a run is never lost. Run `runLogPreflight` before the spawn (step 6) and `recordRun` after it (step 17). If `task-218` has not already done it, add `agent execute` to `REVIEWED_AGENT_WRITERS` (`test/core/builtin-adapter-writers.test.ts`) and to the dry-run table (`test/cli/dry-run.integration.test.ts`).
+- **Handover from the W3 B1 triage (2026-10-07, approver).** `paths.runs` (`docs/06_runs/` in this repository, `task-206`) sits inside `paths.docs` (`docs/`), so a run-log file belongs to two categories. Ruling: keep the overlap; state in `spec-016` §4.1, in the same pending amendment as `bug-288`'s tightening, that path categories may nest and that `paths runs` and `paths docs` both list the run log.
 
 ## Execution Notes
 
