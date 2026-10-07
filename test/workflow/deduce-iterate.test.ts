@@ -1,0 +1,475 @@
+/**
+ * task-202 — `iterate_over`, live queries, optional and archived phases in the pure deduction
+ * (`src/workflow/deduce.ts`; `spec-017` §4.6, §4.7, §4.10, §4.11; `dl-104` D2 (b); REQ-STATE-07;
+ * P4.16, P4.13), on synthetic snapshots.
+ *
+ * - AC 1: BDD `p4-workflow/P4.16-include-composition.feature` sc. 1–3 (3 backlog + 1 done → 3
+ *   iterations; a plain include runs once; zero matches → vacuous, with the note).
+ * - AC 2: eligible / entered / complete (§4.6): the entry filter (`status`) and the scope filter, a
+ *   task moved on by the sub staying entered, a list-valued `where` field matching a shared element.
+ * - AC 3: `dna:<path>` / `bindings:<name>` collections (`spec-003` § "Collections"), declared order,
+ *   keys, `{item}` / `{item.<field>}`, `WingFoil-Item` records.
+ * - AC 4: §4.7 — `late` candidates after a later phase completes non-vacuously; a vacuous completion
+ *   never closes an earlier phase.
+ * - AC 5: §4.10 optional skip; §4.11 archived elements and `abandoned: true`.
+ */
+import { deduceWorkflowState, type DeductionSnapshot, type InstanceDeduction } from '../../src/core';
+import { MemoryYaml } from '../../src/memory/schema';
+import { parseYaml } from '../../src/validation';
+import { Workflow } from '../../src/workflow/schema';
+
+const MEMORY = MemoryYaml.parse(
+  parseYaml(
+    `version: 1.0
+types:
+  task:
+    path: "docs/tasks/{id}.md"
+    id_pattern: "task-{n}-{slug}"
+    states:
+      sequence: [ draft, pending, backlog, in-progress, in-review, done ]
+  release:
+    path: "docs/releases/{id}.md"
+    states:
+      sequence: [ draft, planning, in-development, releasing, released ]
+  bug:
+    path: "docs/bugs/{id}.md"
+    states:
+      sequence: [ draft, open, closed ]
+  adr:
+    path: "docs/adrs/{id}.md"
+    states:
+      sequence: [ draft, pending, accepted, superseded ]
+      waiting: [ accepted ]
+  plan:
+    path: "docs/plans/{scope}/{id}.md"
+    states:
+      sequence: [ draft, active, done ]
+`,
+    'memory.yaml',
+  ),
+);
+
+const wf = (yaml: string): Workflow => Workflow.parse(parseYaml(yaml, 'workflow.yaml'));
+
+type Doc = { path: string; frontmatter: Record<string, unknown>; body: string };
+
+function doc(path: string, frontmatter: Record<string, unknown>): Doc {
+  return { path, frontmatter, body: '' };
+}
+
+const task = (id: string, status: string, extra: Record<string, unknown> = {}): Doc => doc(`docs/tasks/${id}.md`, { id, type: 'task', status, ...extra });
+const release = (id: string, status: string, extra: Record<string, unknown> = {}): Doc =>
+  doc(`docs/releases/${id}.md`, { id, type: 'release', status, version: 'v1', ...extra });
+const plan = (id: string, workflow: string, element = ''): Doc => doc(`docs/plans/x/${id}.md`, { id, type: 'plan', status: 'active', workflow, element });
+
+function snapshot(workflows: Workflow[], documents: Doc[], extra: Partial<DeductionSnapshot> = {}): DeductionSnapshot {
+  const plans = documents.filter((d) => d.frontmatter['type'] === 'plan');
+  return {
+    commit: 'c0ffee',
+    workflows,
+    workflowFiles: workflows.map((w) => `.wingfoil/workflows/custom/${w.name}.yaml`),
+    registryDiagnostics: [],
+    memoryYaml: MEMORY,
+    documents,
+    scanDiagnostics: [],
+    tree: [],
+    starts: new Map(plans.map((p, i) => [p.path, { commit: `s${i}`, position: i }])),
+    records: new Map(),
+    dirty: [],
+    ...extra,
+  };
+}
+
+const first = (s: DeductionSnapshot): InstanceDeduction => deduceWorkflowState(s).instances[0]!;
+const keys = (entry: InstanceDeduction): string[] => entry.frontier.map((step) => step.key);
+
+/** The sub a release iterates per task: start (in-progress), finish (done). */
+const DEV = wf(`name: dev
+kind: sub
+element: task
+phases:
+  - name: start
+    actions:
+      - element.set_state(in-progress)
+  - name: finish
+    actions:
+      - element.set_state(done)
+`);
+
+/** P4.16's Background: `include: dev, iterate_over: task, where: { status: [backlog] }`, then a wrap-up. */
+const REL = wf(`name: rel
+kind: main
+element: release
+phases:
+  - name: loop
+    include: dev
+    iterate_over: task
+    where: { status: [ backlog ] }
+  - name: wrap
+    actions:
+      - element.set_state(releasing)
+`);
+
+describe('task-202 AC 1 — BDD P4.16 (include composition) on the deduction', () => {
+  it('sc. 1: 3 backlog tasks and 1 done task → the sub runs once per backlog task, in {n} order', () => {
+    const entry = first(
+      snapshot(
+        [REL, DEV],
+        [
+          task('task-10-ten', 'backlog'),
+          task('task-2-two', 'backlog'),
+          task('task-3-three', 'backlog'),
+          task('task-1-one', 'done'),
+          release('r1', 'in-development'),
+          plan('p1', 'rel', 'r1'),
+        ],
+      ),
+    );
+    expect(keys(entry)).toEqual(['dev.start@task:task-2-two', 'dev.start@task:task-3-three', 'dev.start@task:task-10-ten']);
+    expect(entry.phases).toEqual([
+      { phase: 'loop', state: 'current', iterations: { eligible: 3, entered: 0, complete: 1, late: 0 } },
+      { phase: 'wrap', state: 'pending' },
+    ]);
+    expect(entry.frontier[0]!.trail).toEqual([
+      { workflow: 'rel', phase: 'loop', scope: { element: { type: 'release', id: 'r1', status: 'in-development' } } },
+      { workflow: 'dev', phase: 'start', scope: { element: { type: 'task', id: 'task-2-two', status: 'backlog' } } },
+    ]);
+    expect(entry.frontier[0]!.scope).toEqual({ element: { type: 'task', id: 'task-2-two', status: 'backlog' } });
+  });
+
+  it('sc. 2: a plain include runs exactly once, on the including element', () => {
+    const setup = wf(`name: setup
+kind: sub
+phases:
+  - name: only
+    produces: [ "out/{id}.md" ]
+`);
+    const main = wf(`name: once
+kind: main
+element: release
+phases:
+  - name: prepare
+    include: setup
+`);
+    const entry = first(snapshot([main, setup], [release('r1', 'planning'), plan('p1', 'once', 'r1')]));
+    expect(keys(entry)).toEqual(['setup.only@release:r1']);
+    expect(entry.phases).toEqual([{ phase: 'prepare', state: 'current' }]);
+  });
+
+  it('sc. 3: no task in backlog → the sub runs zero times; the phase completes vacuously with the note', () => {
+    const entry = first(snapshot([REL, DEV], [task('task-1-one', 'draft'), release('r1', 'in-development'), plan('p1', 'rel', 'r1')]));
+    expect(entry.phases[0]).toEqual({
+      phase: 'loop',
+      state: 'complete',
+      vacuous: true,
+      iterations: { eligible: 0, entered: 0, complete: 0, late: 0, note: 'no elements matched the iterate_over filter' },
+    });
+    expect(keys(entry)).toEqual(['rel.wrap@release:r1']);
+  });
+});
+
+describe('task-202 AC 2 — eligible, entered and complete candidates (spec-017 §4.6)', () => {
+  const CYCLE = wf(`name: cycle
+kind: main
+element: release
+phases:
+  - name: loop
+    include: dev
+    iterate_over: task
+    where: { status: [ backlog ], tags: [ "{release.version}" ] }
+`);
+
+  it('a task the sub moved out of the entry filter stays entered; a list-valued `where` field matches a shared element', () => {
+    const entry = first(
+      snapshot(
+        [CYCLE, DEV],
+        [
+          task('task-4-moved', 'in-progress', { tags: ['v1', 'workflow'] }),
+          task('task-5-waiting', 'backlog', { tags: ['v1'] }),
+          task('task-6-other-release', 'backlog', { tags: ['v2'] }),
+          task('task-7-not-ready', 'pending', { tags: ['v1'] }),
+          task('task-8-finished', 'done', { tags: ['workflow', 'v1'] }),
+          task('task-9-untagged', 'backlog'),
+          release('r1', 'in-development'),
+          plan('p1', 'cycle', 'r1'),
+        ],
+      ),
+    );
+    expect(keys(entry)).toEqual(['dev.finish@task:task-4-moved', 'dev.start@task:task-5-waiting']);
+    expect(entry.phases[0]).toEqual({ phase: 'loop', state: 'current', iterations: { eligible: 1, entered: 1, complete: 1, late: 0 } });
+  });
+
+  it('the phase is complete when no candidate is eligible or entered, and the workflow moves on', () => {
+    const entry = first(snapshot([CYCLE, DEV], [task('task-8-finished', 'done', { tags: ['v1'] }), release('r1', 'in-development'), plan('p1', 'cycle', 'r1')]));
+    expect(entry.phases).toEqual([{ phase: 'loop', state: 'complete', iterations: { eligible: 0, entered: 0, complete: 1, late: 0 } }]);
+    expect(entry.complete).toBe(true);
+  });
+
+  it('candidates with no {n} token in the id_pattern iterate in byte-wise id order', () => {
+    const overReleases = wf(`name: line
+kind: main
+phases:
+  - name: each
+    include: rel-sub
+    iterate_over: release
+    where: { status: [ planning ] }
+`);
+    const relSub = wf(`name: rel-sub
+kind: sub
+element: release
+phases:
+  - name: go
+    actions:
+      - element.set_state(in-development)
+`);
+    const entry = first(snapshot([overReleases, relSub], [release('minor-b', 'planning'), release('minor-a', 'planning'), plan('p1', 'line')]));
+    expect(keys(entry)).toEqual(['rel-sub.go@release:minor-a', 'rel-sub.go@release:minor-b']);
+  });
+});
+
+describe('task-202 AC 3 — iterate_over a collection (dl-104 D2 (b), spec-003 § "Collections")', () => {
+  const MODS = wf(`name: mods
+kind: main
+phases:
+  - name: each-module
+    include: per-module
+    iterate_over: dna:modules
+    where: { kind: [ lib ] }
+  - name: each-template
+    include: per-template
+    iterate_over: bindings:templates
+`);
+  const PER_MODULE = wf(`name: per-module
+kind: sub
+phases:
+  - name: write
+    produces: [ "docs/modules/{item}.md", "{item.path}/README.md" ]
+  - name: check
+`);
+  const PER_TEMPLATE = wf(`name: per-template
+kind: sub
+phases:
+  - name: smoke
+    produces: [ "out/{item}.log" ]
+`);
+  const collections = new Map<string, readonly unknown[]>([
+    [
+      'dna:modules',
+      [
+        { name: 'core', path: 'src/core', kind: 'lib' },
+        { name: 'cli', path: 'src/cli', kind: 'app' },
+        { name: 'agent', path: 'src/agent', kind: 'lib' },
+      ],
+    ],
+    ['bindings:templates', ['kanban', 'scrum']],
+  ]);
+
+  it('iterates the matching entries in declared order, keyed by `name`, interpolating {item} and {item.<field>}', () => {
+    const entry = first(
+      snapshot([MODS, PER_MODULE, PER_TEMPLATE], [plan('p1', 'mods')], {
+        collections: collections as DeductionSnapshot['collections'],
+        tree: ['docs/modules/core.md', 'src/core/README.md'],
+      }),
+    );
+    expect(keys(entry)).toEqual(['per-module.check@dna:modules#core', 'per-module.write@dna:modules#agent']);
+    const write = entry.frontier[1]!;
+    expect(write.scope).toEqual({ item: { collection: 'dna:modules', key: 'agent' } });
+    expect(write.produces.map((p) => p.resolved)).toEqual([['docs/modules/agent.md'], ['src/agent/README.md']]);
+    expect(entry.phases[0]).toEqual({ phase: 'each-module', state: 'current', iterations: { eligible: 1, entered: 1, complete: 0, late: 0 } });
+  });
+
+  it('a WingFoil-Item record completes a collection step; scalar entries are their own key', () => {
+    const records = new Map([
+      [
+        's0',
+        [
+          { commit: 'r1', phase: 'per-module.check', instance: 'p1', element: null, item: 'dna:modules#core' },
+          { commit: 'r2', phase: 'per-module.check', instance: 'p1', element: null, item: 'dna:modules#agent' },
+        ],
+      ],
+    ]);
+    const entry = first(
+      snapshot([MODS, PER_MODULE, PER_TEMPLATE], [plan('p1', 'mods')], {
+        collections: collections as DeductionSnapshot['collections'],
+        tree: ['docs/modules/core.md', 'src/core/README.md', 'docs/modules/agent.md', 'src/agent/README.md', 'out/scrum.log'],
+        records,
+      }),
+    );
+    expect(entry.phases[0]).toEqual({ phase: 'each-module', state: 'complete', iterations: { eligible: 0, entered: 0, complete: 2, late: 0 } });
+    expect(keys(entry)).toEqual(['per-template.smoke@bindings:templates#kanban']);
+    expect(entry.frontier[0]!.produces[0]!.resolved).toEqual(['out/kanban.log']);
+  });
+
+  it('{item.<field>} of a scalar entry has no value; an absent collection has no candidates', () => {
+    const scalarSub = wf(`name: per-template
+kind: sub
+phases:
+  - name: smoke
+    produces: [ "out/{item.name}.log" ]
+`);
+    const deduction = deduceWorkflowState(
+      snapshot([MODS, PER_MODULE, scalarSub], [plan('p1', 'mods')], { collections: new Map([['bindings:templates', ['kanban']]]) }),
+    );
+    expect(deduction.instances[0]!.phases[0]).toMatchObject({ phase: 'each-module', state: 'complete', vacuous: true });
+    expect(keys(deduction.instances[0]!)).toEqual(['per-template.smoke@bindings:templates#kanban']);
+    expect(deduction.diagnostics.map((d) => d.message)).toEqual([
+      "token '{item.name}' of per-template.smoke has no value: bindings:templates#kanban has no value for 'name'",
+    ]);
+  });
+});
+
+describe('task-202 AC 4 — live queries after the workflow moved on (spec-017 §4.7)', () => {
+  const FLOW = wf(`name: flow
+kind: main
+element: release
+phases:
+  - name: triage
+    where: { type: bug, status: [ open ] }
+  - name: loop
+    include: dev
+    iterate_over: task
+    where: { status: [ backlog ] }
+  - name: wrap
+    actions:
+      - element.set_state(releasing)
+`);
+
+  it('a candidate matching after a later phase completed non-vacuously is `late`, not on the frontier', () => {
+    const entry = first(
+      snapshot(
+        [FLOW, DEV],
+        [
+          doc('docs/bugs/bug-1.md', { id: 'bug-1', type: 'bug', status: 'open' }),
+          task('task-3-late', 'backlog'),
+          task('task-2-midway', 'in-progress'),
+          task('task-1-done', 'done'),
+          release('r1', 'releasing'),
+          plan('p1', 'flow', 'r1'),
+        ],
+      ),
+    );
+    expect(entry.frontier).toEqual([]);
+    expect(entry.complete).toBe(true);
+    expect(entry.phases).toEqual([
+      { phase: 'triage', state: 'complete' },
+      { phase: 'loop', state: 'complete', iterations: { eligible: 0, entered: 0, complete: 1, late: 2 } },
+      { phase: 'wrap', state: 'complete' },
+    ]);
+    expect(entry.late).toEqual([
+      { type: 'bug', id: 'bug-1', status: 'open' },
+      { type: 'task', id: 'task-2-midway', status: 'in-progress' },
+      { type: 'task', id: 'task-3-late', status: 'backlog' },
+    ]);
+  });
+
+  it('a later phase complete only vacuously never closes an earlier one', () => {
+    const vacuousAfter = wf(`name: flow2
+kind: main
+element: release
+phases:
+  - name: loop
+    include: dev
+    iterate_over: task
+    where: { status: [ backlog ] }
+  - name: sweep
+    where: { type: bug, status: [ open ] }
+  - name: empty-loop
+    include: dev
+    iterate_over: task
+    where: { status: [ pending ] }
+  - name: close
+`);
+    const entry = first(snapshot([vacuousAfter, DEV], [task('task-1-a', 'backlog'), release('r1', 'in-development'), plan('p1', 'flow2', 'r1')]));
+    expect(keys(entry)).toEqual(['dev.start@task:task-1-a']);
+    expect(entry.phases.map((p) => p.state)).toEqual(['current', 'pending', 'pending', 'pending']);
+    expect(entry.late).toEqual([]);
+  });
+});
+
+describe('task-202 AC 5 — optional phases (§4.10) and archived elements (§4.11)', () => {
+  const OPT = wf(`name: opt
+kind: main
+element: release
+phases:
+  - name: extra
+    optional: true
+  - name: plan
+    actions:
+      - element.set_state(planning)
+  - name: develop
+    actions:
+      - element.set_state(in-development)
+`);
+
+  it('an unsatisfied optional phase is current and reported together with the next non-optional phase', () => {
+    const entry = first(snapshot([OPT], [release('r1', 'draft'), plan('p1', 'opt', 'r1')]));
+    expect(keys(entry)).toEqual(['opt.extra@release:r1', 'opt.plan@release:r1']);
+    expect(entry.frontier.map((step) => step.optional)).toEqual([true, false]);
+    expect(entry.phases.map((p) => p.state)).toEqual(['current', 'pending', 'pending']);
+  });
+
+  it('it is skipped once a later phase is complete non-vacuously', () => {
+    const entry = first(snapshot([OPT], [release('r1', 'planning'), plan('p1', 'opt', 'r1')]));
+    expect(entry.phases.map((p) => p.state)).toEqual(['skipped', 'complete', 'current']);
+    expect(keys(entry)).toEqual(['opt.develop@release:r1']);
+  });
+
+  it('a vacuous later completion does not skip it', () => {
+    const optVacuous = wf(`name: opt2
+kind: main
+phases:
+  - name: extra
+    optional: true
+  - name: sweep
+    where: { type: bug, status: [ open ] }
+  - name: last
+`);
+    const entry = first(snapshot([optVacuous], [plan('p1', 'opt2')]));
+    expect(keys(entry)).toEqual(['opt2.extra', 'opt2.last']);
+    expect(entry.phases.map((p) => p.state)).toEqual(['current', 'pending', 'pending']);
+  });
+
+  it('an archived bound element abandons its instance: abandoned, empty frontier, not complete', () => {
+    const entry = first(snapshot([REL, DEV], [task('task-1-a', 'backlog'), release('r1', 'deprecated'), plan('p1', 'rel', 'r1')]));
+    expect(entry.instance).toMatchObject({ abandoned: true, element: { type: 'release', id: 'r1', status: 'deprecated' } });
+    expect(entry.frontier).toEqual([]);
+    expect(entry.complete).toBe(false);
+  });
+
+  it('an archived candidate is neither eligible nor entered: deprecated, and superseded on an adr', () => {
+    const overAdrs = wf(`name: adrs
+kind: main
+phases:
+  - name: each
+    include: adr-sub
+    iterate_over: adr
+    where: { status: [ accepted, superseded ] }
+`);
+    const adrSub = wf(`name: adr-sub
+kind: sub
+element: adr
+phases:
+  - name: review
+`);
+    const entry = first(
+      snapshot(
+        [overAdrs, adrSub],
+        [doc('docs/adrs/adr-1.md', { id: 'adr-1', type: 'adr', status: 'superseded' }), doc('docs/adrs/adr-2.md', { id: 'adr-2', type: 'adr', status: 'deprecated' }), plan('p1', 'adrs')],
+      ),
+    );
+    expect(entry.phases[0]).toMatchObject({ state: 'complete', vacuous: true });
+    const tasks = first(snapshot([REL, DEV], [task('task-1-a', 'deprecated'), release('r1', 'in-development'), plan('p1', 'rel', 'r1')]));
+    expect(tasks.phases[0]).toMatchObject({ state: 'complete', vacuous: true });
+  });
+
+  it('an archived element never matches a selection', () => {
+    const sweep = wf(`name: sweep
+kind: main
+phases:
+  - name: sweep
+    where: { type: bug }
+`);
+    const entry = first(snapshot([sweep], [doc('docs/bugs/bug-1.md', { id: 'bug-1', type: 'bug', status: 'deprecated' }), plan('p1', 'sweep')]));
+    expect(entry.complete).toBe(true);
+  });
+});
