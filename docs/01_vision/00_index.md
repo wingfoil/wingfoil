@@ -44,7 +44,7 @@ line count (`awk 'END{print NR}'`).
 | [`05_journeys.md`](05_journeys.md)                     | 1.5 | 2026-10-07 | Approved | 287   | 8 end-to-end user journeys (0a, 0b, 1–6): steps, obstacles, success                                                     |
 | [`06_features.md`](06_features.md)                     | 1.11 | 2026-10-07 | Approved | 520   | 64 features (by pillar + by release) and the data-model / implementation notes                                          |
 | [`07_sequencer.md`](07_sequencer.md)                   | 1.8 | 2026-10-01 | Approved | 471   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
-| [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.9 | 2026-10-07 | Approved | 220   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
+| [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.10 | 2026-10-07 | Approved | 220   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
 | [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.6 | 2026-10-06 | Approved | 408   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
 | [`X_lean-inception-plan.md`](X_lean-inception-plan.md) | —   | 2026-06-11 | —        | 42    | Workshop plan: sessions, key decisions, output list                                                                     |
 
