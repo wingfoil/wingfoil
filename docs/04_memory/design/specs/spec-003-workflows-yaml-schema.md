@@ -730,7 +730,7 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 | `E_BINDING_COLLECTION_KEY` | error | loader | a `bindings.yaml` collection entry with no key (a map with neither `id` nor `name`), a key outside the ID characters, or a key an earlier entry of the same collection already uses; path `collections.<name>[<i>]` | § "Collections"; approver ruling 2026-10-05 |
 | `E_PHASE_ROLE_UNKNOWN` | error | core | `role` or `approval.by_role` is not a `dna.yaml` `team.roles` name; message `unknown role '<role>' (not defined in dna.yaml)` | P3.2, P4.14 |
 | `E_PHASE_APPROVER_UNKNOWN` | error | core | `approval.by_person` names no `team.members[]` `name` or `email` | P4.14 sc. 2 |
-| `E_WORKFLOW_ELEMENT_TYPE_UNKNOWN` | error | core | `element`, a Memory `iterate_over`, a `memory.add(type: T)` or a `produces` owner type is not a `memory.yaml` type | P1.13 |
+| `E_WORKFLOW_ELEMENT_TYPE_UNKNOWN` | error | core | `element`, a Memory `iterate_over`, a `memory.add(type: T)`, a `produces` owner type, the `T` of a typed `<T>.set_state(s)` or `<T>.sync_state` action (`element.set_state` / `element.sync_state` name the bound element, not a type), or a value of a selection's `where.type` (§ "Selections"; a value carrying a `{…}` token is not decided) is not a `memory.yaml` type; path `element`, `phases[<i>].iterate_over`, `phases[<i>].where.type` (`phases[<i>].where.type[<k>]` for a list), `phases[<i>].actions[<a>]` or `phases[<i>].produces[<k>].type`, visited in that order within a phase; message `unknown memory type '<T>' (not defined in memory.yaml)` | P1.13; `bug-282` |
 | `E_WORKFLOW_COLLECTION_UNRESOLVED` | error | core | a collection `iterate_over` names no list in `dna.yaml` / `bindings.yaml`, or a `dna.yaml` list it names has an entry with no key, two entries sharing a key, or a key outside the ID characters (a `bindings.yaml` collection's keys are `E_BINDING_COLLECTION_KEY`'s) | `dl-104` D2 (b) |
 | `E_PHASE_CADENCE_EVENT_UNKNOWN` | error | core | a `cadence: { recurring: { on } }` event splits into no `<memory-type>-<state>` whose type `memory.yaml` registers and whose state an element of that type can enter (a `sequence` state, a reject or return target, or `deprecated`); path `phases[<i>].cadence.recurring.on`, message `cadence event '<on>' names no memory.yaml type and state (<memory-type>-<state>)` | open question 3, settled |
 | `W_WORKFLOW_UNBOUND_TOKEN` | warning | loader | an action or check token has neither a built-in nor a `bindings.yaml` binding | `dl-090` Q2 (c); open question 1, settled |
@@ -1001,3 +1001,16 @@ only on a load the loader accepted. "Where each check runs" names the two files 
 decided without its input, as for the loader rows. No other code, severity or message changes.
 Edited in place without a supersede or a state change (`dl-047`); pending the approver's
 `memory amend` at `task-194`'s review.
+
+**Revision (2026-10-07, `task-264`) — every place a workflow names a Memory type is checked (`bug-282`).** The
+`E_WORKFLOW_ELEMENT_TYPE_UNKNOWN` row listed `element`, a Memory `iterate_over`, a `memory.add(type: T)`
+and a `produces` owner type; three other places name a Memory type and were in no row, so a misspelt type
+there passed every check: the `T` of the typed actions `<T>.set_state(s)` and `<T>.sync_state` (§ "Action
+expressions"), and a value of a selection's `where.type` (§ "Selections", where `type` is mandatory). The
+row now names them, with `element.*` kept as the bound element rather than a type and a `where.type`
+value carrying a `{…}` token left undecided (it names no type until it is interpolated). It also states
+the path and message of every form, as the `E_PHASE_CADENCE_EVENT_UNKNOWN` row does, and the order of the fields
+within a phase (`iterate_over`, `where.type`, `actions`, `produces`). No new code: a typo in a type is the
+same mistake wherever it is written, so it reports the same code, severity and message. A `where` under
+`iterate_over` is a filter, not a selection, and stays unchecked. Edited in place without a supersede or a
+state change (`dl-047`); pending the approver's `memory amend` at `task-264`'s review.

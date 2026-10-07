@@ -8,6 +8,8 @@
  * - AC 2: a cadence `on:` event whose type or state `memory.yaml` does not declare is an error.
  * - AC 4: the registry read at `HEAD` ignores a dirty `dna.yaml`.
  * - AC 5: this repository raises exactly spec-017 §12's core set (characterization).
+ * - task-264 (`bug-282`): the `E_WORKFLOW_ELEMENT_TYPE_UNKNOWN` row also checks the `T` of a typed
+ *   `<T>.set_state` / `<T>.sync_state` and a selection's `where.type`; `element.*` stays accepted.
  *
  * AC 3 (the exit-state function) is `workflow-exit-state.test.ts`.
  */
@@ -479,6 +481,110 @@ describe('workflowCoreDiagnostics — pure', () => {
       const got = pure([{ name: 'main', kind: 'main', phases: [phase(action)] }]);
       expect(got.map((d) => `${d.code} ${d.path} ${d.message}`)).toEqual(expected);
     }
+  });
+});
+
+describe('task-264 — E_WORKFLOW_ELEMENT_TYPE_UNKNOWN on typed set_state / sync_state and a selection\'s where.type (bug-282)', () => {
+  const PURE_MEMORY = MemoryYaml.parse(parseYaml(MEMORY_YAML, 'memory.yaml'));
+  const pure = (workflows: unknown[]): Diag[] =>
+    workflowCoreDiagnostics(
+      { include: workflows.map((_, i) => `f${i}.yaml`), workflows: workflows.map((w) => Workflow.parse(w)), bindings: null },
+      { memoryYaml: PURE_MEMORY, dnaYaml: null, templateFields: () => new Set(['id', 'title']) },
+    ) as Diag[];
+  const typeErrors = (diagnostics: readonly Diag[]): Diag[] => diagnostics.filter((d) => d.code === 'E_WORKFLOW_ELEMENT_TYPE_UNKNOWN');
+  const unknown = (path: string, type: string): Diag => err(path, 'E_WORKFLOW_ELEMENT_TYPE_UNKNOWN', `unknown memory type '${type}' (not defined in memory.yaml)`, 'f0.yaml');
+
+  // AC 2 (red-first): one fixture per form.
+  it('a typed set_state whose type memory.yaml does not declare is an error at its action', () => {
+    const got = pure([{ name: 'main', kind: 'main', element: 'task', phases: [{ name: 'a', actions: ['git.x', 'tsak.set_state(backlog)'] }] }]);
+    expect(typeErrors(got)).toEqual([unknown('phases[0].actions[1]', 'tsak')]);
+  });
+
+  it('a typed sync_state whose type memory.yaml does not declare is an error at its action (bug-282 step 2)', () => {
+    const got = pure([{ name: 'main', kind: 'main', element: 'task', phases: [{ name: 'a', actions: ['tsak.sync_state(for_each: task.bug)'] }] }]);
+    expect(typeErrors(got)).toEqual([unknown('phases[0].actions[0]', 'tsak')]);
+  });
+
+  it('a selection\'s where.type that memory.yaml does not declare is an error, scalar or list entry', () => {
+    const got = pure([
+      {
+        name: 'main',
+        kind: 'main',
+        phases: [
+          { name: 'a', where: { type: 'tsak', status: 'pending' } },
+          { name: 'b', where: { type: ['task', 'bugz'], status: 'open' } },
+        ],
+      },
+    ]);
+    expect(typeErrors(got)).toEqual([unknown('phases[0].where.type', 'tsak'), unknown('phases[1].where.type[1]', 'bugz')]);
+  });
+
+  it('bug-282 step 1, through the registry at HEAD: where.type and the typed set_state are two errors, in field order', () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeProject(repo, {
+        [MAIN_FILE]:
+          "name: main\nkind: main\nphases:\n  - name: a\n    where: { type: tsak, status: pending }\n    actions:\n      - 'tsak.set_state(backlog)'\n      - memory.approve\n",
+      });
+      expect(() => loadWorkflowRegistryAtRev(repo, 'HEAD')).toThrow(ValidationError);
+      expect(core(diagnosticsAtHead(repo))).toEqual([
+        err('phases[0].where.type', 'E_WORKFLOW_ELEMENT_TYPE_UNKNOWN', "unknown memory type 'tsak' (not defined in memory.yaml)"),
+        err('phases[0].actions[0]', 'E_WORKFLOW_ELEMENT_TYPE_UNKNOWN', "unknown memory type 'tsak' (not defined in memory.yaml)"),
+      ]);
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+
+  it("within a phase the row's fields come out in order: where.type, actions (memory.add and typed alike), produces", () => {
+    const got = pure([
+      {
+        name: 'main',
+        kind: 'main',
+        phases: [
+          {
+            name: 'a',
+            where: { type: 'ghost' },
+            actions: ['memory.add(type: phantom)', 'spectre.set_state(done)', 'wraith.sync_state'],
+            produces: [{ type: 'phantom', path: 'docs/{phantom.id}.md' }],
+          },
+        ],
+      },
+    ]);
+    expect(typeErrors(got)).toEqual([
+      unknown('phases[0].where.type', 'ghost'),
+      unknown('phases[0].actions[0]', 'phantom'),
+      unknown('phases[0].actions[1]', 'spectre'),
+      unknown('phases[0].actions[2]', 'wraith'),
+      unknown('phases[0].produces[0].type', 'phantom'),
+    ]);
+  });
+
+  // AC 3: what stays accepted.
+  it('element.set_state / element.sync_state, a declared type, a where.type token and a where under iterate_over are accepted', () => {
+    const got = pure([
+      {
+        name: 'main',
+        kind: 'main',
+        element: 'task',
+        phases: [
+          { name: 'a', actions: ['element.set_state(pending)', 'element.sync_state', 'task.set_state(backlog)', 'bug.sync_state(for_each: task.bug)'] },
+          { name: 'b', where: { type: ['task', 'bug'], status: 'open' }, actions: ['bug.set_state(triaged)'] },
+          { name: 'c', where: { type: '{element.type}' } },
+          { name: 'd', include: 'sub', iterate_over: 'dna:modules', where: { type: 'library' } },
+        ],
+      },
+      { name: 'sub', kind: 'sub', phases: [{ name: 'g' }] },
+    ]);
+    expect(typeErrors(got)).toEqual([]);
+  });
+
+  it('without memory.yaml no type is decided', () => {
+    const got = workflowCoreDiagnostics(
+      { include: ['f0.yaml'], workflows: [Workflow.parse({ name: 'main', kind: 'main', phases: [{ name: 'a', where: { type: 'tsak' }, actions: ['tsak.set_state(x)'] }] })], bindings: null },
+      { memoryYaml: null, dnaYaml: null, templateFields: () => null },
+    );
+    expect(got).toEqual([]);
   });
 });
 

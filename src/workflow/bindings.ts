@@ -182,6 +182,17 @@ const MEMORY_VERB_TOKENS: Readonly<Record<string, ActionMemoryVerb>> = {
 const TYPED_STATE_RE = /^([a-z][a-z0-9-]*)\.(set_state|sync_state)$/;
 
 /**
+ * The Memory type a typed state action names — the `T` of `<T>.set_state(…)` / `<T>.sync_state(…)` —
+ * or `null` for `element.set_state` / `element.sync_state` (the workflow's own element, not a type) and
+ * for any other token. The core check `E_WORKFLOW_ELEMENT_TYPE_UNKNOWN` (spec-003, `bug-282`) checks it
+ * against `memory.yaml`.
+ */
+export function typedStateType(token: string): string | null {
+  const typed = TYPED_STATE_RE.exec(tokenName(token));
+  return typed && typed[1] !== 'element' ? typed[1]! : null;
+}
+
+/**
  * Whether `name` (a {@link tokenName}) is a **built-in** token (spec-003's built-in table):
  * `memory.add|submit|approve|reject|deprecate`, `element.set_state`, `<type>.set_state`,
  * `<type>.sync_state`, `element.set_release`, `config.init` and every `agent.*`. A project may not

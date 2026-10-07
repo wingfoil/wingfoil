@@ -26,7 +26,7 @@ import type { DnaYaml } from '../dna/schema';
 import type { MemoryYaml } from '../memory/schema';
 import { resolveStateMachine } from '../memory/state-machine';
 import type { Diagnostic } from '../validation';
-import { collectionKeyIssues, memoryAddType, tokenName, type BindingsYaml } from '../workflow/bindings';
+import { collectionKeyIssues, memoryAddType, tokenName, typedStateType, type BindingsYaml } from '../workflow/bindings';
 import { workflowFacts, type Workflow } from '../workflow/schema';
 
 import { iterationStartState, machineStates, workflowExitStates, type ExitStart, type PhaseExitState } from './workflow-exit-state';
@@ -152,8 +152,20 @@ function staticChecks(out: Collector, i: number, workflow: Workflow, bindings: B
     const isCollection = over !== undefined && (over.startsWith(DNA_COLLECTION) || over.startsWith(BINDINGS_COLLECTION));
     if (memoryYaml) {
       if (over !== undefined && !isCollection && !knownType(over)) out.add(i, p, 'E_WORKFLOW_ELEMENT_TYPE_UNKNOWN', at('iterate_over'), unknownType(over));
+      // A selection's `where.type` (`bug-282`): only without `iterate_over` (with it, `where` filters the
+      // iteration and `type` may be a collection entry's field); a value with a `{…}` token is not decided.
+      const selected = over === undefined ? phase.where?.['type'] : undefined;
+      if (selected !== undefined) {
+        const values = Array.isArray(selected)
+          ? selected.map((value, k) => [String(value), at(`where.type[${k}]`)] as const)
+          : [[String(selected), at('where.type')] as const];
+        for (const [type, path] of values) {
+          if (!type.includes('{') && !knownType(type)) out.add(i, p, 'E_WORKFLOW_ELEMENT_TYPE_UNKNOWN', path, unknownType(type));
+        }
+      }
       (phase.actions ?? []).forEach((action, a) => {
-        const type = memoryAddType(action);
+        // `memory.add(type: T)`, and the `T` of a typed `<T>.set_state` / `<T>.sync_state` (`bug-282`).
+        const type = memoryAddType(action) ?? typedStateType(action);
         if (type !== null && !knownType(type)) out.add(i, p, 'E_WORKFLOW_ELEMENT_TYPE_UNKNOWN', at(`actions[${a}]`), unknownType(type));
       });
       (phase.produces ?? []).forEach((entry, k) => {
