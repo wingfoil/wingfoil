@@ -7,7 +7,10 @@
  *   (`bug-150`'s `role: nobody` / `memory.add(type: nonsense)` reproduction is one fixture).
  * - AC 2: a cadence `on:` event whose type or state `memory.yaml` does not declare is an error.
  * - AC 4: the registry read at `HEAD` ignores a dirty `dna.yaml`.
- * - AC 5: this repository raises exactly spec-017 §12's core set (characterization).
+ * - AC 5: this repository raises exactly spec-017 §12's core set (characterization; task-199 removed all three
+ *   warnings it held).
+ * - task-199: a selection (`where` without `iterate_over`) puts the types it selects in scope for the
+ *   phase's action arguments (spec-017 §4.1).
  *
  * AC 3 (the exit-state function) is `workflow-exit-state.test.ts`.
  */
@@ -291,6 +294,31 @@ describe('spec-003 § Diagnostics — the core rows (task-194)', () => {
     ]);
   });
 
+  it('task-199: a selection puts the types it selects in scope for the phase\'s action arguments — not for produces, not for {element.<f>}', () => {
+    writeProject(repo, {
+      [MAIN_FILE]:
+        'name: main\nkind: main\nelement: task\nphases:\n  - name: derive\n    where: { type: [bug], status: [open] }\n    actions:\n' +
+        '      - \'memory.add(type: task, bug: "{bug.id}")\'\n      - \'memory.add(type: task, line: "{release-line.id}")\'\n      - git.create_branch("x/{element.nofield}")\n' +
+        '    produces:\n      - "docs/{bug.id}.md"\n',
+    });
+    expect(core(diagnosticsAtHead(repo))).toEqual([
+      warn('phases[0].produces[0]', 'W_PHASE_TOKEN_OUT_OF_SCOPE', "token '{bug.id}' names no enclosing element (in scope: task)"),
+      warn('phases[0].actions[1]', 'W_PHASE_TOKEN_OUT_OF_SCOPE', "token '{release-line.id}' names no enclosing element (in scope: task; selected: bug)"),
+      warn('phases[0].actions[2]', 'W_PHASE_TOKEN_OUT_OF_SCOPE', "token '{element.nofield}': the task template declares no field 'nofield'"),
+    ]);
+  });
+
+  it('task-199: an iterating phase\'s where is a filter, not a selection — its types put nothing in scope', () => {
+    writeProject(repo, {
+      [MAIN_FILE]:
+        'name: main\nkind: main\nelement: task\nphases:\n  - name: loop\n    include: sub\n    iterate_over: bug\n    where: { type: [release-line] }\n',
+      [SUB_FILE]: 'name: sub\nkind: sub\nelement: bug\nphases:\n  - name: go\n    actions:\n      - \'memory.add(type: task, line: "{release-line.id}")\'\n',
+    });
+    expect(core(diagnosticsAtHead(repo))).toEqual([
+      warn('phases[0].actions[0]', 'W_PHASE_TOKEN_OUT_OF_SCOPE', "token '{release-line.id}' names no enclosing element (in scope: task, bug)", SUB_FILE),
+    ]);
+  });
+
   it('a workflow no startable one reaches: its exit states are checked from its type\'s first state, its tokens are not', () => {
     writeProject(repo, {
       [MAIN_FILE]: 'name: main\nkind: main\nphases:\n  - name: go\n',
@@ -514,14 +542,13 @@ describe('AC 4 — every read is at HEAD', () => {
 });
 
 describe('AC 5 — this repository raises exactly spec-017 §12\'s core set (characterization)', () => {
-  it('2 × W_PHASE_TOKEN_OUT_OF_SCOPE on release-planning.build-backlog, 1 × W_PHASE_FALLBACK_NOT_REENTRANT on bug-ingest.triage, no error', () => {
+  // task-199 rewrote release-planning.build-backlog against a selection (its two out-of-scope tokens are
+  // gone) and dropped bug-ingest.triage's fallback, which a reject to `closed` could never re-enter; the
+  // full repository warning set is pinned by workflow-repository-conformance.test.ts.
+  it('no core diagnostic, no error', () => {
     const root = join(__dirname, '..', '..');
     const registry = loadWorkflowRegistryAtRev(root, 'HEAD');
     expect(registry.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-    expect(core(registry.diagnostics as Diag[])).toEqual([
-      warn('phases[1].fallback.step', 'W_PHASE_FALLBACK_NOT_REENTRANT', "fallback step 'capture' is an earlier phase, but a reject from bug gate 'open' goes forward to 'closed': the reject completes this phase", 'workflows/custom/bug-ingest.yaml'),
-      warn('phases[6].actions[2]', 'W_PHASE_TOKEN_OUT_OF_SCOPE', "token '{dl.id}' names no enclosing element (in scope: release-line, release)", 'workflows/custom/release-planning.yaml'),
-      warn('phases[6].actions[4]', 'W_PHASE_TOKEN_OUT_OF_SCOPE', "token '{bug.id}' names no enclosing element (in scope: release-line, release)", 'workflows/custom/release-planning.yaml'),
-    ]);
+    expect(core(registry.diagnostics as Diag[])).toEqual([]);
   });
 });
