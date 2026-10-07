@@ -372,7 +372,7 @@ A phase declares `cadence: once` (the default — every existing phase is unchan
   segments joined by single hyphens, at least two of them; since a type and a state may both contain
   hyphens (`release-line-in-progress`), the split and the check that the type and the state exist in
   `memory.yaml` are a **core** check (they need `memory.yaml`), so an event that can never fire is a
-  validation error there.
+  validation error there (`E_PHASE_CADENCE_EVENT_UNKNOWN`).
 
 `cadence` is a closed union and is checked structurally (spec-009's structural codes, as for any Zod
 failure), each refusal at its own path:
@@ -665,7 +665,10 @@ the order below, is the `reason`, and every diagnostic is in `details` (`dl-055`
 **Order.** Diagnostics come out in one deterministic order (REQ-SYS-07): `workflows.yaml` first,
 then each workflow file in manifest `include` order, then `bindings.yaml`; within a file,
 workflow-level before phase-level, phases in declared order; for one field, the rows of the table
-below in table order. The same configuration yields the same list, in the same order, on every run.
+below in table order. The *core* rows run in a later stage, on a registry the loader has accepted
+(below), so they follow **every** loader diagnostic, in the same order among themselves: file by
+file, workflow-level first, phases in declared order and, per phase, the rows in table order. The
+same configuration yields the same list, in the same order, on every run.
 
 **Where a cross-file diagnostic is reported.** `E_WORKFLOW_FILE_NOT_FOUND` is reported on
 `workflows.yaml` at `include[<i>]`. `E_WORKFLOW_DUPLICATE_NAME` is reported on every file after the
@@ -688,9 +691,13 @@ whose target it is are skipped. The error the user must fix first is therefore t
 in `loadWorkflowsYaml` (`src/core/loaders.ts`, the checks themselves in
 `src/core/workflow-diagnostics.ts`) as caller-supplied semantic checks
 (`spec-009-validation-strategy` §1), keeping the loader's pillar isolation (`src/core/loaders.ts:1-10`).
-*Core* checks also need `memory.yaml`, `dna.yaml` or `roles.yaml` at `HEAD`, and run in the workflow
-operations of `src/core` (`spec-017` §2). Structural (Zod) failures keep `spec-009`'s structural
-codes, except the named `kind` refusal.
+*Core* checks also need `memory.yaml` or `dna.yaml` (none of them reads `roles.yaml`) at `HEAD`, and
+run in the workflow operations of `src/core` (`spec-017` §2): `src/core/workflow-core-checks.ts`,
+called by `src/core/workflow-registry.ts`, which reads every input at one commit and runs them only
+when the loader reported no error. A core check is not decided when its input is missing: without
+`dna.yaml` no role, member or `dna:` collection is checked, without `memory.yaml` no type, event,
+token, exit state or fallback, and without a type's template no token field. Structural (Zod)
+failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 
 | Code | Severity | Runs in | Rule | Source |
 |---|---|---|---|---|
@@ -725,6 +732,7 @@ codes, except the named `kind` refusal.
 | `E_PHASE_APPROVER_UNKNOWN` | error | core | `approval.by_person` names no `team.members[]` `name` or `email` | P4.14 sc. 2 |
 | `E_WORKFLOW_ELEMENT_TYPE_UNKNOWN` | error | core | `element`, a Memory `iterate_over`, a `memory.add(type: T)` or a `produces` owner type is not a `memory.yaml` type | P1.13 |
 | `E_WORKFLOW_COLLECTION_UNRESOLVED` | error | core | a collection `iterate_over` names no list in `dna.yaml` / `bindings.yaml`, or a `dna.yaml` list it names has an entry with no key, two entries sharing a key, or a key outside the ID characters (a `bindings.yaml` collection's keys are `E_BINDING_COLLECTION_KEY`'s) | `dl-104` D2 (b) |
+| `E_PHASE_CADENCE_EVENT_UNKNOWN` | error | core | a `cadence: { recurring: { on } }` event splits into no `<memory-type>-<state>` whose type `memory.yaml` registers and whose state an element of that type can enter (a `sequence` state, a reject or return target, or `deprecated`); path `phases[<i>].cadence.recurring.on`, message `cadence event '<on>' names no memory.yaml type and state (<memory-type>-<state>)` | open question 3, settled |
 | `W_WORKFLOW_UNBOUND_TOKEN` | warning | loader | an action or check token has neither a built-in nor a `bindings.yaml` binding | `dl-090` Q2 (c); open question 1, settled |
 | `W_PHASE_PRODUCES_OWNER_IMPLICIT` | warning | loader | a string `produces` entry with an `{id}` or `{<field>}` token in a phase that `memory.add`s (not a self-creating workflow's creating phase) | `dl-104` D3 |
 | `W_PHASE_ACTION_UNTARGETED` | warning | loader | an untyped Memory action (`memory.submit\|approve\|reject\|deprecate`, `element.*`) with no element to act on: the workflow binds none, no `memory.add` precedes it in the phase, and the phase has no selection | `spec-017` §4.2 |
@@ -981,3 +989,15 @@ row's bracket.** The verb table gave `park`'s bracket as the literal `[in-progre
 the bracket is `[from → to]` with `to` the type's `returns.<from>`, as `spec-008` §2 now states it; this
 repository's `task` edge is kept as the example. No other row changed. Edited in place without a
 supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-180`'s review.
+
+**Revision (2026-10-06, `task-194-check-workflows-against-memory-yaml-dna-yaml-state`) — the core
+checks implemented (`bug-150`).** § "Diagnostics" gains the row open question 3 left unnamed,
+`E_PHASE_CADENCE_EVENT_UNKNOWN` (core, error), placed after the other core errors, with its path,
+message and the states an event may name; § "Recurring phases" names it. The "Order" paragraph **changes**: it
+interleaved the core rows with the loader rows per field, and now puts every core diagnostic after
+every loader diagnostic, in spec-003's order among themselves. The ground is `task-194`'s AC 1 ("in
+spec-003 order after the loader diagnostics") and the stage the core checks run in: a later one,
+only on a load the loader accepted. "Where each check runs" names the two files and drops `roles.yaml`, which no core row reads, and states that a core check is not
+decided without its input, as for the loader rows. No other code, severity or message changes.
+Edited in place without a supersede or a state change (`dl-047`); pending the approver's
+`memory amend` at `task-194`'s review.

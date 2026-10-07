@@ -992,4 +992,14 @@ the command each workflow token runs, or `null` when there is none — and `diag
 warnings, such as `W_WORKFLOW_UNBOUND_TOKEN` for a token with no binding. A warning does not change the
 exit code; an error in any of the files exits `1`.
 
+The workflows are also checked against the rest of the configuration: a phase `role` or
+`approval: { by_role }` that `dna.yaml`'s `team.roles` does not define (`E_PHASE_ROLE_UNKNOWN`), an
+`approval: { by_person }` that names no `team.members[]` entry, a Memory type `memory.yaml` does not
+register (in `element`, `iterate_over`, `memory.add(type: …)` or a `produces` owner), an `iterate_over`
+collection that resolves to no list, and a `cadence` event that can never fire are errors (exit `1`).
+A `{<type>.<field>}` token outside its scope, a phase whose actions its element's state machine cannot
+apply, and a `fallback` that does not match the reject it answers are warnings. These warnings follow
+the load's own in `diagnostics`. Because the command reads `dna.yaml` and `memory.yaml` for these checks,
+it now also fails (exit `1`) when either of them is present but invalid.
+
 - **Commit:** none.
