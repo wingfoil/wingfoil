@@ -106,7 +106,9 @@ describe('AC 2 — retrospective.yaml: explore lists its secondary sources; addi
     expect(check).toMatch(/consumer feedback note[^;]*declined \([^)]*\) \| needs-info \(/);
     // Written over every source listed before the gate, so a read-only phase added between explore and this one
     // (dl-163 S3d collect-feedback) brings one more source with no change to the check.
-    expect(check).toMatch(/every secondary source listed before this gate \(the friction inventory's list, and the read record of any read-only phase run between explore and this one\)/);
+    expect(check).toMatch(/in every secondary source listed before this gate \(the friction inventory's list, and the read record of any read-only phase run between explore and this one\)/);
+    // Review F2: every consumer note gets an outcome, not only a proposal — a defect note is not a proposal (dl-163 S3d).
+    expect(check).toMatch(/^proposals\.disposed\(every item that is a proposal, and every consumer feedback note \(dl-163\),/);
   });
 
   it('the other phases keep their shape (task-199 pins approve; capture keeps its one post check)', () => {

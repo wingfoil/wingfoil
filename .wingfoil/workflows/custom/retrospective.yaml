@@ -6,7 +6,7 @@ description: >-
   Close the release loop: EXPLORE the release's Execution Notes for friction, let the approver add
   points, capture what went well / what to improve as Memory, and feed adjustments into the next
   release planning.
-version: 1.4                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175); 1.3 dl-104 Action 2 (task-199): approve declares the Memory transition it stands for, explore's agent.mine_execution_notes becomes agent.execute (dl-090 Q6); 1.4 dl-115 Q1 (A) + Q3 (x), dl-163 (task-213): explore reads the ### Retrospective subsections first and lists every secondary source it was given; additional-points gains a checks.pre that every proposal has one outcome (four, six for a consumer feedback note)
+version: 1.4                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175); 1.3 dl-104 Action 2 (task-199): approve declares the Memory transition it stands for, explore's agent.mine_execution_notes becomes agent.execute (dl-090 Q6); 1.4 dl-115 Q1 (A) + Q3 (x), dl-163 (task-213): explore reads the ### Retrospective subsections first and lists every secondary source it was given; additional-points gains a checks.pre that every proposal and every consumer feedback note has one outcome (four, six for a consumer feedback note)
 element: release
 
 phases:
@@ -39,9 +39,9 @@ phases:
     description: >-
       Approver gate: present the friction inventory + the identified improvement themes; the approver
       adds any further points to analyze (and, if a point implies a config/process change, a DL is
-      spun off in capture). Before the gate, every item that is a proposal has exactly one outcome
-      (dl-115 Q3 (x), the check below). A review checkpoint, not an approval-gated transition — no
-      commit.
+      spun off in capture). Before the gate, every item that is a proposal, and every consumer
+      feedback note, has exactly one outcome (dl-115 Q3 (x), dl-163 S3d; the check below). A review
+      checkpoint, not an approval-gated transition — no commit.
     role: approver
     checks:
       # dl-115 Q3 (x), amended 2026-10-07 with dl-163: a proposal is never read as a finding. Written over
@@ -50,13 +50,14 @@ phases:
       # No command asserts it yet (unbound, a warning in v0.3).
       pre:
         - >-
-          proposals.disposed(every item that is a proposal, in every secondary source listed before
-          this gate (the friction inventory's list, and the read record of any read-only phase run
-          between explore and this one), has exactly one outcome: covered (by a theme or an existing disposition) |
-          element (an existing element, with its id and a status read by command) | restated (a new
-          proposal restated from versioned ground) | superseded (with the command that proves it); a
-          consumer feedback note (dl-163) may instead be declined (the approver does not take it up,
-          with a reason) | needs-info (sent back to its consumer for more information))
+          proposals.disposed(every item that is a proposal, and every consumer feedback note (dl-163),
+          in every secondary source listed before this gate (the friction inventory's list, and the
+          read record of any read-only phase run between explore and this one), has exactly one
+          outcome: covered (by a theme or an existing disposition) | element (an existing element,
+          with its id and a status read by command) | restated (a new proposal restated from versioned
+          ground) | superseded (with the command that proves it); a consumer feedback note, which may
+          be a defect rather than a proposal, may instead be declined (the approver does not take it
+          up, with a reason) | needs-info (sent back to its consumer for more information))
     approval: { by_role: approver }
 
   - name: capture
