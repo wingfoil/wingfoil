@@ -2,7 +2,7 @@
 id: dl-163-consumer-projects-feedback-sources-and-the-feedback-loop
 type: decision-log
 title: "Consumer projects' feedback sources and the feedback loop"
-status: in-discussion
+status: ready
 context: "retrospective"
 release: "v0.3"
 contributor: ""
