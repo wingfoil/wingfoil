@@ -5,7 +5,7 @@ kind: sub
 description: >-
   Retire the product (or a major line) at end of life: announce, deprecate active Memory and
   releases, and archive. Documents remain in the repo (agents ignore deprecated content).
-version: 1.1                     # 1.1 spec-003 alignment (task-199): deprecate acts on a selection (W_PHASE_ACTION_UNTARGETED), git.commit takes a key: value argument
+version: 1.1                     # 1.1 spec-003 alignment (task-199): deprecate acts on a selection — the closing release-line's unreleased releases (W_PHASE_ACTION_UNTARGETED; approver ruling 2026-10-07), git.commit takes a key: value argument
 
 phases:
   - name: announce
@@ -19,17 +19,19 @@ phases:
     approval: { by_role: approver }
 
   - name: deprecate
-    description: "Deprecate the releases, ADRs and decision-logs still in force."
+    description: "Deprecate the releases of the release-line being closed that are not yet released."
     role: tech-lead
-    # Selection (spec-003 § "Selections"): every release not yet released and every ADR and decision-log
-    # not yet archived — the elements `memory.deprecate` acts on (spec-017 §4.2). The phase is complete
-    # when none is left. `superseded` is no deprecate target: only a later element's `supersedes:` reaches it
-    # (memory.yaml `adr` `waiting: [ accepted ]`).
+    # Selection (spec-003 § "Selections"): the releases of the release-line being closed (sw-life-cycle's
+    # bound release-line; dl-159 keeps release lines parallel, so the scope is one line, not the project)
+    # that are not yet released — the elements `memory.deprecate` acts on (spec-017 §4.2). The phase is
+    # complete when none is left. How ADRs and decision-logs are retired at end of life is a follow-up
+    # decision-log's (approver ruling 2026-10-07, task-199 review).
     where:
-      type: [release, adr, decision-log]
-      status: [draft, planning, in-development, releasing, pending, accepted, in-discussion, ready]
+      type: release
+      release-line: "{release-line.version}"
+      status: [draft, planning, in-development, releasing]
     actions:
-      - memory.deprecate                        # each selected element: any state -> deprecated
+      - memory.deprecate                        # each selected release: any state -> deprecated
     checks:
       post: ["deprecated content excluded from agent context and default search (REQ-STATE-06)"]
 

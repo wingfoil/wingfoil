@@ -95,8 +95,8 @@ defining a second one".
    approve targets the bound element (the release, spec-017 §4.2); the typed form targets the
    decision-log `capture` created and, under `approval:`, emits `approve` (spec-003 verb rule) —
    `wf(decision-log): approve retro-{version} [in-discussion → ready]`.
-6. *`end-of-life.deprecate`'s selection*: `type: [release, adr, decision-log]`, `status: [draft, planning,
-   in-development, releasing, pending, accepted, in-discussion, ready]` — what the phase description names.
+6. *`end-of-life.deprecate`'s selection* — as first written, `type: [release, adr, decision-log]` with
+   every not-yet-archived state; the approver restricted it at review (below).
 7. *Manual action bindings.* `git.create_branch(task: "{task.id}")` / `git.create_worktree(task: …)`:
    open question 6 keeps the `task/` prefix out of the value, and an argv binding cannot add it
    (`E_BINDING_PARTIAL_INTERPOLATION`), so the binding is `manual` and the prefix stays git-conventions
@@ -210,7 +210,26 @@ the line citations into the edited workflow files in spec-003/spec-017 now name 
 
 **Pending amendments (approver)** — uncommitted in the worktree, for `memory amend`:
 - `spec-003-workflows-yaml-schema` — `--reason "task-199: bindings.yaml is a dl-149 file kind (dl-153 (A)); a selection's types are in scope for its action arguments; open question 6 settled; the repository re-measured after the workflow alignment, citations into the edited workflow files by phase and key. See the 2026-10-07 Revision note."`
-- `spec-017-workflow-commands-and-state-deduction` — `--reason "task-199: §4.1 gains the selection scope rule; §12 re-measured after the workflow alignment (zero errors, 61 unbound checks, 27 checkpoints, 6 finalize approvals; the pinned build 0.2.2 no longer loads the workflow files); §2 no longer names roles.yaml; §4.2, §5.1 and §5.2 follow. See the 2026-10-07 Revision note."`
+- `spec-017-workflow-commands-and-state-deduction` — `--reason "task-199: §4.1 gains the selection scope rule; §12 re-measured after the workflow alignment (zero errors, 61 unbound checks, 27 checkpoints, 6 finalize approvals; build-backlog's selection never empties and the phase completes through §4.7; the pinned build 0.2.2 no longer loads the workflow files); §2 no longer names roles.yaml; §4.2, §5.1 and §5.2 follow. See the 2026-10-07 Revision note."`
 
 Note: `test/docs/name-resolvability.test.ts` passes only with the spec-003 amendment applied — the
 committed spec-003 still cites `agent.verify_specs`, which no configuration file carries after this task.
+
+### Review fixes / rulings (2026-10-07)
+
+Review: approve with fixes. Approver rulings relayed by the coordinator:
+- **F1** (pinned build 0.2.2 cannot read the `{ type, path }` `produces`): disclosed in the refactor notes,
+  `CLAUDE.md` §3, `.wingfoil/README.md` and spec-017 §12 (`c1c2ef59`).
+- **F3** (a), accepted: `build-backlog`'s selection never empties — its `ready` decision-logs stay
+  `ready` (`dl-017`) — so the phase completes through spec-017 §4.7 once `commit-backlog`'s state
+  evidence holds, and until then `status` / `next` show it on the frontier; stated in spec-017 §12's
+  re-measure. (c) "selection as scope vs evidence" is a follow-up decision-log the coordinator files.
+- **D6**: `end-of-life.deprecate` selects only the releases of the release-line being closed that are
+  not yet released — `where: { type: release, release-line: "{release-line.version}", status: [draft,
+  planning, in-development, releasing] }` (release-line scoping, consistent with `dl-159`'s parallel
+  lines); ADRs and decision-logs leave the selection (a follow-up DL decides how they are retired).
+  Same `version: 1.1`, its header reason updated; `WORKFLOW.md`'s node follows; the conformance suite
+  pins the selection. `{release-line.version}` resolves on sw-life-cycle's include path (the build's
+  `loadWorkflowRegistry` → 61 `W_WORKFLOW_UNBOUND_TOKEN`, nothing else).
+- **D3**: `dev-loop.yaml` stays `1.41`.
+

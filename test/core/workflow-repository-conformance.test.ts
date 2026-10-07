@@ -309,6 +309,15 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
     ]);
   });
 
+  it('end-of-life.deprecate selects only the closing release-line\'s unreleased releases (approver ruling 2026-10-07)', () => {
+    const endOfLife = registry().workflows.find((w) => w.name === 'end-of-life')!;
+    expect(endOfLife.phases.find((p) => p.name === 'deprecate')?.where).toEqual({
+      type: 'release',
+      'release-line': '{release-line.version}',
+      status: ['draft', 'planning', 'in-development', 'releasing'],
+    });
+  });
+
   it('retrospective.approve declares the transition it stands for: wf(decision-log): approve retro-{version}', () => {
     const retrospective = registry().workflows.find((w) => w.name === 'retrospective')!;
     const approve = retrospective.phases.find((p) => p.name === 'approve')!;

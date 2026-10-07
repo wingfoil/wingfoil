@@ -318,7 +318,7 @@ content, REQ-STATE-06).
 ```mermaid
 flowchart TD
     AN["**announce** *(product-owner)*\nmemory.add(type: decision-log) 'End-of-life plan'\n✔ P4.12: [title]\n🔑 Approval gate — *approver*"]
-    DE["**deprecate** *(tech-lead)*\nselection: releases, ADRs, decision-logs still in force\nmemory.deprecate on each selected element\n✔ deprecated content excluded from agent context"]
+    DE["**deprecate** *(tech-lead)*\nselection: the closing release-line's releases not yet released\nmemory.deprecate on each selected release\n✔ deprecated content excluded from agent context"]
     AR["**archive** *(tech-lead)*\ngit.commit(message: 'end-of-life: archive')\nfreeze the repository line"]
 
     AN --> DE --> AR
