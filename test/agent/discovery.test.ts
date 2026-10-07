@@ -17,8 +17,8 @@ const FAKE = readFileSync(join(__dirname, '..', 'fixtures', 'agents', 'custom', 
 /** The fake manifest renamed to `name`. */
 const renamed = (name: string): string => FAKE.replace(/^name: fake$/m, `name: ${name}`);
 
-/** A minimal built-in manifest (built-ins must carry `verified_with`). */
-const builtIn = (name: string): string => `${renamed(name)}verified_with: "fake 1.0.0"\n`;
+/** A built-in manifest: built-ins must carry `verified_with`, which the fake fixture declares (task-200). */
+const builtIn = (name: string): string => renamed(name);
 
 describe('adapter discovery and loading', () => {
   let repo: string;
@@ -183,7 +183,11 @@ describe('adapter discovery and loading', () => {
       );
       const details = errorDetails(result.error);
       expect(details).toHaveLength(1);
-      expect(details[0]).toMatchObject({ code: 'E_INVALID_FORMAT', path: 'format', file: 'HEAD:.wingfoil/agents/custom/fake.yaml' });
+      expect(details[0]).toEqual({
+        file: 'HEAD:.wingfoil/agents/custom/fake.yaml',
+        detail: 'format: this file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil',
+      });
+      expect(result.error.details?.issues).toEqual([expect.objectContaining({ code: 'E_INVALID_FORMAT', path: 'format', file: 'HEAD:.wingfoil/agents/custom/fake.yaml' })]);
     });
 
     it('a manifest that is not YAML is refused with the same prefix', () => {

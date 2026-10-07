@@ -1,9 +1,8 @@
-# The fake adapter (spec-016 §2.7): a CUSTOM adapter in the test fixtures, so the path tests exercise
-# is the one every project adapter takes. It declares every §2.2 field (task-177, task-200), and
-# launches `test/fixtures/agents/fake-agent.cjs` by its repository-relative path, resolved against the
-# agent's working directory. `terminal: optional` lets the interactive success path run with no
-# terminal; `fake-terminal.yaml` is the same adapter with `terminal: required` (the NO_TERMINAL case).
-name: fake
+# The fake adapter with a terminal requirement (spec-016 §2.7, task-200): `fake.yaml` field for field,
+# except its name and `launch.interactive.terminal: required`, declared explicitly. Under Jest and CI
+# the child has no terminal, so `agent execute` refuses it with NO_TERMINAL at §3.3 step 12, the last
+# check before the spawn: every earlier refusal of §3.7 is reachable with either fixture.
+name: fake-terminal
 format: 1
 command: node
 verified_with: fake-agent 1.0.0
@@ -11,7 +10,7 @@ version_args: [ test/fixtures/agents/fake-agent.cjs, --version ]
 launch:
   interactive:
     args: [ test/fixtures/agents/fake-agent.cjs, --mcp-config, "{mcp_config_file}", --prompt, "{bootstrap}" ]
-    terminal: optional
+    terminal: required
   headless:
     args: [ test/fixtures/agents/fake-agent.cjs, --headless, --mcp-config, "{mcp_config_file}", --prompt, "{bootstrap}" ]
     output: json

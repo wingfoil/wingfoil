@@ -360,6 +360,8 @@ describe('AC 3 — required-with rules', () => {
 
   it('verified_with is required on a built-in, and optional on a custom adapter', () => {
     const manifest = fake();
+    delete manifest.verified_with;
+    expect(issuesOf(manifest, 'custom')).toEqual([]);
     expectIssue(issuesOf(manifest, 'built-in'), 'verified_with', /required.*built-in/);
     manifest.verified_with = 'fake 1.0.0';
     expect(issuesOf(manifest, 'built-in')).toEqual([]);

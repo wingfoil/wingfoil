@@ -34,7 +34,9 @@ export const WORKFLOWS_YAML_FORMAT = 1 as const;
 export const WORKFLOW_FORMAT = 1 as const;
 /**
  * An agent adapter manifest (`spec-016` §2.2 `format`, task-177) — the first kind that carried the key.
- * Unlike the others it is required and read as a literal (`src/agent/schema.ts`).
+ * Unlike the others it is required and read as a literal (`src/agent/schema.ts`); like the others, a
+ * newer one is refused by {@link refuseNewerFormat} before the structural pass (`parseAdapterManifest`,
+ * task-200, `bug-242`).
  */
 export const ADAPTER_MANIFEST_FORMAT = 1 as const;
 

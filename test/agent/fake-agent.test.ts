@@ -295,7 +295,9 @@ describe('AC 2 — driven directly, the fake fetches the {role}-session Prompt f
 
     const [entry, ...rest] = records(recordFile);
     expect(rest).toEqual([]);
-    expect(entry!.argv).toEqual(argv);
+    // The script records what follows its own path: argv[0] of the launch is the script itself.
+    expect(argv[0]).toBe(FAKE_SCRIPT_REL);
+    expect(entry!.argv).toEqual(argv.slice(1));
     expect(entry!.mcp?.server?.name).toBe('wingfoil');
     expect(entry!.mcp?.prompt).toEqual({ name: 'developer-session', arguments: { element, state: sha } });
     expect(entry!.mcp?.error).toBeUndefined();

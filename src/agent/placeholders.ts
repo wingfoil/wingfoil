@@ -1,7 +1,9 @@
 /**
  * The adapter manifest's placeholders (`spec-016` §2.3, task-177): a **closed** set, each filling one
  * or more **whole** argv elements, never part of one (`dl-090` Q3 (a): "argv, no shell. … Interpolation
- * fills whole arguments only"), and each legal only in the fields §2.3 lists.
+ * fills whole arguments only"), and each legal only in the fields §2.3 lists. Some are also
+ * **required** where a declared choice depends on them (task-200, `bug-234`): a manifest that
+ * validates can launch.
  *
  * This module only checks a manifest; it renders nothing. Rendering is `agent execute`'s (§3.3
  * step 10), a later task's.
@@ -149,4 +151,54 @@ export function placeholderIssues(manifest: ManifestInput, file: string): Valida
     }),
     ...argvIssues(manifest.summary?.export_args, 'summary.export_args', file, none),
   ];
+}
+
+/** Whether some element of `args` is exactly the placeholder `name`. */
+function carries(args: readonly string[] | undefined, name: AdapterPlaceholder): boolean {
+  return (args ?? []).includes(`{${name}}`);
+}
+
+/**
+ * The placeholders a declared choice makes **required** (`spec-016` §2.3, task-200, `bug-234`), so that
+ * a manifest that validates can launch:
+ * - every declared launch's `args` carries the placeholder of `prompt.via` (`{bootstrap}` for `arg`,
+ *   `{bootstrap_file}` for `file`; `stdin` needs none) and of `mcp.via` (`{mcp_config_file}` for
+ *   `config-file`; `{mcp_command}` and `{mcp_args}` for `args`) — without it the agent starts without
+ *   its bootstrap, or without the `wingfoil` server `adr-012` makes mandatory;
+ * - `session.assign_args`, when `session.id` is `assign`, carries `{session_id}` — without it the
+ *   assigned id never reaches the agent, and the run record names a session that does not exist;
+ * - `session.resume.args`, when `session.resume.supported` is `true`, carries `{session_id}`.
+ * An absent field is §2.2's "required with" rule (`E_ADAPTER_MANIFEST`), not reported again here.
+ *
+ * @param manifest - A manifest Pass 1 has accepted.
+ * @param file - The label every issue carries (`<rev>:<path>`).
+ */
+export function requiredPlaceholderIssues(manifest: ManifestInput, file: string): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const need = (args: readonly string[] | undefined, path: string, name: AdapterPlaceholder, when: string, why: string): void => {
+    if (args === undefined || carries(args, name)) return;
+    issues.push({ code: E_ADAPTER_PLACEHOLDER, path, file, message: `{${name}} is required with ${when}: ${why} (spec-016 §2.3)` });
+  };
+  const launches: [string, readonly string[] | undefined][] = [
+    ['launch.interactive.args', manifest.launch.interactive.args],
+    ['launch.headless.args', manifest.launch.headless?.args],
+  ];
+  for (const [path, args] of launches) {
+    const noBootstrap = 'without it the agent starts without its bootstrap';
+    if (manifest.prompt.via === 'arg') need(args, path, 'bootstrap', 'prompt.via: arg', noBootstrap);
+    if (manifest.prompt.via === 'file') need(args, path, 'bootstrap_file', 'prompt.via: file', noBootstrap);
+    const noServer = 'without it the agent runs without the wingfoil MCP server (adr-012)';
+    if (manifest.mcp.via === 'config-file') need(args, path, 'mcp_config_file', 'mcp.via: config-file', noServer);
+    if (manifest.mcp.via === 'args') {
+      need(args, path, 'mcp_command', 'mcp.via: args', noServer);
+      need(args, path, 'mcp_args', 'mcp.via: args', noServer);
+    }
+  }
+  if (manifest.session.id === 'assign') {
+    need(manifest.session.assign_args, 'session.assign_args', 'session_id', 'session.id: assign', 'without it the assigned id never reaches the agent');
+  }
+  if (manifest.session.resume.supported) {
+    need(manifest.session.resume.args, 'session.resume.args', 'session_id', 'session.resume.supported: true', 'without it the agent cannot be told which session to resume');
+  }
+  return issues;
 }
