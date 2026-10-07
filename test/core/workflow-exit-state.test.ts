@@ -243,6 +243,14 @@ describe('workflowExitStates — spec-017 §4.4', () => {
     expect(states['sweep']).toMatchObject({ held: [], exit: 'draft' });
   });
 
+  it('F3: a typed set_state on a phase that selects its type holds the selected gate whose approve target it names', () => {
+    const wf = workflow('name: w\nkind: sub\nelement: release\nphases:\n  - name: c\n    where: { type: task, status: [pending, in-review] }\n    actions: [ task.set_state(backlog) ]\n');
+    expect(workflowExitStates(wf, MEMORY, { boundType: 'release', state: 'draft', instance: false })[0]).toMatchObject({
+      exit: 'draft',
+      held: [{ type: 'task', gate: 'pending', reject: 'draft' }],
+    });
+  });
+
   it('a plain include of a sub declaring its own element, from an unbound workflow, starts at that type\'s first state', () => {
     const outer = workflow('name: outer\nkind: sub\nphases:\n  - name: plan\n    include: release-planning\n');
     const states = workflowExitStates(outer, MEMORY, { boundType: null, state: null, instance: false }, new Map([['release-planning', RELEASE_PLANNING]]));

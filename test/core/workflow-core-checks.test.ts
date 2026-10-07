@@ -16,7 +16,9 @@ import { join } from 'path';
 
 // Through the `src/core` barrel: the public surface task-198/199/204/211 import.
 import { CORE_MODULES, loadWorkflowRegistry, loadWorkflowRegistryAtHead, loadWorkflowRegistryAtRev, workflowCoreDiagnostics } from '../../src/core';
-import { ValidationError } from '../../src/validation';
+import { MemoryYaml } from '../../src/memory/schema';
+import { parseYaml, ValidationError } from '../../src/validation';
+import { Workflow } from '../../src/workflow/schema';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 interface Diag {
@@ -428,6 +430,55 @@ describe('spec-003 § Diagnostics — the core rows (task-194)', () => {
 describe('workflowCoreDiagnostics — pure', () => {
   it('reads only its arguments: an empty registry, or no memory.yaml and no dna.yaml, gives nothing', () => {
     expect(workflowCoreDiagnostics({ include: [], workflows: [], bindings: null }, { memoryYaml: null, dnaYaml: null, templateFields: () => null })).toEqual([]);
+  });
+
+  // Review F1: two distinct problems at one path are two diagnostics; only the same problem raised on
+  // two include paths is reported once.
+  const PURE_MEMORY = MemoryYaml.parse(parseYaml(MEMORY_YAML, 'memory.yaml'));
+  const pure = (workflows: unknown[], dnaYaml: unknown = null): Diag[] =>
+    workflowCoreDiagnostics(
+      { include: workflows.map((_, i) => `f${i}.yaml`), workflows: workflows.map((w) => Workflow.parse(w)), bindings: null },
+      { memoryYaml: PURE_MEMORY, dnaYaml: dnaYaml as never, templateFields: () => new Set(['id', 'title']) },
+    ) as Diag[];
+
+  it('F1: two out-of-scope tokens in one action are two warnings', () => {
+    const got = pure([{ name: 'main', kind: 'main', element: 'task', phases: [{ name: 'a', actions: ['git.x(a: "{foo.id}", b: "{bar.id}")'] }] }]);
+    expect(got.map((d) => d.message)).toEqual([
+      "token '{foo.id}' names no enclosing element (in scope: task)",
+      "token '{bar.id}' names no enclosing element (in scope: task)",
+    ]);
+  });
+
+  it('F1: every key problem of a dna.yaml list is its own error', () => {
+    const dna = { team: { roles: [], members: [] }, modules: [{ name: 'Bad One', path: 'a' }, { name: 'Bad One', path: 'b' }, { path: 'c' }] };
+    const got = pure(
+      [
+        { name: 'main', kind: 'main', phases: [{ name: 'a', include: 'sub', iterate_over: 'dna:modules' }] },
+        { name: 'sub', kind: 'sub', phases: [{ name: 'g' }] },
+      ],
+      dna,
+    );
+    expect(got.map((d) => `${d.code} ${d.path} ${d.message}`)).toEqual([
+      "E_WORKFLOW_COLLECTION_UNRESOLVED phases[0].iterate_over collection 'dna:modules' entry 0: collection key 'Bad One' is outside the ID characters [a-z0-9-.]",
+      "E_WORKFLOW_COLLECTION_UNRESOLVED phases[0].iterate_over collection 'dna:modules' entry 1: collection key 'Bad One' is outside the ID characters [a-z0-9-.]",
+      "E_WORKFLOW_COLLECTION_UNRESOLVED phases[0].iterate_over collection 'dna:modules' entry 1: duplicate collection key 'Bad One'",
+      "E_WORKFLOW_COLLECTION_UNRESOLVED phases[0].iterate_over collection 'dna:modules' entry 2: a collection entry map needs an id or name field",
+    ]);
+  });
+
+  it('F3: a typed set_state on a selection of its type holds the gate it approves out of (fallback mismatch fires as for memory.approve)', () => {
+    const phase = (action: string) => ({
+      name: 'a',
+      where: { type: 'task', status: 'pending' },
+      actions: [action],
+      approval: { by_role: 'developer' },
+      fallback: { step: 'a', set_state: 'done' },
+    });
+    const expected = ["W_PHASE_FALLBACK_STATE_MISMATCH phases[0].fallback.set_state fallback set_state 'done' differs from the reject target 'draft' of task gate 'pending'"];
+    for (const action of ['memory.approve', 'task.set_state(backlog)']) {
+      const got = pure([{ name: 'main', kind: 'main', phases: [phase(action)] }]);
+      expect(got.map((d) => `${d.code} ${d.path} ${d.message}`)).toEqual(expected);
+    }
   });
 });
 
