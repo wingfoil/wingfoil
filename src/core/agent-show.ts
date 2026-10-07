@@ -23,7 +23,6 @@ import {
   RUN_RECORD_KEYS,
   RUN_TOKEN_KEYS,
   runIdElementId,
-  serializeRunRecord,
   type RunRecord,
 } from '../agent/run-log';
 import { readPathAtRev, runGitRead, StorageError } from '../storage';
@@ -85,7 +84,8 @@ const FULL_SHA_RE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
  * newest first. That list holds the commits that removed a copy of the line too: a side branch that
  * dropped or reverted it and was merged keeping it, since a merge that equals neither parent makes
  * git walk both (task-220 review F2). So each listed commit is checked in order, and the first whose
- * log blob holds the record's exact line is the one that added the line `HEAD` holds. A merge itself
+ * log blob holds the line's exact bytes — as `commit`'s blob stores them, never re-serialized (R1) —
+ * is the one that added the line `HEAD` holds. A merge itself
  * is not diffed, so a record that arrived through one is attributed to the commit on its branch that
  * wrote it.
  *
@@ -94,7 +94,12 @@ const FULL_SHA_RE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
  */
 function addingCommit(root: string, commit: string, logPath: string, record: RunRecord): CoreResult<string> {
   const needle = `{"id":${JSON.stringify(record.id)},`;
-  const line = serializeRunRecord(record).replace(/\n$/, '');
+  // The line's bytes as `commit` stores them — not a re-serialization, which differs from a valid line
+  // written with a `\u` escape or a CRLF ending (re-review R1). The reader has accepted that blob, so
+  // it holds exactly one line of this id (§4.5: ids are unique) and it opens with the needle.
+  const lines = (readPathAtRev(root, commit, logPath) ?? '').split('\n');
+  const line = lines.find((candidate) => candidate.startsWith(needle));
+  if (line === undefined) return coreErr({ code: 'IO', message: `run ${record.id}: its line is not in ${logPath} at ${commit}` });
   let stdout: string;
   try {
     stdout = runGitRead(root, ['log', '--no-show-signature', '-S', needle, '--format=%H', commit, '--', logPath]).stdout;
