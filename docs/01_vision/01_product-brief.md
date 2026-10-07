@@ -1,6 +1,6 @@
 # Product Brief — WingFoil
 
-**Version:** 1.8
+**Version:** 1.9
 **Date:** 2026-10-07  
 **Status:** Approved
 
@@ -146,7 +146,8 @@ AI agents as the team (`dl-113-personas-revisited`; the full profiles are in [`0
 - **Profile:** Product manager, team lead, or stakeholder. Does not write code. Cares about delivery and velocity.
 - **Pain:** Unclear what's been decided, what the process is, what risks exist, and what the team's actual progress is.
 - **Goal with WingFoil:** Read-only views over Memory and workflow state: decisions and their reasons, pending
-  approvals, release progress. Casey reads the project's state and never changes it.
+  approvals, release progress. Casey changes state only through an approval the DNA assigns to Casey (the
+  `approver` role, or an approval naming Casey), as `dl-162` rules; Casey's own goals are read-only views.
 
 ### The Maintainer — Receiving AI-Generated Contributions
 

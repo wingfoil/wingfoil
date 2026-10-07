@@ -1,7 +1,7 @@
 # Personas — WingFoil
 
-**Version:** 1.1
-**Date:** 2026-10-06
+**Version:** 1.2
+**Date:** 2026-10-07
 **Status:** Approved
 
 ---
@@ -98,9 +98,11 @@ journeys, the features' persona column and the User Story Map that name them sta
 - **AI usage level:** Review (agents' outputs) → Planning (project roadmap, specs)
 - **Pain:** Unclear what's been decided, what the process is, what risks exist. Relies entirely on secondhand
   information from technical leads. Can't tell if an agent's output is correct or aligned with intent.
-- **Goals with WingFoil:** Casey needs to read the project's state, never to change it, so each goal is a **read-only
-  view** over Memory and workflow state (`dl-113-personas-revisited`, Q2 (a)). The views are delivered by read commands
-  and later by a user interface, which `dl-008-cli-first-no-gui` keeps out of the MVP.
+- **Goals with WingFoil:** Casey's own goals are **read-only views** over Memory and workflow state
+  (`dl-113-personas-revisited`, Q2 (a)), delivered by read commands and later by a user interface, which
+  `dl-008-cli-first-no-gui` keeps out of the MVP. Casey changes state only through an approval the DNA assigns to Casey
+  (the `approver` role, or an approval naming Casey), as `dl-162` rules: approval follows the role, not the persona
+  (REQ-SYS-08).
     - Decisions and their reasons: what was decided, by whom, when and why, at a glance (the audit trail)
     - Pending approvals: where a human decision is required and alignment or review is needed
     - Release progress: workflow state, and the bottlenecks that hold it back
