@@ -86,6 +86,18 @@ A `resources/read` request against any resolvable URI returns:
 An unresolvable URI (unknown type, unknown id, malformed scheme) returns a standard MCP "resource not
 found" error — this is a read-path error, distinct from the write-refusal below.
 
+A Memory read reports the files it could not read — a document whose frontmatter does not parse, a
+symbolic link, a document written in a newer `format:` — as the CLI does: one `W_MEMORY_UNREADABLE`
+line per file (`spec-017` §1.4), in path order, in a top-level `warnings` array beside `contents`
+(`["W_MEMORY_UNREADABLE (<file>): unreadable frontmatter in <file>: <reason>", …]`). A collection read
+(`wingfoil://memory/{type}`) scans every document and reports every such file. A single-document read
+(`wingfoil://memory/{type}/{id}`) is a lookup that stops at its match, so it reports only the files it
+passed, in path order, before reaching the document; a file after the match is not read and not
+reported. A read that left nothing out carries no `warnings` field. A single-document read that finds
+nothing has passed every file, and still answers "resource not found", with those lines as
+`error.data.details` (`[{"detail": "<line>"}, …]`, §4.3 item 4), since the document may be one of them. Every Resource derived from a
+core operation carries that operation's warnings the same way.
+
 #### 2.3 Write refusal (fit criterion, verbatim)
 
 The Resources channel implements **no** `resources/write` capability. Per REQ-INT-01 / REQ-SEC-05, any
@@ -111,6 +123,18 @@ e.g. `developer-session`, `reviewer-session`. `prompts/list` returns this fixed 
 server start — it is not hand-maintained. `wingfoil mcp` reads the set once, in its pre-flight
 (`spec-014` §1), and it holds for the server's life: a role added to `dna.yaml` while the server runs
 is served after a restart. The Prompts capability is therefore declared without `listChanged`.
+
+Every `{role}-session` Prompt declares two **optional** arguments, in this order (`spec-016` §2.4,
+approver ruling R18, `adr-012` point 3):
+
+| Argument | Value |
+|---|---|
+| `element` | the Memory element the context is built for, as a `spec-008` §7 element-ref `<type>:<id>` |
+| `state` | the commit the context is read at: a sha, as `agent execute` passes it, or any name of one commit, resolved once (`spec-012` §2 `stateRef`) |
+
+They are given together or not at all (§3.4). An argument whose value is the empty string counts as
+absent: both empty is the argument-less Prompt, and one empty beside one set is the "one without the
+other" refusal. (A client that submits every declared argument sends `""` for one left blank.)
 
 #### 3.2 Embedding contract
 
@@ -152,6 +176,20 @@ MUST appear in that next call's output — a Prompt's content is resolved per-re
 server boot (fit criterion: "a newly assigned directive appears on the next session start"). Only
 the role set of §3.1 is fixed at start.
 
+**With `element` and `state`** the Prompt carries the execution context instead: one `user` message
+whose text is the `spec-012` §7 payload for `(role, element, state)`, byte for byte as the context
+builder (`assembleExecutionContext`) returns it — never re-serialized by the server. `state` is
+resolved to one sha before anything is read, and every read is at that sha (`spec-012` §2), not
+per request against the working tree: a later commit, or an uncommitted edit of the element, does not
+change the answer. The payload's own header records the sha.
+
+The context's diagnostics are never part of the payload (`spec-012` §5.1, `dl-050`). They ride beside
+`messages` in a top-level `warnings` array, as a Resource read's do (§2.2), in this order: the role's
+directive-resolution warnings (`spec-012` §5.1 order), then the builder's notes (`spec-012` §3 stage
+order: no module matched, no relevant Memory), then the `W_MEMORY_UNREADABLE` lines of the files the
+Memory scan left out (path order). A context with none carries no `warnings` field. Without arguments,
+the Prompt is exactly the role header and directive blocks above.
+
 #### 3.3 No mutation
 
 Prompts are, like Resources, read-only: invoking a Prompt returns instructional text; it has no side
@@ -169,10 +207,23 @@ sends the message exactly as below:
 |---|---|
 | `prompts/get("{R}-session")`, `R` not in the role set | `no prompt for undefined role '<R>'` |
 | `prompts/get(<name>)`, `<name>` not of the form `{role}-session` | `Prompt <name> not found` |
+| an argument other than `element` and `state` (the first, by name) | `unknown prompt argument '<arg>': '<name>' takes only 'element' and 'state'` |
+| `element` without `state`, or `state` without `element` (an empty value counts as absent, §3.1) | `prompt arguments 'element' and 'state' go together: '<missing>' is missing` |
+| `element` not an element-ref (`spec-008` §7's grammar: exactly one `:`, both sides non-empty, no whitespace, control character or `-->`) | `malformed element-ref <element as JSON string>: expected <type>:<id>` |
+| `state` malformed as a revision | `malformed revision <state as JSON string>: a revision is a non-empty name with no leading '-', no whitespace or control character, no ':' and no '..'` |
+| `state` naming no commit (an unknown name, a tree or blob sha) | `revision <state as JSON string> does not name a commit` |
+| `element` not held by the commit `state` names | `element '<type>:<id>' not found at <sha>`; the `W_MEMORY_UNREADABLE` lines of the files the scan could not read, when there are any, as `error.data.details` |
+
+The undefined-role and name refusals come first; the argument refusals are checked in the table's
+order.
 
 An SDK client renders them as `MCP error -32602: <message>`. A read that fails while the prompt is
 built (`roles.yaml`, a directive file) carries the loader's operator-facing details as
-`error.data.details`, as a failed Resource read does (§4.3 item 4).
+`error.data.details`, as a failed Resource read does (§4.3 item 4). So does a context the builder
+refuses for what the repository holds rather than for the request — an archived subject, a subject
+written in a newer `format:` (`dl-149` `E_INVALID_FORMAT`), a pillar file the commit lacks (`invalid
+execution context: missing '<section>' section`, its cause as a detail): a failed read, with the
+builder's message, not a `-32602`.
 
 ### 4. Tools (REQ-INT-03, REQ-SYS-05)
 
@@ -255,6 +306,7 @@ Each Tool's input schema mirrors its CLI's required flags one-to-one (e.g. `memo
    `structuredContent: {"value": <payload>, "warnings": ["<text>", …]}`, the success counterpart of
    item 4's `{error, details}`. The text content stays the payload's JSON, so a client that reads
    only `content` sees what it always saw. A success with no warnings carries no `structuredContent`.
+   A Resource read and a Prompt carry theirs as a top-level `warnings` array (§2.2, §3.2).
    This is the registrar's rule (`src/mcp/registrar.ts`). The shipped `wingfoil mcp` server registers
    no Tools until P5.2.3 (v0.4), so no client receives the field yet. When Tools ship, a flag such as
    `directive assign`'s `--force` must become a Tool input as well.
@@ -440,3 +492,18 @@ from `<from>`, which on a refusal is always `(none)`; the example shows that str
 `test/memory/state-machine.test.ts`. No Tool, Resource or rule of this spec changed: §4.3 item 3's
 "rejected identically to the CLI path" holds. Edited in place without a supersede or a state change,
 per `dl-047` (no `version:` field).
+
+**Revision (2026-10-06, `task-195-role-session-mcp-prompt-accepts-element-state-returns`) — §3.1–§3.4:
+the `{role}-session` Prompt takes `element` and `state` and carries the `spec-012` §7 payload; §2.2 and
+§4.3 item 5: reads carry `warnings`, per approver ruling R18 (`spec-016` §2.4, `adr-012` point 3),
+`bug-231` and `bug-263`.** §3.1 declares the two optional arguments, an empty value counting as absent;
+§3.2 states the embedding contract with them (the builder's payload resolved at `state`, not per
+request against the working tree) and where the context's diagnostics go; §3.4 fixes the six new
+refusals, all `-32602`, the element-ref grammar being `spec-008` §7's, and states that a refusal about
+the repository (archived or newer-format subject, missing pillar file) is a failed read. The 2026-10-02
+Revision note's "A Resource read is not given a field: no read-only operation returns warnings"
+stopped holding at `task-171`, whose tolerant scans report the documents they leave out: §2.2 now gives
+Memory reads, and every core-derived Resource, a top-level `warnings` array — every unreadable file for
+a collection, the files passed before the match for a single document — and §4.3 item 5 points to it.
+The no-argument Prompt, the URIs, the write refusal and the Tools are unchanged. Edited in place
+without a supersede or a state change, per `dl-047` (no `version:` field).
