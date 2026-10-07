@@ -37,7 +37,7 @@ line count (`awk 'END{print NR}'`).
 
 | Document                                               | Ver | Date       | Status   | Lines | What it contains                                                                                                        |
 |--------------------------------------------------------|-----|------------|----------|-------|-------------------------------------------------------------------------------------------------------------------------|
-| [`01_product-brief.md`](01_product-brief.md)           | 1.7 | 2026-10-06 | Approved | 361   | Executive summary: vision, problem, pillars, differentiators, personas, metrics, GTM, timeline, tech stack, constraints |
+| [`01_product-brief.md`](01_product-brief.md)           | 1.8 | 2026-10-07 | Approved | 361   | Executive summary: vision, problem, pillars, differentiators, personas, metrics, GTM, timeline, tech stack, constraints |
 | [`02_product-vision.md`](02_product-vision.md)         | 1.3 | 2026-10-06 | Approved | 103   | Vision statement, key decisions, and the reference-workflow/methodology-template model                                  |
 | [`03_is-isnot.md`](03_is-isnot.md)                     | 1.4 | 2026-10-06 | Approved | 59    | Scope boundaries: what WingFoil IS / IS NOT / DOES / DOES NOT                                                           |
 | [`04_personas.md`](04_personas.md)                     | 1.1 | 2026-10-06 | Approved | 147   | The primary persona (Morgan) and the 7 personas (Alex, Sam, Jordan, Morgan, Casey, Taylor, the maintainer)              |
