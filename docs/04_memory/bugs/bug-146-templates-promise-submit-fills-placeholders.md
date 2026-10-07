@@ -2,7 +2,7 @@
 id: "bug-146-templates-promise-submit-fills-placeholders"
 type: bug
 title: "Every scaffolded Memory template claims `memory submit` \"replaces these placeholder comments with real content\"; `submit` only changes `status:`/`rejection_reason` and leaves the body untouched"
-status: in-review
+status: closed
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
