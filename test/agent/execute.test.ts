@@ -4,9 +4,9 @@
  * meets it is `test/cli/agent-execute.integration.test.ts`.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 
 import {
   agentCommandFound,
@@ -23,6 +23,7 @@ import { CLI_ENTRY, DIST_DIR } from '../cli/helpers/spawn-cli';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
+const REPO_ROOT = join(__dirname, '..', '..');
 
 describe('renderBootstrap (§2.4) — a pure function of (role, element, run id, state_ref)', () => {
   it('is the fixed template, LF-terminated, with the context instruction and the handoff line', () => {
@@ -70,18 +71,8 @@ describe('renderMcpTemplate (§2.3) — {mcp_command} and {mcp_args} in mcp.temp
 });
 
 describe('withRunFiles (§2.3) — the temporary files live in the OS temporary directory and are removed on every exit path', () => {
-  let tmp: string;
-  let previous: string | undefined;
-  beforeEach(() => {
-    tmp = realpathSync(mkdtempSync(join(tmpdir(), 'wf-run-files-')));
-    previous = process.env.TMPDIR;
-    process.env.TMPDIR = tmp;
-  });
-  afterEach(() => {
-    if (previous === undefined) delete process.env.TMPDIR;
-    else process.env.TMPDIR = previous;
-    rmSync(tmp, { recursive: true, force: true });
-  });
+  // `os.tmpdir()` as the module sees it: the process's own temporary directory, never the repository.
+  const base = realpathSync(tmpdir());
 
   it('writes each file under the temporary directory, hands their paths over, and removes them when the work resolves', async () => {
     let seen: Record<string, string> = {};
@@ -89,24 +80,33 @@ describe('withRunFiles (§2.3) — the temporary files live in the OS temporary 
       seen = { ...paths };
       for (const path of Object.values(paths)) {
         expect(existsSync(path)).toBe(true);
-        expect(relative(tmp, realpathSync(path)).split(sep)[0]).not.toBe('..');
-        expect(realpathSync(path).startsWith(`${tmp}${sep}`)).toBe(true);
+        expect(realpathSync(path).startsWith(`${base}${sep}`)).toBe(true);
+        expect(relative(REPO_ROOT, realpathSync(path)).startsWith('..')).toBe(true);
       }
       return 42;
     });
     expect(value).toBe(42);
     expect(Object.keys(seen).sort()).toEqual(['bootstrap_file', 'mcp_config_file']);
-    expect(readdirSync(tmp)).toEqual([]);
+    for (const path of Object.values(seen)) expect(existsSync(dirname(path))).toBe(false);
   });
 
   it('removes them when the work throws, and rethrows', async () => {
-    await expect(withRunFiles({ mcp_config_file: '{}' }, async () => Promise.reject(new Error('boom')))).rejects.toThrow('boom');
-    expect(readdirSync(tmp)).toEqual([]);
+    let seen = '';
+    await expect(
+      withRunFiles({ mcp_config_file: '{}' }, async (paths) => {
+        seen = paths.mcp_config_file!;
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
+    expect(seen).not.toBe('');
+    expect(existsSync(dirname(seen))).toBe(false);
   });
 
-  it('their contents are the rendered texts', async () => {
+  it('their contents are the rendered texts; a file not asked for is not written', async () => {
     await withRunFiles({ bootstrap_file: 'line\n' }, async (paths) => {
       expect(readFileSync(paths.bootstrap_file!, 'utf-8')).toBe('line\n');
+      expect(paths.mcp_config_file).toBeUndefined();
+      expect(readdirSync(dirname(paths.bootstrap_file!))).toEqual(['bootstrap.txt']);
     });
   });
 });
@@ -210,7 +210,7 @@ describe('mcpPreflight (§3.3 step 11) — any failure is MCP_UNREACHABLE', () =
   it('a server that answers the Prompt: ok', async () => {
     const root = makeTempGitRepo();
     try {
-      writeFixtureFile(root, '.wingfoil/dna.yaml', 'version: 1\nmodules: []\nstacks:\n  technologies: []\nteam:\n  roles:\n    - name: developer\npaths: {}\n');
+      writeFixtureFile(root, '.wingfoil/dna.yaml', 'version: 1\nmodules: []\nstacks:\n  technologies: []\nteam:\n  members: []\n  roles:\n    - name: developer\npaths: {}\n');
       writeFixtureFile(root, '.wingfoil/memory.yaml', 'version: 1\ntypes:\n  task:\n    path: "docs/tasks/{id}.md"\n');
       writeFixtureFile(root, '.wingfoil/roles.yaml', 'version: 1.0\nassignments: {}\nglobal: []\n');
       writeFixtureFile(root, 'docs/tasks/task-001-a.md', '---\nid: task-001-a\ntype: task\ntitle: "a"\nstatus: draft\n---\n\nBody.\n');

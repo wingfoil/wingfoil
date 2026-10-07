@@ -105,7 +105,9 @@ function directiveMd(id: string): string {
 }
 
 function elementMd(type: string, id: string, body: string): string {
-  return ['---', `id: ${id}`, `type: ${type}`, `title: "${id}"`, 'release: "v0.1"', 'status: draft', '---', '', body, ''].join('\n');
+  // A shared tag makes the elements relevant to each other (spec-012 §6), so no context has the
+  // "no relevant Memory" note and the warnings a test expects are only its own.
+  return ['---', `id: ${id}`, `type: ${type}`, `title: "${id}"`, 'release: "v0.1"', 'status: draft', 'tags: [ context ]', '---', '', body, ''].join('\n');
 }
 
 /** A manifest derived from the fake's: `fake.yaml` with its `name` and, optionally, other lines replaced. */
@@ -130,6 +132,7 @@ function seed(tweak: (repo: string) => void = () => undefined): string {
   }
   writeFixtureFile(repo, `docs/04_memory/v0.1/${TASK_ID}.md`, elementMd('task', TASK_ID, '## Description\n\nOverride the next step.'));
   writeFixtureFile(repo, `docs/04_memory/bugs/${BUG_ID}.md`, elementMd('bug', BUG_ID, '## Summary\n\nA bug.'));
+  writeFixtureFile(repo, 'docs/04_memory/v0.1/task-203-sibling.md', elementMd('task', 'task-203-sibling', '## Description\n\nA sibling.'));
   // The project's own registration (dl-026), naming a `wingfoil` server that cannot start: §2.5.
   writeFixtureFile(repo, '.mcp.json', '{"mcpServers": {"wingfoil": {"command": "wingfoil-no-such-server", "args": ["mcp"]}}}\n');
   mkdirSync(join(repo, dirname(FAKE_SCRIPT_REL)), { recursive: true });

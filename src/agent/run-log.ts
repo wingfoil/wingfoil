@@ -510,6 +510,11 @@ export function deriveNotesField(root: string, input: DeriveNotesFieldInput): st
   });
 }
 
+/** The subject of the commit that records the run `runId` (§4.4): `agent: record <run-id>`, outside `wf()`. */
+export function recordSubject(runId: string): string {
+  return `agent: record ${runId}`;
+}
+
 /** What a recorded run returns: the record and the commit that holds it. */
 export interface RecordedRun {
   readonly record: RunRecord;
@@ -599,7 +604,7 @@ export function recordRun(root: string, logPath: string, record: RunRecord): Cor
     return keep({ code: 'CONFLICT', message: `run id ${record.id} already recorded at HEAD` });
   }
 
-  const message = `agent: record ${record.id}`;
+  const message = recordSubject(record.id);
   try {
     // task-210's primitive: plans instead of writing under a dry run, and on a refused commit puts the
     // file, any directory it created and the index entry back before throwing a CommitFailure.

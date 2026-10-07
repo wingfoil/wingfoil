@@ -93,6 +93,7 @@ import { prepareSupersede, supersedeReason } from './memory-supersede';
 import { amendReservedFields, requireAmendableEdit, requireAmendableType, requireReadableScaffold, requireRequiredFieldsKept } from './memory-amend';
 import { resolveAddType } from './memory-add-type';
 import { committedScopeError, requireAbsentTarget, requireUnmodifiedTarget } from './write-guard';
+import { agentExecuteFn } from './agent-execute';
 import { agentShowFn, renderAgentShowConsole } from './agent-show';
 import { UsageError } from './usage-error';
 import type { CoreFlag, CoreFn, CoreModule, CoreOption } from './registry';
@@ -2199,12 +2200,28 @@ const directivesListFn: CoreFn<unknown, DirectiveListing> = async (params) => {
 export const CORE_MODULES: readonly CoreModule[] = [
   // task-177 (`spec-016` §1): the `agent` module, registered under the name its operations carry
   // (`agentExecute`, `agentList`, `agentShow`, spec-016 §8). `agentShow` is the first (task-220);
-  // `agentExecute` (task-228) and `agentList` (task-240) join it. `src/agent` holds the adapter manifest
-  // and the run log they read.
+  // `agentExecute` follows (task-218 the pre-launch half, task-228 the launch), and `agentList`
+  // (task-240) joins them. `src/agent` holds the adapter manifest, the run log and the pipeline.
   {
     name: 'agent',
-    description: 'read recorded agent runs (launching an agent arrives with agent execute)',
+    description: 'launch an agent on an element, and read recorded agent runs',
     operations: {
+      // task-218 (`spec-016` §3): `mutates: true` — its one write is the run record's commit (§4.4,
+      // task-228), so it takes `--dry-run`, which prints the launch plan. CLI only in v0.3: the
+      // production server does not run `registerCoreModules`, and the `agent.execute` Tool is v0.4
+      // (spec-016 §7, §8). Reads `HEAD` (spec-008 §11).
+      agentExecute: {
+        name: 'agentExecute',
+        mutates: true,
+        description: 'launch an agent CLI through its adapter on one Memory element, with its context assembled and checked first',
+        options: [
+          { name: 'element', valueName: 'type:id', description: 'the element the agent works on, e.g. task:task-042-login-form' },
+          { name: 'role', valueName: 'role', description: 'the role the agent runs as, a dna.yaml team.roles name (default: developer, with a warning)' },
+          { name: 'agent', valueName: 'name', description: 'the team.agents entry to launch (default: the first with an adapter that executes the role)' },
+        ],
+        example: 'wingfoil agent execute --element task:task-042-login-form --role developer',
+        fn: agentExecuteFn,
+      },
       // task-220 (`spec-016` §6): read-only, and a declared `HEAD` read (§5.1, `spec-006` §6 item 6).
       // Its console rendering is the `key: value` lines §6 defines, not the indented JSON every other
       // command prints until P5.1.4 (`renderConsole`, spec-008 §2). Not served over MCP before v0.4
