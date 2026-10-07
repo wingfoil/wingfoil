@@ -18,7 +18,10 @@ at its Memory (`bug-075`). `task-111-configuration-moves-to-the-repository-root`
 repository root with `git mv` — this directory to `.wingfoil/`, the Memory to `docs/04_memory/` — so
 `wingfoil memory history` keeps each element's trail across the move. Every read command (`dna show`,
 `paths`, `directives list`, `workflow list`, `memory search`, `memory history`) and every Memory
-verb (`submit`, `approve`, `reject`, `deprecate`) now runs on this repository. `memory add` works here
+verb (`submit`, `approve`, `reject`, `deprecate`) now runs on this repository — except that the pinned
+build 0.2.2 cannot read the workflow files since `task-199` gave `produces` the `{ type, path }` form
+(`dl-104` D3): `workflow list` and the MCP resource `wingfoil://workflows` need the dev build
+(`npm run build`, then `node dist/cli.js workflow list`) until the pin advances past 0.2.2. `memory add` works here
 too since `task-123-template-paths-are-relative-to-the-config-root` made every `template.file` value
 relative to this directory (`bug-156`).
 

@@ -189,8 +189,14 @@ v1.0 they fail closed, dl-090 Q2 (c)):
   `npx jest test/core/workflow-core-checks.test.ts test/core/workflow-repository-conformance.test.ts
   test/docs test/lint/version-bump.test.ts` 135 passed; `npx eslint` on the two touched files exit 0.
 - `node dist/cli.js workflow list` (code build) exit 0 with no `unknown field(s) ignored: format`
-  warning; the pinned build 0.2.2 and any build without this task's loader change still print it, since
-  they ignore the key.
+  warning. **The pinned build 0.2.2 no longer reads this repository's workflows** (review F1): its schema
+  takes `produces` entries as strings only, so `npm run -s wingfoil -- workflow list` exits 1 with
+  `E_VALIDATION phases.N.produces.0 (…initial-design.yaml): Invalid input: expected string, received
+  object` (four times) before it reaches `bindings.yaml`, and the `.mcp.json` server (same pin) answers
+  `wingfoil://workflows` with -32603; `npm run check:mcp` still passes because it only lists resources.
+  Unavoidable until `advance-pinned-build` moves the pin past 0.2.2; until then the workflow reads (CLI
+  and MCP) need the dev build (`npm run build && node dist/cli.js workflow list`), as `CLAUDE.md` §3 and
+  `.wingfoil/README.md` now say.
 - BDD: no feature file names these workflow files' tokens (`grep -rn "bindings.yaml\|agent-docs"
   docs/02_requirements/02_bdd/features/` → nothing); no scenario added.
 
@@ -204,7 +210,7 @@ the line citations into the edited workflow files in spec-003/spec-017 now name 
 
 **Pending amendments (approver)** — uncommitted in the worktree, for `memory amend`:
 - `spec-003-workflows-yaml-schema` — `--reason "task-199: bindings.yaml is a dl-149 file kind (dl-153 (A)); a selection's types are in scope for its action arguments; open question 6 settled; the repository re-measured after the workflow alignment, citations into the edited workflow files by phase and key. See the 2026-10-07 Revision note."`
-- `spec-017-workflow-commands-and-state-deduction` — `--reason "task-199: §4.1 gains the selection scope rule; §12 re-measured after the workflow alignment (zero errors, 61 unbound checks, 27 checkpoints, 6 finalize approvals); §2 no longer names roles.yaml; §4.2, §5.1 and §5.2 follow. See the 2026-10-07 Revision note."`
+- `spec-017-workflow-commands-and-state-deduction` — `--reason "task-199: §4.1 gains the selection scope rule; §12 re-measured after the workflow alignment (zero errors, 61 unbound checks, 27 checkpoints, 6 finalize approvals; the pinned build 0.2.2 no longer loads the workflow files); §2 no longer names roles.yaml; §4.2, §5.1 and §5.2 follow. See the 2026-10-07 Revision note."`
 
 Note: `test/docs/name-resolvability.test.ts` passes only with the spec-003 amendment applied — the
 committed spec-003 still cites `agent.verify_specs`, which no configuration file carries after this task.

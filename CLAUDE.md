@@ -81,7 +81,10 @@ phase. The same build's MCP server is registered in `.mcp.json`, and `npm run ch
 
 **Commands that run on this repository**, with the pinned build:
 - the read commands answer on WingFoil's own configuration: `dna show`, `paths`, `directives list`,
-  `workflow list`, `memory search`, `memory history`;
+  `memory search`, `memory history`. The workflow reads — `workflow list` and the MCP resource
+  `wingfoil://workflows` — need the dev build (`npm run build`, then `node dist/cli.js workflow list`)
+  until the pin advances past 0.2.2: 0.2.2 reads a `produces` entry as a string only and refuses the
+  `{ type, path }` entries (`dl-104` D3) `task-199` wrote;
 - `memory submit`, `approve`, `reject` and `deprecate` write their `wf()` commits here;
 - `memory add` works since `task-123` (`bug-156`), but 0.2.1 has no `--set` (`task-110`), so it
   adds only types whose id and path need no field token: `bug`, `adr`, `decision-log`, `tech-spec`,
