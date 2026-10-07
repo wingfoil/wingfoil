@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.20"
+version: "1.21"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -809,3 +809,37 @@ commit, right after the task's transition and on the task branch:
     `task-207`, `219`, `223`, `229`, `230`, `238`, `244` (merge `1810ca9a`).
   - W3 is now 61 tasks (57 + `264`, `265`, `266`, `267`); fix share 5 open of 52 (10%).
   - B2 opened with eight tasks; the B1 latency run is still owed (the machine stayed loaded by other sessions).
+- **2026-10-07 — batch B2 `done`** (`task-264`, `199`, `198`, `200`, `261`, `220`, `260`); `task-223` deferred.
+  - **`task-223` deferred to v0.4** (approver): it stopped at design; a per-type branch list could only be the union
+    of the practised prefixes, and the rule worth enforcing (`dl-014` G1) needs a policy per starting state, to be
+    designed with `dl-159`'s deferred follow-ups. Its design notes were copied into the task, which was deprecated
+    (`524e43c0`; a task's path carries its release, so it was not moved); `dl-106` gains a dated note (Action 2 →
+    v0.4); merge `b968e738`.
+  - **Review.** Every task had an independent review: "approve" for `264`, "approve with fixes" for the rest, every
+    fix applied in-task; focused re-reviews for `198`, `220` (twice: its first fix broke non-canonical run-log
+    lines), `260`, and `195`-style rulings for `199`. Defects found by review and fixed: `198` regressed branch
+    coverage and completed an `awaits` phase without a record; `200`'s fake agent hung post-run lookups, split
+    multi-byte characters and crashed on a non-JSON server line; `220` printed a signature instead of a sha under
+    `log.showSignature` and could name the commit that removed a record; `260`'s schema/audit parity claim was
+    false until the rule was shared; `261` repeated `bug-268`'s defect in its new step.
+  - **Approver rulings (`task-199`):** F3 (a) `build-backlog`'s selection never empties and the phase completes
+    through spec-017 §4.7, written in §12, with a follow-up decision-log; D6 `end-of-life.deprecate` selects only
+    the closing release line's unreleased releases (ADRs and decision-logs to a follow-up decision-log); D3
+    `dev-loop.yaml` stays 1.41. F1: the pinned build 0.2.2 can no longer load this repository's workflow files
+    (`{ type, path }` produces) — disclosed in CLAUDE.md §3 and `.wingfoil/README.md` until the pin advances.
+  - **Amendments: 11 + 1 by hand** — `264`: spec-003; `199`: spec-003, spec-017; `198`: spec-017, spec-003;
+    `200`: spec-016; `220`: spec-006, spec-008, spec-016, and `minor-v0.3` `features:` + P5.3.5 by hand
+    (`3b585e33`, the `release` type is `amendable: false`, precedent `a143909e`); `260`: spec-002.
+  - **Bugs closed:** bug-224, bug-234, bug-242, bug-261, bug-268, bug-269, bug-282.
+  - **Merges,** in order 264 → 199 → 198 → 200 → 261 → 220 → 260 (last `7219d7ac`); conflicts only in Revision
+    notes (both kept), `00_index.md` rows and a test header; integration fix `a04dfc8f` (`08_mvp-canvas.md` 1.10,
+    64 features after P5.3.5).
+  - **Gates on `main`** (`7219d7ac`, clean worktree): `test:coverage` 300 suites, 5712 tests, coverage 99.28 /
+    97.18 / 97.33 / 99.71; lint, `docs:api`, `npm run typecheck`, `check:audit` exit 0; e2e smoke exit 0.
+    Governance `--base 4fd77678`: 63 `wf()` commits, 0 findings.
+  - **Latency:** still owed (B1 and B2); the machine stayed loaded by other sessions (load ≈ 20–30).
+  - **Handovers** (merge `c485e433`): `task-218`, `228`, `202`, `203`, `204`, `216`, `240`.
+  - **Follow-ups:** being filed by `bug-ingest-rel-v0.3-w3b2-review-findings-plan` (three decision-logs among them).
+  - **Fix share:** 3 open fix tasks of 44 open (7%).
+  - **Pause:** after the B2 triage the dev-loop stops before B3, at the approver's request, for the feedback
+    mechanism a separate session introduces between batches.
