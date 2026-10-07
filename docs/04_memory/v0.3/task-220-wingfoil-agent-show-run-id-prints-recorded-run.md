@@ -176,8 +176,8 @@ Coordinator review, 2026-10-07: **APPROVE WITH FIXES**; the task stays `in-revie
 - F3/F4 in `spec-008` (pending amendment, reason updated below): §3's quoted help text matches the
   new one; §2's exception is a sentence of its own after the P5.1.4 sentence, so "its human rendering"
   no longer reads as `agent show`'s.
-- F5 `e82d7a4c`: `01_product-brief.md` 1.7 → 1.8 (2026-10-07), `~63` → `~64` (Estimate) and `63
-  features` → `64 features` (document list); its `00_index.md` row follows (line count unchanged).
+- F5 `e82d7a4c`: `01_product-brief.md` 1.7 → 1.8 (2026-10-07), `63 features` → `64 features`
+  (document list; the line-254 `~63` story-point estimate was changed too and reverted at re-review); its `00_index.md` row follows (line count unchanged).
   task-141's index script (excluded lines `(382,416)`) → `mismatches: []`. `08_mvp-canvas.md:207` is
   task-261's and is left to the gate merge.
 - Defensive arms left untested, by design: the non-`RevisionError` rethrow after `resolveRevision`,
@@ -189,6 +189,11 @@ Coordinator review, 2026-10-07: **APPROVE WITH FIXES**; the task stays `in-revie
   `src/memory/history.ts` (the `--follow` probes) run `git log --format=…` without
   `--no-show-signature`; `git -c log.showSignature=true log --format=%H` on the reviewer's `g3` prints
   `No signature` on stdout before the shas.
+- Re-review R1 (red `3450d10b`, 2 failed; green in the next commit): the F2 fix matched a
+  re-serialized line, so a valid record written with a `\u` escape or a CRLF ending matched no commit;
+  `addingCommit` now takes the line's bytes from `HEAD`'s blob and matches them, and a line edited after
+  it was added is `IO` (tested). `npx jest` on agent-show, registrar, program, `test/agent`, `test/docs`
+  (23 suites) → **351 passed**; lint, both `tsc` 0; index script `mismatches: []`.
 - Gates: `npx jest` on the touched suites + `test/docs` + `test/agent` (28 suites) → **395 passed**;
   `npm run lint` 0; both `tsc` 0; `npm run docs:api` 0; `node scripts/check-governance.cjs --base
   4fd77678` → 0 findings.
