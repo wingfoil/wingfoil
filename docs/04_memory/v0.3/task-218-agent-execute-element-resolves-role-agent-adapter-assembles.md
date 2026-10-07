@@ -8,7 +8,7 @@ kind: "feature"
 priority: "high"
 tags: ["v0.3", "agent", "cli", "refusals"]
 ref: "spec-016"
-bug: ["bug-202"]
+bug: ["bug-202", "bug-290"]
 depends_on: ["task-130-show-coreerror-details-surface-give-refusal-shape-under", "task-169-make-directive-assign-refuse-whole-file-rewrite-unless", "task-176-complete-spec-012-context-builder-dna-selection-relevance", "task-177-adapter-manifests-load-validate-wingfoil-agents-builtin-custom", "task-195-role-session-mcp-prompt-accepts-element-state-returns", "task-200-fake-agent-custom-adapter-let-agent-execute-path", "task-206-agent-execute-records-run-json-lines-line-under"]
 tmpl_version: 260703
 ---

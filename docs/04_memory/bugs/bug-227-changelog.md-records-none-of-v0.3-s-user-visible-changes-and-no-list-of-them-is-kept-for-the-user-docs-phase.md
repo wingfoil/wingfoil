@@ -95,3 +95,19 @@ batch B6 (`dev-loop-rel-v0.3-plan`), reproduced against `main` at `ccccc227`.
   For library users: `filterRelevantMemoryDocuments` reports the documents it leaves out in its result's
   `diagnostics` (`task-253`), and `CONTEXT_PAYLOAD_FORMAT` and `WrittenTimestamp` are exported from the core
   entry, the context payload being pinned as format 1 (`task-255`).
+- **Added at the W3 B2 ingest (2026-10-07, `bug-ingest-rel-v0.3-w3b2-review-findings-plan`).** User-visible
+  changes of W3 B2 the CHANGELOG must list: `wingfoil agent show <run-id>`, which prints one recorded agent run and
+  the commit that added it (`task-220`, P5.3.5); `dna.yaml`'s `team.agents` entries now refuse a blank `name`, an
+  `email` on an RFC 2606 reserved top-level domain, carrying git's guessed `.(none)` domain or a parenthesis in its
+  top-level domain, and an entry that declares an `adapter` but no `email` (`task-260`, `bug-261`; the pinned
+  0.2.2 loads all of them — `DnaYaml.safeParse` of each with `node_modules/wingfoil-released` → accepted, with this
+  build → refused); `workflow list` reports `E_WORKFLOW_ELEMENT_TYPE_UNKNOWN` for an unknown type in a typed
+  `<T>.set_state` / `<T>.sync_state` action and in a selection's `where.type` (`task-264`, `bug-282`). Upgrade
+  note: a workflow file whose `produces` uses the `{ type, path }` form (`task-199`) is refused by 0.2.2 with
+  `E_VALIDATION … expected string, received object`, so a project that adopts it cannot go back to 0.2.x; the
+  `init` scaffolds declare no `produces` and are unaffected. **Wave 3 B1 has no entry here yet**; its user-visible
+  changes, by the tasks' titles (the `user-docs` phase checks each against the shipped CLI): `memory submit`'s
+  commit names the content it carries in a `Carries content:` line (`task-209`); `--dry-run` on every mutating verb
+  (`task-210`); the `{role}-session` MCP Prompt accepts `element` and `state` (`task-195`); `wingfoil init` installs
+  the built-in adapters as protected built-in assets (`task-196`); `workflow list` checks workflows against
+  `memory.yaml`, `dna.yaml` and the state machines (`task-194`).
