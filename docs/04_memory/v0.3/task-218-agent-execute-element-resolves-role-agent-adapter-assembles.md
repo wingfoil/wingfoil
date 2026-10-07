@@ -55,6 +55,7 @@ This task builds the pre-launch half of `agent execute`, for the stepless (`adho
   that selection in `spec-016` where this task resolves the entry, and pass that entry's `name <email>` to the
   launched agent. A hand session uses the entry whose `name` is the agent's own and, with no such entry, the first
   entry, saying so in the commit body. The directive text and the email rule (Rule 2 (ii)) are `task-260`'s.
+- **Handover from wave 3 B1 (2026-10-07, `task-195`, `task-196`, `task-206`, `task-210`).** Parse `--element` with `parseElementRef` / `malformedElementRefMessage` from `src/core` (`spec-008` §7's grammar, `task-195`): the {role}-session Prompt already uses it, so the two surfaces cannot drift. Call `runLogPreflight(root, paths.runs, elementId)` (`src/agent`, `task-206`) at `spec-016` step 6, before anything is spawned. `agent execute` is `mutates: true`: add it to `REVIEWED_AGENT_WRITERS` in `test/core/builtin-adapter-writers.test.ts` (`task-196`, REQ-SEC-07; the test fails otherwise) and a row to the dry-run table in `test/cli/dry-run.integration.test.ts` (`task-210`; its completeness test fails otherwise). Every write goes through `writeAndCommit` (`src/storage`); a raw writer throws during a dry run.
 
 ## Execution Notes
 
