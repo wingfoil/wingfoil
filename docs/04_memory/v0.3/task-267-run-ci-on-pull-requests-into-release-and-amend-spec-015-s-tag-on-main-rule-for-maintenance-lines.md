@@ -55,6 +55,7 @@ The npm side must also accept a tag pushed from `release/*`.
   (`ci.yml` for a pull request into `release/0.3`, `publish.yml` for its tag), so without it, and without `task-265`
   and `task-266`, `0.3.1` could not be built and published from `release/0.3` (which `dl-159` forbids back-merging
   into); the `v0.3.0` publish, on the `main` path, exercises the pipeline first.
+- **Approver rulings (2026-10-07, at the filing of `dl-159`).** `ci.yml`'s concurrency group protects `release/*` runs from cancellation exactly as it protects `main`'s (no longer optional). The external check that the `npm-publish` environment and the npm trusted publisher accept a tag pushed from `release/*` is the approver's, at this task's review; the developer writes the exact steps in Execution Notes. Whether `npm stage approve` keeps the staged `--tag` (task-266) is checked with `npm view wingfoil dist-tags` after `0.3.0` is approved, if not settled earlier.
 
 ## Execution Notes
 
