@@ -26,7 +26,9 @@ export function invalidFormatReason(value: string): string {
  * `json`/`yaml` carry only the structured payload (no banners/colour). `console` has no human
  * rendering yet: it prints `json`'s payload indented by two spaces, with no colour, as spec-008 §2
  * declares, until P5.1.4 gives it one (`dl-043`, v0.4; task-156, `bug-152`). That change is meant to
- * be visible: `test/cli/console-format-fallback.integration.test.ts` pins today's bytes.
+ * be visible: `test/cli/console-format-fallback.integration.test.ts` pins today's bytes. The one
+ * exception is a command whose spec defines its own console text (`agent show`, spec-016 §6): the
+ * registrar prints its `CoreOperation.renderConsole` instead and never calls this for `console`.
  */
 export function renderSuccess(value: unknown, format: OutputFormat): string {
   if (format === 'json') return JSON.stringify(value) + '\n';

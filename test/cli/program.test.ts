@@ -231,11 +231,11 @@ describe('buildProgram — the program itself (bug-007: this module is now loada
 
   // task-156 (`bug-152`, `bug-203`, spec-008 §2): until P5.1.4 gives `console` a human rendering
   // (`dl-043`), the help says what the default prints and that the colour switch changes nothing.
-  it('`--help` states that `console` prints indented JSON and that no output is colored yet (task-156)', async () => {
+  it('`--help` states that `console` prints indented JSON unless the command defines its own (task-220), and that no output is colored yet (task-156)', async () => {
     const program = await buildFixtureProgram();
     const descriptionOf = (flags: string): string | undefined =>
       program.options.find((option) => option.flags === flags)?.description;
-    expect(descriptionOf('--format <format>')).toBe('output format (console|json|yaml); console prints indented JSON for now');
+    expect(descriptionOf('--format <format>')).toBe('output format (console|json|yaml); console prints indented JSON for now, unless the command defines its own');
     expect(descriptionOf('--no-color')).toBe('disable ANSI colors (accepted; no output is colored yet)');
   });
 

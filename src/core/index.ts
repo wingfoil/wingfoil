@@ -2178,7 +2178,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
   // and the run log they read.
   {
     name: 'agent',
-    description: 'launch an agent CLI through its declared adapter, and read the runs it recorded',
+    description: 'read recorded agent runs (launching an agent arrives with agent execute)',
     operations: {
       // task-220 (`spec-016` §6): read-only, and a declared `HEAD` read (§5.1, `spec-006` §6 item 6).
       // Its console rendering is the `key: value` lines §6 defines, not the indented JSON every other
