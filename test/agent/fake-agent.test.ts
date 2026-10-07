@@ -495,14 +495,14 @@ function stubServer(source: string): string {
   return config;
 }
 
-/** Answers `initialize`, then `prompts/get` with `text`, its bytes written in two chunks cut at byte `cutAfter(buf)`. */
+/** Answers `initialize`, then `prompts/get` with the text `a—b`, its answer written in two chunks cut inside the em dash. */
 const SPLIT_SERVER = `
 const rl = require('readline').createInterface({ input: process.stdin });
 rl.on('line', (line) => {
   const m = JSON.parse(line);
-  if (m.method === 'initialize') process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result: { serverInfo: { name: 'wingfoil', version: 'x' }, protocolVersion: '2025-06-18', capabilities: {} } }) + '\n');
+  if (m.method === 'initialize') process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result: { serverInfo: { name: 'wingfoil', version: 'x' }, protocolVersion: '2025-06-18', capabilities: {} } }) + '\\n');
   if (m.method === 'prompts/get') {
-    const buf = Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: m.id, result: { messages: [{ role: 'user', content: { type: 'text', text: 'a\u2014b' } }] } }) + '\n');
+    const buf = Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: m.id, result: { messages: [{ role: 'user', content: { type: 'text', text: 'a\u2014b' } }] } }) + '\\n');
     const cut = buf.indexOf(0xe2) + 1;
     process.stdout.write(buf.subarray(0, cut));
     setTimeout(() => process.stdout.write(buf.subarray(cut)), 200);
@@ -511,7 +511,7 @@ rl.on('line', (line) => {
 `;
 
 const NOISY_SERVER = `
-process.stdout.write('not json\n');
+process.stdout.write('not json\\n');
 process.stdin.resume();
 setInterval(() => undefined, 1000);
 `;
