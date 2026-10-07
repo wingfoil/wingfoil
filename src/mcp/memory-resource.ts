@@ -44,8 +44,17 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { loadMemoryYaml } from '../core';
 import { findMemoryDocumentByTypeAndId, listMemoryDocumentsByType } from '../memory/query';
 import { readDocument } from '../storage';
+import { formatDiagnostic, type Diagnostic } from '../validation';
 
-import { jsonResourceResult, refuseIfWriteIntent, resourceNotFoundError, withRefusalDetails } from './read-only';
+import {
+  jsonResourceResult,
+  readRefusalError,
+  refuseIfWriteIntent,
+  resourceNotFoundError,
+  warningDetails,
+  withRefusalDetails,
+  withWarnings,
+} from './read-only';
 
 /** Options for {@link registerMemoryResources}. */
 export interface RegisterMemoryResourcesOptions {
@@ -85,7 +94,10 @@ export function registerMemoryResources(server: McpServer, options: RegisterMemo
         // an agent-facing read path, so archived documents — `{deprecated, superseded}`, per the shared
         // `isArchivedStatus` — are withheld. Since task-171 (`dl-038` option 1) the primitive withholds
         // them by default, so this call site no longer filters: omitting a filter fails closed.
-        const summaries = listMemoryDocumentsByType(root, memoryYaml, type)
+        // A document the scan leaves out (unreadable, a link, a newer `format:`) is reported, and the
+        // report reaches the client as `warnings` (task-195, `bug-231`), as the CLI prints it.
+        const diagnostics: Diagnostic[] = [];
+        const summaries = listMemoryDocumentsByType(root, memoryYaml, type, { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) })
           .map(({ id, title, status, tags }) => ({
             id,
             title,
@@ -93,7 +105,7 @@ export function registerMemoryResources(server: McpServer, options: RegisterMemo
             tags,
           }));
 
-        return jsonResourceResult(uri, summaries);
+        return withWarnings(jsonResourceResult(uri, summaries), diagnostics.map(formatDiagnostic));
       }),
   );
 
@@ -114,8 +126,16 @@ export function registerMemoryResources(server: McpServer, options: RegisterMemo
         // `includeArchived: true`, said here on purpose (task-171, `dl-038` option 1): REQ-STATE-06 keeps
         // an archived document "present on disk and in git history", and this Resource is how an agent
         // retrieves one explicitly.
-        const doc = findMemoryDocumentByTypeAndId(root, memoryYaml, type, id, { includeArchived: true });
-        if (!doc) throw resourceNotFoundError(`memory/${type}/${id}`);
+        // The lookup reports the files it could not read on its way (task-195, `bug-231`): beside the
+        // document on success, and as the refusal's details when it found nothing, since the document
+        // may be one of them.
+        const diagnostics: Diagnostic[] = [];
+        const doc = findMemoryDocumentByTypeAndId(root, memoryYaml, type, id, {
+          includeArchived: true,
+          onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+        });
+        const warnings = diagnostics.map(formatDiagnostic);
+        if (!doc) throw readRefusalError(resourceNotFoundError(`memory/${type}/${id}`).message, warningDetails(warnings));
 
         // spec-004 §2.2 wants the *full file content* (frontmatter + body), not the re-serialized
         // parsed frontmatter `loadMemoryDocumentSummary` already split apart for the scan — so this
@@ -148,7 +168,7 @@ export function registerMemoryResources(server: McpServer, options: RegisterMemo
             title: doc.frontmatter.title,
           },
         };
-        return result;
+        return withWarnings(result, warnings);
       }),
   );
 }

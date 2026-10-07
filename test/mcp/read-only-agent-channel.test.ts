@@ -131,7 +131,13 @@ describe('REQ-SEC-05 — the operation-derived surface over the real CORE_MODULE
 });
 
 describe('REQ-SEC-05 — the shipped production surface: Prompts advertised, no Tools, nothing persisted (task-058)', () => {
-  const PROMPT_FIXTURE_FILES = ['.wingfoil/dna.yaml', '.wingfoil/roles.yaml', '.wingfoil/directives/custom/testing.md'];
+  const PROMPT_FIXTURE_FILES = [
+    '.wingfoil/dna.yaml',
+    '.wingfoil/roles.yaml',
+    '.wingfoil/directives/custom/testing.md',
+    '.wingfoil/memory.yaml',
+    'docs/04_memory/v0.1/task-001-foo.md',
+  ];
   let root: string;
 
   beforeAll(() => {
@@ -167,6 +173,13 @@ describe('REQ-SEC-05 — the shipped production surface: Prompts advertised, no 
       '.wingfoil/directives/custom/testing.md',
       ['---', 'id: testing', 'name: "Testing"', 'type: directive', 'kind: custom', 'title: "Testing"', '---', '', 'Write the failing test first.', ''].join('\n'),
     );
+    // task-195: a Memory element, so the round trip also covers a Prompt call with `element` and `state`.
+    writeFixtureFile(root, '.wingfoil/memory.yaml', 'version: 1.1\ntypes:\n  task:\n    path: "docs/04_memory/{release}/{id}.md"\n');
+    writeFixtureFile(
+      root,
+      'docs/04_memory/v0.1/task-001-foo.md',
+      ['---', 'id: task-001-foo', 'type: task', 'title: "Foo"', 'status: in-progress', '---', '', 'Body.', ''].join('\n'),
+    );
     commitAll(root, 'seed task-058 production-surface fixture');
   });
 
@@ -190,6 +203,10 @@ describe('REQ-SEC-05 — the shipped production surface: Prompts advertised, no 
     expect(prompts.map((prompt) => prompt.name)).toEqual(['developer-session']);
     const result = await client.getPrompt({ name: 'developer-session' });
     expect(JSON.stringify(result.messages)).toContain('## Directive: testing');
+    // task-195 (AC 5): a call with `element` and `state` builds the context and still writes nothing.
+    const withContext = await client.getPrompt({ name: 'developer-session', arguments: { element: 'task:task-001-foo', state: 'HEAD' } });
+    expect(JSON.stringify(withContext.messages)).toContain('# WingFoil Agent Context');
+    await expect(client.listTools()).resolves.toEqual({ tools: [] });
     assertFilesUnchanged(root, snapshot);
   });
 });

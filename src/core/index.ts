@@ -134,6 +134,8 @@ export { workflowCoreDiagnostics } from './workflow-core-checks';
 export type { CheckedRegistry, WorkflowCoreInputs } from './workflow-core-checks';
 export { iterationStartState, machineStates, workflowExitStates } from './workflow-exit-state';
 export type { ExitStart, HeldGate, InstanceState, PhaseExitState, UndeterminedAction } from './workflow-exit-state';
+
+export { malformedElementRefMessage, parseElementRef } from './element-ref';
 export type { DirectiveFile, WorkflowsLoadResult } from './loaders';
 export {
   assembleExecutionContext,

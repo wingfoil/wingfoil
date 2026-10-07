@@ -455,6 +455,44 @@ describe('assembleExecutionContext — spec-012 context builder (task-176)', () 
       if (!result.ok) expect(result.error.details).toBeUndefined();
     });
 
+    // task-195 (`bug-263`): a subject written in a newer `format:` exists — it is refused for its format,
+    // as every verb that names it refuses it (`dl-149`), not reported as absent.
+    it('a subject written in a newer format is VALIDATION with the E_INVALID_FORMAT text, not NOT_FOUND', () => {
+      writeTask(repo, ELEMENT_ID, { tags: ['performance'], extra: ['format: 2'] });
+      commitAll(repo, 'a newer-format subject');
+      const sha = headSha(repo);
+      const result = assembleExecutionContext(repo, request());
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('VALIDATION');
+        expect(result.error.message).toMatch(
+          new RegExp(`^element 'task:${ELEMENT_ID}' at ${sha} is written in a newer format: E_INVALID_FORMAT format \\(docs/04_memory/v0\\.2/${ELEMENT_ID}\\.md\\): .*upgrade WingFoil$`),
+        );
+        expect(result.error.details).toEqual({ issues: [expect.objectContaining({ code: 'E_INVALID_FORMAT', file: `docs/04_memory/v0.2/${ELEMENT_ID}.md` })] });
+      }
+    });
+
+    it('a newer-format sibling stays a warning: only the subject itself is refused for its format', () => {
+      writeTask(repo, 'task-007-future', { tags: ['performance'], extra: ['format: 2'] });
+      commitAll(repo, 'a newer-format sibling');
+      const result = assembleExecutionContext(repo, request());
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.warnings).toEqual([expect.stringMatching(/^W_MEMORY_UNREADABLE \(docs\/04_memory\/v0\.2\/task-007-future\.md\): .*E_INVALID_FORMAT/)]);
+      }
+    });
+
+    it('an absent subject beside a newer-format sibling is still NOT_FOUND', () => {
+      writeTask(repo, 'task-007-future', { extra: ['format: 2'] });
+      commitAll(repo, 'a newer-format sibling');
+      const result = assembleExecutionContext(repo, request({ element: { type: 'task', id: 'task-999-missing' } }));
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+        expect(result.error.details).toEqual({ unreadable: [expect.stringContaining('task-007-future')] });
+      }
+    });
+
     it('a clean build carries no warnings key', () => {
       const result = assembleExecutionContext(repo, request());
       expect(result.ok && result.warnings).toBeUndefined();
