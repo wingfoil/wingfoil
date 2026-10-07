@@ -201,6 +201,50 @@ runs directory left behind.
   --noEmit` 0; `npm run docs:api` 0; `npx jest test/agent test/storage test/lint` → 39 suites, **549
   passed**; `node scripts/check-governance.cjs --base ed4607a4` 0.
 
+### Review fixes (B)
+
+The coordinator asked for this before `task-210` reaches `main`. Its reviewed head `06e4cf44` was merged
+into this branch (`7b8a642e`, `--no-ff`; it reaches `main` first at the gate). The conflicts in
+`src/storage/commit.ts` and `src/storage/index.ts` were resolved by dropping this task's `unstagePaths`,
+so both files now equal `06e4cf44`'s (`diff <(git show 06e4cf44:src/storage/commit.ts)
+src/storage/commit.ts` → empty).
+
+- **Red, `c63bee5c`.** The merge removed `unstagePaths`, so the branch does not build between the
+  merge and the fix. The red run was therefore taken against the pre-merge code instead: a temporary
+  detached worktree at `73cbf9b7` with the new test file. `npx jest test/agent/run-log.test.ts` →
+  **4 failed, 68 passed**:
+  - F1: the stale `index.lock` threw instead of returning a refusal.
+  - F2: the cause named the absolute project root.
+  - The empty `docs/runs` directory stayed behind.
+  - The dry-run case failed because there is no `captureDryRun` before task-210.
+  The temporary worktree was removed afterwards.
+- **Green, `b4daca43`.** `recordRun` now commits through `writeAndCommit(root, [{path: logPath,
+  content: atHead + line}], message)`. A `CommitFailure` (`E_COMMIT_FAILED`) becomes `IO` `run <id>
+  not recorded: <cause>`, with the record as a `details` line. The cause is `CommitFailure.gitDetail`,
+  task-210's one-line explanation with the root removed, plus the index problem when there is one. Any
+  other error (including the dry-run stop) is rethrown. The hand-written write and restore,
+  `unstagePaths` and the old `gitCause` are gone. `npx jest test/agent/run-log.test.ts` → **72
+  passed**. Each fix has a test:
+  - F1: a held `.git/index.lock` gives `IO`. Nothing throws, no absolute path appears, the record is
+    in details, `HEAD` is unchanged, and no `docs/runs` is left.
+  - F2: a hook that prints `$(pwd)/docs/runs` gives the cause `refused in docs/runs`. The message
+    contains neither spelling of the root.
+  - Leftover directory: the refusing-hook case also asserts that `docs/runs` is gone.
+- **Dry run.** `recordRun` is a library function, not a registered `mutates: true` operation (`agent
+  execute`, task-228, will be one). So task-210's dry-run registry table needs no row for it, and no
+  raw writer is reached under a dry run. Inside `captureDryRun` it plans `agent: record <id>` on the one
+  log path and writes nothing (tested).
+- **Gates:**
+  - `npm run test:coverage` → 279 suites, **5209 passed, 1 failed**. The failure is
+    `test/docs/dry-run-documented.test.ts` "spec-008 §2 has a --dry-run row". It is task-210's own
+    test, and it reads task-210's spec-008 pending amendment, which sits uncommitted in task-210's
+    worktree (`git -C ../task-210 status --short` → `M .../spec-008-cli-grammar.md`). It passes once
+    the coordinator records that amendment.
+  - Coverage All files **99.26 | 96.75 | 96.82 | 99.71**; `src/agent/run-log.ts` 99.1 | 95.33 | 100 |
+    99.45.
+  - `npm run lint` 0; both `tsc` 0; `npm run docs:api` 0; `node scripts/check-governance.cjs --base
+    ed4607a4` 0.
+
 ### Pending amendments (approver)
 
 - `dl-114-recording-agent-token-consumption` — proposed `--reason`: "Adds the agent's session id to Q2
