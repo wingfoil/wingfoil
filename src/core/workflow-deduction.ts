@@ -136,7 +136,9 @@ function readWalk(root: string, sha: string, starts: readonly StartCommit[]): Wa
  */
 function instanceWalk(walk: readonly WalkCommit[], byCommit: ReadonlyMap<string, WalkCommit>, start: string): Set<string> {
   const excluded = new Set<string>();
-  const pending = [...(byCommit.get(start)?.parents ?? [])];
+  // Every start lies in the union walk: the oldest is not reachable from its own parents, and any other
+  // start has a smaller topological position, so it is no ancestor of the oldest's parents.
+  const pending = [...byCommit.get(start)!.parents];
   while (pending.length > 0) {
     const commit = pending.pop()!;
     const entry = byCommit.get(commit);

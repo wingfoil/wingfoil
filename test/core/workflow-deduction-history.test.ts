@@ -21,7 +21,7 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { deduceWorkflowStateAtHead, type Deduction, type InstanceDeduction } from '../../src/core';
+import { deduceWorkflowStateAtHead, readDeductionSnapshotAtHead, type Deduction, type InstanceDeduction } from '../../src/core';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const MEMORY_YAML = `version: 1.0
@@ -421,5 +421,58 @@ describe('task-203 AC 5 — one walk for the union of the open instances, one lo
     const source = readFileSync(join(__dirname, '..', '..', 'src', 'core', 'workflow-deduction.ts'), 'utf-8');
     expect(source).not.toMatch(/child_process/);
     expect(source).toMatch(/runGitRead\(/);
+  });
+});
+
+describe('task-203 — the snapshot reader on edge cases of the walk (spec-017 §4.8)', () => {
+  it('a re-entry naming no document, or one whose file no commit of the walk changed, gets no last change', () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeProject(repo);
+      commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-progress') }, 'task');
+      commit(repo, { 'docs/plans/loop-1.md': plan('loop-1', 'loop', 'task-1') }, 'wf(plan): add loop-1');
+      // Hand subjects with no file change: the bracket names the move, the walk holds no change of the file.
+      commit(repo, {}, 'wf(task): reject task-1, task-9 [in-review → in-progress]');
+      commit(repo, {}, 'wf(task): park task-1 [in-progress → in-progress]');
+      const snapshot = readDeductionSnapshotAtHead(repo);
+      const history = [...snapshot.history.values()][0]!;
+      expect(history.reentries.map((entry) => [entry.verb, entry.id, entry.from, entry.to])).toEqual([
+        ['reject', 'task-1', 'in-review', 'in-progress'],
+        ['reject', 'task-9', 'in-review', 'in-progress'],
+      ]);
+      expect(snapshot.lastChanges).toEqual(new Map());
+      // The newest transition naming task-1 with its current status is the no-op park, newer than the reject.
+      expect(snapshot.transitions.map((entry) => [entry.id, entry.to])).toEqual([
+        ['task-1', 'in-progress'],
+        ['task-1', 'in-progress'],
+        ['task-9', 'in-progress'],
+      ]);
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+
+  it('cuts each instance\'s walk through the parent links of a merged history', () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeProject(repo);
+      commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-progress') }, 'task');
+      git(repo, ['checkout', '--quiet', '-b', 'side']);
+      // On a side branch, before loop-2 exists: a record naming loop-2 that its walk must not hold.
+      record(repo, 'loop-2', 'loop.design', 'task:task-1');
+      git(repo, ['checkout', '--quiet', 'main']);
+      commit(repo, { 'docs/plans/loop-1.md': plan('loop-1', 'loop', 'task-1') }, 'wf(plan): add loop-1');
+      git(repo, ['merge', '--quiet', '--no-ff', '-m', 'merge side', 'side']);
+      commit(repo, { 'docs/plans/loop-2.md': plan('loop-2', 'loop', 'task-1') }, 'wf(plan): add loop-2');
+      const deduction = deduceWorkflowStateAtHead(repo);
+      // loop-1's walk holds the side branch (not reachable from its start's parent), but the record names loop-2;
+      // loop-2's walk starts after the merge, so the record is older than its start.
+      expect(keys(only(deduction, 'loop-2'))).toEqual(['loop.design@task:task-1']);
+      expect(keys(only(deduction, 'loop-1'))).toEqual(['loop.design@task:task-1']);
+      const histories = [...readDeductionSnapshotAtHead(repo).history.values()].map((entry) => entry.records.length);
+      expect(histories.sort()).toEqual([0, 1]);
+    } finally {
+      removeTempDir(repo);
+    }
   });
 });

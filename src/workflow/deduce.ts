@@ -520,11 +520,9 @@ function byTypeThenId(a: Element, b: Element): number {
   return compareText(a.type, b.type) || compareText(a.id, b.id);
 }
 
-/** The newer of two re-entry cutoffs (the smaller walk position), either possibly absent. */
-function newer(a: WalkPosition | null, b: WalkPosition | null): WalkPosition | null {
-  if (a === null) return b;
-  if (b === null) return a;
-  return b.position < a.position ? b : a;
+/** The newer of a phase's cutoff so far (possibly absent) and a re-entry: the smaller walk position. */
+function newer(a: WalkPosition | null, b: WalkPosition): WalkPosition {
+  return a === null || b.position < a.position ? b : a;
 }
 
 /** The read-only context of one deduction. */
