@@ -92,8 +92,8 @@ sentence becomes stale (pending amendment below).
 7. *`tests.unchanged(since: red)` stays unbound*: no command evaluates it before P4.12 (v1.0). Two
    more `W_WORKFLOW_UNBOUND_TOKEN` warnings in task-199's pinned set (green `post[1]`, refactor
    `post[5]`), each with this reason.
-8. *`testing.md` had no `version:`*; it gets `version: "1.1"` (the first declared revision after the
-   implicit 1.0, spec-013 `version` row). `roles.yaml` 1.4 → 1.5.
+8. *`testing.md` had no `version:`*; it gets `version: "1.1"` because AC 4 asks for a `version:` bump.
+   `roles.yaml` 1.4 → 1.5.
 
 **AC classification (T1).** The task labels AC 3–6 characterization; none of the declarations exists
 yet (`grep -n "role: qa\|distinct_from\|tests.unchanged\|from: main" .wingfoil/workflows/custom/dev-loop.yaml`
@@ -184,6 +184,32 @@ Run with the spec-003 pending amendment in the working tree. Load average 57–9
   test/core/dev-loop-v1-5.test.ts` and `git diff f1b018c4 HEAD -- test/memory/element-schema-park-limits.test.ts`
   are empty.
 
+### Review fixes (2026-10-07, coordinator review: APPROVE WITH FIXES)
+
+- **F1** — the park sync `[in-progress → planned]` was no edge of the bug machine. Red `fa0fc407`
+  (the bug machine at `HEAD` has `returns: { in-progress: planned }`, `isMachineEdge` accepts the hop,
+  the subject reads back as `sync`: failed, 2 of 22 in `npx jest test/core/dev-loop-v1-5.test.ts`
+  with F2's test). Fix ``628d27d5``: `.wingfoil/memory.yaml` 2.5 → 2.6, bug
+  `returns: { in-progress: planned }` (`dl-110` P1 (a)); `memory park` takes the same edge on a bug.
+  `test/core/bug-decline-edges.test.ts`'s pinned bug edge table gains `in-progress` park → `planned`
+  (`e42e9521`, found by the full `npm test`: 1 failed / 5743). `spec-001`'s example `bug` block gains
+  the key (pending amendment below);
+  `test/docs/memory-types-parity.test.ts` passes with it.
+- **F2** — the header said `done`'s fallback gets no sync, but it re-enters at `red`, whose first
+  action is the sync. Header and `done`'s fallback comment now say the sync also runs after `done`'s
+  fallback, and that the legality of that task edge is `dl-053`'s question.
+- **F3** — not applied; stopped and reported. Moving the only main-sync to `refactor`'s last action
+  removes `dl-035` (a)'s "before any `red` work" on a resume after a reject, which `dl-035`'s ratified
+  Decision 2 (a) and `git-conventions` §2 both require. The approver needs to rule on it (see report).
+- **F9** — design decision 8 no longer claims an implicit 1.0 from spec-013.
+- Touched suites after the fixes: `npx jest` over `dev-loop-v1-5`, `element-schema-park-limits`,
+  `workflow-repository-conformance`, `workflow-md`, `test/directives`, `version-bump`,
+  `memory-types-parity`, `enumeration-parity.allowlist`, `workflow-executor-cadence`, `test/memory`,
+  `loaders` → 39 suites, 869 tests passed. Full `npm test` before
+  `e42e9521`: 302 suites, 5742 passed, 1 failed (the edge table above), which then passes (13/13);
+  `npm run lint`, both `tsc` runs exit 0; `check-governance --base 1ce84a54` → 2 `wf()` commits,
+  0 findings.
+
 ### Pending amendments (approver)
 
 - `spec-003-workflows-yaml-schema` — `--reason "dev-loop.yaml is at v1.5 (task-205): the Execution
@@ -191,6 +217,10 @@ Run with the spec-003 pending amendment in the working tree. Load average 57–9
   example gains distinct_from, the dl-035 main-sync and the bug sync, and one sentence says that a step
   the reject path needs is the first action of the fallback step, since a fallback takes no actions
   (dl-061 A.1). No field, diagnostic or rule changes."`
+- `spec-001-memory-yaml-schema` — `--reason "The example bug block gains returns: { in-progress: planned },
+  as memory.yaml 2.6 declares (task-205 review F1): dev-loop's park sync moves a linked bug back
+  [in-progress → planned] when its fix task is parked (dl-110 P2), and the hop must be a machine edge.
+  No key, rule or diagnostic changes."`
 
 ### For the coordinator
 
