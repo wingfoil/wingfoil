@@ -2,7 +2,7 @@
 id: "task-202-deduce-iterate-over-over-memory-types-collections-live"
 type: task
 title: "Deduce `iterate_over` over Memory types and collections, live queries, optional and archived phases"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "high"
