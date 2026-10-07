@@ -17,9 +17,10 @@
  * compares the element at `state_ref` with the element at `HEAD`: all committed states, never the
  * working tree, so notes an agent wrote but did not commit yield `none` (§4.2 key 18).
  */
+import { realpathSync } from 'node:fs';
 import { basename, posix, relative, resolve, sep } from 'node:path';
 
-import { CommitFailure, pathPorcelainStatus, readPathAtRev, writeAndCommit } from '../storage';
+import { CommitFailure, isDryRunActive, pathPorcelainStatus, readPathAtRev, writeAndCommit } from '../storage';
 import { isIdPiece } from '../validation/id';
 import { requireConfinedTarget, requireConfinedWriteTarget } from '../core/confinement';
 import { resolveRevision, RevisionError } from '../core/revision';
@@ -503,6 +504,21 @@ const recordDetails = (record: RunRecord, line: string): Record<string, unknown>
 });
 
 /**
+ * `text` on one line with both spellings of the project root removed (`<root>/x` → `x`, a bare root →
+ * `.`), so a filesystem error's absolute path does not reach the operator.
+ */
+function withoutRoot(root: string, text: string): string {
+  let detail = text;
+  const spellings = [resolve(root), realpathSync(root)].sort((a, b) => b.length - a.length);
+  for (const spelling of spellings) detail = detail.split(`${spelling}${sep}`).join('').split(spelling).join('.');
+  return detail
+    .split('\n')
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+    .join('; ');
+}
+
+/**
  * The cause a failed record commit names: git's (or a hook's) explanation on one line with the project
  * root removed (`CommitFailure.gitDetail`, task-210), plus the index problem when the index entry could
  * not be put back.
@@ -534,7 +550,8 @@ function commitCause(failure: CommitFailure): string {
  * The append and the commit go through `writeAndCommit` (task-210): under a dry run the commit is
  * planned and nothing is written. A commit git refuses (a hook, a held `index.lock`, …) is `IO` `run
  * <run-id> not recorded: <cause>` with the record as a `details` line, the cause naming no absolute
- * path; the file, any directory the append created, and the index entry are put back as they were.
+ * path; the file, any directory the append created, and the index entry are put back as they were. A
+ * write the filesystem refuses (`EACCES`, `ENOSPC`) is the same `IO` refusal, the record kept.
  */
 export function recordRun(root: string, logPath: string, record: RunRecord): CoreResult<RecordedRun> {
   let line: string;
@@ -569,7 +586,11 @@ export function recordRun(root: string, logPath: string, record: RunRecord): Cor
     const sha = writeAndCommit(root, [{ path: logPath, content: `${atHead ?? ''}${line}` }], message);
     return coreOk({ record, sha }, { sha, message });
   } catch (error) {
-    if (!(error instanceof CommitFailure)) throw error;
-    return keep({ code: 'IO', message: `run ${record.id} not recorded: ${commitCause(error)}` });
+    // The dry-run stop ends the operation with its plan; it is not a failure to report.
+    if (isDryRunActive()) throw error;
+    // Anything else — git refusing the commit, or the filesystem refusing the write (EACCES, ENOSPC),
+    // which writeAndCommit rethrows as raised — loses no run: the record goes back in details (§3.7).
+    const cause = error instanceof CommitFailure ? commitCause(error) : withoutRoot(root, error instanceof Error ? error.message : String(error));
+    return keep({ code: 'IO', message: `run ${record.id} not recorded: ${cause}` });
   }
 }
