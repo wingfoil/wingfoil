@@ -67,7 +67,7 @@ describe('git-conventions §7 — dl-158 (task-260)', () => {
 
   it('cites dl-158 in the heading and in the sources list', () => {
     expect(s7.split('\n')[1]).toContain('`dl-158` Rule 1 (a), Rule 2 (ii)');
-    expect(TEXT).toMatch(/^- `dl-158-[^`]+`\n  — which `team.agents` entry signs/m);
+    expect(TEXT).toMatch(/^- `dl-158-[^`]+`\n {2}— which `team.agents` entry signs/m);
   });
 
   it('states Rule 1 (a): agent execute launches the signing entry; a hand session uses its own name, else the first entry, said in the body', () => {
