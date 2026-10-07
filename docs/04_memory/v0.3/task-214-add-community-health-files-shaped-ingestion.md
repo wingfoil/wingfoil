@@ -93,11 +93,35 @@ GitHub recognises no contributing guide, code of conduct, security policy or iss
   `service` (`kind: setting`, `verify: gh api repos/wingfoil/wingfoil/private-vulnerability-reporting`), and runs
   `gh api repos/wingfoil/wingfoil/community/profile` (repository `wingfoil/wingfoil` since task-116, not
   `robypomper/wingfoil` as `dl-127` writes).
-- **Covenant text.** Written from the published 2.1 text; no copy was available offline to diff against. Check:
-  `diff <(curl -s https://raw.githubusercontent.com/EthicalSource/contributor_covenant/release/content/version/2/1/code_of_conduct.md) CODE_OF_CONDUCT.md`
-  (only the contact line should differ); `community/profile`'s `code_of_conduct.key` should read `contributor_covenant`.
-- **Decisions for the approver:** (1) the enforcement contact `wingfoil.ai@gmail.com` (the address an earlier
-  WingFoil prototype's code of conduct used; the AC leaves the contact to the approver); (2) blank issues off;
+- **Covenant text.** Written from the published 2.1 text; no copy was available offline to diff against.
+  Corrected at review (F2): the Hugo source in the EthicalSource repository carries front matter and unwrapped
+  lines, so a plain `diff` against it does not isolate the contact line. The reviewer compared
+  `https://www.contributor-covenant.org/version/2/1/code_of_conduct/code_of_conduct.md` with `CODE_OF_CONDUCT.md`
+  word by word with whitespace normalised (e.g. `diff <(curl -s <that URL> | tr -s '[:space:]' '\n') <(tr -s '[:space:]' '\n' < CODE_OF_CONDUCT.md)`):
+  only the contact differs. `community/profile`'s `code_of_conduct.key` should read `contributor_covenant`.
+- **Decisions for the approver:** (1) the enforcement contact `wingfoil.ai@gmail.com` (the AC leaves the contact
+  to the approver, who confirms it at approval); (2) blank issues off;
   (3) the issue URL goes in `credit:`; (4) `COLLABORATION.md` in `produces:`; (5) the guard pins SECURITY.md's
-  supported row to `package.json`'s minor, so the commit that bumps the version to 0.3.0 must update SECURITY.md too.
+  supported row to `package.json`'s minor, so the release bump commit updates SECURITY.md too (F1 below).
 - No pending amendments: no Memory element other than this task file is edited.
+
+### Review fixes (2026-10-07, coordinator review: approve with fixes; status stays `in-review`)
+
+- **F1** — `release-publishing.yaml` 1.2 → **1.3**: the `tag` phase's description names the files of the version
+  bump commit (package.json, package-lock.json, server.json, CHANGELOG.md, **SECURITY.md**), as `b1cd5db2` carried
+  for 0.2.2 (`git show --stat b1cd5db2`) plus SECURITY.md. Actions and checks unchanged. The guard now fails with
+  "SECURITY.md does not list X.Y.x as supported, but package.json is X.Y.Z: update SECURITY.md in the release bump
+  commit (release-publishing, tag phase)" (checked by setting package.json to 0.3.0 and running
+  `npx jest test/docs/community-health.test.ts -t "SECURITY.md supports"` → 1 failed with that message; reverted
+  with `git checkout package.json`), and a new test pins the `tag` description naming SECURITY.md. spec-015 §4 not
+  touched (another B3 task amends it).
+- **F2** — the Covenant check above is corrected to the reviewer's whitespace-normalised comparison with the
+  contributor-covenant.org Markdown; the external provenance of the contact address is removed (the approver
+  confirms the contact at approval).
+- **F3** — `bug.yml` (header, intro, version field), `proposal.yml` (intro) and `COLLABORATION.md` say what capture
+  maps instead of "as written": the `bug: ` / `proposal: ` title prefix is dropped, and the installed version becomes
+  the `release-origin` id of the release that published it (`0.2.1` → `v0.2`, `0.2.2` → `v0.2.2`; the ids in use:
+  `grep -h '^release-origin' docs/04_memory/bugs/*.md | sort | uniq -c` → `v0.1`, `v0.2`, `v0.2.2`, `v0.3`).
+- Gates: `npx jest test/docs/community-health.test.ts test/core/workflow-repository-conformance.test.ts test/docs/workflow-md.test.ts test/memory/reason-trailer.test.ts test/core/workflow-core-checks.test.ts`
+  → 5 suites, **140 / 140 passed**; `npm run lint` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
+  `node dist/cli.js workflow list` exit 0.
