@@ -29,9 +29,16 @@
  * - `WINGFOIL_FAKE_AGENT_STDIN=1` — read stdin to its end and record it. Off by default: an interactive
  *   agent owns stdin, and an inherited pipe nobody closes would never end.
  * - `WINGFOIL_FAKE_AGENT_DOCUMENT` — the JSON document to print for `--lookup` and a headless launch,
- *   instead of {@link defaultDocument}.
- * - `WINGFOIL_FAKE_AGENT_EXIT` — the exit code (default `0`).
- * - `WINGFOIL_FAKE_AGENT_WAIT=signal` — after recording, wait until a signal kills the process.
+ *   instead of {@link defaultDocument}; a document without `session_id` gets the session asked for.
+ * - `WINGFOIL_FAKE_AGENT_EXIT` — a launch's exit code (default `0`).
+ * - `WINGFOIL_FAKE_AGENT_WAIT=signal` — a launch, after recording, waits until a signal kills it.
+ * - `WINGFOIL_FAKE_AGENT_LOOKUP=fail|hang` — `--lookup`, after recording, exits `1` with nothing on
+ *   stdout (`fail`), or waits until a signal kills it (`hang`): a post-run lookup that fails or times
+ *   out while the launch succeeded (`spec-016` §2.6).
+ *
+ * `EXIT` and `WAIT` apply to a launch only. `agent execute` passes its environment to every child it
+ * starts (§2.2), so the post-run `--version` and `--lookup` (§3.3 step 16) see the same variables, and
+ * must still answer.
  *
  * Nothing here is random or read from the clock, and nothing secret-shaped is written as a literal.
  */
@@ -74,7 +81,13 @@ function defaultDocument(sessionId) {
 function documentFor(sessionId) {
   const declared = process.env.WINGFOIL_FAKE_AGENT_DOCUMENT;
   if (declared === undefined) return defaultDocument(sessionId);
-  return JSON.parse(declared);
+  const document = JSON.parse(declared);
+  return 'session_id' in document ? document : { ...document, session_id: sessionId };
+}
+
+/** Keep the process alive until a signal ends it; the timer only keeps the event loop busy. */
+function waitForSignal() {
+  setInterval(() => undefined, 60000);
 }
 
 /** Stdin to its end, as UTF-8 text. */
@@ -132,17 +145,26 @@ function fetchPrompt(configFile, prompt, args) {
     child.on('exit', (code, signal) => {
       finish(new Error(`MCP server exited (${signal ?? code}) before answering: ${stderr.trim()}`));
     });
+    // Decoded as streams, so a multi-byte character split across two chunks stays one character.
+    child.stdout.setEncoding('utf-8');
+    child.stderr.setEncoding('utf-8');
     child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString('utf-8');
+      stderr += chunk;
     });
     child.stdout.on('data', (chunk) => {
-      buffered += chunk.toString('utf-8');
+      buffered += chunk;
       let newline;
-      while ((newline = buffered.indexOf('\n')) !== -1) {
+      while (!settled && (newline = buffered.indexOf('\n')) !== -1) {
         const line = buffered.slice(0, newline).trim();
         buffered = buffered.slice(newline + 1);
         if (line === '') continue;
-        const message = JSON.parse(line);
+        let message;
+        try {
+          message = JSON.parse(line);
+        } catch {
+          finish(new Error(`non-JSON line from server: ${line}`));
+          return;
+        }
         const done = pending.get(message.id);
         if (done === undefined) continue; // a notification, or an answer nobody asked for
         pending.delete(message.id);
@@ -204,30 +226,29 @@ async function main() {
   const argv = process.argv.slice(2);
   const stdin = process.env.WINGFOIL_FAKE_AGENT_STDIN === '1' ? await readStdin() : null;
 
-  let failed = null;
   if (argv.includes('--version')) {
     record({ argv, stdin, env: Object.keys(process.env).sort(), mcp: null });
     process.stdout.write(`${VERSION}\n`);
   } else if (argv.includes('--lookup')) {
     record({ argv, stdin, env: Object.keys(process.env).sort(), mcp: null });
+    const lookup = process.env.WINGFOIL_FAKE_AGENT_LOOKUP;
+    if (lookup === 'hang') return waitForSignal();
+    if (lookup === 'fail') {
+      process.stderr.write('fake-agent: lookup failed (WINGFOIL_FAKE_AGENT_LOOKUP=fail)\n');
+      process.exitCode = 1;
+      return;
+    }
     process.stdout.write(`${JSON.stringify(documentFor(option(argv, '--lookup') ?? null))}\n`);
   } else if (argv.includes('--summary')) {
     record({ argv, stdin, env: Object.keys(process.env).sort(), mcp: null });
     process.stdout.write('fake-agent: session summary\n');
   } else {
-    failed = await launch(argv, stdin);
+    // Only a launch reads EXIT and WAIT (review F1).
+    const failed = await launch(argv, stdin);
+    if (failed !== null) process.exitCode = failed;
+    else if (process.env.WINGFOIL_FAKE_AGENT_WAIT === 'signal') waitForSignal();
+    else process.exitCode = Number(process.env.WINGFOIL_FAKE_AGENT_EXIT ?? '0');
   }
-
-  if (failed !== null) {
-    process.exitCode = failed;
-    return;
-  }
-  if (process.env.WINGFOIL_FAKE_AGENT_WAIT === 'signal') {
-    // Stay alive until a signal ends the process; the timer only keeps the event loop busy.
-    setInterval(() => undefined, 60000);
-    return;
-  }
-  process.exitCode = Number(process.env.WINGFOIL_FAKE_AGENT_EXIT ?? '0');
 }
 
 main().catch((error) => {
