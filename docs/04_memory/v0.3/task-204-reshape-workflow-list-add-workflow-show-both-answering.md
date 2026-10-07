@@ -204,9 +204,11 @@ Uncommitted in the worktree; gates ran with them.
 - `docs/agents.md` (§ MCP table: "`wingfoil://workflows/{name}` ↔ `workflow list`, the entry with that name";
   § "When asked to run": "`workflow list` → find the workflow and its phases"), `CLAUDE.md` §1/§3/§6 and
   `.wingfoil/README.md` describe the 0.2.x `workflow list` and say it is the only workflow operation — for
-  the v0.3 `user-docs` / `align-agent-docs` phase.
+  the v0.3 `user-docs` / `align-agent-docs` phase. Review outcome: the coordinator files it as a bug at the gate.
 - `workflow list` on this repository took 15.9 s wall (1.9 s user) under load 88: the deduction snapshot
-  (Memory scan) dominates, as task-198's F5 warned; REQ-PERF-03 measurement belongs to the idle-machine gate.
+  (Memory scan) dominates, as task-198's F5 warned. The reviewer measured 0.9–3.0 s on an idle machine, and
+  0.88 s with task-203 and task-204 merged. Not a finding: REQ-PERF-03 (< 1,000 ms p95) binds `workflow next`,
+  not `list`.
 
 ### Merge-order notes
 
@@ -218,3 +220,22 @@ Uncommitted in the worktree; gates ran with them.
 - task-218 also adds to `CORE_MODULES`, `docs/cli-reference.md`, `production-registry` / `parity` lists and
   spec-005/008: expect adjacent-line conflicts.
 - Handover for task-245 (`X_cli-cmds.md:168`): `workflow show <ref>`, no `--name`.
+
+### Review fixes (2026-10-08, independent review: approve with fixes; no `src/` change)
+
+- spec-006 §6's baseline table: the working-tree row no longer ends "`workflowList` until its v0.3 reshape
+  moves it to item 6"; the Revision note and the proposed `--reason` name §6.
+- spec-017 §7.5 states the `executableNow` rule `frontierSubs` (`src/core/workflow-list-show.ts`) applies:
+  the include of every phase on a frontier step's trail, ancestors included, plus the leaf `iterate_over`
+  phase's include, even with no eligible candidate.
+- spec-017 §8 no longer contradicts itself: `ActionView.binding.kind` (reused by `CheckView`) reads `run`
+  instead of `command`, matching `TokenBinding` (`src/workflow/bindings.ts`) and `spec-003` Layer 3. This
+  closes the first candidate finding above.
+- Governance at review: `node scripts/check-governance.cjs --base 1ce84a54` → 4 `wf()` commits checked,
+  0 findings.
+
+Final proposed `--reason` texts (supersede the ones under "Pending amendments" above):
+- `spec-017`: "task-204: §8 said only that workflow show returns the resolved declaration of §7.6; implementing it needed a shape. §8 gains ShowResult with WorkflowView, PhaseView, CheckTokenView and the TokenBinding spec-003's resolution yields, and the binding kind of next's action and check views reads run instead of command, as spec-003 Layer 3 and the code say, so §8 no longer contradicts itself. It states that a phase's evidence kinds follow §4.3 as deduction applies them and that list and show carry the deduction's diagnostics. §7.5 states the executableNow rule list applies: the include of every phase on the trail of an open instance's frontier step, ancestors included, plus a leaf iterate_over phase's include, even with no eligible candidate. No command, rule or diagnostic changed."
+- `spec-008`: unchanged.
+- `spec-006`: "task-204 registers workflowShow in CORE_MODULES beside the reshaped workflowList, so §3's row loses its planned marker, and §6's baseline table drops 'workflowList until its v0.3 reshape moves it to item 6' from the working-tree row, since both now read HEAD under item 6. No other row changed."
+- `spec-003`: unchanged.
