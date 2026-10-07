@@ -52,6 +52,24 @@ describe('task-260 — AgentEntry refuses a placeholder identity (bug-261)', () 
     },
   );
 
+  it.each(['root@host.(none)', 'root@host.(none).com'])('refuses git\'s guessed-domain marker (%j), naming team.agents.0.email', (email) => {
+    const message = issueAt(withAgent({ email }), 'team.agents.0.email');
+    expect(message).toBeDefined();
+    expect(message).toContain('.(none)');
+  });
+
+  it('refuses a parenthesis in the top-level domain, naming team.agents.0.email', () => {
+    const message = issueAt(withAgent({ email: 'a@b.c(d)' }), 'team.agents.0.email');
+    expect(message).toBeDefined();
+    expect(message).toMatch(/parenthesis/);
+  });
+
+  it('reports one issue per refused email (the shape refusal is not repeated by the audit rule)', () => {
+    const result = DnaYaml.safeParse(withAgent({ email: 'bot@agents.test' }));
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.filter((i) => i.path.join('.') === 'team.agents.0.email')).toHaveLength(1);
+  });
+
   it.each(['noreply@anthropic.com', 'agent@test.example.com', 'bot@example.org'])('keeps accepting %j (only the top-level label counts)', (email) => {
     expect(DnaYaml.safeParse(withAgent({ email })).success).toBe(true);
   });
@@ -67,6 +85,11 @@ describe('task-260 — AgentEntry refuses a placeholder identity (bug-261)', () 
     ['Claude', 'svc@host.localhost'],
     ['Claude', 'noreply@anthropic.com'],
     ['AI agent (Claude/Cursor/etc.)', 'agent@test.example.com'],
+    // Review F1: git's guessed-domain marker and a parenthesis in the top-level domain, which the audit's
+    // address shape rejects. The table shows agreement on its rows, not equivalence of the two predicates.
+    ['Claude', 'root@host.(none)'],
+    ['Claude', 'root@host.(none).com'],
+    ['Claude', 'a@b.c(d)'],
   ])('the schema and isValidAttribution agree on %j <%s>', (name, email) => {
     const schemaAccepts = DnaYaml.safeParse(withAgent({ name, email })).success;
     expect(schemaAccepts).toBe(isValidAttribution(name, email));
