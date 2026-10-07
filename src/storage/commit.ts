@@ -21,7 +21,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmdirSync, unlinkSyn
 import { dirname, isAbsolute, join, relative, sep } from 'path';
 
 import { formatVersionTrailer, readBuildStamp } from './build-stamp';
-import { isDryRunActive, refuseDuringDryRun, stopWithPlan, unifiedDiff } from './dry-run';
+import { isDryRunActive, planDiff, refuseDuringDryRun, stopWithPlan } from './dry-run';
 import { E_COMMIT_FAILED, E_GIT_READ_FAILED, E_INVALID_REVISION, StorageError } from './errors';
 import { runGitRead, runGitReadBytes } from './git-read';
 import type { GitReadOptions } from './git-read';
@@ -38,6 +38,12 @@ export interface CommitOptions {
    * that string, so a `<` in the name moved the email it recorded (task-132 review, finding 2).
    */
   readonly author?: { readonly name: string; readonly email: string };
+  /**
+   * The success warnings the operation has collected before it commits (task-210 review, F4). The real
+   * run ignores them — the operation reports them itself — while a dry run, which stops at the commit,
+   * carries them into its result, so `--dry-run` warns about what the real run would warn about.
+   */
+  readonly warnings?: readonly string[];
 }
 
 /** The environment git runs with: `process.env`, with {@link CommitOptions.env} merged over it. */
@@ -181,17 +187,20 @@ function repoRelative(root: string, path: string): string {
  *
  * - **Dry run** (`dl-106` W2, `spec-008` §2 `--dry-run`). Inside `captureDryRun` (`./dry-run`), nothing
  *   is written: the commit the call would make — subject, full message with the `WingFoil-Version:`
- *   trailer, sorted root-relative paths, and the diff from `HEAD` to the new content — is recorded and
- *   the operation stops here. Every guard and refusal the operation runs before its write has already
- *   run, so a dry run of a refused operation is refused the same way.
+ *   trailer, sorted root-relative paths, and the diff from `HEAD` to the blobs it would record
+ *   (`planDiff`) — is recorded with {@link CommitOptions.warnings}, and the operation stops here. Every
+ *   guard and refusal the operation runs before its write has already run, so a dry run of a refused
+ *   operation is refused the same way.
  * - **A failed commit leaves nothing behind** (`bug-217`). When writing a file or git's `add`/`commit`
- *   fails (a refusing hook, a full disk, an unparseable author date), the working tree and the index of
- *   every path are put back exactly as they were — a created file is deleted with the directories the
- *   write created, an overwritten or deleted one gets its bytes back, and each index entry is restored,
- *   whatever the operator had staged there — so a retry of `memory add` gets the same id and nothing
- *   rides into the operator's next commit. A git failure is then reported as {@link StorageError}
- *   `E_COMMIT_FAILED`, naming the paths repository-relative and quoting git's explanation with the
- *   project root removed; a filesystem failure is rethrown as it was raised.
+ *   fails (a refusing hook, a full disk, an unparseable author date, a held `index.lock`), the working
+ *   tree is put back first — a created file is deleted, then every directory the write created, deepest
+ *   first across all paths; an overwritten or deleted file gets its bytes back — and then, when it
+ *   differs from what it was, the index entry of every path, whatever the operator had staged there. So
+ *   a retry of `memory add` gets the same id and nothing rides into the operator's next commit. A git
+ *   failure is then reported as {@link CommitFailure} (`E_COMMIT_FAILED`), naming the paths repository-
+ *   relative and quoting git's explanation with the project root removed — and, if the index could not
+ *   be put back, saying so. A filesystem failure is rethrown as it was raised (the index is untouched by
+ *   then).
  *
  * Callers run their confinement and dirty-target guards before calling: this primitive writes where it
  * is told.
@@ -204,27 +213,29 @@ export function writeAndCommit(root: string, changes: readonly PathChange[], mes
   }));
   if (isDryRunActive()) {
     const sorted = [...planned].sort((a, b) => Number(a.relative > b.relative) - Number(a.relative < b.relative));
-    stopWithPlan({
-      dryRun: true,
-      subject: (/^.*/.exec(message) as RegExpExecArray)[0],
-      message: stampedMessage(message),
-      paths: sorted.map((change) => change.relative),
-      diff: sorted.map((change) => unifiedDiff(change.relative, readPathAtRev(root, 'HEAD', change.relative, options), change.content, options.env)).join(''),
-    });
+    stopWithPlan(
+      {
+        dryRun: true,
+        subject: (/^.*/.exec(message) as RegExpExecArray)[0],
+        message: stampedMessage(message),
+        paths: sorted.map((change) => change.relative),
+        diff: sorted.map((change) => planDiff(root, change.relative, change.content, gitEnv(options))).join(''),
+      },
+      options.warnings,
+    );
   }
 
   const relativePaths = planned.map((change) => change.relative);
   const indexBefore = indexEntries(root, relativePaths, options);
   const bytesBefore = planned.map((change) => (existsSync(change.absolute) ? readFileSync(change.absolute) : null));
   const createdDirectories: { readonly file: string; readonly created: string }[] = [];
-  const restore = (): void => {
-    restoreIndex(root, relativePaths, indexBefore, options);
+  const restoreWorkingTree = (): void => {
     planned.forEach((change, index) => {
       const bytes = bytesBefore[index] ?? null;
       if (bytes !== null) writeFileSync(change.absolute, bytes);
       else if (existsSync(change.absolute)) unlinkSync(change.absolute);
     });
-    for (const { file, created } of createdDirectories) removeCreatedDirectories(file, created);
+    removeCreatedDirectories(createdDirectories);
   };
 
   try {
@@ -238,14 +249,43 @@ export function writeAndCommit(root: string, changes: readonly PathChange[], mes
       }
     }
   } catch (error) {
-    restore();
+    restoreWorkingTree();
     throw error;
   }
   try {
     return commitPathsNow(root, changes.map((change) => change.path), message, options);
   } catch (error) {
-    restore();
-    throw new StorageError(E_COMMIT_FAILED, commitFailureReason(root, relativePaths, error));
+    restoreWorkingTree();
+    const indexProblem = restoreIndexIfChanged(root, relativePaths, indexBefore, options);
+    throw new CommitFailure(root, relativePaths, gitExplanation(error), indexProblem === undefined ? undefined : withoutRoot(root, indexProblem));
+  }
+}
+
+/**
+ * `E_COMMIT_FAILED` (task-210, `bug-217`): git did not make the commit of a write, and
+ * {@link writeAndCommit} has put the working tree back. Carries its parts so a caller that must word
+ * the failure differently (approve's supersede recovery) does not parse the message.
+ */
+export class CommitFailure extends StorageError {
+  /** The repository-relative paths the commit would have contained. */
+  readonly paths: readonly string[];
+  /** git's explanation, on one line, with the project root removed. */
+  readonly gitDetail: string;
+  /** Why the index entries could not be put back, when they could not; `undefined` when they were. */
+  readonly indexProblem: string | undefined;
+
+  constructor(root: string, paths: readonly string[], raw: string, indexProblem: string | undefined) {
+    const gitDetail = withoutRoot(root, raw);
+    const outcome =
+      indexProblem === undefined
+        ? 'nothing was committed, and the working tree and the index are as they were'
+        : `nothing was committed and the working tree is as it was, but the index entries of ${paths.join(', ')} could not be put back (${indexProblem}): check them with git status`;
+    super(E_COMMIT_FAILED, `git did not commit ${paths.join(', ')}: ${gitDetail} — ${outcome}`);
+    this.name = 'CommitFailure';
+    this.paths = paths;
+    this.gitDetail = gitDetail;
+    this.indexProblem = indexProblem;
+    Object.setPrototypeOf(this, CommitFailure.prototype);
   }
 }
 
@@ -256,55 +296,76 @@ function indexEntries(root: string, paths: readonly string[], options: CommitOpt
     .filter((record) => record.length > 0);
 }
 
-/** Put the index entries of `paths` back to `entries`: drop what was not there, reinstate what was. */
-function restoreIndex(root: string, paths: readonly string[], entries: readonly string[], options: CommitOptions): void {
-  quietGit(root, ['update-index', '--force-remove', '--', ...paths], options);
-  if (entries.length === 0) return;
-  execFileSync('git', ['-C', root, 'update-index', '-z', '--index-info'], {
-    input: entries.map((entry) => `${entry}\0`).join(''),
-    env: gitEnv(options),
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+/**
+ * Put the index entries of `paths` back to `entries` when they differ from them now — drop what was not
+ * there, reinstate what was. Best effort: a failure (a held `index.lock`) is returned as git's
+ * explanation rather than thrown, so the caller still reports the commit failure in its own words.
+ */
+function restoreIndexIfChanged(root: string, paths: readonly string[], entries: readonly string[], options: CommitOptions): string | undefined {
+  try {
+    if (indexEntries(root, paths, options).join('\0') === entries.join('\0')) return undefined;
+    quietGit(root, ['update-index', '--force-remove', '--', ...paths], options);
+    if (entries.length > 0) {
+      execFileSync('git', ['-C', root, 'update-index', '-z', '--index-info'], {
+        input: entries.map((entry) => `${entry}\0`).join(''),
+        env: gitEnv(options),
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    }
+    return undefined;
+  } catch (error) {
+    return gitExplanation(error);
+  }
 }
 
 /**
- * Remove the directories a write created for `file`: from the file's own directory up to and including
- * `created` (the first directory `mkdirSync({recursive})` created), deepest first, stopping at the first
- * one that is not empty — something else now lives there, and it is not this write's to remove.
+ * Remove every directory a write created — for each file, from its own directory up to and including the
+ * first directory `mkdirSync({recursive})` created for it — **deepest first across all files**, so a
+ * directory emptied by removing a deeper one is removed in turn. One that is not empty stays: something
+ * else now lives there, and it is not this write's to remove.
  */
-function removeCreatedDirectories(file: string, created: string): void {
-  for (let directory = dirname(file); ; directory = dirname(directory)) {
+function removeCreatedDirectories(created: readonly { readonly file: string; readonly created: string }[]): void {
+  const directories = new Set<string>();
+  for (const entry of created) {
+    for (let directory = dirname(entry.file); ; directory = dirname(directory)) {
+      directories.add(directory);
+      if (directory === entry.created || dirname(directory) === directory) break;
+    }
+  }
+  const depth = (path: string): number => path.split(sep).length;
+  for (const directory of [...directories].sort((a, b) => depth(b) - depth(a) || Number(a < b) - Number(a > b))) {
     try {
       rmdirSync(directory);
     } catch {
-      return;
+      // Not empty: it holds something this write did not create.
     }
-    if (directory === created || dirname(directory) === directory) return;
   }
 }
 
-/**
- * The `E_COMMIT_FAILED` reason: the paths, git's own explanation (stderr, else the error's message) on
- * one line, with every spelling of the project root removed so no absolute path reaches the operator
- * (the `bug-251` class), and what the primitive did about it.
- */
-function commitFailureReason(root: string, paths: readonly string[], error: unknown): string {
+/** git's explanation of a failed run: its stderr when it wrote one, else the error's own message. */
+function gitExplanation(error: unknown): string {
   const captured = (error as { stderr?: unknown }).stderr;
-  // git's stderr when it wrote one; else the error's own message (`Command failed: git -C <root> …`,
-  // whose root the next step removes) — a commit with nothing to record explains itself on stdout.
-  const raw = typeof captured === 'string' && captured.trim().length > 0 ? captured : (error as Error).message;
+  // A commit with nothing to record explains itself on stdout only; the message (`Command failed: git
+  // -C <root> …`) is then what there is, and its root is removed by `withoutRoot`.
+  return typeof captured === 'string' && captured.trim().length > 0 ? captured : (error as Error).message;
+}
+
+/**
+ * `text` on one line, with every spelling of the project root removed — `<root>/x` becomes `x`, a bare
+ * `<root>` becomes `.` — so no absolute path reaches the operator (the `bug-251` class).
+ */
+function withoutRoot(root: string, text: string): string {
   // The longer spelling first, so that one spelling being a prefix of the other leaves no fragment.
   const real = realpathSync(root);
-  let detail = raw;
+  let detail = text;
   for (const spelling of real.length >= root.length ? [real, root] : [root, real]) {
     detail = detail.split(`${spelling}${sep}`).join('').split(spelling).join('.');
   }
-  const oneLine = detail
+  return detail
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .join('; ');
-  return `git did not commit ${paths.join(', ')}: ${oneLine} — nothing was committed, and the working tree and the index are as they were`;
 }
 
 // --- Read primitives for asserting what a commit CONTAINS (task-088, bug-076) ------------------

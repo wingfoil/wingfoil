@@ -34,7 +34,7 @@ import {
   renderCustomDirective,
 } from '../directives/create';
 import { parseDirectiveIds, withAssignedDirectives } from '../directives/roles-edit';
-import { documentExists, readDocument, StorageError, writeAndCommit, writeDocument } from '../storage';
+import { CommitFailure, documentExists, E_COMMIT_FAILED, readDocument, StorageError, writeAndCommit, writeDocument } from '../storage';
 // Not re-exported by the `../storage` barrel, imported directly per that module's own convention
 // (same as `src/memory/entry.ts`): `memory add` needs the CONFINED target path before it writes, to
 // run task-092's absence guard on it.
@@ -528,7 +528,7 @@ async function runDnaMutation(
     warnings.push(DNA_REWRITE_WARNING);
   }
 
-  const sha = writeAndCommit(root, [{ path: DNA_YAML_PATH, content: serialized }], subject);
+  const sha = writeAndCommit(root, [{ path: DNA_YAML_PATH, content: serialized }], subject, { warnings });
   const leaked = committedScopeError(root, sha, DNA_YAML_PATH, serialized);
   if (leaked) return leaked;
   return coreOk(outcome, { sha, message: subject }, warnings);
@@ -853,15 +853,17 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
     const slot = requireWipSlot(root, 'HEAD', committedMemoryYaml, type, initialState);
     if (!slot.ok) return slot;
 
+    const warnings = slot.value.map(formatDiagnostic);
     const { path, sha } = writeMemoryEntry(root, pathPattern, pathValues, content, message, {
       author: identity.value,
+      warnings,
       // `@`: git reads a bare `<seconds> <offset>` as a timestamp only from 9 digits of seconds up
       // (`0 +0000` is "invalid date format"); `@<seconds> <offset>` is a timestamp at any width.
       ...(date === undefined ? {} : { env: { GIT_AUTHOR_DATE: `@${date}` } }),
     });
     const leaked = committedScopeError(root, sha, targetPath, content);
     if (leaked) return leaked;
-    return coreOk({ id, path: relative(root, path) }, { sha, message }, slot.value.map(formatDiagnostic));
+    return coreOk({ id, path: relative(root, path) }, { sha, message }, warnings);
   } catch (error) {
     if (error instanceof StorageError) {
       // One rule, one code (task-130, `bug-123`, `spec-005` §3): a confinement refusal is `VALIDATION`
@@ -1366,9 +1368,12 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
       });
     }
   }
-  const committed = commitMemoryTransition(root, prepared.value, rendered, message);
+  // Both lookups read the same HEAD sha in path order; a file unreadable to both is named once. Known
+  // before the first commit, so a dry run, which stops there, reports them too (task-210 review, F4).
+  const warnings = superseded === null ? prepared.value.warnings : [...new Set([...prepared.value.warnings, ...superseded.warnings])];
+  const committed = commitMemoryTransition(root, prepared.value, rendered, message, {}, 'declared-fields-only', warnings);
   if (!committed.ok) return committed;
-  if (superseded === null) return coreOk({ id, path, from, to }, { sha: committed.value, message }, prepared.value.warnings);
+  if (superseded === null) return coreOk({ id, path, from, to }, { sha: committed.value, message }, warnings);
 
   const finalizeMessage = formatMemoryCommitMessage({
     type,
@@ -1381,8 +1386,15 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
   try {
     finalized = commitMemoryTransition(root, superseded, renderedSuperseded, finalizeMessage);
   } catch (error) {
-    // `String` of an `Error` is its `name: message`, which keeps git's own explanation.
-    finalized = coreErr({ code: 'IO', message: String(error) });
+    // A refused commit is worded from its parts, without the primitive's "the working tree and the index
+    // are as they were": the next statement makes the working tree differ on purpose (task-210 review,
+    // F5). Any other error keeps `String`'s `name: message`.
+    const reason =
+      error instanceof CommitFailure
+        ? `${E_COMMIT_FAILED}: git did not commit ${error.paths.join(', ')}: ${error.gitDetail}` +
+          (error.indexProblem === undefined ? '' : ` (its index entry could not be put back: ${error.indexProblem})`)
+        : String(error);
+    finalized = coreErr({ code: 'IO', message: reason });
     // The commit primitive put the file back when git refused the commit (task-210, `bug-217`); the
     // recovery below commits the file as it stands, so write the finalized status into it again — the
     // one write here meant to outlive a failed commit, because the approve has already happened.
@@ -1412,8 +1424,7 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
       superseded: { id: superseded.id, path: superseded.path, from: superseded.from, to: superseded.to },
     },
     { sha: committed.value, message },
-    // Both lookups read the same HEAD sha in path order; a file unreadable to both is named once.
-    [...new Set([...prepared.value.warnings, ...superseded.warnings])],
+    warnings,
   );
 };
 

@@ -397,7 +397,7 @@ export function updateRoleAssignments(
     warnings.push(ROLES_REWRITE_WARNING);
   }
 
-  const sha = writeAndCommit(root, [{ path: ROLES_YAML_PATH, content: serialized }], message);
+  const sha = writeAndCommit(root, [{ path: ROLES_YAML_PATH, content: serialized }], message, { warnings });
   const leaked = committedScopeError(root, sha, ROLES_YAML_PATH, serialized);
   if (leaked) return leaked;
   return coreOk({ assignments: next }, { sha, message }, warnings);

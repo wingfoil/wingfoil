@@ -689,6 +689,8 @@ export function checkMemoryTransition(
  *
  * @param scope - How much of the document this operation owns; defaults to the strict
  *   `declared-fields-only`, so a new verb is guarded unless it opts out deliberately.
+ * @param warnings - The success warnings the verb will report, handed to the commit primitive so a dry
+ *   run carries them (task-210 review, F4); defaults to the lookup's own, `prepared.warnings`.
  */
 export function commitMemoryTransition(
   root: string,
@@ -697,11 +699,12 @@ export function commitMemoryTransition(
   message: string,
   expected: Readonly<Record<string, string | undefined>> = {},
   scope: DocumentScope = 'declared-fields-only',
+  warnings: readonly string[] = prepared.warnings,
 ): CoreResult<string> {
   const checked = checkMemoryTransition(root, prepared, content, expected, scope);
   if (!checked.ok) return checked;
   const owned = { status: prepared.to, ...expected };
-  const sha = writeAndCommit(root, [{ path: prepared.path, content }], message, { author: prepared.identity });
+  const sha = writeAndCommit(root, [{ path: prepared.path, content }], message, { author: prepared.identity, warnings });
 
   const leaked = verifyCommittedScope(root, sha, prepared.path, owned, scope);
   if (leaked.length > 0) {

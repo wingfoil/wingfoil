@@ -27,7 +27,8 @@ export const DRY_RUN_FLAG: CoreFlag = {
  * Run `run` — one operation's `fn` — as a dry run:
  *
  * - it reached its commit → a success whose value is the {@link DryRunPlan} (exit `0`), with no
- *   `commit`, since none was made;
+ *   `commit`, since none was made, and the warnings the operation handed to the commit primitive
+ *   (`CommitOptions.warnings`) — the ones the real run would print;
  * - it refused before writing → its own failed result, unchanged, so the exit code is the refusal's;
  * - it threw → the same throw, for the surface to render as it renders any thrown error;
  * - it succeeded without committing (a change that is already in place) → its own result, which is
@@ -37,7 +38,7 @@ export const DRY_RUN_FLAG: CoreFlag = {
  */
 export async function runAsDryRun<T>(run: () => Promise<CoreResult<T>>): Promise<CoreResult<T | DryRunPlan>> {
   const outcome = await captureDryRun(run);
-  if (outcome.kind === 'planned') return coreOk(outcome.plan);
+  if (outcome.kind === 'planned') return coreOk(outcome.plan, undefined, outcome.warnings);
   if (outcome.kind === 'threw') throw outcome.error;
   return outcome.value;
 }
