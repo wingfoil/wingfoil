@@ -2,7 +2,7 @@
 id: "task-207-drive-e2e-smoke-through-fresh-project-use-scenario"
 type: task
 title: "Drive e2e-smoke through a fresh-project use scenario with exact exit codes and a report"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "fix"
 priority: "high"
