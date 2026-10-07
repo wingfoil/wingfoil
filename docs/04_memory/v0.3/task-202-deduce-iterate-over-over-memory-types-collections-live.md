@@ -33,6 +33,7 @@ tmpl_version: 260703
 - **Features:** P4.16, P4.13.
 - **Notes:** Proposal key: A06.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from wave 3 B2 (2026-10-07, `task-198`).** `task-198` removed the `iterate_over` `item` scope, dead until this task: put it back in `elementKey` (it now casts the scope to `{element}`) and in `hasRecord` (it now requires `record.item === null`) in `src/workflow/deduce.ts`. An `iterate_over` phase is reported as one unexpanded leaf until this task expands it.
 
 ## Execution Notes
 
