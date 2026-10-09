@@ -32,9 +32,9 @@ checks:
   # dev-loop.refactor and release-submit.pre-release-checks (dl-044; the command is task-173's).
   typecheck.clean:          { run: [npm, run, typecheck] }
   # dev-loop.review (dl-116 Action 4): the document-parity suites, by name — every test/docs suite citing dl-116
-  # (test/core/dev-loop-v1-6.test.ts holds the list complete), cli-reference (the model dl-116 names) and the
-  # enumeration-parity allowlist's own gate.
-  docs.parity:              { run: [npm, test, --, test/docs/cli-reference.test.ts, test/docs/commands-parity.test.ts, test/docs/enumeration-parity.allowlist.test.ts, test/docs/exit-codes-parity.test.ts, test/docs/mcp-surface-parity.test.ts, test/docs/memory-types-parity.test.ts, test/docs/name-resolvability.test.ts, test/docs/workflow-md.test.ts] }
+  # (test/core/dev-loop-v1-6.test.ts checks that each one is listed), plus command-surface-specs (dl-116 Q1 (A)'s
+  # first enumeration), cli-reference (the model dl-116 names) and the enumeration-parity allowlist's own gate.
+  docs.parity:              { run: [npm, test, --, test/docs/cli-reference.test.ts, test/docs/command-surface-specs.test.ts, test/docs/commands-parity.test.ts, test/docs/enumeration-parity.allowlist.test.ts, test/docs/exit-codes-parity.test.ts, test/docs/mcp-surface-parity.test.ts, test/docs/memory-types-parity.test.ts, test/docs/name-resolvability.test.ts, test/docs/workflow-md.test.ts] }
   # dev-loop.review: the BDD scenarios are pinned by jest suites that cite their feature files
   # (docs/02_requirements/02_bdd/features/); there is no separate BDD runner.
   tests.bdd.passing:        { run: [npm, test] }

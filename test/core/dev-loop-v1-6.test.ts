@@ -154,8 +154,10 @@ describe('AC 1 — dev-loop.yaml v1.6 declares the seven v0.3 gates (red-first)'
       const cited = dl116Suites();
       expect(cited.length).toBeGreaterThan(0);
       for (const suite of cited) expect(suites).toContain(suite);
-      // The model dl-116 names, and the allowlist's own gate.
+      // The model dl-116 names, the allowlist's own gate, and dl-116 Q1 (A)'s first enumeration (spec-005/008/006
+      // command lists against the program), which predates dl-116 and does not cite it.
       expect(suites).toContain('test/docs/cli-reference.test.ts');
+      expect(suites).toContain('test/docs/command-surface-specs.test.ts');
       expect(suites).toContain('test/docs/enumeration-parity.allowlist.test.ts');
     });
   });
@@ -175,13 +177,18 @@ describe('AC 1 — dev-loop.yaml v1.6 declares the seven v0.3 gates (red-first)'
     });
   });
 
-  it('dev-loop.yaml is at version 1.6, with its history line keeping 1.5\'s', () => {
-    expect(registry().workflow.version).toBe(1.6);
-    expect(atHead(DEV_LOOP_FILE)).toMatch(/^version: 1\.6 +# 1\.6 .*task-221.*\(prev 1\.5 dl-134/m);
+  // Version pins are "at least": a later writer of the same file bumps it again (B4: task-212, 219, 222 also
+  // bump bindings.yaml), and the history line keeps this task's entry.
+  it('dev-loop.yaml is at version 1.6 or later, its history naming task-221 and keeping 1.5\'s', () => {
+    expect(registry().workflow.version).toBeGreaterThanOrEqual(1.6);
+    expect(atHead(DEV_LOOP_FILE)).toMatch(/^version: \d+\.\d+ +# .*\b1\.6 .*task-221.*\(prev 1\.5 dl-134/m);
   });
 
-  it('bindings.yaml is at version 1.3, its history naming task-221', () => {
-    expect(atHead(BINDINGS_FILE)).toMatch(/^version: 1\.3 +# .*1\.3 .*task-221/m);
+  it('bindings.yaml is at version 1.3 or later, its history naming task-221', () => {
+    const match = /^version: (\d+(?:\.\d+)?) +# (.*)$/m.exec(atHead(BINDINGS_FILE));
+    expect(match).not.toBeNull();
+    expect(Number(match![1])).toBeGreaterThanOrEqual(1.3);
+    expect(match![2]).toMatch(/task-221/);
   });
 });
 

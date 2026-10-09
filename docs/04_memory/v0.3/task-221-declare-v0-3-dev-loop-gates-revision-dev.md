@@ -19,7 +19,7 @@ Seven ratified decisions each add a check to `dev-loop.yaml`. One revision (v1.6
 
 ## Acceptance Criteria
 
-- (characterization) `design` declares the criterion-vs-directives/specs check (dl-102 §4); `refactor.checks.post` gains `typecheck.clean` (dl-044), bound in `bindings.yaml` to task-173's `npm run typecheck`; `review.checks.pre` gains the claim re-run check (dl-097 (a)), the re-review check (dl-098) and names the document-parity suites (dl-116); `done.checks.post` gains the `### Retrospective` existence check (dl-115 Q2 (a)); `start.checks.pre` gains the stop-the-line check: no feature task is picked up while open fix tasks exceed 30 % of the release's open tasks (dl-133 Q3 (a), Q4 (i)).
+- (red-first; planned as characterization, reclassified at design) `design` declares the criterion-vs-directives/specs check (dl-102 §4); `refactor.checks.post` gains `typecheck.clean` (dl-044), bound in `bindings.yaml` to task-173's `npm run typecheck`; `review.checks.pre` gains the claim re-run check (dl-097 (a)), the re-review check (dl-098) and names the document-parity suites (dl-116); `done.checks.post` gains the `### Retrospective` existence check (dl-115 Q2 (a)); `start.checks.pre` gains the stop-the-line check: no feature task is picked up while open fix tasks exceed 30 % of the release's open tasks (dl-133 Q3 (a), Q4 (i)).
 - (characterization) `workflow show dev-loop` (v0.3 build) shows each new check with its binding or as an unbound warning, zero errors; the warnings are listed in Execution Notes.
 - (characterization) the active v0.3 dev-loop phase plan states the same gates in the same change.
 
@@ -185,9 +185,31 @@ Run with the plan amendment in the working tree; `main` has not moved (`git rev-
   (`grep -n "checks.pre\|claims.rerun" .wingfoil/directives/custom/code-review.md` → line 40) says the
   `review` phase's `checks.pre` entry is the workflow's declaration, which it now is.
 
+### review fixes (independent review: APPROVE WITH FIXES, 2026-10-09)
+
+1. *Exact version pins.* `dev-loop-v1-6.test.ts` pinned `bindings.yaml` to `version: 1.3` and dev-loop to
+   `toBe(1.6)`; tasks 212, 219 and 222 also bump `bindings.yaml`, so the gate re-bumps would break both.
+   Both are now "at least" (≥ 1.6 / ≥ 1.3) and the history line must name `task-221`. The other `toEqual`
+   calls in the file pin check lists, not versions (`grep -n "toBe(1\|toEqual(\[" test/core/dev-loop-v1-6.test.ts`).
+   This edits a `red` file after `red` (`tests.unchanged(since: red)`), at the reviewer's request; it is listed
+   here as the declared exception.
+2. *AC 2's rows at red.* The seven AC 2 rows failed at `9d118a7d` because the YAML did not declare the checks
+   yet (`entry` undefined), not because `workflow show` lacked anything: the command needed no change (see red).
+3. *`docs.parity`'s list.* The comment claimed the test "holds the list complete"; it only checks that every
+   `test/docs` suite citing `dl-116` is listed. Added `test/docs/command-surface-specs.test.ts` (spec-005/008/006
+   command lists against the program: dl-116 Q1 (A)'s first enumeration, which predates dl-116 and does not
+   cite it) to the binding and to the test, and reworded the comment. Left out, with reasons:
+   `dry-run-documented.test.ts` checks that one flag is documented in two places (task-210 AC 4), not
+   that a document's enumeration matches a code-defined set; `sard-state-from-history.test.ts` checks the
+   wording of two SARD requirements (task-203), a premise check rather than parity. Both still run in
+   `npm test` (`tests.bdd.passing`).
+4. *AC 1's label* in the Acceptance Criteria now says red-first (reclassified at design).
+5. *Plan amendment.* The red/green/refactor bullet named `tsc --noEmit` "by hand" and omitted
+   `tests.unchanged`; it now states v1.5's roles and `tests.unchanged(since: red)` and v1.6's `typecheck.clean`.
+
 ### Pending amendments (approver)
 
-- `dev-loop-rel-v0.3-plan` — `--reason "task-221: the plan states the dev-loop v1.6 gates in the same change as dev-loop.yaml (AC 3; the dl-034 lesson): section 1 names the dev-loop versions and lists the gates of start, design, refactor, review and done; section 2 says the dl-133 stop-the-line check is in force from task-221's approval."`
+- `dev-loop-rel-v0.3-plan` — `--reason "task-221: the plan states the dev-loop v1.6 gates in the same change as dev-loop.yaml (AC 3; the dl-034 lesson). Section 1 names the dev-loop versions, its red/green/refactor bullet states v1.5's roles and tests.unchanged(since: red) and v1.6's typecheck.clean, and it lists the gates of start, design, refactor, review and done; section 2 says the dl-133 stop-the-line check is in force from task-221's approval."`
 
 ### Retrospective
 
