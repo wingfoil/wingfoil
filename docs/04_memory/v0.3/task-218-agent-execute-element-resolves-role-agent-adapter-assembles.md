@@ -2,7 +2,7 @@
 id: "task-218-agent-execute-element-resolves-role-agent-adapter-assembles"
 type: task
 title: "`agent execute --element` resolves role, agent and adapter, assembles and checks the context, and refuses every bad case before anything is spawned"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "high"
