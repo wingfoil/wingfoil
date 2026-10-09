@@ -63,7 +63,7 @@ Accepted by every command, except `--dry-run`, which only the commands that chan
 | Option | Effect |
 |---|---|
 | `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (Unreleased (v0.3): except `agent show`, which prints `key: value` lines); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
-| `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, and for a `memory approve` that also moves a superseded document it shows only the approve commit. |
+| `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, and for a `memory approve` that also moves a superseded document it shows only the approve commit. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
@@ -134,14 +134,19 @@ Which state a command reads depends on whether that state can stop it:
   commit it before running the command that depends on it — otherwise the command fails and says the
   change is not committed.
 - **Read-only commands read the working tree** — `dna show`, `paths`, `directives list`,
-  `memory search`, `memory history`, `workflow list`, and the MCP server's Resources. They show what
+  `memory search`, `memory history`, and the MCP server's Resources. They show what
   is on disk, uncommitted edits included: a draft you have not committed is exactly what
   `memory search` should find. So `memory add --type <t>` can refuse a type your working copy of
   `memory.yaml` declares, while `memory search` searches the documents that same working copy
   declares — the type is on disk and in no commit; commit `memory.yaml` and the two agree.
+- Unreleased (v0.3): **`agent execute` reads `HEAD`** like the other commands that write: the
+  commit it reads becomes the run's `state_ref`.
 - Unreleased (v0.3): **`agent show` reads `HEAD`**, though it changes nothing: it answers from the
   same commit as the run ids `agent execute` counts, and when only your working tree holds the run it
   is asked for, it says so on a `hint:` line instead of showing it.
+- Unreleased (v0.3): **`workflow list` and `workflow show` read `HEAD`**, though they change nothing:
+  they answer from the same commit as the other workflow commands, and an uncommitted change to a file
+  they read is reported as a `W_UNCOMMITTED_INPUTS` warning instead of being used.
 - **Safety checks on the file about to be written or deleted look at the disk itself** — for
   example, whether a path leads outside the project through a symbolic link — because that is what
   the write will follow.
@@ -1015,19 +1020,38 @@ Built-in directives are refused (`error: built-in directives cannot be removed`)
 
 ### `wingfoil workflow list`
 
-Print the workflow manifest (`workflows.yaml`) and every workflow it includes, with their phases.
+List the workflows you can run now, as committed at `HEAD`.
 
 ```
-wingfoil workflow list
+wingfoil workflow list [--all]
 ```
 
-Read-only. WingFoil 0.2.2 has **no workflow engine**: workflows describe the process, and you (or your
-agent) follow them by hand — see the [user guide §7](user-guide.md#7-workflows).
+Unreleased (v0.3). Read-only. It reads the workflow files, `memory.yaml`, `dna.yaml` and the Memory
+documents **as committed at `HEAD`**, not the working tree (see [Git side effects](#git-side-effects)), so
+it answers from the same state as the other workflow commands. An uncommitted change to one of those inputs
+does not change the answer: it is reported as a `W_UNCOMMITTED_INPUTS` warning naming the file.
 
-The output also carries `bindings` — the project's `.wingfoil/workflows/bindings.yaml`, which declares
-the command each workflow token runs, or `null` when there is none — and `diagnostics`, the load's
-warnings, such as `W_WORKFLOW_UNBOUND_TOKEN` for a token with no binding. A warning does not change the
-exit code; an error in any of the files exits `1`.
+Without `--all` it lists the workflows you can start (`startable`), plus an includable workflow when an
+open workflow has reached a phase that includes it — `dev-loop` while a `release-cycle` is in its
+development phase. An open workflow is a `plan` document in `draft` or `active` that names it (see
+`workflow show`). With `--all` it lists every workflow the configuration loads. Each entry has `name`,
+`startable`, `includable`, `description` and `executableNow`, sorted by name:
+
+```console
+$ wingfoil workflow list --format json
+{"baseline":{"rev":"HEAD","commit":"<sha>"},"workflows":[{"name":"adr-ingest","startable":true,"includable":false,"description":"Capture a single Architectural Decision Record (ADR) into Memory.","executableNow":true}, …],"diagnostics":[…]}
+```
+
+With no `workflows.yaml` at `HEAD` it lists nothing and adds `"message": "no workflows defined"`, exit `0`.
+
+This replaces the 0.2.x output, which printed `workflows.yaml` and every workflow file with their phases;
+`wingfoil workflow show <name>` prints a workflow's phases now. The MCP Resources `wingfoil://workflows`
+and `wingfoil://workflows/{name}` keep the 0.2.x content and read the working tree in v0.3.
+
+`diagnostics` carries the warnings of the load and of the checks against the rest of the configuration
+(below), then the warnings about uncommitted inputs and about Memory documents that could not be read. A
+warning does not change the exit code; an error in any of the files exits `1`, with every diagnostic in
+the error's details.
 
 The workflows are also checked against the rest of the configuration: a phase `role` or
 `approval: { by_role }` that `dna.yaml`'s `team.roles` does not define (`E_PHASE_ROLE_UNKNOWN`), an
@@ -1035,10 +1059,36 @@ The workflows are also checked against the rest of the configuration: a phase `r
 register (in `element`, `iterate_over`, `memory.add(type: …)` or a `produces` owner), an `iterate_over`
 collection that resolves to no list, and a `cadence` event that can never fire are errors (exit `1`).
 A `{<type>.<field>}` token outside its scope, a phase whose actions its element's state machine cannot
-apply, and a `fallback` that does not match the reject it answers are warnings. These warnings follow
-the load's own in `diagnostics`. Because the command reads `dna.yaml` and `memory.yaml` for these checks,
-it now also fails (exit `1`) when either of them is present but invalid.
+apply, and a `fallback` that does not match the reject it answers are warnings. Without `dna.yaml` or
+`memory.yaml` the checks that need it cannot run: each missing file is reported as a
+`W_WORKFLOW_CHECKS_NOT_RUN` warning naming the checks that were skipped. The command fails (exit `1`)
+when `dna.yaml` or `memory.yaml` is present but invalid.
 
+- **Commit:** none.
+
+### `wingfoil workflow show`
+
+Print one workflow resolved, its included workflows nested under their phases, as committed at `HEAD`.
+
+```
+wingfoil workflow show <ref>
+```
+
+Unreleased (v0.3). Read-only, and it reads `HEAD` as `workflow list` does. `<ref>` is a workflow name, or
+the id of an open workflow instance (its `plan` document), which stands for that instance's workflow.
+
+For each phase it prints its `role` and that role's directives (`id` and `title`, the role's own and the
+global ones, as `directives list --role` resolves them), its `actions` and `checks` with the binding each
+token resolves to (`wingfoil`, `manual`, `agent`, `run` from `workflows/bindings.yaml`, or `unbound`;
+checks are listed, never run: `"evaluated": false`), `produces` with the Memory type that owns each path,
+`approval`, `awaits`, `fallback`, `iterate` (an `iterate_over` and its `where`) or `selection` (a `where`
+alone), `mode`, `allowedModes` and `distinctFrom`, `cadence`, the kinds of evidence that complete the phase
+(`state`, `created`, `produces`, `selection`, `include`, `awaits`, `record`), and, for a phase that includes
+another workflow, that workflow resolved the same way under `sub`. The payload is
+`{"baseline": {…}, "workflow": {…}, "diagnostics": […]}`, the diagnostics as `workflow list` reports them.
+
+- **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <ref>`, exit
+  `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
 - **Commit:** none.
 
 ## Agent
@@ -1048,6 +1098,47 @@ directory `dna.yaml` declares in `paths.runs` (`docs/runs/` in a project `wingfo
 each record committed on its own as `agent: record <run-id>`. A run id is
 `<element-id>/<phase>/<n>`: the element's id without its type, the workflow phase (or `adhoc` for a
 run outside a workflow step), and a count from 1, e.g. `task-042-login-form/red/1`.
+
+### `wingfoil agent execute`
+
+Launch an agent CLI through its adapter on one Memory element, with its context assembled and checked first.
+
+```
+wingfoil agent execute --element <type:id> [--role <role>] [--agent <name>]
+```
+
+| Option | Description |
+|---|---|
+| `--element <type:id>` | The element the agent works on, as `<type>:<id>` with the element's full id, e.g. `task:task-042-login-form`. Required in this release (the workflow-step forms `--next`, `--workflow` and `--step` are not available yet, and are refused as unknown options). |
+| `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is `developer`, and a `warning:` line says so. `approver` is refused: an agent never runs as the role that approves. |
+| `--agent <name>` | The `team.agents` entry to launch. Without it, the first entry, in `dna.yaml` order, that declares an `adapter` and lists the role in `executes_as`. |
+
+Unreleased (v0.3), and **not yet able to launch**: this build runs every check that comes before the
+launch and stops there. It reads **as committed at `HEAD`** (see [Git side effects](#git-side-effects)):
+`dna.yaml`, `memory.yaml`, the element, the agent's adapter under `.wingfoil/agents/built-in/` or
+`.wingfoil/agents/custom/`, and the run log. That commit is the run's `state_ref`. In order, it checks:
+the element exists; the role is defined and is not `approver`; an agent with an adapter runs the role;
+the adapter is valid; its `command` is on `PATH` (or at its path in the project); your git identity is
+set; `dna.yaml` declares `paths.runs` and the element's run log has no uncommitted changes; the
+execution context (DNA, the role's directives, the relevant Memory) assembles and validates; the
+WingFoil MCP server of this same build starts and serves that context (your project's `.mcp.json` is
+neither read nor changed); and, for an adapter whose launch needs one, stdin and stdout are a terminal.
+The first check that fails ends the command with exit `1` and its message, for example
+`error: context pre-load failed: MCP server unreachable` or
+`error: invalid execution context: missing 'directives' section`. The context's warnings (a directive
+bound to the role with no file, a Memory document that could not be read) and any file under
+`.wingfoil/agents/` that is not an adapter (another extension, a nested file, a name outside
+`[a-z0-9-.]`) are printed as `warning:` lines first. Temporary files go to the system's temporary
+directory and are removed whatever happens.
+
+When every check passes, the command exits `1` with `error: agent execute cannot launch an agent yet:
+run <run-id> passed every pre-launch check …`. With `--dry-run` it exits `0` instead and prints the
+launch it would make: `{"dryRun": true, "subject": "agent: record <run-id>", "paths": [<run log>],
+"run": {id, element, workflow, phase, role, mode, agent, adapter, state_ref}, "bootstrap": "<the
+prompt the agent would receive>"}`. Without `--element` it exits `2` with
+`error: missing required argument: --next or --element`.
+
+- **Commit:** none in this build (the launch will commit one run record, `agent: record <run-id>`).
 
 ### `wingfoil agent show`
 

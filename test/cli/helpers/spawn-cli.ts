@@ -38,6 +38,12 @@ export interface SpawnedRun {
 /** Where to run the child. */
 export interface SpawnCaptureOptions {
   readonly cwd?: string;
+  /**
+   * The child's environment. Absent, the child gets node's own `process.env` — which is NOT the one a
+   * test sees: jest gives each test file a copy, so an assignment to `process.env` in a test does not
+   * reach a child spawned without `env` (task-268). Pass `process.env` to hand the test's copy on.
+   */
+  readonly env?: NodeJS.ProcessEnv;
 }
 
 /**
@@ -48,7 +54,7 @@ export interface SpawnCaptureOptions {
  * report: both throw, so neither can read back as an ordinary exit code.
  */
 export function spawnCapture(command: string, args: readonly string[], options: SpawnCaptureOptions = {}): SpawnedRun {
-  const run = spawnSync(command, [...args], { cwd: options.cwd, encoding: 'utf-8' });
+  const run = spawnSync(command, [...args], { cwd: options.cwd, encoding: 'utf-8', env: options.env });
   if (run.error) throw run.error;
   if (run.status === null) throw new Error(`${command} ended on signal ${run.signal ?? 'unknown'}, not an exit`);
   return { status: run.status, stdout: run.stdout, stderr: run.stderr };

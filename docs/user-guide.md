@@ -359,11 +359,16 @@ Full script: [`examples/03-directives-per-role`](examples/03-directives-per-role
 wingfoil workflow list
 ```
 
+Unreleased (v0.3): `workflow list` lists the workflows you can start, plus an included one an open workflow
+has reached (`--all` lists every workflow), as committed at `HEAD`; `wingfoil workflow show <name>` prints
+one workflow's phases, each with its role, that role's directives, its actions and checks, and the
+workflows it includes nested under it. See the [CLI reference](cli-reference.md#wingfoil-workflow-list).
+
 **WingFoil 0.2.2 has no workflow engine**: nothing starts a workflow, tracks its phase or runs its
 checks. The workflow files describe your process so that people and agents read the same one, and you
 follow it by hand. In practice:
 
-1. Pick the workflow and phase you are in, from `workflow list`.
+1. Pick the workflow and phase you are in, from `workflow list` and `workflow show <name>` (0.2.x: `workflow list`).
 2. Do that phase's work in the role it names, with that role's directives loaded.
 3. Record the outcome as Memory documents and move them through their states with the verbs in §8.
 

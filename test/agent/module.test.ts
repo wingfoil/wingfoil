@@ -1,8 +1,8 @@
 /**
  * The `agent` module exists (task-177, `spec-016` §1): `src/agent` is declared in `dna.yaml`
  * `modules` (held by `test/core/module-layout.test.ts`), and its `CoreModule` is registered in
- * `CORE_MODULES` under the name `agent`. Its first operation is `agentShow` (task-220, read-only);
- * `agent execute` and `agent list` are later tasks', so no MCP Tool is derived from it today.
+ * `CORE_MODULES` under the name `agent`. Its operations are `agentShow` (task-220, read-only) and
+ * `agentExecute` (task-218, mutating: its one write is the run record); `agent list` is task-240's.
  */
 import { MODULE_NAME, resolveRunLogPath } from '../../src/agent';
 import { CORE_MODULES } from '../../src/core';
@@ -15,15 +15,18 @@ describe('the agent module', () => {
     expect(MODULE_NAME).toBe('agent');
   });
 
-  it('is registered in CORE_MODULES with agentShow, read-only, as its one operation (task-220)', () => {
+  it('is registered in CORE_MODULES with agentExecute (mutating, task-218) and agentShow (read-only, task-220)', () => {
     const agent = CORE_MODULES.find((module) => module.name === 'agent');
     expect(agent).toBeDefined();
-    expect(Object.keys(agent!.operations)).toEqual(['agentShow']);
+    expect(Object.keys(agent!.operations).sort()).toEqual(['agentExecute', 'agentShow']);
     expect(
       enumerateOperations(CORE_MODULES)
         .filter(({ module }) => module.name === 'agent')
         .map(({ operation }) => [operation.name, operation.mutates]),
-    ).toEqual([['agentShow', false]]);
+    ).toEqual([
+      ['agentExecute', true],
+      ['agentShow', false],
+    ]);
   });
 
   it('is declared in this repository’s dna.yaml modules at src/agent', () => {

@@ -90,6 +90,9 @@ describe('REQ-SEC-05 — the operation-derived surface over the real CORE_MODULE
     // `memory.memorySearch` (spec-006 §3) registers as a Resource and does not widen this list.
     const mutatingOps = CORE_MODULES.flatMap((module) => Object.values(module.operations)).filter((op) => op.mutates);
     expect(mutatingOps.map((op) => op.name).sort()).toEqual([
+      // task-218 — `agent execute`, mutating (its write is the run record); a Tool here only through the
+      // mechanical registrar: the production server registers none before v0.4 (spec-016 §7).
+      'agentExecute',
       'directiveAssign',
       'directiveCreate',
       'directiveRemove',
@@ -111,6 +114,7 @@ describe('REQ-SEC-05 — the operation-derived surface over the real CORE_MODULE
     ]);
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
+      'agent.execute',
       'directive.assign',
       'directive.create',
       'directive.remove',

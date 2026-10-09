@@ -10,9 +10,15 @@
  * - **Discovery lists, it does not parse.** A name in both directories is refused here, because the
  *   run record could not say which one launched (§2.1). Only the adapter a caller selects is then read
  *   and validated (§3.2 step 5), so a broken manifest blocks nobody but its own agents.
+ * - **What is not an adapter is said, not skipped** (`bug-290`). The listing offers only names
+ *   {@link loadAdapter} can select — a basename in `spec-009`'s ID class — and
+ *   {@link adapterTreeDiagnosticsAtRev} reports every other entry under `.wingfoil/agents/` (another
+ *   extension, a nested file, a file outside the two directories, a basename outside the ID class) as a
+ *   `W_ADAPTER_IGNORED` warning naming its path, except the `.gitkeep` `wingfoil init` reserves the
+ *   directories with. `agent execute` prints them where it lists the adapter tree (§3.3 step 2).
  */
 import { readPathAtRev } from '../storage';
-import { isIdPiece, ValidationError, type ValidationIssue, ID_CHAR_CLASS } from '../validation';
+import { isIdPiece, ValidationError, type Diagnostic, type ValidationIssue, ID_CHAR_CLASS } from '../validation';
 import { listPathsAtCommit, resolveRevision, atHeadOr, RevisionError } from '../core/revision';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
 
@@ -24,6 +30,9 @@ export const ADAPTERS_DIR_PATH = '.wingfoil/agents' as const;
 
 /** The `E_*` code of a name declared in both adapter directories. */
 export const E_ADAPTER_DUPLICATE = 'E_ADAPTER_DUPLICATE';
+
+/** The `W_*` code of an entry under the adapter tree that is not an adapter (`bug-290`). */
+export const W_ADAPTER_IGNORED = 'W_ADAPTER_IGNORED';
 
 /** An adapter found at a revision: its name (the file basename), its directory and its path. */
 export interface AdapterEntry {
@@ -44,15 +53,53 @@ const ENTRY_RE = /^\.wingfoil\/agents\/(built-in|custom)\/([^/]+)\.yaml$/;
 /** Byte order, never locale order (REQ-SYS-07). */
 const byteOrder = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-/** The adapters commit `sha` holds, by name then kind, duplicates included. */
+/** The placeholder `wingfoil init` reserves an empty adapter directory with: never reported. */
+const GITKEEP = '.gitkeep';
+
+/** Why the entry at `path` is not an adapter, or `null` when it is one (or is a `.gitkeep`). */
+function notAnAdapter(path: string): string | null {
+  const match = ENTRY_RE.exec(path);
+  if (match === null) {
+    return path.endsWith(`/${GITKEEP}`)
+      ? null
+      : `not an adapter: an adapter is a .yaml file directly inside ${ADAPTERS_DIR_PATH}/built-in/ or ${ADAPTERS_DIR_PATH}/custom/ (spec-016 §2.1)`;
+  }
+  const name = match[2]!;
+  return isIdPiece(name)
+    ? null
+    : `not an adapter: its name '${name}' is not an id, characters [${ID_CHAR_CLASS}] only (spec-009 §1), so no agent can select it`;
+}
+
+/** The adapters commit `sha` holds, by name then kind, duplicates included; only names that are ids. */
 function entriesAtCommit(root: string, sha: string): AdapterEntry[] {
   const entries: AdapterEntry[] = [];
   for (const path of listPathsAtCommit(root, sha, ADAPTERS_DIR_PATH)) {
     const match = ENTRY_RE.exec(path);
-    if (match === null) continue;
+    if (match === null || !isIdPiece(match[2]!)) continue;
     entries.push({ name: match[2]!, kind: match[1] as AdapterKind, path });
   }
   return entries.sort((a, b) => byteOrder(a.name, b.name) || byteOrder(a.kind, b.kind));
+}
+
+/**
+ * Every entry under `.wingfoil/agents/` at `rev` that is not an adapter (`bug-290`, `spec-016` §2.1): a
+ * file of another extension, a nested file, a file outside `built-in/` and `custom/`, or a `.yaml`
+ * basename outside `spec-009`'s ID class — one `W_ADAPTER_IGNORED` warning each, naming the path in
+ * `file`, in path order (byte order). A `.gitkeep` is not reported. Nothing is parsed.
+ *
+ * @param rev - A revision naming one commit; `HEAD` for the gating read. At `HEAD`, a repository with
+ *   no commit has no entry and no diagnostic.
+ * @throws `RevisionError` when `rev`, other than `HEAD`, names no commit.
+ */
+export function adapterTreeDiagnosticsAtRev(root: string, rev: string): Diagnostic[] {
+  const sha = rev === 'HEAD' ? atHeadOr(root, () => resolveRevision(root, rev), null) : resolveRevision(root, rev);
+  if (sha === null) return [];
+  const diagnostics: Diagnostic[] = [];
+  for (const path of [...listPathsAtCommit(root, sha, ADAPTERS_DIR_PATH)].sort(byteOrder)) {
+    const message = notAnAdapter(path);
+    if (message !== null) diagnostics.push({ code: W_ADAPTER_IGNORED, severity: 'warning', file: path, path: '', message });
+  }
+  return diagnostics;
 }
 
 /** One issue per name declared in both directories, in name order, paired with that name. */
@@ -75,7 +122,8 @@ function duplicateIssues(entries: readonly AdapterEntry[], file: string): { read
 }
 
 /**
- * Every adapter commit `rev` declares, sorted by name (byte order). Nothing is parsed.
+ * Every adapter commit `rev` declares, sorted by name (byte order): only the names {@link loadAdapter}
+ * can select; {@link adapterTreeDiagnosticsAtRev} reports the rest. Nothing is parsed.
  *
  * @param rev - A revision naming one commit; `HEAD` for the gating read.
  * @throws `ValidationError` (`E_ADAPTER_DUPLICATE`) when a name is in both `built-in/` and `custom/`;
@@ -86,6 +134,28 @@ export function listAdaptersAtRev(root: string, rev: string): AdapterEntry[] {
   const duplicates = duplicateIssues(entries, `${rev}:${ADAPTERS_DIR_PATH}`);
   if (duplicates.length > 0) throw new ValidationError(duplicates.map(({ issue }) => issue));
   return entries;
+}
+
+/**
+ * The refusal of a name declared in both adapter directories at `rev` (§2.1), in {@link loadAdapter}'s
+ * shape — `adapter '<first name>': declared in both …`, every duplicated name a `dl-055` detail line —
+ * or `undefined` when every name is unique. `agent execute` asks it where it lists the adapter tree
+ * (§3.3 step 2), before it resolves the element, the role or the agent.
+ *
+ * @param rev - A revision naming one commit (a sha, or `HEAD`; at `HEAD` a repository with no commit has
+ *   no adapter).
+ */
+export function duplicateAdapterRefusal(root: string, rev: string): CoreResult<never> | undefined {
+  const sha = rev === 'HEAD' ? atHeadOr(root, () => resolveRevision(root, rev), null) : resolveRevision(root, rev);
+  if (sha === null) return undefined;
+  const duplicates = duplicateIssues(entriesAtCommit(root, sha), `${rev}:${ADAPTERS_DIR_PATH}`);
+  if (duplicates.length === 0) return undefined;
+  const [first] = duplicates;
+  return coreErr({
+    code: 'VALIDATION',
+    message: `adapter '${first!.name}': ${first!.issue.message}`,
+    details: { issues: duplicates.map(({ issue }) => ({ ...issue, detail: render(issue) })) },
+  });
 }
 
 /** An issue in the form a refusal shows it: `<path>: <message>`, or the message alone at the root. */

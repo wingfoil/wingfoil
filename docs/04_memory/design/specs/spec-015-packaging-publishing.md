@@ -147,8 +147,10 @@ Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a de
    property is what makes the §3 smoke meaningful: a same-named `wingfoil` on npmjs can never satisfy
    the install. See the *Revision (2026-09-21) — §3 stage 2* note below.
 3. **smoke** — in a clean environment, `npm install -g wingfoil --registry http://localhost:4873`,
-   then run the `dl-023` init+CLI e2e smoke (assert `wingfoil --help` on PATH exits 0, and the
-   fresh-init CLI surface is schema-valid). The installed build's stamp must name the commit the
+   then run the `dl-023` init+CLI e2e smoke (assert `wingfoil --help` on PATH exits 0, then drive a
+   fresh project per template through the `dl-099` §3 use scenario: every Memory transition verb, the
+   exact exit code of each step, every written artifact re-loaded through its own reader, a clean
+   working tree after each step). The installed build's stamp must name the commit the
    stage was given: with `--expect-commit <sha>` — which the CI stage always passes, as
    `"$GITHUB_SHA"`, the commit the `gate` job of the same run built and packed — `wingfoil --version`
    must print exactly `<package.json version> (<sha>)` (`dl-111`, `task-192`'s build record), so a
@@ -626,3 +628,19 @@ each at 1,000 ms p95. The suite asserts both for each command, through the one v
 judging either. How the suites run is unchanged: `npm test`, CI and
 `prepublishOnly` still leave them out, and `npm run test:latency` runs them alone, only when asked for.
 Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions above.
+
+**Revision (2026-10-07, `task-207-drive-e2e-smoke-through-fresh-project-use-scenario`) — §3 stage 3: the
+staging smoke is the `dl-099` §3 use scenario (`bug-132`, `bug-133`).** Stage 3 reuses
+`scripts/e2e-smoke.cjs` verbatim, so widening the smoke widens this gate (`bug-132`'s note H1). Until
+this revision the script ran eight happy-path commands per template and asserted their exit 0, their
+JSON output, one `submit` edge (`draft → pending`) and, once at the end, a clean working tree. It now
+drives each template's fresh project through a use scenario: one task per verb of the scaffold's
+machine (`add → submit → approve`, `add → submit → reject`, `add → deprecate`), `memory history` on
+each; every step declares its exit code, with exit-1 and exit-2 steps whose spec-005 §3 error is
+asserted; after the last writer every written artifact is re-loaded through its own reader with its
+content asserted; and the working tree must be clean after every step. Stage 3's text says so. The
+same script also runs on every push and pull request, in `ci.yml`'s `e2e-smoke` job, against the
+tarball `npm pack` makes (`dl-099` §4 (c), smoke part); the staging rehearsal itself stays out of CI.
+The pins are `test/cli/e2e-smoke.test.ts`, `test/cli/publish-staging.test.ts` and
+`test/cli/ci-workflow.test.ts`. Edited in place: no supersede, no state change, no `version:` bump
+(`dl-047`), as in the revisions above.

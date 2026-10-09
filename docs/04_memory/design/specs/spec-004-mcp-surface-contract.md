@@ -242,6 +242,7 @@ wingfoil memory deprecate       → memory.deprecate
 wingfoil workflow start         → workflow.start
 wingfoil workflow end           → workflow.end
 wingfoil workflow next          → workflow.next        (advances/reads active step)
+wingfoil agent execute          → agent.execute        (v0.4; refuses every call until v1.0, spec-016 §7)
 ```
 
 Read-only CLI query commands (`memory search`, `memory history`, `dna show`, `paths`, `workflow
@@ -507,3 +508,11 @@ Memory reads, and every core-derived Resource, a top-level `warnings` array — 
 a collection, the files passed before the match for a single document — and §4.3 item 5 points to it.
 The no-argument Prompt, the URIs, the write refusal and the Tools are unchanged. Edited in place
 without a supersede or a state change, per `dl-047` (no `version:` field).
+
+**Revision (2026-10-07, `task-218-agent-execute-element-resolves-role-agent-adapter-assembles`) — §4.1
+gains `agent.execute`.** `wingfoil agent execute` ships in v0.3, registered `mutates: true` in
+`CORE_MODULES` (`spec-016` §8), so §4.2's parity rule pairs it with a Tool. The row records the Tool
+`spec-016` §7 schedules: served from v0.4 with the rest of the Tools (P5.2.3), and refusing every call
+until a headless launch exists (v1.0, `spec-016` §3.5), since an MCP caller has no terminal. The
+shipped server registers no Tool in v0.3 (`spec-014` §3). Edited in place without a supersede or a
+state change, per `dl-047` (no `version:` field).

@@ -68,7 +68,8 @@ export type ActionBinding = z.infer<typeof ActionBinding>;
 
 /** One collection entry: a scalar, or a map keyed by its `id` (else its `name`) field. */
 const CollectionEntry = z.union([z.string(), z.number(), z.boolean(), z.record(z.string(), z.unknown())]);
-type CollectionEntry = z.infer<typeof CollectionEntry>;
+/** One entry of a collection (spec-003 § "Collections"): a scalar, or a map keyed by its `id` / `name` field. */
+export type CollectionEntry = z.infer<typeof CollectionEntry>;
 
 /**
  * The key of one collection entry (spec-003 § "Collections"): the entry itself for a scalar, the

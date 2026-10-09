@@ -144,8 +144,11 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
     // ratification chose option (E) precisely because spec-006 §3's one-Tool-per-function rule makes
     // this three Tools rather than the dozen a per-collection verb set would have cost.
     // task-127 adds `memory amend` (`dl-108`), the approver-gated amendment verb; task-180 adds
-    // `memory park` (`dl-110`), the verb that takes a declared `returns` edge.
+    // `memory park` (`dl-110`), the verb that takes a declared `returns` edge. task-218 adds
+    // `agent execute` (`spec-016` §8): a Tool here, through the mechanical registrar; the production
+    // server registers none before v0.4 (spec-016 §7).
     const expected = [
+      'agent execute',
       'directive assign',
       'directive create',
       'directive remove',
@@ -190,12 +193,15 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'wingfoil://memory/search',
       'wingfoil://paths',
       'wingfoil://workflow/list',
+      // task-204's `workflow.workflowShow` (read-only); not served by the production server (spec-017 §9).
+      'wingfoil://workflow/show',
     ]);
     // Every `mutates: true` operation is registered ONLY as a Tool (never a Resource), so none appears
     // above; the Tools list below is the mutating set the surface advertises.
     expect(hasAnyMutatingOperation(CORE_MODULES)).toBe(true);
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
+      'agent.execute',
       'directive.assign',
       'directive.create',
       'directive.remove',

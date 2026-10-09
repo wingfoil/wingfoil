@@ -203,7 +203,7 @@ for cell):
 | `workflowStatus`   | `workflow` *(planned)*   | false   | `wingfoil workflow status`    | Resource `wingfoil://workflows/-/status` — v0.3, ruling R12 | P4.5    |
 | `workflowFinalize` | `workflow` *(planned)*   | true    | `wingfoil workflow finalize`  | Tool `workflow.finalize` *(v0.4)*             | ruling R11 (`dl-104` D1) |
 | `workflowList`     | `workflow`               | false   | `wingfoil workflow list`      | the shipped `wingfoil://workflows` keeps its payload in v0.3 | P4.6    |
-| `workflowShow`     | `workflow` *(planned)*   | false   | `wingfoil workflow show`      | the shipped `wingfoil://workflows/{name}` keeps its payload in v0.3 | P4.7    |
+| `workflowShow`     | `workflow`               | false   | `wingfoil workflow show`      | the shipped `wingfoil://workflows/{name}` keeps its payload in v0.3 | P4.7    |
 | `workflowCreate`   | `workflow` *(planned)*   | true    | `wingfoil workflow create`    | Tool `workflow.create` *(v0.4)*               | P4.8    |
 | `workflowRemove`   | `workflow` *(planned)*   | true    | `wingfoil workflow remove`    | Tool `workflow.remove` *(v0.4)*               | P4.9    |
 
@@ -244,7 +244,7 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
 
 | function         | module                | mutates | CLI                        | MCP                                         | feature |
 |-------------------|------------------------|---------|-----------------------------|----------------------------------------------|---------|
-| `agentExecute`    | `agent` *(planned)*    | true    | `wingfoil agent execute`    | Tool `agent.execute` *(v0.4; refuses until v1.0)* | P5.3.1  |
+| `agentExecute`    | `agent`                | true    | `wingfoil agent execute`    | Tool `agent.execute` *(v0.4; refuses until v1.0)* | P5.3.1  |
 | `agentList`       | `agent` *(planned)*    | false   | `wingfoil agent list`       | Resource `wingfoil://agent/list` *(v0.4; URI per `dl-040`)* | `dl-135` point 4 |
 | `agentShow`       | `agent`                | false   | `wingfoil agent show`       | Resource `wingfoil://agent/show/{run-id}` *(v0.4; URI per `dl-040`)* | P5.3.5  |
 
@@ -396,7 +396,7 @@ users is `spec-008-cli-grammar` §11):
 |----------|------------|
 | `HEAD`, gating (item 1) | `memoryAdd` (type registry and scaffold; its `{n}` counter reads the wider baseline `command-baseline` declares, which can only raise the id), `memorySubmit`, `memoryApprove`, `memoryReject`, `memoryDeprecate`, `memoryAmend` (state machine, the document their `<id>` names and its committed `status` — `findMemoryDocumentByIdAtRev` at the one sha `prepareMemoryTransition` resolves — and approver authority on the gated verbs; the working tree supplies the content `memorySubmit` and `memoryAmend` commit and is checked to be the element `HEAD` records); `dnaSet`, `dnaAdd`, `dnaUpdate`, `dnaRemove` (`dna.yaml`, read only after item 2 has refused any difference from `HEAD`); `directiveAssign` (role catalogue, directive inventory, bindings); `directiveRemove`'s referrer check (`roles.yaml`, `loadRolesYamlAtHead`); `workflowNext`, from the task that ships it in v0.3 |
 | `HEAD`, declared (item 6) | `workflowStatus`, `workflowList`, `workflowShow`, `agentList`, `agentShow`, the two v0.3 workflow Resources — each from the task that ships it in v0.3 |
-| working tree, gating nothing (item 4) | `dnaShow`, `paths`, `directivesList`, `memorySearch`, `memoryHistory` (its log is git's, its `memory.yaml` the working tree's), the shipped MCP Resources and the role Prompts; `workflowList` until its v0.3 reshape moves it to item 6 |
+| working tree, gating nothing (item 4) | `dnaShow`, `paths`, `directivesList`, `memorySearch`, `memoryHistory` (its log is git's, its `memory.yaml` the working tree's), the shipped MCP Resources and the role Prompts |
 | filesystem, predicting an effect (item 5) | the confinement and symlink guards of every writing or deleting operation, and `directiveCreate`'s check that its target file does not exist |
 | working tree, deviating | `directiveRemove`'s name resolution (`bug-108`) — owed to `HEAD` |
 
@@ -821,3 +821,16 @@ rendering of its own (`key: value` lines) where every other command prints the i
 `hint:` line; `renderConsole` is optional on every operation, used only by the CLI under `--format
 console`, never under `json`/`yaml` or on MCP. No other function or surface changed. Edited in place
 without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-07, `task-204-reshape-workflow-list-add-workflow-show-both-answering`) — §3's
+`workflowShow` row is registered; §6's table follows `workflowList`'s move.** `workflowShow` is now in
+`CORE_MODULES` under `workflow`, beside the reshaped `workflowList`, so its module cell loses *(planned)*;
+both read `HEAD` as §6 item 6 already declares, so §6's baseline table drops "`workflowList` until its v0.3
+reshape moves it to item 6" from the working-tree row. The shipped `wingfoil://workflows…` Resources the
+§3 row names are unchanged. No other row changed. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-07, `task-218-agent-execute-element-resolves-role-agent-adapter-assembles`) —
+§3's `agentExecute` row is registered.** `agent execute` is registered in `CORE_MODULES` under `agent`
+(its pre-launch half, `spec-016` §3.3 steps 1–12; the launch is `task-228`'s), so its module cell loses
+*(planned)*, as `spec-016` §8's row does in the same task: the two tables stay cell for cell. Edited in
+place without a supersede or a state change (`dl-047`).

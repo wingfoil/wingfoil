@@ -8,7 +8,7 @@ workflow: ""           # REQUIRED — the workflow this plan executes, e.g. "dev
 phase: ""              # REQUIRED — the phase/scope this plan covers, e.g. "rel-v0.1" or "retrospective"
 element: ""            # optional — the Memory element this phase iterates (e.g. a release id)
 release: ""            # optional — target release, e.g. "v0.1"
-tmpl_version: 261006   # Orignal template version
+tmpl_version: 261007   # Orignal template version
 ---
 
 <!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
@@ -32,3 +32,16 @@ tmpl_version: 261006   # Orignal template version
 ## Handoff
 
 <!-- What requires the approver vs. the agent; the checkpoint(s) and the completion criteria. -->
+
+## Execution Notes
+
+<!-- Running log of what actually happened while executing this plan — rulings, deviations from the
+     steps above, blockers — filled in as the phase runs, not written after the fact. -->
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     An item met by the phase as a whole goes here; one met on a single task or bug goes in that
+     element's own subsection. The retrospective's `explore` reads this subsection first. -->

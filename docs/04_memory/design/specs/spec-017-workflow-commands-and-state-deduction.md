@@ -114,7 +114,7 @@ checks that its target file does not exist on disk.
 |---|---|
 | workflows (in `list`, MCP) | byte-wise ascending `name` |
 | phases | declared order |
-| iterations over Memory elements | ascending by the `{n}` token of the type's `id_pattern` when it has one, else byte-wise ascending `id` |
+| iterations over Memory elements | ascending by the `{n}` token of the type's `id_pattern` when it has one (an id the pattern does not match after every one it does), else byte-wise ascending `id` |
 | iterations over a collection | the collection's declared order (`spec-003` § "Collections") |
 | open instances | most recently started first (§3.3); ties by byte-wise ascending instance id |
 | frontier steps (§4.9) | instance order, then depth-first phase order, then iteration order |
@@ -264,7 +264,7 @@ kind of evidence it declares is satisfied:
 | `state` | the bound element's status is at or after the phase's exit state (§4.4) in its type's `sequence` |
 | `created` | for each type `T` the phase adds: the step created at least one element of `T`, each of them is at or after the state the phase's later actions leave it in (§4.4 applied to it), and each `{ type: T, path }` entry resolves to a committed path for each of them. A step that created **no** element leaves this kind satisfied when the phase declares other evidence, and otherwise **missing**, completed only by a `record` |
 | `produces` | every string entry, resolved (§4.1), matches at least one path in `HEAD`'s tree (a pattern ending in `/` matches when a committed file lies under it). An entry `spec-003` flags `W_PHASE_PRODUCES_OWNER_IMPLICIT` is shown but is **not evidence** until it is rewritten in the `{ type, path }` form: under `dl-104` D3's default it would name a file of the workflow's element that the phase never writes (a task-named spec), or one that exists from the start (the release-line's own file) |
-| `selection` | no Memory document at `HEAD` matches the phase's `where` |
+| `selection` | no Memory document at `HEAD` matches the phase's `where`; an archived document (`deprecated`, or `superseded`, §4.11) never matches |
 | `include` | the included workflow is complete for the element(s) or entries it runs on (§4.5, §4.6) |
 | `awaits` | never in v0.3 — its `evidence` is a check, evaluated from v1.0 (P4.12); the phase completes by a `record` |
 | `record` | a phase record for the step exists (§4.8) |
@@ -297,8 +297,10 @@ other key is the **scope filter**. Candidates are the documents of type `iterate
 whose frontmatter matches the scope filter by `spec-003`'s match rule (an equal value; membership in a
 list value; a list-valued field matches when the two lists share an element —
 `release-cycle.yaml:27`'s `tags: ["{release.version}"]` against a task's `tags:` list). A candidate is:
-- **eligible** when it also matches the entry filter and no phase of the sub is complete for it;
-- **entered** when at least one phase of the sub is complete for it and the sub is not complete;
+- **eligible** when it also matches the entry filter and no phase of the sub before its current phase is
+  complete other than vacuously;
+- **entered** when a phase of the sub before the sub's current phase (§4.9) is complete for it other than
+  vacuously (§4.7), and the sub is not complete;
 - **complete** when the sub is complete for it;
 - otherwise ignored.
 
@@ -307,11 +309,15 @@ The entry filter alone would drop an element the moment the sub moves it on (a `
 
 *Over a collection* (`dl-104` D2 (b)). Candidates are the collection's entries at `HEAD` that match
 `where`, in declared order; collections carry no status, so every candidate is eligible until the sub
-is complete for it, entered once a phase of it is complete, and complete with the sub.
+is complete for it, entered once a phase of it before its current phase is complete other than vacuously, and
+complete with the sub.
 
-The phase is complete when no candidate is eligible or entered. With zero candidates it completes
-with the note `no elements matched the iterate_over filter` (P4.16 sc. 3) and is **vacuously
-complete** (§4.7). REQ-STATE-07's "N elements matching the `where` filter" is read as the eligible
+The phase is complete when no candidate is eligible or entered. When no candidate is eligible, entered
+or complete — there is none, or every one is ignored (P4.16 sc. 3's "no task has `status: backlog`",
+where an empty scope filter makes every task a candidate) — it completes with the note
+`no elements matched the iterate_over filter` (P4.16 sc. 3) and is **vacuously complete** (§4.7). A
+`where` token with no value leaves the candidates undecided: the phase is then one unexpanded step,
+missing `include`, and the token is reported (`W_UNRESOLVED_TOKEN`). REQ-STATE-07's "N elements matching the `where` filter" is read as the eligible
 plus entered candidates defined here, which keeps an element counted after the sub moves it out of
 the entry filter; the SARD wording is amended with this spec (Consequences), together with `dl-104`
 Action 1's "or collection entries".
@@ -323,9 +329,12 @@ from undoing finished work:
   other than vacuously; a candidate that matches after that point is reported as `late` in
   `status` (and, if it sits in a gate state, among the ungated elements of §5.1), never put back on
   the frontier — a bug opened while a release is in development does not reopen that release's
-  planning;
-- a phase that is complete only **vacuously** (a live query with zero candidates, or a selection
-  matching nothing) never makes an earlier phase complete or skipped by this rule or by §4.10.
+  planning. For an `iterate_over` phase the late candidates are the ones still eligible or entered;
+  each is counted in the `late` count of `iterations` (§8), and an element (not a collection entry, which is no
+  `ElementRef`) is listed in the instance's `late`; for a selection they are the elements it matches;
+- a phase that is complete only **vacuously** (an `iterate_over` with no candidate counted, a selection
+  matching nothing whose only other evidence is a `created` with no element, or a plain `include` whose
+  sub completed only vacuously) never makes an earlier phase complete or skipped by this rule or by §4.10.
 
 **4.8 The history walk: records, linkage and re-entry.** Deduction reads commit history once per
 invocation, per open instance, over a bounded **walk**: the commits reachable from `HEAD` and not
@@ -351,13 +360,26 @@ Three things are found there.
   before `fallback.step` keep their evidence, and `produces` evidence is not affected. This is how the
   fallback step becomes current after a reject (§5.2): after `dev-loop.review` is rejected, `start`
   and `design` stay complete, `red` needs a new record, and `review`'s `state` needs a new `submit`.
+  **Newer** means *descends from*: a commit is newer than the re-entry commit when the re-entry commit
+  is a strict ancestor of it, decided through the parent links the walk reads. Neither the commit date
+  nor the position in `--topo-order` decides it. A record made on a branch that had not seen the reject
+  does not count once that branch is merged, whichever parent order the merge has. When several
+  re-entries reach a phase, its evidence must descend from each. A plain `include` runs on the same
+  element, so the re-entries that reach the including phase reach every phase of its sub. An
+  `iterate_over` phase does not hand its own re-entries to its iterations: each iteration runs on
+  another element (or a collection entry, which has none), and only that element's re-entries cut its
+  sub's evidence (approver ruling 2026-10-09, `task-202`).
 
 A commit older than the start commit is outside the walk: a record, linkage or reject from before
 the instance was started does not count for it.
 
-**Cost** (REQ-PERF-03, `workflow next` < 1,000 ms p95). One deduction reads `HEAD`'s tree once, the
-Memory frontmatter once, and one `git log` over the union of the open instances' walks (bounded by the
-oldest open instance's start commit), plus one lookup per element that has a re-entry in the walk.
+**Cost** (REQ-PERF-03, `workflow next` < 1,000 ms p95). One deduction reads `HEAD`'s tree once and the
+Memory frontmatter once. It reads history with one `git merge-base --octopus` over every open instance's
+start commit and one `git log` over the union of the open instances' walks: the commits reachable from
+`HEAD` and not from that merge base's parents. With no common ancestor, the walk is not bounded. It then
+makes one lookup per element that has a re-entry in the walk. The merge base is an ancestor of every
+start, so no commit any instance's walk holds is cut off. The oldest start alone would cut one off in a
+branching history: a commit on another branch that precedes the oldest start.
 Nothing scales with the full history. The fit criterion is verified by a timing test in the
 implementing task, on this repository's history; it is not measured here.
 
@@ -372,16 +394,21 @@ instance to the step and `scope` is the step's element or collection entry. A st
 once when several iterations are in flight (parallel `dev-loop`s, `dl-014`). An instance is
 **complete** when its frontier is empty, except an instance whose workflow the registry does not load
 (`W_INSTANCE_WORKFLOW_UNKNOWN`, §2): its frontier is empty because nothing can be deduced, and it is
-reported `complete: false`.
+reported `complete: false`; and an abandoned instance (§4.11), whose frontier is empty for the same reason,
+is reported `complete: false` too.
 
 **4.10 Optional phases.** A phase with `optional: true` whose evidence is unsatisfied is **skipped**
 when a later phase of the same workflow is complete other than vacuously (§4.7); otherwise it is
-current, and the step reports `optional: true` together with the next non-optional phase. From v1.0 an
+current, and the step reports `optional: true`; the frontier then also carries the steps of the following
+phases that are not complete, up to and including the next non-optional one, which the optional phase does
+not hold back. From v1.0 an
 optional phase is also skipped when its `checks.pre` are unmet (`spec-003` `optional` row).
 
 **4.11 Archived elements.** A candidate or bound element in `deprecated`, or in `superseded` on
 `adr`/`tech-spec` (REQ-STATE-06, `dl-065`), is neither eligible nor entered; an instance whose bound
-element is archived reports `abandoned: true` and an empty frontier.
+element (declared or self-bound, §3.4) is archived reports `abandoned: true`, an empty frontier, no phase progress and
+`complete: false` (§4.9). A self-bound element stays bound when it is archived: a later element the creating
+step linked does not rebind the instance. A selection never matches an archived element either (§4.3).
 
 ### 5. Approvals, fallback, notifications and third parties
 
@@ -548,7 +575,9 @@ its frontier, its pending approvals and its `late` candidates (§4.7); then the 
 **7.5 `list`** (P4.6). Without `--all`: the startable workflows, plus every includable workflow that
 is the current phase's sub on some open instance's frontier (P4.6 sc. 1–2). With `--all`: every
 loaded workflow (P4.6 sc. 3). Each entry: `name`, `startable`, `includable`, `description`, and
-`executableNow`. This replaces today's payload, which is the raw loader result (§ Consequences).
+`executableNow`. An includable workflow is executable now when it is the `include` of a phase on the
+trail of some open instance's frontier step (§4.9), ancestors included, or of that step's own phase when
+it is an `iterate_over` phase reported as the leaf, even one with no eligible candidate. This replaces today's payload, which is the raw loader result (§ Consequences).
 With no manifest: `no workflows defined`, exit `0` (P4.6 sc. 4; `spec-003` Layer 1, "an absent
 manifest is an empty registry").
 
@@ -630,7 +659,7 @@ interface TrailEntry { workflow: string; phase: string; scope: ScopeRef | null }
 interface ActionView {
   token: string; text: string; unresolved: string[];
   target: "bound" | "selection" | "created" | "run" | "none";
-  binding: { kind: "wingfoil" | "command" | "agent" | "manual" | "unbound";
+  binding: { kind: "wingfoil" | "run" | "agent" | "manual" | "unbound";
              argv?: string[]; expectedCommit?: string };
 }
 interface CheckView { token: string; binding: ActionView["binding"]; evaluated: false }
@@ -670,9 +699,32 @@ interface EndResult      { baseline: Baseline; ended: Instance; active: Instance
 interface FinalizeResult { baseline: Baseline; instance: Instance; finalized: Step; next: Step | null; commit: string }
 interface ListResult     { baseline: Baseline; workflows: { name: string; startable: boolean; includable: boolean;
                            description: string | null; executableNow: boolean }[]; message?: string; diagnostics: Diagnostic[] }
+type TokenBinding = { kind: "wingfoil" | "manual" | "agent" | "run" | "unbound"; source: "built-in" | "project" | "none";
+                 argv?: string[]; expectedCommit?: { type: string | null; verbs: string[] }; severity?: "warn" | "reject" };  // spec-003's resolution of one token
+interface CheckTokenView { token: string; binding: TokenBinding; evaluated: false }
+interface PhaseView      { name: string; description: string | null; role: string | null; optional: boolean;
+                           directives: { id: string; title: string }[]; directiveWarnings: string[];
+                           actions: { token: string; binding: TokenBinding }[]; checks: { pre: CheckTokenView[]; post: CheckTokenView[] };
+                           produces: { pattern: string; owner: string | null; evidence: boolean }[];
+                           approval: { byRole: string } | { byPerson: string } | null;
+                           awaits: { party: string; evidence: CheckTokenView } | null;
+                           fallback: { step: string; setState: string | null } | null;
+                           iterate: { over: string; where: Record<string, unknown> | null } | null;
+                           selection: { where: Record<string, unknown> } | null;
+                           mode: "fresh" | "resume" | "reference"; allowedModes: ("fresh" | "resume" | "reference")[];
+                           distinctFrom: string[]; cadence: unknown; evidence: EvidenceKind[];
+                           include: string | null; sub: WorkflowView | null }
+interface WorkflowView   { name: string; file: string; startable: boolean; includable: boolean; description: string | null;
+                           element: string | null; phases: PhaseView[] }
+interface ShowResult     { baseline: Baseline; workflow: WorkflowView; diagnostics: Diagnostic[] }
 ```
 
-`show` returns the resolved declaration of §7.6 with the `Baseline` and `diagnostics`. Console
+`show` returns the resolved declaration of §7.6 with the `Baseline` and `diagnostics`: `ShowResult`. A
+phase's `evidence` is the kinds §4.3 gives it, by the rules deduction applies to the same phase
+(`include` alone for a plain `include`); `owner` and `state` evidence use the element the phase is bound to
+where the shown workflow, or its includer, binds it; `mode` is the declared mode, `fresh` when absent. A
+`list` or `show` payload carries the same `diagnostics` the deduction of §4 reports at that commit, since
+both resolve against it (`executableNow`, an instance id as `<ref>`). Console
 rendering is free-form (`spec-005` §2) but always prints, for `next`, the step's key, trail, role,
 scope, the actions with their bindings, the directive ids and any "human needed" line (§5.3);
 `dl-043`'s generic console renderer is v0.4 scope.
@@ -845,6 +897,14 @@ before `plan-next-release-line`.
   `selection` evidence is never satisfied on its own. The phase completes through §4.7 once
   `commit-backlog`'s `state` evidence holds (the release `in-development`); until then `status` and
   `next` show `build-backlog` on the frontier (approver ruling 2026-10-07, `task-199` review).
+- *Late decision-logs (known consequence, approver ruling at `task-202`'s review):* because
+  `build-backlog`'s selection never empties, an instance whose release passed `commit-backlog` lists every
+  matching `ready` decision-log in its `late` (§4.7) — on this repository 124 late elements, 87 of them
+  `ready` decision-logs (reviewer's probe, `task-202` review) — until `dl-160`'s actions (post-v0.3) let a
+  decision-log leave the selection.
+- *Instances started mid-release:* records before an instance's start commit do not count (§4.8), so an
+  instance started after some tasks are done puts each done task's record checkpoints (`dev-loop.red|green|
+  refactor`) back on the frontier (§4.9) unless the task's state evidence completes the sub.
 - *Checkpoints:* 27 phases — the 28 above less `end-of-life.deprecate`, whose selection (the closing
   release-line's releases not yet released) is evidence.
   `retrospective.approve` stays one: its `decision-log.set_state(ready)` acts on the decision-log
@@ -1037,3 +1097,43 @@ workflow the registry does not load is `complete: false` although its frontier i
 entry gains `evidence: boolean`, which tells an entry that is shown but is not evidence (§4.3) from one of a
 workflow with no element (both have `owner: null`). No deduction rule changed. Edited in place without a
 supersede or a state change (`dl-047`); recorded with `memory amend`.
+
+**Revision (2026-10-09, `task-203-read-instance-history-walk-step-linkage-created-elements`) — §4.8's
+"newer" and the walk's bound, per the approver's rulings on task-203's review findings F1 and F3, both
+option (a).** "Newer than the re-entry commit" is now defined by ancestry: the evidence commit is a
+strict descendant of the re-entry commit, read from the walk's parent links. It is no longer read from
+the commit date or the `--topo-order` position, which put a record made on a branch that never saw the
+reject after it or before it depending on the merge's parent order. The Cost paragraph now bounds the
+single union walk by the octopus merge base of the open instances' start commits. It is no longer bounded
+by the oldest start, which dropped a younger instance's commits made on another branch before that
+start. One `git merge-base` spawn is added; nothing else scales with the full history. No other
+deduction rule changed. Edited in place without a supersede or a state change (`dl-047`); pending the
+approver's `memory amend` at task-203's review.
+
+**Revision (2026-10-09, `task-202-deduce-iterate-over-over-memory-types-collections-live`) — readings the
+`iterate_over`, live-query, optional and archived rules needed, and rules added.** Readings: §4.6, a candidate
+is eligible when it matches the entry filter and no phase of the sub before the sub's current phase is
+complete other than vacuously, and entered once such a phase is complete; the note
+and vacuous completion apply when no candidate is eligible, entered or complete (an empty scope filter makes
+every element of the type a candidate, so "zero candidates" alone would never hold for P4.16 sc. 3); an
+unresolved `where` token leaves the phase one unexpanded step. §1.3, an id the `{n}` pattern does not match
+iterates after every one it does. §4.7, which candidates are late, how they are counted and listed, and which
+completions are vacuous. §4.10, the frontier of an optional current phase also carries the following phases up
+to the next non-optional one. Rules added: §4.3 and §4.11, a selection never matches an archived element;
+§4.9 and §4.11, an abandoned instance has no phase progress and is reported `complete: false`; §4.11, an
+instance whose self-bound element is archived is abandoned, and a later linked element does not rebind it; §4.8, an
+`iterate_over` phase does not hand its re-entry cutoff to its iterations, each element having its own
+re-entries (approver ruling 2026-10-09), while a plain `include` passes it to its sub. §12 records two
+known consequences: the late `ready` decision-logs of `build-backlog`'s selection (until `dl-160`) and the
+record checkpoints an instance started mid-release reports again. Edited in place without a supersede or a
+state change (`dl-047`); pending the approver's `memory amend` at `task-202`'s review.
+
+**Revision (2026-10-09, `task-204-reshape-workflow-list-add-workflow-show-both-answering`) — `show`'s payload
+declared, `list`'s rule stated.** §8 said only that `show` returns "the resolved declaration of §7.6"; implementing it needed a
+shape, and a payload two consumers can read differently is the failure REQ-SYS-07 exists to prevent. §8 gains
+`ShowResult` (with `WorkflowView`, `PhaseView`, `CheckTokenView` and the `TokenBinding` `spec-003`'s resolution of a token
+yields; `run` is the kind of a project binding, so the action and check views of `next`
+read `run` where they read `command`, as `spec-003` Layer 3 and the code say), states that a
+phase's evidence kinds follow §4.3 as deduction applies them and that `list` and `show` carry the deduction's
+diagnostics; §7.5 states the `executableNow` rule `list` applies. No command, rule or diagnostic changes. Edited in place without a supersede or a state change
+(`dl-047`); pending the approver's `memory amend` at `task-204`'s review.

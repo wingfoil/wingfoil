@@ -20,7 +20,7 @@ import { rmSync } from 'fs';
 import { join } from 'path';
 
 // Through the `src/core` barrel: the public surface task-198/199/204/211 import.
-import { CORE_MODULES, loadWorkflowRegistry, loadWorkflowRegistryAtHead, loadWorkflowRegistryAtRev, workflowCoreDiagnostics } from '../../src/core';
+import { CORE_MODULES, loadWorkflowRegistry, loadWorkflowRegistryAtHead, loadWorkflowRegistryAtRev, W_WORKFLOW_CHECKS_NOT_RUN, workflowCoreDiagnostics } from '../../src/core';
 import { MemoryYaml } from '../../src/memory/schema';
 import { parseYaml, ValidationError } from '../../src/validation';
 import { Workflow } from '../../src/workflow/schema';
@@ -469,7 +469,8 @@ describe('workflowCoreDiagnostics — pure', () => {
     workflowCoreDiagnostics(
       { include: workflows.map((_, i) => `f${i}.yaml`), workflows: workflows.map((w) => Workflow.parse(w)), bindings: null },
       { memoryYaml: PURE_MEMORY, dnaYaml: dnaYaml as never, templateFields: () => new Set(['id', 'title']) },
-    ) as Diag[];
+      // These cases run without dna.yaml on purpose; its W_WORKFLOW_CHECKS_NOT_RUN (bug-281, task-204) is pinned below.
+    ).filter((d) => d.code !== W_WORKFLOW_CHECKS_NOT_RUN) as Diag[];
 
   it('F1: two out-of-scope tokens in one action are two warnings', () => {
     const got = pure([{ name: 'main', kind: 'main', element: 'task', phases: [{ name: 'a', actions: ['git.x(a: "{foo.id}", b: "{bar.id}")'] }] }]);
@@ -623,7 +624,11 @@ describe('task-264 — E_WORKFLOW_ELEMENT_TYPE_UNKNOWN on typed set_state / sync
       { include: ['f0.yaml'], workflows: [Workflow.parse({ name: 'main', kind: 'main', phases: [{ name: 'a', where: { type: 'tsak' }, actions: ['tsak.set_state(x)'] }] })], bindings: null },
       { memoryYaml: null, dnaYaml: null, templateFields: () => null },
     );
-    expect(got).toEqual([]);
+    // No type error; the two skips are reported (bug-281, task-204), dna.yaml first.
+    expect(got.map((d) => [d.code, d.file])).toEqual([
+      [W_WORKFLOW_CHECKS_NOT_RUN, 'dna.yaml'],
+      [W_WORKFLOW_CHECKS_NOT_RUN, 'memory.yaml'],
+    ]);
   });
 });
 

@@ -7,7 +7,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { ADAPTERS_DIR_PATH, E_ADAPTER_DUPLICATE, listAdaptersAtRev, loadAdapter } from '../../src/agent';
+import { adapterTreeDiagnosticsAtRev, ADAPTERS_DIR_PATH, E_ADAPTER_DUPLICATE, listAdaptersAtRev, loadAdapter, W_ADAPTER_IGNORED } from '../../src/agent';
 import { errorDetails } from '../../src/core/error-details';
 import { ValidationError } from '../../src/validation';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -261,5 +261,53 @@ describe('adapter discovery and loading', () => {
     expect(result.ok).toBe(true);
     const broken = loadAdapter(repo, 'broken');
     expect(broken.ok).toBe(false);
+  });
+
+  describe('bug-290 — an entry that is not an adapter is reported, and the listing offers only loadable names', () => {
+    const NOT_AN_ADAPTER =
+      'not an adapter: an adapter is a .yaml file directly inside .wingfoil/agents/built-in/ or .wingfoil/agents/custom/ (spec-016 §2.1)';
+
+    beforeEach(() => {
+      writeFixtureFile(repo, '.wingfoil/agents/custom/ok.yaml', renamed('ok'));
+      writeFixtureFile(repo, '.wingfoil/agents/custom/a.yml', renamed('a'));
+      writeFixtureFile(repo, '.wingfoil/agents/custom/nested/b.yaml', renamed('b'));
+      writeFixtureFile(repo, '.wingfoil/agents/custom/Bad Name.yaml', renamed('Bad Name'));
+      writeFixtureFile(repo, '.wingfoil/agents/custom/.gitkeep', '');
+      writeFixtureFile(repo, '.wingfoil/agents/built-in/.gitkeep', '');
+      writeFixtureFile(repo, '.wingfoil/agents/stray.yaml', renamed('stray'));
+      commitAll(repo, 'adapters and non-adapters');
+    });
+
+    it('the listing holds only names loadAdapter can select', () => {
+      expect(listAdaptersAtRev(repo, 'HEAD').map((entry) => entry.name)).toEqual(['ok']);
+    });
+
+    it('every other entry but a .gitkeep is a W_ADAPTER_IGNORED warning naming its path, in path order', () => {
+      expect(adapterTreeDiagnosticsAtRev(repo, 'HEAD')).toEqual([
+        {
+          code: W_ADAPTER_IGNORED,
+          severity: 'warning',
+          file: '.wingfoil/agents/custom/Bad Name.yaml',
+          path: '',
+          message: "not an adapter: its name 'Bad Name' is not an id, characters [a-z0-9-.] only (spec-009 §1), so no agent can select it",
+        },
+        { code: W_ADAPTER_IGNORED, severity: 'warning', file: '.wingfoil/agents/custom/a.yml', path: '', message: NOT_AN_ADAPTER },
+        { code: W_ADAPTER_IGNORED, severity: 'warning', file: '.wingfoil/agents/custom/nested/b.yaml', path: '', message: NOT_AN_ADAPTER },
+        { code: W_ADAPTER_IGNORED, severity: 'warning', file: '.wingfoil/agents/stray.yaml', path: '', message: NOT_AN_ADAPTER },
+      ]);
+    });
+
+    it('a tree of adapters and .gitkeep files only has no diagnostic; a repository with no commit has none', () => {
+      const clean = makeTempGitRepo();
+      try {
+        expect(adapterTreeDiagnosticsAtRev(clean, 'HEAD')).toEqual([]);
+        writeFixtureFile(clean, '.wingfoil/agents/custom/ok.yaml', renamed('ok'));
+        writeFixtureFile(clean, '.wingfoil/agents/built-in/.gitkeep', '');
+        commitAll(clean, 'clean tree');
+        expect(adapterTreeDiagnosticsAtRev(clean, 'HEAD')).toEqual([]);
+      } finally {
+        removeTempDir(clean);
+      }
+    });
   });
 });
