@@ -207,17 +207,53 @@ src` → `src/workflow/deduce.ts` and the barrel only).
   `npm run lint`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit`,
   `npm run docs:api` exit 0 (spec amendments in the working tree).
 
+### Merge of task-203 (2026-10-09)
+
+- `git merge --no-ff task/task-203-read-instance-history-walk-step-linkage-created-elements` (task-203 final at
+  `c4a5350d`) → merge commit `bc314ffa`. The pending spec-017/spec-003 edits were saved in the batch scratch folder
+  first (`git diff` patch), then re-applied with `git apply --3way` after the merge.
+- **Conflicts:** 12 hunks, all in `src/workflow/deduce.ts`. The resolution keeps task-202's structure (element/item
+  frame union, lazy per-phase evaluation, `iterate`, §4.7/§4.10/§4.11) and carries task-203's history walk into it
+  unchanged: the snapshot's `history` / `transitions` / `lastChanges` / `parents` (replacing `records`),
+  `createdBy`, `stateCommit`, the descendant-based `newerThan` (its review F1), `cutoffs`, the `created` evidence,
+  `{ type, path }` resolution against created elements, and self-binding. `hasRecord` matches the
+  `WingFoil-Element` or `WingFoil-Item` scope together with 203's self-bound unscoped record and the re-entry
+  cutoff. Cutoffs are computed from the innermost frame when it is an element (a collection entry has no
+  re-entries), are passed to a plain `include`'s sub, and are **not** handed to an `iterate_over`'s iterations
+  (**approver ruling 2026-10-09**: each element has its own re-entries; stated in spec-017 §4.8 as part of the
+  pending amendment). A self-bound archived element abandons the instance (`bind` now returns the element).
+  `src/core/workflow-deduction.ts` merged without conflict (task-203's walk reader plus this task's
+  `readCollections`). `test/workflow/deduce-iterate.test.ts` follows the snapshot's new fields in the merge commit.
+- **F3, non-empty half** (commit `bdb142c4`): "review F3: a selection matching nothing whose step created an element
+  (linkage, task-203) is not vacuous" — a self-creating flow whose `sweep` adds a task linked by
+  `WingFoil-Step`, so `sweep` completes non-vacuously and the optional `extra` is skipped; the same test pins that
+  the self-bound element, once `deprecated`, abandons the instance. Characterization: the clause landed in
+  `791d31cc`; it became reachable only with 203's linkage. Mutation check: with
+  `leaf.step.created.length === 0` removed, `npx jest test/workflow/deduce-iterate.test.ts -t "review F3"` → 1
+  failed, 1 passed; restored → 2 passed.
+- **Spec-017 re-applied on cb12ce6a's text:** §4.8 and Cost keep task-203's wording; this task's §1.3, §4.3,
+  §4.6, §4.7, §4.8 (iterate_over/include and re-entries, the ruling), §4.9, §4.10, §4.11 and §12 edits sit on top;
+  the two Revision notes are kept in date order (task-203's, then this task's, both 2026-10-09).
+- **Gates at `bdb142c4`** with both pending amendments in the working tree (load average 10–29, `uptime`):
+  `npm run test:coverage` → **304 suites, 5779 passed, 0 failed**; All files **99.31 % stmts / 97.30 % branches /
+  97.46 % funcs / 99.72 % lines** (W3 B2 gate's main: 99.28 / 97.18 / 97.33 / 99.71); `src/workflow/deduce.ts`
+  and `src/core/workflow-deduction.ts` 100 / 100 / 100 / 100. `npm run lint`, `npm run docs:api`,
+  `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` exit 0.
+  `node scripts/check-governance.cjs --base 1ce84a54` exit 0 ("7 wf() commits", 0 findings).
+
 ### Pending amendments (approver)
 
-- `spec-017-workflow-commands-and-state-deduction` (uncommitted; record after task-203's spec-017 amendment,
-  merge order 203 → 202) — proposed `--reason`: "task-202: readings the iterate_over, live-query, optional and
+- `spec-017-workflow-commands-and-state-deduction` (uncommitted; record after task-203's spec-017 amendment
+  `cb12ce6a`, rebased on its text) — proposed `--reason`: "task-202: readings the iterate_over, live-query, optional and
   archived rules needed, and rules added. Readings: §4.6, a candidate is entered once a phase before the sub's
   current phase is complete other than vacuously; the note and vacuous completion apply when no candidate is
   eligible, entered or complete; an unresolved where token leaves one unexpanded step. §1.3, an id the {n}
   pattern does not match iterates last. §4.7, which candidates are late, how they are counted and listed, and
   which completions are vacuous. §4.10, an optional current phase's frontier carries the phases up to the next
   non-optional one. Rules added: §4.3 and §4.11, a selection never matches an archived element; §4.9 and §4.11,
-  an abandoned instance has no phase progress and is reported complete: false. §12 records the late ready
+  an abandoned instance has no phase progress and is reported complete: false; §4.8, an iterate_over phase does
+  not hand its re-entry cutoff to its iterations, each element having its own re-entries (approver ruling
+  2026-10-09), while a plain include passes it to its sub. §12 records the late ready
   decision-logs of build-backlog's selection until dl-160, and the record checkpoints an instance started
   mid-release reports again."
 - `spec-003-workflows-yaml-schema` (uncommitted; record after task-264's, task-199's and task-198's
