@@ -37,6 +37,10 @@ const { isAbsolute, join, relative } = require('node:path');
 
 const { load: yamlLoad } = require('js-yaml');
 
+/** The revision a range's documents are read at, and the configuration the Memory roots come from. */
+const HEAD = 'HEAD';
+const MEMORY_YAML = '.wingfoil/memory.yaml';
+
 /** Phrases that assert a state of the code or the repository (`dl-097` §2 (b), extended). */
 const STATE_CLAIM_PHRASES = [
   'already covered',
@@ -207,7 +211,7 @@ function git(root, args) {
 function memoryRoots(root) {
   let document;
   try {
-    document = yamlLoad(git(root, ['show', 'HEAD:.wingfoil/memory.yaml']));
+    document = yamlLoad(git(root, ['show', `${HEAD}:${MEMORY_YAML}`]));
   } catch {
     return [];
   }
@@ -255,7 +259,7 @@ function lintClaims(root, options) {
     }
     for (const { path, added } of changedDocuments(root, options.base)) {
       files.push(path);
-      const text = git(root, ['show', `HEAD:${path}`]);
+      const text = git(root, ['show', `${HEAD}:${path}`]);
       for (const warning of lintMarkdown(text, added)) warnings.push({ file: path, ...warning });
     }
   }
