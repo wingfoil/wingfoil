@@ -144,6 +144,7 @@ export type { ExitStart, HeldGate, InstanceState, PhaseExitState, UndeterminedAc
 export { deduceWorkflowStateAtHead, readDeductionSnapshotAtHead, selectWorkflowInstance } from './workflow-deduction';
 export {
   deduceWorkflowState,
+  NO_ITERATION_NOTE,
   resolveInstanceRef,
   W_INSTANCE_WORKFLOW_UNKNOWN,
   W_MEMORY_INVALID_STATE,
@@ -159,6 +160,7 @@ export type {
   EvidenceKind,
   Instance,
   InstanceDeduction,
+  IterationCounts,
   PhaseProgress,
   PhaseRecord,
   ProducesView,

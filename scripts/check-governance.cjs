@@ -131,6 +131,20 @@ function git(root, args, input) {
   });
 }
 
+/** A full commit name: 40 hexadecimal digits (SHA-1), or 64 (SHA-256). */
+const FULL_COMMIT_NAME_RE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
+/**
+ * `name`, checked to be a full commit name where a `git log` reader expected one (task-268, `bug-291`,
+ * the script's twin of `src/storage`'s `requireCommitName`). Every `git log` here passes
+ * `--no-show-signature`, so a `log.showSignature` configuration cannot print signature text among the
+ * formatted lines; whatever arrives there anyway is a failure to run (exit 2), never a commit.
+ */
+function requireCommitName(name, command) {
+  if (!FULL_COMMIT_NAME_RE.test(name)) throw new Error(`${command} printed ${JSON.stringify(name)} where a commit name was expected`);
+  return name;
+}
+
 /** `rev` as a full commit sha, or a usage error naming it. */
 function resolveCommit(root, rev, flag) {
   try {
@@ -142,13 +156,13 @@ function resolveCommit(root, rev, flag) {
 
 /** The range's commits, oldest first: sha, first parent, author, subject, body. */
 function readCommits(root, range) {
-  const raw = git(root, ['log', '--reverse', '--format=%H%x00%P%x00%an%x00%ae%x00%s%x00%b%x00', ...range]);
+  const raw = git(root, ['log', '--no-show-signature', '--reverse', '--format=%H%x00%P%x00%an%x00%ae%x00%s%x00%b%x00', ...range]);
   const fields = raw.split('\0');
   const commits = [];
   for (let index = 0; index + 6 <= fields.length; index += 6) {
     const [sha, parents, authorName, authorEmail, subject, body] = fields.slice(index, index + 6);
     commits.push({
-      sha: sha.trim(),
+      sha: requireCommitName(sha.trim(), 'git log --reverse'),
       parent: parents.split(' ')[0] || null,
       authorName,
       authorEmail,
@@ -161,13 +175,13 @@ function readCommits(root, range) {
 
 /** The paths each commit of the range touches (renames as delete + add), by sha. */
 function readTouchedPaths(root, range) {
-  const raw = git(root, ['log', '--no-renames', '--name-only', '--format=%x01%H', ...range]);
+  const raw = git(root, ['log', '--no-show-signature', '--no-renames', '--name-only', '--format=%x01%H', ...range]);
   const touched = new Map();
   let current = null;
   for (const line of raw.split('\n')) {
     if (line.startsWith('\u0001')) {
       current = [];
-      touched.set(line.slice(1), current);
+      touched.set(requireCommitName(line.slice(1), 'git log --name-only'), current);
     } else if (line !== '' && current !== null) {
       current.push(line);
     }
@@ -180,7 +194,7 @@ function readTouchedPaths(root, range) {
  * the path the same document has at `HEAD`, which is where `verifyTransitionConsistency` walks from.
  */
 function readRenames(root, range) {
-  const raw = git(root, ['-c', 'diff.renameLimit=0', 'log', '--reverse', '-M', '--diff-filter=R', '--name-status', '--format=', ...range]);
+  const raw = git(root, ['-c', 'diff.renameLimit=0', 'log', '--no-show-signature', '--reverse', '-M', '--diff-filter=R', '--name-status', '--format=', ...range]);
   const forward = new Map();
   for (const line of raw.split('\n')) {
     const [status, from, to] = line.split('\t');
@@ -368,10 +382,11 @@ function checkGovernance(root, options = {}) {
     // On the first-parent line, the commit that added the file is where it landed — on `main`, the
     // merge of the branch that wrote it — so every commit merged with it is history, not only those
     // older than the branch's own commit.
-    const adding = git(root, ['log', '--first-parent', '--diff-filter=A', '--format=%H', 'HEAD', '--', SCRIPT_PATH])
+    const adding = git(root, ['log', '--no-show-signature', '--first-parent', '--diff-filter=A', '--format=%H', 'HEAD', '--', SCRIPT_PATH])
       .trim()
       .split('\n')
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((name) => requireCommitName(name, 'git log --first-parent --diff-filter=A'));
     introducedAt = adding.length === 0 ? null : adding[adding.length - 1];
   }
   const history = new Set(introducedAt === null ? [] : git(root, ['rev-list', introducedAt]).trim().split('\n'));
