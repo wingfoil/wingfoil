@@ -96,14 +96,23 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-planning", "phases[5].checks.pre[0]", "spec-review.passed"],
       ["release-planning", "phases[5].checks.post[0]", "frontmatter.required"],
       ["release-planning", "phases[6].checks.post[0]", "frontmatter.required"],
+      // task-221 (dl-133 Q4 (i)): the stop-the-line check reads memory.yaml's rule; no command asserts it yet.
+      ["dev-loop", "phases[0].checks.pre[0]", "stop-the-line.clear"],
       ["dev-loop", "phases[1].checks.post[0]", "frontmatter.required"],
       ["dev-loop", "phases[1].checks.post[1]", "tech-spec.approved"],
       ["dev-loop", "phases[1].checks.post[2]", "depends_on.acknowledged"],
+      // task-221 (dl-102 §4): a reading of each criterion, no command.
+      ["dev-loop", "phases[1].checks.post[3]", "acceptance-criteria.consistent"],
       ["dev-loop", "phases[2].checks.post[0]", "tests.exist"],
       ["dev-loop", "phases[2].checks.post[1]", "tests.failing"],
       // task-205 (dl-134 §2): declared on green and refactor, evaluated from v1.0 (P4.12); no command asserts it yet.
       ["dev-loop", "phases[3].checks.post[1]", "tests.unchanged"],
       ["dev-loop", "phases[4].checks.post[5]", "tests.unchanged"],
+      // task-221 (dl-097 (a), dl-098): the reviewer's re-runs; (dl-115 Q2 (a)): the file is the task's path,
+      // which no binding placeholder carries. `typecheck.clean` and `docs.parity` are bound.
+      ["dev-loop", "phases[5].checks.pre[1]", "claims.rerun"],
+      ["dev-loop", "phases[5].checks.pre[2]", "rereview.previous-reject"],
+      ["dev-loop", "phases[6].checks.post[0]", "retrospective.present"],
       ["user-docs", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
       ["user-docs", "phases[1].checks.post[0]", "user-facing docs aligned with the release's shipped CLI/feature surface"],
       ["agent-docs", "phases[0].checks.post[0]", "CLAUDE.md project status matches the shipped command surface"],
