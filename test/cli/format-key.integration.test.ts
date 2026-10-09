@@ -7,7 +7,7 @@
 import { spawnSync } from 'child_process';
 import { join } from 'path';
 
-import { makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
 const UPGRADE = 'this file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil';
@@ -53,6 +53,7 @@ describe('a newer `format` at the CLI — exit 1, the file, the format and "upgr
   it('`workflow list` with a format-2 workflow file: exit 1, the workflow file named', () => {
     writeFixtureFile(repo, '.wingfoil/workflows.yaml', 'version: 1\ninclude:\n  - workflows/custom/main.yaml\n');
     writeFixtureFile(repo, '.wingfoil/workflows/custom/main.yaml', 'name: main\nkind: main\nformat: 2\nphases:\n  - name: go\n');
+    commitAll(repo, 'a format-2 workflow file'); // `workflow list` reads HEAD (task-204)
     const result = run('workflow', 'list');
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('E_INVALID_FORMAT format (workflows/custom/main.yaml)');

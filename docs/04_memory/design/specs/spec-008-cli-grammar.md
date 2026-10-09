@@ -672,7 +672,7 @@ CLI reference's *Git side effects* says the same to users.
 |----------|----------|-----|
 | **committed at `HEAD`** | `memory add`, `memory submit`, `memory approve`, `memory reject`, `memory deprecate`, `memory park`, `memory amend` (their `memory.yaml`, the document the `<id>` names and its status, and approver authority — the content `submit` and `amend` commit is the working tree's); `dna set`, `dna add`, `dna update`, `dna remove`; `directive assign`; `directive remove`'s referrer check; `workflow next` (v0.3) | a read that can refuse the command or change what it writes (`spec-006` §6 items 1–2). When the working tree defines a type the commit does not, `memory add`'s refusal says the change is not committed (`dl-084` (D), `task-095`); the `dna` verbs first refuse a `dna.yaml` that differs from `HEAD`, so what they then read is `HEAD`'s; `memory add`'s `{n}` counter reads the wider baseline the `command-baseline` directive declares, which can only raise the number |
 | **committed at `HEAD`, declared** (v0.3, as each ships) | `workflow status`, `workflow list`, `workflow show`, `agent list`, `agent show` | approver ruling R15: one deduction, one baseline; a working tree that differs is reported as the warning `W_UNCOMMITTED_INPUTS`, and never decides the answer (`spec-006` §6 item 6, `spec-017` §1.2) |
-| **working tree** | `dna show`, `paths`, `directives list`, `memory search`, `memory history`; `workflow list` until its v0.3 reshape | a read that gates nothing: a draft you have not committed is what `memory search` exists to find (`spec-006` §6 item 4). `memory history` reads git's log for the entries and the working tree's `memory.yaml` |
+| **working tree** | `dna show`, `paths`, `directives list`, `memory search`, `memory history` | a read that gates nothing: a draft you have not committed is what `memory search` exists to find (`spec-006` §6 item 4). `memory history` reads git's log for the entries and the working tree's `memory.yaml` |
 | **filesystem** | the confinement and symlink guards of every command that writes or deletes a file; `directive create`'s check that its target does not exist | the read predicts where a syscall will land, which no commit records (`spec-006` §6 item 5, `dl-086`) |
 | **working tree, a defect** | `directive remove`'s lookup of the directive it is asked to delete (`bug-108`) | owed to `HEAD` |
 
@@ -691,6 +691,7 @@ reference entry. A command that does not declare it refuses it as an unknown opt
 | Command | Flag | Behaviour |
 |---------|------|-----------|
 | `paths` | `--list` | Accepted for the planned drill-down view; it does not change the output yet. |
+| `workflow list` | `--all` | Lists every workflow the registry loads, not only the ones executable now: the includable workflows no open instance's frontier enters are listed too, with `executableNow: false` (`spec-017` §7.5, BDD P4.6 sc. 3). |
 | `directive assign` | `--force` | Authorizes the whole-file rewrite of `roles.yaml` when the in-place edit cannot apply (`dl-062` Q1 option 3). Without it that case is §6's `CONFLICT` refusal. With it the file is written again from its parsed content in the one `wf(directive): assign …` commit, and the success carries §6's warning. `--force` does not force a rewrite: an edit the in-place editor can make is made in place, with no warning. A missing `roles.yaml` is written whole without the flag, since there is nothing to preserve. |
 | `dna set`, `dna add`, `dna update`, `dna remove` | `--force` | Authorizes the whole-file rewrite of `dna.yaml` when the in-place edit cannot express the change (task-193, ruling R20/Q9, as `dl-062`). Without it that case is §6's `CONFLICT` refusal. With it the file is written again from its parsed content in the verb's one `wf(dna): …` commit, and the success carries §6's warning. As for `directive assign`, `--force` does not force a rewrite: an edit the in-place editor can make is made in place, with no warning. `dna.yaml` always exists when these verbs run, so there is no unflagged whole-file write. |
 
@@ -1179,3 +1180,10 @@ the command defines its own`. `agent show` was already in §1's noun list
 and in §11's declared-`HEAD` row, so neither changes; nor do the flags, the exit codes or §6's error
 format (its `hint:` line is the one §6 already allows). Edited in place without a supersede or a state
 change (`dl-047`).
+
+**Revision (2026-10-07, `task-204-reshape-workflow-list-add-workflow-show-both-answering`) — `workflow list`
+reads `HEAD`; its `--all` flag.** `task-204` moves `workflow list` to the `HEAD` baseline `spec-017` §1.1
+declares (ruling R15) and ships `workflow show` beside it, so §11's working-tree row loses "`workflow list`
+until its v0.3 reshape" (both commands already sit in the declared-`HEAD` row), and §12 gains the one
+command-specific flag the reshape adds, `workflow list --all`. No other row changes. Edited in place without a
+supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-204`'s review.

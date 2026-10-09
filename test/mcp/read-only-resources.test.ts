@@ -395,6 +395,24 @@ describe('wingfoil://workflows and wingfoil://workflows/{name} (spec-004 §2.1)'
       'resource not found: workflows/no-such-workflow',
     );
   });
+
+  // task-204 AC 5 (characterization): `workflow list` / `show` moved to `HEAD`, but these two Resources keep
+  // their payload and their working-tree baseline in v0.3 (spec-017 §9; `spec-006` §6 item 4).
+  it('both keep the working-tree baseline: an uncommitted edit is what they serve (task-204, spec-017 §9)', async () => {
+    const own = seedFixtureRepo();
+    try {
+      const { client: ownClient } = await connectReadOnlyClient(own);
+      writeFixtureFile(own, '.wingfoil/workflows/custom/dev-loop.yaml', DEV_LOOP_YAML.replace('TDD loop', 'TDD loop, uncommitted'));
+      const listed = await ownClient.readResource({ uri: 'wingfoil://workflows' });
+      const summaries = JSON.parse((listed.contents[0] as { text: string }).text) as { name: string; description: string }[];
+      expect(summaries.find((entry) => entry.name === 'dev-loop')).toEqual({ name: 'dev-loop', kind: 'sub', description: 'TDD loop, uncommitted' });
+      const shown = await ownClient.readResource({ uri: 'wingfoil://workflows/dev-loop' });
+      expect(JSON.parse((shown.contents[0] as { text: string }).text).description).toBe('TDD loop, uncommitted');
+      await ownClient.close();
+    } finally {
+      removeTempDir(own);
+    }
+  });
 });
 
 describe('Resources are read-only (spec-004 §2.3, REQ-INT-01/REQ-SEC-05) — the exact refusal string', () => {

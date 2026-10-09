@@ -14,7 +14,7 @@ import { CORE_MODULES } from '../../src/core';
 import { loadWorkflowsYaml } from '../../src/core/loaders';
 import { TEMPLATES, templateScaffold, DEFAULT_TEMPLATE, resolveTemplate } from '../../src/storage/templates';
 import { EXIT_VALIDATION, ValidationError } from '../../src/validation';
-import { makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 interface Diag {
   code: string;
@@ -564,6 +564,7 @@ describe('spec-003 § Diagnostics — one deterministic order (REQ-SYS-07)', () 
 
     const workflowList = CORE_MODULES.find((m) => m.name === 'workflow')?.operations.workflowList;
     if (!workflowList) throw new Error('fixture bug: workflow.workflowList not registered');
+    commitAll(repo, 'the fixture, committed: workflow list reads HEAD (task-204)');
     const result = await workflowList.fn({ root: repo });
     expect(result.ok).toBe(false);
     if (!result.ok) {

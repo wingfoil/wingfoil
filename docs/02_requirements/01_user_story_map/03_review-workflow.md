@@ -32,7 +32,7 @@
 ### Step 3 — Review submission details and assigned directives
 
 * **[MVP · v0.3]** US-2-05: As Sam, I want to see task context, submission, and team conventions to verify with
-  `wingfoil workflow show --name release-cycle` so that I know what to evaluate against. _(ref: P4.7 — home in Journey 0a)_
+  `wingfoil workflow show release-cycle` so that I know what to evaluate against. _(ref: P4.7 — home in Journey 0a)_
 
 ### Step 4 — Launch review agent with team directives
 

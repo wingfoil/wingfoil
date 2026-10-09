@@ -18,7 +18,7 @@
 ### Step 2 — Select task and review directives + context
 
 * **[MVP · v0.3]** US-3-02: As Jordan, I want to see task description, assigned directives, and team conventions with
-  `wingfoil workflow show --name release-cycle` so that I understand what I must respect. _(ref: P4.7 — home in Journey 0a)_
+  `wingfoil workflow show release-cycle` so that I understand what I must respect. _(ref: P4.7 — home in Journey 0a)_
 
 ### Step 3 — Review team context (DNA and relevant decisions)
 
