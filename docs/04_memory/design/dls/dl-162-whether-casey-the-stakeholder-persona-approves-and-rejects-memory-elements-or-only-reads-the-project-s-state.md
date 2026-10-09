@@ -97,3 +97,12 @@ correction is then one sentence each in `04_personas.md` and `01_product-brief.m
 3. Once `task-212` ships the `change-proposal` type, vision questions like this one are filed as that type instead
    of a decision-log.
 4. **Traceability:** P1.7, P1.8, P1.9, P4.14, P4.15, X1.1, X1.2; US-5-10; REQ-SYS-08; `dl-113`, `dl-132`.
+
+**Note (2026-10-09, W3 B3 follow-ups, `bug-ingest-rel-v0.3-w3b3-review-findings-plan`; from `task-273`'s review) —
+a v0.4 follow-up.** Option (B) covers approvals: Casey approves or rejects when the DNA gives Casey the `approver`
+role for that decision. It does not cover `memory deprecate` (P1.9), which is not an approval (no `Approver:` line,
+no authority check), yet Casey is still listed among its personas: `docs/01_vision/06_features.md`'s P1.9 row
+("Morgan, Casey"), `docs/01_vision/X_cli-cmds.md`'s `memory deprecate` row ("Morgan, Casey") and US-5-04 ("As Casey,
+I want deprecated documents marked with `wingfoil memory deprecate`", `docs/02_requirements/01_user_story_map/06_decisions.md`).
+Whether Casey is only the beneficiary of a deprecation (reads that a document is deprecated) or may perform one is
+left for v0.4; until then the three rows stand as written.
