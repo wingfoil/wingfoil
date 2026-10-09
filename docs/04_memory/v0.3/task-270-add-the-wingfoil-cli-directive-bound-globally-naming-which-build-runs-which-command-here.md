@@ -150,7 +150,7 @@ ancestor of `HEAD` (`git merge-base --is-ancestor main HEAD`) — nothing to mer
   (`gate-w3b3-cov.log`); no `src/` change.
 - `npm run lint` exit 0; `npm run docs:api` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
   `npx tsc -p tsconfig.build.json --noEmit` exit 0.
-- `node scripts/check-governance.cjs --base b56e8721` → "1 wf() commits", 0 findings, exit 0.
+- `node scripts/check-governance.cjs --base b56e8721` → "2 wf() commits" (the `start` and the `submit`; "1" when first run, before the submit), 0 findings, exit 0.
 
 ### review (self, reviewer)
 
@@ -167,6 +167,11 @@ ancestor of `HEAD` (`git merge-base --is-ancestor main HEAD`) — nothing to mer
 - `bug-087-element-ids-derived-from-the-worktree` — `--reason "Tagged pinned-build (dl-163 S3e, task-270): the pinned 0.2.2 still allocates ids from the working tree, so the wingfoil-cli directive's pointer must find it."`
 - `bug-162-task-counter-restarts-per-release` — `--reason "Tagged pinned-build (dl-163 S3e, task-270): the pinned 0.2.2 still numbers tasks per release, so the wingfoil-cli directive's pointer must find it."`
 - `bug-292-check-mcp-only-lists-the-pinned-server-s-resources-so-it-passes-while-reading-wingfoil-workflows-fails-with-32603` — `--reason "Tagged pinned-build (dl-163 S3e, task-270): it records that the pinned build cannot read this repository's workflow files, which the wingfoil-cli directive's read rule relies on."`
+
+**Review fixes (independent review, APPROVE WITH FIXES).** `wingfoil-cli.test.ts` reads
+`release-planning.yaml`'s version as `>= 1.8` (task-230, task-215 write it next); every prose assertion
+goes through a `prose()` helper that matches a re-wrapped line break (`\s+`); the directive names the
+repository once (`wingfoil/wingfoil`), no version bump (the file is not yet on `main`).
 
 ### Retrospective
 

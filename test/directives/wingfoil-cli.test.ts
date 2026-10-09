@@ -75,39 +75,44 @@ function section(number: number): string {
   return TEXT.slice(start, end < 0 ? undefined : end);
 }
 
+/** `phrase` as a pattern in which every run of spaces also matches a line break, so re-wrapping the prose cannot fail a test. */
+function prose(phrase: string): RegExp {
+  return new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ +/g, '\\s+'));
+}
+
 describe('AC 1 — what the directive says (task-270, dl-163 S3e)', () => {
   it('declares itself global and cites dl-163 S3e and dl-095', () => {
     const header = TEXT.slice(0, TEXT.indexOf('\n---', 4));
     expect(header).toMatch(/^id: wingfoil-cli$/m);
     expect(header).toMatch(/^scope: global$/m);
-    expect(TEXT).toContain('`dl-163-consumer-projects-feedback-sources-and-the-feedback-loop` S3e');
-    expect(TEXT).toContain('`dl-095-which-wingfoil-build-develops-wingfoil`');
+    expect(TEXT).toMatch(prose('`dl-163-consumer-projects-feedback-sources-and-the-feedback-loop` S3e'));
+    expect(TEXT).toMatch(prose('`dl-095-which-wingfoil-build-develops-wingfoil`'));
   });
 
   it('§1: the code build for Memory operations, the pinned build for the read commands and MCP', () => {
     const s1 = section(1);
     expect(s1).toMatch(/\*\*Memory operations\*\*[^\n]*the \*\*code build\*\*[^\n]*`npm run build`, then `node dist\/cli\.js <command>`/);
     expect(s1).toMatch(/\*\*Read commands\*\*[^\n]*\*\*MCP\*\*[^\n]*the \*\*pinned build\*\*[^\n]*`wingfoil-released`[^\n]*`npm run -s wingfoil -- <command>`/);
-    expect(s1).toMatch(/the only one that can run WingFoil\s+from its own source/);
+    expect(s1).toMatch(prose('the only one that can run WingFoil from its own source'));
   });
 
   it('§2: the verb where the build has one, otherwise the hand procedure and dl-095 Q3', () => {
     const s2 = section(2);
-    expect(s2).toContain('Where the build in use has the verb, the verb is used.');
-    expect(s2).toContain('the declared hand procedure is followed:** the `wf()` commit');
-    expect(s2).toContain('follows `dl-095` Q3');
+    expect(s2).toMatch(prose('Where the build in use has the verb, the verb is used.'));
+    expect(s2).toMatch(prose('the declared hand procedure is followed:** the `wf()` commit'));
+    expect(s2).toMatch(prose('follows `dl-095` Q3'));
   });
 
   it('§3: points to the pinned-build tag and lists no bug', () => {
     const s3 = section(3);
-    expect(s3).toContain('This directive points to the tag; it does not list the surprises.');
-    expect(s3).toContain('npm run -s wingfoil -- memory search --type bug --tag pinned-build');
+    expect(s3).toMatch(prose('This directive points to the tag; it does not list the surprises.'));
+    expect(s3).toMatch(prose('npm run -s wingfoil -- memory search --type bug --tag pinned-build'));
     expect(TEXT).not.toMatch(/\bbug-\d+/);
   });
 
   it('§4: advance-pinned-build re-checks it; §5: no inbox, defects go to bug-ingest', () => {
-    expect(section(4)).toContain("`release-planning`'s `advance-pinned-build` phase re-checks this directive");
-    expect(section(5)).toContain('This repository\n' + 'keeps none: a WingFoil defect found here goes straight to `bug-ingest`');
+    expect(section(4)).toMatch(prose("`release-planning`'s `advance-pinned-build` phase re-checks this directive"));
+    expect(section(5)).toMatch(prose('This repository keeps none: a WingFoil defect found here goes straight to `bug-ingest`'));
   });
 });
 
@@ -123,8 +128,8 @@ describe('AC 3 — release-planning advance-pinned-build names the re-check (tas
   };
   const phase = workflow.phases.find((p) => p.name === 'advance-pinned-build')!;
 
-  it('is version 1.8', () => {
-    expect(workflow.version).toBe(1.8);
+  it('is version 1.8 or later (task-230 and task-215 write the file next)', () => {
+    expect(workflow.version).toBeGreaterThanOrEqual(1.8);
   });
 
   it('describes the re-check and gates it as a post check', () => {

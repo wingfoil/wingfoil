@@ -28,9 +28,10 @@ believe a rule is wrong for your case, file a `decision-log`, do not deviate.
 ## Who this reaches
 
 This directive reaches an agent executing under any role of **this repository's own**
-`.wingfoil/roles.yaml`, which auto-loads it (P3.6). It reaches nobody else, by design: this repository
-is the only one that can run WingFoil from its own source, so the rule has no meaning in a project
-scaffolded by `wingfoil init`, and it is not a candidate built-in directive.
+`.wingfoil/roles.yaml` — `wingfoil/wingfoil`, the repository WingFoil is developed in — which
+auto-loads it (P3.6). It reaches nobody else, by design: this repository is the only one that can
+run WingFoil from its own source, so the rule has no meaning in a project scaffolded by
+`wingfoil init`, and it is not a candidate built-in directive.
 
 ## 1. Two builds, each for its own job
 
