@@ -10,7 +10,8 @@
  *
  * - Any byte change is a content change, comments included: their `[SPEC]`/`[AUTHORING]` provenance
  *   annotations are part of the file's content (field-provenance convention).
- * - Versions are compared as YAML reads them, so `1.10` after `1.1` is no bump (memory.yaml's own note).
+ * - Versions are compared as YAML reads them, so `1.10` after `1.1` is no bump (memory.yaml's own note),
+ *   and a bump is a numeric increase: a downgrade or a re-quoting is none (task-208, `bug-249`).
  * - The bump baseline is `main` (doc-versioning, approver ruling 2026-10-01): a branch bumps a file once,
  *   and further edits on it do not bump again. So an edit that leaves `version:` as at `HEAD` passes when
  *   `HEAD` already carries a version different from the one at its fork point from `main`
