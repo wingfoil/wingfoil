@@ -2,7 +2,7 @@
 id: "bug-134-e2e-smoke-yaml-declares-no-produces"
 type: bug
 title: "`e2e-smoke.yaml` declares no `produces:`, although dl-023 asked for a smoke-test report, so the phase's completion cannot be deduced"
-status: in-review
+status: closed
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
