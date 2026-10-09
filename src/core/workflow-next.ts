@@ -23,7 +23,7 @@
  */
 import type { RolesYaml } from '../directives/schema';
 import type { DnaYaml } from '../dna/schema';
-import type { MemoryYaml } from '../memory/schema';
+import type { MemoryYaml, StateMachine } from '../memory/schema';
 import { resolveStateMachine } from '../memory/state-machine';
 import type { Diagnostic } from '../validation';
 import { resolveToken, tokenName, type BindingsYaml, type TokenBinding } from '../workflow/bindings';
@@ -214,15 +214,39 @@ function firstArgument(text: string): string | null {
   return match ? match[1]!.trim() : null;
 }
 
-/** `wf(<type>): <verb> <ids> [<bracket>]`, ids joined by `, `, `<id>` when none is known yet. */
-function subject(type: string, verb: string, ids: readonly string[], bracket: string | null): string {
-  const named = ids.length === 0 ? '<id>' : ids.join(', ');
-  return `wf(${type}): ${verb} ${named}${bracket === null ? '' : ` [${bracket}]`}`;
+/** One commit subject a target needs: grouped with the others of the same type, verb and bracket (one commit each group). */
+interface SubjectEntry {
+  readonly type: string;
+  readonly verb: string;
+  readonly bracket: string | null;
+  readonly id: string;
 }
 
 /**
- * The commit subject(s) a `manual` Memory action is expected to produce (`spec-003` § "Action expressions",
- * the verb table and the rule under it; `spec-017` §6.1), or `undefined` when it produces none:
+ * `wf(<type>): <verb> <ids> [<bracket>]` per group of entries with the same type, verb and bracket, ids joined
+ * by `, `, one subject per line; `assign release <v>` reads `wf(<type>): assign release <v> to <ids>`
+ * (`spec-003` verb table). `undefined` when there is no entry.
+ */
+function renderSubjects(entries: readonly SubjectEntry[]): string | undefined {
+  const groups = new Map<string, SubjectEntry[]>();
+  for (const entry of entries) {
+    const key = `${entry.type}\u0000${entry.verb}\u0000${entry.bracket ?? ''}`;
+    groups.set(key, [...(groups.get(key) ?? []), entry]);
+  }
+  if (groups.size === 0) return undefined;
+  return [...groups.values()]
+    .map((group) => {
+      const { type, verb, bracket } = group[0]!;
+      const ids = group.map((entry) => entry.id).join(', ');
+      return verb.startsWith('assign ') ? `wf(${type}): ${verb} to ${ids}` : `wf(${type}): ${verb} ${ids}${bracket === null ? '' : ` [${bracket}]`}`;
+    })
+    .join('\n');
+}
+
+/**
+ * The commit subject(s) a built-in `manual` Memory action is expected to produce (`spec-003` § "Action
+ * expressions", the verb table and the rule under it; `spec-017` §6.1), or `undefined` when it produces none.
+ * A target not known yet is written `<id>` (and its type `<type>`, its state `<from>`):
  * - `set_state(s)`: `approve` when the phase declares `approval:`, else `finalize` when `s` is the last state
  *   of the type's `sequence`, else `start`; bracket `[<from> → s]`, `<from>` the bound element's state before
  *   the action (§4.4) or each other target's status at `HEAD`;
@@ -231,67 +255,41 @@ function subject(type: string, verb: string, ids: readonly string[], bracket: st
  *   states passed forward. An element already there needs no commit;
  * - `set_release(v)`: `assign release <v> to <ids>`, one subject per type.
  */
-function expectedCommit(action: DeducedAction, phase: Phase, boundType: string | null, memoryYaml: MemoryYaml | null): string | undefined {
+function expectedCommit(action: DeducedAction, phase: Phase, memoryYaml: MemoryYaml): string | undefined {
   const name = tokenName(action.token);
-  const typedType = /^([a-z][a-z0-9-]*)\.(set_state|sync_state)$/.exec(name);
-  const groups = new Map<string, string[]>(); // subject without ids → ids
-  const add = (type: string, verb: string, bracket: string | null, id: string | null): void => {
-    const keyed = `${type}\u0000${verb}\u0000${bracket ?? ''}`;
-    const ids = groups.get(keyed) ?? [];
-    if (id !== null) ids.push(id);
-    groups.set(keyed, ids);
-  };
-  const render = (): string | undefined => {
-    if (groups.size === 0) return undefined;
-    return [...groups.entries()]
-      .map(([keyed, ids]) => {
-        const [type, verb, bracket] = keyed.split('\u0000') as [string, string, string];
-        if (verb.startsWith('assign release ')) return `wf(${type}): ${verb} to ${ids.length === 0 ? '<id>' : ids.join(', ')}`;
-        return subject(type, verb, ids, bracket === '' ? null : bracket);
-      })
-      .join('\n');
-  };
-  const machineOf = (type: string) => (memoryYaml !== null && Object.prototype.hasOwnProperty.call(memoryYaml.types, type) ? resolveStateMachine(memoryYaml, type) : null);
+  const machineOf = (type: string): StateMachine | null => (Object.prototype.hasOwnProperty.call(memoryYaml.types, type) ? resolveStateMachine(memoryYaml, type) : null);
+  const lastOf = (machine: StateMachine): string => machine.sequence[machine.sequence.length - 1]!;
+  const targets: readonly ElementRef[] =
+    action.targets.length > 0 ? action.targets : [{ type: action.targetType ?? '<type>', id: '<id>', status: action.target === 'bound' && action.boundFrom !== null ? action.boundFrom : '<from>' }];
+  const argument = firstArgument(action.text) ?? '';
 
-  if (name === 'element.set_release') {
-    const version = firstArgument(action.text) ?? '<version>';
-    if (action.targets.length === 0) add(boundType ?? '<type>', `assign release ${version}`, null, null);
-    for (const target of action.targets) add(target.type, `assign release ${version}`, null, target.id);
-    return render();
+  if (name === 'element.set_release') return renderSubjects(targets.map((target) => ({ type: target.type, verb: `assign release ${argument}`, bracket: null, id: target.id })));
+  if (name.endsWith('.set_state')) {
+    return renderSubjects(
+      targets.map((target) => {
+        const machine = machineOf(target.type);
+        const verb = phase.approval !== undefined ? 'approve' : machine !== null && lastOf(machine) === argument ? 'finalize' : 'start';
+        const from = action.target === 'bound' && action.boundFrom !== null ? action.boundFrom : target.status;
+        return { type: target.type, verb, bracket: `${from} → ${argument}`, id: target.id };
+      }),
+    );
   }
-  if (name === 'element.set_state' || typedType?.[2] === 'set_state') {
-    const to = firstArgument(action.text) ?? '<state>';
-    const type = typedType !== null ? typedType[1]! : (action.targets[0]?.type ?? boundType ?? '<type>');
-    const machine = machineOf(type);
-    const verb = phase.approval !== undefined ? 'approve' : machine !== null && machine.sequence[machine.sequence.length - 1] === to ? 'finalize' : 'start';
-    if (action.targets.length === 0) {
-      add(type, verb, `${action.target === 'bound' ? (action.boundFrom ?? '<from>') : '<from>'} → ${to}`, null);
-    }
-    for (const target of action.targets) {
-      const from = action.target === 'bound' ? (action.boundFrom ?? target.status) : target.status;
-      add(target.type, verb, `${from} → ${to}`, target.id);
-    }
-    return render();
+  // `<T>.sync_state(for_each: <S>.<field>)`; a sync whose source is not known yet expects nothing.
+  const source = action.source;
+  if (!name.endsWith('.sync_state') || source === undefined || source.state === null) return undefined;
+  const sourceMachine = machineOf(source.type);
+  const sourceLast = sourceMachine !== null && lastOf(sourceMachine) === source.state;
+  const entries: SubjectEntry[] = [];
+  for (const target of action.targets) {
+    const machine = machineOf(target.type)!; // a target was found as a Memory element of its type
+    const to = machine.sequence.includes(source.state) ? source.state : sourceLast ? lastOf(machine) : null;
+    if (to === null || target.status === to) continue;
+    const from = machine.sequence.indexOf(target.status);
+    const toIndex = machine.sequence.indexOf(to);
+    const chain = from !== -1 && toIndex > from ? machine.sequence.slice(from, toIndex + 1) : [target.status, to];
+    entries.push({ type: target.type, verb: 'sync', bracket: chain.join(' → '), id: target.id });
   }
-  if (typedType?.[2] === 'sync_state') {
-    const type = typedType[1]!;
-    const machine = machineOf(type);
-    const source = action.source;
-    const sourceMachine = source === undefined ? null : machineOf(source.type);
-    if (machine === null || source === undefined || source.state === null) return undefined;
-    const sourceLast = sourceMachine !== null && sourceMachine.sequence[sourceMachine.sequence.length - 1] === source.state;
-    const to = machine.sequence.includes(source.state) ? source.state : sourceLast ? machine.sequence[machine.sequence.length - 1]! : null;
-    if (to === null) return undefined;
-    for (const target of action.targets) {
-      if (target.status === to) continue;
-      const from = machine.sequence.indexOf(target.status);
-      const toIndex = machine.sequence.indexOf(to);
-      const chain = from !== -1 && toIndex > from ? machine.sequence.slice(from, toIndex + 1) : [target.status, to];
-      add(target.type, 'sync', chain.join(' → '), target.id);
-    }
-    return render();
-  }
-  return undefined;
+  return renderSubjects(entries);
 }
 
 /** Replace each `{name}` element of a project `run` argv with the token's `name:` argument, when it has one. */
@@ -301,12 +299,12 @@ function interpolateRun(run: readonly string[], text: string): string[] {
 }
 
 /** The binding of one action, with the step's operands filled (`spec-017` §6.1). */
-function actionBinding(action: DeducedAction, step: DeducedStep, phase: Phase, boundType: string | null, inputs: NextInputs): StepBinding {
+function actionBinding(action: DeducedAction, step: DeducedStep, phase: Phase, inputs: NextInputs): StepBinding {
   const binding = resolveToken(action.token, 'action', inputs.bindings);
   const name = tokenName(action.token);
   switch (binding.kind) {
     case 'wingfoil': {
-      const argv = [...(binding.argv ?? [])];
+      const argv = [...binding.argv!]; // a built-in `wingfoil` binding always names its command (`bindings.ts`)
       if (name === 'memory.add') argv.push('--workflow', step.instance, '--step', step.key);
       else if (name.startsWith('memory.')) argv.push(...action.targets.map((target) => target.id));
       return { kind: 'wingfoil', argv };
@@ -314,9 +312,10 @@ function actionBinding(action: DeducedAction, step: DeducedStep, phase: Phase, b
     case 'agent':
       return { kind: 'agent', argv: ['wingfoil', 'agent', 'execute', '--workflow', step.instance, '--step', step.key] };
     case 'run':
-      return { kind: 'run', argv: interpolateRun(binding.argv ?? [], action.text) };
+      return { kind: 'run', argv: interpolateRun(binding.argv!, action.text) }; // a `run` binding is its argv
     case 'manual': {
-      const commit = binding.source === 'built-in' ? expectedCommit(action, phase, boundType, inputs.memoryYaml) : undefined;
+      // A step exists only for an open plan, a Memory element: `memory.yaml` is present.
+      const commit = binding.source === 'built-in' ? expectedCommit(action, phase, inputs.memoryYaml!) : undefined;
       return commit === undefined ? { kind: 'manual' } : { kind: 'manual', expectedCommit: commit };
     }
     default:
@@ -327,7 +326,7 @@ function actionBinding(action: DeducedAction, step: DeducedStep, phase: Phase, b
 /** A check token with its binding, never evaluated (`spec-017` §6.1). */
 function checkView(token: string, bindings: BindingsYaml | null): CheckView {
   const binding = resolveToken(token, 'check', bindings);
-  return { token, binding: binding.kind === 'run' ? { kind: 'run', argv: interpolateRun(binding.argv ?? [], token) } : { kind: binding.kind }, evaluated: false };
+  return { token, binding: binding.kind === 'run' ? { kind: 'run', argv: interpolateRun(binding.argv!, token) } : { kind: binding.kind }, evaluated: false };
 }
 
 /** The role's directives (`spec-017` §6.2): ids and titles, ascending by id, and the resolution's warnings. */
@@ -352,7 +351,6 @@ export function buildStep(step: DeducedStep, inputs: NextInputs): Step {
   const workflow = inputs.workflows.find((candidate) => candidate.name === step.workflow)!;
   const phase = workflow.phases.find((candidate) => candidate.name === step.phase)!;
   const scope = step.scope;
-  const boundType = scope !== null && 'element' in scope ? scope.element.type : (workflow.element ?? null);
   const role = step.role;
   const agentRole = role !== null && (inputs.dnaYaml?.team?.agents ?? []).some((agent) => agent.executes_as.includes(role));
   const otherMissing = step.evidence.missing.filter((kind) => kind !== 'awaits' && kind !== 'record');
@@ -374,7 +372,7 @@ export function buildStep(step: DeducedStep, inputs: NextInputs): Step {
       text: action.text,
       unresolved: action.unresolved,
       target: action.target,
-      binding: actionBinding(action, step, phase, boundType, inputs),
+      binding: actionBinding(action, step, phase, inputs),
     })),
     checks: {
       pre: (phase.checks?.pre ?? []).map((token) => checkView(token, inputs.bindings)),

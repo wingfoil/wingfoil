@@ -275,6 +275,8 @@ export interface DeducedAction {
   /** The `{…}` tokens with no value (each reported `W_UNRESOLVED_TOKEN`), in order. */
   readonly unresolved: readonly string[];
   readonly target: ActionTarget;
+  /** The Memory type the action acts on when deduction knows it (`null`: a selection of several types, or none). */
+  readonly targetType: string | null;
   /**
    * The elements the action acts on, known at `HEAD`, ascending `(type, id)`: the bound element, the
    * selected ones, the ones the step (or, for a `run` target, an earlier step of the pass) created, or those a
@@ -1265,11 +1267,9 @@ class Deducer {
     report: (path: string, resolved: Resolved) => void,
   ): DeducedAction[] {
     const phase = workflow.phases[p]!;
-    const selection = phase.where !== undefined && phase.iterate_over === undefined;
-    const selectedTypes = selection ? asStrings(phase.where!['type']) : [];
+    const selectedTypes = phase.where !== undefined && phase.iterate_over === undefined ? asStrings(phase.where['type']) : [];
     const last = frames[frames.length - 1];
-    const frame = last?.kind === 'element' ? last : undefined;
-    const bound = frame?.element ?? null;
+    const bound = last?.kind === 'element' ? last.element : null;
     const sorted = (elements: readonly ElementRef[]): ElementRef[] => [...elements].sort(compareRefs);
     let addedType: string | null = null;
     return (phase.actions ?? []).map((token, a): DeducedAction => {
@@ -1278,61 +1278,83 @@ class Deducer {
         ({ token: name, reason }) => !(reason === 'no element in scope' && selectedTypes.includes(name.slice(1, -1).split('.')[0]!)),
       );
       report(`phases[${p}].actions[${a}]`, { ...resolved, unresolved });
-      const text = token.replace(TOKEN_RE, (whole) => {
-        if (unresolved.some((entry) => entry.token === whole)) return whole;
-        const single = resolveTokens(whole, frames);
-        return single.value ?? whole;
-      });
-      // The static state before this action (§4.4) when the bound element's status lies on the static path up to
-      // it; otherwise the static start was not the element's (an instance starts from the type's first state), and
-      // its status at `HEAD` is where the action starts.
+      // Each token with a value substituted; a pending or unresolved one (no value) kept as written.
+      const text = token.replace(TOKEN_RE, (whole) => resolveTokens(whole, frames).value ?? whole);
+      // The bound element's state before this action: the static state (§4.4) once an earlier action of the phase
+      // moved it; until then its status at `HEAD`, since the static start of an instance is its type's first state.
+      // `actionStates` holds one entry per action (`workflow-exit-state.ts`).
       const statics = exit.actionStates;
-      const boundFrom = bound === null ? (statics[a] ?? null) : statics.slice(0, a + 1).includes(bound.status) ? (statics[a] ?? null) : bound.status;
+      const boundFrom = bound !== null && statics[a] === statics[0] ? bound.status : (statics[a] as string | null);
       const base = { token, text, unresolved: unresolved.map((entry) => entry.token), boundFrom };
-      const name = tokenName(token);
-      if (name === 'memory.add') {
-        addedType = memoryAddType(token);
-        return { ...base, target: 'created', targets: sorted(created.filter((element) => element.type === addedType).map(refOf)) };
-      }
-      if (UNTYPED_TARGET_VERBS.includes(name)) {
-        if (addedType !== null) {
-          const type = addedType;
-          return { ...base, target: 'created', targets: sorted(created.filter((element) => element.type === type).map(refOf)) };
-        }
-        if (selection) return { ...base, target: 'selection', targets: sorted(selected) };
-        if (frame !== undefined) return { ...base, target: 'bound', targets: bound === null ? [] : [refOf(bound)] };
-        return { ...base, target: 'none', targets: [] };
-      }
-      const typed = typedStateType(token);
-      if (typed !== null && name.endsWith('.set_state')) {
-        if (frame?.type === typed) return { ...base, target: 'bound', targets: bound === null ? [] : [refOf(bound)] };
-        if (exit.run.some((element) => element.type === typed)) {
-          // The elements of `T` an earlier step of the same pass created (§4.2): the earlier phases' keys on this scope.
-          const suffix = scope === null ? '' : `@${scopeKey(scope)}`;
-          const earlier = workflow.phases.slice(0, p).flatMap((earlierPhase) => {
-            const stepName = `${workflow.name}.${earlierPhase.name}`;
-            return frame?.selfBound ? [stepName + suffix, stepName] : [stepName + suffix];
-          });
-          return { ...base, target: 'run', targets: this.createdBy(instanceId, startCommit, earlier).filter((element) => element.type === typed).map(refOf) };
-        }
-        if (selectedTypes.includes(typed)) return { ...base, target: 'selection', targets: sorted(selected.filter((element) => element.type === typed)) };
-        return { ...base, target: 'none', targets: [] };
-      }
-      if (typed !== null) {
-        // `<T>.sync_state(for_each: <S>.<field>)`: the elements of `T` the field of the nearest `S` names (§4.2).
-        const named = /for_each\s*:\s*["']?([a-z][a-z0-9-]*)\.([A-Za-z0-9_-]+)/.exec(token);
-        if (named === null) return { ...base, target: 'run', targets: [] };
-        const [, sourceType, field] = named as unknown as [string, string, string];
-        const sourceFrame = [...frames].reverse().find((candidate): candidate is ElementFrame => candidate.kind === 'element' && candidate.type === sourceType);
-        const source = sourceFrame?.element ?? null;
-        const raw = source === null ? undefined : source.frontmatter[field];
-        const ids = (Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw]).map((value) => scalarText(value)).filter((id): id is string => id !== null);
-        const targets = ids.map((id) => this.find(typed, id)).filter((element): element is Element => element !== null).map(refOf);
-        const state = sourceFrame === frame ? boundFrom : (source?.status ?? null);
-        return { ...base, target: 'run', targets: sorted(targets), source: { type: sourceType, state } };
-      }
-      return { ...base, target: 'none', targets: [] };
+      const target = this.actionTarget(instanceId, startCommit, workflow, p, frames, exit, scope, created, selected, token, boundFrom, addedType);
+      if (tokenName(token) === 'memory.add') addedType = memoryAddType(token);
+      return { ...base, ...target, targets: sorted(target.targets) };
     });
+  }
+
+  /**
+   * What one action of phase `p` acts on (`spec-017` §4.2's table): `created` after (or at) a `memory.add` of
+   * the phase, else the phase's selection, else the bound element, for the untyped verbs; for `<T>.set_state`
+   * the bound element of `T`, else the elements of `T` an earlier step of the pass created (`run`), else the
+   * selection of `T`; for `<T>.sync_state(for_each: <S>.<field>)` the elements of `T` that field of the
+   * nearest `S` names; otherwise nothing.
+   */
+  private actionTarget(
+    instanceId: string,
+    startCommit: string,
+    workflow: Workflow,
+    p: number,
+    frames: readonly Frame[],
+    exit: PhaseExitState,
+    scope: ScopeRef | null,
+    created: readonly Element[],
+    selected: readonly ElementRef[],
+    token: string,
+    boundFrom: string | null,
+    addedType: string | null,
+  ): Pick<DeducedAction, 'target' | 'targetType' | 'targets' | 'source'> {
+    const phase = workflow.phases[p]!;
+    const name = tokenName(token);
+    const last = frames[frames.length - 1];
+    const frame = last?.kind === 'element' ? last : undefined;
+    const boundRefs = frame?.element ? [refOf(frame.element)] : [];
+    const ofType = (elements: readonly Element[], type: string | null): ElementRef[] => elements.filter((element) => element.type === type).map(refOf);
+    const none = { target: 'none' as const, targetType: null, targets: [] };
+    if (name === 'memory.add') {
+      const type = memoryAddType(token);
+      return { target: 'created', targetType: type, targets: ofType(created, type) };
+    }
+    if (UNTYPED_TARGET_VERBS.includes(name)) {
+      if (addedType !== null) return { target: 'created', targetType: addedType, targets: ofType(created, addedType) };
+      if (phase.where !== undefined && phase.iterate_over === undefined) return { target: 'selection', targetType: null, targets: selected };
+      return frame === undefined ? none : { target: 'bound', targetType: frame.type, targets: boundRefs };
+    }
+    const typed = typedStateType(token);
+    if (typed === null) return none;
+    if (name.endsWith('.set_state')) {
+      if (frame?.type === typed) return { target: 'bound', targetType: typed, targets: boundRefs };
+      if (exit.run.some((element) => element.type === typed)) {
+        // The elements of `T` an earlier step of the same pass created (§4.2): the earlier phases' keys on this scope.
+        const suffix = scope === null ? '' : `@${scopeKey(scope)}`;
+        const earlier = workflow.phases.slice(0, p).flatMap(({ name: earlierName }) => {
+          const stepName = `${workflow.name}.${earlierName}`;
+          return frame?.selfBound ? [stepName + suffix, stepName] : [stepName + suffix];
+        });
+        return { target: 'run', targetType: typed, targets: ofType(this.createdBy(instanceId, startCommit, earlier), typed) };
+      }
+      const selection = phase.where !== undefined && phase.iterate_over === undefined && asStrings(phase.where['type']).includes(typed);
+      return { target: selection ? 'selection' : 'none', targetType: typed, targets: selection ? selected.filter((element) => element.type === typed) : [] };
+    }
+    // `<T>.sync_state(for_each: <S>.<field>)`: the elements of `T` the field of the nearest `S` names (§4.2).
+    const named = /for_each\s*:\s*["']?([a-z][a-z0-9-]*)\.([A-Za-z0-9_-]+)/.exec(token);
+    if (named === null) return { target: 'run', targetType: typed, targets: [] };
+    const sourceType = named[1]!;
+    const sourceFrame = [...frames].reverse().find((candidate): candidate is ElementFrame => candidate.kind === 'element' && candidate.type === sourceType);
+    const source = sourceFrame?.element ?? null;
+    const ids = asStrings(source?.frontmatter[named[2]!]);
+    const targets = ids.map((id) => this.find(typed, id)).filter((element): element is Element => element !== null);
+    const state = sourceFrame === frame ? boundFrom : (source?.status ?? null);
+    return { target: 'run', targetType: typed, targets: targets.map(refOf), source: { type: sourceType, state } };
   }
 
   /**

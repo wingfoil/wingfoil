@@ -142,7 +142,7 @@ export type { CheckTokenView, ListEntry, ListResult, PhaseView, ShowInputs, Show
 // task-216: `workflow next` at `HEAD` (`spec-017` §6, §7.3, §8 `Step` / `NextResult`); the operation is
 // `CORE_MODULES`' `workflowNext`, and the step builder is what `agent execute --next` (task-235) and `status`
 // (task-225) reuse.
-export { ASSIGNED_TO_ME, NO_OPEN_WORKFLOWS, assigneeRoles, buildStep, humanNeededLine, membersHoldingRole, nextWorkflow, noNextStepMessage, renderNextConsole, workflowNextAtHead } from './workflow-next';
+export { buildStep, nextWorkflow, renderNextConsole } from './workflow-next';
 export type { ActionView, Awaiting, CadenceView, CheckView, Member, NextInputs, NextOptions, NextResult, Step, StepBinding } from './workflow-next';
 export { W_WORKFLOW_CHECKS_NOT_RUN, workflowCoreDiagnostics } from './workflow-core-checks';
 export type { CheckedRegistry, WorkflowCoreInputs } from './workflow-core-checks';
