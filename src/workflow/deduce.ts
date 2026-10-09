@@ -254,7 +254,7 @@ export interface DeducedStep {
    * evidence count only if newer than the re-entry (§5.2).
    */
   readonly reentered: boolean;
-  /** The newest such re-entry commit, or `null`. */
+  /** The first listed such re-entry commit (the newest in a linear history), or `null`. */
   readonly reentryCommit: string | null;
 }
 
@@ -773,7 +773,7 @@ class Deducer {
       missing.push('include');
     }
 
-    // state — the bound element at or after the phase's exit state (§4.4), set by a commit newer than any
+    // state — the bound element at or after the phase's exit state (§4.4), set by a commit newer than every
     // re-entry that reaches this phase (§4.8).
     if (declaresState(phase, exit.boundType)) {
       kinds.push('state');

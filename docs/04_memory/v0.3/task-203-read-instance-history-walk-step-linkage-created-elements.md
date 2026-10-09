@@ -172,6 +172,11 @@ is 3,183 of 5,879 commits (`git rev-list --count HEAD --not <oldest start>^@`), 
 0.12 s (`/usr/bin/time`). The snapshot took 3.3–4.8 s under that load, dominated as before by the registry load and
 the Memory scan (task-198's figures); the pure deduction 9–24 ms. REQ-PERF-03 itself is measured by the coordinator on
 an idle machine.
+*After the review fixes (independent re-review figures):* the walk is **3,179** commits (snapshot
+`parents.size`), not the 3,183 counted above, which is the figure for the old bound. On this repository the
+octopus merge base of the open starts is the oldest start, `bf05de0d`, so the new bound walks exactly the
+commits the old one did. HEAD snapshot 2.6 / 2.2 s on this branch against main's 3.0 / 2.5 s: no
+regression.
 
 ### review (self, reviewer)
 
@@ -218,7 +223,8 @@ an idle machine.
 - **Red** `c2e6cade` (`npx jest test/core/workflow-deduction-history.test.ts -t "review F" --json`):
   - "review F1 … (main-first)" failed: `red:complete`, as the topo position placed the side record after
     the reject;
-  - "review F1 … (side-first)" passed: the topo order happened to place it before the reject;
+  - "review F1 … (side-first)" passed. It is a **characterization**, because the topo order happened to
+    place the record before the reject; "main-first" is the genuine red;
   - "review F3 … a younger instance's walk keeps a reject made on another branch before the oldest start"
     failed: `reentered: false`.
   - The ruling's requirement is that both orders agree, and the pair did not.
