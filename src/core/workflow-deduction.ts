@@ -11,7 +11,8 @@
  * `deduceWorkflowState` (`src/workflow/deduce.ts`).
  *
  * git is read with `runGitRead` (stderr captured, `bug-093`) and the `git log` walk with
- * `walkGitLogFields` (NUL-framed, `bug-050`). No clock, no randomness, nothing cached between calls.
+ * `walkGitLogFields` (NUL-framed, `bug-050`); every `git log` passes `--no-show-signature` and checks the
+ * commit names it parses (`task-268`, `bug-291`). No clock, no randomness, nothing cached between calls.
  */
 import { posix } from 'path';
 
@@ -19,7 +20,7 @@ import type { DnaYaml } from '../dna/schema';
 import { walkGitLogFields } from '../memory/git-log';
 import { computeMemoryContentRoots, loadMemoryDocumentsAtRev } from '../memory/query';
 import type { MemoryYaml } from '../memory/schema';
-import { runGitRead } from '../storage';
+import { requireCommitName, runGitRead } from '../storage';
 import type { Diagnostic } from '../validation';
 import {
   deduceWorkflowState,
@@ -60,13 +61,13 @@ const COMMIT_MARK = String.fromCharCode(1);
 function readStarts(root: string, sha: string, paths: readonly string[]): Map<string, StartCommit> {
   const starts = new Map<string, StartCommit>();
   if (paths.length === 0) return starts;
-  const args = ['-c', 'core.quotePath=false', 'log', '--topo-order', '--no-renames', '--diff-filter=A', '--name-only', '--format=%x01%H', sha, '--'];
+  const args = ['-c', 'core.quotePath=false', 'log', '--no-show-signature', '--topo-order', '--no-renames', '--diff-filter=A', '--name-only', '--format=%x01%H', sha, '--'];
   const wanted = new Set(paths);
   let commit = '';
   let position = -1;
   for (const line of runGitRead(root, [...args, ...paths.map((path) => `:(literal)${path}`)]).stdout.split('\n')) {
     if (line.startsWith(COMMIT_MARK)) {
-      commit = line.slice(1);
+      commit = requireCommitName(line.slice(1), 'git log --diff-filter=A');
       position += 1;
     } else if (wanted.has(line) && !starts.has(line)) {
       starts.set(line, { commit, position });

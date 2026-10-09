@@ -5,7 +5,7 @@
  * first" plumbing over a different field set/pathspec shape; this is that one shared primitive, so
  * the record-separator convention lives in exactly one place instead of being copy-pasted twice.
  */
-import { E_GIT_READ_FAILED, runGitRead, StorageError } from '../storage';
+import { E_GIT_READ_FAILED, requireCommitName, runGitRead, StorageError } from '../storage';
 
 /** The exit status git uses for `fatal:` — a broken repository, and an unborn `HEAD` alike. */
 const GIT_FATAL = 128;
@@ -83,6 +83,11 @@ const NUL = String.fromCharCode(0);
  * is the reason. An empty `fields` requests nothing and likewise yields `[]`, rather than looping
  * forever over zero-width groups.
  *
+ * `--no-show-signature` is passed so a `log.showSignature` configuration cannot print signature text
+ * before a commit's formatted output, where it would land in the record's first field (`task-268`,
+ * `bug-291`); and every `%H` field is checked to be a full commit name (`requireCommitName`), so
+ * whatever arrives there anyway is refused rather than used.
+ *
  * **Every other failure throws** `StorageError` `E_GIT_READ_FAILED` carrying git's own message
  * (`task-142`): a `root` that is not a repository, a tree git cannot read, an output past the read
  * buffer. It used to return `[]` for all of them, so an oversized walk — Node's 1 MiB default buffer,
@@ -99,7 +104,7 @@ export function walkGitLogFields(
 ): string[][] {
   if (fields.length === 0) return [];
   const format = fields.map((field) => `${field}${NUL_PLACEHOLDER}`).join('');
-  const args = ['log', ...extraArgs, `--format=${format}`, '--', ...pathspecs];
+  const args = ['log', '--no-show-signature', ...extraArgs, `--format=${format}`, '--', ...pathspecs];
   const run = runGitRead(root, args, { accepted: [0, GIT_FATAL] });
   if (run.status === GIT_FATAL) {
     if (isUnbornHead(root)) return [];
@@ -114,10 +119,12 @@ export function walkGitLogFields(
   // are records thereafter.
   const pieces = stdout.split(NUL);
   pieces.pop();
+  const commitNameSlots = fields.flatMap((field, index) => (field === '%H' ? [index] : []));
   const records: string[][] = [];
   for (let index = 0; index + fields.length <= pieces.length; index += fields.length) {
     const record = pieces.slice(index, index + fields.length);
     record[0] = (record[0] as string).replace(/^\n+/, '');
+    for (const index of commitNameSlots) requireCommitName(record[index] as string, 'git log');
     records.push(record);
   }
 
