@@ -175,18 +175,26 @@ describe("this repository's catalogue (AC 1, AC 2, characterization)", () => {
 
 describe('the report schema and layout (AC 2, characterization)', () => {
   const dir = join(ROOT, 'docs', '08_health');
-  const schema = JSON.parse(readFileSync(join(dir, 'release-health.schema.json'), 'utf-8')) as Record<string, any>;
+  interface MetricDef {
+    properties: { id: { pattern: string }; status: { enum: string[] } };
+    allOf: unknown[];
+  }
+  const schema = JSON.parse(readFileSync(join(dir, 'release-health.schema.json'), 'utf-8')) as {
+    $schema: string;
+    required: string[];
+    $defs: { metric: MetricDef };
+  };
 
   it('is a draft 2020-12 JSON schema whose top level requires the run identity, the toolchain and the metrics', () => {
-    expect(schema['$schema']).toBe('https://json-schema.org/draft/2020-12/schema');
-    expect(schema['required']).toEqual(['schema_version', 'catalogue_version', 'release', 'measurement_point', 'previous', 'toolchain', 'metrics']);
+    expect(schema.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
+    expect(schema.required).toEqual(['schema_version', 'catalogue_version', 'release', 'measurement_point', 'previous', 'toolchain', 'metrics']);
   });
 
   it("a metric entry's id is the catalogue's id shape, and a value that was not measured carries a reason", () => {
-    const metric = schema['$defs']['metric'];
-    expect(metric['properties']['id']['pattern']).toBe('^[A-Z][0-9]{2}$');
-    expect(metric['properties']['status']['enum']).toEqual(['measured', 'not-measurable', 'not-comparable']);
-    expect(metric['allOf']).toEqual([
+    const metric = schema.$defs.metric;
+    expect(metric.properties.id.pattern).toBe('^[A-Z][0-9]{2}$');
+    expect(metric.properties.status.enum).toEqual(['measured', 'not-measurable', 'not-comparable']);
+    expect(metric.allOf).toEqual([
       { if: { properties: { status: { const: 'measured' } } }, then: { required: ['value'] }, else: { required: ['reason'] } },
     ]);
   });
