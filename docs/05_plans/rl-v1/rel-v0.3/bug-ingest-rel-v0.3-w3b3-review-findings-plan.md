@@ -111,6 +111,9 @@ projects (`GIT_CONFIG_GLOBAL=/dev/null`, `node dist/cli.js init --template Scrum
   (e.g. `90c97bec`) carry them; the two batches disagree, and which one §7 wants is for the approver to confirm.
 - **A3/A4 bugs and `task-216`.** As ruled, both are linked by the handover note only, not by `task-216`'s `bug:` list,
   so they stay `triaged` (no `sync [triaged → planned]`); adding them to the list is the approver's call.
+- **Governance (2026-10-09).** `node scripts/check-governance.cjs --base main` → on `ingest/w3b3-review-findings`, 42
+  `wf()` commits, 0 findings (gated, history), 0 entries not checked; on `backlog/w3b3-handovers`, 8 `wf()` commits,
+  0 findings, 0 entries not checked. Neither branch is pushed or merged.
 
 ### Retrospective
 
