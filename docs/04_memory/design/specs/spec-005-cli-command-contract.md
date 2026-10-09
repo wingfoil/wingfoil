@@ -203,7 +203,11 @@ error: <reason>
 - **Every refusal has this shape, whichever layer raises it.** The argument parser's own refusals —
   an unknown command or option, a missing option argument, a missing verb — are written in the active
   `--format` exactly like a refusal raised by WingFoil's core, at the same exit codes (§1). Under
-  `json`/`yaml` stderr carries the one object and nothing else: the usage text a parser prints for an
+  `json`/`yaml` stderr carries the one error object and, before it, only warnings, each its own
+  document in the same format (`{"warning": "<text>"}`, `spec-008` §6): a warning raised while the
+  command ran — a configuration file's unknown key (`spec-009` §2), `agent execute`'s context warnings
+  (`spec-016` §3.3 step 8) — is written when it is raised, so it precedes the refusal, and on a success
+  stderr may carry warnings while the exit code is `0`. The usage text a parser prints for an
   incomplete invocation is not written (an explicit `--help` still prints it, to stdout). An
   unrecognised `--format` value cannot select a format, so that refusal, and any refusal raised before
   a valid value is known, is console text.
@@ -401,6 +405,15 @@ exits `2` instead of starting the server (`0`) or refusing an uninitialized proj
 `wingfoil init --format bogus` outside a repository exits `2` instead of `1`. Each is the code §1
 already assigns to a malformed invocation; no rule of the exit-code table changed. Edited in place without a supersede or a state change, per
 `dl-047-tech-specs-carry-no-version-field`.
+
+**Revision (2026-10-07, `task-218-agent-execute-element-resolves-role-agent-adapter-assembles`) —
+§3.2: warnings precede the error object on stderr.** `task-169` gave every successful command a
+warning channel on stderr (`spec-008` §6) and left this section's "the one object and nothing else"
+to the task implementing `spec-016` §3.4. That task routes every warning raised while a command runs
+through the one renderer, at the moment it is raised (`bug-202`: the unknown-field warning, which the
+loaders wrote raw); so a refusal can follow warnings, each its own document. A consumer reads stderr as
+a stream of documents, the error last. The error object's shape and every exit code are unchanged.
+Edited in place without a supersede or a state change, per `dl-047-tech-specs-carry-no-version-field`.
 
 ## Process Notes
 
