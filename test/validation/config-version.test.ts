@@ -14,6 +14,7 @@ describe('isVersionIncrease (bug-249)', () => {
     ['1.3', '1.4', true],
     ['1.0', 1.1, true],
     ['1.2.3', '1.10.0', true],
+    ['1.2', '1.2.0.1', true],
   ])('%p → %p is an increase', (before, after, expected) => {
     expect(isVersionIncrease(before, after)).toBe(expected);
   });
@@ -25,6 +26,9 @@ describe('isVersionIncrease (bug-249)', () => {
     [2.5, 2.4],
     [1.1, 1.1],
     ['1.10.0', '1.2.3'],
+    ['1.2.3', '1.2.3'],
+    ['1.2.0.1', '1.2'],
+    [Number.POSITIVE_INFINITY, 2],
     [null, 1],
     [1, null],
     ['one', 'two'],
