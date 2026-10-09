@@ -2,7 +2,7 @@
 id: "task-213-write-retrospective-notes-during-release-templates-retrospective-workflow"
 type: task
 title: "Write retrospective notes during the release: templates and retrospective workflow"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "medium"
