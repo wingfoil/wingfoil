@@ -2,7 +2,7 @@
 id: "task-221-declare-v0-3-dev-loop-gates-revision-dev"
 type: task
 title: "Declare the v0.3 dev-loop gates in one revision of dev-loop.yaml"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "medium"
