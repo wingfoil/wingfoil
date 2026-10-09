@@ -82,10 +82,10 @@ the rule; the precedent and the batch notes say otherwise).
 
 | AC | Class | Why |
 |---|---|---|
-| 1 — `traceability.md` gains dl-118 rules 1–3 with `dl-060`, citing `dl-118`; both ingest `capture` descriptions point at it; versions bumped | characterization, **observed red** | directive and config prose; a live test pins the citations and the two pointers, and fails until the text exists |
+| 1 — `traceability.md` gains dl-118 rules 1–3 with `dl-060`, citing `dl-118`; both ingest `capture` descriptions point at it; versions bumped | red-first (document) | directive and config prose; a live test pins the citations and the two pointers, and fails until the text exists |
 | 2 — every standing rule of the v0.2/v0.2.2 dev-loop plans listed with source and landing place | characterization | an inventory in these notes (below); the approver confirms it at review |
-| 3 — the orchestrating session authors out-of-band criteria as `tech-lead`, backlog criteria as `product-owner`; no new role | characterization, **observed red** | prose, pinned by the same test; "no new role" pinned against `dna.yaml` `team.roles` |
-| `bug-186` (absorbed, dl-045; triage Reason) — a plan's `release` is the release it serves, set by its author; amend keeps it reserved | characterization, **observed red** | prose, pinned by the same test |
+| 3 — the orchestrating session authors out-of-band criteria as `tech-lead`, backlog criteria as `product-owner`; no new role | red-first (document) | prose, pinned by the same test; "no new role" pinned against `dna.yaml` `team.roles` |
+| `bug-186` (absorbed, dl-045; triage Reason) — a plan's `release` is the release it serves, set by its author; amend keeps it reserved | red-first (document) | prose, pinned by the same test |
 
 **AC 2 — inventory of the standing rules in the v0.2 and v0.2.2 dev-loop plans.** Sources:
 `docs/05_plans/rl-v1/rel-v0.2/dev-loop-rel-v0.2-plan.md` ("v0.2") and
@@ -99,7 +99,7 @@ the rule; the precedent and the batch notes say otherwise).
 | 3 | Branch `task/{task.id}` cut from `main` | v0.2 §2 "Branch, worktree & merge"; v0.2.2 §1 "Per-task contract" (start) | `git-conventions.md` §1 — present |
 | 4 | One worktree per task, removed after the merge | v0.2 §2 "Branch, worktree & merge"; v0.2.2 §1 | `git-conventions.md` — **not stated** (`grep -n worktree` finds only §2's "from inside its own worktree" and §5); declared as actions in `dev-loop.yaml` (`git.create_worktree`, `git.remove_worktree`). Text proposed to `task-208` in the report |
 | 5 | Merge into `main` with `--no-ff` | v0.2 §2 "Branch, worktree & merge", §3.7; v0.2.2 §1 (done) | `git-conventions.md` §1 — present |
-| 6 | `approve` and `finalize` committed on the task branch, before the merge | v0.2 §2 "Branch, worktree & merge", §3.7; v0.2.2 §1 (done) | `dev-loop.yaml` `done` — but **contradicted** by `git-conventions.md` §1, whose closed on-`main` list includes "the approver's `approve` and `reject` commits" (practice: `1a276f87`, task-204's approve, is not on `main`'s first-parent line and is an ancestor of `1ea0c6e9^2`). Candidate finding in the report |
+| 6 | `approve` and `finalize` committed on the task branch, before the merge | v0.2 §2 "Branch, worktree & merge", §3.7; v0.2.2 §1 (done) | **lands nowhere; contradicted twice.** `dev-loop.yaml` `done` (`sed -n 175,182p`) orders `memory.approve` → `git.merge` → `git.remove_worktree` → `element.set_state(done)`, i.e. finalize after the merge, while practice finalizes on the branch before it (`d4a2a1dc`, `4b80b0b2`, `a4808d1f` are off `main`'s first-parent line: `git log --first-parent main --format=%h | grep -c <sha>` → 0). And `git-conventions.md` §1 lists "the approver's `approve` and `reject` commits" among the commits made directly on `main`, while the task approve is on the branch (`1a276f87`, task-204's, is an ancestor of `1ea0c6e9^2`). A follow-up bug, filed by the coordinator |
 | 7 | A failed or conflicted merge is aborted clean and the task goes back to `red` | v0.2 §2 (`dl-014` G4), §3.7 "Fallback" | `git-conventions.md` §2 (never force-resolved; aborted and recorded) — present; `dev-loop.yaml` `done` fallback |
 | 8 | No task commit in the shared main working tree; `git branch --show-current` before every commit | v0.2.2 §1 (closing paragraph) | `git-conventions.md` — **not stated** (`grep -n show-current` → nothing). Text proposed to `task-208` in the report |
 | 9 | Memory transition commits in the `wf({type}): {verb} {ids}` form | v0.2 §2 "Commits" | `git-conventions.md` §4 — present |
@@ -107,7 +107,7 @@ the rule; the precedent and the batch notes say otherwise).
 | 11 | `approve`/`reject` only on the approver's instruction; the agent never approves; the loop stops at review | v0.2 §2 "Commits"; v0.2.2 §1 (review, done), "Handoff" | not a directive rule: enforced by `dna.yaml` `team.agents[].approval_authority: false` and `memory approve`'s authority check (`requireApprovalAuthority`); `dev-loop.yaml` `review` `approval: { by_role: approver }`. Left there |
 | 12 | Code commit subjects per phase: `test|feat|refactor({module}): {task.id} — …` | v0.2 §2 "Commits" | **not stated** in any directive (`code-quality.md` says only "conventional commit messages"). Branch, worktree and merge are `git-conventions`' subject; text proposed to `task-208` in the report |
 | 13 | A linked bug's status follows the task, each change its own `wf(bug): sync` commit right after the task's, on the task branch | v0.2 §2 "`bug.sync_state`"; v0.2.2 §4 | `dev-loop.yaml` `bug.sync_state` actions (when); the `sync` verb is `dl-079`'s, which `git-conventions.md` §4 defers to. Left there |
-| 14 | `dl-045`'s outcome handed explicitly to `task-045`/`046`/`061` | v0.2 §2 "`bug.sync_state`" | **task-specific**: it names three tasks of one release; the general half (read `depends_on` notes) is row 17 |
+| 14 | A decision-log a task absorbs (here `dl-045`, for `task-045`/`046`/`061`) is handed to the task explicitly at `design`, because `read_related` covers `depends_on` tasks only | v0.2 §2 "`bug.sync_state`" (closing paragraph) | **lands nowhere — a gap.** `dev-loop.yaml` `design` step (2) reads the Execution Notes of `depends_on` tasks only (`sed -n 100,118p .wingfoil/workflows/custom/dev-loop.yaml`); `dl-102` §4, task-221's check, compares each criterion with the bound directives and ratified specs, not with the decision-logs a task absorbs (task-221 AC 1, `grep -n "dl-102" docs/04_memory/v0.3/task-221-*.md`). The naming of three v0.2 tasks is task-specific; the rule is general. Candidate finding in the report |
 | 15 | Phase → role table and the directives each loads | v0.2 §2 "Roles & directives" | configuration, not a rule: `dev-loop.yaml` `role:` and `roles.yaml`. Left there |
 | 16 | Classify each AC (T1); characterization ACs need no red; never fabricate a red | v0.2 §3.2, §3.3; v0.2.2 §1 (design) | `testing.md` (T1) — present |
 | 17 | Read every `depends_on` task's Execution Notes before `red` (`dl-015`) | v0.2 §3.2; v0.2.2 §1 (design) | `traceability.md` (`depends_on` bullet) — present; `dev-loop.yaml` `agent.read_related` |
@@ -134,6 +134,7 @@ The approver confirms this list at review (AC 2).
 section "## Which type a finding is filed as"` and the other three headings; `Expected substring:
 "traceability"` for both captures). The one pass is the file-existence check, which held before.
 Not asserted (testing T1, prose quality): the wording of rules 1–3 beyond their numbered headings;
+the "versions bumped" part of AC 1 (checked by `grep -n '^version'` on the three files at review);
 the AC 2 inventory, which the approver confirms by reading.
 
 ### green (developer)
@@ -187,6 +188,23 @@ Against `code-review`, `traceability`, `claim-evidence`:
   `bug-ingest`; rewritten. No other stale sentence found on re-reading the directive.
 - No Memory element other than this task and the `bug-186` sync is edited: **Pending amendments
   (approver): none.**
+
+
+### review fixes (independent review: approve with fixes, 2026-10-09)
+
+1. *AC classification (testing T3).* A characterization test that fails on first run means the AC
+   was red-first: AC 1, AC 3 and `bug-186` are relabelled **red-first (document)** above (task-205's
+   precedent); AC 2 stays characterization. "Versions bumped" is listed as unasserted. The doc comment
+   of `test/directives/traceability.test.ts` (line 7, "Characterization of directive and
+   configuration text") is frozen since `red` and keeps the old label.
+2. *`traceability.md`, "A plan's `release`".* One sentence names the correction path: a hand `assign`
+   commit, `wf(plan): assign release vX to <id>` (`spec-003`'s verb table: `assign` writes `release` on
+   any type; `spec-008` §2 gives the canonical subject `memory history` reads). No second version bump
+   (one per branch, doc-versioning).
+3. *Inventory rows 6 and 14 corrected.* Row 6 lands nowhere and is contradicted by both `dev-loop.yaml`
+   `done`'s order and `git-conventions` §1 (follow-up bug for the coordinator). Row 14 now states the
+   v0.2 plan's general rule (an absorbed decision-log is handed over at `design`) and records it as a
+   gap: neither `design` step (2) nor `dl-102` §4 covers it.
 
 ### Retrospective
 

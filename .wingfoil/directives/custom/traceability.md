@@ -99,7 +99,9 @@ tech-specs, ADRs and tasks only (`release-planning.yaml`, `build-backlog`). Beca
 scaffold declares `release` (`.wingfoil/memory/templates/plan.md`), `memory amend` keeps the field
 reserved on plans, as on every type whose committed scaffold declares it (`amendReservedFields`,
 `src/core/memory-amend.ts`; approver ruling at `task-170`): a plan's `release` is not corrected
-through `amend`.
+through `amend`. It is corrected by a hand `assign` commit that changes only that field,
+`wf(plan): assign release vX to <id>` (`spec-003-workflows-yaml-schema`: `assign` writes `release` on any type;
+`spec-008-cli-grammar` §2: the canonical subject `memory history` reads).
 
 > Rationale: traceability is what lets Casey/Morgan see how requirements flow to test and release,
 > and what makes the audit trail complete. Source: `docs/02_requirements/X_specs-downcast-plan.md`;
