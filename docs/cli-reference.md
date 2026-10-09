@@ -1113,10 +1113,11 @@ wingfoil agent execute --element <type:id> [--role <role>] [--agent <name>]
 | `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is `developer`, and a `warning:` line says so. `approver` is refused: an agent never runs as the role that approves. |
 | `--agent <name>` | The `team.agents` entry to launch. Without it, the first entry, in `dna.yaml` order, that declares an `adapter` and lists the role in `executes_as`. |
 
-Unreleased (v0.3), and **not yet able to launch**: this build runs every check that comes before the
-launch and stops there. It reads **as committed at `HEAD`** (see [Git side effects](#git-side-effects)):
+Unreleased (v0.3). It reads **as committed at `HEAD`** (see [Git side effects](#git-side-effects)):
 `dna.yaml`, `memory.yaml`, the element, the agent's adapter under `.wingfoil/agents/built-in/` or
-`.wingfoil/agents/custom/`, and the run log. That commit is the run's `state_ref`. In order, it checks:
+`.wingfoil/agents/custom/`, and the run log. That commit is the run's `state_ref`. The one read outside
+it: the WingFoil MCP server it starts for the pre-flight reads your working tree's `dna.yaml` when it
+starts, so an uncommitted change there can refuse the pre-flight. In order, it checks:
 the element exists; the role is defined and is not `approver`; an agent with an adapter runs the role;
 the adapter is valid; its `command` is on `PATH` (or at its path in the project); your git identity is
 set; `dna.yaml` declares `paths.runs` and the element's run log has no uncommitted changes; the
@@ -1128,17 +1129,42 @@ The first check that fails ends the command with exit `1` and its message, for e
 `error: invalid execution context: missing 'directives' section`. The context's warnings (a directive
 bound to the role with no file, a Memory document that could not be read) and any file under
 `.wingfoil/agents/` that is not an adapter (another extension, a nested file, a name outside
-`[a-z0-9-.]`) are printed as `warning:` lines first. Temporary files go to the system's temporary
-directory and are removed whatever happens.
+`[a-z0-9-.]`) are printed as `warning:` lines first, each once. Temporary files go to the system's
+temporary directory and are removed whatever happens, an interruption before the launch included.
 
-When every check passes, the command exits `1` with `error: agent execute cannot launch an agent yet:
-run <run-id> passed every pre-launch check …`. With `--dry-run` it exits `0` instead and prints the
-launch it would make: `{"dryRun": true, "subject": "agent: record <run-id>", "paths": [<run log>],
-"run": {id, element, workflow, phase, role, mode, agent, adapter, state_ref}, "bootstrap": "<the
-prompt the agent would receive>"}`. Without `--element` it exits `2` with
-`error: missing required argument: --next or --element`.
+Then it launches the agent: it prints `run <run-id>: launching <agent> (<adapter>) as <role> on
+<type>:<id>`, starts the adapter's command with the arguments its manifest declares (no shell), and
+hands it the terminal. The agent's first prompt names the run, the role, the element and the commit,
+tells it where to load its context (the `<role>-session` prompt of the `wingfoil` MCP server registered
+for it), and tells it to end the commits of its work, except an approve or reject commit, with
+`Co-Authored-By: <agent name> <<agent email>>` and `AI-Model: <its model>`. While the agent runs,
+Ctrl-C and Ctrl-\ reach the agent and do not stop `agent execute`; `SIGTERM` and `SIGHUP` sent to
+`agent execute` are passed on to the agent. When the agent exits, it asks the adapter's declared
+commands for the agent's version, session, model and token counts (each within 10 seconds; one that
+fails is recorded as `not-reported`, with a `warning:` line), appends one record to the element's run
+log (`<paths.runs>/<element-id>.jsonl`) and commits it alone, then prints
+`run <run-id>: agent exited <status> after <seconds> s (recorded in <sha7>)`.
 
-- **Commit:** none in this build (the launch will commit one run record, `agent: record <run-id>`).
+It exits `0` only when the agent exited `0` and the record was committed. An agent that exited with
+another code, or was ended by a signal, gives exit `1` and
+`error: agent exited <status>; run <run-id> recorded` (`<status>` is the code or `signal:<NAME>`); a
+record that could not be committed gives exit `1` and `error: run <run-id> not recorded: <cause>` (or the
+run-log refusal), with the record itself as a detail line so the run is not lost.
+
+**Nothing is written on stdout**, which belongs to the agent: every line `agent execute` prints goes to
+stderr, and `--format json` / `yaml` only reshape those lines, one document each — `{"warning": …}`,
+`{"notice": "run …: launching …"}`, `{"error": …, "hint"?, "details"?}`, and `{"run": <record>}` for the
+summary.
+
+With `--dry-run` it runs every check above, launches nothing, and prints on stdout the launch it would
+make: `{"dryRun": true, "subject": "agent: record <run-id>", "paths": [<run log>], "run": {id, element,
+workflow, phase, role, mode, agent, adapter, state_ref}, "bootstrap": "<the prompt the agent would
+receive>"}`. Without `--element` it exits `2` with `error: missing required argument: --next or
+--element`.
+
+- **Commit:** `agent: record <run-id>`, containing only the element's run log, with the
+  `WingFoil-Version:` trailer and no other body; made whatever the agent's exit, unless the record
+  cannot be committed.
 
 ### `wingfoil agent show`
 
