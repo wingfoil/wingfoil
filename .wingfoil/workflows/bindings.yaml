@@ -16,7 +16,7 @@
 # specification-phase quality criteria, the release/branch state queries, …) have no command that asserts
 # them today; each is listed with its reason in task-199's Execution Notes and stays a
 # W_WORKFLOW_UNBOUND_TOKEN warning, which in v1.0 fails closed (dl-090 Q2 (c)).
-version: 1.2                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry; 1.1 bug-134 (task-207): e2e-smoke-passed writes its report and states severity: reject (dl-023); 1.2 git.merge also names dev-loop's main-sync, `from: main` (task-205, dl-035)
+version: 1.3                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry; 1.1 bug-134 (task-207): e2e-smoke-passed writes its report and states severity: reject (dl-023); 1.2 git.merge also names dev-loop's main-sync, `from: main` (task-205, dl-035); 1.3 vision-index.current, vision-change's index check (task-212, bug-270)
 format: 1                        # dl-153 (A): a dl-149 file kind (BINDINGS_YAML_FORMAT)
 
 checks:
@@ -44,6 +44,8 @@ checks:
   mcp.registered:           { run: [npm, run, "check:mcp"] }
   # agent-docs.align-agent-docs (bug-170): WORKFLOW.md names every workflow and phase workflows.yaml includes.
   workflow-md.complete:     { run: [npm, test, --, test/docs/workflow-md.test.ts] }
+  # vision-change.update-vision / schedule (dl-132 element 5, bug-270): docs/01_vision/00_index.md matches every vision file.
+  vision-index.current:     { run: [npm, test, --, test/docs/vision-index.test.ts] }
 
 actions:
   # dev-loop.review (dl-014): the BDD acceptance scenarios run inside the jest suite.

@@ -85,3 +85,22 @@ describe('AC 2 — the startable, self-creating `vision-change` workflow', () =>
     ]);
   });
 });
+
+describe('AC 4 — the downcast subs accept a second includer (characterization)', () => {
+  const loaded = loadWorkflowRegistryAtHead(ROOT);
+
+  it.each(SUBS)('%s is kind: sub, declares no element, and is included by specification-downcast and vision-change', (name) => {
+    const sub = loaded.workflows.find((workflow) => workflow.name === name);
+    expect(sub).toMatchObject({ kind: 'sub' });
+    expect(sub?.element).toBeUndefined();
+    const includers = loaded.workflows.filter((workflow) => workflow.phases.some((phase) => phase.include === name)).map((workflow) => workflow.name);
+    expect(includers).toEqual(['vision-change', 'specification-downcast']); // manifest order: the startable mains come first
+  });
+
+  it('the loader reports nothing on vision-change but its unbound prose check', () => {
+    const own = loaded.diagnostics
+      .filter((d) => d.file === 'workflows/custom/vision-change.yaml')
+      .map((d) => [d.code, d.path]);
+    expect(own).toEqual([['W_WORKFLOW_UNBOUND_TOKEN', 'phases[0].checks.post[0]']]);
+  });
+});

@@ -9,7 +9,7 @@
 # true for tech-spec, decision-log, service, task, bug and plan; false for release and release-line
 # (approver ruling, task-127 review, 2026-10-01). true for adr since the approver ruling of 2026-10-02
 # (task-158): dated correction and Revision notes only, since a change to the decision is a new ADR
-# (dl-108 A3).
+# (dl-108 A3). true for change-proposal from its introduction (task-212, dl-132).
 # Source: docs/01_vision/06_features.md, docs/02_requirements/.../P1.13-memory-element-schema.feature
 #          docs/02_requirements/03_sard/03_state-context.md (REQ-STATE-01, REQ-STATE-08)
 #
@@ -50,13 +50,16 @@
 #   service      — one unit of external state the project owns, depends on, or presents itself through
 #                  (dl-088); created on demand via the `service-ingest` main, and by any phase that sets
 #                  up external state.
+#   change-proposal — a change to the vision, of which a feature request is a case (dl-132 Q1 (a));
+#                  created by the startable `vision-change` main, which analyses its impact along the
+#                  traceability chain, downcasts only the layers the analysis names and assigns it to a release.
 # (risk / rfc / note were dropped: no workflow action currently produces them.)
 # Memory content lives under docs/04_memory/ (each type's `path`), resolved against the repository
 # root, where this .wingfoil/ also sits (moved there from docs/self/ by task-111). Seeded so far: `release` (roadmap derived from
 # docs/03_backlog/; each `requirements:` points to its by-release backlog JSON) plus the initial `adr`
 # and `decision-log` content recorded by initial-design (under design/adrs/ and design/dls/).
 # The per-type `template.file:` scaffolds live alongside the config under .wingfoil/memory/templates/.
-version: 2.6                     # [AUTHORING] content revision (WingFoil convention, dl-047) — the file's FORMAT is the separate `format:` key [SPEC: spec-001, dl-149], absent here and so read as 1; a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable); 2.2 -> 2.3 at task-164 (release path folder = the release-line id, bug-163); 2.3 -> 2.4 at task-251 (this annotation: content revision, not format, dl-149); 2.4 -> 2.5 at task-180 (task `returns`, dl-110); 2.5 -> 2.6 at task-205 (bug `returns: { in-progress: planned }`, dl-110 P1 (a)/P2: the dev-loop park sync's edge)
+version: 2.7                     # [AUTHORING] content revision (WingFoil convention, dl-047) — the file's FORMAT is the separate `format:` key [SPEC: spec-001, dl-149], absent here and so read as 1; a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable); 2.2 -> 2.3 at task-164 (release path folder = the release-line id, bug-163); 2.3 -> 2.4 at task-251 (this annotation: content revision, not format, dl-149); 2.4 -> 2.5 at task-180 (task `returns`, dl-110); 2.5 -> 2.6 at task-205 (bug `returns: { in-progress: planned }`, dl-110 P1 (a)/P2: the dev-loop park sync's edge); 2.6 -> 2.7 at task-212 (the `change-proposal` type, dl-132 Q1 (a))
 
 # Default machine used by any type that does not declare its own `states` block.
 # [SPEC: REQ-STATE-08] default machine: draft -> pending -> approved, reject from pending back to draft,
@@ -263,3 +266,22 @@ types:
       gates:
         pending: { reject: draft }   # approve: pending->active (the approver ran `verify`) · reject: ->draft
       waiting: [ ]                   # `active` is terminal; retirement is memory.deprecate
+
+  change-proposal:
+    path: "docs/04_memory/change-proposals/{id}.md"   # [AUTHORING] dl-132 Action 2 — resolved against the repository root
+    id_pattern: "cp-{n}-{slug}"                       # [AUTHORING] e.g. cp-001-a-feature-ingest-workflow
+    name: Change Proposal                             # [AUTHORING] dl-132
+    description: A proposed change to the vision — a new feature (kind `feature`) or any other edit of docs/01_vision/ (kind `vision`) — with its impact analysis along the traceability chain (P* → US-* → BDD → REQ-* → delivered tasks/ADRs/specs; "no impact" recorded per layer, dl-132 Q2 (ii)) and its target release. Workflow — created by the startable `vision-change` main (capture), accepted at its impact-analysis gate, downcast only for the layers the analysis names, and `scheduled` once a release carries it (dl-132 element 4). See dl-132-vision-change-and-feature-ingest.   # [AUTHORING]
+    tags: [ change-proposal, vision, feature ]        # [AUTHORING]
+    template:                   # [AUTHORING] dl-132 Action 2 — scaffold for `wingfoil memory add --type change-proposal`
+      frontmatter:
+        required: [ title, kind ]
+        values:                 # [AUTHORING] the declared value set; not enforced by the tool (spec-001 passthrough), as `task`'s
+          kind: [ feature, vision ]   # dl-132 Q1 (a): a feature request is the most common vision change
+      file: "memory/templates/change-proposal.md"
+    amendable: true      # key [SPEC: spec-001, dl-108 A3]; value [AUTHORING] task-212: a proposal's analysis is corrected like a decision-log's content
+    states: # [SPEC] structure (P1.13 / REQ-SYS-04); [AUTHORING] vocabulary+encoding — dl-132 Decision element 1
+      sequence: [ draft, in-analysis, accepted, scheduled ]
+      gates:
+        in-analysis: { reject: draft }   # approve: in-analysis->accepted (vision-change impact-analysis) · reject: ->draft
+      waiting: [ accepted ]              # accepted->scheduled: vision-change's `schedule` step, once a release carries it
