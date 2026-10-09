@@ -272,3 +272,69 @@ describe('mcpPreflight — a server that answers the Prompt with no text is unre
     }
   }, 30000);
 });
+
+describe('task-228 — the B3 handovers on the pre-launch half', () => {
+  it('the MCP pre-flight has one deadline: initialize and the Prompt fetch share it (REQ-PERF-01)', async () => {
+    const root = makeTempGitRepo();
+    try {
+      // A stub that takes 1.5 s to answer initialize and 1.5 s to answer the Prompt: each answer is
+      // within a 2.5 s limit, both together are not.
+      writeFixtureFile(
+        root,
+        'slow-server.cjs',
+        [
+          "const rl = require('readline').createInterface({ input: process.stdin });",
+          "const send = (m) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');",
+          "const later = (f) => setTimeout(f, 1500);",
+          "rl.on('line', (line) => {",
+          '  const m = JSON.parse(line);',
+          "  if (m.method === 'initialize') later(() => send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { prompts: {} }, serverInfo: { name: 'slow', version: '1' } } }));",
+          "  else if (m.method === 'prompts/get') later(() => send({ id: m.id, result: { messages: [{ role: 'user', content: { type: 'text', text: 'context' } }] } }));",
+          '});',
+          '',
+        ].join('\n'),
+      );
+      const result = await mcpPreflight({
+        root,
+        server: { command: process.execPath, args: [join(root, 'slow-server.cjs')] },
+        role: 'developer',
+        element: 'task:task-001-a',
+        stateRef: SHA,
+        timeoutMs: 2500,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.message).toBe('context pre-load failed: MCP server unreachable');
+    } finally {
+      removeTempDir(root);
+    }
+  }, 30000);
+
+  it.each([['SIGINT'], ['SIGTERM'], ['SIGHUP']])('%s before the spawn removes the temporary directory and ends the process by that signal', (signal) => {
+    // A child that holds withRunFiles open on the compiled module, prints its directory, and waits.
+    const script = [
+      `const { withRunFiles } = require(${JSON.stringify(join(DIST_DIR, 'agent'))});`,
+      "withRunFiles({ bootstrap_file: 'x' }, async (paths) => {",
+      "  process.stdout.write(require('path').dirname(paths.bootstrap_file) + '\\n');",
+      '  await new Promise(() => setInterval(() => undefined, 60000));',
+      '});',
+    ].join('\n');
+    const out = execFileSync(
+      process.execPath,
+      [
+        '-e',
+        [
+          "const { spawn } = require('child_process');",
+          `const child = spawn(process.execPath, ['-e', ${JSON.stringify(script)}], { stdio: ['ignore', 'pipe', 'inherit'] });`,
+          "let dir = '';",
+          "child.stdout.on('data', (chunk) => { dir += chunk; if (dir.endsWith('\\n')) child.kill(" + JSON.stringify(signal) + '); });',
+          "child.on('close', (code, sig) => { process.stdout.write(JSON.stringify({ dir: dir.trim(), code, sig, exists: require('fs').existsSync(dir.trim()) })); });",
+        ].join('\n'),
+      ],
+      { encoding: 'utf-8' },
+    );
+    const { dir, code, sig, exists } = JSON.parse(out) as { dir: string; code: number | null; sig: string | null; exists: boolean };
+    expect(dir).toMatch(/wingfoil-run-/);
+    expect(exists).toBe(false);
+    expect({ code, sig }).toEqual({ code: null, sig: signal });
+  }, 30000);
+});

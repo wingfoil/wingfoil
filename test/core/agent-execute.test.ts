@@ -6,14 +6,14 @@
  * coverage-measured process, and the cases the CLI suite cannot set up (no commit, an uncommitted
  * pillar file, a manifest with `prompt.via: file` or `mcp.via: args`).
  */
-import { unlinkSync } from 'node:fs';
+import { mkdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { AgentExecuteHost, AgentLaunchPlan } from '../../src/agent';
 import { agentExecuteFn } from '../../src/core/agent-execute';
 import { runAsDryRun } from '../../src/core/dry-run';
 import type { CoreResult } from '../../src/core/types';
-import { withWarningSink } from '../../src/validation/warning';
+import { withNoticeSink, withWarningSink } from '../../src/validation/warning';
 import { DNA_YAML, manifest, seed, TASK_ID, TASK_REF } from '../agent/helpers/agent-execute-fixture';
 import { CLI_ENTRY } from '../cli/helpers/spawn-cli';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -33,14 +33,19 @@ const fixture = (tweak?: (repo: string) => void): string => {
 interface Outcome {
   readonly result: CoreResult<unknown>;
   readonly warnings: string[];
+  readonly notices: string[];
 }
 
 /** Run the operation (as a dry run unless `real`), collecting the warnings it raises. */
 async function run(root: string, options: Record<string, string>, host: AgentExecuteHost = HOST, real = false): Promise<Outcome> {
   const warnings: string[] = [];
+  const notices: string[] = [];
   const call = () => agentExecuteFn({ root, options, host });
-  const result = await withWarningSink((text) => warnings.push(text), () => (real ? call() : runAsDryRun(call)));
-  return { result, warnings };
+  const result = await withNoticeSink(
+    (text) => notices.push(text),
+    () => withWarningSink((text) => warnings.push(text), () => (real ? call() : runAsDryRun(call))),
+  );
+  return { result, warnings, notices };
 }
 
 const refusal = (outcome: Outcome) => (outcome.result.ok ? undefined : outcome.result.error);
@@ -160,14 +165,15 @@ describe('agentExecuteFn — what follows the pre-launch checks in this build', 
     expect(outcome.warnings).toEqual([]);
   }, 60000);
 
-  it('a real run refuses once every check passed, with a hint naming --dry-run', async () => {
+  it('a real run launches the agent and commits its record (task-228); the banner is a notice', async () => {
     const repo = fixture();
-    const error = refusal(await run(repo, { element: TASK_REF, role: 'developer' }, HOST, true));
-    expect(error).toEqual({
-      code: 'IO',
-      message: `agent execute cannot launch an agent yet: run ${TASK_ID}/adhoc/1 passed every pre-launch check (spec-016 §3.3 steps 1-12)`,
-      hint: 'run it with --dry-run to see the launch it would make',
-    });
+    const before = git(repo, ['rev-parse', 'HEAD']).trim();
+    const outcome = await run(repo, { element: TASK_REF, role: 'developer' }, HOST, true);
+    if (!outcome.result.ok) throw new Error(outcome.result.error.message);
+    const value = outcome.result.value as { run: Record<string, unknown>; sha: string };
+    expect(value.run).toMatchObject({ id: `${TASK_ID}/adhoc/1`, exit_status: 0, model: 'fake-model', state_ref: before });
+    expect(value.sha).toBe(git(repo, ['rev-parse', 'HEAD']).trim());
+    expect(outcome.notices).toEqual([`run ${TASK_ID}/adhoc/1: launching Fake Agent (custom/fake) as developer on ${TASK_REF}`]);
   }, 60000);
 
   it.each([
@@ -221,4 +227,111 @@ describe('agentExecuteFn — review fixes (task-218 review F1, F3)', () => {
     const src = join(__dirname, '..', '..', 'src');
     for (const file of ['cli.ts', 'cli/registrar.ts', 'mcp/registrar.ts']) expect(readFileSync(join(src, file), 'utf-8')).not.toMatch(/\bhost\b/);
   });
+});
+
+describe('agentExecuteFn — the launch half in process (task-228, spec-016 §3.3 steps 13–18)', () => {
+  /** Run with the fake's environment variables set for this call only. */
+  async function withFakeEnv<T>(env: Record<string, string>, work: () => Promise<T>): Promise<T> {
+    const saved = Object.fromEntries(Object.keys(env).map((name) => [name, process.env[name]]));
+    Object.assign(process.env, env);
+    try {
+      return await work();
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  }
+
+  it('a lookup that hangs past its limit → not-reported and a warning; the run still succeeds', async () => {
+    const repo = fixture();
+    const outcome = await withFakeEnv({ WINGFOIL_FAKE_AGENT_LOOKUP: 'hang' }, () =>
+      run(repo, { element: TASK_REF, role: 'developer' }, { ...HOST, lookupTimeoutMs: 1500 }, true),
+    );
+    if (!outcome.result.ok) throw new Error(outcome.result.error.message);
+    expect((outcome.result.value as { run: Record<string, unknown> }).run).toMatchObject({ model: 'not-reported', agent_version: 'fake-agent 1.0.0' });
+    expect(outcome.warnings).toEqual(["adapter 'fake': the usage lookup failed (timed out after 1500 ms): model and tokens recorded as not-reported"]);
+  }, 60000);
+
+  it('session.id: lookup reads session.field from the lookup document; session.id: output is not-reported for an interactive launch', async () => {
+    const lookup = fixture((root) => {
+      writeFixtureFile(root, '.wingfoil/dna.yaml', DNA_YAML.replace('adapter: fake', 'adapter: looked'));
+      writeFixtureFile(
+        root,
+        '.wingfoil/agents/custom/looked.yaml',
+        manifest('looked', (text) => text.replace('id: assign', 'id: lookup').replace(/ {2}assign_args: .*\n/, '').replace(/"\{session_id\}"/g, 'fixed-session')),
+      );
+    });
+    const looked = await withFakeEnv({ WINGFOIL_FAKE_AGENT_DOCUMENT: JSON.stringify({ session_id: 'from-lookup', model: 'm-1', usage: { input: 1 } }) }, () =>
+      run(lookup, { element: TASK_REF, role: 'developer' }, HOST, true),
+    );
+    if (!looked.result.ok) throw new Error(looked.result.error.message);
+    expect((looked.result.value as { run: Record<string, unknown> }).run).toMatchObject({
+      session: 'from-lookup',
+      model: 'm-1',
+      tokens: { input: 1, output: 'not-reported', cache_read: 'not-reported', cache_write: 'not-reported' },
+    });
+
+    const output = fixture((root) => {
+      writeFixtureFile(root, '.wingfoil/dna.yaml', DNA_YAML.replace('adapter: fake', 'adapter: outed'));
+      writeFixtureFile(
+        root,
+        '.wingfoil/agents/custom/outed.yaml',
+        manifest('outed', (text) =>
+          text.replace('id: assign', 'id: output').replace(/ {2}assign_args: .*\n/, '').replace(/"\{session_id\}"/g, 'fixed-session').replace('from: lookup', 'from: none'),
+        ),
+      );
+    });
+    const outed = await run(output, { element: TASK_REF, role: 'developer' }, HOST, true);
+    if (!outed.result.ok) throw new Error(outed.result.error.message);
+    expect((outed.result.value as { run: Record<string, unknown> }).run).toMatchObject({ session: 'not-reported', model: 'not-reported' });
+  }, 120000);
+
+  it('a lookup document with a value of the wrong type records not-reported and says so', async () => {
+    const repo = fixture();
+    const outcome = await withFakeEnv({ WINGFOIL_FAKE_AGENT_DOCUMENT: JSON.stringify({ model: 7, usage: { input: -1, output: 2 } }) }, () =>
+      run(repo, { element: TASK_REF, role: 'developer' }, HOST, true),
+    );
+    if (!outcome.result.ok) throw new Error(outcome.result.error.message);
+    expect((outcome.result.value as { run: Record<string, unknown> }).run).toMatchObject({
+      model: 'not-reported',
+      tokens: { input: 'not-reported', output: 2, cache_read: 'not-reported', cache_write: 'not-reported' },
+    });
+    expect(outcome.warnings).toEqual([
+      "adapter 'fake': the usage lookup's model is not a non-empty string: recorded as not-reported",
+      "adapter 'fake': the usage lookup's input is not a non-negative integer: recorded as not-reported",
+    ]);
+  }, 60000);
+
+  it('an agent that cannot be spawned: IO, no record, nothing committed', async () => {
+    const repo = fixture();
+    const before = git(repo, ['rev-parse', 'HEAD']).trim();
+    const outcome = await run(
+      repo,
+      { element: TASK_REF, role: 'developer' },
+      {
+        ...HOST,
+        spawn: () => {
+          throw new Error('spawn refused');
+        },
+      },
+      true,
+    );
+    expect(refusal(outcome)).toMatchObject({ code: 'IO', message: "agent command 'node' could not be started (adapter 'fake'): spawn refused" });
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(before);
+  }, 60000);
+
+  it('a record that cannot be committed: recordRun\'s refusal, the record in details', async () => {
+    const repo = fixture();
+    // The agent leaves the run log modified (the fake appends its own record line to it): the record
+    // commit refuses (spec-016 §3.7), and the run is not lost. An empty directory is invisible to git.
+    mkdirSync(join(repo, 'docs/runs'), { recursive: true });
+    const outcome = await withFakeEnv({ WINGFOIL_FAKE_AGENT_RECORD: join(repo, `docs/runs/${TASK_ID}.jsonl`) }, () =>
+      run(repo, { element: TASK_REF, role: 'developer' }, HOST, true),
+    );
+    const error = refusal(outcome);
+    expect(error).toMatchObject({ code: 'CONFLICT', message: `run log docs/runs/${TASK_ID}.jsonl has uncommitted changes` });
+    expect(error?.details?.['run_id']).toBe(`${TASK_ID}/adhoc/1`);
+  }, 60000);
 });

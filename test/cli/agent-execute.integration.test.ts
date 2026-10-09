@@ -251,6 +251,7 @@ function bootstrapOf(role: string, element: string, runId: string, stateRef: str
     `Your context is assembled at commit ${stateRef} and served by the "wingfoil" MCP server`,
     `registered for this session. Load it before any other action: Get the MCP prompt "${role}-session" with arguments element="${element}" and state="${stateRef}".`,
     handoff,
+    `End every commit of your work, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <the model identifier you run as>" (git-conventions §7).`,
     '',
   ].join('\n');
 }
@@ -348,7 +349,7 @@ describe('task-218 AC 5 — the bootstrap bytes (§2.4)', () => {
   }, 60000);
 });
 
-describe('task-218 — the dry run is the launch plan; the real run stops before the spawn', () => {
+describe('task-218 — the dry run is the launch plan', () => {
   let repo: string;
   beforeAll(() => {
     repo = track(seed());
@@ -377,18 +378,6 @@ describe('task-218 — the dry run is the launch plan; the real run stops before
       },
     });
     assertPersistenceUnchanged(repo, before, 'dry run');
-    expect(run.leftInTmp).toEqual([]);
-  }, 60000);
-
-  it('without --dry-run: every pre-launch check passes, and the command refuses to launch (task-228 adds the launch)', () => {
-    const before = snapshotPersistence(repo);
-    const run = execute(repo, [...FULL, '--role', 'developer']);
-    expect(run.status).toBe(1);
-    expect(run.stdout).toBe('');
-    expect(run.stderr.split('\n')[0]).toBe(
-      `error: agent execute cannot launch an agent yet: run ${TASK_ID}/adhoc/1 passed every pre-launch check (spec-016 §3.3 steps 1-12)`,
-    );
-    assertPersistenceUnchanged(repo, before, 'stopped before the spawn');
     expect(run.leftInTmp).toEqual([]);
   }, 60000);
 });
