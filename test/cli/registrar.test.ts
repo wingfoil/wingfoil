@@ -13,6 +13,7 @@ import { coreErr, coreOk } from '../../src/core/types';
 import type { CoreErrorCode, CoreResult } from '../../src/core/types';
 import { buildCliCommands, listRegisteredCliCommands, type CliCommand } from '../../src/cli/registrar';
 import { StorageError, E_NO_GIT_ROOT } from '../../src/storage/errors';
+import { reportWarning } from '../../src/validation/warning';
 
 const FIXTURE_MODULES: CoreModule[] = [
   {
@@ -457,6 +458,44 @@ describe('an operation\'s own console rendering and a core hint (task-220, spec-
   it('a CoreError hint is the hint: line under the error, and the exit code stays 1', async () => {
     await command('hint').run('console');
     expect(written(stderrSpy)).toBe('error: run not found: x/red/2\nhint: commit the run log\n');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+});
+
+describe('the warning sink (task-218, bug-202) — a warning an operation raises is rendered at once, in the active format', () => {
+  const RAISING: CoreModule[] = [
+    {
+      name: 'demo',
+      operations: {
+        demoRaise: {
+          name: 'demoRaise',
+          mutates: false,
+          fn: async () => {
+            reportWarning('raised mid-run');
+            return coreErr({ code: 'VALIDATION', message: 'refused after the warning' });
+          },
+        },
+      },
+    },
+  ];
+  let exitSpy: jest.SpyInstance;
+  let stderrSpy: jest.SpyInstance;
+  beforeEach(() => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+  afterEach(() => {
+    exitSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+
+  it.each([
+    ['console', 'warning: raised mid-run\n', 'error: refused after the warning\n'],
+    ['json', `${JSON.stringify({ warning: 'raised mid-run' })}\n`, `${JSON.stringify({ error: 'refused after the warning' })}\n`],
+  ])('%s: the warning, then the error', async (format, warning, error) => {
+    const commands = buildCliCommands(RAISING, { resolveRoot: () => '/fixture-root', buildParams: () => ({}) });
+    await findCommand(commands, 'demo', 'raise').run(format);
+    expect(stderrSpy.mock.calls.map((call) => call[0])).toEqual([warning, error]);
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 });

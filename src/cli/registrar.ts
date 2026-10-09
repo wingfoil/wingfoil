@@ -21,11 +21,12 @@ import type { CoreResult } from '../core/types';
 import { exitCodeForResult, exitCodeForThrow } from '../core/exit-code';
 import { errorDetails } from '../core/error-details';
 import { DRY_RUN_FLAG, runAsDryRun } from '../core/dry-run';
+import { withWarningSink } from '../validation/warning';
 
 import { emitError } from './error';
 import { exitWith } from './exit';
 import { invalidFormatReason, isValidFormat, renderSuccess } from './output';
-import { emitWarnings } from './warning';
+import { emitWarning, emitWarnings } from './warning';
 
 /** Ambient dependencies {@link buildCliCommands} needs: how to resolve the project root and how to shape each operation's params. */
 export interface BuildCommandsOptions {
@@ -158,7 +159,14 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
             // reads `type`/`title`/`tags`). Undefined for every op declaring none.
             options: optionValues,
           });
-          result = dryRun ? await runAsDryRun(() => operation.fn(params)) : await operation.fn(params);
+          // Every warning raised while the operation runs — a loader's unknown-field warning (`bug-202`),
+          // `agent execute`'s context warnings (task-218) — is rendered here, in the active format, the
+          // moment it is raised: before the payload or the error that follows it.
+          const call = (): Promise<CoreResult<unknown>> => operation.fn(params);
+          result = await withWarningSink(
+            (text) => emitWarning(text, { format }),
+            () => (dryRun ? runAsDryRun(call) : call()),
+          );
         } catch (error) {
           // Core owns exit-code selection for a thrown error too (spec-008 Consequences): a UsageError
           // (a malformed argument, e.g. `dna set`'s invalid key path) surfaces as exit 2, everything

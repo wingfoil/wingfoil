@@ -63,7 +63,7 @@ Accepted by every command, except `--dry-run`, which only the commands that chan
 | Option | Effect |
 |---|---|
 | `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (Unreleased (v0.3): except `agent show`, which prints `key: value` lines); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
-| `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, and for a `memory approve` that also moves a superseded document it shows only the approve commit. |
+| `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, and for a `memory approve` that also moves a superseded document it shows only the approve commit. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
@@ -139,6 +139,8 @@ Which state a command reads depends on whether that state can stop it:
   `memory search` should find. So `memory add --type <t>` can refuse a type your working copy of
   `memory.yaml` declares, while `memory search` searches the documents that same working copy
   declares — the type is on disk and in no commit; commit `memory.yaml` and the two agree.
+- Unreleased (v0.3): **`agent execute` reads `HEAD`** like the other commands that write: the
+  commit it reads becomes the run's `state_ref`.
 - Unreleased (v0.3): **`agent show` reads `HEAD`**, though it changes nothing: it answers from the
   same commit as the run ids `agent execute` counts, and when only your working tree holds the run it
   is asked for, it says so on a `hint:` line instead of showing it.
@@ -1096,6 +1098,47 @@ directory `dna.yaml` declares in `paths.runs` (`docs/runs/` in a project `wingfo
 each record committed on its own as `agent: record <run-id>`. A run id is
 `<element-id>/<phase>/<n>`: the element's id without its type, the workflow phase (or `adhoc` for a
 run outside a workflow step), and a count from 1, e.g. `task-042-login-form/red/1`.
+
+### `wingfoil agent execute`
+
+Launch an agent CLI through its adapter on one Memory element, with its context assembled and checked first.
+
+```
+wingfoil agent execute --element <type:id> [--role <role>] [--agent <name>]
+```
+
+| Option | Description |
+|---|---|
+| `--element <type:id>` | The element the agent works on, as `<type>:<id>` with the element's full id, e.g. `task:task-042-login-form`. Required in this release (the workflow-step forms `--next`, `--workflow` and `--step` are not available yet, and are refused as unknown options). |
+| `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is `developer`, and a `warning:` line says so. `approver` is refused: an agent never runs as the role that approves. |
+| `--agent <name>` | The `team.agents` entry to launch. Without it, the first entry, in `dna.yaml` order, that declares an `adapter` and lists the role in `executes_as`. |
+
+Unreleased (v0.3), and **not yet able to launch**: this build runs every check that comes before the
+launch and stops there. It reads **as committed at `HEAD`** (see [Git side effects](#git-side-effects)):
+`dna.yaml`, `memory.yaml`, the element, the agent's adapter under `.wingfoil/agents/built-in/` or
+`.wingfoil/agents/custom/`, and the run log. That commit is the run's `state_ref`. In order, it checks:
+the element exists; the role is defined and is not `approver`; an agent with an adapter runs the role;
+the adapter is valid; its `command` is on `PATH` (or at its path in the project); your git identity is
+set; `dna.yaml` declares `paths.runs` and the element's run log has no uncommitted changes; the
+execution context (DNA, the role's directives, the relevant Memory) assembles and validates; the
+WingFoil MCP server of this same build starts and serves that context (your project's `.mcp.json` is
+neither read nor changed); and, for an adapter whose launch needs one, stdin and stdout are a terminal.
+The first check that fails ends the command with exit `1` and its message, for example
+`error: context pre-load failed: MCP server unreachable` or
+`error: invalid execution context: missing 'directives' section`. The context's warnings (a directive
+bound to the role with no file, a Memory document that could not be read) and any file under
+`.wingfoil/agents/` that is not an adapter (another extension, a nested file, a name outside
+`[a-z0-9-.]`) are printed as `warning:` lines first. Temporary files go to the system's temporary
+directory and are removed whatever happens.
+
+When every check passes, the command exits `1` with `error: agent execute cannot launch an agent yet:
+run <run-id> passed every pre-launch check …`. With `--dry-run` it exits `0` instead and prints the
+launch it would make: `{"dryRun": true, "subject": "agent: record <run-id>", "paths": [<run log>],
+"run": {id, element, workflow, phase, role, mode, agent, adapter, state_ref}, "bootstrap": "<the
+prompt the agent would receive>"}`. Without `--element` it exits `2` with
+`error: missing required argument: --next or --element`.
+
+- **Commit:** none in this build (the launch will commit one run record, `agent: record <run-id>`).
 
 ### `wingfoil agent show`
 

@@ -1,5 +1,6 @@
 /**
- * Unknown-field warning policy for `.passthrough()` schemas (spec-009-validation-strategy §2).
+ * Unknown-field warning policy for `.passthrough()` schemas (spec-009-validation-strategy §2), and the
+ * **warning sink** every warning raised while an operation runs goes through (task-218, `bug-202`).
  *
  * Unknown-ness is decided against the schema's own declared key set (`schema.shape`), NOT against
  * the passthrough-parsed output. Under `.passthrough()` the parsed object retains every unknown
@@ -12,7 +13,40 @@
  * too, not only at the document root"). This matters because the files this module guards —
  * `memory.yaml`, `dna.yaml`, `workflows.yaml` — all carry deeply nested config blocks (per-type
  * state machines, phase objects, etc.), where an unknown field would otherwise go undetected.
+ *
+ * **The sink.** A loader deep inside `src/` does not know the surface it serves or its `--format`, so it
+ * never writes a warning itself: it hands it to {@link reportWarning}. The surface that runs the
+ * operation installs a sink around the call ({@link withWarningSink}) — the CLI registrar renders each
+ * warning through `src/cli/warning.ts`, the one renderer, in the active `--format`, at the moment it is
+ * raised, so it precedes whatever the command prints after it (an error, or `agent execute`'s pre-flight
+ * refusal, `spec-016` §3.3 step 8). The mode travels in an `AsyncLocalStorage`, as the dry run's does,
+ * so no loader signature changes. Outside any sink (the MCP server, a library caller) the warning is
+ * written to stderr as `Warning: <text>`, the line these loaders always wrote.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+/** Where a raised warning goes: one operator-facing sentence, no prefix. */
+export type WarningSink = (text: string) => void;
+
+const sinkStore = new AsyncLocalStorage<WarningSink>();
+
+/**
+ * Run `run` with `sink` receiving every warning {@link reportWarning} raises inside it, its awaited
+ * continuations included. Returns what `run` returns.
+ */
+export function withWarningSink<T>(sink: WarningSink, run: () => T): T {
+  return sinkStore.run(sink, run);
+}
+
+/**
+ * Raise one warning: to the sink {@link withWarningSink} installed around the running operation, or,
+ * with none installed, to stderr as `Warning: <text>`.
+ */
+export function reportWarning(text: string): void {
+  const sink = sinkStore.getStore();
+  if (sink !== undefined) sink(text);
+  else process.stderr.write(`Warning: ${text}\n`);
+}
 
 /**
  * Minimal structural view of a Zod object schema: only its declared top-level `shape` is needed.
@@ -95,9 +129,9 @@ function collectUnknownFields(
 }
 
 /**
- * Emit one stderr warning (spec-009 §2) listing every raw key not declared in `schema`'s shape,
- * recursively through nested passthrough object/array-of-object schemas. Writes nothing when there
- * are no unknown fields.
+ * Raise one warning (spec-009 §2) listing every raw key not declared in `schema`'s shape, recursively
+ * through nested passthrough object/array-of-object schemas, through {@link reportWarning} (`bug-202`):
+ * `<file>: unknown field(s) ignored: <paths>`. Raises nothing when there are no unknown fields.
  */
 export function emitUnknownFieldWarning(
   raw: Record<string, unknown>,
@@ -106,6 +140,6 @@ export function emitUnknownFieldWarning(
 ): void {
   const unknown = collectUnknownFields(raw, schema, '');
   if (unknown.length > 0) {
-    process.stderr.write(`Warning: ${filePath}: unknown field(s) ignored: ${unknown.join(', ')}\n`);
+    reportWarning(`${filePath}: unknown field(s) ignored: ${unknown.join(', ')}`);
   }
 }

@@ -244,7 +244,7 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
 
 | function         | module                | mutates | CLI                        | MCP                                         | feature |
 |-------------------|------------------------|---------|-----------------------------|----------------------------------------------|---------|
-| `agentExecute`    | `agent` *(planned)*    | true    | `wingfoil agent execute`    | Tool `agent.execute` *(v0.4; refuses until v1.0)* | P5.3.1  |
+| `agentExecute`    | `agent`                | true    | `wingfoil agent execute`    | Tool `agent.execute` *(v0.4; refuses until v1.0)* | P5.3.1  |
 | `agentList`       | `agent` *(planned)*    | false   | `wingfoil agent list`       | Resource `wingfoil://agent/list` *(v0.4; URI per `dl-040`)* | `dl-135` point 4 |
 | `agentShow`       | `agent`                | false   | `wingfoil agent show`       | Resource `wingfoil://agent/show/{run-id}` *(v0.4; URI per `dl-040`)* | P5.3.5  |
 
@@ -828,3 +828,9 @@ without a supersede or a state change (`dl-047`).
 both read `HEAD` as §6 item 6 already declares, so §6's baseline table drops "`workflowList` until its v0.3
 reshape moves it to item 6" from the working-tree row. The shipped `wingfoil://workflows…` Resources the
 §3 row names are unchanged. No other row changed. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-07, `task-218-agent-execute-element-resolves-role-agent-adapter-assembles`) —
+§3's `agentExecute` row is registered.** `agent execute` is registered in `CORE_MODULES` under `agent`
+(its pre-launch half, `spec-016` §3.3 steps 1–12; the launch is `task-228`'s), so its module cell loses
+*(planned)*, as `spec-016` §8's row does in the same task: the two tables stay cell for cell. Edited in
+place without a supersede or a state change (`dl-047`).

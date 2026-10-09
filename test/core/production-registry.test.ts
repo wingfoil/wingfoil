@@ -17,6 +17,8 @@ describe('CORE_MODULES — production registry', () => {
       (entry) => `${entry.module.name}.${entry.operation.name}`,
     );
     expect(flat).toEqual([
+      // task-218 (`spec-016` §3): `agent execute`, mutating — its one write is the run record (task-228).
+      'agent.agentExecute',
       // task-220 (`spec-016` §6): the `agent` module's first operation, read-only.
       'agent.agentShow',
       // task-050-directive-create registers a `directive` (SINGULAR) module, because
@@ -57,6 +59,7 @@ describe('CORE_MODULES — production registry', () => {
   it('the operations declared `mutates: true` are exactly the ones listed; every other registered operation is read-only', () => {
     const mutating = enumerateOperations(CORE_MODULES).filter(({ operation }) => operation.mutates);
     expect(mutating.map(({ module, operation }) => `${module.name}.${operation.name}`)).toEqual([
+      'agent.agentExecute',
       'directive.directiveAssign',
       'directive.directiveCreate',
       'directive.directiveRemove',

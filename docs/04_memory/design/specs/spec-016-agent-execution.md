@@ -97,11 +97,23 @@ that changes from task to task.
   built-ins, as it installs the P3.8 directive templates (`task-057`). The installed copy pins the
   launch flags in the project's git history, so two clones launch the same argv (`REQ-SYS-07`).
 - `dna.yaml` `team.agents[]` gains one optional field, **`adapter: <adapter-name>`** (`spec-002`
-  amendment: the field moves from tolerated by `.passthrough()` to validated). An agent without
+  amendment: the field moves from tolerated by `.passthrough()` to validated). An entry that declares
+  `adapter` must also declare `email` (`dl-158` Rule 2 (ii), `task-260`): the entry is the identity
+  that signs the launched agent's commits (§3.2 step 4). An agent without
   `adapter` can still be named in DNA, but it cannot be launched (§3.7, `NO_ADAPTER`). The DNA stays
   the only place where *who* executes *which roles* is declared. The manifest never lists roles.
 - Manifests are read at `HEAD`, because they gate what `agent execute` launches
   (`dl-080` (B), `command-baseline` directive, `spec-006` §6).
+- **What is not an adapter is reported** (`bug-290`). An adapter is a `.yaml` file directly inside
+  `built-in/` or `custom/` whose basename is in `spec-009`'s ID class; only those are listed, so every
+  listed name is one the loader can select. Every other entry under `.wingfoil/agents/` — another
+  extension (a file ending in .yml), a nested file, a file outside the two directories, a basename outside the
+  ID class (`Bad Name.yaml`) — is a diagnostic `W_ADAPTER_IGNORED`, severity `warning`, naming its path
+  (`not an adapter: …`), in path order; a `.gitkeep` is not reported. Its surface is every command that
+  lists the adapter tree: `agent execute`, at §3.3 step 2, prints each one as a `warning:` line, so a
+  `NOT_FOUND` for an adapter written under the wrong extension follows a line that names the file.
+  `wingfoil init` lists no project adapter (it refuses an initialized project), and a later command
+  that lists adapters carries the same diagnostics.
 
 #### 2.2 Schema
 
@@ -354,13 +366,18 @@ In this order, each a gating read at `HEAD` (`spec-006` §6):
 3. **Role**: `--role` if given, else the step's `role` (P5.3.2); a step with `role: null` and no
    `--role` → `NO_STEP_ROLE`. Without `--next`, `--workflow` or `--step`, and without `--role`, the
    role is the `developer` default of `X_cli-cmds.md:223`, and a `warning:` line says so
-   (approver ruling R18, 2026-09-30, `release-planning-rel-v0.3-plan`; it keeps P5.3.1 scenario 2 passing as written).
+   (approver ruling R18, 2026-09-30, `release-planning-rel-v0.3-plan`; it keeps P5.3.1 scenario 2 passing as written):
+   `warning: no --role given and no workflow step to take one from: running as the default role 'developer'`.
    The role must be in `team.roles`.
 4. **Agent**: per §3.1 `--agent`. The role `approver` is never executed by an agent, even when an
    agent lists it in `executes_as`: it is the role that holds approval authority (`REQ-SEC-03`;
    `team.agents[].approval_authority: false`, `.wingfoil/dna.yaml:123-128`) → `APPROVER_ROLE`. With
    `--agent`, that agent's `executes_as` must contain the role; without it, the first agent with an
    `adapter` whose `executes_as` contains the role is taken, and if there is none → `NO_AGENT`.
+   **The entry selected here is the identity that signs** (`dl-158` Rule 1 (a)): the launched agent
+   attributes the commits of its work, under the `git-conventions` directive §7, to this entry's
+   `name <email>`, which the launch hands to it (with the attribution rule, in the bootstrap: approver
+   ruling R20 Q8, `task-228`).
 5. **Adapter**: the agent's `adapter`, loaded and validated (§2); only the selected adapter's
    manifest is parsed and validated. With `--agent` naming an agent that
    declares none → `NO_ADAPTER`.
@@ -379,8 +396,12 @@ temporary files outside the repository (step 10); before step 17, it has written
 repository.
 
 1. Parse arguments → exit `2` on usage errors.
-2. Load `dna.yaml`, `memory.yaml`, `roles.yaml` and the workflow registry at `HEAD`; list
-   the adapter directories (a name present in both is refused here).
+2. Load `dna.yaml` and `memory.yaml` and, when a step is resolved (`--next`, `--workflow`, `--step`),
+   the workflow registry at `HEAD`; list the adapter directories (a name present in both is refused
+   here, before any resolution; every entry that is not an adapter is printed as a `W_ADAPTER_IGNORED`
+   warning, §2.1). The stepless form resolves no step and reads no workflow file. `roles.yaml` and the
+   directives are read by the context builder at step 7, so a missing `roles.yaml` is step 7's
+   `INVALID_CONTEXT`.
 3. Resolve (§3.2).
 4. `command` of the adapter found on `PATH` (or at its repository path) → else `AGENT_NOT_FOUND`.
 5. Git identity present (`REQ-SEC-01`), since step 17 commits → else the shared pre-flight error
@@ -389,11 +410,18 @@ repository.
    `HEAD` (`requireUnmodifiedTarget`, `spec-006` §6 write half) → else `CONFLICT`.
 7. Assemble the execution context at `state_ref` = `HEAD` (`spec-012` §2: `(role, element,
    stateRef)`); validate it (P5.4.4 sc. 3) → else `INVALID_CONTEXT`.
-8. Print `ExecutionContext.warnings` on stderr, in `spec-012` §5.1 order (`dl-050` option 4).
+8. Print `ExecutionContext.warnings` on stderr, in `spec-012` §5.1 order (`dl-050` option 4), then the
+   documents the builder could not read (`W_MEMORY_UNREADABLE`, `spec-012` §3). The builder's notes
+   (the DNA note, P5.3.3 sc. 3's `no relevant Memory found for task`) are not warnings: they reach the
+   agent inside the `{role}-session` Prompt's `warnings` (`spec-004` §3.2), not stderr.
 9. Compute the run id (§4.3).
 10. Render `{bootstrap}` / `{bootstrap_file}` and `{mcp_config_file}`.
 11. **MCP pre-flight**: spawn `{mcp_command} {mcp_args}`, complete MCP `initialize`, get the
     `{role}-session` Prompt with `element` and `state` = `state_ref` (§2.4), close. Any failure → `MCP_UNREACHABLE` (P5.4.3 sc. 3).
+    **Declared exception to the `HEAD` baseline:** the server is `wingfoil mcp`, whose own start-up
+    check reads the working tree's `dna.yaml` role set (`spec-014` §1). An uncommitted change there —
+    a deleted or invalid `dna.yaml` — refuses the pre-flight even though every gating read of steps 2–7
+    passed at `HEAD`. The Prompt it serves still resolves at `state` (§2.4).
 12. **Terminal check**, the last check before the spawn: when the adapter's
     `launch.interactive.terminal` is `required` (the default), stdin and stdout must both be
     terminals → else `NO_TERMINAL`. With `optional`, the check is skipped (§2.2, §2.7). Placing it
@@ -416,6 +444,13 @@ repository.
 16. Post-run lookups (§2.6), `agent_version` (§2.2), `notes` (§4.2).
 17. Append the record and commit it (§4.4).
 18. Exit: `0` if the agent exited `0` and step 17 succeeded; otherwise `1` (§3.7).
+
+**`--dry-run`** (`spec-008` §2) runs steps 1–12 — every refusal included — and, instead of step 13,
+prints the launch plan on stdout and exits `0`: `{dryRun: true, subject, paths, run, bootstrap}`, the
+record commit's subject and run-log path, the record's fields known before the spawn (`id`, `element`,
+`workflow`, `phase`, `role`, `mode`, `agent`, `adapter`, `state_ref`, §4.2 order) and §2.4's bootstrap.
+It has no `message` or `diff`: the record holds the run's exit, which no plan can know. Nothing is
+spawned but the pre-flight's server, and nothing is written to the repository.
 
 #### 3.4 Interactive launch: stdio
 
@@ -732,7 +767,7 @@ Fixed here so that v0.3 does not foreclose it (`dl-135` release split, plan R5):
 
 | function | module | mutates | CLI | MCP |
 |---|---|---|---|---|
-| `agentExecute` | `agent` *(planned)* | true | `wingfoil agent execute` | Tool `agent.execute` *(v0.4; refuses until v1.0, §7)* |
+| `agentExecute` | `agent` | true | `wingfoil agent execute` | Tool `agent.execute` *(v0.4; refuses until v1.0, §7)* |
 | `agentList` | `agent` *(planned)* | false | `wingfoil agent list` | Resource `wingfoil://agent/list` *(v0.4; URI per `dl-040`)* |
 | `agentShow` | `agent` | false | `wingfoil agent show` | Resource `wingfoil://agent/show/{run-id}` *(v0.4; URI per `dl-040`, encoding per §7)* |
 
@@ -934,3 +969,19 @@ row is registered.** `agent show` ships (§6), registered in `CORE_MODULES` unde
 module cell loses *(planned)*, as `spec-006` §3's row does in the same task: the two tables stay cell
 for cell. §6's contract is implemented as written. Edited in place without a supersede or a state
 change (`dl-047`).
+
+**Revision (2026-10-07, `task-218-agent-execute-element-resolves-role-agent-adapter-assembles`) — the
+pre-launch half of `agent execute` is registered; §2.1, §3.2, §3.3 and §8 say what it does.** §2.1: an
+entry declaring `adapter` must declare `email` (`dl-158` Rule 2 (ii), carried out by `task-260`; it
+called `adapter` a plain optional field), and what is not an adapter is reported as `W_ADAPTER_IGNORED`
+where the tree is listed (`bug-290`: code, severity and surface). §3.2 step 3 gives the default-role
+warning's text; step 4 states that the selected entry is the one that signs the agent's commits
+(`dl-158` Rule 1 (a)). §3.3 step 2 reads the workflow registry only when a step is resolved, since the
+stepless form resolves none (an unrelated broken workflow file would otherwise refuse `--element`),
+refuses a duplicate adapter name before any resolution, and leaves `roles.yaml` to the context builder
+(step 7), where the code reads it; step 11 declares that the pre-flight's server reads the working
+tree's `dna.yaml` at start-up (`spec-014` §1), the one read of the run outside `HEAD`;
+step 8 names what is printed and that the builder's notes are not; the `--dry-run` paragraph gives the
+plan `spec-008` §2 now names. §8's `agentExecute` module cell loses *(planned)*, as `spec-006` §3's
+row does in the same task. No literal of §2.4, no key of §4.2 and no rule of §4.3 changes. Edited in
+place without a supersede or a state change (`dl-047`).
