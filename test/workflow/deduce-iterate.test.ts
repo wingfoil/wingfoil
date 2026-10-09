@@ -76,7 +76,10 @@ function snapshot(workflows: Workflow[], documents: Doc[], extra: Partial<Deduct
     scanDiagnostics: [],
     tree: [],
     starts: new Map(plans.map((p, i) => [p.path, { commit: `s${i}`, position: i }])),
-    records: new Map(),
+    history: new Map(),
+    transitions: [],
+    lastChanges: new Map(),
+    parents: new Map(),
     dirty: [],
     ...extra,
   };
@@ -344,20 +347,24 @@ phases:
   });
 
   it('a WingFoil-Item record completes a collection step; scalar entries are their own key', () => {
-    const records = new Map([
+    const history = new Map([
       [
         's0',
-        [
-          { commit: 'r1', phase: 'per-module.check', instance: 'p1', element: null, item: 'dna:modules#core' },
-          { commit: 'r2', phase: 'per-module.check', instance: 'p1', element: null, item: 'dna:modules#agent' },
-        ],
+        {
+          records: [
+            { commit: 'r1', position: 1, phase: 'per-module.check', instance: 'p1', element: null, item: 'dna:modules#core' },
+            { commit: 'r2', position: 0, phase: 'per-module.check', instance: 'p1', element: null, item: 'dna:modules#agent' },
+          ],
+          links: [],
+          reentries: [],
+        },
       ],
     ]);
     const entry = first(
       snapshot([MODS, PER_MODULE, PER_TEMPLATE], [plan('p1', 'mods')], {
         collections: collections as DeductionSnapshot['collections'],
         tree: ['docs/modules/core.md', 'src/core/README.md', 'docs/modules/agent.md', 'src/agent/README.md', 'out/scrum.log'],
-        records,
+        history,
       }),
     );
     expect(entry.phases[0]).toEqual({ phase: 'each-module', state: 'complete', iterations: { eligible: 0, entered: 0, complete: 2, late: 0 } });

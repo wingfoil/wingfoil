@@ -35,7 +35,8 @@
 
 ### REQ-STATE-02 — State recomputability (no index)
 
-* **Description:** Project/workflow state is recomputable purely from Memory files at a given commit.
+* **Description:** Project/workflow state is recomputable from Memory files and the commit history reachable from the
+  commit, at a given commit (`spec-017` §4.8); no `.wingfoil/state/` index is read or written.
 * **Rationale:** Single source of truth (see REQ-SYS-03).
 * **Fit Criterion:** Recomputing state from files for a fixed commit equals any previously cached state; no
   `.wingfoil/state/` artifact is required for correctness.
