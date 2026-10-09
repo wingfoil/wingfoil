@@ -53,6 +53,11 @@ own (documentation directive D2).
   `COLLABORATION.md`, `test/docs/reported-by.test.ts`.
 - **Order:** B5's other `memory.yaml` writer is `task-217`: merge in sequence. Patterns in specs must use
   placeholders (`<service id>/F-<nnn>`), not concrete ids, or `name-resolvability` fails.
+- **Handover from wave 3 B3 (2026-10-09, `task-214`'s review; W3 B3 follow-ups).** `COLLABORATION.md`'s
+  `## Credit` section already has the bullet for an artifact captured from a GitHub issue (`contributor:` = the
+  handle, `credit:` = the issue URL), and since `task-214` (`67fc69b9`) it also says a GitHub issue never gets a
+  `reported_by:` field. Extend that bullet, or add the inbox case beside it in the same list, rather than writing a
+  second credit rule.
 
 ## Execution Notes
 
