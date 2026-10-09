@@ -33,8 +33,10 @@
 
 ### REQ-SYS-03 — Stateless state derivation (no state index)
 
-* **Description:** Workflow state is deduced from Memory file existence and frontmatter; there is no separate
-  `.wingfoil/state/` index.
+* **Description:** Workflow state is deduced from Memory files and the commit history reachable from the commit:
+  Memory file existence and frontmatter, and the history a workflow instance's deduction reads (its start
+  commit, and the step linkage, phase records and re-entries of its walk — `spec-017` §3.3, §4.8,
+  `dl-104` D1 (b)); there is no separate `.wingfoil/state/` index.
 * **Rationale:** Avoids dual-source-of-truth drift; state lives next to the deliverable.
 * **Fit Criterion:** No `.wingfoil/state/` artifact exists; deleting any in-memory cache and recomputing state yields a
   result identical to the prior computation for the same commit.
