@@ -161,9 +161,10 @@ describe('AC 4 — the testing directive and roles.yaml halves of dl-134 (Action
     expect(testing()).toMatch(/`security-secrets` S1/);
   });
 
-  it('roles.yaml binds code-quality, testing and determinism to reviewer beside its own, at version 1.5', () => {
+  it('roles.yaml binds code-quality, testing and determinism to reviewer beside its own, from version 1.5', () => {
     const roles = loadRolesYaml(ROOT);
-    expect(roles.version).toBe(1.5);
+    // 1.5 is task-205's bump; a later binding moves it forward (1.6, task-270: wingfoil-cli global).
+    expect(Number(roles.version)).toBeGreaterThanOrEqual(1.5);
     for (const id of ['code-review', 'traceability', 'command-baseline', 'code-quality', 'testing', 'determinism']) {
       expect(roles.assignments.reviewer).toContain(id);
     }
