@@ -6,13 +6,13 @@ kind: custom
 title: "Git conventions: branches, sync, tags, subjects, identity, id allocation, attribution"
 tags: [custom, git, process, security]
 scope: global
-version: "1.2"
+version: "1.3"   # 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2) (prev 1.2 §7, task-260)
 ref: [P3.5, P3.7, REQ-SEC-01, REQ-SYS-08]
 ---
 
 # Directive — Git conventions
 
-**Date:** 2026-10-07
+**Date:** 2026-10-09
 
 Custom WingFoil rule. Applies to **every role**: whoever writes a commit or names a branch in this
 repository — a `developer` on a task branch, the `approver` whose `approve` commit an agent types, a
@@ -78,11 +78,16 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
 - Bring a branch up to date with `git merge --no-edit main`, run from inside its own worktree. **Never
   rebase a branch that carries `wf()` commits**: a rebase rewrites the approve/reject records the
   audit trail is made of (P1.2, P1.7, P1.10).
-- A task branch merges `main` at two points: when the task **resumes after a reject**, before any
-  `red` work; and again **before re-submitting**, if `main` has moved since. The review gate then
-  measures the tree that will exist after the merge.
-- A conflict that is not trivially resolvable is not force-resolved: abort the merge, record it in
-  the task's Execution Notes, and return the task to `red`.
+- A task branch merges `main` at two points: when the task **resumes** — after a reject or a park,
+  and after `dev-loop`'s `done` fallback — before any `red` work; and again **before re-submitting**, if `main` has moved since. In `dev-loop` the first is
+  run by the developer at the start of `red`, before `qa` writes a test; the second is the last action
+  of `refactor`, so `refactor`'s checks and the review gate measure the tree that will exist after
+  the merge, and `review` itself never merges.
+- The developer runs both merges and resolves their conflicts; `qa` never resolves a conflict in
+  implementation files. A conflict is never force-resolved: one that is not trivially resolvable is
+  aborted and recorded in the task's Execution Notes, and the developer then resolves it — at `red`'s
+  merge before `qa` starts; at `refactor`'s merge, when it cannot be resolved there, the task returns
+  to `red`, since the conflict may touch `red`'s frozen tests.
 
 ## 3. Tags (`dl-024` rule 2, as amended by `dl-074-tag-must-be-on-pushed-main`)
 

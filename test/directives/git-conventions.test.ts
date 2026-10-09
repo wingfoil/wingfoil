@@ -93,7 +93,9 @@ describe('git-conventions §7 — dl-158 (task-260)', () => {
     expect(s7).toContain("git's guessed `.(none)` domain");
   });
 
-  it('bumps the directive version to 1.2', () => {
-    expect(header).toContain('version: "1.2"');
+  it('bumps the directive version to 1.2 or later (1.3 since task-205, §2)', () => {
+    const version = /^version: "(\d+)\.(\d+)"/m.exec(header);
+    expect(version).not.toBeNull();
+    expect(Number(version![1]) * 1000 + Number(version![2])).toBeGreaterThanOrEqual(1002);
   });
 });
