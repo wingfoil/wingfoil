@@ -351,13 +351,22 @@ Three things are found there.
   before `fallback.step` keep their evidence, and `produces` evidence is not affected. This is how the
   fallback step becomes current after a reject (§5.2): after `dev-loop.review` is rejected, `start`
   and `design` stay complete, `red` needs a new record, and `review`'s `state` needs a new `submit`.
+  **Newer** means *descends from*: a commit is newer than the re-entry commit when the re-entry commit
+  is a strict ancestor of it, decided through the parent links the walk reads. Neither the commit date
+  nor the position in `--topo-order` decides it. A record made on a branch that had not seen the reject
+  does not count once that branch is merged, whichever parent order the merge has. When several
+  re-entries reach a phase, its evidence must descend from each.
 
 A commit older than the start commit is outside the walk: a record, linkage or reject from before
 the instance was started does not count for it.
 
-**Cost** (REQ-PERF-03, `workflow next` < 1,000 ms p95). One deduction reads `HEAD`'s tree once, the
-Memory frontmatter once, and one `git log` over the union of the open instances' walks (bounded by the
-oldest open instance's start commit), plus one lookup per element that has a re-entry in the walk.
+**Cost** (REQ-PERF-03, `workflow next` < 1,000 ms p95). One deduction reads `HEAD`'s tree once and the
+Memory frontmatter once. It reads history with one `git merge-base --octopus` over every open instance's
+start commit and one `git log` over the union of the open instances' walks: the commits reachable from
+`HEAD` and not from that merge base's parents. With no common ancestor, the walk is not bounded. It then
+makes one lookup per element that has a re-entry in the walk. The merge base is an ancestor of every
+start, so no commit any instance's walk holds is cut off. The oldest start alone would cut one off in a
+branching history: a commit on another branch that precedes the oldest start.
 Nothing scales with the full history. The fit criterion is verified by a timing test in the
 implementing task, on this repository's history; it is not measured here.
 
@@ -1037,3 +1046,15 @@ workflow the registry does not load is `complete: false` although its frontier i
 entry gains `evidence: boolean`, which tells an entry that is shown but is not evidence (§4.3) from one of a
 workflow with no element (both have `owner: null`). No deduction rule changed. Edited in place without a
 supersede or a state change (`dl-047`); recorded with `memory amend`.
+
+**Revision (2026-10-09, `task-203-read-instance-history-walk-step-linkage-created-elements`) — §4.8's
+"newer" and the walk's bound, per the approver's rulings on task-203's review findings F1 and F3, both
+option (a).** "Newer than the re-entry commit" is now defined by ancestry: the evidence commit is a
+strict descendant of the re-entry commit, read from the walk's parent links. It is no longer read from
+the commit date or the `--topo-order` position, which put a record made on a branch that never saw the
+reject after it or before it depending on the merge's parent order. The Cost paragraph now bounds the
+single union walk by the octopus merge base of the open instances' start commits. It is no longer bounded
+by the oldest start, which dropped a younger instance's commits made on another branch before that
+start. One `git merge-base` spawn is added; nothing else scales with the full history. No other
+deduction rule changed. Edited in place without a supersede or a state change (`dl-047`); pending the
+approver's `memory amend` at task-203's review.
