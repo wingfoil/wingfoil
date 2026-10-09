@@ -56,11 +56,123 @@ is used for which job in this repository and how a missing verb or a surprise of
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+Branch `task/task-270-add-the-wingfoil-cli-directive-bound-globally-naming-which-build-runs-which-command-here`,
+worktree `../.wf2-wt/task-270`, cut from `main` at `b56e8721` (start `8da3d2cf`). Batch W3 B4, merge order
+216 → 228 → 219 → 222 → 221 → 212 → 197 → 208 → 269 → **270** (last).
+
+### design (architect)
+
+**`depends_on`:** none declared. The Implementation Notes name `task-205` (B3) as the previous `roles.yaml`
+writer: it is merged (`grep -n '^version' .wingfoil/roles.yaml` → `version: 1.5`, its bump), so this task bumps
+1.5 → 1.6. `dl-163` (`ready`) S3e is the content; `dl-095` (`ready`) Q3 the hand procedure; `spec-013`
+(`approved`) the frontmatter shape.
+
+**Facts re-measured on this worktree (claim-evidence).**
+- The pinned build is `0.2.2` (`npm run -s wingfoil -- --version` → `0.2.2`); the code build
+  `node dist/cli.js --version` → `0.2.2 (8da3d2cf…)`.
+- The code build has `amend` and `park`, the pinned one has neither (`node dist/cli.js memory --help` lists
+  `amend`, `park`; `npm run -s wingfoil -- memory --help` lists `add approve deprecate history reject search submit`).
+- The pinned build can read the tag the directive points to: `npm run -s wingfoil -- memory search --type bug
+  --tag pinned-build` → `"matches": []`, exit 0, and the same command with `--tag test` (a known positive)
+  lists `bug-181-…`, so the empty result is an absence, not a blind pattern.
+- `.mcp.json` registers `node node_modules/wingfoil-released/dist/cli.js mcp` (the pinned build);
+  `package.json` `scripts.check:mcp` exists.
+- `spec-013`'s Context says "(twelve today)"; `ls .wingfoil/directives/custom/*.md | wc -l` → `13` before this
+  task, `14` after: a stale sentence this task makes staler → pending amendment.
+
+**Design decisions (approver to confirm).**
+1. *The directive names no pinned version* (`dl-163` said "today 0.2.2"): it would rot at the next pin advance;
+   it points to `package.json` and `--version` instead.
+2. *A read the pinned build cannot run* (today `workflow list` and `wingfoil://workflows`) is run with the code
+   build only when a `pinned-build` bug records it, and the note names that bug (§2 last bullet). Without this
+   clause the directive would contradict the current practice that `bug-292` documents.
+3. *When a surprise stops applying* (§3): when the pin reaches a published build with the fix, not when the bug
+   closes — `bug-087`/`bug-162` are `closed` but 0.2.2 still allocates wrong ids (`dl-163` Context).
+4. *AC 3 as a prose post check*, beside the description: `the wingfoil-cli directive re-checked against the new
+   pin (…)`. No command can assert it, so it is one more `W_WORKFLOW_UNBOUND_TOKEN` warning in task-199's pinned
+   set (`release-planning` `phases[0].checks.post[2]`), with that reason. Binding it would need a
+   `bindings.yaml` edit (shared with 219/221/222) and a mechanical criterion the directive deliberately avoids
+   (decision 1).
+5. *Tagging the existing surprises* (pending amendments): `bug-087`, `bug-162`, `bug-292` gain
+   `tags: ["pinned-build"]`, so the pointer finds the surprises `dl-163` measured. Not an AC; the approver may
+   drop them.
+6. *`.wingfoil/WORKFLOW.md`* names the re-check in the release-planning prose and diagram node (same-class:
+   the file describes `advance-pinned-build`'s checks).
+7. *Not edited:* `CLAUDE.md` §3/§7 and `.wingfoil/README.md` (owned by `align-agent-docs`, `dl-025`; `task-252`
+   moves "Commands that run on this repository" to AGENTS.md and points to this directive). The directive does
+   not cite CLAUDE.md: the `wf()` hand procedure cites `git-conventions` §4 and `dl-067` instead.
+
+**AC classification (T1).**
+
+| AC | Class | Why |
+|---|---|---|
+| 1 — directive content | characterization (documentation) | a document; pinned by a text test that passes on first run |
+| 2 — global binding, listed for every DNA role, `schema.test.ts` list | red-first | `roles.yaml` 1.5 does not name it; no file |
+| 3 — `advance-pinned-build` names the re-check | characterization (configuration) | pinned on first run; conformance row updated |
+
+### red (qa)
+
+`777ba89e` adds `test/directives/wingfoil-cli.test.ts` (AC 2: `roles.yaml` `global:`, the eight `dna.yaml`
+roles, `directives list --role <r>` through the registered core operation for each) and adds `wingfoil-cli`
+to `schema.test.ts`'s pinned `roles.global`.
+`npx jest test/directives/wingfoil-cli.test.ts test/directives/schema.test.ts` → **10 failed, 26 passed**: the
+eight per-role listings, the `global:` membership, the schema pin; the passing one in the new file is the
+eight-role guard.
+
+### green (developer)
+
+- `91f2a903` — `.wingfoil/directives/custom/wingfoil-cli.md` (`version: "1.0"`, `scope: global`, sections
+  1–5: build table, verb or hand procedure, `pinned-build` tag, re-check, no inbox); `roles.yaml` 1.5 → 1.6
+  (`global:` + header paragraph); AC 1 characterization tests (5, pass on first run; one regex widened for a
+  line break before commit).
+- `b2831e0c` — `release-planning.yaml` 1.7 → 1.8 (description + post check); `WORKFLOW.md`;
+  `test/core/workflow-repository-conformance.test.ts` gains the row
+  `["release-planning", "phases[0].checks.post[2]", "the wingfoil-cli directive re-checked against the new pin"]`.
+  AC 3 tests (2) pass on first run.
+- `npx jest test/directives/ test/core/directives-list.test.ts` → 179 passed;
+  `npx jest test/core/workflow-repository-conformance.test.ts test/lint/version-bump.test.ts test/docs/workflow-md.test.ts`
+  → 38 passed (after the commits: the conformance suite reads `HEAD`).
+
+Test files changed outside `red`'s commit (testing T4): `workflow-repository-conformance.test.ts` (above) and
+`test/core/dev-loop-v1-5.test.ts` (`7a96df80`): task-205 pinned `roles.yaml` at exactly `1.5`; found by the
+first full `npm test` (1 failed); it now asserts `>= 1.5` with the reviewer bindings unchanged.
+
+### refactor
+
+Run with the pending amendments in the working tree. Main-sync (dev-loop v1.5): `main` is `b56e8721`, an
+ancestor of `HEAD` (`git merge-base --is-ancestor main HEAD`) — nothing to merge.
+- `npm test` (before `7a96df80`): 4 failed / 6069 — `dev-loop-v1-5` (fixed above) and three
+  `test/lint/coverage-parity.test.ts` cases with `spawnSync … ETIMEDOUT` under batch load; that suite alone →
+  passes (`npx jest test/core/dev-loop-v1-5.test.ts test/lint/coverage-parity.test.ts` → 30 passed).
+- `npm test` (at `7a96df80`): 1 failed / 6069 — `test/mcp/resource-latency.test.ts` (REQ-PERF-04 p95 under load average ~81, `uptime`); that suite alone → 4 passed. No budget changed.
+- `npm run test:coverage`: 6068 passed, 1 failed (the `dev-loop-v1-5` pin, before its fix); All files
+  99.2 / 97.01 / 97.48 / 99.67 (stmts / branches / funcs / lines) — equal to the B3 gate's
+  (`gate-w3b3-cov.log`); no `src/` change.
+- `npm run lint` exit 0; `npm run docs:api` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
+  `npx tsc -p tsconfig.build.json --noEmit` exit 0.
+- `node scripts/check-governance.cjs --base b56e8721` → "1 wf() commits", 0 findings, exit 0.
+
+### review (self, reviewer)
+
+- AC 1: §1 table (code build for Memory operations, pinned build for reads + MCP, "the only one that can run
+  WingFoil from its own source"), §2 (verb / hand procedure / `dl-095` Q3), §3 (points to the tag, lists no bug:
+  the test asserts no `bug-<n>` in the file), §4 (re-check), §5 (no inbox, `bug-ingest`) — 5 tests.
+- AC 2: one bump (1.6); 8/8 roles list it as global; `schema.test.ts` pinned list updated;
+  `directives list` on this repository reports no scope warning (`directives-list.test.ts` live test, green).
+- AC 3: one bump (1.8); task-199's zero-error test green with one new unbound-check row.
+- Same-class: `spec-013`'s directive count (pending amendment); `WORKFLOW.md`'s advance-pinned-build text.
+
+**Pending amendments (approver).**
+- `spec-013-directive-frontmatter-schema` — `--reason "Context count of custom directives brought to fourteen with a dated Revision note: task-270 adds wingfoil-cli (dl-163 S3e). No field or rule changed."`
+- `bug-087-element-ids-derived-from-the-worktree` — `--reason "Tagged pinned-build (dl-163 S3e, task-270): the pinned 0.2.2 still allocates ids from the working tree, so the wingfoil-cli directive's pointer must find it."`
+- `bug-162-task-counter-restarts-per-release` — `--reason "Tagged pinned-build (dl-163 S3e, task-270): the pinned 0.2.2 still numbers tasks per release, so the wingfoil-cli directive's pointer must find it."`
+- `bug-292-check-mcp-only-lists-the-pinned-server-s-resources-so-it-passes-while-reading-wingfoil-workflows-fails-with-32603` — `--reason "Tagged pinned-build (dl-163 S3e, task-270): it records that the pinned build cannot read this repository's workflow files, which the wingfoil-cli directive's read rule relies on."`
+
+### Retrospective
+
+- `test/core/dev-loop-v1-5.test.ts` pinned `roles.yaml`'s version exactly, so the next binding broke an
+  unrelated task's suite (`7a96df80`). Proposal: live-config suites pin a lower bound, as `version-bump.test.ts`
+  already enforces the bump.
+- Full `npm test` under batch load timed out three `coverage-parity` probes (`ETIMEDOUT`), green alone.
+- The task file's Description is `dl-163` S3e verbatim, but S3e's "today 0.2.2" would rot in a directive
+  (decision 1).
