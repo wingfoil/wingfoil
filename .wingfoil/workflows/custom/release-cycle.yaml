@@ -8,8 +8,8 @@ name: release-cycle
 kind: sub
 description: >-
   Deliver one release: plan scope -> run a TDD dev-loop per backlog task (including bug-fix
-  tasks) -> align user-facing docs -> submit -> publish to npm -> retrospective.
-version: 1.2                     # dl-013: added user-docs phase (1.1); dl-119: git comment points to git-conventions (1.2)
+  tasks) -> align user-facing docs -> submit -> publish to npm -> measure release health -> retrospective.
+version: 1.3                     # dl-013: added user-docs phase (1.1); dl-119: git comment points to git-conventions (1.2); 1.3 dl-089 §1 (task-222): + release-health between publishing and retrospective
 element: release        # the iterated element provided by sw-life-cycle (iterate_over: release)
 
 phases:
@@ -45,6 +45,14 @@ phases:
   - name: publishing
     description: "Tag, build, and publish to npm; mark the release released."
     include: release-publishing
+
+  - name: release-health                     # dl-089 §1 — measure, compare with the previous run, propose; not a gate
+    description: >-
+      Measure the release at its measurement point with the fixed metric catalogue, compare every metric
+      with the previous release's run and write the improvement proposals the retrospective disposes of.
+      Runs on every release, including one whose publishing was skipped; D01 (outcome equivalence) only on
+      major and minor releases (dl-089 §2, dl-131).
+    include: release-health
 
   - name: retrospective
     description: "Capture learnings and adjust the next release."
