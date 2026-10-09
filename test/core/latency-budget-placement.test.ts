@@ -35,6 +35,11 @@
  *    ({@link idleConditionProblems}), so a run on a loaded machine is refused rather than counted.
  *    Like rule 3 it reads the code only (imports and comments removed), and it checks that the two
  *    calls are present, not what their results are used for.
+ * 5. **An in-process opt-in suite spawns nothing and records the load** (task-216). A suite in
+ *    `IN_PROCESS_LATENCY_SUITES` runs in the opt-in pass because its fixture is too large to time inside
+ *    the parallel run (REQ-PERF-03 on this repository's own history); it times (imports the helper), does
+ *    not spawn by this file's markers, and calls `readLoadAverage(` so a red carries the machine's load.
+ *    It has no process-start floor, so rules 3 and 4 (which judge one) apply to the spawning suites only.
  *
  * **What it does not see.** The check reads one file at a time and follows no import other than the
  * two named above. A spawn reached through any other module is invisible to it: the git calls inside
@@ -63,7 +68,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, sep } from 'path';
 
-import { LATENCY_SUITES } from '../latency-suites.cjs';
+import { IN_PROCESS_LATENCY_SUITES, LATENCY_SUITES } from '../latency-suites.cjs';
 
 const TEST_ROOT = join(__dirname, '..');
 
@@ -247,8 +252,16 @@ describe('latency budgets: one clock, no timed spawn without a documented exempt
     }
   });
 
-  it('the exempted files are exactly the suites that run alone, only when asked for (test/latency-suites.cjs)', () => {
-    expect([...LATENCY_SUITES].sort()).toEqual(Object.keys(EXEMPTIONS).map((path) => `test/${path}`).sort());
+  it('the exempted files are exactly the spawning suites that run alone, only when asked for (test/latency-suites.cjs)', () => {
+    const spawning = LATENCY_SUITES.filter((suite) => !IN_PROCESS_LATENCY_SUITES.includes(suite));
+    expect([...spawning].sort()).toEqual(Object.keys(EXEMPTIONS).map((path) => `test/${path}`).sort());
+  });
+
+  it.each([...IN_PROCESS_LATENCY_SUITES].sort())('%s is an opt-in in-process suite: it times, spawns nothing, records the load (rule 5)', (suitePath) => {
+    expect(LATENCY_SUITES).toContain(suitePath);
+    const relativePath = suitePath.replace(/^test\//, '');
+    expect({ suitePath, ...classify(relativePath) }).toMatchObject({ times: true, spawns: false });
+    expect(codeOnly(readFileSync(join(TEST_ROOT, relativePath), 'utf-8'))).toContain('readLoadAverage(');
   });
 
   it('rule 3 catches the plain ways of dropping one of the two quantities (guards the guard)', () => {
@@ -283,7 +296,7 @@ describe('latency budgets: one clock, no timed spawn without a documented exempt
     ]);
   });
 
-  it.each([...LATENCY_SUITES].sort())(
+  it.each(LATENCY_SUITES.filter((suite) => !IN_PROCESS_LATENCY_SUITES.includes(suite)).sort())(
     '%s budgets both quantities of a spawned command, the total and the marginal, through the helper (dl-146 (C), rule 3)',
     (suitePath) => {
       expect(processLevelProblems(suitePath, readFileSync(join(TEST_ROOT, '..', suitePath), 'utf-8'))).toEqual([]);
@@ -304,7 +317,7 @@ describe('latency budgets: one clock, no timed spawn without a documented exempt
     expect(idleConditionProblems('s', `${imports}/** readLoadAverage( idleMachineVerdict( */\n// idleMachineVerdict(\n`)).toHaveLength(2);
   });
 
-  it.each([...LATENCY_SUITES].sort())('%s records the load and refuses a run on a loaded machine (bug-276, rule 4)', (suitePath) => {
+  it.each(LATENCY_SUITES.filter((suite) => !IN_PROCESS_LATENCY_SUITES.includes(suite)).sort())('%s records the load and refuses a run on a loaded machine (bug-276, rule 4)', (suitePath) => {
     expect(idleConditionProblems(suitePath, readFileSync(join(TEST_ROOT, '..', suitePath), 'utf-8'))).toEqual([]);
   });
 });
