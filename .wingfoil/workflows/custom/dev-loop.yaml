@@ -16,7 +16,9 @@
 # from v1.0; v0.3 records each run's session id). The reviewer loads the developer's and `qa`'s
 # directives too (`roles.yaml`), and checks the handoff in git (dl-134 §5): `red`'s commit precedes
 # `green`'s on the task branch (`git log --format='%h %s' main..task/<id>`), and
-# `git diff <red-commit> HEAD -- <red's test files>` is empty.
+# `git log --no-merges --format=%h <red-commit>..HEAD -- <red's test files>` is empty. The check
+# compares only the branch's own non-merge commits since `red`: a change brought in by an inward
+# `Merge branch 'main' into task/…` commit is excluded.
 #
 # `bug.sync_state` is a no-op unless the task's `bug:` field names at least one bug. Since
 # dl-045-absorbed-bug-back-reference that field is a LIST, and it covers TWO cases: a fix task
@@ -64,8 +66,10 @@
 # `qa` starts, and `qa` never resolves a conflict in implementation files. (b) Before re-submitting,
 # if `main` has moved since (a): the last action of `refactor`, so its coverage, API-docs and
 # `lint.clean` checks measure the merged tree; `review` does not merge. A conflict is never
-# force-resolved (dl-014 G4): abort clean and record it in the Execution Notes; the developer resolves
-# it, at (a) before `qa` starts, and at (b) the task goes back to `red` if it cannot be resolved there.
+# force-resolved (dl-014 G4): a conflict that is not trivially resolvable is aborted clean and recorded
+# in the Execution Notes, and the developer resolves it — at (a) before `qa` starts; at (b) the task
+# goes back to `red` when it cannot be resolved there, because the conflict may touch `red`'s frozen
+# tests, which only `qa` may change.
 #
 # WIP limits (dl-156, ratified Q1 (a), Q2 (i)): when a `limits:` is declared, holders are counted
 # across every ref, and `reject` and `returns` edges are exempt. This repository declares no
@@ -154,7 +158,7 @@ phases:
       Quality gate runs the BDD acceptance tests, then the reviewer approves or rejects. The reviewer
       judges both the tests and the code, under the developer's and qa's directives as well as its own,
       and checks the git handoff: red's commit before green's, red's test files unchanged since. It
-      does not merge: the branch is already current (refactor's last action).
+      does not merge: the branch was brought current at refactor's last action (main moving after that is done's fallback).
     role: reviewer
     distinct_from: [red, green, refactor]      # dl-134 §4 (c) — the review shares no session with the work it judges; fresh is mandatory for reviewer
     actions:

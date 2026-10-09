@@ -51,7 +51,7 @@ actions:
   git.create_branch:        { manual: true }
   git.create_worktree:      { manual: true }
   # git.merge(to: main, ff: false): switch to `to`, then `git merge --no-ff` the task branch — two commands.
-  # git.merge(from: main) (dev-loop red/review, dl-035): `git merge --no-edit main` inside the task's worktree.
+  # git.merge(from: main) (dev-loop red/refactor, dl-035): `git merge --no-edit main` inside the task's worktree.
   git.merge:                { manual: true }
   git.remove_worktree:      { manual: true }
   # release-publishing.tag (dl-024) and end-of-life.archive: the commit message and the tag are the

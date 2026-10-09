@@ -74,8 +74,9 @@ generic rules above.
   wrong, the task goes back to `red`, where `qa` fixes it. Other test files may still change, as a
   contract change legitimately updates older tests, and each such change is listed in the task's
   Execution Notes for the reviewer; `refactor`'s coverage additions are new files or files `red` did
-  not touch. The reviewer checks it with `git diff <red-commit> HEAD -- <red's test files>` (empty).
-  From v1.0 the `dev-loop` post-check `tests.unchanged(since: red)` on `green` and `refactor`
+  not touch. The reviewer checks it with `git log --no-merges --format=%h <red-commit>..HEAD --
+  <red's test files>` (empty). It compares only the branch's own non-merge commits since `red`: a
+  change brought in by an inward `Merge branch 'main' into task/…` commit is excluded. From v1.0 the `dev-loop` post-check `tests.unchanged(since: red)` on `green` and `refactor`
   evaluates it (P4.12); until then this rule and the reviewer do.
 - **Secret-shaped fixtures** follow `security-secrets` S1: a fixture that must match a secret pattern
   is assembled at runtime, never committed as one literal (`dl-073` Action 3, `dl-122`).
