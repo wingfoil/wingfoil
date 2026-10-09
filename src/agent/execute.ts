@@ -1,8 +1,8 @@
 /**
  * `wingfoil agent execute`, the pre-launch half (`spec-016-agent-execution` §3, task-218): everything
- * the command does before it would spawn the agent — the stepless (`adhoc`) form, `--element` with an
- * optional `--role` and `--agent`. task-228 adds the launch (§3.3 steps 13–18); task-235 the step forms
- * (`--next`, `--workflow`, `--step`).
+ * the command does before it spawns the agent — the stepless (`adhoc`) form, `--element` with an
+ * optional `--role` and `--agent`. The launch (§3.3 steps 13–18) is `./launch.ts` (task-228); the step
+ * forms (`--next`, `--workflow`, `--step`) are task-235's.
  *
  * The pipeline ({@link agentExecutePipeline}) is §3.3's, in its order, and the first failure stops it:
  *
@@ -26,7 +26,11 @@
  * 11. The MCP pre-flight against the running build ({@link mcpPreflight}, §2.5).
  * 12. The terminal check, last, so every earlier refusal is reachable without a terminal.
  *
- * Then the caller's `launch` runs, with the temporary files still in place.
+ * Then the caller's `launch` runs, with the temporary files still in place and the function that hands
+ * the signals over from their cleanup to the launch (`withRunFiles`' `release`).
+ *
+ * Each distinct warning is printed once, and a label naming the resolved commit reads `HEAD:`
+ * (`withDistinctWarnings`; task-218's review F5).
  *
  * **Baseline.** Every gating read is at the one `HEAD` commit resolved at step 2 (`dl-080` (B), the
  * `command-baseline` directive), which is also `state_ref`. Nothing is written to the repository: the
@@ -45,7 +49,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 import { readPathAtRev } from '../storage';
 import { formatDiagnostic, ValidationError, type Diagnostic } from '../validation';
-import { reportWarning } from '../validation/warning';
+import { reportWarning, withDistinctWarnings } from '../validation/warning';
 import { findMemoryDocumentByTypeAndIdAtRev } from '../memory/query';
 import { isRoleDefined } from '../dna/roles';
 import type { AgentEntry, DnaYaml } from '../dna/schema';
@@ -57,6 +61,7 @@ import { DNA_YAML_PATH, loadDnaYamlAtRev, loadMemoryYamlAtRev, MEMORY_YAML_PATH 
 import { resolveRevision, RevisionError } from '../core/revision';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
 
+import type { LaunchHost } from './launch';
 import { adapterTreeDiagnosticsAtRev, duplicateAdapterRefusal, loadAdapter, type LoadedAdapter } from './discovery';
 import { ADHOC_PHASE, executionNotesSection, nextRunId, NO_WORKFLOW, recordSubject, runLogPreflight } from './run-log';
 
@@ -97,11 +102,25 @@ export interface BootstrapInput {
   readonly stateRef: string;
   /** {@link handoffLine}'s answer for the element's type. */
   readonly handoff: string;
+  /**
+   * The `team.agents` entry that runs and signs the agent's commits (`dl-158` Rule 1 (a)): its `name`
+   * and `email`, which the attribution line hands to the agent (`dl-117` Action 4, ruling R20 Q8).
+   */
+  readonly agent: { readonly name: string; readonly email: string };
+}
+
+/** The fixed opening of §2.4's attribution line (task-228, `git-conventions` §7). */
+export const ATTRIBUTION_LINE_PREFIX = 'End every commit of your work, except an approve or reject commit, with the trailer paragraph';
+
+/** §2.4's attribution line for `agent`: the rule of `git-conventions` §7, with the entry that signs. */
+export function attributionLine(agent: { readonly name: string; readonly email: string }): string {
+  return `${ATTRIBUTION_LINE_PREFIX} "Co-Authored-By: ${agent.name} <${agent.email}>" and "AI-Model: <the model identifier you run as>" (git-conventions §7).`;
 }
 
 /**
  * The bootstrap prompt (§2.4): the only text WingFoil puts into the agent's initial prompt. Pure, with
- * no clock and no host data, LF-terminated. A change to any literal here is a revision of `spec-016`.
+ * no clock and no host data, LF-terminated. Its last line hands the agent the attribution rule and the
+ * entry that signs (task-228). A change to any literal here is a revision of `spec-016`.
  */
 export function renderBootstrap(input: BootstrapInput): string {
   const contextInstruction = `Get the MCP prompt "${input.role}-session" with arguments element="${input.element}" and state="${input.stateRef}".`;
@@ -110,6 +129,7 @@ export function renderBootstrap(input: BootstrapInput): string {
     `Your context is assembled at commit ${input.stateRef} and served by the "wingfoil" MCP server`,
     `registered for this session. Load it before any other action: ${contextInstruction}`,
     input.handoff,
+    attributionLine(input.agent),
     '',
   ].join('\n');
 }
@@ -154,16 +174,39 @@ const RUN_FILE_BASENAMES: Readonly<Record<RunFileName, string>> = {
   mcp_config_file: 'mcp-config.json',
 };
 
+/** The signals that end `agent execute` before the spawn, and so must not leave the temporary files behind. */
+const CLEANUP_SIGNALS: readonly NodeJS.Signals[] = process.platform === 'win32' ? ['SIGINT', 'SIGTERM'] : ['SIGINT', 'SIGTERM', 'SIGHUP'];
+
 /**
  * Write `files` into a fresh directory of the operating system's temporary directory (never the
  * repository, §2.3), owner-only, run `work` with their absolute paths, and remove the directory when
  * `work` settles — resolved, rejected or thrown alike.
+ *
+ * A `SIGINT`, `SIGTERM` or `SIGHUP` that arrives meanwhile (a pre-flight interrupted from the keyboard,
+ * task-218's review) removes the directory too, then ends the process by that same signal. `work`
+ * receives `release`, which removes that handling: the launch calls it when it takes the signals over
+ * (§3.3 step 15).
  */
 export async function withRunFiles<T>(
   files: Partial<Record<RunFileName, string>>,
-  work: (paths: Partial<Record<RunFileName, string>>) => Promise<T>,
+  work: (paths: Partial<Record<RunFileName, string>>, release: () => void) => Promise<T>,
 ): Promise<T> {
   const dir = mkdtempSync(join(tmpdir(), 'wingfoil-run-'));
+  const listeners = CLEANUP_SIGNALS.map((signal): [NodeJS.Signals, () => void] => [
+    signal,
+    () => {
+      release();
+      rmSync(dir, { recursive: true, force: true });
+      process.kill(process.pid, signal);
+    },
+  ]);
+  let held = true;
+  function release(): void {
+    if (!held) return;
+    held = false;
+    for (const [signal, listener] of listeners) process.removeListener(signal, listener);
+  }
+  for (const [signal, listener] of listeners) process.on(signal, listener);
   try {
     const paths: Partial<Record<RunFileName, string>> = {};
     for (const name of Object.keys(RUN_FILE_BASENAMES).sort() as RunFileName[]) {
@@ -173,8 +216,9 @@ export async function withRunFiles<T>(
       writeFileSync(path, text, { encoding: 'utf-8', mode: 0o600 });
       paths[name] = path;
     }
-    return await work(paths);
+    return await work(paths, release);
   } finally {
+    release();
     rmSync(dir, { recursive: true, force: true });
   }
 }
@@ -254,7 +298,13 @@ export async function mcpPreflight(input: McpPreflightInput): Promise<CoreResult
     serverStderr += chunk.toString();
   });
   const client = new Client({ name: 'wingfoil-agent-execute', version: '1' }, { capabilities: {} });
-  try {
+  // One deadline for the whole exchange, start-up included (task-218's review: a limit per request let
+  // the pre-flight take about twice it against REQ-PERF-01's 30 s).
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer within ${input.timeoutMs} ms`)), input.timeoutMs);
+  });
+  const exchange = async (): Promise<void> => {
     await client.connect(transport, { timeout: input.timeoutMs });
     const prompt = await client.getPrompt(
       { name: `${input.role}-session`, arguments: { element: input.element, state: input.stateRef } },
@@ -264,6 +314,9 @@ export async function mcpPreflight(input: McpPreflightInput): Promise<CoreResult
     if (content === undefined || content.type !== 'text' || content.text === '') {
       throw new Error(`the ${input.role}-session prompt returned no context text`);
     }
+  };
+  try {
+    await Promise.race([exchange(), deadline]);
     return coreOk(undefined);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
@@ -271,6 +324,7 @@ export async function mcpPreflight(input: McpPreflightInput): Promise<CoreResult
     const cause = withoutRoot(said === undefined ? reason : `${reason} (server: ${said})`, input.root);
     return coreErr({ code: 'IO', message: MCP_UNREACHABLE_MESSAGE, details: { cause, issues: [{ detail: cause }] } });
   } finally {
+    clearTimeout(timer);
     await client.close().catch(() => undefined);
   }
 }
@@ -285,7 +339,7 @@ export interface AgentExecuteRequest {
 }
 
 /** The host facts the pipeline reads, each overridable by a caller (tests) and defaulted from the process. */
-export interface AgentExecuteHost {
+export interface AgentExecuteHost extends LaunchHost {
   /** The server the pre-flight starts; {@link runningBuildMcpServer} by default. */
   readonly mcpServer?: McpServerCommand;
   /** Whether stdin and stdout are both terminals (§3.3 step 12); the process's own by default. */
@@ -312,6 +366,10 @@ export interface PreparedLaunch {
   readonly stateRef: string;
   /** Root-relative path of the run-log file the record will be committed to. */
   readonly logPath: string;
+  /** Root-relative path of the element's document at `state_ref` (the record's `notes`, §4.2 key 18). */
+  readonly elementPath: string;
+  /** Root-relative path of the element type's template file, when the type declares one. */
+  readonly templatePath: string | undefined;
   /** §2.4's bytes. */
   readonly bootstrap: string;
   /** The server the agent is registered with (§2.5). */
@@ -349,13 +407,13 @@ function loadCommittedConfig(root: string, sha: string): CoreResult<{ dna: DnaYa
  * documents the scan could not read as `details.unreadable` (task-171) so the refusal does not read as
  * a bare absence. An archived element is found here and refused by the context builder.
  */
-function requireElement(root: string, sha: string, memoryYaml: MemoryYaml, element: ExecutionContextElement): CoreResult<undefined> {
+function requireElement(root: string, sha: string, memoryYaml: MemoryYaml, element: ExecutionContextElement): CoreResult<string> {
   const unreadable: Diagnostic[] = [];
   const found = findMemoryDocumentByTypeAndIdAtRev(root, sha, memoryYaml, element.type, element.id, {
     includeArchived: true,
     onDiagnostic: (diagnostic) => unreadable.push(diagnostic),
   });
-  if (found !== undefined) return coreOk(undefined);
+  if (found !== undefined) return coreOk(found.path);
   return coreErr({
     code: 'NOT_FOUND',
     message: `element not found: ${element.type}:${element.id}`,
@@ -371,11 +429,16 @@ function unreadableDetails(lines: readonly string[]): Record<string, unknown> {
   return { unreadable: lines, issues: lines.map((detail) => ({ detail })) };
 }
 
-/** Whether the element type's template, at `sha`, has a `## Execution Notes` heading line (§2.4). */
-function templateHasExecutionNotes(root: string, sha: string, memoryYaml: MemoryYaml, type: string): boolean {
+/** Root-relative path of the element type's template file, or `undefined` when the type declares none. */
+function templatePathOf(memoryYaml: MemoryYaml, type: string): string | undefined {
   const file = memoryYaml.types[type]?.template?.file;
-  if (file === undefined) return false;
-  const text = readPathAtRev(root, sha, `.wingfoil/${file}`);
+  return file === undefined ? undefined : `.wingfoil/${file}`;
+}
+
+/** Whether the element type's template, at `sha`, has a `## Execution Notes` heading line (§2.4). */
+function templateHasExecutionNotes(root: string, sha: string, templatePath: string | undefined): boolean {
+  if (templatePath === undefined) return false;
+  const text = readPathAtRev(root, sha, templatePath);
   return text !== null && executionNotesSection(text) !== null;
 }
 
@@ -390,7 +453,25 @@ export async function agentExecutePipeline<T>(
   root: string,
   request: AgentExecuteRequest,
   host: AgentExecuteHost,
-  launch: (prepared: PreparedLaunch) => Promise<CoreResult<T>>,
+  launch: (prepared: PreparedLaunch, releaseSignals: () => void) => Promise<CoreResult<T>>,
+): Promise<CoreResult<T>> {
+  // Each distinct warning is printed once — the pipeline and the context builder both load dna.yaml
+  // (task-218's review F5) — and a label naming the resolved commit reads `HEAD:`, the baseline every
+  // read of the run is at (spec-008 §11).
+  let sha: string | undefined;
+  return withDistinctWarnings(
+    () => runPipeline(root, request, host, launch, (resolved) => (sha = resolved)),
+    (text) => (sha === undefined ? text : text.split(`${sha}:`).join('HEAD:')),
+  );
+}
+
+/** {@link agentExecutePipeline}'s body; `onHead` learns the commit step 2 resolved. */
+async function runPipeline<T>(
+  root: string,
+  request: AgentExecuteRequest,
+  host: AgentExecuteHost,
+  launch: (prepared: PreparedLaunch, releaseSignals: () => void) => Promise<CoreResult<T>>,
+  onHead: (sha: string) => void,
 ): Promise<CoreResult<T>> {
   // Step 2 — one HEAD, every gating read at it.
   let sha: string;
@@ -400,6 +481,7 @@ export async function agentExecutePipeline<T>(
     if (error instanceof RevisionError) return coreErr(error.toCoreError());
     throw error;
   }
+  onHead(sha);
   const config = loadCommittedConfig(root, sha);
   if (!config.ok) return config;
   const { dna, memoryYaml } = config.value;
@@ -452,12 +534,15 @@ export async function agentExecutePipeline<T>(
   if (!runId.ok) return runId;
 
   // Step 10 — the bootstrap and the temporary files.
+  const templatePath = templatePathOf(memoryYaml, request.element.type);
   const bootstrap = renderBootstrap({
     role,
     element: elementRef,
     runId: runId.value,
     stateRef: sha,
-    handoff: handoffLine(templateHasExecutionNotes(root, sha, memoryYaml, request.element.type)),
+    handoff: handoffLine(templateHasExecutionNotes(root, sha, templatePath)),
+    // A team.agents entry that declares an adapter declares an email (dna.yaml schema, dl-158 Rule 2 (ii)).
+    agent: { name: agent.value.name, email: agent.value.email ?? '' },
   });
   const mcpServer = host.mcpServer ?? runningBuildMcpServer();
   const files: Partial<Record<RunFileName, string>> = {
@@ -465,7 +550,7 @@ export async function agentExecutePipeline<T>(
     ...(manifest.mcp.via === 'config-file' ? { mcp_config_file: renderMcpTemplate(manifest.mcp.template!, mcpServer) } : {}),
   };
 
-  return withRunFiles(files, async (paths) => {
+  return withRunFiles(files, async (paths, releaseSignals) => {
     // Step 11 — the MCP pre-flight.
     const preflight = await mcpPreflight({
       root,
@@ -494,10 +579,12 @@ export async function agentExecutePipeline<T>(
       adapter: adapter.value,
       stateRef: sha,
       logPath: logPath.value,
+      elementPath: element.value,
+      templatePath,
       bootstrap,
       mcpServer,
       files: paths,
-    });
+    }, releaseSignals);
   });
 }
 

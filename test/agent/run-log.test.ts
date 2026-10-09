@@ -701,7 +701,7 @@ describe('the strict reader and writer agree', () => {
 });
 
 describe('bug-288 — the run log holds exactly the writer\'s form (spec-016 §4.2, §4.5)', () => {
-  const NOT_SERIALIZED = 'not in the serialized form of spec-016 §4.2 (a CR, or whitespace outside a string)';
+  const NOT_SERIALIZED = 'not in the serialized form of spec-016 §4.2 (a CR, whitespace outside a string, or another spelling of a value)';
   const refused = (text: string): string | undefined => {
     const result = parseRunLog(text, LOG);
     return result.ok ? undefined : result.error.message;

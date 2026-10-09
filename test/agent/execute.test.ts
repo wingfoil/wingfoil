@@ -25,7 +25,7 @@ import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 const REPO_ROOT = join(__dirname, '..', '..');
 
-describe('renderBootstrap (§2.4) — a pure function of (role, element, run id, state_ref)', () => {
+describe('renderBootstrap (§2.4) — a pure function of (role, element, run id, state_ref, signing entry)', () => {
   it('is the fixed template, LF-terminated, with the context instruction and the handoff line', () => {
     const text = renderBootstrap({
       role: 'developer',
@@ -33,6 +33,7 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
       runId: 'task-001-a/adhoc/1',
       stateRef: SHA,
       handoff: handoffLine(true),
+      agent: { name: 'Fake Agent', email: 'fake-agent@example.com' },
     });
     expect(text).toBe(
       [
@@ -40,13 +41,14 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
         `Your context is assembled at commit ${SHA} and served by the "wingfoil" MCP server`,
         `registered for this session. Load it before any other action: Get the MCP prompt "developer-session" with arguments element="task:task-001-a" and state="${SHA}".`,
         'Record your handoff in the element\'s "## Execution Notes" section.',
+        'End every commit of your work, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <the model identifier you run as>" (git-conventions §7).',
         '',
       ].join('\n'),
     );
   });
 
   it('the same inputs render the same bytes', () => {
-    const input = { role: 'qa', element: 'bug:bug-1', runId: 'bug-1/adhoc/2', stateRef: SHA, handoff: handoffLine(false) };
+    const input = { role: 'qa', element: 'bug:bug-1', runId: 'bug-1/adhoc/2', stateRef: SHA, handoff: handoffLine(false), agent: { name: 'A', email: 'a@example.com' } };
     expect(renderBootstrap(input)).toBe(renderBootstrap({ ...input }));
   });
 });

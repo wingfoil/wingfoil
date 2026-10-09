@@ -92,7 +92,7 @@ import { prepareSupersede, supersedeReason } from './memory-supersede';
 import { amendReservedFields, requireAmendableEdit, requireAmendableType, requireReadableScaffold, requireRequiredFieldsKept } from './memory-amend';
 import { resolveAddType } from './memory-add-type';
 import { committedScopeError, requireAbsentTarget, requireUnmodifiedTarget } from './write-guard';
-import { agentExecuteFn } from './agent-execute';
+import { agentExecuteFn, renderAgentExecuteStderr } from './agent-execute';
 import { agentShowFn, renderAgentShowConsole } from './agent-show';
 import { UsageError } from './usage-error';
 import type { CoreFlag, CoreFn, CoreModule, CoreOption } from './registry';
@@ -2249,6 +2249,8 @@ export const CORE_MODULES: readonly CoreModule[] = [
         ],
         example: 'wingfoil agent execute --element task:task-042-login-form --role developer',
         fn: agentExecuteFn,
+        // spec-016 §3.4 (task-228): the agent owns stdout, so the recorded run is reported on stderr.
+        renderToStderr: renderAgentExecuteStderr as (value: unknown) => ReturnType<typeof renderAgentExecuteStderr>,
       },
       // task-220 (`spec-016` §6): read-only, and a declared `HEAD` read (§5.1, `spec-006` §6 item 6).
       // Its console rendering is the `key: value` lines §6 defines, not the indented JSON every other

@@ -229,6 +229,9 @@ describe('agentExecuteFn — review fixes (task-218 review F1, F3)', () => {
   });
 });
 
+/** The fake's resume declaration; without an assigned id it has no `{session_id}` to carry, so it goes. */
+const NO_RESUME = '    supported: true\n    args: [ --resume, "{session_id}" ]\n';
+
 describe('agentExecuteFn — the launch half in process (task-228, spec-016 §3.3 steps 13–18)', () => {
   /** Run with the fake's environment variables set for this call only. */
   async function withFakeEnv<T>(env: Record<string, string>, work: () => Promise<T>): Promise<T> {
@@ -260,7 +263,7 @@ describe('agentExecuteFn — the launch half in process (task-228, spec-016 §3.
       writeFixtureFile(
         root,
         '.wingfoil/agents/custom/looked.yaml',
-        manifest('looked', (text) => text.replace('id: assign', 'id: lookup').replace(/ {2}assign_args: .*\n/, '').replace(/"\{session_id\}"/g, 'fixed-session')),
+        manifest('looked', (text) => text.replace('id: assign', 'id: lookup').replace(/ {2}assign_args: .*\n/, '').replace(NO_RESUME, '    supported: false\n').replace(/"\{session_id\}"/g, 'fixed-session')),
       );
     });
     const looked = await withFakeEnv({ WINGFOIL_FAKE_AGENT_DOCUMENT: JSON.stringify({ session_id: 'from-lookup', model: 'm-1', usage: { input: 1 } }) }, () =>
@@ -279,7 +282,7 @@ describe('agentExecuteFn — the launch half in process (task-228, spec-016 §3.
         root,
         '.wingfoil/agents/custom/outed.yaml',
         manifest('outed', (text) =>
-          text.replace('id: assign', 'id: output').replace(/ {2}assign_args: .*\n/, '').replace(/"\{session_id\}"/g, 'fixed-session').replace('from: lookup', 'from: none'),
+          text.replace('id: assign', 'id: output').replace(/ {2}assign_args: .*\n/, '').replace(NO_RESUME, '    supported: false\n').replace(/"\{session_id\}"/g, 'fixed-session').replace('from: lookup', 'from: none'),
         ),
       );
     });
