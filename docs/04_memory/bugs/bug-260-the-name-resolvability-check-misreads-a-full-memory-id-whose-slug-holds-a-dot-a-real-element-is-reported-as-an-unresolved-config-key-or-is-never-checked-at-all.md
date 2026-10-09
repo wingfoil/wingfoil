@@ -67,3 +67,11 @@ of the document, as in `task-256`) or invisible to the check.
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b4a-review-findings-plan`, from the independent review of
 `task-187` (W2 B4a, `dev-loop-rel-v0.3-plan`) and `task-256`'s Execution Notes, checked against `main` at
 `b0c3e472`.
+
+- **Note (2026-10-09, W3 B3 follow-ups, `bug-ingest-rel-v0.3-w3b3-review-findings-plan`; from `task-202`).** A second
+  misfire of the same check, on a name that is no element id: `task-202`'s `spec-017` amendment first wrote the
+  output field `` `iterations.late` `` in backticks, and `npx jest test/docs/name-resolvability.test.ts` failed (1
+  failed) because the name matches `CONFIG_PATH` (`test/docs/support/name-resolvability.ts`) and is classified as a
+  configuration key that does not exist; the author reworded it (11 passed). A backticked dotted name that is an
+  output or JSON field, not a configuration key, has no way to pass; the fix of this bug decides whether such names
+  get a class of their own (`task-202`'s Execution Notes, the bullet after the `src/core` barrel-export one).
