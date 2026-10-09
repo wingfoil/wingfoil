@@ -278,7 +278,8 @@ itself a frontmatter field of every Memory document, a selection names the type(
 `type` key; a selection without one would select across every type and is `E_PHASE_SELECTION_UNTYPED`.
 In the phase's action arguments, each selected type is in scope: `{bug.id}` in `build-backlog`'s
 `memory.add(type: task, …, bug: "{bug.id}")` names each selected bug (`spec-017` §4.1). A selection is
-complete when no document matches it (`spec-017` §4).
+complete when no document matches it (`spec-017` §4); an archived document (`deprecated`, or `superseded`)
+never matches a selection (`spec-017` §4.3, §4.11).
 
 #### Collections (`iterate_over` over configuration, `dl-104` D2 (b))
 
@@ -1062,3 +1063,9 @@ document does not carry reads as `""`, the reading `dl-016` §1's "`release` emp
 (`release-planning.yaml`'s `release: ["", "{release.version}"]`) needs and `spec-017`'s deduction applies;
 the shared-element rule for a list-valued field was already stated. No diagnostic changed. Edited in place
 without a supersede or a state change (`dl-047`); recorded with `memory amend`.
+
+**Revision (2026-10-07, `task-202-deduce-iterate-over-over-memory-types-collections-live`) — a selection never
+matches an archived element.** § "Selections" states the rule `spec-017` §4.3 and §4.11 add: a `deprecated` or
+`superseded` document is never selected, as it is never an `iterate_over` candidate. No diagnostic changed.
+Edited in place without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at
+`task-202`'s review.
