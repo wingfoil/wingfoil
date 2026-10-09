@@ -127,6 +127,26 @@ describe('version bump of the four versioned config files (bug-143, task-183)', 
       ]);
     });
 
+    it('fails a downgrade: a bump is a numeric increase, not any difference (bug-249)', () => {
+      writeFixtureFile(repo, DNA, config('0.9', 'b'));
+      expect(checkPendingVersionBumps(repo)).toEqual([
+        { path: DNA, reason: "content differs from HEAD but version: 0.9 is not greater than HEAD's 1.0" },
+      ]);
+    });
+
+    it('fails a re-quoting that reads as the same number (bug-249)', () => {
+      writeFixtureFile(repo, DNA, config('"1.0"', 'b'));
+      expect(checkPendingVersionBumps(repo).map((finding) => finding.path)).toEqual([DNA]);
+    });
+
+    it('credits a branch bump only when it is an increase over the fork point (bug-249)', () => {
+      git(repo, ['checkout', '--quiet', '-b', 'task/x']);
+      writeFixtureFile(repo, DNA, config('0.9', 'b'));
+      commitAll(repo, 'edit and downgrade');
+      writeFixtureFile(repo, DNA, config('0.9', 'c'));
+      expect(checkPendingVersionBumps(repo).map((finding) => finding.path)).toEqual([DNA]);
+    });
+
     it('fails an edit that removes version:', () => {
       writeFixtureFile(repo, DNA, '# header\nproject:\n  name: b\n');
       expect(checkPendingVersionBumps(repo)).toEqual([

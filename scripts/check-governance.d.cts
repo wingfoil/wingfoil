@@ -1,8 +1,18 @@
 /**
  * The rule a governance finding breaks (`dl-103` §1): the subject grammar, the canonical bracket, the
- * `Approver:`/`Reason:` body shape, the author's approval authority, or the element's state.
+ * `Approver:`/`Reason:` body shape, the author's approval authority, the element's state, or a versioned
+ * config file's `version:` over a `--base` range (`bug-249`, task-208).
  */
-export type GovernanceRule = 'subject' | 'bracket' | 'body' | 'authority' | 'state';
+export type GovernanceRule = 'subject' | 'bracket' | 'body' | 'authority' | 'state' | 'config';
+
+/** A check added after the script itself (task-208): each gates only the commits after its own introduction. */
+export type GovernanceCheck = 'verb-edge' | 'status-outside-wf' | 'supersedes-pair' | 'config-version';
+
+/**
+ * Each later check's marker: the string whose first appearance in `scripts/check-governance.cjs`, on
+ * `HEAD`'s first-parent line, is that check's introduction commit.
+ */
+export const CHECKS: Readonly<Record<GovernanceCheck, string>>;
 
 /** One rule broken by one commit. */
 export interface GovernanceFinding {
@@ -18,6 +28,8 @@ export interface GovernanceFinding {
    * check. `false` for history, which is reported and does not fail it.
    */
   readonly gated: boolean;
+  /** The later check that produced the finding, when it is one (task-208); absent for the base rules. */
+  readonly check?: GovernanceCheck;
 }
 
 /** A commit whose state could not be checked, and why. A commit may have several entries. */
@@ -37,6 +49,13 @@ export interface GovernanceReport {
   readonly introducedAt: string | null;
   /** The `wf()` commits checked (configuration scopes excluded). */
   readonly checked: number;
+  /**
+   * Each later check's introduction commit, or `null` when no commit brought its marker in (it then
+   * falls back to {@link introducedAt}); every entry is {@link introducedAt} when that was given.
+   */
+  readonly checkIntroductions: Readonly<Record<GovernanceCheck, string | null>>;
+  /** The other non-merge commits of the range: read for status changes outside a `wf()` operation (`dl-139`). */
+  readonly otherCommits: number;
   /** How many of {@link checked} are gated. */
   readonly gatedCommits: number;
   /** Every finding, oldest commit first, then by rule. */
