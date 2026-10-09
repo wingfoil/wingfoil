@@ -59,6 +59,10 @@
  *   numerically greater (`isVersionIncrease`, `src/validation`, shared with the pending-change gate of
  *   `test/lint/helpers/version-bump.ts`). The finding sits on the range's last commit touching the file.
  *   Without `--base` nothing is judged: a whole-history run has no range to bump over.
+ * - `approval-ai-trailer` (`bug-307`; rule `body`): an `approve` or `reject` commit records the
+ *   approver's decision and carries no `Co-Authored-By:` and no `AI-Model:` line (`git-conventions` §7);
+ *   every other verb may. The approve/reject commits written before this check are history: they cannot
+ *   be rewritten (`git-conventions` §2, §8).
 
  * **Starting mode** (`dl-103` §1). A finding on a commit that is not the introduction commit nor one
  * of its ancestors is gated, and fails the check (exit 1). A finding on history — the introduction
@@ -110,7 +114,13 @@ const CHECKS = Object.freeze({
   'status-outside-wf': 'governance-check:status-outside-wf',
   'supersedes-pair': 'governance-check:supersedes-pair',
   'config-version': 'governance-check:config-version',
+  'approval-ai-trailer': 'governance-check:approval-ai-trailer',
 });
+
+/** The verbs that record the approver's decision and carry no AI co-author (`git-conventions` §7). */
+const DECISION_VERBS = new Set(['approve', 'reject']);
+/** A co-author or model trailer line (`git-conventions` §7, `bug-307`). */
+const AI_TRAILER_RE = /^(co-authored-by|ai-model):/i;
 
 /** The four versioned config files whose `version:` the doc-versioning bump rule applies to (`bug-143`). */
 const VERSIONED_CONFIG_FILES = ['.wingfoil/dna.yaml', '.wingfoil/memory.yaml', '.wingfoil/workflows.yaml', '.wingfoil/roles.yaml'];
@@ -607,6 +617,16 @@ function checkGovernance(root, options = {}) {
     const { findings: subjectFindings, op, ids } = checkSubjectAndBracket(commit, memoryYaml, dist);
     subjectFindings.forEach(push);
     if (op !== null) checkBodyAndAuthority(commit, op, dna, dist).forEach(push);
+    if (DECISION_VERBS.has(op)) {
+      for (const line of commit.body.split('\n').filter((candidate) => AI_TRAILER_RE.test(candidate))) {
+        const key = line.slice(0, line.indexOf(':'));
+        push({
+          rule: 'body',
+          message: `'${op}' records the approver's decision and carries no AI co-author trailer (git-conventions §7), yet it has a ${key}: line`,
+          check: 'approval-ai-trailer',
+        });
+      }
+    }
 
     if (!WF_HEAD_RE.test(commit.subject)) return;
     const gated = !history.has(commit.sha);
