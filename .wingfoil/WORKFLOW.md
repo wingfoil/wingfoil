@@ -247,7 +247,8 @@ implementing the task (detail not predictable at planning time).
 ### Release Planning — `release-planning`
 
 Eight steps in sequence; `record-adrs` is optional. `advance-pinned-build` moves the pinned
-published build forward first (dl-095); `triage-bugs` and `reconcile-governance` sweep in-scope
+published build forward first (dl-095) and re-checks the `wingfoil-cli` directive against the new
+pin (dl-163 S3e); `triage-bugs` and `reconcile-governance` sweep in-scope
 `open` bugs and not-ready decision-logs/ADRs into their gated states (dl-016), selecting only
 elements whose `release` is empty or this release. Each `memory.add` step carries a P4.12 check gate
 enforcing the required frontmatter fields before the next step begins. `define-scope`'s gate exempts
@@ -256,7 +257,7 @@ the releases added before dl-092 (`minor-v0.1` … `minor-v1.0`) from `kind`, wh
 
 ```mermaid
 flowchart TD
-    AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only\n✔ check:lockfile · check:mcp"]
+    AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only\n✔ check:lockfile · check:mcp · wingfoil-cli re-check"]
     DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)"]
     TB["**triage-bugs** *(tech-lead)*\nmemory.approve: bug open → triaged\n🔑 Approval gate — *approver*\n↩ REJECT → closed"]
     RG["**reconcile-governance** *(product-owner)*\nmemory.approve: decision-log in-discussion → ready\nadr pending → accepted\n🔑 Approval gate — *approver*\n↩ REJECT → draft"]
