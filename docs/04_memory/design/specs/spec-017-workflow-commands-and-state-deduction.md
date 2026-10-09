@@ -575,7 +575,9 @@ its frontier, its pending approvals and its `late` candidates (§4.7); then the 
 **7.5 `list`** (P4.6). Without `--all`: the startable workflows, plus every includable workflow that
 is the current phase's sub on some open instance's frontier (P4.6 sc. 1–2). With `--all`: every
 loaded workflow (P4.6 sc. 3). Each entry: `name`, `startable`, `includable`, `description`, and
-`executableNow`. This replaces today's payload, which is the raw loader result (§ Consequences).
+`executableNow`. An includable workflow is executable now when it is the `include` of a phase on the
+trail of some open instance's frontier step (§4.9), ancestors included, or of that step's own phase when
+it is an `iterate_over` phase reported as the leaf, even one with no eligible candidate. This replaces today's payload, which is the raw loader result (§ Consequences).
 With no manifest: `no workflows defined`, exit `0` (P4.6 sc. 4; `spec-003` Layer 1, "an absent
 manifest is an empty registry").
 
@@ -657,7 +659,7 @@ interface TrailEntry { workflow: string; phase: string; scope: ScopeRef | null }
 interface ActionView {
   token: string; text: string; unresolved: string[];
   target: "bound" | "selection" | "created" | "run" | "none";
-  binding: { kind: "wingfoil" | "command" | "agent" | "manual" | "unbound";
+  binding: { kind: "wingfoil" | "run" | "agent" | "manual" | "unbound";
              argv?: string[]; expectedCommit?: string };
 }
 interface CheckView { token: string; binding: ActionView["binding"]; evaluated: false }
@@ -697,9 +699,32 @@ interface EndResult      { baseline: Baseline; ended: Instance; active: Instance
 interface FinalizeResult { baseline: Baseline; instance: Instance; finalized: Step; next: Step | null; commit: string }
 interface ListResult     { baseline: Baseline; workflows: { name: string; startable: boolean; includable: boolean;
                            description: string | null; executableNow: boolean }[]; message?: string; diagnostics: Diagnostic[] }
+type TokenBinding = { kind: "wingfoil" | "manual" | "agent" | "run" | "unbound"; source: "built-in" | "project" | "none";
+                 argv?: string[]; expectedCommit?: { type: string | null; verbs: string[] }; severity?: "warn" | "reject" };  // spec-003's resolution of one token
+interface CheckTokenView { token: string; binding: TokenBinding; evaluated: false }
+interface PhaseView      { name: string; description: string | null; role: string | null; optional: boolean;
+                           directives: { id: string; title: string }[]; directiveWarnings: string[];
+                           actions: { token: string; binding: TokenBinding }[]; checks: { pre: CheckTokenView[]; post: CheckTokenView[] };
+                           produces: { pattern: string; owner: string | null; evidence: boolean }[];
+                           approval: { byRole: string } | { byPerson: string } | null;
+                           awaits: { party: string; evidence: CheckTokenView } | null;
+                           fallback: { step: string; setState: string | null } | null;
+                           iterate: { over: string; where: Record<string, unknown> | null } | null;
+                           selection: { where: Record<string, unknown> } | null;
+                           mode: "fresh" | "resume" | "reference"; allowedModes: ("fresh" | "resume" | "reference")[];
+                           distinctFrom: string[]; cadence: unknown; evidence: EvidenceKind[];
+                           include: string | null; sub: WorkflowView | null }
+interface WorkflowView   { name: string; file: string; startable: boolean; includable: boolean; description: string | null;
+                           element: string | null; phases: PhaseView[] }
+interface ShowResult     { baseline: Baseline; workflow: WorkflowView; diagnostics: Diagnostic[] }
 ```
 
-`show` returns the resolved declaration of §7.6 with the `Baseline` and `diagnostics`. Console
+`show` returns the resolved declaration of §7.6 with the `Baseline` and `diagnostics`: `ShowResult`. A
+phase's `evidence` is the kinds §4.3 gives it, by the rules deduction applies to the same phase
+(`include` alone for a plain `include`); `owner` and `state` evidence use the element the phase is bound to
+where the shown workflow, or its includer, binds it; `mode` is the declared mode, `fresh` when absent. A
+`list` or `show` payload carries the same `diagnostics` the deduction of §4 reports at that commit, since
+both resolve against it (`executableNow`, an instance id as `<ref>`). Console
 rendering is free-form (`spec-005` §2) but always prints, for `next`, the step's key, trail, role,
 scope, the actions with their bindings, the directive ids and any "human needed" line (§5.3);
 `dl-043`'s generic console renderer is v0.4 scope.
@@ -1102,3 +1127,13 @@ re-entries (approver ruling 2026-10-09), while a plain `include` passes it to it
 known consequences: the late `ready` decision-logs of `build-backlog`'s selection (until `dl-160`) and the
 record checkpoints an instance started mid-release reports again. Edited in place without a supersede or a
 state change (`dl-047`); pending the approver's `memory amend` at `task-202`'s review.
+
+**Revision (2026-10-09, `task-204-reshape-workflow-list-add-workflow-show-both-answering`) — `show`'s payload
+declared, `list`'s rule stated.** §8 said only that `show` returns "the resolved declaration of §7.6"; implementing it needed a
+shape, and a payload two consumers can read differently is the failure REQ-SYS-07 exists to prevent. §8 gains
+`ShowResult` (with `WorkflowView`, `PhaseView`, `CheckTokenView` and the `TokenBinding` `spec-003`'s resolution of a token
+yields; `run` is the kind of a project binding, so the action and check views of `next`
+read `run` where they read `command`, as `spec-003` Layer 3 and the code say), states that a
+phase's evidence kinds follow §4.3 as deduction applies them and that `list` and `show` carry the deduction's
+diagnostics; §7.5 states the `executableNow` rule `list` applies. No command, rule or diagnostic changes. Edited in place without a supersede or a state change
+(`dl-047`); pending the approver's `memory amend` at `task-204`'s review.
