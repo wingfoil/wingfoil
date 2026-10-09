@@ -123,6 +123,10 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-publishing", "phases[0].checks.pre[0]", "on-branch-is-main"],
       ["release-publishing", "phases[0].checks.pre[1]", "release-branch-merged-to-main"],
       ["release-publishing", "phases[1].checks.post[0]", "staged version approved on npm and live on the npm registry"],
+      // task-222 (dl-089 §1): the report checks, unbound until scripts/release-health/ ships them (task-231, task-241).
+      ["release-health", "phases[0].checks.post[0]", "every catalogue metric has a value or an explicit not-measurable reason"],
+      ["release-health", "phases[1].checks.post[0]", "every regressed metric and every breached floor has a finding"],
+      ["release-health", "phases[2].checks.post[0]", "every finding is tracked by an element or carries an RH proposal in the report's Proposals section"],
       ["retrospective", "phases[0].checks.post[0]", "secondary-sources.listed"],
       ["retrospective", "phases[1].checks.pre[0]", "proposals.disposed"],
       ["retrospective", "phases[2].checks.post[0]", "frontmatter.required"],
@@ -250,7 +254,7 @@ function measure(workflows: readonly Workflow[]): { checkpoints: string[]; final
 }
 
 describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => {
-  it('26 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134)', () => {
+  it('27 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 26 until task-222: release-health.propose writes into the report compare produced)', () => {
     expect(measure(registry().workflows).checkpoints).toEqual([
       'user-story-mapping.backbone',
       'user-story-mapping.vertical-explosion',
@@ -275,6 +279,7 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'release-submit.approve-release',
       'release-publishing.tag',
       'release-publishing.publish',
+      'release-health.propose',
       'retrospective.additional-points',
       'retrospective.approve',
       'end-of-life.archive',

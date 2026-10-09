@@ -377,7 +377,8 @@ non-blank (`--reason` itself stays optional, `dl-027`).
           + **BDD** tests; keeps a fix task's source `bug` in sync via `bug.sync_state`)* → `user-docs`
           *(dl-013 — `align-user-docs`, the user-facing documentation gate; dl-025 — `align-agent-docs`
           (the `agent-docs` workflow), this file, `.wingfoil/README.md` and `.wingfoil/WORKFLOW.md`)* → `e2e-smoke`
-          *(dl-023 — fresh-init + CLI end-to-end smoke gate, plus the `mcp-registration` check of `.mcp.json`)* → `release-submit` → `release-publishing` → `retrospective`.
+          *(dl-023 — fresh-init + CLI end-to-end smoke gate, plus the `mcp-registration` check of `.mcp.json`)* → `release-submit` → `release-publishing` → `release-health`
+          *(dl-089 — measure → compare → propose against the catalogue `docs/08_health/metrics.yaml`; not a gate)* → `retrospective`.
     - `sunset` → `end-of-life`.
 - **`bug-ingest`, `decision-log-ingest`, `adr-ingest`, `service-ingest`** — capture a single element on demand. If started
   while another workflow with an active `element` is running, the new file **inherits that element**
