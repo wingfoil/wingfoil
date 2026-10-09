@@ -219,7 +219,9 @@ Separation of duties (`dl-134`, v1.5): `red` is `qa`'s, black-box, and `green` a
 the files `red`'s commit touched unchanged (`tests.unchanged(since: red)`, evaluated from v1.0).
 `green` never shares an agent session with `red`, `refactor` may resume `green`'s, and `review`
 shares none with the three; the reviewer loads the developer's and `qa`'s directives too. A task
-resumed after a reject or a park merges `main` first (`dl-035`). `memory park` returns a started
+resumed after a reject or a park merges `main` at the start of `red`, run by the developer before
+`qa` writes a test, and again as `refactor`'s last action if `main` moved, so the checks and the
+review measure the merged tree (`dl-035`; approver ruling 2026-10-09). `memory park` returns a started
 task to the backlog: its branch is kept, its worktree removed, its bugs synced back to `planned`
 (`dl-110`).
 
@@ -227,10 +229,10 @@ task to the backlog: its branch is kept, its worktree removed, its bugs synced b
 flowchart TD
     ST["**start** *(developer)*\ngit.create_branch(task: {task.id}) → branch task/{task.id}\ntask: backlog → in-progress\n↳ bug.sync_state: source bug planned → in-progress"]
     DES["📐 **design** *(architect)* · safety net\nverify a tech-spec exists + is approved for every\nfile format/schema/constant/API the task implements\n✔ P4.12: [title, scope] (if scaffolded) + tech-spec: approved"]
-    RED["🔴 **red** *(qa)* · fresh\n↳ bug.sync_state: source bug in-review → in-progress (after a reject)\nmerge main (on a resume)\nwrite the tests black-box from the ACs\n✔ tests.exist + tests.failing"]
+    RED["🔴 **red** *(qa)* · fresh\n↳ bug.sync_state: source bug in-review → in-progress (after a reject)\ndeveloper merges main first (on a resume)\nwrite the tests black-box from the ACs\n✔ tests.exist + tests.failing"]
     GREEN["🟢 **green** *(developer)* · distinct from red\nmin code to pass\n✔ tests.passing + tests.unchanged(since: red)"]
-    REF["🔵 **refactor** *(developer)* · may resume green\nclean code, keep tests green\n✔ tests.passing + coverage ≥ 80% + tests.unchanged(since: red)"]
-    REV["📋 **review** *(reviewer)* · distinct from red, green, refactor\nmerge main (if it moved)\ntask: in-progress → in-review\n↳ bug.sync_state: source bug → in-review (once ALL its fix tasks are)\n🔑 Approval gate — *approver*"]
+    REF["🔵 **refactor** *(developer)* · may resume green\nclean code, keep tests green\nlast: merge main (if it moved)\n✔ tests.passing + coverage ≥ 80% + tests.unchanged(since: red)"]
+    REV["📋 **review** *(reviewer)* · distinct from red, green, refactor\ntask: in-progress → in-review\n↳ bug.sync_state: source bug → in-review (once ALL its fix tasks are)\n🔑 Approval gate — *approver*"]
     DONE["✅ **done** *(developer)*\ngit merge to main\ntask: in-review → approved → done\n↳ bug.sync_state: source bug → resolved → closed (once ALL its fix tasks are done)"]
 
     ST --> DES --> RED --> GREEN --> REF --> REV
