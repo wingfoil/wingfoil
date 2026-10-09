@@ -177,7 +177,7 @@ export function emitUnknownFieldWarning(
 ): void {
   const unknown = collectUnknownFields(raw, schema, '')
   if (unknown.length > 0) {
-    process.stderr.write(`Warning: ${filePath}: unknown field(s) ignored: ${unknown.join(', ')}\n`)
+    reportWarning(`${filePath}: unknown field(s) ignored: ${unknown.join(', ')}`)
   }
 }
 ```
@@ -190,9 +190,13 @@ to the output object. Nested objects: the same diff is applied recursively at ea
 that itself has a `.passthrough()` schema, so unknown fields inside nested config blocks are
 reported too, not only at the document root.
 
-The warning always goes to stderr and is suppressed when the active output format is
-machine-readable (`--format json` / `--format yaml`), matching `spec-008`'s rule that diagnostic
-text never mixes into structured stdout.
+The warning is never written from inside a loader: `emitUnknownFieldWarning` raises it
+(`<file>: unknown field(s) ignored: <paths>`) through the warning sink of `src/validation/warning.ts`
+(`reportWarning`), and the surface running the operation renders it. The CLI renders it at once, on
+stderr, through its one warning renderer (`spec-008` §6) in the active `--format` — `warning: <text>`,
+`{"warning": "<text>"}` or a YAML document — so diagnostic text never mixes into structured stdout and
+a structured stderr stays a stream of parseable documents (`spec-005` §3.2). Outside any sink (the MCP
+server, a library caller) it is written to stderr as `Warning: <text>`.
 
 ### 3. Shared error-code convention
 
@@ -277,3 +281,11 @@ cross-file example names a field that exists, per `bug-213`.** The example said 
 member of the type's `states.values`, a key of the `values`/`initial`/`transitions` encoding `spec-001`
 retired; no machine in `memory.yaml` uses it (`grep -n "transitions:\|initial:" .wingfoil/memory.yaml`
 → no output). It now names the states of `spec-001`'s machine. No other section changed.
+
+**Revision (2026-10-07, `task-218-agent-execute-element-resolves-role-agent-adapter-assembles`) —
+§2: the unknown-field warning rides the CLI's warning channel, per `bug-202`.** The section said the
+warning is suppressed under `--format json` / `yaml`; the code never did that — it wrote `Warning: …`
+from inside the loaders under every format, so a `json` refusal's stderr was a text line and then the
+error object. The listing's last line now calls `reportWarning`. It is now raised through a sink the CLI renders in the active format, like every other
+warning (`task-169`'s renderer), rather than suppressed: a misspelt key stays visible to a script.
+Edited in place without a supersede or a state change (`dl-047`).

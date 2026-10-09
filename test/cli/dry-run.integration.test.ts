@@ -25,7 +25,7 @@
  * fixed identity, fixed fixture text; rows run in declaration order on one repository, each on its own
  * documents, so no row depends on another's real run.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CORE_MODULES, enumerateOperations } from '../../src/core';
@@ -81,7 +81,23 @@ function buildFixture(): string {
     '      returns: { in-progress: open }',
   ].join('\n');
   writeFileSync(memoryPath, memoryYaml.replace(commented, uncommented));
-  git(repo, ['commit', '--quiet', '-am', 'configure approver and the bug machine']);
+  // `agent execute` (task-218): an agent with the fake adapter (task-200), the script it launches, and
+  // the scaffold's `paths.runs`.
+  const dna = readFileSync(dnaPath, 'utf-8');
+  if (!dna.includes('    - name: approver\n')) throw new Error('fixture bug: the scaffolded role list moved');
+  writeFileSync(
+    dnaPath,
+    dna.replace(
+      '    - name: approver\n',
+      '    - name: approver\n  agents:\n    - name: Fake Agent\n      email: fake-agent@example.com\n      executes_as: [developer]\n      adapter: fake\n',
+    ),
+  );
+  const fixtures = join(__dirname, '..', 'fixtures', 'agents');
+  writeFileSync(join(repo, '.wingfoil', 'agents', 'custom', 'fake.yaml'), readFileSync(join(fixtures, 'custom', 'fake.yaml')));
+  mkdirSync(join(repo, 'test', 'fixtures', 'agents'), { recursive: true });
+  copyFileSync(join(fixtures, 'fake-agent.cjs'), join(repo, 'test', 'fixtures', 'agents', 'fake-agent.cjs'));
+  git(repo, ['add', '-A']);
+  git(repo, ['commit', '--quiet', '-am', 'configure approver, the bug machine and the fake agent']);
 
   step(repo, 'memory', 'add', '--type', 'task', '--title', 'Submit me');
   step(repo, 'memory', 'add', '--type', 'task', '--title', 'Approve me');
@@ -106,10 +122,18 @@ interface Row {
   readonly args: readonly string[];
   /** An edit the operation needs on disk before it runs (`memory amend` records an uncommitted correction). */
   readonly prepare?: (repo: string) => void;
+  /**
+   * `agent execute` (task-218): its commit records a run, so it follows the agent's exit and cannot be
+   * planned as bytes. Its dry run runs every pre-launch check and prints the launch plan — the record
+   * commit's subject and path, without `message` or `diff` (spec-008 §2) — and its real run, until
+   * task-228 adds the launch, stops before the spawn and commits nothing.
+   */
+  readonly launch?: true;
 }
 
 /** Keyed by the operation's camelCase registry name; the completeness test holds the keys to the registry. */
 const ROWS: Readonly<Record<string, Row>> = {
+  agentExecute: { args: ['agent', 'execute', '--element', 'task:task-001-submit-me', '--role', 'developer'], launch: true },
   dnaSet: { args: ['dna', 'set', 'project.name', '--value', 'Dry Run Demo'] },
   dnaAdd: { args: ['dna', 'add', 'modules', '--value', 'core', '--entry-path', 'src/core'] },
   dnaUpdate: { args: ['dna', 'update', 'modules.api', '--entry-description', 'Public HTTP API'] },
@@ -173,7 +197,7 @@ describe('--dry-run on every mutating operation of the registry (task-210, dl-10
     // Measured, not assumed: the task's "28" and the batch notes' "34" both counted
     // `grep -c "mutates: true" src/core/index.ts`, which also matches comment lines.
     expect(Object.keys(ROWS).sort()).toEqual(mutatingOperations());
-    expect(mutatingOperations()).toHaveLength(14);
+    expect(mutatingOperations()).toHaveLength(15);
   });
 
   it.each(Object.entries(ROWS))('%s: plans the commit, writes nothing, and the real run makes that commit', (_name, row) => {
@@ -189,6 +213,15 @@ describe('--dry-run on every mutating operation of the registry (task-210, dl-10
     expect(typeof plan.subject).toBe('string');
     expect(Array.isArray(plan.paths)).toBe(true);
     expect(plan.paths.length).toBeGreaterThan(0);
+    if (row.launch === true) {
+      expect(plan.subject).toMatch(/^agent: record task-001-submit-me\/adhoc\/1$/);
+      expect(plan.paths).toEqual(['docs/runs/task-001-submit-me.jsonl']);
+      const real = wingfoil(repo, [...row.args, '--format', 'json']);
+      expect(real.status).toBe(1);
+      expect(real.stdout).toBe('');
+      assertPersistenceUnchanged(repo, before, 'agent execute stopped before the spawn');
+      return;
+    }
     expect(typeof plan.diff).toBe('string');
     expect(plan.diff.length).toBeGreaterThan(0);
 

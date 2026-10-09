@@ -74,9 +74,8 @@ import {
   loadDirectiveInventory,
   loadDnaYaml,
   loadMemoryYaml,
-  type WorkflowsLoadResult,
 } from './loaders';
-import { loadWorkflowRegistry } from './workflow-registry';
+import { workflowListAtHead, workflowShowAtHead, type ListResult, type ShowResult } from './workflow-list-show';
 import { loadDirectiveListing, type DirectiveListing } from './directives-list';
 import { selectDirectivesById } from './context';
 import { checkAssignable, checkUnreferenced, updateRoleAssignments } from './directive-assign';
@@ -93,6 +92,7 @@ import { prepareSupersede, supersedeReason } from './memory-supersede';
 import { amendReservedFields, requireAmendableEdit, requireAmendableType, requireReadableScaffold, requireRequiredFieldsKept } from './memory-amend';
 import { resolveAddType } from './memory-add-type';
 import { committedScopeError, requireAbsentTarget, requireUnmodifiedTarget } from './write-guard';
+import { agentExecuteFn } from './agent-execute';
 import { agentShowFn, renderAgentShowConsole } from './agent-show';
 import { UsageError } from './usage-error';
 import type { CoreFlag, CoreFn, CoreModule, CoreOption } from './registry';
@@ -134,13 +134,18 @@ export { isWellFormedRevision, resolveRevision, RevisionError } from './revision
 // task-194: the workflow registry with spec-003's core checks, and the exit-state computation
 // (spec-017 §4.4) task-198's deduction reuses.
 export { loadWorkflowRegistry, loadWorkflowRegistryAtHead, loadWorkflowRegistryAtRev } from './workflow-registry';
-export { workflowCoreDiagnostics } from './workflow-core-checks';
+// task-204: `workflow list` / `workflow show` at `HEAD` (`spec-017` §7.5–§7.6, §8).
+// The functions stay module-internal until a consumer needs them (task-216's `next` may import
+// `declaredEvidenceKinds`); the operations are `CORE_MODULES`' `workflowList` / `workflowShow`.
+export type { CheckTokenView, ListEntry, ListResult, PhaseView, ShowInputs, ShowResult, TokenView, WorkflowView } from './workflow-list-show';
+export { W_WORKFLOW_CHECKS_NOT_RUN, workflowCoreDiagnostics } from './workflow-core-checks';
 export type { CheckedRegistry, WorkflowCoreInputs } from './workflow-core-checks';
 export { iterationStartState, machineStates, workflowExitStates } from './workflow-exit-state';
 export type { ExitStart, HeldGate, InstanceState, PhaseExitState, UndeterminedAction } from './workflow-exit-state';
 export { deduceWorkflowStateAtHead, readDeductionSnapshotAtHead, selectWorkflowInstance } from './workflow-deduction';
 export {
   deduceWorkflowState,
+  NO_ITERATION_NOTE,
   resolveInstanceRef,
   W_INSTANCE_WORKFLOW_UNKNOWN,
   W_MEMORY_INVALID_STATE,
@@ -156,6 +161,7 @@ export type {
   EvidenceKind,
   Instance,
   InstanceDeduction,
+  IterationCounts,
   PhaseProgress,
   PhaseRecord,
   ProducesView,
@@ -257,9 +263,10 @@ export interface RootParams {
  * failures onto a `CoreResult` (spec-006 §2): a `ValidationError` from the shared two-pass pipeline
  * becomes `VALIDATION`, a missing file (Node's `ENOENT`) becomes `NOT_FOUND`; anything else
  * propagates as a genuine thrown exception (a programmer bug, not a domain failure — spec-006 §2's
- * "no function throws for *expected* domain failures" implies unexpected ones still may). Factored
- * out of `wrapReadOnly` so both `dnaShowFn` (task-026) and `pathsFn` (task-028) reuse the exact
- * same mapping for their own richer, argument-aware bodies instead of duplicating it.
+ * "no function throws for *expected* domain failures" implies unexpected ones still may). Every
+ * read-only query (`dnaShowFn`, `pathsFn`, `workflowListFn`, …) maps its loader's failures through it,
+ * so the mapping is written once. (The `wrapReadOnly` adapter it was factored out of had one caller
+ * left, `workflowList`, until task-204 gave that operation a flag and was removed with it.)
  */
 function loadOrError<R>(loader: () => R): CoreResult<R> {
   try {
@@ -321,14 +328,6 @@ function loadConfigOrError<R>(root: string, loader: () => R): CoreResult<R> {
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
   return loadOrError(loader);
-}
-
-/** Adapt a synchronous, throwing pillar loader into a `CoreFn` taking just `{ root }` (spec-006 §2). */
-function wrapReadOnly<R>(loader: (root: string) => R): CoreFn<unknown, R> {
-  return async (params) => {
-    const { root } = params as RootParams;
-    return loadOrError(() => loader(root));
-  };
 }
 
 /**
@@ -2169,6 +2168,36 @@ const directivesListFn: CoreFn<unknown, DirectiveListing> = async (params) => {
   return loadOrError(() => loadDirectiveListing(root, options?.role));
 };
 
+/** `wingfoil workflow list [--all]` params (task-204): `all` is the parsed `--all` flag. */
+export interface WorkflowListParams {
+  readonly root: string;
+  readonly all?: boolean;
+}
+
+/** `workflowList` `CoreOperation.fn` (P4.6, `spec-017` §7.5): {@link workflowListAtHead}, refusals mapped. */
+const workflowListFn: CoreFn<unknown, ListResult> = async (params) => {
+  const { root, all } = params as WorkflowListParams;
+  return loadOrError(() => workflowListAtHead(root, all === true));
+};
+
+/** `wingfoil workflow show <ref>` params (task-204): the `<ref>` rides the bare positional (`spec-008` §1). */
+export interface WorkflowShowParams {
+  readonly root: string;
+  readonly positional?: string;
+}
+
+/**
+ * `workflowShow` `CoreOperation.fn` (P4.7, `spec-017` §7.6): {@link workflowShowAtHead}, refusals mapped; a
+ * missing `<ref>` is the one missing-operand usage error (exit `2`) for a caller that bypasses the registrar.
+ */
+const workflowShowFn: CoreFn<unknown, ShowResult> = async (params) => {
+  const { root, positional } = params as WorkflowShowParams;
+  if (positional === undefined) throw new UsageError(missingOperandReason('ref'));
+  const result = loadOrError(() => workflowShowAtHead(root, positional));
+  return result.ok ? result.value : result;
+};
+
+
 /**
  * The production `CoreModule` registry (spec-006 §2, §4). `src/cli`'s command registrar and
  * `src/mcp`'s Tool/Resource registrar both import this exact array — see spec-006 §4.1: "no
@@ -2199,12 +2228,28 @@ const directivesListFn: CoreFn<unknown, DirectiveListing> = async (params) => {
 export const CORE_MODULES: readonly CoreModule[] = [
   // task-177 (`spec-016` §1): the `agent` module, registered under the name its operations carry
   // (`agentExecute`, `agentList`, `agentShow`, spec-016 §8). `agentShow` is the first (task-220);
-  // `agentExecute` (task-228) and `agentList` (task-240) join it. `src/agent` holds the adapter manifest
-  // and the run log they read.
+  // `agentExecute` follows (task-218 the pre-launch half, task-228 the launch), and `agentList`
+  // (task-240) joins them. `src/agent` holds the adapter manifest, the run log and the pipeline.
   {
     name: 'agent',
-    description: 'read recorded agent runs (launching an agent arrives with agent execute)',
+    description: 'launch an agent on an element, and read recorded agent runs',
     operations: {
+      // task-218 (`spec-016` §3): `mutates: true` — its one write is the run record's commit (§4.4,
+      // task-228), so it takes `--dry-run`, which prints the launch plan. CLI only in v0.3: the
+      // production server does not run `registerCoreModules`, and the `agent.execute` Tool is v0.4
+      // (spec-016 §7, §8). Reads `HEAD` (spec-008 §11).
+      agentExecute: {
+        name: 'agentExecute',
+        mutates: true,
+        description: 'launch an agent CLI through its adapter on one Memory element, with its context assembled and checked first',
+        options: [
+          { name: 'element', valueName: 'type:id', description: 'the element the agent works on, e.g. task:task-042-login-form' },
+          { name: 'role', valueName: 'role', description: 'the role the agent runs as, a dna.yaml team.roles name (default: developer, with a warning)' },
+          { name: 'agent', valueName: 'name', description: 'the team.agents entry to launch (default: the first with an adapter that executes the role)' },
+        ],
+        example: 'wingfoil agent execute --element task:task-042-login-form --role developer',
+        fn: agentExecuteFn,
+      },
       // task-220 (`spec-016` §6): read-only, and a declared `HEAD` read (§5.1, `spec-006` §6 item 6).
       // Its console rendering is the `key: value` lines §6 defines, not the indented JSON every other
       // command prints until P5.1.4 (`renderConsole`, spec-008 §2). Not served over MCP before v0.4
@@ -2470,15 +2515,26 @@ export const CORE_MODULES: readonly CoreModule[] = [
     name: 'workflow',
     description: 'read the workflows the project declares (there is no workflow engine yet)',
     operations: {
+      // task-204 (`spec-017` §7.5–§7.6, §8): both read `HEAD`, a declared exception (§1.1, ruling R15;
+      // `spec-006` §6 item 6), from the snapshot and deduction `workflow next` / `status` answer from. A
+      // `spec-003` error at `HEAD` (loader or core check, task-194) is `VALIDATION`, exit 1, with every
+      // diagnostic in `details`; warnings ride the payload's `diagnostics`. The MCP Resources
+      // `wingfoil://workflows…` are not these operations and keep the working tree (spec-017 §9).
       workflowList: {
         name: 'workflowList',
         mutates: false,
-        description: 'print the workflow manifest (workflows.yaml) and every workflow it includes, with their phases',
-        example: 'wingfoil workflow list',
-        // task-194 (`bug-150`): the loader's result plus the core checks (`memory.yaml` types, `dna.yaml`
-        // roles and members, tokens, exit states, fallbacks), read from the working tree — the command's
-        // baseline until task-204 moves it to `HEAD` (spec-017 §1.1, ruling R15) with its new payload.
-        fn: wrapReadOnly<WorkflowsLoadResult>(loadWorkflowRegistry),
+        description: 'list the workflows you can run now, as committed at HEAD',
+        flags: [{ name: 'all', description: 'list every workflow, the includable ones no open workflow has reached as well' }],
+        example: 'wingfoil workflow list --all',
+        fn: workflowListFn,
+      },
+      workflowShow: {
+        name: 'workflowShow',
+        mutates: false,
+        description: 'print one workflow resolved, its included workflows nested under their phases, as committed at HEAD',
+        positional: { name: 'ref', required: true, description: 'a workflow name, or the id of an open workflow instance' },
+        example: 'wingfoil workflow show release-cycle',
+        fn: workflowShowFn,
       },
     },
   },

@@ -9,7 +9,7 @@
  */
 import { enumerateOperations } from '../../src/core/registry';
 import { CORE_MODULES, WINGFOIL_NOT_INITIALIZED } from '../../src/core';
-import { makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 describe('CORE_MODULES — production registry', () => {
   it('registers exactly the operations listed, as `<module>.<operation>`, in sorted order', () => {
@@ -17,6 +17,8 @@ describe('CORE_MODULES — production registry', () => {
       (entry) => `${entry.module.name}.${entry.operation.name}`,
     );
     expect(flat).toEqual([
+      // task-218 (`spec-016` §3): `agent execute`, mutating — its one write is the run record (task-228).
+      'agent.agentExecute',
       // task-220 (`spec-016` §6): the `agent` module's first operation, read-only.
       'agent.agentShow',
       // task-050-directive-create registers a `directive` (SINGULAR) module, because
@@ -49,12 +51,15 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memorySubmit',
       'paths.paths',
       'workflow.workflowList',
+      // task-204 (`spec-017` §7.6): read-only.
+      'workflow.workflowShow',
     ]);
   });
 
   it('the operations declared `mutates: true` are exactly the ones listed; every other registered operation is read-only', () => {
     const mutating = enumerateOperations(CORE_MODULES).filter(({ operation }) => operation.mutates);
     expect(mutating.map(({ module, operation }) => `${module.name}.${operation.name}`)).toEqual([
+      'agent.agentExecute',
       'directive.directiveAssign',
       'directive.directiveCreate',
       'directive.directiveRemove',
@@ -190,9 +195,11 @@ phases:
     }
   });
 
-  it('workflowList returns coreOk({manifest, workflows}) for a valid workflows pillar', async () => {
+  // task-204: `workflow list` reads `HEAD` (spec-017 §1.1, R15), so the fixture is committed.
+  it('workflowList returns coreOk({baseline, workflows, diagnostics}) for a valid workflows pillar', async () => {
     writeFixtureFile(repo, '.wingfoil/workflows.yaml', WORKFLOWS_YAML);
     writeFixtureFile(repo, '.wingfoil/workflows/custom/main.yaml', MAIN_WORKFLOW_YAML);
+    commitAll(repo, 'workflows');
     const result = await findOperation('workflow', 'workflowList').fn({ root: repo });
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -202,6 +209,7 @@ phases:
 
   it('workflowList returns coreErr(VALIDATION) when an include path is missing (cross-file check)', async () => {
     writeFixtureFile(repo, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/missing.yaml\n');
+    commitAll(repo, 'a manifest naming a missing file');
     const result = await findOperation('workflow', 'workflowList').fn({ root: repo });
     expect(result.ok).toBe(false);
     if (!result.ok) {

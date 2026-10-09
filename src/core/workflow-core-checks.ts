@@ -20,6 +20,8 @@
  * A check is not decided when its input is missing (spec-003's rule for loader checks, applied here):
  * without `dna.yaml` no role, approver or `dna:` collection is checked; without `memory.yaml` no type,
  * cadence event, token, exit state or fallback; without a type's template its fields are not checked.
+ * The first two skips are reported, each as one `W_WORKFLOW_CHECKS_NOT_RUN` warning ahead of the per-file
+ * rows (`bug-281`, task-204), so an empty result means the checks ran and found nothing.
  */
 import { resolveDnaPath } from '../dna/path';
 import type { DnaYaml } from '../dna/schema';
@@ -109,6 +111,9 @@ class Collector {
   }
 }
 
+/** `W_WORKFLOW_CHECKS_NOT_RUN` (`bug-281`, spec-003 "Where each check runs"): a core check skipped for want of its input. */
+export const W_WORKFLOW_CHECKS_NOT_RUN = 'W_WORKFLOW_CHECKS_NOT_RUN';
+
 /**
  * Every core diagnostic of `registry` (spec-003 § "Diagnostics", `core` rows), in spec-003's order.
  * Pure: it reads only its arguments.
@@ -117,7 +122,25 @@ export function workflowCoreDiagnostics(registry: CheckedRegistry, inputs: Workf
   const out = new Collector(registry.include);
   registry.workflows.forEach((workflow, i) => staticChecks(out, i, workflow, registry.bindings, inputs));
   if (inputs.memoryYaml) contextChecks(out, registry, inputs.memoryYaml, inputs);
-  return out.ordered();
+  return [...notRunDiagnostics(registry, inputs), ...out.ordered()];
+}
+
+/**
+ * One `W_WORKFLOW_CHECKS_NOT_RUN` warning per missing input of the core checks, `dna.yaml` first, naming the
+ * checks that did not run (`bug-281`): the skip itself is spec-003's rule, but without a trace an empty
+ * `diagnostics` could not tell "checked and clean" from "not checked". `file` is the missing file relative to
+ * `.wingfoil/`, as the other diagnostics' `file`; `path` is empty. None for a registry with no workflow, which
+ * no check would have read.
+ */
+function notRunDiagnostics(registry: CheckedRegistry, inputs: WorkflowCoreInputs): Diagnostic[] {
+  if (registry.workflows.length === 0) return [];
+  const missing: Diagnostic[] = [];
+  const notRun = (file: string, checks: string): void => {
+    missing.push({ code: W_WORKFLOW_CHECKS_NOT_RUN, severity: 'warning', file, path: '', message: `${file} is absent: the ${checks} checks were not run` });
+  };
+  if (inputs.dnaYaml === null) notRun('dna.yaml', 'role, approver and dna: collection');
+  if (inputs.memoryYaml === null) notRun('memory.yaml', 'type, cadence event, token, exit state and fallback');
+  return missing;
 }
 
 // ---- the rows that read one workflow and the other pillars, with no include context ---------------

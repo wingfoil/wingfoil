@@ -109,8 +109,9 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["agent-docs", "phases[0].checks.post[3]", "CLAUDE.md role-directive bindings match roles.yaml"],
       ["e2e-smoke", "phases[0].checks.post[0]", "exit-code-zero"],
       ["e2e-smoke", "phases[0].checks.post[1]", "scaffolded dna.yaml/memory.yaml/directives round-trip their own loaders"],
-      ["e2e-smoke", "phases[1].checks.post[0]", "exit-codes match spec-005-cli-command-contract"],
-      ["e2e-smoke", "phases[1].checks.post[1]", "no schema-invalid artifact produced by any command"],
+      ["e2e-smoke", "phases[1].checks.post[0]", "every step exits with the code it declares, per spec-005-cli-command-contract"],
+      ["e2e-smoke", "phases[1].checks.post[1]", "every artifact a command wrote re-loads through its own reader after the last writer, with its content asserted"],
+      ["e2e-smoke", "phases[1].checks.post[2]", "the working tree is clean after every step"],
       ["e2e-smoke", "phases[2].checks.post[0]", "exit-code-zero"],
       ["e2e-smoke", "phases[2].checks.post[1]", "registered server version == package.json pin"],
       ["e2e-smoke", "phases[2].checks.post[2]", "advertised channel set == EXPECTED_CHANNELS, every advertised list answers"],
@@ -246,7 +247,7 @@ function measure(workflows: readonly Workflow[]): { checkpoints: string[]; final
 }
 
 describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => {
-  it('27 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates)', () => {
+  it('26 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134)', () => {
     expect(measure(registry().workflows).checkpoints).toEqual([
       'user-story-mapping.backbone',
       'user-story-mapping.vertical-explosion',
@@ -267,7 +268,6 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'e2e-smoke.fresh-init',
       'e2e-smoke.drive-cli',
       'e2e-smoke.mcp-registration',
-      'e2e-smoke.gate',
       'release-submit.pre-release-checks',
       'release-submit.approve-release',
       'release-publishing.tag',

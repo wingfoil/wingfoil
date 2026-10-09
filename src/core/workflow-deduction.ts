@@ -1,25 +1,36 @@
 /**
- * The `HEAD` snapshot workflow state deduction reads (task-198, `spec-017` §1.1–§1.3, §3.3, §4.8), and
- * the deduction at `HEAD` every workflow consumer calls.
+ * The `HEAD` snapshot workflow state deduction reads (task-198, task-203; `spec-017` §1.1–§1.3, §3.3,
+ * §4.8), and the deduction at `HEAD` every workflow consumer calls.
  *
  * {@link readDeductionSnapshotAtHead} is the one impure step: it resolves `HEAD` once and reads every
  * input at that sha — the workflow registry with its core checks (`loadWorkflowRegistryAtRev`),
  * `memory.yaml`, `dna.yaml`, every Memory document in sorted path order (tolerant, task-171), the file
- * list, each open plan's start commit and the phase records of its walk — plus, to **explain** and never
- * to decide, the working-tree paths among the inputs that differ from `HEAD` (`W_UNCOMMITTED_INPUTS`,
- * §1.2; the `command-baseline` directive). The deduction itself is the pure
- * `deduceWorkflowState` (`src/workflow/deduce.ts`).
+ * list, each open plan's start commit and what each instance's walk holds (phase records, step linkages,
+ * re-entries) — plus, to **explain** and never to decide, the working-tree paths among the inputs that
+ * differ from `HEAD` (`W_UNCOMMITTED_INPUTS`, §1.2; the `command-baseline` directive). The deduction
+ * itself is the pure `deduceWorkflowState` (`src/workflow/deduce.ts`).
+ *
+ * History is read at the cost §4.8 states (REQ-PERF-03): **one** `git log` over the union of the open
+ * instances' walks, bounded by the parents of the starts' octopus merge base (one `git merge-base
+ * --octopus`), from which each instance's own walk is cut in memory through the parent links; plus one
+ * lookup per element a re-entry in the walk names.
  *
  * git is read with `runGitRead` (stderr captured, `bug-093`) and the `git log` walk with
- * `walkGitLogFields` (NUL-framed, `bug-050`). No clock, no randomness, nothing cached between calls.
+ * `walkGitLogFields` (NUL-framed, `bug-050`); every `git log` passes `--no-show-signature` and checks the
+ * commit names it parses (`task-268`, `bug-291`), so a `log.showSignature` setting cannot put signature
+ * text among the parsed lines; the `git merge-base` that bounds the walk takes no such flag, and its
+ * output is checked the same way. No clock, no randomness, nothing cached between calls.
  */
 import { posix } from 'path';
 
+import { resolveDnaPath } from '../dna/path';
 import type { DnaYaml } from '../dna/schema';
+import { parseBracketHops, parseMemoryOperation } from '../memory/audit';
 import { walkGitLogFields } from '../memory/git-log';
-import { computeMemoryContentRoots, loadMemoryDocumentsAtRev } from '../memory/query';
+import { computeMemoryContentRoots, loadMemoryDocumentsAtRev, type MemoryDocumentSummary } from '../memory/query';
 import type { MemoryYaml } from '../memory/schema';
-import { runGitRead } from '../storage';
+import { resolveStateMachine } from '../memory/state-machine';
+import { requireCommitName, runGitRead } from '../storage';
 import type { Diagnostic } from '../validation';
 import {
   deduceWorkflowState,
@@ -29,9 +40,15 @@ import {
   type Deduction,
   type DeductionSnapshot,
   type InstanceDeduction,
+  type InstanceHistory,
   type PhaseRecord,
+  type Reentry,
   type StartCommit,
+  type StepLink,
+  type TransitionCommit,
+  type WalkPosition,
 } from '../workflow/deduce';
+import type { BindingsYaml, CollectionEntry } from '../workflow/bindings';
 import { producesPath, type Workflow } from '../workflow/schema';
 
 import { loadDnaYamlAtRev, loadMemoryYamlAtRev } from './loaders';
@@ -60,13 +77,13 @@ const COMMIT_MARK = String.fromCharCode(1);
 function readStarts(root: string, sha: string, paths: readonly string[]): Map<string, StartCommit> {
   const starts = new Map<string, StartCommit>();
   if (paths.length === 0) return starts;
-  const args = ['-c', 'core.quotePath=false', 'log', '--topo-order', '--no-renames', '--diff-filter=A', '--name-only', '--format=%x01%H', sha, '--'];
+  const args = ['-c', 'core.quotePath=false', 'log', '--no-show-signature', '--topo-order', '--no-renames', '--diff-filter=A', '--name-only', '--format=%x01%H', sha, '--'];
   const wanted = new Set(paths);
   let commit = '';
   let position = -1;
   for (const line of runGitRead(root, [...args, ...paths.map((path) => `:(literal)${path}`)]).stdout.split('\n')) {
     if (line.startsWith(COMMIT_MARK)) {
-      commit = line.slice(1);
+      commit = requireCommitName(line.slice(1), 'git log --diff-filter=A');
       position += 1;
     } else if (wanted.has(line) && !starts.has(line)) {
       starts.set(line, { commit, position });
@@ -85,40 +102,196 @@ function trailerValue(block: string, key: string): string | null {
   return found;
 }
 
+/** One commit of the history walk: its parents, subject and trailer block, at its walk position. */
+interface WalkCommit extends WalkPosition {
+  readonly parents: readonly string[];
+  readonly subject: string;
+  readonly trailers: string;
+}
+
 /**
- * The phase records each start commit's walk holds (§4.8): commits reachable from `sha` and not from
- * the start commit's parents whose trailers carry `WingFoil-Phase: <w>.<p> completed` and
- * `WingFoil-Instance`. One `git log` finds the candidates; one `rev-list` per start commit bounds them,
- * only when a candidate exists. Linkage and re-entries, and the single union walk, are task-203's.
+ * The walk's lower bound (§4.8, review F3 ruling (a)): `^@` of the octopus merge base of every start
+ * commit, or none when the starts share no ancestor (unrelated histories; `git merge-base` exits 1). The
+ * base is an ancestor of (or equal to) each start, so whatever its parents reach is reachable from every
+ * start's parents: outside every instance's walk. A commit some instance's walk holds is therefore never
+ * cut off, as it could be by the oldest start alone in a branching history. `merge-base` prints a commit
+ * name and takes no `--no-show-signature` (git refuses the option; `log.showSignature` does not apply to
+ * it); its output is refused unless it is a commit name (`requireCommitName`, task-268).
  */
-function readRecords(root: string, sha: string, starts: readonly StartCommit[]): Map<string, PhaseRecord[]> {
-  const byStart = new Map<string, PhaseRecord[]>();
-  if (starts.length === 0) return byStart;
-  // Bounded by the oldest start (the largest position): no walk reaches past its parents.
-  const oldest = [...starts].sort((a, b) => b.position - a.position)[0]!.commit;
-  const candidates: PhaseRecord[] = [];
-  const range = ['-E', `--grep=^${PHASE_TRAILER}: `, sha, '--not', `${oldest}^@`];
-  for (const [commit, block] of walkGitLogFields(root, ['%H', '%(trailers:only,unfold)'], [], range)) {
-    const phase = trailerValue(block!, PHASE_TRAILER);
-    const instance = trailerValue(block!, 'WingFoil-Instance');
-    if (phase === null || !phase.endsWith(RECORD_SUFFIX) || instance === null) continue;
-    candidates.push({
-      commit: commit!,
-      phase: phase.slice(0, -RECORD_SUFFIX.length).trim(),
-      instance,
-      element: trailerValue(block!, 'WingFoil-Element'),
-      item: trailerValue(block!, 'WingFoil-Item'),
-    });
+function readWalkBound(root: string, starts: readonly StartCommit[]): string[] {
+  const commits = [...new Set(starts.map((entry) => entry.commit))].sort();
+  const run = runGitRead(root, ['merge-base', '--octopus', ...commits], { accepted: [0, 1] });
+  if (run.status === 1) return [];
+  const base = requireCommitName(run.stdout.trim(), 'git merge-base --octopus');
+  return ['--not', `${base}^@`];
+}
+
+/**
+ * The union of the open instances' walks (§4.8): one `git log --topo-order` of the commits reachable
+ * from `sha` and not from `bound` (`readWalkBound`), newest first, with each commit's parents, subject
+ * and trailers. Every instance's walk lies inside this one.
+ */
+function readWalk(root: string, sha: string, bound: readonly string[]): WalkCommit[] {
+  const rows = walkGitLogFields(root, ['%H', '%P', '%s', '%(trailers:only,unfold)'], [], ['--topo-order', sha, ...bound]);
+  // `walkGitLogFields` returns oldest first; the walk position counts from `HEAD`.
+  return rows.reverse().map(([commit, parents, subject, trailers], position) => ({
+    commit: commit!,
+    position,
+    parents: parents!.split(' ').filter((parent) => parent !== ''),
+    subject: subject!,
+    trailers: trailers!,
+  }));
+}
+
+/**
+ * The commits of one instance's walk (§4.8): those of the union walk not reachable from `start`'s
+ * parents. Reachability is followed through the walk's own parent links: a commit on a path from a
+ * parent of `start` down to a commit of the union walk is itself in the union walk, so nothing outside
+ * it is needed.
+ */
+function instanceWalk(walk: readonly WalkCommit[], byCommit: ReadonlyMap<string, WalkCommit>, start: string): Set<string> {
+  const excluded = new Set<string>();
+  // Every start lies in the union walk: it descends from (or is) the merge base, so it is not reachable
+  // from the base's parents.
+  const pending = [...byCommit.get(start)!.parents];
+  while (pending.length > 0) {
+    const commit = pending.pop()!;
+    const entry = byCommit.get(commit);
+    if (entry === undefined || excluded.has(commit)) continue;
+    excluded.add(commit);
+    pending.push(...entry.parents);
   }
-  if (candidates.length === 0) return byStart;
+  return new Set(walk.filter((entry) => !excluded.has(entry.commit)).map((entry) => entry.commit));
+}
+
+/** The ids a `wf(<type>): <verb> <ids> [<bracket>]` subject names, in order. */
+function subjectIds(subject: string): string[] {
+  const rest = subject.replace(/^wf\([^)]*\):\s*\S+\s*/, '').replace(/\[[^[\]]*\]\s*$/, '');
+  return rest
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id !== '');
+}
+
+/** The scope of a `wf(<scope>): …` subject — the Memory type of a Memory operation. */
+function subjectType(subject: string): string {
+  return /^wf\(([^)]*)\)/.exec(subject)![1]!;
+}
+
+/** What one walk commit says (§4.8): a record, linkages, re-entries and transitions, each possibly empty. */
+interface CommitFacts {
+  readonly record: PhaseRecord | null;
+  readonly links: StepLink[];
+  readonly reentries: Reentry[];
+  readonly transitions: TransitionCommit[];
+}
+
+/**
+ * Read one walk commit. A re-entry is a `reject` or `park` whose bracket ends at an earlier position of
+ * the type's `sequence` than it starts from: a `bug` rejected `open → closed` moves forward, which
+ * decides the phase rather than re-entering it (§5.2).
+ */
+function readFacts(entry: WalkCommit, memoryYaml: MemoryYaml | null): CommitFacts {
+  const { commit, position, subject, trailers } = entry;
+  const phase = trailerValue(trailers, PHASE_TRAILER);
+  const instance = trailerValue(trailers, 'WingFoil-Instance');
+  const record: PhaseRecord | null =
+    phase !== null && phase.endsWith(RECORD_SUFFIX) && instance !== null
+      ? {
+          commit,
+          position,
+          phase: phase.slice(0, -RECORD_SUFFIX.length).trim(),
+          instance,
+          element: trailerValue(trailers, 'WingFoil-Element'),
+          item: trailerValue(trailers, 'WingFoil-Item'),
+        }
+      : null;
+  const facts: CommitFacts = { record, links: [], reentries: [], transitions: [] };
+  const operation = parseMemoryOperation(subject);
+  if (operation === null) return facts;
+  const type = subjectType(subject);
+  const ids = subjectIds(subject);
+  const step = trailerValue(trailers, 'WingFoil-Step');
+  if (operation === 'add' && instance !== null && step !== null) {
+    for (const id of ids) facts.links.push({ commit, position, instance, step, type, id });
+  }
+  const hops = parseBracketHops(subject);
+  if (hops === null) return facts;
+  const from = hops[0]!.from;
+  const to = hops[hops.length - 1]!.to;
+  for (const id of ids) facts.transitions.push({ commit, position, type, id, to });
+  if ((operation === 'reject' || operation === 'park') && memoryYaml !== null && Object.prototype.hasOwnProperty.call(memoryYaml.types, type)) {
+    const sequence = resolveStateMachine(memoryYaml, type).sequence;
+    const target = sequence.indexOf(to);
+    if (target !== -1 && target < sequence.indexOf(from)) {
+      for (const id of ids) facts.reentries.push({ commit, position, verb: operation, type, id, from, to });
+    }
+  }
+  return facts;
+}
+
+/**
+ * The latest commit of the walk that changed the file at `path` — one `git log -1` bounded like the
+ * walk — or `null` when no commit of the walk did.
+ */
+function readLastChange(root: string, sha: string, bound: readonly string[], path: string, byCommit: ReadonlyMap<string, WalkCommit>): WalkPosition | null {
+  const out = runGitRead(root, ['log', '--no-show-signature', '--topo-order', '-1', '--format=%H', sha, ...bound, '--', `:(literal)${path}`]).stdout.trim();
+  if (out === '') return null;
+  const entry = byCommit.get(requireCommitName(out, 'git log -1'));
+  return entry === undefined ? null : { commit: entry.commit, position: entry.position };
+}
+
+/** What the history walk yields for the snapshot (§4.8). */
+interface HistoryRead {
+  readonly history: Map<string, InstanceHistory>;
+  readonly transitions: TransitionCommit[];
+  readonly lastChanges: Map<string, WalkPosition>;
+  readonly parents: Map<string, readonly string[]>;
+}
+
+/**
+ * Read the history every open instance's deduction needs (§4.8): one walk for the union of the instances'
+ * walks, each instance's records, linkages and re-entries cut from it, the transition commits naming a
+ * re-entered element, the walk's parent links, and one lookup per re-entered element (its file's latest
+ * change in the walk). With no start, nothing is read.
+ */
+function readHistory(
+  root: string,
+  sha: string,
+  starts: readonly StartCommit[],
+  memoryYaml: MemoryYaml | null,
+  documents: readonly MemoryDocumentSummary[],
+): HistoryRead {
+  const read: HistoryRead = { history: new Map(), transitions: [], lastChanges: new Map(), parents: new Map() };
+  if (starts.length === 0) return read;
+  const bound = readWalkBound(root, starts);
+  const walk = readWalk(root, sha, bound);
+  const byCommit = new Map(walk.map((entry) => [entry.commit, entry]));
+  for (const entry of walk) read.parents.set(entry.commit, entry.parents);
+  const facts = walk.map((entry) => readFacts(entry, memoryYaml));
+
+  const reentered = new Set<string>();
   for (const start of [...new Set(starts.map((entry) => entry.commit))].sort()) {
-    const walk = new Set(runGitRead(root, ['rev-list', sha, '--not', `${start}^@`]).stdout.split('\n'));
-    byStart.set(
-      start,
-      candidates.filter((record) => walk.has(record.commit)),
-    );
+    const members = instanceWalk(walk, byCommit, start);
+    const inWalk = facts.filter((_, index) => members.has(walk[index]!.commit));
+    const history: InstanceHistory = {
+      records: inWalk.flatMap((fact) => (fact.record === null ? [] : [fact.record])),
+      links: inWalk.flatMap((fact) => fact.links),
+      reentries: inWalk.flatMap((fact) => fact.reentries),
+    };
+    for (const reentry of history.reentries) reentered.add(`${reentry.type}:${reentry.id}`);
+    read.history.set(start, history);
   }
-  return byStart;
+  if (reentered.size === 0) return read;
+
+  read.transitions.push(...facts.flatMap((fact) => fact.transitions).filter((entry) => reentered.has(`${entry.type}:${entry.id}`)));
+  for (const key of [...reentered].sort()) {
+    const document = documents.find(({ frontmatter }) => `${text(frontmatter['type'])}:${text(frontmatter['id'])}` === key);
+    if (document === undefined) continue;
+    const last = readLastChange(root, sha, bound, document.path, byCommit);
+    if (last !== null) read.lastChanges.set(key, last);
+  }
+  return read;
 }
 
 /** The static directory (or file) a `produces` pattern names before its first token, or `null` for the whole tree. */
@@ -155,6 +328,33 @@ function readDirty(root: string, memoryYaml: MemoryYaml | null, dnaYaml: DnaYaml
   return [...new Set(dirty)].sort();
 }
 
+/**
+ * The entries of every collection a loaded workflow iterates over (`spec-003` § "Collections", `dl-104`
+ * D2 (b)), by reference in byte order: `dna:<path>` from `dna.yaml` (the `spec-008` §9 path syntax),
+ * `bindings:<name>` from `workflows/bindings.yaml`'s `collections`, both at the snapshot's commit. A
+ * `dna:` reference with no `dna.yaml` is left out: it has no candidates.
+ */
+function readCollections(workflows: readonly Workflow[], dnaYaml: DnaYaml | null, bindings: BindingsYaml | null): Map<string, readonly CollectionEntry[]> {
+  const references = new Set<string>();
+  for (const workflow of workflows) {
+    for (const phase of workflow.phases) {
+      if (phase.iterate_over !== undefined && /^(dna|bindings):/.test(phase.iterate_over)) references.add(phase.iterate_over);
+    }
+  }
+  const collections = new Map<string, readonly CollectionEntry[]>();
+  for (const reference of [...references].sort()) {
+    // Every reference resolves to a list here: the registry refuses one that does not
+    // (`E_WORKFLOW_COLLECTION_UNRESOLVED`), except a `dna:` reference without `dna.yaml`, which is undecided
+    // there and has no candidates here.
+    if (reference.startsWith('bindings:')) {
+      collections.set(reference, bindings!.collections![reference.slice('bindings:'.length)]!);
+    } else if (dnaYaml !== null) {
+      collections.set(reference, (resolveDnaPath(dnaYaml, reference.slice('dna:'.length)) as { target: { value: CollectionEntry[] } }).target.value);
+    }
+  }
+  return collections;
+}
+
 /** The snapshot of a repository with nothing committed: no instance can be open. */
 function emptySnapshot(): DeductionSnapshot {
   return {
@@ -167,8 +367,12 @@ function emptySnapshot(): DeductionSnapshot {
     scanDiagnostics: [],
     tree: [],
     starts: new Map(),
-    records: new Map(),
+    history: new Map(),
+    transitions: [],
+    lastChanges: new Map(),
+    parents: new Map(),
     dirty: [],
+    collections: new Map(),
   };
 }
 
@@ -186,6 +390,8 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
   const memoryYaml = loadMemoryYamlAtRev(root, sha);
   const dnaYaml = loadDnaYamlAtRev(root, sha);
   const scanDiagnostics: Diagnostic[] = [];
+  // The whole scan keeps archived documents: an archived bound element abandons its instance (§4.11), and
+  // the deduction keeps them out of every selection and iteration itself.
   const documents = memoryYaml === null ? [] : loadMemoryDocumentsAtRev(root, sha, memoryYaml, { onDiagnostic: (diagnostic) => scanDiagnostics.push(diagnostic) });
 
   // The plans that may be open instances (§3.2's status and `parent` rules; the workflow rule is the deduction's).
@@ -196,6 +402,7 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
     )
     .map((document) => document.path);
   const starts = readStarts(root, sha, candidates);
+  const { history, transitions, lastChanges, parents } = readHistory(root, sha, [...starts.values()], memoryYaml, documents);
 
   return {
     commit: sha,
@@ -207,8 +414,12 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
     scanDiagnostics,
     tree: listPathsAtCommit(root, sha, '').sort(),
     starts,
-    records: readRecords(root, sha, [...starts.values()]),
+    history,
+    transitions,
+    lastChanges,
+    parents,
     dirty: readDirty(root, memoryYaml, dnaYaml, registry.workflows),
+    collections: readCollections(registry.workflows, dnaYaml, registry.bindings),
   };
 }
 
