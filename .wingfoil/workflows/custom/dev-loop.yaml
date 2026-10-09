@@ -16,9 +16,10 @@
 # from v1.0; v0.3 records each run's session id). The reviewer loads the developer's and `qa`'s
 # directives too (`roles.yaml`), and checks the handoff in git (dl-134 §5): `red`'s commit precedes
 # `green`'s on the task branch (`git log --format='%h %s' main..task/<id>`), and
-# `git log --no-merges --format=%h <red-commit>..HEAD -- <red's test files>` is empty. The check
-# compares only the branch's own non-merge commits since `red`: a change brought in by an inward
-# `Merge branch 'main' into task/…` commit is excluded.
+# `git log --first-parent --no-merges --format=%h <red-commit>..HEAD -- <red's test files>` is empty.
+# The check compares only the branch's own non-merge commits since `red`: a change brought in by an
+# inward `Merge branch 'main' into task/…` commit is excluded (`--first-parent` never visits main's
+# side of that merge; `--no-merges` drops the merge itself).
 #
 # `bug.sync_state` is a no-op unless the task's `bug:` field names at least one bug. Since
 # dl-045-absorbed-bug-back-reference that field is a LIST, and it covers TWO cases: a fix task

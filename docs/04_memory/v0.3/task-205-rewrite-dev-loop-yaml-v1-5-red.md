@@ -229,7 +229,9 @@ Run with the spec-003 pending amendment in the working tree. Load average 57–9
   change to one of `red`'s test files as a breach: `testing` T4, the `dev-loop.yaml` header and
   spec-003's check entry now say it compares only the branch's own non-merge commits since `red`
   (an inward `Merge branch 'main' into task/…` is excluded), and the reviewer's command is
-  `git log --no-merges --format=%h <red-commit>..HEAD -- <red's test files>` (empty). The header says
+  `git log --first-parent --no-merges --format=%h <red-commit>..HEAD -- <red's test files>` (empty;
+  `--first-parent` added after a correction: without it the range still visits main's own commits
+  from an inward merge). The header says
   why a conflict at `refactor`'s merge returns to `red` (it may touch `red`'s frozen tests);
   `review`'s description says the branch was brought current at `refactor`'s last action, `main`
   moving after that being `done`'s fallback; `git-conventions` §2 (still 1.3) names the resume
@@ -241,6 +243,12 @@ Run with the spec-003 pending amendment in the working tree. Load average 57–9
 - **Merge note:** `workflows/bindings.yaml` conflicts with `task-207`: both bump 1.0 → 1.1; the
   coordinator re-bumps to 1.2 at the gate.
 
+- **`--first-parent` evidence** (scratch repo `devloop-kit/task-205-scratch/fp-repo`, isolated
+  `GIT_CONFIG_GLOBAL`): `red` `9d140d3` appends to `t.test.ts`, `green` `5cb0d96`; `main` edits line 1
+  of the same file (`a4884a7`), merged in (`084a231`). `git log --no-merges --format=%h 9d140d3..HEAD
+  -- t.test.ts` → `a4884a7` (the false failure); with `--first-parent` → nothing. After a task-branch
+  edit of the file (`149fa0c`), the `--first-parent` command → `149fa0c`.
+
 ### Pending amendments (approver)
 
 - `spec-003-workflows-yaml-schema` — `--reason "dev-loop.yaml is at v1.5 (task-205): the Execution
@@ -249,8 +257,8 @@ Run with the spec-003 pending amendment in the working tree. Load average 57–9
   the first action of the fallback step, since a fallback takes no actions (dl-061 A.1), and one that
   the review gate does not merge main, dl-035's pre-submit sync being refactor's last action (approver
   ruling 2026-10-09, option 2); the tests.unchanged(since: <phase>) entry says it compares only the
-  branch's own non-merge commits since the phase, so a main-sync merge is not an edit of the frozen
-  tests. No field or diagnostic changes."`
+  branch's own non-merge commits since the phase (git log --first-parent --no-merges), so a main-sync
+  merge is not an edit of the frozen tests. No field or diagnostic changes."`
 - `spec-001-memory-yaml-schema` — `--reason "The example bug block gains returns: { in-progress: planned },
   as memory.yaml 2.6 declares (task-205 review F1): dev-loop's park sync moves a linked bug back
   [in-progress → planned] when its fix task is parked (dl-110 P2), and the hop must be a machine edge.
