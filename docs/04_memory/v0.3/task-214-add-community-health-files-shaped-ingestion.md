@@ -2,7 +2,7 @@
 id: "task-214-add-community-health-files-shaped-ingestion"
 type: task
 title: "Add the community health files, shaped for ingestion"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "medium"
