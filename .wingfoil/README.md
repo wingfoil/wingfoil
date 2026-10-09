@@ -105,7 +105,8 @@ Ingest mains (startable on demand, REQ-STATE-03):
   decision-log-ingest  → capture a decision-log
   adr-ingest           → capture an ADR  (used during dev-loop / other phases)
   service-ingest       → capture an external service (account, credential by reference, listing,
-                         setting, domain, handle — dl-088); the approver runs its `verify`, then approves
+                         setting, domain, handle, repository — dl-088; a repository may name its
+                         feedback inbox — dl-163); the approver runs its `verify`, then approves
 ```
 
 `lean-inception` and `specification-downcast` are marked **done** and modeled from their existing

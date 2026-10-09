@@ -381,7 +381,7 @@ flowchart LR
 | `bug-ingest` | `docs/04_memory/bugs/{id}.md` | Defect found during dev-loop or testing |
 | `decision-log-ingest` | `docs/04_memory/design/dls/{id}.md` | Ad-hoc product/process decision |
 | `adr-ingest` | `docs/04_memory/design/adrs/{id}.md` | Architectural decision during any phase |
-| `service-ingest` | `docs/04_memory/services/{id}.md` | External state set up (account, credential by reference, listing, setting, domain, handle — `dl-088`) |
+| `service-ingest` | `docs/04_memory/services/{id}.md` | External state set up (account, credential by reference, listing, setting, domain, handle, repository — `dl-088`; a repository with an optional `feedback_inbox` — `dl-163`) |
 
 ---
 
