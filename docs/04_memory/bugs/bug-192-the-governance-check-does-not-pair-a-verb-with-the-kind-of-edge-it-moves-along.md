@@ -2,7 +2,7 @@
 id: bug-192-the-governance-check-does-not-pair-a-verb-with-the-kind-of-edge-it-moves-along
 type: bug
 title: "The governance check does not pair a verb with the kind of edge it moves along"
-status: planned
+status: in-progress
 severity: "medium"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
