@@ -37,6 +37,10 @@ The CLI vision reference declares sync against the retired `tech-stack` key, rep
   entry. `bug-274`: `docs/design.md:138` places tasks under `.wingfoil/memory/task/`; widen `task-259`'s
   `test/docs/memory-store-location-text.test.ts` guard to `docs/*.md` with the fix.
 - **Handover from wave 3 B1 (2026-10-07, `task-210`, `task-209`).** `--dry-run` is not a root or global flag: it is registered on each of the 14 mutating commands, after the verb, and read commands, `init` and `mcp` refuse it (exit `2`). The `X_cli-cmds.md` row must say so (`spec-008` §2). A refused commit now fails with `E_COMMIT_FAILED` (`spec-008` §6), and `memory submit`'s commit body may carry one `Carries content:` line (`spec-008` §2).
+- **Handover from wave 3 B3 (2026-10-09, `task-204`; W3 B3 follow-ups).** `docs/01_vision/X_cli-cmds.md`'s
+  `workflow show [--name NAME] [--format json/yaml]` row should read `workflow show <ref>`: since `task-204` the
+  workflow (or an open instance id) is a positional and there is no `--name` (`node dist/cli.js workflow --help` →
+  `show <ref>`).
 
 ## Execution Notes
 

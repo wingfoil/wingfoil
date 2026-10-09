@@ -33,6 +33,10 @@ The two catalogues are fixed in a versioned file, not chosen per run. v2 adds th
 - **Notes:** Proposal key: D14. `script.run(...)` tokens bind through `bindings.yaml` (dl-090); until P4.10 the scripts run by hand. `dl-090` Action 4: the `script.run(...)` tokens of this workflow are bound in task-199's `bindings.yaml`. `dl-114` Action 3 (cost metrics from the run records) is optional in the catalogue, decided at design.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
 - **Handover from wave 1 B2 (2026-10-02, `task-141`'s independent review).** REQ-STATE-10 (`docs/02_requirements/03_sard/03_state-context.md`, ratified 2026-10-01) cites the catalogue v2 process-conformance entries that this task declares: add the P entries its fit criterion lists (checks 1-6, byte-identical reruns), and give REQ-STATE-10 its user story and BDD scenario, which it still lacks.
+- **Handover from wave 3 B3 (2026-10-09, `task-207`'s review; W3 B3 follow-ups).** `docs/07_gates/` is a new
+  numbered folder, used by the e2e-smoke gate's report (`e2e-smoke.yaml` `gate` `produces:`
+  `docs/07_gates/rl-{release.release-line}/rel-{release.version}-e2e-smoke.md`, `task-207`): fold it into the
+  numbering ruling `bug-299` asks for.
 
 ## Execution Notes
 

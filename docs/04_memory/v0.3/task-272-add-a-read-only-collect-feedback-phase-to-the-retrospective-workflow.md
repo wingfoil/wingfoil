@@ -53,6 +53,11 @@ between `explore` and `additional-points`, and writes a read record the approver
   run is by hand at the v0.3 retrospective, so this task configures, it does not execute.
 - **Files:** `.wingfoil/workflows/custom/retrospective.yaml`, `.wingfoil/WORKFLOW.md`, the two conformance tests,
   spec-017 (pending amendment).
+- **Handover from wave 3 B3 (2026-10-09, `task-213`; W3 B3 follow-ups).** `retrospective.yaml` is at `version:
+  1.4` after `task-213`: bump to 1.5 or later. Reuse `dl-115`'s six outcome labels as `task-213` wrote them,
+  `covered|element|restated|superseded|declined|needs-info`. The `additional-points` `checks.pre` `task-213` added
+  already covers every secondary source `explore` lists before the gate, so the `collect-feedback` phase's notes
+  only need to be listed there.
 
 ## Execution Notes
 

@@ -66,6 +66,17 @@ Part (b), the generated export, is v0.4 (`dl-137` Q3) and is not in scope.
   - No product code: `wingfoil init` and the export are part (b), v0.4.
 - Added on 2026-10-05 by the approver's ratification of `dl-137`.
 - **Handover from wave 2 B3 (2026-10-06).** `dl-155` (ratified (A)) owns the reconciliation of the six P3.8 stand-in directives with the shipped built-ins: the agent file must cite it where `CLAUDE.md` §3 and `.wingfoil/README.md` still name `bug-040` (closed). `CLAUDE.md` also states "20 in all" commands (22 since `memory park` and `memory amend`) and nine modules (bug-239).
+- **Handover from wave 3 B3 (2026-10-09, W3 B3 follow-ups; the `align-agent-docs` items for the agent file).**
+  - `CLAUDE.md` §2's documentation map lacks `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md`, which
+    `task-214` added at the root (`grep -c 'CONTRIBUTING\|CODE_OF_CONDUCT\|SECURITY.md' CLAUDE.md` → `0`).
+  - From `task-205`'s Execution Notes (*Handed to `user-docs` `align-agent-docs`*): §5.1 gains the two-commit reject
+    of a task with linked bugs (the approver's `wf(task): reject … [in-review → in-progress]`, then one `wf(bug):
+    sync <bug> [in-review → in-progress]` per bug, citing the reject's sha, no `Approver:` line); §7's reviewer row
+    gains `code-quality`, `testing`, `determinism` and `roles.yaml` is at 1.5; §6 says `dev-loop`'s `red` is `qa`'s.
+  - `spec-017` §8's binding kind is now `run` (`kind: "wingfoil" | "run" | "agent" | "manual" | "unbound"`), not
+    `command`: any agent-facing text that describes `workflow next`/`show` bindings uses `run`.
+  - `bug-302` (`triaged`, v0.3) lists the agent-doc passages that still call `workflow list` the only workflow
+    command.
 
 ## Execution Notes
 

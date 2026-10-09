@@ -40,6 +40,13 @@ v0.2's gates found defects only when they ran. A candidate is any commit propose
   re-cut re-entry rule and the no-identity check in terms of the candidate commit and the release's integration
   branch, not `main` by name, so A2.4 changes one parameter; the `spec-015` Revision note this task adds does not
   restate "tag on `main`" (`task-267` amends §3/§4 in B9).
+- **Handover from wave 3 B3 (2026-10-09, `task-207`'s review; W3 B3 follow-ups).** The gate binding
+  `e2e-smoke-passed` (`.wingfoil/workflows/bindings.yaml`: `run: [node, scripts/e2e-smoke.cjs, --report, "{report}"]`)
+  passes no `--expect-version` / `--expect-commit` and no `-- <command>`, so the script runs whatever `wingfoil` is
+  on PATH and the report does not prove the candidate tarball (`dl-099` §1): bind the candidate's stamp. A command
+  after `--` must be an absolute path: the script runs each step in a throwaway directory, so `node
+  scripts/e2e-smoke.cjs -- node dist/cli.js` fails (`task-207`'s review), while `task-207`'s own run with `-- node
+  "$PWD/dist/cli.js"` exited 0, 54/54 `ok` (its Execution Notes).
 
 ## Execution Notes
 
