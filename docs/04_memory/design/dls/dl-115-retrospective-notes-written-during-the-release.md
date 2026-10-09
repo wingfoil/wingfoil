@@ -75,6 +75,13 @@ disposition. The open choices below remain for the approver.
   *(Amended 2026-10-07, approver, with `dl-163`.)* For a consumer feedback note (`dl-163`) the outcome set is six:
   the four above plus `declined` (the approver does not take it up, with a reason) and `needs-info` (the note is
   sent back to its consumer for more information); the check accepts all six for such notes.
+  *(Amended 2026-10-07, approver, with `task-213`.)* The outcomes carry fixed labels, which
+  `retrospective.yaml`'s `additional-points` check (`proposals.disposed`) and every disposition record
+  use: `covered` (by a theme or an existing disposition), `element` (an existing element, with its id
+  and a status read by command), `restated` (a new proposal restated from versioned ground),
+  `superseded` (with the command that proves it); for a consumer feedback note also `declined` and
+  `needs-info` (`dl-163`). Every consumer feedback note gets one of the six, a defect note included,
+  since a defect is not a proposal.
 - **(y) in the `claim-evidence` directive**, as a general rule for any gate fed by a secondary
   source, not only retrospectives.
 

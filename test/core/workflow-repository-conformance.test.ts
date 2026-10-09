@@ -120,6 +120,8 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-publishing", "phases[0].checks.pre[0]", "on-branch-is-main"],
       ["release-publishing", "phases[0].checks.pre[1]", "release-branch-merged-to-main"],
       ["release-publishing", "phases[1].checks.post[0]", "staged version approved on npm and live on the npm registry"],
+      ["retrospective", "phases[0].checks.post[0]", "secondary-sources.listed"],
+      ["retrospective", "phases[1].checks.pre[0]", "proposals.disposed"],
       ["retrospective", "phases[2].checks.post[0]", "frontmatter.required"],
       ["end-of-life", "phases[0].checks.post[0]", "frontmatter.required"],
       ["end-of-life", "phases[1].checks.post[0]", "deprecated content excluded from agent context and default search"],

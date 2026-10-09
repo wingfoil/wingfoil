@@ -9,7 +9,7 @@ release: ""            # optional — fix/implementation release, stamped by rel
 feature: ""            # optional — related feature ID, e.g. "P1.6"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
-tmpl_version: 261006   # Orignal template version
+tmpl_version: 261007   # Orignal template version
 ---
 
 <!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
@@ -49,3 +49,12 @@ tmpl_version: 261006   # Orignal template version
        live on those tasks (docs/04_memory/{release}/{id}.md, `bug: {this id}`, their own
        Execution Notes section) — this section only needs a pointer plus anything that doesn't
        belong on a specific fix task (e.g. why 2 tasks were needed instead of 1). -->
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
+     the bug itself (its finding, its triage, why it took more than one task). The retrospective's
+     `explore` reads this subsection first. -->

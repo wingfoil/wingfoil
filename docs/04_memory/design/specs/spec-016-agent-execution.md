@@ -199,7 +199,9 @@ registered for this session. Load it before any other action: {context_instructi
 `Record your handoff in the element's body and in your commit messages.` Today the section exists in
 the `task`, `release` and `release-line` templates; the `bug` template's section is `## Triage &
 Execution Notes`, so a bug gets the fallback line; and it is absent from `adr`, `decision-log`,
-`tech-spec`, `plan` or `service` (`grep -l "^## Execution Notes$" .wingfoil/memory/templates/*`).
+`tech-spec` or `service` (`grep -l "^## Execution Notes$" .wingfoil/memory/templates/*`). The `plan`
+template has carried the section since `task-213` (`dl-115` Q1 (A)), so a plan gets the
+`## Execution Notes` line.
 
 `{context_instruction}` names the MCP primitive that carries the assembled context: the
 `{role}-session` Prompt (`spec-004` §3.1), which gains the optional arguments `element` and `state`
@@ -985,3 +987,17 @@ step 8 names what is printed and that the builder's notes are not; the `--dry-ru
 plan `spec-008` §2 now names. §8's `agentExecute` module cell loses *(planned)*, as `spec-006` §3's
 row does in the same task. No literal of §2.4, no key of §4.2 and no rule of §4.3 changes. Edited in
 place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-07, `task-213-write-retrospective-notes-during-release-templates-retrospective-workflow`)
+— the `plan` template gains `## Execution Notes`.** `dl-115` Q1 (A) closes the running log of the
+`task`, `bug` and `plan` templates with a `### Retrospective` subsection; the `plan` template had no
+running log, so it gains a `## Execution Notes` section ending in that subsection. §2.4's list moves
+`plan` from the templates without the section to those with it
+(`grep -l "^## Execution Notes$" .wingfoil/memory/templates/*` → `plan.md`, `release-line.md`,
+`release.md`, `task.md`). Two effects follow, with no change to either rule: a run on a plan gets the
+`## Execution Notes` `{handoff_line}` instead of the fallback (§2.4), and its run record's `notes`
+key (§4.2 key 18) can now be `<plan-id>#execution-notes` instead of always `none`. The `### Retrospective`
+subsection sits inside the section (it ends at the next level-1 or level-2 heading), so an edit to it
+alone also sets `notes`. The `bug` template's section stays `## Triage & Execution Notes`, so a bug
+keeps the fallback line and `none`. Edited in place without a supersede or a state change
+(`dl-047`); recorded with `memory amend`.
