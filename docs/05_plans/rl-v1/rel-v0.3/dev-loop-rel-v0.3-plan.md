@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.22"
+version: "1.23"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -856,3 +856,38 @@ commit, right after the task's transition and on the task branch:
     promotes only bugs and decision-logs), `dl-115` (six outcomes for consumer notes), `task-213` (handover).
     `bug-299` (three `docs/06_*` folders) filed, triage pending.
   - W3 is now 66 tasks (61 + `268`–`272`; `task-223` deprecated).
+- **2026-10-09 — batch B3 `done`** (`task-268`, `203`, `202`, `204`, `207`, `218`, `213`, `205`, `214`).
+  - **Review.** Every task had an independent review, all "approve with fixes", every fix applied in-task;
+    focused re-reviews for `203` (rulings F1/F3), `205` (ruling F3, then a `--first-parent` correction found by
+    the coordinator: `--no-merges` alone keeps the commits an inward merge brings) and `202` (twice: its review
+    fixes, then the merge of `203`'s branch, where the reviewer found the cutoff ruling untested). Defects found by
+    review and fixed: `203`'s re-entry order depended on the merge's parent order and its walk could miss a
+    younger instance's commits; `202` declared readings as rules and its "eligible" contradicted the code; `218`
+    refused a duplicate adapter after the element and role checks, claimed every read at `HEAD`, and dropped
+    coverage against the real base; `204`'s spec-017 §8 contradicted itself (`command` vs `run`).
+  - **Approver rulings (2026-10-09):** `203` F1 (a) "newer than a re-entry" is ancestry, F3 (a) the walk is
+    bounded by the octopus merge base of the starts; `202` an `iterate_over` phase does not hand its re-entry
+    cutoff to its iterations, a plain `include` does; `205` F3 option 2 (`red`'s main-sync by the developer before
+    `qa`, the pre-review sync is `refactor`'s last action; no `dl-035` amendment); `214` Code of Conduct contact
+    `robypomper@gmail.com`; `218` the MCP pre-flight's working-tree read of `dna.yaml` is a declared exception
+    (a decision-log follows), the `TOOLS_V04` allowlist addition `agent.execute` and branch coverage 96.87 are
+    accepted.
+  - **Amendments: 18** — `203`: spec-017; `202`: spec-017, spec-003; `204`: spec-017, spec-008, spec-006,
+    spec-003; `207`: spec-015; `218`: spec-016, spec-008, spec-005, spec-009, spec-006, spec-004; `213`:
+    spec-016, dl-115; `205`: spec-003, spec-001.
+  - **Bugs closed:** bug-132, bug-133, bug-134, bug-202, bug-281, bug-290, bug-291.
+  - **Merges,** in order 268 → 203 → 202 → 204 → 207 → 218 → 213 → 205 → 214 (last `a757b1b9`); each later
+    task merged `main` first. Conflicts: `203` × `268` in `src/core/workflow-deduction.ts` (literal
+    `--no-show-signature`, `requireCommitName` on parsed shas; `git merge-base` takes no such flag), `202` × `203`
+    in `src/workflow/deduce.ts` (12 hunks), spec Revision notes (both kept), and `bindings.yaml`, re-bumped to 1.2
+    (`207`'s 1.1 and `205`'s 1.1). Intake `intake/governance-evolution` (`dl-164`, `in-discussion`) merged
+    `fe816d51` during the batch.
+  - **Gates on `main`** (`a757b1b9`): `test:coverage` 319 suites, 6050 tests, coverage 99.2 / 97.01 / 97.48 /
+    99.67 (branch coverage below B2's 97.18: `218`'s accepted drop); lint, `docs:api`, `npm run typecheck`,
+    `check:audit` exit 0; e2e smoke exit 0 (53 steps, run as `-- node "$PWD/dist/cli.js"`: a relative path after
+    `--` fails, the script runs every step in a throwaway directory). Governance `--base 1ce84a54`: 81 `wf()`
+    commits, 0 findings.
+  - **Latency:** still owed (B1, B2, B3); load average 30–60 during the gate.
+  - **Follow-ups:** to be filed through a `bug-ingest` plan after the approver's triage.
+  - **Consumer inboxes ready for `task-269`:** WingFoil-Templates (`53090c29`) and WingFoil-UI (`1d9348d0`,
+    private); Benchmark not started.
