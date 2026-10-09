@@ -709,7 +709,9 @@ run in the workflow operations of `src/core` (`spec-017` §2): `src/core/workflo
 called by `src/core/workflow-registry.ts`, which reads every input at one commit and runs them only
 when the loader reported no error. A core check is not decided when its input is missing: without
 `dna.yaml` no role, member or `dna:` collection is checked, without `memory.yaml` no type, event,
-token, exit state or fallback, and without a type's template no token field. Structural (Zod)
+token, exit state or fallback, and without a type's template no token field. The first two skips are reported:
+each missing file adds one `W_WORKFLOW_CHECKS_NOT_RUN` warning, ahead of the core rows, so an empty
+`diagnostics` means the checks ran and found nothing (`bug-281`). Structural (Zod)
 failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 
 | Code | Severity | Runs in | Rule | Source |
@@ -753,6 +755,7 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 | `W_PHASE_EXIT_STATE_UNDETERMINED` | warning | core | the phase's state-changing actions cannot be applied along the element's machine from the state the previous phase leaves (`spec-017` §4.4) | `spec-001` |
 | `W_PHASE_FALLBACK_STATE_MISMATCH` | warning | core | `fallback.set_state` differs from `memory.yaml`'s reject target for the gate state the phase holds its element in | P4.15; `spec-001` |
 | `W_PHASE_FALLBACK_NOT_REENTRANT` | warning | core | `fallback.step` names an earlier phase, but the reject target of the phase's gate lies forward in the `sequence`, so a reject completes the phase instead of re-entering it (`spec-017` §4.8) | P4.15 |
+| `W_WORKFLOW_CHECKS_NOT_RUN` | warning | core | `dna.yaml` or `memory.yaml` is absent at the baseline, so the core checks that read it did not run; one per missing file, `dna.yaml` first, before every other core row; `file` the missing file (`dna.yaml` / `memory.yaml`), path empty, message `<file> is absent: the <checks> checks were not run` (`dna.yaml`: role, approver and dna: collection; `memory.yaml`: type, cadence event, token, exit state and fallback). None for a registry with no workflow | `bug-281` |
 
 **Unbound tokens in v0.3 are warnings** (open question 1, settled at this revision). `dl-090` Q2 (c)
 makes an unbound check fail closed and requires every action to be bound or `manual`; before any
@@ -1069,3 +1072,12 @@ matches an archived element.** § "Selections" states the rule `spec-017` §4.3 
 `superseded` document is never selected, as it is never an `iterate_over` candidate. No diagnostic changed.
 Edited in place without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at
 `task-202`'s review.
+
+**Revision (2026-10-07, `task-204-reshape-workflow-list-add-workflow-show-both-answering`) — a skipped core
+check is reported (`bug-281`).** "Where each check runs" said a core check is not decided without its input,
+and that held silently: with `dna.yaml` or `memory.yaml` absent, `workflow list` returned no diagnostic and
+exit `0` for a registry the same checks would refuse, so an empty `diagnostics` could mean "checked and clean"
+or "not checked". The table gains `W_WORKFLOW_CHECKS_NOT_RUN` (core, warning), one per missing file, and the
+paragraph says the first two skips are reported. The skip itself does not change, and a missing template still
+leaves its token fields undecided without a report. Edited in place without a supersede or a state change
+(`dl-047`); pending the approver's `memory amend` at `task-204`'s review.
