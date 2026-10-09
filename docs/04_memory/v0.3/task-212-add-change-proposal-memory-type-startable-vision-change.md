@@ -2,7 +2,7 @@
 id: "task-212-add-change-proposal-memory-type-startable-vision-change"
 type: task
 title: "Add the `change-proposal` Memory type and the startable `vision-change` workflow"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "medium"
