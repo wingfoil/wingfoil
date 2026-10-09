@@ -67,6 +67,8 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["adr-ingest", "phases[0].checks.post[0]", "frontmatter.required"],
       ["service-ingest", "phases[0].checks.post[0]", "frontmatter.required"],
       ["service-ingest", "phases[0].checks.post[1]", "secret-scan.clean"],
+      // task-212 (dl-132): vision-change's capture mirrors the change-proposal template; its vision-index.current checks are bound.
+      ["vision-change", "phases[0].checks.post[0]", "frontmatter.required"],
       ["specification-downcast", "phases[0].checks.post[0]", "100% of MVP Canvas features covered; edge-case stories present"],
       ["specification-downcast", "phases[1].checks.post[0]", "each scenario atomic + testable; zero ambiguous adjectives/adverbs"],
       ["specification-downcast", "phases[2].checks.post[0]", "every REQ has a numeric/percentage/boolean Fit Criterion"],
@@ -250,8 +252,9 @@ function measure(workflows: readonly Workflow[]): { checkpoints: string[]; final
 }
 
 describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => {
-  it('26 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134)', () => {
+  it('27 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 26 until task-212 added vision-change.update-vision)', () => {
     expect(measure(registry().workflows).checkpoints).toEqual([
+      'vision-change.update-vision',
       'user-story-mapping.backbone',
       'user-story-mapping.vertical-explosion',
       'user-story-mapping.mvp-cut',

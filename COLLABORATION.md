@@ -1,6 +1,6 @@
 # Contributing to WingFoil — through Memory, not (only) code
 
-**Version:** 1.3 · **Date:** 2026-10-07
+**Version:** 1.4 · **Date:** 2026-10-09
 
 WingFoil is a harness for **AI-assisted, deterministic software development**. It manages its own
 development the same way it asks other projects to (dogfooding): every change flows through
@@ -18,7 +18,7 @@ into delivered work.** You do not need to write the code, the tests, or run `win
 
 ## What you can contribute
 
-Instead of a code pull request, you file one of the four **base Memory documents**, each via its
+Instead of a code pull request, you file one of the five **base Memory documents**, each via its
 capture (“ingest”) workflow:
 
 | You want to… | File a… | Via workflow | Lands as |
@@ -27,9 +27,12 @@ capture (“ingest”) workflow:
 | propose a product/process decision | **Decision-Log (DL)** | `decision-log-ingest` | `…/design/dls/{id}.md` |
 | propose an architectural decision | **ADR** | `adr-ingest` | `…/design/adrs/{id}.md` |
 | define a shared format/schema/API | **Tech-Spec** | `release-planning` (`identify-specs`) | `…/design/specs/{id}.md` |
+| request a feature, or change the vision | **Change-Proposal** | `vision-change` | `…/change-proposals/{id}.md` |
 
 Each artifact starts at `draft`, then moves to its first working state (`open` / `in-discussion` /
-`pending`) so there is content to discuss. From there it is **triaged, approved, and scheduled** into a
+`pending` / `in-analysis`) so there is content to discuss. A change-proposal names its impact on every
+layer below the vision (features, user stories, BDD, SARD requirements, delivered work), "no impact"
+included, and is done only once a release carries it (`dl-132`). From there it is **triaged, approved, and scheduled** into a
 release during `release-planning` (see `dl-016` — `triage-bugs` + `reconcile-governance`), and an AI
 agent implements it under the `dev-loop` (TDD + BDD, `code-review`/`code-quality` directives).
 
@@ -48,6 +51,8 @@ are still run by a maintainer or an agent. The current path is:
    - **Proposal**, for a product or process decision: the context, the options you see and the one you
      prefer, which `decision-log-ingest`'s `capture` records as the `decision-log`'s Context, Decision
      and Rationale (the title loses its `proposal: ` prefix).
+     A feature request uses this form too: it changes the vision, so the maintainer captures it as a
+     `change-proposal` through `vision-change` instead (`dl-132`, `dl-163`).
 
    Blank issues are off. Questions go to
    [Discussions](https://github.com/wingfoil/wingfoil/discussions/categories/q-a), and a vulnerability

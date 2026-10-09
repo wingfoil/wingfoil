@@ -2,7 +2,8 @@
 
 This document describes the complete workflow configuration for the WingFoil project as defined in
 `.wingfoil/` (this directory). The single startable lifecycle is `sw-life-cycle`; four independent
-**ingest mains** can be started on demand at any time.
+**ingest mains** can be started on demand at any time, and so can **`vision-change`**, which changes the
+vision after inception through a `change-proposal` (`dl-132`).
 
 ---
 
@@ -385,6 +386,40 @@ flowchart LR
 
 ---
 
+## Vision Change — `vision-change`
+
+A `kind: main` workflow startable on demand (`dl-132`): a change to the vision — a new feature, the most
+common case, or any other edit of `docs/01_vision/` — enters as a `change-proposal` element. Its impact
+along the traceability chain is analysed before acceptance, only the layers the analysis names are
+downcast (the three downcast phases are optional, `dl-132` Q2 (ii)), and it ends only when a release
+carries it. It is self-creating: the change-proposal its `capture` phase adds is the instance's element.
+
+```mermaid
+flowchart TD
+    subgraph VC["vision-change"]
+        direction TB
+        V1["**capture** *(product-owner)*\nmemory.add(type: change-proposal)\nmemory.submit\n✔ P4.12: [title, kind]\ndraft → in-analysis"]
+        V2["**impact-analysis** *(architect)*\nagent.execute (reverse walk of the traceability chain)\nmemory.approve\n🔑 *approver*\nin-analysis → accepted (reject → draft, back to capture)"]
+        V3["**update-vision** *(product-owner)*\nvision documents + doc-versioning bumps\n00_index.md in the same commit\n✔ vision-index.current"]
+        V4["**downcast-stories** *(optional)*\n`user-story-mapping`"]
+        V5["**downcast-scenarios** *(optional)*\n`specification-by-examples`"]
+        V6["**downcast-requirements** *(optional)*\n`volere-requirements`"]
+        V7["**schedule** *(product-owner)*\nsequencer entry + release `features:`\nelement.set_release · element.set_state(scheduled)\n✔ vision-index.current\naccepted → scheduled"]
+        V1 --> V2 --> V3 --> V4 --> V5 --> V6 --> V7
+        V2 -. reject .-> V1
+    end
+```
+
+| Workflow | Produces | Typical trigger |
+|---|---|---|
+| `vision-change` | `docs/04_memory/change-proposals/{id}.md` | A feature request, or any change to the vision after inception |
+
+A downcast phase whose layer the analysis marks "no impact" is skipped once `schedule` completes
+(`spec-017` §4.10). The included subs are the same ones `specification-downcast` runs at inception,
+scoped to the delta.
+
+---
+
 ## Token Bindings — `workflows/bindings.yaml`
 
 Every `actions:` and `checks:` token resolves through a binding (spec-003 Layer 3, dl-090). The
@@ -552,17 +587,32 @@ stateDiagram-v2
     active --> deprecated : memory.deprecate (dropped or replaced)
 ```
 
+### Change Proposal  *(`dl-132` — a change to the vision)*
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> draft
+    draft --> in_analysis : memory.submit (the change and its impact analysis)
+    in_analysis --> accepted : memory.approve
+    in_analysis --> draft : memory.reject
+    accepted --> scheduled : workflow (vision-change schedule — a release carries it)
+    accepted --> deprecated : memory.deprecate
+
+    in_analysis : in-analysis
+```
+
 ---
 
 ## Roles Summary
 
 | Role | Responsibilities in workflows |
 |---|---|
-| `product-owner` | Release-line seeding/closing (`seed-first-release-line`, `plan-next-release-line`), release-line roadmap (`seed-releases`), release planning, scope definition, governance reconcile, backlog creation |
+| `product-owner` | Vision change (`vision-change` capture, update-vision, schedule), release-line seeding/closing (`seed-first-release-line`, `plan-next-release-line`), release-line roadmap (`seed-releases`), release planning, scope definition, governance reconcile, backlog creation |
 | `tech-lead` | Config init, release-line approval, pinned-build advance, bug triage, backlog approval, implementation-complete check, release submission and publishing, deprecation |
-| `architect` | Features session, Volere requirements, ADR authoring, tech-spec identification/authoring (`identify-specs`, `dev-loop/design`), agent-facing docs (`align-agent-docs`) |
+| `architect` | Vision-change impact analysis, features session, Volere requirements, ADR authoring, tech-spec identification/authoring (`identify-specs`, `dev-loop/design`), agent-facing docs (`align-agent-docs`) |
 | `developer` | TDD dev-loop (green/refactor), branch management, user-facing docs (`align-user-docs`), bug capture, service capture |
 | `reviewer` | Code review in dev-loop (tests and code, under the developer's and qa's directives too, `dl-134`) |
 | `qa` | BDD specification, the dev-loop `red` phase (black-box tests, `dl-134`), end-to-end smoke (`e2e-smoke`), pre-release checks |
 | `facilitator` | Lean inception sessions, retrospective exploration and capture |
-| `approver` | All approval gates (bug triage, governance reconcile, backlog commit, task review, documentation, e2e smoke, release, retrospective, end-of-life, service verification) |
+| `approver` | All approval gates (bug triage, vision-change acceptance, governance reconcile, backlog commit, task review, documentation, e2e smoke, release, retrospective, end-of-life, service verification) |

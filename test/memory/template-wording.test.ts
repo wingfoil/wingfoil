@@ -6,7 +6,7 @@
  *
  * - the **built-in** ones `wingfoil init` writes into every new project (`templateScaffold`,
  *   `src/storage/templates.ts`), one per scaffolded type;
- * - **this repository's** nine, `.wingfoil/memory/templates/*.md`, the ones its own `memory add`
+ * - **this repository's** ten, `.wingfoil/memory/templates/*.md`, the ones its own `memory add`
  *   copies.
  *
  * What `add` and `submit` actually do is `src/memory/add.ts` `renderAddDocument` (sets `id`, `title`,
@@ -57,10 +57,11 @@ function expectTruthfulGuidance(content: string): void {
 }
 
 describe('the scaffolds say what `memory add` and `memory submit` do (task-209, bug-146)', () => {
-  it('there are nine repository scaffolds and one built-in scaffold per scaffolded type', () => {
+  it('there are ten repository scaffolds and one built-in scaffold per scaffolded type', () => {
     expect(repoTemplates.map(([name]) => name)).toEqual([
       'adr.md',
       'bug.md',
+      'change-proposal.md',
       'decision-log.md',
       'plan.md',
       'release-line.md',
