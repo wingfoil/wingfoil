@@ -2,7 +2,7 @@
 id: bug-202-the-unknown-field-warning-is-printed-to-stderr-from-inside-the-loaders-under-every-output-format
 type: bug
 title: "The unknown-field warning is printed to stderr from inside the loaders, under every output format"
-status: in-review
+status: closed
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
