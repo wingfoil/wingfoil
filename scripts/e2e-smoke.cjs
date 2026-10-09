@@ -31,18 +31,22 @@
  * randomness in what is asserted or reported (the temp directory name is never compared or written).
  *
  * Usage:
+ *   node scripts/e2e-smoke.cjs --candidate [--report PATH]   # the packed candidate, its stamp bound (task-219)
  *   node scripts/e2e-smoke.cjs [--expect-version X.Y.Z [--expect-commit SHA]] [--report PATH]   # `wingfoil` on PATH
  *   node scripts/e2e-smoke.cjs [...] -- node "$PWD/dist/cli.js"
  * Every step runs inside a throwaway directory, so a script path after `--` must be absolute.
  * `--expect-version` alone pins the semver of the build stamp and accepts any commit in it;
  * `--expect-commit` (task-254, `bug-235`) requires the whole stamp, `X.Y.Z (SHA)`, which is how the
- * staging stage proves the tarball was built from the released commit (`dl-111`).
+ * staging stage proves the tarball was built from the released commit (`dl-111`). `--candidate` (task-219,
+ * the `e2e-smoke-passed` binding) packs the clean checked-out commit, installs it into a throwaway prefix
+ * and smokes that bin with `--expect-version` = `package.json`'s version and `--expect-commit` = `HEAD`
+ * (`dl-099` §1: the candidate's packed tarball, not the working tree).
  * Exit codes: 0 every check passed, 1 a check failed, 2 a bad argument.
  */
 'use strict';
 
 const { spawnSync } = require('node:child_process');
-const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = require('node:fs');
+const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { dirname, join } = require('node:path');
 
@@ -420,7 +424,7 @@ function versionOfStamp(stamp) {
   return match ? match[1] : null;
 }
 
-/** Parse `[--expect-version X [--expect-commit SHA]] [--report PATH] [-- command args...]`. */
+/** Parse `[--candidate | --expect-version X [--expect-commit SHA]] [--report PATH] [-- command args...]`. */
 function parseSmokeArgs(argv) {
   const separator = argv.indexOf('--');
   const own = separator === -1 ? argv : argv.slice(0, separator);
@@ -434,6 +438,8 @@ function parseSmokeArgs(argv) {
       assertCommitName(own[i + 1]);
       options.expectedCommit = own[i + 1];
       i += 1;
+    } else if (own[i] === '--candidate') {
+      options.candidate = true;
     } else if (own[i] === '--report' && own[i + 1]) {
       options.reportPath = own[i + 1];
       i += 1;
@@ -444,22 +450,111 @@ function parseSmokeArgs(argv) {
   if (options.expectedCommit !== undefined && options.expectedVersion === undefined) {
     throw new Error('--expect-commit requires --expect-version');
   }
+  if (options.candidate && (options.expectedVersion !== undefined || separator !== -1)) {
+    throw new Error('--candidate takes the stamp and the command from the candidate: no --expect-version, --expect-commit or -- <command>');
+  }
   return options;
 }
 
-if (require.main === module) {
+/**
+ * `--candidate` (task-219, `dl-099` §1; the `task-207` review handover): smoke the release candidate — the
+ * checked-out commit — as a user installs it, with its build stamp bound. On a clean working tree (a dirty
+ * one would stamp `<sha>-dirty`), pack the commit (`npm pack`: its `prepack` builds `dist/` and the stamp)
+ * into a throwaway directory, install that tarball into a throwaway prefix there, and return the smoke's
+ * options: the installed bin — an absolute path, as the throwaway step directories need — and the stamp it
+ * must print, `package.json`'s version and `HEAD`. `cleanup` removes the directory; a failed pack or
+ * install removes it before rethrowing.
+ *
+ * @param {{ status: () => string, head: () => string, version: () => string, makeDir: () => string,
+ *           pack: (destination: string) => string, install: (tarball: string, prefix: string) => void,
+ *           removeDir: (dir: string) => void }} effects
+ * @returns {{ command: string, commandArgs: string[], expectedVersion: string, expectedCommit: string, cleanup: () => void }}
+ */
+function prepareCandidate(effects) {
+  const dirty = effects.status().trim();
+  if (dirty !== '') {
+    throw new Error(`--candidate: the working tree is not clean, so the build would not be the candidate commit: ${dirty.split('\n').join(', ')}`);
+  }
+  const expectedCommit = effects.head();
+  assertCommitName(expectedCommit);
+  const expectedVersion = effects.version();
+  const dir = effects.makeDir();
+  const cleanup = () => effects.removeDir(dir);
   try {
-    const { reportPath, ...options } = parseSmokeArgs(process.argv.slice(2));
-    const report = runSmoke({ ...options, log: (line) => process.stdout.write(`${line}\n`) });
-    if (reportPath !== undefined) {
-      mkdirSync(dirname(reportPath), { recursive: true });
-      writeFileSync(reportPath, formatReport(report, { ...options, command: [options.command, ...options.commandArgs] }));
-    }
-    process.exitCode = report.ok ? 0 : 1;
+    const prefix = join(dir, 'prefix');
+    effects.install(effects.pack(join(dir, 'pack')), prefix);
+    return { command: join(prefix, 'bin', 'wingfoil'), commandArgs: [], expectedVersion, expectedCommit, cleanup };
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
+}
+
+/* istanbul ignore next -- the real git/npm effects of `--candidate`; prepareCandidate is tested with fakes. */
+/**
+ * The real effects of {@link prepareCandidate}, in `repoRoot`: git for the tree and `HEAD`, `npm pack` and
+ * `npm install --global --prefix` (the same two steps as `ci.yml`'s `e2e-smoke` job).
+ * @param {string} repoRoot
+ */
+function realCandidateEffects(repoRoot) {
+  const must = (command, args, cwd) => {
+    const run = spawnSync(command, args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'inherit'] });
+    if (run.status !== 0) throw new Error(`${command} ${args.join(' ')} exited ${run.status ?? run.error?.message}`);
+    return run.stdout;
+  };
+  return {
+    status: () => must('git', ['status', '--porcelain'], repoRoot),
+    head: () => must('git', ['rev-parse', 'HEAD'], repoRoot).trim(),
+    version: () => JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf-8')).version,
+    makeDir: () => mkdtempSync(join(tmpdir(), 'wingfoil-candidate-')),
+    pack: (destination) => {
+      mkdirSync(destination, { recursive: true });
+      const name = must('npm', ['pack', '--silent', '--pack-destination', destination], repoRoot).trim().split('\n').pop();
+      return join(destination, name);
+    },
+    install: (tarball, prefix) => {
+      must('npm', ['install', '--global', '--prefix', prefix, tarball], repoRoot);
+    },
+    removeDir: (dir) => rmSync(dir, { recursive: true, force: true }),
+  };
+}
+
+if (require.main === module) {
+  let parsedArgs;
+  try {
+    parsedArgs = parseSmokeArgs(process.argv.slice(2));
   } catch (error) {
     process.stderr.write(`error: ${error.message}\n`);
     process.exitCode = 2;
   }
+  if (parsedArgs !== undefined) {
+    const { reportPath, candidate, ...parsed } = parsedArgs;
+    let prepared;
+    try {
+      prepared = candidate ? prepareCandidate(realCandidateEffects(dirname(__dirname))) : undefined;
+    } catch (error) {
+      // A candidate that cannot be packed or installed is a failed check (exit 1), not a bad argument.
+      process.stderr.write(`error: ${error.message}\n`);
+      process.exitCode = 1;
+    }
+    if (!candidate || prepared !== undefined) {
+      const { cleanup, ...options } = prepared ?? { ...parsed, cleanup: () => undefined };
+      let report;
+      try {
+        report = runSmoke({ ...options, log: (line) => process.stdout.write(`${line}\n`) });
+      } finally {
+        cleanup();
+      }
+      if (reportPath !== undefined) {
+        // `--candidate`'s bin lives in a throwaway directory: the report names the candidate, not that path,
+        // so the same run still gives the same bytes.
+        const command = candidate ? ['wingfoil (the packed candidate, installed into a throwaway prefix)'] : [options.command, ...options.commandArgs];
+        mkdirSync(dirname(reportPath), { recursive: true });
+        writeFileSync(reportPath, formatReport(report, { ...options, command }));
+      }
+      process.exitCode = report.ok ? 0 : 1;
+    }
+  }
 }
 
-module.exports = { SMOKE_TEMPLATES, assertCommitName, formatReport, parseSmokeArgs, runSmoke, smokeSteps, smokeTemplate };
+module.exports = { SMOKE_TEMPLATES, assertCommitName, formatReport, parseSmokeArgs, prepareCandidate, runSmoke, smokeSteps, smokeTemplate };

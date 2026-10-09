@@ -4,12 +4,24 @@
 # per-pillar cadence. Include-only; sw-life-cycle iterates it over `release`.
 # Git conventions: the `git-conventions` directive (.wingfoil/directives/custom/git-conventions.md,
 # dl-119) — branch prefixes, --no-ff merges, and the release tag on the pushed `main` (dl-024, dl-074).
+# Release candidate (dl-099 §1, task-219): the commit proposed for the version tag, on the release's
+# integration branch; both e2e-smoke and the staging rehearsal must have passed on it, and a re-cut
+# candidate re-enters both (the description below).
 name: release-cycle
 kind: sub
 description: >-
   Deliver one release: plan scope -> run a TDD dev-loop per backlog task (including bug-fix
-  tasks) -> align user-facing docs -> submit -> publish to npm -> retrospective.
-version: 1.2                     # dl-013: added user-docs phase (1.1); dl-119: git comment points to git-conventions (1.2)
+  tasks) -> align user-facing docs -> e2e-smoke -> submit -> publish to npm -> retrospective.
+  A release candidate is the commit of the release's integration branch proposed for the version
+  tag (dl-099 §1); it is cut by release-publishing's `release-commit`. Both checks run on it: the
+  e2e-smoke gate (against the packed candidate, `e2e-smoke-passed`) and release-publishing's
+  `staging-rehearsal`, whose own smoke runs against the staged tarball of the candidate. A candidate
+  is re-cut whenever a commit that must ship lands on the integration branch after the checks ran —
+  a fix for a failed rehearsal or publish, a late merge: the re-cut candidate re-enters `e2e-smoke`
+  (and `submit`'s checks) and then `staging-rehearsal`, and only a candidate that has passed both is
+  tagged. A commit that only records evidence (a gate report, a transcript, a Memory transition) does
+  not re-cut: the tag goes on the candidate the checks named.
+version: 1.3                     # dl-013: added user-docs phase (1.1); dl-119: git comment points to git-conventions (1.2); dl-099 §1 (task-219): the release candidate and its re-cut re-entry into e2e-smoke and staging-rehearsal (1.3)
 element: release        # the iterated element provided by sw-life-cycle (iterate_over: release)
 
 phases:
@@ -35,7 +47,7 @@ phases:
   - name: e2e-smoke                          # dl-023 — fresh-init + CLI end-to-end smoke gate before submit (staged warn->reject)
     description: >-
       Run a real `wingfoil init` + drive the CLI surface, asserting exit codes + schema-valid
-      scaffolded artifacts, before the release is assembled.
+      scaffolded artifacts, before the release is assembled. Re-entered by a re-cut candidate (dl-099).
     include: e2e-smoke
 
   - name: submit
@@ -43,7 +55,9 @@ phases:
     include: release-submit
 
   - name: publishing
-    description: "Tag, build, and publish to npm; mark the release released."
+    description: >-
+      Cut the release candidate, rehearse its publish on staging (`staging-rehearsal`), tag it, publish
+      to npm; mark the release released. A candidate re-cut here re-enters e2e-smoke first (dl-099).
     include: release-publishing
 
   - name: retrospective
