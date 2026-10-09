@@ -40,18 +40,22 @@ configuration commits with no `wf()` among them, the v0.4 rows of the features, 
 
 1. **capture** (product-owner): `memory add --type decision-log` → `dl-164`, then `memory submit` →
    `in-discussion`.
-2. **approve** (⛔ approver): ratify Q1 (the Memory type), Q1b (declared in every scaffold), Q2 (the `apply`
-   verb), Q3 (the trailer's strictness), Q4 (the place in the vision) and Q5 (the release). Then
-   `in-discussion → ready`; a reject goes back to `draft` and to capture.
+2. **approve** (⛔ approver): **not run by this plan.** Approver ruling, 2026-10-09: `dl-164` is judged at the
+   next release-planning (v0.4), whose `reconcile-governance` phase selects it (`where:` `type: decision-log`,
+   `status: in-discussion`, `release: ""`). There Q1 (the Memory type), Q1b (declared in every scaffold), Q2 (the
+   `apply` verb), Q3 (the trailer's strictness), Q4 (the place in the vision) and Q5 (the release) are ratified,
+   `in-discussion → ready`, or rejected to `draft`.
 
 ## Handoff
 
-- **Approver:** Q1–Q5 and the ratification; the release stamp (`assign`) at v0.4 `release-planning`.
+- **Approver:** Q1–Q5 and the ratification, at v0.4 `release-planning`'s `reconcile-governance`; the release
+  stamp (`assign`).
 - **Agent:** capture and its fact checks; after ratification, the vision and requirements downcast (Actions 2–3)
   through `vision-change` if `task-212` has landed, otherwise under a task derived by v0.4 `build-backlog`.
 - **Merge:** the branch is handed to the session that merges onto `main` (fast-forward after a rebase and an id
   collision check), as the intake branches are.
-- **Completion criteria:** `dl-164-governance-evolution-wingfoil-governs-the-change-of-its-own-governance-a-governance-change-is-a-memory-element-applied-through-a-governed-process-verified-traced-and-the-same-at-bootstrap-and-later` `ready` (or rejected to `draft`); this plan `active → done`.
+- **Completion criteria:** `dl-164` captured `in-discussion` (capture only, approver ruling 2026-10-09); this plan
+  `active → done`. The ratification is v0.4 release-planning's, not this plan's.
 
 ## Execution Notes
 
@@ -60,3 +64,5 @@ configuration commits with no `wf()` among them, the v0.4 rows of the features, 
   a new verb `apply`; Q3 (A) warn-first ratchet; Q4 (a) a sixth pillar P6, features P6.1–P6.7; Q5 (x) v0.4 for
   the vision, requirements, configuration and coherence check, the CLI surface scheduled by v0.4 planning. Its
   *Verification* section maps the approver's five verifiable points to tests.
+- **scope reduced to capture (2026-10-09)** — approver ruling: the decision-log is judged at the next
+  release-planning, so this plan does not stay open until then; it closes at capture (`active → done`).
