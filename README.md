@@ -318,24 +318,22 @@ MIT — open source and free to use.
 
 ## Contributing
 
-Early feedback is welcome. Please open issues on GitHub to share:
-
-- Use cases and pain points
-- Feature requests
-- Bug reports
+Early feedback is welcome. Open a GitHub issue with the **Bug report** or the **Proposal** form: each is
+captured as a Memory element (a `bug` or a `decision-log`) without asking you again.
 
 See **[`COLLABORATION.md`](COLLABORATION.md)** — how to contribute through Memory artifacts
 (Bug / Decision-Log / ADR / Tech-Spec) instead of code, with credit for the AI-generated work
-derived from your contribution.
+derived from your contribution. Everyone follows the [Code of Conduct](CODE_OF_CONDUCT.md); report a
+vulnerability privately, as [`SECURITY.md`](SECURITY.md) explains, never in a public issue.
 
 ---
 
 ## Questions?
 
-- **GitHub Issues:** Bug reports, feature requests
+- **GitHub Issues:** bug reports and proposals, through the issue forms
 - **Documentation:** Start from the [user guide](docs/user-guide.md); WingFoil's own specifications (vision, USM · BDD ·
   SARD, backlog) are under [`docs/`](docs/)
-- **Community:** Join discussions (links coming soon)
+- **Community:** ask and share in [GitHub Discussions](https://github.com/wingfoil/wingfoil/discussions)
 
 ---
 

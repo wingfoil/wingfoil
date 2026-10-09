@@ -1,0 +1,10 @@
+# Issue chooser: only the two forms, which map to Memory elements (dl-127). Questions go to Discussions,
+# vulnerabilities to private vulnerability reporting (SECURITY.md).
+blank_issues_enabled: false
+contact_links:
+  - name: Question
+    url: https://github.com/wingfoil/wingfoil/discussions/categories/q-a
+    about: Ask how to use WingFoil in Discussions (Q&A), not in the issue tracker.
+  - name: Security vulnerability
+    url: https://github.com/wingfoil/wingfoil/security/advisories/new
+    about: Report a vulnerability privately. Never in a public issue (SECURITY.md).

@@ -285,7 +285,7 @@ agent-facing documents (dl-025). It starts only once every task of the release i
 ```mermaid
 flowchart TD
     CI["**check-implementation-complete** *(tech-lead)*\n✔ pre: every task tagged {release.version} is done"]
-    AU["**align-user-docs** *(developer)*\nREADME.md · docs/user-guide.md · docs/cli-reference.md\ndocs/examples/ · CHANGELOG.md\n✔ aligned with the shipped CLI/feature surface\n🔑 Approval gate — *approver*"]
+    AU["**align-user-docs** *(developer)*\nREADME.md · docs/user-guide.md · docs/cli-reference.md\ndocs/examples/ · CHANGELOG.md\nCOLLABORATION.md + community health files (dl-127)\n✔ aligned with the shipped CLI/feature surface\n🔑 Approval gate — *approver*"]
     AA["**align-agent-docs** → `agent-docs`\n(see Agent Docs below)"]
 
     CI --> AU --> AA
