@@ -70,7 +70,8 @@ repository) are added later through `service-ingest`, as each consumer versions 
   it. Decision D1 below.
 - **Versions:** `memory.yaml` 2.6 → 2.7 (task-212 also bumps 2.6 → 2.7; this task merges after it and re-bumps
   at the gate); service scaffold `tmpl_version` 261006 → 261009 (date-stamp convention, task-213); `service-ingest.yaml`
-  1.0 → 1.1 with an inline reason. `.wingfoil/README.md` and `WORKFLOW.md` carry no version field.
+  1.0 → 1.1 with an inline reason. At the gate `memory.yaml` goes to 2.8: task-212 merges first with its
+  2.7, and the coordinator re-bumps this branch after merging main. `.wingfoil/README.md` and `WORKFLOW.md` carry no version field.
 
 **AC classification** (testing directive, T1/T3):
 
@@ -106,7 +107,8 @@ Run with the `dl-088` pending amendment in the working tree, load average ~300 (
   97.48 / 99.67, equal to the W3 B3 gate's line (`grep '^All files' ../devloop-kit/gate-w3b3-cov.log`).
 - `npm run lint`, `npm run docs:api`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json
   --noEmit` → exit 0 each.
-- `node scripts/check-governance.cjs --base b56e8721` → 1 wf() commit checked, 0 findings, exit 0.
+- `node scripts/check-governance.cjs --base b56e8721` → 1 wf() commit checked at refactor, 0 findings, exit
+  0; after the submit, 2 wf() commits (start, submit), 0 findings.
 - `node dist/cli.js workflow list` → exit 0; the conformance suite's counts are unchanged (only a description
   changed; `git diff b56e8721 -- test/core/workflow-repository-conformance.test.ts` → empty).
 - BDD: no feature file names the `service` type (`grep -rln service docs/02_requirements/02_bdd/features` →
@@ -130,7 +132,22 @@ fact). No consumer service registered (coordinator's, after the merge).
 - D3 — no spec-001/spec-010 amendment (neither enumerates kinds or service fields; parity gates unaffected).
 
 **Pending amendments (approver)** — uncommitted in the worktree, for `memory amend`:
-- `dl-088-a-memory-type-for-state-that-lives-outside-the-repository` — `--reason "task-269, from dl-163 S3b: the kind table gains repository and an optional feedback_inbox row, with the repository verify shape. See the dated amendment note before Body."`
+- `dl-088-a-memory-type-for-state-that-lives-outside-the-repository` — `--reason "task-269, from dl-163 S3b: the kind table gains repository and an optional feedback_inbox row, with the repository verify shape and its expected result; for a private repository git ls-remote names the SSH remote while url keeps the https address. See the dated amendment note before Body."`
+
+### Review fixes (2026-10-09, independent review: approve with fixes)
+
+- **F1** — `git ls-remote <url> refs/heads/main` with the https `url` fails on a private repository (the
+  reviewer got `fatal: could not read Username`). The service template's Verification comment and the `dl-088`
+  amendment now say that for a private repository `<url>` names a remote git can authenticate to, the SSH form
+  `git@github.com:<owner>/<repo>.git`, while the `url` field keeps the https address; the expected result is
+  exit 0 and a sha printed. The `url:` comment says it is the repository's https address for a
+  `kind: repository` service. dl-163's commands are unchanged (no `gh api … /commits/main` variant: an approver
+  choice). `tmpl_version` stays 261009 (this branch's bump).
+- Governance count corrected above (2 wf() commits after the submit); the `memory.yaml` 2.8 gate re-bump noted
+  under design.
+- Runs: `npx jest test/core/service-repository-kind.test.ts test/core/service-memory-type.test.ts
+  test/memory/template-wording.test.ts test/docs` → 20 suites, 164 passed (with the amendment in the working
+  tree, before and after the fix commit); `npm run lint`, both `tsc` runs → exit 0.
 
 ### Retrospective
 

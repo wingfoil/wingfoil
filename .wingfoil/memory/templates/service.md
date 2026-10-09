@@ -7,7 +7,7 @@ provider: ""           # REQUIRED — who hosts it, e.g. "npmjs.com", "GitHub", 
 kind: ""               # REQUIRED — account | credential | listing | setting | domain | handle | repository
 owner_role: ""         # REQUIRED — the dna.yaml role that manages it: a role, never a person (REQ-SYS-08)
 verify: ""             # REQUIRED — the read-only command or URL that establishes its current state (claim-evidence)
-url: ""                # optional — its public URL, if any
+url: ""                # optional — its public URL, if any; for a `kind: repository` service, the repository's https address, also when the repository is private
 account: ""            # optional — the public identifier used (a login, an org name); never a secret
 renews: ""             # optional — ISO date on which it expires or must be renewed; "" if never
 repo_refs: []          # optional — repository paths that depend on it, e.g. [".github/workflows/publish.yml"]
@@ -45,7 +45,10 @@ tmpl_version: 261009   # Original template version
      approving (pending → active). Read-only commands only.
      For a `kind: repository` service with a `feedback_inbox` (dl-163), `verify` checks the inbox,
      not only the repository: `git ls-remote <url> refs/heads/main` plus
-     `gh api repos/<owner>/<repo>/contents/<feedback_inbox>README.md --jq .sha`. -->
+     `gh api repos/<owner>/<repo>/contents/<feedback_inbox>README.md --jq .sha`. For a private
+     repository, `<url>` in the `git ls-remote` command names a remote git can authenticate to, the
+     SSH form `git@github.com:<owner>/<repo>.git`, while the `url` field keeps the https address.
+     Expected result: each command exits 0 and prints a sha (`main` moves, so no fixed sha). -->
 
 ## Management
 
