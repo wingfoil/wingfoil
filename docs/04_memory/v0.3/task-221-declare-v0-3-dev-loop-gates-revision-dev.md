@@ -115,6 +115,83 @@ grammar: its "Observed forms" list is not exhaustive (`typecheck.clean`, `secret
 | 2 — `workflow show dev-loop` shows them, zero errors | characterization | `workflow show` (task-204) already reports each check's binding or `unbound`; no code changes. The conformance suite's pinned warning set changes with the YAML (updated in the red commit, failing until green) and the command's output is recorded below |
 | 3 — the plan states the same gates | characterization (document) | a pending amendment of the active plan, checked by reading it; no test |
 
+### red
+
+`9d118a7d` adds `test/core/dev-loop-v1-6.test.ts` (AC 1: the seven checks, their bindings, the rule they
+read, the templates' heading, versions 1.6 / 1.3; AC 2: `workflowShowAtHead(ROOT, 'dev-loop')` lists each new
+check with binding kind `run` or `unbound`, `evaluated: false`), adds the five new unbound checks to the
+pinned warning set of `test/core/workflow-repository-conformance.test.ts`, and loosens two exact-version
+pins of `test/core/dev-loop-v1-5.test.ts` (`version: 1.5` → `>= 1.5` with 1.5's history entry kept;
+`testing.md` `"1.1"` → `"1.x"`), which this task's bumps would otherwise break. Run at `9d118a7d`
+(`npx jest test/core/dev-loop-v1-6.test.ts test/core/dev-loop-v1-5.test.ts test/core/workflow-repository-conformance.test.ts --json`):
+3 suites, 59 tests, **18 failed** — 17 in `dev-loop-v1-6` (every AC 1 declaration and version test, all
+seven AC 2 rows) and the conformance warning-set test; the 4 `dev-loop-v1-6` tests that passed are
+preconditions (zero errors, the `stop_the_line` rule, `typecheck.clean`'s existing binding, the templates'
+heading); `dev-loop-v1-5` stayed green.
+
+### green
+
+`17eb01f8`: `dev-loop.yaml` 1.5 → 1.6 (history line, a header paragraph on the v0.3 gates, the five check
+sites); `bindings.yaml` 1.2 → 1.3 (`typecheck.clean`'s comment names `dev-loop.refactor`; new `docs.parity`:
+`npm test --` the eight suites). Same three suites → 3 passed, **59 passed**.
+`c237a90a` (documentation): `WORKFLOW.md` dev-loop prose paragraph and diagram nodes (start, design,
+refactor, review, done); `testing.md` "1.1" → "1.2", the `typecheck.clean` bullet names `dev-loop`'s
+`refactor` (task-173's handover: written only now that `refactor` declares it).
+
+**AC 2 — `workflow show dev-loop` (dev build).** `npm run build && node dist/cli.js workflow show dev-loop --format json`
+→ exit 0; the seven new checks: `start` pre `stop-the-line.clear` unbound · `design` post
+`acceptance-criteria.consistent` unbound · `refactor` post `typecheck.clean` run `[npm, run, typecheck]` ·
+`review` pre `claims.rerun` unbound, `rereview.previous-reject` unbound, `docs.parity` run
+`[npm, test, --, test/docs/cli-reference.test.ts, …]` · `done` post `retrospective.present` unbound; each
+`evaluated: false`. Diagnostics: 0 errors; 71 `W_WORKFLOW_UNBOUND_TOKEN` (66 before: the conformance pin
+gains exactly the five new unbound rows `phases[0].checks.pre[0]`, `phases[1].checks.post[3]`,
+`phases[5].checks.pre[1]`, `phases[5].checks.pre[2]`, `phases[6].checks.post[0]`) and 6 `W_MEMORY_UNREADABLE`
+for the grandfathered frontmatter-less plans (`docs/05_plans/rl-v1/rel-v0.1/dev-loop-rel-v0.1-plan.md` …),
+which no file of this task touches. **The warnings the new checks add** (AC 2): the five unbound ones above,
+each a reading no command asserts today (claims, previous reject, criteria vs rules, the stop-the-line
+predicate over task frontmatter, the Retrospective heading in a file whose path no placeholder carries).
+
+**AC 3 — the plan.** `docs/05_plans/rl-v1/rel-v0.3/dev-loop-rel-v0.3-plan.md` (`plan`, `active`): "1.23" →
+"1.24"; §1 names the dev-loop versions and gains "The v0.3 gates (`dev-loop.yaml` v1.6, `task-221`)" with
+the five phases' gates; §2's `dl-133` bullet says the check is in force from this task's approval. Left
+**uncommitted** (pending amendment, below).
+
+### refactor
+
+Run with the plan amendment in the working tree; `main` has not moved (`git rev-parse main` →
+`b56e8721`), so the closing main-sync is a no-op.
+- `npm test` → 320 suites, **6073 passed** (1028 s, load average ~70).
+- `npm run test:coverage` → 99.21 / 97.03 / 97.54 / 99.67 (statements / branches / functions / lines), not
+  below `main` `a757b1b9`'s 99.2 / 97.01 / 97.48 / 99.67 (plan, B3 gate); 6072 passed, **1 failed**:
+  `test/core/query-latency.test.ts` P1.10 `memory history` p95 1008.5 ms < 1000. Re-run alone twice: still
+  failing at load average 78 and 95 (`uptime`), p95 1151.8 / 3489.9 ms. A load flake, not this task:
+  `git diff --stat b56e8721 HEAD -- src/` prints nothing, and the same suite passed in the `npm test` run
+  above. Budget not touched; the idle run is the coordinator's.
+- `npm run lint` exit 0; `npm run docs:api` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
+  `npx tsc -p tsconfig.build.json --noEmit` exit 0.
+- `tests.unchanged(since: red)`: `git log --first-parent --no-merges --format=%h 9d118a7d..HEAD -- test/core/dev-loop-v1-5.test.ts test/core/dev-loop-v1-6.test.ts test/core/workflow-repository-conformance.test.ts`
+  → empty (positive case: the same command from `b1a3592a` on `dev-loop-v1-6.test.ts` → 1 line).
+- `node scripts/check-governance.cjs --base b56e8721` → "1 wf() commits", 0 findings, exit 0.
+
+### review (self-review, code-review directive)
+
+- AC 1 met: each check at the phase and list the AC names (`dev-loop-v1-6` AC 1 block); `typecheck.clean`
+  bound to `npm run typecheck`; threshold not restated (`expect(token).not.toMatch(/\d/)`).
+- AC 2 met: command output above; zero errors also pinned by the conformance test.
+- AC 3 met as a pending amendment (the plan is past its first state).
+- Same class in files touched: the plan's §1 "follows `dev-loop.yaml` v1.4" was stale since task-205 —
+  corrected in the same amendment; `testing.md`'s `typecheck.clean` bullet (task-173 handover) fixed.
+  `code-review.md` names no dev-loop token (`grep -c "checks.pre\|claims.rerun" .wingfoil/directives/custom/code-review.md`
+  → 0) and is task-208's in B4: not edited.
+
+### Pending amendments (approver)
+
+- `dev-loop-rel-v0.3-plan` — `--reason "task-221: the plan states the dev-loop v1.6 gates in the same change as dev-loop.yaml (AC 3; the dl-034 lesson): section 1 names the dev-loop versions and lists the gates of start, design, refactor, review and done; section 2 says the dl-133 stop-the-line check is in force from task-221's approval."`
+
 ### Retrospective
 
-- None yet.
+- The full `npm test` took 1028 s and the coverage run longer, at load average 70–95 with ten B4 agents
+  (`uptime`): `query-latency` fails alone at that load (p95 1008–3490 ms). Proposal: none new; the idle run
+  at the gate is the existing remedy.
+- Two exact-version pins in `dev-loop-v1-5.test.ts` (`toBe(1.5)`, `"1.1"`) had to be loosened by the next
+  writer of the same files (`9d118a7d`). Proposal: version pins assert ">= the version this task wrote".
