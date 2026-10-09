@@ -201,6 +201,9 @@ src` → `src/workflow/deduce.ts` and the barrel only).
 - **F4** (approver decision) — spec-017 §12 records the late `ready` decision-logs of `build-backlog`'s
   never-empty selection (reviewer's probe on this repository: 124 late, 87 of them `ready` decision-logs) as the
   known consequence until `dl-160`'s actions (post-v0.3).
+- **F5** — `readDirty` (`src/core/workflow-deduction.ts`) leaves `.wingfoil/dna.yaml` out of
+  `W_UNCOMMITTED_INPUTS`, although `dna:` collections are now read from it. Not fixed here: deferred as a W3 B3
+  follow-up (coordinator's list).
 - **F6** — spec-017 §12 records that an instance started mid-release reports done tasks' record checkpoints
   again, since records older than the start commit do not count (§4.8, §4.9).
 - Commit `791d31cc`. After it: `npx jest test/workflow test/core/workflow-deduction test/docs` → 177 passed;
@@ -231,7 +234,7 @@ src` → `src/workflow/deduce.ts` and the barrel only).
   `791d31cc`; it became reachable only with 203's linkage. Mutation check: with
   `leaf.step.created.length === 0` removed, `npx jest test/workflow/deduce-iterate.test.ts -t "review F3"` → 1
   failed, 1 passed; restored → 2 passed.
-- **Spec-017 re-applied on cb12ce6a's text:** §4.8 and Cost keep task-203's wording; this task's §1.3, §4.3,
+- **Spec-017 re-applied on task-203's amend text** (`56974f80` on main; `cb12ce6a` was that commit before its trailers were added): §4.8 and Cost keep task-203's wording; this task's §1.3, §4.3,
   §4.6, §4.7, §4.8 (iterate_over/include and re-entries, the ruling), §4.9, §4.10, §4.11 and §12 edits sit on top;
   the two Revision notes are kept in date order (task-203's, then this task's, both 2026-10-09).
 - **Gates at `bdb142c4`** with both pending amendments in the working tree (load average 10–29, `uptime`):
@@ -241,17 +244,46 @@ src` → `src/workflow/deduce.ts` and the barrel only).
   `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` exit 0.
   `node scripts/check-governance.cjs --base 1ce84a54` exit 0 ("7 wf() commits", 0 findings).
 
+### Re-review fixes (focused re-review: approve with fixes, items 1–6, 2026-10-09)
+
+- **Item 1, cutoff ruling pinned** (commit `492eb8e3`, characterization: the code already behaved this way since the
+  merge): `test/workflow/deduce-iterate.test.ts`, describe "re-entry cutoffs across include and iterate_over
+  (spec-017 §4.8; approver ruling 2026-10-09)", modelled on the reviewer's case B (`relb`: prep → inc (plain
+  include) → loop (iterate_over task) → submit → approve, approve's fallback to prep, the release re-entry `J`
+  committed after the old records). "(a) a plain include honours the cutoff: inc is current again, its sub step
+  reports the re-entry" (`subrel.check@release:r1`, `reentered: true`, `reentryCommit: J`); "(b) an iterate_over
+  iteration ignores it: loop is complete on the task's pre-reject record". The suite's `release` type gained the
+  `releasing` gate the cutoff needs. Mutation checks, `npx jest test/workflow/deduce-iterate.test.ts -t "re-entry
+  cutoffs"`: passing `reentries` to the iteration's `run` → (b) fails (1 failed, 1 passed); dropping them from the
+  plain include's `run` → (a) fails (1 failed, 1 passed); restored → 2 passed.
+- **Item 2** — spec-017 §4.6's "eligible" bullet now matches the code ("no phase of the sub before its current
+  phase is complete other than vacuously"), listed among the readings (same class as review F1).
+- **Item 3** — spec-017 §4.11 says "(declared or self-bound, §3.4)" and that a later linked element does not
+  rebind an archived self-bound element; listed among the rules added.
+- **Item 4** — task-203's spec-017 amend is cited as `56974f80`; F5 has a disposition (above).
+- **Item 5** — `git merge --no-edit main` (main `ae1f1a03`, task-203 and task-268) merged cleanly; trailers added
+  with `--amend --no-edit --trailer` → merge commit `e7260ba3`. The spec-017/spec-003 amendments were saved as a
+  patch and re-applied with `git apply --3way` (clean; spec-017 on top of `56974f80`).
+- **Item 6, gates at `492eb8e3`** with both amendments in the working tree (load average 12–24, `uptime`):
+  `npm run test:coverage` → **309 suites, 5817 passed, 0 failed**; All files **99.31 / 97.30 / 97.47 / 99.72**;
+  `src/workflow/deduce.ts` 100 / 100 / 100 / 100; `src/core/workflow-deduction.ts` 100 / 98.94 / 100 / 100 (line
+  241, `readLastChange`'s `entry === undefined` arm, task-203's code as merged from main). `npm run lint` (with
+  task-268's git-log-readers lint), `npm run docs:api`, both `tsc` exit 0; `node scripts/check-governance.cjs
+  --base 1ce84a54` exit 0, "20 wf() commits", 0 findings.
+
 ### Pending amendments (approver)
 
 - `spec-017-workflow-commands-and-state-deduction` (uncommitted; record after task-203's spec-017 amendment
-  `cb12ce6a`, rebased on its text) — proposed `--reason`: "task-202: readings the iterate_over, live-query, optional and
-  archived rules needed, and rules added. Readings: §4.6, a candidate is entered once a phase before the sub's
-  current phase is complete other than vacuously; the note and vacuous completion apply when no candidate is
+  `56974f80`, rebased on its text) — proposed `--reason`: "task-202: readings the iterate_over, live-query, optional and
+  archived rules needed, and rules added. Readings: §4.6, a candidate is eligible when it matches the entry filter
+  and no phase of the sub before its current phase is complete other than vacuously, and entered once such a phase
+  is complete; the note and vacuous completion apply when no candidate is
   eligible, entered or complete; an unresolved where token leaves one unexpanded step. §1.3, an id the {n}
   pattern does not match iterates last. §4.7, which candidates are late, how they are counted and listed, and
   which completions are vacuous. §4.10, an optional current phase's frontier carries the phases up to the next
   non-optional one. Rules added: §4.3 and §4.11, a selection never matches an archived element; §4.9 and §4.11,
-  an abandoned instance has no phase progress and is reported complete: false; §4.8, an iterate_over phase does
+  an abandoned instance has no phase progress and is reported complete: false; §4.11, an instance whose self-bound
+  element is archived is abandoned, and a later linked element does not rebind it; §4.8, an iterate_over phase does
   not hand its re-entry cutoff to its iterations, each element having its own re-entries (approver ruling
   2026-10-09), while a plain include passes it to its sub. §12 records the late ready
   decision-logs of build-backlog's selection until dl-160, and the record checkpoints an instance started
