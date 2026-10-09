@@ -2,7 +2,7 @@
 id: "task-219-define-release-candidate-staging-rehearsal-phase-recut-reentry"
 type: task
 title: "Define the release candidate: staging rehearsal as a phase, re-cut re-entry, no-identity suite before the tag"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "high"
