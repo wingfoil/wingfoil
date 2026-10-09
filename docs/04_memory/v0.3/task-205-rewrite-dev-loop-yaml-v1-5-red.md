@@ -74,7 +74,8 @@ sentence becomes stale (pending amendment below).
    reject. The header states it, and B.1/C.1.
 2. *`dl-035` (AC 6).* `git.merge(from: main)` in `red` after the sync and before `agent.execute` (point
    (a), resume after a reject or a park), and in `review` before `tests.bdd.run` / `memory.submit`
-   (point (b)). It reuses the `git.merge` token, already bound `manual`, so no action token becomes
+   (point (b)) — point (b) later moved to `refactor`'s last action (review F3, approver ruling
+   2026-10-09, option 2). It reuses the `git.merge` token, already bound `manual`, so no action token becomes
    unbound; `bindings.yaml`'s comment names the second form (version 1.0 → 1.1).
 3. *Parking (`dl-110` P2).* `park` is a CLI verb that no workflow token emits (spec-003 verb table),
    and a phase sequence has no event hook, so P2 is declared as the park procedure in the header
@@ -176,7 +177,7 @@ Run with the spec-003 pending amendment in the working tree. Load average 57–9
 - AC 3 met (header) — the `CLAUDE.md` §5.1 text is handed above.
 - AC 4 met — T3/T4 + S1, reviewer bindings, `version` bumps; `bug-112`'s membership tests green
   (`test/directives`, `test/core/loaders.test.ts` in the targeted run).
-- AC 5 met; AC 6 met (`red` and `review` merges, each line citing `dl-035`).
+- AC 5 met; AC 6 met (`red` and, since review F3, `refactor` merges, each line citing `dl-035`).
 - Separation of duties was not practised by this run: one agent session wrote `red`, `green`,
   `refactor` and this self-review, as the brief's dev-loop still prescribes (v1.5 takes effect for the
   next task). The handoff is checkable in git: `git log --format='%h %s' main..HEAD` puts the red
@@ -198,9 +199,22 @@ Run with the spec-003 pending amendment in the working tree. Load average 57–9
 - **F2** — the header said `done`'s fallback gets no sync, but it re-enters at `red`, whose first
   action is the sync. Header and `done`'s fallback comment now say the sync also runs after `done`'s
   fallback, and that the legality of that task edge is `dl-053`'s question.
-- **F3** — not applied; stopped and reported. Moving the only main-sync to `refactor`'s last action
-  removes `dl-035` (a)'s "before any `red` work" on a resume after a reject, which `dl-035`'s ratified
-  Decision 2 (a) and `git-conventions` §2 both require. The approver needs to rule on it (see report).
+- **F3** — first stopped and reported: moving the only main-sync to `refactor`'s last action would
+  remove `dl-035` (a)'s "before any `red` work" on a resume after a reject, which `dl-035`'s ratified
+  Decision 2 (a) and `git-conventions` §2 both require. **Approver ruling 2026-10-09, option 2**: keep
+  (a) in `red`, run by the developer before `qa` writes a test (`qa` never resolves a conflict in
+  implementation files), and move (b) from `review` to `refactor`'s last action, so `refactor`'s
+  coverage, API-docs and `lint.clean` checks measure the merged tree and `review` stays read-only; no
+  `dl-035` amendment. Red `914be4be` (3 of 24 failed: `refactor`'s last action, `review` without a
+  merge, the header's conflict wording). Fix `01fad996`: `dev-loop.yaml` (the action moves; the
+  header drops the circular "the task returns to `red`" for `red`'s own merge), `git-conventions` 1.2
+  → 1.3 (§2 names who runs each merge and who resolves its conflicts; date 2026-10-09), `WORKFLOW.md`
+  (diagram and prose). `297dde71`: task-260's `test/directives/git-conventions.test.ts` pinned the
+  exact version `"1.2"`; it now asserts 1.2 or later. The conformance test's counts do not change
+  (no check moved). The spec-003 pending amendment no longer shows a merge in `review` and says why. Gates after F3 (both
+  pending amendments in the working tree): `npm run test:coverage` → 302 suites, 5745 tests, all
+  passed, 99.28 / 97.16 / 97.4 / 99.71 (no `src/` change); `npm run lint`, `npm run docs:api`, both
+  `tsc` runs exit 0; `check-governance --base 1ce84a54` → 2 `wf()` commits, 0 findings.
 - **F9** — design decision 8 no longer claims an implicit 1.0 from spec-013.
 - Touched suites after the fixes: `npx jest` over `dev-loop-v1-5`, `element-schema-park-limits`,
   `workflow-repository-conformance`, `workflow-md`, `test/directives`, `version-bump`,
@@ -214,9 +228,10 @@ Run with the spec-003 pending amendment in the working tree. Load average 57–9
 
 - `spec-003-workflows-yaml-schema` — `--reason "dev-loop.yaml is at v1.5 (task-205): the Execution
   independence worked example no longer says the separation is not yet on disk, the review-gate worked
-  example gains distinct_from, the dl-035 main-sync and the bug sync, and one sentence says that a step
-  the reject path needs is the first action of the fallback step, since a fallback takes no actions
-  (dl-061 A.1). No field, diagnostic or rule changes."`
+  example gains distinct_from and the bug sync, one sentence says that a step the reject path needs is
+  the first action of the fallback step, since a fallback takes no actions (dl-061 A.1), and one that
+  the review gate does not merge main, dl-035's pre-submit sync being refactor's last action (approver
+  ruling 2026-10-09, option 2). No field, diagnostic or rule changes."`
 - `spec-001-memory-yaml-schema` — `--reason "The example bug block gains returns: { in-progress: planned },
   as memory.yaml 2.6 declares (task-205 review F1): dev-loop's park sync moves a linked bug back
   [in-progress → planned] when its fix task is parked (dl-110 P2), and the hop must be a machine edge.
