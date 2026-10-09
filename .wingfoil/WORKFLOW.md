@@ -225,15 +225,23 @@ review measure the merged tree (`dl-035`; approver ruling 2026-10-09). `memory p
 task to the backlog: its branch is kept, its worktree removed, its bugs synced back to `planned`
 (`dl-110`).
 
+The v0.3 gates (v1.6, `task-221`): `start` refuses a feature task while open fix tasks are more than
+the share `memory.yaml` `task.stop_the_line` declares (`dl-133`); `design` reads each acceptance
+criterion against the bound directives and the ratified specs (`dl-102` §4); `refactor` also runs
+`typecheck.clean` (`dl-044`); `review` re-runs the summary's claims (`dl-097`), re-verifies a previous
+reject's items first on a re-review (`dl-098`) and runs the document-parity suites (`docs.parity`,
+`dl-116`); `done` checks that the task's `### Retrospective` subsection exists, and that of each bug
+it closes (`dl-115`). No check is evaluated before v1.0 (P4.12); until then the phase's role applies it.
+
 ```mermaid
 flowchart TD
-    ST["**start** *(developer)*\ngit.create_branch(task: {task.id}) → branch task/{task.id}\ntask: backlog → in-progress\n↳ bug.sync_state: source bug planned → in-progress"]
-    DES["📐 **design** *(architect)* · safety net\nverify a tech-spec exists + is approved for every\nfile format/schema/constant/API the task implements\n✔ P4.12: [title, scope] (if scaffolded) + tech-spec: approved"]
+    ST["**start** *(developer)*\n✔ pre: stop-the-line clear (feature tasks only, dl-133)\ngit.create_branch(task: {task.id}) → branch task/{task.id}\ntask: backlog → in-progress\n↳ bug.sync_state: source bug planned → in-progress"]
+    DES["📐 **design** *(architect)* · safety net\nverify a tech-spec exists + is approved for every\nfile format/schema/constant/API the task implements\n✔ P4.12: [title, scope] (if scaffolded) + tech-spec: approved\n✔ each AC consistent with the directives and specs (dl-102)"]
     RED["🔴 **red** *(qa)* · fresh\n↳ bug.sync_state: source bug in-review → in-progress (after a reject)\ndeveloper merges main first (on a resume)\nwrite the tests black-box from the ACs\n✔ tests.exist + tests.failing"]
     GREEN["🟢 **green** *(developer)* · distinct from red\nmin code to pass\n✔ tests.passing + tests.unchanged(since: red)"]
-    REF["🔵 **refactor** *(developer)* · may resume green\nclean code, keep tests green\nlast: merge main (if it moved)\n✔ tests.passing + coverage ≥ 80% + tests.unchanged(since: red)"]
-    REV["📋 **review** *(reviewer)* · distinct from red, green, refactor\ntask: in-progress → in-review\n↳ bug.sync_state: source bug → in-review (once ALL its fix tasks are)\n🔑 Approval gate — *approver*"]
-    DONE["✅ **done** *(developer)*\ngit merge to main\ntask: in-review → approved → done\n↳ bug.sync_state: source bug → resolved → closed (once ALL its fix tasks are done)"]
+    REF["🔵 **refactor** *(developer)* · may resume green\nclean code, keep tests green\nlast: merge main (if it moved)\n✔ tests.passing + coverage ≥ 80% + lint + typecheck + tests.unchanged(since: red)"]
+    REV["📋 **review** *(reviewer)* · distinct from red, green, refactor\n✔ pre: BDD + claims re-run + previous reject re-verified + docs.parity\ntask: in-progress → in-review\n↳ bug.sync_state: source bug → in-review (once ALL its fix tasks are)\n🔑 Approval gate — *approver*"]
+    DONE["✅ **done** *(developer)*\ngit merge to main\ntask: in-review → approved → done\n↳ bug.sync_state: source bug → resolved → closed (once ALL its fix tasks are done)\n✔ ### Retrospective present (task, closed bugs)"]
 
     ST --> DES --> RED --> GREEN --> REF --> REV
     REV -->|APPROVE| DONE
