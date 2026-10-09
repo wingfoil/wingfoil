@@ -31,6 +31,8 @@ types:
     path: "docs/releases/{id}.md"
     states:
       sequence: [ draft, planning, in-development, releasing, released ]
+      gates:
+        releasing: { reject: in-development }
   bug:
     path: "docs/bugs/{id}.md"
     states:
@@ -645,3 +647,78 @@ phases:
     expect(entry.complete).toBe(true);
   });
 });
+
+describe('task-202 — re-entry cutoffs across include and iterate_over (spec-017 §4.8; approver ruling 2026-10-09)', () => {
+  // Characterization (re-review item 1): the code already behaves this way since the merge of task-203.
+  const SUBREL = wf(`name: subrel
+kind: sub
+element: release
+phases:
+  - name: check
+`);
+  const SUBT = wf(`name: subt
+kind: sub
+element: task
+phases:
+  - name: work
+`);
+  const RELB = wf(`name: relb
+kind: main
+element: release
+phases:
+  - name: prep
+  - name: inc
+    include: subrel
+  - name: loop
+    include: subt
+    iterate_over: task
+    where: { status: [ backlog ] }
+  - name: submit
+    actions:
+      - element.set_state(releasing)
+  - name: approve
+    actions:
+      - memory.approve
+    fallback: { step: prep, set_state: in-development }
+`);
+  const rec = (phase: string, element: string, commit: string, position: number) => ({ commit, position, phase, instance: 'p1', element, item: null });
+  // History: s0 (start) → a1 prep → a2 subrel.check → a3 subt.work → J (release r1 rejected releasing → in-development).
+  const OLD = [rec('relb.prep', 'release:r1', 'a1', 4), rec('subrel.check', 'release:r1', 'a2', 3), rec('subt.work', 'task:task-1-a', 'a3', 2)];
+  const REJECT = { commit: 'J', position: 1, verb: 'reject' as const, type: 'release', id: 'r1', from: 'releasing', to: 'in-development' };
+  const PARENTS: [string, string[]][] = [
+    ['a1', ['s0']],
+    ['a2', ['a1']],
+    ['a3', ['a2']],
+    ['J', ['a3']],
+  ];
+  const at = (records: ReturnType<typeof rec>[], parents: [string, string[]][]): InstanceDeduction =>
+    first(
+      snapshot([RELB, SUBREL, SUBT], [task('task-1-a', 'backlog'), release('r1', 'in-development'), plan('p1', 'relb', 'r1')], {
+        history: new Map([['s0', { records: [...records, ...OLD], links: [], reentries: [REJECT] }]]),
+        parents: new Map([...PARENTS, ...parents]),
+      }),
+    );
+
+  it('(a) a plain include honours the cutoff: inc is current again, its sub step reports the re-entry', () => {
+    const entry = at([rec('relb.prep', 'release:r1', 'a4', 0)], [['a4', ['J']]]);
+    expect(entry.phases.map((phase) => `${phase.phase}:${phase.state}`)).toEqual(['prep:complete', 'inc:current', 'loop:pending', 'submit:pending', 'approve:pending']);
+    expect(entry.frontier.map((step) => [step.key, step.reentered, step.reentryCommit])).toEqual([['subrel.check@release:r1', true, 'J']]);
+  });
+
+  it('(b) an iterate_over iteration ignores it: loop is complete on the task\'s pre-reject record', () => {
+    const entry = at(
+      [rec('subrel.check', 'release:r1', 'a5', 0), rec('relb.prep', 'release:r1', 'a4', 1)],
+      [
+        ['a4', ['J']],
+        ['a5', ['a4']],
+      ],
+    );
+    expect(entry.phases.slice(0, 3)).toEqual([
+      { phase: 'prep', state: 'complete' },
+      { phase: 'inc', state: 'complete' },
+      { phase: 'loop', state: 'complete', iterations: { eligible: 0, entered: 0, complete: 1, late: 0 } },
+    ]);
+    expect(entry.frontier.map((step) => [step.key, step.reentered])).toEqual([['relb.submit@release:r1', true]]);
+  });
+});
+
