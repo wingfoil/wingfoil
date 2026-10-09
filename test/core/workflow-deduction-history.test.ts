@@ -476,3 +476,55 @@ describe('task-203 — the snapshot reader on edge cases of the walk (spec-017 �
     }
   });
 });
+
+describe.each(['main-first', 'side-first'])('task-203 review F1 (ruling (a)) — "newer than the re-entry" is ancestry, whatever the merge order (%s)', (order) => {
+  it('a `red` record made on a branch that never saw the reject does not count after the merge', () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeProject(repo);
+      commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-progress') }, 'task-1');
+      commit(repo, { 'docs/plans/loop-1.md': plan('loop-1', 'loop', 'task-1') }, 'wf(plan): add loop-1');
+      record(repo, 'loop-1', 'loop.design', 'task:task-1');
+      record(repo, 'loop-1', 'loop.red', 'task:task-1');
+      commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-review') }, 'wf(task): submit task-1');
+      git(repo, ['branch', 'task/other']);
+      const reject = commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-progress') }, 'wf(task): reject task-1 [in-review → in-progress]');
+      git(repo, ['checkout', '--quiet', 'task/other']);
+      record(repo, 'loop-1', 'loop.red', 'task:task-1'); // made without seeing the reject
+      if (order === 'main-first') {
+        git(repo, ['checkout', '--quiet', 'main']);
+        git(repo, ['merge', '--quiet', '--no-ff', '-m', 'merge task/other', 'task/other']);
+      } else {
+        git(repo, ['merge', '--quiet', '--no-ff', '-m', 'merge main', 'main']);
+      }
+      const instance = only(deduceWorkflowStateAtHead(repo), 'loop-1');
+      expect(states(instance)).toEqual(['start:complete', 'design:complete', 'red:current', 'review:pending', 'done:pending']);
+      expect(instance.frontier[0]).toMatchObject({ key: 'loop.red@task:task-1', reentered: true, reentryCommit: reject });
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+});
+
+describe('task-203 review F3 (ruling (a)) — the union walk is bounded by the octopus merge base of the starts', () => {
+  it("a younger instance's walk keeps a reject made on another branch before the oldest start", () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeProject(repo);
+      commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-review') }, 'task-1 in review');
+      git(repo, ['checkout', '--quiet', '-b', 'side']);
+      commit(repo, { 'docs/plans/loop-Y.md': plan('loop-Y', 'loop', 'task-1') }, 'wf(plan): add loop-Y');
+      record(repo, 'loop-Y', 'loop.design', 'task:task-1');
+      record(repo, 'loop-Y', 'loop.red', 'task:task-1');
+      git(repo, ['checkout', '--quiet', 'main']);
+      const reject = commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-progress') }, 'wf(task): reject task-1 [in-review → in-progress]');
+      commit(repo, { 'docs/plans/ing-O.md': plan('ing-O', 'capture-flow') }, 'wf(plan): add ing-O');
+      git(repo, ['merge', '--quiet', '--no-ff', '-m', 'merge side', 'side']);
+      // The reject lies in loop-Y's walk (not reachable from its start's parent), though it precedes ing-O's start.
+      const instance = only(deduceWorkflowStateAtHead(repo), 'loop-Y');
+      expect(instance.frontier[0]).toMatchObject({ key: 'loop.red@task:task-1', reentered: true, reentryCommit: reject });
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+});
