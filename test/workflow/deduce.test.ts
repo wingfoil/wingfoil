@@ -62,7 +62,10 @@ function snapshot(workflows: Workflow[], documents: ReturnType<typeof doc>[], ex
     scanDiagnostics: [],
     tree: [],
     starts: new Map(plans.map((p, i) => [p.path, { commit: `s${i}`, position: i }])),
-    records: new Map(),
+    history: new Map(),
+    transitions: [],
+    lastChanges: new Map(),
+    parents: new Map(),
     dirty: [],
     ...extra,
   };
@@ -180,7 +183,8 @@ phases:
 
     documents[1] = doc('docs/bugs/b1.md', { id: 'b1', type: 'bug', status: 'open', release: 'v2' });
     step = deduceWorkflowState(snapshot([flow, sub], documents)).instances[0]!.frontier[0]!;
-    expect([step.key, step.evidence]).toEqual(['typed.many@task:t1', { kinds: ['include'], missing: ['include'], finalizable: false }]);
+    // task-202 expands the `iterate_over` phase (spec-017 §4.6): the sub runs on the open bug.
+    expect([step.key, step.evidence]).toEqual(['typed-sub.fix@bug:b1', { kinds: ['created', 'record'], missing: ['record'], finalizable: true }]);
   });
 
   it('review F2: a phase with `awaits` needs a record even when its other evidence is satisfied (spec-017 §4.3, §5.4)', () => {
@@ -197,7 +201,7 @@ phases:
     const done = deduceWorkflowState(
       snapshot([flow], documents, {
         tree: ['dist/out.tgz'],
-        records: new Map([['s0', [{ commit: 'r1', phase: 'publish.release', instance: 'p1', element: null, item: null }]]]),
+        history: new Map([['s0', { records: [{ commit: 'r1', position: 0, phase: 'publish.release', instance: 'p1', element: null, item: null }], links: [], reentries: [] }]]),
       }),
     );
     expect(done.instances[0]!.complete).toBe(true);
@@ -246,7 +250,7 @@ phases:
     ]);
   });
 
-  it('state evidence is unsatisfied for a status outside the sequence (deprecated) and for an undetermined exit state', () => {
+  it('a deprecated bound element abandons the instance (task-202, spec-017 §4.11); an undetermined exit state leaves state evidence unsatisfied', () => {
     const flow = wf(`name: rel
 kind: main
 element: release
@@ -260,7 +264,7 @@ phases:
 `);
     const at = (status: string): string[] =>
       deduceWorkflowState(snapshot([flow], [doc('docs/releases/r1.md', { id: 'r1', type: 'release', status }), plan('p1', 'rel', 'r1')])).instances[0]!.frontier.map((step) => step.key);
-    expect(at('deprecated')).toEqual(['rel.plan@release:r1']);
+    expect(at('deprecated')).toEqual([]);
     expect(at('released')).toEqual(['rel.odd@release:r1']);
   });
 
@@ -317,6 +321,153 @@ phases:
     const bare = deduceWorkflowState(snapshot([], [doc('docs/tasks/t1.md', { id: 't1', type: 'task', status: 'draft' }), doc('docs/tasks/t2.md', {})], { memoryYaml: null }));
     expect(bare.diagnostics.map((d) => [d.code, d.message])).toEqual([['W_MEMORY_UNREADABLE', "unreadable frontmatter in docs/tasks/t1.md: type 'task' is not declared in memory.yaml"]]);
     expect(W_MEMORY_INVALID_STATE).toBe('W_MEMORY_INVALID_STATE');
+  });
+
+  it('task-203: the newest of several re-entries cuts the evidence; `state` counts by its transition or the file\'s last change', () => {
+    const memory = MemoryYaml.parse(
+      parseYaml(
+        `version: 1.0
+types:
+  task:
+    path: "docs/tasks/{id}.md"
+    states:
+      sequence: [ draft, in-progress, in-review, done ]
+      gates:
+        in-review: { reject: in-progress }
+  plan:
+    path: "docs/plans/{scope}/{id}.md"
+    states:
+      sequence: [ draft, active, done ]
+`,
+        'memory.yaml',
+      ),
+    );
+    const flow = wf(`name: loop
+kind: main
+element: task
+phases:
+  - name: start
+    actions:
+      - element.set_state(in-progress)
+  - name: review
+    actions:
+      - memory.submit
+    fallback: { step: start }
+`);
+    const documents = [doc('docs/tasks/t1.md', { id: 't1', type: 'task', status: 'in-progress' }), plan('p1', 'loop', 't1')];
+    const reentry = (commit: string, position: number) => ({ commit, position, verb: 'reject' as const, type: 'task', id: 't1', from: 'in-review', to: 'in-progress' });
+    const history = new Map([['s0', { records: [], links: [], reentries: [reentry('r-new', 3), reentry('r-old', 5)] }]]);
+    // One line of history, newest first: t1 → c2 → r-new → c4 → r-old → c9.
+    const line = ['t1', 'c2', 'r-new', 'c4', 'r-old', 'c9'];
+    const parents = new Map(line.map((commit, index) => [commit, index + 1 < line.length ? [line[index + 1]!] : []]));
+    const first = (extra: Partial<DeductionSnapshot>) =>
+      deduceWorkflowState(snapshot([flow], documents, { memoryYaml: memory, history, parents, ...extra })).instances[0]!.frontier[0]!;
+
+    // No transition and no recorded change: the state is older than the walk.
+    expect(first({})).toMatchObject({ key: 'loop.start@task:t1', reentered: true, reentryCommit: 'r-new', evidence: { missing: ['state'] } });
+    // The file's last change sits between the two re-entries: older than the newest, so still not counted.
+    expect(first({ lastChanges: new Map([['task:t1', { commit: 'c4', position: 4 }]]) }).evidence.missing).toEqual(['state']);
+    // Below a merge the descendants are reached by two paths and counted once: r-new → (a | b) → m.
+    const diamond = new Map([...parents, ['a', ['r-new']], ['b', ['r-new']], ['m', ['a', 'b']]]);
+    expect(first({ parents: diamond, lastChanges: new Map([['task:t1', { commit: 'm', position: 0 }]]) }).key).toBe('loop.review@task:t1');
+    // A commit outside the walk's parent links descends from nothing.
+    expect(first({ lastChanges: new Map([['task:t1', { commit: 'elsewhere', position: 0 }]]) }).evidence.missing).toEqual(['state']);
+    // A change newer than both counts; so does a transition naming the current status, preferred over the change.
+    expect(first({ lastChanges: new Map([['task:t1', { commit: 'c2', position: 2 }]]) }).key).toBe('loop.review@task:t1');
+    expect(
+      first({
+        transitions: [{ commit: 't1', position: 1, type: 'task', id: 't1', to: 'in-progress' }],
+        lastChanges: new Map([['task:t1', { commit: 'c9', position: 9 }]]),
+      }).key,
+    ).toBe('loop.review@task:t1');
+  });
+
+  it('task-203: linkage edge cases — an element HEAD lacks, ties by id, an unresolved path token, a type created by nobody, an undetermined target', () => {
+    const ingest = wf(`name: grab
+kind: main
+phases:
+  - name: capture
+    actions:
+      - 'memory.add(type: bug)'
+      - 'memory.add(type: task)'
+      - element.set_state(nonsense)
+    produces:
+      - { type: bug, path: "docs/bugs/{bug.slug}.md" }
+`);
+    const link = (id: string, type: string, position: number) => ({ commit: `a${position}`, position, instance: 'p1', step: 'grab.capture', type, id });
+    const documents = [
+      doc('docs/bugs/b1.md', { id: 'b1', type: 'bug', status: 'open' }),
+      doc('docs/bugs/b2.md', { id: 'b2', type: 'bug', status: 'open' }),
+      plan('p1', 'grab'),
+    ];
+    // b0 is linked but HEAD holds no such element; b2 and b1 share the oldest add commit, so ascending id binds b1.
+    const history = new Map([['s0', { records: [], links: [link('b2', 'bug', 4), link('b1', 'bug', 4), link('b0', 'bug', 9)], reentries: [] }]]);
+    const deduction = deduceWorkflowState(snapshot([ingest], documents, { history }));
+    const instance = deduction.instances[0]!;
+    expect(instance.instance.element).toEqual({ type: 'bug', id: 'b1', status: 'open' });
+    expect(instance.instance.created.map((ref) => ref.id)).toEqual(['b1', 'b2']);
+    const step = instance.frontier[0]!;
+    // No task created, the bug's `{bug.slug}` has no value, and the set_state target is undetermined.
+    expect(step.evidence.missing).toEqual(['created']);
+    expect(step.produces).toEqual([{ pattern: 'docs/bugs/{bug.slug}.md', owner: 'bug', resolved: [], exists: false, evidence: false }]);
+    expect(deduction.diagnostics.map((d) => d.message)).toEqual([
+      "token '{bug.slug}' of grab.capture has no value: bug:b1 has no value for 'slug'",
+      "token '{bug.slug}' of grab.capture has no value: bug:b2 has no value for 'slug'",
+    ]);
+
+    const both = new Map([['s0', { records: [], links: [link('b1', 'bug', 4), link('t1', 'task', 3)], reentries: [] }]]);
+    const withTask = [doc('docs/bugs/b1.md', { id: 'b1', type: 'bug', status: 'open', slug: 's1' }), plan('p1', 'grab'), doc('docs/tasks/t1.md', { id: 't1', type: 'task', status: 'draft' })];
+    // Both types created and the bug's path committed: what fails now is the undetermined target state of the task.
+    const withPath = deduceWorkflowState(snapshot([ingest], withTask, { history: both, tree: ['docs/bugs/s1.md'] })).instances[0]!.frontier[0]!;
+    expect(withPath.produces[0]).toMatchObject({ resolved: ['docs/bugs/s1.md'], exists: true });
+    expect(withPath.evidence.missing).toEqual(['created']);
+  });
+
+  it('task-203: a self-bound step accepts a record written before its element existed; a type added twice is judged by its first add', () => {
+    const ingest = wf(`name: grab
+kind: main
+phases:
+  - name: note
+  - name: capture
+    actions:
+      - 'memory.add(type: bug)'
+      - memory.submit
+      - 'memory.add(type: bug)'
+  - name: check
+`);
+    const documents = [doc('docs/bugs/b1.md', { id: 'b1', type: 'bug', status: 'open' }), plan('p1', 'grab')];
+    const record = (phase: string, element: string | null, position: number) => ({ commit: `r${position}`, position, phase, instance: 'p1', element, item: null });
+    const history = new Map([
+      [
+        's0',
+        {
+          records: [record('grab.check', 'bug:b1', 1), record('grab.note', null, 7)],
+          links: [{ commit: 'a5', position: 5, instance: 'p1', step: 'grab.capture', type: 'bug', id: 'b1' }],
+          reentries: [],
+        },
+      ],
+    ]);
+    const instance = deduceWorkflowState(snapshot([ingest], documents, { history })).instances[0]!;
+    expect(instance.instance.element?.id).toBe('b1');
+    expect(instance.complete).toBe(true);
+  });
+
+  it('task-203: a re-entry from a state no phase holds as a gate with a fallback reaches no phase', () => {
+    const flow = wf(`name: rel
+kind: main
+element: release
+phases:
+  - name: plan
+    actions:
+      - element.set_state(planning)
+  - name: ship
+    actions:
+      - element.set_state(released)
+`);
+    const documents = [doc('docs/releases/r1.md', { id: 'r1', type: 'release', status: 'planning' }), plan('p1', 'rel', 'r1')];
+    const reentries = [{ commit: 'k1', position: 1, verb: 'park' as const, type: 'release', id: 'r1', from: 'released', to: 'planning' }];
+    const step = deduceWorkflowState(snapshot([flow], documents, { history: new Map([['s0', { records: [], links: [], reentries }]]) })).instances[0]!.frontier[0]!;
+    expect(step).toMatchObject({ key: 'rel.ship@release:r1', reentered: false, reentryCommit: null });
   });
 
   it('a repository with no commit has an empty answer', () => {
