@@ -542,6 +542,37 @@ phases:
     expect(keys(entry)).toEqual(['add-sweep.extra', 'add-sweep.last']);
   });
 
+  it('review F3: a selection matching nothing whose step created an element (linkage, task-203) is not vacuous', () => {
+    const addSweep = wf(`name: add-sweep2
+kind: main
+phases:
+  - name: extra
+    optional: true
+  - name: sweep
+    where: { type: bug, status: [ open ] }
+    actions:
+      - 'memory.add(type: task)'
+  - name: last
+`);
+    const linked = (status: string): DeductionSnapshot =>
+      snapshot([addSweep], [task('task-9-new', status), plan('p1', 'add-sweep2')], {
+        history: new Map([
+          ['s0', { records: [], links: [{ commit: 'a1', position: 0, instance: 'p1', step: 'add-sweep2.sweep', type: 'task', id: 'task-9-new' }], reentries: [] }],
+        ]),
+      });
+    const entry = first(linked('draft'));
+    expect(entry.frontier.find((step) => step.phase === 'sweep')).toBeUndefined();
+    expect(entry.phases).toEqual([
+      { phase: 'extra', state: 'skipped' },
+      { phase: 'sweep', state: 'complete' },
+      { phase: 'last', state: 'current' },
+    ]);
+    // The self-bound element archived abandons the instance (§3.4 with §4.11).
+    const archived = first(linked('deprecated'));
+    expect(archived.instance).toMatchObject({ abandoned: true, element: { type: 'task', id: 'task-9-new', status: 'deprecated' } });
+    expect(archived.frontier).toEqual([]);
+  });
+
   it('a vacuous later completion does not skip it', () => {
     const optVacuous = wf(`name: opt2
 kind: main
