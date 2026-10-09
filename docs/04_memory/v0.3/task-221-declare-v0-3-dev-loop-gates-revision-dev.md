@@ -145,7 +145,7 @@ refactor, review, done); `testing.md` "1.1" → "1.2", the `typecheck.clean` bul
 `[npm, test, --, test/docs/cli-reference.test.ts, …]` · `done` post `retrospective.present` unbound; each
 `evaluated: false`. Diagnostics: 0 errors; 71 `W_WORKFLOW_UNBOUND_TOKEN` (66 before: the conformance pin
 gains exactly the five new unbound rows `phases[0].checks.pre[0]`, `phases[1].checks.post[3]`,
-`phases[5].checks.pre[1]`, `phases[5].checks.pre[2]`, `phases[6].checks.post[0]`) and 6 `W_MEMORY_UNREADABLE`
+`phases[5].checks.pre[1]`, `phases[5].checks.pre[2]`, `phases[6].checks.post[0]`; `git show b56e8721:test/core/workflow-repository-conformance.test.ts | grep -c '^      \["'` → 66 rows before) and 6 `W_MEMORY_UNREADABLE`
 for the grandfathered frontmatter-less plans (`docs/05_plans/rl-v1/rel-v0.1/dev-loop-rel-v0.1-plan.md` …),
 which no file of this task touches. **The warnings the new checks add** (AC 2): the five unbound ones above,
 each a reading no command asserts today (claims, previous reject, criteria vs rules, the stop-the-line
@@ -181,8 +181,9 @@ Run with the plan amendment in the working tree; `main` has not moved (`git rev-
 - AC 3 met as a pending amendment (the plan is past its first state).
 - Same class in files touched: the plan's §1 "follows `dev-loop.yaml` v1.4" was stale since task-205 —
   corrected in the same amendment; `testing.md`'s `typecheck.clean` bullet (task-173 handover) fixed.
-  `code-review.md` names no dev-loop token (`grep -c "checks.pre\|claims.rerun" .wingfoil/directives/custom/code-review.md`
-  → 0) and is task-208's in B4: not edited.
+  `code-review.md` (task-208's in B4, not edited) stays true: its one mention
+  (`grep -n "checks.pre\|claims.rerun" .wingfoil/directives/custom/code-review.md` → line 40) says the
+  `review` phase's `checks.pre` entry is the workflow's declaration, which it now is.
 
 ### Pending amendments (approver)
 
