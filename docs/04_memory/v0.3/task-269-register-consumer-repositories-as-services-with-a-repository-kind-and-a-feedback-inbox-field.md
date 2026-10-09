@@ -54,11 +54,85 @@ repository) are added later through `service-ingest`, as each consumer versions 
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (architect)
+
+- **depends_on (dl-015):** none (`depends_on: []`). Decisions read: `dl-163` (`ready`) S3b, R1, R2, R8; `dl-088`
+  (`ready`) field table. No tech-spec enumerates the service kinds or the service's optional fields: `spec-010`
+  defers type-specific fields to `spec-001` and the templates, and `spec-001`'s worked example carries no
+  `description` (`grep -n "handle\|feedback_inbox" docs/04_memory/design/specs/spec-00{1,10}-*.md` → no kind list).
+  The parity gates (`test/docs/memory-types-parity.test.ts`) compare types and state facts only, and this task
+  adds neither, so **no spec-001/spec-010 amendment** is needed.
+- **Where the refusal lives:** no product code reads a service's fields beyond `template.frontmatter.required`
+  (`memory.yaml` has no declarative shape for an optional field: `grep -n "not_applicable_allowed\|lists" src/memory/schema.ts`),
+  and declared value sets are product-enforced only from v0.4 (`bug-195`; `dl-163` R8 "no product feature yet").
+  So the refusal is a **repository test**: a pure `feedbackInboxProblems` in `test/core/helpers/service-fields.ts`,
+  applied to every committed service document — the pattern `dl-163` S3c sets for `reported_by:`, which can reuse
+  it. Decision D1 below.
+- **Versions:** `memory.yaml` 2.6 → 2.7 (task-212 also bumps 2.6 → 2.7; this task merges after it and re-bumps
+  at the gate); service scaffold `tmpl_version` 261006 → 261009 (date-stamp convention, task-213); `service-ingest.yaml`
+  1.0 → 1.1 with an inline reason. `.wingfoil/README.md` and `WORKFLOW.md` carry no version field.
+
+**AC classification** (testing directive, T1/T3):
+
+| AC | Class | Why |
+|---|---|---|
+| 1 — kind `repository`, optional `feedback_inbox`, scaffold + `memory.yaml` pinned, bad inbox refused | red-first | the kind, the field and the declaration are new; the four declaration cases fail at `1a21ada8`. The refusal cases pass at red, because the checker is test code (D1); they pin the rule |
+| 2 — `service-ingest`, README, WORKFLOW.md list the kind | red-first (reclassified from characterization) | the text did not exist; a test fails at `1a21ada8` — calling it characterization would fabricate a green. The `dl-088` table amendment is a pending amendment, not tested |
+| 3 — `verify` shape in the template comment | red-first (reclassified from characterization) | the comment did not exist; fails at `1a21ada8` |
+
+### red
+
+`a26a0503`: new `test/core/service-repository-kind.test.ts` (memory.yaml and scaffold at `HEAD` through
+`loadMemoryYamlAtHead` / `resolveAddType`, as `memory add` reads them; `service-ingest` through `loadWorkflowsYaml`;
+guides and service documents from the working tree, sorted) and `test/core/helpers/service-fields.ts`. Run:
+`npx jest test/core/service-repository-kind.test.ts` → **8 failed, 18 passed, 26**: AC 1's kind list, field line,
+`tmpl_version`, `memory.yaml` description; AC 2's three; AC 3's one. Passing at red: the 16
+`feedbackInboxProblems` cases and the scan of the 17 committed services (`svc-001`..`svc-017`, none has the field).
+
+### green
+
+`56523163`: `.wingfoil/memory/templates/service.md` (kind list + `repository`, `feedback_inbox: ""` with its
+`# optional` comment, Verification comment with the two commands, `tmpl_version: 261009`), `.wingfoil/memory.yaml`
+2.7 (service description), `service-ingest.yaml` 1.1 (description, header), `.wingfoil/README.md` and
+`.wingfoil/WORKFLOW.md` (ingest lines). Red's files untouched (`git diff --name-only a26a0503 HEAD -- test/` →
+nothing). Run: `npx jest test/core/service-repository-kind.test.ts test/core/service-memory-type.test.ts
+test/memory/template-wording.test.ts test/core/workflow-repository-conformance.test.ts test/docs/workflow-md.test.ts
+test/lint/version-bump.test.ts` → 6 suites, **102 passed**.
+
+### refactor
+
+Run with the `dl-088` pending amendment in the working tree, load average ~300 (`uptime`, 9 parallel agents):
+- `npm test` → 320 suites, **6080 passed**, exit 0. `npm run test:coverage` → exit 0, All files 99.2 / 97.01 /
+  97.48 / 99.67, equal to the W3 B3 gate's line (`grep '^All files' ../devloop-kit/gate-w3b3-cov.log`).
+- `npm run lint`, `npm run docs:api`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json
+  --noEmit` → exit 0 each.
+- `node scripts/check-governance.cjs --base b56e8721` → 1 wf() commit checked, 0 findings, exit 0.
+- `node dist/cli.js workflow list` → exit 0; the conformance suite's counts are unchanged (only a description
+  changed; `git diff b56e8721 -- test/core/workflow-repository-conformance.test.ts` → empty).
+- BDD: no feature file names the `service` type (`grep -rln service docs/02_requirements/02_bdd/features` →
+  nothing); no scenario added.
+
+### review (self, reviewer)
+
+Every AC is pinned by `test/core/service-repository-kind.test.ts` (AC 1: 22 cases, AC 2: 3, AC 3: 1). Same-class
+check: every enumeration of the kinds in a file this task owns now lists `repository` (`grep -rn "domain, handle\|domain | handle"
+.wingfoil` → five lines, all touched by `56523163`). Not changed: the copied `kind:` comments in `svc-013`..`svc-017` (active
+services; the comment is a copy of the old scaffold, the value is correct) and `dl-163`'s Context quote (a dated
+fact). No consumer service registered (coordinator's, after the merge).
+
+**Decisions for the approver:**
+- D1 — the `feedback_inbox` refusal is a repository test (`test/core/helpers/service-fields.ts`), not product
+  code (`dl-163` R8, `bug-195`); its rules: optional; only on `kind: repository`; repository-relative (no leading
+  `/`, `\`, `~` or drive letter); `/` separators; trailing `/`; no empty, `.` or `..` segment.
+- D2 — a `feedback_inbox` on a service that is not `kind: repository` is refused (dl-163 S3b: one service per
+  repository, the inbox a property of it). The same test also checks every committed service's `kind` is one of
+  the scaffold's seven.
+- D3 — no spec-001/spec-010 amendment (neither enumerates kinds or service fields; parity gates unaffected).
+
+**Pending amendments (approver)** — uncommitted in the worktree, for `memory amend`:
+- `dl-088-a-memory-type-for-state-that-lives-outside-the-repository` — `--reason "task-269, from dl-163 S3b: the kind table gains repository and an optional feedback_inbox row, with the repository verify shape. See the dated amendment note before Body."`
+
+### Retrospective
+
+- The kind list is copied into each service's `kind:` comment at `memory add`, so every scaffold change leaves
+  stale copies in older services (`grep -n "domain | handle" docs/04_memory/services/*.md | wc -l` → 5 copies).
