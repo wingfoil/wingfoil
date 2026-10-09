@@ -199,12 +199,22 @@ describe('AC 6 — dl-035: the resume path merges main into the task branch befo
     expect(actionLine('red', 'git.merge(from: main)')).toMatch(/dl-035/);
   });
 
-  it('`review` merges main again before `memory.submit`, if main moved', () => {
-    const actions = phase('review').actions ?? [];
-    const merge = actions.indexOf('git.merge(from: main)');
-    expect(merge).toBeGreaterThanOrEqual(0);
-    expect(merge).toBeLessThan(actions.indexOf('memory.submit'));
-    expect(actionLine('review', 'git.merge(from: main)')).toMatch(/dl-035/);
+  it('`refactor` merges main as its LAST action, so its post-checks measure the merged tree (approver ruling 2026-10-09, option 2)', () => {
+    const actions = phase('refactor').actions ?? [];
+    expect(actions[actions.length - 1]).toBe('git.merge(from: main)');
+    expect(actionLine('refactor', 'git.merge(from: main)')).toMatch(/dl-035 \(b\)/);
+  });
+
+  it('`review` does not merge: it stays read-only toward the branch except submit and the bug sync', () => {
+    expect((phase('review').actions ?? []).map(tokenName)).toEqual(['tests.bdd.run', 'memory.submit', 'bug.sync_state']);
+  });
+
+  it('the header gives conflicts to the developer, never to qa, with no "returns to red" from red itself', () => {
+    const text = header();
+    expect(text).toMatch(/the developer runs it before `qa` starts/);
+    expect(text).toMatch(/`qa` never resolves a conflict/);
+    expect(text).toMatch(/last action of `refactor`/);
+    expect(text).not.toMatch(/the task returns to `red` with the conflict/);
   });
 
   it('the merge is a bound manual step (no unbound action token)', () => {
