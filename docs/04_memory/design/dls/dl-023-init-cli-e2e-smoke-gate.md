@@ -123,3 +123,15 @@ B-DECISION … choice here or on `dl-013`/`dl-023`"*. The ruling was made at S5.
   that Actions item (1) asked for. The change is carried by `bug-134-e2e-smoke-yaml-declares-no-produces`
   (`triaged`), and it is made behind a task, not inline.
 
+**Note (2026-10-09, `dl-099` Action 3; W3 B3 follow-ups, `bug-ingest-rel-v0.3-w3b3-review-findings-plan`).** The gate
+this decision describes is extended by `dl-099-release-gates-run-on-every-candidate-on-a-fresh-project` (`ready`),
+which this note points to as its Action 3 asks. Read the Decision above together with it: the smoke runs on every
+release candidate, against the candidate's packed tarball rather than the working tree (`dl-099` §1); it drives each
+template through a use scenario — every built-in machine shape through `add → submit → approve`, one `reject`, one
+`deprecate`, `memory history` on each — re-loading what each command wrote and asserting exact exit codes,
+including 1 and 2 (`dl-099` §3); it declares its report under `produces:` (§3); and its smoke part also runs in CI
+on every push (§4 (c), ratified with (a)). `task-207` delivered the smoke side in v0.3 (`e2e-smoke.yaml` 1.4, the
+gate hard-rejecting at `severity: reject` in `workflows/bindings.yaml`, the report under `docs/07_gates/`, a CI
+job in `.github/workflows/ci.yml`; `bug-132`, `bug-133`, `bug-134` closed). The staging rehearsal of `dl-099` §2 and
+the candidate re-entry are `task-219`'s (`backlog`). The minimum command list of the Decision above stays a floor,
+not the scenario.

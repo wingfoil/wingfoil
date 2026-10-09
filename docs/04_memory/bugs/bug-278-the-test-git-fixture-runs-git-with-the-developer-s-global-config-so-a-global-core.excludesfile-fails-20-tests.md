@@ -71,3 +71,13 @@ that ignores everything, and the helper's comment claims an isolation it does no
 
 Captured on 2026-10-07 by `bug-ingest-rel-v0.3-w3b1-review-findings-plan`, from `task-262`'s review (W3 B1,
 `dev-loop-rel-v0.3-plan`), reproduced against `main` at `0962f85f`.
+
+- **Note (2026-10-09, W3 B3 follow-ups, `bug-ingest-rel-v0.3-w3b3-review-findings-plan`; from `task-268`).** The
+  in-process `checkGovernance` has the same problem: `scripts/check-governance.cjs`'s `git()` helper calls
+  `execFileSync('git', …)` with no `env` option, so a test that sets `process.env.GIT_CONFIG_GLOBAL` before calling
+  it in-process does not isolate the git it spawns. `task-268` observed the mechanism in a Jest test:
+  `execFileSync('sh', ['-c', 'echo "[$WF_PROBE]"'])` after `process.env.WF_PROBE = 'x'` prints `[]`, because Jest's
+  per-file `process.env` copy reaches only a child given `env` explicitly. `task-268` worked around it by spawning
+  the script with `env: process.env` in `test/cli/check-governance-show-signature.test.ts`; the fix of this bug
+  covers the script's spawns as well as the fixture's (`task-268`'s Execution Notes, *Isolation of spawned
+  children*).
