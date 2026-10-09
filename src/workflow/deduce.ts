@@ -550,7 +550,7 @@ const STATE_VERBS: readonly string[] = ['memory.submit', 'memory.approve', 'elem
 const TYPED_SET_STATE_RE = /^([a-z][a-z0-9-]*)\.set_state$/;
 
 /** Whether `phase` declares `state` evidence on an element of `boundType` (`spec-003` § "Evidence", `spec-017` §4.2). */
-function declaresState(phase: Phase, boundType: string | null): boolean {
+export function declaresState(phase: Phase, boundType: string | null): boolean {
   if (boundType === null) return false;
   const selection = phase.where !== undefined && phase.iterate_over === undefined;
   let added = false;

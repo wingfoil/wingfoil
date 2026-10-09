@@ -289,6 +289,8 @@ describe('characterization — the parsed shape and the v0.3 release boundary', 
     const readers = walk(srcRoot)
       .filter((file) => readFileSync(file, 'utf-8').includes('distinct_from'))
       .map((file) => relative(srcRoot, file).split('\\').join('/'));
-    expect(readers).toEqual(['core/workflow-diagnostics.ts', 'workflow/schema.ts']);
+    // task-204: `workflow show` reports `distinct_from` as declared (`distinctFrom`), read-only — spec-017 §0
+    // "surfaced read-only in next/show"; it still enforces nothing.
+    expect(readers).toEqual(['core/workflow-diagnostics.ts', 'core/workflow-list-show.ts', 'workflow/schema.ts']);
   });
 });

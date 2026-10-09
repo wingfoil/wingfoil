@@ -6,7 +6,7 @@
 import { spawnSync } from 'child_process';
 import { join } from 'path';
 
-import { makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
 
@@ -18,6 +18,7 @@ describe('`wingfoil workflow list` — a spec-003 error names its code and file'
     writeFixtureFile(repo, '.wingfoil/workflows/custom/main.yaml', 'name: main\nkind: main\nphases:\n  - name: go\n');
     // A phase with no `name`: a structural failure whose bare message names no file.
     writeFixtureFile(repo, '.wingfoil/workflows/custom/bad.yaml', 'name: bad\nkind: sub\nphases:\n  - description: nameless\n');
+    commitAll(repo, 'the fixture'); // `workflow list` reads HEAD (task-204, spec-017 §1.1)
   });
   afterEach(() => removeTempDir(repo));
 
@@ -39,6 +40,7 @@ describe('`wingfoil workflow list` — a spec-003 error names its code and file'
   it('json: every further diagnostic reaches `details`, each in the reason form, the reason not repeated (task-130 × task-136)', () => {
     // A second error after bad.yaml's: an include of a file that does not exist.
     writeFixtureFile(repo, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/main.yaml\n  - workflows/custom/bad.yaml\n  - workflows/custom/missing.yaml\n');
+    commitAll(repo, 'include a missing file');
     const result = spawnSync(process.execPath, [CLI, 'workflow', 'list', '--format', 'json'], { cwd: repo, encoding: 'utf8' });
     expect(result.status).toBe(1);
     const { error, details } = JSON.parse(result.stderr) as { error: string; details?: { detail?: string; file?: string }[] };
@@ -52,6 +54,7 @@ describe('`wingfoil workflow list` — a spec-003 error names its code and file'
 
   it('console: the further diagnostic is an indented detail line after the reason', () => {
     writeFixtureFile(repo, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/main.yaml\n  - workflows/custom/bad.yaml\n  - workflows/custom/missing.yaml\n');
+    commitAll(repo, 'include a missing file');
     const result = spawnSync(process.execPath, [CLI, 'workflow', 'list'], { cwd: repo, encoding: 'utf8' });
     expect(result.status).toBe(1);
     const lines = result.stderr.split('\n').filter(Boolean);

@@ -13,7 +13,7 @@
 ### Step 1 — Review current workflow and identify gaps
 
 * **[MVP · v0.3]** US-6-01: As Morgan, I want to see current workflow structure and gaps with
-  `wingfoil workflow show --name [workflow]` so that I understand what's missing (e.g., an approval gate for architecture
+  `wingfoil workflow show [workflow]` so that I understand what's missing (e.g., an approval gate for architecture
   decisions). _(ref: P4.7 — home in Journey 0a)_
 
 ### Step 2 — Define new workflow phase/step

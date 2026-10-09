@@ -178,12 +178,16 @@ describe('spec-003 § Diagnostics — the evidence and binding rows owned by tas
     // Through `workflow list`: ok (exit 0), the warnings in the payload's `diagnostics`.
     const workflowList = CORE_MODULES.find((m) => m.name === 'workflow')?.operations.workflowList;
     if (!workflowList) throw new Error('fixture bug: workflow.workflowList not registered');
+    commitAll(repo, 'the fixture, committed: workflow list reads HEAD (task-204)');
     const result = await workflowList.fn({ root: repo });
     expect(result.ok).toBe(true);
     if (result.ok) {
+      // The fixture has no dna.yaml / memory.yaml: the core checks report that they did not run (bug-281).
       expect((result.value as { diagnostics: Diag[] }).diagnostics.map((d) => d.code)).toEqual([
         'W_WORKFLOW_UNBOUND_TOKEN',
         'W_WORKFLOW_UNBOUND_TOKEN',
+        'W_WORKFLOW_CHECKS_NOT_RUN',
+        'W_WORKFLOW_CHECKS_NOT_RUN',
       ]);
     }
   });

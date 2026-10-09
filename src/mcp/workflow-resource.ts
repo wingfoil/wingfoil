@@ -14,7 +14,8 @@
  * here distinguishes them beyond what each workflow's own `kind` field already reports.
  *
  * Registered directly via `McpServer.registerResource`, not through `registerCoreModules`'s
- * `CoreModule[]` registry — no `workflowShow` `CoreOperation` exists yet; same
+ * `CoreModule[]` registry — `workflowList` / `workflowShow` (task-204) answer from `HEAD` with another
+ * payload, while these keep theirs and the working tree in v0.3 (spec-017 §9); same
  * spec-006-core-domain-api §4 parity deviation `memory-resource.ts`/`dna-resource.ts` document for
  * their own Resources, for the same reason (task-030-implement-mcp-resources' scope).
  */
