@@ -154,11 +154,23 @@ describe('program.ts — real commander wiring (compiled + spawned, out-of-proce
     expect(value[0]?.assignment).toBe('unassigned');
   });
 
+  // task-204: `workflow list` reads `HEAD` (spec-017 §1.1, R15), and the static fixture root is not a
+  // repository of its own (its `HEAD` is this repository's), so its workflow files are committed in a
+  // temporary repository first.
   it('`workflow list --format json` exits 0 and includes the one fixture `main` workflow', () => {
-    const result = runCli('workflow', 'list', '--format', 'json');
-    expect(result.status).toBe(0);
-    const value = JSON.parse(result.stdout) as { workflows: Array<{ name: string; kind: string }> };
-    expect(value.workflows).toEqual([expect.objectContaining({ name: 'main', kind: 'main' })]);
+    const repo = makeTempGitRepo();
+    try {
+      for (const file of ['.wingfoil/workflows.yaml', '.wingfoil/workflows/custom/main.yaml', '.wingfoil/dna.yaml']) {
+        writeFixtureFile(repo, file, readFileSync(join(CLI_FIXTURE_ROOT, file), 'utf-8'));
+      }
+      commitAll(repo, 'the CLI fixture');
+      const result = runCliInRoot(repo, 'workflow', 'list', '--format', 'json');
+      expect(result.status).toBe(0);
+      const value = JSON.parse(result.stdout) as { workflows: Array<{ name: string; startable: boolean }> };
+      expect(value.workflows).toEqual([expect.objectContaining({ name: 'main', startable: true, executableNow: true })]);
+    } finally {
+      removeTempDir(repo);
+    }
   });
 
   it('`dna show team --format json` prints only the "team" subtree (P2.2, task-026)', () => {

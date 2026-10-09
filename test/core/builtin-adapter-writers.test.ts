@@ -25,8 +25,14 @@ import { enumerateOperations } from '../../src/core/registry';
 
 const SRC = join(__dirname, '..', '..', 'src');
 
-/** Mutating `agent` operations reviewed against REQ-SEC-07's adapter clause. None exists yet. */
-const REVIEWED_AGENT_WRITERS: readonly string[] = [];
+/**
+ * Mutating `agent` operations reviewed against REQ-SEC-07's adapter clause.
+ * - `agentExecute` (task-218): reads the adapter at `HEAD` through the discovery and writes nothing under
+ *   `.wingfoil/agents/`: before the spawn it writes only its temporary files, in the OS temporary
+ *   directory, and its one commit (task-228) holds the element's run-log file alone (`spec-016` §3.6).
+ *   `test/cli/agent-execute.integration.test.ts` holds every pre-launch path to writing nothing at all.
+ */
+const REVIEWED_AGENT_WRITERS: readonly string[] = ['agentExecute'];
 
 /** Every `.ts` file under `src/`, repository-relative with `/`, in byte order (REQ-SYS-07). */
 function sourceFiles(dir: string = SRC): string[] {

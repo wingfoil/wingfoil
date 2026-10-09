@@ -368,6 +368,7 @@ types:
         resolved:  { reject: in-progress }   # approve: resolved→closed · reject: reopen →in-progress
       waiting: [ triaged, planned ]          # triaged→planned (release-planning schedules it);
                                              # planned→in-progress (dev-loop starts the fix)
+      returns: { in-progress: planned }      # dev-loop's park sync: the fix task is parked (dl-110 P2)
 
   plan:                                      # dl-019
     path: "docs/05_plans/{scope}/{id}.md"
@@ -591,3 +592,11 @@ passing it, the snapshot at a commit); `memory amend` reads the committed templa
 check. No schema field, token or edge changes, and every file valid before stays valid. Edited
 in place, with no `version:` bump (`dl-047`); pending the approver's `memory amend` at `task-257`'s
 review.
+
+**Revision (2026-10-07, `task-205-rewrite-dev-loop-yaml-v1-5-red`) — `bug` declares a return edge.** The
+example's `bug` block gains `returns: { in-progress: planned }`, as this repository's `memory.yaml` 2.6
+does: when `dev-loop` parks a fix task (`dl-110` P2), the linked bug is synced back
+`[in-progress → planned]`, and that hop must be an edge of the bug machine (`isMachineEdge`) for the
+audit to accept it. No key, rule or diagnostic changes; `returns` already allowed any type to declare
+a return edge (`dl-110` P1 (a)). Edited in place without a supersede or a state change (`dl-047`);
+pending the approver's `memory amend` at `task-205`'s review.

@@ -6,11 +6,13 @@ kind: custom
 title: "Testing"
 tags: [custom, testing, tdd, jest]
 ref: [P3.8]
+version: "1.1"
 ---
 
 # Directive — Testing
 
-Custom stand-in directive. Applies to developers and QA.
+Custom stand-in directive. Applies to developers, QA and reviewers (`roles.yaml`; reviewers since
+`dl-134` §3, task-205).
 
 > **Stand-in custom directive.** WingFoil ships its official built-in P3.8 templates, and
 > `wingfoil init` installs them under `.wingfoil/directives/built-in/` (task-057). This repository's
@@ -37,12 +39,14 @@ Custom stand-in directive. Applies to developers and QA.
   on a type error in either tree. `ci.yml` runs `npm run typecheck` on every push, and
   `release-submit`'s `pre-release-checks` declares `typecheck.clean`.
 
-## WingFoil-specific clauses (`dl-121`)
+## WingFoil-specific clauses (`dl-121`, `dl-134`)
 
-The two rules in this section are WingFoil's own. They are not part of the generic P3.8 template
-that this stand-in mirrors. They were ratified in `dl-121-testing-directive-extensions` (`ready`,
-Q1 (a), Q2 following `dl-120` Q1 (a)). When this stand-in is reconciled with the shipped built-in
-template, this section is kept as a `custom` rule and is not dropped with the generic rules above.
+The rules in this section are WingFoil's own. They are not part of the generic P3.8 template that
+this stand-in mirrors. T1 and T2 were ratified in `dl-121-testing-directive-extensions` (`ready`,
+Q1 (a), Q2 following `dl-120` Q1 (a)); T3 and T4 in `dl-134-dev-loop-separation-of-duties`
+(`ready`, Q1 (a), Q2 (a)), placed here under `dl-121` Q2. When this stand-in is reconciled with the
+shipped built-in template, this section is kept as a `custom` rule and is not dropped with the
+generic rules above.
 
 - **T1 — A guard says exactly what it asserts.** The name, `describe`/`it` title, module doc, TSDoc
   and workflow `checks:` string of any test, script or gate describe what its assertions verify,
@@ -58,5 +62,24 @@ template, this section is kept as a `custom` rule and is not dropped with the ge
   check that the normal suite runs (`dl-121` Q1 (a)), as `scripts/check-lockfile-pins.cjs` is run
   by `test/cli/check-lockfile-pins.test.ts` (`task-104`). A CI matrix across environments may be
   added later; it does not replace the invariant check.
+- **T3 — `red` is `qa`'s, and it is black-box.** In `dev-loop`, the `red` phase is run by the `qa`
+  role (`dl-134` §1, Q1 (a)). `qa` writes every acceptance test of the task, characterization tests
+  included, from the Acceptance Criteria and the approved tech-specs, through the public interface
+  (the CLI, the exported API), and does not read the implementation the tests constrain. A
+  characterization test that fails on first run means the AC was red-first after all: it goes back
+  to `design` for reclassification. An AC that cannot be turned into a test without reading the code
+  goes back to `design` too.
+- **T4 — `red`'s tests are frozen in `green` and `refactor`.** The files `red`'s commit touched are
+  not modified in `green` or `refactor` (`dl-134` §2, Q2 (a)). If `green` finds one of those tests
+  wrong, the task goes back to `red`, where `qa` fixes it. Other test files may still change, as a
+  contract change legitimately updates older tests, and each such change is listed in the task's
+  Execution Notes for the reviewer; `refactor`'s coverage additions are new files or files `red` did
+  not touch. The reviewer checks it with `git log --first-parent --no-merges --format=%h
+  <red-commit>..HEAD -- <red's test files>` (empty). It compares only the branch's own non-merge
+  commits since `red`: a change brought in by an inward `Merge branch 'main' into task/…` commit is
+  excluded (`--first-parent` never visits main's side of that merge). From v1.0 the `dev-loop` post-check `tests.unchanged(since: red)` on `green` and `refactor`
+  evaluates it (P4.12); until then this rule and the reviewer do.
+- **Secret-shaped fixtures** follow `security-secrets` S1: a fixture that must match a secret pattern
+  is assembled at runtime, never committed as one literal (`dl-073` Action 3, `dl-122`).
 
 > Source: Features §P3.8 (Testing). Aligns with `dev-loop` TDD sub-workflow.

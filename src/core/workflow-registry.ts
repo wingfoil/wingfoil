@@ -7,8 +7,8 @@
  * - {@link loadWorkflowRegistryAtRev} / {@link loadWorkflowRegistryAtHead} — the committed baseline
  *   `spec-017` §1.1 gives every workflow operation (`HEAD`): the workflow files, `bindings.yaml`,
  *   `memory.yaml`, `dna.yaml` and the Memory templates are all read at one commit, resolved once;
- * - {@link loadWorkflowRegistry} — the working tree, for `workflow list` until task-204 moves it to
- *   `HEAD` (ruling R15) together with its new payload.
+ * - {@link loadWorkflowRegistry} — the working tree. No workflow command reads it since task-204 moved
+ *   `workflow list` to `HEAD` (ruling R15); it stays for callers that read the working tree on purpose.
  *
  * The result has the loader's shape — `{ manifest, workflows, bindings, diagnostics }` — with the core
  * warnings appended after the loader's. A core **error** makes the load throw a `DiagnosticsError`
@@ -100,7 +100,7 @@ function absentAsNull<T>(read: () => T): T | null {
 
 /**
  * The workflow registry from the **working tree**: the loader's result and the core checks, every
- * input read from disk. `workflow list`'s baseline until task-204 moves it to `HEAD`.
+ * input read from disk. `workflow list` read it until task-204 moved that command to `HEAD`.
  *
  * @throws `DiagnosticsError` (`VALIDATION`) when the loader or a core check reports an error.
  */

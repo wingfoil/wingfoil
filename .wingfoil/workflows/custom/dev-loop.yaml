@@ -3,6 +3,24 @@
 # Encodes the test-first cycle and the review gate with fallback-on-rejection (P4.15).
 # Atomic actions per P4.10 / REQ-INT-06; atomic step execution per REQ-STATE-04.
 # New ADRs discovered during the loop are captured on demand via the `adr-ingest` main workflow.
+#
+# Separation of duties (dl-134, ratified Q1 (a), Q2 (a), §4 (c)). `red` is `qa`'s: the tests are
+# written from the Acceptance Criteria and the approved tech-specs, black-box, characterization tests
+# included; an AC that cannot be tested without reading the implementation goes back to `design`.
+# `green` and `refactor` are the developer's and do not edit the files `red`'s commit touched
+# (`tests.unchanged(since: red)`, declared here, evaluated from v1.0 with P4.12; until then the
+# `testing` directive's T4 and the reviewer). A test `green` finds wrong goes back to `red`. Each phase
+# declares how independent its executor is (spec-003 § "Execution independence"): `red` and `review`
+# run `fresh` (mandatory for `qa`/`reviewer`, so no `mode`), `green` never shares a session with `red`,
+# `refactor` may resume `green`'s, and `review` shares none with `red`, `green` or `refactor` (enforced
+# from v1.0; v0.3 records each run's session id). The reviewer loads the developer's and `qa`'s
+# directives too (`roles.yaml`), and checks the handoff in git (dl-134 §5): `red`'s commit precedes
+# `green`'s on the task branch (`git log --format='%h %s' main..task/<id>`), and
+# `git log --first-parent --no-merges --format=%h <red-commit>..HEAD -- <red's test files>` is empty.
+# The check compares only the branch's own non-merge commits since `red`: a change brought in by an
+# inward `Merge branch 'main' into task/…` commit is excluded (`--first-parent` never visits main's
+# side of that merge; `--no-merges` drops the merge itself).
+#
 # `bug.sync_state` is a no-op unless the task's `bug:` field names at least one bug. Since
 # dl-045-absorbed-bug-back-reference that field is a LIST, and it covers TWO cases: a fix task
 # created by release-planning/build-backlog from a selected triaged bug, and a bug ABSORBED into an
@@ -19,20 +37,59 @@
 # with 2 fix tasks reaches in-review only once both are in-review, and resolved/closed only once
 # both are done. No separate bug-fix workflow: task and bug share the `in-progress`/`in-review`
 # state names by design.
+#
+# The reject path (dl-061, ratified A.1, B.1, C.1). There are four sync points: `start`, `review`,
+# `done`, and the first action of `red`. The last is where a review reject lands (dl-061 A.1): the
+# fallback re-enters at `red`, and a `fallback` takes no `actions` (spec-003), so the sync is the first
+# action of `red`, driving each linked bug `in-review → in-progress` over the bug `gates` reject edge,
+# as `wf(bug): sync <bug> [in-review → in-progress]`. On a first pass it is a no-op: `start` already
+# moved the bugs to `in-progress`. A sync crossing a `gates` reject edge cites the approver's reject
+# commit (its sha) in its body and carries no `Approver:` line of its own (dl-061 B.1): the decision is
+# recorded once, on the approver's commit. Whoever performs `memory.reject` on a task whose `bug:` list
+# is not empty emits both commits, the reject and then the sync, in that order (dl-061 C.1): under the
+# no-engine regime the person or agent running the reject is the engine. `done`'s fallback (a failed
+# merge, dl-014 G4) also re-enters at `red`, so red's sync also runs after `done`'s fallback; whether
+# that fallback's task edge (`approved → in-progress`) is legal is dl-053's question (dl-061
+# ratification).
+#
+# Parking (dl-110 P2). `memory park <task> --reason <text>` moves a started task back along its
+# `returns` edge, `wf(task): park <id> [in-progress → backlog]`; it is a CLI verb that no phase emits
+# (spec-003 verb table). Whoever parks: the branch `task/{task.id}` is kept, the task's worktree is
+# removed (`git.remove_worktree`), the park reason goes into the task's Execution Notes as well as the
+# commit, and each linked bug is synced `in-progress → planned` (`wf(bug): sync <bug> [in-progress →
+# planned]`, along the bug `returns` edge, memory.yaml 2.6). A parked task re-enters at `start`, on
+# its kept branch.
+#
+# Main-sync on resume (dl-035; the rule text is git-conventions §2; placement: approver ruling
+# 2026-10-09, option 2). A task branch merges `main` (`git merge --no-edit main`, never a rebase) at
+# two points. (a) When it resumes after a reject or a park, before any `red` work: the
+# `git.merge(from: main)` in `red`, a no-op when `main` has not moved; the developer runs it before
+# `qa` starts, and `qa` never resolves a conflict in implementation files. (b) Before re-submitting,
+# if `main` has moved since (a): the last action of `refactor`, so its coverage, API-docs and
+# `lint.clean` checks measure the merged tree; `review` does not merge. A conflict is never
+# force-resolved (dl-014 G4): a conflict that is not trivially resolvable is aborted clean and recorded
+# in the Execution Notes, and the developer resolves it — at (a) before `qa` starts; at (b) the task
+# goes back to `red` when it cannot be resolved there, because the conflict may touch `red`'s frozen
+# tests, which only `qa` may change.
+#
+# WIP limits (dl-156, ratified Q1 (a), Q2 (i)): when a `limits:` is declared, holders are counted
+# across every ref, and `reject` and `returns` edges are exempt. This repository declares no
+# `limits:` until that is implemented (approver, dl-156 ratification), so no phase here meets a limit.
 name: dev-loop
 kind: sub
 description: >-
   Test-first development loop for a single task: design -> red -> green -> refactor -> review.
+  `red` is qa's, the rest the developer's, the reviewer's and the approver's.
   On review rejection, fall back to `red` and return the task to in-progress.
-version: 1.41                    # 1.41 spec-003 alignment (task-199): start's git tokens take a key: value argument with no partial interpolation (spec-003 open question 6), design's three agent.<x> become one agent.execute with the instructions in its description (dl-090 Q6 (b)), design names its produces owner as { type, path } (dl-104 D3) — numbered below 1.5, which task-205's dl-134 rewrite carries (prev 1.4, header comment only: dl-123 gives `triaged`/`planned` a reject to `closed` — no phase or step change (prev 1.3: dl-045 `task.bug` is a LIST, so a bug absorbed into an existing task's ACs is sync-able; 1.2: dl-034 lint.clean gate in `refactor`; 1.1: dl-014 git ergonomics (branch/worktree/merge) + docs-api checks; T1 test-strategy classification)
+version: 1.5                     # 1.5 dl-134 separation of duties (task-205): red by qa, green distinct_from [red], refactor mode: resume, review distinct_from [red, green, refactor], tests.unchanged(since: red) on green and refactor; dl-061 A.1 fourth bug.sync_state as red's first action (B.1/C.1 in the header); dl-110 P2 parking and dl-035 main-sync (red, end of refactor) (prev 1.41 spec-003 alignment (task-199): start's git tokens take a key: value argument with no partial interpolation (spec-003 open question 6), design's three agent.<x> become one agent.execute with the instructions in its description (dl-090 Q6 (b)), design names its produces owner as { type, path } (dl-104 D3); 1.4, header comment only: dl-123 gives `triaged`/`planned` a reject to `closed` — no phase or step change; 1.3: dl-045 `task.bug` is a LIST, so a bug absorbed into an existing task's ACs is sync-able; 1.2: dl-034 lint.clean gate in `refactor`; 1.1: dl-014 git ergonomics (branch/worktree/merge) + docs-api checks; T1 test-strategy classification)
 element: task          # the iterated element provided by release-cycle
 
 phases:
   - name: start
-    description: "Pick up the task; create a feature branch; move it to in-progress."
+    description: "Pick up the task; create a feature branch (or reuse a parked task's); move it to in-progress."
     role: developer
     actions:
-      - 'git.create_branch(task: "{task.id}")'            # dl-014 G1 — the namespaced branch task/<id>; the prefix is git-conventions §1's, kept out of the value (spec-003 open question 6)
+      - 'git.create_branch(task: "{task.id}")'            # dl-014 G1 — the namespaced branch task/<id>; the prefix is git-conventions §1's, kept out of the value (spec-003 open question 6); a parked task's branch is kept and reused (dl-110 P2)
       - 'git.create_worktree(task: "{task.id}")'          # dl-014 G2 — per-task worktree on that branch (enables parallel dev-loops; REQ-INT-06)
       - element.set_state(in-progress)        # task: backlog -> in-progress
       - 'bug.sync_state(for_each: task.bug)'        # keep every linked bug in sync: planned -> in-progress (dl-045: a list)
@@ -45,7 +102,8 @@ phases:
       approved state. For each still-missing spec: memory.add then memory.submit (draft -> pending).
       The agent run (1) classifies each acceptance criterion as red-first (new behaviour) or
       characterization (behaviour that already exists) and records it in the task's Execution Notes
-      (T1: dl-014 + testing directive); (2) reads the Execution Notes of every `depends_on` task
+      (T1: dl-014 + testing directive), sending back any AC that `qa` could not test without reading
+      the implementation (dl-134 §1); (2) reads the Execution Notes of every `depends_on` task
       (dl-015, a hard gate: `red` waits until they are acknowledged); (3) checks the task's scope
       against the existing tech-spec elements.
     role: architect
@@ -61,33 +119,49 @@ phases:
     fallback: { step: design }         # reject -> revise the spec and re-verify
 
   - name: red
-    description: "Write a failing test that captures the task's acceptance criteria."
-    role: developer
+    description: >-
+      Write the tests that capture the task's acceptance criteria, black-box, from the ACs and the
+      approved tech-specs, without reading the implementation they constrain (dl-134 §1): a failing
+      test for each red-first AC, and a test that passes on first run for each characterization AC
+      (Q1 (a)); a characterization test that fails on first run sends the AC back to `design` for
+      reclassification. End with the red commit: `green` and `refactor` do not edit the files it
+      touched (dl-134 §2, Q2 (a)).
+    role: qa                                   # dl-134 §1; fresh is mandatory for qa (dl-135 point 3), so no `mode`
     actions:
+      - 'bug.sync_state(for_each: task.bug)'   # dl-061 A.1 — after a review reject, every linked bug in-review -> in-progress (cites the reject sha, B.1); a no-op on a first pass
+      - 'git.merge(from: main)'                # dl-035 (a) — on a resume after a reject or a park, the developer merges main into task/<id> and resolves any conflict before qa writes a test; a no-op when main has not moved
       - agent.execute
     checks:
       post: ["tests.exist", "tests.failing(for: red-first ACs)"]   # red-first ACs: a new test exists and fails; characterization ACs (T1) are exempt — no fabricated red, no dead code to force one
 
   - name: green
-    description: "Implement the minimum code to make the test pass."
+    description: "Implement the minimum code to make the tests pass, without editing the files red's commit touched."
     role: developer
+    distinct_from: [red]                       # dl-134 §4 (c) — the code's author never shares a session with the tests' author
     actions:
       - agent.execute
     checks:
-      post: ["tests.passing"]
+      post: ["tests.passing", "tests.unchanged(since: red)"]   # dl-134 §2 — declared now, evaluated from v1.0 (P4.12); a test found wrong goes back to red
 
   - name: refactor
-    description: "Refactor with tests green; keep coverage from regressing."
+    description: "Refactor with tests green; keep coverage from regressing; leave red's test files unchanged; end by merging main if it moved."
     role: developer
+    mode: resume                               # dl-134 §4 (c) — may resume green's session: both are the developer's (from v0.4, dl-135)
     actions:
       - agent.execute
+      - 'git.merge(from: main)'                # dl-035 (b) — the LAST action: merge main if it moved since red's merge, so the checks below measure the merged tree (approver ruling 2026-10-09, option 2)
     checks:
-      post: ["tests.passing", "tests.coverage(min: 80)", "docs.api.public-complete", "docs.api.build", "lint.clean"]   # dl-014 G5 / dl-013 — ACTIVE hard-reject (as of task-062-typedoc-tsdoc-backfill, which closed the B-DECISION Option 2 ramp): docs.api.* enforce via TypeDoc `notDocumented` + `treatWarningsAsErrors` (`typedoc.json`, `npm run docs:api`, asserted by `test/docs/api-docs.test.ts`); an undocumented exported declaration fails `refactor`
+      post: ["tests.passing", "tests.coverage(min: 80)", "docs.api.public-complete", "docs.api.build", "lint.clean", "tests.unchanged(since: red)"]   # dl-014 G5 / dl-013 — ACTIVE hard-reject (as of task-062-typedoc-tsdoc-backfill, which closed the B-DECISION Option 2 ramp): docs.api.* enforce via TypeDoc `notDocumented` + `treatWarningsAsErrors` (`typedoc.json`, `npm run docs:api`, asserted by `test/docs/api-docs.test.ts`); an undocumented exported declaration fails `refactor`; tests.unchanged(since: red) is dl-134 §2, evaluated from v1.0 (P4.12)
       # dl-034 (as of task-066-fix-eslint-baseline-and-lint-gate, which cleared the bug-009 baseline) — ACTIVE hard-reject FROM THE START, no warn-only ramp (dl-034 Decision 2: docs.api.* needed a ramp because its backfill spanned every exported declaration in the tree; this backfill was one line): lint.clean enforces via ESLint (`eslint.config.js`, `npm run lint`, asserted by `test/lint/lint-clean.test.ts`); any lint error fails `refactor`. Placed here and not in `review` (dl-034 Decision 3) so the developer clears their own lint before a reviewer is engaged — this is the gate the `code-quality` directive's "Lint clean: no errors" always assumed and never had
 
   - name: review
-    description: "Quality gate runs the BDD acceptance tests, then the reviewer approves or rejects."
+    description: >-
+      Quality gate runs the BDD acceptance tests, then the reviewer approves or rejects. The reviewer
+      judges both the tests and the code, under the developer's and qa's directives as well as its own,
+      and checks the git handoff: red's commit before green's, red's test files unchanged since. It
+      does not merge: the branch was brought current at refactor's last action (main moving after that is done's fallback).
     role: reviewer
+    distinct_from: [red, green, refactor]      # dl-134 §4 (c) — the review shares no session with the work it judges; fresh is mandatory for reviewer
     actions:
       - tests.bdd.run                          # gate also runs the BDD acceptance suite for the task
       - memory.submit                          # task: in-progress -> in-review
@@ -95,7 +169,7 @@ phases:
     checks:
       pre: ["tests.bdd.passing"]               # BDD scenarios for the task must pass before approval
     approval: { by_role: approver }
-    fallback: { step: red, set_state: in-progress }   # reject -> back to red, task -> in-progress
+    fallback: { step: red, set_state: in-progress }   # reject -> back to red (qa confirms or corrects the tests, then green), task -> in-progress; red's first action syncs the bugs back (dl-061 A.1)
 
   - name: done
     description: "On approval, merge to main and mark the task done."
@@ -106,4 +180,4 @@ phases:
       - git.remove_worktree                    # dl-014 G2 — remove the per-task worktree after merge, before branch delete
       - element.set_state(done)                # task: approved -> done
       - 'bug.sync_state(for_each: task.bug)'        # keep every linked bug in sync: in-review -> resolved -> closed (once all ITS tasks are done)
-    fallback: { step: red, set_state: in-progress }   # dl-014 G4 — a conflicted/failed merge (REQ-INT-06: abort clean, mark failed) routes back to red
+    fallback: { step: red, set_state: in-progress }   # dl-014 G4 — a conflicted/failed merge (REQ-INT-06: abort clean, mark failed) routes back to red, whose first action syncs the bugs; whether this task edge is legal is dl-053's question

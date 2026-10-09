@@ -133,10 +133,11 @@ describe('Journey 0a (v0.1-scoped slice) — real CLI, fresh throwaway project (
     expect(workflowStart.status).toBe(2);
     expect(workflowStart.stderr).toContain("unknown command 'start'");
 
-    // task-220 ships the `agent` noun with `agent show`; `agent execute` is still a later task's (task-228).
+    // task-218 ships `agent execute --element`; its step form `--next` is task-235's, so it is still
+    // an unknown option (usage error), and the launch itself is task-228's.
     const agentExecute = runCliInRoot(repo, 'agent', 'execute', '--next');
     expect(agentExecute.status).toBe(2);
-    expect(agentExecute.stderr).toContain("unknown command 'execute'");
+    expect(agentExecute.stderr).toContain("unknown option '--next'");
   });
 
   it('`dna set` still writes scalars only — but it now names the verb that reaches an array-typed field, and that verb works (bug-083, task-093)', () => {

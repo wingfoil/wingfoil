@@ -278,7 +278,8 @@ itself a frontmatter field of every Memory document, a selection names the type(
 `type` key; a selection without one would select across every type and is `E_PHASE_SELECTION_UNTYPED`.
 In the phase's action arguments, each selected type is in scope: `{bug.id}` in `build-backlog`'s
 `memory.add(type: task, …, bug: "{bug.id}")` names each selected bug (`spec-017` §4.1). A selection is
-complete when no document matches it (`spec-017` §4).
+complete when no document matches it (`spec-017` §4); an archived document (`deprecated`, or `superseded`)
+never matches a selection (`spec-017` §4.3, §4.11).
 
 #### Collections (`iterate_over` over configuration, `dl-104` D2 (b))
 
@@ -335,8 +336,8 @@ phase from checking its own work is therefore a constraint on the **executor**, 
 Validation (all releases): each `distinct_from` entry names a phase of the **same** workflow
 (`E_PHASE_DISTINCT_FROM_UNKNOWN`), and a phase never names itself (`E_PHASE_DISTINCT_FROM_SELF`).
 
-Worked example, the separation `dl-134` proposes for `dev-loop.yaml` v1.5 (not yet on disk: the
-file is at `version: 1.41` since `task-199`, with `red`'s `role: developer`):
+Worked example, the separation `dl-134` ratified (Q1 (a), Q2 (a), §4 (c)), as `dev-loop.yaml` v1.5
+declares it since `task-205` (actions and checks left out):
 
 ```yaml
   - name: red
@@ -517,7 +518,9 @@ Assertion strings, evaluated to a boolean gate. Observed forms:
 - Test/coverage gates — `tests.exist`, `tests.failing`, `tests.passing`, `tests.coverage(min: 80)`,
   `tests.bdd.passing`, and `tests.unchanged(since: <phase>)` — the tests written in the named phase
   are unmodified (`dl-134` §2, declared on `green`/`refactor` by `dev-loop.yaml` v1.5, evaluated from
-  v1.0).
+  v1.0). It compares only the branch's own non-merge commits since the named phase: a change brought
+  in by an inward `Merge branch 'main' into task/…` commit is excluded (until v1.0 the reviewer runs
+  `git log --first-parent --no-merges --format=%h <phase-commit>..HEAD -- <its test files>`, empty).
 - Frontmatter gates — `frontmatter.required: [title, scope]`. A gate may exempt named elements from
   one field: `frontmatter.required: [<fields>] except <field> for [<id>, …]` — the listed ids need not
   carry `<field>`; every other element needs every field (`release-planning`'s `define-scope` and
@@ -581,14 +584,22 @@ And the review gate with state-resetting fallback (grounded in `dev-loop.yaml`):
 ```yaml
   - name: review
     role: reviewer
+    distinct_from: [red, green, refactor]
     actions:
       - tests.bdd.run
       - memory.submit                        # task: in-progress -> in-review
+      - 'bug.sync_state(for_each: task.bug)'
     checks:
       pre: ["tests.bdd.passing"]
     approval: { by_role: approver }
     fallback: { step: red, set_state: in-progress }   # reject -> back to `red`, task -> in-progress
 ```
+
+A `fallback` carries no `actions`, so a step the reject path needs is the first action of the
+fallback step: `dev-loop`'s `red` begins with `bug.sync_state(for_each: task.bug)`, which moves each
+linked bug `in-review → in-progress` after a reject and is a no-op on a first pass (`dl-061` A.1). The
+review gate itself does not merge: `dl-035`'s pre-submit main-sync is `refactor`'s last action, so
+`refactor`'s checks measure the merged tree (approver ruling 2026-10-09).
 
 ### Layer 3 — `Bindings` (`.wingfoil/workflows/bindings.yaml`)
 
@@ -708,7 +719,9 @@ run in the workflow operations of `src/core` (`spec-017` §2): `src/core/workflo
 called by `src/core/workflow-registry.ts`, which reads every input at one commit and runs them only
 when the loader reported no error. A core check is not decided when its input is missing: without
 `dna.yaml` no role, member or `dna:` collection is checked, without `memory.yaml` no type, event,
-token, exit state or fallback, and without a type's template no token field. Structural (Zod)
+token, exit state or fallback, and without a type's template no token field. The first two skips are reported:
+each missing file adds one `W_WORKFLOW_CHECKS_NOT_RUN` warning, ahead of the core rows, so an empty
+`diagnostics` means the checks ran and found nothing (`bug-281`). Structural (Zod)
 failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 
 | Code | Severity | Runs in | Rule | Source |
@@ -752,6 +765,7 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 | `W_PHASE_EXIT_STATE_UNDETERMINED` | warning | core | the phase's state-changing actions cannot be applied along the element's machine from the state the previous phase leaves (`spec-017` §4.4) | `spec-001` |
 | `W_PHASE_FALLBACK_STATE_MISMATCH` | warning | core | `fallback.set_state` differs from `memory.yaml`'s reject target for the gate state the phase holds its element in | P4.15; `spec-001` |
 | `W_PHASE_FALLBACK_NOT_REENTRANT` | warning | core | `fallback.step` names an earlier phase, but the reject target of the phase's gate lies forward in the `sequence`, so a reject completes the phase instead of re-entering it (`spec-017` §4.8) | P4.15 |
+| `W_WORKFLOW_CHECKS_NOT_RUN` | warning | core | `dna.yaml` or `memory.yaml` is absent at the baseline, so the core checks that read it did not run; one per missing file, `dna.yaml` first, before every other core row; `file` the missing file (`dna.yaml` / `memory.yaml`), path empty, message `<file> is absent: the <checks> checks were not run` (`dna.yaml`: role, approver and dna: collection; `memory.yaml`: type, cadence event, token, exit state and fallback). None for a registry with no workflow | `bug-281` |
 
 **Unbound tokens in v0.3 are warnings** (open question 1, settled at this revision). `dl-090` Q2 (c)
 makes an unbound check fail closed and requires every action to be bound or `manual`; before any
@@ -1062,3 +1076,31 @@ document does not carry reads as `""`, the reading `dl-016` §1's "`release` emp
 (`release-planning.yaml`'s `release: ["", "{release.version}"]`) needs and `spec-017`'s deduction applies;
 the shared-element rule for a list-valued field was already stated. No diagnostic changed. Edited in place
 without a supersede or a state change (`dl-047`); recorded with `memory amend`.
+
+**Revision (2026-10-07, `task-202-deduce-iterate-over-over-memory-types-collections-live`) — a selection never
+matches an archived element.** § "Selections" states the rule `spec-017` §4.3 and §4.11 add: a `deprecated` or
+`superseded` document is never selected, as it is never an `iterate_over` candidate. No diagnostic changed.
+Edited in place without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at
+`task-202`'s review.
+
+**Revision (2026-10-07, `task-204-reshape-workflow-list-add-workflow-show-both-answering`) — a skipped core
+check is reported (`bug-281`).** "Where each check runs" said a core check is not decided without its input,
+and that held silently: with `dna.yaml` or `memory.yaml` absent, `workflow list` returned no diagnostic and
+exit `0` for a registry the same checks would refuse, so an empty `diagnostics` could mean "checked and clean"
+or "not checked". The table gains `W_WORKFLOW_CHECKS_NOT_RUN` (core, warning), one per missing file, and the
+paragraph says the first two skips are reported. The skip itself does not change, and a missing template still
+leaves its token fields undecided without a report. Edited in place without a supersede or a state change
+(`dl-047`); pending the approver's `memory amend` at `task-204`'s review.
+
+**Revision (2026-10-09, `task-205-rewrite-dev-loop-yaml-v1-5-red`) — the `dev-loop` examples say what
+is on disk, and `tests.unchanged` names the commits it compares.** `dev-loop.yaml` is at v1.5: § "Execution independence"'s worked example no longer says the
+separation is "not yet on disk" and names the ratified options (`dl-134` Q1 (a), Q2 (a), §4 (c)); the
+review-gate worked example gains the v1.5 `distinct_from` and the `bug.sync_state`, and two sentences:
+where a step the reject path needs is declared, since a `fallback` takes no `actions` (`dl-061` A.1:
+the first action of the fallback step), and that the review gate does not merge `main`, `dl-035`'s
+pre-submit sync being `refactor`'s last action (approver ruling 2026-10-09, option 2). The
+`tests.unchanged(since: <phase>)` entry now says it compares only the branch's own non-merge commits
+since the phase, so a main-sync merge does not count as an edit of the frozen tests. No field or
+diagnostic changes.
+Edited in place without a supersede or a state change (`dl-047`); pending the approver's `memory amend`
+at `task-205`'s review.

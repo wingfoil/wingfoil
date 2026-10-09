@@ -1,14 +1,15 @@
 # WingFoil — e2e-smoke (SUB workflow)
 # dl-023 — standing fresh-init + CLI end-to-end smoke gate before release-submit. Include-only.
+# dl-099 §3 — the smoke drives a fresh project through a use scenario, not a command list.
 name: e2e-smoke
 kind: sub
 description: >-
-  Black-box release gate: run a real `wingfoil init` into a throwaway project, then drive the
-  scaffolded project through the CLI surface, asserting correct exit codes and schema-valid
-  scaffolded artifacts. Would have caught bug-005 at release time instead of at the last task.
-  STAGED per the dl-014 B-DECISION (Option 2): warn on failure until the gate runs green for a
-  release, then flip to hard-reject.
-version: 1.3                     # dl-082: `dna set` respelled to `<path> --value <v>` (task-093); 1.2 dl-026: + mcp-registration (task-112); 1.3 spec-003 alignment (task-199): cli.run takes a key: value argument, and the `memory add ...; memory submit ...` step is two tokens (dl-090 Q3 (a): no shell)
+  Black-box release gate: run a real `wingfoil init` into a throwaway project for each template, then
+  drive the scaffolded project through a use scenario: every Memory transition verb, an exact exit code
+  per step (0, 1 and 2), every written artifact re-loaded through its own reader, a clean working tree
+  after every step. Would have caught bug-005 at release time instead of at the last task. HARD-REJECT
+  (dl-023 staging record: v0.2 ran it green, v0.2.2 and later block release-submit on a failure).
+version: 1.4                     # dl-082: `dna set` respelled to `<path> --value <v>` (task-093); 1.2 dl-026: + mcp-registration (task-112); 1.3 spec-003 alignment (task-199): cli.run takes a key: value argument, and the `memory add ...; memory submit ...` step is two tokens (dl-090 Q3 (a): no shell); 1.4 dl-099 §3, dl-023 (task-207; bug-132, bug-133, bug-134): the use scenario with exact exit codes and re-loads, the gate produces its report and hard-rejects
 element: release
 
 phases:
@@ -22,18 +23,33 @@ phases:
 
   - name: drive-cli
     description: >-
-      Exercise the scaffolded project through the CLI surface — dna show/set, memory add/submit,
-      paths, directives list — against spec-005-cli-command-contract.
+      Drive the scaffolded project through a use scenario (dl-099 §3): one task per verb of each
+      machine shape `init` scaffolds (add -> submit -> approve, add -> submit -> reject,
+      add -> deprecate); refusals with their exact exit code and spec-005 §3 error (an unknown option
+      and a missing operand exit 2; an approve with no approver bound and a submit past the last state
+      exit 1); then, after the last writer, every written artifact re-loaded through its own reader
+      with its content asserted (dna show, memory search, memory history per task, directives list,
+      paths, workflow list). `scripts/e2e-smoke.cjs` is the executable form of these steps.
     role: qa
     actions:
       - 'cli.run(command: "dna show")'
       - 'cli.run(command: "dna set <path> --value <v>")'
+      - 'cli.run(command: "dna add team.members ...")'
       - 'cli.run(command: "memory add ...")'
       - 'cli.run(command: "memory submit ...")'
+      - 'cli.run(command: "memory approve ...")'
+      - 'cli.run(command: "memory reject ...")'
+      - 'cli.run(command: "memory deprecate ...")'
+      - 'cli.run(command: "memory search ...")'
+      - 'cli.run(command: "memory history ...")'
       - 'cli.run(command: "paths <category>")'
       - 'cli.run(command: "directives list")'
+      - 'cli.run(command: "workflow list")'
     checks:
-      post: ["exit-codes match spec-005-cli-command-contract", "no schema-invalid artifact produced by any command"]
+      post:
+        - "every step exits with the code it declares, per spec-005-cli-command-contract (0, 1 and 2 each asserted); a non-zero exit carries spec-005 §3's error"
+        - "every artifact a command wrote re-loads through its own reader after the last writer, with its content asserted"
+        - "the working tree is clean after every step"
 
   - name: mcp-registration          # dl-026 re-verification, dl-095 Q2 (i) — task-112
     description: >-
@@ -50,9 +66,12 @@ phases:
 
   - name: gate
     description: >-
-      Report smoke results. STAGED (dl-023 / B-DECISION Option 2): warn on failure until the gate runs
-      green for a release, then flip to hard-reject so it blocks release-submit.
+      Run the smoke and record its report (bug-134: dl-023 asked for a smoke-test report). Hard-reject
+      (dl-023 staging record, 2026-09-28/29): a failing smoke blocks release-submit, so the check is bound
+      at severity reject in workflows/bindings.yaml. The report is written on a failure too.
     role: qa
+    produces:
+      - "docs/07_gates/rl-{release.release-line}/rel-{release.version}-e2e-smoke.md"
     checks:
-      post: ["e2e-smoke-passed (staged: warn until green for a release, then hard-reject)"]
+      post: ["e2e-smoke-passed(report: docs/07_gates/rl-{release.release-line}/rel-{release.version}-e2e-smoke.md)"]
     approval: { by_role: approver }

@@ -35,7 +35,8 @@
 
 ### REQ-STATE-02 — State recomputability (no index)
 
-* **Description:** Project/workflow state is recomputable purely from Memory files at a given commit.
+* **Description:** Project/workflow state is recomputable from Memory files and the commit history reachable from the
+  commit, at a given commit (`spec-017` §4.8); no `.wingfoil/state/` index is read or written.
 * **Rationale:** Single source of truth (see REQ-SYS-03).
 * **Fit Criterion:** Recomputing state from files for a fixed commit equals any previously cached state; no
   `.wingfoil/state/` artifact is required for correctness.
@@ -84,11 +85,21 @@
 ### REQ-STATE-07 — Iteration state for include() composition
 
 * **Description:** An `include()` with `iterate_over: <type>` and optional `where` filters runs the sub once per
-  matching element.
+  matching element. `iterate_over` may also name a collection declared in versioned configuration — `dna:<path>` in
+  `dna.yaml` or `bindings:<name>` in `workflows/bindings.yaml` — and then runs the sub once per matching collection
+  entry, in the collection's declared order.
 * **Rationale:** Drive per-element sub-workflows (e.g., TDD loop per backlog task).
-* **Fit Criterion:** Given N elements matching the `where` filter, the included sub executes exactly N times; given 0
-  matches, it executes 0 times and the phase completes with a "no elements matched" note.
-* **Traceability:** Feature P4.16 (US-6-04, BDD `p4-workflow/P4.16-include-composition.feature`).
+* **Fit Criterion:** Given N elements or collection entries matching the `where` filter, the included sub executes
+  exactly N times; given 0 matches (no candidate eligible, entered or already complete), it executes 0 times and the
+  phase completes with a "no elements matched" note. Over a Memory type, N counts the **eligible plus entered**
+  candidates (`spec-017-workflow-commands-and-state-deduction` §4.6): an element matching the whole filter on which
+  no phase of the sub is complete yet, and an element matching the filter's non-`status` keys on which the sub has
+  started and is not complete. The second kind keeps an element counted after the sub moves it out of the filter's
+  `status` (a task leaves `backlog` when its `dev-loop` starts).
+  Over a collection, every matching entry the sub is not complete for is counted.
+* **Traceability:** Feature P4.16 (US-6-04, BDD `p4-workflow/P4.16-include-composition.feature`);
+  `dl-104-phase-scope-evidence-and-entry-points` D2 (b) and Action 1 (collection entries);
+  `spec-017-workflow-commands-and-state-deduction` §4.6 (eligible and entered candidates).
 
 ### REQ-STATE-08 — Default state-machine fallback
 

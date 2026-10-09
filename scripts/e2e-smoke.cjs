@@ -1,23 +1,38 @@
 #!/usr/bin/env node
 /**
  * dl-023 fresh-init + CLI end-to-end smoke — the executable form of
- * `.wingfoil/workflows/custom/e2e-smoke.yaml`, reused verbatim as spec-015 §3 stage 3.
+ * `.wingfoil/workflows/custom/e2e-smoke.yaml`, reused verbatim as spec-015 §3 stage 3 and run by
+ * `.github/workflows/ci.yml`'s `e2e-smoke` job against the packed tarball (`dl-099` §4 (c)).
  *
- * Black-box: it only spawns a `wingfoil` command and reads exit codes/stdout. For each supported template
- * it creates a throwaway git repository, runs `wingfoil init --template <T>`, drives the scaffolded project
- * through the CLI surface `e2e-smoke.yaml`'s `drive-cli` phase names (`dna show`, `dna set`, `memory add`,
- * `memory submit`, `paths`, `directives list`, `workflow list` — each loads and schema-validates the
- * scaffolded artefact it reads), and finally requires a clean working tree (every mutation is its own
- * commit). `memory submit` acts on the task `memory add` just created and must report the
- * `draft -> pending` edge, which is what proves the scaffolded `memory.yaml` state machine is loaded and
- * applied (task-107, bug-029).
+ * Black-box: it only spawns `wingfoil` (and `git`) and reads exit codes, stdout and stderr. For each
+ * supported template it creates a throwaway git repository, runs `wingfoil init --template <T>`, and drives
+ * the scaffolded project through a use scenario (`dl-099` §3, task-207):
  *
- * Deterministic: fixed step list and template order, fixed throwaway git identity, no clock or randomness
- * in what is asserted (the temp directory name is never compared).
+ * - every step declares the exit code it must end with (spec-005 §1). A step that must fail also has to
+ *   carry spec-005 §3's error on stderr (`error: <reason>`, or `{"error": …}` under `--format json`), and
+ *   its reason is asserted (`bug-132`). The scenario holds exit-2 steps (an unknown option, a missing
+ *   operand) and exit-1 steps (an `approve` before an approver is bound, REQ-SEC-03; a `submit` past the
+ *   last state);
+ * - one task per verb of the scaffold's one machine shape (`defaults`: `draft → pending → approved`, the
+ *   `pending` gate rejecting to `draft`): `add → submit → approve`, `add → submit → reject`,
+ *   `add → deprecate`. The smoke's git identity is bound as an `approver` (`dna add team.members`) between
+ *   the refused and the accepted `approve`;
+ * - after the last writer, every artifact a command wrote is re-loaded through its own reader and its
+ *   content asserted, not only its exit: `dna show` (the `dna set` value, the bound approver),
+ *   `memory search` and `memory history` per task, `directives list`, then `paths` and `workflow list`
+ *   (`bug-133`);
+ * - the working tree must be clean after EVERY step: each mutation is its own commit, and a refusal
+ *   writes nothing.
+ *
+ * `--report <path>` writes the run as Markdown (`bug-134`: the report `e2e-smoke.yaml`'s gate declares
+ * under `produces:`), on a failure too.
+ *
+ * Deterministic: fixed step list and template order, fixed throwaway git identity, nothing from a clock or
+ * randomness in what is asserted or reported (the temp directory name is never compared or written).
  *
  * Usage:
- *   node scripts/e2e-smoke.cjs [--expect-version X.Y.Z [--expect-commit SHA]]   # drives `wingfoil` on PATH
- *   node scripts/e2e-smoke.cjs [--expect-version X.Y.Z [--expect-commit SHA]] -- node "$PWD/dist/cli.js"
+ *   node scripts/e2e-smoke.cjs [--expect-version X.Y.Z [--expect-commit SHA]] [--report PATH]   # `wingfoil` on PATH
+ *   node scripts/e2e-smoke.cjs [...] -- node "$PWD/dist/cli.js"
  * Every step runs inside a throwaway directory, so a script path after `--` must be absolute.
  * `--expect-version` alone pins the semver of the build stamp and accepts any commit in it;
  * `--expect-commit` (task-254, `bug-235`) requires the whole stamp, `X.Y.Z (SHA)`, which is how the
@@ -27,9 +42,9 @@
 'use strict';
 
 const { spawnSync } = require('node:child_process');
-const { mkdtempSync, rmSync } = require('node:fs');
+const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
-const { join } = require('node:path');
+const { dirname, join } = require('node:path');
 
 /**
  * A commit an expected stamp may name: a full hex object name, SHA-1 (40) or SHA-256 (64) — the shape
@@ -42,29 +57,105 @@ const COMMIT_NAME_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 /** Every template `wingfoil init` supports, in the order they are smoked. */
 const SMOKE_TEMPLATES = Object.freeze(['Scrum', 'Kanban']);
 
+/** The throwaway repository's git identity — bound as the scenario's approver. */
+const SMOKE_NAME = 'WingFoil Smoke';
+const SMOKE_EMAIL = 'smoke@wingfoil.invalid';
+
+/** The `--format json` flag pair, appended to every step whose payload is asserted. */
+const JSON_FORMAT = Object.freeze(['--format', 'json']);
+
 /**
- * The per-template CLI steps, `init` first. `json: true` means stdout must parse as JSON.
- * A step can depend on an earlier one without the list becoming code: `capture: '<name>'` keeps that
- * step's parsed JSON stdout under `<name>`, a later arg `'{<name>.<field>}'` is replaced by that field
- * before spawning, and `expect: { field: value }` must match the step's own parsed JSON stdout.
+ * The per-template use scenario, `init` first. Every step declares `exit` (0, 1 or 2). `json: true` means
+ * stdout must parse as JSON. `capture: '<name>'` keeps a step's parsed JSON stdout under `<name>`; a later
+ * arg or `expect` value `'{<name>.<field>}'` is replaced by that field. `expect` maps dotted paths
+ * (`matches.0.id`, `entries.length`) to the value they must hold: in the JSON stdout of a step that exits
+ * 0, in the parsed spec-005 §3 error (`{ error, hint }`) of one that does not.
  * @param {string} template
- * @returns {ReadonlyArray<{ args: readonly string[], json?: boolean, capture?: string,
- *                           expect?: Readonly<Record<string, string>> }>}
+ * @returns {ReadonlyArray<{ args: readonly string[], exit: 0 | 1 | 2, json?: boolean, capture?: string,
+ *                           expect?: Readonly<Record<string, string | number>> }>}
  */
 function smokeSteps(template) {
-  return [
-    { args: ['init', '--template', template] },
-    { args: ['dna', 'show', '--format', 'json'], json: true },
-    { args: ['dna', 'set', 'project.name', '--value', 'WingFoil smoke'] },
-    { args: ['memory', 'add', '--type', 'task', '--title', 'Smoke task', '--format', 'json'], json: true, capture: 'task' },
-    {
-      args: ['memory', 'submit', '{task.id}', '--format', 'json'],
-      json: true,
-      expect: { from: 'draft', to: 'pending' },
+  const task = (title, capture) => ({
+    args: ['memory', 'add', '--type', 'task', '--title', title, ...JSON_FORMAT],
+    exit: 0,
+    json: true,
+    capture,
+    expect: { path: `docs/memory/task/{${capture}.id}.md` },
+  });
+  const edge = (verb, name, from, to, reason) => ({
+    args: ['memory', verb, `{${name}.id}`, ...(reason === undefined ? [] : ['--reason', reason]), ...JSON_FORMAT],
+    exit: 0,
+    json: true,
+    expect: { id: `{${name}.id}`, from, to },
+  });
+  const search = (name, status) => ({
+    args: ['memory', 'search', `{${name}.id}`, '--status', status, ...JSON_FORMAT],
+    exit: 0,
+    json: true,
+    expect: { 'matches.length': 1, 'matches.0.id': `{${name}.id}`, 'matches.0.status': status },
+  });
+  const history = (name, operations, last) => ({
+    args: ['memory', 'history', `{${name}.id}`, ...JSON_FORMAT],
+    exit: 0,
+    json: true,
+    expect: {
+      'entries.length': operations.length,
+      ...Object.fromEntries(operations.map((operation, i) => [`entries.${i}.operation`, operation])),
+      ...Object.fromEntries(Object.entries(last).map(([field, value]) => [`entries.${operations.length - 1}.${field}`, value])),
     },
-    { args: ['paths', 'config', '--list', '--format', 'json'], json: true },
-    { args: ['directives', 'list', '--format', 'json'], json: true },
-    { args: ['workflow', 'list', '--format', 'json'], json: true },
+  });
+  return [
+    { args: ['init', '--template', template], exit: 0 },
+    { args: ['dna', 'show', ...JSON_FORMAT], exit: 0, json: true, expect: { 'project.methodology': template } },
+    // spec-005 §1 exit 2: an unknown option, and a missing operand — each refused with §3's error.
+    { args: ['dna', 'show', '--no-such-option'], exit: 2, expect: { error: "unknown option '--no-such-option'" } },
+    { args: ['memory', 'approve', ...JSON_FORMAT], exit: 2, expect: { error: 'missing required argument: <id>' } },
+    { args: ['dna', 'set', 'project.name', '--value', 'WingFoil smoke'], exit: 0 },
+    task('Approved task', 'approved'),
+    edge('submit', 'approved', 'draft', 'pending'),
+    // spec-005 §1 exit 1: no approver is bound yet (REQ-SEC-03), so the approve is refused and writes nothing.
+    {
+      args: ['memory', 'approve', '{approved.id}', '--reason', 'smoke: no approver bound', ...JSON_FORMAT],
+      exit: 1,
+      expect: { error: "user not authorized to approve type 'task'" },
+    },
+    {
+      args: ['dna', 'add', 'team.members', '--value', SMOKE_NAME, '--entry-email', SMOKE_EMAIL, '--entry-roles', 'approver'],
+      exit: 0,
+    },
+    edge('approve', 'approved', 'pending', 'approved', 'smoke: approve'),
+    // spec-005 §1 exit 1: `approved` is the last state of the sequence, so there is no forward edge.
+    {
+      args: ['memory', 'submit', '{approved.id}', ...JSON_FORMAT],
+      exit: 1,
+      expect: { error: "illegal transition approved -> (none) for type 'task'" },
+    },
+    task('Rejected task', 'rejected'),
+    edge('submit', 'rejected', 'draft', 'pending'),
+    edge('reject', 'rejected', 'pending', 'draft', 'smoke: reject'),
+    task('Deprecated task', 'deprecated'),
+    edge('deprecate', 'deprecated', 'draft', 'deprecated', 'smoke: deprecate'),
+    // The last writer is above. Every artifact written is re-loaded through its own reader (bug-133).
+    {
+      args: ['dna', 'show', ...JSON_FORMAT],
+      exit: 0,
+      json: true,
+      expect: {
+        'project.name': 'WingFoil smoke',
+        'team.members.length': 1,
+        'team.members.0.email': SMOKE_EMAIL,
+        'team.members.0.roles.0': 'approver',
+      },
+    },
+    search('approved', 'approved'),
+    history('approved', ['add', 'submit', 'approve'], { approver: `${SMOKE_NAME} <${SMOKE_EMAIL}> (approver)`, reason: 'smoke: approve' }),
+    search('rejected', 'draft'),
+    history('rejected', ['add', 'submit', 'reject'], { to: 'draft', reason: 'smoke: reject' }),
+    search('deprecated', 'deprecated'),
+    history('deprecated', ['add', 'deprecate'], { to: 'deprecated', reason: 'smoke: deprecate' }),
+    { args: ['directives', 'list', ...JSON_FORMAT], exit: 0, json: true, expect: { 'entries.length': 10 } },
+    { args: ['paths', 'config', '--list', ...JSON_FORMAT], exit: 0, json: true },
+    { args: ['workflow', 'list', ...JSON_FORMAT], exit: 0, json: true },
   ];
 }
 
@@ -79,65 +170,104 @@ function spawn(command, args, cwd, env) {
 }
 
 /**
- * A check for one spawned `wingfoil` invocation: exit 0, parseable JSON when asked, and every `expect`
- * field equal in that JSON. `parsed` carries the JSON for a later `capture`.
+ * spec-005 §3's error on stderr, as `{ error, hint }`: the one JSON object a structured refusal writes,
+ * or the console `error: <reason>` line and its optional `hint: ` line. `null` when stderr carries neither.
  */
-function commandCheck(label, run, json, expect) {
-  if (run.status !== 0) {
-    const firstLine = run.stderr.trim().split('\n')[0] ?? '';
-    return { label, ok: false, detail: `exit ${run.status ?? 'spawn-error'}: ${firstLine}` };
+function parseError(stderr) {
+  const text = stderr.trim();
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed !== null && typeof parsed === 'object' && typeof parsed.error === 'string') return parsed;
+  } catch {
+    // not the structured form: try the console one
+  }
+  const lines = text.split('\n');
+  if (!lines[0]?.startsWith('error: ')) return null;
+  const hint = lines.find((line) => line.startsWith('hint: '));
+  return { error: lines[0].slice('error: '.length), ...(hint === undefined ? {} : { hint: hint.slice('hint: '.length) }) };
+}
+
+/** The value at a dotted path (`matches.0.id`; `length` of an array), or `undefined`. */
+function valueAt(value, path) {
+  return path.split('.').reduce((at, key) => (at === null || at === undefined ? undefined : at[key]), value);
+}
+
+/**
+ * Replace a whole `'{<name>.<field>}'` string with that field of the JSON captured under `<name>`. Returns
+ * `{ value }`, or `{ unresolved }` naming the placeholder when the capture or the field is missing.
+ */
+function resolveValue(value, captured) {
+  const ref = typeof value === 'string' ? /^(.*)\{(\w+)\.(\w+)\}(.*)$/.exec(value) : null;
+  if (!ref) return { value };
+  const field = captured.get(ref[2])?.[ref[3]];
+  if (typeof field !== 'string' || field === '') return { unresolved: `{${ref[2]}.${ref[3]}}` };
+  return { value: `${ref[1]}${field}${ref[4]}` };
+}
+
+/** Resolve every arg of a step; `{ unresolved }` on the first one that cannot be. */
+function resolveArgs(args, captured) {
+  const resolved = [];
+  for (const arg of args) {
+    const one = resolveValue(arg, captured);
+    if (one.unresolved !== undefined) return one;
+    resolved.push(one.value);
+  }
+  return { args: resolved };
+}
+
+/**
+ * Judge one step's run: the exit it declares; for exit 0, parseable JSON when asked; for a non-zero exit,
+ * spec-005 §3's error on stderr; then every `expect` path in that JSON or error. `parsed` carries the
+ * JSON for a later `capture`. An `expect` value's placeholder may name this step's own capture.
+ */
+function stepCheck(label, run, step, captured) {
+  const firstLine = run.stderr.trim().split('\n')[0] ?? '';
+  if (run.status !== step.exit) {
+    return { label, ok: false, detail: `expected exit ${step.exit}, got exit ${run.status ?? 'spawn-error'}: ${firstLine}` };
   }
   let parsed;
-  if (json) {
+  if (step.exit !== 0) {
+    parsed = parseError(run.stderr);
+    if (parsed === null) return { label, ok: false, detail: `exit ${run.status} with no spec-005 §3 error on stderr` };
+  } else if (step.json) {
     try {
       parsed = JSON.parse(run.stdout);
     } catch {
       return { label, ok: false, detail: 'stdout is not valid JSON' };
     }
   }
-  const mismatches = Object.entries(expect ?? {})
-    .filter(([field, value]) => parsed?.[field] !== value)
-    .map(([field, value]) => `expected ${field}=${value}, got ${field}=${String(parsed?.[field])}`);
+  const scope = step.capture === undefined ? captured : new Map([...captured, [step.capture, parsed]]);
+  const mismatches = [];
+  for (const [path, declared] of Object.entries(step.expect ?? {})) {
+    const resolved = resolveValue(declared, scope);
+    const actual = valueAt(parsed, path);
+    if (resolved.unresolved !== undefined) mismatches.push(`expected ${path}=${declared}, but ${resolved.unresolved} is not in any output`);
+    else if (actual !== resolved.value) mismatches.push(`expected ${path}=${resolved.value}, got ${path}=${String(actual)}`);
+  }
   if (mismatches.length > 0) return { label, ok: false, detail: mismatches.join('; ') };
-  return { label, ok: true, detail: 'exit 0', parsed };
+  return { label, ok: true, detail: `exit ${run.status}`, parsed };
 }
 
 /**
- * Replace every `'{<name>.<field>}'` arg with that field of the JSON captured under `<name>`.
- * Returns the unresolvable placeholder instead when a capture or field is missing.
+ * Run `steps` (default: the template's scenario) in a fresh throwaway git repository; returns one check
+ * per step, each also requiring a clean working tree after it. Stops at the first failing check.
  */
-function resolveArgs(args, captured) {
-  const resolved = [];
-  for (const arg of args) {
-    const ref = /^\{(\w+)\.(\w+)\}$/.exec(arg);
-    if (!ref) {
-      resolved.push(arg);
-      continue;
-    }
-    const value = captured.get(ref[1])?.[ref[2]];
-    if (typeof value !== 'string' || value === '') return { unresolved: arg };
-    resolved.push(value);
-  }
-  return { args: resolved };
-}
-
-/** Run the steps of one template in a fresh throwaway git repository; returns its checks. */
-function smokeTemplate(template, invoke, env) {
+function smokeTemplate(template, invoke, env, steps = smokeSteps(template)) {
   const checks = [];
   const repo = mkdtempSync(join(tmpdir(), 'wingfoil-smoke-'));
   try {
     const git = (args) => spawn('git', args, repo, env);
     for (const args of [
       ['init', '--quiet', '--initial-branch=main'],
-      ['config', 'user.name', 'WingFoil Smoke'],
-      ['config', 'user.email', 'smoke@wingfoil.invalid'],
+      ['config', 'user.name', SMOKE_NAME],
+      ['config', 'user.email', SMOKE_EMAIL],
       ['config', 'commit.gpgsign', 'false'],
     ]) {
-      const check = commandCheck(`[${template}] git ${args[0]}`, git(args), false);
-      if (!check.ok) return [check];
+      const run = git(args);
+      if (run.status !== 0) return [{ label: `[${template}] git ${args[0]}`, ok: false, detail: `exit ${run.status}: ${run.stderr.trim()}` }];
     }
     const captured = new Map();
-    for (const step of smokeSteps(template)) {
+    for (const step of steps) {
       const resolved = resolveArgs(step.args, captured);
       if (resolved.unresolved !== undefined) {
         const detail = `${resolved.unresolved} not found in an earlier step's JSON output`;
@@ -145,18 +275,21 @@ function smokeTemplate(template, invoke, env) {
         return checks;
       }
       const label = `[${template}] wingfoil ${resolved.args.join(' ')}`;
-      const { parsed, ...check } = commandCheck(label, invoke(resolved.args, repo), step.json, step.expect);
+      const { parsed, ...check } = stepCheck(label, invoke(resolved.args, repo), step, captured);
+      if (check.ok) {
+        const status = git(['status', '--porcelain']);
+        const dirty = status.status === 0 ? status.stdout.trim() : status.stderr.trim();
+        if (status.status !== 0 || dirty !== '') {
+          check.ok = false;
+          check.detail = `${check.detail}; working tree not clean after the step: ${dirty.split('\n').join(', ')}`;
+        } else {
+          check.detail = `${check.detail}, tree clean`;
+        }
+      }
       checks.push(check);
       if (!check.ok) return checks;
       if (step.capture !== undefined) captured.set(step.capture, parsed);
     }
-    const status = git(['status', '--porcelain']);
-    const clean = status.status === 0 && status.stdout.trim() === '';
-    checks.push({
-      label: `[${template}] working tree clean after every mutation`,
-      ok: clean,
-      detail: clean ? 'clean' : status.stdout.trim() || status.stderr.trim(),
-    });
     return checks;
   } finally {
     rmSync(repo, { recursive: true, force: true });
@@ -217,10 +350,12 @@ function runSmoke(options) {
   const done = () => ({ ok: checks.every((c) => c.ok), checks });
 
   const help = invoke(['--help'], tmpdir());
-  const helpExit = commandCheck('wingfoil --help', help, false);
-  const helpUsage = help.stdout.includes('Usage: wingfoil');
   const helpCheck =
-    helpExit.ok && !helpUsage ? { ...helpExit, ok: false, detail: 'stdout does not contain "Usage: wingfoil"' } : helpExit;
+    help.status !== 0
+      ? { label: 'wingfoil --help', ok: false, detail: `exit ${help.status ?? 'spawn-error'}: ${help.stderr.trim().split('\n')[0] ?? ''}` }
+      : help.stdout.includes('Usage: wingfoil')
+        ? { label: 'wingfoil --help', ok: true, detail: 'exit 0' }
+        : { label: 'wingfoil --help', ok: false, detail: 'stdout does not contain "Usage: wingfoil"' };
   if (!record(helpCheck)) return done();
 
   if (options.expectedVersion !== undefined) {
@@ -236,6 +371,44 @@ function runSmoke(options) {
   return done();
 }
 
+/** A table cell: no newline, and `|` escaped so it cannot end the cell. */
+function cell(text) {
+  return String(text).replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
+}
+
+/**
+ * The Markdown report `--report` writes (`bug-134`): what was driven, the verdict, and every check in run
+ * order. Nothing in it comes from a clock, so the same run gives the same bytes.
+ * @param {{ ok: boolean, checks: ReadonlyArray<{ label: string, ok: boolean, detail: string }> }} report
+ * @param {{ command: readonly string[], expectedVersion?: string, expectedCommit?: string }} meta
+ * @returns {string}
+ */
+function formatReport(report, meta) {
+  const passed = report.checks.filter((c) => c.ok).length;
+  const failed = report.checks.find((c) => !c.ok);
+  const verdict = report.ok
+    ? `**PASS** (${passed}/${report.checks.length} checks ok)`
+    : `**FAIL** (${passed}/${report.checks.length} checks ok; stopped at: ${cell(failed?.label ?? '')})`;
+  return [
+    '# e2e-smoke report',
+    '',
+    'Written by `scripts/e2e-smoke.cjs --report` — the executable form of `.wingfoil/workflows/custom/e2e-smoke.yaml`',
+    '(`dl-023`, `dl-099` §3). The gate hard-rejects: a FAIL blocks `release-submit`.',
+    '',
+    `- Command: \`${meta.command.join(' ')}\``,
+    `- Expected version: ${meta.expectedVersion === undefined ? 'not checked' : `\`${meta.expectedVersion}\``}`,
+    `- Expected commit: ${meta.expectedCommit === undefined ? 'not checked' : `\`${meta.expectedCommit}\``}`,
+    `- Templates: ${SMOKE_TEMPLATES.join(', ')}`,
+    '',
+    `Result: ${verdict}`,
+    '',
+    '| # | Result | Check | Detail |',
+    '|---|--------|-------|--------|',
+    ...report.checks.map((c, i) => `| ${i + 1} | ${c.ok ? 'ok' : 'FAIL'} | ${cell(c.label)} | ${cell(c.detail)} |`),
+    '',
+  ].join('\n');
+}
+
 /**
  * The `<semver>` of a `--version` stamp `<semver> (<sha>)`, or `null` when `stamp` has another shape.
  *
@@ -247,7 +420,7 @@ function versionOfStamp(stamp) {
   return match ? match[1] : null;
 }
 
-/** Parse `[--expect-version X [--expect-commit SHA]] [-- command args...]`. */
+/** Parse `[--expect-version X [--expect-commit SHA]] [--report PATH] [-- command args...]`. */
 function parseSmokeArgs(argv) {
   const separator = argv.indexOf('--');
   const own = separator === -1 ? argv : argv.slice(0, separator);
@@ -261,6 +434,9 @@ function parseSmokeArgs(argv) {
       assertCommitName(own[i + 1]);
       options.expectedCommit = own[i + 1];
       i += 1;
+    } else if (own[i] === '--report' && own[i + 1]) {
+      options.reportPath = own[i + 1];
+      i += 1;
     } else {
       throw new Error(`unknown or incomplete argument: ${own[i]}`);
     }
@@ -273,7 +449,12 @@ function parseSmokeArgs(argv) {
 
 if (require.main === module) {
   try {
-    const report = runSmoke({ ...parseSmokeArgs(process.argv.slice(2)), log: (line) => process.stdout.write(`${line}\n`) });
+    const { reportPath, ...options } = parseSmokeArgs(process.argv.slice(2));
+    const report = runSmoke({ ...options, log: (line) => process.stdout.write(`${line}\n`) });
+    if (reportPath !== undefined) {
+      mkdirSync(dirname(reportPath), { recursive: true });
+      writeFileSync(reportPath, formatReport(report, { ...options, command: [options.command, ...options.commandArgs] }));
+    }
     process.exitCode = report.ok ? 0 : 1;
   } catch (error) {
     process.stderr.write(`error: ${error.message}\n`);
@@ -281,4 +462,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { SMOKE_TEMPLATES, assertCommitName, parseSmokeArgs, smokeSteps, runSmoke };
+module.exports = { SMOKE_TEMPLATES, assertCommitName, formatReport, parseSmokeArgs, runSmoke, smokeSteps, smokeTemplate };

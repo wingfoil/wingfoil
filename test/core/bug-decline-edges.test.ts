@@ -183,7 +183,7 @@ describe('the committed bug machine — every edge, `sequence` order (AC 2 + AC 
     open: { submit: null, approve: 'triaged', reject: 'closed', park: null },
     triaged: { submit: null, approve: null, reject: 'closed', park: null }, // dl-123 (A)
     planned: { submit: null, approve: null, reject: 'closed', park: null }, // dl-123 (A)
-    'in-progress': { submit: 'in-review', approve: null, reject: null, park: null },
+    'in-progress': { submit: 'in-review', approve: null, reject: null, park: 'planned' }, // dl-110 P1 (a): the park sync's return edge (task-205 review F1)
     'in-review': { submit: null, approve: 'resolved', reject: 'in-progress', park: null },
     resolved: { submit: null, approve: 'closed', reject: 'in-progress', park: null },
     closed: { submit: null, approve: null, reject: null, park: null },

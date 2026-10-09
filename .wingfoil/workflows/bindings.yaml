@@ -16,7 +16,7 @@
 # specification-phase quality criteria, the release/branch state queries, …) have no command that asserts
 # them today; each is listed with its reason in task-199's Execution Notes and stays a
 # W_WORKFLOW_UNBOUND_TOKEN warning, which in v1.0 fails closed (dl-090 Q2 (c)).
-version: 1.0                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry
+version: 1.2                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry; 1.1 bug-134 (task-207): e2e-smoke-passed writes its report and states severity: reject (dl-023); 1.2 git.merge also names dev-loop's main-sync, `from: main` (task-205, dl-035)
 format: 1                        # dl-153 (A): a dl-149 file kind (BINDINGS_YAML_FORMAT)
 
 checks:
@@ -35,7 +35,10 @@ checks:
   # (docs/02_requirements/02_bdd/features/); there is no separate BDD runner.
   tests.bdd.passing:        { run: [npm, test] }
   # e2e-smoke.gate (dl-023: hard-reject from v0.3): the executable form of e2e-smoke.yaml, driving `wingfoil` on PATH.
-  e2e-smoke-passed:         { run: [node, scripts/e2e-smoke.cjs] }
+  # task-207 (bug-134): it writes the report the gate declares under produces:, passed as the check's
+  # `report:` argument, rendered: a repository-relative path, so the pattern refuses an absolute path
+  # (leading `/`), an option (leading `-`), a `..` segment and any character outside [A-Za-z0-9._/-].
+  e2e-smoke-passed:         { run: [node, scripts/e2e-smoke.cjs, --report, "{report}"], severity: reject, args: { report: '^(?![/-])(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]+$' } }
   # release-planning.advance-pinned-build (dl-095 Q3 (B), dl-026).
   lockfile.pinned:          { run: [npm, run, "check:lockfile"] }
   mcp.registered:           { run: [npm, run, "check:mcp"] }
@@ -50,7 +53,9 @@ actions:
   # these stay manual until a command takes the task id as a whole argument.
   git.create_branch:        { manual: true }
   git.create_worktree:      { manual: true }
-  git.merge:                { manual: true }   # switch to `to`, then `git merge --no-ff` the task branch: two commands
+  # git.merge(to: main, ff: false): switch to `to`, then `git merge --no-ff` the task branch — two commands.
+  # git.merge(from: main) (dev-loop red/refactor, dl-035): `git merge --no-edit main` inside the task's worktree.
+  git.merge:                { manual: true }
   git.remove_worktree:      { manual: true }
   # release-publishing.tag (dl-024) and end-of-life.archive: the commit message and the tag are the
   # approver's, on main.
