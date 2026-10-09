@@ -13,6 +13,8 @@
  *   state whose `supersedes:` names an element that is not `superseded` at `HEAD`.
  * - **config versions over a range** (`bug-249`): with `--base`, each of the four versioned config files
  *   whose bytes differ between the merge-base and `HEAD` declares a numerically greater `version:`.
+ * - **no AI co-author on an approval** (`bug-307`, `git-conventions` §7): an `approve` or `reject`
+ *   commit carries no `Co-Authored-By:` and no `AI-Model:` trailer; other verbs may.
  * - **per-check introduction**: each check added after the script gates only the commits after the
  *   first-parent commit that brought its marker into the script, so a new rule never fails on commits
  *   pushed before it existed (`dl-103` §1 starting mode, applied per check).
@@ -323,7 +325,7 @@ describe('config versions over a --base range (bug-249)', () => {
 
 describe('per-check introduction (dl-103 §1 starting mode, per check)', () => {
   it('declares a marker for every check added after the script', () => {
-    expect(Object.keys(CHECKS).sort()).toEqual(['config-version', 'status-outside-wf', 'supersedes-pair', 'verb-edge']);
+    expect(Object.keys(CHECKS).sort()).toEqual(['approval-ai-trailer', 'config-version', 'status-outside-wf', 'supersedes-pair', 'verb-edge']);
     for (const marker of Object.values(CHECKS)) expect(marker).toMatch(/^governance-check:/);
   });
 
@@ -348,5 +350,44 @@ describe('per-check introduction (dl-103 §1 starting mode, per check)', () => {
     const moved = f.task('t-1', 'done', 'docs: edit t-1');
     const report = checkGovernance(f.root);
     expect(report.findings.find((finding) => finding.sha === moved)?.gated).toBe(true);
+  });
+});
+
+describe('no AI co-author trailer on approve and reject (bug-307, git-conventions §7)', () => {
+  const f = fixture();
+  const trailers = '\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nAI-Model: claude-opus-5-5';
+  f.task('t-1', 'pending', 'wf(task): add t-1');
+  const approveWithTrailers = f.task('t-1', 'backlog', 'wf(task): approve t-1 [pending → backlog]' + approval() + trailers, APPROVER);
+  f.task('t-2', 'pending', 'wf(task): add t-2');
+  const rejectWithModel = f.task('t-2', 'draft', 'wf(task): reject t-2 [pending → draft]' + approval('Not yet.') + '\n\nAI-Model: claude-opus-5-5', APPROVER);
+  f.task('t-3', 'pending', 'wf(task): add t-3');
+  const approveClean = f.task('t-3', 'backlog', 'wf(task): approve t-3 [pending → backlog]' + approval(), APPROVER);
+  const startWithTrailers = f.task('t-3', 'in-progress', 'wf(task): start t-3 [backlog → in-progress]' + trailers);
+  const report = checkGovernance(f.root);
+
+  it('reports an approve or a reject that carries an AI co-author or model trailer, naming the trailer', () => {
+    expect(rulesOf(report, approveWithTrailers)).toEqual(['body']);
+    expect(messagesOf(report, approveWithTrailers)).toMatch(/Co-Authored-By/);
+    expect(messagesOf(report, approveWithTrailers)).toMatch(/git-conventions §7/);
+    expect(rulesOf(report, rejectWithModel)).toEqual(['body']);
+    expect(messagesOf(report, rejectWithModel)).toMatch(/AI-Model/);
+  });
+
+  it('accepts an approval without them, and the trailers on any other verb', () => {
+    expect(rulesOf(report, approveClean)).toEqual([]);
+    expect(rulesOf(report, startWithTrailers)).toEqual([]);
+  });
+
+  it('gates only commits after the check was introduced: the earlier ones are history (the 63 since 39885b87 cannot be rewritten)', () => {
+    const g = fixture();
+    g.commit('chore: introduce the check', { 'scripts/check-governance.cjs': '// placeholder\n' });
+    g.task('t-1', 'pending', 'wf(task): add t-1');
+    const before = g.task('t-1', 'backlog', 'wf(task): approve t-1 [pending → backlog]' + approval() + trailers, APPROVER);
+    g.commit('chore: add the rule', { 'scripts/check-governance.cjs': `// placeholder\n// ${CHECKS['approval-ai-trailer']}\n` });
+    g.task('t-2', 'pending', 'wf(task): add t-2');
+    const after = g.task('t-2', 'backlog', 'wf(task): approve t-2 [pending → backlog]' + approval() + trailers, APPROVER);
+    const gated = new Map(checkGovernance(g.root).findings.map((finding) => [finding.sha, finding.gated]));
+    expect(gated.get(before)).toBe(false);
+    expect(gated.get(after)).toBe(true);
   });
 });

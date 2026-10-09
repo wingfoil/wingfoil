@@ -6,7 +6,7 @@
 export type GovernanceRule = 'subject' | 'bracket' | 'body' | 'authority' | 'state' | 'config';
 
 /** A check added after the script itself (task-208): each gates only the commits after its own introduction. */
-export type GovernanceCheck = 'verb-edge' | 'status-outside-wf' | 'supersedes-pair' | 'config-version';
+export type GovernanceCheck = 'verb-edge' | 'status-outside-wf' | 'supersedes-pair' | 'config-version' | 'approval-ai-trailer';
 
 /**
  * Each later check's marker: the string whose first appearance in `scripts/check-governance.cjs`, on
