@@ -55,7 +55,9 @@ import { isNumericToken, patternToSource, type Diagnostic, type ValidationError 
 import { creatingPhaseIndex, isImplicitOwnerProduces } from '../core/workflow-diagnostics';
 import { iterationStartState, workflowExitStates, type ExitStart, type PhaseExitState } from '../core/workflow-exit-state';
 
-import { collectionEntryKey, memoryAddType, tokenName, type CollectionEntry } from './bindings';
+import type { DnaYaml } from '../dna/schema';
+
+import { collectionEntryKey, memoryAddType, tokenName, typedStateType, type BindingsYaml, type CollectionEntry } from './bindings';
 import { workflowFacts, type Phase, type Workflow } from './schema';
 
 /** `W_UNCOMMITTED_INPUTS` (`spec-017` §1.2): a deduction input differs from `HEAD`; the answer is `HEAD`'s. */
@@ -194,6 +196,14 @@ export interface DeductionSnapshot {
    * no candidates. Absent: no collection is iterated.
    */
   readonly collections?: ReadonlyMap<string, readonly CollectionEntry[]>;
+  /**
+   * `workflows/bindings.yaml` at the snapshot's commit, as the registry loaded it, or `null` (none). Carried so
+   * `workflow next` and `show` resolve bindings from the one registry load (task-216; W3 B3 handover). Absent:
+   * not read.
+   */
+  readonly bindings?: BindingsYaml | null;
+  /** `dna.yaml` at the snapshot's commit, or `null` (none): `next`'s role holders and agent roles (task-216). Absent: not read. */
+  readonly dnaYaml?: DnaYaml | null;
 }
 
 /** The baseline an answer comes from (`spec-017` §8, `dl-084` (A)). */
@@ -250,6 +260,33 @@ export interface ProducesView {
   readonly evidence: boolean;
 }
 
+/** What an action acts on (`spec-017` §4.2, §8 `ActionView.target`). */
+export type ActionTarget = 'bound' | 'selection' | 'created' | 'run' | 'none';
+
+/**
+ * One action of a step, as deduction resolves it (`spec-017` §4.1, §4.2): its text with the tokens
+ * substituted, the tokens with no value, and the elements it acts on at `HEAD`. Its binding is `next`'s
+ * (§6.1, `src/core/workflow-next.ts`).
+ */
+export interface DeducedAction {
+  readonly token: string;
+  /** The token with each `{…}` that has a value substituted; a pending or unresolved one is kept as written. */
+  readonly text: string;
+  /** The `{…}` tokens with no value (each reported `W_UNRESOLVED_TOKEN`), in order. */
+  readonly unresolved: readonly string[];
+  readonly target: ActionTarget;
+  /**
+   * The elements the action acts on, known at `HEAD`, ascending `(type, id)`: the bound element, the
+   * selected ones, the ones the step (or, for a `run` target, an earlier step of the pass) created, or those a
+   * `<T>.sync_state(for_each: <type>.<field>)` names. Empty when none is known yet.
+   */
+  readonly targets: readonly ElementRef[];
+  /** The bound element's state just before this action, computed statically (§4.4), or `null`. */
+  readonly boundFrom: string | null;
+  /** For a `<T>.sync_state(for_each: <S>.<field>)`: the type and the state of the source element `S` at this action. */
+  readonly source?: { readonly type: string; readonly state: string | null };
+}
+
 /** A leaf step on an instance's frontier (`spec-017` §4.9; the part of §8's `Step` deduction decides). */
 export interface DeducedStep {
   /** `<workflow>.<phase>`, then `@<type>:<id>` or `@<collection>#<key>` when the step runs on a scope. */
@@ -278,6 +315,8 @@ export interface DeducedStep {
   readonly reentered: boolean;
   /** The first listed such re-entry commit (the newest in a linear history), or `null`. */
   readonly reentryCommit: string | null;
+  /** The phase's actions, resolved (§4.1, §4.2), in declared order (task-216). */
+  readonly actions: readonly DeducedAction[];
 }
 
 /** How an `iterate_over` phase's candidates stand (`spec-017` §4.6, §4.7, §8). */
@@ -547,6 +586,14 @@ function resolveTokens(text: string, frames: readonly Frame[]): Resolved {
 
 /** The untyped verbs that, before any `memory.add` and outside a selection, move the bound element (`spec-003` § "Evidence"). */
 const STATE_VERBS: readonly string[] = ['memory.submit', 'memory.approve', 'element.set_state'];
+/** The untyped tokens that act on the created elements, the selection or the bound element (`spec-017` §4.2). */
+const UNTYPED_TARGET_VERBS: readonly string[] = ['memory.submit', 'memory.approve', 'memory.reject', 'memory.deprecate', 'element.set_state', 'element.set_release'];
+
+/** A frontmatter value as a list of strings (absent: none). */
+function asStrings(value: unknown): string[] {
+  if (value === undefined || value === null) return [];
+  return (Array.isArray(value) ? value : [value]).map(String);
+}
 const TYPED_SET_STATE_RE = /^([a-z][a-z0-9-]*)\.set_state$/;
 
 /** Whether `phase` declares `state` evidence on an element of `boundType` (`spec-003` § "Evidence", `spec-017` §4.2). */
@@ -1174,6 +1221,8 @@ class Deducer {
       if (!this.hasRecord(instanceId, startCommit, stepName, scope, frame?.selfBound === true, reentries)) missing.push('record');
     }
 
+    const actions = this.actionsOf(instanceId, startCommit, workflow, p, frames, exit, scope, created, selected, report);
+
     return {
       step: {
         key,
@@ -1189,10 +1238,101 @@ class Deducer {
         evidence: { kinds, missing, finalizable: missing.length === 1 && missing[0] === 'record' },
         reentered: reentries.length > 0,
         reentryCommit: newest(reentries)?.commit ?? null,
+        actions,
       },
       diagnostics,
       selected,
     };
+  }
+
+  /**
+   * The actions of phase `p`, resolved (`spec-017` §4.1, §4.2; task-216): each token's text with its `{…}`
+   * substituted against `frames`, the tokens with no value (reported `W_UNRESOLVED_TOKEN` at
+   * `phases[p].actions[k]`), and what it acts on — the targets of §4.2's table, read at `HEAD`. A `{T.<field>}`
+   * whose `T` the phase's selection selects and no enclosing scope binds resolves per selected element when
+   * the action runs (§4.1), so it is kept as written and is not unresolved.
+   */
+  private actionsOf(
+    instanceId: string,
+    startCommit: string,
+    workflow: Workflow,
+    p: number,
+    frames: readonly Frame[],
+    exit: PhaseExitState,
+    scope: ScopeRef | null,
+    created: readonly Element[],
+    selected: readonly ElementRef[],
+    report: (path: string, resolved: Resolved) => void,
+  ): DeducedAction[] {
+    const phase = workflow.phases[p]!;
+    const selection = phase.where !== undefined && phase.iterate_over === undefined;
+    const selectedTypes = selection ? asStrings(phase.where!['type']) : [];
+    const last = frames[frames.length - 1];
+    const frame = last?.kind === 'element' ? last : undefined;
+    const bound = frame?.element ?? null;
+    const sorted = (elements: readonly ElementRef[]): ElementRef[] => [...elements].sort(compareRefs);
+    let addedType: string | null = null;
+    return (phase.actions ?? []).map((token, a): DeducedAction => {
+      const resolved = resolveTokens(token, frames);
+      const unresolved = resolved.unresolved.filter(
+        ({ token: name, reason }) => !(reason === 'no element in scope' && selectedTypes.includes(name.slice(1, -1).split('.')[0]!)),
+      );
+      report(`phases[${p}].actions[${a}]`, { ...resolved, unresolved });
+      const text = token.replace(TOKEN_RE, (whole) => {
+        if (unresolved.some((entry) => entry.token === whole)) return whole;
+        const single = resolveTokens(whole, frames);
+        return single.value ?? whole;
+      });
+      // The static state before this action (§4.4) when the bound element's status lies on the static path up to
+      // it; otherwise the static start was not the element's (an instance starts from the type's first state), and
+      // its status at `HEAD` is where the action starts.
+      const statics = exit.actionStates;
+      const boundFrom = bound === null ? (statics[a] ?? null) : statics.slice(0, a + 1).includes(bound.status) ? (statics[a] ?? null) : bound.status;
+      const base = { token, text, unresolved: unresolved.map((entry) => entry.token), boundFrom };
+      const name = tokenName(token);
+      if (name === 'memory.add') {
+        addedType = memoryAddType(token);
+        return { ...base, target: 'created', targets: sorted(created.filter((element) => element.type === addedType).map(refOf)) };
+      }
+      if (UNTYPED_TARGET_VERBS.includes(name)) {
+        if (addedType !== null) {
+          const type = addedType;
+          return { ...base, target: 'created', targets: sorted(created.filter((element) => element.type === type).map(refOf)) };
+        }
+        if (selection) return { ...base, target: 'selection', targets: sorted(selected) };
+        if (frame !== undefined) return { ...base, target: 'bound', targets: bound === null ? [] : [refOf(bound)] };
+        return { ...base, target: 'none', targets: [] };
+      }
+      const typed = typedStateType(token);
+      if (typed !== null && name.endsWith('.set_state')) {
+        if (frame?.type === typed) return { ...base, target: 'bound', targets: bound === null ? [] : [refOf(bound)] };
+        if (exit.run.some((element) => element.type === typed)) {
+          // The elements of `T` an earlier step of the same pass created (§4.2): the earlier phases' keys on this scope.
+          const suffix = scope === null ? '' : `@${scopeKey(scope)}`;
+          const earlier = workflow.phases.slice(0, p).flatMap((earlierPhase) => {
+            const stepName = `${workflow.name}.${earlierPhase.name}`;
+            return frame?.selfBound ? [stepName + suffix, stepName] : [stepName + suffix];
+          });
+          return { ...base, target: 'run', targets: this.createdBy(instanceId, startCommit, earlier).filter((element) => element.type === typed).map(refOf) };
+        }
+        if (selectedTypes.includes(typed)) return { ...base, target: 'selection', targets: sorted(selected.filter((element) => element.type === typed)) };
+        return { ...base, target: 'none', targets: [] };
+      }
+      if (typed !== null) {
+        // `<T>.sync_state(for_each: <S>.<field>)`: the elements of `T` the field of the nearest `S` names (§4.2).
+        const named = /for_each\s*:\s*["']?([a-z][a-z0-9-]*)\.([A-Za-z0-9_-]+)/.exec(token);
+        if (named === null) return { ...base, target: 'run', targets: [] };
+        const [, sourceType, field] = named as unknown as [string, string, string];
+        const sourceFrame = [...frames].reverse().find((candidate): candidate is ElementFrame => candidate.kind === 'element' && candidate.type === sourceType);
+        const source = sourceFrame?.element ?? null;
+        const raw = source === null ? undefined : source.frontmatter[field];
+        const ids = (Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw]).map((value) => scalarText(value)).filter((id): id is string => id !== null);
+        const targets = ids.map((id) => this.find(typed, id)).filter((element): element is Element => element !== null).map(refOf);
+        const state = sourceFrame === frame ? boundFrom : (source?.status ?? null);
+        return { ...base, target: 'run', targets: sorted(targets), source: { type: sourceType, state } };
+      }
+      return { ...base, target: 'none', targets: [] };
+    });
   }
 
   /**

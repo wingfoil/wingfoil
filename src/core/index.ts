@@ -76,6 +76,7 @@ import {
   loadMemoryYaml,
 } from './loaders';
 import { workflowListAtHead, workflowShowAtHead, type ListResult, type ShowResult } from './workflow-list-show';
+import { renderNextConsole, workflowNextAtHead, type NextResult } from './workflow-next';
 import { loadDirectiveListing, type DirectiveListing } from './directives-list';
 import { selectDirectivesById } from './context';
 import { checkAssignable, checkUnreferenced, updateRoleAssignments } from './directive-assign';
@@ -138,6 +139,11 @@ export { loadWorkflowRegistry, loadWorkflowRegistryAtHead, loadWorkflowRegistryA
 // The functions stay module-internal until a consumer needs them (task-216's `next` may import
 // `declaredEvidenceKinds`); the operations are `CORE_MODULES`' `workflowList` / `workflowShow`.
 export type { CheckTokenView, ListEntry, ListResult, PhaseView, ShowInputs, ShowResult, TokenView, WorkflowView } from './workflow-list-show';
+// task-216: `workflow next` at `HEAD` (`spec-017` §6, §7.3, §8 `Step` / `NextResult`); the operation is
+// `CORE_MODULES`' `workflowNext`, and the step builder is what `agent execute --next` (task-235) and `status`
+// (task-225) reuse.
+export { ASSIGNED_TO_ME, NO_OPEN_WORKFLOWS, assigneeRoles, buildStep, humanNeededLine, membersHoldingRole, nextWorkflow, noNextStepMessage, renderNextConsole, workflowNextAtHead } from './workflow-next';
+export type { ActionView, Awaiting, CadenceView, CheckView, Member, NextInputs, NextOptions, NextResult, Step, StepBinding } from './workflow-next';
 export { W_WORKFLOW_CHECKS_NOT_RUN, workflowCoreDiagnostics } from './workflow-core-checks';
 export type { CheckedRegistry, WorkflowCoreInputs } from './workflow-core-checks';
 export { iterationStartState, machineStates, workflowExitStates } from './workflow-exit-state';
@@ -2198,6 +2204,24 @@ const workflowShowFn: CoreFn<unknown, ShowResult> = async (params) => {
 };
 
 
+/** `wingfoil workflow next [<ref>] [--assigned-to <who>]` params (task-216): the `<ref>` rides the bare positional. */
+export interface WorkflowNextParams {
+  readonly root: string;
+  readonly positional?: string;
+  readonly options?: { readonly 'assigned-to'?: string };
+}
+
+/**
+ * `workflowNext` `CoreOperation.fn` (P4.4, `spec-017` §7.3): {@link workflowNextAtHead}, refusals mapped — a
+ * `spec-003` error at `HEAD` is `VALIDATION` (exit 1), a `<ref>` naming no open instance `NOT_FOUND` (exit 1);
+ * every deduced outcome exits 0.
+ */
+const workflowNextFn: CoreFn<unknown, NextResult> = async (params) => {
+  const { root, positional, options } = params as WorkflowNextParams;
+  const result = loadOrError(() => workflowNextAtHead(root, positional, options?.['assigned-to']));
+  return result.ok ? result.value : result;
+};
+
 /**
  * The production `CoreModule` registry (spec-006 §2, §4). `src/cli`'s command registrar and
  * `src/mcp`'s Tool/Resource registrar both import this exact array — see spec-006 §4.1: "no
@@ -2527,6 +2551,20 @@ export const CORE_MODULES: readonly CoreModule[] = [
         flags: [{ name: 'all', description: 'list every workflow, the includable ones no open workflow has reached as well' }],
         example: 'wingfoil workflow list --all',
         fn: workflowListFn,
+      },
+      // task-216 (`spec-017` §7.3): reads `HEAD`, gating (§1.1 item 1): its first step is what `agent execute
+      // --next` launches on. Exit 0 for every deduced outcome; 1 for a `spec-003` error or an unknown `<ref>`.
+      // Console: the step's key, trail, role, scope, actions with bindings, directive ids and any "human
+      // needed" line (§8). The MCP Resource `wingfoil://workflows/-/next` is task-239's.
+      workflowNext: {
+        name: 'workflowNext',
+        mutates: false,
+        description: 'print the next step of an open workflow: its verb, role, element, directives and bindings, as committed at HEAD',
+        positional: { name: 'ref', description: 'a workflow name or an open workflow instance id (default: the active instance)' },
+        options: [{ name: 'assigned-to', valueName: 'who', description: "keep the steps whose role 'me', a member name or email, or a role name holds" }],
+        example: 'wingfoil workflow next --assigned-to me',
+        fn: workflowNextFn,
+        renderConsole: renderNextConsole as (value: unknown) => string,
       },
       workflowShow: {
         name: 'workflowShow',
