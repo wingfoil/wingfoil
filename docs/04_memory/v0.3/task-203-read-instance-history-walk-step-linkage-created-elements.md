@@ -202,4 +202,41 @@ an idle machine.
   - The P4.13 feature narrative and `06_features.md` P4.13 row still say "from Memory file existence and frontmatter".
     They are not SARD and not touched here, so they are reported as a candidate finding.
 
-**Pending amendments (approver):** none. No approved element was edited.
+### review fixes (approver rulings on the independent review, 2026-10-09)
+
+- **F1, ruling (a): ancestry.** Evidence is "newer than the re-entry" when its commit is a strict
+  descendant of the re-entry commit. This replaces design reading 2, which used the `--topo-order`
+  position. Ancestry is decided through the `%P` parent links the walk already reads
+  (`DeductionSnapshot.parents`), with no extra git spawn. When several re-entries reach a phase, its
+  evidence must descend from each; `reentryCommit` reports the one listed first.
+- **F3, ruling (a): octopus bound.** The single union walk, and the per-element lookups, are bounded by
+  `^@` of `git merge-base --octopus <every start>`, not by the oldest start's parents. This replaces
+  design reading 4. Starts with no common ancestor (`merge-base` exits 1) leave the walk unbounded.
+  `merge-base` refuses `--no-show-signature` (`git merge-base --octopus --no-show-signature …` →
+  `error: unknown option`, exit 129), so its output is checked as a full sha instead. task-268's
+  `requireCommitName` takes that role at the gate merge.
+- **Red** `c2e6cade` (`npx jest test/core/workflow-deduction-history.test.ts -t "review F" --json`):
+  - "review F1 … (main-first)" failed: `red:complete`, as the topo position placed the side record after
+    the reject;
+  - "review F1 … (side-first)" passed: the topo order happened to place it before the reject;
+  - "review F3 … a younger instance's walk keeps a reject made on another branch before the oldest start"
+    failed: `reentered: false`.
+  - The ruling's requirement is that both orders agree, and the pair did not.
+- **Green** `ff433358`. All three pass, plus coverage tests for:
+  - unrelated histories (unbounded walk);
+  - a non-sha merge base, refused as `E_GIT_READ_FAILED` (git shim);
+  - a diamond below a re-entry.
+- **Gates** after the fix:
+  - targeted coverage of both files: 100 / 100 / 100 / 100 (101 tests);
+  - `npx jest test/core/workflow test/workflow test/docs test/agent/fake-agent.test.ts`: 30 suites, 421 tests passed;
+  - `npm run lint`, `npm run docs:api` and both `tsc` runs: exit 0.
+
+**Pending amendments (approver):**
+- `spec-017` is left uncommitted in the worktree. §4.8 now defines "newer" as ancestry, the Cost paragraph
+  states the octopus bound, and a dated Revision note is added. Proposed `--reason`: "task-203 (review
+  F1, F3, approver rulings (a)): §4.8 defines 'newer than the re-entry commit' as descends from it, read
+  through the walk's parent links, so a record made on a branch that never saw the reject does not count
+  whichever parent order the merge has; the Cost paragraph bounds the single union walk by the octopus
+  merge base of the open instances' start commits instead of the oldest start, so a younger instance's
+  commits on another branch are kept, at one extra git merge-base spawn. No other deduction rule
+  changed."
