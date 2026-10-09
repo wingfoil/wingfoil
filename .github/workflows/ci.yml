@@ -46,6 +46,16 @@
 # A push of several commits runs once, on the tip — no workflow tests the intermediate commits.
 # A branch with an open PR into `main` runs twice per push (`push` and `pull_request`): accepted cost.
 #
+# e2e-smoke (task-207, dl-099 §4 (c), smoke part) — a second job, beside the gate, not after it: `npm ci`,
+#                    `npm pack` (its `prepack` runs the build, so the tarball carries the build stamp of
+#                    this commit), a global install of that tarball into a throwaway `$RUNNER_TEMP`
+#                    prefix, then `scripts/e2e-smoke.cjs` against the installed `wingfoil` — the dl-099 §3
+#                    use scenario on a fresh project per template, with `--expect-commit "$GITHUB_SHA"` as
+#                    publish.yml's stage passes it. What is smoked is what a user installs, not the
+#                    working tree. The staging rehearsal (`npm run publish:staging`, a local Verdaccio)
+#                    stays out of this workflow (dl-099 §4: it runs per release candidate). The job
+#                    inherits `on:` and declares no trigger, condition or branch of its own (dl-159).
+#
 # Read-only: `contents: read` and no job-level `permissions`. No secret, no registry credential, no OIDC.
 #
 # Locally, the same gate is
@@ -94,3 +104,24 @@ jobs:
       - name: Production advisories — no high advisory in the dependencies tree (task-250, bug-223)
         if: ${{ !cancelled() }}
         run: npm run check:audit
+
+  e2e-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - name: Install
+        run: npm ci
+      - name: Pack the candidate tarball — `prepack` builds dist/ and its build stamp
+        run: |
+          mkdir -p "$RUNNER_TEMP/pack"
+          npm pack --pack-destination "$RUNNER_TEMP/pack"
+      - name: Install that tarball into a throwaway prefix, as a user would
+        run: npm install --global --prefix "$RUNNER_TEMP/wingfoil" "$RUNNER_TEMP"/pack/wingfoil-*.tgz
+      - name: e2e smoke — the dl-099 §3 use scenario against the installed bin (task-207)
+        run: node scripts/e2e-smoke.cjs --expect-version "$(node -p "require('./package.json').version")" --expect-commit "$GITHUB_SHA" -- "$RUNNER_TEMP/wingfoil/bin/wingfoil"
