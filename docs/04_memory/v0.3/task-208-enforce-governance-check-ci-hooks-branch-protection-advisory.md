@@ -2,7 +2,7 @@
 id: "task-208-enforce-governance-check-ci-hooks-branch-protection-advisory"
 type: task
 title: "Enforce the governance check in CI, with hooks, branch protection and the advisory lints"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "high"
