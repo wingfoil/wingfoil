@@ -581,7 +581,7 @@ describe('task-198 — the HEAD snapshot reader at its edges (spec-017 §1.1–�
       commitFiles(repo, { 'README.md': '# bare\n' }, 'bare');
       writeFixtureFile(repo, 'docs/x.md', 'untracked\n');
       const snapshot = readDeductionSnapshotAtHead(repo);
-      expect(snapshot).toMatchObject({ workflows: [], workflowFiles: [], memoryYaml: null, documents: [], starts: new Map(), history: new Map(), transitions: [], lastChanges: new Map(), dirty: [] });
+      expect(snapshot).toMatchObject({ workflows: [], workflowFiles: [], memoryYaml: null, documents: [], starts: new Map(), history: new Map(), transitions: [], lastChanges: new Map(), parents: new Map(), dirty: [] });
       expect(deduceWorkflowStateAtHead(repo)).toMatchObject({ active: null, instances: [], diagnostics: [] });
     } finally {
       removeTempDir(repo);

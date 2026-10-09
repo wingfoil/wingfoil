@@ -65,6 +65,7 @@ function snapshot(workflows: Workflow[], documents: ReturnType<typeof doc>[], ex
     history: new Map(),
     transitions: [],
     lastChanges: new Map(),
+    parents: new Map(),
     dirty: [],
     ...extra,
   };
@@ -355,12 +356,21 @@ phases:
     const documents = [doc('docs/tasks/t1.md', { id: 't1', type: 'task', status: 'in-progress' }), plan('p1', 'loop', 't1')];
     const reentry = (commit: string, position: number) => ({ commit, position, verb: 'reject' as const, type: 'task', id: 't1', from: 'in-review', to: 'in-progress' });
     const history = new Map([['s0', { records: [], links: [], reentries: [reentry('r-new', 3), reentry('r-old', 5)] }]]);
-    const first = (extra: Partial<DeductionSnapshot>) => deduceWorkflowState(snapshot([flow], documents, { memoryYaml: memory, history, ...extra })).instances[0]!.frontier[0]!;
+    // One line of history, newest first: t1 → c2 → r-new → c4 → r-old → c9.
+    const line = ['t1', 'c2', 'r-new', 'c4', 'r-old', 'c9'];
+    const parents = new Map(line.map((commit, index) => [commit, index + 1 < line.length ? [line[index + 1]!] : []]));
+    const first = (extra: Partial<DeductionSnapshot>) =>
+      deduceWorkflowState(snapshot([flow], documents, { memoryYaml: memory, history, parents, ...extra })).instances[0]!.frontier[0]!;
 
     // No transition and no recorded change: the state is older than the walk.
     expect(first({})).toMatchObject({ key: 'loop.start@task:t1', reentered: true, reentryCommit: 'r-new', evidence: { missing: ['state'] } });
     // The file's last change sits between the two re-entries: older than the newest, so still not counted.
     expect(first({ lastChanges: new Map([['task:t1', { commit: 'c4', position: 4 }]]) }).evidence.missing).toEqual(['state']);
+    // Below a merge the descendants are reached by two paths and counted once: r-new → (a | b) → m.
+    const diamond = new Map([...parents, ['a', ['r-new']], ['b', ['r-new']], ['m', ['a', 'b']]]);
+    expect(first({ parents: diamond, lastChanges: new Map([['task:t1', { commit: 'm', position: 0 }]]) }).key).toBe('loop.review@task:t1');
+    // A commit outside the walk's parent links descends from nothing.
+    expect(first({ lastChanges: new Map([['task:t1', { commit: 'elsewhere', position: 0 }]]) }).evidence.missing).toEqual(['state']);
     // A change newer than both counts; so does a transition naming the current status, preferred over the change.
     expect(first({ lastChanges: new Map([['task:t1', { commit: 'c2', position: 2 }]]) }).key).toBe('loop.review@task:t1');
     expect(

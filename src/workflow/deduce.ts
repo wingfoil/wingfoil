@@ -69,7 +69,8 @@ export interface StartCommit {
 
 /**
  * A commit's place in the history walk (`spec-017` §4.8): its index in the `git log --topo-order` of
- * the union of the open instances' walks, `0` the commit at `HEAD`. A smaller position is **newer**.
+ * the union of the open instances' walks, `0` the commit at `HEAD`. A smaller position is listed first;
+ * whether evidence is **newer than a re-entry** is decided by ancestry, not by position (review F1).
  */
 export interface WalkPosition {
   readonly commit: string;
@@ -164,6 +165,11 @@ export interface DeductionSnapshot {
   readonly transitions: readonly TransitionCommit[];
   /** The latest commit in the walk that changed each re-entered element's file, by `<type>:<id>` (one lookup each). */
   readonly lastChanges: ReadonlyMap<string, WalkPosition>;
+  /**
+   * The parent links of every commit of the walk, by sha (parents outside the walk included). "Newer than a
+   * re-entry" means "descends from the re-entry commit", decided through them (§4.8, review F1 ruling (a)).
+   */
+  readonly parents: ReadonlyMap<string, readonly string[]>;
   /** The deduction inputs that differ from `HEAD` in the working tree, sorted (§1.2). */
   readonly dirty: readonly string[];
 }
@@ -520,9 +526,9 @@ function byTypeThenId(a: Element, b: Element): number {
   return compareText(a.type, b.type) || compareText(a.id, b.id);
 }
 
-/** The newer of a phase's cutoff so far (possibly absent) and a re-entry: the smaller walk position. */
-function newer(a: WalkPosition | null, b: WalkPosition): WalkPosition {
-  return a === null || b.position < a.position ? b : a;
+/** The newest of the re-entries that reach a step (the smallest walk position), for display; `null` for none. */
+function newest(reentries: readonly WalkPosition[]): WalkPosition | null {
+  return reentries.reduce<WalkPosition | null>((best, entry) => (best === null || entry.position < best.position ? entry : best), null);
 }
 
 /** The read-only context of one deduction. */
@@ -531,6 +537,10 @@ class Deducer {
   private readonly fileOf = new Map<string, string>();
   private readonly tree: ReadonlySet<string>;
   private readonly elements: readonly Element[];
+  /** The walk's child links (the inverse of `snapshot.parents`), built on first use. */
+  private children: Map<string, string[]> | null = null;
+  /** The strict descendants in the walk of each re-entry commit asked about. */
+  private readonly descendantsOf = new Map<string, ReadonlySet<string>>();
 
   constructor(
     private readonly snapshot: DeductionSnapshot,
@@ -598,21 +608,49 @@ class Deducer {
   }
 
   /**
-   * The walk position of the commit that put `element` in its current status (§4.8, `state` after a
-   * re-entry): the newest transition commit naming it whose bracket ends at that status, else the newest
-   * commit in the walk that changed its file; `Infinity` (older than anything in the walk) when neither.
+   * The commit that put `element` in its current status (§4.8, `state` after a re-entry): the latest
+   * transition commit naming it whose bracket ends at that status, else the latest commit in the walk that
+   * changed its file; `null` (older than anything in the walk) when neither.
    */
-  private statePosition(element: Element): number {
+  private stateCommit(element: Element): string | null {
     const named = this.snapshot.transitions.find((entry) => entry.type === element.type && entry.id === element.id && entry.to === element.status);
-    return named?.position ?? this.snapshot.lastChanges.get(keyOf(element))?.position ?? Number.POSITIVE_INFINITY;
+    return named?.commit ?? this.snapshot.lastChanges.get(keyOf(element))?.commit ?? null;
+  }
+
+  /** The strict descendants of `commit` within the walk, through its parent links (§4.8, review F1). */
+  private descendants(commit: string): ReadonlySet<string> {
+    const known = this.descendantsOf.get(commit);
+    if (known !== undefined) return known;
+    if (this.children === null) {
+      this.children = new Map();
+      for (const [child, parents] of this.snapshot.parents) {
+        for (const parent of parents) this.children.set(parent, [...(this.children.get(parent) ?? []), child]);
+      }
+    }
+    const found = new Set<string>();
+    const pending = [...(this.children.get(commit) ?? [])];
+    while (pending.length > 0) {
+      const next = pending.pop()!;
+      if (found.has(next)) continue;
+      found.add(next);
+      pending.push(...(this.children.get(next) ?? []));
+    }
+    this.descendantsOf.set(commit, found);
+    return found;
+  }
+
+  /** Whether `commit` is newer than every re-entry in `reentries`: a strict descendant of each (§4.8). */
+  private newerThan(commit: string | null, reentries: readonly WalkPosition[]): boolean {
+    return reentries.every((reentry) => commit !== null && this.descendants(reentry.commit).has(commit));
   }
 
   /**
    * The re-entry cutoff of each phase of a pass of `workflow` on `element` (§4.8 re-entries, §5.2): for
    * every re-entry of the element in the instance's walk, the phase whose gate state was its `<from>` —
    * the first phase that holds that gate (§5.1) and declares a `fallback` — names a `fallback.step`; from
-   * that phase onward the `record` and `state` evidence counts only if newer than the re-entry. A phase
-   * reached by several re-entries keeps the newest; `inherited` is the including phase's own cutoff. A
+   * that phase onward the `record` and `state` evidence counts only if newer than the re-entry — a
+   * descendant of its commit. A phase reached by several re-entries keeps them all, and its evidence must
+   * descend from each; `inherited` is what reaches the including phase. A
    * re-entry from a state no phase holds as a gate with a fallback reaches no phase: the element's state
    * alone tells the deduction where the pass stands.
    */
@@ -621,9 +659,9 @@ class Deducer {
     workflow: Workflow,
     exits: readonly PhaseExitState[],
     element: Element | null,
-    inherited: WalkPosition | null,
-  ): (WalkPosition | null)[] {
-    const out: (WalkPosition | null)[] = workflow.phases.map(() => inherited);
+    inherited: readonly WalkPosition[],
+  ): WalkPosition[][] {
+    const out: WalkPosition[][] = workflow.phases.map(() => [...inherited]);
     if (element === null) return out;
     for (const reentry of this.history(startCommit).reentries) {
       if (reentry.type !== element.type || reentry.id !== element.id) continue;
@@ -633,12 +671,12 @@ class Deducer {
       if (gate === -1) continue;
       // A `fallback.step` naming no phase is refused at load time (`E_PHASE_FALLBACK_STEP_UNKNOWN`, spec-003).
       const from = workflow.phases.findIndex((phase) => phase.name === workflow.phases[gate]!.fallback!.step);
-      for (let q = from; q < out.length; q += 1) out[q] = newer(out[q]!, reentry);
+      for (let q = from; q < out.length; q += 1) out[q]!.push(reentry);
     }
     return out;
   }
 
-  /** Run a workflow on `frames`, from `start` (§4.4), under `trail`; `inherited` is the including phase's re-entry cutoff. */
+  /** Run a workflow on `frames`, from `start` (§4.4), under `trail`; `inherited` are the re-entries reaching the including phase. */
   run(
     instanceId: string,
     startCommit: string,
@@ -646,7 +684,7 @@ class Deducer {
     frames: readonly Frame[],
     start: ExitStart,
     trail: readonly TrailEntry[],
-    inherited: WalkPosition | null = null,
+    inherited: readonly WalkPosition[] = [],
   ): WorkflowResult {
     // `memory.yaml` is present: a workflow runs only for an open plan, an element of a declared type.
     const exits = workflowExitStates(workflow, this.snapshot.memoryYaml!, start, this.byName);
@@ -713,7 +751,7 @@ class Deducer {
     exit: PhaseExitState,
     trail: readonly TrailEntry[],
     scope: ScopeRef | null,
-    cutoff: WalkPosition | null,
+    reentries: readonly WalkPosition[],
   ): { step: DeducedStep; diagnostics: Diagnostic[] } {
     const phase = workflow.phases[p]!;
     const file = this.fileOf.get(workflow.name)!;
@@ -744,7 +782,7 @@ class Deducer {
         element !== null &&
         exit.exit !== null &&
         atOrAfter(resolveStateMachine(this.snapshot.memoryYaml!, element.type), element.status, exit.exit) &&
-        (cutoff === null || this.statePosition(element) < cutoff.position);
+        this.newerThan(this.stateCommit(element), reentries);
       if (!satisfied) missing.push('state');
     }
 
@@ -829,7 +867,7 @@ class Deducer {
     const recordNeeded = phase.awaits !== undefined || (created.length === 0 && !kinds.some((kind) => kind !== 'created'));
     if (recordNeeded) {
       kinds.push('record');
-      if (!this.hasRecord(instanceId, startCommit, stepName, scope, frame?.selfBound === true, cutoff)) missing.push('record');
+      if (!this.hasRecord(instanceId, startCommit, stepName, scope, frame?.selfBound === true, reentries)) missing.push('record');
     }
 
     return {
@@ -845,8 +883,8 @@ class Deducer {
         produces,
         created: created.map(refOf),
         evidence: { kinds, missing, finalizable: missing.length === 1 && missing[0] === 'record' },
-        reentered: cutoff !== null,
-        reentryCommit: cutoff?.commit ?? null,
+        reentered: reentries.length > 0,
+        reentryCommit: newest(reentries)?.commit ?? null,
       },
       diagnostics,
     };
@@ -871,10 +909,10 @@ class Deducer {
 
   /**
    * Whether the instance's walk holds a record of step `stepName` on `scope` (§4.8 records), newer than
-   * `cutoff` when a re-entry reaches the step. A self-bound scope also accepts a record with no element,
+   * every re-entry that reaches the step (a descendant of each). A self-bound scope also accepts a record with no element,
    * written before the element existed.
    */
-  private hasRecord(instanceId: string, startCommit: string, stepName: string, scope: ScopeRef | null, selfBound: boolean, cutoff: WalkPosition | null): boolean {
+  private hasRecord(instanceId: string, startCommit: string, stepName: string, scope: ScopeRef | null, selfBound: boolean, reentries: readonly WalkPosition[]): boolean {
     const element = scope === null ? null : elementKey(scope);
     return this.history(startCommit).records.some(
       (record) =>
@@ -882,7 +920,7 @@ class Deducer {
         record.instance === instanceId &&
         (record.element === element || (selfBound && record.element === null)) &&
         record.item === null &&
-        (cutoff === null || record.position < cutoff.position),
+        this.newerThan(record.commit, reentries),
     );
   }
 

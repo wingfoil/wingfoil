@@ -528,3 +528,44 @@ describe('task-203 review F3 (ruling (a)) — the union walk is bounded by the o
     }
   });
 });
+
+describe('task-203 review F3 — the merge-base bound on edge cases', () => {
+  it('starts with no common ancestor (unrelated histories) leave the walk unbounded', () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeProject(repo);
+      commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-progress') }, 'task-1');
+      commit(repo, { 'docs/plans/loop-1.md': plan('loop-1', 'loop', 'task-1') }, 'wf(plan): add loop-1');
+      git(repo, ['checkout', '--quiet', '--orphan', 'other']);
+      git(repo, ['rm', '-r', '-q', '-f', '.']);
+      commit(repo, { 'docs/plans/ing-1.md': plan('ing-1', 'capture-flow') }, 'wf(plan): add ing-1');
+      git(repo, ['checkout', '--quiet', '-f', 'main']);
+      git(repo, ['merge', '--quiet', '--no-ff', '--allow-unrelated-histories', '-m', 'merge other', 'other']);
+      record(repo, 'loop-1', 'loop.design', 'task:task-1');
+      const deduction = deduceWorkflowStateAtHead(repo);
+      expect(keys(only(deduction, 'loop-1'))).toEqual(['loop.red@task:task-1']);
+      expect(keys(only(deduction, 'ing-1'))).toEqual(['capture-flow.capture']);
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+
+  it('refuses a merge base that is not a commit name, as git read failure', () => {
+    const repo = makeTempGitRepo();
+    const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf-8' }).trim();
+    const shim = mkdtempSync(join(tmpdir(), 'wf-git-shim-'));
+    const saved = process.env.PATH;
+    try {
+      writeProject(repo);
+      commit(repo, { 'docs/plans/ing-1.md': plan('ing-1', 'capture-flow') }, 'wf(plan): add ing-1');
+      writeFileSync(join(shim, 'git'), `#!/bin/sh\ncase " $* " in *" merge-base "*) echo "No signature"; exit 0;; esac\nexec '${realGit}' "$@"\n`);
+      chmodSync(join(shim, 'git'), 0o755);
+      process.env.PATH = `${shim}:${saved ?? ''}`;
+      expect(() => deduceWorkflowStateAtHead(repo)).toThrow(/git merge-base --octopus printed 'No signature', not a commit name/);
+    } finally {
+      process.env.PATH = saved;
+      removeTempDir(shim);
+      removeTempDir(repo);
+    }
+  });
+});

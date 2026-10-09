@@ -11,8 +11,9 @@
  * itself is the pure `deduceWorkflowState` (`src/workflow/deduce.ts`).
  *
  * History is read at the cost §4.8 states (REQ-PERF-03): **one** `git log` over the union of the open
- * instances' walks, bounded by the oldest start commit's parents, from which each instance's own walk is
- * cut in memory through the parent links; plus one lookup per element a re-entry in the walk names.
+ * instances' walks, bounded by the parents of the starts' octopus merge base (one `git merge-base
+ * --octopus`), from which each instance's own walk is cut in memory through the parent links; plus one
+ * lookup per element a re-entry in the walk names.
  *
  * git is read with `runGitRead` (stderr captured, `bug-093`) and the `git log` walk with
  * `walkGitLogFields` (NUL-framed, `bug-050`); every `git log` passes `--no-show-signature`, so a
@@ -27,7 +28,7 @@ import { walkGitLogFields } from '../memory/git-log';
 import { computeMemoryContentRoots, loadMemoryDocumentsAtRev, type MemoryDocumentSummary } from '../memory/query';
 import type { MemoryYaml } from '../memory/schema';
 import { resolveStateMachine } from '../memory/state-machine';
-import { runGitRead } from '../storage';
+import { E_GIT_READ_FAILED, runGitRead, StorageError } from '../storage';
 import type { Diagnostic } from '../validation';
 import {
   deduceWorkflowState,
@@ -108,16 +109,34 @@ interface WalkCommit extends WalkPosition {
   readonly trailers: string;
 }
 
+/** A full commit name, as `git merge-base` prints one. */
+const FULL_SHA_RE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
+/**
+ * The walk's lower bound (§4.8, review F3 ruling (a)): `^@` of the octopus merge base of every start
+ * commit, or none when the starts share no ancestor (unrelated histories; `git merge-base` exits 1). The
+ * base is an ancestor of (or equal to) each start, so whatever its parents reach is reachable from every
+ * start's parents: outside every instance's walk. A commit some instance's walk holds is therefore never
+ * cut off, as it could be by the oldest start alone in a branching history. `merge-base` prints a commit
+ * name and takes no `--no-show-signature` (git refuses the option; `log.showSignature` does not apply to
+ * it); its output is refused unless it is a full sha.
+ */
+function readWalkBound(root: string, starts: readonly StartCommit[]): string[] {
+  const commits = [...new Set(starts.map((entry) => entry.commit))].sort();
+  const run = runGitRead(root, ['merge-base', '--octopus', ...commits], { accepted: [0, 1] });
+  if (run.status === 1) return [];
+  const base = run.stdout.trim();
+  if (!FULL_SHA_RE.test(base)) throw new StorageError(E_GIT_READ_FAILED, `git merge-base --octopus printed '${base}', not a commit name, in ${root}`);
+  return ['--not', `${base}^@`];
+}
+
 /**
  * The union of the open instances' walks (§4.8): one `git log --topo-order` of the commits reachable
- * from `sha` and not from the oldest start commit's parents, newest first, with each commit's parents,
- * subject and trailers. The oldest start has the largest topological position, so no other start is
- * reachable from its parents and every instance's walk lies inside this one.
+ * from `sha` and not from `bound` (`readWalkBound`), newest first, with each commit's parents, subject
+ * and trailers. Every instance's walk lies inside this one.
  */
-function readWalk(root: string, sha: string, starts: readonly StartCommit[]): WalkCommit[] {
-  if (starts.length === 0) return [];
-  const oldest = [...starts].sort((a, b) => b.position - a.position)[0]!.commit;
-  const rows = walkGitLogFields(root, ['%H', '%P', '%s', '%(trailers:only,unfold)'], [], [NO_SIGNATURE, '--topo-order', sha, '--not', `${oldest}^@`]);
+function readWalk(root: string, sha: string, bound: readonly string[]): WalkCommit[] {
+  const rows = walkGitLogFields(root, ['%H', '%P', '%s', '%(trailers:only,unfold)'], [], [NO_SIGNATURE, '--topo-order', sha, ...bound]);
   // `walkGitLogFields` returns oldest first; the walk position counts from `HEAD`.
   return rows.reverse().map(([commit, parents, subject, trailers], position) => ({
     commit: commit!,
@@ -136,8 +155,8 @@ function readWalk(root: string, sha: string, starts: readonly StartCommit[]): Wa
  */
 function instanceWalk(walk: readonly WalkCommit[], byCommit: ReadonlyMap<string, WalkCommit>, start: string): Set<string> {
   const excluded = new Set<string>();
-  // Every start lies in the union walk: the oldest is not reachable from its own parents, and any other
-  // start has a smaller topological position, so it is no ancestor of the oldest's parents.
+  // Every start lies in the union walk: it descends from (or is) the merge base, so it is not reachable
+  // from the base's parents.
   const pending = [...byCommit.get(start)!.parents];
   while (pending.length > 0) {
     const commit = pending.pop()!;
@@ -219,8 +238,8 @@ function readFacts(entry: WalkCommit, memoryYaml: MemoryYaml | null): CommitFact
  * The latest commit of the walk that changed the file at `path` — one `git log -1` bounded like the
  * walk — or `null` when no commit of the walk did.
  */
-function readLastChange(root: string, sha: string, oldest: string, path: string, byCommit: ReadonlyMap<string, WalkCommit>): WalkPosition | null {
-  const out = runGitRead(root, ['log', NO_SIGNATURE, '--topo-order', '-1', '--format=%H', sha, '--not', `${oldest}^@`, '--', `:(literal)${path}`]).stdout.trim();
+function readLastChange(root: string, sha: string, bound: readonly string[], path: string, byCommit: ReadonlyMap<string, WalkCommit>): WalkPosition | null {
+  const out = runGitRead(root, ['log', NO_SIGNATURE, '--topo-order', '-1', '--format=%H', sha, ...bound, '--', `:(literal)${path}`]).stdout.trim();
   const entry = byCommit.get(out);
   return entry === undefined ? null : { commit: entry.commit, position: entry.position };
 }
@@ -230,12 +249,14 @@ interface HistoryRead {
   readonly history: Map<string, InstanceHistory>;
   readonly transitions: TransitionCommit[];
   readonly lastChanges: Map<string, WalkPosition>;
+  readonly parents: Map<string, readonly string[]>;
 }
 
 /**
  * Read the history every open instance's deduction needs (§4.8): one walk for the union of the instances'
  * walks, each instance's records, linkages and re-entries cut from it, the transition commits naming a
- * re-entered element, and one lookup per re-entered element (its file's latest change in the walk).
+ * re-entered element, the walk's parent links, and one lookup per re-entered element (its file's latest
+ * change in the walk). With no start, nothing is read.
  */
 function readHistory(
   root: string,
@@ -244,10 +265,12 @@ function readHistory(
   memoryYaml: MemoryYaml | null,
   documents: readonly MemoryDocumentSummary[],
 ): HistoryRead {
-  const read: HistoryRead = { history: new Map(), transitions: [], lastChanges: new Map() };
-  const walk = readWalk(root, sha, starts);
-  if (walk.length === 0) return read;
+  const read: HistoryRead = { history: new Map(), transitions: [], lastChanges: new Map(), parents: new Map() };
+  if (starts.length === 0) return read;
+  const bound = readWalkBound(root, starts);
+  const walk = readWalk(root, sha, bound);
   const byCommit = new Map(walk.map((entry) => [entry.commit, entry]));
+  for (const entry of walk) read.parents.set(entry.commit, entry.parents);
   const facts = walk.map((entry) => readFacts(entry, memoryYaml));
 
   const reentered = new Set<string>();
@@ -265,11 +288,10 @@ function readHistory(
   if (reentered.size === 0) return read;
 
   read.transitions.push(...facts.flatMap((fact) => fact.transitions).filter((entry) => reentered.has(`${entry.type}:${entry.id}`)));
-  const oldest = [...starts].sort((a, b) => b.position - a.position)[0]!.commit;
   for (const key of [...reentered].sort()) {
     const document = documents.find(({ frontmatter }) => `${text(frontmatter['type'])}:${text(frontmatter['id'])}` === key);
     if (document === undefined) continue;
-    const last = readLastChange(root, sha, oldest, document.path, byCommit);
+    const last = readLastChange(root, sha, bound, document.path, byCommit);
     if (last !== null) read.lastChanges.set(key, last);
   }
   return read;
@@ -324,6 +346,7 @@ function emptySnapshot(): DeductionSnapshot {
     history: new Map(),
     transitions: [],
     lastChanges: new Map(),
+    parents: new Map(),
     dirty: [],
   };
 }
@@ -352,7 +375,7 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
     )
     .map((document) => document.path);
   const starts = readStarts(root, sha, candidates);
-  const { history, transitions, lastChanges } = readHistory(root, sha, [...starts.values()], memoryYaml, documents);
+  const { history, transitions, lastChanges, parents } = readHistory(root, sha, [...starts.values()], memoryYaml, documents);
 
   return {
     commit: sha,
@@ -367,6 +390,7 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
     history,
     transitions,
     lastChanges,
+    parents,
     dirty: readDirty(root, memoryYaml, dnaYaml, registry.workflows),
   };
 }
