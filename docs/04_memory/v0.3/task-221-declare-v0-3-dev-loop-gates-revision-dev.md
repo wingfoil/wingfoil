@@ -34,9 +34,87 @@ Seven ratified decisions each add a check to `dev-loop.yaml`. One revision (v1.6
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+Branch `task/task-221-declare-v0-3-dev-loop-gates-revision-dev`, worktree `../.wf2-wt/task-221`, cut from
+`main` at `b56e8721` (start commit `b1a3592a`).
+
+### design (architect)
+
+**Governance read** (`grep -m1 '^status' docs/04_memory/design/dls/dl-{044,097,098,102,115,116,133}-*.md`
+→ all seven `status: ready`; the options each ratification chose, from its approve commit,
+`git log --format='%h %b' --grep='^wf(decision-log): approve dl-NNN' main`):
+- `dl-044` (`16436983`): `typecheck.clean` in `refactor.checks.post`; the binding already exists
+  (`.wingfoil/workflows/bindings.yaml`, `typecheck.clean: { run: [npm, run, typecheck] }`, written by
+  `task-173` for `release-submit`), so this task declares the token and re-labels the binding's comment.
+- `dl-097` (`ae393dc0`): (a) a review-gate `checks.pre` now; (b) the CI lint is `dl-103`'s, not this task's.
+- `dl-098` (`b956ad6d`): (a) + (b): the re-review reads the previous reject through `memory history`, and
+  the implementer answers each item in the Execution Notes (template line written by `task-201`).
+- `dl-102` (`a13dfc94`): §4 — `design` reads each criterion against the bound directives and the ratified
+  specs, and raises a contradiction to the approver.
+- `dl-115` (`d7abc553`): Q2 (a) — an existence check on `done`; its Action 3 names "`done` phase
+  `checks.post`, and the step that keeps a fix task's source bug in sync", so the check also covers each
+  linked bug the `done` sync moves to `closed`. The plan half ("when a plan reaches `done`") has no
+  workflow step in `dev-loop`: reported, not written here.
+- `dl-116` (`a6276d34`): Q2 (a) the parity suites run in Jest; Action 4 — `review` names them.
+- `dl-133` (`9568ca66`): Q4 (i) a `start.checks.pre` refusing a feature task; the threshold is read from
+  `memory.yaml` `task.stop_the_line` (task-150 handover), not restated.
+
+**Specs.** No tech-spec is cited by the ACs. `spec-003` (`status: approved`) governs the check-token
+grammar: its "Observed forms" list is not exhaustive (`typecheck.clean`, `secret-scan.clean`,
+`proposals.disposed` are declared in workflows and not listed there:
+`grep -c "typecheck.clean\|proposals.disposed" docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md`
+→ `0`), and the new tokens are plain `name(prose)` checks of the same shape, so no spec edit is needed.
+
+**depends_on (dl-015), each `status: done`** (`grep -m1 '^status' docs/04_memory/v0.3/task-{150,173,201,205,213}-*.md`):
+- `task-150` — `memory.yaml` 2.6 `task.stop_the_line` (`max_share: 30`, `open: "status != done"`,
+  `blocks: feature`, `scope: release`, `at: "dev-loop start"`), "the ONE statement of the threshold"; its
+  notes leave the `start` check to this task and observe the literal rule firing at `cac8a447`.
+- `task-173` — `npm run typecheck`, `typecheck.clean` bound; "the `dev-loop.yaml` declaration is left to
+  `task-221`"; `testing.md` must not claim `refactor` declares it before this task.
+- `task-201` — `code-review.md` claim re-run and re-review items, task template's dl-098 (b) line; "The
+  dev-loop `checks.pre` entries are task-221".
+- `task-205` — `dev-loop.yaml` 1.5 (structure kept: `red`'s two leading actions, `refactor`'s last
+  `git.merge(from: main)`, `tests.unchanged(since: red)` on `green`/`refactor`); `test/core/dev-loop-v1-5.test.ts`
+  pins `version: 1.5` and `testing.md` `"1.1"`, which this task's bumps update.
+- `task-213` — `### Retrospective` in the task/bug/plan templates; "The `done` existence check is task-221".
+
+**Design decisions.**
+1. *Token names and arguments* (all `checks`, so none may be `manual`; spec-003 Layer 3):
+   - `start.checks.pre`: `stop-the-line.clear(rule: memory.yaml task.stop_the_line; a fix task is never blocked)` — unbound.
+   - `design.checks.post` + `acceptance-criteria.consistent(…)` — unbound (a reading, no command).
+   - `refactor.checks.post` + `typecheck.clean` — bound (`npm run typecheck`). Appended after
+     `tests.unchanged(since: red)`, so task-205's paths (`phases[4].checks.post[5]`) do not move.
+   - `review.checks.pre` + `claims.rerun(…)`, `rereview.previous-reject(…)` — unbound; + `docs.parity` —
+     bound to `npm test -- <the eight suites>` (below).
+   - `done.checks.post`: `retrospective.present(…)` — unbound: the file it reads is the task's path, which
+     no binding placeholder can carry today (a `{task.path}` interpolation does not exist).
+2. *`docs.parity` names the suites, not `test/docs/`.* dl-116 Action 4 says "names the new checks". The
+   binding lists the eight suites whose header cites `dl-116` or that are its model
+   (`grep -l "dl-116" test/docs/*.test.ts` → commands-parity, exit-codes-parity, mcp-surface-parity,
+   memory-types-parity, name-resolvability, workflow-md; plus `enumeration-parity.allowlist.test.ts`, the
+   allowlist's own gate, and `cli-reference.test.ts`, the model dl-116 names). A test pins that every
+   `test/docs/*.test.ts` citing `dl-116` is in the binding, so a later parity suite cannot be left out.
+3. *What counts as open (task-150 handover).* Kept as written in `memory.yaml`: every task of the release
+   that is not `done` — `draft`, `pending` and `deprecated` included — because that is `dl-133` §3's
+   ratified text and `memory.yaml` is not this task's file in B4 (task-212/269 write it). Today both
+   readings give the same verdict: on this branch's tree, v0.3 tasks
+   (`for f in docs/04_memory/v0.3/task-*.md; do …status… …kind…; done | sort | uniq -c`) are 39 backlog
+   feature, 2 backlog fix, 1 deprecated feature, 1 in-progress feature, 106 done → 2 open fixes of 43 open
+   (4.7 %), or of 42 without the deprecated one (4.8 %): the rule does not fire. Excluding `deprecated`
+   (a task that will never be `done` counts as open forever) is a decision for the approver.
+4. *Bumps* (one each, baseline `main` `b56e8721`): `dev-loop.yaml` 1.5 → 1.6; `bindings.yaml` 1.2 → 1.3
+   (comment on `typecheck.clean`, new `docs.parity`); `testing.md` "1.1" → "1.2" (the `typecheck.clean`
+   bullet names `refactor` now, task-173's handover); `WORKFLOW.md` (no version field) dev-loop prose and
+   diagram. The v0.3 dev-loop plan (`plan`, `active`) is past its first state: its edit is a pending
+   amendment, left uncommitted (AC 3).
+
+**AC classification (testing T1).**
+
+| AC | Class | Why |
+|---|---|---|
+| 1 — the seven checks declared | red-first (corrected from characterization) | none is declared at `b56e8721` (`grep -c "typecheck.clean\|stop-the-line\|claims.rerun\|retrospective.present" .wingfoil/workflows/custom/dev-loop.yaml` → `0`, while `grep -c "lint.clean"` → `4`): a test asserting them fails until the YAML changes — a genuine red, no fabricated one |
+| 2 — `workflow show dev-loop` shows them, zero errors | characterization | `workflow show` (task-204) already reports each check's binding or `unbound`; no code changes. The conformance suite's pinned warning set changes with the YAML (updated in the red commit, failing until green) and the command's output is recorded below |
+| 3 — the plan states the same gates | characterization (document) | a pending amendment of the active plan, checked by reading it; no test |
+
+### Retrospective
+
+- None yet.
