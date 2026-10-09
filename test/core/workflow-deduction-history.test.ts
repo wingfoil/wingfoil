@@ -561,7 +561,7 @@ describe('task-203 review F3 — the merge-base bound on edge cases', () => {
       writeFileSync(join(shim, 'git'), `#!/bin/sh\ncase " $* " in *" merge-base "*) echo "No signature"; exit 0;; esac\nexec '${realGit}' "$@"\n`);
       chmodSync(join(shim, 'git'), 0o755);
       process.env.PATH = `${shim}:${saved ?? ''}`;
-      expect(() => deduceWorkflowStateAtHead(repo)).toThrow(/git merge-base --octopus printed 'No signature', not a commit name/);
+      expect(() => deduceWorkflowStateAtHead(repo)).toThrow('git merge-base --octopus printed "No signature" where a commit name was expected');
     } finally {
       process.env.PATH = saved;
       removeTempDir(shim);

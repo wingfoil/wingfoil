@@ -16,9 +16,10 @@
  * lookup per element a re-entry in the walk names.
  *
  * git is read with `runGitRead` (stderr captured, `bug-093`) and the `git log` walk with
- * `walkGitLogFields` (NUL-framed, `bug-050`); every `git log` passes `--no-show-signature`, so a
- * `log.showSignature` setting cannot put signature text among the parsed lines (`bug-291`). No clock, no
- * randomness, nothing cached between calls.
+ * `walkGitLogFields` (NUL-framed, `bug-050`); every `git log` passes `--no-show-signature` and checks the
+ * commit names it parses (`task-268`, `bug-291`), so a `log.showSignature` setting cannot put signature
+ * text among the parsed lines; the `git merge-base` that bounds the walk takes no such flag, and its
+ * output is checked the same way. No clock, no randomness, nothing cached between calls.
  */
 import { posix } from 'path';
 
@@ -29,7 +30,7 @@ import { walkGitLogFields } from '../memory/git-log';
 import { computeMemoryContentRoots, loadMemoryDocumentsAtRev, type MemoryDocumentSummary } from '../memory/query';
 import type { MemoryYaml } from '../memory/schema';
 import { resolveStateMachine } from '../memory/state-machine';
-import { E_GIT_READ_FAILED, runGitRead, StorageError } from '../storage';
+import { requireCommitName, runGitRead } from '../storage';
 import type { Diagnostic } from '../validation';
 import {
   deduceWorkflowState,
@@ -76,13 +77,13 @@ const COMMIT_MARK = String.fromCharCode(1);
 function readStarts(root: string, sha: string, paths: readonly string[]): Map<string, StartCommit> {
   const starts = new Map<string, StartCommit>();
   if (paths.length === 0) return starts;
-  const args = ['-c', 'core.quotePath=false', 'log', '--topo-order', '--no-renames', '--diff-filter=A', '--name-only', '--format=%x01%H', sha, '--'];
+  const args = ['-c', 'core.quotePath=false', 'log', '--no-show-signature', '--topo-order', '--no-renames', '--diff-filter=A', '--name-only', '--format=%x01%H', sha, '--'];
   const wanted = new Set(paths);
   let commit = '';
   let position = -1;
   for (const line of runGitRead(root, [...args, ...paths.map((path) => `:(literal)${path}`)]).stdout.split('\n')) {
     if (line.startsWith(COMMIT_MARK)) {
-      commit = line.slice(1);
+      commit = requireCommitName(line.slice(1), 'git log --diff-filter=A');
       position += 1;
     } else if (wanted.has(line) && !starts.has(line)) {
       starts.set(line, { commit, position });
@@ -101,18 +102,12 @@ function trailerValue(block: string, key: string): string | null {
   return found;
 }
 
-/** The flag every `git log` here passes, so `log.showSignature` cannot print among parsed lines (`bug-291`). */
-const NO_SIGNATURE = '--no-show-signature';
-
 /** One commit of the history walk: its parents, subject and trailer block, at its walk position. */
 interface WalkCommit extends WalkPosition {
   readonly parents: readonly string[];
   readonly subject: string;
   readonly trailers: string;
 }
-
-/** A full commit name, as `git merge-base` prints one. */
-const FULL_SHA_RE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 
 /**
  * The walk's lower bound (§4.8, review F3 ruling (a)): `^@` of the octopus merge base of every start
@@ -121,14 +116,13 @@ const FULL_SHA_RE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
  * start's parents: outside every instance's walk. A commit some instance's walk holds is therefore never
  * cut off, as it could be by the oldest start alone in a branching history. `merge-base` prints a commit
  * name and takes no `--no-show-signature` (git refuses the option; `log.showSignature` does not apply to
- * it); its output is refused unless it is a full sha.
+ * it); its output is refused unless it is a commit name (`requireCommitName`, task-268).
  */
 function readWalkBound(root: string, starts: readonly StartCommit[]): string[] {
   const commits = [...new Set(starts.map((entry) => entry.commit))].sort();
   const run = runGitRead(root, ['merge-base', '--octopus', ...commits], { accepted: [0, 1] });
   if (run.status === 1) return [];
-  const base = run.stdout.trim();
-  if (!FULL_SHA_RE.test(base)) throw new StorageError(E_GIT_READ_FAILED, `git merge-base --octopus printed '${base}', not a commit name, in ${root}`);
+  const base = requireCommitName(run.stdout.trim(), 'git merge-base --octopus');
   return ['--not', `${base}^@`];
 }
 
@@ -138,7 +132,7 @@ function readWalkBound(root: string, starts: readonly StartCommit[]): string[] {
  * and trailers. Every instance's walk lies inside this one.
  */
 function readWalk(root: string, sha: string, bound: readonly string[]): WalkCommit[] {
-  const rows = walkGitLogFields(root, ['%H', '%P', '%s', '%(trailers:only,unfold)'], [], [NO_SIGNATURE, '--topo-order', sha, ...bound]);
+  const rows = walkGitLogFields(root, ['%H', '%P', '%s', '%(trailers:only,unfold)'], [], ['--topo-order', sha, ...bound]);
   // `walkGitLogFields` returns oldest first; the walk position counts from `HEAD`.
   return rows.reverse().map(([commit, parents, subject, trailers], position) => ({
     commit: commit!,
@@ -241,8 +235,9 @@ function readFacts(entry: WalkCommit, memoryYaml: MemoryYaml | null): CommitFact
  * walk — or `null` when no commit of the walk did.
  */
 function readLastChange(root: string, sha: string, bound: readonly string[], path: string, byCommit: ReadonlyMap<string, WalkCommit>): WalkPosition | null {
-  const out = runGitRead(root, ['log', NO_SIGNATURE, '--topo-order', '-1', '--format=%H', sha, ...bound, '--', `:(literal)${path}`]).stdout.trim();
-  const entry = byCommit.get(out);
+  const out = runGitRead(root, ['log', '--no-show-signature', '--topo-order', '-1', '--format=%H', sha, ...bound, '--', `:(literal)${path}`]).stdout.trim();
+  if (out === '') return null;
+  const entry = byCommit.get(requireCommitName(out, 'git log -1'));
   return entry === undefined ? null : { commit: entry.commit, position: entry.position };
 }
 
