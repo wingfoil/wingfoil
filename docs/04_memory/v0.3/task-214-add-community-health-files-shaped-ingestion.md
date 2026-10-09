@@ -61,7 +61,7 @@ GitHub recognises no contributing guide, code of conduct, security policy or iss
 - `67fc69b9 feat(docs): task-214 — …`: `npx jest test/docs/community-health.test.ts test/docs/workflow-md.test.ts test/core/workflow-repository-conformance.test.ts`
   → 3 suites, **45 / 45 passed**.
   - `CONTRIBUTING.md` (19 lines): pointer to `COLLABORATION.md` and `dl-020`, one line per channel.
-  - `CODE_OF_CONDUCT.md`: Contributor Covenant 2.1, enforcement contact `wingfoil.ai@gmail.com` (**proposal**, see review).
+  - `CODE_OF_CONDUCT.md`: Contributor Covenant 2.1, enforcement contact `robypomper@gmail.com` (approver ruling 2026-10-09).
   - `SECURITY.md`: `0.2.x` supported (package.json `0.2.2`), private vulnerability reporting
     (`/security/advisories/new`), the bug form's fields asked for, a `bug` element recorded after the fix.
   - `.github/ISSUE_TEMPLATE/bug.yml`: issue title = `title`; `severity` dropdown with the template's four values;
@@ -99,8 +99,8 @@ GitHub recognises no contributing guide, code of conduct, security policy or iss
   `https://www.contributor-covenant.org/version/2/1/code_of_conduct/code_of_conduct.md` with `CODE_OF_CONDUCT.md`
   word by word with whitespace normalised (e.g. `diff <(curl -s <that URL> | tr -s '[:space:]' '\n') <(tr -s '[:space:]' '\n' < CODE_OF_CONDUCT.md)`):
   only the contact differs. `community/profile`'s `code_of_conduct.key` should read `contributor_covenant`.
-- **Decisions for the approver:** (1) the enforcement contact `wingfoil.ai@gmail.com` (the AC leaves the contact
-  to the approver, who confirms it at approval); (2) blank issues off;
+- **Decisions for the approver:** (1) the enforcement contact is `robypomper@gmail.com` (approver ruling
+  2026-10-09; no longer a proposal); (2) blank issues off;
   (3) the issue URL goes in `credit:`; (4) `COLLABORATION.md` in `produces:`; (5) the guard pins SECURITY.md's
   supported row to `package.json`'s minor, so the release bump commit updates SECURITY.md too (F1 below).
 - No pending amendments: no Memory element other than this task file is edited.
