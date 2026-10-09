@@ -38,6 +38,19 @@ This task adds the launch half: - step 13's banner, the spawn with `launch.inter
 - **Handover from wave 3 B1 (2026-10-07, `task-206`, `task-210`, `task-196`).** `recordRun` writes through `task-210`'s `writeAndCommit` and, on any failure after serialization, returns `IO` / `CONFLICT` / `VALIDATION` with the record as a `details` line and the project root stripped: forward that to stderr unchanged, so a run is never lost. Run `runLogPreflight` before the spawn (step 6) and `recordRun` after it (step 17). If `task-218` has not already done it, add `agent execute` to `REVIEWED_AGENT_WRITERS` (`test/core/builtin-adapter-writers.test.ts`) and to the dry-run table (`test/cli/dry-run.integration.test.ts`).
 - **Handover from the W3 B1 triage (2026-10-07, approver).** `paths.runs` (`docs/06_runs/` in this repository, `task-206`) sits inside `paths.docs` (`docs/`), so a run-log file belongs to two categories. Ruling: keep the overlap; state in `spec-016` §4.1, in the same pending amendment as `bug-288`'s tightening, that path categories may nest and that `paths runs` and `paths docs` both list the run log.
 - **Handover from wave 3 B2 (2026-10-07, `task-200`).** Drive the signal, exit-code and lookup cases through the fake agent: `WINGFOIL_FAKE_AGENT_EXIT` / `_WAIT` apply to the launch only, `WINGFOIL_FAKE_AGENT_LOOKUP=fail|hang` makes a post-run lookup fail or hang while the launch succeeds, and a declared lookup document gets the asked-for `session_id`. The record holds environment variable names only (REQ-SEC-08).
+- **Handover from wave 3 B3 (2026-10-09, `task-218`'s review; W3 B3 follow-ups).**
+  - `MCP_PREFLIGHT_TIMEOUT_MS` (30 000, `src/agent/execute.ts`) is passed separately to `client.connect` and to the
+    Prompt request, so the pre-flight can take about twice it (≈60 s) against REQ-PERF-01's 30 s: use one deadline.
+  - A SIGINT during the pre-flight leaves the `wingfoil-run-*` temporary directory (`mkdtemp`, step 10) behind.
+  - A successful `agent execute` prints the same `dna.yaml` unknown-key warning twice (the pipeline and the context
+    builder both load `dna.yaml`), and its label carries a full sha; print it once (review F5).
+  - Hand the agent its signing entry's `name <email>` in the bootstrap (`dl-158` Rule 1 (a); `task-218` decision 9
+    left it to this task; the entry is `PreparedLaunch.agent`).
+  - Remove the interim refusal `agent execute cannot launch an agent yet` (`src/core/agent-execute.ts`) before v0.3
+    ships: this task's launch replaces it.
+  - `dl-165` (`in-discussion`, v0.3) asks whether the pre-flight's `wingfoil mcp` keeps reading the working tree's
+    `dna.yaml` (the exception `spec-016` §3.3 step 11 declares), reads `HEAD`, or is handed the run's commit; rule it
+    with this task's design, since the agent you launch starts the same server.
 
 ## Execution Notes
 
