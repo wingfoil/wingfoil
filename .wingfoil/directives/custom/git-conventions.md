@@ -6,7 +6,7 @@ kind: custom
 title: "Git conventions: branches, sync, tags, subjects, identity, id allocation, attribution"
 tags: [custom, git, process, security]
 scope: global
-version: "1.3"   # 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2) (prev 1.2 §7, task-260)
+version: "1.4"   # 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1) (prev 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260)
 ref: [P3.5, P3.7, REQ-SEC-01, REQ-SYS-08]
 ---
 
@@ -183,7 +183,27 @@ be the last one, and a reader of the `Reason:` block (`dl-067-reason-trailer-con
 - **Never an `approve` or `reject` commit.** §7 excludes them from AI co-authorship, so there is no
   trailer to add.
 
+## 9. Checks on pushed commits (`dl-103` §1)
+
+- **CI is the enforcement point.** `.github/workflows/governance.yml` runs
+  `scripts/check-governance.cjs` over every range pushed to `main` and every pull request into it. It
+  checks §4's subjects and brackets, the `Reason:`/`Approver:` shape (`dl-067`), approval authority
+  (§5, `dl-094`), state legality and the verb each transition uses, status changes outside a `wf()`
+  operation (`dl-139`), the version bump of the four versioned config files (`bug-249`), and §7's rule
+  that `approve` and `reject` carry no AI co-author trailer (`bug-307`). Each rule fails only commits
+  after the one that introduced it; older history is reported, never rewritten (§2, §8). Beside it, a
+  warn-only lint (`scripts/lint-claims.cjs`, `dl-097` §2 (b)) annotates claims with no command in the
+  Memory documents the range changed.
+- **Branch protection makes it binding.** Requiring the `governance` status on `main` is a repository
+  setting only the approver changes (`dl-103` §1 (C)), recorded as a `service` element.
+- **The pre-push hook is a local convenience** (`dl-103` §1 (B)). Opt in once per clone with
+  `git config core.hooksPath .githooks`; `.githooks/pre-push` then runs the same check over the commits
+  about to be pushed (it needs `npm run build`). It is per clone and `git push --no-verify` skips it, so
+  it never replaces CI. In this repository's worktrees the setting is shared configuration: the approver
+  decides whether it is set.
+
 > Source: `dl-119-a-git-conventions-directive` (Actions 2–4), `dl-117-ai-attribution-policy` (Action 2),
 > `dl-158` (Action 2),
-> `dl-101-id-allocation-across-refs` (Action 2). Features P3.5, P3.7; REQ-SEC-01 (every state change
+> `dl-101-id-allocation-across-refs` (Action 2),
+> `dl-103-governance-enforced-outside-the-agent` §1 (§9). Features P3.5, P3.7; REQ-SEC-01 (every state change
 > carries a git identity), REQ-SYS-08 (bindings by role).
