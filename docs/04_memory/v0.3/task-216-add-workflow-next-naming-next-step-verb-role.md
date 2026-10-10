@@ -2,7 +2,7 @@
 id: "task-216-add-workflow-next-naming-next-step-verb-role"
 type: task
 title: "Add `workflow next`, naming the next step's verb, role, element, directives and bindings"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "high"
