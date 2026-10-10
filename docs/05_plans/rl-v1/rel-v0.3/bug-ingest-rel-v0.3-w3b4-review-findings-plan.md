@@ -145,6 +145,14 @@ gave the highest `bug-307`, `dl-165`, `task-274`, `svc-017` and no `cp-*`, so th
     no tracked file holds; `task-276`'s criteria restate it from the inventory rows 4, 6, 8, 12 and 21 of `task-197`'s
     Execution Notes.
 
+- **Governance (2026-10-10).** `node scripts/check-governance.cjs --base main` → on `ingest/w3b4-review-findings`
+  (at `9dc9c713`, this plan's submit), 95 `wf()` commits and 0 other commits, gated 0 findings, history 0 findings,
+  0 entries not checked; on `backlog/w3b4-handovers` (`5a714544`), 5 `wf()` commits, 0 findings, 0 not checked; on
+  `ingest/w3b4-consumer-services` (`1240dcd7`), 6 `wf()` commits, 0 findings, 0 not checked. Every `approve` commit
+  of the three branches carries no `Co-Authored-By:` or `AI-Model:` line and every other commit carries both (a loop
+  over `git rev-list main..HEAD` per branch, 0 exceptions; the check's `approval-ai-trailer` rule agrees). None of
+  the three branches is pushed or merged.
+
 ### Retrospective
 
 - Two absence claims drafted from the follow-up log were false when measured (`release-health` already in
