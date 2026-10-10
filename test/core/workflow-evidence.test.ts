@@ -419,4 +419,12 @@ describe("this repository's own workflows (characterization, spec-003 § Diagnos
       'docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-friction-inventory.md',
     ]);
   });
+
+  it("retrospective.collect-feedback produces its read record beside the friction inventory, outside every Memory path (task-272, dl-163 S3d)", () => {
+    const liveRoot = join(__dirname, '..', '..');
+    const retrospective = loadWorkflowsYaml(liveRoot).workflows.find((w) => w.name === 'retrospective');
+    expect(retrospective?.phases.find((p) => p.name === 'collect-feedback')?.produces).toEqual([
+      'docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md',
+    ]);
+  });
 });
