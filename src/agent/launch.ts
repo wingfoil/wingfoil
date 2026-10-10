@@ -220,7 +220,11 @@ interface PostRunFacts {
   readonly tokens: RunTokens;
 }
 
-const NO_TOKENS: RunTokens = { input: NOT_REPORTED, output: NOT_REPORTED, cache_read: NOT_REPORTED, cache_write: NOT_REPORTED };
+/**
+ * Every count unreported. A function, not a module constant: `./run-log` can still be loading when this
+ * module is first evaluated (`src/core` ↔ `src/agent` import cycle), so `NOT_REPORTED` is read at call time.
+ */
+const noTokens = (): RunTokens => ({ input: NOT_REPORTED, output: NOT_REPORTED, cache_read: NOT_REPORTED, cache_write: NOT_REPORTED });
 
 /** What {@link postRunFacts} needs. */
 interface PostRunInput {
@@ -270,7 +274,7 @@ async function postRunFacts(input: PostRunInput): Promise<PostRunFacts> {
   }
 
   let model: string = NOT_REPORTED;
-  let tokens: RunTokens = NO_TOKENS;
+  let tokens: RunTokens = noTokens();
   if (manifest.usage.from === 'lookup' && manifest.usage.lookup_args !== undefined) {
     const parsed = parseLookup(await lookup(manifest.usage.lookup_args));
     if (!parsed.ok) warn(`the usage lookup failed (${parsed.reason}): model and tokens recorded as not-reported`);
