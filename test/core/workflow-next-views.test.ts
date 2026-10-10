@@ -230,7 +230,7 @@ describe('task-216 — step views: targets, bindings, executor attributes, messa
       target: 'selection',
       binding: { kind: 'manual', expectedCommit: 'wf(bug): assign release v1 to bug-1' },
     });
-    expect(binding(step, 'memory.approve')).toMatchObject({ target: 'selection', binding: { kind: 'wingfoil', argv: ['wingfoil', 'memory', 'approve', 'bug-1'] } });
+    expect(binding(step, 'memory.approve')).toMatchObject({ target: 'selection', binding: { kind: 'wingfoil', argv: ['wingfoil', 'memory', 'approve', 'bug-1', '--reason', '<reason>'] } });
     expect(step.checks).toEqual({
       pre: [{ token: 'tests.passing', binding: { kind: 'run', argv: ['npm', 'test'] }, evaluated: false }],
       post: [{ token: 'report.ok(report: out.txt)', binding: { kind: 'run', argv: ['node', 'check.cjs', 'out.txt'] }, evaluated: false }],
@@ -268,7 +268,7 @@ describe('task-216 — step views: targets, bindings, executor attributes, messa
 
   it('an action no element answers; an awaits whose other evidence is missing awaits nothing yet (§4.2, §5.4)', async () => {
     const step = (await next(repo, 'loose-1')).next!;
-    expect(binding(step, 'memory.submit')).toMatchObject({ target: 'none', binding: { kind: 'wingfoil', argv: ['wingfoil', 'memory', 'submit'] } });
+    expect(binding(step, 'memory.submit')).toMatchObject({ target: 'none', binding: { kind: 'wingfoil', argv: ['wingfoil', 'memory', 'submit', '<id>'] } });
     expect(binding(step, 'element.set_state(done)')).toMatchObject({ target: 'none', binding: { kind: 'manual', expectedCommit: 'wf(<type>): start <id> [<from> → done]' } });
     expect(step.evidence.missing).toContain('produces');
     expect(step.awaiting).toBeNull();

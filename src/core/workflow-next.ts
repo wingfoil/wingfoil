@@ -26,6 +26,7 @@ import type { DnaYaml } from '../dna/schema';
 import type { MemoryYaml, StateMachine } from '../memory/schema';
 import { resolveStateMachine } from '../memory/state-machine';
 import type { Diagnostic } from '../validation';
+import { reportWarning } from '../validation/warning';
 import { resolveToken, tokenName, type BindingsYaml, type TokenBinding } from '../workflow/bindings';
 import {
   deduceWorkflowState,
@@ -47,6 +48,7 @@ import { resolveRoleDirectives } from './context';
 import { readGitIdentity } from './git-identity';
 import { loadDirectivesAtRev, loadRolesYamlAtRev, type DirectiveFile } from './loaders';
 import { coreErr, coreOk, type CoreResult } from './types';
+import { unknownWorkflowMessage } from './workflow-list-show';
 import { readDeductionSnapshotAtHead } from './workflow-deduction';
 
 /** `NextResult.message` when no instance is open (`spec-017` §7.3). */
@@ -305,9 +307,14 @@ function actionBinding(action: DeducedAction, step: DeducedStep, phase: Phase, i
   const name = tokenName(action.token);
   switch (binding.kind) {
     case 'wingfoil': {
+      // A whole command (review fix 2): the operands the verb requires, as placeholders where only the user
+      // can give them. `--workflow` / `--step` link the added element to the step (spec-017 §7.10, task-227).
       const argv = [...binding.argv!]; // a built-in `wingfoil` binding always names its command (`bindings.ts`)
-      if (name === 'memory.add') argv.push('--workflow', step.instance, '--step', step.key);
-      else if (name.startsWith('memory.')) argv.push(...action.targets.map((target) => target.id));
+      if (name === 'memory.add') argv.push('--title', '<title>', '--workflow', step.instance, '--step', step.key);
+      else if (name.startsWith('memory.')) {
+        argv.push(...(action.targets.length > 0 ? action.targets.map((target) => target.id) : ['<id>']));
+        if (name === 'memory.approve' || name === 'memory.reject') argv.push('--reason', '<reason>');
+      }
       return { kind: 'wingfoil', argv };
     }
     case 'agent':
@@ -411,6 +418,23 @@ export function assigneeRoles(dnaYaml: DnaYaml | null, who: string, identityEmai
 }
 
 /**
+ * Warn when `--assigned-to <who>` names nobody (review fix 5): `me` whose email is no member's, or a `<who>`
+ * that is no member's name or email and no `team.roles` role. The filter still runs; it keeps no step.
+ */
+function warnUnknownAssignee(dnaYaml: DnaYaml | null, who: string, identityEmail: string): void {
+  const members = dnaYaml?.team?.members ?? [];
+  const sameEmail = (email: string | undefined, other: string): boolean => email !== undefined && email !== '' && email.toLowerCase() === other.toLowerCase();
+  if (who === ASSIGNED_TO_ME) {
+    if (!members.some((member) => identityEmail !== '' && sameEmail(member.email, identityEmail))) {
+      reportWarning(`--assigned-to me: the git identity's email '${identityEmail}' is no team.members[] entry's`);
+    }
+    return;
+  }
+  const known = members.some((member) => member.name === who || sameEmail(member.email, who)) || (dnaYaml?.team?.roles ?? []).some((role) => role.name === who);
+  if (!known) reportWarning(`--assigned-to '${who}' names no team.members[] entry (name or email) and no team.roles role in dna.yaml`);
+}
+
+/**
  * `workflow next`'s answer from one deduction (`spec-017` §7.3, §10). Pure. Exit `0` in every deduced
  * case — `no open workflows`; `no next step: workflow '<name>' is complete`; a filter that keeps nothing — and
  * `NOT_FOUND` `workflow is not open: <ref>` for a `ref` naming no open instance.
@@ -420,7 +444,9 @@ export function nextWorkflow(inputs: NextInputs, deduction: Deduction, options: 
   const base = { baseline: deduction.baseline, diagnostics: deduction.diagnostics };
   const selected = resolveInstanceRef(deduction, ref);
   if (selected === null) {
-    if (ref !== undefined) return coreErr({ code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } });
+    // A loaded workflow with no open instance is "not open"; any other `<ref>` names nothing (§10, review fix 1).
+    if (ref !== undefined && inputs.workflows.some((workflow) => workflow.name === ref)) return coreErr({ code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } });
+    if (ref !== undefined) return coreErr({ code: 'NOT_FOUND', message: unknownWorkflowMessage(ref), details: { ref } });
     return coreOk({ ...base, instance: null, complete: false, next: null, more: [], message: NO_OPEN_WORKFLOWS });
   }
   const { instance, complete, frontier } = selected;
@@ -432,6 +458,7 @@ export function nextWorkflow(inputs: NextInputs, deduction: Deduction, options: 
         : `no next step: workflow '${instance.workflow}' is not loaded`;
     return coreOk({ ...base, instance, complete, next: null, more: [], message });
   }
+  if (assignedTo !== undefined) warnUnknownAssignee(inputs.dnaYaml, assignedTo, options.identityEmail ?? '');
   const roles = assignedTo === undefined ? null : assigneeRoles(inputs.dnaYaml, assignedTo, options.identityEmail ?? '');
   const kept = roles === null ? frontier : frontier.filter((step) => step.role !== null && roles.has(step.role));
   if (kept.length === 0) {
@@ -479,7 +506,8 @@ function describeScope(scope: ScopeRef | null): string {
 export function humanNeededLine(step: Step): string | null {
   const awaiting = step.awaiting;
   if (awaiting === null) return null;
-  if (awaiting.kind === 'party') return `waiting for ${awaiting.party}: ${awaiting.evidence.token} (complete it with wingfoil workflow finalize)`;
+  // `workflow finalize` writes the record (spec-017 §7.9) and is not shipped yet (review fix 4).
+  if (awaiting.kind === 'party') return `waiting for ${awaiting.party}: ${awaiting.evidence.token} (a phase record completes it: wingfoil workflow finalize, not available yet)`;
   const action = awaiting.recordNeeded ? 'finalize' : 'approve or reject';
   const what = awaiting.elements.length > 0 ? awaiting.elements.map((element) => element.id).join(', ') : step.key;
   const routed = awaiting.routedTo.length > 0 ? awaiting.routedTo.map((member) => `${member.name} <${member.email}>`).join(', ') : (awaiting.routingError ?? 'nobody');

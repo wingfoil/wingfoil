@@ -1089,9 +1089,18 @@ reports its `key` (`<workflow>.<phase>`, then `@<type>:<id>` for the element it 
 hold it and whether an agent runs as it (`agentRole`), the role's directives (`id` and `title` only; their
 text is what `agent execute` loads), and each action with its interpolated text and its binding:
 
-- `wingfoil`: the command, with the step's operands filled — `memory add --type <T> --workflow <instance>
-  --step <key>` to link what you add to the step, or the ids a Memory verb acts on;
-- `agent`: `wingfoil agent execute --workflow <instance> --step <key>`;
+- `wingfoil`: the whole command, with the step's operands filled and placeholders for what only you can
+  give — `memory add --type <T> --title <title> --workflow <instance> --step <key>`, or a Memory verb with
+  the ids it acts on (`<id>` when none is known yet) and, for `approve` / `reject`, `--reason <reason>`;
+- `agent`: `wingfoil agent execute --workflow <instance> --step <key>`.
+
+**Planned:** `memory add --workflow` / `--step` (which link the added element to the step) and
+`agent execute --workflow` / `--step` are not available in this build yet; until they are, run `memory add`
+without those two options, and give `agent execute` the step's element with `--element <type>:<id>`. A step that waits for a third party is completed by a phase record that
+`wingfoil workflow finalize` writes, which is not available yet either.
+
+The other binding kinds:
+
 - `manual`: for a state change WingFoil has no command for yet, the commit subject the step expects, e.g.
   `wf(task): start task-130 [backlog → in-progress]`, `wf(bug): sync bug-12 [in-review → in-progress]`;
 - `run`: a command bound in `workflows/bindings.yaml`; `unbound`: none.
@@ -1113,14 +1122,17 @@ next step: decision-log-ingest.capture
   role: product-owner — held by Roberto Pompermaier
   directives: claim-evidence, doc-versioning, documentation, git-conventions, security, security-secrets, traceability
   actions:
-    - memory.add(type: decision-log) [wingfoil: wingfoil memory add --type decision-log --workflow decision-log-ingest-rel-v0.3-consumer-feedback-loop-plan --step decision-log-ingest.capture]
-    - memory.submit [wingfoil: wingfoil memory submit]
+    - memory.add(type: decision-log) [wingfoil: wingfoil memory add --type decision-log --title <title> --workflow decision-log-ingest-rel-v0.3-consumer-feedback-loop-plan --step decision-log-ingest.capture]
+    - memory.submit [wingfoil: wingfoil memory submit <id>]
   evidence missing: produces
 ```
 
 - **Exit `0`** for every deduced outcome, with a `message`: `no open workflows`;
   `no next step: workflow '<name>' is complete`; `no next step of workflow '<name>' is assigned to '<who>'`.
-- **Errors:** a `<ref>` that names no open instance → `workflow is not open: <ref>`, exit `1`; an error in
+- **Warnings:** `--assigned-to <who>` that names no member (name or email) and no `team.roles` role, or
+  `me` when your git identity's email is no member's, prints a `warning:` line; the filter then keeps no step.
+- **Errors:** a `<ref>` that names no workflow and no open instance → `unknown workflow: <ref>`; a workflow
+  with no open instance → `workflow is not open: <ref>`; both exit `1`; an error in
   the workflow files → exit `1`, as `workflow list`; more than one `<ref>` → exit `2`.
 - **Commit:** none.
 
