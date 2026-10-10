@@ -43,6 +43,9 @@ changes:
       attribution rule); dl-101-id-allocation-across-refs Action 4 (G15's duplicate-id scan, wording only)
     added: [G16, Q18, Q19, Q20, P01, P02, P03, P04, P05, P06, P07, E01, E02, E03, E04, E05]
     redefined: [G08, Q15, D01]
+    notes: >-
+      Wording only, no change of what is measured: Q12 states that a loaded run (task-263's load flag) is
+      recorded as not-measurable; P06 is measured on major and minor releases only, with D01's two runs.
 
 metrics:
   # ── G — git history ──────────────────────────────────────────────────────────────────────────────────
@@ -94,7 +97,7 @@ metrics:
   - id: G07
     name: Unknown identities
     definition: >-
-      Commits whose author or committer email is not a `team.members` or `team.agents` entry of `dna.yaml` at the measurement point, or uses an RFC 2606 reserved domain.
+      Commits whose author or committer is not a `team.members` entry of `dna.yaml` at the measurement point, or uses an RFC 2606 reserved domain.
     scope: window
     kind: floor
     floor: 0
@@ -161,7 +164,7 @@ metrics:
   - id: G15
     name: Stale branches and duplicate ids
     definition: >-
-      Unmerged remote branches whose last commit is older than the previous measurement point; Memory ids allocated twice across refs (the duplicate-id scan of dl-101 Action 4 over every ref).
+      Unmerged remote branches older than the release; Memory ids allocated twice across branches (the duplicate-id scan of dl-101 Action 4).
     scope: snapshot
     kind: floor
     floor: 0

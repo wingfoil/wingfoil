@@ -334,7 +334,8 @@ Determinism Index's outcome D01 and process conformance P, the external snapshot
 metric with the previous release's run and turns each regression or breached floor into an
 `RH-{version}-NN` proposal for the retrospective. It blocks nothing; a breach of G07, G10, G14, Q01 or Q02
 is filed at once through `bug-ingest`. `release-health.measure` / `.compare` are bound to
-`scripts/release-health/measure.cjs` / `compare.cjs`, which never write git configuration.
+`scripts/release-health/measure.cjs` / `compare.cjs`, to be written by task-231..233 (measure) and task-241 (compare);
+dl-089 §6 forbids them writing git configuration.
 
 ```mermaid
 flowchart TD
@@ -416,7 +417,7 @@ built in (`agent.*` is `wingfoil agent execute` under the phase's role; the inst
 `description`). Every other token is bound in `.wingfoil/workflows/bindings.yaml` (`format: 1`,
 dl-153): a check to an argument vector (`npm test`, `npm run lint`, `npm run docs:api`,
 `npm run typecheck`, `npm run check:lockfile`, `npm run check:mcp`, `node scripts/e2e-smoke.cjs`, …),
-an action to a command (`release-health.measure` / `.compare`, `node scripts/release-health/…`) or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
+an action to a command (`release-health.measure` / `.compare`, `node scripts/release-health/…`, scripts still to be written) or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
 `approver.execute`). Token arguments are `key: value` pairs, substituted as whole argv elements, never
 through a shell. The prose checks no command asserts yet (`frontmatter.required: […]`,
 `spec-review.passed`, the specification-phase quality criteria, …) stay unbound: `workflow list` reports

@@ -193,7 +193,7 @@ paths:
     - .wingfoil/                   # this dogfooding configuration
   runs:                            # [SPEC: spec-016 §4.1, dl-114 Action 2] the run log: one <element-id>.jsonl per element, written and committed by `agent execute`; exactly one directory
     - docs/06_runs/
-  health:                          # [AUTHORING] dl-089 §1 (A): the release-health catalogue (metrics.yaml) and reports, read by scripts/release-health/; exactly one directory (passthrough category, spec-002 Categories)
+  health:                          # [SPEC: dl-089 §1 (A), spec-002 Categories] the release-health catalogue (metrics.yaml) and reports, read by scripts/release-health/; exactly one directory (declared category)
     - docs/08_health/
 # The docs/NN_* folders take one number each, in the order the release flow writes them (bug-299): 01_vision
 # .. 05_plans, then 06_runs (dev-loop, the agent run log), 07_gates (the e2e-smoke gate report), 08_health
