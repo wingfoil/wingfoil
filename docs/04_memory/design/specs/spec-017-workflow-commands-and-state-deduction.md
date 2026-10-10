@@ -193,8 +193,9 @@ criterion).
   (`spec-008` §7). When the argument is absent, the bound element of the active instance is inherited
   if its type is `T`; otherwise `start` refuses. The element must exist at `HEAD`.
 - **Self-creating.** A startable workflow that declares no `element` and whose own phases contain a
-  `memory.add(type: T)` — the four ingest mains (`bug-ingest.yaml:9-11`: "No fixed `element:`") and
-  `sw-life-cycle` (`seed-first-release-line`, `sw-life-cycle.yaml:31-38`) — starts **unbound**. Its
+  `memory.add(type: T)` — the four ingest mains (`bug-ingest.yaml:9-11`: "No fixed `element:`"),
+  `vision-change` (`capture`, a `change-proposal`, `dl-132`) and `sw-life-cycle`
+  (`seed-first-release-line`, `sw-life-cycle.yaml:31-38`) — starts **unbound**. Its
   **creating phase** is the first of its own phases that declares a `memory.add`, and `T` is that
   action's type. The instance's element is **bound when its first element is created**: it is the
   element of type `T` that the creating phase's step created (§4.8, linkage) with the oldest add
@@ -871,21 +872,24 @@ list --format json` with the pinned build 0.2.2 loads the same 23 workflows and 
 
 **Consequence for deduction** (§3.4, §4, §5.1).
 - *Self-creating instances:* `sw-life-cycle` (`release-line`), `bug-ingest`, `decision-log-ingest`,
-  `adr-ingest`, `service-ingest` bind the element their creating phase creates, so their capture,
-  approve and triage phases deduce from it and each instance can end.
-- *Checkpoints:* 28 phases declare no evidence and complete by `workflow finalize`: the 11 phases of
+  `adr-ingest`, `service-ingest`, `vision-change` (`change-proposal`, `task-212`) bind the element their
+  creating phase creates, so their capture, approve and triage phases (and `vision-change`'s
+  `impact-analysis` and `schedule`) deduce from it and each instance can end.
+- *Checkpoints:* 29 phases declare no evidence and complete by `workflow finalize`: the 11 phases of
   `user-story-mapping`, `specification-by-examples`, `volere-requirements` and `backlog-export`;
   `release-planning.advance-pinned-build`; `dev-loop.red|green|refactor`;
   `user-docs.check-implementation-complete`; `e2e-smoke.fresh-init|drive-cli|mcp-registration`;
   `release-submit.pre-release-checks|approve-release`; `release-publishing.release-commit|tag|publish`; `release-health.propose`;
-  `retrospective.additional-points|approve`; `end-of-life.archive`. So a `sw-life-cycle`
+  `retrospective.additional-points|approve`; `end-of-life.archive`; `vision-change.update-vision`
+  (`task-212`). So a `sw-life-cycle`
   instance passes `specification` only by finalizing those 11 steps, and `dev-loop` passes
   `red`/`green`/`refactor` by one `finalize` each.
-- *Approvals recorded by `finalize` with approver authority* (no element carried, §5.1): 7 phases,
-  listed in §5.1. The other 13 approval phases are carried by Memory: `bug-ingest.triage`, the three
-  ingest `approve` phases, `release-line-cycle.approve`, `release-planning.triage-bugs|
-  reconcile-governance|record-adrs|identify-specs|commit-backlog`, `dev-loop.design|review`,
-  `end-of-life.announce`.
+- *Approvals recorded by `finalize` with approver authority* (no element carried, §5.1): 6 phases,
+  listed in §5.1 (7 before `task-199`, when `retrospective.approve` was one). The other 15 approval phases
+  are carried by Memory: `bug-ingest.triage`, the three ingest `approve` phases, `release-line-cycle.approve`,
+  `release-planning.triage-bugs|reconcile-governance|record-adrs|identify-specs|commit-backlog`,
+  `dev-loop.design|review`, `retrospective.approve` (its decision-log), `end-of-life.announce`, and
+  `vision-change.impact-analysis` (`task-212`).
 - *Implicit owners:* `{id}` in a phase that adds an element is ambiguous until the entry takes
   `dl-104` D3's `{ type, path }` form. Until the alignment task rewrote the nine entries (`task-199`,
   below), they were not evidence (§4.3): `dev-loop.design`, `release-planning.record-adrs|identify-specs|build-backlog`
@@ -1198,3 +1202,20 @@ commit): 25 workflows, 93 phases, **0 errors, 69 `W_WORKFLOW_UNBOUND_TOKEN` warn
 `test/core/workflow-repository-conformance.test.ts` pins after the merge. §12's earlier figures (61 warnings) stay as
 the record of `task-199`'s measurement. No command, rule or diagnostic changes. Edited in place without a supersede
 or a state change (`dl-047`); pending the approver's `memory amend` at `task-222`'s review.
+
+**Revision (2026-10-10, `task-212-add-change-proposal-memory-type-startable-vision-change`) — `vision-change`
+is self-creating; §12 re-measured on the merged tree.** `dl-132` adds a startable main that declares no
+`element` and whose `capture` phase adds a `change-proposal`, so §3.4 names it beside the four ingest mains,
+and §12's consequence lists name it: a self-creating instance, the checkpoint `vision-change.update-vision`,
+and the Memory-carried approval `vision-change.impact-analysis`. Re-measured on `task-212`'s branch merged
+with `main` at `6af698f0` (`task-216`, `228`, `219`, `197`, `208`, `222`, `221`), through
+`loadWorkflowRegistryAtHead` at the merge commit and `node dist/cli.js workflow list --all --format json`:
+26 workflows, 100 phases, **0 errors, 76 `W_WORKFLOW_UNBOUND_TOKEN` warnings**, each on a check (two are
+`vision-change`'s: its capture's `frontmatter.required` and `schedule`'s `target_release` pre-check); 29
+checkpoints; 21 approval phases, 6 recorded by `workflow finalize` and 15 carried by Memory. The bullets
+above give those two counts and lists as measured now (the approval bullet also names
+`retrospective.approve`, carried by its decision-log since `task-199`); §12's earlier figures (103 and 61
+warnings, `task-222`'s 69) stay as the record of their measurements. The figures are those
+`test/core/workflow-repository-conformance.test.ts` pins after the merge. No rule, command or diagnostic
+changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend` at `task-212`'s review.
