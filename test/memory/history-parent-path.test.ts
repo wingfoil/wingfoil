@@ -8,6 +8,8 @@
  * Throwaway repositories with fixed commit dates.
  */
 import { execFileSync } from 'child_process';
+import { mkdirSync } from 'fs';
+import { dirname, join } from 'path';
 
 import { reconstructMemoryTransitions } from '../../src/memory/audit';
 import { attachParentPaths, getMemoryHistory, parseParentPaths, type MemoryHistoryEntry } from '../../src/memory/history';
@@ -77,6 +79,7 @@ describe('AC2 — the walk carries the path each commit\'s first parent used (pa
     const oldPath = 'docs/04_memory/v1/task-1.md';
     writeFixtureFile(root, oldPath, taskDoc('backlog'));
     const add = commitAt(root, '10:00', 'wf(task): add task-1');
+    mkdirSync(join(root, dirname(DOC)), { recursive: true }); // `git mv` does not create the destination folder
     git(root, ['mv', oldPath, DOC]);
     writeFixtureFile(root, DOC, taskDoc('in-progress'));
     const moved = commitAt(root, '11:00', 'wf(task): start task-1 [backlog → in-progress]');
