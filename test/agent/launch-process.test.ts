@@ -158,6 +158,11 @@ class FakeChild extends EventEmitter {
     super();
     setImmediate(() => this.emit('spawn'));
   }
+  /** End by itself with `code`, as an agent that exits does. */
+  finish(code: number): void {
+    this.exitCode = code;
+    this.emit('exit', code, null);
+  }
   kill(signal: NodeJS.Signals): boolean {
     this.killed.push(signal);
     setImmediate(() => {
@@ -226,12 +231,77 @@ describe('launchAgent — signals around the spawn (review fix 1, spec-016 §3.3
   }, 60000);
 });
 
+describe('launchAgent — the re-review branches (re-review 4)', () => {
+  it('a SIGTERM after the agent has exited is ignored while the lookups run, and the run is recorded', async () => {
+    const { root, input } = launchFixture((manifest: AdapterManifest) => ({
+      ...manifest,
+      usage: { from: 'lookup', lookup_args: ['scripts/slow.cjs'], fields: { model: 'model' } },
+    }));
+    repos.push(root);
+    const child = new FakeChild();
+    const run = withWarningSink(
+      () => undefined,
+      () => launchAgent(root, input, { spawn: () => child as unknown as ChildProcess }, () => undefined),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    child.finish(0);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    process.emit('SIGTERM', 'SIGTERM');
+    const outcome = await run;
+    expect(child.killed).toEqual([]);
+    expect(outcome.ok ? outcome.value.run.model : outcome.error.message).toBe('slow');
+  }, 60000);
+
+  it('an error the child emits after it spawned is not a failure to start: the exit decides', async () => {
+    const { root, input } = launchFixture((manifest: AdapterManifest) => manifest);
+    repos.push(root);
+    const child = new FakeChild();
+    const run = launchAgent(root, input, { spawn: () => child as unknown as ChildProcess }, () => undefined);
+    await new Promise((resolve) => setImmediate(resolve));
+    child.emit('error', new Error('a late error'));
+    child.finish(0);
+    const outcome = await run;
+    expect(outcome.ok).toBe(true);
+  }, 60000);
+
+  it('a lookup command that cannot start: `could not start: <code>`', async () => {
+    const { root, input } = launchFixture((manifest: AdapterManifest) => ({
+      ...manifest,
+      command: 'bin/no-such-cli',
+      usage: { from: 'lookup', lookup_args: ['--usage'], fields: { model: 'model' } },
+    }));
+    repos.push(root);
+    const child = new FakeChild();
+    const warnings: string[] = [];
+    const run = withWarningSink(
+      (text) => warnings.push(text),
+      () => launchAgent(root, input, { spawn: () => child as unknown as ChildProcess }, () => undefined),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    child.finish(0);
+    const outcome = await run;
+    expect(outcome.ok).toBe(true);
+    expect(warnings).toEqual(["adapter 'hand': the usage lookup failed (could not start: ENOENT): model and tokens recorded as not-reported"]);
+  }, 60000);
+});
+
 describe('launchAgent — a lookup that prints more than 1 MiB (review fix 2)', () => {
+  it('on stderr, with valid stdout: the limit covers both streams, and the cause says so (re-review 1)', async () => {
+    const { root, input } = launchFixture((manifest: AdapterManifest) => ({
+      ...manifest,
+      usage: { from: 'lookup', lookup_args: ['scripts/flood-stderr.cjs'], fields: { model: 'model' } },
+    }));
+    repos.push(root);
+    const outcome = await launch(input, root);
+    expect(record(outcome)).toMatchObject({ model: 'not-reported' });
+    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed more than 1 MiB on stdout or stderr): model and tokens recorded as not-reported"]);
+  }, 60000);
+
   it('is reported as such, not as a command that could not start', async () => {
     const { root, input } = launchFixture((manifest: AdapterManifest) => ({ ...manifest, usage: { from: 'lookup', lookup_args: ['scripts/flood.cjs'] } }));
     repos.push(root);
     const outcome = await launch(input, root);
-    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed more than 1 MiB): model and tokens recorded as not-reported"]);
+    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed more than 1 MiB on stdout or stderr): model and tokens recorded as not-reported"]);
   }, 60000);
 });
 

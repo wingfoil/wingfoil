@@ -381,3 +381,45 @@ describe('withRunFiles — signals (review fix 1)', () => {
     expect(calls).toEqual([[process.pid, 'SIGTERM']]);
   });
 });
+
+describe('withRunFiles — signals around the directory\'s creation (re-review 4)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require('node:fs') as typeof import('node:fs');
+  const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+  const counts = (): number[] => SIGNALS.map((signal) => process.listenerCount(signal));
+
+  it('a mkdtempSync that throws: the error is rethrown and the listeners are removed', async () => {
+    const before = counts();
+    const spy = jest.spyOn(fs, 'mkdtempSync').mockImplementation(() => {
+      throw new Error('EACCES fake');
+    });
+    try {
+      await expect(withRunFiles({ bootstrap_file: 'x' }, async () => 'ran')).rejects.toThrow('EACCES fake');
+    } finally {
+      spy.mockRestore();
+    }
+    expect(counts()).toEqual(before);
+  });
+
+  it('a signal before the directory exists re-raises it with nothing to remove, and nothing is left', async () => {
+    const original = fs.mkdtempSync;
+    const spy = jest.spyOn(fs, 'mkdtempSync').mockImplementation(((prefix: string) => {
+      process.emit('SIGTERM', 'SIGTERM');
+      return original(prefix);
+    }) as typeof fs.mkdtempSync);
+    const kill = jest.spyOn(process, 'kill').mockImplementation(() => true);
+    let dir = '';
+    let calls: unknown[][] | undefined;
+    try {
+      await withRunFiles({ bootstrap_file: 'x' }, async (paths) => {
+        dir = dirname(paths.bootstrap_file!);
+      });
+      calls = kill.mock.calls;
+    } finally {
+      kill.mockRestore();
+      spy.mockRestore();
+    }
+    expect(calls).toEqual([[process.pid, 'SIGTERM']]);
+    expect(existsSync(dir)).toBe(false);
+  });
+});

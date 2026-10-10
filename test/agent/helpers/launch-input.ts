@@ -2,7 +2,7 @@
  * task-228 — a scratch repository and a hand-built `LaunchInput` for `launchAgent` (`src/agent/launch.ts`),
  * with small agent and lookup scripts the tests point a manifest at: `agent-ok.cjs` (exits 0),
  * `silent.cjs` (prints nothing), `not-json.cjs`, `killed.cjs` (ends itself by SIGKILL),
- * `number-session.cjs` (prints `{"sid": 5}`), `fails.cjs` (exits 1), `exit3.cjs` (exits 3), `flood.cjs` (prints 1.1 MiB) and `both.cjs` (prints a session id and
+ * `number-session.cjs` (prints `{"sid": 5}`), `fails.cjs` (exits 1), `exit3.cjs` (exits 3), `flood.cjs` (prints 1.1 MiB), `flood-stderr.cjs` (valid stdout, 1.1 MiB on stderr), `slow.cjs` (answers after 1.5 s) and `both.cjs` (prints a session id and
  * one count, and appends a line to `lookups.log` each time it runs).
  */
 import type { AdapterManifest, LaunchInput } from '../../../src/agent';
@@ -19,6 +19,8 @@ const SCRIPTS: Readonly<Record<string, string>> = {
   'scripts/fails.cjs': 'process.exitCode = 1;\n',
   'scripts/exit3.cjs': 'process.exitCode = 3;\n',
   'scripts/flood.cjs': "process.stdout.write('x'.repeat(1100 * 1024));\n",
+  'scripts/flood-stderr.cjs': "process.stdout.write(JSON.stringify({ model: 'm' }) + '\\n'); process.stderr.write('e'.repeat(1100 * 1024));\n",
+  'scripts/slow.cjs': "setTimeout(() => process.stdout.write(JSON.stringify({ model: 'slow' }) + '\\n'), 1500);\n",
   'scripts/both.cjs':
     "require('fs').appendFileSync('lookups.log', 'run\\n'); process.stdout.write(JSON.stringify({ sid: 's-9', tokens: { in: 7 } }) + '\\n');\n",
 };
