@@ -206,9 +206,11 @@ flowchart TD
 ```
 
 **Release candidate** (`dl-099` §1): the commit of the release's integration branch proposed for the
-version tag, cut by `release-publishing`'s `release-commit`. Two checks run on it: the `e2e-smoke` gate,
+version tag, cut by `release-publishing`'s `release-commit`. The two checks are the `e2e-smoke` gate,
 which packs and smokes the candidate with its build stamp bound (`e2e-smoke-passed`, `--candidate`), and
-`staging-rehearsal`, whose own smoke runs against the staged tarball. A commit that must ship and lands
+`staging-rehearsal`. The release commit does not re-cut the candidate: `e2e-smoke` runs before it, so on
+the first candidate the rehearsal's smoke (the same scenario of `scripts/e2e-smoke.cjs`, against the staged
+tarball, with `--expect-commit`) stands as its e2e-smoke run. A commit that must ship and lands
 after the checks ran **re-cuts** the candidate: the release re-enters `e2e-smoke` (and `submit`'s checks),
 then `staging-rehearsal`. Only a candidate that passed both is tagged; a commit that only records evidence
 (a gate report, a transcript, a Memory transition) does not re-cut, because `tag` tags the candidate the

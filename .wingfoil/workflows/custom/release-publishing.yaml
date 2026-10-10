@@ -49,7 +49,8 @@ phases:
       history so it survives phase-branch cleanup. It goes on the release candidate the rehearsal
       transcript names (`staging-rehearsal-passed` prints that commit), not on a later commit such as
       the one that records the transcript: a candidate that has not passed both checks is not tagged
-      (dl-099 §1).
+      (dl-099 §1). In the action, `on: main` names the branch the tag must be reachable from; the
+      commit tagged is the candidate `staging-rehearsal-passed` prints.
     role: tech-lead
     checks:
       pre:   # dl-024; dl-099 §1
@@ -57,7 +58,7 @@ phases:
         - "release-branch-merged-to-main"
         - "staging-rehearsal-passed(transcript: docs/07_gates/rl-{release.release-line}/rel-{release.version}-staging-rehearsal.md)"
     actions:
-      - 'git.tag(name: "{release.version}", on: main)'      # dl-024 — tag on main, not on a design/release_* branch
+      - 'git.tag(name: "{release.version}", on: main)'      # dl-024 — tag on main, not on a design/release_* branch; `on:` names the branch, the commit is the candidate staging-rehearsal-passed prints (dl-099 §1)
 
   - name: publish
     description: >-

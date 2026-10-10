@@ -13,9 +13,12 @@ description: >-
   Deliver one release: plan scope -> run a TDD dev-loop per backlog task (including bug-fix
   tasks) -> align user-facing docs -> e2e-smoke -> submit -> publish to npm -> retrospective.
   A release candidate is the commit of the release's integration branch proposed for the version
-  tag (dl-099 §1); it is cut by release-publishing's `release-commit`. Both checks run on it: the
+  tag (dl-099 §1); it is cut by release-publishing's `release-commit`. The two checks are the
   e2e-smoke gate (against the packed candidate, `e2e-smoke-passed`) and release-publishing's
-  `staging-rehearsal`, whose own smoke runs against the staged tarball of the candidate. A candidate
+  `staging-rehearsal`. The release commit does not re-cut the candidate: the e2e-smoke phase runs
+  before it, so on the first candidate the rehearsal's smoke (the same scenario of
+  `scripts/e2e-smoke.cjs`, against the staged tarball, with `--expect-commit`) stands as its e2e-smoke
+  run. A candidate
   is re-cut whenever a commit that must ship lands on the integration branch after the checks ran —
   a fix for a failed rehearsal or publish, a late merge: the re-cut candidate re-enters `e2e-smoke`
   (and `submit`'s checks) and then `staging-rehearsal`, and only a candidate that has passed both is

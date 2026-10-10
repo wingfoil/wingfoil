@@ -539,20 +539,24 @@ if (require.main === module) {
     }
     if (!candidate || prepared !== undefined) {
       const { cleanup, ...options } = prepared ?? { ...parsed, cleanup: () => undefined };
-      let report;
       try {
-        report = runSmoke({ ...options, log: (line) => process.stdout.write(`${line}\n`) });
+        const report = runSmoke({ ...options, log: (line) => process.stdout.write(`${line}\n`) });
+        if (reportPath !== undefined) {
+          // `--candidate`'s bin lives in a throwaway directory: the report names the candidate, not that path,
+          // so the same run still gives the same bytes.
+          const command = candidate ? ['wingfoil (the packed candidate, installed into a throwaway prefix)'] : [options.command, ...options.commandArgs];
+          mkdirSync(dirname(reportPath), { recursive: true });
+          writeFileSync(reportPath, formatReport(report, { ...options, command }));
+        }
+        process.exitCode = report.ok ? 0 : 1;
+      } catch (error) {
+        // The header's contract: 1 = a check failed, 2 = anything else (a bad argument, a report that cannot
+        // be written) — reported as one `error:` line, never a stack trace (task-219 review fix 5).
+        process.stderr.write(`error: ${error.message}\n`);
+        process.exitCode = 2;
       } finally {
         cleanup();
       }
-      if (reportPath !== undefined) {
-        // `--candidate`'s bin lives in a throwaway directory: the report names the candidate, not that path,
-        // so the same run still gives the same bytes.
-        const command = candidate ? ['wingfoil (the packed candidate, installed into a throwaway prefix)'] : [options.command, ...options.commandArgs];
-        mkdirSync(dirname(reportPath), { recursive: true });
-        writeFileSync(reportPath, formatReport(report, { ...options, command }));
-      }
-      process.exitCode = report.ok ? 0 : 1;
     }
   }
 }
