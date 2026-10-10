@@ -44,6 +44,10 @@ types:
       file: "memory/templates/bug.md"
       frontmatter:
         required: [ title ]
+    states:
+      sequence: [ draft, open, triaged, planned, in-progress, in-review, resolved, closed ]
+      gates:
+        in-review: { reject: in-progress }
   release:
     path: "docs/04_memory/planning/{id}.md"
     states:

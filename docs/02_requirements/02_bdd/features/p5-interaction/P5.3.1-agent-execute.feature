@@ -1,3 +1,7 @@
+# Revised 2026-10-10 (task-235, spec-016 §3.1, §3.2 steps 1 and 6, §3.7; ruling R16; dl-135 point 3): the
+# --workflow and --step scenarios, the recorded step and mode scenario, and the v0.4 --resume scenario
+# (tagged @v0.4: --resume is not registered in v0.3, so it is refused as an unknown option, exit 2) are added.
+# Earlier scenarios are unchanged.
 # Revised 2026-10-09 (task-228, spec-016 §3.1, §3.3, §4; dl-114 Action 2, dl-135 Action 3): the run
 # record scenarios, the --agent scenario and the attribution step are added; scenario 2's fixture note
 # says element ids are full ids. Scenarios 1 and 3 are unchanged; "ready within 30 seconds" is read as
@@ -53,3 +57,33 @@ Feature: P5.3.1 (US-1-03) - wingfoil agent execute [--next]
     When I run "wingfoil agent execute --element task:202 --role developer --agent <second agent>"
     Then the second agent is launched
     And its bootstrap tells it to sign the commits of its work as that agent's name and email
+
+  Scenario: The run record names the step it ran, in mode fresh
+    Given the next step is phase "implement" of workflow "loop", and the phase allows modes "fresh" and "resume"
+    When I run "wingfoil agent execute --next"
+    Then the record's workflow is "loop", its phase "implement", and its mode "fresh"
+    And its run id is "<element-id>/implement/1"
+    And no warning is printed about the mode
+
+  Scenario: Take the next step of a named workflow with --workflow
+    Given two workflows are open, and "delivery" is not the one started last
+    When I run "wingfoil agent execute --workflow delivery"
+    Then the agent starts on the next step of the most recently started open "delivery" instance
+
+  Scenario: Take one of several ready steps with --step
+    Given the frontier of instance "delivery-1" holds the steps "loop.implement@task:203" and "loop.implement@task:204"
+    When I run "wingfoil agent execute --workflow delivery-1 --step loop.implement@task:204"
+    Then the agent starts on element "task:204", not on the first step
+    And this is the argv "wingfoil workflow next" prints for that step's agent binding
+
+  Scenario: Error - --step names no step of the frontier
+    When I run "wingfoil agent execute --workflow delivery-1 --step loop.review@task:203"
+    Then no agent is launched
+    And the command exits with code 1 and message "step 'loop.review@task:203' is not on the frontier of delivery-1"
+
+  @v0.4
+  Scenario: Error - --resume on a phase that allows only fresh runs
+    Given the next step's phase declares no "mode", so it allows only "fresh"
+    When I run "wingfoil agent execute --next --resume <run-id>"
+    Then no agent is launched
+    And the command exits with code 1 and says the phase does not allow mode "resume"

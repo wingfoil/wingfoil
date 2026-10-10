@@ -18,6 +18,10 @@
  * - AC 5: with two parallel frontier steps, the `agent` binding argv `workflow next` prints for the second
  *   step (`spec-017` §6.1), run as written, launches on that step;
  * - AC 6: a phase declaring `mode: resume` still runs `fresh`, with no warning; `--resume` exits 2.
+ * - The W3 B4 handover (`bug.sync_state`'s aggregate rule), two-task fixture: `agent execute` takes a step
+ *   whose actions include a sync, and acts on none of them — a bug two tasks name keeps its state, and the
+ *   run's one commit holds only the run log (`spec-016` §3.6). The rule itself is `workflow next`'s
+ *   reporting (`spec-017` §6.1), Execution Notes decision 3.
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
@@ -26,7 +30,8 @@ import { join } from 'node:path';
 
 import { git, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { TASK_ID } from '../agent/helpers/agent-execute-fixture';
-import { GHOSTLY, GHOSTLY_FILE, headOf, RELEASE_ID, seedStep, SIBLING_ID, startInstance, STEP_WORKFLOWS } from '../agent/helpers/agent-execute-step-fixture';
+import { BUG_ID } from '../agent/helpers/agent-execute-fixture';
+import { elementWithStatus, GHOSTLY, GHOSTLY_FILE, headOf, RELEASE_ID, seedStep, SIBLING_ID, startInstance, STEP_WORKFLOWS } from '../agent/helpers/agent-execute-step-fixture';
 import { CLI_ENTRY } from './helpers/spawn-cli';
 
 const scratch: string[] = [];
@@ -265,5 +270,44 @@ describe('task-235 AC 6 — --resume is v0.4: an unknown option, exit 2', () => 
     expect(run.stderr).toMatch(/unknown option '--resume'/);
     expectNothingRan(repo, run, before);
     expect(readdirSync(join(repo, 'docs'))).not.toContain('runs');
+  });
+});
+
+/** A `dev-loop` `done`-shaped phase: the task's last state, then the sync of every bug it names. */
+const FIXLOOP = `name: fixloop
+startable: true
+element: task
+phases:
+  - name: done
+    role: developer
+    actions:
+      - element.set_state(done)
+      - 'bug.sync_state(for_each: task.bug)'
+      - agent.execute
+`;
+
+describe('task-235 — the W3 B4 handover: agent execute acts on no sync step (two tasks name one bug)', () => {
+  it('launches on the done step of one task; the bug the other task also names keeps its state; one commit, the run log only', () => {
+    const repo = track(
+      seedStep(
+        (root) => {
+          writeFixtureFile(root, `docs/04_memory/v0.1/${TASK_ID}.md`, elementWithStatus('task', TASK_ID, 'approved', '## Description\n\n## Execution Notes', `bug: ["${BUG_ID}"]\n`));
+          writeFixtureFile(root, `docs/04_memory/v0.1/${SIBLING_ID}.md`, elementWithStatus('task', SIBLING_ID, 'in-review', '## Description\n\n## Execution Notes', `bug: ["${BUG_ID}"]\n`));
+          writeFixtureFile(root, `docs/04_memory/bugs/${BUG_ID}.md`, elementWithStatus('bug', BUG_ID, 'in-review', '## Summary\n\n## Triage & Execution Notes'));
+        },
+        { ...STEP_WORKFLOWS, 'workflows/custom/fixloop.yaml': FIXLOOP },
+      ),
+    );
+    startInstance(repo, 'fix-1', 'fixloop', TASK_ID);
+    const next = JSON.parse(cli(repo, ['workflow', 'next', '--format', 'json']).stdout) as { next: { key: string; actions: { token: string }[] } };
+    expect(next.next.key).toBe(`fixloop.done@task:${TASK_ID}`);
+    expect(next.next.actions.map((action) => action.token)).toContain('bug.sync_state(for_each: task.bug)');
+    const before = headOf(repo);
+    const run = execute(repo, ['--next']);
+    expect(run.status).toBe(0);
+    expect(bootstrapOf(run)).toContain(`act as role "developer" on element task:${TASK_ID}.`);
+    expect(git(repo, ['rev-list', '--count', `${before}..HEAD`]).trim()).toBe('1');
+    expect(git(repo, ['diff', '--name-only', before, 'HEAD']).trim()).toBe(`docs/runs/${TASK_ID}.jsonl`);
+    expect(readFileSync(join(repo, `docs/04_memory/bugs/${BUG_ID}.md`), 'utf-8')).toMatch(/^status: in-review$/m);
   });
 });
