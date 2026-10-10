@@ -54,7 +54,7 @@ wingfoil://workflows/{name}                   # a single workflow definition (ma
 ```
 
 - `{type}` is any type key declared in `memory.yaml` `types:` (`release-line, release, task, adr,
-  decision-log, tech-spec, bug, plan, service`).
+  decision-log, tech-spec, bug, plan, service, change-proposal`).
 - `{id}` is the element's `id` frontmatter value (e.g. `task-042-foo`), not its filesystem path —
   the server resolves `id → path` via each type's `path` pattern in `memory.yaml`.
 - Listing a collection (`wingfoil://memory/{type}` with no `{id}`) returns each element's frontmatter
@@ -516,3 +516,9 @@ gains `agent.execute`.** `wingfoil agent execute` ships in v0.3, registered `mut
 until a headless launch exists (v1.0, `spec-016` §3.5), since an MCP caller has no terminal. The
 shipped server registers no Tool in v0.3 (`spec-014` §3). Edited in place without a supersede or a
 state change, per `dl-047` (no `version:` field).
+
+**Revision (2026-10-09, `task-212-add-change-proposal-memory-type-startable-vision-change`) — §2.1's
+`{type}` enumeration gains `change-proposal`** (`dl-132` Q1 (a), `memory.yaml` 2.7), as `spec-001`'s
+Context does. The rule it illustrates — `{type}` is any key `memory.yaml` declares — is unchanged, and no
+URI, Resource or Tool changes. Edited in place without a supersede or a state change, per `dl-047` (no
+`version:` field); pending the approver's `memory amend` at `task-212`'s review.
