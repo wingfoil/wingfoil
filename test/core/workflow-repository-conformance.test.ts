@@ -93,6 +93,7 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-planning", "phases[0].checks.pre[0]", "`npm run -s wingfoil -- --version` == the version package.json pins"],
       ["release-planning", "phases[0].checks.post[0]", "new pin >= old pin, and `npm view wingfoil versions` lists it"],
       ["release-planning", "phases[0].checks.post[1]", "the switch commit changes only package.json and package-lock.json"],
+      ["release-planning", "phases[0].checks.post[2]", "the wingfoil-cli directive re-checked against the new pin"],
       ["release-planning", "phases[1].checks.post[0]", "frontmatter.required"],
       ["release-planning", "phases[4].checks.pre[0]", "spec-review.passed"],
       ["release-planning", "phases[4].checks.post[0]", "frontmatter.required"],

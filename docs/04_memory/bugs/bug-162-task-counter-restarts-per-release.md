@@ -10,6 +10,7 @@ feature: "P1.3"
 contributor: ""
 credit: ""
 tmpl_version: 260703
+tags: ["pinned-build"]
 ---
 
 ## Summary

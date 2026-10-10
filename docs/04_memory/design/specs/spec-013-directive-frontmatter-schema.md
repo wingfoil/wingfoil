@@ -21,7 +21,7 @@ Unlike the other three pillars, the Directives pillar had **no dedicated tech-sp
 was first written: `spec-010-memory-frontmatter-schema`'s scope is explicitly
 `docs/04_memory/**/*.md` (Memory documents), **not** `.wingfoil/directives/**`. So the
 `DirectiveFrontmatter` schema shipped in `task-004` as an explicit `[AUTHORING]` shape grounded in the
-ten files then under `.wingfoil/directives/custom/*.md` (twelve today), with a single field (`name`)
+ten files then under `.wingfoil/directives/custom/*.md` (fourteen today), with a single field (`name`)
 traced to a BDD scenario. This spec closes that traceability gap: it is the authoritative definition
 of the Directives-pillar file shape, retroactively blessing (and where noted, constraining) the shape
 `task-004` implemented. It is deliberately **minimal** — it fixes only what the loader must enforce to
@@ -202,3 +202,11 @@ unimplemented; the reconciliation is out of its scope and not scheduled, as the 
 `roles.yaml`'s header and `spec-011`'s `built-in/` paragraph now say. No field, rule or other section
 changed. Edited in place without a supersede or a state change (`dl-047`); pending the approver's
 sign-off at `task-188`'s review.
+
+**Revision (2026-10-09, `task-270-add-the-wingfoil-cli-directive-bound-globally-naming-which-build-runs-which-command-here`)
+— the Context's count of custom directives.** The Context said the custom directives were twelve; they
+were thirteen once `git-conventions` landed (`task-178`), and `task-270` adds `wingfoil-cli`
+(`dl-163` S3e), so they are fourteen (`ls .wingfoil/directives/custom/*.md | wc -l` → `14`). The new
+directive uses only the fields this spec declares. No field, rule or other section changed. Edited in
+place without a supersede or a state change (`dl-047`); pending the approver's sign-off at `task-270`'s
+review.

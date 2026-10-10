@@ -19,10 +19,14 @@
 # bind whoever commits — the approver's approve commits, the facilitator's and product-owner's captures
 # — not only the developer. Declared global here and by `scope: global` in its file (task-144).
 #
+# `wingfoil-cli` (dl-163 S3e, task-270) is global: it says which WingFoil build runs which command in this
+# repository (the code build for Memory operations, the pinned build for the read commands and MCP), and
+# every role runs commands. Declared global here and by `scope: global` in its file.
+#
 # `reviewer` also loads `code-quality`, `testing` and `determinism` (dl-134 §3, task-205): it judges
 # both the tests `qa` writes in `dev-loop`'s `red` and the code the developer writes in `green` and
 # `refactor`, so it reviews under the directives of the roles it checks, beside its own.
-version: 1.5
+version: 1.6
 
 assignments:
   developer:
@@ -58,3 +62,4 @@ global:
   - security-secrets
   - claim-evidence
   - git-conventions
+  - wingfoil-cli

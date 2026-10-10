@@ -301,7 +301,7 @@ describe('RolesYaml — validates the real, live .wingfoil/roles.yaml file', () 
     liveRoles();
   });
 
-  it('keeps the bindings that matter (task-094: command-baseline, claim-evidence; task-133: security; task-178: git-conventions)', () => {
+  it('keeps the bindings that matter (task-094: command-baseline, claim-evidence; task-133: security; task-178: git-conventions; task-270: wingfoil-cli)', () => {
     const roles = liveRoles();
     expect(roles.assignments.developer).toEqual(
       expect.arrayContaining(['code-quality', 'testing', 'determinism', 'command-baseline']),
@@ -316,6 +316,7 @@ describe('RolesYaml — validates the real, live .wingfoil/roles.yaml file', () 
         'security-secrets',
         'claim-evidence',
         'git-conventions',
+        'wingfoil-cli',
       ]),
     );
   });
