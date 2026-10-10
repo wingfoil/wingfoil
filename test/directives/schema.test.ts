@@ -124,10 +124,13 @@ describe('DirectiveFrontmatter — declared optional `scope` and `version` (task
     expect(stderrOf(() => loadDirectives(liveRoot))).not.toMatch(/unknown field/);
   });
 
-  it('command-baseline carries its version as the frontmatter key, not a body line, bumped to 1.4 (approver rulings 2026-10-01, R4 2026-10-02; task-247)', () => {
+  // At least 1.4, with its history line: a later bump must not break this pin (bug-314; task-274 bumped it to 1.5).
+  it('command-baseline carries its version as the frontmatter key, not a body line, bumped to 1.4 or later (approver rulings 2026-10-01, R4 2026-10-02; task-247)', () => {
     const raw = readFileSync(join(__dirname, '..', '..', '.wingfoil', 'directives', 'custom', 'command-baseline.md'), 'utf-8');
     const fm = load(extractFrontmatter(raw) as string) as Record<string, unknown>;
-    expect(fm.version).toBe('1.4');
+    expect(typeof fm.version).toBe('string');
+    expect(Number(fm.version)).toBeGreaterThanOrEqual(1.4);
+    expect(raw).toMatch(/^\*\*Revision 1\.4 \(2026-10-02, `task-247-/m);
     expect(raw).not.toMatch(/^\*\*Version:\*\*/m);
   });
 });
