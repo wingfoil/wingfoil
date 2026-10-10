@@ -447,8 +447,9 @@ describe('task-216 AC 2 — after a review reject, next reports the fallback ste
         { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-review', 'bug: ["bug-1"]\n'), 'docs/bugs/bug-1.md': element('bug', 'bug-1', 'in-review') },
         'wf(task): submit task-1',
       );
-      // Before the reject the review's state evidence holds (task in-review), so done is next; red is behind it.
-      expect((await nextOk(repo)).next?.key).toBe('dev-loop.done@task:task-1');
+      // Before the reject the review's state evidence holds (task in-review), but the task it carries awaits the
+      // approval, so the review stays next (spec-017 §5.1, task-225); red is behind it.
+      expect((await nextOk(repo)).next).toMatchObject({ key: 'dev-loop.review@task:task-1', awaiting: { kind: 'approval', elements: [{ id: 'task-1', status: 'in-review' }] } });
       const reject = commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-progress', 'bug: ["bug-1"]\n') }, 'wf(task): reject task-1 [in-review → in-progress]');
 
       const step = (await nextOk(repo)).next!;
