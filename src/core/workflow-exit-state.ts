@@ -102,6 +102,12 @@ export interface PhaseExitState {
   readonly run: readonly InstanceState[];
   /** The gate states the phase holds an element in, in action order, each listed once. */
   readonly held: readonly HeldGate[];
+  /**
+   * The bound element's state just before each of the phase's actions, index-aligned with `actions`
+   * (`null`: unknown, or no bound element); empty for an `include` phase. `workflow next` reads the
+   * `<from>` of a `set_state`'s expected commit subject here (task-216, `spec-017` §6.1).
+   */
+  readonly actionStates: readonly (string | null)[];
 }
 
 /** An element whose state the computation tracks. */
@@ -270,7 +276,7 @@ function compute(
         const last = subStates[subStates.length - 1];
         if (sameElement && last) bound!.state = last.exit;
       }
-      out.push({ phase: phase.name, boundType: bound?.type ?? null, entry, exit: bound?.state ?? null, undetermined: null, created: [], run: [], held: [] });
+      out.push({ phase: phase.name, boundType: bound?.type ?? null, entry, exit: bound?.state ?? null, undetermined: null, created: [], run: [], held: [], actionStates: [] });
       return;
     }
 
@@ -279,7 +285,9 @@ function compute(
     let actsOnSelection = false;
     // `<T>.set_state(s)` on the selection (§4.2 last fallback): the `(T, s)` pairs, in action order.
     const selectionSets: { type: string; to: string }[] = [];
+    const actionStates: (string | null)[] = [];
     (phase.actions ?? []).forEach((action, a) => {
+      actionStates.push(bound?.state ?? null);
       const name = tokenName(action);
       if (name === 'memory.add') {
         const type = memoryAddType(action);
@@ -348,6 +356,7 @@ function compute(
       created: created.map((element) => ({ type: element.type, action: element.action, state: element.state })),
       run: [...run].map((element) => ({ type: element.type, action: element.action, state: element.state })),
       held,
+      actionStates,
     });
   });
   return out;

@@ -21,6 +21,7 @@ export { runValidation } from './two-pass';
 export type { RunValidationOptions, SemanticCheck } from './two-pass';
 export { generateId, idPatternIssues, isIdPiece, isNumericToken, patternTokens, patternToRegExp, patternToSource, ID_CHAR_CLASS } from './id';
 export { parseYaml } from './yaml';
+export { isVersionIncrease } from './config-version';
 export { attributionEmailIssue, hasReservedDomain, isAttributableIdentity, isBlankIdentityName } from './identity';
 export type { AttributionEmailIssue } from './identity';
 export {

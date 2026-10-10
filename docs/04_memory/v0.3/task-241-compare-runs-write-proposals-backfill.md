@@ -21,7 +21,7 @@ tmpl_version: 260703
 
 - (red-first) improved/stable/regressed/new/not-comparable with dl-089's tolerances; a cross-version comparison re-measures the previous point; three-run trend shown; unit-tested.
 - (red-first) `propose` searches Memory for a tracking element before proposing; G07/G10/G14 and Q01/Q02-at-tag breaches are flagged for immediate `bug-ingest` (§5).
-- (characterization) v0.1 measured at `5b16ab61`, v0.2 at `v0.2.1`; both reports committed under `docs/06_health/`; the provisional v0.2 table in dl-089 §7 is compared and differences explained.
+- (characterization) v0.1 measured at `5b16ab61`, v0.2 at `v0.2.1`; both reports committed under `docs/08_health/` (`paths.health`); the provisional v0.2 table in dl-089 §7 is compared and differences explained.
 
 ## Implementation Notes
 

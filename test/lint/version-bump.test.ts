@@ -10,7 +10,8 @@
  *
  * - Any byte change is a content change, comments included: their `[SPEC]`/`[AUTHORING]` provenance
  *   annotations are part of the file's content (field-provenance convention).
- * - Versions are compared as YAML reads them, so `1.10` after `1.1` is no bump (memory.yaml's own note).
+ * - Versions are compared as YAML reads them, so `1.10` after `1.1` is no bump (memory.yaml's own note),
+ *   and a bump is a numeric increase: a downgrade or a re-quoting is none (task-208, `bug-249`).
  * - The bump baseline is `main` (doc-versioning, approver ruling 2026-10-01): a branch bumps a file once,
  *   and further edits on it do not bump again. So an edit that leaves `version:` as at `HEAD` passes when
  *   `HEAD` already carries a version different from the one at its fork point from `main`
@@ -125,6 +126,26 @@ describe('version bump of the four versioned config files (bug-143, task-183)', 
       expect(checkPendingVersionBumps(repo)).toEqual([
         { path: DNA, reason: "content differs from HEAD but version: 1.10 reads as 1.1 in YAML, the same as HEAD's 1.1" },
       ]);
+    });
+
+    it('fails a downgrade: a bump is a numeric increase, not any difference (bug-249)', () => {
+      writeFixtureFile(repo, DNA, config('0.9', 'b'));
+      expect(checkPendingVersionBumps(repo)).toEqual([
+        { path: DNA, reason: "content differs from HEAD but version: 0.9 is not greater than HEAD's 1.0" },
+      ]);
+    });
+
+    it('fails a re-quoting that reads as the same number (bug-249)', () => {
+      writeFixtureFile(repo, DNA, config('"1.0"', 'b'));
+      expect(checkPendingVersionBumps(repo).map((finding) => finding.path)).toEqual([DNA]);
+    });
+
+    it('credits a branch bump only when it is an increase over the fork point (bug-249)', () => {
+      git(repo, ['checkout', '--quiet', '-b', 'task/x']);
+      writeFixtureFile(repo, DNA, config('0.9', 'b'));
+      commitAll(repo, 'edit and downgrade');
+      writeFixtureFile(repo, DNA, config('0.9', 'c'));
+      expect(checkPendingVersionBumps(repo).map((finding) => finding.path)).toEqual([DNA]);
     });
 
     it('fails an edit that removes version:', () => {

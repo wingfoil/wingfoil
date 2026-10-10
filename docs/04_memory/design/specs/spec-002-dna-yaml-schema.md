@@ -269,8 +269,9 @@ first: `--force` cannot make it valid.
 
 ### Categories (P2.5)
 
-`wingfoil paths [category]` queries `paths` by the six category names **sources, tests, docs, config,
-governance, runs** (X_cli-cmds.md; `runs` per `spec-016-agent-execution` §4.1). Each maps to an
+`wingfoil paths [category]` queries `paths` by the seven category names **sources, tests, docs, config,
+governance, runs, health** (X_cli-cmds.md; `runs` per `spec-016-agent-execution` §4.1; `health` per
+`dl-089-release-health-analyses-before-retrospective` §1 (A)). Each maps to an
 ordered `string[]`; missing categories are permitted, and `.passthrough()` allows a future category to
 be added without invalidating existing files.
 
@@ -279,6 +280,12 @@ be added without invalidating existing files.
 is a validation error at `paths.runs`. `wingfoil init` scaffolds `paths.runs: [docs/runs/]`.
 `governance` was not reused for it, because it already holds `.wingfoil/` and the run log would be
 ambiguous there (`spec-016` §4.1).
+
+`health` has the same cardinality rule: it names the directory of the release-health metric catalogue
+(`<health>/metrics.yaml`) and of the reports the release-health workflow writes
+(`<health>/release-health-<version>.{json,md}`), so it holds **exactly one** entry, and a document
+declaring two is a validation error at `paths.health`. `wingfoil init` does not scaffold it: only a project
+that runs a release-health workflow needs it.
 
 ### Minimal valid instance
 
@@ -479,3 +486,11 @@ entry that declares an `adapter` (one `agent execute` can launch) must declare a
 is governed by the directive. Every refusal names the field (`team.agents.<i>.name` / `.email`). A
 document valid before stays valid unless an agent carries one of those identities or an `adapter`
 without an `email`. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-09, `task-222-declare-release-health-catalogue-v2-report-schema-release`) — a seventh `paths`
+category, `health`.** `dl-089` §1 (A) declares the release-health directory in `dna.yaml` `paths:`; carried by
+`.passthrough()` alone it was an unknown key, and every command loading the document printed `unknown field(s)
+ignored: paths.health`. Categories gains `health`, holding exactly one directory like `runs`, since the release-health
+scripts read and write one place. `init` does not scaffold it. A document valid before stays valid unless it declares
+two `health` directories. Edited in place without a supersede or a state change (`dl-047`); pending the approver's
+`memory amend` at `task-222`'s review.

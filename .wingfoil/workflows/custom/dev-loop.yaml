@@ -75,13 +75,21 @@
 # WIP limits (dl-156, ratified Q1 (a), Q2 (i)): when a `limits:` is declared, holders are counted
 # across every ref, and `reject` and `returns` edges are exempt. This repository declares no
 # `limits:` until that is implemented (approver, dl-156 ratification), so no phase here meets a limit.
+#
+# The v0.3 gates (v1.6, task-221). Each check below cites the decision-log that ratified it. Like every
+# check, none is evaluated before P4.12 (v1.0, dl-090 Q2 (c)); until then the role named on the phase
+# applies it. `typecheck.clean` and `docs.parity` are bound in `bindings.yaml`; the others are readings
+# no command asserts and stay W_WORKFLOW_UNBOUND_TOKEN warnings. The stop-the-line threshold is stated
+# once, in `memory.yaml` `task.stop_the_line` (task-150): an open task is any task of the release that
+# is not `done`, a feature task is not picked up while open `fix` tasks are strictly more than
+# `max_share` percent of them, and a `fix` task is never blocked.
 name: dev-loop
 kind: sub
 description: >-
   Test-first development loop for a single task: design -> red -> green -> refactor -> review.
   `red` is qa's, the rest the developer's, the reviewer's and the approver's.
   On review rejection, fall back to `red` and return the task to in-progress.
-version: 1.5                     # 1.5 dl-134 separation of duties (task-205): red by qa, green distinct_from [red], refactor mode: resume, review distinct_from [red, green, refactor], tests.unchanged(since: red) on green and refactor; dl-061 A.1 fourth bug.sync_state as red's first action (B.1/C.1 in the header); dl-110 P2 parking and dl-035 main-sync (red, end of refactor) (prev 1.41 spec-003 alignment (task-199): start's git tokens take a key: value argument with no partial interpolation (spec-003 open question 6), design's three agent.<x> become one agent.execute with the instructions in its description (dl-090 Q6 (b)), design names its produces owner as { type, path } (dl-104 D3); 1.4, header comment only: dl-123 gives `triaged`/`planned` a reject to `closed` — no phase or step change; 1.3: dl-045 `task.bug` is a LIST, so a bug absorbed into an existing task's ACs is sync-able; 1.2: dl-034 lint.clean gate in `refactor`; 1.1: dl-014 git ergonomics (branch/worktree/merge) + docs-api checks; T1 test-strategy classification)
+version: 1.6                     # 1.6 the v0.3 gates in one revision (task-221): start.checks.pre stop-the-line (dl-133 §3 Q4 (i), threshold read from memory.yaml task.stop_the_line), design.checks.post criteria vs directives/specs (dl-102 §4), refactor.checks.post typecheck.clean (dl-044), review.checks.pre claim re-run (dl-097 (a)) + previous reject re-verified (dl-098) + document-parity suites (dl-116), done.checks.post ### Retrospective present (dl-115 Q2 (a)) (prev 1.5 dl-134 separation of duties (task-205): red by qa, green distinct_from [red], refactor mode: resume, review distinct_from [red, green, refactor], tests.unchanged(since: red) on green and refactor; dl-061 A.1 fourth bug.sync_state as red's first action (B.1/C.1 in the header); dl-110 P2 parking and dl-035 main-sync (red, end of refactor) (prev 1.41 spec-003 alignment (task-199): start's git tokens take a key: value argument with no partial interpolation (spec-003 open question 6), design's three agent.<x> become one agent.execute with the instructions in its description (dl-090 Q6 (b)), design names its produces owner as { type, path } (dl-104 D3); 1.4, header comment only: dl-123 gives `triaged`/`planned` a reject to `closed` — no phase or step change; 1.3: dl-045 `task.bug` is a LIST, so a bug absorbed into an existing task's ACs is sync-able; 1.2: dl-034 lint.clean gate in `refactor`; 1.1: dl-014 git ergonomics (branch/worktree/merge) + docs-api checks; T1 test-strategy classification)
 element: task          # the iterated element provided by release-cycle
 
 phases:
@@ -93,6 +101,8 @@ phases:
       - 'git.create_worktree(task: "{task.id}")'          # dl-014 G2 — per-task worktree on that branch (enables parallel dev-loops; REQ-INT-06)
       - element.set_state(in-progress)        # task: backlog -> in-progress
       - 'bug.sync_state(for_each: task.bug)'        # keep every linked bug in sync: planned -> in-progress (dl-045: a list)
+    checks:
+      pre: ["stop-the-line.clear(rule: memory.yaml task.stop_the_line; a fix task is never blocked)"]   # dl-133 §3, Q3 (a), Q4 (i) — pick-up, not admission; the threshold is memory.yaml's, never restated here
 
   - name: design
     description: >-
@@ -114,7 +124,7 @@ phases:
     produces:
       - { type: tech-spec, path: "docs/04_memory/design/specs/{tech-spec.id}.md" }   # dl-104 D3: the tech-specs this phase adds, never a file named after the task
     checks:
-      post: ["frontmatter.required: [title, scope]", "tech-spec.approved", "depends_on.acknowledged"]  # specs approved + dl-015 hard gate: every depends_on task's Execution Notes read before red
+      post: ["frontmatter.required: [title, scope]", "tech-spec.approved", "depends_on.acknowledged", "acceptance-criteria.consistent(each criterion read against the executing role's directives and the ratified specs and decision-logs it touches; a contradiction goes to the approver, not implemented and not silently resolved)"]  # specs approved + dl-015 hard gate: every depends_on task's Execution Notes read before red; dl-102 §4: the implementer's safety net for a criterion that contradicts a bound rule
     approval: { by_role: approver }    # newly-scaffolded specs need approval before red begins
     fallback: { step: design }         # reject -> revise the spec and re-verify
 
@@ -151,7 +161,7 @@ phases:
       - agent.execute
       - 'git.merge(from: main)'                # dl-035 (b) — the LAST action: merge main if it moved since red's merge, so the checks below measure the merged tree (approver ruling 2026-10-09, option 2)
     checks:
-      post: ["tests.passing", "tests.coverage(min: 80)", "docs.api.public-complete", "docs.api.build", "lint.clean", "tests.unchanged(since: red)"]   # dl-014 G5 / dl-013 — ACTIVE hard-reject (as of task-062-typedoc-tsdoc-backfill, which closed the B-DECISION Option 2 ramp): docs.api.* enforce via TypeDoc `notDocumented` + `treatWarningsAsErrors` (`typedoc.json`, `npm run docs:api`, asserted by `test/docs/api-docs.test.ts`); an undocumented exported declaration fails `refactor`; tests.unchanged(since: red) is dl-134 §2, evaluated from v1.0 (P4.12)
+      post: ["tests.passing", "tests.coverage(min: 80)", "docs.api.public-complete", "docs.api.build", "lint.clean", "tests.unchanged(since: red)", "typecheck.clean"]   # typecheck.clean is dl-044 (task-221; the gate, `npm run typecheck`, is task-173's); dl-014 G5 / dl-013 — ACTIVE hard-reject (as of task-062-typedoc-tsdoc-backfill, which closed the B-DECISION Option 2 ramp): docs.api.* enforce via TypeDoc `notDocumented` + `treatWarningsAsErrors` (`typedoc.json`, `npm run docs:api`, asserted by `test/docs/api-docs.test.ts`); an undocumented exported declaration fails `refactor`; tests.unchanged(since: red) is dl-134 §2, evaluated from v1.0 (P4.12)
       # dl-034 (as of task-066-fix-eslint-baseline-and-lint-gate, which cleared the bug-009 baseline) — ACTIVE hard-reject FROM THE START, no warn-only ramp (dl-034 Decision 2: docs.api.* needed a ramp because its backfill spanned every exported declaration in the tree; this backfill was one line): lint.clean enforces via ESLint (`eslint.config.js`, `npm run lint`, asserted by `test/lint/lint-clean.test.ts`); any lint error fails `refactor`. Placed here and not in `review` (dl-034 Decision 3) so the developer clears their own lint before a reviewer is engaged — this is the gate the `code-quality` directive's "Lint clean: no errors" always assumed and never had
 
   - name: review
@@ -167,7 +177,11 @@ phases:
       - memory.submit                          # task: in-progress -> in-review
       - 'bug.sync_state(for_each: task.bug)'        # keep every linked bug in sync: in-progress -> in-review (once all ITS tasks are)
     checks:
-      pre: ["tests.bdd.passing"]               # BDD scenarios for the task must pass before approval
+      pre:
+        - "tests.bdd.passing"                  # BDD scenarios for the task must pass before approval
+        - "claims.rerun(the reviewer re-runs the state claims of the task's review-ready summary; every absence claim shows its positive case)"   # dl-097 (a) — the code-review directive's claim item
+        - "rereview.previous-reject(on a re-review, each item of the previous reject's Reason, read through memory history, is re-verified by command before any new finding; a no-op on a first review)"   # dl-098 (a) + (b) — the implementer answers each item in the Execution Notes
+        - "docs.parity"                        # dl-116 Action 4 — the document-parity suites, named in bindings.yaml (they also run inside tests.bdd.passing's npm test, dl-116 Q2 (a))
     approval: { by_role: approver }
     fallback: { step: red, set_state: in-progress }   # reject -> back to red (qa confirms or corrects the tests, then green), task -> in-progress; red's first action syncs the bugs back (dl-061 A.1)
 
@@ -180,4 +194,6 @@ phases:
       - git.remove_worktree                    # dl-014 G2 — remove the per-task worktree after merge, before branch delete
       - element.set_state(done)                # task: approved -> done
       - 'bug.sync_state(for_each: task.bug)'        # keep every linked bug in sync: in-review -> resolved -> closed (once all ITS tasks are done)
+    checks:
+      post: ["retrospective.present(the task's ### Retrospective subsection, and that of each linked bug the sync moves to closed; None is a valid entry)"]   # dl-115 Q2 (a), Action 3 — existence only; the file is the element's path, which no binding placeholder carries yet
     fallback: { step: red, set_state: in-progress }   # dl-014 G4 — a conflicted/failed merge (REQ-INT-06: abort clean, mark failed) routes back to red, whose first action syncs the bugs; whether this task edge is legal is dl-053's question

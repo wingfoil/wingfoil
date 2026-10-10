@@ -320,19 +320,20 @@ describe('task-220 — agent show <run-id> (spec-016 §6)', () => {
     it.each([
       ['a \\u escape', (line: string) => line.replace('"model":"not-reported"', '"model":"caf\\u00e9"')],
       ['a CRLF line ending', (line: string) => `${line}\r`],
-    ])('R1: a valid record written with %s is attributed to the commit that wrote those bytes', async (_label, rewrite) => {
+    ])('R1, as bug-288 tightened it (task-228): a record written with %s is not in the serialized form, and is refused', async (_label, rewrite) => {
       // Store the bytes as written, whatever the developer's global `core.autocrlf` says.
       execFileSync('git', ['-C', repo, 'config', 'core.autocrlf', 'false']);
       const run = record();
       const raw = rewrite(serializeRunRecord(run).replace(/\n$/, ''));
       writeFixtureFile(repo, LOG, `${raw}\n`);
       commitAt(`agent: record ${run.id}`, 1_900_000_000);
-      const added = head(repo);
-      writeFixtureFile(repo, 'README.md', 'later\n');
-      commitAt('later', 1_900_000_100);
       const result = await show(repo, run.id);
-      if (!result.ok) throw new Error(result.error.message);
-      expect(result.value.commit).toBe(added);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('VALIDATION');
+      expect(result.error.message).toBe(
+        `run log ${LOG}: line 1 is not a valid run record: not in the serialized form of spec-016 §4.2 (a CR, whitespace outside a string, or another spelling of a value)`,
+      );
     });
 
     it('R1: a line edited after it was added (same id, other bytes) matches no listed commit: IO', async () => {

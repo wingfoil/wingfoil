@@ -133,5 +133,7 @@ including 1 and 2 (`dl-099` §3); it declares its report under `produces:` (§3)
 on every push (§4 (c), ratified with (a)). `task-207` delivered the smoke side in v0.3 (`e2e-smoke.yaml` 1.4, the
 gate hard-rejecting at `severity: reject` in `workflows/bindings.yaml`, the report under `docs/07_gates/`, a CI
 job in `.github/workflows/ci.yml`; `bug-132`, `bug-133`, `bug-134` closed). The staging rehearsal of `dl-099` §2 and
-the candidate re-entry are `task-219`'s (`backlog`). The minimum command list of the Decision above stays a floor,
+the candidate re-entry are `task-219`'s: `release-publishing.yaml`'s `staging-rehearsal` phase, the re-cut rule in
+`release-cycle.yaml`, and the gate binding `e2e-smoke-passed` smoking the packed candidate with its build stamp
+bound (`--candidate`). The minimum command list of the Decision above stays a floor,
 not the scenario.

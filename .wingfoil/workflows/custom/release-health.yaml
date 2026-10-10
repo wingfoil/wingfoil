@@ -1,0 +1,63 @@
+# WingFoil — release-health (SUB workflow)
+# dl-089 §1 — measure the release with the fixed metric catalogue (docs/08_health/metrics.yaml, version 2:
+# dl-133, dl-131, dl-130, dl-100, dl-116, dl-111, dl-117), compare it with the previous run, and turn every
+# regression or breached floor into an improvement proposal for the retrospective. Include-only:
+# release-cycle runs it between `publishing` and `retrospective`. Not a release gate: the release has shipped.
+# The two scripts are written by task-231..233 (measure) and task-241 (compare); until the engine runs
+# bindings (P4.10) they are run by hand, from the bound argument vector in workflows/bindings.yaml (dl-090).
+name: release-health
+kind: sub
+description: >-
+  Measure the release with two fixed metric catalogues — git history and project quality, plus the
+  Determinism Index components and the external visibility snapshot — compare every metric with the
+  previous release's run, and turn each regression or breached floor into an improvement proposal for the
+  retrospective. Not a release gate: the release has already shipped (dl-089 §5).
+version: 1.0                     # 1.0 dl-089 §1 (task-222): measure -> compare -> propose, roles per dl-089 §1; {health-dir} is paths.health (dl-089 (A)), numbered docs/08_health/ by bug-299
+element: release
+
+phases:
+  - name: measure
+    description: >-
+      Run every catalogue metric at the release's measurement point — the tag of the version actually
+      published, else the commit on main carrying the release's `released` transition (dl-089 §1) — with
+      the pipeline's pinned Node from `npm ci`, in a throw-away worktree; never write git configuration
+      (dl-089 §6). D01 (outcome equivalence, dl-131 O) and P06 run the benchmark with the build just
+      published, on major and minor releases only: a patch release records them as not-comparable.
+      Write the machine-readable report (docs/08_health/release-health.schema.json). Read-only on the
+      repository under measurement.
+    role: qa
+    actions:
+      - 'release-health.measure(release: "{release.version}")'
+    produces:
+      - "docs/08_health/release-health-{release.version}.json"
+    checks:
+      # Unbound until scripts/release-health/ ships its report check (task-231, task-241); qa checks it by reading the report.
+      post: ["every catalogue metric has a value or an explicit not-measurable reason"]
+
+  - name: compare
+    description: >-
+      Load the previous release's report (re-measuring its measurement point when it used an older
+      catalogue version), classify every metric as improved / stable / regressed / new / not-comparable,
+      evaluate the floors, flag small samples, and settle the previous run's proposals (dl-089 §3–§4).
+      Write the human-readable report (docs/08_health/report-layout.md).
+    role: facilitator
+    actions:
+      - 'release-health.compare(release: "{release.version}")'
+    produces:
+      - "docs/08_health/release-health-{release.version}.md"
+    checks:
+      post: ["every regressed metric and every breached floor has a finding"]
+
+  - name: propose
+    description: >-
+      For each finding, search Memory for an element that already tracks it: a tracked finding cites the
+      element (its status read by command); an untracked one becomes a proposal `RH-{release.version}-NN`
+      with its evidence, a proposed element type and a proposed target release, written in the report's
+      `## Proposals` section. A breach of G07, G10 or G14, or of Q01 or Q02 at a published tag, is filed
+      at once through bug-ingest in this run (dl-089 §5). The proposals are input to the retrospective's
+      additional-points gate, where the approver disposes of them.
+    role: facilitator
+    actions:
+      - agent.execute                  # dl-090 Q6: the search and the proposals above, under the facilitator's session prompt
+    checks:
+      post: ["every finding is tracked by an element or carries an RH proposal in the report's Proposals section"]

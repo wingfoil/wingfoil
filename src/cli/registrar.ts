@@ -21,12 +21,12 @@ import type { CoreResult } from '../core/types';
 import { exitCodeForResult, exitCodeForThrow } from '../core/exit-code';
 import { errorDetails } from '../core/error-details';
 import { DRY_RUN_FLAG, runAsDryRun } from '../core/dry-run';
-import { withWarningSink } from '../validation/warning';
+import { withNoticeSink, withWarningSink } from '../validation/warning';
 
 import { emitError } from './error';
 import { exitWith } from './exit';
 import { invalidFormatReason, isValidFormat, renderSuccess } from './output';
-import { emitWarning, emitWarnings } from './warning';
+import { emitNotice, emitStderrDocument, emitWarning, emitWarnings } from './warning';
 
 /** Ambient dependencies {@link buildCliCommands} needs: how to resolve the project root and how to shape each operation's params. */
 export interface BuildCommandsOptions {
@@ -163,9 +163,10 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
           // `agent execute`'s context warnings (task-218) — is rendered here, in the active format, the
           // moment it is raised: before the payload or the error that follows it.
           const call = (): Promise<CoreResult<unknown>> => operation.fn(params);
-          result = await withWarningSink(
-            (text) => emitWarning(text, { format }),
-            () => (dryRun ? runAsDryRun(call) : call()),
+          // A notice (`agent execute`'s launch banner, task-228) is rendered the same way, on stderr.
+          result = await withNoticeSink(
+            (text) => emitNotice(text, { format }),
+            () => withWarningSink((text) => emitWarning(text, { format }), () => (dryRun ? runAsDryRun(call) : call())),
           );
         } catch (error) {
           // Core owns exit-code selection for a thrown error too (spec-008 Consequences): a UsageError
@@ -184,6 +185,14 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
           // The success-warning channel (task-169, `dl-062`): stderr only, before the payload, so stdout
           // is the same bytes with and without warnings under every `--format`.
           emitWarnings(result.warnings, { format });
+          // A command that hands its stdout to a child (`agent execute`, spec-016 §3.4, task-228) reports
+          // on stderr and writes nothing on stdout (spec-005 §2).
+          const report = operation.renderToStderr?.(result.value);
+          if (report !== undefined) {
+            emitStderrDocument(report.document, report.console, { format });
+            exitWith(exitCodeForResult(result));
+            return;
+          }
           // A command whose spec defines a console rendering (task-220, `agent show`) supplies it;
           // every other command keeps `renderSuccess`'s indented JSON (spec-008 §2).
           process.stdout.write(

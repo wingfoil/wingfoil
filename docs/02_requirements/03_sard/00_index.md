@@ -81,7 +81,7 @@ chain is recorded in each requirement's `Traceability` field in the part files 0
 | REQ-INT-04 | CLI exit-code contract      | 0/1/2 matrix asserted; check exit 0 pass / 1 fail / 2 blocked | P1.3, P1.6, P1.7, P5.1.4, P4.12, P4.15 (+ all command features) |
 | REQ-INT-05 | Machine-readable formats    | json/yaml parse valid                         | P2.5, P4.5                         |
 | REQ-INT-06 | Git operations as actions   | Effect produced; conflict aborts clean        | P4.10                              |
-| REQ-INT-07 | Agent execution wrapper     | role/element resolved, context pre-loaded     | P5.3.1, P5.3.2                     |
+| REQ-INT-07 | Agent execution wrapper (agent CLI) | role/element resolved, context pre-loaded, adapter argv only, run recorded | P5.3.1, P5.3.2 |
 | REQ-INT-08 | Consistent CLI error format | `error: <reason>`, non-zero, suggestion       | P5.1.4                             |
 | REQ-INT-09 | Notification delivery & failure contract | 100% human-needed events notified; delivery failure logs + non-zero exit | X1.1 |
 

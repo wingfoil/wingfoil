@@ -83,8 +83,8 @@ export interface NameIndex {
   globalFlags: ReadonlySet<string>;
 }
 
-const ELEMENT_ID = /^(?:(?:task|bug|dl|adr|spec|svc)-\d{3}(?:-[a-z0-9]+)*|(?:minor|patch|major)-v\d+(?:\.\d+)*|rl-v\d+|[a-z0-9]+(?:-[a-z0-9.]+)*-plan)$/;
-const SHORT_ELEMENT_ID = /^(?:task|bug|dl|adr|spec|svc)-\d{3}$/;
+const ELEMENT_ID = /^(?:(?:task|bug|dl|adr|spec|svc|cp)-\d{3}(?:-[a-z0-9]+)*|(?:minor|patch|major)-v\d+(?:\.\d+)*|rl-v\d+|[a-z0-9]+(?:-[a-z0-9.]+)*-plan)$/;
+const SHORT_ELEMENT_ID = /^(?:task|bug|dl|adr|spec|svc|cp)-\d{3}$/;
 const REQUIREMENT_ID = /^REQ-[A-Z]+-\d+$/;
 const FILE_NAME = /^[\w.-]+\.(?:ts|cjs|mjs|js|json|ya?ml|md|feature)$/;
 /** A technology written the way its project spells it (`Node.js`, `Commander.js`), not a file. */

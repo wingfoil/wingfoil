@@ -4,16 +4,17 @@ type: service
 title: ""              # REQUIRED — the external thing, e.g. "npm package `wingfoil`"
 status: draft          # auto-set by wingfoil; memory.submit → pending; the approver runs `verify`, then memory.approve → active
 provider: ""           # REQUIRED — who hosts it, e.g. "npmjs.com", "GitHub", "registry.modelcontextprotocol.io"
-kind: ""               # REQUIRED — account | credential | listing | setting | domain | handle
+kind: ""               # REQUIRED — account | credential | listing | setting | domain | handle | repository
 owner_role: ""         # REQUIRED — the dna.yaml role that manages it: a role, never a person (REQ-SYS-08)
 verify: ""             # REQUIRED — the read-only command or URL that establishes its current state (claim-evidence)
-url: ""                # optional — its public URL, if any
+url: ""                # optional — its public URL, if any; for a `kind: repository` service, the repository's https address, also when the repository is private
 account: ""            # optional — the public identifier used (a login, an org name); never a secret
 renews: ""             # optional — ISO date on which it expires or must be renewed; "" if never
 repo_refs: []          # optional — repository paths that depend on it, e.g. [".github/workflows/publish.yml"]
 decision: ""           # optional — the decision-log or ADR that motivated it
 set_up_in: ""          # optional — the release in which it was set up, e.g. "v0.2"; not `release`, and never stamped by build-backlog (bug-166)
-tmpl_version: 261006   # Original template version
+feedback_inbox: ""     # optional — kind: repository only: the repository-relative folder, ending in `/`, where that repository keeps its notes about WingFoil, e.g. "docs/wingfoil-feedback/" (dl-163)
+tmpl_version: 261009   # Original template version
 ---
 
 <!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
@@ -41,7 +42,13 @@ tmpl_version: 261006   # Original template version
 ## Verification
 
 <!-- The `verify` procedure and the result expected from it — what the approver runs before
-     approving (pending → active). Read-only commands only. -->
+     approving (pending → active). Read-only commands only.
+     For a `kind: repository` service with a `feedback_inbox` (dl-163), `verify` checks the inbox,
+     not only the repository: `git ls-remote <url> refs/heads/main` plus
+     `gh api repos/<owner>/<repo>/contents/<feedback_inbox>README.md --jq .sha`. For a private
+     repository, `<url>` in the `git ls-remote` command names a remote git can authenticate to, the
+     SSH form `git@github.com:<owner>/<repo>.git`, while the `url` field keeps the https address.
+     Expected result: each command exits 0 and prints a sha (`main` moves, so no fixed sha). -->
 
 ## Management
 

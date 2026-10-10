@@ -1,0 +1,455 @@
+# WingFoil — release-health metric catalogue (dl-089 §2)
+#
+# The metrics every release-health run measures (`.wingfoil/workflows/custom/release-health.yaml`), fixed
+# here rather than chosen per run. Rules (dl-089 §2, checked by scripts/release-health/catalogue.cjs and
+# test/release-health/catalogue.test.ts):
+#   - every metric has a stable id, a name, a definition precise enough to reimplement, a scope and a kind;
+#   - scope: `window` — the commits reachable from this release's measurement point and not from the
+#     previous one (per release, never cumulative); `snapshot` — the tree at the measurement point;
+#   - kind: `floor` — a condition that must always hold, a breach is a finding regardless of the trend;
+#     `trend` — compared with the previous run in its `direction` (`pending`: no rule yet, reported without
+#     a verdict); `info` — reported for context, no verdict;
+#   - adding, removing or redefining a metric bumps `version` and requires a decision-log, recorded in
+#     `changes`; a metric is never dropped: it stays here as `status: retired` with `retired_in`.
+#
+# Defaults (dl-089 §3): tolerance 2 percentage points for shares, 10 % relative for counts, sizes and
+# durations; a metric may override them with `tolerance`. Fewer than `small_sample` relevant items in a
+# window flags the metric `small-sample`: a regression is reported but proposes nothing on its own.
+# Every percentage is reported with its raw counts beside it (dl-089 §6).
+#
+# The measurement point is the tag of the version actually published, else the commit on `main` carrying
+# the release's `released` transition (dl-089 §1). The scripts measure in a throw-away worktree and never
+# write git configuration (dl-089 §6).
+#
+# Components of the Determinism Index (dl-131 Decision 3): D01 is O (outcome equivalence, reported, never
+# promised); P01–P07 are P (process conformance, REQ-STATE-10); I (input) is a requirement verified by
+# tests (REQ-SYS-07, REQ-STATE-09) and is not measured here.
+version: 2
+defaults:
+  tolerance: { share: 2pp, relative: 10% }
+  small_sample: 30
+
+changes:
+  - version: 1
+    source: dl-089-release-health-analyses-before-retrospective
+    added: [G01, G02, G03, G04, G05, G06, G07, G08, G09, G10, G11, G12, G13, G14, G15,
+            Q01, Q02, Q03, Q04, Q05, Q06, Q07, Q08, Q09, Q10, Q11, Q12, Q13, Q14, Q15, Q16, Q17, D01]
+  - version: 2
+    source: >-
+      dl-133-fix-task-tail §1 (Q18, Q19); dl-131-determinism-index-scope Action 8 (D01 is O, P01–P07);
+      dl-130-visibility-steps-in-the-release-flow Q2 (a) (E01–E05); dl-100-governance-debt-resweep-and-capacity
+      §4 (a) (Q20); dl-116-document-parity-tests-beyond-the-cli-reference Action 2 (Q15 made mechanical);
+      dl-111-tool-signature-in-commits Action 4 (G16); dl-117-ai-attribution-policy Action 3 (G08 against the
+      attribution rule); dl-101-id-allocation-across-refs Action 4 (G15's duplicate-id scan, wording only)
+    added: [G16, Q18, Q19, Q20, P01, P02, P03, P04, P05, P06, P07, E01, E02, E03, E04, E05]
+    redefined: [G08, Q15, D01]
+    notes: >-
+      Wording only, no change of what is measured: Q12 states that a loaded run (task-263's load flag) is
+      recorded as not-measurable; P06 is measured on major and minor releases only, with D01's two runs.
+
+metrics:
+  # ── G — git history ──────────────────────────────────────────────────────────────────────────────────
+  - id: G01
+    name: Conventional subjects
+    definition: >-
+      Share of non-merge commits whose subject is in conventional form (`type(scope): text` or `wf(type): verb ids`).
+    scope: window
+    kind: floor
+    floor: 100%
+  - id: G02
+    name: Commit bodies
+    definition: >-
+      Share of non-merge commits with a non-empty body (trailer lines excluded).
+    scope: window
+    kind: trend
+    direction: up
+  - id: G03
+    name: Commit size
+    definition: >-
+      Lines added plus deleted per non-merge commit (`git show --numstat`, binary files excluded) — median, p90, and the share above 500.
+    scope: window
+    kind: trend
+    direction: down
+  - id: G04
+    name: Subject length
+    definition: >-
+      Subject length in characters of non-merge commits — mean, and the share above 72.
+    scope: window
+    kind: trend
+    direction: down
+    decision: the wf() subject grammar
+  - id: G05
+    name: Code commits citing an id
+    definition: >-
+      Share of non-merge commits touching `paths.sources` or `paths.tests` whose subject or body cites a task or bug id.
+    scope: window
+    kind: floor
+    floor: 100%
+    decision: traceability directive
+  - id: G06
+    name: Approval evidence
+    definition: >-
+      Approve and reject `wf()` commits carrying an `Approver:` line and a non-blank `Reason:` block, as a count over all approve and reject commits.
+    scope: window
+    kind: floor
+    floor: 100%
+    decision: dl-067
+  - id: G07
+    name: Unknown identities
+    definition: >-
+      Commits whose author or committer is not a `team.members` entry of `dna.yaml` at the measurement point, or uses an RFC 2606 reserved domain.
+    scope: window
+    kind: floor
+    floor: 0
+    decision: REQ-SEC-01, REQ-SEC-03
+    immediate_bug: true          # dl-089 §5: a breach is filed through bug-ingest in the same run
+  - id: G08
+    name: AI attribution conformance
+    definition: >-
+      Share of commits carrying an AI attribution trailer that follow the attribution rule of the
+      git-conventions directive §7 (dl-117 Q1 (B), Q2 (c)): `Co-Authored-By:` names a `dna.yaml`
+      `team.agents` entry and an `AI-Model:` trailer is present; plus the number of approve and reject
+      commits carrying any AI attribution trailer (must be 0), and the distinct trailer strings as context.
+      Commits older than the rule's ratification are counted apart and never judged.
+    scope: window
+    kind: floor
+    floor: 100% conforming, 0 approve/reject with AI attribution
+    decision: dl-117 (redefined in catalogue v2; was "trend per policy", no policy then)
+  - id: G09
+    name: Verbs outside the grammar
+    definition: >-
+      Share of `wf()` commits whose verb is not in the declared grammar (`MEMORY_OPERATIONS`, src/memory/audit.ts, at the measurement point).
+    scope: window
+    kind: trend
+    direction: down
+    decision: dl-079
+  - id: G10
+    name: Canonical arrow
+    definition: >-
+      Share of `wf()` transition brackets using the canonical arrow `→`.
+    scope: window
+    kind: floor
+    floor: 100%
+    decision: dl-054, dl-079
+    immediate_bug: true
+  - id: G11
+    name: Back-merges
+    definition: >-
+      Merges of `main` into a `task/*` branch, per task branch merged in the window.
+    scope: window
+    kind: info
+    decision: dl-035
+  - id: G12
+    name: Code commits touching docs
+    definition: >-
+      Share of non-merge commits touching `paths.sources` that also touch `docs/`.
+    scope: window
+    kind: trend
+    direction: pending           # no rule yet (dl-089 §2 "trend per rule")
+  - id: G13
+    name: Flow volume
+    definition: >-
+      Share of `wf()` commits among non-merge commits; non-merge commits per active day (a day with at least one commit, author date).
+    scope: window
+    kind: info
+  - id: G14
+    name: Secrets in diffs
+    definition: >-
+      Findings of the project's own secret scanner (spec-007 patterns) over the window's diffs.
+    scope: window
+    kind: floor
+    floor: 0
+    decision: spec-007
+    immediate_bug: true
+  - id: G15
+    name: Stale branches and duplicate ids
+    definition: >-
+      Unmerged remote branches older than the release; Memory ids allocated twice across branches (the duplicate-id scan of dl-101 Action 4).
+    scope: snapshot
+    kind: floor
+    floor: 0
+    decision: dl-024, dl-101
+  - id: G16
+    name: Tool-signed flow commits
+    definition: >-
+      Share of `wf()` commits carrying the `WingFoil-Version:` trailer in their trailing trailer paragraph — separates tool-written from hand-written drift in G09 and G10.
+    scope: window
+    kind: info
+    decision: dl-111 Action 4
+
+  # ── Q — project quality ──────────────────────────────────────────────────────────────────────────────
+  - id: Q01
+    name: Build, typecheck, lint
+    definition: "`npm run build`, `npm run typecheck` (tsconfig.json) and `npm run lint` exit 0."
+    scope: snapshot
+    kind: floor
+    floor: pass
+    immediate_bug: true          # dl-089 §5: a red tree at a published tag
+  - id: Q02
+    name: Tests
+    definition: "`npm test`: total, failing and disabled (skipped or todo) tests."
+    scope: snapshot
+    kind: floor
+    floor: 0 failing, 0 disabled
+    immediate_bug: true
+  - id: Q03
+    name: Coverage
+    definition: "`npm run test:coverage` totals — statements, branches, functions, lines — every file under `paths.sources` included, `index.ts` too."
+    scope: snapshot
+    kind: trend
+    direction: up
+    decision: bug-021
+  - id: Q04
+    name: Critical-module branch coverage
+    definition: >-
+      Branch coverage of src/memory/audit.ts, src/memory/commit-message.ts and src/memory/state-machine.ts.
+    scope: snapshot
+    kind: floor
+    floor: 90%
+    decision: dl-011
+  - id: Q05
+    name: Complexity
+    definition: >-
+      Functions in `paths.sources` above cyclomatic complexity 15; functions above 80 lines.
+    scope: snapshot
+    kind: trend
+    direction: down
+  - id: Q06
+    name: Duplication
+    definition: >-
+      Duplicated-line share in `paths.sources` and `paths.tests`, clones of at least 8 lines.
+    scope: snapshot
+    kind: trend
+    direction: down
+  - id: Q07
+    name: Cycles and layering
+    definition: >-
+      Import cycles in `paths.sources`; imports that bypass src/core and that no element records as a deviation.
+    scope: snapshot
+    kind: floor
+    floor: 0
+    decision: spec-006 §1
+  - id: Q08
+    name: Dependency footprint
+    definition: >-
+      Runtime dependencies imported nowhere in `paths.sources` (floor 0); consumer install size of the packed tarball (trend down).
+    scope: snapshot
+    kind: floor
+    floor: 0 unused runtime dependencies
+    direction: down              # the install size half
+    decision: dl-010
+  - id: Q09
+    name: Dangling process ids
+    definition: >-
+      Process-id references (task, bug, dl, adr, spec, svc ids) in `paths.sources` and `paths.tests` that resolve to no Memory element, fixtures excluded.
+    scope: snapshot
+    kind: floor
+    floor: 0
+  - id: Q10
+    name: Requirements cited by tests
+    definition: >-
+      Share of the SARD requirements in the release's `requirements:` scope cited by at least one test under `paths.tests`.
+    scope: snapshot
+    kind: floor
+    floor: 100%
+  - id: Q11
+    name: Runnable examples
+    definition: >-
+      Share of docs/examples scripts executed and passing.
+    scope: snapshot
+    kind: floor
+    floor: 100%
+    decision: dl-013
+  - id: Q12
+    name: CLI latency
+    definition: >-
+      p95 of the standard command set on the 40-element fixture (`npm run test:latency`), with the load average of the run; a loaded run is recorded as not-measurable.
+    scope: snapshot
+    kind: floor
+    floor: < 1,000 ms
+    decision: REQ-PERF-02
+  - id: Q13
+    name: Bug flow
+    definition: >-
+      Bugs added and closed in the window; open bugs by severity; open bugs with no `release` at the measurement point. Verdicts on the closure ratio (closed / added) and on the unassigned count.
+    scope: window+snapshot
+    kind: trend
+    direction: up                # closure ratio up; the unassigned count is compared down
+    decision: dl-016
+  - id: Q14
+    name: Open decision-logs
+    definition: >-
+      Decision-logs in `in-discussion` at the measurement point — count and median age in days since their `add` commit.
+    scope: snapshot
+    kind: trend
+    direction: down
+    decision: dl-016
+  - id: Q15
+    name: Document divergences
+    definition: >-
+      Share of bugs added in the window that are document divergences (dl-116's definition: the behaviour
+      is correct or not at issue, and the defect is a document contradicted by the code or another
+      document). Classified mechanically from the fix: a bug is a divergence when the non-merge commits of
+      the task(s) whose `bug:` list names it change no executable line under `paths.sources` — every changed
+      line there is blank or a comment. A bug with no fix task at the measurement point is counted
+      unclassified, beside the share.
+    scope: window
+    kind: trend
+    direction: down
+    decision: dl-116 Action 2 (redefined in catalogue v2; v1 classified by title)
+  - id: Q16
+    name: Memory volume
+    definition: >-
+      Words in Memory documents, median per type; comment-line ratio in `paths.sources`.
+    scope: snapshot
+    kind: info
+  - id: Q17
+    name: Install command
+    definition: >-
+      The install command the user documentation gives resolves to the documented version (`npm view`).
+    scope: snapshot
+    kind: floor
+    floor: pass
+    decision: dl-013
+  - id: Q18
+    name: Fix share
+    definition: >-
+      Share of the release's tasks (`release:` equal to the release) whose `kind` is `fix` (dl-133 Q1 (b)); v0.1 and v0.2 are backfilled by the heuristic name-or-`bug:`.
+    scope: window
+    kind: trend
+    direction: down
+    decision: dl-133 §1
+  - id: Q19
+    name: Tasks added after commit-backlog
+    definition: >-
+      Tasks of the release added after its `commit-backlog` commit, split fix / feature, with the fix share.
+    scope: window
+    kind: trend
+    direction: down              # the fix share
+    decision: dl-133 §1, dl-100 §2
+  - id: Q20
+    name: Bug net flow
+    definition: >-
+      Bugs moved to a terminal state (`closed` or `deprecated`) in the window minus bugs added in the window.
+    scope: window
+    kind: floor
+    floor: ">= 0"
+    decision: dl-100 §4 (a)
+
+  # ── D — Determinism Index, outcome (O) ─────────────────────────────────────────────────────────────
+  - id: D01
+    name: Determinism Index — outcome equivalence (O)
+    definition: >-
+      Two independent runs of the benchmark project (registered as a `service` element), same
+      specifications and WingFoil configuration, different agents, with the WingFoil build just published.
+      Both runs' outputs are judged on the benchmark's own versioned, spec-derived, black-box acceptance
+      scenarios, written before the runs (dl-131 Decision 4). The value is the share of scenarios whose
+      verdict is the same on both runs, as agreeing / total. The report records the value, this criterion,
+      the WingFoil build, the benchmark's commit and the date of the run, as data. Reported, never promised
+      (dl-131 Q1 (b)).
+    scope: snapshot
+    kind: trend
+    direction: up
+    component: O
+    criterion: { agreeing_min: 90%, critical_scenarios: all pass on both runs }
+    releases: [major, minor]     # a patch reports D01 as not-comparable; the next minor compares with the previous minor
+    decision: product brief (north star); dl-089 (criterion); dl-131 (D01 is O)
+
+  # ── P — Determinism Index, process conformance (REQ-STATE-10) ───────────────────────────────────────
+  # Computed from git and the configuration at the head alone; each reports items checked, items failing,
+  # and names every failing item. P07 is the measure's own determinism.
+  - id: P01
+    name: Well-formed flow commits
+    definition: "`wf(...)` commits whose subject and body are well-formed per the commit grammar: a declared verb, the `[from → to]` bracket, `Approver:` line and non-blank `Reason:` block wherever the verb requires them."
+    scope: window
+    kind: floor
+    floor: 0 failing
+    component: P
+    requirement: REQ-STATE-10
+  - id: P02
+    name: Legal transitions
+    definition: >-
+      Status changes in the window that are not a legal transition of their type's state machine in `memory.yaml` (REQ-STATE-01).
+    scope: window
+    kind: floor
+    floor: 0 failing
+    component: P
+    requirement: REQ-STATE-10
+  - id: P03
+    name: Produces present
+    definition: >-
+      Phases recorded as complete in the window (workflow deduction, spec-017) whose `produces:` artifacts are absent at the measurement point.
+    scope: window
+    kind: floor
+    floor: 0 failing
+    component: P
+    requirement: REQ-STATE-10
+  - id: P04
+    name: Traceability chain
+    definition: >-
+      Broken links of the chain feature → user story → BDD scenario → REQ → task, for the elements touched in the window.
+    scope: window
+    kind: floor
+    floor: 0 failing
+    component: P
+    requirement: REQ-STATE-10
+  - id: P05
+    name: Roles and separation of duties
+    definition: >-
+      Phases run in the window by an actor that does not hold the phase's declared role, or by the same actor where the workflow requires distinct ones (`distinct_from`, dl-134), read from the run log (`paths.runs`) and the commits.
+    scope: window
+    kind: floor
+    floor: 0 failing
+    component: P
+    requirement: REQ-STATE-10
+  - id: P06
+    name: Flow sequence between two runs
+    definition: >-
+      The sequences of checkpoint and flow commits (`wf(...)` subjects, ids normalized) of D01's two benchmark runs from the same base, side by side, with the count of positions where they differ.
+    scope: snapshot
+    kind: info
+    component: P
+    requirement: REQ-STATE-10
+    releases: [major, minor]     # measured with D01's runs
+  - id: P07
+    name: Byte-identical recomputation
+    definition: >-
+      Computing P01–P06 twice on the same commit range and configuration yields byte-identical results.
+    scope: window
+    kind: floor
+    floor: pass
+    component: P
+    requirement: REQ-STATE-10
+
+  # ── E — external visibility snapshot (dl-130 Q2 (a)) ───────────────────────────────────────────────
+  # Each value is recorded with the command and the date it was read, or `not-measurable` offline.
+  - id: E01
+    name: GitHub stars
+    definition: >-
+      Stargazers of the repository (`gh api repos/{owner}/{repo}` `stargazers_count`).
+    scope: snapshot
+    kind: info
+  - id: E02
+    name: GitHub forks
+    definition: >-
+      Forks of the repository (`forks_count`).
+    scope: snapshot
+    kind: info
+  - id: E03
+    name: GitHub watchers
+    definition: >-
+      Watchers of the repository (`subscribers_count`).
+    scope: snapshot
+    kind: info
+  - id: E04
+    name: 14-day traffic
+    definition: >-
+      Views and clones over the last 14 days, total and unique (`gh api repos/{owner}/{repo}/traffic/views` and `/traffic/clones`).
+    scope: snapshot
+    kind: info
+  - id: E05
+    name: npm downloads
+    definition: >-
+      Downloads of the `wingfoil` package over the last week and month (`https://api.npmjs.org/downloads/point/last-week/wingfoil`, `last-month`).
+    scope: snapshot
+    kind: info

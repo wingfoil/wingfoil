@@ -3,8 +3,8 @@
  * `spec-016-agent-execution` §1). It owns adapter manifest loading and validation (task-177: the strict
  * schema §2.2, the placeholder rules §2.3, discovery and loading at a revision §2.1, §3.2 step 5, and
  * the report of what under `.wingfoil/agents/` is not an adapter, `bug-290`), the run log (task-206),
- * and `agent execute`'s pipeline up to the spawn (task-218, `./execute.ts`); the launch itself is
- * task-228's. Its operations are registered under the `agent` `CoreModule` (`src/core/index.ts`).
+ * `agent execute`'s pipeline up to the spawn (task-218, `./execute.ts`) and the launch (task-228,
+ * `./launch.ts`). Its operations are registered under the `agent` `CoreModule` (`src/core/index.ts`).
  */
 export const MODULE_NAME = 'agent' as const;
 
@@ -47,7 +47,21 @@ export type {
   RunTokens,
 } from './run-log';
 export {
+  assignedSessionId,
+  launchAgent,
+  launchBanner,
+  LOOKUP_TIMEOUT_MS,
+  readJsonPath,
+  renderLaunchArgv,
+  runSummaryLine,
+  SESSION_ID_NAMESPACE,
+  uuidV5,
+} from './launch';
+export type { LaunchHost, LaunchInput, LaunchValues, RecordedLaunch, SpawnAgent } from './launch';
+export {
   agentCommandFound,
+  attributionLine,
+  ATTRIBUTION_LINE_PREFIX,
   agentExecutePipeline,
   DEFAULT_ROLE,
   DEFAULT_ROLE_WARNING,

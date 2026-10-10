@@ -122,7 +122,7 @@ Every workflow-definition file validates against the following schema. Top-level
 one or both of `startable` / `includable`:
 
 - with `kind` only, the two facts follow the alias above, so every workflow file on disk validates
-  unchanged (24 files since `task-199` added `agent-docs.yaml`, each `kind: main` or `kind: sub`:
+  unchanged (26 files since `task-222` added `release-health.yaml` and `task-212` `vision-change.yaml`, each `kind: main` or `kind: sub`:
   `grep -L "^kind: \(main\|sub\)$" .wingfoil/workflows/custom/*.yaml` → nothing);
 - with the booleans, at least one of them is `true` (`E_WORKFLOW_NEITHER_STARTABLE_NOR_INCLUDABLE`);
   an absent boolean reads as `false`;
@@ -1104,3 +1104,12 @@ since the phase, so a main-sync merge does not count as an edit of the frozen te
 diagnostic changes.
 Edited in place without a supersede or a state change (`dl-047`); pending the approver's `memory amend`
 at `task-205`'s review.
+
+**Revision (2026-10-09, `task-212-add-change-proposal-memory-type-startable-vision-change`) — a further
+workflow file.** `dl-132` adds the startable `vision-change` main (`.wingfoil/workflows/custom/vision-change.yaml`,
+`kind: main`, self-creating on a `change-proposal`), which includes `user-story-mapping`,
+`specification-by-examples` and `volere-requirements` from optional phases, a second includer for each.
+The Layer 2 count of files that validate under the `kind` alias is now 26, with `task-222`'s `release-health.yaml` (measured on the tree merged with `main` at `6af698f0`: `ls .wingfoil/workflows/custom/*.yaml | wc -l` → 26, `grep -L` → nothing). No field, rule or diagnostic
+changes: a `kind: sub` with no `element` was already includable by any phase (`dl-109`). Edited in place
+without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-212`'s
+review.

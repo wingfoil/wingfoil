@@ -241,3 +241,20 @@ export function latencyReport(measured: MarginalLatencySamples, commands: readon
     ),
   ].join('\n');
 }
+
+/**
+ * The idle condition of an **in-process** opt-in suite (task-216 review fix 6; `test/latency-suites.cjs`
+ * `IN_PROCESS_LATENCY_SUITES`): with no process-start floor to judge, the load window decides. `'otherwise
+ * idle'` when the 1-minute load average stays under half of `cores` before and after the measurement,
+ * otherwise `'loaded: …'` with the window and the bound. The bound is a declared choice, not a REQ-PERF
+ * budget: the reviewer's REQ-PERF-03 run at a load of 6.8 on this repository's 12-core reference machine
+ * failed, and task-154's idle run measured 3.75. Pure.
+ */
+export function inProcessIdleVerdict(load: LoadWindow, cores: number): string {
+  const bound = cores / 2;
+  if (Math.max(load.before.oneMinute, load.after.oneMinute) < bound) return 'otherwise idle';
+  return (
+    `loaded: ${describeLoad(load)}; the 1-minute load reaches ${bound} (half of ${cores} cores): ` +
+    'not a REQ-PERF measurement (an otherwise idle machine): rerun when the machine is idle'
+  );
+}
