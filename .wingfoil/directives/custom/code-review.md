@@ -47,6 +47,17 @@ Custom stand-in directive. Applies to reviewers (and the approver gate).
 - This item is the enforcement point `dl-097` §2 (a) chose. The matching `checks.pre` entry of the
   `dev-loop` `review` phase is that workflow's declaration (`dl-097` Action 3), not this directive's.
 
+## Same-class findings are fixed before approval (`dev-loop-rel-v0.2.2-plan` *Execution Notes (close-out)*)
+
+A finding is rarely alone: the stale description that produced it was usually written more than once.
+When a finding is a stale or false description, search the files the task touched for the same class
+before the verdict. A same-class stale description found at review is fixed in the task before approval,
+in every file the task touched. When it cannot be fixed there — it falls outside the task's criteria, or
+the approver rules it out of scope — the reviewer files it as an element (a `bug`, or the type the
+`traceability` directive's filing rule names). It is never left in the Execution Notes alone: nothing
+reschedules the notes of a `done` task. The rule was learned in `v0.2.2`, after `task-121` and `bug-160`,
+and that plan's close-out records it as a standing rule.
+
 ## Re-review: the previous reject is checked first (`dl-098`)
 
 When the task under review has at least one earlier `wf(task): reject` commit, do this before any
@@ -70,6 +81,7 @@ new finding (`dl-098` §1):
    list, never as a closing paragraph of `Key: value` lines, and never begin a line with `Approver:`
    or `Reason:` (`dl-067`, the shape of the `Reason:` block).
 
-> Source: Features §P3.8 (Code Review); `dl-097` (a) and `dl-098` §1 for the two sections above;
+> Source: Features §P3.8 (Code Review); `dl-097` (a), the `dev-loop-rel-v0.2.2-plan` close-out and `dl-098` §1
+> for the three sections above (the second ruled in by the approver on 2026-10-10, `task-276`);
 > `dl-103` §2 (i) for the unattended-run policy.
 > Used by the `dev-loop` review step.
