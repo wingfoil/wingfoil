@@ -6,6 +6,9 @@
  * (`test/cli/agent-execute-launch.integration.test.ts`): a signal sent to the Jest process itself would
  * reach Jest's own handling too.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { launchAgent, type AdapterManifest, type LaunchInput } from '../../src/agent';
 import { renderAgentExecuteStderr } from '../../src/core/agent-execute';
 import type { CoreResult } from '../../src/core/types';
@@ -64,6 +67,27 @@ describe('launchAgent — post-run lookups that fail record not-reported and say
     const outcome = await launch(input, root);
     expect(record(outcome)).toMatchObject({ session: 'not-reported' });
     expect(outcome.warnings).toEqual(["adapter 'hand': the session lookup's session id is not a non-empty string: recorded as not-reported"]);
+  }, 60000);
+});
+
+describe('launchAgent — one argv declared for the session and the usage runs once (spec-016 §2.6)', () => {
+  it('session and usage from one lookup; undeclared fields and an absent model are not-reported, silently; a failing version_args is said', async () => {
+    const { root, input } = launchFixture((manifest: AdapterManifest) => ({
+      ...manifest,
+      version_args: ['scripts/fails.cjs'],
+      session: { id: 'lookup', lookup_args: ['scripts/both.cjs'], field: 'sid', resume: { supported: false } },
+      usage: { from: 'lookup', lookup_args: ['scripts/both.cjs'], fields: { model: 'model', input: 'tokens.in' } },
+    }));
+    repos.push(root);
+    const outcome = await launch(input, root);
+    expect(record(outcome)).toMatchObject({
+      session: 's-9',
+      model: 'not-reported',
+      tokens: { input: 7, output: 'not-reported', cache_read: 'not-reported', cache_write: 'not-reported' },
+      agent_version: 'not-reported',
+    });
+    expect(outcome.warnings).toEqual(["adapter 'hand': version_args failed (exited 1): agent_version recorded as not-reported"]);
+    expect(readFileSync(join(root, 'lookups.log'), 'utf-8')).toBe('run\n');
   }, 60000);
 });
 
