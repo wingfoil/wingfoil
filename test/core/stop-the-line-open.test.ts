@@ -103,15 +103,15 @@ describe('AC 2 — the definition of an open task has one home, memory.yaml', ()
     const devLoop = loadWorkflowRegistryAtHead(ROOT).workflows.find((w) => w.name === 'dev-loop');
     if (devLoop === undefined) throw new Error('dev-loop is not in the registry at HEAD');
     const start = devLoop.phases.find((p) => p.name === 'start');
-    const token = (start?.checks?.pre ?? []).find((t) => tokenName(t) === 'stop-the-line.clear');
-    if (token === undefined) throw new Error('dev-loop.start declares no checks.pre stop-the-line.clear at HEAD');
-    return token;
+    const found = (start?.checks?.pre ?? []).find((t) => tokenName(t) === 'stop-the-line.clear');
+    if (found === undefined) throw new Error('dev-loop.start declares no checks.pre stop-the-line.clear at HEAD');
+    return found;
   }
 
   it('(characterization) the `stop-the-line.clear` token names memory.yaml task.stop_the_line and carries no task status', () => {
-    const token = stopTheLineToken();
-    expect(token).toContain('memory.yaml task.stop_the_line');
-    const named = taskStatuses().filter((status) => new RegExp(`(^|[^a-z-])${status}([^a-z-]|$)`).test(token));
+    const declared = stopTheLineToken();
+    expect(declared).toContain('memory.yaml task.stop_the_line');
+    const named = taskStatuses().filter((status) => new RegExp(`(^|[^a-z-])${status}([^a-z-]|$)`).test(declared));
     expect(named).toEqual([]);
   });
 
