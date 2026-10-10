@@ -2,7 +2,7 @@
 id: "task-222-declare-release-health-catalogue-v2-report-schema-release"
 type: task
 title: "Declare the release-health catalogue v2, its report schema and the release-health workflow"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "medium"
