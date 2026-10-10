@@ -86,7 +86,6 @@ export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [
   { enumeration: 'spec-005 Context nouns', document: SPEC_005, direction: 'missing', item: 'directives', reason: UNTRIAGED },
   { enumeration: 'spec-008 §1 flat commands', document: SPEC_008, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
   { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'agent list', reason: PLANNED, plannedBy: ['task-240'] },
-  { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'workflow next', reason: PLANNED, plannedBy: ['task-216'] },
   { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'workflow status', reason: PLANNED, plannedBy: ['task-225'] },
 ];
 

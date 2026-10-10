@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.23"
+version: "1.24"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -59,7 +59,7 @@ regressing. Then `release-cycle` moves on to `user-docs`, which is not part of t
 
 ### 1. Per-task contract
 
-Each task follows `dev-loop.yaml` v1.4, as detailed in `dev-loop-rel-v0.2-plan` §2–§3:
+Each task follows `dev-loop.yaml` (v1.4 at the opening; v1.5 from `task-205`, v1.6 from `task-221`), as detailed in `dev-loop-rel-v0.2-plan` §2–§3:
 
 - **start** (developer): branch `task/{task.id}` cut from `main`, worktree `../.wf2-wt/task-{n}`,
   task `backlog → in-progress` (`wf(task): start {id} [backlog → in-progress]`, by hand: no verb),
@@ -69,9 +69,25 @@ Each task follows `dev-loop.yaml` v1.4, as detailed in `dev-loop-rel-v0.2-plan` 
   every `depends_on` task (`dl-015`, hard gate); verify the cited specs are `approved`; any spec
   change the task's ACs require is a Revision-noted edit inside the task (hand edit until
   `task-127`'s `memory amend` ships and the pin advances).
-- **red / green / refactor** (developer): refactor's checks are coverage ≥ 80, `docs.api.*` and
-  `lint.clean`, all hard-reject. `tsc --noEmit` is also run by hand (`dl-044`'s gate is declared by
-  `task-173`).
+- **red / green / refactor** (`red` by `qa` from v1.5, `green` and `refactor` by the developer):
+  refactor's checks are coverage ≥ 80, `docs.api.*`, `lint.clean` and, from v1.6, `typecheck.clean`
+  (`npm run typecheck`, `dl-044`), all hard-reject; `green` and `refactor` leave `red`'s test files
+  unchanged (`tests.unchanged(since: red)`, v1.5, `dl-134` §2: until v1.0 the reviewer runs
+  `git log --first-parent --no-merges --format=%h <red-commit>..HEAD -- <red's test files>`, empty).
+- **The v0.3 gates (`dev-loop.yaml` v1.6, `task-221`)**, applied by the phase's role until P4.12 (v1.0)
+  evaluates them:
+  - `start`: no `kind: feature` task is picked up while the release's open `fix` tasks are strictly
+    more than `max_share` percent of its open tasks (`memory.yaml` `task.stop_the_line`, `dl-133` §3
+    Q4 (i)); an open task is any task of the release that is not `done`. A fix task is never blocked.
+  - `design`: each acceptance criterion is read against the executing role's directives and the
+    ratified specs and decision-logs it touches; a contradiction goes to the approver (`dl-102` §4).
+  - `refactor`: also `typecheck.clean`, `npm run typecheck` (`dl-044`).
+  - `review`: the reviewer re-runs the state claims of the review-ready summary, every absence claim
+    with its positive case (`dl-097` (a)); on a re-review, each item of the previous reject's
+    `Reason:` is re-verified by command first (`dl-098`); the document-parity suites run as
+    `docs.parity` (`bindings.yaml`, `dl-116`).
+  - `done`: the task's `### Retrospective` subsection exists, and that of each linked bug the sync
+    closes ("None" is valid, `dl-115` Q2 (a)).
 - **review** (reviewer): unit and BDD suites green, `node dist/cli.js memory submit {id}` →
   `wf(task): submit {id}` (plain subject, no
   bracket, `dl-054`, confirmed at planning R20), `bug.sync_state`. **The loop stops here** until the
@@ -91,7 +107,8 @@ A ratified rule is in force from the approval of the task that implements it; no
 forward (reading of `release-planning-rel-v0.3-plan`, confirmed by the planning session on
 2026-09-30):
 - **`dl-133` stop-the-line** (Q3 30% open fix tasks, Q4 (i) block feature pick-up): threshold
-  declared by `task-150` (wave 1), `start` check by `dev-loop.yaml` v1.6 (`task-221`). **Not in
+  declared by `task-150` (wave 1), `start` check by `dev-loop.yaml` v1.6 (`task-221`), in force
+  from that task's approval (§1, "The v0.3 gates"). **Not in
   force in wave 0**: the 33% fix share today (40 of 121) is the planned composition of the backlog,
   not the in-release tail the rule measures. Tracked from wave 1 on, by hand, in each wave's revision
   of this plan.

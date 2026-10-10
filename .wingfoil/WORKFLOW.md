@@ -2,7 +2,8 @@
 
 This document describes the complete workflow configuration for the WingFoil project as defined in
 `.wingfoil/` (this directory). The single startable lifecycle is `sw-life-cycle`; four independent
-**ingest mains** can be started on demand at any time.
+**ingest mains** can be started on demand at any time, and so can **`vision-change`**, which changes the
+vision after inception through a `change-proposal` (`dl-132`).
 
 ---
 
@@ -180,10 +181,11 @@ delivery starts.
 
 Iterated once per release (`iterate_over: release`, `where: release-line = {release-line.version},
 status ∈ [draft, planning, in-development]` — scoped to the current release-line-cycle iteration).
-Seven phases in sequence, each including one sub-workflow: `planning` (`release-planning`),
+Eight phases in sequence, each including one sub-workflow: `planning` (`release-planning`),
 `implementation` (`dev-loop`), `user-docs` (`user-docs`, dl-013/dl-025), `e2e-smoke` (`e2e-smoke`,
-dl-023), `submit` (`release-submit`), `publishing` (`release-publishing`) and `retrospective`
-(`retrospective`). A patch runs every phase except `retrospective` (dl-092).
+dl-023), `submit` (`release-submit`), `publishing` (`release-publishing`), `release-health`
+(`release-health`, dl-089) and `retrospective` (`retrospective`). A patch runs every phase except
+`retrospective` (dl-092); its release-health run reports D01 as not-comparable.
 
 ```mermaid
 flowchart TD
@@ -195,14 +197,28 @@ flowchart TD
 
     ES["**e2e-smoke** → `e2e-smoke`\nfresh-init → drive-cli → mcp-registration → gate\n🔑 Approval gate — *approver*\n(see sub-diagram below)"]
 
-    RS["**submit** → `release-submit`\npre-release-checks → enter-releasing → approve-release\n🔑 Approval gate — *approver*\nrelease: in-development → releasing\n↩ REJECT → pre-release-checks"]
+    RS["**submit** → `release-submit`\npre-release-checks → enter-releasing → approve-release\n✔ tests.no-identity: the suite with no git identity\n🔑 Approval gate — *approver*\nrelease: in-development → releasing\n↩ REJECT → pre-release-checks"]
 
-    RP2["**publishing** → `release-publishing`\ntag → publish → mark-released\ngit tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released"]
+    RP2["**publishing** → `release-publishing`\nrelease-commit → staging-rehearsal → tag → publish → mark-released\nrelease commit = the candidate · staging rehearsal on it · git tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released\n(see sub-diagram below)"]
 
-    RT["**retrospective** → `retrospective`\nexplore → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115)\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
+    RT["**retrospective** → `retrospective`\nexplore → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115), the release-health report among them\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
 
-    RP --> DL --> UD --> ES --> RS --> RP2 --> RT
+    RH["**release-health** → `release-health`\nmeasure → compare → propose\ncatalogue `docs/08_health/metrics.yaml` · report `docs/08_health/release-health-{version}.md`\nnot a gate (dl-089 §5)"]
+
+    RP --> DL --> UD --> ES --> RS --> RP2 --> RH --> RT
+    RP2 -.->|re-cut candidate| ES
 ```
+
+**Release candidate** (`dl-099` §1): the commit of the release's integration branch proposed for the
+version tag, cut by `release-publishing`'s `release-commit`. The two checks are the `e2e-smoke` gate,
+which packs and smokes the candidate with its build stamp bound (`e2e-smoke-passed`, `--candidate`), and
+`staging-rehearsal`. The release commit does not re-cut the candidate: `e2e-smoke` runs before it, so on
+the first candidate the rehearsal's smoke (the same scenario of `scripts/e2e-smoke.cjs`, against the staged
+tarball, with `--expect-commit`) stands as its e2e-smoke run. A commit that must ship and lands
+after the checks ran **re-cuts** the candidate: the release re-enters `e2e-smoke` (and `submit`'s checks),
+then `staging-rehearsal`. Only a candidate that passed both is tagged; a commit that only records evidence
+(a gate report, a transcript, a Memory transition) does not re-cut, because `tag` tags the candidate the
+rehearsal transcript names.
 
 ### Dev Loop — `dev-loop`
 
@@ -225,15 +241,23 @@ review measure the merged tree (`dl-035`; approver ruling 2026-10-09). `memory p
 task to the backlog: its branch is kept, its worktree removed, its bugs synced back to `planned`
 (`dl-110`).
 
+The v0.3 gates (v1.6, `task-221`): `start` refuses a feature task while open fix tasks are more than
+the share `memory.yaml` `task.stop_the_line` declares (`dl-133`); `design` reads each acceptance
+criterion against the bound directives and the ratified specs (`dl-102` §4); `refactor` also runs
+`typecheck.clean` (`dl-044`); `review` re-runs the summary's claims (`dl-097`), re-verifies a previous
+reject's items first on a re-review (`dl-098`) and runs the document-parity suites (`docs.parity`,
+`dl-116`); `done` checks that the task's `### Retrospective` subsection exists, and that of each bug
+it closes (`dl-115`). No check is evaluated before v1.0 (P4.12); until then the phase's role applies it.
+
 ```mermaid
 flowchart TD
-    ST["**start** *(developer)*\ngit.create_branch(task: {task.id}) → branch task/{task.id}\ntask: backlog → in-progress\n↳ bug.sync_state: source bug planned → in-progress"]
-    DES["📐 **design** *(architect)* · safety net\nverify a tech-spec exists + is approved for every\nfile format/schema/constant/API the task implements\n✔ P4.12: [title, scope] (if scaffolded) + tech-spec: approved"]
+    ST["**start** *(developer)*\n✔ pre: stop-the-line clear (feature tasks only, dl-133)\ngit.create_branch(task: {task.id}) → branch task/{task.id}\ntask: backlog → in-progress\n↳ bug.sync_state: source bug planned → in-progress"]
+    DES["📐 **design** *(architect)* · safety net\nverify a tech-spec exists + is approved for every\nfile format/schema/constant/API the task implements\n✔ P4.12: [title, scope] (if scaffolded) + tech-spec: approved\n✔ each AC consistent with the directives and specs (dl-102)"]
     RED["🔴 **red** *(qa)* · fresh\n↳ bug.sync_state: source bug in-review → in-progress (after a reject)\ndeveloper merges main first (on a resume)\nwrite the tests black-box from the ACs\n✔ tests.exist + tests.failing"]
     GREEN["🟢 **green** *(developer)* · distinct from red\nmin code to pass\n✔ tests.passing + tests.unchanged(since: red)"]
-    REF["🔵 **refactor** *(developer)* · may resume green\nclean code, keep tests green\nlast: merge main (if it moved)\n✔ tests.passing + coverage ≥ 80% + tests.unchanged(since: red)"]
-    REV["📋 **review** *(reviewer)* · distinct from red, green, refactor\ntask: in-progress → in-review\n↳ bug.sync_state: source bug → in-review (once ALL its fix tasks are)\n🔑 Approval gate — *approver*"]
-    DONE["✅ **done** *(developer)*\ngit merge to main\ntask: in-review → approved → done\n↳ bug.sync_state: source bug → resolved → closed (once ALL its fix tasks are done)"]
+    REF["🔵 **refactor** *(developer)* · may resume green\nclean code, keep tests green\nlast: merge main (if it moved)\n✔ tests.passing + coverage ≥ 80% + lint + typecheck + tests.unchanged(since: red)"]
+    REV["📋 **review** *(reviewer)* · distinct from red, green, refactor\n✔ pre: BDD + claims re-run + previous reject re-verified + docs.parity\ntask: in-progress → in-review\n↳ bug.sync_state: source bug → in-review (once ALL its fix tasks are)\n🔑 Approval gate — *approver*"]
+    DONE["✅ **done** *(developer)*\ngit merge to main\ntask: in-review → approved → done\n↳ bug.sync_state: source bug → resolved → closed (once ALL its fix tasks are done)\n✔ ### Retrospective present (task, closed bugs)"]
 
     ST --> DES --> RED --> GREEN --> REF --> REV
     REV -->|APPROVE| DONE
@@ -322,6 +346,43 @@ flowchart TD
     FI --> DC --> MR --> GA
 ```
 
+### Release Publishing — `release-publishing`
+
+The release commit is its own phase, so the staging rehearsal runs on the candidate it cuts (`dl-099`
+§2, task-219). The rehearsal starts a local Verdaccio registry, so it runs per candidate and never in CI.
+
+```mermaid
+flowchart TD
+    RC["**release-commit** *(tech-lead)*\ngit.commit: the version bump (package.json, package-lock.json,\nserver.json, CHANGELOG.md, SECURITY.md) → merged: the candidate"]
+    SR["**staging-rehearsal** *(qa)*\nnpm run publish:staging -- --expect-commit <candidate> --transcript …\n✔ staging-rehearsal-passed: closing line + the stamp's commit\n`docs/07_gates/rl-{release-line}/rel-{version}-staging-rehearsal.md`"]
+    TG["**tag** *(tech-lead)*\n✔ pre: staging-rehearsal-passed (again)\ngit.tag on the candidate the transcript names"]
+    PB["**publish** *(tech-lead)*\npush the tag → publish.yml: gate → stage → promote (npm stage publish)\n🔑 Approval gate — *approver* (npm stage approve, 2FA)"]
+    MR["**mark-released** *(tech-lead)*\nrelease: releasing → released"]
+
+    RC --> SR --> TG --> PB --> MR
+```
+
+### Release Health — `release-health`
+
+Runs after `publishing` and before `retrospective` on every release (dl-089). It measures the release at
+its measurement point — the published tag, else the commit carrying the `released` transition — with the
+fixed catalogue `docs/08_health/metrics.yaml` (version 2: git history G, project quality Q, the
+Determinism Index's outcome D01 and process conformance P, the external snapshot E), compares every
+metric with the previous release's run and turns each regression or breached floor into an
+`RH-{version}-NN` proposal for the retrospective. It blocks nothing; a breach of G07, G10, G14, Q01 or Q02
+is filed at once through `bug-ingest`. `release-health.measure` / `.compare` are bound to
+`scripts/release-health/measure.cjs` / `compare.cjs`, to be written by task-231..233 (measure) and task-241 (compare);
+dl-089 §6 forbids them writing git configuration.
+
+```mermaid
+flowchart TD
+    ME["**measure** *(qa)*\nrelease-health.measure — every catalogue metric at the measurement point\nD01 / P06 on major and minor releases only\n`docs/08_health/release-health-{version}.json`"]
+    CO["**compare** *(facilitator)*\nrelease-health.compare — improved / stable / regressed / new / not-comparable\nfloors, small samples, previous proposals settled\n`docs/08_health/release-health-{version}.md`"]
+    PR["**propose** *(facilitator)*\nagent.execute — tracked findings cite their element; the rest become RH proposals\nG07 · G10 · G14 · Q01 · Q02 breaches filed through bug-ingest"]
+
+    ME --> CO --> PR
+```
+
 ---
 
 ## Phase 7 — Sunset: `end-of-life`
@@ -385,6 +446,40 @@ flowchart LR
 
 ---
 
+## Vision Change — `vision-change`
+
+A `kind: main` workflow startable on demand (`dl-132`): a change to the vision — a new feature, the most
+common case, or any other edit of `docs/01_vision/` — enters as a `change-proposal` element. Its impact
+along the traceability chain is analysed before acceptance, only the layers the analysis names are
+downcast (the three downcast phases are optional, `dl-132` Q2 (ii)), and it ends only when a release
+carries it. It is self-creating: the change-proposal its `capture` phase adds is the instance's element.
+
+```mermaid
+flowchart TD
+    subgraph VC["vision-change"]
+        direction TB
+        V1["**capture** *(product-owner)*\nmemory.add(type: change-proposal)\nmemory.submit\n✔ P4.12: [title, kind]\ndraft → in-analysis"]
+        V2["**impact-analysis** *(architect)*\nagent.execute (reverse walk of the traceability chain)\nmemory.approve\n🔑 *approver*\nin-analysis → accepted (reject → draft, back to capture)"]
+        V3["**update-vision** *(product-owner)*\nvision documents + doc-versioning bumps\n00_index.md in the same commit\n✔ vision-index.current"]
+        V4["**downcast-stories** *(optional)*\n`user-story-mapping`"]
+        V5["**downcast-scenarios** *(optional)*\n`specification-by-examples`"]
+        V6["**downcast-requirements** *(optional)*\n`volere-requirements`"]
+        V7["**schedule** *(product-owner)*\nfills target_release (✔ pre: not empty)\nsequencer entry + release `features:`\nelement.set_release · element.set_state(scheduled)\n✔ vision-index.current\naccepted → scheduled"]
+        V1 --> V2 --> V3 --> V4 --> V5 --> V6 --> V7
+        V2 -. reject .-> V1
+    end
+```
+
+| Workflow | Produces | Typical trigger |
+|---|---|---|
+| `vision-change` | `docs/04_memory/change-proposals/{id}.md` | A feature request, or any change to the vision after inception |
+
+A downcast phase whose layer the analysis marks "no impact" is skipped once `schedule` completes
+(`spec-017` §4.10). The included subs are the same ones `specification-downcast` runs at inception,
+scoped to the delta.
+
+---
+
 ## Token Bindings — `workflows/bindings.yaml`
 
 Every `actions:` and `checks:` token resolves through a binding (spec-003 Layer 3, dl-090). The
@@ -393,7 +488,7 @@ built in (`agent.*` is `wingfoil agent execute` under the phase's role; the inst
 `description`). Every other token is bound in `.wingfoil/workflows/bindings.yaml` (`format: 1`,
 dl-153): a check to an argument vector (`npm test`, `npm run lint`, `npm run docs:api`,
 `npm run typecheck`, `npm run check:lockfile`, `npm run check:mcp`, `node scripts/e2e-smoke.cjs`, …),
-an action to a command or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
+an action to a command (`release-health.measure` / `.compare`, `node scripts/release-health/…`, scripts still to be written) or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
 `approver.execute`). Token arguments are `key: value` pairs, substituted as whole argv elements, never
 through a shell. The prose checks no command asserts yet (`frontmatter.required: […]`,
 `spec-review.passed`, the specification-phase quality criteria, …) stay unbound: `workflow list` reports
@@ -552,17 +647,32 @@ stateDiagram-v2
     active --> deprecated : memory.deprecate (dropped or replaced)
 ```
 
+### Change Proposal  *(`dl-132` — a change to the vision)*
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> draft
+    draft --> in_analysis : memory.submit (the change and its impact analysis)
+    in_analysis --> accepted : memory.approve
+    in_analysis --> draft : memory.reject
+    accepted --> scheduled : workflow (vision-change schedule — a release carries it)
+    accepted --> deprecated : memory.deprecate
+
+    in_analysis : in-analysis
+```
+
 ---
 
 ## Roles Summary
 
 | Role | Responsibilities in workflows |
 |---|---|
-| `product-owner` | Release-line seeding/closing (`seed-first-release-line`, `plan-next-release-line`), release-line roadmap (`seed-releases`), release planning, scope definition, governance reconcile, backlog creation |
+| `product-owner` | Vision change (`vision-change` capture, update-vision, schedule), release-line seeding/closing (`seed-first-release-line`, `plan-next-release-line`), release-line roadmap (`seed-releases`), release planning, scope definition, governance reconcile, backlog creation |
 | `tech-lead` | Config init, release-line approval, pinned-build advance, bug triage, backlog approval, implementation-complete check, release submission and publishing, deprecation |
-| `architect` | Features session, Volere requirements, ADR authoring, tech-spec identification/authoring (`identify-specs`, `dev-loop/design`), agent-facing docs (`align-agent-docs`) |
+| `architect` | Vision-change impact analysis, features session, Volere requirements, ADR authoring, tech-spec identification/authoring (`identify-specs`, `dev-loop/design`), agent-facing docs (`align-agent-docs`) |
 | `developer` | TDD dev-loop (green/refactor), branch management, user-facing docs (`align-user-docs`), bug capture, service capture |
 | `reviewer` | Code review in dev-loop (tests and code, under the developer's and qa's directives too, `dl-134`) |
-| `qa` | BDD specification, the dev-loop `red` phase (black-box tests, `dl-134`), end-to-end smoke (`e2e-smoke`), pre-release checks |
-| `facilitator` | Lean inception sessions, retrospective exploration and capture |
-| `approver` | All approval gates (bug triage, governance reconcile, backlog commit, task review, documentation, e2e smoke, release, retrospective, end-of-life, service verification) |
+| `qa` | BDD specification, the dev-loop `red` phase (black-box tests, `dl-134`), end-to-end smoke (`e2e-smoke`), pre-release checks, release-health measurement (`measure`) |
+| `facilitator` | Lean inception sessions, release-health comparison and proposals (`compare`, `propose`), retrospective exploration and capture |
+| `approver` | All approval gates (bug triage, vision-change acceptance, governance reconcile, backlog commit, task review, documentation, e2e smoke, release, retrospective, end-of-life, service verification) |

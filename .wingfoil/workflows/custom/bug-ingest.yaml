@@ -5,13 +5,13 @@
 name: bug-ingest
 kind: main
 description: Capture a single defect report (bug) into Memory.
-version: 1.1                     # 1.1 spec-003 alignment (task-199): triage has no fallback — a reject at the open gate closes the bug (memory.yaml `bug` gates: open -> closed), so there is no capture to return to (W_PHASE_FALLBACK_NOT_REENTRANT, spec-017 §5.2)
+version: 1.2                     # 1.2 capture points at the traceability directive's filing rule (dl-118 (B), task-197) · 1.1 spec-003 alignment (task-199): triage has no fallback — a reject at the open gate closes the bug (memory.yaml `bug` gates: open -> closed), so there is no capture to return to (W_PHASE_FALLBACK_NOT_REENTRANT, spec-017 §5.2)
 # No fixed `element:` — started standalone this main creates a top-level bug. When invoked while
 # another workflow with an active `element` context is running, the created Memory file inherits that
 # element (e.g. a bug raised during dev-loop inherits the active `task`).
 phases:
   - name: capture
-    description: "Record the bug (summary, reproduction steps, severity)."
+    description: "Record the bug (summary, reproduction steps, severity). First check that a bug is the right type: the traceability directive's filing rule (dl-118) — a bug when the fix is mechanical and uncontested; a decision-log when there is a real choice or a rule for all future work."
     role: developer
     actions:
       - 'memory.add(type: bug)'

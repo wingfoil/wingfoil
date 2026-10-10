@@ -80,8 +80,9 @@ describe('AC 2 — retrospective.yaml: explore lists its secondary sources; addi
     loadWorkflowRegistryAtHead(ROOT).workflows.find((w) => w.name === 'retrospective')!;
 
   it('the version is bumped from 1.3 (task-199) and the header names this change', () => {
-    expect(retrospective().version).toBe(1.4);
-    expect(atHead('.wingfoil/workflows/custom/retrospective.yaml')).toMatch(/^version: 1\.4 .*1\.4 dl-115 .*task-213/m);
+    // A later change bumps again (1.5 task-222, dl-089); the 1.4 entry stays in the header's history.
+    expect(retrospective().version).toBeGreaterThanOrEqual(1.4);
+    expect(atHead('.wingfoil/workflows/custom/retrospective.yaml')).toMatch(/^version: [0-9.]+ .*1\.4 dl-115 .*task-213/m);
   });
 
   it('explore reads the ### Retrospective subsections first, then lists every secondary source it was given', () => {

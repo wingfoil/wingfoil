@@ -166,9 +166,9 @@ included.
 
 - `built-in/` — reserved for official workflow templates shipped by the npm package; empty today
   (`.gitkeep` only).
-- `custom/` — every workflow file that exists today: 5 startable `kind: main` workflows
-  (`sw-life-cycle`, `bug-ingest`, `decision-log-ingest`, `adr-ingest`, `service-ingest` — REQ-STATE-03 permits multiple
-  open mains) plus every `kind: sub` workflow they compose via `include()` (REQ-SYS-06). `sub`
+- `custom/` — every workflow file that exists today: 6 startable `kind: main` workflows
+  (`sw-life-cycle`, `bug-ingest`, `decision-log-ingest`, `adr-ingest`, `service-ingest`, `vision-change` —
+  REQ-STATE-03 permits multiple open mains) plus every `kind: sub` workflow they compose via `include()` (REQ-SYS-06). `sub`
   workflows cannot be started directly; only `workflows.yaml`'s `includes:` list — not the
   subdirectory a file lives in — determines what is loaded.
 
@@ -348,3 +348,9 @@ enumerates this repository's `.wingfoil/`, which has no `agents/` directory. Not
 files, the root-detection algorithm or the init-marker algorithm changes. Edited in place without a
 supersede or a state change (the `spec-001` precedent `dl-041` cites); pending the approver's sign-off at
 `task-196`'s review.
+
+**Revision (2026-10-10, `task-212-add-change-proposal-memory-type-startable-vision-change`) — a sixth startable
+workflow.** `dl-132` adds `vision-change` (`.wingfoil/workflows/custom/vision-change.yaml`, `kind: main`), so
+the `workflows/{built-in,custom}/` split lists six startable mains. Nothing about the layout, the
+root-detection algorithm or the init-marker algorithm changes. Edited in place without a supersede or a state
+change (`dl-047`), pending the approver's `memory amend` at `task-212`'s review.

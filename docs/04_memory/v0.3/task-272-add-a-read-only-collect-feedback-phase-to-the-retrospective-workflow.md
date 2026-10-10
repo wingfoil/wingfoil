@@ -34,8 +34,8 @@ between `explore` and `additional-points`, and writes a read record the approver
   `task-222`'s): reads every `active` `repository` service with a `feedback_inbox` at its `main` (remote, or a
   local checkout recorded per machine outside the repository), recording the commit read; lists notes `open`,
   answered `needs-info`, `captured` whose elements shipped in this release, and those triaged outside the
-  retrospective under R6; `produces` `docs/06_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md`
-  (or the path `bug-299`'s ruling sets) with one row per note: cite `@sha`, commit read, content restated in
+  retrospective under R6; `produces` `docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md`
+  (`bug-299`'s numbering, `task-222`: the folder `explore`'s friction inventory uses) with one row per note: cite `@sha`, commit read, content restated in
   WingFoil's words, proposed outcome among six (`dl-115`'s four, `declined`, `needs-info`); never a consumer's
   configuration, paths or prose.
 - (characterization) `explore` lists the read record as a secondary source; `additional-points`' check (task-213)

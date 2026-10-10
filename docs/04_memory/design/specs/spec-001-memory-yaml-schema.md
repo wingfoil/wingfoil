@@ -11,10 +11,12 @@ tmpl_version: 260703   # Orignal template version
 ## Context
 
 `memory.yaml` is the **Project Memory type registry** (feature **P1.13**). It declares every Memory
-element type — `release-line, release, task, adr, decision-log, tech-spec, bug, plan, service` (the
-eighth, `plan`, added by `dl-019-plans-as-memory-element`; the ninth, `service`, by
+element type — `release-line, release, task, adr, decision-log, tech-spec, bug, plan, service,
+change-proposal` (the eighth, `plan`, added by `dl-019-plans-as-memory-element`; the ninth, `service`, by
 `dl-088-a-memory-type-for-state-that-lives-outside-the-repository`, in `memory.yaml` since 1.6,
-`task-124-the-service-memory-type`) — giving each a path
+`task-124-the-service-memory-type`; the tenth, `change-proposal`, by
+`dl-132-vision-change-and-feature-ingest`, in `memory.yaml` since 2.7,
+`task-212-add-change-proposal-memory-type-startable-vision-change`) — giving each a path
 pattern, an id pattern, human metadata, a template scaffold, and a state machine. It is consumed by
 every `wingfoil memory *` command (add/submit/approve/reject/deprecate/show/search/history), by the
 Workflow pillar (to resolve `element:` type declarations), by the ID-generation engine (reads
@@ -280,7 +282,7 @@ The `defaults` machine and the types below reproduce **exactly** the legal trans
 `service` type with `task-124`, the `amendable` keys with `task-127`); only the encoding changes (except the deliberate default-machine collapse called
 out in Consequences). The first seven were written with this spec; `plan`, `service`, the `release`
 id pattern and the two `bug` decline edges were added later (see the *Revision (2026-09-29)* note
-below).
+below), and `change-proposal` with `memory.yaml` 2.7 (*Revision (2026-10-09)*).
 
 ```yaml
 # DEFAULT machine — was: draft→pending, pending→{approved,rejected}, rejected→draft
@@ -387,6 +389,16 @@ types:
       gates:
         pending: { reject: draft }           # approve: pending→active (the approver ran `verify`) · reject: →draft
       waiting: [ ]                           # `active` is terminal; retirement is memory.deprecate
+
+  change-proposal:                           # dl-132
+    path: "docs/04_memory/change-proposals/{id}.md"
+    id_pattern: "cp-{n}-{slug}"
+    amendable: true
+    states:
+      sequence: [ draft, in-analysis, accepted, scheduled ]
+      gates:
+        in-analysis: { reject: draft }       # approve: in-analysis→accepted (vision-change's impact analysis) · reject: →draft
+      waiting: [ accepted ]                  # accepted→scheduled: vision-change's schedule step, once a release carries it
 ```
 
 `triaged` and `planned` are the first states in any machine that are **both** in `waiting` and keys
@@ -600,3 +612,14 @@ does: when `dev-loop` parks a fix task (`dl-110` P2), the linked bug is synced b
 audit to accept it. No key, rule or diagnostic changes; `returns` already allowed any type to declare
 a return edge (`dl-110` P1 (a)). Edited in place without a supersede or a state change (`dl-047`);
 pending the approver's `memory amend` at `task-205`'s review.
+
+**Revision (2026-10-09, `task-212-add-change-proposal-memory-type-startable-vision-change`) — the
+`change-proposal` type.** `dl-132` Q1 (a): a change to the vision, of which a feature request is a case
+(`kind: feature | vision`), is a Memory element of its own. `memory.yaml` 2.7 declares it exactly as the
+worked example above, with `template.file: "memory/templates/change-proposal.md"`, required
+`[title, kind]` and `amendable: true`; the Context's type list names it as the tenth. Its machine uses only
+existing keys: `in-analysis` is the gate (reject → `draft`), and `accepted → scheduled` is a `waiting`
+edge driven by the `vision-change` workflow's `schedule` step, not by a CLI verb. No key, rule or
+diagnostic changes, and no source file names the type (REQ-SYS-04's fit criterion). Edited in place
+without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-212`'s
+review.

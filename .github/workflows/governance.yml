@@ -1,0 +1,97 @@
+# WingFoil — the governance check on every push and pull request to main (dl-103 §1 (A); built by task-208).
+#
+#   governance → `npm ci`, `npm run build` (the check reads src's parsers from dist/), then:
+#     - `node scripts/check-governance.cjs --base "$BASE"` (task-167, extended by task-208): every `wf()`
+#       commit of the range against the subject, bracket, body, authority and state rules, plus the
+#       later checks — verb ↔ edge pairing (bug-192), status changes outside a wf() operation (dl-139),
+#       a supersedes: pair left half-done (bug-218), config versions over the range (bug-249) and AI
+#       co-author trailers on approve/reject (bug-307). Exit 1 on a finding after a rule's introduction
+#       fails the run; history before it is reported only (dl-103 §1 starting mode, per check).
+#     - `node scripts/lint-claims.cjs --base "$BASE" --format github` (dl-097 §2 (b)): the claim-shape
+#       lint over the Memory documents the range changed, as `::warning` annotations. Warn-only by its own
+#       exit status (always 0 on findings, 2 only when it cannot run) until its false-positive rate has
+#       been measured over one release (dl-097 Action 4). It runs whenever the build succeeded, whatever
+#       the governance check said, so one verdict never hides the other.
+#
+# The range (`BASE`): on a pull request, the base branch's commit (`github.event.pull_request.base.sha`);
+# on a push, the commit `main` pointed at before it (`github.event.before`). A push that created the
+# branch (all-zero `before`), or whose `before` is no longer reachable (a force push), has no range:
+# BASE is then empty and the check runs over the whole history — about six minutes (task-167), and the
+# config-version rule, which needs a range, judges nothing.
+#
+# Why `fetch-depth: 0`: the check finds its introduction commit, and each later check's, on HEAD's
+# first-parent line; in a shallow clone they are missing and every fetched commit would be gated
+# (task-167 handover). Why the build: the check loads `dist/` and exits 2 without it.
+#
+# Binding: this workflow makes the check EXIST; branch protection on `main` requiring the `governance`
+# status makes it binding (dl-103 §1 (C)) — a repository setting the approver configures, recorded as a
+# `service` element (`kind: setting`) through service-ingest. The local twin is `.githooks/pre-push`
+# (dl-103 §1 (B), opt-in: `git config core.hooksPath .githooks`; git-conventions §9).
+#
+# Kept equal to ci.yml, and pinned by `test/cli/governance-workflow.test.ts`: `env.NODE_VERSION`, the
+# runner image, every `uses:` line (full commit SHA, release tag in the trailing comment, dl-057; the
+# directory-wide rule is `test/cli/workflow-action-pins.test.ts`), `package-manager-cache: false`,
+# `persist-credentials: false`, and the concurrency rule (no run on `main` is ever cancelled).
+#
+# Read-only: `contents: read` and no job-level `permissions`. No secret, no registry credential, no OIDC.
+#
+# Locally: `npm ci && npm run build && npm run check:governance -- --base <rev> && npm run lint:claims -- --base <rev>`.
+
+name: governance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: governance-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22.12.0'
+
+jobs:
+  governance:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - name: Install
+        run: npm ci
+      - name: Build — the check reads src's parsers from dist/
+        id: build
+        run: npm run build
+      - name: The range — the pull request base, or the commit before the push
+        id: range
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          BASE="${PR_BASE:-$PUSH_BEFORE}"
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "No reachable range base: the whole history is checked."
+            BASE=""
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+      - name: Governance check — wf() commits of the range (dl-103 §1, task-167, task-208)
+        env:
+          BASE: ${{ steps.range.outputs.base }}
+        run: |
+          if [ -n "$BASE" ]; then node scripts/check-governance.cjs --base "$BASE"; else node scripts/check-governance.cjs; fi
+      - name: Claim lint — warn-only annotations on the changed Memory documents (dl-097 §2 (b))
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          BASE: ${{ steps.range.outputs.base }}
+        run: |
+          if [ -n "$BASE" ]; then node scripts/lint-claims.cjs --base "$BASE" --format github; else echo "No range: the claim lint reads only a range's changes."; fi

@@ -40,11 +40,39 @@
  *   - a gated commit whose `memory.yaml` is missing or does not validate is a finding: its state cannot
  *     be checked. History before `.wingfoil/` existed is listed as "state not checked" instead.
 
+ * **Later checks** (task-208), each gating only the commits after its own introduction (below):
+ * - `verb-edge` (`bug-192`; `spec-008` §2 "Which verb a `set_state` emits"): a single-hop `approve`
+ *   moves along a forward edge; `start` along a forward edge not into the last state of the
+ *   `sequence`; `finalize` along a forward edge into it; `reject` along a `gates` reject edge. A
+ *   bracket hop that is a reject edge and not a forward one, under any other verb (`sync`), needs the
+ *   approver's reject commit cited by sha in the body (`dl-061` B.1). A named document gone at `HEAD`
+ *   still has its bracket compared with its frontmatter before and after the commit.
+ * - `status-outside-wf` (`dl-139` (a)): a non-merge commit that is not a Memory `wf()` operation (any
+ *   other subject, a configuration scope included) changes no Memory document's `status`, nor creates
+ *   one. A Memory document is a `.md` under the content roots of the `memory.yaml` committed at that
+ *   commit whose frontmatter `type` is one of its types; renames are followed; a deletion is not judged.
+ * - `supersedes-pair` (`bug-218`): an `approve` that leaves a document in the `waiting` state whose
+ *   forward edge leads to `superseded`, with a non-empty `supersedes:`, needs the element it names to
+ *   be `superseded` at `HEAD`; the finding names the `finalize` commit that completes the pair.
+ * - `config-version` (`bug-249`; rule `config`): with `--base`, each of the four versioned config files
+ *   whose blob differs between the merge-base of `--base` and `HEAD`, and `HEAD`, declares a `version:`
+ *   numerically greater (`isVersionIncrease`, `src/validation`, shared with the pending-change gate of
+ *   `test/lint/helpers/version-bump.ts`). The finding sits on the range's last commit touching the file.
+ *   Without `--base` nothing is judged: a whole-history run has no range to bump over.
+ * - `approval-ai-trailer` (`bug-307`; rule `body`): an `approve` or `reject` commit records the
+ *   approver's decision and carries no `Co-Authored-By:` and no `AI-Model:` line (`git-conventions` §7);
+ *   every other verb may. The approve/reject commits written before this check are history: they cannot
+ *   be rewritten (`git-conventions` §2, §8).
+
  * **Starting mode** (`dl-103` §1). A finding on a commit that is not the introduction commit nor one
  * of its ancestors is gated, and fails the check (exit 1). A finding on history — the introduction
  * commit and its ancestors — is reported and does not fail it (exit 0). The introduction commit is
  * the commit of `HEAD`'s first-parent line that added this file — on `main`, the merge that landed it
- * — unless `--introduced-at` names one.
+ * — unless `--introduced-at` names one. Each later check has its own introduction: the oldest commit
+ * of `HEAD`'s first-parent line whose change to this file altered the count of the check's marker
+ * (`CHECKS`, `git log -S`), so a rule added later never fails on commits pushed before it existed; a
+ * marker no commit brought in falls back to the script's introduction, and `--introduced-at` sets every
+ * check's introduction at once.
  *
  * The parsers are `src/memory`'s, read from the compiled `dist/` (`npm run build` first): the verb
  * list and subject reader (`parseMemoryOperation`), the bracket reader (`parseBracketHops`), the
@@ -74,7 +102,33 @@ const DNA_YAML = '.wingfoil/dna.yaml';
 const DIST = join(__dirname, '..', 'dist');
 
 /** The rules, in the order findings are sorted within a commit. */
-const RULES = ['subject', 'bracket', 'body', 'authority', 'state'];
+const RULES = ['subject', 'bracket', 'body', 'authority', 'state', 'config'];
+
+/**
+ * The checks added after the script itself (task-208), each with the marker whose first appearance in
+ * this file, on `HEAD`'s first-parent line, is the check's introduction commit. Each marker appears in
+ * this file exactly once, here.
+ */
+const CHECKS = Object.freeze({
+  'verb-edge': 'governance-check:verb-edge',
+  'status-outside-wf': 'governance-check:status-outside-wf',
+  'supersedes-pair': 'governance-check:supersedes-pair',
+  'config-version': 'governance-check:config-version',
+  'approval-ai-trailer': 'governance-check:approval-ai-trailer',
+});
+
+/** The verbs that record the approver's decision and carry no AI co-author (`git-conventions` §7). */
+const DECISION_VERBS = new Set(['approve', 'reject']);
+/** A co-author or model trailer line (`git-conventions` §7, `bug-307`). */
+const AI_TRAILER_RE = /^(co-authored-by|ai-model):/i;
+
+/** The four versioned config files whose `version:` the doc-versioning bump rule applies to (`bug-143`). */
+const VERSIONED_CONFIG_FILES = ['.wingfoil/dna.yaml', '.wingfoil/memory.yaml', '.wingfoil/workflows.yaml', '.wingfoil/roles.yaml'];
+
+/** The verbs whose single hop the `verb-edge` check pairs with a kind of edge (`spec-008` §2). */
+const PAIRED_VERBS = new Set(['approve', 'start', 'finalize', 'reject']);
+/** A token that may be a commit sha cited in a body. */
+const SHA_TOKEN_RE = /\b[0-9a-f]{7,64}\b/g;
 
 /** The verbs that record an approval, and therefore need `Approver:` and authority. */
 const APPROVAL_VERBS = new Set(['approve', 'reject', 'amend']);
@@ -111,6 +165,7 @@ function loadDist() {
     core: require(join(DIST, 'core')),
     validation: require(join(DIST, 'validation')),
     dnaSchema: require(join(DIST, 'dna', 'schema')),
+    storage: require(join(DIST, 'storage')),
   };
 }
 
@@ -164,6 +219,7 @@ function readCommits(root, range) {
     commits.push({
       sha: requireCommitName(sha.trim(), 'git log --reverse'),
       parent: parents.split(' ')[0] || null,
+      merge: parents.trim().split(' ').length > 1,
       authorName,
       authorEmail,
       subject,
@@ -221,6 +277,121 @@ function readBlobIds(root, requests) {
       const [oid, type] = line.split(' ');
       return type === 'blob' ? oid : null;
     });
+}
+
+/**
+ * The content of every `<rev>:<path>` request, in one `git cat-file --batch`, or `null` where the path
+ * (or the revision) does not exist. Sizes are bytes, so the output is read as a buffer.
+ */
+function readBlobTexts(root, requests) {
+  if (requests.length === 0) return [];
+  const raw = execFileSync('git', ['-C', root, 'cat-file', '--batch'], {
+    input: requests.join('\n') + '\n',
+    maxBuffer: 1024 * 1024 * 1024,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  const texts = [];
+  let offset = 0;
+  for (let index = 0; index < requests.length; index += 1) {
+    const end = raw.indexOf(0x0a, offset);
+    const header = raw.subarray(offset, end).toString('utf-8').split(' ');
+    offset = end + 1;
+    if (header.length === 3 && /^\d+$/.test(header[2])) {
+      const size = Number(header[2]);
+      texts.push(header[1] === 'blob' ? raw.subarray(offset, offset + size).toString('utf-8') : null);
+      offset += size + 1;
+    } else {
+      texts.push(null);
+    }
+  }
+  return texts;
+}
+
+/**
+ * A Markdown text's frontmatter `status` and `type`: `null` when there is no text, `{ unreadable }` when
+ * the frontmatter does not parse, else the two fields (`null` where absent or not a string).
+ */
+function readFrontmatterFields(dist, text, label) {
+  if (text === null) return null;
+  const { frontmatter } = dist.storage.splitFrontmatter(text);
+  if (!frontmatter) return { status: null, type: null, supersedes: null, id: null };
+  let parsed;
+  try {
+    parsed = dist.validation.parseYaml(frontmatter, label);
+  } catch (error) {
+    return { unreadable: error instanceof Error ? error.message.split('\n')[0] : String(error) };
+  }
+  const field = (name) => (parsed !== null && typeof parsed === 'object' && typeof parsed[name] === 'string' ? parsed[name] : null);
+  return { status: field('status'), type: field('type'), supersedes: field('supersedes'), id: field('id') };
+}
+
+/**
+ * The file changes of each non-merge commit of `shas` (renames followed, `-M`): `{ from, to }` paths,
+ * `from` `null` for an addition and `to` `null` for a deletion. One `git log` over the range.
+ */
+function readFileChanges(root, range, shas) {
+  const wanted = new Set(shas);
+  const changes = new Map();
+  if (wanted.size === 0) return changes;
+  const raw = git(root, ['-c', 'diff.renameLimit=0', 'log', '--no-show-signature', '--no-merges', '-M', '--name-status', '--format=%x01%H', ...range]);
+  let current = null;
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('\u0001')) {
+      const sha = requireCommitName(line.slice(1), 'git log --name-status');
+      current = wanted.has(sha) ? [] : null;
+      if (current !== null) changes.set(sha, current);
+    } else if (line !== '' && current !== null) {
+      const [status, first, second] = line.split('\t');
+      if (status.startsWith('R')) current.push({ from: first, to: second });
+      else if (status.startsWith('C')) current.push({ from: null, to: second });
+      else if (status === 'A') current.push({ from: null, to: first });
+      else if (status === 'D') current.push({ from: first, to: null });
+      else current.push({ from: first, to: first });
+    }
+  }
+  return changes;
+}
+
+/**
+ * The introduction commit of a later check: the oldest commit of `HEAD`'s first-parent line whose
+ * change to this script altered the count of the check's marker, or `null` when none did.
+ */
+function markerIntroduction(root, marker) {
+  const shas = git(root, ['log', '--no-show-signature', '--first-parent', '--format=%H', '-S', marker, 'HEAD', '--', SCRIPT_PATH])
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((name) => requireCommitName(name, 'git log --first-parent -S'));
+  return shas.length === 0 ? null : shas[shas.length - 1];
+}
+
+/** The kinds of edge `from → to` is in `machine`: `forward`, `reject`, `returns`, `deprecate`. */
+function edgeKinds(dist, machine, from, to) {
+  const kinds = [];
+  const index = machine.sequence.indexOf(from);
+  if (index !== -1 && machine.sequence[index + 1] === to) kinds.push('forward');
+  if ((machine.gates ?? {})[from]?.reject === to) kinds.push('reject');
+  if ((machine.returns ?? {})[from] === to) kinds.push('returns');
+  if (to === dist.memory.DEPRECATED_STATE) kinds.push('deprecate');
+  return kinds;
+}
+
+/**
+ * The `verb-edge` finding of a single hop under a paired verb (`spec-008` §2), or `null`. Only an edge
+ * of the machine is judged: a non-edge is already the state rule's finding.
+ */
+function verbEdgeFinding(dist, machine, type, op, from, to) {
+  if (!PAIRED_VERBS.has(op) || !dist.memory.isMachineEdge(machine, from, to)) return null;
+  const kinds = edgeKinds(dist, machine, from, to);
+  const last = machine.sequence[machine.sequence.length - 1];
+  const what = `${from} → ${to} is a ${kinds.join('/')} edge of the '${type}' machine`;
+  if (op === 'approve' && !kinds.includes('forward')) return `'approve' moves along a forward edge; ${what}`;
+  if (op === 'reject' && !kinds.includes('reject')) return `'reject' moves along a gates reject edge; ${what}`;
+  if (op === 'finalize' && (!kinds.includes('forward') || to !== last)) return `'finalize' moves along the forward edge into the last state '${last}'; ${what}`;
+  if (op === 'start' && (!kinds.includes('forward') || to === last)) {
+    return `'start' moves along a forward edge not into the last state '${last}' (that is 'finalize'); ${what}`;
+  }
+  return null;
 }
 
 /** A memoized `blob id → parsed configuration` reader: `{ ok: true, value }` or `{ ok: false, error }`. */
@@ -364,7 +535,8 @@ function describeTransitionFinding(finding, path, type) {
 }
 
 /**
- * Check the `wf()` commits of `base..HEAD` (or of `HEAD`'s whole history) in the repository at `root`.
+ * Check the `wf()` commits of `base..HEAD` (or of `HEAD`'s whole history) in the repository at `root`,
+ * and the other commits of the range for the later checks that read them.
  *
  * @param {string} root
  * @param {{ base?: string, introducedAt?: string }} [options]
@@ -389,13 +561,28 @@ function checkGovernance(root, options = {}) {
       .map((name) => requireCommitName(name, 'git log --first-parent --diff-filter=A'));
     introducedAt = adding.length === 0 ? null : adding[adding.length - 1];
   }
-  const history = new Set(introducedAt === null ? [] : git(root, ['rev-list', introducedAt]).trim().split('\n'));
+  const checkIntroductions = {};
+  for (const [check, marker] of Object.entries(CHECKS)) {
+    checkIntroductions[check] = options.introducedAt !== undefined ? introducedAt : (markerIntroduction(root, marker) ?? introducedAt);
+  }
+  const histories = new Map();
+  const historyOf = (introduction) => {
+    if (!histories.has(introduction)) {
+      histories.set(introduction, new Set(introduction === null ? [] : git(root, ['rev-list', introduction]).trim().split('\n')));
+    }
+    return histories.get(introduction);
+  };
+  const history = historyOf(introducedAt);
+  const isGated = (sha, check) => !historyOf(check === undefined ? introducedAt : checkIntroductions[check]).has(sha);
 
-  const commits = readCommits(root, range).filter((commit) => commit.subject.startsWith('wf('));
+  const allCommits = readCommits(root, range);
+  const commits = allCommits.filter((commit) => commit.subject.startsWith('wf('));
   const memoryCommits = commits.filter((commit) => {
     const scope = WF_HEAD_RE.exec(commit.subject)?.[1];
     return scope === undefined || !dist.memory.CONFIGURATION_SCOPES.includes(scope);
   });
+  const memoryShas = new Set(memoryCommits.map((commit) => commit.sha));
+  const otherCommits = allCommits.filter((commit) => !commit.merge && !memoryShas.has(commit.sha));
   const touched = readTouchedPaths(root, range);
   const renamed = readRenames(root, range);
   const atHead = new Set(git(root, ['ls-tree', '-r', '--name-only', 'HEAD']).split('\n'));
@@ -408,19 +595,38 @@ function checkGovernance(root, options = {}) {
 
   const findings = [];
   const stateUnchecked = [];
-  const order = new Map(memoryCommits.map((commit, index) => [commit.sha, index]));
+  const order = new Map(allCommits.map((commit, index) => [commit.sha, index]));
+  const subjects = new Map(allCommits.map((commit) => [commit.sha, commit.subject]));
+  const bodies = new Map(allCommits.map((commit) => [commit.sha, commit.body]));
   /** headPath → sha → how that commit touched the document: { named, op, bracketed, machine, type, key } */
   const stateDocuments = new Map();
+  /** The named documents of each `approve`, for the `supersedes-pair` check: { sha, path, machine, type }. */
+  const approvals = [];
+  /** Sync-style hops across a reject edge, whose body must cite a reject commit: { sha, hop }. */
+  const rejectCrossings = [];
+  /** Named, bracketed touches of a document gone at `HEAD`: { sha, parent, path, hops, type }. */
+  const goneAtHead = [];
 
   memoryCommits.forEach((commit, index) => {
     const memoryOid = blobs[index * 2];
     const memoryYaml = readMemoryYaml(memoryOid);
     const dna = commit.parent === null ? null : readDnaYaml(blobs[index * 2 + 1]);
-    const push = ({ rule, message }) => findings.push({ sha: commit.sha, subject: commit.subject, rule, message, gated: !history.has(commit.sha) });
+    const push = ({ rule, message, check }) =>
+      findings.push({ sha: commit.sha, subject: commit.subject, rule, message, gated: isGated(commit.sha, check), ...(check ? { check } : {}) });
 
     const { findings: subjectFindings, op, ids } = checkSubjectAndBracket(commit, memoryYaml, dist);
     subjectFindings.forEach(push);
     if (op !== null) checkBodyAndAuthority(commit, op, dna, dist).forEach(push);
+    if (DECISION_VERBS.has(op)) {
+      for (const line of commit.body.split('\n').filter((candidate) => AI_TRAILER_RE.test(candidate))) {
+        const key = line.slice(0, line.indexOf(':'));
+        push({
+          rule: 'body',
+          message: `'${op}' records the approver's decision and carries no AI co-author trailer (git-conventions §7), yet it has a ${key}: line`,
+          check: 'approval-ai-trailer',
+        });
+      }
+    }
 
     if (!WF_HEAD_RE.test(commit.subject)) return;
     const gated = !history.has(commit.sha);
@@ -451,6 +657,20 @@ function checkGovernance(root, options = {}) {
         }
       } else if (!dist.memory.isMachineEdge(machine, from, to)) {
         push({ rule: 'state', message: `${from} → ${to} is not an edge of the '${type}' machine at this commit` });
+      } else {
+        const pairing = verbEdgeFinding(dist, machine, type, op, from, to);
+        if (pairing !== null) push({ rule: 'state', message: pairing, check: 'verb-edge' });
+      }
+    }
+    // A hop along a reject edge that is no forward edge, under a verb that is not `reject` itself
+    // (`sync`, `dl-061` B.1): the decision is the approver's reject, which the body must cite by sha.
+    if (op !== null && op !== 'reject' && !PAIRED_VERBS.has(op) && machine && hops) {
+      for (const hop of hops) {
+        const kinds = edgeKinds(dist, machine, hop.from, hop.to);
+        if (kinds.includes('reject') && !kinds.includes('forward')) {
+          rejectCrossings.push({ sha: commit.sha, hop, type });
+          break;
+        }
       }
     }
 
@@ -466,14 +686,22 @@ function checkGovernance(root, options = {}) {
     // Every Markdown document the commit touches is checked: those its subject names, and the others
     // for one thing only — a status the commit changed without naming the element.
     const documents = new Map();
+    const writtenAt = new Map();
     for (const path of (touched.get(commit.sha) ?? []).filter((candidate) => candidate.endsWith('.md'))) {
       const atHeadPath = renamed(path);
       documents.set(atHeadPath, documents.get(atHeadPath) === true || isNamed(path));
+      if (isNamed(path)) writtenAt.set(atHeadPath, path);
     }
     if (![...documents.values()].some(Boolean)) unchecked('no document it touches is named by its subject');
     for (const [path, isNamedDocument] of documents) {
+      if (isNamedDocument && op === 'approve' && machine) approvals.push({ sha: commit.sha, path: writtenAt.get(path) ?? path, machine, type });
       if (!atHead.has(path)) {
-        if (isNamedDocument) unchecked(`${path} does not exist at HEAD`);
+        if (!isNamedDocument) continue;
+        if (machine && hops && !EDGE_EXEMPT_VERBS.has(op)) {
+          goneAtHead.push({ sha: commit.sha, parent: commit.parent, path: writtenAt.get(path) ?? path, hops });
+        } else {
+          unchecked(`${path} does not exist at HEAD`);
+        }
         continue;
       }
       if (!stateDocuments.has(path)) stateDocuments.set(path, new Map());
@@ -488,7 +716,6 @@ function checkGovernance(root, options = {}) {
     }
   });
 
-  const subjects = new Map(memoryCommits.map((commit) => [commit.sha, commit.subject]));
   const byOrder = (a, b) => order.get(a) - order.get(b);
   /** Run `read`; on a revision whose frontmatter does not parse, report `shas` as not checked instead. */
   const readOrReport = (path, shas, read) => {
@@ -507,8 +734,8 @@ function checkGovernance(root, options = {}) {
       return null;
     }
   };
-  const stateFinding = (sha, message) =>
-    findings.push({ sha, subject: subjects.get(sha), rule: 'state', message, gated: !history.has(sha) });
+  const stateFinding = (sha, message, check, rule = 'state') =>
+    findings.push({ sha, subject: subjects.get(sha), rule, message, gated: isGated(sha, check), ...(check ? { check } : {}) });
 
   for (const path of [...stateDocuments.keys()].sort()) {
     const touches = stateDocuments.get(path);
@@ -552,6 +779,141 @@ function checkGovernance(root, options = {}) {
     }
   }
 
+  // verb-edge: a document gone at HEAD still has its bracket compared with the frontmatter (bug-192).
+  if (goneAtHead.length > 0) {
+    const texts = readBlobTexts(root, goneAtHead.flatMap((entry) => [`${entry.parent ?? entry.sha + '^'}:${entry.path}`, `${entry.sha}:${entry.path}`]));
+    goneAtHead.forEach((entry, index) => {
+      const before = readFrontmatterFields(dist, texts[index * 2], `${entry.path}@${entry.parent}`);
+      const after = readFrontmatterFields(dist, texts[index * 2 + 1], `${entry.path}@${entry.sha}`);
+      if ((before && before.unreadable) || (after && after.unreadable)) {
+        stateUnchecked.push({ sha: entry.sha, subject: subjects.get(entry.sha), reason: `${entry.path}: a revision's frontmatter does not parse` });
+        return;
+      }
+      const derivedFrom = before?.status ?? null;
+      const derivedTo = after?.status ?? null;
+      const declaredFrom = entry.hops[0].from;
+      const declaredTo = entry.hops[entry.hops.length - 1].to;
+      if (declaredFrom !== derivedFrom || declaredTo !== derivedTo) {
+        stateFinding(
+          entry.sha,
+          `${entry.path} (gone at HEAD): the bracket declares ${declaredFrom} → ${declaredTo}, the frontmatter went ${derivedFrom} → ${derivedTo}`,
+          'verb-edge',
+        );
+      }
+    });
+  }
+
+  // verb-edge: a hop across a reject edge cites the approver's reject commit (`dl-061` B.1).
+  for (const { sha, hop, type } of rejectCrossings) {
+    const tokens = [...new Set(bodies.get(sha).match(SHA_TOKEN_RE) ?? [])];
+    const cited = tokens.some((token) => {
+      try {
+        const cite = git(root, ['log', '--no-show-signature', '-1', '--format=%s', `${token}^{commit}`, '--']).trim();
+        return dist.memory.parseMemoryOperation(cite) === 'reject';
+      } catch {
+        return false;
+      }
+    });
+    if (!cited) {
+      stateFinding(sha, `${hop.from} → ${hop.to} is a reject edge of the '${type}' machine: the body must cite the approver's reject commit by sha (dl-061 B.1)`, 'verb-edge');
+    }
+  }
+
+  // supersedes-pair: an approve into the superseding `waiting` state completes its pair (bug-218).
+  if (approvals.length > 0) {
+    const texts = readBlobTexts(root, approvals.map((entry) => `${entry.sha}:${entry.path}`));
+    let headDocuments;
+    approvals.forEach((entry, index) => {
+      const approved = readFrontmatterFields(dist, texts[index], `${entry.path}@${entry.sha}`);
+      if (!approved || approved.unreadable || approved.status === null) return;
+      if (!dist.memory.supersedesEdgeFrom(entry.machine, approved.status)) return;
+      const target = (approved.supersedes ?? '').trim();
+      if (target === '') return;
+      if (headDocuments === undefined) {
+        const headMemoryYaml = readMemoryYaml(readBlobIds(root, [`${head}:${MEMORY_YAML}`])[0]);
+        headDocuments = headMemoryYaml && headMemoryYaml.ok ? dist.memory.loadMemoryDocumentsAtRev(root, head, headMemoryYaml.value, { includeArchived: true }) : [];
+      }
+      const found = headDocuments.find((document) => document.frontmatter.id === target);
+      const state = found && typeof found.frontmatter.status === 'string' ? found.frontmatter.status : null;
+      if (state === dist.memory.SUPERSEDED_STATE) return;
+      const approvedId = approved.id ?? basename(entry.path, '.md');
+      stateFinding(
+        entry.sha,
+        `${entry.path}: approved into '${approved.status}' with supersedes: ${target}, but ${target} is ${state === null ? 'missing' : `'${state}'`} at HEAD, ` +
+          `not '${dist.memory.SUPERSEDED_STATE}': complete the pair with \`wf(${entry.type}): finalize ${target} [${state ?? approved.status} → ${dist.memory.SUPERSEDED_STATE}]\`, ` +
+          `Reason: superseded by ${approvedId} (its supersedes: field), approved in ${entry.sha}.`,
+        'supersedes-pair',
+      );
+    });
+  }
+
+  // status-outside-wf: a commit that is no Memory operation changes no Memory status (dl-139 (a)).
+  const changes = readFileChanges(root, range, otherCommits.map((commit) => commit.sha));
+  const candidates = [];
+  const otherMemoryOids = readBlobIds(root, otherCommits.map((commit) => `${commit.sha}:${MEMORY_YAML}`));
+  otherCommits.forEach((commit, index) => {
+    const memoryYaml = readMemoryYaml(otherMemoryOids[index]);
+    if (!memoryYaml || !memoryYaml.ok) return;
+    const roots = dist.memory.computeMemoryContentRoots(memoryYaml.value);
+    const inRoots = (path) => path !== null && path.endsWith('.md') && roots.some((rootDir) => path.startsWith(`${rootDir}/`));
+    for (const change of changes.get(commit.sha) ?? []) {
+      if (change.to === null || !(inRoots(change.from) || inRoots(change.to))) continue;
+      candidates.push({ commit, change, types: memoryYaml.value.types });
+    }
+  });
+  if (candidates.length > 0) {
+    const texts = readBlobTexts(
+      root,
+      candidates.flatMap(({ commit, change }) => [change.from === null || commit.parent === null ? '' : `${commit.parent}:${change.from}`, `${commit.sha}:${change.to}`]),
+    );
+    candidates.forEach(({ commit, change, types }, index) => {
+      const before = change.from === null || commit.parent === null ? null : readFrontmatterFields(dist, texts[index * 2], change.from);
+      const after = readFrontmatterFields(dist, texts[index * 2 + 1], change.to);
+      if ((before && before.unreadable) || (after && after.unreadable)) return;
+      const isMemory = (fields) => fields !== null && fields.type !== null && Object.prototype.hasOwnProperty.call(types, fields.type);
+      if (!isMemory(before) && !isMemory(after)) return;
+      const from = before?.status ?? null;
+      const to = after?.status ?? null;
+      if (from === to) return;
+      stateFinding(
+        commit.sha,
+        `${change.to}: its status went ${from ?? '(none)'} → ${to ?? '(none)'} in a commit that is not a wf() Memory operation (dl-139)`,
+        'status-outside-wf',
+      );
+    });
+  }
+
+  // config-version: over a --base range, a versioned config file that changed bumps its version (bug-249).
+  if (base !== null) {
+    const mergeBase = git(root, ['merge-base', base, 'HEAD']).trim();
+    const oids = readBlobIds(root, VERSIONED_CONFIG_FILES.flatMap((path) => [`${mergeBase}:${path}`, `${head}:${path}`]));
+    VERSIONED_CONFIG_FILES.forEach((path, index) => {
+      const [before, after] = [oids[index * 2], oids[index * 2 + 1]];
+      if (before === null || after === null || before === after) return;
+      const [beforeText, afterText] = readBlobTexts(root, [before, after]);
+      const versionOf = (text) => {
+        try {
+          const document = dist.validation.parseYaml(text, path);
+          return document !== null && typeof document === 'object' ? (document.version ?? null) : null;
+        } catch {
+          return null;
+        }
+      };
+      const writtenOf = (text) => /^version:[ \t]*([^\s#]+)/m.exec(text)?.[1] ?? '(none)';
+      if (dist.validation.isVersionIncrease(versionOf(beforeText), versionOf(afterText))) return;
+      const last = git(root, ['log', '--no-show-signature', '-1', '--format=%H', `${base}..HEAD`, '--', path]).trim();
+      const sha = last === '' ? head : requireCommitName(last, 'git log -1');
+      if (!subjects.has(sha)) subjects.set(sha, git(root, ['log', '--no-show-signature', '-1', '--format=%s', sha]).trim());
+      if (!order.has(sha)) order.set(sha, order.size);
+      stateFinding(
+        sha,
+        `${path}: changed in ${base}..HEAD, but version: ${writtenOf(beforeText)} → ${writtenOf(afterText)} is no numeric increase (bug-249, doc-versioning)`,
+        'config-version',
+        'config',
+      );
+    });
+  }
+
   const unique = new Map();
   for (const finding of findings) unique.set(`${finding.sha}\0${finding.rule}\0${finding.message}`, finding);
   const sorted = [...unique.values()].sort(
@@ -565,7 +927,9 @@ function checkGovernance(root, options = {}) {
     head,
     base,
     introducedAt,
+    checkIntroductions,
     checked: memoryCommits.length,
+    otherCommits: otherCommits.length,
     gatedCommits: memoryCommits.filter((commit) => !history.has(commit.sha)).length,
     findings: sorted,
     stateUnchecked: stateUnchecked.sort((a, b) => order.get(a.sha) - order.get(b.sha)),
@@ -591,7 +955,11 @@ function formatReport(report) {
   const history = report.findings.filter((finding) => !finding.gated);
   const lines = [
     `governance check: ${report.checked} wf() commits in ${report.base === null ? 'HEAD' : `${report.base}..HEAD`} ` +
-      `(${report.gatedCommits} after the introduction commit ${report.introducedAt ?? '(none: every commit is gated)'})`,
+      `(${report.gatedCommits} after the introduction commit ${report.introducedAt ?? '(none: every commit is gated)'}), ` +
+      `and ${report.otherCommits} other commits`,
+    `later checks introduced at: ${Object.entries(report.checkIntroductions)
+      .map(([check, sha]) => `${check} ${sha ?? '(none)'}`)
+      .join(', ')}`,
   ];
   const line = (finding) => `  ${finding.sha} ${finding.rule}: ${finding.message}\n      ${finding.subject}`;
   if (gated.length > 0) lines.push('FAIL — after the introduction commit:', ...gated.map(line));
@@ -639,7 +1007,7 @@ function main(argv) {
   }
 }
 
-module.exports = { checkGovernance, exitCodeFor, formatReport };
+module.exports = { CHECKS, checkGovernance, exitCodeFor, formatReport };
 
 if (require.main === module) {
   process.exitCode = main(process.argv.slice(2));

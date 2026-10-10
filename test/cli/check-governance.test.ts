@@ -195,7 +195,8 @@ describe('body rule — Approver:/Reason: shape (dl-067, as amended by task-166)
   ids.forEach((id) => f.pending(id));
   const approve = (id: string, body: string): string =>
     f.task(id, 'backlog', `wf(task): approve ${id} [pending → backlog]${body}`, APPROVER);
-  const conforming = approve('t-1', approval('Line one.\n\nA second paragraph.\n\nCo-Authored-By: Someone <s@example.invalid>'));
+  // The trailer paragraph is a `Signed-off-by:`: since task-208 (bug-307) a `Co-Authored-By:` on an approve is a finding.
+  const conforming = approve('t-1', approval('Line one.\n\nA second paragraph.\n\nSigned-off-by: Someone <s@example.invalid>'));
   const noApprover = approve('t-2', '\n\nReason: Looks fine.');
   const blankReason = approve('t-3', `\n\nApprover: ${APPROVER.name} <${APPROVER.email}> (approver)\nReason:`);
   const lowercaseReservedKey = approve('t-4', approval('Fine.\napprover: Someone Else <x@example.invalid> (approver)'));
