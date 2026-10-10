@@ -36,7 +36,10 @@ import { coreErr, coreOk, type CoreResult } from '../core/types';
 import type { AdapterManifest } from './schema';
 import { deriveNotesField, NOT_REPORTED, recordRun, type ReportedCount, type RunRecord, type RunTokens } from './run-log';
 
-/** How much one post-run lookup may print on stdout before it is stopped (§2.6). */
+/**
+ * How much one post-run lookup may print before it is stopped (§2.6): `execFile`'s `maxBuffer`, which
+ * bounds stdout and stderr each, so a lookup with valid stdout and over 1 MiB on stderr loses its values.
+ */
 const LOOKUP_MAX_BYTES = 1024 * 1024;
 
 /** How long one post-run lookup may run (§2.6, §3.3 step 16). */
@@ -215,7 +218,7 @@ function runLookup(command: string, args: readonly string[], root: string, timeo
       if (error === null) return settle({ ok: true, stdout });
       const failed = error as NodeJS.ErrnoException & { killed?: boolean; code?: number | string; signal?: string | null };
       if (failed.killed === true) return settle({ ok: false, reason: `timed out after ${timeoutMs} ms` });
-      if (failed.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return settle({ ok: false, reason: `printed more than ${LOOKUP_MAX_BYTES / 1024 / 1024} MiB` });
+      if (failed.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return settle({ ok: false, reason: `printed more than ${LOOKUP_MAX_BYTES / 1024 / 1024} MiB on stdout or stderr` });
       if (typeof failed.code === 'number') return settle({ ok: false, reason: `exited ${failed.code}` });
       if (failed.signal) return settle({ ok: false, reason: `ended by ${failed.signal}` });
       return settle({ ok: false, reason: failed.code !== undefined ? `could not start: ${failed.code}` : failed.message });

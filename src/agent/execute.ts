@@ -196,8 +196,9 @@ export async function withRunFiles<T>(
   const listeners = CLEANUP_SIGNALS.map((signal): [NodeJS.Signals, () => void] => [
     signal,
     () => {
-      release();
+      // The directory goes before the listeners: a second signal meanwhile runs this again, harmlessly.
       if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
+      release();
       process.kill(process.pid, signal);
     },
   ]);
@@ -220,8 +221,9 @@ export async function withRunFiles<T>(
     }
     return await work(paths, release);
   } finally {
-    release();
+    // Removed before the last listeners come out, so no signal in between can leave it behind.
     if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
+    release();
   }
 }
 
