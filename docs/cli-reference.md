@@ -407,13 +407,17 @@ Print the resource paths declared in `dna.yaml` `paths:`.
 wingfoil paths [<category>] [--list]
 ```
 
-`<category>` is `sources`, `tests`, `docs`, `config`, `governance` or `runs`. Without it the whole
+`<category>` is `sources`, `tests`, `docs`, `config`, `governance`, `runs` or `health`. Without it the whole
 map is printed. `--list` is accepted for a planned drill-down view, but in this release it does not
 change the output.
 
 `runs` is the directory of the agent run log, and it holds exactly one entry: a `dna.yaml` that
 declares none or two is refused, naming `paths.runs`. `wingfoil init` scaffolds it as `docs/runs/`;
 change it with `wingfoil dna update paths.runs --value <dir>`.
+
+`health` is the directory of the release-health metric catalogue and reports, and it also holds exactly
+one entry; `wingfoil init` does not scaffold it, since only a project that runs a release-health workflow
+needs it.
 
 ```console
 $ wingfoil paths sources

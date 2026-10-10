@@ -6,7 +6,7 @@ description: >-
   Close the release loop: EXPLORE the release's Execution Notes for friction, let the approver add
   points, capture what went well / what to improve as Memory, and feed adjustments into the next
   release planning.
-version: 1.4                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175); 1.3 dl-104 Action 2 (task-199): approve declares the Memory transition it stands for, explore's agent.mine_execution_notes becomes agent.execute (dl-090 Q6); 1.4 dl-115 Q1 (A) + Q3 (x), dl-163 (task-213): explore reads the ### Retrospective subsections first and lists every secondary source it was given; additional-points gains a checks.pre that every proposal and every consumer feedback note has one outcome (four, six for a consumer feedback note)
+version: 1.5                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175); 1.3 dl-104 Action 2 (task-199): approve declares the Memory transition it stands for, explore's agent.mine_execution_notes becomes agent.execute (dl-090 Q6); 1.4 dl-115 Q1 (A) + Q3 (x), dl-163 (task-213): explore reads the ### Retrospective subsections first and lists every secondary source it was given; additional-points gains a checks.pre that every proposal and every consumer feedback note has one outcome (four, six for a consumer feedback note); 1.5 dl-089 §1 (task-222): explore reads the release-health report, additional-points presents its proposals, capture writes the retro's ## Release health section; the friction inventory moves to docs/09_retrospectives/ (bug-299)
 element: release
 
 phases:
@@ -19,7 +19,10 @@ phases:
       tooling gaps, inter-task dependency friction. Then read every secondary source the phase is
       given — any input written outside the release's own Memory documents: the notes kept during the
       release for the next planning, points the approver hands over, a report or record another phase
-      produced (a consumer feedback triage record, dl-163). The inventory lists each secondary source
+      produced (a consumer feedback triage record, dl-163), and always the release-health report
+      `docs/08_health/release-health-{release.version}.md` that release-cycle's `release-health` phase
+      wrote before this one (dl-089 §1): its comparison is read as measurement, and each of its
+      `RH-{release.version}-NN` proposals is carried as a proposal. The inventory lists each secondary source
       it was given, with the commit or sha read, and carries each item of a source that is a proposal
       as a proposal, never as a finding (dl-115 Q3 (x)): a proposal cannot emerge from mining the
       repository. Read-only; produces a structured, source-cited friction inventory grouped by theme.
@@ -30,14 +33,15 @@ phases:
     produces:
       # The source-cited friction inventory, grouped by theme, outside every Memory path (approver
       # ruling 2026-10-05; dl-104 D3: a produces entry is a path pattern an engine can test for existence).
-      - "docs/06_retrospectives/rl-{release.release-line}/rel-{release.version}-friction-inventory.md"
+      - "docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-friction-inventory.md"
     checks:
       # dl-115 Q3 (x): no command asserts it yet (unbound, a warning in v0.3); the facilitator checks it.
       post: ["secondary-sources.listed(every secondary source the phase was given, with the commit or sha read, in the friction inventory)"]
 
   - name: additional-points
     description: >-
-      Approver gate: present the friction inventory + the identified improvement themes; the approver
+      Approver gate: present the friction inventory + the identified improvement themes, and the
+      release-health report's comparison table and its RH proposals (dl-089 §4); the approver
       adds any further points to analyze (and, if a point implies a config/process change, a DL is
       spun off in capture). Before the gate, every item that is a proposal, and every consumer
       feedback note, has exactly one outcome (dl-115 Q3 (x), dl-163 S3d; the check below). A review
@@ -61,7 +65,9 @@ phases:
     approval: { by_role: approver }
 
   - name: capture
-    description: "Record retrospective learnings as a Memory decision-log."
+    description: >-
+      Record retrospective learnings as a Memory decision-log. Its `## Release health` section holds the
+      release-health comparison table and the disposition of every RH proposal (dl-089 §1).
     role: facilitator
     actions:
       - 'memory.add(type: decision-log, title: "Retrospective {release.version}")'

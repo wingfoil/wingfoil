@@ -94,6 +94,7 @@ sw-life-cycle (main)
 │                              │     ├── e2e-smoke  (fresh-init + CLI end-to-end smoke gate + mcp-registration — dl-023)
 │                              │     ├── release-submit
 │                              │     ├── release-publishing
+│                              │     ├── release-health  (measure → compare → propose — dl-089; docs/08_health/)
 │                              │     └── retrospective  (→ decision-log)
 │                              ├── align-agent-docs    → agent-docs  (dl-025: the same phase at release-line close)
 │                              └── plan-next-release-line  (once all releases are `released`:

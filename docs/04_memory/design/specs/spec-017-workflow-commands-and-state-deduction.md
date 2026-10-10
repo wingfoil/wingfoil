@@ -873,11 +873,11 @@ list --format json` with the pinned build 0.2.2 loads the same 23 workflows and 
 - *Self-creating instances:* `sw-life-cycle` (`release-line`), `bug-ingest`, `decision-log-ingest`,
   `adr-ingest`, `service-ingest` bind the element their creating phase creates, so their capture,
   approve and triage phases deduce from it and each instance can end.
-- *Checkpoints:* 27 phases declare no evidence and complete by `workflow finalize`: the 11 phases of
+- *Checkpoints:* 28 phases declare no evidence and complete by `workflow finalize`: the 11 phases of
   `user-story-mapping`, `specification-by-examples`, `volere-requirements` and `backlog-export`;
   `release-planning.advance-pinned-build`; `dev-loop.red|green|refactor`;
   `user-docs.check-implementation-complete`; `e2e-smoke.fresh-init|drive-cli|mcp-registration`;
-  `release-submit.pre-release-checks|approve-release`; `release-publishing.release-commit|tag|publish`;
+  `release-submit.pre-release-checks|approve-release`; `release-publishing.release-commit|tag|publish`; `release-health.propose`;
   `retrospective.additional-points|approve`; `end-of-life.archive`. So a `sw-life-cycle`
   instance passes `specification` only by finalizing those 11 steps, and `dev-loop` passes
   `red`/`green`/`refactor` by one `finalize` each.
@@ -1186,3 +1186,15 @@ named: `end-of-life.deprecate`, which selects what it deprecates since the 2026-
 `test/core/workflow-repository-conformance.test.ts` pins at `task-219`'s branch. No rule, command or
 diagnostic changes. Edited in place without a supersede or a state change (`dl-047`); pending the
 approver's `memory amend` at `task-219`'s review.
+
+**Revision (2026-10-10, `task-222-declare-release-health-catalogue-v2-report-schema-release`) — §12 re-measured with
+`release-health`.** `dl-089` §1 adds the `release-health` sub-workflow (measure → compare → propose), included by
+`release-cycle` between `publishing` and `retrospective`. Re-measured on the tree merged with `task-216`, `task-228`
+and `task-219` (`node dist/cli.js workflow list --all --format json` and `loadWorkflowRegistryAtHead` at the merge
+commit): 25 workflows, 93 phases, **0 errors, 69 `W_WORKFLOW_UNBOUND_TOKEN` warnings**, each on a check (three are
+`release-health`'s report checks, unbound until its scripts ship); every action resolves,
+`release-health.measure` / `.compare` through `workflows/bindings.yaml`. The checkpoint list gains
+`release-health.propose` (its proposals go into the report `compare` produced): 28, the list
+`test/core/workflow-repository-conformance.test.ts` pins after the merge. §12's earlier figures (61 warnings) stay as
+the record of `task-199`'s measurement. No command, rule or diagnostic changes. Edited in place without a supersede
+or a state change (`dl-047`); pending the approver's `memory amend` at `task-222`'s review.

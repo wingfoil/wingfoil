@@ -11,7 +11,7 @@ name: release-cycle
 kind: sub
 description: >-
   Deliver one release: plan scope -> run a TDD dev-loop per backlog task (including bug-fix
-  tasks) -> align user-facing docs -> e2e-smoke -> submit -> publish to npm -> retrospective.
+  tasks) -> align user-facing docs -> e2e-smoke -> submit -> publish to npm -> measure release health -> retrospective.
   A release candidate is the commit of the release's integration branch proposed for the version
   tag (dl-099 §1); it is cut by release-publishing's `release-commit`. The two checks are the
   e2e-smoke gate (against the packed candidate, `e2e-smoke-passed`) and release-publishing's
@@ -24,7 +24,7 @@ description: >-
   (and `submit`'s checks) and then `staging-rehearsal`, and only a candidate that has passed both is
   tagged. A commit that only records evidence (a gate report, a transcript, a Memory transition) does
   not re-cut: the tag goes on the candidate the checks named.
-version: 1.3                     # dl-013: added user-docs phase (1.1); dl-119: git comment points to git-conventions (1.2); dl-099 §1 (task-219): the release candidate and its re-cut re-entry into e2e-smoke and staging-rehearsal (1.3)
+version: 1.4                     # dl-013: added user-docs phase (1.1); dl-119: git comment points to git-conventions (1.2); dl-099 §1 (task-219): the release candidate and its re-cut re-entry into e2e-smoke and staging-rehearsal (1.3); dl-089 §1 (task-222): + release-health between publishing and retrospective (1.4)
 element: release        # the iterated element provided by sw-life-cycle (iterate_over: release)
 
 phases:
@@ -62,6 +62,14 @@ phases:
       Cut the release candidate, rehearse its publish on staging (`staging-rehearsal`), tag it, publish
       to npm; mark the release released. A candidate re-cut here re-enters e2e-smoke first (dl-099).
     include: release-publishing
+
+  - name: release-health                     # dl-089 §1 — measure, compare with the previous run, propose; not a gate
+    description: >-
+      Measure the release at its measurement point with the fixed metric catalogue, compare every metric
+      with the previous release's run and write the improvement proposals the retrospective disposes of.
+      Runs on every release, including one whose publishing was skipped; D01 (outcome equivalence) only on
+      major and minor releases (dl-089 §2, dl-131).
+    include: release-health
 
   - name: retrospective
     description: "Capture learnings and adjust the next release."

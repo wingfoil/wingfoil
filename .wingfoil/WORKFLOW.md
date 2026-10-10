@@ -180,10 +180,11 @@ delivery starts.
 
 Iterated once per release (`iterate_over: release`, `where: release-line = {release-line.version},
 status ∈ [draft, planning, in-development]` — scoped to the current release-line-cycle iteration).
-Seven phases in sequence, each including one sub-workflow: `planning` (`release-planning`),
+Eight phases in sequence, each including one sub-workflow: `planning` (`release-planning`),
 `implementation` (`dev-loop`), `user-docs` (`user-docs`, dl-013/dl-025), `e2e-smoke` (`e2e-smoke`,
-dl-023), `submit` (`release-submit`), `publishing` (`release-publishing`) and `retrospective`
-(`retrospective`). A patch runs every phase except `retrospective` (dl-092).
+dl-023), `submit` (`release-submit`), `publishing` (`release-publishing`), `release-health`
+(`release-health`, dl-089) and `retrospective` (`retrospective`). A patch runs every phase except
+`retrospective` (dl-092); its release-health run reports D01 as not-comparable.
 
 ```mermaid
 flowchart TD
@@ -199,9 +200,11 @@ flowchart TD
 
     RP2["**publishing** → `release-publishing`\nrelease-commit → staging-rehearsal → tag → publish → mark-released\nrelease commit = the candidate · staging rehearsal on it · git tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released\n(see sub-diagram below)"]
 
-    RT["**retrospective** → `retrospective`\nexplore → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115)\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
+    RT["**retrospective** → `retrospective`\nexplore → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115), the release-health report among them\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
 
-    RP --> DL --> UD --> ES --> RS --> RP2 --> RT
+    RH["**release-health** → `release-health`\nmeasure → compare → propose\ncatalogue `docs/08_health/metrics.yaml` · report `docs/08_health/release-health-{version}.md`\nnot a gate (dl-089 §5)"]
+
+    RP --> DL --> UD --> ES --> RS --> RP2 --> RH --> RT
     RP2 -.->|re-cut candidate| ES
 ```
 
@@ -350,6 +353,27 @@ flowchart TD
     RC --> SR --> TG --> PB --> MR
 ```
 
+### Release Health — `release-health`
+
+Runs after `publishing` and before `retrospective` on every release (dl-089). It measures the release at
+its measurement point — the published tag, else the commit carrying the `released` transition — with the
+fixed catalogue `docs/08_health/metrics.yaml` (version 2: git history G, project quality Q, the
+Determinism Index's outcome D01 and process conformance P, the external snapshot E), compares every
+metric with the previous release's run and turns each regression or breached floor into an
+`RH-{version}-NN` proposal for the retrospective. It blocks nothing; a breach of G07, G10, G14, Q01 or Q02
+is filed at once through `bug-ingest`. `release-health.measure` / `.compare` are bound to
+`scripts/release-health/measure.cjs` / `compare.cjs`, to be written by task-231..233 (measure) and task-241 (compare);
+dl-089 §6 forbids them writing git configuration.
+
+```mermaid
+flowchart TD
+    ME["**measure** *(qa)*\nrelease-health.measure — every catalogue metric at the measurement point\nD01 / P06 on major and minor releases only\n`docs/08_health/release-health-{version}.json`"]
+    CO["**compare** *(facilitator)*\nrelease-health.compare — improved / stable / regressed / new / not-comparable\nfloors, small samples, previous proposals settled\n`docs/08_health/release-health-{version}.md`"]
+    PR["**propose** *(facilitator)*\nagent.execute — tracked findings cite their element; the rest become RH proposals\nG07 · G10 · G14 · Q01 · Q02 breaches filed through bug-ingest"]
+
+    ME --> CO --> PR
+```
+
 ---
 
 ## Phase 7 — Sunset: `end-of-life`
@@ -421,7 +445,7 @@ built in (`agent.*` is `wingfoil agent execute` under the phase's role; the inst
 `description`). Every other token is bound in `.wingfoil/workflows/bindings.yaml` (`format: 1`,
 dl-153): a check to an argument vector (`npm test`, `npm run lint`, `npm run docs:api`,
 `npm run typecheck`, `npm run check:lockfile`, `npm run check:mcp`, `node scripts/e2e-smoke.cjs`, …),
-an action to a command or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
+an action to a command (`release-health.measure` / `.compare`, `node scripts/release-health/…`, scripts still to be written) or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
 `approver.execute`). Token arguments are `key: value` pairs, substituted as whole argv elements, never
 through a shell. The prose checks no command asserts yet (`frontmatter.required: […]`,
 `spec-review.passed`, the specification-phase quality criteria, …) stay unbound: `workflow list` reports
@@ -591,6 +615,6 @@ stateDiagram-v2
 | `architect` | Features session, Volere requirements, ADR authoring, tech-spec identification/authoring (`identify-specs`, `dev-loop/design`), agent-facing docs (`align-agent-docs`) |
 | `developer` | TDD dev-loop (green/refactor), branch management, user-facing docs (`align-user-docs`), bug capture, service capture |
 | `reviewer` | Code review in dev-loop (tests and code, under the developer's and qa's directives too, `dl-134`) |
-| `qa` | BDD specification, the dev-loop `red` phase (black-box tests, `dl-134`), end-to-end smoke (`e2e-smoke`), pre-release checks |
-| `facilitator` | Lean inception sessions, retrospective exploration and capture |
+| `qa` | BDD specification, the dev-loop `red` phase (black-box tests, `dl-134`), end-to-end smoke (`e2e-smoke`), pre-release checks, release-health measurement (`measure`) |
+| `facilitator` | Lean inception sessions, release-health comparison and proposals (`compare`, `propose`), retrospective exploration and capture |
 | `approver` | All approval gates (bug triage, governance reconcile, backlog commit, task review, documentation, e2e smoke, release, retrospective, end-of-life, service verification) |
