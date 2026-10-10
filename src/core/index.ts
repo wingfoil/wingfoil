@@ -833,7 +833,8 @@ function singleOption(options: MemoryAddParams['options'], name: string): string
  *    skeleton (P1.3; spec-010-memory-frontmatter-schema) plus the `--set` fields (a context token only
  *    where the scaffold declares it). `status` is the head of the type's committed machine
  *    (`spec-001`; `bug-214`, task-180), and a WIP limit declared on that state is checked
- *    (`requireWipSlot`, `CONFLICT`, exit 1). Then **write + commit** through task-022's
+ *    (`requireWipSlot`, `CONFLICT`, exit 1), its holders counted at `HEAD` and on every local and
+ *    remote-tracking branch (`dl-156` Q1 (a), task-274). Then **write + commit** through task-022's
  *    confined `writeMemoryEntry` (REQ-SEC-06 refuse-before-write + one scoped commit
  *    `wf(<type>): add <id>`); the returned sha rides `CoreResult.commit`.
  *
@@ -900,7 +901,8 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
     const absent = requireAbsentTarget(root, targetPath);
     if (!absent.ok) return absent;
     // `add` is the verb that enters the initial state, so a WIP limit declared there holds here too
-    // (task-180, `dl-110` P3 (a)), counted in the commit the type was resolved at.
+    // (task-180, `dl-110` P3 (a)), counted at `HEAD` — the commit the type was resolved at — and on
+    // every local and remote-tracking branch (`dl-156` Q1 (a), task-274).
     const slot = requireWipSlot(root, 'HEAD', committedMemoryYaml, type, initialState);
     if (!slot.ok) return slot;
 
@@ -1713,8 +1715,8 @@ export interface MemoryParkResult {
  *    the identity is read (task-125, `bug-172`). The reason is mandatory: a park records why.
  * 2. **{@link beginMemoryTransition}** with op `park` — identity (REQ-SEC-01), then the document and
  *    its edge at `HEAD` (`dl-080`): a state with no `returns` edge is `INVALID_TRANSITION` with the
- *    `dl-032` contract message (exit `1`), and a WIP limit declared on the target state is checked
- *    there too (`requireWipSlot`, `CONFLICT`, exit `1`).
+ *    `dl-032` contract message (exit `1`). A WIP limit declared on the target state does not refuse a
+ *    park: a return along a `returns` edge takes no slot check (`dl-156` Q2 (i), task-274).
  * 3. **Edit + commit** — `status` set to the target and nothing else (`spec-010` field-write ownership,
  *    enforced by `commitMemoryTransition`'s post-condition), one commit scoped to that file:
  *    `wf(<type>): park <id> [<from> → <to>]` with a `Reason:` block (`spec-008` §2).

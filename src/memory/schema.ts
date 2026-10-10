@@ -43,7 +43,9 @@ export const RESERVED_TYPE_NAMES: readonly string[] = Object.freeze(['directive'
  *   a rejection, taken by `memory park`. Every key MUST be a member of `sequence`, and its target an
  *   EARLIER state of `sequence`: a park steps back along the chain, never forward or off it.
  * - `limits` (task-180, `dl-110` P3 (a)): `{ <state>: <positive integer> }`, an optional WIP limit,
- *   enforced by the verb that enters the state (`requireWipSlot`, `src/core/memory-transition.ts`).
+ *   enforced by the verb that enters the state (`requireWipSlot`, `src/core/memory-transition.ts`),
+ *   its holders counted across every ref, except `reject` and `park`, which send an element back
+ *   (`dl-156`, task-274).
  *   Every key MUST be a member of `sequence`.
  */
 export const StateMachine = z

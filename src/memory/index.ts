@@ -98,6 +98,7 @@ export {
   parseSetOptions,
   parseTags,
   readAuthorDate,
+  refBaselineCommits,
   renderAddDocument,
   slugifyTitle,
   unknownSetNames,

@@ -26,12 +26,14 @@ import { existsSync, lstatSync } from 'fs';
 import { join } from 'path';
 
 import {
+  DEPRECATED_STATE,
   E_INVALID_TRANSITION,
   findMemoryDocumentById,
   findMemoryDocumentByIdAtRev,
   loadMemoryDocumentsAtRev,
   loadMemoryDocumentSummary,
   loadMemoryDocumentSummaryAtRev,
+  refBaselineCommits,
   resolveStateMachine,
   resolveSupersedeTarget,
   resolveTypeTransition,
@@ -243,8 +245,10 @@ function recordedIdAt(root: string, sha: string, path: string): string | undefin
  *   `format` newer than this build reads → `VALIDATION` with the `dl-149` `E_INVALID_FORMAT` text, the
  *   file named (task-257, `bug-241`);
  * - the target state declares a WIP limit its holders have reached → `CONFLICT`
- *   ({@link requireWipSlot}, task-180). Every transition into a state goes through here, so the limit
- *   holds whichever verb or engine action moves the element.
+ *   ({@link requireWipSlot}, task-180), the holders counted across every ref (task-274). Every
+ *   transition into a state goes through here, so the limit holds whichever verb or engine action
+ *   moves the element — except `reject` and `park`, which send it back along a reject or `returns`
+ *   edge and are exempt (`dl-156` Q2 (i)).
  *
  * The unknown-type, invalid-state and illegal-transition refusals keep their pinned messages
  * verbatim as the first sentence; {@link uncommittedMachineNote} may append a second one.
@@ -408,8 +412,12 @@ export function prepareMemoryTransitionAtRev(
         : op === 'supersede'
           ? resolveSupersedeTarget(memoryYaml, type, from, path)
           : resolveTypeTransition(memoryYaml, type, from, op, path);
-    // A self-loop (`amend`) enters no state, so it takes no slot.
-    if (to !== from) {
+    // A self-loop (`amend`) enters no state, so it takes no slot. Nor does a return (`dl-156` Q2 (i),
+    // task-274): `reject` only ever takes a `gates.<from>.reject` edge and `park` only a
+    // `returns.<from>` edge (`resolveTransitionTarget`), the element held the state before, and sending
+    // work back is not capped by a capacity rule. Keyed on the verb, not on the target, so an `approve`
+    // whose forward target equals the gate's reject target still takes the check.
+    if (to !== from && op !== 'reject' && op !== 'park') {
       const slot = requireWipSlot(root, sha, memoryYaml, type, to, id);
       if (!slot.ok) return slot;
       // The documents the slot count could not read, if the lookup above has not already named them.
@@ -459,20 +467,36 @@ export function prepareMemoryTransitionAtRev(
 }
 
 /**
+ * The sentence every WIP refusal ends with (`dl-156` Q1 (a), task-274): the count reads refs, and a
+ * clone sees only the refs it has fetched.
+ */
+export const WIP_REFS_SENTENCE =
+  'The holders are counted at HEAD and on every local and remote-tracking branch, so the count depends on which refs were last fetched.';
+
+/**
  * Refuse to move an element into `state` when the type's machine declares a WIP limit there
  * (`limits: { <state>: N }`, `spec-001`, `dl-110` P3 (a), task-180) and N elements of the type already
  * hold it — `CONFLICT`, exit `1`, naming every holder in path order, before anything is written.
  *
  * The one shared check: {@link prepareMemoryTransitionAtRev} calls it for every transition into a new
- * state (`submit`, `approve`, `reject`, `park`, the `supersedes:` trigger, and any workflow emitter that
- * prepares its transition there), and `memory add` calls it for the initial state, since `add` is the
- * verb that enters that state. The holders are counted in commit `sha` — the one the transition is
- * decided at (`dl-080`) — by each document's own `type` and `status`; `exceptId`, the element being
- * moved, is never its own holder. A document the scan cannot read is not counted (task-171's tolerant
+ * state except the two that send an element back (`submit`, `approve`, the `supersedes:` trigger, and
+ * any workflow emitter that prepares its transition there — not `reject` nor `park`, `dl-156` Q2 (i)),
+ * and `memory add` calls it for the initial state, since `add` is the verb that enters that state.
+ *
+ * **Where the holders are counted** (`dl-156` Q1 (a), task-274): in commit `sha` — the one the
+ * transition is decided at (`dl-080`) — **and** at the tip of every local branch and remote-tracking
+ * ref, the commits {@link refBaselineCommits} lists for `memory add`'s id counter (`dl-101` §2 (a)), so
+ * parallel branches see each other's holders. Documents are matched by their own `type`, grouped by
+ * `id` (by path when a document has none), and each element counts in its **most advanced** state
+ * across those commits ({@link isMoreAdvancedState}); `exceptId`, the element being moved, is never its
+ * own holder. The refusal ends with {@link WIP_REFS_SENTENCE}. This is a read wider than `HEAD`, which
+ * the `command-baseline` directive declares by name.
+ *
+ * A document the scan cannot read, on any of those commits, is not counted (task-171's tolerant
  * scan), since its `type` and `status` are unknown; it is returned as a `W_MEMORY_UNREADABLE`
- * diagnostic, which the caller's success carries as a warning and a refusal carries in
- * `details.issues`, so a limit that may be undercounted says so. Without a declared limit nothing is
- * read and nothing is returned.
+ * diagnostic, once per file (the decided commit's first), which the caller's success carries as a
+ * warning and a refusal carries in `details.issues`, so a limit that may be undercounted says so.
+ * Without a declared limit nothing is read and nothing is returned.
  */
 export function requireWipSlot(
   root: string,
@@ -482,20 +506,61 @@ export function requireWipSlot(
   state: string,
   exceptId?: string,
 ): CoreResult<readonly Diagnostic[]> {
-  const limit = resolveStateMachine(memoryYaml, type).limits?.[state];
+  const machine = resolveStateMachine(memoryYaml, type);
+  const limit = machine.limits?.[state];
   if (limit === undefined) return coreOk([]);
+  const decided = resolveRevision(root, sha);
+  const commits = [decided, ...refBaselineCommits(root).filter((commit) => commit !== decided)];
+
   const unreadable: Diagnostic[] = [];
-  const holders = loadMemoryDocumentsAtRev(root, sha, memoryYaml, { onDiagnostic: (diagnostic) => unreadable.push(diagnostic) })
-    .filter(({ frontmatter }) => frontmatter.type === type && frontmatter.status === state && frontmatter.id !== exceptId)
-    .map(({ frontmatter, path }) => (frontmatter.id === undefined ? path : String(frontmatter.id)));
+  const onDiagnostic = (diagnostic: Diagnostic): void => {
+    if (!unreadable.some((known) => known.file === diagnostic.file)) unreadable.push(diagnostic);
+  };
+  // Each element once: its most advanced state across the commits, and the path it holds it at.
+  const elements = new Map<string, { readonly name: string; readonly path: string; readonly state: string }>();
+  for (const commit of commits) {
+    for (const { frontmatter, path } of loadMemoryDocumentsAtRev(root, commit, memoryYaml, { onDiagnostic })) {
+      if (frontmatter.type !== type) continue;
+      const id = frontmatter.id === undefined ? undefined : String(frontmatter.id);
+      const key = id === undefined ? `path:${path}` : `id:${id}`;
+      const status = typeof frontmatter.status === 'string' ? frontmatter.status : String(frontmatter.status ?? '');
+      const known = elements.get(key);
+      if (known === undefined || isMoreAdvancedState(machine, status, known.state)) {
+        elements.set(key, { name: id ?? path, path, state: status });
+      }
+    }
+  }
+  const holders = [...elements.values()]
+    .filter((element) => element.state === state && element.name !== exceptId)
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .map((element) => element.name);
   if (holders.length < limit) return coreOk(unreadable);
   return coreErr({
     code: 'CONFLICT',
     message:
       `WIP limit reached for '${state}' on type '${type}' (limit ${limit}): held by ${holders.join(', ')}. ` +
-      `Move one of them out of '${state}', then retry.`,
+      `Move one of them out of '${state}', then retry. ${WIP_REFS_SENTENCE}`,
     ...(unreadable.length > 0 ? { details: { issues: unreadable } } : {}),
   });
+}
+
+/**
+ * Whether state `a` is further along `machine` than state `b` — the rule that picks the one state an
+ * element counts in when the refs disagree (`dl-156` Q1 (a): "the most advanced state wins"). A
+ * `sequence` state ranks by its position; a state outside `sequence` (an off-chain `gates` reject
+ * target, `deprecated`, or a value the machine does not declare) ranks after every `sequence` state,
+ * since the element has left the chain, and `deprecated` ranks last of all. Equal ranks are ordered by
+ * name, so the answer never depends on the order the commits were read in (REQ-SYS-07). Pure.
+ */
+export function isMoreAdvancedState(machine: StateMachine, a: string, b: string): boolean {
+  const rank = (state: string): number => {
+    if (state === DEPRECATED_STATE) return machine.sequence.length + 1;
+    const index = machine.sequence.indexOf(state);
+    return index === -1 ? machine.sequence.length : index;
+  };
+  const ra = rank(a);
+  const rb = rank(b);
+  return ra !== rb ? ra > rb : a > b;
 }
 
 /**

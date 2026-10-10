@@ -167,15 +167,33 @@ function sequenceCandidatePaths(root: string, prefix: string): string[] {
   const worktree = runGitRead(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard', ...pathspec]);
   for (const path of worktree.stdout.split('\0')) if (path.length > 0) paths.add(path);
 
+  // One batched read for every commit, not one `git ls-tree` each (`bug-178`, task-142): the number of
+  // git processes no longer grows with the number of branches and remote-tracking refs.
+  for (const path of listPathsAtRevs(root, refBaselineCommits(root), prefix)) paths.add(path);
+  return [...paths].sort();
+}
+
+/**
+ * The commits of the refs a number or a WIP slot can be taken on (`dl-101` §2 (a)): the tip of every
+ * local branch (`refs/heads/*`) and remote-tracking ref (`refs/remotes/*`), and `HEAD` (a detached
+ * `HEAD` is on no branch; an unborn one adds nothing), as full shas, de-duplicated and sorted
+ * (REQ-SYS-07). No network: the remote-tracking refs are what the last `git fetch` left (`dl-101`
+ * §1.1).
+ *
+ * The one listing of "every ref" both wider reads use — `memory add`'s `{n}` counter
+ * ({@link nextSequenceNumber}) and the WIP-limit holder count (`requireWipSlot`, `dl-156` Q1 (a),
+ * task-274) — so the two cannot disagree about which refs exist (`command-baseline`, *Declared
+ * baselines*).
+ *
+ * @throws {@link StorageError} `E_GIT_READ_FAILED` when a git read fails.
+ */
+export function refBaselineCommits(root: string): string[] {
   const refs = runGitRead(root, ['for-each-ref', '--format=%(objectname)', 'refs/heads', 'refs/remotes']);
   // `--verify --quiet` exits 1, printing nothing, on an unborn `HEAD`: an answer, not a failure.
   const head = runGitRead(root, ['rev-parse', '--verify', '--quiet', 'HEAD^{commit}'], { accepted: [0, 1] });
   const commits = new Set(`${refs.stdout}\n${head.stdout}`.split('\n').map((sha) => sha.trim()));
   commits.delete('');
-  // One batched read for every commit, not one `git ls-tree` each (`bug-178`, task-142): the number of
-  // git processes no longer grows with the number of branches and remote-tracking refs.
-  for (const path of listPathsAtRevs(root, [...commits].sort(), prefix)) paths.add(path);
-  return [...paths].sort();
+  return [...commits].sort();
 }
 
 /**
