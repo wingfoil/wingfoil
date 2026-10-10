@@ -96,8 +96,22 @@ function buildFixture(): string {
   writeFileSync(join(repo, '.wingfoil', 'agents', 'custom', 'fake.yaml'), readFileSync(join(fixtures, 'custom', 'fake.yaml')));
   mkdirSync(join(repo, 'test', 'fixtures', 'agents'), { recursive: true });
   copyFileSync(join(fixtures, 'fake-agent.cjs'), join(repo, 'test', 'fixtures', 'agents', 'fake-agent.cjs'));
+  // `workflow finalize` (task-226): a `plan` type, a workflow whose first phase is a checkpoint, and one
+  // open instance of it, so the record has a frontier step to name.
+  writeFileSync(
+    memoryPath,
+    `${readFileSync(memoryPath, 'utf-8').replace(/\s*$/, '\n')}  plan:\n    path: docs/plans/{id}.md\n    states:\n      sequence: [ draft, active, done ]\n      waiting: [ active ]\n`,
+  );
+  writeFileSync(join(repo, '.wingfoil', 'workflows', 'custom', 'checkpoint.yaml'), 'name: checkpoint\nstartable: true\nphases:\n  - name: review-notes\n    role: approver\n  - name: close\n    role: approver\n');
+  const workflowsPath = join(repo, '.wingfoil', 'workflows.yaml');
+  writeFileSync(workflowsPath, `${readFileSync(workflowsPath, 'utf-8').replace(/\s*$/, '\n')}  - workflows/custom/checkpoint.yaml\n`);
+  mkdirSync(join(repo, 'docs', 'plans'), { recursive: true });
+  writeFileSync(
+    join(repo, 'docs', 'plans', 'checkpoint-1-plan.md'),
+    '---\nid: "checkpoint-1-plan"\ntype: plan\ntitle: "checkpoint — 1"\nstatus: active\nworkflow: "checkpoint"\nphase: "1"\n---\n\n## Body\n',
+  );
   git(repo, ['add', '-A']);
-  git(repo, ['commit', '--quiet', '-am', 'configure approver, the bug machine and the fake agent']);
+  git(repo, ['commit', '--quiet', '-am', 'configure approver, the bug machine, the fake agent and a checkpoint workflow']);
 
   step(repo, 'memory', 'add', '--type', 'task', '--title', 'Submit me');
   step(repo, 'memory', 'add', '--type', 'task', '--title', 'Approve me');
@@ -123,6 +137,11 @@ interface Row {
   /** An edit the operation needs on disk before it runs (`memory amend` records an uncommitted correction). */
   readonly prepare?: (repo: string) => void;
   /**
+   * `workflow finalize` (task-226, `spec-017` §7.9): its commit is a phase record with no file change, so
+   * its plan has no paths and no diff, and the real commit records no path.
+   */
+  readonly empty?: true;
+  /**
    * `agent execute` (task-218): its commit records a run, so it follows the agent's exit and cannot be
    * planned as bytes. Its dry run runs every pre-launch check and prints the launch plan — the record
    * commit's subject and path, without `message` or `diff` (spec-008 §2) — and its real run launches
@@ -147,6 +166,7 @@ const ROWS: Readonly<Record<string, Row>> = {
   directiveCreate: { args: ['directive', 'create', '--name', 'dry-rule'] },
   directiveAssign: { args: ['directive', 'assign', '--directive', 'traceability', '--role', 'qa'] },
   directiveRemove: { args: ['directive', 'remove', 'remove-me'] },
+  workflowFinalize: { args: ['workflow', 'finalize', 'checkpoint-1-plan'], empty: true },
   // Last: its preparation leaves a modified document in the tree for the rows after it.
   memoryAmend: {
     args: ['memory', 'amend', 'task-005-amend-me', '--reason', 'Corrected the scope paragraph.'],
@@ -197,7 +217,7 @@ describe('--dry-run on every mutating operation of the registry (task-210, dl-10
     // Measured, not assumed: the task's "28" and the batch notes' "34" both counted
     // `grep -c "mutates: true" src/core/index.ts`, which also matches comment lines.
     expect(Object.keys(ROWS).sort()).toEqual(mutatingOperations());
-    expect(mutatingOperations()).toHaveLength(15);
+    expect(mutatingOperations()).toHaveLength(16);
   });
 
   it.each(Object.entries(ROWS))('%s: plans the commit, writes nothing, and the real run makes that commit', (_name, row) => {
@@ -212,6 +232,18 @@ describe('--dry-run on every mutating operation of the registry (task-210, dl-10
     expect(plan.dryRun).toBe(true);
     expect(typeof plan.subject).toBe('string');
     expect(Array.isArray(plan.paths)).toBe(true);
+    if (row.empty === true) {
+      expect(plan.subject).toBe('workflow: finalize checkpoint-1-plan checkpoint.review-notes');
+      expect(plan.paths).toEqual([]);
+      expect(plan.diff).toBe('');
+      const head = gitOut(repo, ['rev-parse', 'HEAD']);
+      const real = wingfoil(repo, [...row.args, '--format', 'json']);
+      expect(real.status).toBe(0);
+      expect(gitOut(repo, ['rev-parse', 'HEAD~1'])).toBe(head);
+      expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe(plan.message.trim());
+      expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD'])).toBe('');
+      return;
+    }
     expect(plan.paths.length).toBeGreaterThan(0);
     if (row.launch === true) {
       expect(plan.subject).toMatch(/^agent: record task-001-submit-me\/adhoc\/1$/);

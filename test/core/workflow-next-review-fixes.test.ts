@@ -71,10 +71,10 @@ describe('task-216 review fix 2 — a printed wingfoil argv is a whole command',
   });
 });
 
-describe('task-216 review fix 4 — a third party is not completed by a command that does not ship yet', () => {
-  it("the waiting line names the record and says the command is not available yet", () => {
+describe('task-216 review fix 4, task-226 — a third party is completed by the record workflow finalize writes', () => {
+  it('the waiting line names the record and the whole finalize command for the step (task-226 ships it)', () => {
     const step = { ...buildStep(DEDUCED, INPUTS), awaiting: { kind: 'party', party: 'a vendor', evidence: { token: 'vendor.ack', binding: { kind: 'unbound' }, evaluated: false } } } as Step;
-    expect(humanNeededLine(step)).toBe('waiting for a vendor: vendor.ack (a phase record completes it: wingfoil workflow finalize, not available yet)');
+    expect(humanNeededLine(step)).toBe('waiting for a vendor: vendor.ack (a phase record completes it: wingfoil workflow finalize ing-1 --step capture-flow.capture)');
   });
 });
 
