@@ -195,14 +195,26 @@ flowchart TD
 
     ES["**e2e-smoke** → `e2e-smoke`\nfresh-init → drive-cli → mcp-registration → gate\n🔑 Approval gate — *approver*\n(see sub-diagram below)"]
 
-    RS["**submit** → `release-submit`\npre-release-checks → enter-releasing → approve-release\n🔑 Approval gate — *approver*\nrelease: in-development → releasing\n↩ REJECT → pre-release-checks"]
+    RS["**submit** → `release-submit`\npre-release-checks → enter-releasing → approve-release\n✔ tests.no-identity: the suite with no git identity\n🔑 Approval gate — *approver*\nrelease: in-development → releasing\n↩ REJECT → pre-release-checks"]
 
-    RP2["**publishing** → `release-publishing`\ntag → publish → mark-released\ngit tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released"]
+    RP2["**publishing** → `release-publishing`\nrelease-commit → staging-rehearsal → tag → publish → mark-released\nrelease commit = the candidate · staging rehearsal on it · git tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released\n(see sub-diagram below)"]
 
     RT["**retrospective** → `retrospective`\nexplore → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115)\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
 
     RP --> DL --> UD --> ES --> RS --> RP2 --> RT
+    RP2 -.->|re-cut candidate| ES
 ```
+
+**Release candidate** (`dl-099` §1): the commit of the release's integration branch proposed for the
+version tag, cut by `release-publishing`'s `release-commit`. The two checks are the `e2e-smoke` gate,
+which packs and smokes the candidate with its build stamp bound (`e2e-smoke-passed`, `--candidate`), and
+`staging-rehearsal`. The release commit does not re-cut the candidate: `e2e-smoke` runs before it, so on
+the first candidate the rehearsal's smoke (the same scenario of `scripts/e2e-smoke.cjs`, against the staged
+tarball, with `--expect-commit`) stands as its e2e-smoke run. A commit that must ship and lands
+after the checks ran **re-cuts** the candidate: the release re-enters `e2e-smoke` (and `submit`'s checks),
+then `staging-rehearsal`. Only a candidate that passed both is tagged; a commit that only records evidence
+(a gate report, a transcript, a Memory transition) does not re-cut, because `tag` tags the candidate the
+rehearsal transcript names.
 
 ### Dev Loop — `dev-loop`
 
@@ -320,6 +332,22 @@ flowchart TD
     GA["**gate** *(qa)*\n✔ e2e-smoke-passed — hard-reject (dl-023)\n`docs/07_gates/rl-{release-line}/rel-{version}-e2e-smoke.md`\n🔑 Approval gate — *approver*"]
 
     FI --> DC --> MR --> GA
+```
+
+### Release Publishing — `release-publishing`
+
+The release commit is its own phase, so the staging rehearsal runs on the candidate it cuts (`dl-099`
+§2, task-219). The rehearsal starts a local Verdaccio registry, so it runs per candidate and never in CI.
+
+```mermaid
+flowchart TD
+    RC["**release-commit** *(tech-lead)*\ngit.commit: the version bump (package.json, package-lock.json,\nserver.json, CHANGELOG.md, SECURITY.md) → merged: the candidate"]
+    SR["**staging-rehearsal** *(qa)*\nnpm run publish:staging -- --expect-commit <candidate> --transcript …\n✔ staging-rehearsal-passed: closing line + the stamp's commit\n`docs/07_gates/rl-{release-line}/rel-{version}-staging-rehearsal.md`"]
+    TG["**tag** *(tech-lead)*\n✔ pre: staging-rehearsal-passed (again)\ngit.tag on the candidate the transcript names"]
+    PB["**publish** *(tech-lead)*\npush the tag → publish.yml: gate → stage → promote (npm stage publish)\n🔑 Approval gate — *approver* (npm stage approve, 2FA)"]
+    MR["**mark-released** *(tech-lead)*\nrelease: releasing → released"]
+
+    RC --> SR --> TG --> PB --> MR
 ```
 
 ---

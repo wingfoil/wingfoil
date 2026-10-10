@@ -873,12 +873,12 @@ list --format json` with the pinned build 0.2.2 loads the same 23 workflows and 
 - *Self-creating instances:* `sw-life-cycle` (`release-line`), `bug-ingest`, `decision-log-ingest`,
   `adr-ingest`, `service-ingest` bind the element their creating phase creates, so their capture,
   approve and triage phases deduce from it and each instance can end.
-- *Checkpoints:* 28 phases declare no evidence and complete by `workflow finalize`: the 11 phases of
+- *Checkpoints:* 27 phases declare no evidence and complete by `workflow finalize`: the 11 phases of
   `user-story-mapping`, `specification-by-examples`, `volere-requirements` and `backlog-export`;
   `release-planning.advance-pinned-build`; `dev-loop.red|green|refactor`;
-  `user-docs.check-implementation-complete`; the four `e2e-smoke` phases;
-  `release-submit.pre-release-checks|approve-release`; `release-publishing.tag|publish`;
-  `retrospective.additional-points|approve`; `end-of-life.deprecate|archive`. So a `sw-life-cycle`
+  `user-docs.check-implementation-complete`; `e2e-smoke.fresh-init|drive-cli|mcp-registration`;
+  `release-submit.pre-release-checks|approve-release`; `release-publishing.release-commit|tag|publish`;
+  `retrospective.additional-points|approve`; `end-of-life.archive`. So a `sw-life-cycle`
   instance passes `specification` only by finalizing those 11 steps, and `dev-loop` passes
   `red`/`green`/`refactor` by one `finalize` each.
 - *Approvals recorded by `finalize` with approver authority* (no element carried, §5.1): 7 phases,
@@ -1175,3 +1175,14 @@ is not loaded and a filter that keeps no step, the warning of an `--assigned-to`
 what a `park` re-enters when its `<from>` is no held gate (the W3 B3 handover). No
 command, deduction rule or diagnostic changes. Edited in place without a supersede or a state change
 (`dl-047`); pending the approver's `memory amend` at `task-216`'s review.
+
+**Revision (2026-10-10, `task-219-define-release-candidate-staging-rehearsal-phase-recut-reentry`) — §12's
+checkpoint list re-measured.** `task-219` (`dl-099` §1–§2) moved the release commit out of
+`release-publishing.tag` into a phase of its own, `release-commit`, which declares no evidence, and added
+`staging-rehearsal`, which produces its transcript and so is no checkpoint. The list now names
+`release-commit`. It also drops what earlier changes had already made evidence-bearing and the list still
+named: `end-of-life.deprecate`, which selects what it deprecates since the 2026-10-07 ruling, and
+`e2e-smoke.gate`, which produces its report since `task-207` (`bug-134`). The count is 27, the list
+`test/core/workflow-repository-conformance.test.ts` pins at `task-219`'s branch. No rule, command or
+diagnostic changes. Edited in place without a supersede or a state change (`dl-047`); pending the
+approver's `memory amend` at `task-219`'s review.

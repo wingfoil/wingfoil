@@ -120,9 +120,10 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["e2e-smoke", "phases[2].checks.post[2]", "advertised channel set == EXPECTED_CHANNELS, every advertised list answers"],
       ["release-submit", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
       ["release-submit", "phases[0].checks.pre[1]", "all bugs where tags=[{release.version}] are status"],
-      ["release-publishing", "phases[0].checks.pre[0]", "on-branch-is-main"],
-      ["release-publishing", "phases[0].checks.pre[1]", "release-branch-merged-to-main"],
-      ["release-publishing", "phases[1].checks.post[0]", "staged version approved on npm and live on the npm registry"],
+      // task-219: release-commit and staging-rehearsal precede tag; the rehearsal's check is bound.
+      ["release-publishing", "phases[2].checks.pre[0]", "on-branch-is-main"],
+      ["release-publishing", "phases[2].checks.pre[1]", "release-branch-merged-to-main"],
+      ["release-publishing", "phases[3].checks.post[0]", "staged version approved on npm and live on the npm registry"],
       ["retrospective", "phases[0].checks.post[0]", "secondary-sources.listed"],
       ["retrospective", "phases[1].checks.pre[0]", "proposals.disposed"],
       ["retrospective", "phases[2].checks.post[0]", "frontmatter.required"],
@@ -250,7 +251,7 @@ function measure(workflows: readonly Workflow[]): { checkpoints: string[]; final
 }
 
 describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => {
-  it('26 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134)', () => {
+  it('27 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 27 again from task-219: release-publishing.release-commit, while staging-rehearsal produces its transcript)', () => {
     expect(measure(registry().workflows).checkpoints).toEqual([
       'user-story-mapping.backbone',
       'user-story-mapping.vertical-explosion',
@@ -273,6 +274,7 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'e2e-smoke.mcp-registration',
       'release-submit.pre-release-checks',
       'release-submit.approve-release',
+      'release-publishing.release-commit',
       'release-publishing.tag',
       'release-publishing.publish',
       'retrospective.additional-points',
