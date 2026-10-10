@@ -2,7 +2,7 @@
 id: "task-197-write-filing-type-rule-standing-brief-rules-into"
 type: task
 title: "Write the filing-type rule and the standing brief's rules into the traceability directive"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "medium"
