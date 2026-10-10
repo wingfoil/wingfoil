@@ -6,6 +6,8 @@
  * (`test/cli/agent-execute-launch.integration.test.ts`): a signal sent to the Jest process itself would
  * reach Jest's own handling too.
  */
+import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -140,6 +142,96 @@ describe('launchAgent — the outcome (spec-016 §3.3 step 18)', () => {
         ),
     );
     expect(result.ok ? 'ok' : result.error.message).toBe("agent command 'node' could not be started (adapter 'hand'): refused");
+  }, 60000);
+});
+
+/**
+ * A child-process stand-in for the signal cases (review fix 1): it reports `spawn` at once, and `kill`
+ * ends it by that signal. A signal is raised with `process.emit`, which runs the listeners only — the
+ * Jest process is never signalled.
+ */
+class FakeChild extends EventEmitter {
+  exitCode: number | null = null;
+  signalCode: NodeJS.Signals | null = null;
+  readonly killed: string[] = [];
+  constructor() {
+    super();
+    setImmediate(() => this.emit('spawn'));
+  }
+  kill(signal: NodeJS.Signals): boolean {
+    this.killed.push(signal);
+    setImmediate(() => {
+      this.signalCode = signal;
+      this.emit('exit', null, signal);
+    });
+    return true;
+  }
+}
+
+describe('launchAgent — signals around the spawn (review fix 1, spec-016 §3.3 step 15)', () => {
+  it('the launch listeners are in place before the pre-launch cleanup is released', async () => {
+    const { root, input } = launchFixture((manifest: AdapterManifest) => manifest);
+    repos.push(root);
+    const baseline = process.listenerCount('SIGTERM');
+    let atRelease = -1;
+    const child = new FakeChild();
+    const run = launchAgent(root, input, { spawn: () => child as unknown as ChildProcess }, () => {
+      atRelease = process.listenerCount('SIGTERM');
+    });
+    setImmediate(() => child.kill('SIGTERM'));
+    await run;
+    expect(atRelease).toBe(baseline + 1);
+    expect(process.listenerCount('SIGTERM')).toBe(baseline);
+  }, 60000);
+
+  it('a SIGTERM that arrives while the agent is being spawned is forwarded once the child exists, and the run is recorded', async () => {
+    const { root, input } = launchFixture((manifest: AdapterManifest) => manifest);
+    repos.push(root);
+    const child = new FakeChild();
+    const outcome = await withWarningSink(
+      () => undefined,
+      () =>
+        launchAgent(
+          root,
+          input,
+          {
+            spawn: () => {
+              process.emit('SIGTERM', 'SIGTERM');
+              return child as unknown as ChildProcess;
+            },
+          },
+          () => undefined,
+        ),
+    );
+    expect(child.killed).toEqual(['SIGTERM']);
+    expect(outcome.ok ? 'ok' : outcome.error.message).toBe(`agent exited signal:SIGTERM; run ${input.runId} recorded`);
+  }, 60000);
+
+  it('SIGINT and SIGQUIT are ignored, SIGHUP forwarded, while the agent runs', async () => {
+    const { root, input } = launchFixture((manifest: AdapterManifest) => manifest);
+    repos.push(root);
+    const child = new FakeChild();
+    const run = withWarningSink(
+      () => undefined,
+      () => launchAgent(root, input, { spawn: () => child as unknown as ChildProcess }, () => undefined),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    process.emit('SIGINT', 'SIGINT');
+    process.emit('SIGQUIT', 'SIGQUIT');
+    expect(child.killed).toEqual([]);
+    process.emit('SIGHUP', 'SIGHUP');
+    const outcome = await run;
+    expect(child.killed).toEqual(['SIGHUP']);
+    expect(outcome.ok ? 'ok' : outcome.error.message).toBe(`agent exited signal:SIGHUP; run ${input.runId} recorded`);
+  }, 60000);
+});
+
+describe('launchAgent — a lookup that prints more than 1 MiB (review fix 2)', () => {
+  it('is reported as such, not as a command that could not start', async () => {
+    const { root, input } = launchFixture((manifest: AdapterManifest) => ({ ...manifest, usage: { from: 'lookup', lookup_args: ['scripts/flood.cjs'] } }));
+    repos.push(root);
+    const outcome = await launch(input, root);
+    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed more than 1 MiB): model and tokens recorded as not-reported"]);
   }, 60000);
 });
 

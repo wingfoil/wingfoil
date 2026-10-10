@@ -340,3 +340,44 @@ describe('task-228 — the B3 handovers on the pre-launch half', () => {
     expect({ code, sig }).toEqual({ code: null, sig: signal });
   }, 30000);
 });
+
+describe('withRunFiles — signals (review fix 1)', () => {
+  it('its cleanup listeners are installed before the temporary directory is created', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('node:fs') as typeof import('node:fs');
+    const baseline = process.listenerCount('SIGINT');
+    let atCreate = -1;
+    const original = fs.mkdtempSync;
+    const spy = jest.spyOn(fs, 'mkdtempSync').mockImplementation(((prefix: string) => {
+      atCreate = process.listenerCount('SIGINT');
+      return original(prefix);
+    }) as typeof fs.mkdtempSync);
+    try {
+      await withRunFiles({ bootstrap_file: 'x' }, async () => undefined);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(atCreate).toBe(baseline + 1);
+    expect(process.listenerCount('SIGINT')).toBe(baseline);
+  });
+
+  it('a signal before the spawn removes the directory and re-raises it on this process', async () => {
+    const kill = jest.spyOn(process, 'kill').mockImplementation(() => true);
+    let dir = '';
+    let existedAfterSignal = true;
+    let calls: unknown[][] = [];
+    try {
+      await withRunFiles({ bootstrap_file: 'x' }, async (paths) => {
+        dir = dirname(paths.bootstrap_file!);
+        process.emit('SIGTERM', 'SIGTERM');
+        existedAfterSignal = existsSync(dir);
+      });
+      calls = kill.mock.calls;
+    } finally {
+      kill.mockRestore();
+    }
+    // Removed by the signal handler itself, before the work settled.
+    expect(existedAfterSignal).toBe(false);
+    expect(calls).toEqual([[process.pid, 'SIGTERM']]);
+  });
+});
