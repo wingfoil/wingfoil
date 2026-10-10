@@ -56,7 +56,9 @@ import { coreErr, coreOk, type CoreResult } from './types';
  * does not ask.
  *
  * @param root - Project root.
- * @param relativePath - Root-relative POSIX path of the file the operation is about to touch.
+ * @param relativePath - The path of the file the operation is about to touch, as the refusal should
+ *   name it: root-relative POSIX, or absolute (resolved as is) — the run log passes its configured
+ *   `paths.runs` spelling, so a refusal names `/etc/<id>.jsonl` rather than a `../` climb (bug-288).
  * @param action - The verb for the refusal's first clause, e.g. `'remove'` → `cannot remove '<path>'`
  *   (P3.3's own message shape, shared with `requireCustomAsset`).
  */

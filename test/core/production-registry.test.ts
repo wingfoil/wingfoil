@@ -51,6 +51,8 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memorySubmit',
       'paths.paths',
       'workflow.workflowList',
+      // task-216 (`spec-017` §7.3): read-only.
+      'workflow.workflowNext',
       // task-204 (`spec-017` §7.6): read-only.
       'workflow.workflowShow',
     ]);
