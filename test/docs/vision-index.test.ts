@@ -13,7 +13,7 @@
  *
  * Deterministic: findings in index order; synthetic inputs fixed.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { headings, lineCount, visionIndexFindings } from './support/vision-index';
@@ -51,6 +51,16 @@ describe('the checker catches each kind of drift (synthetic inputs)', () => {
 
   function index(row: string, ranges: string): string {
     return [
+      '## Quick lookup',
+      '',
+      '| You need… | Go to |',
+      '|---|---|',
+      '| First | `a` L6–12 |',
+      '',
+      '---',
+      '',
+      '## Document map',
+      '',
       '| Document | Ver | Date | Status | Lines | What |',
       '|---|---|---|---|---|---|',
       row,
@@ -95,6 +105,73 @@ describe('the checker catches each kind of drift (synthetic inputs)', () => {
     expect(visionIndexFindings(index('| [`b.md`](b.md) | 1.0 | 2026-10-09 | Approved | 3 | b |', RANGES), read)).toEqual([
       { file: 'b.md', what: 'file', indexed: 'listed', actual: 'missing' },
     ]);
-    expect(visionIndexFindings('# empty', read).map((finding) => finding.what)).toEqual(['document map', 'section maps']);
+    expect(visionIndexFindings('# empty', read).map((finding) => finding.what)).toEqual(['document map', 'section maps', 'quick lookup']);
   });
 });
+
+/**
+ * Independent review of task-212 (2026-10-10): the checker above returned `[]` for seven kinds of drift. Each case
+ * below mutates the REAL index (or the folder listing) once and expects the finding that names it; the first case
+ * runs the stricter checks (coverage, anchors, Quick lookup, spelling) on the unmutated folder.
+ */
+describe('review fixes — coverage, anchors, Quick lookup, spelling and unparseable rows', () => {
+  const realIndex = readVision('00_index.md')!;
+  const files = readdirSync(VISION).filter((name) => name.endsWith('.md'));
+
+  function findings(mutate: (index: string) => string, listing: readonly string[] = files): ReturnType<typeof visionIndexFindings> {
+    const mutated = mutate(realIndex);
+    expect(mutated).not.toBe(realIndex);
+    return visionIndexFindings(mutated, readVision, listing);
+  }
+
+  it('the real folder: every file has one row and one block, every anchor and Quick-lookup reference holds', () => {
+    expect(visionIndexFindings(realIndex, readVision, files)).toEqual([]);
+  });
+
+  it('a changed Quick-lookup range', () => {
+    expect(findings((index) => index.replace('`01_product-brief` L22–38', '`01_product-brief` L23–38'))).toContainEqual({
+      file: '01_product-brief.md', what: 'quick lookup', indexed: 'L23–38', actual: 'line 23 is not a heading',
+    });
+  });
+
+  it('a single-line anchor that moved', () => {
+    expect(findings((index) => index.replace('Five Pillars L44', 'Five Pillars L45'))).toContainEqual({
+      file: '01_product-brief.md', what: 'anchor', indexed: 'L45', actual: 'line 45 is not a heading',
+    });
+  });
+
+  it('a hyphen range', () => {
+    expect(findings((index) => index.replace('- Core Problem — L22–38', '- Core Problem — L22-38'))).toContainEqual({
+      file: '00_index.md', what: 'range spelling', indexed: 'L22-38', actual: 'an en dash range (Lx–y)',
+    });
+  });
+
+  it('a deleted document-map row', () => {
+    expect(findings((index) => index.replace(/^\| \[`03_is-isnot\.md`\].*\n/m, ''))).toContainEqual({
+      file: '03_is-isnot.md', what: 'document-map rows', indexed: '0', actual: '1',
+    });
+  });
+
+  it('a new vision file that is not listed', () => {
+    const result = visionIndexFindings(realIndex, readVision, [...files, 'Y_new-document.md']);
+    expect(result).toEqual([
+      { file: 'Y_new-document.md', what: 'document-map rows', indexed: '0', actual: '1' },
+      { file: 'Y_new-document.md', what: 'section-map blocks', indexed: '0', actual: '1' },
+    ]);
+  });
+
+  it('a deleted section-map block', () => {
+    expect(findings((index) => index.replace(/^### `03_is-isnot\.md`\n[\s\S]*?(?=^### `)/m, ''))).toContainEqual({
+      file: '03_is-isnot.md', what: 'section-map blocks', indexed: '0', actual: '1',
+    });
+  });
+
+  it('a malformed Lines cell', () => {
+    const result = findings((index) => index.replace(/(^\| \[`03_is-isnot\.md`\][^\n]*\| )59(\s+\|)/m, '$159x$2'));
+    expect(result.map((finding) => [finding.file, finding.what])).toEqual([
+      ['00_index.md', 'row'],
+      ['03_is-isnot.md', 'document-map rows'],
+    ]);
+  });
+});
+

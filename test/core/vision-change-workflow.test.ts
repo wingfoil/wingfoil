@@ -97,10 +97,14 @@ describe('AC 4 — the downcast subs accept a second includer (characterization)
     expect(includers).toEqual(['vision-change', 'specification-downcast']); // manifest order: the startable mains come first
   });
 
-  it('the loader reports nothing on vision-change but its unbound prose check', () => {
+  it('the loader reports nothing on vision-change but its unbound prose checks', () => {
     const own = loaded.diagnostics
       .filter((d) => d.file === 'workflows/custom/vision-change.yaml')
       .map((d) => [d.code, d.path]);
-    expect(own).toEqual([['W_WORKFLOW_UNBOUND_TOKEN', 'phases[0].checks.post[0]']]);
+    // schedule's pre-check is the review fix of 2026-10-10: set_release("") would stamp nothing.
+    expect(own).toEqual([
+      ['W_WORKFLOW_UNBOUND_TOKEN', 'phases[0].checks.post[0]'],
+      ['W_WORKFLOW_UNBOUND_TOKEN', 'phases[6].checks.pre[0]'],
+    ]);
   });
 });

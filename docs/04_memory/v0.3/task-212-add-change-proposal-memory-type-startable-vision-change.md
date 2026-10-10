@@ -95,7 +95,7 @@ the `bug-270` test, exactly as `workflow-md.complete` is bound to its suite.
 | 4 — the subs include from a second workflow, loader-checked | characterization | the loader rule (`E_WORKFLOW_ELEMENT_MISMATCH`, include resolution) exists; the test needs the includer, so it lands with green |
 | 5 — path, `id_pattern`, template sections | **red-first** (was characterization) | the template and type entry are new content: a test written first genuinely fails |
 | 6 — scratch-clone walk, WORKFLOW.md draws it | characterization | transcript + existing suite |
-| bug-270 — vision index test | characterization | the index is correct today with fences parsed (task-141's script reports one false mismatch, `06_features.md` L357–520, only because it hard-codes the fence lines 380/414 that moved to 381/415); synthetic drift cases prove each mismatch kind is caught |
+| bug-270 — vision index test | characterization | the index is correct today with fences parsed (task-141's script reports one false mismatch, `06_features.md` L357–520, only because it hard-codes lines 380/414 as the `#` lines inside fences, which are now 382/416 — corrected at review: `grep -n '^#' docs/01_vision/06_features.md | sed -n '/^38[0-9]:/p;/^41[0-9]:/p'` → `382:`, `416:`); synthetic drift cases prove each mismatch kind is caught |
 
 ### red (2026-10-09, `709d0c55`)
 
@@ -191,8 +191,9 @@ startable workflows.
 Same-class sweep in files touched: every enumeration of the nine types / four ingest mains in `.wingfoil/README.md`,
 `.wingfoil/WORKFLOW.md`, `COLLABORATION.md`, `memory.yaml`'s header and specs 001/003/004/010 now names the new one
 (`grep -rn "plan, service\|four ingest\|4 ingest" .wingfoil COLLABORATION.md docs/04_memory/design/specs`).
-Left as they are, outside this task's files: `CLAUDE.md` (owned by `align-agent-docs`, `dl-025`) and `spec-017`
-§3.4 ("the four ingest mains") / §12 (the repository's re-measured counts), which `task-216` amends in this batch.
+Left as they are, outside this task's files: `CLAUDE.md` (owned by `align-agent-docs`, `dl-025`). At submit these
+notes also left `spec-017` §3.4 / §12 to `task-216`; that was wrong (the review found no spec-017 change on its
+branch), and the review fixes below add this task's own `spec-017` amendment.
 
 ### Decisions for the approver
 
@@ -205,6 +206,8 @@ Left as they are, outside this task's files: `CLAUDE.md` (owned by `align-agent-
    declares no evidence, so it is a checkpoint (completes by `workflow finalize`).
 3. **`target_release` and `release` are two fields**: the proposer's request, and the assignment `schedule` stamps
    (`element.set_release("{change-proposal.target_release}")`), so `release` keeps the `traceability` meaning.
+   Since the review, `schedule` says the product-owner fills `target_release` first and carries the pre-check
+   `change-proposal.target_release is not empty` (an empty value would stamp nothing).
 4. **`schedule` has no approval gate**, and the release's `features:` can be edited only while the release is
    `draft` (`release` is `amendable: false`): a change scheduled into a release past `draft` needs the approver's
    one-off hand amend of the release, as for `minor-v1.0` in W1. Ruling wanted: accept this, or gate `schedule`.
@@ -218,6 +221,30 @@ Left uncommitted in the worktree; the coordinator runs `memory amend`:
 - `spec-004-mcp-surface-contract` — `--reason "task-212: the §2.1 {type} enumeration gains change-proposal (dl-132, memory.yaml 2.7), as spec-001's Context does; no URI, Resource or Tool changes."`
 - `spec-010-memory-frontmatter-schema` — `--reason "task-212: the Context's type list and the type and title rows name change-proposal (dl-132, memory.yaml 2.7); its scaffold keeps release in the shared meaning and the proposer's request as target_release. No field or rule changes."`
 - `spec-003-workflows-yaml-schema` — `--reason "task-212: the startable vision-change main (dl-132) makes 25 workflow files that validate under the kind alias; no field, rule or diagnostic changes."`
+- `spec-011-storage-layout` — `--reason "task-212: the workflows/{built-in,custom}/ split lists six startable kind: main workflows, adding vision-change (dl-132); the layout and its algorithms are unchanged."`
+- `spec-017-workflow-commands-and-state-deduction` — `--reason "task-212: §3.4 names vision-change among the self-creating workflows, and §12's consequence lists name it (a self-creating instance, the checkpoint vision-change.update-vision, the Memory-carried approval vision-change.impact-analysis). §12's figures are left to the batch gate, which re-measures them after merging main, where task-222's revision re-measures them first. No rule, command or diagnostic changes."`
+
+### review fixes (independent review: approve with fixes, 2026-10-10)
+
+1. **bug-270 checker** (`test/docs/support/vision-index.ts`) returned `[]` for seven kinds of drift. It now
+   reports: a vision file without exactly one document-map row and one section-map block (given the folder
+   listing); an unparseable row (strict row pattern, so a malformed `Lines` cell is a finding); a hyphen range
+   `Lx-y`; a section-map single-line anchor or a *Quick lookup* reference (single or range start) that is not a
+   heading, except the declared prose anchors `INDEX_ANCHORS` (`01_product-brief` L108, `08_mvp-canvas` L57,
+   `06_features` L102–104). The seven cases are a new `describe` block in `test/docs/vision-index.test.ts`, each
+   mutating the real index once, plus the unmutated folder with coverage → `[]`. The file was committed at green
+   (`de774b29`), not red; the earlier synthetic fixture gained a *Quick lookup* section and the "no map" case
+   expects a third finding, `quick lookup`, because the section is now required.
+2. `spec-011` lines 169–170: six startable mains, pending amendment (below).
+3. `test/docs/support/name-resolvability.ts`: `cp` joins `ELEMENT_ID` and `SHORT_ELEMENT_ID`, as `svc` did.
+4. `spec-017` §3.4 and §12's lists: pending amendment (below); the §12 figures are the gate's.
+5. Decision 3: `schedule` names the product-owner filling `target_release` and pre-checks it is not empty
+   (`vision-change.yaml`, still 1.0: the file is not on `main`); the conformance test gains that unbound check,
+   the AC 4 test expects it, `WORKFLOW.md`'s node shows it.
+6. The fence lines in the design table are corrected to 382/416.
+
+Not this task's: decision 4 waits for an approver ruling; the `ingest/` branch prefix for `vision-change` runs is
+`task-208`'s.
 
 ### Retrospective
 
@@ -228,3 +255,5 @@ Left uncommitted in the worktree; the coordinator runs `memory amend`:
   (`bug-270` step 4, re-observed at `b56e8721`).
 - A plain YAML scalar holding `` `kind: feature` `` broke `memory.yaml` at HEAD, caught only by the tests that
   read HEAD; nothing lints `memory.yaml` before the commit. Proposal: none beyond the existing tests.
+- The submitted notes said `task-216` amends `spec-017` without checking its branch; the review found it does not.
+  A claim about another task's work needs the command that shows it (`git diff main...task/task-216-… -- docs/04_memory/design/specs/spec-017*`).

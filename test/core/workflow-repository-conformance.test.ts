@@ -69,6 +69,7 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["service-ingest", "phases[0].checks.post[1]", "secret-scan.clean"],
       // task-212 (dl-132): vision-change's capture mirrors the change-proposal template; its vision-index.current checks are bound.
       ["vision-change", "phases[0].checks.post[0]", "frontmatter.required"],
+      ["vision-change", "phases[6].checks.pre[0]", "change-proposal.target_release is not empty"],
       ["specification-downcast", "phases[0].checks.post[0]", "100% of MVP Canvas features covered; edge-case stories present"],
       ["specification-downcast", "phases[1].checks.post[0]", "each scenario atomic + testable; zero ambiguous adjectives/adverbs"],
       ["specification-downcast", "phases[2].checks.post[0]", "every REQ has a numeric/percentage/boolean Fit Criterion"],

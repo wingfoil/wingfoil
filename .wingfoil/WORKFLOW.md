@@ -404,7 +404,7 @@ flowchart TD
         V4["**downcast-stories** *(optional)*\n`user-story-mapping`"]
         V5["**downcast-scenarios** *(optional)*\n`specification-by-examples`"]
         V6["**downcast-requirements** *(optional)*\n`volere-requirements`"]
-        V7["**schedule** *(product-owner)*\nsequencer entry + release `features:`\nelement.set_release · element.set_state(scheduled)\n✔ vision-index.current\naccepted → scheduled"]
+        V7["**schedule** *(product-owner)*\nfills target_release (✔ pre: not empty)\nsequencer entry + release `features:`\nelement.set_release · element.set_state(scheduled)\n✔ vision-index.current\naccepted → scheduled"]
         V1 --> V2 --> V3 --> V4 --> V5 --> V6 --> V7
         V2 -. reject .-> V1
     end
