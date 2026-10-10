@@ -53,6 +53,19 @@ export interface MemoryHistoryEntry {
    * (`task-097-memory-history-reads-each-commit-at-its-historical-path`).
    */
   readonly path: string;
+  /**
+   * The root-relative path the document occupied in this commit's **first parent** — where its state
+   * before the commit is read (`task-278`, `bug-308`) — or `null` when the commit created it there:
+   * an `A` edge, or a `C` edge from the template the element was copied from (which the parent holds,
+   * not the element). The source of a rename (`R`), the commit's own path otherwise.
+   *
+   * Read off the same `--follow --name-status` line as {@link path} ({@link parseParentPaths}), never
+   * from the walk's previous entry: the walk is ordered by date, not by ancestry, so on interleaved
+   * branches the previous entry is another branch's commit. Set on every entry
+   * {@link getMemoryHistory} returns; absent only on an entry built by hand, read then as {@link path}
+   * (as is a commit git printed no diff for, {@link attachParentPaths}).
+   */
+  readonly parentPath?: string | null;
 }
 
 const LOG_FIELDS = ['%H', '%an', '%ae', '%aI', '%s', '%b'];
@@ -206,13 +219,41 @@ const PATH_PROBE_LOG_ARGS = ['--follow', '--name-status', '--format=%H'];
  * @returns sha → the root-relative path the document occupied at that commit.
  */
 export function collectHistoricalPaths(root: string, relativePath: string): Map<string, string> {
-  const stdout = readOrExplain(
+  return parseHistoricalPaths(readPathProbe(root, relativePath));
+}
+
+/** The `--follow --name-status` probe's output, which {@link parseHistoricalPaths} and {@link parseParentPaths} both read. */
+function readPathProbe(root: string, relativePath: string): string {
+  return readOrExplain(
     root,
     [...PATH_PROBE_ARGS, 'log', '--no-show-signature', ...PATH_PROBE_LOG_ARGS, '--', relativePath],
     `git log --follow --name-status failed for ${relativePath}: cannot establish where the element lived at each commit`,
   );
+}
 
-  return parseHistoricalPaths(stdout);
+/**
+ * sha → the tab-separated fields of that commit's first status line in the probe's output (`M`,
+ * `<path>`, or `R<score>`, `<old>`, `<new>`). Every line without a tab must be a full commit name and
+ * a status line must follow one; anything else is refused with `StorageError` `E_GIT_READ_FAILED`
+ * (`requireCommitName`) rather than skipped (`task-268`, `bug-291`).
+ */
+function parseStatusLines(stdout: string): Map<string, string[]> {
+  const fieldsBySha = new Map<string, string[]>();
+  let currentSha: string | null = null;
+  for (const line of stdout.split('\n')) {
+    if (line === '') continue;
+    // A line with no tab is `--format=%H`'s: a commit name, or refused — never skipped (task-268,
+    // `bug-291`: signature text printed under `log.showSignature` was skipped here, silently).
+    if (!line.includes('\t')) {
+      currentSha = requireCommitName(line, 'git log --follow --name-status');
+      continue;
+    }
+    // A status line before any name is not what `--format=%H` prints: refused like any other line.
+    if (currentSha === null) currentSha = requireCommitName(line, 'git log --follow --name-status');
+    if (fieldsBySha.has(currentSha)) continue;
+    fieldsBySha.set(currentSha, line.split('\t'));
+  }
+  return fieldsBySha;
 }
 
 /**
@@ -226,22 +267,30 @@ export function collectHistoricalPaths(root: string, relativePath: string): Map<
  */
 export function parseHistoricalPaths(stdout: string): Map<string, string> {
   const pathBySha = new Map<string, string>();
-  let currentSha: string | null = null;
-  for (const line of stdout.split('\n')) {
-    if (line === '') continue;
-    // A line with no tab is `--format=%H`'s: a commit name, or refused — never skipped (task-268,
-    // `bug-291`: signature text printed under `log.showSignature` was skipped here, silently).
-    if (!line.includes('\t')) {
-      currentSha = requireCommitName(line, 'git log --follow --name-status');
-      continue;
-    }
-    // A status line before any name is not what `--format=%H` prints: refused like any other line.
-    if (currentSha === null) currentSha = requireCommitName(line, 'git log --follow --name-status');
-    if (pathBySha.has(currentSha)) continue;
-    const fields = line.split('\t');
-    pathBySha.set(currentSha, fields[fields.length - 1] as string);
-  }
+  for (const [sha, fields] of parseStatusLines(stdout)) pathBySha.set(sha, fields[fields.length - 1] as string);
   return pathBySha;
+}
+
+/**
+ * Parse the same probe output into sha → the path the document occupied in that commit's first
+ * parent (`task-278`, `bug-308`): the FIRST path of a rename line (`R<score> <old> <new>`), `null` for
+ * a creation — `A`, or `C<score> <source> <path>`, whose source is the template the element was copied
+ * from and not the element — and the line's single path otherwise (`M`, `D`, `T`). `git log` diffs a
+ * non-merge commit against its only parent, so the line describes exactly that edge. Pure: no git;
+ * refuses what {@link parseHistoricalPaths} refuses.
+ *
+ * @param stdout - The probe's output.
+ * @returns sha → the first parent's root-relative path, or `null` (first status line wins).
+ */
+export function parseParentPaths(stdout: string): Map<string, string | null> {
+  const parentPathBySha = new Map<string, string | null>();
+  for (const [sha, fields] of parseStatusLines(stdout)) {
+    const status = fields[0] as string;
+    if (status.startsWith('A') || status.startsWith('C')) parentPathBySha.set(sha, null);
+    else if (status.startsWith('R')) parentPathBySha.set(sha, fields[1] as string);
+    else parentPathBySha.set(sha, fields[fields.length - 1] as string);
+  }
+  return parentPathBySha;
 }
 
 /**
@@ -268,6 +317,29 @@ export function attachHistoricalPaths(
   fallbackPath: string,
 ): MemoryHistoryEntry[] {
   return entries.map((entry) => ({ ...entry, path: pathBySha.get(entry.sha) ?? fallbackPath }));
+}
+
+/**
+ * Stamp each walked commit with the path the element occupied in its first parent, from
+ * {@link parseParentPaths}' map (`task-278`, `bug-308`). Pure, like {@link attachHistoricalPaths},
+ * and with the same fallback for a sha the probe printed no line for — git shows no diff for a merge:
+ * the entry's own {@link MemoryHistoryEntry.path}, so a merge is read against its first parent at the
+ * path it holds itself. (`git log --follow` lists no merge commit in the shapes this repository
+ * produces — `bug-308`'s reproduction walked the three non-merge commits only — so the fallback is
+ * the rule for one, not a path the walk is known to take.)
+ *
+ * @param entries - The walk, oldest first, each already carrying its own path.
+ * @param parentPathBySha - sha → the first parent's path or `null`, from {@link parseParentPaths}.
+ * @returns A new array; `entries` is not mutated.
+ */
+export function attachParentPaths(
+  entries: readonly MemoryHistoryEntry[],
+  parentPathBySha: ReadonlyMap<string, string | null>,
+): MemoryHistoryEntry[] {
+  return entries.map((entry) => ({
+    ...entry,
+    parentPath: parentPathBySha.has(entry.sha) ? (parentPathBySha.get(entry.sha) as string | null) : entry.path,
+  }));
 }
 
 /**
@@ -317,6 +389,8 @@ export function getMemoryHistory(root: string, relativePath: string): MemoryHist
   });
 
   if (entries.length === 0) return entries;
-  const located = attachHistoricalPaths(entries, collectHistoricalPaths(root, relativePath), relativePath);
+  // One probe answers both questions: where the document was at each commit, and in its first parent.
+  const probe = readPathProbe(root, relativePath);
+  const located = attachParentPaths(attachHistoricalPaths(entries, parseHistoricalPaths(probe), relativePath), parseParentPaths(probe));
   return dropPreCreationAncestry(located, findElementCreationSha(root, relativePath));
 }

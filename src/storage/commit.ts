@@ -703,6 +703,48 @@ export function readPathsAtRev(
   return paths.map((path) => (answers.has(path) ? answers.get(path)! : readPathAtRev(root, rev, path, options)));
 }
 
+/** One `<rev>:<path>` read of {@link readRevisionPaths}. */
+export interface RevisionPath {
+  /** A revision naming one commit: a sha, or an expression over one (`<sha>^1`). */
+  readonly rev: string;
+  /** Root-relative POSIX path. */
+  readonly path: string;
+}
+
+/**
+ * The content of each `<rev>:<path>` request — each at its OWN revision — in input order: the bytes as
+ * UTF-8, or `null` when that revision does not hold that path as a file, a revision that names no
+ * commit included (the first parent of a root commit, `<sha>^1`). The many-revision counterpart of
+ * {@link readPathsAtRev}, with its answers and its refusals, in **one** `git cat-file --batch`.
+ *
+ * Why it exists (`task-278`, `bug-308`): `reconstructMemoryTransitions` (`src/memory/audit.ts`) reads
+ * a document at every commit of its history AND at each commit's first parent; one `git show` per
+ * read would double the spawns of the governance check's slowest path, a batch replaces them all.
+ *
+ * @param root - Project root (the git repository).
+ * @param requests - The revisions and paths to read.
+ * @param options - {@link CommitOptions} (the environment git runs with).
+ * @returns One entry per request, in the same order.
+ * @throws {@link StorageError} `E_INVALID_REVISION` for a rev holding a newline, a carriage return, a
+ *   `:` or a NUL; `E_GIT_READ_FAILED` when the batch read fails.
+ */
+export function readRevisionPaths(root: string, requests: readonly RevisionPath[], options: CommitOptions = {}): (string | null)[] {
+  for (const { rev } of requests) {
+    if (/[\n\r:\0]/.test(rev)) {
+      throw new StorageError(E_INVALID_REVISION, `revision ${JSON.stringify(rev)} cannot be read in a batch: it holds a newline, a carriage return, a ':' or a NUL`);
+    }
+  }
+  // A path holding a newline or a carriage return cannot travel on the line-based protocol: read alone.
+  const batched = requests.filter(({ path }) => !/[\n\r]/.test(path));
+  const objects = catFileBatch(root, batched.map(({ rev, path }) => `${rev}:${path}`), options);
+  const answers = new Map<RevisionPath, string | null>();
+  batched.forEach((request, index) => {
+    const object = objects[index] ?? null;
+    answers.set(request, object !== null && object.type === 'blob' ? object.content.toString('utf-8') : null);
+  });
+  return requests.map((request) => (answers.has(request) ? answers.get(request)! : readPathAtRev(root, request.rev, request.path, options)));
+}
+
 // --- Listing a directory at MANY revisions in a constant number of processes (task-142) -------
 
 /** The object-type bits of a tree entry's mode (`S_IFMT`). */

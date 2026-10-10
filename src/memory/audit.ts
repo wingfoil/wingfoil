@@ -37,7 +37,7 @@ import { getMemoryHistory } from './history';
 import { RESERVED_TYPE_NAMES, type StateMachine } from './schema';
 import { isMachineEdge } from './state-machine';
 import { walkGitLogFields } from './git-log';
-import { runGitRead, splitFrontmatter } from '../storage';
+import { readRevisionPaths, splitFrontmatter, type RevisionPath } from '../storage';
 
 // --- Attribution audit -----------------------------------------------------------------------
 
@@ -265,10 +265,11 @@ export function parseMemoryOperation(subject: string): MemoryOperation | null {
 
 /**
  * One reconstructed transition in a Memory element's history — author/timestamp from git itself,
- * `fromState`/`toState` derived from the document's own frontmatter `status:` field at that commit
- * (ADR-007: state lives in frontmatter, not the commit message), and `approval` parsed from the
- * commit body when present. `fromState` is `null` only for the element's first commit (creation —
- * there is no prior state to name).
+ * `toState` derived from the document's own frontmatter `status:` field at that commit and `fromState`
+ * from the same field in that commit's first parent (ADR-007: state lives in frontmatter, not the
+ * commit message; `task-278`, `bug-308`), and `approval` parsed from the commit body when present.
+ * `fromState` is `null` for the element's creation — there is no prior state to name — and wherever the
+ * parent holds no readable `status`.
  */
 export interface MemoryTransition {
   readonly sha: string;
@@ -296,54 +297,49 @@ export interface MemoryTransition {
   readonly wingfoil: string | null;
   /**
    * Present only when this commit's frontmatter does not parse (task-171, `bug-188`): the first line
-   * of the parse error. `toState` is then `null`, and so is the next transition's `fromState`, since
-   * the state between them could not be read. Absent on every other transition, so their shape is
-   * unchanged.
+   * of the parse error. `toState` is then `null`, and so is the `fromState` of every commit whose first
+   * parent holds that revision, since the state between them could not be read. Absent on every other
+   * transition, so their shape is unchanged.
    */
   readonly unreadable?: string;
 }
 
-/** The exit status of `git show <sha>:<path>` for a path that commit does not hold (`fatal:`). */
-const GIT_FATAL = 128;
-
 /**
- * Read `historicalPath`'s frontmatter `status:` field as it existed at `sha` (`git show sha:path`),
- * without validating it against any type's Zod schema — this is a historical-snapshot read, not a
- * live document validation. Its `status` is `null` if the path didn't exist at `sha`, has no
- * frontmatter block, or the frontmatter has no string `status` field. A frontmatter that does not
- * parse is returned as `unreadable`, never thrown here (task-171, `bug-188`): one bad revision used to
- * make the whole history unreadable.
+ * Parse a document's frontmatter `status:` field out of `raw` — its bytes at one revision, from
+ * {@link reconstructMemoryTransitions}' batched read — without validating it against any type's Zod
+ * schema: this is a historical-snapshot read, not a live document validation. Its `status` is `null`
+ * if the revision does not hold the path (`raw` is `null`), has no frontmatter block, or the
+ * frontmatter has no string `status` field. A frontmatter that does not parse is returned as
+ * `unreadable`, never thrown here (task-171, `bug-188`): one bad revision used to make the whole
+ * history unreadable.
  *
- * `historicalPath` is the path the element occupied **at that commit** — `MemoryHistoryEntry.path`,
- * produced by the same `--follow` walk that selected the commit — never the caller's current path.
- * Passing the current one was `bug-080-read-status-at-reads-the-current-path-at-pre-rename-commits`:
- * every commit older than a rename asked git for a path that tree does not contain, the read failed,
- * and the transition reported `null` states. `dl-080` — a read that gates an operation resolves at
- * `HEAD` — does not reach here: this read gates nothing, and its subject is by construction *other*
- * commits.
+ * The path read is the one the element occupied **at that revision** — `MemoryHistoryEntry.path` for
+ * the commit, `MemoryHistoryEntry.parentPath` for its first parent, both produced by the same
+ * `--follow` walk that selected the commit — never the caller's current path. Passing the current one
+ * was `bug-080-read-status-at-reads-the-current-path-at-pre-rename-commits`: every commit older than a
+ * rename asked git for a path that tree does not contain, the read failed, and the transition reported
+ * `null` states. `dl-080` — a read that gates an operation resolves at `HEAD` — does not reach here:
+ * this read gates nothing, and its subject is by construction *other* commits.
  *
- * The read goes through `runGitRead` (`src/storage/git-read.ts`, task-142), so git's stderr lands in
- * a pipe this process owns rather than on the operator's terminal
- * (`bug-071-read-status-at-leaks-git-stderr`). Exit `128` is taken as "no document at this commit"
- * and answers `null`, and git's text is then discarded: that is the legitimate case — a commit
- * before the element's creation or after a deletion — but git uses the same exit status for an
- * object it cannot read, so this read cannot tell the two apart, and does not try (`bug-097`). What
- * catches a broken walk is the walk itself: `getMemoryHistory` throws when its own `git log` fails,
- * and `dropPreCreationAncestry` when the creation probe and the walk disagree (`task-089`). Any other
- * failure — git that cannot be spawned, an answer past the read buffer — throws `StorageError`
- * `E_GIT_READ_FAILED`.
+ * The bytes come from `readRevisionPaths` (`src/storage`, one `git cat-file --batch` for the whole
+ * history, `task-278`), so git's stderr lands in a pipe this process owns rather than on the
+ * operator's terminal (`bug-071-read-status-at-leaks-git-stderr`). A revision that does not hold the
+ * path answers `null`: that is the legitimate case — a commit before the element's creation or after a
+ * deletion, the parent of a root commit — and git answers `missing` for it as for an object it cannot
+ * read, so this read cannot tell the two apart, and does not try (`bug-097`). What catches a broken
+ * walk is the walk itself: `getMemoryHistory` throws when its own `git log` fails, and
+ * `dropPreCreationAncestry` when the creation probe and the walk disagree (`task-089`). A batch that
+ * cannot run throws `StorageError` `E_GIT_READ_FAILED`.
  */
-function readStatusAt(root: string, sha: string, historicalPath: string): StatusRead {
-  const run = runGitRead(root, ['show', `${sha}:${historicalPath}`], { accepted: [0, GIT_FATAL] });
-  if (run.status === GIT_FATAL) return { status: null };
-  const raw = run.stdout;
+function parseStatus(raw: string | null, label: string): StatusRead {
+  if (raw === null) return { status: null };
 
   const { frontmatter } = splitFrontmatter(raw);
   if (!frontmatter) return { status: null };
 
   let parsed: unknown;
   try {
-    parsed = parseYaml(frontmatter, `${historicalPath}@${sha}`);
+    parsed = parseYaml(frontmatter, label);
   } catch (error) {
     // task-171 (`bug-188`): the caller decides what an unreadable revision means — a history entry
     // with no state, or (for the consistency check) a refusal. `parseYaml` throws only
@@ -356,7 +352,7 @@ function readStatusAt(root: string, sha: string, historicalPath: string): Status
   return { status: typeof status === 'string' ? status : null };
 }
 
-/** What {@link readStatusAt} found: the `status`, and the parse error when the frontmatter did not parse. */
+/** What {@link parseStatus} found: the `status`, and the parse error when the frontmatter did not parse. */
 interface StatusRead {
   readonly status: string | null;
   readonly unreadable?: ValidationError;
@@ -376,20 +372,29 @@ export interface ReconstructOptions {
 
 /**
  * Reconstruct every transition `relativePath` went through, oldest first, entirely from git log
- * (`getMemoryHistory`) plus a frontmatter read at each commit (`git show`) — no separate log file
- * (ADR-007). This is the derivation `wingfoil memory history` (P1.10) renders — `src/core`'s
+ * (`getMemoryHistory`) plus a frontmatter read at each commit and at its first parent (one `git
+ * cat-file --batch`) — no separate log file (ADR-007). This is the derivation `wingfoil memory history` (P1.10) renders — `src/core`'s
  * `memoryHistory` operation (`task-049-memory-history`) renames and string-formats these fields into
  * its own entry shape, deriving no further state of its own; this function is the reconstruction
  * itself, not that command's output formatting.
  *
  * **Renames are followed on both halves of the derivation**, which is the correction
  * `task-097-memory-history-reads-each-commit-at-its-historical-path` made. `getMemoryHistory` always
- * walked with `git log --follow`, so it *found* the commits preceding a rename; `readStatusAt` then
- * read each of them at the CURRENT path, which those trees do not contain, so all of them reported
- * `null` states (`bug-080-…`). The walk now carries the path each commit actually used
+ * walked with `git log --follow`, so it *found* the commits preceding a rename; the read then read
+ * each of them at the CURRENT path, which those trees do not contain, so all of them reported `null`
+ * states (`bug-080-…`). The walk now carries the path each commit actually used
  * (`MemoryHistoryEntry.path`, from `--follow --name-status`) and this function reads at that path —
  * the walk is the source of truth for "where was this file at this commit", and the read no longer
  * guesses.
+ *
+ * **`fromState` is read in the commit's first parent** (`task-278`, `bug-308`), at the path that parent
+ * used (`MemoryHistoryEntry.parentPath`: a rename's source; `null` for a creation, which reads no
+ * parent), never taken from the walk's previous entry. The walk is ordered by commit date, not by
+ * ancestry: an `amend` on `main` made while the same element was started on a task branch is walked
+ * after the branch's `start`, so the previous entry made it read `in-progress → backlog` although its
+ * parent and its own revision both hold `backlog` — and the governance check failed it (`d818c0dd`).
+ * A merge commit, which `git log --follow` does not list in that shape, would be judged against its
+ * first parent too. On a linear history the two readings agree.
  *
  * This was never the hypothetical the TSDoc here used to call "a documented edge case, not a live
  * defect": the Memory folder's `planning/v1/*` became `planning/rl-v1/*` in a single commit,
@@ -400,7 +405,7 @@ export interface ReconstructOptions {
  * `toState` is still `null` where a commit in the walk genuinely has no document to read — before
  * the element's creation, or after a deletion. That is a legitimate answer, distinct from the defect
  * above, and it no longer arrives with a `fatal:` on the operator's stderr (`bug-071`; see
- * {@link readStatusAt}).
+ * {@link parseStatus}).
  */
 export function reconstructMemoryTransitions(
   root: string,
@@ -410,12 +415,24 @@ export function reconstructMemoryTransitions(
   const strict = options.strict === true;
   const history = getMemoryHistory(root, relativePath); // oldest first already
 
-  const transitions: MemoryTransition[] = [];
-  let previousState: string | null = null;
+  // Each commit is read twice — at itself, and at its first parent where the document was before it
+  // (`task-278`, `bug-308`) — all in one batch. A creation has no parent read: its `fromState` is null.
+  const requests: RevisionPath[] = [];
   for (const entry of history) {
-    const read = readStatusAt(root, entry.sha, entry.path);
+    requests.push({ rev: entry.sha, path: entry.path });
+    const parentPath = entry.parentPath === undefined ? entry.path : entry.parentPath;
+    if (parentPath !== null) requests.push({ rev: `${entry.sha}^1`, path: parentPath });
+  }
+  const raws = readRevisionPaths(root, requests);
+
+  const transitions: MemoryTransition[] = [];
+  let next = 0;
+  for (const entry of history) {
+    const read = parseStatus(raws[next++] ?? null, `${entry.path}@${entry.sha}`);
+    const parentPath = entry.parentPath === undefined ? entry.path : entry.parentPath;
+    const before = parentPath === null ? { status: null } : parseStatus(raws[next++] ?? null, `${parentPath}@${entry.sha}^1`);
     if (strict && read.unreadable !== undefined) throw read.unreadable;
-    const toState = read.status;
+    if (strict && before.unreadable !== undefined) throw before.unreadable;
     const unreadable = read.unreadable?.issues[0]?.message ?? read.unreadable?.message;
     transitions.push({
       sha: entry.sha,
@@ -424,14 +441,13 @@ export function reconstructMemoryTransitions(
       date: entry.date,
       subject: entry.subject,
       operation: parseMemoryOperation(entry.subject),
-      fromState: previousState,
-      toState,
+      fromState: before.status,
+      toState: read.status,
       approval: parseApprovalMetadata(entry.body),
       reason: parseCommitReason(entry.body),
       wingfoil: parseVersionTrailer(entry.body),
       ...(unreadable !== undefined ? { unreadable: unreadable.split('\n')[0]!.trim() } : {}),
     });
-    previousState = toState;
   }
   return transitions;
 }
