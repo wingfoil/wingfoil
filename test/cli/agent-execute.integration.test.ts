@@ -251,7 +251,7 @@ function bootstrapOf(role: string, element: string, runId: string, stateRef: str
     `Your context is assembled at commit ${stateRef} and served by the "wingfoil" MCP server`,
     `registered for this session. Load it before any other action: Get the MCP prompt "${role}-session" with arguments element="${element}" and state="${stateRef}".`,
     handoff,
-    `End every commit of your work, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <the model identifier you run as>" (git-conventions §7).`,
+    `End every commit you write, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).`,
     '',
   ].join('\n');
 }

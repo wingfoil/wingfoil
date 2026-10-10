@@ -110,11 +110,11 @@ export interface BootstrapInput {
 }
 
 /** The fixed opening of §2.4's attribution line (task-228, `git-conventions` §7). */
-export const ATTRIBUTION_LINE_PREFIX = 'End every commit of your work, except an approve or reject commit, with the trailer paragraph';
+export const ATTRIBUTION_LINE_PREFIX = 'End every commit you write, except an approve or reject commit, with the trailer paragraph';
 
 /** §2.4's attribution line for `agent`: the rule of `git-conventions` §7, with the entry that signs. */
 export function attributionLine(agent: { readonly name: string; readonly email: string }): string {
-  return `${ATTRIBUTION_LINE_PREFIX} "Co-Authored-By: ${agent.name} <${agent.email}>" and "AI-Model: <the model identifier you run as>" (git-conventions §7).`;
+  return `${ATTRIBUTION_LINE_PREFIX} "Co-Authored-By: ${agent.name} <${agent.email}>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).`;
 }
 
 /**
@@ -191,12 +191,13 @@ export async function withRunFiles<T>(
   files: Partial<Record<RunFileName, string>>,
   work: (paths: Partial<Record<RunFileName, string>>, release: () => void) => Promise<T>,
 ): Promise<T> {
-  const dir = mkdtempSync(join(tmpdir(), 'wingfoil-run-'));
+  // The listeners go in before the directory exists (review fix 1), so no signal can leave it behind.
+  let dir: string | undefined;
   const listeners = CLEANUP_SIGNALS.map((signal): [NodeJS.Signals, () => void] => [
     signal,
     () => {
       release();
-      rmSync(dir, { recursive: true, force: true });
+      if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
       process.kill(process.pid, signal);
     },
   ]);
@@ -208,6 +209,7 @@ export async function withRunFiles<T>(
   }
   for (const [signal, listener] of listeners) process.on(signal, listener);
   try {
+    dir = mkdtempSync(join(tmpdir(), 'wingfoil-run-'));
     const paths: Partial<Record<RunFileName, string>> = {};
     for (const name of Object.keys(RUN_FILE_BASENAMES).sort() as RunFileName[]) {
       const text = files[name];
@@ -219,7 +221,7 @@ export async function withRunFiles<T>(
     return await work(paths, release);
   } finally {
     release();
-    rmSync(dir, { recursive: true, force: true });
+    if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
   }
 }
 

@@ -41,7 +41,7 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
         `Your context is assembled at commit ${SHA} and served by the "wingfoil" MCP server`,
         `registered for this session. Load it before any other action: Get the MCP prompt "developer-session" with arguments element="task:task-001-a" and state="${SHA}".`,
         'Record your handoff in the element\'s "## Execution Notes" section.',
-        'End every commit of your work, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <the model identifier you run as>" (git-conventions §7).',
+        'End every commit you write, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).',
         '',
       ].join('\n'),
     );

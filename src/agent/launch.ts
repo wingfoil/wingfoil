@@ -36,6 +36,9 @@ import { coreErr, coreOk, type CoreResult } from '../core/types';
 import type { AdapterManifest } from './schema';
 import { deriveNotesField, NOT_REPORTED, recordRun, type ReportedCount, type RunRecord, type RunTokens } from './run-log';
 
+/** How much one post-run lookup may print on stdout before it is stopped (§2.6). */
+const LOOKUP_MAX_BYTES = 1024 * 1024;
+
 /** How long one post-run lookup may run (§2.6, §3.3 step 16). */
 export const LOOKUP_TIMEOUT_MS = 10000;
 
@@ -132,24 +135,41 @@ type ExitStatus = number | string;
 const IGNORED_SIGNALS: readonly NodeJS.Signals[] = process.platform === 'win32' ? ['SIGINT'] : ['SIGINT', 'SIGQUIT'];
 const FORWARDED_SIGNALS: readonly NodeJS.Signals[] = process.platform === 'win32' ? ['SIGTERM'] : ['SIGTERM', 'SIGHUP'];
 
+/** §3.3 step 15's signal handling, installed before the spawn and attached to the agent once it exists. */
+interface SignalTakeover {
+  /** Hand the agent over: a forwarded signal that arrived before it existed is sent to it now. */
+  attach(child: ChildProcess): void;
+  /** Remove every listener installed. */
+  restore(): void;
+}
+
 /**
- * Install §3.3 step 15's signal handling for `child`: `SIGINT`/`SIGQUIT` ignored, `SIGTERM`/`SIGHUP`
- * forwarded to the agent while it runs (ignored once it has exited, until the record is committed).
- * Returns the function that removes every listener installed.
+ * Install §3.3 step 15's signal handling **before the spawn** (review fix 1: a signal between the
+ * pre-launch cleanup's release and the spawn must neither kill `agent execute` nor orphan the agent):
+ * `SIGINT`/`SIGQUIT` ignored, `SIGTERM`/`SIGHUP` forwarded to the agent while it runs. One that arrives
+ * before the agent exists is remembered and sent as soon as it is attached; once the agent has exited
+ * they are ignored, until the record is committed.
  */
-function takeOverSignals(child: ChildProcess): () => void {
+function takeOverSignals(): SignalTakeover {
+  let child: ChildProcess | undefined;
+  let pending: NodeJS.Signals | undefined;
+  const forward = (signal: NodeJS.Signals): void => {
+    if (child === undefined) pending = signal;
+    else if (child.exitCode === null && child.signalCode === null) child.kill(signal);
+  };
   const installed: [NodeJS.Signals, () => void][] = [
     ...IGNORED_SIGNALS.map((signal): [NodeJS.Signals, () => void] => [signal, () => undefined]),
-    ...FORWARDED_SIGNALS.map((signal): [NodeJS.Signals, () => void] => [
-      signal,
-      () => {
-        if (child.exitCode === null && child.signalCode === null) child.kill(signal);
-      },
-    ]),
+    ...FORWARDED_SIGNALS.map((signal): [NodeJS.Signals, () => void] => [signal, () => forward(signal)]),
   ];
   for (const [signal, listener] of installed) process.on(signal, listener);
-  return () => {
-    for (const [signal, listener] of installed) process.removeListener(signal, listener);
+  return {
+    attach(spawned) {
+      child = spawned;
+      if (pending !== undefined) forward(pending);
+    },
+    restore() {
+      for (const [signal, listener] of installed) process.removeListener(signal, listener);
+    },
   };
 }
 
@@ -191,10 +211,11 @@ type LookupOutcome = { ok: true; stdout: string } | { ok: false; reason: string 
 /** Run `command` + `args` with the time limit, no shell, in the root; stdout captured. */
 function runLookup(command: string, args: readonly string[], root: string, timeoutMs: number): Promise<LookupOutcome> {
   return new Promise((settle) => {
-    execFile(command, [...args], { cwd: root, env: process.env, timeout: timeoutMs, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024, encoding: 'utf-8' }, (error, stdout) => {
+    execFile(command, [...args], { cwd: root, env: process.env, timeout: timeoutMs, killSignal: 'SIGKILL', maxBuffer: LOOKUP_MAX_BYTES, encoding: 'utf-8' }, (error, stdout) => {
       if (error === null) return settle({ ok: true, stdout });
       const failed = error as NodeJS.ErrnoException & { killed?: boolean; code?: number | string; signal?: string | null };
       if (failed.killed === true) return settle({ ok: false, reason: `timed out after ${timeoutMs} ms` });
+      if (failed.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return settle({ ok: false, reason: `printed more than ${LOOKUP_MAX_BYTES / 1024 / 1024} MiB` });
       if (typeof failed.code === 'number') return settle({ ok: false, reason: `exited ${failed.code}` });
       if (failed.signal) return settle({ ok: false, reason: `ended by ${failed.signal}` });
       return settle({ ok: false, reason: failed.code !== undefined ? `could not start: ${failed.code}` : failed.message });
@@ -348,8 +369,8 @@ export function launchBanner(input: LaunchInput): string {
 
 /**
  * §3.3 steps 13–18 for a launch every pre-launch check has passed. `releaseSignals` is called right
- * before the spawn: it hands the process's signals over from the pre-launch cleanup (`withRunFiles`) to
- * the launch (§3.3 step 15).
+ * before the spawn, after the launch has installed its own listeners: it hands the process's signals
+ * over from the pre-launch cleanup (`withRunFiles`) to the launch (§3.3 step 15) with no gap between.
  *
  * @returns The recorded run (the agent exited `0` and the record was committed); otherwise `IO`
  *   `agent command '<command>' could not be started …` (no run, no record), `IO` `agent exited
@@ -364,12 +385,11 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
 
   // Step 13 — the banner; step 14 — the spawn; step 15 — the wait, with the signals taken over.
   reportNotice(launchBanner(input));
+  // The launch's listeners go in before the pre-launch cleanup's come out: no signal finds neither.
+  const signals = takeOverSignals();
   releaseSignals();
-  let restoreSignals = (): void => undefined;
   try {
-    const ran = await runAgent(host.spawn ?? spawn, commandToSpawn(root, manifest.command), argv, root, (child) => {
-      restoreSignals = takeOverSignals(child);
-    });
+    const ran = await runAgent(host.spawn ?? spawn, commandToSpawn(root, manifest.command), argv, root, (child) => signals.attach(child));
     if (!ran.ok) {
       return coreErr({ code: 'IO', message: `agent command '${manifest.command}' could not be started (adapter '${input.adapter.name}'): ${ran.reason}` });
     }
@@ -422,6 +442,6 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
     }
     return coreOk({ run: record, sha: recorded.value.sha });
   } finally {
-    restoreSignals();
+    signals.restore();
   }
 }
