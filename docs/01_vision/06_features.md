@@ -1,7 +1,7 @@
 # Features — WingFoil
 
-**Version:** 1.11
-**Date:** 2026-10-07  
+**Version:** 1.12
+**Date:** 2026-10-09  
 **Status:** Approved
 
 ---
@@ -130,7 +130,7 @@ Dual interface (CLI for humans, MCP Server for agents).
 
 | ID     | Feature                           | Journey        | User         | Description                                                                                                                                                                                 | Type    |
 |--------|-----------------------------------|----------------|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-| P5.3.1 | `wingfoil agent execute [--next]` | 0a, 1, 2, 4, 6 | All          | Wrapper that launches the agent with auto-loaded context; with `--next` the role and target element are resolved from the current workflow step (explicit override via `--element type:id`) | Command |
+| P5.3.1 | `wingfoil agent execute [--next]` | 0a, 1, 2, 4, 6 | All          | Wrapper that launches the agent's own CLI through its adapter with auto-loaded context; with `--next` the role and target element are resolved from the current workflow step (explicit override via `--element type:id`); every run is recorded in the run log (`dl-114`) with the execution mode that ran (`fresh`, `resume` or `reference`; only `fresh` in v0.3, `dl-135`) | Command |
 | P5.3.2 | Agent Role Selection per Step     | 0a, 1, 2, 4    | All          | Route agent to correct role based on current workflow step                                                                                                                                  | Feature |
 | P5.3.3 | Relevance Filtering               | 1, 2, 3        | Alex, Agents | Agent loads only relevant Memory docs, avoiding noise                                                                                                                                       | Feature |
 | P5.3.5 | `wingfoil agent show <run-id>`    | 2, 4           | Sam, Morgan  | Print one recorded agent run (role, agent, exit status, duration, token counts) and the commit that added it, read at `HEAD` (`dl-135` Action 3)                                          | Command |
@@ -236,14 +236,14 @@ Notifications and alerts across all features.
 | P4.14      | Approval Routing (role-based from DNA)      | Medium     | DNA (roles, team members), Notifications | Medium   | High     | Route approvals correctly             | Team members defined in `.wingfoil/dna.yaml`      |
 | P4.15      | Fallback on Rejection                       | High       | State machine, optional steps            | High     | High     | Handle rejections gracefully          | Return to previous step                           |
 | P4.16      | Workflow include() Composition              | Medium     | Workflow config                          | Medium   | High     | Compose sub-workflows; iterate_over   | include() once or once-per-element                |
-| P5.3.1     | `wingfoil agent execute [--next]`           | Medium     | Agent SDK, MCP, Directives               | High     | Critical | Launch agents with context            | Foundation for agent journeys                     |
+| P5.3.1     | `wingfoil agent execute [--next]`           | Medium     | Agent CLI adapter, MCP, Directives       | High     | Critical | Launch agents with context            | Foundation for agent journeys                     |
 | P5.3.2     | Agent Role Selection per Step               | Medium     | Workflow system                          | Medium   | High     | Route agent by step                   | Correct role per phase                            |
 | P5.3.3     | Relevance Filtering                         | Medium     | Memory, Agent context                    | Medium   | Medium   | Load only relevant docs               | Avoid context window exhaustion                   |
 | P5.3.5     | `wingfoil agent show <run-id>`              | Low        | Run log (P5.3.1)                         | Low      | Medium   | Inspect one agent run                 | Read-only, at `HEAD`; record + adding commit      |
 | P5.4.1     | Agent Role Definition                       | Low        | None                                     | Low      | Critical | Define agent personas                 | Developer, Reviewer, QA, Architect                |
 | P5.4.2     | Agent Role → Directives Binding             | Low        | Directive system                         | Low      | Critical | Auto-load rules for agent             | Core differentiator                               |
 | P5.4.3     | Agent Context Pre-Loading                   | Medium     | DNA, Memory, Directives                  | Medium   | Critical | Pre-fetch agent context               | <30 sec launch time                               |
-| P5.4.4     | Agent Execution Context                     | Medium     | MCP, Agent SDK                           | Medium   | Critical | Structured context passing            | DNA + Memory + Directives                         |
+| P5.4.4     | Agent Execution Context                     | Medium     | MCP, Agent CLI adapter                   | Medium   | Critical | Structured context passing            | DNA + Memory + Directives                         |
 | X1.1       | "Human Needed" Notifications                | Medium     | CLI hooks, git hooks                     | Medium   | High     | Alert on approvals needed             | Essential for Morgan + Casey                      |
 | X1.2       | Notification Routing                        | Medium     | DNA (roles), Notifications               | Medium   | Medium   | Route alerts by role                  | Role-based or person-specific                     |
 
