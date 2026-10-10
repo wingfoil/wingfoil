@@ -27,7 +27,9 @@ Feature: P1.2 (US-0A-02) - Versioning & Audit Trail
 
   # REQ-STATE-10 (US-6-12, task-222): process conformance, the Determinism Index's component P
   # (dl-131), computed from the audit trail and the configuration alone — the release-health
-  # catalogue's P01–P07 (docs/08_health/metrics.yaml).
+  # catalogue's P01–P07 (docs/08_health/metrics.yaml). Measured by scripts/release-health/measure.cjs
+  # (task-231); exercised by test/release-health/measure.test.ts.
+  @REQ-STATE-10
   Scenario: Process conformance names every failing item
     Given a commit range whose head carries the WingFoil configuration
     And the range holds one malformed "wf(task): approve" commit with no "Approver:" line
@@ -36,6 +38,22 @@ Feature: P1.2 (US-0A-02) - Versioning & Audit Trail
     And the well-formed-commit check reports exactly that commit as failing, by its sha
     And no other check reports a failure
 
+  @REQ-STATE-10
+  Scenario Outline: Process conformance names an injected defect of kind <kind>
+    Given a commit range whose head carries the WingFoil configuration, with no failing item on any check
+    And the range holds one injected defect: <defect>
+    When the process conformance of the range is computed
+    Then the <check> check reports exactly that defect as its one failing item
+    And no other check reports a failure
+
+    Examples:
+      | kind | defect                                                                          | check                          |
+      | 2    | a status change that is not an edge of its type's state machine                | legal-transition (P02)         |
+      | 3    | a phase recorded complete whose produces artifact is absent at the head        | produces-present (P03)         |
+      | 4    | a task citing a feature id that resolves to nothing                            | traceability (P04)             |
+      | 5    | a phase run in the same session as a phase its distinct_from names             | roles and separation (P05)     |
+
+  @REQ-STATE-10
   Scenario: Process conformance is byte-identical on a rerun
     Given a commit range and the configuration at its head
     When the process conformance of the range is computed twice

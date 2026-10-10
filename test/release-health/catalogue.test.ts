@@ -128,6 +128,36 @@ describe('validateCatalogue — dl-089 §2 catalogue rules (AC 4, red-first)', (
     expect(validateCatalogue(doc)).toContain('changes: the last entry is version 1, the catalogue is version 3');
   });
 
+  // task-231 (W3 B4 handover, task-222's review): four gaps the measure must not inherit, since it reads these fields.
+  it('task-231: a floor metric whose floor is null is refused', () => {
+    const doc = minimal();
+    metrics(doc)[0]!['floor'] = null;
+    expect(validateCatalogue(doc)).toContain('metrics[0] (G01): a floor metric declares its floor');
+  });
+
+  it('task-231: a redefined or retired id that names no metric is refused', () => {
+    const doc = minimal();
+    doc['version'] = 2;
+    (doc['changes'] as unknown[]).push({ version: 2, source: 'dl-999', redefined: ['G09'], retired: ['Q42'] });
+    const issues = validateCatalogue(doc);
+    expect(issues).toContain('changes[1]: redefined G09 names no metric of the catalogue');
+    expect(issues).toContain('changes[1]: retired Q42 names no metric of the catalogue');
+  });
+
+  it('task-231: added, redefined and retired are lists, never a single string', () => {
+    const doc = minimal();
+    (doc['changes'] as Record<string, unknown>[])[0]!['added'] = 'G01, G02';
+    const issues = validateCatalogue(doc);
+    expect(issues).toContain('changes[0]: added is not a list of ids');
+  });
+
+  it('task-231: a direction outside up, down or pending is refused on every kind, info included', () => {
+    const doc = minimal();
+    metrics(doc).push({ id: 'G13', name: 'Flow', definition: 'Share of wf() commits.', scope: 'window', kind: 'info', direction: 'sideways' });
+    (doc['changes'] as Record<string, unknown>[])[0]!['added'] = ['G01', 'G02', 'G13'];
+    expect(validateCatalogue(doc)).toContain("metrics[2] (G13): direction 'sideways' is not one of up, down, pending");
+  });
+
   it('a document that is not a catalogue is one issue, not a throw', () => {
     expect(validateCatalogue(null)).toEqual(['the catalogue is not a mapping with version, metrics and changes']);
     expect(validateCatalogue({ version: 1, metrics: 'x', changes: [] })).toEqual(['the catalogue is not a mapping with version, metrics and changes']);
