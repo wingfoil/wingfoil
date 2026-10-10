@@ -2,7 +2,7 @@
 id: "task-228-agent-execute-launches-agent-forwards-right-signals-records"
 type: task
 title: "`agent execute` launches the agent, forwards the right signals, records the run and reports it on stderr only"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "high"
