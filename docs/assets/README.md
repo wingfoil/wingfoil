@@ -66,15 +66,39 @@ The README's demo is rendered by [VHS](https://github.com/charmbracelet/vhs) fro
 records (`dl-128` Q1 (a)). The tape runs `docs/examples/01-first-project/run.sh` against the build in `dist/` and
 waits for the example's `OK:` line, so a build that no longer passes the example makes `vhs` exit non-zero and
 leaves no new GIF. VHS (with its `ttyd` and `ffmpeg`) is not a project dependency: install it on the machine that
-regenerates the asset.
+regenerates the asset. Rendering is a manual step of each release's `user-docs` phase (`align-user-docs`, check
+`demo.rendered`), done by hand on the approver's ruling of 2026-10-10.
+
+**1. Install the tools (Ubuntu/Debian).** VHS comes from Charm's apt repository; `ttyd` and `ffmpeg` from the
+distribution:
 
 ```bash
-npm run build
-vhs docs/examples/01-first-project/demo.tape   # writes docs/assets/wingfoil-demo-first-project.gif
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" \
+  | sudo tee /etc/apt/sources.list.d/charm.list
+sudo apt update && sudo apt install vhs ttyd ffmpeg
+vhs --version && ttyd --version && ffmpeg -version | head -1
 ```
 
-Commit hashes and timestamps differ on every recording, so the GIF changes each time it is regenerated. It is
-regenerated in each release's `user-docs` phase (`align-user-docs`, check `demo.rendered`).
+If `vhs` refuses the distribution's `ttyd` as too old, install a newer `ttyd` from its GitHub releases page
+(<https://github.com/tsl0922/ttyd/releases>) and put it first on `PATH`.
+
+**2. Render**, from the repository root:
+
+```bash
+npm run build && vhs docs/examples/01-first-project/demo.tape   # writes docs/assets/wingfoil-demo-first-project.gif
+```
+
+**3. Check the result:**
+
+```bash
+git diff --stat                                # lists docs/assets/wingfoil-demo-first-project.gif (new or changed)
+npx jest test/docs/presentation.test.ts        # passes
+```
+
+Commit hashes and timestamps differ on every recording, so the GIF changes each time it is regenerated. Commit it
+with the release's documentation changes.
 
 ## Editing the wordmark
 
