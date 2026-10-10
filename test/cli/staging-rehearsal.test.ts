@@ -141,6 +141,8 @@ describe('task-219 AC 1 — release-publishing declares the rehearsal on the can
   it('tag re-checks the transcript first, and tags the candidate commit it names', () => {
     expect(phase('tag')?.checks?.pre).toContain(`staging-rehearsal-passed(transcript: ${TRANSCRIPT_PATH})`);
     expect(phase('tag')?.description).toMatch(/candidate/);
+    // Review fix 2: `on: main` names the branch; the commit tagged is the one the check prints (D2).
+    expect(phase('tag')?.description).toMatch(/`on: main` names the branch/);
   });
 
   it('the check is bound to the transcript check, at severity reject, with a repository-relative path pattern', () => {
@@ -168,5 +170,12 @@ describe('task-219 AC 2 — release-cycle states the candidate and the re-cut re
     expect(text).toContain('e2e-smoke');
     expect(text).toContain('staging-rehearsal');
     expect(text).not.toMatch(/\bmain\b/);
+  });
+
+  it('states that the release commit does not re-cut, and what stands as the first candidate\'s e2e-smoke run (review fix 3, D3)', () => {
+    const text = [cycle.description, ...cycle.phases.map((p) => p.description ?? '')].join('\n');
+    expect(text).toMatch(/release commit does not re-cut/);
+    expect(text).toMatch(/rehearsal's smoke[^.]*stands as its e2e-smoke run/);
+    expect(text).not.toMatch(/Both checks run on it/);
   });
 });

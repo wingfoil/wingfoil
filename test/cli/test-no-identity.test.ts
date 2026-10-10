@@ -14,7 +14,8 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { devNull } from 'node:os';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { load as yamlLoad } from 'js-yaml';
@@ -24,7 +25,8 @@ const REPO_ROOT = join(__dirname, '..', '..');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const noIdentity = require('../../scripts/test-no-identity.cjs') as {
   IDENTITY_VARIABLES: readonly string[];
-  noIdentityEnv: (base: Readonly<Record<string, string | undefined>>, home: string) => Record<string, string | undefined>;
+  noIdentityEnv: (base: Readonly<Record<string, string | undefined>>, home: string, globalConfig: string) => Record<string, string | undefined>;
+  ISOLATED_GLOBAL_CONFIG: string;
   runNoIdentity: (
     args: readonly string[],
     options: {
@@ -51,8 +53,8 @@ describe('task-219 AC 3 — the no-identity suite run', () => {
   });
 
   it('the environment points the global config away, empties HOME and drops every identity variable', () => {
-    const env = noIdentity.noIdentityEnv({ ...WITH_IDENTITY, PATH: '/bin', KEEP_ME: '1' }, '/empty/home');
-    expect(env['GIT_CONFIG_GLOBAL']).toBe(devNull);
+    const env = noIdentity.noIdentityEnv({ ...WITH_IDENTITY, PATH: '/bin', KEEP_ME: '1' }, '/empty/home', '/isolated/gitconfig');
+    expect(env['GIT_CONFIG_GLOBAL']).toBe('/isolated/gitconfig');
     expect(env['GIT_CONFIG_NOSYSTEM']).toBe('1');
     expect(env['HOME']).toBe('/empty/home');
     for (const name of ['GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL', 'EMAIL']) {
@@ -86,6 +88,8 @@ describe('task-219 AC 3 — the no-identity suite run', () => {
         home = options.env['HOME']!;
         expect(existsSync(home)).toBe(true);
         expect(readdirSync(home)).toEqual([]);
+        const useConfigOnly = spawnSync('git', ['config', 'user.useConfigOnly'], { cwd: options.cwd, env: options.env, encoding: 'utf-8' });
+        expect(useConfigOnly.stdout.trim()).toBe('true');
         return spawnSync('git', ['config', 'user.email'], { cwd: options.cwd, env: options.env, encoding: 'utf-8' }).status;
       },
     });
@@ -97,6 +101,42 @@ describe('task-219 AC 3 — the no-identity suite run', () => {
   it('propagates a failing suite\'s status, and a run that died on a signal as 1', () => {
     expect(noIdentity.runNoIdentity([], { env: WITH_IDENTITY, spawn: () => 3 })).toBe(3);
     expect(noIdentity.runNoIdentity([], { env: WITH_IDENTITY, spawn: () => null })).toBe(1);
+  });
+
+  // Review fix 1 (2026-10-10): git also takes config — so an identity — from the environment itself.
+  describe('the config git reads from the environment is dropped too (review fix 1)', () => {
+    let root: string;
+    let globalConfig: string;
+    beforeEach(() => {
+      root = mkdtempSync(join(tmpdir(), 'wf-no-identity-'));
+      globalConfig = join(root, 'gitconfig');
+      writeFileSync(globalConfig, noIdentity.ISOLATED_GLOBAL_CONFIG);
+    });
+    afterEach(() => rmSync(root, { recursive: true, force: true }));
+    const gitIn = (env: Record<string, string | undefined>, args: string[], cwd = REPO_ROOT) => spawnSync('git', args, { cwd, env, encoding: 'utf-8' });
+
+    it('GIT_CONFIG_PARAMETERS is removed, so `git -c`-style config cannot carry user.email in', () => {
+      const env = noIdentity.noIdentityEnv({ ...process.env, GIT_CONFIG_PARAMETERS: "'user.email'='param@leak.invalid'" }, root, globalConfig);
+      expect(env).not.toHaveProperty('GIT_CONFIG_PARAMETERS');
+      expect(gitIn(env, ['config', 'user.email']).status).toBe(1);
+    });
+
+    it('GIT_CONFIG_COUNT and every GIT_CONFIG_KEY_<n> / GIT_CONFIG_VALUE_<n> are removed', () => {
+      const leak = { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'core.abbrev', GIT_CONFIG_VALUE_0: '12', GIT_CONFIG_KEY_1: 'user.email', GIT_CONFIG_VALUE_1: 'count@leak.invalid' };
+      const env = noIdentity.noIdentityEnv({ ...process.env, ...leak }, root, globalConfig);
+      for (const name of Object.keys(leak)) expect(env).not.toHaveProperty(name);
+      expect(gitIn(env, ['config', 'user.email']).status).toBe(1);
+    });
+
+    it('the isolated global config sets user.useConfigOnly, so no commit succeeds on an auto-detected identity', () => {
+      const env = noIdentity.noIdentityEnv(process.env, root, globalConfig);
+      expect(gitIn(env, ['config', 'user.useConfigOnly']).stdout.trim()).toBe('true');
+      const repo = join(root, 'repo');
+      expect(gitIn(env, ['init', '--quiet', repo], root).status).toBe(0);
+      const commit = gitIn(env, ['-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'x'], repo);
+      expect(commit.status).not.toBe(0);
+      expect(commit.stderr).toMatch(/auto-detection is disabled|Please tell me who you are/);
+    });
   });
 
   it('release-submit.yaml pre-release-checks declares it, and bindings.yaml binds it to the script', () => {

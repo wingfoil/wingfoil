@@ -9,6 +9,7 @@
  * directories need — with `--expect-version` = `package.json`'s version and `--expect-commit` = `HEAD`. The
  * binding passes `--candidate`. The effects are injected: no pack, no install, no network here.
  */
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -115,5 +116,19 @@ describe('task-219 — e2e-smoke --candidate smokes the packed candidate with it
       checks: Record<string, { run: string[] }>;
     };
     expect(bindings.checks['e2e-smoke-passed']?.run).toEqual(['node', 'scripts/e2e-smoke.cjs', '--candidate', '--report', '{report}']);
+  });
+});
+
+// Review fix 5 (2026-10-10): the header contract — 1 a check failed, 2 a bad argument — holds for an error
+// after the run too (here: a report path that cannot be written), with no stack trace.
+describe('task-219 — e2e-smoke keeps its exit-2 path', () => {
+  it('an unwritable --report path exits 2 with `error: <reason>` on stderr, not a stack trace', () => {
+    const run = spawnSync(process.execPath, [join(REPO_ROOT, 'scripts', 'e2e-smoke.cjs'), '--report', '/dev/null/x.md', '--', '/nonexistent'], {
+      cwd: REPO_ROOT,
+      encoding: 'utf-8',
+    });
+    expect(run.status).toBe(2);
+    expect(run.stderr).toMatch(/^error: /m);
+    expect(run.stderr).not.toMatch(/\n\s+at /);
   });
 });
