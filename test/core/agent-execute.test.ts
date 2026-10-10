@@ -338,3 +338,25 @@ describe('agentExecuteFn — the launch half in process (task-228, spec-016 §3.
     expect(error?.details?.['run_id']).toBe(`${TASK_ID}/adhoc/1`);
   }, 60000);
 });
+
+describe('agentExecuteFn — branches the review asked to cover (task-228 review)', () => {
+  it('a committed run log the strict reader refuses: its VALIDATION, before the launch', async () => {
+    const repo = fixture((root) => writeFixtureFile(root, `docs/runs/${TASK_ID}.jsonl`, 'not a record\n'));
+    expect(refusal(await run(repo, { element: TASK_REF, role: 'developer' }))?.message).toBe(
+      `run log docs/runs/${TASK_ID}.jsonl: line 1 is not a valid run record: not JSON`,
+    );
+  }, 60000);
+
+  it('a type whose memory.yaml entry declares no template gets the fallback handoff line', async () => {
+    const repo = fixture();
+    writeFixtureFile(
+      repo,
+      '.wingfoil/memory.yaml',
+      git(repo, ['show', 'HEAD:.wingfoil/memory.yaml']).replace('    template:\n      file: "memory/templates/task.md"\n      frontmatter:\n        required: [ title ]\n', ''),
+    );
+    commitAll(repo, 'task type without a template');
+    const outcome = await run(repo, { element: TASK_REF, role: 'developer' });
+    if (!outcome.result.ok) throw new Error(outcome.result.error.message);
+    expect((outcome.result.value as AgentLaunchPlan).bootstrap).toContain("Record your handoff in the element's body and in your commit messages.");
+  }, 60000);
+});
