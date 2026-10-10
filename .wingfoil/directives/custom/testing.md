@@ -6,7 +6,7 @@ kind: custom
 title: "Testing"
 tags: [custom, testing, tdd, jest]
 ref: [P3.8]
-version: "1.1"
+version: "1.2"
 ---
 
 # Directive — Testing
@@ -36,8 +36,8 @@ Custom stand-in directive. Applies to developers, QA and reviewers (`roles.yaml`
 - Test sources typecheck as cleanly as production sources (`dl-044`). Gate: `typecheck.clean`, the
   whole-project `tsc --noEmit` over `tsconfig.json` (src and test) and `tsconfig.build.json` (src),
   run as `npm run typecheck` and asserted by `test/lint/typecheck-clean.test.ts`, so `npm test` fails
-  on a type error in either tree. `ci.yml` runs `npm run typecheck` on every push, and
-  `release-submit`'s `pre-release-checks` declares `typecheck.clean`.
+  on a type error in either tree. `ci.yml` runs `npm run typecheck` on every push; `dev-loop`'s
+  `refactor` and `release-submit`'s `pre-release-checks` declare `typecheck.clean`.
 
 ## WingFoil-specific clauses (`dl-121`, `dl-134`)
 
