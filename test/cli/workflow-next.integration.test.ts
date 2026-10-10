@@ -95,9 +95,9 @@ describe('task-216 — wingfoil workflow next on the compiled CLI', () => {
     expect(value.next.key).toBe('release-cycle.ship@release:minor-1');
   });
 
-  it('spec-017 §10 — an unknown <ref>: exit 1, "workflow is not open: ghost"', () => {
+  it('spec-017 §10 — a <ref> naming no workflow and no open instance: exit 1, "unknown workflow: ghost"', () => {
     const run = runCliEntry(repo, ['workflow', 'next', 'ghost']);
-    expect([run.status, run.stdout, run.stderr]).toEqual([1, '', 'error: workflow is not open: ghost\n']);
+    expect([run.status, run.stdout, run.stderr]).toEqual([1, '', 'error: unknown workflow: ghost\n']);
   });
 
   it('a second positional: exit 2', () => {

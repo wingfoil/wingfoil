@@ -333,9 +333,14 @@ describe('task-216 AC 1 — BDD P4.4 on a release-cycle instance (spec-017 §7.3
     expect(nobody.ok && nobody.value.next).toBeNull();
   });
 
-  it('an unknown <ref> is NOT_FOUND "workflow is not open: <ref>" (spec-017 §10)', async () => {
+  it('a <ref> naming no loaded workflow and no open instance is NOT_FOUND "unknown workflow: <ref>" (spec-017 §10)', async () => {
     const result = await next(repo, 'ghost');
-    expect(result).toMatchObject({ ok: false, error: { code: 'NOT_FOUND', message: 'workflow is not open: ghost' } });
+    expect(result).toMatchObject({ ok: false, error: { code: 'NOT_FOUND', message: 'unknown workflow: ghost' } });
+  });
+
+  it('a loaded workflow with no open instance is NOT_FOUND "workflow is not open: <ref>" (spec-017 §10)', async () => {
+    const result = await next(repo, 'planning');
+    expect(result).toMatchObject({ ok: false, error: { code: 'NOT_FOUND', message: 'workflow is not open: planning' } });
   });
 
   it('a workflow name or an instance id selects the instance', async () => {
