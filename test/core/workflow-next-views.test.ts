@@ -102,6 +102,9 @@ phases:
     actions:
       - memory.submit
       - element.set_state(done)
+      - config.init
+    checks:
+      post: [ "report.ok" ]
     awaits: { party: "a vendor", evidence: "vendor.ack" }
     produces: [ "docs/never.md" ]
 `;
@@ -113,6 +116,7 @@ phases:
   - name: close
     role: developer
     actions:
+      - 'bug.sync_state(for_each: release.bug)'
       - element.set_state(done)
       - 'bug.sync_state(for_each: task.bug)'
       - bug.sync_state
@@ -246,6 +250,9 @@ describe('task-216 — step views: targets, bindings, executor attributes, messa
     expect(binding(step, 'element.set_state(done)').binding).toEqual({ kind: 'manual', expectedCommit: 'wf(task): finalize task-9 [backlog → done]' });
     expect(binding(step, 'bug.sync_state(for_each: task.bug)')).toMatchObject({ target: 'run', binding: { kind: 'manual', expectedCommit: 'wf(bug): sync bug-2 [triaged → closed]' } });
     expect(binding(step, 'bug.sync_state')).toMatchObject({ target: 'run', binding: { kind: 'manual' } });
+    // No enclosing release names a bug: nothing to sync, no subject.
+    expect(binding(step, 'bug.sync_state(for_each: release.bug)')).toMatchObject({ target: 'run', binding: { kind: 'manual' } });
+    expect(binding(step, 'bug.sync_state(for_each: release.bug)').binding.expectedCommit).toBeUndefined();
     expect(binding(step, 'bug.sync_state').binding.expectedCommit).toBeUndefined();
     expect(binding(step, 'bug.set_state(closed)')).toMatchObject({ target: 'none', binding: { kind: 'manual', expectedCommit: 'wf(bug): finalize <id> [<from> → closed]' } });
   });
@@ -265,6 +272,9 @@ describe('task-216 — step views: targets, bindings, executor attributes, messa
     expect(binding(step, 'element.set_state(done)')).toMatchObject({ target: 'none', binding: { kind: 'manual', expectedCommit: 'wf(<type>): start <id> [<from> → done]' } });
     expect(step.evidence.missing).toContain('produces');
     expect(step.awaiting).toBeNull();
+    expect(binding(step, 'config.init').binding).toEqual({ kind: 'wingfoil', argv: ['wingfoil', 'init'] });
+    // A check with no argument keeps its binding's placeholder as written.
+    expect(step.checks.post).toEqual([{ token: 'report.ok', binding: { kind: 'run', argv: ['node', 'check.cjs', '{report}'] }, evaluated: false }]);
   });
 
   it("--assigned-to me through the operation: the fixture's git identity is no member, so no step is kept", async () => {
