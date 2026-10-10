@@ -6,12 +6,12 @@ kind: custom
 title: "Which baseline a command reads and writes"
 tags: [custom, determinism, git, baseline]
 ref: [REQ-SEC-02, REQ-STATE-02, REQ-SYS-07]
-version: "1.4"
+version: "1.5"
 ---
 
 # Directive — Which baseline a command reads and writes
 
-**Date:** 2026-10-02
+**Date:** 2026-10-10
 
 Custom WingFoil rule. Applies to anyone adding or changing a command, a `src/core` operation, or an
 MCP Tool — every surface, because both surfaces run the same core function (REQ-SYS-05,
@@ -181,10 +181,13 @@ reads and why the wider read cannot be reached by an uncommitted state to the op
 | Read | Declared baseline | Why it is not `HEAD` alone | Source |
 |------|-------------------|----------------------------|--------|
 | `memory add`'s `{n}` sequence counter (`nextSequenceNumber`, `src/memory/add.ts`) | the trees of every local branch (`refs/heads/*`), every remote-tracking ref (`refs/remotes/*`) and `HEAD`, plus the working tree as git sees it (the index and the untracked, non-ignored files), over every folder the type's `path` can resolve to; no network | a number is taken wherever any of those holds it; the read takes the **highest** number and adds one, so a wider baseline can only raise the id, never lower it onto an occupied one or change whether the command refuses | `dl-101` §2 (a); `task-128` (`bug-087`, `bug-162`) |
+| The WIP-limit holder count (`requireWipSlot`, `src/core/memory-transition.ts`), on every verb that keeps the check (`memory add` for the initial state, `submit`, `approve`, the `supersedes:` trigger) | the commit the transition is decided at, plus the tips of the refs the counter reads (`refBaselineCommits`, `src/memory/add.ts`: every local branch, every remote-tracking ref, `HEAD`); never the working tree; no network | with one branch per task (`git-conventions` §1) a holder started on another branch is invisible at `HEAD`, so a limit counted there refuses nothing; the read uses only commits, each element counts once in its most advanced state, and the refusal says the count depends on which refs were fetched. It **can** refuse the command — the one declared baseline that does — which `dl-156` ratified knowing it | `dl-156` Q1 (a); `task-274` |
 
 The counter's read still gates what the command writes, so it follows the rest of this directive: a
 git read that fails is an error of the operation, never an empty answer (an empty answer would
-reissue `1`). The write half is unchanged: `requireAbsentTarget` still refuses an occupied target.
+reissue `1`). The same holds for the WIP count, whose empty answer would admit any transition. Both
+read the refs through the one listing, `refBaselineCommits`, so they cannot disagree about which refs
+exist. The write half is unchanged: `requireAbsentTarget` still refuses an occupied target.
 
 ## Reach for the primitive — there is no third mechanism to write
 
@@ -242,3 +245,9 @@ now declares (approver ruling 2026-10-01, at `task-128`'s review). The rule text
 *Where the shipped code still deviates* no longer lists the Memory transition verbs: their id lookup
 and status read resolve at `HEAD` (`bug-187`). `directive remove` (`bug-108`) is the deviation left.
 The rule text is unchanged.
+
+**Revision 1.5 (2026-10-10, `task-274-count-wip-limit-holders-across-every-ref-and-exempt-reject-and-returns-edges-from-the-limit`).**
+*Declared baselines* gains its second entry, the WIP-limit holder count, which `dl-156` Q1 (a) moved
+from the decided commit alone to that commit plus every local and remote-tracking branch tip. Unlike
+the counter it can refuse the command; the row says so. `reject` and `park` no longer take the check
+(`dl-156` Q2 (i)). The rule text is unchanged.
