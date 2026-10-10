@@ -199,7 +199,7 @@ for cell):
 |--------------------|--------------------------|---------|-------------------------------|-----------------------------------------------|---------|
 | `workflowStart`    | `workflow` *(planned)*   | true    | `wingfoil workflow start`     | Tool `workflow.start` *(v0.4, P5.2.3)*        | P4.2    |
 | `workflowEnd`      | `workflow` *(planned)*   | true    | `wingfoil workflow end`       | Tool `workflow.end` *(v0.4)*                  | P4.3    |
-| `workflowNext`     | `workflow` *(planned)*   | false   | `wingfoil workflow next`      | Resource `wingfoil://workflows/-/next` (the active instance) — v0.3, ruling R12 | P4.4    |
+| `workflowNext`     | `workflow`               | false   | `wingfoil workflow next`      | Resource `wingfoil://workflows/-/next` (the active instance) — v0.3, ruling R12 | P4.4    |
 | `workflowStatus`   | `workflow` *(planned)*   | false   | `wingfoil workflow status`    | Resource `wingfoil://workflows/-/status` — v0.3, ruling R12 | P4.5    |
 | `workflowFinalize` | `workflow` *(planned)*   | true    | `wingfoil workflow finalize`  | Tool `workflow.finalize` *(v0.4)*             | ruling R11 (`dl-104` D1) |
 | `workflowList`     | `workflow`               | false   | `wingfoil workflow list`      | the shipped `wingfoil://workflows` keeps its payload in v0.3 | P4.6    |
@@ -834,3 +834,9 @@ reshape moves it to item 6" from the working-tree row. The shipped `wingfoil://w
 (its pre-launch half, `spec-016` §3.3 steps 1–12; the launch is `task-228`'s), so its module cell loses
 *(planned)*, as `spec-016` §8's row does in the same task: the two tables stay cell for cell. Edited in
 place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-10, `task-216-add-workflow-next-naming-next-step-verb-role`) — §3's `workflowNext`
+row ships.** `task-216` registers `workflowNext` in `CORE_MODULES` (`mutates: false`, `wingfoil workflow
+next`), so §3's row loses its planned marker. Its MCP Resource stays `task-239`'s. No other row changes.
+Edited in place without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at
+`task-216`'s review.
