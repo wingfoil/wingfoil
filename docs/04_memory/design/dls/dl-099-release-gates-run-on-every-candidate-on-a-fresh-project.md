@@ -141,3 +141,13 @@ rehearsal stays at (a), because it starts a local registry.
 - **Traceability:** REQ-SYS-09 (distribution as an npm package), REQ-INT-04 (CLI exit-code
   contract).
 - **Amended by** `dl-133-fix-task-tail` (2026-09-29, v0.3 planning): the smoke and the mechanical user-doc checks also run at every wave end.
+
+**Note (2026-10-10, approver ruling on `task-219` D2; W3 B4 follow-ups, `bug-ingest-rel-v0.3-w3b4-review-findings-plan`).**
+§1's "a candidate is re-cut whenever a commit lands after the checks ran" does not count commits that only record
+evidence: a commit whose changes are all gate reports, rehearsal transcripts, Memory transitions or plans
+(`docs/07_gates/`, `docs/04_memory/`, `docs/05_plans/`) does not re-cut the candidate. The version tag goes on the
+commit the rehearsal transcript names (`staging-rehearsal-passed` prints it; `release-publishing.yaml` 1.4, phase
+`tag`), not on the tip that records the transcript. `task-219` delivered the rehearsal phase, the transcript and its
+check; the pre-check that only evidence paths changed between the candidate and the tip is
+`bug-312-nothing-checks-before-tagging-that-only-evidence-paths-changed-between-the-rehearsed-candidate-and-the-branch-tip`
+(`triaged`, v0.3). The Decision above is otherwise unchanged.
