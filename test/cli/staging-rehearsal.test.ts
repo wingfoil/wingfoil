@@ -175,7 +175,7 @@ describe('task-219 AC 2 — release-cycle states the candidate and the re-cut re
   it('states that the release commit does not re-cut, and what stands as the first candidate\'s e2e-smoke run (review fix 3, D3)', () => {
     const text = [cycle.description, ...cycle.phases.map((p) => p.description ?? '')].join('\n');
     expect(text).toMatch(/release commit does not re-cut/);
-    expect(text).toMatch(/rehearsal's smoke[^.]*stands as its e2e-smoke run/);
+    expect(text).toMatch(/rehearsal's smoke \([^)]*\) stands as its e2e-smoke run/);
     expect(text).not.toMatch(/Both checks run on it/);
   });
 });
