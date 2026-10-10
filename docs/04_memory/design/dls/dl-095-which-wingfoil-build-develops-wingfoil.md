@@ -114,3 +114,12 @@ what manages the project. Three questions are open for the approver.
 - **Related:** `dl-069` (lockfile drift), `dl-092` (the patch whose tag triggers the switch),
   `bug-076`, `bug-077` (defects found by using the released build).
 - **Traceability:** P5.2.1 (MCP Resources); REQ-SYS-09 (distribution as an npm package).
+
+**Note (2026-10-10, W3 B4 follow-ups, `bug-ingest-rel-v0.3-w3b4-review-findings-plan`).** The third Action's command
+"`npx wingfoil --version` equals the version `package.json` pins" reads `npm run -s wingfoil -- --version` from now on:
+the `wingfoil-cli` directive (§1, `dl-163` S3e) forbids `npx wingfoil`, because once `dist/` is built it runs this
+checkout's own CLI and no longer says which build answers. The plan template already carries the corrected command
+(`.wingfoil/memory/templates/plan.md`, *Context* comment). The pinned build's surprises are bugs tagged `pinned-build`
+(`wingfoil-cli` §3), among them
+`bug-323-the-pinned-build-s-memory-history-reports-an-amend-commit-with-operation-null` (`triaged`, v0.4). The
+Decision above is unchanged.
