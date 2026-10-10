@@ -85,7 +85,7 @@ describe('wingfoil memory add --workflow / --step (task-227, spec-008 §12)', ()
   });
 
   it('a step that adds no such type is exit 1 with one error line', () => {
-    writeFixtureFile(repo, '.wingfoil/memory.yaml', `${MEMORY_YAML}  note:\n    path: "docs/note/{id}.md"\n    id_pattern: "note-{n}-{slug}"\n    template:\n      file: "memory/templates/note.md"\n`);
+    writeFixtureFile(repo, '.wingfoil/memory.yaml', `${MEMORY_YAML}  note:\n    path: "docs/note/{id}.md"\n    id_pattern: "note-{n}-{slug}"\n    template:\n      file: "memory/templates/note.md"\n      frontmatter:\n        required: [title]\n`);
     writeFixtureFile(repo, '.wingfoil/memory/templates/note.md', TEMPLATE('note'));
     commitAll(repo, 'a note type');
     const run = wingfoil(repo, 'memory', 'add', '--type', 'note', '--title', 'N', '--workflow', 'cap-1');

@@ -157,7 +157,20 @@ describe('task-227 — memory add --workflow links the added element to a step (
       const bug = { type: 'bug', id: added.value.id, status: 'draft' };
       expect(deduced.instance.element).toEqual(bug);
       expect(deduced.instance.created).toEqual([bug]);
-      expect(deduced.frontier.map((step) => [step.key, step.created])).toEqual([['capture.record', [bug]]]);
+      // Bound, the creating step runs on its element: its key gains the scope (`spec-017` §4.9).
+      expect(deduced.frontier.map((step) => [step.key, step.created])).toEqual([[`capture.record@bug:${added.value.id}`, [bug]]]);
+    });
+
+    it('a second element linked to the bound creating step is listed in `created` and does not rebind', async () => {
+      open(repo, 'cap-1', 'capture');
+      const first = await add(repo, { type: 'bug', title: 'First', workflow: 'cap-1' });
+      const second = await add(repo, { type: 'bug', title: 'Second', workflow: 'cap-1' });
+      expect(first.ok && second.ok).toBe(true);
+      if (!first.ok || !second.ok) return;
+      expect(trailersOfHead(repo).split('\n')[1]).toBe(`WingFoil-Step: capture.record@bug:${first.value.id}`);
+      const deduced = instance(repo, 'cap-1');
+      expect(deduced.instance.element?.id).toBe(first.value.id);
+      expect(deduced.instance.created.map((ref) => ref.id)).toEqual([first.value.id, second.value.id]);
     });
 
     it('a workflow name as <ref> selects its most recently started open instance', async () => {
