@@ -29,7 +29,11 @@ Custom stand-in directive. Applies to reviewers (and the approver gate).
 - Approval binds to the `reviewer`/`approver` role, not a person.
 - **No gated transition by an unattended run** (`dl-103` §2 (i)): every `approve` and `reject` is a
   human-authored commit; a process without a human present may `add`, `submit`, `start`, `sync` and
-  write content, never approve or reject — the governance check's authority rule enforces it.
+  write content, never approve or reject. The governance check's authority rule does not enforce this:
+  it checks only that the author holds the `approver` role in `team.members` and is the identity the
+  `Approver:` line names, so a run under the approver's own identity passes it. Whether a human was
+  present cannot be checked by machine until signed approvals (`dl-103` §2 (iii)); until then the policy
+  is kept by never giving an unattended run the approver's identity.
 
 ## Claims are re-run before the verdict (`dl-097` (a))
 

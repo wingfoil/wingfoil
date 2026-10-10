@@ -148,10 +148,13 @@ tmpl_version: 260703
   grep -cE "wf\(bug\): sync .*(in-review → in-progress)"` → `0`; the fixture tests are its positive cases.
   `bug-307`'s 63 violating commits are its own count. So the cut-off matters for `bug-307`, and keeps the
   others safe from history they did not see.
-- **A pre-existing gated finding on `main`** (not this task's rules): `d818c0dd` `wf(task): amend task-152-… [backlog
-  → backlog]`, "the bracket declares backlog → backlog, the frontmatter went in-progress → backlog". A push
-  range does not include it, but `governance.yml`'s whole-history fallback (unreachable `before`) would fail on
-  it. Reported to the coordinator, not filed.
+- **One gated finding of an existing rule, a false positive** (corrected at the review, 2026-10-10): `d818c0dd`
+  `wf(task): amend task-152-… [backlog → backlog]` is reported as "the frontmatter went in-progress → backlog",
+  but `git show d818c0dd~1:<file> | grep ^status` and `git show d818c0dd:<file> | grep ^status` both print
+  `status: backlog`. `reconstructMemoryTransitions` (`src/memory/audit.ts`) takes `fromState` from the previous
+  entry of the path's log, not from the commit's parent, which breaks on non-linear history. A push range does
+  not include it, but `governance.yml`'s whole-history fallback would fail on it; fixing the rule waits for the
+  approver's decision.
 
 ### review (self, reviewer)
 

@@ -324,9 +324,38 @@ describe('config versions over a --base range (bug-249)', () => {
 });
 
 describe('per-check introduction (dl-103 §1 starting mode, per check)', () => {
-  it('declares a marker for every check added after the script', () => {
-    expect(Object.keys(CHECKS).sort()).toEqual(['approval-ai-trailer', 'config-version', 'status-outside-wf', 'supersedes-pair', 'verb-edge']);
-    for (const marker of Object.values(CHECKS)) expect(marker).toMatch(/^governance-check:/);
+  it('pins every marker exactly: renaming one would silently move that rule\'s cut-off', () => {
+    expect(CHECKS).toEqual({
+      'verb-edge': 'governance-check:verb-edge',
+      'status-outside-wf': 'governance-check:status-outside-wf',
+      'supersedes-pair': 'governance-check:supersedes-pair',
+      'config-version': 'governance-check:config-version',
+      'approval-ai-trailer': 'governance-check:approval-ai-trailer',
+    });
+  });
+
+  it('takes the merge commit as the cut-off when a --no-ff merge brings the marker in, as on main', () => {
+    const f = fixture();
+    f.commit('chore: introduce the check', { 'scripts/check-governance.cjs': '// placeholder\n' });
+    f.task('t-1', 'backlog', 'wf(task): add t-1');
+    git(f.root, ['checkout', '--quiet', '-b', 'task/rule']);
+    const branchCommit = f.commit('feat: add the rule', { 'scripts/check-governance.cjs': `// placeholder\n// ${CHECKS['status-outside-wf']}\n` });
+    const onBranch = f.task('t-1', 'in-progress', 'docs: edit t-1 on the branch');
+    git(f.root, ['checkout', '--quiet', 'main']);
+    const parallel = f.commit('docs: unrelated', { 'README.md': 'x\n' });
+    execFileSync('git', ['merge', '--quiet', '--no-ff', '-m', 'Merge branch task/rule', 'task/rule'], {
+      cwd: f.root,
+      env: { ...process.env, GIT_AUTHOR_NAME: DEVELOPER.name, GIT_AUTHOR_EMAIL: DEVELOPER.email, GIT_COMMITTER_NAME: DEVELOPER.name, GIT_COMMITTER_EMAIL: DEVELOPER.email },
+    });
+    const merge = git(f.root, ['rev-parse', 'HEAD']).trim();
+    const after = f.task('t-1', 'done', 'docs: edit t-1 after the merge');
+    const report = checkGovernance(f.root);
+    expect(report.checkIntroductions['status-outside-wf']).toBe(merge);
+    expect(report.checkIntroductions['status-outside-wf']).not.toBe(branchCommit);
+    expect(parallel).not.toBe(merge);
+    const gated = new Map(report.findings.map((finding) => [finding.sha, finding.gated]));
+    expect(gated.get(onBranch)).toBe(false);
+    expect(gated.get(after)).toBe(true);
   });
 
   it('gates a later check only after the first-parent commit that brought its marker into the script', () => {

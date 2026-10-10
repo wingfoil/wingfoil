@@ -189,8 +189,11 @@ be the last one, and a reader of the `Reason:` block (`dl-067-reason-trailer-con
   `scripts/check-governance.cjs` over every range pushed to `main` and every pull request into it. It
   checks §4's subjects and brackets, the `Reason:`/`Approver:` shape (`dl-067`), approval authority
   (§5, `dl-094`), state legality and the verb each transition uses, status changes outside a `wf()`
-  operation (`dl-139`), the version bump of the four versioned config files (`bug-249`), and §7's rule
-  that `approve` and `reject` carry no AI co-author trailer (`bug-307`). Each rule fails only commits
+  operation (`dl-139`), an approve whose `supersedes:` target is not `superseded` at `HEAD` (`bug-218`),
+  and §7's exclusion of `approve` and `reject` (`bug-307`), enforced as: those commits carry no
+  `Co-Authored-By:` and no `AI-Model:` line at all, anywhere in the body, whoever it names. With
+  `--base` only (CI passes it), it also checks the version bump of the four versioned config files
+  over the range (`bug-249`); a whole-history run has no range and does not judge it. Each rule fails only commits
   after the one that introduced it; older history is reported, never rewritten (§2, §8). Beside it, a
   warn-only lint (`scripts/lint-claims.cjs`, `dl-097` §2 (b)) annotates claims with no command in the
   Memory documents the range changed.
