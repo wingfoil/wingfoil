@@ -1066,6 +1066,76 @@ when `dna.yaml` or `memory.yaml` is present but invalid.
 
 - **Commit:** none.
 
+### `wingfoil workflow next`
+
+Print the next step of an open workflow: its verb, role, element, directives and bindings, as committed at HEAD.
+
+```
+wingfoil workflow next [<ref>] [--assigned-to <who>]
+```
+
+| Option | Description |
+|---|---|
+| `--assigned-to <who>` | Keep only the steps whose role `<who>` holds: `me` (the `team.members[]` entry whose email is your git identity's), a member's name or email, or a role name. |
+
+Unreleased (v0.3). Read-only, and it reads `HEAD` as `workflow list` does: an uncommitted change is
+reported as `W_UNCOMMITTED_INPUTS`, never read. `<ref>` is a workflow name (its most recently started open
+instance) or the id of an open instance; without it, the active instance (the most recently started one).
+
+The answer is the instance's **frontier**, the steps that are ready now. The first is the next step; the
+others are listed under `more` (several tasks iterated in parallel give several ready steps). Each step
+reports its `key` (`<workflow>.<phase>`, then `@<type>:<id>` for the element it runs on, e.g.
+`dev-loop.red@task:task-130`), its `trail` from the instance down, its `scope`, its `role`, the members who
+hold it and whether an agent runs as it (`agentRole`), the role's directives (`id` and `title` only; their
+text is what `agent execute` loads), and each action with its interpolated text and its binding:
+
+- `wingfoil`: the whole command, with the step's operands filled and placeholders for what only you can
+  give — `memory add --type <T> --title <title> --workflow <instance> --step <key>`, or a Memory verb with
+  the ids it acts on (`<id>` when none is known yet) and, for `approve` / `reject`, `--reason <reason>`;
+- `agent`: `wingfoil agent execute --workflow <instance> --step <key>`.
+
+**Planned:** `memory add --workflow` / `--step` (which link the added element to the step) and
+`agent execute --workflow` / `--step` are not available in this build yet; until they are, run `memory add`
+without those two options, and give `agent execute` the step's element with `--element <type>:<id>`. A step that waits for a third party is completed by a phase record that
+`wingfoil workflow finalize` writes, which is not available yet either.
+
+The other binding kinds:
+
+- `manual`: for a state change WingFoil has no command for yet, the commit subject the step expects, e.g.
+  `wf(task): start task-130 [backlog → in-progress]`, `wf(bug): sync bug-12 [in-review → in-progress]`;
+- `run`: a command bound in `workflows/bindings.yaml`; `unbound`: none.
+
+Checks are listed with their binding and `"evaluated": false`: nothing is run. A step also reports the
+evidence still missing (`finalizable: true` when only a record is, which `workflow finalize` writes),
+`fallback`, `reentered` and `reentryCommit` after a reject, `mode`, `allowedModes`, `distinctFrom` and a
+recurring `cadence` (`lastRun: "not-recorded"`). The console view prints the key, trail, scope, role,
+directive ids, actions with their bindings, the missing evidence and a "waiting for" or "human needed"
+line; `--format json|yaml` prints the full payload,
+`{"baseline": {…}, "instance": {…}, "complete": …, "next": {…}, "more": […], "diagnostics": […]}`.
+
+```console
+$ wingfoil workflow next
+workflow: decision-log-ingest (decision-log-ingest-rel-v0.3-consumer-feedback-loop-plan)
+next step: decision-log-ingest.capture
+  trail: decision-log-ingest.capture
+  scope: (none)
+  role: product-owner — held by Roberto Pompermaier
+  directives: claim-evidence, doc-versioning, documentation, git-conventions, security, security-secrets, traceability
+  actions:
+    - memory.add(type: decision-log) [wingfoil: wingfoil memory add --type decision-log --title <title> --workflow decision-log-ingest-rel-v0.3-consumer-feedback-loop-plan --step decision-log-ingest.capture]
+    - memory.submit [wingfoil: wingfoil memory submit <id>]
+  evidence missing: produces
+```
+
+- **Exit `0`** for every deduced outcome, with a `message`: `no open workflows`;
+  `no next step: workflow '<name>' is complete`; `no next step of workflow '<name>' is assigned to '<who>'`.
+- **Warnings:** `--assigned-to <who>` that names no member (name or email) and no `team.roles` role, or
+  `me` when your git identity's email is no member's, prints a `warning:` line; the filter then keeps no step.
+- **Errors:** a `<ref>` that names no workflow and no open instance → `unknown workflow: <ref>`; a workflow
+  with no open instance → `workflow is not open: <ref>`; both exit `1`; an error in
+  the workflow files → exit `1`, as `workflow list`; more than one `<ref>` → exit `2`.
+- **Commit:** none.
+
 ### `wingfoil workflow show`
 
 Print one workflow resolved, its included workflows nested under their phases, as committed at `HEAD`.
@@ -1087,8 +1157,8 @@ alone), `mode`, `allowedModes` and `distinctFrom`, `cadence`, the kinds of evide
 another workflow, that workflow resolved the same way under `sub`. The payload is
 `{"baseline": {…}, "workflow": {…}, "diagnostics": […]}`, the diagnostics as `workflow list` reports them.
 
-- **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <ref>`, exit
-  `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
+- **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <name>` —
+  `<ref>` itself, or, for an open instance whose workflow is not loaded, that workflow's name — exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
 - **Commit:** none.
 
 ## Agent
