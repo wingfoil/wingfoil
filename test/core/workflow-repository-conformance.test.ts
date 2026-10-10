@@ -99,14 +99,23 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-planning", "phases[5].checks.pre[0]", "spec-review.passed"],
       ["release-planning", "phases[5].checks.post[0]", "frontmatter.required"],
       ["release-planning", "phases[6].checks.post[0]", "frontmatter.required"],
+      // task-221 (dl-133 Q4 (i)): the stop-the-line check reads memory.yaml's rule; no command asserts it yet.
+      ["dev-loop", "phases[0].checks.pre[0]", "stop-the-line.clear"],
       ["dev-loop", "phases[1].checks.post[0]", "frontmatter.required"],
       ["dev-loop", "phases[1].checks.post[1]", "tech-spec.approved"],
       ["dev-loop", "phases[1].checks.post[2]", "depends_on.acknowledged"],
+      // task-221 (dl-102 §4): a reading of each criterion, no command.
+      ["dev-loop", "phases[1].checks.post[3]", "acceptance-criteria.consistent"],
       ["dev-loop", "phases[2].checks.post[0]", "tests.exist"],
       ["dev-loop", "phases[2].checks.post[1]", "tests.failing"],
       // task-205 (dl-134 §2): declared on green and refactor, evaluated from v1.0 (P4.12); no command asserts it yet.
       ["dev-loop", "phases[3].checks.post[1]", "tests.unchanged"],
       ["dev-loop", "phases[4].checks.post[5]", "tests.unchanged"],
+      // task-221 (dl-097 (a), dl-098): the reviewer's re-runs; (dl-115 Q2 (a)): the file is the task's path,
+      // which no binding placeholder carries. `typecheck.clean` and `docs.parity` are bound.
+      ["dev-loop", "phases[5].checks.pre[1]", "claims.rerun"],
+      ["dev-loop", "phases[5].checks.pre[2]", "rereview.previous-reject"],
+      ["dev-loop", "phases[6].checks.post[0]", "retrospective.present"],
       ["user-docs", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
       ["user-docs", "phases[1].checks.post[0]", "user-facing docs aligned with the release's shipped CLI/feature surface"],
       ["agent-docs", "phases[0].checks.post[0]", "CLAUDE.md project status matches the shipped command surface"],
@@ -123,9 +132,14 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["e2e-smoke", "phases[2].checks.post[2]", "advertised channel set == EXPECTED_CHANNELS, every advertised list answers"],
       ["release-submit", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
       ["release-submit", "phases[0].checks.pre[1]", "all bugs where tags=[{release.version}] are status"],
-      ["release-publishing", "phases[0].checks.pre[0]", "on-branch-is-main"],
-      ["release-publishing", "phases[0].checks.pre[1]", "release-branch-merged-to-main"],
-      ["release-publishing", "phases[1].checks.post[0]", "staged version approved on npm and live on the npm registry"],
+      // task-219: release-commit and staging-rehearsal precede tag; the rehearsal's check is bound.
+      ["release-publishing", "phases[2].checks.pre[0]", "on-branch-is-main"],
+      ["release-publishing", "phases[2].checks.pre[1]", "release-branch-merged-to-main"],
+      ["release-publishing", "phases[3].checks.post[0]", "staged version approved on npm and live on the npm registry"],
+      // task-222 (dl-089 §1): the report checks, unbound until scripts/release-health/ ships them (task-231, task-241).
+      ["release-health", "phases[0].checks.post[0]", "every catalogue metric has a value or an explicit not-measurable reason"],
+      ["release-health", "phases[1].checks.post[0]", "every regressed metric and every breached floor has a finding"],
+      ["release-health", "phases[2].checks.post[0]", "every finding is tracked by an element or carries an RH proposal in the report's Proposals section"],
       ["retrospective", "phases[0].checks.post[0]", "secondary-sources.listed"],
       ["retrospective", "phases[1].checks.pre[0]", "proposals.disposed"],
       ["retrospective", "phases[2].checks.post[0]", "frontmatter.required"],
@@ -253,7 +267,7 @@ function measure(workflows: readonly Workflow[]): { checkpoints: string[]; final
 }
 
 describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => {
-  it('27 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 26 until task-212 added vision-change.update-vision)', () => {
+  it('29 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 27 again from task-219: release-publishing.release-commit, while staging-rehearsal produces its transcript; 28 from task-222: release-health.propose writes into the report compare produced; 29 from task-212: vision-change.update-vision)', () => {
     expect(measure(registry().workflows).checkpoints).toEqual([
       'vision-change.update-vision',
       'user-story-mapping.backbone',
@@ -277,8 +291,10 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'e2e-smoke.mcp-registration',
       'release-submit.pre-release-checks',
       'release-submit.approve-release',
+      'release-publishing.release-commit',
       'release-publishing.tag',
       'release-publishing.publish',
+      'release-health.propose',
       'retrospective.additional-points',
       'retrospective.approve',
       'end-of-life.archive',

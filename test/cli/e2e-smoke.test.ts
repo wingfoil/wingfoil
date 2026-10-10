@@ -287,7 +287,8 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
     it('the gate hard-rejects (dl-023): bound at severity reject, and no text still stages it as warn', () => {
       const bound = bindings.checks['e2e-smoke-passed'];
       expect(bound?.severity).toBe('reject');
-      expect(bound?.run).toEqual(['node', 'scripts/e2e-smoke.cjs', '--report', '{report}']);
+      // task-219: `--candidate` binds the packed candidate and its stamp (test/cli/e2e-smoke-candidate.test.ts).
+      expect(bound?.run).toEqual(['node', 'scripts/e2e-smoke.cjs', '--candidate', '--report', '{report}']);
       // The pattern judges the rendered path the engine passes, its `{…}` tokens filled in.
       expect(REPORT_PATH.replace(/\{[^}]+\}/g, 'v0.3')).toMatch(new RegExp(bound?.args?.report ?? '^$'));
       // Anything but a repository-relative path is refused (review F1): a shell fragment, an absolute

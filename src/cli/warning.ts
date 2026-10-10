@@ -37,3 +37,23 @@ export function emitWarning(text: string, opts: { format: OutputFormat }): void 
 export function emitWarnings(warnings: readonly string[] | undefined, opts: { format: OutputFormat }): void {
   for (const warning of warnings ?? []) emitWarning(warning, opts);
 }
+
+/**
+ * Write one notice (task-228, `reportNotice`: `agent execute`'s launch banner, `spec-016` §3.3 step 13) to
+ * stderr in the active `--format`'s shape: the bare line for `console`, `{"notice": "<text>"}` for
+ * `json`, one self-delimiting YAML document for `yaml` — the shapes {@link emitWarning} uses.
+ */
+export function emitNotice(text: string, opts: { format: OutputFormat }): void {
+  emitStderrDocument({ notice: text }, text, opts);
+}
+
+/**
+ * Write one stderr message: `document` as one JSON line (`json`) or one `---`/`...` YAML document
+ * (`yaml`), `consoleLine` as is (`console`). The success report of a command that writes nothing on
+ * stdout (`CoreOperation.renderToStderr`, `spec-016` §3.4) goes through here too.
+ */
+export function emitStderrDocument(document: Readonly<Record<string, unknown>>, consoleLine: string, opts: { format: OutputFormat }): void {
+  if (opts.format === 'json') process.stderr.write(JSON.stringify(document) + '\n');
+  else if (opts.format === 'yaml') process.stderr.write('---\n' + yamlDump(document) + '...\n');
+  else process.stderr.write(`${consoleLine}\n`);
+}

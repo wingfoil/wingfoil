@@ -149,7 +149,8 @@ describe('AC 4 — the testing directive and roles.yaml halves of dl-134 (Action
 
   it('testing.md carries the qa black-box rule (§1, Q1 (a)) and the freeze of red\'s files (§2, Q2 (a)), with a version', () => {
     const text = testing();
-    expect(text).toMatch(/^version: "1\.1"$/m);
+    // "1.1" at task-205; task-221 bumps it (the typecheck.clean bullet names `refactor`).
+    expect(text).toMatch(/^version: "1\.[1-9]\d*"$/m);
     expect(text).toMatch(/\*\*T3 — `red` is `qa`'s, and it is black-box\.\*\*/);
     expect(text).toMatch(/dl-134` §1, Q1 \(a\)/);
     expect(text).toMatch(/\*\*T4 — `red`'s tests are frozen in `green` and `refactor`\.\*\*/);
@@ -178,9 +179,9 @@ describe('AC 4 — the testing directive and roles.yaml halves of dl-134 (Action
 });
 
 describe('AC 5 — version 1.5 and the WORKFLOW.md diagram', () => {
-  it('dev-loop.yaml is at version 1.5, with its history line', () => {
-    expect(devLoop().workflow.version).toBe(1.5);
-    expect(atHead(DEV_LOOP_FILE)).toMatch(/^version: 1\.5 +# 1\.5 dl-134 .*\(prev 1\.41/m);
+  it('dev-loop.yaml is at version 1.5 or later, with 1.5\'s history line (task-221 makes it 1.6)', () => {
+    expect(devLoop().workflow.version).toBeGreaterThanOrEqual(1.5);
+    expect(atHead(DEV_LOOP_FILE)).toMatch(/^version: \d+\.\d+ +# .*\b1\.5 dl-134 .*\(prev 1\.41/m);
   });
 
   it('WORKFLOW.md\'s dev-loop diagram shows `red` under qa', () => {

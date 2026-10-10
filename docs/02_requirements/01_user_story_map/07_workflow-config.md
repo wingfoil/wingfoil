@@ -57,6 +57,10 @@
 * **[MVP · v0.3]** US-6-E2: As Morgan, I want in-flight tasks to keep running on their original workflow version when I
   deploy a restructured workflow so that a mid-flight process change never corrupts or blocks active work. _(edge:
   Journey 6 — in-flight migration)_
+* **[MVP · v0.3]** US-6-12: As Morgan, I want each run's process conformance computed from git and the configuration
+  alone — every check with its items checked and failing, every failing item named — so that I see whether a run
+  followed the workflow without trusting the agent's own report. _(req: REQ-STATE-10; ref: P1.2, P4.13 — measured by
+  the release-health catalogue's P measures)_
 
 ### Future (Post-MVP)
 

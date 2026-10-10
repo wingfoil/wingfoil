@@ -25,7 +25,7 @@ import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 const REPO_ROOT = join(__dirname, '..', '..');
 
-describe('renderBootstrap (§2.4) — a pure function of (role, element, run id, state_ref)', () => {
+describe('renderBootstrap (§2.4) — a pure function of (role, element, run id, state_ref, signing entry)', () => {
   it('is the fixed template, LF-terminated, with the context instruction and the handoff line', () => {
     const text = renderBootstrap({
       role: 'developer',
@@ -33,6 +33,7 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
       runId: 'task-001-a/adhoc/1',
       stateRef: SHA,
       handoff: handoffLine(true),
+      agent: { name: 'Fake Agent', email: 'fake-agent@example.com' },
     });
     expect(text).toBe(
       [
@@ -40,13 +41,14 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
         `Your context is assembled at commit ${SHA} and served by the "wingfoil" MCP server`,
         `registered for this session. Load it before any other action: Get the MCP prompt "developer-session" with arguments element="task:task-001-a" and state="${SHA}".`,
         'Record your handoff in the element\'s "## Execution Notes" section.',
+        'End every commit you write, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).',
         '',
       ].join('\n'),
     );
   });
 
   it('the same inputs render the same bytes', () => {
-    const input = { role: 'qa', element: 'bug:bug-1', runId: 'bug-1/adhoc/2', stateRef: SHA, handoff: handoffLine(false) };
+    const input = { role: 'qa', element: 'bug:bug-1', runId: 'bug-1/adhoc/2', stateRef: SHA, handoff: handoffLine(false), agent: { name: 'A', email: 'a@example.com' } };
     expect(renderBootstrap(input)).toBe(renderBootstrap({ ...input }));
   });
 });
@@ -271,4 +273,153 @@ describe('mcpPreflight — a server that answers the Prompt with no text is unre
       removeTempDir(root);
     }
   }, 30000);
+});
+
+describe('task-228 — the B3 handovers on the pre-launch half', () => {
+  it('the MCP pre-flight has one deadline: initialize and the Prompt fetch share it (REQ-PERF-01)', async () => {
+    const root = makeTempGitRepo();
+    try {
+      // A stub that takes 1.5 s to answer initialize and 1.5 s to answer the Prompt: each answer is
+      // within a 2.5 s limit, both together are not.
+      writeFixtureFile(
+        root,
+        'slow-server.cjs',
+        [
+          "const rl = require('readline').createInterface({ input: process.stdin });",
+          "const send = (m) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');",
+          "const later = (f) => setTimeout(f, 1500);",
+          "rl.on('line', (line) => {",
+          '  const m = JSON.parse(line);',
+          "  if (m.method === 'initialize') later(() => send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { prompts: {} }, serverInfo: { name: 'slow', version: '1' } } }));",
+          "  else if (m.method === 'prompts/get') later(() => send({ id: m.id, result: { messages: [{ role: 'user', content: { type: 'text', text: 'context' } }] } }));",
+          '});',
+          '',
+        ].join('\n'),
+      );
+      const result = await mcpPreflight({
+        root,
+        server: { command: process.execPath, args: [join(root, 'slow-server.cjs')] },
+        role: 'developer',
+        element: 'task:task-001-a',
+        stateRef: SHA,
+        timeoutMs: 2500,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.message).toBe('context pre-load failed: MCP server unreachable');
+    } finally {
+      removeTempDir(root);
+    }
+  }, 30000);
+
+  it.each([['SIGINT'], ['SIGTERM'], ['SIGHUP']])('%s before the spawn removes the temporary directory and ends the process by that signal', (signal) => {
+    // A child that holds withRunFiles open on the compiled module, prints its directory, and waits.
+    const script = [
+      `const { withRunFiles } = require(${JSON.stringify(join(DIST_DIR, 'agent'))});`,
+      "withRunFiles({ bootstrap_file: 'x' }, async (paths) => {",
+      "  process.stdout.write(require('path').dirname(paths.bootstrap_file) + '\\n');",
+      '  await new Promise(() => setInterval(() => undefined, 60000));',
+      '});',
+    ].join('\n');
+    const out = execFileSync(
+      process.execPath,
+      [
+        '-e',
+        [
+          "const { spawn } = require('child_process');",
+          `const child = spawn(process.execPath, ['-e', ${JSON.stringify(script)}], { stdio: ['ignore', 'pipe', 'inherit'] });`,
+          "let dir = '';",
+          "child.stdout.on('data', (chunk) => { dir += chunk; if (dir.endsWith('\\n')) child.kill(" + JSON.stringify(signal) + '); });',
+          "child.on('close', (code, sig) => { process.stdout.write(JSON.stringify({ dir: dir.trim(), code, sig, exists: require('fs').existsSync(dir.trim()) })); });",
+        ].join('\n'),
+      ],
+      { encoding: 'utf-8' },
+    );
+    const { dir, code, sig, exists } = JSON.parse(out) as { dir: string; code: number | null; sig: string | null; exists: boolean };
+    expect(dir).toMatch(/wingfoil-run-/);
+    expect(exists).toBe(false);
+    expect({ code, sig }).toEqual({ code: null, sig: signal });
+  }, 30000);
+});
+
+describe('withRunFiles — signals (review fix 1)', () => {
+  it('its cleanup listeners are installed before the temporary directory is created', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('node:fs') as typeof import('node:fs');
+    const baseline = process.listenerCount('SIGINT');
+    let atCreate = -1;
+    const original = fs.mkdtempSync;
+    const spy = jest.spyOn(fs, 'mkdtempSync').mockImplementation(((prefix: string) => {
+      atCreate = process.listenerCount('SIGINT');
+      return original(prefix);
+    }) as typeof fs.mkdtempSync);
+    try {
+      await withRunFiles({ bootstrap_file: 'x' }, async () => undefined);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(atCreate).toBe(baseline + 1);
+    expect(process.listenerCount('SIGINT')).toBe(baseline);
+  });
+
+  it('a signal before the spawn removes the directory and re-raises it on this process', async () => {
+    const kill = jest.spyOn(process, 'kill').mockImplementation(() => true);
+    let dir = '';
+    let existedAfterSignal = true;
+    let calls: unknown[][] | undefined;
+    try {
+      await withRunFiles({ bootstrap_file: 'x' }, async (paths) => {
+        dir = dirname(paths.bootstrap_file!);
+        process.emit('SIGTERM', 'SIGTERM');
+        existedAfterSignal = existsSync(dir);
+      });
+      calls = kill.mock.calls;
+    } finally {
+      kill.mockRestore();
+    }
+    // Removed by the signal handler itself, before the work settled.
+    expect(existedAfterSignal).toBe(false);
+    expect(calls).toEqual([[process.pid, 'SIGTERM']]);
+  });
+});
+
+describe('withRunFiles — signals around the directory\'s creation (re-review 4)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require('node:fs') as typeof import('node:fs');
+  const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+  const counts = (): number[] => SIGNALS.map((signal) => process.listenerCount(signal));
+
+  it('a mkdtempSync that throws: the error is rethrown and the listeners are removed', async () => {
+    const before = counts();
+    const spy = jest.spyOn(fs, 'mkdtempSync').mockImplementation(() => {
+      throw new Error('EACCES fake');
+    });
+    try {
+      await expect(withRunFiles({ bootstrap_file: 'x' }, async () => 'ran')).rejects.toThrow('EACCES fake');
+    } finally {
+      spy.mockRestore();
+    }
+    expect(counts()).toEqual(before);
+  });
+
+  it('a signal before the directory exists re-raises it with nothing to remove, and nothing is left', async () => {
+    const original = fs.mkdtempSync;
+    const spy = jest.spyOn(fs, 'mkdtempSync').mockImplementation(((prefix: string) => {
+      process.emit('SIGTERM', 'SIGTERM');
+      return original(prefix);
+    }) as typeof fs.mkdtempSync);
+    const kill = jest.spyOn(process, 'kill').mockImplementation(() => true);
+    let dir = '';
+    let calls: unknown[][] | undefined;
+    try {
+      await withRunFiles({ bootstrap_file: 'x' }, async (paths) => {
+        dir = dirname(paths.bootstrap_file!);
+      });
+      calls = kill.mock.calls;
+    } finally {
+      kill.mockRestore();
+      spy.mockRestore();
+    }
+    expect(calls).toEqual([[process.pid, 'SIGTERM']]);
+    expect(existsSync(dir)).toBe(false);
+  });
 });

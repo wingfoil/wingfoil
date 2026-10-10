@@ -16,7 +16,7 @@
 # specification-phase quality criteria, the release/branch state queries, …) have no command that asserts
 # them today; each is listed with its reason in task-199's Execution Notes and stays a
 # W_WORKFLOW_UNBOUND_TOKEN warning, which in v1.0 fails closed (dl-090 Q2 (c)).
-version: 1.3                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry; 1.1 bug-134 (task-207): e2e-smoke-passed writes its report and states severity: reject (dl-023); 1.2 git.merge also names dev-loop's main-sync, `from: main` (task-205, dl-035); 1.3 vision-index.current, vision-change's index check (task-212, bug-270)
+version: 1.6                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry; 1.1 bug-134 (task-207): e2e-smoke-passed writes its report and states severity: reject (dl-023); 1.2 git.merge also names dev-loop's main-sync, `from: main` (task-205, dl-035); 1.3 task-219 (dl-099 §1–§2): e2e-smoke-passed smokes the packed candidate (`--candidate`), staging-rehearsal-passed and tests.no-identity are bound; 1.4 dl-089 §1, dl-090 Action 4 (task-222): release-health's measure and compare bound to scripts/release-health/; 1.5 dev-loop v1.6 (task-221): typecheck.clean also gates dev-loop.refactor (dl-044), docs.parity names the document-parity suites dev-loop.review runs (dl-116 Action 4); 1.6 vision-index.current, vision-change's index check (task-212, bug-270)
 format: 1                        # dl-153 (A): a dl-149 file kind (BINDINGS_YAML_FORMAT)
 
 checks:
@@ -29,16 +29,31 @@ checks:
   docs.api.public-complete: { run: [npm, run, "docs:api"] }   # TypeDoc notDocumented + treatWarningsAsErrors (typedoc.json)
   docs.api.build:           { run: [npm, run, "docs:api"] }
   lint.clean:               { run: [npm, run, lint] }
-  # release-submit.pre-release-checks (dl-044, task-173).
+  # dev-loop.refactor and release-submit.pre-release-checks (dl-044; the command is task-173's).
   typecheck.clean:          { run: [npm, run, typecheck] }
+  # dev-loop.review (dl-116 Action 4): the document-parity suites, by name — every test/docs suite citing dl-116
+  # (test/core/dev-loop-v1-6.test.ts checks that each one is listed), plus command-surface-specs (dl-116 Q1 (A)'s
+  # first enumeration), cli-reference (the model dl-116 names) and the enumeration-parity allowlist's own gate.
+  docs.parity:              { run: [npm, test, --, test/docs/cli-reference.test.ts, test/docs/command-surface-specs.test.ts, test/docs/commands-parity.test.ts, test/docs/enumeration-parity.allowlist.test.ts, test/docs/exit-codes-parity.test.ts, test/docs/mcp-surface-parity.test.ts, test/docs/memory-types-parity.test.ts, test/docs/name-resolvability.test.ts, test/docs/workflow-md.test.ts] }
+  # release-submit.pre-release-checks (task-219, dl-099; bug-172): the suite with no git identity, as the CI
+  # gate job runs it — scripts/test-no-identity.cjs.
+  tests.no-identity:        { run: [npm, run, "test:no-identity"] }
   # dev-loop.review: the BDD scenarios are pinned by jest suites that cite their feature files
   # (docs/02_requirements/02_bdd/features/); there is no separate BDD runner.
   tests.bdd.passing:        { run: [npm, test] }
-  # e2e-smoke.gate (dl-023: hard-reject from v0.3): the executable form of e2e-smoke.yaml, driving `wingfoil` on PATH.
+  # e2e-smoke.gate (dl-023: hard-reject from v0.3): the executable form of e2e-smoke.yaml. task-219 (dl-099 §1;
+  # task-207's review): `--candidate` packs the checked-out commit (clean tree), installs the tarball into a
+  # throwaway prefix and drives that bin by its absolute path, with the stamp bound — --expect-version =
+  # package.json's version, --expect-commit = HEAD — so the report proves the candidate, not whatever
+  # `wingfoil` is on PATH.
   # task-207 (bug-134): it writes the report the gate declares under produces:, passed as the check's
   # `report:` argument, rendered: a repository-relative path, so the pattern refuses an absolute path
   # (leading `/`), an option (leading `-`), a `..` segment and any character outside [A-Za-z0-9._/-].
-  e2e-smoke-passed:         { run: [node, scripts/e2e-smoke.cjs, --report, "{report}"], severity: reject, args: { report: '^(?![/-])(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]+$' } }
+  e2e-smoke-passed:         { run: [node, scripts/e2e-smoke.cjs, --candidate, --report, "{report}"], severity: reject, args: { report: '^(?![/-])(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]+$' } }
+  # release-publishing.staging-rehearsal and tag (task-219, dl-099 §1–§2): the transcript's closing line is the
+  # success line for package.json's name@version, and its smoke checked the stamp's commit — the candidate,
+  # which the check prints. Same path rule as `report` above.
+  staging-rehearsal-passed: { run: [node, scripts/publish-staging.cjs, --check-transcript, "{transcript}"], severity: reject, args: { transcript: '^(?![/-])(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]+$' } }
   # release-planning.advance-pinned-build (dl-095 Q3 (B), dl-026).
   lockfile.pinned:          { run: [npm, run, "check:lockfile"] }
   mcp.registered:           { run: [npm, run, "check:mcp"] }
@@ -70,3 +85,9 @@ actions:
   cli.run:                  { manual: true }
   # release-publishing.publish: the 2FA `npm stage approve` no command can perform (dl-087, adr-011 point 3).
   approver.execute:         { manual: true }
+  # release-health.measure / .compare (dl-089 §1, dl-090 Action 4): dl-089's `script.run("scripts/release-health/… --release …")`
+  # family, as named tokens with a key: value argument (dl-090 Q3 (a)). The scripts are written by task-231..233
+  # (measure.cjs) and task-241 (compare.cjs); these vectors are the command line they implement. The version is a
+  # whole argument matching a release version (vX.Y or vX.Y.Z), so no option or path can be passed through it.
+  release-health.measure:   { run: [node, scripts/release-health/measure.cjs, --release, "{release}"], args: { release: '^v[0-9]+\.[0-9]+(\.[0-9]+)?$' } }
+  release-health.compare:   { run: [node, scripts/release-health/compare.cjs, --release, "{release}"], args: { release: '^v[0-9]+\.[0-9]+(\.[0-9]+)?$' } }

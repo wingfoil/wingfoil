@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { emitUnknownFieldWarning } from '../../src/validation/warning';
+import { emitUnknownFieldWarning, reportNotice, reportWarning, withDistinctWarnings, withNoticeSink, withWarningSink } from '../../src/validation/warning';
 
 // spec-009 §2 — unknown-field warning policy. The diff MUST be raw-keys vs the schema's declared
 // shape, never raw-vs-parsed: under .passthrough() the parsed object keeps every unknown key, so a
@@ -92,5 +92,46 @@ describe('emitUnknownFieldWarning — passthrough unknown-field policy (spec-009
     expect(writes).toHaveLength(1);
     expect(writes[0]).toContain('topUnknown');
     expect(writes[0]).toContain('block.deepUnknown');
+  });
+});
+
+describe('withDistinctWarnings and the notice sink (task-228)', () => {
+  let stderrSpy: jest.SpyInstance;
+  beforeEach(() => {
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+  afterEach(() => stderrSpy.mockRestore());
+
+  it('passes each distinct warning on once, rewritten, to the installed sink', () => {
+    const seen: string[] = [];
+    withWarningSink(
+      (text) => seen.push(text),
+      () =>
+        withDistinctWarnings(
+          () => {
+            reportWarning('abc:x');
+            reportWarning('abc:x');
+            reportWarning('other');
+          },
+          (text) => text.replace('abc:', 'HEAD:'),
+        ),
+    );
+    expect(seen).toEqual(['HEAD:x', 'other']);
+  });
+
+  it('outside any sink, a distinct warning is written to stderr once as `Warning: <text>`', () => {
+    withDistinctWarnings(() => {
+      reportWarning('twice');
+      reportWarning('twice');
+    });
+    expect(stderrSpy.mock.calls.map((call) => call[0])).toEqual(['Warning: twice\n']);
+  });
+
+  it('a notice goes to its sink, or to stderr as a bare line', () => {
+    const seen: string[] = [];
+    withNoticeSink((text) => seen.push(text), () => reportNotice('banner'));
+    expect(seen).toEqual(['banner']);
+    reportNotice('bare');
+    expect(stderrSpy.mock.calls.map((call) => call[0])).toEqual(['bare\n']);
   });
 });

@@ -5,13 +5,13 @@
 name: decision-log-ingest
 kind: main
 description: Capture a single product/process decision (decision-log) into Memory.
-version: 1.0
+version: 1.1                     # 1.1 capture points at the traceability directive's filing rule (dl-118 (B), task-197)
 # No fixed `element:` — started standalone this main creates a top-level decision-log. When invoked
 # while another workflow with an active `element` context is running, the created Memory file inherits
 # that element (e.g. a decision-log recorded during a release inherits the active `release`).
 phases:
   - name: capture
-    description: "Record the decision (context, decision, rationale)."
+    description: "Record the decision (context, decision, rationale). First check that a decision-log is the right type: the traceability directive's filing rule (dl-118) — a decision-log when there is a real choice, or a rule for all future work that a directive will state; a bug when the fix is mechanical and uncontested."
     role: product-owner
     actions:
       - 'memory.add(type: decision-log)'

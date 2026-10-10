@@ -13,7 +13,7 @@ import { coreErr, coreOk } from '../../src/core/types';
 import type { CoreErrorCode, CoreResult } from '../../src/core/types';
 import { buildCliCommands, listRegisteredCliCommands, type CliCommand } from '../../src/cli/registrar';
 import { StorageError, E_NO_GIT_ROOT } from '../../src/storage/errors';
-import { reportWarning } from '../../src/validation/warning';
+import { reportNotice, reportWarning } from '../../src/validation/warning';
 
 const FIXTURE_MODULES: CoreModule[] = [
   {
@@ -497,5 +497,62 @@ describe('the warning sink (task-218, bug-202) — a warning an operation raises
     await findCommand(commands, 'demo', 'raise').run(format);
     expect(stderrSpy.mock.calls.map((call) => call[0])).toEqual([warning, error]);
     expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+});
+
+describe('a notice, and a success reported on stderr (task-228, spec-016 §3.4) — nothing on stdout', () => {
+  const REPORTING: CoreModule[] = [
+    {
+      name: 'demo',
+      operations: {
+        demoLaunch: {
+          name: 'demoLaunch',
+          mutates: false,
+          fn: async () => {
+            reportNotice('launching');
+            return coreOk({ run: { id: 'r/adhoc/1' } });
+          },
+          renderToStderr: (value: unknown) => ({ document: value as Record<string, unknown>, console: 'summary line' }),
+        },
+        demoPlan: {
+          name: 'demoPlan',
+          mutates: false,
+          fn: async () => coreOk({ dryRun: true }),
+          renderToStderr: () => undefined,
+        },
+      },
+    },
+  ];
+  let exitSpy: jest.SpyInstance;
+  let stderrSpy: jest.SpyInstance;
+  let stdoutSpy: jest.SpyInstance;
+  beforeEach(() => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  });
+  afterEach(() => {
+    exitSpy.mockRestore();
+    stderrSpy.mockRestore();
+    stdoutSpy.mockRestore();
+  });
+
+  it.each([
+    ['console', ['launching\n', 'summary line\n']],
+    ['json', [`${JSON.stringify({ notice: 'launching' })}\n`, `${JSON.stringify({ run: { id: 'r/adhoc/1' } })}\n`]],
+    ['yaml', ['---\nnotice: launching\n...\n', '---\nrun:\n  id: r/adhoc/1\n...\n']],
+  ])('%s: the notice, then the report, both on stderr; exit 0', async (format, lines) => {
+    const commands = buildCliCommands(REPORTING, { resolveRoot: () => '/fixture-root', buildParams: () => ({}) });
+    await findCommand(commands, 'demo', 'launch').run(format);
+    expect(stderrSpy.mock.calls.map((call) => call[0])).toEqual(lines);
+    expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('a value the operation does not report on stderr is the ordinary stdout payload', async () => {
+    const commands = buildCliCommands(REPORTING, { resolveRoot: () => '/fixture-root', buildParams: () => ({}) });
+    await findCommand(commands, 'demo', 'plan').run('json');
+    expect(stdoutSpy.mock.calls.map((call) => call[0])).toEqual([`${JSON.stringify({ dryRun: true })}\n`]);
+    expect(stderrSpy).not.toHaveBeenCalled();
   });
 });

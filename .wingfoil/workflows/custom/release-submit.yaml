@@ -5,13 +5,15 @@ kind: sub
 description: >-
   Assemble the release once its tasks are done: run pre-release checks, move the release into
   `releasing`, and gate on approval before publishing.
-version: 1.1                     # 1.0 -> 1.1 at task-173: `pre-release-checks` declares `typecheck.clean` (dl-044)
+version: 1.2                     # 1.0 -> 1.1 at task-173: `pre-release-checks` declares `typecheck.clean` (dl-044); 1.2 task-219 (dl-099, the v0.2.2 carry-over): it declares `tests.no-identity`, the suite with no git identity
 element: release
 
 phases:
   - name: pre-release-checks
     description: >-
-      Verify all release tasks are done and the suite is green. Bugs have no independent status
+      Verify all release tasks are done and the suite is green — also with no git identity, as the CI
+      gate job runs it (`tests.no-identity`). Every check here runs on the release candidate's tree:
+      when the candidate is re-cut, they run again (release-cycle). Bugs have no independent status
       here — their state is derived by dev-loop's `bug.sync_state` from their fix tasks, so the
       task check below covers them; the bug check is a redundant sanity check on the sync itself.
     role: qa
@@ -22,6 +24,7 @@ phases:
         - "tests.passing"
         - "tests.coverage(min: 80)"
         - "typecheck.clean"            # dl-044, task-173: `npm run typecheck` — `tsc --noEmit` over tsconfig.json (src AND test) and tsconfig.build.json; asserted by test/lint/typecheck-clean.test.ts. Until this, `tsc --noEmit` ran only by hand here
+        - "tests.no-identity"          # task-219 (dl-099; bug-172): `npm run test:no-identity` — the full suite with no git identity, as the CI gate job runs it; v0.2.2 reached its tag with five tests that failed only there
 
   - name: enter-releasing
     description: "Move the release element into the releasing state."

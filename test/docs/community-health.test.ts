@@ -10,7 +10,7 @@
  * - `CONTRIBUTING.md` is a pointer to `COLLABORATION.md` and `dl-020` (Q1 (a));
  * - `CODE_OF_CONDUCT.md` is the Contributor Covenant 2.1 with its contact placeholder filled (Q2 (a));
  * - `SECURITY.md` supports the minor of `package.json`'s version and names GitHub private
- *   vulnerability reporting as its channel (Q3 (a)); `release-publishing`'s `tag` phase names
+ *   vulnerability reporting as its channel (Q3 (a)); `release-publishing`'s `release-commit` phase (the `tag` phase until task-219) names
  *   `SECURITY.md` among the files of the version bump commit, so a minor bump updates it too;
  * - the bug form's fields are the `bug` template's: its required frontmatter (`title` is the issue
  *   title, `severity` a required dropdown whose options are the template's), `release-origin`, and
@@ -112,7 +112,7 @@ describe('AC 1 — CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md (dl-127 Q1�
     if (!new RegExp(`^\\| ${major}\\.${minor}\\.x +\\| Yes +\\|$`, 'm').test(text)) {
       throw new Error(
         `SECURITY.md does not list ${major}.${minor}.x as supported, but package.json is ${version}: ` +
-          'update SECURITY.md in the release bump commit (release-publishing, tag phase).',
+          'update SECURITY.md in the release bump commit (release-publishing, release-commit phase).',
       );
     }
     expect(text).toContain('https://github.com/wingfoil/wingfoil/security/advisories/new');
@@ -122,13 +122,15 @@ describe('AC 1 — CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md (dl-127 Q1�
 });
 
 describe('AC 1 — the release bump commit carries SECURITY.md', () => {
-  it('release-publishing\'s tag phase names SECURITY.md among the files of the version bump commit', () => {
+  // task-219 (dl-099 §1): the version bump moved out of `tag` into its own `release-commit` phase, which cuts
+  // the candidate the staging rehearsal runs on.
+  it('release-publishing\'s release-commit phase names SECURITY.md among the files of the version bump commit', () => {
     const workflow = load(read('.wingfoil/workflows/custom/release-publishing.yaml')) as {
       phases: { name: string; description: string }[];
     };
-    const tag = workflow.phases.find((phase) => phase.name === 'tag')!;
-    expect(tag.description).toContain('package.json');
-    expect(tag.description).toContain('SECURITY.md');
+    const releaseCommit = workflow.phases.find((phase) => phase.name === 'release-commit')!;
+    expect(releaseCommit.description).toContain('package.json');
+    expect(releaseCommit.description).toContain('SECURITY.md');
   });
 });
 

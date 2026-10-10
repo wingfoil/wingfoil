@@ -27,7 +27,16 @@
  * Publishing a tarball runs no lifecycle scripts, so `prepublishOnly` is not re-run here — run the gate
  * (`npm run prepublishOnly`) first, as the workflow's gate job does. POSIX only (CI runs ubuntu).
  *
- * Usage: npm run publish:staging [-- [--tarball path/to/wingfoil-X.Y.Z.tgz] [--expect-commit <sha>]]
+ *   8. with `--transcript <path>`, write this script's own log lines there (task-219): the transcript the
+ *      `release-publishing` `staging-rehearsal` phase produces, on a failure too.
+ *
+ * `--check-transcript <path>` runs none of the above: it is that phase's `checks.post`
+ * (`staging-rehearsal-passed`, `.wingfoil/workflows/bindings.yaml`). Exit 0 when the transcript's closing
+ * line is the success line for `package.json`'s `name@version` and its smoke checked the stamp's commit
+ * (`--expect-commit`), printing that commit — the candidate; exit 1 otherwise, the reason on stderr.
+ *
+ * Usage: npm run publish:staging [-- [--tarball path/to/wingfoil-X.Y.Z.tgz] [--expect-commit <sha>] [--transcript <path>]]
+ *        node scripts/publish-staging.cjs --check-transcript <path>
  */
 'use strict';
 
@@ -147,8 +156,9 @@ function installArgs(name, version) {
 }
 
 /**
- * Parse `[--tarball <path>] [--expect-commit <sha>]`. An empty or malformed commit throws before
- * anything starts: an unset `"$GITHUB_SHA"` must stop the stage, never run it unchecked.
+ * Parse `[--tarball <path>] [--expect-commit <sha>] [--transcript <path>]`, or `--check-transcript <path>`
+ * alone (task-219). An empty or malformed commit throws before anything starts: an unset
+ * `"$GITHUB_SHA"` must stop the stage, never run it unchecked.
  */
 function parseArgs(argv) {
   const options = {};
@@ -160,11 +170,60 @@ function parseArgs(argv) {
       assertCommitName(argv[i + 1]);
       options.expectCommit = argv[i + 1];
       i += 1;
+    } else if (argv[i] === '--transcript' && argv[i + 1]) {
+      options.transcript = argv[i + 1];
+      i += 1;
+    } else if (argv[i] === '--check-transcript' && argv[i + 1]) {
+      options.checkTranscript = argv[i + 1];
+      i += 1;
     } else {
       throw new Error(`unknown or incomplete argument: ${argv[i]}`);
     }
   }
+  if (options.checkTranscript !== undefined && Object.keys(options).length > 1) {
+    throw new Error('--check-transcript takes no other option: it only reads a transcript');
+  }
   return options;
+}
+
+/** The prefix of every line this script logs, and so of every line of its `--transcript`. */
+const LOG_PREFIX = '[publish:staging] ';
+
+/**
+ * The line a passing rehearsal logs last (without {@link LOG_PREFIX}): the closing line
+ * `staging-rehearsal-passed` reads (task-219, `dl-099` §2).
+ * @param {string} name
+ * @param {string} version
+ */
+function stagingPassedLine(name, version) {
+  return `staged ${name}@${version} and smoke passed`;
+}
+
+/** The smoke's `--version` check line with a commit, as this script logs it (indented, `runSmoke`'s format). */
+const VERSION_CHECK_RE = /^\[publish:staging\] +ok +wingfoil --version = (\S+) \(([0-9a-f]{40}|[0-9a-f]{64})\) — match$/;
+
+/**
+ * `--check-transcript` (task-219, `dl-099` §1–§2): whether a rehearsal transcript proves the candidate.
+ * It passes only when its closing line is {@link stagingPassedLine} for `name@version` — the run staged
+ * and smoked this package's version — and the smoke's `--version` check named a commit, that is, the run
+ * had `--expect-commit`. That commit is the candidate the rehearsal proved, and the one `tag` tags.
+ *
+ * @param {string} text
+ * @param {{ name: string, version: string }} pkg
+ * @returns {{ ok: true, commit: string } | { ok: false, reason: string }}
+ */
+function checkTranscript(text, pkg) {
+  const lines = text.split('\n').map((line) => line.trimEnd()).filter((line) => line !== '');
+  const expected = `${LOG_PREFIX}${stagingPassedLine(pkg.name, pkg.version)}`;
+  const closing = lines[lines.length - 1] ?? '';
+  if (closing !== expected) {
+    return { ok: false, reason: `the closing line is not "${expected}": got "${closing}"` };
+  }
+  const checked = lines.map((line) => VERSION_CHECK_RE.exec(line)).find((match) => match !== null && match[1] === pkg.version);
+  if (!checked) {
+    return { ok: false, reason: `no smoke line checked the build stamp ${pkg.version} (<sha>): the rehearsal ran without --expect-commit <candidate sha>` };
+  }
+  return { ok: true, commit: checked[2] };
 }
 
 /**
@@ -302,7 +361,7 @@ async function runStaging({ name, version, tarball, commit, effects, baseEnv = p
       effects.log('staging smoke FAILED — the build must not be promoted');
       return 1;
     }
-    effects.log(`staged ${name}@${version} and smoke passed`);
+    effects.log(stagingPassedLine(name, version));
     return 0;
   } catch (error) {
     effects.log(`staging FAILED: ${error instanceof Error ? error.message : String(error)}`);
@@ -433,18 +492,49 @@ function realEffects(repoRoot, log) {
 async function main() {
   const repoRoot = dirname(__dirname);
   const { name, version } = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf-8'));
-  const { tarball, expectCommit } = parseArgs(process.argv.slice(2));
-  const log = (line) => process.stdout.write(`[publish:staging] ${line}\n`);
-  return runStaging({
-    name,
-    version,
-    tarball: tarball === undefined ? undefined : resolve(tarball),
-    commit: expectCommit,
-    effects: realEffects(repoRoot, log),
-    // The real run — and only the real run — arms the interrupt handlers (task-083). The offline
-    // orchestration tests call `runStaging` without this option and so install nothing on `process`.
-    interrupts: { target: process, die: raiseSignal },
-  });
+  const { tarball, expectCommit, transcript, checkTranscript: checked } = parseArgs(process.argv.slice(2));
+  if (checked !== undefined) {
+    // task-219: the `staging-rehearsal-passed` check — reads a transcript, starts nothing.
+    let text;
+    try {
+      text = readFileSync(checked, 'utf-8');
+    } catch {
+      process.stderr.write(`error: no rehearsal transcript at ${checked}\n`);
+      return 1;
+    }
+    const verdict = checkTranscript(text, { name, version });
+    if (!verdict.ok) {
+      process.stderr.write(`error: ${verdict.reason}\n`);
+      return 1;
+    }
+    process.stdout.write(`staging rehearsal passed for ${name}@${version} on candidate ${verdict.commit}\n`);
+    return 0;
+  }
+  const lines = [];
+  const log = (line) => {
+    lines.push(`${LOG_PREFIX}${line}`);
+    process.stdout.write(`${LOG_PREFIX}${line}\n`);
+  };
+  try {
+    return await runStaging({
+      name,
+      version,
+      tarball: tarball === undefined ? undefined : resolve(tarball),
+      commit: expectCommit,
+      effects: realEffects(repoRoot, log),
+      // The real run — and only the real run — arms the interrupt handlers (task-083). The offline
+      // orchestration tests call `runStaging` without this option and so install nothing on `process`.
+      interrupts: { target: process, die: raiseSignal },
+    });
+  } finally {
+    // task-219: the transcript the `staging-rehearsal` phase produces — this script's own lines (npm's and
+    // Verdaccio's inherited output is not in it), written on a failure too. An interrupt re-raises its
+    // signal before this runs, so an interrupted rehearsal leaves no transcript: it proved nothing.
+    if (transcript !== undefined) {
+      mkdirSync(dirname(resolve(transcript)), { recursive: true });
+      writeFileSync(transcript, `${lines.join('\n')}\n`);
+    }
+  }
 }
 
 if (require.main === module) {
@@ -460,6 +550,9 @@ if (require.main === module) {
 }
 
 module.exports = {
+  LOG_PREFIX,
+  checkTranscript,
+  stagingPassedLine,
   REGISTRY_STOP_TIMEOUT_MS,
   SIGKILL_GRACE_MS,
   STAGING_REGISTRY,

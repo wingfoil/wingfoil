@@ -1,0 +1,36 @@
+#!/bin/sh
+# WingFoil — the governance check before a push (dl-103 §1 (B), task-208). A local convenience that runs
+# the same script as .github/workflows/governance.yml over the commits about to be pushed; the binding
+# check is CI's (branch protection on main). Opt in once per clone (git-conventions §9):
+#
+#   git config core.hooksPath .githooks
+#
+# `git push --no-verify` skips it. It needs dist/ built (`npm run build`): without it, it says so and lets
+# the push through rather than block on a missing build.
+#
+# git gives one line per pushed ref on stdin: <local ref> <local sha> <remote ref> <remote sha>. The range
+# checked is <remote sha>..HEAD for the ref whose local sha is HEAD; a new remote ref (all-zero sha) is
+# checked from its merge-base with origin/main. A ref other than HEAD is not checked.
+top=$(git rev-parse --show-toplevel) || exit 1
+script="$top/scripts/check-governance.cjs"
+if [ ! -f "$top/dist/memory/index.js" ]; then
+  echo "pre-push: dist/ is not built (npm run build): governance check skipped" >&2
+  exit 0
+fi
+head=$(git rev-parse HEAD) || exit 1
+zero=0000000000000000000000000000000000000000
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$head" ] || continue
+  if [ "$remote_sha" = "$zero" ] || ! git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+    base=$(git merge-base HEAD origin/main 2>/dev/null) || base=""
+  else
+    base="$remote_sha"
+  fi
+  if [ -n "$base" ]; then
+    node "$script" --root "$top" --base "$base" || status=$?
+  else
+    node "$script" --root "$top" || status=$?
+  fi
+done
+exit "$status"
