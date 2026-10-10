@@ -33,6 +33,14 @@ tmpl_version: 260703
 - **Features:** P4.5, P4.14, P4.15, X1.1, X1.2.
 - **Notes:** Proposal key: A10.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from wave 3 B4 (2026-10-10, `task-216`'s independent review; W3 B4 follow-ups,
+  `bug-ingest-rel-v0.3-w3b4-review-findings-plan`).** `workflow next` (`task-216`) prints a `bug.sync_state` manual
+  action without the aggregate rule of `dev-loop.yaml` `done`'s `bug.sync_state(for_each: task.bug)` ("in-review ->
+  resolved -> closed (once all ITS tasks are done)"): `task-216`'s decision 5 says "a `sync_state` ignores the
+  aggregate 'all tasks of the bug' rule". So `next` can print a sync the dev-loop would not make yet, for a bug that
+  another open task also names. This task consumes that output (`NextResult`): apply the rule before reporting or
+  acting on a sync step — a bug moves past `in-review` only when every task whose `bug:` list names it is `done` —
+  and pin a two-task fixture.
 
 ## Execution Notes
 
