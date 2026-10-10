@@ -7,6 +7,7 @@
  * Asserted through the exported function and the command line, on fixtures; nothing reads the network.
  */
 import { spawnSync } from 'node:child_process';
+import type { SpawnSyncReturns } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -102,7 +103,7 @@ describe('changelog-section command line (task-229)', () => {
   });
   afterEach(() => rmSync(work, { recursive: true, force: true }));
 
-  const run = (...args: string[]): ReturnType<typeof spawnSync> =>
+  const run = (...args: string[]): SpawnSyncReturns<string> =>
     spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf-8' });
 
   it('prints the notes on stdout and exits 0', () => {
