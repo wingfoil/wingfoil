@@ -112,7 +112,7 @@ configuration moves there (v0.2.2 step 2, closing `bug-075`). The states mean:
 |---|---|---|
 | `title` | yes | e.g. "npm package `wingfoil`" |
 | `provider` | yes | who hosts it: `npmjs.com`, `GitHub`, `registry.modelcontextprotocol.io`, … |
-| `kind` | yes | one of `account`, `credential`, `listing`, `setting`, `domain`, `handle` |
+| `kind` | yes | one of `account`, `credential`, `listing`, `setting`, `domain`, `handle`, `repository` (*amended 2026-10-09, `dl-163` S3b*) |
 | `owner_role` | yes | the `dna.yaml` role that manages it: a role, never a person (REQ-SYS-08) |
 | `verify` | yes | the command or URL that establishes its current state (`claim-evidence`) |
 | `url` | no | its public URL, if any |
@@ -121,6 +121,17 @@ configuration moves there (v0.2.2 step 2, closing `bug-075`). The states mean:
 | `repo_refs` | no | repository paths that depend on it (e.g. `.github/workflows/publish.yml`) |
 | `decision` | no | the decision-log or ADR that motivated it |
 | `set_up_in` | no | the release in which it was set up (not `release`, which a service never carries — `bug-166`) |
+| `feedback_inbox` | no | `kind: repository` only: the repository-relative folder, ending in `/`, where that repository keeps its notes about WingFoil, e.g. `docs/wingfoil-feedback/` (*amended 2026-10-09, `dl-163` S3b*) |
+
+*(Amended 2026-10-09, with `task-269`, from `dl-163` S3b, ratified by the approver on 2026-10-07.)* The
+kind table gains `repository`: a consumer repository, one `service` per repository, whose optional
+`feedback_inbox` names the folder where that repository keeps its notes about WingFoil (`dl-163` R1). Its
+`verify` checks the inbox, not only the repository: `git ls-remote <url> refs/heads/main` plus
+`gh api repos/<owner>/<repo>/contents/<feedback_inbox>README.md --jq .sha`; each exits 0 and prints a
+sha. For a private repository, `<url>` in `git ls-remote` names a remote git can authenticate to, the SSH
+form `git@github.com:<owner>/<repo>.git`, while the `url` field keeps the repository's https address. The
+required fields are unchanged. `.wingfoil/memory/templates/service.md` and `memory.yaml`'s `service` description carry the
+change.
 
 ### Body
 
