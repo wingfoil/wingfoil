@@ -202,6 +202,44 @@ Uncommitted in the worktree; gates ran with them.
   `NextResult.next` and the agent argv; task-239 serves the Resource from `workflowNextAtHead`.
 - `src/workflow/deduce.ts` and `src/core/loaders.ts` changed here: any B4 task touching them merges main.
 
+### Review fixes (independent review: approve with fixes, 2026-10-10)
+
+- **Red** `1a42e0a0` — a red-era expectation corrected (fix 1): `workflow next ghost` is `unknown workflow:
+  ghost` (spec-017 §10, as `workflow show`), and a new case keeps `workflow is not open: planning` for a
+  loaded workflow with no open instance. `6902c98a` — failing tests for fixes 2, 4, 5, 6
+  (`test/core/workflow-next-review-fixes.test.ts`, `test/core/latency-in-process-idle.test.ts`); the
+  red-era latency suite and placement guard change with fix 6 (rule 5: "times no process start", and it
+  requires `inProcessIdleVerdict(`). Run before the fix: 2 failed (the two `ghost` cases), then 7 failed
+  (`npx jest test/core/workflow-next-review-fixes.test.ts test/core/latency-in-process-idle.test.ts
+  test/core/latency-budget-placement.test.ts` → 7 failed, 718 passed).
+- **Green** `ac4e4122` —
+  - fix 1: `unknown workflow: <ref>`;
+  - fix 2: a printed `wingfoil` argv is a whole command (`<id>`, `--title <title>`, `--reason <reason>`);
+    the console example in `docs/cli-reference.md` follows (`node dist/cli.js workflow next` on this
+    repository prints `wingfoil memory submit <id>`);
+  - fix 4: the third-party line says `workflow finalize` is not available yet; `docs/cli-reference.md`
+    marks `--workflow` / `--step` (task-227, task-235) and `workflow finalize` (task-226) as planned;
+  - fix 5: an `--assigned-to` that names nobody warns through the warning sink;
+  - fix 6: `inProcessIdleVerdict` (test helper): an in-process opt-in suite refuses a run whose 1-minute
+    load reaches half the cores, instead of counting it.
+- **Fix 3** is in the spec-017 pending amendment (§4.8): the park sentence is conditional on the `<from>`
+  being no held gate, and a park from a held gate re-enters like a reject
+  (`test/core/workflow-deduction-history.test.ts`, the `describe.each(['reject', 'park'])` block).
+- The refactor-era `test/core/workflow-next-views.test.ts` pinned the old argv of `approve` / `submit`; it
+  now pins the whole command.
+- **Gates** (at `ac4e4122`):
+  - `npm run test:coverage`: 326 suites, **6121 passed**, All files **99.23 / 97.06 / 97.6 / 99.68**;
+  - `npm run lint`, `npm run docs:api` and both `tsc` runs: exit 0;
+  - `node scripts/check-governance.cjs --base b56e8721`: 2 `wf()` commits checked, 0 findings;
+  - `npx jest -c jest.latency.config.js test/core/workflow-next-latency.test.ts`: p95 **532 ms** (n=25,
+    min 439, max 559) at load 13.39 → 11.95 on 12 cores, **refused as loaded** by the new verdict. The
+    budget case is not counted; the idle run is the coordinator's.
+
+Final proposed `--reason` texts (they supersede the ones under "Pending amendments" above):
+- `spec-017`: "task-216: implementing workflow next needed readings §4.8 and §6–§8 left open. §8's Step gains directiveWarnings, the warnings §6.2 already reports; its cadence takes §6.4's shape, recurring plus lastRun not-recorded, null for once; expectedCommit may hold one subject per line. §6.1 states that a printed wingfoil argv is a whole command with id, title and reason placeholders, how a manual action's subject names its targets and its from-state, and the sync_state target-state rule. §7.3 gives the messages of an abandoned instance, an instance whose workflow is not loaded and a filter that keeps no step, and the warning of an assigned-to that names nobody. §4.8 says that a park whose from-state is no held gate re-enters no phase's cutoff, while one from a held gate re-enters like a reject. No command, deduction rule or diagnostic code changed."
+- `spec-006`: unchanged.
+- `spec-008`: unchanged.
+
 ### Retrospective
 
 - The red test pinned a wrong subject that a green bug happened to satisfy (`66938e87`): a spec example
