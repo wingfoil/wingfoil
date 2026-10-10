@@ -86,8 +86,10 @@ describe('control characters in tracked text files (bug-073, task-173)', () => {
     });
 
     it('skips files on the binary list, and only those', () => {
-      expect(BINARY_EXTENSIONS).toEqual(['.png']);
+      // task-224 (dl-128 Q2 (a)): the README's demo is a GIF committed under docs/assets/.
+      expect(BINARY_EXTENSIONS).toEqual(['.gif', '.png']);
       writeFixtureFile(repo, 'docs/image.png', 'PNG\u0000\u0001\u001a');
+      writeFixtureFile(repo, 'docs/demo.gif', 'GIF89a\u0000\u0001\u001a');
       writeFixtureFile(repo, 'docs/image.png.md', 'x\u0000');
       git(repo, ['add', '.']);
       expect(scanTrackedFiles(repo).map((finding) => finding.path)).toEqual(['docs/image.png.md']);
