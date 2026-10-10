@@ -1,5 +1,6 @@
 # WingFoil — npm publish pipeline (adr-009 points 1–3, adr-011, spec-015 §3–§5, dl-018 T3; built by
-# task-060, promotion reworked by task-113, server.json versions added to the tag check by task-115).
+# task-060, promotion reworked by task-113, server.json versions added to the tag check by task-115, the
+# GitHub Release job added by task-229, dl-130 step 1).
 #
 #   gate    → assert the tag is on main and equals v<package.json version>, and that server.json's
 #             `version` and every `packages[].version` equal it too (spec-015 §4), `npm ci`,
@@ -10,6 +11,14 @@
 #             (task-254, bug-235) — teardown; the very script a developer runs
 #   promote → `npm stage publish` THAT SAME tarball to npm with provenance. The version is NOT live yet:
 #             it waits in npm's stage queue until the approver approves it on npm with 2FA (adr-011).
+#   release → once `npm view wingfoil@<version> version` answers exactly that version (never `@latest`,
+#             dl-159), create the GitHub Release `vX.Y.Z` with the version's CHANGELOG.md section as notes
+#             (`scripts/changelog-section.cjs`, extracted first, so a missing section fails at once). The wait
+#             is a bounded poll, `scripts/wait-npm-version.cjs --timeout-minutes 330 --interval-seconds 60`,
+#             inside `timeout-minutes: 345`: a GitHub-hosted job runs for at most 6 hours, so a longer wait
+#             cannot live in one job (task-229). `contents: write` is granted to this job alone, and `gh` gets
+#             the job's own token on the create step only. Whether the Release is marked latest is
+#             `RELEASE_MAKE_LATEST`, empty = gh's default (task-266 sets it).
 #
 # Trigger: a `vX.Y.Z` tag push. The tag is created on `main` after the release branch merges (dl-024);
 # the gate refuses a tag whose commit is not on `main`.
@@ -59,6 +68,11 @@
 #                                           # Staged Packages)
 #      A bad staged version is discarded with `npm stage reject <stage-id>`: it never goes live.
 #      These commands need npm ≥ 11.15.0 on the approver's machine.
+#   7. The `release` job creates the GitHub Release by itself once the approved version is live. If the
+#      approval came after its poll gave up (330 minutes after promote), the job fails with
+#      "… is not live on npm after …": approve on npm, then open the run and use Re-run failed jobs (up to
+#      30 days after the run). Promote succeeded, so it is not re-run; the release job polls again and
+#      creates the Release. A rejected stage leaves the job failed and no Release, which is correct.
 #
 #   Rollback posture: a failed stage (staging publish, install or dl-023 smoke) blocks promote — `needs:
 #   stage` means promote never runs — and a bad tarball that was staged is stopped by `npm stage reject`.
@@ -118,7 +132,8 @@
 #        act push --eventpath /tmp/tag-event.json --artifact-server-path /tmp/act-artifacts
 #      or one job at a time: `act push --eventpath /tmp/tag-event.json --artifact-server-path /tmp/act-artifacts -j gate`
 #   3. act sets `ACT=true`: the promote stage step is skipped (`if: !env.ACT`), so a local run can never
-#      stage. act has no OIDC issuer and ignores `environment:`, so the trusted publisher, provenance and
+#      stage; the release job's npm poll and `gh release create` are skipped the same way, while its
+#      CHANGELOG extraction still runs. act has no OIDC issuer and ignores `environment:`, so the trusted publisher, provenance and
 #      both approvals can only be exercised by a real tag push.
 #   The gate's "tag is on main" check needs a local `main` pushed to `origin`; for a dry iteration on a
 #   branch, run `npm run prepublishOnly` and `npm run publish:staging` directly instead — they are the
@@ -217,3 +232,30 @@ jobs:
           set +x
           npm --version
           npm stage publish ./dist-pack/*.tgz --provenance --access public
+
+  release:
+    needs: promote
+    runs-on: ubuntu-24.04
+    timeout-minutes: 345
+    permissions:
+      contents: write
+    env:
+      RELEASE_MAKE_LATEST: ''
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - name: Release notes — the version's CHANGELOG.md section (dl-130 step 1)
+        run: node scripts/changelog-section.cjs "${GITHUB_REF_NAME#v}" > "$RUNNER_TEMP/release-notes.md"
+      - name: Wait until npm serves exactly this version — promote only staged it (adr-011)
+        if: ${{ !env.ACT }}
+        run: node scripts/wait-npm-version.cjs "$GITHUB_REF_NAME" --timeout-minutes 330 --interval-seconds 60
+      - name: Create the GitHub Release
+        if: ${{ !env.ACT }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md" ${RELEASE_MAKE_LATEST:+--latest="$RELEASE_MAKE_LATEST"}
