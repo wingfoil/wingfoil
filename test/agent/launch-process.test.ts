@@ -101,6 +101,48 @@ describe('launchAgent — the agent process', () => {
   }, 60000);
 });
 
+describe('launchAgent — the outcome (spec-016 §3.3 step 18)', () => {
+  it('an agent exit 3: recorded, then IO with the summary as the detail line', async () => {
+    const { root, input } = launchFixture((manifest: AdapterManifest) => ({
+      ...manifest,
+      launch: { interactive: { args: ['scripts/exit3.cjs'], terminal: 'optional' } },
+      usage: { from: 'lookup', lookup_args: ['scripts/both.cjs'] },
+    }));
+    repos.push(root);
+    const outcome = await launch(input, root);
+    expect(outcome.result.ok).toBe(false);
+    if (outcome.result.ok) return;
+    expect(outcome.result.error.message).toBe(`agent exited 3; run ${input.runId} recorded`);
+    expect(outcome.result.error.details).toMatchObject({
+      run_id: input.runId,
+      exit_status: 3,
+      issues: [{ detail: expect.stringMatching(new RegExp(`^run ${input.runId}: agent exited 3 after \\d+\\.\\d s \\(recorded in [0-9a-f]{7}\\)$`)) }],
+    });
+    expect(outcome.warnings).toEqual([]);
+  }, 60000);
+
+  it('a spawn that throws something other than an Error is reported as text', async () => {
+    const { root, input } = launchFixture((manifest: AdapterManifest) => manifest);
+    repos.push(root);
+    const warnings: string[] = [];
+    const result = await withWarningSink(
+      (text) => warnings.push(text),
+      () =>
+        launchAgent(
+          root,
+          input,
+          {
+            spawn: () => {
+              throw 'refused';
+            },
+          },
+          () => undefined,
+        ),
+    );
+    expect(result.ok ? 'ok' : result.error.message).toBe("agent command 'node' could not be started (adapter 'hand'): refused");
+  }, 60000);
+});
+
 describe('renderAgentExecuteStderr (spec-016 §3.4)', () => {
   it('a recorded run: the summary line and {run}; a dry-run plan: none', () => {
     const run = { id: 'x/adhoc/1', exit_status: 0, duration_ms: 1260 } as unknown as never;
