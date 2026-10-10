@@ -112,6 +112,8 @@ const PHASE_SOURCE = '[a-z][a-z0-9-]*';
 /** `n`: decimal, no padding, from 1. */
 const COUNT_SOURCE = '[1-9][0-9]*';
 const SIGNAL_RE = /^signal:[A-Z][A-Z0-9]*$/;
+/** The largest process exit code (§4.2 key 16, bug-288). */
+const MAX_EXIT_CODE = 255;
 
 /** `element`'s `<type>:<id>` shape (`spec-008` §7): two non-empty parts. */
 const ELEMENT_REF_RE = /^[^:\s]+:[^:\s]+$/;
@@ -199,9 +201,11 @@ function fieldDefect(key: (typeof RUN_RECORD_KEYS)[number], value: unknown, orde
     case 'duration_ms':
       return isNonNegativeInteger(value) ? null : "'duration_ms' must be a non-negative integer";
     case 'exit_status':
-      return (typeof value === 'number' && Number.isSafeInteger(value)) || (typeof value === 'string' && SIGNAL_RE.test(value))
+      // A process exit code is 0–255 (bug-288): a negative or larger integer is no exit code a spawn yields.
+      return (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= MAX_EXIT_CODE) ||
+        (typeof value === 'string' && SIGNAL_RE.test(value))
         ? null
-        : `'exit_status' must be an integer or "signal:<NAME>"`;
+        : `'exit_status' must be an integer from 0 to ${MAX_EXIT_CODE} or "signal:<NAME>"`;
     default:
       return typeof value === 'string' ? null : `'${key}' must be a string`;
   }
@@ -272,7 +276,9 @@ const invalidLine = (path: string, k: number, detail: string): CoreResult<never>
 
 /**
  * Read a run log strictly (§4.5): every line JSON, exactly the §4.2 keys in order with valid types, an
- * `id` whose element segment is the file's basename (`<runs>/<element-id>.jsonl`), and no id twice.
+ * `id` whose element segment is the file's basename (`<runs>/<element-id>.jsonl`), no id twice, and each
+ * line byte for byte the writer's serialization of its record — no CR, no whitespace outside a string
+ * (bug-288).
  * The last line must be `\n`-terminated, since an append to an unterminated line would corrupt both.
  *
  * @param text - The file's content.
@@ -298,6 +304,12 @@ export function parseRunLog(text: string, path: string): CoreResult<RunRecord[]>
     const defect = recordDefect(value, elementId, true);
     if (defect !== null) return invalidLine(path, i + 1, defect);
     const record = value as RunRecord;
+    // The line must be exactly what the writer produces for the record it parses to (§4.2, bug-288):
+    // no CR before the newline, no whitespace outside a string. Key order is checked above, with its own
+    // message, so the comparison can only fail on those.
+    if (`${lines[i]!}\n` !== serializeRunRecord(record)) {
+      return invalidLine(path, i + 1, 'not in the serialized form of spec-016 §4.2 (a CR, whitespace outside a string, or another spelling of a value)');
+    }
     if (seen.has(record.id)) return coreErr({ code: 'VALIDATION', message: `run log ${path}: run id ${record.id} recorded twice` });
     seen.add(record.id);
     records.push(record);
@@ -353,7 +365,9 @@ export function resolveRunLogPath(
   const relativePath = relative(resolve(root), resolve(root, joined)).split(sep).join('/');
   // The run log is not Memory: the neutral confinement refusal, not REQ-SEC-06's Memory-entry text
   // (task-206 review, decision 6). A textual escape and a symlinked ancestor leaving the root both fail.
-  const confined = requireConfinedTarget(root, relativePath, action);
+  // Confinement is checked on the configured spelling (`/etc/<id>.jsonl`), so a refusal names the
+  // target `paths.runs` gives rather than its `../` climb from the root (bug-288).
+  const confined = requireConfinedTarget(root, joined, action);
   if (!confined.ok) return confined;
   return coreOk(relativePath);
 }

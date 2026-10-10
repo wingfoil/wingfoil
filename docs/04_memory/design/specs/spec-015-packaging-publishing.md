@@ -180,6 +180,21 @@ on 2026-09-23).
 `act` (nektos/act) SHOULD be documented as the local way to exercise `publish.yml` before pushing, so
 the workflow is not debugged through throwaway commits (`adr-009`).
 
+**The staging rehearsal's place in the release** (`dl-099` §1–§2). Before a version is tagged,
+`publish:staging` runs locally on the **release candidate** — the commit of the release's integration
+branch proposed for the tag, which carries the §4 version bump — as `release-publishing.yaml`'s
+`staging-rehearsal` phase (role `qa`): `npm run publish:staging -- --expect-commit <candidate sha>
+--transcript <path>`. Stages 2–3 run on that commit, its smoke requires the candidate's stamp, and the
+transcript (the script's own log lines, written on a failure too) is the phase's `produces`. The check
+`staging-rehearsal-passed` (`node scripts/publish-staging.cjs --check-transcript <path>`) passes only when
+the transcript closes on `staged <name>@<version> and smoke passed` for `package.json`'s version and its
+smoke checked the stamp's commit, which it prints: the tag goes on that commit. The release commit does
+not re-cut the candidate: the `e2e-smoke` gate runs before it, so on the first candidate the rehearsal's
+stage 3 smoke (the same scenario of `scripts/e2e-smoke.cjs`, against the staged tarball, with
+`--expect-commit`) stands as its e2e-smoke run. A candidate re-cut after the rehearsal re-enters the
+`e2e-smoke` gate and the rehearsal (`release-cycle.yaml`). The rehearsal is
+not part of `publish.yml` or CI: it starts a local registry, so it runs once per candidate (`dl-099` §4).
+
 ### 4. Version / tag scheme
 
 - `package.json` `version` is semver (`MAJOR.MINOR.PATCH`); v0.2 publishes `0.2.z`.
@@ -644,3 +659,16 @@ tarball `npm pack` makes (`dl-099` §4 (c), smoke part); the staging rehearsal i
 The pins are `test/cli/e2e-smoke.test.ts`, `test/cli/publish-staging.test.ts` and
 `test/cli/ci-workflow.test.ts`. Edited in place: no supersede, no state change, no `version:` bump
 (`dl-047`), as in the revisions above.
+
+**Revision (2026-10-09, `task-219-define-release-candidate-staging-rehearsal-phase-recut-reentry`) — §3:
+the staging rehearsal's place in the release, per `dl-099` §1–§2.** The spec described the §3 pipeline,
+which `publish.yml` runs after the tag, and the `publish:staging` script it shares with a developer's
+machine, but not when that script runs before the tag: in v0.2 and v0.2.2 the rehearsal ran because a
+phase plan wrote it in (`dl-099` *What the gates actually exercised*). §3 gains a paragraph: the rehearsal
+runs on the release candidate as `release-publishing.yaml`'s `staging-rehearsal` phase, with
+`--expect-commit <candidate sha>` and `--transcript <path>` (a new option of `scripts/publish-staging.cjs`),
+and `--check-transcript <path>` is the phase's check, whose printed commit is the one tagged; the release
+commit does not re-cut the candidate, whose first e2e-smoke run is the rehearsal's own smoke; a re-cut
+candidate re-enters the checks. The pipeline's stages, the scripts' other options and the publish workflow
+are unchanged. The pins are `test/cli/staging-rehearsal.test.ts` and `test/cli/publish-staging.test.ts`.
+Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions above.

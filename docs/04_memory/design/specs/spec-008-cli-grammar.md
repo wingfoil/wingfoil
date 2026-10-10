@@ -468,7 +468,18 @@ each warning shipped today is pinned:
 | `dna set\|add\|update\|remove --force`, when the whole file was rewritten | `dna.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, blank lines, line endings or number formatting (1.0 becomes 1)` |
 | `agent execute` without `--role` (`spec-016` §3.2 step 3) | `no --role given and no workflow step to take one from: running as the default role 'developer'` |
 | `agent execute`, per entry of the adapter tree that is not an adapter (`spec-016` §2.1) | `W_ADAPTER_IGNORED (<path>): not an adapter: an adapter is a .yaml file directly inside .wingfoil/agents/built-in/ or .wingfoil/agents/custom/ (spec-016 §2.1)`, or, for a basename outside the ID class, `W_ADAPTER_IGNORED (<path>): not an adapter: its name '<name>' is not an id, characters [a-z0-9-.] only (spec-009 §1), so no agent can select it` |
-| any command, per configuration file with a key its schema does not declare (`spec-009` §2) | `<file>: unknown field(s) ignored: <paths>` |
+| any command, per configuration file with a key its schema does not declare (`spec-009` §2) | `<file>: unknown field(s) ignored: <paths>` — `agent execute` prints each distinct one once, and a `<file>` label naming the commit it read reads `HEAD:` (`spec-016` §3.3) |
+| `agent execute`, per post-run lookup that fails or reports a value of the wrong type (`spec-016` §2.6) | `adapter '<name>': the usage lookup failed (<cause>): model and tokens recorded as not-reported`, `adapter '<name>': the session lookup failed (<cause>): session recorded as not-reported`, `adapter '<name>': version_args failed (<cause>): agent_version recorded as not-reported`, `adapter '<name>': version_args printed nothing: agent_version recorded as not-reported`, `adapter '<name>': the session lookup's session id is not a non-empty string: recorded as not-reported`, or `adapter '<name>': the usage lookup's <field> is not a non-negative integer: recorded as not-reported` (`model`: `is not a non-empty string`); `<cause>` is `exited <n>`, `timed out after <ms> ms`, `ended by <signal>`, `printed more than 1 MiB on stdout or stderr`, `could not start: <code>` or `printed no JSON` |
+
+**Notices and a payload on stderr** (`spec-016` §3.4, task-228). A command that hands its stdout to a
+child process — `agent execute`, whose agent owns the terminal — writes nothing on stdout (`spec-005`
+§2). Besides its warnings and errors it prints a **notice**, the launch banner
+(`run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`), and on success its report, the
+post-run summary (`run <run-id>: agent exited 0 after <s> s (recorded in <sha7>)`), both on stderr: in
+`console` as the bare line, under `--format json` as one `{"notice": "<text>"}` or `{"run": <record>}`
+document per line, under `--format yaml` as one `---` … `...` document each — the shapes a warning
+takes. A notice, like a warning, is written when raised (the registrar installs a notice sink beside
+the warning sink), so the banner precedes the agent's own output.
 
 An MCP Tool has no stderr: its result carries the warnings as `structuredContent` (`spec-004` §4.3
 item 5). The shipped `wingfoil mcp` registers no Tools before P5.2.3 (v0.4), so on that surface the
@@ -691,12 +702,23 @@ Resources, which follow item 6. Before it starts, `mcp`'s pre-flight reads the w
 A flag one command declares, as opposed to §2's global flags. Each is registered on that command
 only (`CoreOperation.flags`, `spec-006` §2), appears in its `--help`, and is documented in its CLI
 reference entry. A command that does not declare it refuses it as an unknown option (exit `2`, §5).
+The table also lists a command's **value options** (`--<name> <value>`, `CoreOperation.options`), under
+the same rules, and rows **declared here but not registered yet**, each saying so and naming the task
+that registers it: until then the option is refused as unknown (exit `2`), appears in no `--help`, and
+has no reference entry.
 
 | Command | Flag | Behaviour |
 |---------|------|-----------|
 | `paths` | `--list` | Accepted for the planned drill-down view; it does not change the output yet. |
+| `workflow next` | `--assigned-to <who>` | An option with a value: keeps the frontier steps whose role `<who>` holds — `me` (the `team.members[]` entry whose email is the git identity's), a member's name or email, or a role name (`spec-017` §7.3, BDD P4.4 sc. 2). |
 | `workflow list` | `--all` | Lists every workflow the registry loads, not only the ones executable now: the includable workflows no open instance's frontier enters are listed too, with `executableNow: false` (`spec-017` §7.5, BDD P4.6 sc. 3). |
 | `directive assign` | `--force` | Authorizes the whole-file rewrite of `roles.yaml` when the in-place edit cannot apply (`dl-062` Q1 option 3). Without it that case is §6's `CONFLICT` refusal. With it the file is written again from its parsed content in the one `wf(directive): assign …` commit, and the success carries §6's warning. `--force` does not force a rewrite: an edit the in-place editor can make is made in place, with no warning. A missing `roles.yaml` is written whole without the flag, since there is nothing to preserve. |
+| `agent execute` | `--element <type>:<id>` | The target element (`spec-016` §3.1, §7's element-ref). Required in v0.3 until the step forms ship; with `--next` it overrides the step's element. |
+| `agent execute` | `--role <role>` | The role, a `team.roles` name; default the step's role, else `developer` with §6's warning. |
+| `agent execute` | `--agent <name>` | The `team.agents` entry to launch; default the first, in declared order, with an `adapter` whose `executes_as` holds the role. |
+| `agent execute` | `--next`, `--workflow <ref>`, `--step <key>` | The step forms (`spec-016` §3.1, `spec-017` §3.3, §4.9): take workflow, phase, element and role from the next step of the selected instance; `--workflow` and `--step` imply `--next`. **Not registered in v0.3 before task-235**: until then each is an unknown option (exit `2`, §5). At least one of `--next`, `--workflow`, `--step`, `--element` is required, else exit `2`, `missing required argument: --next or --element`. `--resume <run-id>` and `--ref <run-id>` are v0.4 (`spec-016` §7) and unknown options in v0.3. |
+| `agent list` | `--past`, `--waiting`, `--element <type>:<id>`, `--phase <name>` | `spec-016` §5: the past and waiting sections, and the two filters (task-240; not registered yet). `--active` is v0.4 and an unknown option. |
+| `agent show` | — | No flag: one required positional, `<run-id>` (`spec-016` §6). |
 | `dna set`, `dna add`, `dna update`, `dna remove` | `--force` | Authorizes the whole-file rewrite of `dna.yaml` when the in-place edit cannot express the change (task-193, ruling R20/Q9, as `dl-062`). Without it that case is §6's `CONFLICT` refusal. With it the file is written again from its parsed content in the verb's one `wf(dna): …` commit, and the success carries §6's warning. As for `directive assign`, `--force` does not force a rewrite: an edit the in-place editor can make is made in place, with no warning. `dna.yaml` always exists when these verbs run, so there is no unflagged whole-file write. |
 
 ## Consequences
@@ -1204,3 +1226,20 @@ a command runs is written when raised, through the registrar's warning sink (`bu
 pins the default-role warning, `W_ADAPTER_IGNORED` and the unknown-field warning. No flag, exit code or error format changes: the command's
 own grammar and the `agent list` / `agent show` rows are `task-228`'s amendment. Edited in place without
 a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-10, `task-216-add-workflow-next-naming-next-step-verb-role`) — `workflow next
+--assigned-to`.** `task-216` ships `workflow next`, already in §11's committed-`HEAD` row; §12 gains its one
+command-specific option, `--assigned-to <who>` (a value, not a boolean flag). No other
+row changes. Edited in place without a supersede or a state change (`dl-047`); pending the approver's
+`memory amend` at `task-216`'s review.
+
+**Revision (2026-10-10, `task-228-agent-execute-launches-agent-forwards-right-signals-records`) — §12
+carries `agent execute`'s grammar and the `agent list` / `agent show` rows; §6 names the notice and the
+stderr payload.** `agent execute` launches the agent (`spec-016` §3.3 steps 13–18): §12's preamble now
+covers value options and rows declared before they are registered, and the table lists `agent execute`'s
+value options as `spec-016` §3.1 states them, with the step forms marked as not registered before
+task-235, and the `agent list` (task-240) and `agent show` rows. §6 gains the launch's warning texts and a paragraph on
+the notice (the launch banner) and on the success report a command that hands its stdout to a child
+prints on stderr, in the shapes a warning takes; the unknown-field row says `agent execute` prints each
+once with a `HEAD:` label. No exit code changes. Edited in place without a supersede or a state change
+(`dl-047`).
