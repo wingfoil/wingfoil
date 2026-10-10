@@ -105,7 +105,8 @@ Branch `task/task-228-agent-execute-launches-agent-forwards-right-signals-record
 - **Attribution (AC 7, dl-117 Action 4, ruling R20 Q8).** §2.4's bootstrap gains one fixed line, after
   the handoff line, naming the selected entry (`dl-158` Rule 1 (a)):
   `End every commit of your work, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: {agent_name} <{agent_email}>" and "AI-Model: <the model identifier you run as>" (git-conventions §7).`
-  The bootstrap becomes a pure function of `(role, element, run id, state_ref, agent entry)`; the
+  *(Superseded at the review, 2026-10-10: the wording that ships is the one under "Review fixes" F4,
+  which adds git-conventions §8's `--amend --trailer` for a commit `wingfoil` writes.)* The bootstrap becomes a pure function of `(role, element, run id, state_ref, agent entry)`; the
   `agent: record` commit keeps §4.4's form. spec-016 §2.4 revision (pending amendment).
 - **Handovers from the B3 gate.**
   - One deadline for the MCP pre-flight: one timer covers `connect` and the Prompt fetch.
@@ -260,9 +261,11 @@ Per AC, with the case that holds it:
 - `spec-005-cli-command-contract`: "task-228: section 2 gains spec-016 Q8's sentence: a command that hands its stdout to a child process writes no payload on stdout and puts its structured messages on stderr; agent execute is that command, and its dry-run plan stays on stdout."
 
 **Decisions for the approver.**
-1. **Attribution wording** (§2.4): `End every commit of your work, except an approve or reject commit, with
-   the trailer paragraph "Co-Authored-By: <name> <<email>>" and "AI-Model: <the model identifier you run
-   as>" (git-conventions §7).` — the bootstrap's last line; a §2.4 literal, so a spec-016 revision.
+1. **Attribution wording** (§2.4): `End every commit you write, except an approve or reject commit, with the
+   trailer paragraph "Co-Authored-By: <name> <<email>>" and "AI-Model: <the model identifier you run as>";
+   to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph
+   of their own (git-conventions §7, §8).` — the bootstrap's last line (as changed at the review, F4); a
+   §2.4 literal, so a spec-016 revision.
 2. **A notice channel** for the step-13 banner (`reportNotice`, `{"notice": …}` under json): §3.4 listed
    only warning/error/run documents, and the banner had no shape there.
 3. **`CoreOperation.renderToStderr`**: the registry field by which a command reports its success on stderr
@@ -321,7 +324,11 @@ calls, so the kill calls are now captured before it), fix `25a152d7`, `219af348`
   listeners are counted in place at `releaseSignals`; a `process.emit('SIGTERM')` from inside `spawn` is
   forwarded to the injected child once it exists and the run is recorded as `signal:SIGTERM`; SIGINT and
   SIGQUIT are ignored and SIGHUP forwarded; the cleanup listeners are in place when `mkdtempSync` runs; a
-  signal removes the directory and calls `process.kill(process.pid, <signal>)` (spied). My earlier note that
+  signal removes the directory and calls `process.kill(process.pid, <signal>)` (spied). Classification: the
+  ordering tests ("listeners in place at `releaseSignals`", "SIGTERM during the spawn is forwarded",
+  "listeners in place when `mkdtempSync` runs") are red-first; "a signal before the spawn removes the
+  directory and re-raises" and "SIGINT/SIGQUIT ignored, SIGHUP forwarded" passed on the old code and are
+  **characterization**. My earlier note that
   these handlers were reachable only in a spawned process was wrong (refactor section corrected).
 - **F2 — spec-008 §6** gains the two missing warnings (`version_args printed nothing`, the session id of the
   wrong type) and the cause `printed more than 1 MiB`, which `runLookup` now gives for
@@ -343,3 +350,28 @@ fixes 99.14 | 96.79 | 97.38 | 99.62 (`cov4.log`); base `b56e8721` 99.2 | 97.03 |
 remain −0.14 (the `win32` lists in `launch.ts`/`execute.ts`, defensive `??` fallbacks, and task-218's
 pre-launch branches such as `process.stdin.isTTY`). `npm run lint` 0; both `tsc` 0; `npm run docs:api` 0;
 `node scripts/check-governance.cjs --base b56e8721` → 4 `wf()` commits, 0 findings.
+
+### Re-review fixes (focused re-review: approve with fixes, 2026-10-10)
+
+Status stays `in-review`. Red `b7bacde2`, fix below.
+- **1 MiB limit names both streams.** `execFile`'s `maxBuffer` bounds stderr too, so the cause is now
+  `printed more than 1 MiB on stdout or stderr` (red-first: `test/agent/launch-process.test.ts` › "on
+  stderr, with valid stdout" with `flood-stderr.cjs`, and the existing stdout case's text); the
+  `LOOKUP_MAX_BYTES` comment, spec-016 §2.6 and spec-008 §6 say so.
+- **A signal pending while the spawn fails** is stated in spec-016 §3.3 step 15: exit `1`, `could not be
+  started`, nothing written (the behaviour kept).
+- **Branch tests** (characterization, the behaviour existed): `mkdtempSync` throws → the error is rethrown
+  and the listener counts return to the baseline; a signal inside `mkdtempSync` → re-raised with nothing to
+  remove, nothing left; a SIGTERM after the agent exited (FakeChild + `slow.cjs` lookup) is not forwarded
+  and the run is recorded; an `error` after `spawn` does not fail the launch; a lookup whose command cannot
+  start → `could not start: ENOENT`.
+- **Cleanup ordering.** In `withRunFiles` the directory is removed before the listeners come out, in the
+  `finally` and in the signal handler, so a signal in between cannot leave `wingfoil-run-*`. Fix
+  `590dc177`.
+
+Gates (pending amendments on disk): `npm run test:coverage` → **323 suites, 6129 passed, 0 failed**, All
+files **99.25 | 97.00 | 97.57 | 99.68** (`devloop-kit/task-228-scratch/cov7.log`, load 3–16) against the base
+`b56e8721`'s 99.2 | 97.03 | 97.48 | 99.67: branches −0.03, the rest above. Left uncovered by choice: the
+`win32` signal lists, `?? []`/`code ?? 0` fallbacks, and task-218's `isTTY` / rethrow branches. `npm run
+lint` 0; both `tsc` 0; `npm run docs:api` 0; `check-governance --base b56e8721` → 4 `wf()` commits, 0
+findings.
