@@ -9,7 +9,7 @@
 name: vision-change
 kind: main
 description: Change the vision (a new feature or any other vision edit) through a change-proposal, its impact analysis, a scoped downcast and a release assignment.
-version: 1.0
+version: 1.0                     # 1.0 dl-132 (task-212): the first version; schedule's target_release pre-check added at task-212's review, before the file reached main
 # No fixed `element:` — self-creating (spec-003 Layer 2 `element`): the change-proposal its capture phase
 # adds becomes the instance's element.
 phases:
@@ -66,12 +66,16 @@ phases:
 
   - name: schedule
     description: >-
-      Assign the change to a release: its entry in docs/01_vision/07_sequencer.md (with the budget it moves,
-      dl-096) and the feature ids in the release element's `features:`, so release-planning's define-scope
-      finds it; stamp the element's `release` and move it to `scheduled` (dl-132 element 4).
+      Assign the change to a release: the product-owner first fills the element's `target_release` with the
+      release chosen here (the proposer's request, or the one the approver ruled at impact-analysis), then
+      writes its entry in docs/01_vision/07_sequencer.md (with the budget it moves, dl-096) and the feature
+      ids in the release element's `features:`, so release-planning's define-scope finds it; stamp the
+      element's `release` from `target_release` and move it to `scheduled` (dl-132 element 4). An empty
+      `target_release` stamps nothing, so the check below refuses it.
     role: product-owner
     actions:
       - element.set_release("{change-proposal.target_release}")   # stamp `release` on the change-proposal (traceability directive)
       - element.set_state(scheduled)                               # change-proposal: accepted -> scheduled
     checks:
+      pre: ["change-proposal.target_release is not empty"]   # set_release("") would stamp nothing (task-212 review); prose, unbound until P4.12
       post: ["vision-index.current"]          # the sequencer edit updates its index row in the same commit (dl-132 element 5)
