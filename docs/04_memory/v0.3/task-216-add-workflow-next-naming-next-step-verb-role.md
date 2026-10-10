@@ -2,7 +2,7 @@
 id: "task-216-add-workflow-next-naming-next-step-verb-role"
 type: task
 title: "Add `workflow next`, naming the next step's verb, role, element, directives and bindings"
-status: backlog
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "high"
@@ -60,9 +60,188 @@ tmpl_version: 260703
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+### Design (architect, 2026-10-09)
+
+**Inputs read.** `depends_on` Execution Notes (dl-015): task-202 (iterate_over; the approver ruling that an
+`iterate_over` phase hands no re-entry cutoff to its iterations), task-203 (history walk, octopus bound,
+ancestry rule for "newer"; its measured snapshot cost), task-204 (`workflow list` / `show`, `ShowResult`;
+its candidate findings, one of them — `command` vs `run` — already closed in spec-017 §8). The B2/B3
+handovers at the end of Implementation Notes. Cited specs `approved` (`grep -m1 '^status'` over spec-003,
+-005, -006, -008, -012, -017): yes.
+
+**Shape.**
+- `src/core/workflow-next.ts` (new): `buildStep` (a deduced frontier step → spec-017 §8 `Step`),
+  `nextWorkflow` (pure: selection, `--assigned-to`, messages), `workflowNextAtHead`, `renderNextConsole`.
+  Registered as `CORE_MODULES` `workflow.workflowNext` (`mutates: false`, optional positional `<ref>`, option
+  `--assigned-to <who>`, a console renderer per §8).
+- The deduction (`src/workflow/deduce.ts`) resolves each action of a leaf step (§4.1, §4.2): text with the
+  tokens substituted, the tokens with no value (now reported `W_UNRESOLVED_TOKEN` at `phases[p].actions[k]`,
+  as §4.1 says for action arguments), the target kind and type, the target elements at `HEAD`, the bound
+  element's from-state, and a `sync_state`'s source. `workflow-exit-state.ts` gains `actionStates` (the bound
+  state before each action). The binding, argv and expected subject are `next`'s (§6.1).
+- The snapshot carries `bindings.yaml` and `dna.yaml` (W3 B3 handover): `show` and `next` load the registry
+  once.
+- Approval detection and routing (§5.1–§5.3) are task-225's (P4.14, its ACs): `awaiting` reports only a
+  third party (§5.4) here; the console renderer already prints an approval's "human needed" line.
+
+**AC classification** (testing directive, T1).
+
+| AC | Class | Why |
+|---|---|---|
+| 1 — BDD P4.4 sc. 1–3, `no open workflows` | red-first | no `workflow next` (`grep -c workflowNext src/core/index.ts` → 0 at `a9121070`) |
+| 2 — expected subjects (`start`, `approve`), the reject path's `sync` | red-first | no binding view exists |
+| 3 — `NextResult` / `Step` shape, console | red-first | new payload |
+| 4 — REQ-PERF-03 | red-first | the timed operation does not exist |
+| 5 — no directive content, no phase-level directive field | characterization | dl-066 option 1 holds today (the schema has no phase `directives`; `show` resolves through the role). Its test necessarily runs through the new command, so on the red commit it fails with the others for "no workflowNext operation", not on its own assertion |
+
+### Red (qa, 2026-10-09)
+
+`99cf0362` — `test/core/workflow-next.test.ts` (AC 1, 2, 3, 5), `test/cli/workflow-next.integration.test.ts`
+(exit codes and bytes), `test/core/workflow-next-latency.test.ts` (AC 4) and the opt-in placement of that
+suite: `test/latency-suites.cjs` gains `IN_PROCESS_LATENCY_SUITES`, `test/core/latency-budget-placement.test.ts`
+a rule 5 (an in-process opt-in suite times, spawns nothing it times, records the load). Run on the tree without
+the implementation (`npx jest test/core/workflow-next.test.ts test/cli/workflow-next.integration.test.ts
+test/core/latency-budget-placement.test.ts test/cli/run-tests.test.ts` → **25 failed, 713 passed**; every
+failure "no workflowNext operation in CORE_MODULES" or the CLI's `unknown command`; `npx jest -c
+jest.latency.config.js test/core/workflow-next-latency.test.ts` → 2 failed, same reason).
+
+Correction `66938e87`: the CLI test expected `start` for `element.set_state(released)`; `released` is the
+fixture's last release state, so spec-003's rule gives `finalize`. The green code first matched the wrong
+expectation through a bug (`element.set_state` read `element` as a type), fixed at `1ac349f5`.
+`git log --first-parent --no-merges 99cf0362..HEAD -- <red's files>` lists only that commit.
+
+### Green (developer, 2026-10-09)
+
+`b97727b9` — the files above, `docs/cli-reference.md` (`workflow next` entry; `show`'s `unknown workflow:
+<name>` aligned to the code, W3 B3 handover), and the existing tests the new operation or shape changes:
+`production-registry` / `parity` (the operation and its test-only mechanical Resource), `workflow-exit-state`
+(`actionStates`), `workflow-executor-cadence` (`workflow-next.ts` reads `distinct_from`, read-only). Allowlists
+only lose entries: `enumeration-parity` (`spec-008 §11 commands` surplus `workflow next`) and
+`name-resolvability` (nine `workflow next` / `NextResult` / `workflowNext` entries).
+
+### Refactor (developer, 2026-10-09/10)
+
+- `1ac349f5` — one target resolver per action (`actionTarget`), the bound from-state rule (its `HEAD`
+  status until an earlier action of the phase moves it: an instance's static start is its type's first
+  state, so commit-backlog's `release.set_state` read `draft → …`), subjects grouped per commit; new suites
+  `workflow-next-views`, `workflow-next-render`, `workflow-deduction-gaps` (the two B3 handover cases:
+  §4.11 an archived self-bound element is not rebound; `readLastChange`'s empty answer).
+- `0fa5c0f1` — REQ-PERF-03: `loadWorkflowsYamlAtRev` reads the included files and `bindings.yaml` in one
+  `cat-file --batch` (27 → 3 `cat-file` spawns per `workflow next` on this repository, counted with a
+  `spawnSync` wrapper on `dist/core/workflow-next`).
+- `1caf413d`, `e854d948` — simpler subject rendering; branch coverage.
+
+| Command | Result |
+|---|---|
+| `npm run test:coverage` (at `e854d948`) | 324 suites, **6108 passed**; All files **99.23 / 97.02 / 97.59 / 99.68**; main (W3 B3 gate log) 99.2 / 97.01 / 97.48 / 99.67; `workflow-next.ts` 100 / 96.61 / 100 / 100 (targeted run), `deduce.ts` 100 / 99.78 / 100 / 100 |
+| `npm run lint`, `npm run docs:api`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` | exit 0 each |
+| `node scripts/check-governance.cjs --base b56e8721` | 1 `wf()` commit checked, 0 findings, exit 0 |
+| `npx jest -c jest.latency.config.js test/core/workflow-next-latency.test.ts` (REQ-PERF-03, loaded) | **loaded, not a REQ-PERF-03 measurement**: p95 1655 ms (n=25, min 736, max 1910), load 23.19 / 29.39 → 18.85 / 27.88; before `0fa5c0f1` p95 3302 ms (min 908) at load 2.86 → 17.13. The idle run is the coordinator's |
+
+BDD: P4.4's three scenarios are pinned by `test/core/workflow-next.test.ts` (sc. 1 "under 1 second" by the
+latency suite); the feature file needed no change (`grep -n "\-\-name" P4.4-workflow-next.feature` → none).
+
+### Review (reviewer self-check, 2026-10-10)
+
+| AC | Status | Evidence |
+|---|---|---|
+| 1 | met | `workflow-next.test.ts` "AC 1" blocks (sc. 1, sc. 2 by name / email / role / `me`, sc. 3, no open instance, unknown `<ref>`); CLI suite exit codes |
+| 2 | met | "AC 2" blocks: `wf(task): start task-1 [backlog → in-progress]`, `wf(release): approve minor-2 [planning → in-development]`, and after the review reject `red` with `reentered: true` and `wf(bug): sync bug-1 [in-review → in-progress]` |
+| 3 | met | "AC 3" key-set test of `NextResult` / `Step` / `ActionView`; console lines incl. "human needed" and "waiting for" |
+| 4 | met in code, measured loaded only | latency suite (opt-in pass); the idle run is the coordinator's |
+| 5 | met | "AC 5": no `DIRECTIVE-BODY-SENTINEL` in the payload; a phase's `directives:` is not read |
+
+Same-class sweep in touched files: an expected subject takes its type from the deduced target
+(`targetType`), which the deduction sets through `typedStateType` — `element` is never a type
+(`grep -c "typedStateType(token)" src/workflow/deduce.ts` → 1; `workflow-next.ts` parses no type of its own);
+`show` and `next` both read `snapshot.bindings` (`grep -c loadWorkflowRegistryAtRev
+src/core/workflow-list-show.ts` → 0).
+
+### Pending amendments (approver)
+
+Uncommitted in the worktree; gates ran with them.
+- `spec-017-workflow-commands-and-state-deduction` — `--reason "task-216: implementing workflow next needed readings §4.8 and §6–§8 left open. §8's Step gains directiveWarnings, the warnings §6.2 already reports; its cadence takes §6.4's shape, recurring plus lastRun not-recorded, null for once; expectedCommit may hold one subject per line. §6.1 states how a manual action's subject names its targets and its from-state, and the sync_state target-state rule. §7.3 gives the messages of an abandoned instance, an instance whose workflow is not loaded and a filter that keeps no step. §4.8 says what a park re-enters. No command, deduction rule or diagnostic changed."` (after task-204's spec-017 amendment).
+- `spec-006-core-domain-api` — `--reason "task-216 registers workflowNext in CORE_MODULES, so §3's row loses its planned marker. Its MCP Resource stays task-239's; no other row changed."`
+- `spec-008-cli-grammar` — `--reason "task-216 ships workflow next, already in §11's committed-HEAD row; §12 gains its one command-specific option, --assigned-to with a value. No other row changed."` (task-228 also amends spec-008: 216 first.)
+
+### Decisions for the approver
+
+1. `awaiting` reports only a third party (§5.4); approval detection and routing stay task-225's. Until then
+   `next` never prints "human needed" for an approval phase (the renderer is ready).
+2. The REQ-PERF-03 suite runs in the opt-in latency pass, not the parallel `npm test` (the 2026-10-03
+   ruling's reason applies: the budget presupposes an idle machine); `latency-budget-placement` gains rule 5
+   for in-process opt-in suites. Its fixture is this repository at `b56e8721` (eight open instances, not
+   one: a harder case than the AC's).
+3. `--assigned-to`: an unknown `<who>` is read as a role name; a filter that keeps nothing exits 0 with
+   `no next step of workflow '<name>' is assigned to '<who>'`.
+4. `cadence`: `null` for `once`, `{ recurring, lastRun: "not-recorded" }` otherwise; `directiveWarnings`
+   added to `Step` like `PhaseView`.
+5. Expected subjects: grouped per (type, verb, bracket), one per line when targets differ; unknown targets
+   as `<id>` / `<from>` / `<type>`; a `sync_state` ignores the aggregate "all tasks of the bug" rule.
+6. `memory add`'s argv carries `--workflow` / `--step` (task-227 adds the options) and the agent argv
+   `--workflow` / `--step` (task-235): following them before those tasks land is refused as unknown options.
+7. Action-argument tokens with no value now raise `W_UNRESOLVED_TOKEN` (§4.1), except a `{T.<field>}` whose
+   `T` the phase's selection selects (resolved per element when it runs).
+8. `loadWorkflowRegistry` (working tree) is kept: no production caller, but `workflow-core-checks.test.ts`
+   characterizes the working-tree checks through it (B3 handover: "remove it or state who needs it").
+
+### Candidate findings (not filed)
+
+- `loadDirectivesAtRev` reads each directive with its own `git show` (16 spawns, ~180 ms loaded on this
+  repository); `test/core/directive-inventory-baseline.test.ts` pins `readPathAtRev` by name. A batched read
+  would help REQ-PERF-03 further.
+- The snapshot resolves the same sha nine times (`rev-parse <sha>^{commit}`, ~100 ms loaded): each `*AtRev`
+  loader re-resolves its `rev`.
+- `bug-301` (`readDirty` omits `dna.yaml`) now matters more: `next` reads `dna.yaml` (holders, agent roles).
+
+### Merge-order notes
+
+- Merges first in B4. task-228 shares `docs/cli-reference.md`, spec-005/008, `production-registry` /
+  `parity` rosters: adjacent-line conflicts expected; 216's spec-008 Revision note goes before 228's.
+- task-225 (status) builds on `buildStep` / `NextResult` / `humanNeededLine`; task-235 consumes
+  `NextResult.next` and the agent argv; task-239 serves the Resource from `workflowNextAtHead`.
+- `src/workflow/deduce.ts` and `src/core/loaders.ts` changed here: any B4 task touching them merges main.
+
+### Review fixes (independent review: approve with fixes, 2026-10-10)
+
+- **Red** `1a42e0a0` — a red-era expectation corrected (fix 1): `workflow next ghost` is `unknown workflow:
+  ghost` (spec-017 §10, as `workflow show`), and a new case keeps `workflow is not open: planning` for a
+  loaded workflow with no open instance. `6902c98a` — failing tests for fixes 2, 4, 5, 6
+  (`test/core/workflow-next-review-fixes.test.ts`, `test/core/latency-in-process-idle.test.ts`); the
+  red-era latency suite and placement guard change with fix 6 (rule 5: "times no process start", and it
+  requires `inProcessIdleVerdict(`). Run before the fix: 2 failed (the two `ghost` cases), then 7 failed
+  (`npx jest test/core/workflow-next-review-fixes.test.ts test/core/latency-in-process-idle.test.ts
+  test/core/latency-budget-placement.test.ts` → 7 failed, 718 passed).
+- **Green** `ac4e4122` —
+  - fix 1: `unknown workflow: <ref>`;
+  - fix 2: a printed `wingfoil` argv is a whole command (`<id>`, `--title <title>`, `--reason <reason>`);
+    the console example in `docs/cli-reference.md` follows (`node dist/cli.js workflow next` on this
+    repository prints `wingfoil memory submit <id>`);
+  - fix 4: the third-party line says `workflow finalize` is not available yet; `docs/cli-reference.md`
+    marks `--workflow` / `--step` (task-227, task-235) and `workflow finalize` (task-226) as planned;
+  - fix 5: an `--assigned-to` that names nobody warns through the warning sink;
+  - fix 6: `inProcessIdleVerdict` (test helper): an in-process opt-in suite refuses a run whose 1-minute
+    load reaches half the cores, instead of counting it.
+- **Fix 3** is in the spec-017 pending amendment (§4.8): the park sentence is conditional on the `<from>`
+  being no held gate, and a park from a held gate re-enters like a reject
+  (`test/core/workflow-deduction-history.test.ts`, the `describe.each(['reject', 'park'])` block).
+- The refactor-era `test/core/workflow-next-views.test.ts` pinned the old argv of `approve` / `submit`; it
+  now pins the whole command.
+- **Gates** (at `ac4e4122`):
+  - `npm run test:coverage`: 326 suites, **6121 passed**, All files **99.23 / 97.06 / 97.6 / 99.68**;
+  - `npm run lint`, `npm run docs:api` and both `tsc` runs: exit 0;
+  - `node scripts/check-governance.cjs --base b56e8721`: 2 `wf()` commits checked, 0 findings;
+  - `npx jest -c jest.latency.config.js test/core/workflow-next-latency.test.ts`: p95 **532 ms** (n=25,
+    min 439, max 559) at load 13.39 → 11.95 on 12 cores, **refused as loaded** by the new verdict. The
+    budget case is not counted; the idle run is the coordinator's.
+
+Final proposed `--reason` texts (they supersede the ones under "Pending amendments" above):
+- `spec-017`: "task-216: implementing workflow next needed readings §4.8 and §6–§8 left open. §8's Step gains directiveWarnings, the warnings §6.2 already reports; its cadence takes §6.4's shape, recurring plus lastRun not-recorded, null for once; expectedCommit may hold one subject per line. §6.1 states that a printed wingfoil argv is a whole command with id, title and reason placeholders, how a manual action's subject names its targets and its from-state, and the sync_state target-state rule. §7.3 gives the messages of an abandoned instance, an instance whose workflow is not loaded and a filter that keeps no step, and the warning of an assigned-to that names nobody. §4.8 says that a park whose from-state is no held gate re-enters no phase's cutoff, while one from a held gate re-enters like a reject. No command, deduction rule or diagnostic code changed."
+- `spec-006`: unchanged.
+- `spec-008`: unchanged.
+
+### Retrospective
+
+- The red test pinned a wrong subject that a green bug happened to satisfy (`66938e87`): a spec example
+  (`mark-released` → `finalize`) in the fixture would have caught it at red.
+- The machine was rebooted mid-task; the worktree and scratch survived (`git status` at resume).

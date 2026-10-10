@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/08_health/release-health.schema.json",
+  "title": "release-health report",
+  "description": "The machine-readable report `release-health.measure` writes as release-health-<version>.json (dl-089 §1, §6). One entry per catalogue metric, in catalogue order; raw counts beside every percentage. Written by scripts/release-health/measure.cjs; read by compare.cjs, which writes release-health-<version>.md (report-layout.md).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "catalogue_version", "release", "measurement_point", "previous", "toolchain", "metrics"],
+  "properties": {
+    "schema_version": { "const": 1, "description": "This schema's version; bumped on an incompatible change." },
+    "catalogue_version": { "type": "integer", "minimum": 1, "description": "The `version` of metrics.yaml the run measured with." },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "kind"],
+      "properties": {
+        "id": { "type": "string", "description": "The release element's id, e.g. minor-v0.3." },
+        "version": { "type": "string", "pattern": "^v[0-9]+\\.[0-9]+(\\.[0-9]+)?$" },
+        "kind": { "enum": ["major", "minor", "patch"], "description": "D01 and P06 are measured on major and minor releases only." }
+      }
+    },
+    "measurement_point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "commit", "basis"],
+      "properties": {
+        "ref": { "type": "string", "description": "The published tag (e.g. v0.2.1), or the released transition commit when publishing did not run." },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "basis": { "enum": ["published-tag", "released-transition"], "description": "dl-089 §1: a tag whose publish failed is never a measurement point." }
+      }
+    },
+    "previous": {
+      "description": "The previous run's measurement point; null on the first run (every metric is then `new`).",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["release", "commit", "report"],
+          "properties": {
+            "release": { "type": "string" },
+            "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+            "report": { "type": "string", "description": "Repository-relative path of the previous JSON report." }
+          }
+        }
+      ]
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "npm", "lockfile_sha256"],
+      "properties": {
+        "node": { "type": "string" },
+        "npm": { "type": "string" },
+        "lockfile_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/metric" }
+    }
+  },
+  "$defs": {
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z][0-9]{2}$", "description": "The catalogue id." },
+        "status": { "enum": ["measured", "not-measurable", "not-comparable"], "description": "not-comparable: D01/P06 on a patch release." },
+        "reason": { "type": "string", "description": "Required unless status is measured: why no value was taken." },
+        "value": { "description": "The metric's value: a number, a boolean (pass/fail floors), or an object for a multi-part metric (e.g. G03 median/p90/share)." },
+        "raw": {
+          "type": "object",
+          "description": "The raw counts behind every percentage (e.g. { \"numerator\": 41, \"denominator\": 50 }), so the value can be recomputed by hand (dl-089 §6).",
+          "additionalProperties": { "type": ["number", "string", "boolean", "null"] }
+        },
+        "items": { "type": "integer", "minimum": 0, "description": "Relevant items in the window; under the catalogue's small_sample the metric is flagged." },
+        "small_sample": { "type": "boolean" },
+        "failing": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "For a floor (and every P measure): each failing item, named (a commit sha, a file, an element id)."
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "command": { "type": "string", "description": "The command that produced the value." },
+            "read_on": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The date a value was read, for the external E metrics and D01 (dl-130, dl-089 §2)." },
+            "benchmark_commit": { "type": "string", "description": "D01/P06: the benchmark repository's commit." },
+            "wingfoil_build": { "type": "string", "description": "D01/P06: the WingFoil build the runs used." }
+          }
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "status": { "const": "measured" } } }, "then": { "required": ["value"] }, "else": { "required": ["reason"] } }
+      ]
+    }
+  }
+}

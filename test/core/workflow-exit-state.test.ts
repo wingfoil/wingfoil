@@ -254,7 +254,8 @@ describe('workflowExitStates — spec-017 §4.4', () => {
   it('a plain include of a sub declaring its own element, from an unbound workflow, starts at that type\'s first state', () => {
     const outer = workflow('name: outer\nkind: sub\nphases:\n  - name: plan\n    include: release-planning\n');
     const states = workflowExitStates(outer, MEMORY, { boundType: null, state: null, instance: false }, new Map([['release-planning', RELEASE_PLANNING]]));
-    expect(states).toEqual([{ phase: 'plan', boundType: null, entry: null, exit: null, undetermined: null, created: [], run: [], held: [] }]);
+    // task-216: `actionStates` (the bound state before each action) is empty for an include phase.
+    expect(states).toEqual([{ phase: 'plan', boundType: null, entry: null, exit: null, undetermined: null, created: [], run: [], held: [], actionStates: [] }]);
   });
 
   it('iterationStartState: the lowest-sequence status of where.status, else the first state', () => {

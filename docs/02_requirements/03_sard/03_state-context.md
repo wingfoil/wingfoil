@@ -156,4 +156,6 @@
 * **Traceability:** `dl-131-determinism-index-scope` Decision 3 (component P) and Action 7; the P measures join the
   release-health catalogue (`dl-089-release-health-analyses-before-retrospective`, catalogue v2). Features P1.2, P1.7,
   P1.10 (audit trail, approval record, history), P1.13 and P4.13 (per-type state machines, deduced state), P4.1 (phase
-  `produces:`); no BDD scenario yet — the acceptance contract follows when the measure is implemented.
+  `produces:`). User story US-6-12 (`01_user_story_map/07_workflow-config.md`); BDD
+  `p1-memory/P1.2-versioning-audit-trail.feature`, the scenarios tagged REQ-STATE-10 (task-222); the measure itself is
+  the release-health measure script (`task-231`), P01–P07 of `docs/08_health/metrics.yaml`.

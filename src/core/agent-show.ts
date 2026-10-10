@@ -94,9 +94,10 @@ const FULL_SHA_RE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
  */
 function addingCommit(root: string, commit: string, logPath: string, record: RunRecord): CoreResult<string> {
   const needle = `{"id":${JSON.stringify(record.id)},`;
-  // The line's bytes as `commit` stores them — not a re-serialization, which differs from a valid line
-  // written with a `\u` escape or a CRLF ending (re-review R1). The reader has accepted that blob, so
-  // it holds exactly one line of this id (§4.5: ids are unique) and it opens with the needle.
+  // The line's bytes as `commit` stores them (re-review R1). Since bug-288 (task-228) the reader accepts
+  // only the writer's serialization, so they equal a re-serialization; they are still read as stored.
+  // The reader has accepted that blob, so it holds exactly one line of this id (§4.5: ids are unique)
+  // and it opens with the needle.
   const lines = (readPathAtRev(root, commit, logPath) ?? '').split('\n');
   const line = lines.find((candidate) => candidate.startsWith(needle));
   if (line === undefined) return coreErr({ code: 'IO', message: `run ${record.id}: its line is not in ${logPath} at ${commit}` });

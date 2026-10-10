@@ -285,6 +285,10 @@ export type Team = z.infer<typeof Team>;
  * `runs` is the sixth category (`spec-016-agent-execution` §4.1, task-138): the run log's directory.
  * Unlike the other five it holds **exactly one** entry, because `agent execute` writes each record to
  * `<runs>/<element-id>.jsonl` and two directories would make where a run is recorded ambiguous.
+ *
+ * `health` is the seventh (`dl-089-release-health-analyses-before-retrospective` §1 (A), task-222): the
+ * directory of the release-health catalogue (`metrics.yaml`) and of the reports the release-health
+ * workflow writes. It too holds exactly one entry, for the same reason.
  */
 export const Paths = z
   .object({
@@ -296,6 +300,10 @@ export const Paths = z
     runs: z
       .array(z.string())
       .length(1, { message: 'paths.runs holds exactly one directory, the run log (spec-016 §4.1)' })
+      .optional(),
+    health: z
+      .array(z.string())
+      .length(1, { message: 'paths.health holds exactly one directory, the release-health catalogue and reports (dl-089 §1)' })
       .optional(),
   })
   .passthrough();

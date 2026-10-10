@@ -416,7 +416,7 @@ describe("this repository's own workflows (characterization, spec-003 § Diagnos
     const liveRoot = join(__dirname, '..', '..');
     const retrospective = loadWorkflowsYaml(liveRoot).workflows.find((w) => w.name === 'retrospective');
     expect(retrospective?.phases.find((p) => p.name === 'explore')?.produces).toEqual([
-      'docs/06_retrospectives/rl-{release.release-line}/rel-{release.version}-friction-inventory.md',
+      'docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-friction-inventory.md',
     ]);
   });
 });

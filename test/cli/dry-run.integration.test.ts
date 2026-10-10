@@ -125,8 +125,8 @@ interface Row {
   /**
    * `agent execute` (task-218): its commit records a run, so it follows the agent's exit and cannot be
    * planned as bytes. Its dry run runs every pre-launch check and prints the launch plan — the record
-   * commit's subject and path, without `message` or `diff` (spec-008 §2) — and its real run, until
-   * task-228 adds the launch, stops before the spawn and commits nothing.
+   * commit's subject and path, without `message` or `diff` (spec-008 §2) — and its real run launches
+   * the fake agent and makes the planned commit (task-228).
    */
   readonly launch?: true;
 }
@@ -216,10 +216,14 @@ describe('--dry-run on every mutating operation of the registry (task-210, dl-10
     if (row.launch === true) {
       expect(plan.subject).toMatch(/^agent: record task-001-submit-me\/adhoc\/1$/);
       expect(plan.paths).toEqual(['docs/runs/task-001-submit-me.jsonl']);
+      // The real run launches the fake and makes the planned commit (task-228): its subject and paths.
+      const launchedFrom = gitOut(repo, ['rev-parse', 'HEAD']);
       const real = wingfoil(repo, [...row.args, '--format', 'json']);
-      expect(real.status).toBe(1);
+      expect(real.status).toBe(0);
       expect(real.stdout).toBe('');
-      assertPersistenceUnchanged(repo, before, 'agent execute stopped before the spawn');
+      expect(gitOut(repo, ['rev-parse', 'HEAD~1'])).toBe(launchedFrom);
+      expect(gitOut(repo, ['log', '-1', '--format=%s'])).toBe(plan.subject);
+      expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD']).split('\n')).toEqual(plan.paths);
       return;
     }
     expect(typeof plan.diff).toBe('string');
