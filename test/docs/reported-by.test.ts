@@ -309,3 +309,30 @@ describe('AC 2: every `reported_by:` entry cites a note in a registered inbox (t
     expect(reportedByProblems(documents, { declaringTypes: new Set(declaringTypesAtHead()), services })).toEqual([]);
   });
 });
+
+describe('AC 3 (characterization): COLLABORATION.md `## Credit` states the contributor / reported_by: split once (task-271)', () => {
+  /** The `## Credit` section, whitespace-normalized so a phrase wrapped over two lines still matches. */
+  function credit(): string {
+    const text = readFileSync(join(REPO_ROOT, 'COLLABORATION.md'), 'utf-8');
+    const section = text.split(/^## /m).find((part) => part.startsWith('Credit')) ?? '';
+    return section.replace(/\s+/g, ' ');
+  }
+
+  it.each([
+    ['contributor says who', '`contributor:` says **who**'],
+    ['reported_by: says where', '`reported_by:` says **where** it was reported'],
+    ['the entry format', '`<service id>/F-<nnn>@<sha>`'],
+    ['a GitHub issue uses contributor plus its URL', 'the issue URL in `credit:`'],
+    ['reported_by: is only for registered inboxes', 'that field is only for notes filed in a registered consumer repository\'s inbox'],
+    ['feature requests go as change-proposal through vision-change', 'is filed as a `change-proposal` through `vision-change`'],
+    ['keeping the field through memory amend is a review rule', '**Review rule: `reported_by:` survives an amendment.**'],
+  ])('%s', (_label, phrase) => {
+    expect(credit()).toContain(phrase);
+  });
+
+  it('the rule is stated once: no other section of COLLABORATION.md names `reported_by:`', () => {
+    const text = readFileSync(join(REPO_ROOT, 'COLLABORATION.md'), 'utf-8');
+    const outside = text.split(/^## /m).filter((part) => !part.startsWith('Credit'));
+    expect(outside.filter((part) => part.includes(REPORTED_BY))).toEqual([]);
+  });
+});
