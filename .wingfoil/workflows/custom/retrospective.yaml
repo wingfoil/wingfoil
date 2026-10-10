@@ -6,7 +6,7 @@ description: >-
   Close the release loop: EXPLORE the release's Execution Notes for friction, let the approver add
   points, capture what went well / what to improve as Memory, and feed adjustments into the next
   release planning.
-version: 1.5                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175); 1.3 dl-104 Action 2 (task-199): approve declares the Memory transition it stands for, explore's agent.mine_execution_notes becomes agent.execute (dl-090 Q6); 1.4 dl-115 Q1 (A) + Q3 (x), dl-163 (task-213): explore reads the ### Retrospective subsections first and lists every secondary source it was given; additional-points gains a checks.pre that every proposal and every consumer feedback note has one outcome (four, six for a consumer feedback note); 1.5 dl-089 §1 (task-222): explore reads the release-health report, additional-points presents its proposals, capture writes the retro's ## Release health section; the friction inventory moves to docs/09_retrospectives/ (bug-299)
+version: 1.6                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175); 1.3 dl-104 Action 2 (task-199): approve declares the Memory transition it stands for, explore's agent.mine_execution_notes becomes agent.execute (dl-090 Q6); 1.4 dl-115 Q1 (A) + Q3 (x), dl-163 (task-213): explore reads the ### Retrospective subsections first and lists every secondary source it was given; additional-points gains a checks.pre that every proposal and every consumer feedback note has one outcome (four, six for a consumer feedback note); 1.5 dl-089 §1 (task-222): explore reads the release-health report, additional-points presents its proposals, capture writes the retro's ## Release health section; the friction inventory moves to docs/09_retrospectives/ (bug-299); 1.6 dl-163 S3d (task-272): a read-only collect-feedback phase between explore and additional-points reads the registered consumer inboxes and writes a read record the approver rules on, capture records the ruling
 element: release
 
 phases:
@@ -19,14 +19,16 @@ phases:
       tooling gaps, inter-task dependency friction. Then read every secondary source the phase is
       given — any input written outside the release's own Memory documents: the notes kept during the
       release for the next planning, points the approver hands over, a report or record another phase
-      produced (a consumer feedback triage record, dl-163), and always the release-health report
+      produced, and always the release-health report
       `docs/08_health/release-health-{release.version}.md` that release-cycle's `release-health` phase
       wrote before this one (dl-089 §1): its comparison is read as measurement, and each of its
       `RH-{release.version}-NN` proposals is carried as a proposal. The inventory lists each secondary source
       it was given, with the commit or sha read, and carries each item of a source that is a proposal
       as a proposal, never as a finding (dl-115 Q3 (x)): a proposal cannot emerge from mining the
-      repository. Read-only; produces a structured, source-cited friction inventory grouped by theme.
-      Parallelizable (cheap-model miners + synthesis).
+      repository. The consumer feedback read record (dl-163) is written after this phase, by
+      `collect-feedback`: it is not on this inventory's list, and is the other secondary source
+      additional-points reads. Read-only; produces a structured, source-cited friction inventory
+      grouped by theme. Parallelizable (cheap-model miners + synthesis).
     role: facilitator
     actions:
       - agent.execute                  # dl-090 Q6: the mining above, run under the facilitator's session prompt
@@ -38,10 +40,42 @@ phases:
       # dl-115 Q3 (x): no command asserts it yet (unbound, a warning in v0.3); the facilitator checks it.
       post: ["secondary-sources.listed(every secondary source the phase was given, with the commit or sha read, in the friction inventory)"]
 
+  - name: collect-feedback
+    description: >-
+      Read-only (dl-163 S3d). Reads the feedback inbox of every `active` service of kind `repository`
+      that declares a `feedback_inbox`, at the consumer's `main` — the remote, or a local checkout
+      recorded per machine outside this repository — and records the commit read for each. Lists the
+      notes in status `open`, the `needs-info` notes the consumer has since answered, the `captured`
+      notes whose elements shipped in this release, and the notes triaged outside the retrospective
+      into a patch (dl-163 R6), as that patch release's `## Scope changes` records them. The read record
+      has one row per note: its cite `<service id>/F-<nnn>@<sha>`, the commit read, the note's content
+      restated in WingFoil's words (a defect is reproduced in this repository before it becomes an
+      element, R2), and a proposed outcome among six — dl-115's four (covered | element | restated |
+      superseded) or declined | needs-info. The record lists every service read with the commit read,
+      and never holds a consumer's configuration, paths or prose. The phase adds or changes no Memory
+      element and never commits into a consumer repository (R3); no hold-out repository is a source
+      (R7). The approver rules on every row at additional-points.
+    role: facilitator
+    actions:
+      - agent.execute                  # dl-090 Q6: the read above, run under the facilitator's session prompt
+    produces:
+      # The read record, beside explore's friction inventory and outside every Memory path (dl-163 S3d;
+      # bug-299's numbering, task-222).
+      - "docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md"
+    checks:
+      # dl-163 S3d: no command asserts it yet (unbound, a warning in v0.3); the facilitator checks it.
+      post:
+        - >-
+          feedback-notes.recorded(every service read is listed with the commit read; one row per note,
+          with its cite <service id>/F-<nnn>@<sha>, the commit read, its content restated in WingFoil's
+          words and one proposed outcome among covered | element | restated | superseded | declined |
+          needs-info; no row holds a consumer's configuration, paths or prose)
+
   - name: additional-points
     description: >-
-      Approver gate: present the friction inventory + the identified improvement themes, and the
-      release-health report's comparison table and its RH proposals (dl-089 §4); the approver
+      Approver gate: present the friction inventory + the identified improvement themes, the
+      release-health report's comparison table and its RH proposals (dl-089 §4), and the consumer
+      feedback read record `collect-feedback` wrote (dl-163 S3d); the approver
       adds any further points to analyze (and, if a point implies a config/process change, a DL is
       spun off in capture). Before the gate, every item that is a proposal, and every consumer
       feedback note, has exactly one outcome (dl-115 Q3 (x), dl-163 S3d; the check below). A review
@@ -67,7 +101,10 @@ phases:
   - name: capture
     description: >-
       Record retrospective learnings as a Memory decision-log. Its `## Release health` section holds the
-      release-health comparison table and the disposition of every RH proposal (dl-089 §1).
+      release-health comparison table and the disposition of every RH proposal (dl-089 §1). For every
+      consumer feedback note ruled at additional-points, the decision, the elements and the target
+      release go into its Dispositions (or a `## Consumer feedback` section), and this phase runs the
+      ingests the ruling names (dl-163 S3d).
     role: facilitator
     actions:
       - 'memory.add(type: decision-log, title: "Retrospective {release.version}")'
