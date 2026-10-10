@@ -10,6 +10,7 @@ feature: "P5.2.1"            # optional — related feature ID, e.g. "P1.6"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
 tmpl_version: 261006   # Orignal template version
+tags: ["pinned-build"]
 ---
 
 ## Summary
