@@ -193,6 +193,9 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'wingfoil://memory/search',
       'wingfoil://paths',
       'wingfoil://workflow/list',
+      // task-216's `workflow.workflowNext` (read-only): the mechanical test-only Resource; the production
+      // `wingfoil://workflows/-/next` is task-239's (spec-017 §9).
+      'wingfoil://workflow/next',
       // task-204's `workflow.workflowShow` (read-only); not served by the production server (spec-017 §9).
       'wingfoil://workflow/show',
     ]);
