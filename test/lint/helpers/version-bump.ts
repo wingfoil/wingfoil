@@ -3,9 +3,14 @@
  * `test/lint/version-bump.test.ts`. Not a `.test.ts` file, so jest never collects it as a suite.
  *
  * The pending change is the working tree (staged or not) against `HEAD`. A file whose bytes differ
- * from `HEAD` must declare a top-level `version:` that differs, as YAML reads it, from the one at
- * `HEAD` — unless `HEAD` already carries a bump over the file's version at its fork point from
- * {@link TRUNK_BRANCH}: the bump baseline is `main`, so a branch bumps a file once (doc-versioning).
+ * from `HEAD` must declare a top-level `version:` numerically greater, as YAML reads it, than the one
+ * at `HEAD` (`isVersionIncrease`, `src/validation`, shared with `scripts/check-governance.cjs`'s range
+ * rule; task-208, `bug-249`: a downgrade or a re-quoting is no bump) — unless `HEAD` already carries a
+ * bump over the file's version at its fork point from {@link TRUNK_BRANCH}: the bump baseline is
+ * `main`, so a branch bumps a file once (doc-versioning).
+ *
+ * This judges the PENDING change only; what was committed is judged over a pushed range by the
+ * governance check's `config` rule (`--base`, task-208), which `governance.yml` runs in CI.
  *
  * "Differs" is git's verdict (`git diff HEAD`), so eol conversion is honoured. The relaxation trusts
  * the LOCAL `refs/heads/main`: a stale local `main` (one that predates the file's last bump on the
@@ -18,6 +23,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { load } from 'js-yaml';
+
+import { isVersionIncrease } from '../../../src/validation';
 
 /** The config files that declare a `version:` the doc-versioning bump rule applies to, in report order. */
 export const VERSIONED_CONFIG_FILES: readonly string[] = [
@@ -73,7 +80,7 @@ function workingText(root: string, path: string): string | null {
   }
 }
 
-type VersionRead = { readonly version: string | null } | { readonly error: string };
+type VersionRead = { readonly version: string | null; readonly value: unknown } | { readonly error: string };
 
 /** The top-level `version:` as YAML reads it (so `1.10` reads as `1.1`), or the parse error. */
 function readVersion(text: string): VersionRead {
@@ -83,9 +90,9 @@ function readVersion(text: string): VersionRead {
   } catch (error) {
     return { error: (error as Error).message.split('\n')[0] as string };
   }
-  if (document === null || typeof document !== 'object' || Array.isArray(document)) return { version: null };
+  if (document === null || typeof document !== 'object' || Array.isArray(document)) return { version: null, value: null };
   const version = (document as Record<string, unknown>).version;
-  return { version: version === undefined || version === null ? null : String(version) };
+  return { version: version === undefined || version === null ? null : String(version), value: version ?? null };
 }
 
 /** The top-level `version:` token as written (`1.0`, not YAML's `1`), for the message only. */
@@ -94,11 +101,11 @@ function writtenVersion(text: string): string | null {
   return match === null ? null : (match[1] as string);
 }
 
-/** The version a text declares, or `null` when it declares none or does not parse. */
-function versionOrNull(text: string | null): string | null {
+/** The `version:` value a text declares as YAML reads it, or `null` when it declares none or does not parse. */
+function versionValueOrNull(text: string | null): unknown {
   if (text === null) return null;
   const read = readVersion(text);
-  return 'version' in read ? read.version : null;
+  return 'version' in read ? read.value : null;
 }
 
 /** The commit where `HEAD` left {@link TRUNK_BRANCH}, or `null` when there is no such branch. */
@@ -126,14 +133,20 @@ export function checkPendingVersionBumps(root: string): VersionBumpFinding[] {
       findings.push({ path, reason: 'content differs from HEAD but declares no top-level version:' });
       continue;
     }
-    const headVersion = versionOrNull(head);
-    if (read.version !== headVersion) continue;
-
-    if (forkPoint === undefined) forkPoint = trunkForkPoint(root);
-    if (forkPoint !== null && versionOrNull(textAt(root, forkPoint, path)) !== headVersion) continue;
+    const headValue = versionValueOrNull(head);
+    if (isVersionIncrease(headValue, read.value)) continue;
 
     const written = writtenVersion(working) ?? read.version;
-    const headWritten = writtenVersion(head) ?? headVersion;
+    const headWritten = writtenVersion(head) ?? String(headValue);
+    if (read.version !== (headValue === null ? null : String(headValue))) {
+      // A change that is no increase: a downgrade, or a value that does not read as a greater number.
+      findings.push({ path, reason: `content differs from HEAD but version: ${written} is not greater than HEAD's ${headWritten}` });
+      continue;
+    }
+
+    if (forkPoint === undefined) forkPoint = trunkForkPoint(root);
+    if (forkPoint !== null && isVersionIncrease(versionValueOrNull(textAt(root, forkPoint, path)), headValue)) continue;
+
     findings.push({
       path,
       reason:
