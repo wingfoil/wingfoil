@@ -49,6 +49,13 @@ export interface CommitOptions {
    * rewritten") that a plan only intends ("would be rewritten"). Absent, a dry run carries `warnings`.
    */
   readonly plannedWarnings?: readonly string[];
+  /**
+   * Trailer lines (`Key: value`) the commit records in its final paragraph, before the build signature
+   * ({@link stampedMessage}), so git reads them as trailers (`%(trailers)`) — a paragraph of their own in
+   * `message` would not be the final one. `memory add --workflow` writes its linkage this way (task-227,
+   * `spec-017` §4.8). Absent or empty, the message is exactly what it was before.
+   */
+  readonly trailers?: readonly string[];
 }
 
 /** The environment git runs with: `process.env`, with {@link CommitOptions.env} merged over it. */
@@ -86,7 +93,9 @@ function gitReadOptions(options: CommitOptions, accepted: readonly number[]): Gi
 
 /**
  * `message` with the build signature appended as a trailer paragraph of its own (task-192, `dl-111`):
- * a blank line, then `WingFoil-Version: <semver> (<sha>)` ({@link readBuildStamp}).
+ * a blank line, then `WingFoil-Version: <semver> (<sha>)` ({@link readBuildStamp}). The caller's
+ * {@link CommitOptions.trailers}, when given, open that paragraph, the signature staying its last line
+ * (task-227).
  *
  * A separate final paragraph, never a line merged into the caller's body: git reads trailers from the
  * message's final paragraph only, and so does `parseReasonBlock` (`src/memory/commit-message.ts`),
@@ -95,8 +104,8 @@ function gitReadOptions(options: CommitOptions, accepted: readonly number[]): Gi
  * turn the whole body into the trailer block and cut a multi-line reason short. The caller's message
  * is trimmed of trailing whitespace first, which `--cleanup=whitespace` would drop anyway.
  */
-function stampedMessage(message: string): string {
-  return `${message.replace(/\s+$/, '')}\n\n${formatVersionTrailer(readBuildStamp())}`;
+function stampedMessage(message: string, trailers: readonly string[] = []): string {
+  return `${message.replace(/\s+$/, '')}\n\n${[...trailers, formatVersionTrailer(readBuildStamp())].join('\n')}`;
 }
 
 /**
@@ -153,7 +162,7 @@ function commitPathsNow(root: string, paths: readonly string[], message: string,
   // runs collapsed, a `#` line kept — is the tool's, whatever `commit.cleanup` the operator's or the
   // repository's git config sets. Unpinned, `strip` deleted a reason line opening with `#` and
   // `verbatim` kept what `dl-067` clause 3 declares removed.
-  quietGit(root, ['commit', '--only', '--quiet', '--cleanup=whitespace', '-m', stampedMessage(message), '--', ...paths], commitOptions);
+  quietGit(root, ['commit', '--only', '--quiet', '--cleanup=whitespace', '-m', stampedMessage(message, options.trailers), '--', ...paths], commitOptions);
   return runGit(root, ['rev-parse', 'HEAD'], options).trim();
 }
 
@@ -222,7 +231,7 @@ export function writeAndCommit(root: string, changes: readonly PathChange[], mes
       {
         dryRun: true,
         subject: (/^.*/.exec(message) as RegExpExecArray)[0],
-        message: stampedMessage(message),
+        message: stampedMessage(message, options.trailers),
         paths: sorted.map((change) => change.relative),
         diff: sorted.map((change) => planDiff(root, change.relative, change.content, gitEnv(options))).join(''),
       },
