@@ -1,16 +1,16 @@
 /**
- * `wingfoil agent execute` `CoreOperation.fn` (task-218, task-228, `spec-016` §3; P5.3.1, P5.3.2,
- * P5.4.2–P5.4.4): the stepless form, `--element <type>:<id>` with an optional `--role` and `--agent`. It
- * parses the request (§3.3 step 1), runs `src/agent/execute.ts`'s pipeline up to the spawn (steps 2–12),
- * and then:
+ * `wingfoil agent execute` `CoreOperation.fn` (task-218, task-228, task-235, `spec-016` §3; P5.3.1, P5.3.2,
+ * P5.4.2–P5.4.4): the stepless form, `--element <type>:<id>` with an optional `--role` and `--agent`, and the
+ * step forms `--next`, `--workflow <ref>`, `--step <key>` (§3.1; either option implies `--next`), which take
+ * the workflow, phase, element and role from a frontier step (`src/agent/step.ts`). It parses the request
+ * (§3.3 step 1), runs `src/agent/execute.ts`'s pipeline up to the spawn (steps 2–12), and then:
  * - under `--dry-run` (`spec-008` §2) returns the launch it would make — the record commit's subject and
  *   run-log path, the run's fields known before the spawn, and the §2.4 bootstrap — having written
  *   nothing;
  * - otherwise launches the agent (`src/agent/launch.ts`, steps 13–18) and returns the recorded run,
  *   which the CLI prints on stderr only ({@link renderAgentExecuteStderr}, §3.4).
  *
- * The step forms (`--next`, `--workflow`, `--step`) are task-235's: until then they are not registered,
- * so Commander refuses them as unknown options (exit `2`), as it refuses v0.4's `--resume` and `--ref`.
+ * v0.4's `--resume` and `--ref` are not registered, so Commander refuses them as unknown options (exit `2`).
  */
 import { agentExecutePipeline, launchPlan, type AgentExecuteHost, type AgentLaunchPlan } from '../agent/execute';
 import { launchAgent, runSummaryLine, type RecordedLaunch } from '../agent/launch';
@@ -21,9 +21,11 @@ import type { CoreFn, StderrReport } from './registry';
 import { coreOk } from './types';
 import { UsageError } from './usage-error';
 
-/** `agent execute` params: the value options (`spec-008` §1) ride `options`. */
+/** `agent execute` params: the value options (`spec-008` §1) ride `options`, the `--next` flag `next`. */
 export interface AgentExecuteParams {
   readonly root: string;
+  /** `--next` (task-235): take the step from the active instance, or from the one `--workflow` selects. */
+  readonly next?: boolean;
   readonly options?: Readonly<Record<string, string | readonly string[] | undefined>>;
   /**
    * The host facts the pipeline reads (the MCP server to pre-flight, the terminal test, `PATH`), for an
@@ -43,15 +45,19 @@ function single(value: string | readonly string[] | undefined): string | undefin
 
 /**
  * Parse, check the project is initialized, run the pipeline, then plan (dry run) or launch. A usage
- * error (no target, a malformed element-ref, `spec-008` §7) is thrown as `UsageError` before the project
- * is read.
+ * error (none of `--next`, `--workflow`, `--step`, `--element`; a malformed element-ref, `spec-008` §7) is
+ * thrown as `UsageError` before the project is read.
  */
 export const agentExecuteFn: CoreFn<unknown, AgentLaunchPlan | RecordedLaunch> = async (params) => {
-  const { root, options, host } = params as AgentExecuteParams;
+  const { root, options, host, next } = params as AgentExecuteParams;
   const elementOption = single(options?.element);
-  if (elementOption === undefined) throw new UsageError(AGENT_EXECUTE_MISSING_TARGET);
-  const element = parseElementRef(elementOption);
-  if (!element.ok) throw new UsageError(element.error.message);
+  const workflow = single(options?.workflow);
+  const key = single(options?.step);
+  // `--workflow` and `--step` imply `--next` (§3.1); giving `--next` as well changes nothing.
+  const stepForm = next === true || workflow !== undefined || key !== undefined;
+  if (elementOption === undefined && !stepForm) throw new UsageError(AGENT_EXECUTE_MISSING_TARGET);
+  const element = elementOption === undefined ? undefined : parseElementRef(elementOption);
+  if (element !== undefined && !element.ok) throw new UsageError(element.error.message);
 
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
@@ -60,7 +66,12 @@ export const agentExecuteFn: CoreFn<unknown, AgentLaunchPlan | RecordedLaunch> =
   const launchHost = host ?? {};
   return agentExecutePipeline<AgentLaunchPlan | RecordedLaunch>(
     root,
-    { element: element.value, role: single(options?.role), agent: single(options?.agent) },
+    {
+      ...(element === undefined ? {} : { element: element.value }),
+      ...(stepForm ? { step: { ...(workflow === undefined ? {} : { workflow }), ...(key === undefined ? {} : { key }) } } : {}),
+      role: single(options?.role),
+      agent: single(options?.agent),
+    },
     launchHost,
     async (prepared, releaseSignals) => (dryRun ? coreOk(launchPlan(prepared)) : launchAgent(root, prepared, launchHost, releaseSignals)),
   );
