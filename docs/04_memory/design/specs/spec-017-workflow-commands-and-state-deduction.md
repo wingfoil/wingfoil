@@ -360,6 +360,10 @@ Three things are found there.
   before `fallback.step` keep their evidence, and `produces` evidence is not affected. This is how the
   fallback step becomes current after a reject (§5.2): after `dev-loop.review` is rejected, `start`
   and `design` stay complete, `red` needs a new record, and `review`'s `state` needs a new `submit`.
+  A `park` whose `<from>` is no gate state a phase holds (a task's `in-progress` in `dev-loop`)
+  reaches no phase's cutoff: the element's state alone decides, and the first phase whose `state`
+  evidence the returned state no longer meets (`dev-loop`'s `start`) is current again. A `park` whose
+  `<from>` is a held gate re-enters at that phase's `fallback.step`, like a reject.
   **Newer** means *descends from*: a commit is newer than the re-entry commit when the re-entry commit
   is a strict ancestor of it, decided through the parent links the walk reads. Neither the commit date
   nor the position in `--topo-order` decides it. A record made on a branch that had not seen the reject
@@ -487,9 +491,25 @@ and not on the instance's first (approver ruling R16, 2026-09-30, `release-plann
 `awaits.evidence` are listed with their binding and `evaluated: false`; an unbound check is reported
 `unbound`, never passed (`dl-090` Q2 (c)). Nothing is executed.
 
+A printed `wingfoil` argv is a whole command: what only the user can give is a placeholder — `<id>` for a
+target not known yet, `--title <title>` on `memory add`, `--reason <reason>` on `approve` / `reject`.
+
+The expected subject of a `manual` Memory action (`spec-003` § "Action expressions") names its targets (§4.2):
+`<from>` is the bound element's status at `HEAD` until an earlier action of the phase moves it, and the
+state that action leaves it in after; another target's `<from>` is its status. Targets that share a type,
+a verb and a bracket make one commit and one subject, `wf(<type>): <verb> <id1>, <id2> […]`; otherwise
+`expectedCommit` holds one subject per line. A target not known yet (an element not created, a selection
+that matches nothing) is written `<id>`, its state `<from>`, and its type `<type>` when the action does
+not name it. A `<T>.sync_state(for_each: <S>.<field>)` moves each element the field names to the state of
+the same name as `<S>`'s at that action, or, when `<S>` is in its type's last state, to `<T>`'s last state;
+its bracket chains the states it passes forward (`[in-review → resolved → closed]`), and an element
+already there needs no commit. The aggregate rule of `dev-loop`'s header (a bug moves once all its tasks
+have) is not applied in v0.3: the subject is the one this task's progress implies.
+
 **6.2 Role and directives** (P4.4, P3.6, REQ-STATE-05). The step reports its `role`, the members who
 hold it (§5.1 ordering), and the role's directives resolved by `spec-012` §5 (`resolveRoleDirectives`,
 `src/core/context.ts:159`): ids and titles, role-bound and global, plus that resolution's warnings.
+The warnings are the step's `directiveWarnings`.
 Directive content is not inlined; it is `agent execute`'s (`spec-012` §7). A phase references
 directives only through its role (`dl-066` option 1).
 
@@ -565,7 +585,13 @@ keeps the steps whose role the named party holds: `me` is the git identity's ema
 (P4.4 sc. 2). The first step of the result is **the next step** — the one `agent execute --next`
 consumes; the rest are reported as further ready steps. Exit `0` in every deduced case: with no open
 instance it prints `no open workflows`; with an empty frontier,
-`no next step: workflow '<name>' is complete` (P4.4 sc. 3).
+`no next step: workflow '<name>' is complete` (P4.4 sc. 3). An abandoned instance (§4.11) says
+`no next step: workflow '<name>' is abandoned: its element <type>:<id> is <status>`, one whose workflow the
+registry does not load `no next step: workflow '<name>' is not loaded`, and a filter that keeps no step
+`no next step of workflow '<name>' is assigned to '<who>'`; each has `complete: false`. `me` matches
+emails case-insensitively; a `<who>` that names no member is read as a role name, and one that is neither
+a member's name or email nor a `team.roles` role (or `me` when the identity's email is no member's) is
+reported as a warning.
 
 **7.4 `status`** (P4.5, REQ-INT-05). Every open instance (or the one `<ref>` selects), active first
 and marked, each with its top-level phase progress (`complete` | `current` | `pending` | `skipped`),
@@ -660,7 +686,7 @@ interface ActionView {
   token: string; text: string; unresolved: string[];
   target: "bound" | "selection" | "created" | "run" | "none";
   binding: { kind: "wingfoil" | "run" | "agent" | "manual" | "unbound";
-             argv?: string[]; expectedCommit?: string };
+             argv?: string[]; expectedCommit?: string };   // one subject per line (§6.1)
 }
 interface CheckView { token: string; binding: ActionView["binding"]; evaluated: false }
 type Awaiting =
@@ -671,7 +697,7 @@ type EvidenceKind = "state" | "created" | "produces" | "selection" | "include" |
 interface Step {
   key: string; instance: string; trail: TrailEntry[]; workflow: string; phase: string;
   scope: ScopeRef | null; role: string | null; agentRole: boolean; members: Member[];
-  directives: { id: string; title: string }[];
+  directives: { id: string; title: string }[]; directiveWarnings: string[];
   actions: ActionView[]; checks: { pre: CheckView[]; post: CheckView[] };
   produces: { pattern: string; owner: string | null; resolved: string[]; exists: boolean; evidence: boolean }[];  // evidence: false for an implicit-owner entry (shown, §4.3) and a created-owned one
   created: ElementRef[];
@@ -680,7 +706,7 @@ interface Step {
   fallback: { step: string; setState: string | null } | null;
   reentered: boolean; reentryCommit: string | null;
   mode: "fresh"; allowedModes: ("fresh" | "resume" | "reference")[]; distinctFrom: string[];
-  cadence: unknown | null;
+  cadence: { recurring: unknown; lastRun: "not-recorded" } | null;   // null: `once` (§6.4)
 }
 interface NextResult { baseline: Baseline; instance: Instance | null; complete: boolean;
                        next: Step | null; more: Step[]; message?: string; diagnostics: Diagnostic[] }
@@ -847,12 +873,12 @@ list --format json` with the pinned build 0.2.2 loads the same 23 workflows and 
 - *Self-creating instances:* `sw-life-cycle` (`release-line`), `bug-ingest`, `decision-log-ingest`,
   `adr-ingest`, `service-ingest` bind the element their creating phase creates, so their capture,
   approve and triage phases deduce from it and each instance can end.
-- *Checkpoints:* 28 phases declare no evidence and complete by `workflow finalize`: the 11 phases of
+- *Checkpoints:* 27 phases declare no evidence and complete by `workflow finalize`: the 11 phases of
   `user-story-mapping`, `specification-by-examples`, `volere-requirements` and `backlog-export`;
   `release-planning.advance-pinned-build`; `dev-loop.red|green|refactor`;
-  `user-docs.check-implementation-complete`; the four `e2e-smoke` phases;
-  `release-submit.pre-release-checks|approve-release`; `release-publishing.tag|publish`;
-  `retrospective.additional-points|approve`; `end-of-life.deprecate|archive`. So a `sw-life-cycle`
+  `user-docs.check-implementation-complete`; `e2e-smoke.fresh-init|drive-cli|mcp-registration`;
+  `release-submit.pre-release-checks|approve-release`; `release-publishing.release-commit|tag|publish`;
+  `retrospective.additional-points|approve`; `end-of-life.archive`. So a `sw-life-cycle`
   instance passes `specification` only by finalizing those 11 steps, and `dev-loop` passes
   `red`/`green`/`refactor` by one `finalize` each.
 - *Approvals recorded by `finalize` with approver authority* (no element carried, §5.1): 7 phases,
@@ -1137,3 +1163,26 @@ read `run` where they read `command`, as `spec-003` Layer 3 and the code say), s
 phase's evidence kinds follow §4.3 as deduction applies them and that `list` and `show` carry the deduction's
 diagnostics; §7.5 states the `executableNow` rule `list` applies. No command, rule or diagnostic changes. Edited in place without a supersede or a state change
 (`dl-047`); pending the approver's `memory amend` at `task-204`'s review.
+
+**Revision (2026-10-10, `task-216-add-workflow-next-naming-next-step-verb-role`) — `next`'s step view
+completed.** Implementing `workflow next` needed readings §4.8 and §6–§8 left open. §8's `Step` gains
+`directiveWarnings` (the warnings §6.2 already reports), its `cadence` takes the shape §6.4 describes
+(`{ recurring, lastRun: "not-recorded" }`, `null` for `once`), and `expectedCommit` may hold one subject
+per line; §6.1 states how a `manual` action's subject names its targets and its `<from>`, and the
+`sync_state` target-state rule; §7.3 gives the messages of an abandoned instance, an instance whose workflow
+is not loaded and a filter that keeps no step, the warning of an `--assigned-to` that names nobody, and
+§6.1 the placeholders of a printed `wingfoil` argv (`<id>`, `--title <title>`, `--reason <reason>`); §4.8 says
+what a `park` re-enters when its `<from>` is no held gate (the W3 B3 handover). No
+command, deduction rule or diagnostic changes. Edited in place without a supersede or a state change
+(`dl-047`); pending the approver's `memory amend` at `task-216`'s review.
+
+**Revision (2026-10-10, `task-219-define-release-candidate-staging-rehearsal-phase-recut-reentry`) — §12's
+checkpoint list re-measured.** `task-219` (`dl-099` §1–§2) moved the release commit out of
+`release-publishing.tag` into a phase of its own, `release-commit`, which declares no evidence, and added
+`staging-rehearsal`, which produces its transcript and so is no checkpoint. The list now names
+`release-commit`. It also drops what earlier changes had already made evidence-bearing and the list still
+named: `end-of-life.deprecate`, which selects what it deprecates since the 2026-10-07 ruling, and
+`e2e-smoke.gate`, which produces its report since `task-207` (`bug-134`). The count is 27, the list
+`test/core/workflow-repository-conformance.test.ts` pins at `task-219`'s branch. No rule, command or
+diagnostic changes. Edited in place without a supersede or a state change (`dl-047`); pending the
+approver's `memory amend` at `task-219`'s review.

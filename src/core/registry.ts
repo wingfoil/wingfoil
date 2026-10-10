@@ -195,6 +195,22 @@ export interface CoreOperation<P = unknown, R = unknown> {
    * `yaml` never use it, and the MCP surface never calls it. Pure: the same value renders the same text.
    */
   readonly renderConsole?: (value: R) => string;
+  /**
+   * For a command that hands its stdout to a child process (`agent execute`, `spec-016` §3.4, task-228):
+   * the report its success prints **on stderr**, with nothing on stdout (`spec-005` §2). `document` is
+   * the `json`/`yaml` message (`{ "run": <record> }`), `console` the line `console` prints. `undefined`
+   * for a value that is an ordinary stdout payload (the `--dry-run` launch plan). The MCP surface never
+   * calls it.
+   */
+  readonly renderToStderr?: (value: R) => StderrReport | undefined;
+}
+
+/** A success report written on stderr instead of a stdout payload ({@link CoreOperation.renderToStderr}). */
+export interface StderrReport {
+  /** The `json`/`yaml` message: one document. */
+  readonly document: Readonly<Record<string, unknown>>;
+  /** The `console` line, without its newline. */
+  readonly console: string;
 }
 
 /** One pillar's operation group (spec-006 §2) — a `name` (the `wingfoil <noun>` segment) and its operations. */

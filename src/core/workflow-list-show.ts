@@ -30,7 +30,6 @@ import { coreErr, coreOk, type CoreResult } from './types';
 import { isImplicitOwnerProduces } from './workflow-diagnostics';
 import { readDeductionSnapshotAtHead } from './workflow-deduction';
 import { iterationStartState, workflowExitStates, type ExitStart } from './workflow-exit-state';
-import { loadWorkflowRegistryAtRev } from './workflow-registry';
 
 /** `ListResult.message` when `HEAD` holds no manifest (BDD P4.6 sc. 4; `spec-003` Layer 1). */
 export const NO_WORKFLOWS_DEFINED = 'no workflows defined';
@@ -353,8 +352,8 @@ export function showWorkflow(inputs: ShowInputs, deduction: Deduction, ref: stri
 }
 
 /**
- * `workflow show <ref>` at `HEAD` (`spec-017` §7.6): the deduction snapshot, then `bindings.yaml`,
- * `roles.yaml` and the directive files at the snapshot's commit.
+ * `workflow show <ref>` at `HEAD` (`spec-017` §7.6): the deduction snapshot (which carries `bindings.yaml`),
+ * then `roles.yaml` and the directive files at the snapshot's commit.
  *
  * @throws `DiagnosticsError` (`VALIDATION`) when the registry at `HEAD` has a `spec-003` error; a
  *   `ValidationError` for an invalid `roles.yaml` or directive file at `HEAD`; `StorageError` when git
@@ -368,7 +367,8 @@ export function workflowShowAtHead(root: string, ref: string): CoreResult<ShowRe
     workflows: snapshot.workflows,
     workflowFiles: snapshot.workflowFiles,
     memoryYaml: snapshot.memoryYaml,
-    bindings: committed && snapshot.workflows.length > 0 ? loadWorkflowRegistryAtRev(root, snapshot.commit).bindings : null,
+    // The registry the snapshot loaded carries `bindings.yaml`: one registry load per call (task-216).
+    bindings: snapshot.bindings ?? null,
     rolesYaml: committed ? loadRolesYamlAtRev(root, snapshot.commit) : null,
     directiveFiles: committed ? loadDirectivesAtRev(root, snapshot.commit) : [],
   };

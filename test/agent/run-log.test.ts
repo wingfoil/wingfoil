@@ -41,6 +41,9 @@ const ELEMENT = `task:${ELEMENT_ID}`;
 const LOG = `docs/runs/${ELEMENT_ID}.jsonl`;
 const SHA = 'a'.repeat(40);
 
+/** The §4.2 key 16 defect (bug-288: an exit code is 0–255). */
+const EXIT_STATUS_DEFECT = "'exit_status' must be an integer from 0 to 255 or \"signal:<NAME>\"";
+
 /** A complete, valid record; `overrides` replaces whole fields. */
 function record(overrides: Partial<RunRecord> = {}): RunRecord {
   return {
@@ -280,8 +283,11 @@ describe('strict reader (spec-016 §4.5)', () => {
     ['tokens', 'not-reported', "'tokens' must be an object"],
     ['duration_ms', 1.5, "'duration_ms' must be a non-negative integer"],
     ['duration_ms', -1, "'duration_ms' must be a non-negative integer"],
-    ['exit_status', 'oops', "'exit_status' must be an integer or \"signal:<NAME>\""],
-    ['exit_status', 1.5, "'exit_status' must be an integer or \"signal:<NAME>\""],
+    ['exit_status', 'oops', EXIT_STATUS_DEFECT],
+    ['exit_status', 1.5, EXIT_STATUS_DEFECT],
+    // bug-288: a process exit code is 0–255; a negative or larger integer is no exit code.
+    ['exit_status', -1, EXIT_STATUS_DEFECT],
+    ['exit_status', 256, EXIT_STATUS_DEFECT],
   ])('refuses a wrong type: %s = %j', (key, value, detail) => {
     expect(refusal(`${JSON.stringify({ ...asObject(), [key]: value })}\n`)).toEqual(invalid(1, detail));
   });
@@ -688,6 +694,46 @@ describe('the strict reader and writer agree', () => {
       commitAll(repo, 'init');
       expect(recordRun(repo, LOG, hookless).ok).toBe(true);
       expect(readRunLogAt(repo, 'HEAD', LOG)).toEqual({ ok: true, value: [hookless] });
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+});
+
+describe('bug-288 — the run log holds exactly the writer\'s form (spec-016 §4.2, §4.5)', () => {
+  const NOT_SERIALIZED = 'not in the serialized form of spec-016 §4.2 (a CR, whitespace outside a string, or another spelling of a value)';
+  const refused = (text: string): string | undefined => {
+    const result = parseRunLog(text, LOG);
+    return result.ok ? undefined : result.error.message;
+  };
+
+  it('the writer refuses a negative exit status and one above 255; 0 and 255 are written', () => {
+    expect(() => serializeRunRecord(record({ exit_status: -1 }))).toThrow(EXIT_STATUS_DEFECT);
+    expect(() => serializeRunRecord(record({ exit_status: 256 }))).toThrow(EXIT_STATUS_DEFECT);
+    expect(serializeRunRecord(record({ exit_status: 255 }))).toContain('"exit_status":255,');
+  });
+
+  it('the reader refuses a CRLF line', () => {
+    expect(refused(`${line()}\r\n`)).toBe(`run log ${LOG}: line 1 is not a valid run record: ${NOT_SERIALIZED}`);
+  });
+
+  it('the reader refuses whitespace inside or around the object', () => {
+    expect(refused(`${line().replace('{"id"', '{ "id"')}\n`)).toBe(`run log ${LOG}: line 1 is not a valid run record: ${NOT_SERIALIZED}`);
+    expect(refused(`${line()}  \n`)).toBe(`run log ${LOG}: line 1 is not a valid run record: ${NOT_SERIALIZED}`);
+    expect(refused(`${line()}\n ${line({ id: `${ELEMENT_ID}/design/2` })}\n`)).toBe(`run log ${LOG}: line 2 is not a valid run record: ${NOT_SERIALIZED}`);
+  });
+
+  it('whitespace inside a string value is content, and reads back', () => {
+    const spaced = record({ role: 'a role with spaces' });
+    expect(parseRunLog(serializeRunRecord(spaced), LOG)).toEqual({ ok: true, value: [spaced] });
+  });
+
+  it('an absolute paths.runs outside the root is refused naming the configured target, not a ../ climb', () => {
+    const repo = makeTempGitRepo();
+    try {
+      const result = resolveRunLogPath(repo, ['/etc'], 'task-001');
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.message).toMatch(/^cannot write '\/etc\/task-001\.jsonl': it resolves to '\/etc\/task-001\.jsonl', outside the project root/);
     } finally {
       removeTempDir(repo);
     }

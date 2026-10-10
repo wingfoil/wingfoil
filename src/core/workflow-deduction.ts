@@ -373,6 +373,8 @@ function emptySnapshot(): DeductionSnapshot {
     parents: new Map(),
     dirty: [],
     collections: new Map(),
+    bindings: null,
+    dnaYaml: null,
   };
 }
 
@@ -420,6 +422,8 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
     parents,
     dirty: readDirty(root, memoryYaml, dnaYaml, registry.workflows),
     collections: readCollections(registry.workflows, dnaYaml, registry.bindings),
+    bindings: registry.bindings,
+    dnaYaml,
   };
 }
 

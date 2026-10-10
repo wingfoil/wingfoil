@@ -1,7 +1,7 @@
 # SARD — Part 4: Integrations & Interfaces
 
 **ID prefix:** `REQ-INT-*`
-**Derivation:** explicit and implicit communication protocols in the BDD suite (CLI, MCP, git, Agent SDK).
+**Derivation:** explicit and implicit communication protocols in the BDD suite (CLI, MCP, git, agent CLI).
 
 ---
 
@@ -69,15 +69,24 @@
   `git.merge` conflict aborts the merge leaving the working tree clean and marks the step `failed`.
 * **Traceability:** Feature P4.10 (US-0A-20, BDD `p4-workflow/P4.10-workflow-steps.feature`).
 
-### REQ-INT-07 — Agent execution wrapper (Agent SDK + MCP)
+### REQ-INT-07 — Agent execution wrapper (agent CLI + MCP)
 
-* **Description:** `wingfoil agent execute` wraps the AI Agent SDK, resolving role/element from the workflow step and
-  pre-loading context via MCP.
-* **Rationale:** Single command bridges workflow → agent with context.
-* **Fit Criterion:** `agent execute --next` resolves role and element from the active step and pre-loads
-  DNA/Memory/Directives via MCP before the agent starts; explicit `--element type:id` overrides the resolved element.
-* **Traceability:** Feature P5.3.1 (US-1-03, BDD `p5-interaction/P5.3.1-agent-execute.feature`); Feature P5.3.2
-  (US-2-07, BDD `p5-interaction/P5.3.2-agent-role-selection.feature`).
+* **Description:** `wingfoil agent execute` launches the agent's own command-line program through a
+  declared per-agent adapter, resolving role and element from the workflow step, registering the
+  `wingfoil` MCP server for the launched process, and recording the run and its execution mode
+  (`dl-135` Action 3). WingFoil holds no model credential and calls no model API.
+* **Rationale:** A single command bridges workflow → agent with context, for any agent that can
+  take an initial prompt and register an MCP server (North Star: different AI agents).
+* **Fit Criterion:** `agent execute --next` resolves role and element from the active step,
+  assembles and validates the execution context, and verifies that the `wingfoil` MCP server answers,
+  all before the agent process starts; explicit `--element type:id` overrides the resolved element;
+  the launched process receives only the argument vector its adapter declares; every spawned run
+  appends one run record, holding the execution mode that ran, or, when the record cannot be
+  committed, prints it on stderr (`spec-016` §4.3–§4.4); a test using a fake adapter asserts all
+  four without launching a real agent and without a terminal.
+* **Traceability:** Feature P5.3.1 (US-1-03, BDD `p5-interaction/P5.3.1-agent-execute.feature`);
+  Feature P5.3.2 (US-2-07, BDD `p5-interaction/P5.3.2-agent-role-selection.feature`);
+  `adr-004`; `adr-012`; `dl-114`; `dl-135`.
 
 ### REQ-INT-08 — Consistent CLI error format
 

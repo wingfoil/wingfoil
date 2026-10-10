@@ -478,10 +478,18 @@ export function loadWorkflowsYaml(root: string): WorkflowsLoadResult {
 export function loadWorkflowsYamlAtRev(root: string, rev: string): WorkflowsLoadResult {
   const sha = resolveRevision(root, rev);
   const committedPath = (file: string): string => posix.normalize(`.wingfoil/${file}`);
+  // The included files and `bindings.yaml`, read in one `cat-file --batch` once the manifest names them
+  // (task-216, REQ-PERF-03: one spawn instead of one per workflow file).
+  const fetched = new Map<string, string | null>();
   return loadWorkflowsFrom({
     read: (file) => {
+      if (fetched.has(file)) return fetched.get(file)!;
       const [raw = null] = readPathsAtRev(root, sha, [committedPath(file)]);
       return raw;
+    },
+    prefetch: (files) => {
+      const answers = readPathsAtRev(root, sha, files.map(committedPath));
+      files.forEach((file, index) => fetched.set(file, answers[index] ?? null));
     },
     label: (file) => `${rev}:${committedPath(file)}`,
   });
@@ -494,6 +502,8 @@ export function loadWorkflowsYamlAtRev(root: string, rev: string): WorkflowsLoad
  */
 interface WorkflowSource {
   read(file: string): string | null;
+  /** Read `files` ahead, in one batch, for the `read` calls that follow (absent: each `read` reads on its own). */
+  prefetch?(files: readonly string[]): void;
   label(file: string): string;
 }
 
@@ -517,6 +527,7 @@ function loadWorkflowsFrom(source: WorkflowSource): WorkflowsLoadResult {
   if (!manifestResult.success) throw new DiagnosticsError(zodDiagnostics(manifestResult.error.issues, WORKFLOWS_MANIFEST_FILE));
   emitUnknownFieldWarning(manifestData.data as Record<string, unknown>, WorkflowsYaml as unknown as HasShape, manifestPath);
   const manifest = manifestResult.data;
+  source.prefetch?.([...manifest.include, BINDINGS_FILE]);
 
   const manifestDiagnostics: Diagnostic[] = [];
   const files: LoadedWorkflowFile[] = [];
