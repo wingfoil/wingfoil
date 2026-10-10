@@ -77,6 +77,31 @@ Part (b), the generated export, is v0.4 (`dl-137` Q3) and is not in scope.
     `command`: any agent-facing text that describes `workflow next`/`show` bindings uses `run`.
   - `bug-302` (`triaged`, v0.3) lists the agent-doc passages that still call `workflow list` the only workflow
     command.
+- **Handover from wave 3 B4 (2026-10-10, W3 B4 follow-ups, `bug-ingest-rel-v0.3-w3b4-review-findings-plan`; the
+  `align-agent-docs` items left by `task-212`, `task-222`, `task-269`, `task-270` and their reviews).** Measured on
+  `main` at `02800955`.
+  - `CLAUDE.md` §2 still lacks `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md` (the W3 B3 bullet above;
+    `grep -c "CONTRIBUTING\|CODE_OF_CONDUCT\|SECURITY" CLAUDE.md` → `0`, while `ls` lists all three at the root).
+  - `CLAUDE.md` §3 says the Memory verbs run on the pinned build (`npm run -s wingfoil -- memory <verb>`); since
+    `task-270` the `wingfoil-cli` directive (§1, `dl-163` S3e) runs every Memory operation on the code build (`npm run
+    build`, then `node dist/cli.js …`) and only the reads and MCP on the pinned build.
+  - `CLAUDE.md` §5's type table lists nine types; `change-proposal` (`task-212`, `memory.yaml` 2.7) is the tenth
+    (`grep -c change-proposal CLAUDE.md` → `0`), and `service` gained kind `repository` with `feedback_inbox`
+    (`task-269`, 2.8).
+  - `CLAUDE.md` §6: the startable mains are six, with `vision-change` (`node dist/cli.js workflow list --format json`,
+    the `startable` names → `adr-ingest, bug-ingest, decision-log-ingest, service-ingest, sw-life-cycle,
+    vision-change`; `grep -c vision-change CLAUDE.md` → `0`), and the §3 table row still says "four ingest mains".
+    `release-health` is already in §6's `release-cycle` chain (`task-222` edited it: `sed -n 380,381p CLAUDE.md`).
+  - `CLAUDE.md` §7's global row lacks `wingfoil-cli`, bound globally by `task-270` (`roles.yaml` 1.6; `grep -c
+    wingfoil-cli CLAUDE.md` → `0`). If `task-276` (B5) binds `traceability` to `tech-lead`, §7's `tech-lead` row
+    follows it.
+  - `.wingfoil/README.md` lines 21–31 (at `02800955`) say the pinned build is `wingfoil@0.2.1` with no `memory add
+    --set`, and that the verbs run through it: the pin is 0.2.2 (`npm run -s wingfoil -- --version` → `0.2.2`) and the
+    Memory verbs run on the code build (`wingfoil-cli` §1).
+  - `docs/agents.md` (aligned with the approver's confirmation, `CLAUDE.md` §2): its §7 "Following a workflow (no engine
+    in 0.2.2)" and §9 "Known limits in 0.2.2" describe the 0.2.2 surface; `workflow show`/`next`, `memory amend`/`park`,
+    the `change-proposal` type and `agent execute` shipped in v0.3 (`grep -c "workflow next\|memory amend\|agent
+    execute" docs/agents.md` → `0`). `bug-302` covers the "`workflow list` is the only workflow command" passages.
 
 ## Execution Notes
 
