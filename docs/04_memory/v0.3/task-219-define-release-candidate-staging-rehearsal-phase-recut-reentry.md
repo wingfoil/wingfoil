@@ -150,10 +150,35 @@ to it; the batch notes reserve anything that publishes for the approver.
   (`grep -rn "tag phase" test SECURITY.md docs/user-guide.md CONTRIBUTING.md`) → only `community-health.test.ts`,
   fixed.
 
+### review fixes (2026-10-10, independent review: approve with fixes)
+
+Red `04a2b9c6` (`npx jest test/cli/test-no-identity.test.ts test/cli/staging-rehearsal.test.ts
+test/cli/e2e-smoke-candidate.test.ts` → 8 failed, 19 passed); green `78f6954f`; `c1627619` widens one new
+regex that stopped at the dot in `e2e-smoke.cjs` (a test defect, not a behaviour change).
+1. `noIdentityEnv` also drops `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`,
+   `GIT_CONFIG_VALUE_<n>` (the reviewer's probe resolved `user.email` through both), and `GIT_CONFIG_GLOBAL`
+   names a throwaway file with `user.useConfigOnly = true` (outside the empty `HOME`), so no commit passes
+   on an auto-detected identity. Tests: one per channel, and a commit in a fresh repository refused.
+2. `tag`: its description and the action's comment say `on: main` names the branch; the commit tagged is the
+   one `staging-rehearsal-passed` prints.
+3. D3 written down in `release-cycle.yaml`, `WORKFLOW.md` and the spec-015 note: the release commit does not
+   re-cut; on the first candidate the rehearsal's smoke stands as its e2e-smoke run. "Both checks run on it"
+   removed (`grep -n "Both checks" .wingfoil/WORKFLOW.md .wingfoil/workflows/custom/*.yaml` → nothing).
+4. spec-017 §12's checkpoint list: pending amendment below.
+5. `scripts/e2e-smoke.cjs`: an error after the run (e.g. an unwritable report) is `error: <msg>` at exit 2,
+   cleanup still in `finally`; `node scripts/e2e-smoke.cjs --report /dev/null/x.md -- /nonexistent` → exit 2,
+   `error: EEXIST: file already exists, mkdir '/dev/null'`.
+
+Gates on `c1627619`: the task suites (`npx jest` over the 8 suites this task touched) 147/147; `npm run lint`
+and `npm run typecheck` exit 0; `node scripts/check-governance.cjs --base b56e8721` 0 findings;
+`npm run test:no-identity` (now with `useConfigOnly`) **322 suites / 6083 tests, all passed** (load 41–44).
+
 ### Pending amendments (approver)
 
 - `spec-015-packaging-publishing` (§3 paragraph + Revision 2026-10-09):
-  `--reason "task-219 (dl-099 §1-§2): §3 states the staging rehearsal's place in the release - the staging-rehearsal phase runs publish:staging on the release candidate with --expect-commit and --transcript, --check-transcript is its check, and a re-cut candidate re-enters both checks. Revision note added."`
+  `--reason "task-219 (dl-099 §1-§2): §3 states the staging rehearsal's place in the release - the staging-rehearsal phase runs publish:staging on the release candidate with --expect-commit and --transcript, --check-transcript is its check and prints the commit tagged, the release commit does not re-cut the candidate (the rehearsal's smoke stands as its first e2e-smoke run), and a re-cut candidate re-enters both checks. Revision note added."`
+- `spec-017-workflow-commands-and-state-deduction` (§12 *Checkpoints* + Revision 2026-10-10; record after 216's and 222's):
+  `--reason "task-219: §12's checkpoint list re-measured - release-publishing.release-commit is a new checkpoint, and end-of-life.deprecate and e2e-smoke.gate, evidence-bearing since earlier changes, leave the list; 27 phases, as the conformance test pins. Revision note added."`
 - `dl-023-init-cli-e2e-smoke-gate` (the 2026-10-09 note's last sentence):
   `--reason "task-219: the 2026-10-09 note named the staging rehearsal and the candidate re-entry as task-219's with its backlog status; it now names what task-219 delivers, so the note does not go stale with the task's state."`
 
