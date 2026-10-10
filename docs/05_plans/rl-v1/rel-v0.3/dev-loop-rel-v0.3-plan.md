@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.24"
+version: "1.25"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -203,7 +203,7 @@ and the tasks that unblock the most later work first (`task-194` → 37 later ta
 | **B2** | 264, 199, 198, 200, 261, 220, 223, 260 | `199` the only writer of `workflows.yaml`, first `bindings.yaml`; `223` of `memory.yaml` (if the approver confirms its branch patterns); `260` of `git-conventions.md`; `264` (added at the B1 triage) first, `199` keeps its check green; `261` → `220` (`00_index.md`) |
 | **B3** | 203, 202, 204, 207, 218, 213, 205, 214, 268 | `203` → `202` (deduction modules); `204` → `207` (`scripts/e2e-smoke.cjs`); `205` the only writer of `roles.yaml`, `testing.md` |
 | **B4** | 216, 228, 219, 222, 221, 212, 197, 208, 269, 270 | `222` → `221` (`bindings.yaml`); `219`, `222`, `212` (`WORKFLOW.md`); `222` writes `dna.yaml`, `212` `memory.yaml` and `workflows.yaml`, `197` `traceability.md`, `208` `code-review.md`, `git-conventions.md` |
-| **B5** | 225, 217, 226, 227, 235, 229, 231, 224, 271, 272 | `217` the only writer of `memory.yaml`; `229` first of three writers of `publish.yml` |
+| **B5** | 225, 217, 226, 227, 235, 229, 231, 224, 271, 272, 274, 275, 276, 277, 278 | `217` and `275` both write `memory.yaml` (second re-bumps); `229` first of three writers of `publish.yml`; `276` the only writer of `git-conventions.md`, `code-review.md`, `roles.yaml`; `278` (`bug-308`) before branch protection |
 | **B6** | 211, 240, 239, 238, 232, 233, 230 | `232` → `233` (`scripts/release-health/`); `230` the only writer of `memory.yaml`; `238` after `229` |
 | **B7** | 215, 236, 237, 243, 244, 241, 234 | `236` the only writer of `dna.yaml`; `244` last on `publish.yml` |
 | **B8** | 242, 245, 246 | `245` (`X_cli-cmds.md`) after every command task |
@@ -908,3 +908,36 @@ commit, right after the task's transition and on the task branch:
   - **Follow-ups:** to be filed through a `bug-ingest` plan after the approver's triage.
   - **Consumer inboxes ready for `task-269`:** WingFoil-Templates (`53090c29`) and WingFoil-UI (`1d9348d0`,
     private); Benchmark not started.
+- **2026-10-10 — batch B4 `done`** (`task-216`, `228`, `219`, `197`, `208`, `222`, `221`, `212`, `269`, `270`).
+  - **Review.** Every task had an independent review, all "approve with fixes", every fix applied in-task; focused
+    re-review for `228`. Defects found by review and fixed: `228`'s signal race at the spawn (a SIGTERM there lost the
+    run and orphaned the agent; 55 re-runs clean after the fix); `219`'s no-identity environment leaked an identity
+    through `GIT_CONFIG_PARAMETERS`/`GIT_CONFIG_COUNT`; `212`'s vision-index checker missed seven kinds of drift; `216`
+    printed commands that fail (`memory submit` with no id) and named an unknown workflow "not open"; `222` redefined
+    G07/G15 without a trace; `208`'s review showed `d818c0dd` is a false positive of the older state rule (`bug-308`).
+  - **Approver rulings (2026-10-09/10):** `bug-307` absorbed by `task-208`; `219` D2 (evidence-only commits do not
+    re-cut the candidate, `dl-099` note); `212` decision 4 (`define-scope` sweeps scheduled change-proposals,
+    `task-277`); `222` G07 keeps `team.members` (`dl-169`); `216` in-process REQ-PERF-03 check suffices for v0.3, idle
+    bound half the cores; stop-the-line excludes `deprecated` (`task-275`); git-conventions/code-review/roles alignment
+    (`task-276`); branch protection waits for `task-278` (`bug-308`); WingFoil2-Benchmark registered as a consumer
+    service; wingfoil-best-agent left out.
+  - **Amendments: 33** — `216`: spec-017, spec-006, spec-008; `228`: spec-016, spec-008, spec-005; `219`: spec-015,
+    spec-017, dl-023; `222`: spec-002, spec-017, task-272, task-241; `221`: this plan (1.24); `212`: spec-001, spec-003,
+    spec-004, spec-010, spec-011, spec-017; `269`: dl-088; `270`: spec-013, bug-087, bug-162, bug-292 (`pinned-build`
+    tags). `197` and `208` had none.
+  - **Bugs closed:** bug-186, bug-192, bug-218, bug-249, bug-270, bug-288, bug-299, bug-307.
+  - **Merges,** in order 216 → 228 → 219 → 197 → 208 → 222 → 221 → 212 → 269 → 270 (197 and 208, independent of the
+    workflow files, ahead of 222 while its conflicts were resolved; last `02800955`). Every task merged `main` first.
+    Conflicts: spec Revision notes (both kept, date order), `bindings.yaml` (→ 1.6), `workflows.yaml` (→ 1.5),
+    `release-cycle.yaml` (→ 1.4), `memory.yaml` (→ 2.8), `WORKFLOW.md`, `.wingfoil/README.md` and the conformance test
+    (26 workflows, 29 checkpoints). `task-208`'s five governance rules take effect from its merge `b9591e08`.
+  - **Gates on `main`** (`02800955`): `test:coverage` 347 suites, 6471 tests, coverage 99.29 / 97.04 / 97.74 / 99.69;
+    lint, `docs:api`, `npm run typecheck`, `check:audit` exit 0; e2e smoke 53 ok (`-- node "$PWD/dist/cli.js"`);
+    `lint:claims` advisory. Governance `--base b56e8721`: 92 `wf()` commits, 0 findings. **`test:latency` taken idle**
+    (load 2.98 → 2.76): 13 tests passed, `workflow next` p95 468 ms — the latency owed since B1.
+  - **Follow-ups** (`bug-ingest-rel-v0.3-w3b4-review-findings-plan`, `done`): `task-275`..`278` (B5), `bug-308`
+    (planned, `task-278`), `bug-309`..`313` v0.3, `bug-314`..`324` v0.4, `dl-166`..`169` (in-discussion, v0.4), `cp-001`
+    (first change-proposal, `in-analysis`, for `dl-132` Action 5); handovers to `task-252`, `231`, `233`, `225`, `235`;
+    consumer services `svc-018` (WingFoil-Templates), `svc-019` (WingFoil-UI), `svc-020` (WingFoil2-Benchmark), all
+    `pending` until the approver runs `verify`.
+  - W3 is now 72 tasks (68 + `275`–`278`).
