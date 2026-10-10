@@ -214,11 +214,10 @@ Gates (pending amendments on disk):
   96.79 | 97.38 | 99.62** (`devloop-kit/task-228-scratch/cov4.log`, load 15–34). The base `b56e8721`,
   measured the same morning in a detached worktree of it → 319 suites, 6050 passed, **99.2 | 97.03 | 97.48 |
   99.67** (`devloop-kit/task-228-scratch/base-cov.log`). The gap (−0.06 | −0.24 | −0.10 | −0.05) is in
-  `src/agent` (98.07 → 96.66 functions, 93.08 → 91.52 branches): the signal listeners — the pre-spawn
-  cleanup (`execute.ts` 198–200) and the forwarding of `SIGTERM`/`SIGHUP` (`launch.ts` 146) — run only in a
-  spawned process (the CLI suite and `test/agent/execute.test.ts`'s signal cases assert them, coverage does
-  not measure them), plus the `win32` signal lists and a `code ?? 0` that Node never takes. Listed under
-  decisions.
+  `src/agent` (98.07 → 96.66 functions, 93.08 → 91.52 branches), mostly the signal listeners. **Corrected
+  at the review (below):** they are not "only reachable in a spawned process" — `process.emit(<signal>)`
+  with an injected child, and `jest.spyOn(process, 'kill')`, reach them in process; the review-fix tests
+  do, and the gap closes to branches only.
 - `npm run lint` 0; `npx tsc --noEmit -p tsconfig.json` 0; `npx tsc -p tsconfig.build.json --noEmit` 0;
   `npm run docs:api` 0; `node scripts/check-governance.cjs --base b56e8721` → 2 `wf()` commits, 0 findings.
 
@@ -256,8 +255,8 @@ Per AC, with the case that holds it:
   built-in adapters' `verified_with` pass is by hand (task-246's).
 
 **Pending amendments (approver)** — uncommitted in the worktree, proposed `--reason`s:
-- `spec-016-agent-execution`: "task-228: the launch half ships. Section 2.4's bootstrap gains the attribution line naming the signing entry (dl-117 Action 4, ruling R20 Q8, dl-158 Rule 1 (a)); section 2.6 fixes the assign namespace and states how a post-run lookup runs; section 3.3 gives step 11 one deadline, makes step 13's banner a notice, says how step 14 spawns, holds step 15's signal handling until the record is committed and removes the temporary files on a signal before the spawn; section 3.4 adds the notice document and the failed run's summary as a details line; section 3.7 adds the row for a command that cannot be started; section 4.1 states that path categories may nest; sections 4.2 and 4.5 bound exit_status to 0-255 and make each run-log line the writer's exact serialization (bug-288). The step 11 working-tree exception stays as declared while dl-165 is in discussion."
-- `spec-008-cli-grammar`: "task-228: section 12 carries agent execute's grammar from spec-016 section 3.1, the step forms marked unregistered before task-235, and the agent list and agent show rows; section 6 pins the launch's lookup warnings, says agent execute prints each distinct unknown-field warning once under a HEAD: label, and describes the notice and the stderr success report of a command whose stdout belongs to a child."
+- `spec-016-agent-execution`: "task-228: the launch half ships. Section 2.4's bootstrap gains the attribution line naming the signing entry, which tells the agent to add the trailers to a commit wingfoil writes with --amend --trailer (dl-117 Action 4, ruling R20 Q8, dl-158 Rule 1 (a), git-conventions section 8); section 2.6 fixes the assign namespace and states how a post-run lookup runs, at most 1 MiB of output included; section 3.3 gives step 11 one deadline, makes step 13's banner a notice, says how step 14 spawns, installs step 15's signal handling before the spawn and holds it until the record is committed, and removes the temporary files on a signal before the spawn; section 3.4 adds the notice document and the failed run's summary as a details line; section 3.7 adds the row for a command that cannot be started; section 4.1 states that path categories may nest; sections 4.2 and 4.5 bound exit_status to 0-255 and make each run-log line the writer's exact serialization (bug-288). The step 11 working-tree exception stays as declared while dl-165 is in discussion."
+- `spec-008-cli-grammar`: "task-228: section 12's preamble covers value options and rows declared before they are registered, and the table carries agent execute's grammar from spec-016 section 3.1, the step forms marked unregistered before task-235, and the agent list and agent show rows; section 6 pins the launch's lookup warnings, says agent execute prints each distinct unknown-field warning once under a HEAD: label, and describes the notice and the stderr success report of a command whose stdout belongs to a child."
 - `spec-005-cli-command-contract`: "task-228: section 2 gains spec-016 Q8's sentence: a command that hands its stdout to a child process writes no payload on stdout and puts its structured messages on stderr; agent execute is that command, and its dry-run plan stays on stdout."
 
 **Decisions for the approver.**
@@ -277,8 +276,9 @@ Per AC, with the case that holds it:
    two task-220 R1 cases (`agent show` attributed such lines); their tests now assert the refusal.
 7. The run log's confinement refusal is fixed by passing the configured spelling to the shared
    `requireConfinedTarget`; its text for the other writers is unchanged.
-8. **Coverage**: −0.24 branches against the base, all in signal handlers that only run in spawned processes
-   and in platform branches (refactor above). Not chased with in-process signals: one hung Jest.
+8. **Coverage**: after the review fixes, statements, functions and lines are at or above the base and
+   branches are −0.14 (96.89 against 97.03), in the `win32` signal lists, defensive `??` fallbacks and
+   task-218's pre-launch branches (review fixes below).
 9. `spec-008` §12 lists `--next`/`--workflow`/`--step` (task-235) and `agent list`'s flags (task-240) as
    not yet registered, per the AC's "full grammar"; no parity gate reads §12.
 
@@ -306,3 +306,40 @@ spec-016 is touched by no other B4 task.
 - A signal test belongs in a spawned process: the in-process one hung Jest for the whole timeout.
 - bug-288 rode along with a feature task; its strict reader changed another task's pinned behaviour (R1),
   which only the full suite showed (`cov.log` › `agent-show.test.ts`).
+
+### Review fixes (independent review: approve with fixes, 2026-10-10)
+
+Status stays `in-review`; no re-submit. Red `353baceb` (`npx jest test/agent/launch-process.test.ts
+test/agent/execute.test.ts` → 4 failed, 32 passed after a test defect was fixed: `mockRestore` clears a spy's
+calls, so the kill calls are now captured before it), fix `25a152d7`, `219af348` (lint), `fa91c731`.
+- **F1 — signal race at the spawn** (reviewer: a SIGTERM between the release of the pre-launch cleanup and
+  the spawn killed `agent execute` with no record and orphaned the agent). `takeOverSignals()` now installs
+  its four listeners **before** `releaseSignals()`; the forwarding handler holds a mutable child, and a
+  signal that arrives before it exists is remembered and sent on `attach`. `withRunFiles` installs its
+  listeners before `mkdtempSync` (and removes them if it throws). Tests (`test/agent/launch-process.test.ts`
+  › "signals around the spawn", `test/agent/execute.test.ts` › "withRunFiles — signals"): the launch
+  listeners are counted in place at `releaseSignals`; a `process.emit('SIGTERM')` from inside `spawn` is
+  forwarded to the injected child once it exists and the run is recorded as `signal:SIGTERM`; SIGINT and
+  SIGQUIT are ignored and SIGHUP forwarded; the cleanup listeners are in place when `mkdtempSync` runs; a
+  signal removes the directory and calls `process.kill(process.pid, <signal>)` (spied). My earlier note that
+  these handlers were reachable only in a spawned process was wrong (refactor section corrected).
+- **F2 — spec-008 §6** gains the two missing warnings (`version_args printed nothing`, the session id of the
+  wrong type) and the cause `printed more than 1 MiB`, which `runLookup` now gives for
+  `ERR_CHILD_PROCESS_STDIO_MAXBUFFER` instead of `could not start: …` (test: `flood.cjs` prints 1.1 MiB);
+  spec-016 §2.6 names the limit.
+- **F3 — spec-008 §12**'s preamble covers value options and rows declared but not yet registered.
+- **F4** — `requireConfinedTarget`'s `relativePath` doc says it also takes an absolute path; the attribution
+  line now reads `End every commit you write, except an approve or reject commit, with the trailer paragraph
+  "Co-Authored-By: <name> <<email>>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil
+  writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own
+  (git-conventions §7, §8).` (`bug-236`'s hazard), pinned in the unit, CLI and dry-run tests, in
+  `docs/cli-reference.md` and in the spec-016 amendment.
+- Two more branch tests (`fa91c731`): a committed run log the reader refuses is refused before the launch;
+  a type with no template gets the fallback handoff line.
+
+Gates (pending amendments on disk): `npm run test:coverage` → **323 suites, 6123 passed, 0 failed**, All
+files **99.24 | 96.89 | 97.57 | 99.67** (`devloop-kit/task-228-scratch/cov6.log`, load 10–13); before the
+fixes 99.14 | 96.79 | 97.38 | 99.62 (`cov4.log`); base `b56e8721` 99.2 | 97.03 | 97.48 | 99.67. Branches
+remain −0.14 (the `win32` lists in `launch.ts`/`execute.ts`, defensive `??` fallbacks, and task-218's
+pre-launch branches such as `process.stdin.isTTY`). `npm run lint` 0; both `tsc` 0; `npm run docs:api` 0;
+`node scripts/check-governance.cjs --base b56e8721` → 4 `wf()` commits, 0 findings.
