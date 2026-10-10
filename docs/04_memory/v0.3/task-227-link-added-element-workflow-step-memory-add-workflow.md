@@ -2,7 +2,7 @@
 id: "task-227-link-added-element-workflow-step-memory-add-workflow"
 type: task
 title: "Link an added element to its workflow step with `memory add --workflow <ref> [--step <key>]`"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "high"
