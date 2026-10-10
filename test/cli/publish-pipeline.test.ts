@@ -309,10 +309,12 @@ describe('release job (task-229) — the GitHub Release follows npm', () => {
   });
 
   it('authenticates gh with the job token on the create step alone; no other secret, no environment', () => {
-    const create = step('gh release create');
+    const job = release();
+    const create = job?.steps.find((s) => s.run?.includes('gh release create'));
     expect(create?.env).toEqual({ GH_TOKEN: '${{ github.token }}' });
-    expect(release()?.environment).toBeUndefined();
-    const others = (release()?.steps ?? []).filter((s) => s !== create);
+    expect(job?.environment).toBeUndefined();
+    // One parse: `release()` re-reads the file, so identity holds only within `job`.
+    const others = (job?.steps ?? []).filter((s) => s !== create);
     for (const s of others) expect(s.env).toBeUndefined();
     expect(JSON.stringify(release())).not.toContain('secrets.');
   });
