@@ -365,7 +365,7 @@ describe('withRunFiles — signals (review fix 1)', () => {
     const kill = jest.spyOn(process, 'kill').mockImplementation(() => true);
     let dir = '';
     let existedAfterSignal = true;
-    let calls: unknown[][] = [];
+    let calls: unknown[][] | undefined;
     try {
       await withRunFiles({ bootstrap_file: 'x' }, async (paths) => {
         dir = dirname(paths.bootstrap_file!);
