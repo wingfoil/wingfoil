@@ -84,7 +84,7 @@ describe('task-216 — wingfoil workflow next on the compiled CLI', () => {
     expect(run.stdout).toContain('scope: release:minor-1 (in-development)');
     expect(run.stdout).toContain('role: developer — held by Alex');
     expect(run.stdout).toContain('directives: testing');
-    expect(run.stdout).toContain('- element.set_state(released) [manual: expects wf(release): start minor-1 [in-development → released]]');
+    expect(run.stdout).toContain('- element.set_state(released) [manual: expects wf(release): finalize minor-1 [in-development → released]]');
   });
 
   it('--format json parses, with next and the baseline', () => {
