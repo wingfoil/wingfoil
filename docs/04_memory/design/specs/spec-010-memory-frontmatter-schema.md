@@ -20,7 +20,7 @@ Without a single shared base-field definition, every consumer that reads Memory 
 (the state-derivation logic behind REQ-STATE-01/REQ-STATE-02, `wingfoil memory show`/`search`,
 the context loader in `spec-012-context-loader-relevance-filtering`, and any future Zod validator
 per `spec-009-validation-strategy`) would have to re-derive which fields are common to every
-type (`release-line, release, task, adr, decision-log, tech-spec, bug`, then `plan` and `service`)
+type (`release-line, release, task, adr, decision-log, tech-spec, bug`, then `plan`, `service` and `change-proposal`)
 versus which are
 type-specific, and would disagree on where audit history and version bookkeeping live.
 
@@ -51,8 +51,8 @@ A `.md` file under a Memory `path` pattern without a `type` key matching a regis
 | Field          | Type    | Required | Set by                                    | Description / constraints                                                                                                                                                   |
 |----------------|---------|----------|--------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `id`           | string  | yes      | `memory.add` (from the type's `id_pattern`) | Placeholder `"{auto}"` in the raw scaffold before `memory.add` resolves it; thereafter the generated id (e.g. `task-042-implement-cli-grammar`, `adr-004-...`, `rl-v1`). Must match the file stem (`{id}.md`) and the type's `id_pattern` in `memory.yaml`. |
-| `type`         | string  | yes      | `memory.add` (fixed by the scaffold used)  | Must be a key registered in `memory.yaml` `types:` (`release-line, release, task, adr, decision-log, tech-spec, bug, plan, service`; `spec-001`).                                                |
-| `title`        | string  | yes      | `memory.add` (if the add action sets it) or `memory.submit` | Human-readable title. Empty in the freshly added `draft` scaffold; **must** be filled before `memory.submit` moves the document past `draft` — every type lists `title` in its `template.frontmatter.required` (verified against all seven templates when written; `plan` and `service` list it too). |
+| `type`         | string  | yes      | `memory.add` (fixed by the scaffold used)  | Must be a key registered in `memory.yaml` `types:` (`release-line, release, task, adr, decision-log, tech-spec, bug, plan, service, change-proposal`; `spec-001`).                                                |
+| `title`        | string  | yes      | `memory.add` (if the add action sets it) or `memory.submit` | Human-readable title. Empty in the freshly added `draft` scaffold; **must** be filled before `memory.submit` moves the document past `draft` — every type lists `title` in its `template.frontmatter.required` (verified against all seven templates when written; `plan`, `service` and `change-proposal` list it too). |
 | `status`       | string  | yes      | every state transition (`memory.add`/`submit`/`approve`/`reject`/`deprecate`/`park`) | Current lifecycle state. The declared rule: `memory.add` sets it to the head of the type's machine — its own `states.sequence`, or `defaults.states.sequence` (the built-in default machine when the file declares no `defaults`) for a type with no machine of its own; `draft` for every type currently declared; thereafter must be a state of that type's machine (`spec-001`). This is the **only** state carrier — REQ-STATE-01/02: no separate `.wingfoil/state/` index; state is recomputed by reading `status` at a given git commit. |
 | `tmpl_version` | integer | yes      | `memory.add` (copied from the scaffold)    | The originating template scaffold's build stamp, `YYMMDD` as an integer (e.g. `260703`). Fixed at creation and **not** touched again by WingFoil — it identifies which revision of `.wingfoil/memory/templates/{type}.md` produced this file, for detecting documents scaffolded from a stale template. It is not a per-write counter (see "No document-version counter" below). |
 | `rejection_reason` | string | no (optional) | `memory.reject` (set); `memory.submit` (cleared) | Absent until the document's first `memory.reject`. Set to the exact `--reason` text passed to `wingfoil memory reject` at the same time `status` moves to the type's `gates.<state>.reject` target (`spec-001`). The next `memory.submit` on this document clears it (removes the key from frontmatter) as part of moving `status` forward again — it reflects only the **most recent** reject, not a history. Its presence is therefore itself a signal: a document carrying `rejection_reason` was submitted at least once (had real content) and sent back, distinguishing it from a document still in its first, never-submitted `draft`. This is a convenience mirror of the `Reason:` trailer that `memory.reject`'s commit body already carries (P1.7/REQ-SEC-04) — the commit body remains the authoritative audit-trail record; see "No document-version counter" below for why this does not reopen the door to a fuller in-frontmatter audit trail. |
@@ -308,3 +308,12 @@ which the submit commits. The paragraph and the `memory.add` ownership row now s
 `tmpl_version` among the fields `add` may change), and the `memory.submit` ownership row says which of its fields the verb writes and which ride in from the
 author, declared in the commit body (`spec-008` §2). The rows now describe what the code does; no behaviour changes. Edited in place without a
 supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-209`'s review.
+
+**Revision (2026-10-09, `task-212-add-change-proposal-memory-type-startable-vision-change`) — the
+`change-proposal` type.** `memory.yaml` 2.7 declares a tenth type (`dl-132` Q1 (a)), so the Context's
+list and the `type` and `title` rows name it. Its scaffold, `.wingfoil/memory/templates/change-proposal.md`
+(`tmpl_version: 261009`), carries the five base fields, requires `title` and `kind`, and uses `release`
+in the one meaning every element shares (the release its change is assigned to, stamped by the
+`vision-change` workflow's `schedule` step), keeping the proposer's request apart as `target_release`.
+No field, rule or ownership row changes. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend` at `task-212`'s review.
