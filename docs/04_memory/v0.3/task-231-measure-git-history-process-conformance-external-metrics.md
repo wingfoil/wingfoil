@@ -32,6 +32,23 @@ tmpl_version: 260703
 - **Features:** P4.1.
 - **Notes:** Proposal key: D15.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
+- **Handover from wave 3 B4 (2026-10-10, `task-222`'s independent review; W3 B4 follow-ups,
+  `bug-ingest-rel-v0.3-w3b4-review-findings-plan`).** This task is the first consumer of the catalogue `task-222`
+  wrote (`docs/08_health/metrics.yaml` version 2, validator `scripts/release-health/catalogue.cjs`), and the
+  review found gaps in both:
+  - **Validator gaps** in `catalogue.cjs` (each passes today and should be refused, with a rule test per case): a
+    `floor` metric with `floor: null`; a `redefined` or `retired` id that names no metric; `added` given as a string
+    instead of a list; a `direction` value outside the declared set on an `info` metric. Fix them before measuring,
+    since the measure reads these fields.
+  - **REQ-STATE-10's BDD is partial.** `P1.2-versioning-audit-trail.feature` has two scenarios under the comment
+    "REQ-STATE-10 (US-6-12, task-222)" ("Process conformance names every failing item", "… byte-identical on a
+    rerun"); both exercise check kind 1 (a malformed `wf()` commit). Kinds 2–5 of the fit criterion
+    (`03_state-context.md`, REQ-STATE-10: legal transitions, `produces:` present, traceability links, actor per
+    role) need a `Scenario Outline` with one example per kind, and the reviewer asked for an `@REQ-STATE-10` tag on
+    them: the requirement is named in a comment only, and no feature file uses Gherkin tags yet (`grep -rln '^ *@'
+    docs/02_requirements/02_bdd/features` → nothing, while `grep -rn "Scenario Outline"` over the same folder finds
+    `P4.5` and `P4.18`), so the tag would be the first; keep the comment convention if a tag is not wanted. Kind 6 (two runs from one base) is the byte-identity scenario's neighbour and stays as it is unless the
+    measure needs it.
 
 ## Execution Notes
 
