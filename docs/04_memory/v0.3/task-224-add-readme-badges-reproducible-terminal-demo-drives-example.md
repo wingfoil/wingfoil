@@ -129,3 +129,23 @@ The README shows nothing of what WingFoil does. The demo is a self-check: if the
 - No pending amendments: no Memory element other than this task file is edited.
 - Same class as `bug-295` (a `produces:` path that exists from the instance's start): the tape and the GIF will
   join README.md & co. once committed; already tracked there, nothing new filed.
+
+### Approver ruling (2026-10-10) — `demo.rendered` is manual
+
+- Rulings on the review's decisions (1) and (2): the approver installs VHS and renders the GIF himself (nothing is
+  downloaded by this session); `demo.rendered` becomes a manual check. A check binding has no `manual` form
+  (`src/workflow/bindings.ts` `CheckBinding` requires `run`; spec-003 Layer 3 table: `manual` is an
+  `ActionBinding` field only), so the `vhs` binding is removed and the check stays an unbound token, as the
+  other deliberately unbound checks are. `bindings.yaml` stays 1.7 (one bump per branch), header reason updated.
+- red `3c1e7204`: `npx jest test/docs/presentation.test.ts test/core/workflow-repository-conformance.test.ts` →
+  **5 failed / 30 passed**: no binding expected for `demo.rendered`, the check's line in `user-docs.yaml` links
+  `docs/assets/README.md`, the note's content (Charm apt repository, `apt install … vhs ttyd ffmpeg`, the render
+  command from the repository root, `git diff --stat`, `npx jest test/docs/presentation.test.ts`), the
+  conformance list gains `["user-docs", "phases[1].checks.post[2]", "demo.rendered"]` — plus the known GIF failure.
+- green `0d0af0c7` and the `WORKFLOW.md` node (`demo.rendered (manual)`): `npx jest test/docs/presentation.test.ts
+  test/core/workflow-repository-conformance.test.ts test/lint/version-bump.test.ts test/docs/workflow-md.test.ts
+  test/core/workflow-core-checks.test.ts` → **100 passed / 1 failed** (the GIF only). Unbound-token warnings:
+  `node dist/cli.js workflow list --format json | grep -o W_WORKFLOW_UNBOUND_TOKEN | wc -l` → **78** (77 + `demo.rendered`).
+- `npm run lint` exit 0, `npx tsc --noEmit -p tsconfig.json` exit 0 after the change.
+- Next: the approver renders the GIF in this worktree per `docs/assets/README.md` § "Regenerating the demo GIF";
+  then the GIF is committed, the full suite re-run, and the task submitted.
