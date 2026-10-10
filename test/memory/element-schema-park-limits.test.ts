@@ -1,5 +1,5 @@
 /**
- * P1.13 scenarios 5–9 (task-205, `bug-250` handover) — the user-visible contract of a machine's declared
+ * P1.13 scenarios 5–11. Scenarios 5–9 (task-205, `bug-250` handover) — the user-visible contract of a machine's declared
  * `returns` edge (`memory park`) and per-state `limits` (`dl-110` P1 (a), P3 (a), delivered by task-180),
  * as `docs/02_requirements/02_bdd/features/p1-memory/P1.13-memory-element-schema.feature` words it.
  *
@@ -8,9 +8,8 @@
  * path of `requireWipSlot`. The outcome pinned is the one the code gives today — the approve that
  * would fire the trigger is refused at exit 1, before either commit is written.
  *
- * Not here: a `reject` into a full state and holders on other branches. `dl-156` ruled them (Q2 (i)
- * exempt, Q1 (a) count across refs) and they are not implemented yet; their scenarios belong to the
- * task that implements the ruling.
+ * Scenarios 10–11 (task-274) are `dl-156`'s rulings: a `reject` into a full state is exempt from the
+ * limit (Q2 (i)), and a holder committed only on another branch counts (Q1 (a)).
  *
  * Exercises the REAL, registered `CORE_MODULES` operations, each in a throwaway repository.
  */
@@ -22,7 +21,7 @@ import { CORE_MODULES } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { exitCodeForResult, exitCodeForThrow } from '../../src/core/exit-code';
-import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const MEMORY_YAML = `version: 1
@@ -36,6 +35,7 @@ types:
         in-review: { reject: in-progress }
       waiting: [backlog, approved]
       returns: { in-progress: backlog }
+      limits: { in-progress: 1 }
   card:
     path: "docs/memory/cards/{id}.md"
     states:
@@ -89,9 +89,13 @@ function gitOut(repo: string, args: string[]): string {
   return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf-8' }).trim();
 }
 
+/** The sentence every WIP refusal ends with since task-274 (`dl-156` Q1 (a)). */
+const REFS_SENTENCE =
+  'The holders are counted at HEAD and on every local and remote-tracking branch, so the count depends on which refs were last fetched.';
+
 const status = (repo: string, path: string): string => /^status: (\S+)/m.exec(readFileSync(join(repo, path), 'utf-8'))![1]!;
 
-describe('P1.13 scenarios 5–9 — returns edges, memory park and WIP limits (dl-110, bug-250)', () => {
+describe('P1.13 scenarios 5–11 — returns edges, memory park and WIP limits (dl-110, bug-250, dl-156)', () => {
   let repo: string;
 
   beforeEach(() => {
@@ -150,7 +154,7 @@ describe('P1.13 scenarios 5–9 — returns edges, memory park and WIP limits (d
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toBe(
-      "WIP limit reached for 'in-progress' on type 'card' (limit 1): held by card-001. Move one of them out of 'in-progress', then retry.",
+      `WIP limit reached for 'in-progress' on type 'card' (limit 1): held by card-001. Move one of them out of 'in-progress', then retry. ${REFS_SENTENCE}`,
     );
     assertPersistenceUnchanged(repo, unchanged);
   });
@@ -167,6 +171,35 @@ describe('P1.13 scenarios 5–9 — returns edges, memory park and WIP limits (d
     expect(gitOut(repo, ['rev-parse', 'HEAD'])).toBe(before);
     expect(status(repo, 'docs/memory/adrs/adr-2.md')).toBe('pending');
     expect(status(repo, 'docs/memory/adrs/adr-1.md')).toBe('accepted');
+    assertPersistenceUnchanged(repo, unchanged);
+  });
+  it('scenario 10: a reject into a state at its WIP limit is not refused — exit 0, one commit, the holders exceed the limit', async () => {
+    const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const result = await run('memoryReject', repo, 'task-002', { reason: 'tests missing' });
+    expect(exitCodeForResult(result)).toBe(0);
+    expect(gitOut(repo, ['rev-list', '--count', `${before}..HEAD`])).toBe('1');
+    expect(gitOut(repo, ['log', '-1', '--format=%s'])).toBe('wf(task): reject task-002 [in-review → in-progress]');
+    expect(status(repo, 'docs/memory/tasks/task-001.md')).toBe('in-progress');
+    expect(status(repo, 'docs/memory/tasks/task-002.md')).toBe('in-progress');
+  });
+
+  it('scenario 11: Error - a holder committed only on another branch counts toward the WIP limit', async () => {
+    const trunk = gitOut(repo, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    git(repo, ['checkout', '--quiet', '-b', 'task/other']);
+    writeFixtureFile(repo, 'docs/memory/cards/card-003.md', doc('card-003', 'card', 'in-progress'));
+    commitAll(repo, 'card-003 in-progress, on task/other only');
+    git(repo, ['checkout', '--quiet', trunk]);
+    writeFixtureFile(repo, 'docs/memory/cards/card-001.md', doc('card-001', 'card', 'done'));
+    commitAll(repo, 'card-001 done: no card is in-progress on the trunk');
+
+    const unchanged = snapshotPersistence(repo);
+    const result = await run('memorySubmit', repo, 'card-002');
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toBe(
+      `WIP limit reached for 'in-progress' on type 'card' (limit 1): held by card-003. Move one of them out of 'in-progress', then retry. ${REFS_SENTENCE}`,
+    );
     assertPersistenceUnchanged(repo, unchanged);
   });
 });

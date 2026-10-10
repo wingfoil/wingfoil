@@ -30,9 +30,9 @@ Feature: P1.13 (US-0A-04) - Memory Element Schema (memory.yaml)
     Then validation fails
     And the error message is "type name 'workflow' is reserved: wf(workflow) commits record configuration, not Memory"
 
-  # dl-110 P1 (a) / P3 (a), delivered by task-180 (`returns`, `limits`, `memory park`); scenarios added by
-  # task-205 (bug-250). A reject into a full state and holders on other branches are dl-156's (ratified
-  # Q2 (i), Q1 (a)) and get their scenarios with the task that implements that ruling.
+  # dl-110 P1 (a) / P3 (a), delivered by task-180 (`returns`, `limits`, `memory park`); scenarios 5-9 added
+  # by task-205 (bug-250). Scenarios 10-11 are dl-156's (ratified Q2 (i), Q1 (a)), added by task-274: a
+  # reject into a full state is not refused, and a holder on another branch counts.
 
   Scenario: A declared returns edge is taken by memory park
     Given type "task" declares "returns: { in-progress: backlog }"
@@ -61,7 +61,7 @@ Feature: P1.13 (US-0A-04) - Memory Element Schema (memory.yaml)
     And card "card-001" is "in-progress" and card "card-002" is "draft"
     When I run "wingfoil memory submit card-002"
     Then the command exits 1
-    And the error message is "WIP limit reached for 'in-progress' on type 'card' (limit 1): held by card-001. Move one of them out of 'in-progress', then retry."
+    And the error message is "WIP limit reached for 'in-progress' on type 'card' (limit 1): held by card-001. Move one of them out of 'in-progress', then retry. The holders are counted at HEAD and on every local and remote-tracking branch, so the count depends on which refs were last fetched."
     And nothing is written
 
   Scenario: Error - the supersedes trigger into a state at its WIP limit is refused before anything is written
@@ -71,3 +71,20 @@ Feature: P1.13 (US-0A-04) - Memory Element Schema (memory.yaml)
     Then the command exits 1
     And the error message names "adr-0" as the holder of "superseded"
     And neither the approve commit nor the finalize commit is written, and "adr-2" is still "pending"
+
+  Scenario: A reject into a state at its WIP limit is not refused
+    Given type "task" declares "limits: { in-progress: 1 }" and the gate "in-review: { reject: in-progress }"
+    And task "task-001" is "in-progress" and task "task-002" is "in-review"
+    When the approver runs "wingfoil memory reject task-002 --reason 'tests missing'"
+    Then the command exits 0
+    And exactly one commit is written, with subject "wf(task): reject task-002 [in-review → in-progress]"
+    And tasks "task-001" and "task-002" are both "in-progress", above the limit of 1, and nothing was refused
+
+  Scenario: Error - a holder committed only on another branch counts toward the WIP limit
+    Given type "card" declares "limits: { in-progress: 1 }"
+    And no card is "in-progress" on the current branch, and card "card-003" is "in-progress" only on branch "task/other"
+    And card "card-002" is "draft"
+    When I run "wingfoil memory submit card-002"
+    Then the command exits 1
+    And the error message is "WIP limit reached for 'in-progress' on type 'card' (limit 1): held by card-003. Move one of them out of 'in-progress', then retry. The holders are counted at HEAD and on every local and remote-tracking branch, so the count depends on which refs were last fetched."
+    And nothing is written
