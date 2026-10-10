@@ -15,7 +15,9 @@
  *   (`dl-010-minimal-dependencies`).
  *
  * `user-docs`' `align-user-docs` phase produces both, and its `checks.post` covers them through two
- * bound checks: this suite (`presentation.current`) and the recording itself (`demo.rendered`).
+ * checks: this suite (`presentation.current`, bound) and the recording itself (`demo.rendered`), a manual
+ * step by the approver's ruling of 2026-10-10 — no binding, and a note that says how to install the tools,
+ * render, and check the result, linked from the check.
  *
  * Offline and deterministic: every file is read from the working tree; nothing is fetched from
  * shields.io, npm or GitHub (what a badge displays is the service's view, not the repository's).
@@ -208,9 +210,35 @@ describe('AC 3 — align-user-docs produces the tape and the GIF, and checks.pos
     ]);
   });
 
-  it('presentation.current runs this suite; demo.rendered records the tape, which runs the example', () => {
+  it('presentation.current runs this suite; demo.rendered is manual, so it has no binding', () => {
     expect(bindings.checks['presentation.current']?.run).toEqual(['npm', 'test', '--', 'test/docs/presentation.test.ts']);
-    expect(bindings.checks['demo.rendered']?.run).toEqual(['vhs', TAPE]);
+    expect(bindings.checks['demo.rendered']).toBeUndefined();
+  });
+
+  it('the demo.rendered check links the note that says how to render the GIF by hand', () => {
+    const line = read('.wingfoil/workflows/custom/user-docs.yaml')
+      .split('\n')
+      .find((candidate) => /^\s+- demo\.rendered\b/.test(candidate));
+    expect(line).toContain('docs/assets/README.md');
+  });
+
+  it('the note covers installing the tools on Ubuntu/Debian, the render command, and the checks afterwards', () => {
+    const assets = read('docs/assets/README.md');
+    const start = assets.indexOf('## Regenerating the demo GIF');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const next = assets.indexOf('\n## ', start + 1);
+    const note = assets.slice(start, next < 0 ? undefined : next);
+    // VHS from Charm's apt repository, plus ttyd and ffmpeg.
+    expect(note).toContain('https://repo.charm.sh/apt/');
+    expect(note).toMatch(/apt install[^\n]*\bvhs\b/);
+    expect(note).toMatch(/apt install[^\n]*\bttyd\b/);
+    expect(note).toMatch(/apt install[^\n]*\bffmpeg\b/);
+    // The render command, from the repository root.
+    expect(note).toContain(`npm run build && vhs ${TAPE}`);
+    expect(note).toMatch(/repository root/);
+    // What to check afterwards.
+    expect(note).toContain('git diff --stat');
+    expect(note).toContain('npx jest test/docs/presentation.test.ts');
   });
 
   it('the workflow version moved past 1.4', () => {

@@ -119,6 +119,9 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["dev-loop", "phases[6].checks.post[0]", "retrospective.present"],
       ["user-docs", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
       ["user-docs", "phases[1].checks.post[0]", "user-facing docs aligned with the release's shipped CLI/feature surface"],
+      // task-224 (dl-128 item 2; approver ruling 2026-10-10): re-rendering the demo GIF is a manual step (VHS is a
+      // separate binary, and the recording rewrites a tracked file); the steps are in docs/assets/README.md.
+      ["user-docs", "phases[1].checks.post[2]", "demo.rendered"],
       ["agent-docs", "phases[0].checks.post[0]", "CLAUDE.md project status matches the shipped command surface"],
       ["agent-docs", "phases[0].checks.post[1]", "CLAUDE.md element/state tables match memory.yaml"],
       ["agent-docs", "phases[0].checks.post[2]", "CLAUDE.md workflow list matches workflows.yaml"],
