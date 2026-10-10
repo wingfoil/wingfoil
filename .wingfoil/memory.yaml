@@ -59,7 +59,7 @@
 # docs/03_backlog/; each `requirements:` points to its by-release backlog JSON) plus the initial `adr`
 # and `decision-log` content recorded by initial-design (under design/adrs/ and design/dls/).
 # The per-type `template.file:` scaffolds live alongside the config under .wingfoil/memory/templates/.
-version: 2.8                     # [AUTHORING] content revision (WingFoil convention, dl-047) — the file's FORMAT is the separate `format:` key [SPEC: spec-001, dl-149], absent here and so read as 1; a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable); 2.2 -> 2.3 at task-164 (release path folder = the release-line id, bug-163); 2.3 -> 2.4 at task-251 (this annotation: content revision, not format, dl-149); 2.4 -> 2.5 at task-180 (task `returns`, dl-110); 2.5 -> 2.6 at task-205 (bug `returns: { in-progress: planned }`, dl-110 P1 (a)/P2: the dev-loop park sync's edge); 2.6 -> 2.7 at task-212 (the `change-proposal` type, dl-132 Q1 (a)); 2.7 -> 2.8 at task-269 (service kind `repository` and its optional `feedback_inbox`, dl-163 S3b)
+version: 2.9                     # [AUTHORING] content revision (WingFoil convention, dl-047) — the file's FORMAT is the separate `format:` key [SPEC: spec-001, dl-149], absent here and so read as 1; a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable); 2.2 -> 2.3 at task-164 (release path folder = the release-line id, bug-163); 2.3 -> 2.4 at task-251 (this annotation: content revision, not format, dl-149); 2.4 -> 2.5 at task-180 (task `returns`, dl-110); 2.5 -> 2.6 at task-205 (bug `returns: { in-progress: planned }`, dl-110 P1 (a)/P2: the dev-loop park sync's edge); 2.6 -> 2.7 at task-212 (the `change-proposal` type, dl-132 Q1 (a)); 2.7 -> 2.8 at task-269 (service kind `repository` and its optional `feedback_inbox`, dl-163 S3b); 2.8 -> 2.9 at task-217 (the `plan` type's optional `parent` field, spec-017 §3.1)
 
 # Default machine used by any type that does not declare its own `states` block.
 # [SPEC: REQ-STATE-08] default machine: draft -> pending -> approved, reject from pending back to draft,
@@ -243,6 +243,7 @@ types:
       frontmatter:
         required: [ title, workflow, phase ]
       file: "memory/templates/plan.md"
+      # optional `parent` [SPEC: spec-017 §3.1]: empty for a started workflow — an instance, which `wingfoil workflow start` adds and submits and `wingfoil workflow end` finalizes (active -> done); "<workflow>.<phase>" for the plan of one phase, which is never an instance
     amendable: true      # key [SPEC: spec-001, dl-108 A3]; value: approver ruling 2026-10-01 (task-127)
     states: # [AUTHORING] dl-019 — no spec mandates a plan type; simple author->execute->complete lifecycle
       sequence: [ draft, active, done ]

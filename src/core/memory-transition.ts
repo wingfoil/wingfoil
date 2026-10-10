@@ -35,6 +35,7 @@ import {
   resolveStateMachine,
   resolveSupersedeTarget,
   resolveTypeTransition,
+  resolveWaitingTarget,
   validateFrontmatterState,
   verifyDocumentEdit,
 } from '../memory';
@@ -100,9 +101,10 @@ export interface PreparedMemoryTransition {
 /**
  * What a transition is resolved for: a verb, `amend` (the self-loop of the current state, task-127),
  * or `supersede` — the `supersedes:` engine trigger, which is not a verb and whose only target is
- * `superseded` (`resolveSupersedeTarget`, task-162).
+ * `superseded` (`resolveSupersedeTarget`, task-162).; or `finalize` — the forward `waiting` edge no verb drives,
+ * which `workflow end` takes to close a plan, `active → done` (`resolveWaitingTarget`, task-217).
  */
-export type TransitionResolution = TransitionOp | 'amend' | 'supersede';
+export type TransitionResolution = TransitionOp | 'amend' | 'supersede' | 'finalize';
 
 /**
  * A second sentence for a refusal, appended **only** when the working tree's `memory.yaml` and the
@@ -252,7 +254,7 @@ function recordedIdAt(root: string, sha: string, path: string): string | undefin
 export function prepareMemoryTransition(
   root: string,
   id: string,
-  op: TransitionOp | 'amend',
+  op: TransitionOp | 'amend' | 'finalize',
 ): CoreResult<PreparedMemoryTransition> {
   // Resolved ONCE: every read below is at this sha, so the machine and the document cannot come from
   // two commits even if `HEAD` moves while the verb runs (task-137). No commit at all is the same
@@ -407,7 +409,9 @@ export function prepareMemoryTransitionAtRev(
         ? from
         : op === 'supersede'
           ? resolveSupersedeTarget(memoryYaml, type, from, path)
-          : resolveTypeTransition(memoryYaml, type, from, op, path);
+          : op === 'finalize'
+            ? resolveWaitingTarget(memoryYaml, type, from, path)
+            : resolveTypeTransition(memoryYaml, type, from, op, path);
     // A self-loop (`amend`) enters no state, so it takes no slot.
     if (to !== from) {
       const slot = requireWipSlot(root, sha, memoryYaml, type, to, id);
@@ -529,7 +533,7 @@ export interface BegunMemoryTransition extends PreparedMemoryTransition {
 export function beginMemoryTransition(
   root: string,
   id: string,
-  op: TransitionOp | 'amend',
+  op: TransitionOp | 'amend' | 'finalize',
 ): CoreResult<BegunMemoryTransition> {
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
