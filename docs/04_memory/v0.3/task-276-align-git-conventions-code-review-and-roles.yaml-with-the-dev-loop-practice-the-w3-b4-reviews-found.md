@@ -92,6 +92,20 @@ inventory rows above are its tracked source and this task's criteria restate it.
     names the practice without ruling on the verb.
   - `CLAUDE.md` §7's table and `docs/agents.md` mirror `roles.yaml`: `task-252` owns them (its handover).
 
+- **Coordinator handover, W3 B4 gate (2026-10-10): the proposed text verbatim.** task-197's developer report and its
+  reviewer proposed these sentences; use them as the starting wording (adjust only to fit the directive's style):
+  - git-conventions §1: "A `dev-loop` task runs in its own worktree on `task/<task-id>`, created at `start` and removed
+    after the merge, before the branch is deleted (`dl-014` G2)."
+  - git-conventions §1 or §2: "No task commit is made in the shared main working tree; before every commit,
+    `git branch --show-current` must name the task branch."
+  - git-conventions §4: "Code commits on a task branch: `test(<module>): <task-id> — …` (red), `feat|fix(<module>):
+    <task-id> — …` (green, citing bugs), `refactor(<module>): <task-id> — …`."
+  - code-review: "A same-class stale description found at review is fixed in the task before approval, in every file the
+    task touched."
+  - git-conventions §1, on-main list item 1 (reviewer's correction): "the approver's approve/reject outside a branch's own
+    unit of work (triage, pending → backlog, decision-log ratification); a dev-loop task's review approve/reject and its
+    finalize are committed on `task/<id>` before the merge."
+
 ## Execution Notes
 
 ### Retrospective
