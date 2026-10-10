@@ -374,9 +374,10 @@ describe('task-225 AC 1 — BDD P4.5: two open workflows, one pending approval (
     expect(text).toContain('human needed: approve or reject task-3 (task, pending; no open workflow carries it) — routed to Morgan <morgan@example.invalid>');
   });
 
-  it('StatusResult carries exactly spec-017 §8 fields', async () => {
+  it('StatusResult carries exactly spec-017 §8 fields, plus ungatedRoutedTo (§5.3: an ungated line names its routed members)', async () => {
     const value = JSON.parse(JSON.stringify(await status(repo))) as Record<string, unknown>;
-    expect(Object.keys(value).sort()).toEqual(['active', 'baseline', 'diagnostics', 'open', 'pendingApprovals', 'ungated']);
+    expect(Object.keys(value).sort()).toEqual(['active', 'baseline', 'diagnostics', 'open', 'pendingApprovals', 'ungated', 'ungatedRoutedTo']);
+    expect(value['ungatedRoutedTo']).toEqual([MORGAN]);
     for (const entry of value['open'] as Record<string, unknown>[]) expect(Object.keys(entry).sort()).toEqual(['complete', 'frontier', 'instance', 'late', 'phases']);
     for (const entry of value['pendingApprovals'] as Record<string, unknown>[]) expect(Object.keys(entry).sort()).toEqual(['awaiting', 'instance', 'step', 'trail']);
   });
