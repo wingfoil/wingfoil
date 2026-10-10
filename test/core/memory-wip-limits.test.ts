@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import { CORE_MODULES } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult } from '../../src/core/exit-code';
-import { prepareMemoryTransition } from '../../src/core/memory-transition';
+import { isMoreAdvancedState, prepareMemoryTransition } from '../../src/core/memory-transition';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
@@ -384,5 +384,39 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
       `WIP limit reached for 'open' on type 'slot' (limit 1): held by slot-002. Move one of them out of 'open', then retry. ${REFS_SENTENCE}`,
     );
     expectUnchanged(before);
+  });
+});
+
+describe('isMoreAdvancedState — the state an element counts in when refs disagree (task-274, dl-156 Q1 (a))', () => {
+  const machine = { sequence: ['draft', 'pending', 'active'], gates: { pending: { reject: 'declined' } } };
+
+  it('a later sequence state is more advanced than an earlier one, never the reverse', () => {
+    expect(isMoreAdvancedState(machine, 'active', 'pending')).toBe(true);
+    expect(isMoreAdvancedState(machine, 'pending', 'active')).toBe(false);
+  });
+
+  it('a state off the sequence ranks after every sequence state, and deprecated after all of them', () => {
+    expect(isMoreAdvancedState(machine, 'declined', 'active')).toBe(true);
+    expect(isMoreAdvancedState(machine, 'deprecated', 'declined')).toBe(true);
+    expect(isMoreAdvancedState(machine, 'declined', 'deprecated')).toBe(false);
+  });
+
+  it('equal ranks are ordered by name, so the answer does not depend on the order the refs were read in', () => {
+    expect(isMoreAdvancedState(machine, 'zz-unknown', 'declined')).toBe(true);
+    expect(isMoreAdvancedState(machine, 'declined', 'zz-unknown')).toBe(false);
+    expect(isMoreAdvancedState(machine, 'active', 'active')).toBe(false);
+  });
+});
+
+describe('one listing of every ref (task-274): the id counter and the WIP count read the same refs', () => {
+  it('`for-each-ref` is run in exactly one place in src/, the shared `refBaselineCommits`', () => {
+    const hits = execFileSync('git', ['grep', '-l', "'for-each-ref'", '--', 'src/'], { encoding: 'utf-8', cwd: join(__dirname, '../..') })
+      .trim()
+      .split('\n');
+    expect(hits).toEqual(['src/memory/add.ts']);
+    const source = readFileSync(join(__dirname, '../../src/memory/add.ts'), 'utf-8');
+    expect(source.match(/'for-each-ref'/g)).toHaveLength(1);
+    expect(readFileSync(join(__dirname, '../../src/core/memory-transition.ts'), 'utf-8')).toContain('refBaselineCommits(root)');
+    expect(source).toMatch(/listPathsAtRevs\(root, refBaselineCommits\(root\), prefix\)/);
   });
 });
