@@ -49,6 +49,13 @@ export interface CommitOptions {
    * rewritten") that a plan only intends ("would be rewritten"). Absent, a dry run carries `warnings`.
    */
   readonly plannedWarnings?: readonly string[];
+  /**
+   * Trailer lines (`Key: value`) the commit records in its **final** paragraph, before the
+   * `WingFoil-Version:` line ({@link stampedMessage}) — the one paragraph git reads trailers from
+   * (`%(trailers)`). `workflow finalize`'s phase-record trailers (`spec-003` § "Evidence", task-226) ride
+   * here: in a paragraph of their own before the signature, git would not read them.
+   */
+  readonly trailers?: readonly string[];
 }
 
 /** The environment git runs with: `process.env`, with {@link CommitOptions.env} merged over it. */
@@ -95,8 +102,8 @@ function gitReadOptions(options: CommitOptions, accepted: readonly number[]): Gi
  * turn the whole body into the trailer block and cut a multi-line reason short. The caller's message
  * is trimmed of trailing whitespace first, which `--cleanup=whitespace` would drop anyway.
  */
-function stampedMessage(message: string): string {
-  return `${message.replace(/\s+$/, '')}\n\n${formatVersionTrailer(readBuildStamp())}`;
+function stampedMessage(message: string, trailers: readonly string[] = []): string {
+  return `${message.replace(/\s+$/, '')}\n\n${[...trailers, formatVersionTrailer(readBuildStamp())].join('\n')}`;
 }
 
 /**
@@ -146,14 +153,56 @@ function commitPathsNow(root: string, paths: readonly string[], message: string,
   // `--only -- <paths>` records exactly these paths, whatever else is staged: anything a caller or
   // another tool already staged stays staged and uncommitted (bug-027). A plain `git commit` would
   // commit the whole index under a subject that names only this operation.
-  const commitOptions: CommitOptions = options.author
-    ? { ...options, env: { ...options.env, GIT_AUTHOR_NAME: options.author.name, GIT_AUTHOR_EMAIL: options.author.email } }
-    : options;
+  const commitOptions = withAuthor(options);
   // `--cleanup=whitespace` (bug-051): the body's normal form — trailing whitespace stripped, blank-line
   // runs collapsed, a `#` line kept — is the tool's, whatever `commit.cleanup` the operator's or the
   // repository's git config sets. Unpinned, `strip` deleted a reason line opening with `#` and
   // `verbatim` kept what `dl-067` clause 3 declares removed.
-  quietGit(root, ['commit', '--only', '--quiet', '--cleanup=whitespace', '-m', stampedMessage(message), '--', ...paths], commitOptions);
+  quietGit(root, ['commit', '--only', '--quiet', '--cleanup=whitespace', '-m', stampedMessage(message, options.trailers), '--', ...paths], commitOptions);
+  return runGit(root, ['rev-parse', 'HEAD'], options).trim();
+}
+
+/** {@link CommitOptions} with the pinned author, when one is given, in git's environment (task-132). */
+function withAuthor(options: CommitOptions): CommitOptions {
+  return options.author ? { ...options, env: { ...options.env, GIT_AUTHOR_NAME: options.author.name, GIT_AUTHOR_EMAIL: options.author.email } } : options;
+}
+
+/**
+ * The root-relative paths the index holds a change to, against `HEAD` (`git diff --cached --name-only`),
+ * in git's order — what a plain `git commit` would record. Empty when the index matches `HEAD`.
+ */
+export function stagedPaths(root: string, options: CommitOptions = {}): string[] {
+  return runGit(root, ['-c', 'core.quotePath=false', 'diff', '--cached', '--name-only', '-z'], options)
+    .split('\0')
+    .filter((path) => path.length > 0);
+}
+
+/**
+ * Make one commit that changes **no file** — `workflow finalize`'s phase record (`spec-017` §7.9, task-226) —
+ * with `message`, {@link CommitOptions.trailers} and the build signature in its final paragraph, returning
+ * its sha. The commit primitive's third form, beside {@link writeAndCommit}:
+ *
+ * - **`git commit --only --allow-empty`, no pathspec** — git's documented form for an empty commit that
+ *   records nothing the index holds: a change the operator staged is neither committed nor unstaged
+ *   (`bug-027`, `dl-106`), even when a caller skipped the dirty-index guard (`requireCleanIndex`,
+ *   `src/core/write-guard.ts`) that refuses it first.
+ * - **`--cleanup=whitespace`** pinned over `commit.cleanup` (`bug-051`), as for every tool commit.
+ * - **Dry run** (`dl-106` W2): inside `captureDryRun` nothing is committed; the plan is the subject, the
+ *   full message, no paths and no diff.
+ *
+ * @throws {@link CommitFailure} (`E_COMMIT_FAILED`) when git does not make the commit (a refusing hook);
+ *   nothing was written, so there is nothing to put back.
+ */
+export function commitEmpty(root: string, message: string, options: CommitOptions = {}): string {
+  const stamped = stampedMessage(message, options.trailers);
+  if (isDryRunActive()) {
+    stopWithPlan({ dryRun: true, subject: (/^.*/.exec(message) as RegExpExecArray)[0], message: stamped, paths: [], diff: '' }, options.plannedWarnings ?? options.warnings);
+  }
+  try {
+    quietGit(root, ['commit', '--only', '--allow-empty', '--quiet', '--cleanup=whitespace', '-m', stamped], withAuthor(options));
+  } catch (error) {
+    throw new CommitFailure(root, [], gitExplanation(error), undefined);
+  }
   return runGit(root, ['rev-parse', 'HEAD'], options).trim();
 }
 
@@ -222,7 +271,7 @@ export function writeAndCommit(root: string, changes: readonly PathChange[], mes
       {
         dryRun: true,
         subject: (/^.*/.exec(message) as RegExpExecArray)[0],
-        message: stampedMessage(message),
+        message: stampedMessage(message, options.trailers),
         paths: sorted.map((change) => change.relative),
         diff: sorted.map((change) => planDiff(root, change.relative, change.content, gitEnv(options))).join(''),
       },
@@ -285,7 +334,7 @@ export class CommitFailure extends StorageError {
       indexProblem === undefined
         ? 'nothing was committed, and the working tree and the index are as they were'
         : `nothing was committed and the working tree is as it was, but the index entries of ${paths.join(', ')} could not be put back (${indexProblem}): check them with git status`;
-    super(E_COMMIT_FAILED, `git did not commit ${paths.join(', ')}: ${gitDetail} — ${outcome}`);
+    super(E_COMMIT_FAILED, `git did not commit ${committedWhat(paths)}: ${gitDetail} — ${outcome}`);
     this.name = 'CommitFailure';
     this.paths = paths;
     this.gitDetail = gitDetail;
@@ -303,7 +352,12 @@ export class CommitFailure extends StorageError {
 export function commitFailureSummary(error: unknown): string {
   if (!(error instanceof CommitFailure)) return String(error);
   const index = error.indexProblem === undefined ? '' : ` (the index entries could not be put back: ${error.indexProblem})`;
-  return `${E_COMMIT_FAILED}: git did not commit ${error.paths.join(', ')}: ${error.gitDetail}${index}`;
+  return `${E_COMMIT_FAILED}: git did not commit ${committedWhat(error.paths)}: ${error.gitDetail}${index}`;
+}
+
+/** What a failed commit would have recorded: its paths, or `an empty commit` for {@link commitEmpty}'s. */
+function committedWhat(paths: readonly string[]): string {
+  return paths.length === 0 ? 'an empty commit' : paths.join(', ');
 }
 
 /** `git ls-files -s -z` of `paths`: the `mode oid stage\tpath` records the index holds for them. */
