@@ -5,11 +5,12 @@
 # not an intention (that belongs in a decision-log, task or plan).
 # Multiple mains are allowed: REQ-STATE-03 (active workflow context with multiple open mains).
 # Source: dl-088-a-memory-type-for-state-that-lives-outside-the-repository; uses the `service` Memory
-# type (memory.yaml).
+# type (memory.yaml). A consumer repository is registered here as a `kind: repository` service with a
+# `feedback_inbox` (dl-163 S3b), once it has versioned its inbox.
 name: service-ingest
 kind: main
-description: Record a single external service (account, credential by reference, listing, setting, domain, handle) into Memory.
-version: 1.0
+description: Record a single external service (account, credential by reference, listing, setting, domain, handle, repository) into Memory.
+version: 1.1                     # 1.1 dl-163 S3b (task-269): the description lists the kind `repository` (a consumer repository and its feedback inbox)
 # No fixed `element:` — started standalone this main creates a top-level service. When invoked while
 # another workflow with an active `element` context is running (e.g. release-publishing setting up a
 # publish credential), the created Memory file inherits that element.
