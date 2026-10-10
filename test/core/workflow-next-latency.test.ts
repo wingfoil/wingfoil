@@ -26,7 +26,9 @@ import { CORE_MODULES } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import type { NextResult } from '../../src/core';
 import { cloneTempRepo, git, removeTempDir } from '../storage/helpers/git-fixture';
-import { describeLoad, describeSamples, P95_BUDGET_MS, p95, readLoadAverage, RUNS, sampleLatency } from './helpers/latency';
+import { cpus } from 'os';
+
+import { describeLoad, describeSamples, inProcessIdleVerdict, P95_BUDGET_MS, p95, readLoadAverage, RUNS, sampleLatency, type LoadWindow } from './helpers/latency';
 
 /** The commit the clone is checked out at: the W3 B4 pre-batch main, with eight open instances. */
 const PINNED = 'b56e8721';
@@ -61,13 +63,25 @@ describe('REQ-PERF-03 — workflow next on this repository at a pinned commit, i
     expect(outcome.value.next).not.toBeNull();
   });
 
-  it('stays under 1,000 ms at p95 over >= 20 runs', async () => {
+  let samples: number[] = [];
+  let load: LoadWindow;
+
+  it('samples >= 20 runs, reading the load before and after', async () => {
     const fn = workflowNextFn();
     const before = readLoadAverage();
-    const samples = await sampleLatency(RUNS, () => fn({ root: clone }));
-    const load = { before, after: readLoadAverage() };
+    samples = await sampleLatency(RUNS, () => fn({ root: clone }));
+    load = { before, after: readLoadAverage() };
+    process.stdout.write(`workflow next: ${describeSamples(samples)}; ${describeLoad(load)}\n`);
+    expect(samples).toHaveLength(RUNS);
+  });
+
+  it('the run was taken on an otherwise idle machine (a loaded run is refused, not counted)', () => {
+    expect(inProcessIdleVerdict(load, cpus().length)).toBe('otherwise idle');
+  });
+
+  it('stays under 1,000 ms at p95 over >= 20 runs, on an otherwise idle machine', () => {
+    if (inProcessIdleVerdict(load, cpus().length) !== 'otherwise idle') return; // refused above, not counted
     const report = `workflow next: ${describeSamples(samples)}; ${describeLoad(load)}`;
-    process.stdout.write(`${report}\n`);
     expect({ report, under: p95(samples) < P95_BUDGET_MS }).toEqual({ report, under: true });
   });
 });
