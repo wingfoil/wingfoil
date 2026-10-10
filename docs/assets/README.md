@@ -20,6 +20,7 @@ None of them ships in the npm package: `package.json` `files` is `["dist", "READ
 | `wingfoil-social-preview-dark.svg` | 1280×640 banner, dark background | source | — |
 | `wingfoil-social-preview-dark.png` | the dark banner, rendered | generated | alternative to the light banner |
 | `wingfoil-avatar.png` | 500×500, the mark centred on white | generated | organisation avatar (`svc-001-github-organisation-wingfoil`) |
+| `wingfoil-demo-first-project.gif` | terminal recording of example 01, 1200×760 | generated from `docs/examples/01-first-project/demo.tape` | `README.md` demo |
 
 The SVGs are the sources, and the PNGs are generated from them. Edit an SVG, never a PNG. All text in
 the SVGs is converted to paths, so they render the same on any machine without the Inter fonts.
@@ -58,6 +59,22 @@ Check the result:
 file docs/assets/*.png   # 1280 x 640 banners, 500 x 500 avatar, 512 x 525 logo, 512 x 364 mark
 ls -l docs/assets/*.png  # each banner must stay under 1 MB (GitHub's limit)
 ```
+
+## Regenerating the demo GIF
+
+The README's demo is rendered by [VHS](https://github.com/charmbracelet/vhs) from a tape next to the example it
+records (`dl-128` Q1 (a)). The tape runs `docs/examples/01-first-project/run.sh` against the build in `dist/` and
+waits for the example's `OK:` line, so a build that no longer passes the example makes `vhs` exit non-zero and
+leaves no new GIF. VHS (with its `ttyd` and `ffmpeg`) is not a project dependency: install it on the machine that
+regenerates the asset.
+
+```bash
+npm run build
+vhs docs/examples/01-first-project/demo.tape   # writes docs/assets/wingfoil-demo-first-project.gif
+```
+
+Commit hashes and timestamps differ on every recording, so the GIF changes each time it is regenerated. It is
+regenerated in each release's `user-docs` phase (`align-user-docs`, check `demo.rendered`).
 
 ## Editing the wordmark
 

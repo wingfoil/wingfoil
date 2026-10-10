@@ -12,9 +12,10 @@ import { extname, join } from 'node:path';
  * Extensions of the tracked files that are binary by nature, and so are not scanned. An explicit list,
  * not git's verdict (`git ls-files --eol` reports `-text` for any file holding a NUL, which is exactly
  * the file the gate exists to catch). Today the repository's only binaries are the PNGs under
- * `docs/assets/` (`git ls-files --eol | grep -- -text`). A new binary type is added here, on purpose.
+ * `docs/assets/` and the README's demo GIF there (task-224, `dl-128` Q2 (a))
+ * (`git ls-files --eol | grep -- -text`). A new binary type is added here, on purpose.
  */
-export const BINARY_EXTENSIONS: readonly string[] = ['.png'];
+export const BINARY_EXTENSIONS: readonly string[] = ['.gif', '.png'];
 
 /** One offending byte in a tracked file. */
 export interface ControlCharacterFinding {
