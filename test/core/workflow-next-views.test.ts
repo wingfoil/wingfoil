@@ -119,6 +119,22 @@ phases:
       - bug.set_state(closed)
 `;
 
+/** A self-creating main whose creating step also adds a task that a later phase moves (§3.4, §4.2 `run`). */
+const INTAKE = `name: intake
+startable: true
+phases:
+  - name: capture
+    role: developer
+    actions:
+      - 'memory.add(type: bug)'
+      - 'memory.add(type: task)'
+      - memory.submit
+  - name: plan
+    role: developer
+    actions:
+      - task.set_state(backlog)
+`;
+
 const BINDINGS_YAML = `version: 1.0
 checks:
   tests.passing: { run: [npm, test] }
@@ -163,11 +179,12 @@ describe('task-216 — step views: targets, bindings, executor attributes, messa
   let repo: string;
   beforeAll(() => {
     repo = makeTempGitRepo();
-    writeFixtureFile(repo, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/triage.yaml\n  - workflows/custom/seed.yaml\n  - workflows/custom/loose.yaml\n  - workflows/custom/wrap.yaml\n');
+    writeFixtureFile(repo, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/triage.yaml\n  - workflows/custom/seed.yaml\n  - workflows/custom/loose.yaml\n  - workflows/custom/wrap.yaml\n  - workflows/custom/intake.yaml\n');
     writeFixtureFile(repo, '.wingfoil/workflows/custom/triage.yaml', TRIAGE);
     writeFixtureFile(repo, '.wingfoil/workflows/custom/seed.yaml', SEED);
     writeFixtureFile(repo, '.wingfoil/workflows/custom/loose.yaml', LOOSE);
     writeFixtureFile(repo, '.wingfoil/workflows/custom/wrap.yaml', WRAP);
+    writeFixtureFile(repo, '.wingfoil/workflows/custom/intake.yaml', INTAKE);
     writeFixtureFile(repo, '.wingfoil/workflows/bindings.yaml', BINDINGS_YAML);
     writeFixtureFile(repo, '.wingfoil/memory.yaml', MEMORY_YAML);
     writeFixtureFile(repo, '.wingfoil/dna.yaml', DNA_YAML);
@@ -193,6 +210,10 @@ describe('task-216 — step views: targets, bindings, executor attributes, messa
     commit(repo, { 'docs/plans/loose-1.md': plan('loose-1', 'loose') }, 'wf(plan): add loose-1');
     commit(repo, { 'docs/plans/old-1.md': plan('old-1', 'triage', 'minor-0') }, 'wf(plan): add old-1');
     commit(repo, { 'docs/plans/wrap-1.md': plan('wrap-1', 'wrap', 'task-9') }, 'wf(plan): add wrap-1');
+    commit(repo, { 'docs/plans/in-1.md': plan('in-1', 'intake') }, 'wf(plan): add in-1');
+    const intakeLink = { 'WingFoil-Instance': 'in-1', 'WingFoil-Step': 'intake.capture' };
+    commit(repo, { 'docs/bugs/bug-7.md': element('bug', 'bug-7', 'draft') }, 'wf(bug): add bug-7', intakeLink);
+    commit(repo, { 'docs/tasks/task-7.md': element('task', 'task-7', 'pending') }, 'wf(task): add task-7', intakeLink);
     commit(repo, { 'docs/plans/ghost-1.md': plan('ghost-1', 'ghostflow') }, 'wf(plan): add ghost-1');
   });
   afterAll(() => removeTempDir(repo));
@@ -250,6 +271,26 @@ describe('task-216 — step views: targets, bindings, executor attributes, messa
     const value = (await op.fn({ root: repo, positional: 'tri-1', options: { 'assigned-to': 'me' } })) as NextResult | CoreResult<NextResult>;
     const result = 'ok' in value ? (value.ok ? value.value : null) : value;
     expect(result).toMatchObject({ next: null, message: "no next step of workflow 'triage' is assigned to 'me'" });
+  });
+
+  it("a self-bound instance's later phase moves the elements its creating step linked before the element existed (§3.4, §4.2 run)", async () => {
+    const step = (await next(repo, 'in-1')).next!;
+    expect(step.key).toBe('intake.plan@bug:bug-7');
+    expect(binding(step, 'task.set_state(backlog)')).toMatchObject({ target: 'run', binding: { kind: 'manual', expectedCommit: 'wf(task): start task-7 [pending → backlog]' } });
+  });
+
+  it('a spec-003 error at HEAD is VALIDATION, exit 1, through the operation (spec-017 §10)', async () => {
+    const broken = makeTempGitRepo();
+    try {
+      writeFixtureFile(broken, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/loose.yaml\n');
+      writeFixtureFile(broken, '.wingfoil/workflows/custom/loose.yaml', LOOSE.replace('role: developer', 'role: nobody'));
+      writeFixtureFile(broken, '.wingfoil/memory.yaml', MEMORY_YAML);
+      writeFixtureFile(broken, '.wingfoil/dna.yaml', DNA_YAML);
+      commitAll(broken, 'broken configuration');
+      expect(await op.fn({ root: broken })).toMatchObject({ ok: false, error: { code: 'VALIDATION' } });
+    } finally {
+      removeTempDir(broken);
+    }
   });
 
   it('an abandoned instance and one whose workflow is not loaded: no step, a message, complete: false (§4.9, §4.11)', async () => {

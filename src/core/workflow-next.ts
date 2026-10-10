@@ -218,7 +218,8 @@ function firstArgument(text: string): string | null {
 interface SubjectEntry {
   readonly type: string;
   readonly verb: string;
-  readonly bracket: string | null;
+  /** `<from> → <to>`; empty for `assign`, whose subject has no bracket. */
+  readonly bracket: string;
   readonly id: string;
 }
 
@@ -230,7 +231,7 @@ interface SubjectEntry {
 function renderSubjects(entries: readonly SubjectEntry[]): string | undefined {
   const groups = new Map<string, SubjectEntry[]>();
   for (const entry of entries) {
-    const key = `${entry.type}\u0000${entry.verb}\u0000${entry.bracket ?? ''}`;
+    const key = `${entry.type}\u0000${entry.verb}\u0000${entry.bracket}`;
     groups.set(key, [...(groups.get(key) ?? []), entry]);
   }
   if (groups.size === 0) return undefined;
@@ -238,7 +239,7 @@ function renderSubjects(entries: readonly SubjectEntry[]): string | undefined {
     .map((group) => {
       const { type, verb, bracket } = group[0]!;
       const ids = group.map((entry) => entry.id).join(', ');
-      return verb.startsWith('assign ') ? `wf(${type}): ${verb} to ${ids}` : `wf(${type}): ${verb} ${ids}${bracket === null ? '' : ` [${bracket}]`}`;
+      return bracket === '' ? `wf(${type}): ${verb} to ${ids}` : `wf(${type}): ${verb} ${ids} [${bracket}]`;
     })
     .join('\n');
 }
@@ -263,7 +264,7 @@ function expectedCommit(action: DeducedAction, phase: Phase, memoryYaml: MemoryY
     action.targets.length > 0 ? action.targets : [{ type: action.targetType ?? '<type>', id: '<id>', status: action.target === 'bound' && action.boundFrom !== null ? action.boundFrom : '<from>' }];
   const argument = firstArgument(action.text) ?? '';
 
-  if (name === 'element.set_release') return renderSubjects(targets.map((target) => ({ type: target.type, verb: `assign release ${argument}`, bracket: null, id: target.id })));
+  if (name === 'element.set_release') return renderSubjects(targets.map((target) => ({ type: target.type, verb: `assign release ${argument}`, bracket: '', id: target.id })));
   if (name.endsWith('.set_state')) {
     return renderSubjects(
       targets.map((target) => {
@@ -414,7 +415,7 @@ export function assigneeRoles(dnaYaml: DnaYaml | null, who: string, identityEmai
  * case — `no open workflows`; `no next step: workflow '<name>' is complete`; a filter that keeps nothing — and
  * `NOT_FOUND` `workflow is not open: <ref>` for a `ref` naming no open instance.
  */
-export function nextWorkflow(inputs: NextInputs, deduction: Deduction, options: NextOptions = {}): CoreResult<NextResult> {
+export function nextWorkflow(inputs: NextInputs, deduction: Deduction, options: NextOptions): CoreResult<NextResult> {
   const { ref, assignedTo } = options;
   const base = { baseline: deduction.baseline, diagnostics: deduction.diagnostics };
   const selected = resolveInstanceRef(deduction, ref);
