@@ -695,6 +695,7 @@ reference entry. A command that does not declare it refuses it as an unknown opt
 | Command | Flag | Behaviour |
 |---------|------|-----------|
 | `paths` | `--list` | Accepted for the planned drill-down view; it does not change the output yet. |
+| `workflow next` | `--assigned-to <who>` | An option with a value: keeps the frontier steps whose role `<who>` holds — `me` (the `team.members[]` entry whose email is the git identity's), a member's name or email, or a role name (`spec-017` §7.3, BDD P4.4 sc. 2). |
 | `workflow list` | `--all` | Lists every workflow the registry loads, not only the ones executable now: the includable workflows no open instance's frontier enters are listed too, with `executableNow: false` (`spec-017` §7.5, BDD P4.6 sc. 3). |
 | `directive assign` | `--force` | Authorizes the whole-file rewrite of `roles.yaml` when the in-place edit cannot apply (`dl-062` Q1 option 3). Without it that case is §6's `CONFLICT` refusal. With it the file is written again from its parsed content in the one `wf(directive): assign …` commit, and the success carries §6's warning. `--force` does not force a rewrite: an edit the in-place editor can make is made in place, with no warning. A missing `roles.yaml` is written whole without the flag, since there is nothing to preserve. |
 | `dna set`, `dna add`, `dna update`, `dna remove` | `--force` | Authorizes the whole-file rewrite of `dna.yaml` when the in-place edit cannot express the change (task-193, ruling R20/Q9, as `dl-062`). Without it that case is §6's `CONFLICT` refusal. With it the file is written again from its parsed content in the verb's one `wf(dna): …` commit, and the success carries §6's warning. As for `directive assign`, `--force` does not force a rewrite: an edit the in-place editor can make is made in place, with no warning. `dna.yaml` always exists when these verbs run, so there is no unflagged whole-file write. |
@@ -1204,3 +1205,9 @@ a command runs is written when raised, through the registrar's warning sink (`bu
 pins the default-role warning, `W_ADAPTER_IGNORED` and the unknown-field warning. No flag, exit code or error format changes: the command's
 own grammar and the `agent list` / `agent show` rows are `task-228`'s amendment. Edited in place without
 a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-10, `task-216-add-workflow-next-naming-next-step-verb-role`) — `workflow next
+--assigned-to`.** `task-216` ships `workflow next`, already in §11's committed-`HEAD` row; §12 gains its one
+command-specific option, `--assigned-to <who>` (a value, not a boolean flag; the only such row). No other
+row changes. Edited in place without a supersede or a state change (`dl-047`); pending the approver's
+`memory amend` at `task-216`'s review.
