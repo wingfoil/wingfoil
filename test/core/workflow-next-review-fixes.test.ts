@@ -43,6 +43,8 @@ const DEDUCED = {
   evidence: { kinds: ['created'], missing: [], finalizable: false },
   reentered: false,
   reentryCommit: null,
+  reentryFallback: null,
+  approval: null,
   actions: (WORKFLOW.phases[0]!.actions ?? []).map(action),
 } as unknown as DeducedStep;
 
@@ -92,6 +94,7 @@ describe('task-216 review fix 5 — --assigned-to <who> that names nobody warns'
       },
     ],
     diagnostics: [],
+    gated: [],
   };
   const warnings = (who: string, identityEmail = ''): string[] => {
     const raised: string[] = [];

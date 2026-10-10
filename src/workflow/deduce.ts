@@ -285,8 +285,16 @@ export interface DeducedAction {
   readonly targets: readonly ElementRef[];
   /** The bound element's state just before this action, computed statically (§4.4), or `null`. */
   readonly boundFrom: string | null;
-  /** For a `<T>.sync_state(for_each: <S>.<field>)`: the type and the state of the source element `S` at this action. */
-  readonly source?: { readonly type: string; readonly state: string | null };
+  /**
+   * For a `<T>.sync_state(for_each: <S>.<field>)`: the type and the state of the source element `S` at this action,
+   * and, per target id, the other elements of `S` (not archived) whose field names it, ascending `(type, id)` — the
+   * input of the aggregate rule `workflow next` / `status` apply (a bug moves on once every task naming it has, task-225).
+   */
+  readonly source?: {
+    readonly type: string;
+    readonly state: string | null;
+    readonly peers: readonly { readonly id: string; readonly sources: readonly ElementRef[] }[];
+  };
 }
 
 /** A leaf step on an instance's frontier (`spec-017` §4.9; the part of §8's `Step` deduction decides). */
@@ -317,6 +325,17 @@ export interface DeducedStep {
   readonly reentered: boolean;
   /** The first listed such re-entry commit (the newest in a linear history), or `null`. */
   readonly reentryCommit: string | null;
+  /**
+   * The `fallback` that re-entered the step — the step it names and the `set_state` the phase whose gate the
+   * re-entry left declares (§5.2) — or `null` when the step is not re-entered.
+   */
+  readonly reentryFallback: { readonly step: string; readonly setState: string | null } | null;
+  /**
+   * The phase's approval (§5.1), or `null` when it declares none: the carried elements that **await** it — the
+   * targets of its actions sitting in a gate state the phase holds, ascending `(type, id)` — and whether it holds no
+   * gate at all, so that `workflow finalize` records it (`recordNeeded`; the step then has `record` evidence).
+   */
+  readonly approval: { readonly elements: readonly ElementRef[]; readonly recordNeeded: boolean } | null;
   /** The phase's actions, resolved (§4.1, §4.2), in declared order (task-216). */
   readonly actions: readonly DeducedAction[];
 }
@@ -363,6 +382,8 @@ export interface Deduction {
   readonly instances: readonly InstanceDeduction[];
   /** The registry's diagnostics, then this deduction's, in `spec-017` §1.3's order. */
   readonly diagnostics: readonly Diagnostic[];
+  /** Every Memory element at `HEAD` sitting in a `gates` state of its type, ascending `(type, id)` (§5.1, ungated elements). */
+  readonly gated: readonly ElementRef[];
 }
 
 // --- Elements --------------------------------------------------------------------------------------
@@ -658,8 +679,32 @@ function byTypeThenId(a: Element, b: Element): number {
 }
 
 /** The newest of the re-entries that reach a step (the smallest walk position), for display; `null` for none. */
-function newest(reentries: readonly WalkPosition[]): WalkPosition | null {
-  return reentries.reduce<WalkPosition | null>((best, entry) => (best === null || entry.position < best.position ? entry : best), null);
+function newest<T extends WalkPosition>(reentries: readonly T[]): T | null {
+  return reentries.reduce<T | null>((best, entry) => (best === null || entry.position < best.position ? entry : best), null);
+}
+
+/**
+ * The carried elements that await a phase's approval (`spec-017` §5.1): the targets of its actions — the bound
+ * element, the selection, the created and the run elements; a `sync_state` is never a carrier (§4.2) — that sit
+ * in a gate state the phase holds, each once, ascending `(type, id)`.
+ */
+function awaitingElements(actions: readonly DeducedAction[], exit: PhaseExitState): ElementRef[] {
+  const found = new Map<string, ElementRef>();
+  for (const action of actions) {
+    if (action.target === 'none' || tokenName(action.token).endsWith('.sync_state')) continue;
+    for (const target of action.targets) {
+      if (exit.held.some((held) => held.type === target.type && held.gate === target.status)) found.set(keyOf(target), target);
+    }
+  }
+  return [...found.values()].sort(compareRefs);
+}
+
+/**
+ * A re-entry that reaches a phase (§4.8), with the `fallback` of the phase whose gate it left: the step the
+ * pass re-enters at and the `set_state` that phase declares, which the re-entered step reports (§5.2).
+ */
+interface ReachingReentry extends WalkPosition {
+  readonly fallback: { readonly step: string; readonly setState: string | null };
 }
 
 /** One phase, evaluated on its own, before the sequence rules of §4.7, §4.9 and §4.10 apply. */
@@ -806,9 +851,9 @@ class Deducer {
     workflow: Workflow,
     exits: readonly PhaseExitState[],
     element: Element | null,
-    inherited: readonly WalkPosition[],
-  ): WalkPosition[][] {
-    const out: WalkPosition[][] = workflow.phases.map(() => [...inherited]);
+    inherited: readonly ReachingReentry[],
+  ): ReachingReentry[][] {
+    const out: ReachingReentry[][] = workflow.phases.map(() => [...inherited]);
     if (element === null) return out;
     for (const reentry of this.history(startCommit).reentries) {
       if (reentry.type !== element.type || reentry.id !== element.id) continue;
@@ -817,8 +862,11 @@ class Deducer {
       );
       if (gate === -1) continue;
       // A `fallback.step` naming no phase is refused at load time (`E_PHASE_FALLBACK_STEP_UNKNOWN`, spec-003).
-      const from = workflow.phases.findIndex((phase) => phase.name === workflow.phases[gate]!.fallback!.step);
-      for (let q = from; q < out.length; q += 1) out[q]!.push(reentry);
+      const fallback = workflow.phases[gate]!.fallback!;
+      const from = workflow.phases.findIndex((phase) => phase.name === fallback.step);
+      // Each reaching re-entry names the fallback that took it, which the re-entered step reports (§5.2).
+      const reaching: ReachingReentry = { ...reentry, fallback: { step: fallback.step, setState: fallback.set_state ?? null } };
+      for (let q = from; q < out.length; q += 1) out[q]!.push(reaching);
     }
     return out;
   }
@@ -837,7 +885,7 @@ class Deducer {
     frames: readonly Frame[],
     start: ExitStart,
     trail: readonly TrailEntry[],
-    inherited: readonly WalkPosition[] = [],
+    inherited: readonly ReachingReentry[] = [],
   ): WorkflowResult {
     // `memory.yaml` is present: a workflow runs only for an open plan, an element of a declared type.
     const exits = workflowExitStates(workflow, this.snapshot.memoryYaml!, start, this.byName);
@@ -924,7 +972,7 @@ class Deducer {
     exit: PhaseExitState,
     trail: readonly TrailEntry[],
     scope: ScopeRef | null,
-    reentries: readonly WalkPosition[],
+    reentries: readonly ReachingReentry[],
   ): PhaseEval {
     const phase = workflow.phases[p]!;
     // The include resolves: the registry refuses one naming no loaded workflow (`spec-003` loader rows).
@@ -947,7 +995,8 @@ class Deducer {
     }
     const leaf = this.leaf(instanceId, startCommit, workflow, p, frames, exit, trail, scope, reentries);
     const { kinds, missing } = leaf.step.evidence;
-    const complete = missing.length === 0;
+    // A phase with `approval:` also needs no carried element to await it (§4.3, §5.1).
+    const complete = missing.length === 0 && (leaf.step.approval?.elements.length ?? 0) === 0;
     const selection = kinds.includes('selection');
     return {
       complete,
@@ -1027,7 +1076,7 @@ class Deducer {
     exit: PhaseExitState,
     trail: readonly TrailEntry[],
     scope: ScopeRef | null,
-    reentries: readonly WalkPosition[],
+    reentries: readonly ReachingReentry[],
   ): PhaseEval {
     const phase = workflow.phases[p]!;
     const over = phase.iterate_over!;
@@ -1115,7 +1164,7 @@ class Deducer {
     exit: PhaseExitState,
     trail: readonly TrailEntry[],
     scope: ScopeRef | null,
-    reentries: readonly WalkPosition[],
+    reentries: readonly ReachingReentry[],
   ): { step: DeducedStep; diagnostics: Diagnostic[]; selected: ElementRef[] } {
     const phase = workflow.phases[p]!;
     const stepName = `${workflow.name}.${phase.name}`;
@@ -1215,15 +1264,17 @@ class Deducer {
     // awaits — evaluated from v1.0 (P4.12); the step completes by a record (§5.4).
     if (phase.awaits !== undefined) kinds.push('awaits');
 
-    // record — a checkpoint, an `awaits` (always, §4.3 `awaits` row, §5.4), or a `created` step that
-    // created nothing and has no other evidence (§4.3).
-    const recordNeeded = phase.awaits !== undefined || (created.length === 0 && !kinds.some((kind) => kind !== 'created'));
+    // record — a checkpoint, an `awaits` (always, §4.3 `awaits` row, §5.4), a `created` step that created nothing
+    // and has no other evidence (§4.3), or an approval whose phase holds no gate: `workflow finalize` records it (§5.1).
+    const approvalRecord = phase.approval !== undefined && exit.held.length === 0;
+    const recordNeeded = phase.awaits !== undefined || approvalRecord || (created.length === 0 && !kinds.some((kind) => kind !== 'created'));
     if (recordNeeded) {
       kinds.push('record');
       if (!this.hasRecord(instanceId, startCommit, stepName, scope, frame?.selfBound === true, reentries)) missing.push('record');
     }
 
     const actions = this.actionsOf(instanceId, startCommit, workflow, p, frames, exit, scope, created, selected, report);
+    const reentry = newest(reentries);
 
     return {
       step: {
@@ -1239,7 +1290,9 @@ class Deducer {
         created: created.map(refOf),
         evidence: { kinds, missing, finalizable: missing.length === 1 && missing[0] === 'record' },
         reentered: reentries.length > 0,
-        reentryCommit: newest(reentries)?.commit ?? null,
+        reentryCommit: reentry?.commit ?? null,
+        reentryFallback: reentry?.fallback ?? null,
+        approval: phase.approval === undefined ? null : { elements: awaitingElements(actions, exit), recordNeeded: approvalRecord },
         actions,
       },
       diagnostics,
@@ -1354,7 +1407,14 @@ class Deducer {
     const ids = asStrings(source?.frontmatter[named[2]!]);
     const targets = ids.map((id) => this.find(typed, id)).filter((element): element is Element => element !== null);
     const state = sourceFrame === frame ? boundFrom : (source?.status ?? null);
-    return { target: 'run', targetType: typed, targets: targets.map(refOf), source: { type: sourceType, state } };
+    const peers = targets.map((target) => ({
+      id: target.id,
+      sources: this.elements
+        .filter((other) => other.type === sourceType && other.id !== source?.id && !isArchivedStatus(other.status) && asStrings(other.frontmatter[named[2]!]).includes(target.id))
+        .map(refOf)
+        .sort(compareRefs),
+    }));
+    return { target: 'run', targetType: typed, targets: targets.map(refOf), source: { type: sourceType, state, peers } };
   }
 
   /**
@@ -1507,11 +1567,19 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
     message: `uncommitted change to a deduction input, not read (the answer is computed from HEAD): ${path}`,
   }));
 
+  // The elements waiting at a gate (§5.1): `status` lists those no pending approval carries. Every element's type is
+  // declared in `memory.yaml` (`readElements` leaves the others out), so the machine resolves.
+  const gated = elements
+    .filter((element) => Object.prototype.hasOwnProperty.call(resolveStateMachine(snapshot.memoryYaml!, element.type).gates ?? {}, element.status))
+    .map(refOf)
+    .sort(compareRefs);
+
   return {
     baseline: { rev: 'HEAD', commit: snapshot.commit },
     active: instances[0]?.instance.id ?? null,
     instances,
     diagnostics: [...snapshot.registryDiagnostics, ...uncommitted, ...memoryDiagnostics, ...unknownDiagnostics, ...stepDiagnostics],
+    gated,
   };
 }
 

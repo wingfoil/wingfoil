@@ -77,6 +77,7 @@ import {
 } from './loaders';
 import { workflowListAtHead, workflowShowAtHead, type ListResult, type ShowResult } from './workflow-list-show';
 import { renderNextConsole, workflowNextAtHead, type NextResult } from './workflow-next';
+import { renderStatusConsole, workflowStatusAtHead, type StatusResult } from './workflow-status';
 import { loadDirectiveListing, type DirectiveListing } from './directives-list';
 import { selectDirectivesById } from './context';
 import { checkAssignable, checkUnreferenced, updateRoleAssignments } from './directive-assign';
@@ -144,6 +145,11 @@ export type { CheckTokenView, ListEntry, ListResult, PhaseView, ShowInputs, Show
 // (task-225) reuse.
 export { buildStep, nextWorkflow, renderNextConsole } from './workflow-next';
 export type { ActionView, Awaiting, CadenceView, CheckView, Member, NextInputs, NextOptions, NextResult, Step, StepBinding } from './workflow-next';
+// task-225: `workflow status` at `HEAD` (`spec-017` §5.1–§5.4, §7.4, §8 `StatusResult`); approval detection and
+// routing live in the step builder above, so `next` reports them too. The operation is `CORE_MODULES`' `workflowStatus`.
+export { approvalDiagnostics, routeApproval, W_APPROVAL_ROLE_WITHOUT_AUTHORITY } from './workflow-next';
+export { renderStatusConsole, statusWorkflow, workflowStatusAtHead } from './workflow-status';
+export type { PendingApproval, StatusEntry, StatusResult } from './workflow-status';
 export { W_WORKFLOW_CHECKS_NOT_RUN, workflowCoreDiagnostics } from './workflow-core-checks';
 export type { CheckedRegistry, WorkflowCoreInputs } from './workflow-core-checks';
 export { iterationStartState, machineStates, workflowExitStates } from './workflow-exit-state';
@@ -2222,6 +2228,23 @@ const workflowNextFn: CoreFn<unknown, NextResult> = async (params) => {
   return result.ok ? result.value : result;
 };
 
+/** `wingfoil workflow status [<ref>]` params (task-225): the `<ref>` rides the bare positional. */
+export interface WorkflowStatusParams {
+  readonly root: string;
+  readonly positional?: string;
+}
+
+/**
+ * `workflowStatus` `CoreOperation.fn` (P4.5, `spec-017` §7.4): {@link workflowStatusAtHead}, refusals mapped — a
+ * `spec-003` error at `HEAD` is `VALIDATION` (exit 1), a `<ref>` naming no open instance `NOT_FOUND` (exit 1);
+ * every deduced outcome exits 0, a routing error included (BDD P4.14 sc. 3).
+ */
+const workflowStatusFn: CoreFn<unknown, StatusResult> = async (params) => {
+  const { root, positional } = params as WorkflowStatusParams;
+  const result = loadOrError(() => workflowStatusAtHead(root, positional));
+  return result.ok ? result.value : result;
+};
+
 /**
  * The production `CoreModule` registry (spec-006 §2, §4). `src/cli`'s command registrar and
  * `src/mcp`'s Tool/Resource registrar both import this exact array — see spec-006 §4.1: "no
@@ -2567,6 +2590,19 @@ export const CORE_MODULES: readonly CoreModule[] = [
         example: 'wingfoil workflow next --assigned-to me',
         fn: workflowNextFn,
         renderConsole: renderNextConsole as (value: unknown) => string,
+      },
+      // task-225 (`spec-017` §7.4, §5.1–§5.4): reads `HEAD`, declared (§1.1, ruling R15), from the deduction `next`
+      // answers from. Every open instance with its phases, frontier and late elements, the pending approvals routed
+      // to `dna.yaml` members, and the ungated elements; the console view's "human needed" lines are the v0.3
+      // notification channel (§5.3). The MCP Resource `wingfoil://workflows/-/status` is a later task's.
+      workflowStatus: {
+        name: 'workflowStatus',
+        mutates: false,
+        description: 'print every open workflow, its pending approvals and who they are routed to, and the elements waiting at a gate, as committed at HEAD',
+        positional: { name: 'ref', description: 'a workflow name or an open workflow instance id (default: every open instance)' },
+        example: 'wingfoil workflow status',
+        fn: workflowStatusFn,
+        renderConsole: renderStatusConsole as (value: unknown) => string,
       },
       workflowShow: {
         name: 'workflowShow',
