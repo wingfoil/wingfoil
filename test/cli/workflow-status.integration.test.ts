@@ -50,11 +50,18 @@ paths:
 `;
 }
 
-/** A main with a gate on its element: `approve` awaits while the release is `planning`. */
+/**
+ * A main with a gate on its element: `approve` awaits while the release is `planning`. The `submit` phase brings
+ * it there: an instance's static start is the type's first state (spec-017 §4.4), from which an approve is undetermined.
+ */
 const MAIN = `name: release-line
 startable: true
 element: release
 phases:
+  - name: submit
+    role: developer
+    actions:
+      - memory.submit
   - name: approve
     role: developer
     actions:
