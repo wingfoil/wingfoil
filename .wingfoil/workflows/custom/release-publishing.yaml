@@ -3,26 +3,62 @@
 name: release-publishing
 kind: sub
 description: >-
-  Publish an approved release: tag, build, publish to the npm registry, and mark the release
-  element as released.
-version: 1.3                     # 1.2 spec-003 alignment (task-199): the two agent.execute steps are one (the instructions are the description, dl-090 Q6 (b)), git and approver tokens take key: value arguments (spec-003 open question 6); 1.3 task-214: the tag phase names the release bump commit's files, SECURITY.md among them (its supported row follows package.json's minor, dl-127)
+  Publish an approved release: cut the release candidate (the version bump), rehearse its publish on a
+  local staging registry, tag the candidate, publish it to the npm registry, and mark the release
+  element as released. A candidate that has not passed both the e2e-smoke gate and the staging
+  rehearsal is not tagged (dl-099 §1).
+version: 1.4                     # 1.2 spec-003 alignment (task-199): the two agent.execute steps are one (the instructions are the description, dl-090 Q6 (b)), git and approver tokens take key: value arguments (spec-003 open question 6); 1.3 task-214: the tag phase names the release bump commit's files, SECURITY.md among them (its supported row follows package.json's minor, dl-127); 1.4 dl-099 §1–§2 (task-219): the release commit is its own phase, `release-commit`, so the `staging-rehearsal` phase (qa) runs on the candidate it cuts, and `tag` tags the candidate the rehearsal's transcript names
 element: release
 
 phases:
+  - name: release-commit
+    description: >-
+      Cut the release candidate. The release commit is the version bump (spec-015 §4) and carries
+      every file that names the version: package.json, package-lock.json, server.json, CHANGELOG.md,
+      and SECURITY.md, whose supported-versions row names the new minor (dl-127;
+      test/docs/community-health.test.ts fails on a minor bump that leaves it behind). Once it is
+      merged into the release's integration branch, the integration-branch commit that carries it is
+      the release candidate (dl-099 §1): the commit proposed for the tag.
+    role: tech-lead
+    actions:
+      - 'git.commit(message: "release {release.version}")'
+
+  - name: staging-rehearsal                  # dl-099 §2 — a declared phase, not a plan convention
+    description: >-
+      Rehearse the publish of the release candidate on a local staging registry, with the candidate
+      checked out and a clean working tree: `npm run publish:staging -- --expect-commit <candidate sha>
+      --transcript <the produces path>` packs the candidate, publishes it to an ephemeral Verdaccio,
+      installs it as a user would and runs the e2e smoke against it, whose `--version` must print the
+      candidate's stamp (spec-015 §3 stages 2–3). The transcript is the run's own log, written on a
+      failure too; its closing line is the verdict, which `staging-rehearsal-passed` reads together
+      with the commit the smoke checked. A candidate re-cut after this phase ran (a commit that must
+      ship lands after it) re-enters e2e-smoke and this phase (release-cycle). It starts a local
+      registry, so it runs per candidate and not in CI (dl-099 §4).
+    role: qa
+    actions:
+      - 'cli.run(command: "npm run publish:staging -- --expect-commit <candidate sha> --transcript <transcript>")'
+    produces:
+      - "docs/07_gates/rl-{release.release-line}/rel-{release.version}-staging-rehearsal.md"
+    checks:
+      post: ["staging-rehearsal-passed(transcript: docs/07_gates/rl-{release.release-line}/rel-{release.version}-staging-rehearsal.md)"]
+
   - name: tag
     description: >-
       Create the semver git tag for the release ON `main`, after the release branch has merged —
       never on a phase branch (dl-024). The tag must be a stable ref reachable from main's permanent
-      history so it survives phase-branch cleanup. The release commit is the version bump (spec-015
-      §4) and carries every file that names the version: package.json, package-lock.json,
-      server.json, CHANGELOG.md, and SECURITY.md, whose supported-versions row names the new minor
-      (dl-127; test/docs/community-health.test.ts fails on a minor bump that leaves it behind).
+      history so it survives phase-branch cleanup. It goes on the release candidate the rehearsal
+      transcript names (`staging-rehearsal-passed` prints that commit), not on a later commit such as
+      the one that records the transcript: a candidate that has not passed both checks is not tagged
+      (dl-099 §1). In the action, `on: main` names the branch the tag must be reachable from; the
+      commit tagged is the candidate `staging-rehearsal-passed` prints.
     role: tech-lead
     checks:
-      pre: ["on-branch-is-main", "release-branch-merged-to-main"]   # dl-024
+      pre:   # dl-024; dl-099 §1
+        - "on-branch-is-main"
+        - "release-branch-merged-to-main"
+        - "staging-rehearsal-passed(transcript: docs/07_gates/rl-{release.release-line}/rel-{release.version}-staging-rehearsal.md)"
     actions:
-      - 'git.commit(message: "release {release.version}")'
-      - 'git.tag(name: "{release.version}", on: main)'      # dl-024 — tag on main, not on a design/release_* branch
+      - 'git.tag(name: "{release.version}", on: main)'      # dl-024 — tag on main, not on a design/release_* branch; `on:` names the branch, the commit is the candidate staging-rehearsal-passed prints (dl-099 §1)
 
   - name: publish
     description: >-

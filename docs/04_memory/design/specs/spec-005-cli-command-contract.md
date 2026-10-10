@@ -116,6 +116,11 @@ Contract rules:
 - For `json`/`yaml`, stdout carries **only** the structured payload — no banners, progress lines, or
   colour codes interleaved with it. Diagnostic/progress output (if any) goes to stderr regardless of
   `--format`.
+- A command that hands its stdout to a child process writes no payload on stdout; its structured
+  messages go to stderr (`spec-016` §3.4, Q8): `agent execute`, whose agent owns the terminal, prints its
+  warnings, its launch notice, its errors and its success report (`{ "run": <record> }`) on stderr, one
+  document per message under `json`/`yaml`, and leaves stdout to the agent. Its `--dry-run` launch plan,
+  which starts no child, is an ordinary stdout payload.
 - The payload *shape* per command (success case) is owned by that command's own spec (e.g. `paths
   --format json`, `workflow status --format json`); this spec only fixes the *envelope* rules that
   apply uniformly: stdout-only, single top-level value, no extraneous output mixed in.
@@ -433,3 +438,9 @@ was `submit`'s canonical edge (reached from `draft`), not a state `submit` reach
 refused verb has no edge from the current state, so `<to>` is now `(none)` and the indented detail
 line, unchanged, says why. No exit code, format or other rule changed. Edited in place without a
 supersede or a state change, per `dl-047-tech-specs-carry-no-version-field`.
+
+**Revision (2026-10-09, `task-228-agent-execute-launches-agent-forwards-right-signals-records`) — §2
+gains `spec-016` Q8's sentence.** A command that hands its stdout to a child process writes no payload on
+stdout and puts its structured messages on stderr; `agent execute` is the one such command, and its
+dry-run plan stays on stdout. The envelope rules for every other command are unchanged. Edited in place
+without a supersede or a state change (`dl-047`).

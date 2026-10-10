@@ -49,6 +49,45 @@ export function reportWarning(text: string): void {
 }
 
 /**
+ * Run `run` with each distinct warning raised inside it passed on once (task-228, the B3 handover: a
+ * pipeline that loads one file twice raises its warning twice), after `rewrite` (identity by default).
+ * The warnings go to the sink installed around the call, or to stderr outside any.
+ */
+export function withDistinctWarnings<T>(run: () => T, rewrite: (text: string) => string = (text) => text): T {
+  const outer = sinkStore.getStore();
+  const seen = new Set<string>();
+  return sinkStore.run((text) => {
+    const shown = rewrite(text);
+    if (seen.has(shown)) return;
+    seen.add(shown);
+    if (outer !== undefined) outer(shown);
+    else process.stderr.write(`Warning: ${shown}\n`);
+  }, run);
+}
+
+/**
+ * A **notice**: an informational line an operation prints while it runs, neither a warning nor an error
+ * — `agent execute`'s launch banner (`spec-016` §3.3 step 13, task-228). It travels like a warning, to
+ * the sink the surface installs ({@link withNoticeSink}); the CLI renders it in the active `--format`
+ * on stderr. Outside any sink it is written to stderr as is.
+ */
+export type NoticeSink = (text: string) => void;
+
+const noticeStore = new AsyncLocalStorage<NoticeSink>();
+
+/** Run `run` with `sink` receiving every notice {@link reportNotice} raises inside it. */
+export function withNoticeSink<T>(sink: NoticeSink, run: () => T): T {
+  return noticeStore.run(sink, run);
+}
+
+/** Raise one notice: to the installed sink, or, with none, to stderr as a bare line. */
+export function reportNotice(text: string): void {
+  const sink = noticeStore.getStore();
+  if (sink !== undefined) sink(text);
+  else process.stderr.write(`${text}\n`);
+}
+
+/**
  * Minimal structural view of a Zod object schema: only its declared top-level `shape` is needed.
  * Typed structurally rather than as `AnyZodObject` (spec-009 §2's listing) because Zod 4 — the
  * version pinned in `dna.yaml` / `package.json` (`zod@^4`) — no longer exports the `AnyZodObject`

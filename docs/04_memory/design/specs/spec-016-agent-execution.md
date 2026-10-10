@@ -183,7 +183,8 @@ temporary directory, never inside the repository, and are removed when `agent ex
 #### 2.4 Bootstrap prompt
 
 The bootstrap is the only text WingFoil puts into the agent's initial prompt. Its bytes are a pure
-function of `(role, element, run id, state_ref)`. It has no clock and no host data, and it is LF-terminated
+function of `(role, element, run id, state_ref, agent)`, `agent` being the `team.agents` entry §3.2 step 4
+selects, read at `HEAD`. It has no clock and no host data, and it is LF-terminated
 (`REQ-SYS-07`, `REQ-STATE-09`). It is a fixed template owned by this spec:
 
 ```
@@ -191,7 +192,22 @@ WingFoil run {run_id}: act as role "{role}" on element {type}:{id}.
 Your context is assembled at commit {state_ref} and served by the "wingfoil" MCP server
 registered for this session. Load it before any other action: {context_instruction}
 {handoff_line}
+{attribution_line}
 ```
+
+`{attribution_line}` carries the AI-attribution rule of the `git-conventions` directive §7 to the agent
+(`dl-117` Action 4; approver ruling R20 Q8, `release-planning-rel-v0.3-plan`), with the entry that signs
+(`dl-158` Rule 1 (a)) — its `name` and `email`, which an entry declaring `adapter` always has (§2.1):
+
+```
+End every commit you write, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: {agent_name} <{agent_email}>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).
+```
+
+The agent applies it to every commit it writes. A commit `wingfoil` writes for it (a Memory verb) already
+ends with the `WingFoil-Version:` trailer paragraph, so the line tells the agent to add the two trailers to
+it with `git commit --amend --no-edit --trailer`, never as a paragraph of their own, which would push
+`WingFoil-Version:` into a `Reason:` block (`git-conventions` §8, `bug-236`). The `agent: record
+<run-id>` commit is WingFoil's, not the agent's, and keeps §4.4's form.
 
 `{handoff_line}` is one of two fixed literals, chosen by the element type's template (read at `HEAD`):
 `Record your handoff in the element's "## Execution Notes" section.` when the type's
@@ -233,14 +249,26 @@ component (`dl-131`).
 #### 2.6 Session id, usage, model
 
 - **`assign`**: WingFoil chooses the id before launch and passes it through `session.assign_args`.
-  The value is a UUID version 5 over a fixed namespace and the string
-  `<absolute repository root>\n<run id>`. It is unique per clone and run and derived, not random. The
-  run id stays the identifier WingFoil relies on (`dl-135` Q3 (a)).
+  The value is a UUID version 5 (RFC 4122 §4.3) over a fixed namespace and the string
+  `<absolute repository root>\n<run id>`. The namespace is itself the version 5 UUID of the name
+  `wingfoil:spec-016:session` in RFC 4122's URL namespace: `a432dcd6-576d-5991-9503-2b23aa4139db`. The
+  id is unique per clone and run and derived, not random. The run id stays the identifier WingFoil
+  relies on (`dl-135` Q3 (a)).
 - **`output`**: read from the headless JSON output (v1.0 only; for an interactive launch it
   degrades to `not-reported`, because stdout belongs to the agent).
 - **`lookup`**: run `session.lookup_args` after the agent exits, with a 10 s time limit; any
   failure yields `not-reported` and a `warning:` line on stderr (§3.4). The lookup never fails the
   run.
+- **How a lookup runs.** Every post-run command — `version_args`, `session.lookup_args`,
+  `usage.lookup_args` — is the adapter's `command` followed by that argv, placeholders rendered as in
+  §2.3, run with no shell, in the project root, with WingFoil's environment, under the same 10 s limit.
+  An argv declared for both the session and the usage runs once. A lookup that fails, times out,
+  prints more than 1 MiB on stdout or on stderr (each stream is bounded; a lookup whose stdout
+  is valid but whose stderr exceeds the limit loses its values too) or prints no JSON, and a value present in its JSON with the wrong type (a `model` that is not a non-empty
+  string, a count that is not a non-negative integer, a session id that is not a non-empty string),
+  yield `not-reported` and one `warning:` line naming the adapter, the lookup and the cause; an absent
+  value yields `not-reported` silently. `agent_version` is the first non-blank line `version_args`
+  prints.
 - **`none`**: `not-reported`.
 - Usage and model follow the same rules through `usage.from`.
 - **`not-reported` is the literal string**, never `0`, `null` or an absent key (`dl-114` Decision: "a
@@ -420,6 +448,8 @@ repository.
 10. Render `{bootstrap}` / `{bootstrap_file}` and `{mcp_config_file}`.
 11. **MCP pre-flight**: spawn `{mcp_command} {mcp_args}`, complete MCP `initialize`, get the
     `{role}-session` Prompt with `element` and `state` = `state_ref` (§2.4), close. Any failure → `MCP_UNREACHABLE` (P5.4.3 sc. 3).
+    One deadline covers the whole exchange, start-up included (30 s, REQ-PERF-01's budget), not one per
+    request.
     **Declared exception to the `HEAD` baseline:** the server is `wingfoil mcp`, whose own start-up
     check reads the working tree's `dna.yaml` role set (`spec-014` §1). An uncommitted change there —
     a deleted or invalid `dna.yaml` — refuses the pre-flight even though every gating read of steps 2–7
@@ -428,8 +458,11 @@ repository.
     `launch.interactive.terminal` is `required` (the default), stdin and stdout must both be
     terminals → else `NO_TERMINAL`. With `optional`, the check is skipped (§2.2, §2.7). Placing it
     last keeps every earlier refusal reachable, and testable, without a terminal.
-13. Print `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>` on stderr.
-14. **Spawn** the agent with `launch.interactive.args` (+ `session.assign_args` when `assign`). This is
+13. Print `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>` on stderr, `<adapter>`
+    in the record's `<built-in|custom>/<name>` form. It is a **notice** (§3.4).
+14. **Spawn** the agent's `command` (a name is looked up on `PATH`, a path resolved against the project
+    root) with `launch.interactive.args` (+ `session.assign_args` when `assign`), no shell, the project
+    root as its working directory, stdio inherited, WingFoil's environment passed through. This is
     the **"agent ready"** instant of `REQ-PERF-01`. Steps 1–14 must complete in < 30,000 ms p95
     (`02_performance-nfr.md:16-22`). The agent's own start-up is outside WingFoil's control and
     outside the budget (`adr-012` Consequences).
@@ -442,7 +475,17 @@ repository.
     **forwards** only `SIGTERM` and `SIGHUP`, which do not come from the keyboard. Headless launch
     (v1.0, §3.5): the agent has no terminal, and `SIGINT`, `SIGTERM` and `SIGHUP` are all forwarded.
     In both cases `agent execute` then continues at step 16, so a run ended by a signal is still
-    recorded (`exit_status: "signal:<NAME>"`).
+    recorded (`exit_status: "signal:<NAME>"`). The handling holds until the record is committed: once
+    the agent has exited, a `SIGTERM` or `SIGHUP` has no agent to reach and is ignored like `SIGINT`,
+    so steps 16–17 (bounded by the lookups' limits) cannot be cut short and lose the run. The handling is
+    installed **before** the spawn, and before the pre-launch handling below is removed: a `SIGTERM` or
+    `SIGHUP` that arrives while the agent is being spawned is remembered and forwarded as soon as the
+    agent exists, so no signal can end `agent execute` without a record or leave the agent orphaned. If
+    the spawn then fails, there is no agent to forward it to: `agent execute` exits `1` with §3.7's
+    `could not be started` refusal and writes nothing, the signal having ended nothing.
+    **Before the spawn**, from step 10 on — its listeners installed before the temporary directory is
+    created — a `SIGINT`, `SIGTERM` or `SIGHUP` removes the temporary files and then ends `agent execute`
+    by that same signal, so an interrupted pre-flight leaves nothing behind (§2.3).
 16. Post-run lookups (§2.6), `agent_version` (§2.2), `notes` (§4.2).
 17. Append the record and commit it (§4.4).
 18. Exit: `0` if the agent exited `0` and step 17 succeeded; otherwise `1` (§3.7).
@@ -461,9 +504,15 @@ spawned but the pre-flight's server, and nothing is written to the repository.
   stderr, before step 14 and after step 15.
 - `warning: <text>` is the warning prefix, beside `spec-005` §3.1's `error: `. The post-run summary
   is one line: `run <run-id>: agent exited <exit_status> after <duration> (recorded in <sha7>)`.
+- The step-13 banner is a **notice**: neither a warning nor an error, an informational line printed
+  while the command runs.
 - `--format json|yaml` changes only the shape of those stderr lines: one JSON or YAML document per
-  message, `{ "warning": … }`, `{ "error": …, "hint"?, "details"? }` (`spec-005` §3.2 with `dl-055`'s
-  additive `details`), and `{ "run": <record> }` for the summary. This departs from `spec-005` §2
+  message, `{ "warning": … }`, `{ "notice": … }` for the banner, `{ "error": …, "hint"?, "details"? }`
+  (`spec-005` §3.2 with `dl-055`'s additive `details`), and `{ "run": <record> }` for the summary. A
+  YAML message is one `---` … `...` document, as a warning is (`spec-008` §6).
+- When the agent exited non-zero or by a signal, the summary is not printed on its own line: it rides
+  the `error` as its one `details` line (`run <run-id>: agent exited … (recorded in <sha7>)`), so the
+  sha of the record commit is still shown. This departs from `spec-005` §2
   ("stdout carries only the structured payload"). An interactive launch has no stdout of its own to
   put a payload on. `spec-005` §2 is amended accordingly in a v0.3 task (Consequences; Q8, settled).
 
@@ -521,6 +570,7 @@ P4.12:
 | `INVALID_CONTEXT` | `VALIDATION` | `1` | `invalid execution context: missing '<section>' section` (P5.4.4 sc. 3) |
 | `MCP_UNREACHABLE` | `IO` | `1` | `context pre-load failed: MCP server unreachable` (P5.4.3 sc. 3, verbatim) |
 | `NO_TERMINAL` (step 12) | `VALIDATION` | `1` | `interactive launch needs a terminal on stdin and stdout` |
+| the agent's command cannot be started at step 14 (it vanished from `PATH` after step 4, the OS refuses it) | `IO` | `1` | `agent command '<command>' could not be started (adapter '<name>'): <cause>` — no run, no record (§0) |
 | agent exited non-zero or by signal | `IO` | `1` | `agent exited <exit_status>; run <run-id> recorded` |
 | record commit failed | `IO` | `1` | `run <run-id> not recorded: <cause>`, with the record as a `details` line |
 | duplicate run id at record time (§4.3) | `CONFLICT` | `1` | `run id <run-id> already recorded at HEAD` |
@@ -547,11 +597,16 @@ The upper-case names in the first column are this spec's identifiers for tests. 
   when two branches ran the same element.
 - `wingfoil init` scaffolds `paths.runs: [docs/runs/]`. For this repository the value is chosen
   when the task lands.
+- **Path categories may nest.** `paths.runs` may lie inside another category's directory, as this
+  repository's `paths.runs` lies inside its `paths.docs` (`.wingfoil/dna.yaml`; approver ruling, W3 B1
+  triage, 2026-10-07): a run-log file then belongs to both categories: it lies under the directory `wingfoil paths runs`
+  prints and under one `wingfoil paths docs` prints. Nothing reads the overlap as an error.
 
 #### 4.2 Format
 
-**JSON Lines.** One JSON object per line, UTF-8, `\n`-terminated, append-only, keys in the fixed
-order below, and no insignificant whitespace. JSON Lines is chosen because:
+**JSON Lines.** One JSON object per line, UTF-8, `\n`-terminated (never `\r\n`), append-only, keys in
+the fixed order below, and no insignificant whitespace: each line is exactly `JSON.stringify` of the
+record with its keys in that order (`bug-288`). JSON Lines is chosen because:
 - a run is one line (`dl-114` Q1 (A): "one line per run");
 - appends merge as appends;
 - each line parses with `JSON.parse` and needs no dependency (`dl-010`);
@@ -574,7 +629,7 @@ order below, and no insignificant whitespace. JSON Lines is chosen because:
 | 13 | `wingfoil` | string | The launching build, `"<semver> (<sha>)"`, as `dl-111`'s `WingFoil-Version:` trailer. |
 | 14 | `state_ref` | string | Full commit sha the context was assembled at (§3.3 step 7). |
 | 15 | `duration_ms` | integer | Wall-clock, spawn to exit. It is a record of what happened and never enters a context (`dl-114` Q2 rationale). |
-| 16 | `exit_status` | integer \| string | The agent's exit code, or `signal:<NAME>`. |
+| 16 | `exit_status` | integer \| string | The agent's exit code, an integer from `0` to `255`, or `signal:<NAME>` (`bug-288`). |
 | 17 | `result` | string | `n/a` for an interactive launch; `PASS`/`FAIL`/`ERROR` for a headless one (§3.5). |
 | 18 | `notes` | string | `<element-id>#execution-notes` if the element's `## Execution Notes` section at `HEAD` after the run differs from its text at `state_ref`, else `none` (`dl-135` Q2 (c)). Notes the agent wrote but did not commit are not seen, and yield `none`; for a type whose template has no such section (§2.4) the value is always `none`. |
 
@@ -650,8 +705,12 @@ more caller of both.
 #### 4.5 Reading the log
 
 Every reader (`agent execute` for `n`, `agent list`, `agent show`) validates each line it reads: it
-must be JSON, have exactly the §4.2 keys in order with valid types, and have an `id` whose element
-segment equals the file's basename. Within the files read, ids must be unique. A violation is
+must be JSON, have exactly the §4.2 keys in order with valid types, have an `id` whose element
+segment equals the file's basename, and be byte for byte the §4.2 serialization of the record it parses
+to — a CR before the newline, whitespace outside a string, or another spelling of a value (`1.0` for
+`1`, an escaped character the writer writes as is) is refused (`bug-288`), with the detail `not in the
+serialized form of spec-016 §4.2 (a CR, whitespace outside a string, or another spelling of a value)`.
+Within the files read, ids must be unique. A violation is
 `VALIDATION`, exit `1`, `run log <path>: line <k> is not a valid run record: <detail>`, or `run log
 <path>: run id <id> recorded twice`.
 
@@ -1001,3 +1060,22 @@ subsection sits inside the section (it ends at the next level-1 or level-2 headi
 alone also sets `notes`. The `bug` template's section stays `## Triage & Execution Notes`, so a bug
 keeps the fallback line and `none`. Edited in place without a supersede or a state change
 (`dl-047`); recorded with `memory amend`.
+
+**Revision (2026-10-09, `task-228-agent-execute-launches-agent-forwards-right-signals-records`) — the
+launch half ships; the bootstrap carries the attribution rule; the run log's format is exact
+(`bug-288`).** §2.4's bootstrap gains `{attribution_line}`, the `git-conventions` §7 rule with the
+signing entry's `name` and `email` (`dl-117` Action 4, ruling R20 Q8, `dl-158` Rule 1 (a)), so its bytes
+are a function of the selected agent entry too; this is a revision of §2.4's literals, which the
+Consequences' revision trigger names. §2.6 fixes the `assign` namespace value and states how a post-run
+lookup runs (`command` + argv, no shell, 10 s, at most 1 MiB on each of stdout and stderr, one run per distinct argv, a
+wrong-typed value reported).
+§3.3: step 11 has one deadline (task-218's review); step 13's banner is a notice; step 14 names how the
+command is spawned; step 15's signal handling is installed before the spawn (a signal that arrives during
+it is forwarded once the agent exists) and holds until the record is committed, and before the spawn a
+signal removes the temporary files and re-raises. The attribution line tells the agent to add the
+trailers to a commit `wingfoil` writes with `--amend --trailer` (`git-conventions` §8, `bug-236`). §3.4 adds the `notice` document and the failed
+run's summary as a `details` line. §3.7 gains the row for a command that cannot be started at the
+spawn. §4.1 states that path categories may nest (approver ruling, W3 B1 triage). §4.2 key 16 is
+`0`–`255` or `signal:<NAME>`, and §4.2/§4.5 make each line exactly the writer's serialization
+(`bug-288`). The step-11 working-tree exception is unchanged: `dl-165` is still `in-discussion`. No key
+of §4.2 and no rule of §4.3 changes. Edited in place without a supersede or a state change (`dl-047`).

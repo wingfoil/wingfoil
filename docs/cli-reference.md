@@ -1066,6 +1066,76 @@ when `dna.yaml` or `memory.yaml` is present but invalid.
 
 - **Commit:** none.
 
+### `wingfoil workflow next`
+
+Print the next step of an open workflow: its verb, role, element, directives and bindings, as committed at HEAD.
+
+```
+wingfoil workflow next [<ref>] [--assigned-to <who>]
+```
+
+| Option | Description |
+|---|---|
+| `--assigned-to <who>` | Keep only the steps whose role `<who>` holds: `me` (the `team.members[]` entry whose email is your git identity's), a member's name or email, or a role name. |
+
+Unreleased (v0.3). Read-only, and it reads `HEAD` as `workflow list` does: an uncommitted change is
+reported as `W_UNCOMMITTED_INPUTS`, never read. `<ref>` is a workflow name (its most recently started open
+instance) or the id of an open instance; without it, the active instance (the most recently started one).
+
+The answer is the instance's **frontier**, the steps that are ready now. The first is the next step; the
+others are listed under `more` (several tasks iterated in parallel give several ready steps). Each step
+reports its `key` (`<workflow>.<phase>`, then `@<type>:<id>` for the element it runs on, e.g.
+`dev-loop.red@task:task-130`), its `trail` from the instance down, its `scope`, its `role`, the members who
+hold it and whether an agent runs as it (`agentRole`), the role's directives (`id` and `title` only; their
+text is what `agent execute` loads), and each action with its interpolated text and its binding:
+
+- `wingfoil`: the whole command, with the step's operands filled and placeholders for what only you can
+  give — `memory add --type <T> --title <title> --workflow <instance> --step <key>`, or a Memory verb with
+  the ids it acts on (`<id>` when none is known yet) and, for `approve` / `reject`, `--reason <reason>`;
+- `agent`: `wingfoil agent execute --workflow <instance> --step <key>`.
+
+**Planned:** `memory add --workflow` / `--step` (which link the added element to the step) and
+`agent execute --workflow` / `--step` are not available in this build yet; until they are, run `memory add`
+without those two options, and give `agent execute` the step's element with `--element <type>:<id>`. A step that waits for a third party is completed by a phase record that
+`wingfoil workflow finalize` writes, which is not available yet either.
+
+The other binding kinds:
+
+- `manual`: for a state change WingFoil has no command for yet, the commit subject the step expects, e.g.
+  `wf(task): start task-130 [backlog → in-progress]`, `wf(bug): sync bug-12 [in-review → in-progress]`;
+- `run`: a command bound in `workflows/bindings.yaml`; `unbound`: none.
+
+Checks are listed with their binding and `"evaluated": false`: nothing is run. A step also reports the
+evidence still missing (`finalizable: true` when only a record is, which `workflow finalize` writes),
+`fallback`, `reentered` and `reentryCommit` after a reject, `mode`, `allowedModes`, `distinctFrom` and a
+recurring `cadence` (`lastRun: "not-recorded"`). The console view prints the key, trail, scope, role,
+directive ids, actions with their bindings, the missing evidence and a "waiting for" or "human needed"
+line; `--format json|yaml` prints the full payload,
+`{"baseline": {…}, "instance": {…}, "complete": …, "next": {…}, "more": […], "diagnostics": […]}`.
+
+```console
+$ wingfoil workflow next
+workflow: decision-log-ingest (decision-log-ingest-rel-v0.3-consumer-feedback-loop-plan)
+next step: decision-log-ingest.capture
+  trail: decision-log-ingest.capture
+  scope: (none)
+  role: product-owner — held by Roberto Pompermaier
+  directives: claim-evidence, doc-versioning, documentation, git-conventions, security, security-secrets, traceability
+  actions:
+    - memory.add(type: decision-log) [wingfoil: wingfoil memory add --type decision-log --title <title> --workflow decision-log-ingest-rel-v0.3-consumer-feedback-loop-plan --step decision-log-ingest.capture]
+    - memory.submit [wingfoil: wingfoil memory submit <id>]
+  evidence missing: produces
+```
+
+- **Exit `0`** for every deduced outcome, with a `message`: `no open workflows`;
+  `no next step: workflow '<name>' is complete`; `no next step of workflow '<name>' is assigned to '<who>'`.
+- **Warnings:** `--assigned-to <who>` that names no member (name or email) and no `team.roles` role, or
+  `me` when your git identity's email is no member's, prints a `warning:` line; the filter then keeps no step.
+- **Errors:** a `<ref>` that names no workflow and no open instance → `unknown workflow: <ref>`; a workflow
+  with no open instance → `workflow is not open: <ref>`; both exit `1`; an error in
+  the workflow files → exit `1`, as `workflow list`; more than one `<ref>` → exit `2`.
+- **Commit:** none.
+
 ### `wingfoil workflow show`
 
 Print one workflow resolved, its included workflows nested under their phases, as committed at `HEAD`.
@@ -1087,8 +1157,8 @@ alone), `mode`, `allowedModes` and `distinctFrom`, `cadence`, the kinds of evide
 another workflow, that workflow resolved the same way under `sub`. The payload is
 `{"baseline": {…}, "workflow": {…}, "diagnostics": […]}`, the diagnostics as `workflow list` reports them.
 
-- **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <ref>`, exit
-  `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
+- **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <name>` —
+  `<ref>` itself, or, for an open instance whose workflow is not loaded, that workflow's name — exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
 - **Commit:** none.
 
 ## Agent
@@ -1113,10 +1183,11 @@ wingfoil agent execute --element <type:id> [--role <role>] [--agent <name>]
 | `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is `developer`, and a `warning:` line says so. `approver` is refused: an agent never runs as the role that approves. |
 | `--agent <name>` | The `team.agents` entry to launch. Without it, the first entry, in `dna.yaml` order, that declares an `adapter` and lists the role in `executes_as`. |
 
-Unreleased (v0.3), and **not yet able to launch**: this build runs every check that comes before the
-launch and stops there. It reads **as committed at `HEAD`** (see [Git side effects](#git-side-effects)):
+Unreleased (v0.3). It reads **as committed at `HEAD`** (see [Git side effects](#git-side-effects)):
 `dna.yaml`, `memory.yaml`, the element, the agent's adapter under `.wingfoil/agents/built-in/` or
-`.wingfoil/agents/custom/`, and the run log. That commit is the run's `state_ref`. In order, it checks:
+`.wingfoil/agents/custom/`, and the run log. That commit is the run's `state_ref`. The one read outside
+it: the WingFoil MCP server it starts for the pre-flight reads your working tree's `dna.yaml` when it
+starts, so an uncommitted change there can refuse the pre-flight. In order, it checks:
 the element exists; the role is defined and is not `approver`; an agent with an adapter runs the role;
 the adapter is valid; its `command` is on `PATH` (or at its path in the project); your git identity is
 set; `dna.yaml` declares `paths.runs` and the element's run log has no uncommitted changes; the
@@ -1128,17 +1199,43 @@ The first check that fails ends the command with exit `1` and its message, for e
 `error: invalid execution context: missing 'directives' section`. The context's warnings (a directive
 bound to the role with no file, a Memory document that could not be read) and any file under
 `.wingfoil/agents/` that is not an adapter (another extension, a nested file, a name outside
-`[a-z0-9-.]`) are printed as `warning:` lines first. Temporary files go to the system's temporary
-directory and are removed whatever happens.
+`[a-z0-9-.]`) are printed as `warning:` lines first, each once. Temporary files go to the system's
+temporary directory and are removed whatever happens, an interruption before the launch included.
 
-When every check passes, the command exits `1` with `error: agent execute cannot launch an agent yet:
-run <run-id> passed every pre-launch check …`. With `--dry-run` it exits `0` instead and prints the
-launch it would make: `{"dryRun": true, "subject": "agent: record <run-id>", "paths": [<run log>],
-"run": {id, element, workflow, phase, role, mode, agent, adapter, state_ref}, "bootstrap": "<the
-prompt the agent would receive>"}`. Without `--element` it exits `2` with
-`error: missing required argument: --next or --element`.
+Then it launches the agent: it prints `run <run-id>: launching <agent> (<adapter>) as <role> on
+<type>:<id>`, starts the adapter's command with the arguments its manifest declares (no shell), and
+hands it the terminal. The agent's first prompt names the run, the role, the element and the commit,
+tells it where to load its context (the `<role>-session` prompt of the `wingfoil` MCP server registered
+for it), and tells it to end every commit it writes, except an approve or reject commit, with
+`Co-Authored-By: <agent name> <<agent email>>` and `AI-Model: <its model>` — added to a commit `wingfoil`
+writes with `git commit --amend --no-edit --trailer`, never as a paragraph of their own. While the agent runs,
+Ctrl-C and Ctrl-\ reach the agent and do not stop `agent execute`; `SIGTERM` and `SIGHUP` sent to
+`agent execute` are passed on to the agent. When the agent exits, it asks the adapter's declared
+commands for the agent's version, session, model and token counts (each within 10 seconds; one that
+fails is recorded as `not-reported`, with a `warning:` line), appends one record to the element's run
+log (`<paths.runs>/<element-id>.jsonl`) and commits it alone, then prints
+`run <run-id>: agent exited <status> after <seconds> s (recorded in <sha7>)`.
 
-- **Commit:** none in this build (the launch will commit one run record, `agent: record <run-id>`).
+It exits `0` only when the agent exited `0` and the record was committed. An agent that exited with
+another code, or was ended by a signal, gives exit `1` and
+`error: agent exited <status>; run <run-id> recorded` (`<status>` is the code or `signal:<NAME>`); a
+record that could not be committed gives exit `1` and `error: run <run-id> not recorded: <cause>` (or the
+run-log refusal), with the record itself as a detail line so the run is not lost.
+
+**Nothing is written on stdout**, which belongs to the agent: every line `agent execute` prints goes to
+stderr, and `--format json` / `yaml` only reshape those lines, one document each — `{"warning": …}`,
+`{"notice": "run …: launching …"}`, `{"error": …, "hint"?, "details"?}`, and `{"run": <record>}` for the
+summary.
+
+With `--dry-run` it runs every check above, launches nothing, and prints on stdout the launch it would
+make: `{"dryRun": true, "subject": "agent: record <run-id>", "paths": [<run log>], "run": {id, element,
+workflow, phase, role, mode, agent, adapter, state_ref}, "bootstrap": "<the prompt the agent would
+receive>"}`. Without `--element` it exits `2` with `error: missing required argument: --next or
+--element`.
+
+- **Commit:** `agent: record <run-id>`, containing only the element's run log, with the
+  `WingFoil-Version:` trailer and no other body; made whatever the agent's exit, unless the record
+  cannot be committed.
 
 ### `wingfoil agent show`
 

@@ -362,7 +362,10 @@ wingfoil workflow list
 Unreleased (v0.3): `workflow list` lists the workflows you can start, plus an included one an open workflow
 has reached (`--all` lists every workflow), as committed at `HEAD`; `wingfoil workflow show <name>` prints
 one workflow's phases, each with its role, that role's directives, its actions and checks, and the
-workflows it includes nested under it. See the [CLI reference](cli-reference.md#wingfoil-workflow-list).
+workflows it includes nested under it. `wingfoil workflow next` names the next step of an open workflow:
+its role and that role's directives, the element it works on, and for each action the command to run or
+the commit subject it expects (`--assigned-to me` keeps the steps your role holds). See the
+[CLI reference](cli-reference.md#wingfoil-workflow-list).
 
 **WingFoil 0.2.2 has no workflow engine**: nothing starts a workflow, tracks its phase or runs its
 checks. The workflow files describe your process so that people and agents read the same one, and you
