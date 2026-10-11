@@ -710,6 +710,8 @@ has no reference entry.
 | Command | Flag | Behaviour |
 |---------|------|-----------|
 | `paths` | `--list` | Accepted for the planned drill-down view; it does not change the output yet. |
+| `memory add` | `--workflow <ref>` | A value option: links the added document to a step of the open instance `<ref>` names — an instance id, or a workflow name (its most recently started open instance) — through the add commit's trailers `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>` (`spec-017` §4.8, §7.10, ruling R16). The step is the one frontier step whose phase declares `memory.add` of the `--type` given; none, or several without `--step`, is refused (`CONFLICT`, exit `1`, `spec-017` §10). Without it, `memory add` links nothing and its commit is unchanged. |
+| `memory add` | `--step <key>` | A value option: the frontier step to link to, by its key (`spec-017` §4.9), when several steps of the instance add the type. Needs `--workflow`: alone it is exit `2`, `missing required argument: --workflow`. A key not on the instance's frontier is refused (`CONFLICT`, exit `1`). |
 | `workflow next` | `--assigned-to <who>` | An option with a value: keeps the frontier steps whose role `<who>` holds — `me` (the `team.members[]` entry whose email is the git identity's), a member's name or email, or a role name (`spec-017` §7.3, BDD P4.4 sc. 2). |
 | `workflow list` | `--all` | Lists every workflow the registry loads, not only the ones executable now: the includable workflows no open instance's frontier enters are listed too, with `executableNow: false` (`spec-017` §7.5, BDD P4.6 sc. 3). |
 | `directive assign` | `--force` | Authorizes the whole-file rewrite of `roles.yaml` when the in-place edit cannot apply (`dl-062` Q1 option 3). Without it that case is §6's `CONFLICT` refusal. With it the file is written again from its parsed content in the one `wf(directive): assign …` commit, and the success carries §6's warning. `--force` does not force a rewrite: an edit the in-place editor can make is made in place, with no warning. A missing `roles.yaml` is written whole without the flag, since there is nothing to preserve. |
@@ -1243,3 +1245,10 @@ the notice (the launch banner) and on the success report a command that hands it
 prints on stderr, in the shapes a warning takes; the unknown-field row says `agent execute` prints each
 once with a `HEAD:` label. No exit code changes. Edited in place without a supersede or a state change
 (`dl-047`).
+
+**Revision (2026-10-10, `task-227-link-added-element-workflow-step-memory-add-workflow`) — `memory add
+--workflow <ref> [--step <key>]`.** `task-227` ships the two value options `spec-017` §7.10 requires of
+`memory add` (ruling R16); §12 gains a row for each, with `--step`'s dependency on `--workflow` (exit `2`)
+and the refusals' exit `1`. The command already reads `HEAD` (§11), and the deduction that picks the step
+reads it too (`spec-017` §11). No global flag, exit code or error format changes. Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-227`'s review.
