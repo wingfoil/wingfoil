@@ -2818,7 +2818,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
       workflowRemove: {
         name: 'workflowRemove',
         mutates: true,
-        description: 'delete a custom workflow no other workflow includes and no open workflow runs, and its workflows.yaml entry',
+        description: 'delete a custom workflow and its workflows.yaml entry, unless another workflow includes it or an open workflow runs it',
         positional: { name: 'ref', required: true, description: 'a workflow name, or the id of an open workflow instance (built-in workflows cannot be removed)' },
         example: 'wingfoil workflow remove arch-review',
         fn: workflowRemoveFn,

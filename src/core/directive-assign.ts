@@ -243,9 +243,12 @@ export function checkAssignable(root: string, role: string, ids: readonly string
  *    `cannot remove '<id>': still assigned to every role via roles.yaml 'global'`. Recorded in
  *    `task-052-directive-remove`'s Execution Notes and raised for ratification, not assumed settled.
  *
- * A directive referenced from a *workflow* step is deliberately not checked: `src/workflow/schema.ts`
- * has no field that can reference a directive, so P3.3's "or workflow step" precondition is vacuous
- * today, and P4.9's workflow half of clause (b) has no owner in v0.2 per `dl-030`.
+ * A directive referenced from a *workflow* step is deliberately not checked: under `dl-066` option 1 a
+ * phase reaches directives only through its `role` (`spec-003` `Phase.role`; `src/workflow/schema.ts`
+ * has no field that names a directive), so the `roles.yaml` bindings above are the whole referrer source
+ * and P3.3 no longer says "or workflow step". The workflow half of clause (b) — a workflow still included
+ * by another, or with an open instance — is `wingfoil workflow remove`'s (`workflowRemove`,
+ * `./workflow-create-remove.ts`, task-211, `dl-030`); it checks no directive either.
  *
  * **The bindings are read from the `roles.yaml` committed at `HEAD`**, never from the working tree
  * (task-096, `bug-086-directive-inventory-read-from-the-worktree`, `dl-080` option (B)). This

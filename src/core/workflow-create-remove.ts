@@ -220,7 +220,7 @@ function includedBy(workflows: readonly Workflow[], name: string): string[] {
  * initialized project → the registry and the deduction at `HEAD` → `<ref>` (`NOT_FOUND`) → a file under
  * `workflows/built-in/` (REQ-SEC-07 clause (a), `VALIDATION`) → included by another workflow (clause (b),
  * `dl-030`; `CONFLICT`, every referrer in `details.referrers`) → an open instance (`CONFLICT`, every id in
- * `details.instances`) → confinement → the write guard on the file and on `workflows.yaml` → the in-place
+ * `details.instances`; each also a `details.issues` line, which the surfaces print) → confinement → the write guard on the file and on `workflows.yaml` → the in-place
  * manifest edit → the prospective load → the commit.
  *
  * @throws `UsageError` (exit 2) without `<ref>`; `DiagnosticsError` for a `spec-003` error at `HEAD`.
@@ -248,14 +248,16 @@ export async function workflowRemove(params: WorkflowRemoveParams): Promise<Core
   if (!custom.ok) return custom;
   const referrers = includedBy(snapshot.workflows, name);
   if (referrers.length > 0) {
-    return coreErr({ code: 'CONFLICT', message: `cannot remove '${name}': included by '${referrers[0]}'`, details: { referrers } });
+    const issues = referrers.map((referrer) => ({ detail: `included by '${referrer}'` }));
+    return coreErr({ code: 'CONFLICT', message: `cannot remove '${name}': included by '${referrers[0]}'`, details: { referrers, issues } });
   }
   const instances = deduction.instances
     .filter((open) => open.instance.workflow === name)
     .map((open) => open.instance.id)
     .sort();
   if (instances.length > 0) {
-    return coreErr({ code: 'CONFLICT', message: `cannot remove '${name}': open instance ${instances[0]}`, details: { instances } });
+    const issues = instances.map((id) => ({ detail: `open instance ${id}` }));
+    return coreErr({ code: 'CONFLICT', message: `cannot remove '${name}': open instance ${instances[0]}`, details: { instances, issues } });
   }
 
   const confined = requireConfinedTarget(root, file, 'remove');

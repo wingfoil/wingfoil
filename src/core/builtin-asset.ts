@@ -36,17 +36,16 @@
  * This lives in `src/core` (not `src/directives`/`src/workflow`) because REQ-SEC-07 crosscuts both
  * pillars identically and both the CLI and MCP surfaces must enforce it the same way (REQ-SYS-05) —
  * the same reasoning `requireGitIdentity` (REQ-SEC-01, task-014) already established for a
- * cross-cutting mutating-op pre-flight. Neither `directive remove` nor `workflow remove` exists yet in
- * `CORE_MODULES` (spec-006 §3 reserves both as future `mutates: true` operations); per the same
- * precedent (task-014, task-016), this task delivers the shared, fully-tested primitive now and defers
- * wiring it into the actual mutating op to the dependent task (task-052-directive-remove for
- * `directive.remove`; a future task for `workflow.remove`).
+ * cross-cutting mutating-op pre-flight. It shipped (task-042) before either remove operation; both now
+ * call it: `directive remove` (task-052-directive-remove) and `workflow remove` (task-211,
+ * `./workflow-create-remove.ts`).
  *
  * **Scope:** this module delivers REQ-SEC-07's *first* clause only. The second — "removal of a
- * still-referenced custom asset is rejected naming the referrer" — is deliberately not implemented
- * here; per `dl-030-req-sec-07-referenced-asset-ownership` (`ready`) the directive half belongs to
- * `task-052-directive-remove` and the workflow half (P4.9) is carried to the next `release-planning`
- * run. `requireCustomAsset` is therefore the FIRST of two checks a remove op runs, never the only one.
+ * still-referenced custom asset is rejected naming the referrer" — is each remove operation's own, per
+ * `dl-030-req-sec-07-referenced-asset-ownership` (`ready`): the directive half is `checkUnreferenced`
+ * (`./directive-assign.ts`, task-052), the workflow half `workflow remove`'s include and open-instance
+ * refusals (task-211). `requireCustomAsset` is therefore the FIRST of two checks a remove op runs, never
+ * the only one.
  */
 import { coreErr, coreOk, type CoreResult } from './types';
 
