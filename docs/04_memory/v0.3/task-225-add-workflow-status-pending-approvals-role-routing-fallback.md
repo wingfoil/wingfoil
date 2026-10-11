@@ -2,7 +2,7 @@
 id: "task-225-add-workflow-status-pending-approvals-role-routing-fallback"
 type: task
 title: "Add `workflow status` with pending approvals, role routing, fallback and \"human needed\" lines"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "high"
