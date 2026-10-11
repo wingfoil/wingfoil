@@ -51,6 +51,9 @@ import { renderNextConsole, workflowNextAtHead, type Step } from './workflow-nex
 /** The `--set` names `workflow start` accepts (`spec-017` §7.1): the two derived plan tokens it lets a user override. */
 const START_SET_NAMES: readonly string[] = ['phase', 'scope'];
 
+/** The highest `-<n>` suffix `start` tries on a derived `phase` before it gives up (a safeguard; review F1). */
+const MAX_PHASE_SUFFIX = 1000;
+
 /** `phase` with no bound and no context element (approver ruling R18). */
 const DEFAULT_PHASE = '1';
 
@@ -168,7 +171,9 @@ function resolveStartElement(
  * any baseline `dl-101` names; `scope` = the name. `--set phase=` / `--set scope=` override them, and a
  * colliding `--set phase=` is `CONFLICT`. Only tokens the committed `id_pattern` or `path` holds are passed
  * on; a `--set` naming none is `memory add`'s refusal. An `id_pattern` with a `{n}` counter is unique by
- * construction and is not checked.
+ * construction and is not checked, nor is a `path` with no `{id}` (one file per other tokens: `memory add`
+ * refuses an occupied one). The suffix is tried only when `{phase}` is a token of the `id_pattern` itself —
+ * in the `path` alone it cannot change the id — and at most {@link MAX_PHASE_SUFFIX} times.
  */
 function planTokens(
   root: string,
@@ -184,24 +189,28 @@ function planTokens(
   const tokens: Record<string, string> = {};
   for (const key of Object.keys(derived).sort()) if (declared.has(key)) tokens[key] = derived[key]!;
   Object.assign(tokens, set);
-  const idOf = (values: Readonly<Record<string, string>>): string =>
-    generateId(expandFieldTokens(idPattern, values), { slug: slugifyTitle(title ?? name), n: 0 });
   const titleOf = (phase: string | undefined): string => title ?? (phase === undefined ? name : `${name} — ${phase}`);
+  // The id `memory add` will generate: its `{slug}` comes from the title it is given (review F1 nit).
+  const idOf = (values: Readonly<Record<string, string>>): string =>
+    generateId(expandFieldTokens(idPattern, values), { slug: slugifyTitle(titleOf(values['phase'])), n: 0 });
+  const planned = (values: Readonly<Record<string, string>>): StartPlan => ({ id: idOf(values), title: titleOf(values['phase']), tokens: values });
 
-  if (hasNumericToken(idPattern) || !declared.has('phase')) {
-    return coreOk({ id: idOf(tokens), title: titleOf(tokens['phase']), tokens });
+  // A `{n}` id is unique by construction; a `path` with no `{id}` names one file per other tokens, which
+  // `memory add`'s absent-target check decides (`idOccupied` would read every plan as that one).
+  if (hasNumericToken(idPattern) || !patternTokens(pathPattern).includes('id')) return coreOk(planned(tokens));
+  // Only a `{phase}` in the id itself can be made unique by the `-<n>` suffix (review F1): otherwise, and for
+  // a `--set phase=`, the id is checked once.
+  if (!patternTokens(idPattern).includes('phase') || set['phase'] !== undefined) {
+    const plan = planned(tokens);
+    if (idOccupied(root, pathPattern, plan.id)) return coreErr({ code: 'CONFLICT', message: `plan id already exists: ${plan.id}`, details: { id: plan.id } });
+    return coreOk(plan);
   }
-  if (set['phase'] !== undefined) {
-    const id = idOf(tokens);
-    if (idOccupied(root, pathPattern, id)) return coreErr({ code: 'CONFLICT', message: `plan id already exists: ${id}`, details: { id } });
-    return coreOk({ id, title: titleOf(tokens['phase']), tokens });
+  for (let n = 1; n <= MAX_PHASE_SUFFIX; n += 1) {
+    const plan = planned({ ...tokens, phase: n === 1 ? base : `${base}-${n}` });
+    if (!idOccupied(root, pathPattern, plan.id)) return coreOk(plan);
   }
-  for (let n = 1; ; n += 1) {
-    const phase = n === 1 ? base : `${base}-${n}`;
-    const candidate = { ...tokens, phase };
-    const id = idOf(candidate);
-    if (!idOccupied(root, pathPattern, id)) return coreOk({ id, title: titleOf(phase), tokens: candidate });
-  }
+  const last = idOf({ ...tokens, phase: `${base}-${MAX_PHASE_SUFFIX}` });
+  return coreErr({ code: 'CONFLICT', message: `plan id already exists: ${last}`, details: { id: last } });
 }
 
 /**
