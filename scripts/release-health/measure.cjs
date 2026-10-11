@@ -5,12 +5,12 @@
  * `release-health-<version>.json` (`docs/08_health/release-health.schema.json`). Not shipped in the npm package
  * (`package.json` `files`).
  *
- * This file is the **history half** (task-231): the git-history metrics G01–G16, the process-conformance measures
+ * It holds the **history half** (task-231): the git-history metrics G01–G16, the process-conformance measures
  * P01–P07 (`REQ-STATE-10`, `dl-131` Decision 3), the external visibility snapshot E01–E05 (`dl-130` Q2 (a)) and the
- * toolchain record. The quality metrics are measured by task-232 (Q01–Q04, Q11, Q12, Q17) and task-233 (the other
- * Q metrics); until they land, the report carries each of them as `not-measurable`, naming its owner. D01 and P06
- * need the benchmark's two runs (`dl-089` §2, `dl-131`): `not-comparable` on a patch release, else
- * `not-measurable`.
+ * toolchain record; and the **toolchain half** (task-232): Q01–Q04, Q11, Q12 and Q17, measured by running the
+ * project's own commands. The other Q metrics are task-233's; until it lands, the report carries each of them as
+ * `not-measurable`, naming its owner. D01 and P06 need the benchmark's two runs (`dl-089` §2, `dl-131`):
+ * `not-comparable` on a patch release, else `not-measurable`.
  *
  * **The measurement point** (`dl-089` §1). `--at <rev>` names it. Otherwise the release element whose `version` is
  * `--release` is read at `HEAD`, and the point is the highest tag named `<version>` or `<version>.<n>` (a patch:
@@ -22,9 +22,32 @@
  * **Read-only** (`dl-089` §6): every read is `git log`, `git show <rev>:<path>`, `git ls-tree` or
  * `git for-each-ref` at the point; the commit-dependent checks run in a throw-away worktree (`git worktree add
  * --detach`, hooks off through `git -c`, removed afterwards). Nothing writes git configuration, and nothing needs an
- * identity, since nothing is committed. The only file written is the report. A run killed by a signal (SIGINT,
- * SIGTERM, SIGKILL) leaves its worktree registered; remove it by hand with
- * `git worktree remove --force /tmp/wf-release-health-<suffix>/tree` (the path `git worktree list` shows).
+ * identity, since nothing is committed. The only file written is the report (the toolchain's own outputs stay in
+ * the temporary directory). **Signals** (`bug-329`): SIGINT, SIGTERM and SIGHUP stop the running tool, remove the
+ * worktree and its temporary directory, and re-raise; one that lands during the synchronous history half is handled
+ * when that half returns, since Node runs no handler during synchronous code. A run killed by SIGKILL leaves its
+ * worktree registered; remove it by hand with `git worktree remove --force /tmp/wf-release-health-<suffix>/tree`
+ * (the path `git worktree list` shows).
+ *
+ * **The toolchain half** (task-232; `dl-089` §6) runs in the same worktree, after the history half: `npm ci`, then
+ * each metric's command, every tool with the running Node's directory first on `PATH`. It runs only under the
+ * pipeline's pinned Node (`.github/workflows/publish.yml` `env.NODE_VERSION` at the point); with another, its seven
+ * metrics are `not-measurable` naming both versions, unless `--any-node`, which measures and records `node` and
+ * `node_pinned` in each entry's `raw`. A tool that cannot run, is killed, or leaves an output the reader cannot parse
+ * makes its metric `not-measurable` with the reason, never a zero; a check that runs and fails is a measured failure.
+ * - Q01 `npm run build`, `npm run typecheck`, `npm run lint`, all three run: `true` when each exits 0;
+ * - Q02 `npm test -- --json --outputFile=…`: jest's counts; disabled = skipped + todo; failing = failed tests plus
+ *   suites that failed to run, each named;
+ * - Q03/Q04 `npm run test:coverage -- --coverageReporters=json-summary --coverageDirectory=…`: the totals, and the
+ *   branch coverage of the three critical modules against the 90 % floor; a module missing from the summary makes Q04
+ *   `not-measurable`;
+ * - Q11 each `docs/examples/*\/run.sh`, `bash` with `WINGFOIL="node <worktree>/dist/cli.js"`, after a successful build;
+ * - Q12 `npm run test:latency` with `WINGFOIL_LATENCY_REPORT=1`, read from the suite's own report: the highest total
+ *   p95, every p95, the floor and the 1-minute load before and after; **a run the suite judges loaded is
+ *   `not-measurable`** (catalogue Q12, task-263's floor verdict), its `raw` still recording the load;
+ * - Q17 the first `npm install -g <spec>` of `docs/user-guide.md` (else `README.md`), the version that document states
+ *   in bold, and `npm view <spec> version --json`; it reads the registry at run time, so like G15 and E01–E05 a later
+ *   run can answer differently (`raw.resolved_from`); `--offline` skips it.
  *
  * **G15 is not reproducible at a fixed point.** Unlike every other metric, it reads the live `refs/heads` and
  * `refs/remotes` of the clone that runs it, at run time, so a later run at the same point can answer differently;
@@ -75,7 +98,9 @@
  * Deterministic (REQ-SYS-07): no clock, no randomness; every list is in commit order or sorted.
  *
  * Usage: node scripts/release-health/measure.cjs --release <vX.Y[.Z]> [--at <rev>] [--previous <rev>]
- *          [--out <file>] [--offline] [--root <dir>]
+ *          [--out <file>] [--offline] [--root <dir>] [--no-toolchain] [--any-node] [--max-workers <n>]
+ * `--no-toolchain` skips the toolchain half (its metrics `not-measurable`); `--max-workers` goes to the two jest runs.
+ * Progress lines go to stderr.
  * Exit: 0 the report is written (its path on stdout) · 2 the measure could not run (message on stderr).
  */
 'use strict';
