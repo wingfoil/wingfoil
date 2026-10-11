@@ -266,8 +266,8 @@ document's state, `returns.<from>` in the type's machine (`spec-001`), and write
 nothing else. A park is a scheduling decision, not an approval: the body carries a `Reason:` block,
 mandatory as on `approve` (§2 above), and no `Approver:` line, and no authority is checked. Its
 refusals: a missing or blank `--reason` exits `2`; a state with no `returns` edge exits `1` with the
-illegal-transition message (`dl-032`); a target state at its WIP limit (`spec-001` `limits`) exits
-`1`, naming the elements that hold it.
+illegal-transition message (`dl-032`). A WIP limit on the target state (`spec-001` `limits`) does not
+refuse a park: a return along a `returns` edge is exempt (`dl-156` Q2 (i)).
 
 ```
 wf({type}): park {id} [{from} → {to}]
@@ -275,14 +275,20 @@ wf({type}): park {id} [{from} → {to}]
 Reason: {reason}
 ```
 
-**A WIP limit binds every verb that enters the state** (`dl-110` P3 (a); `task-180`). When the type's
-machine declares `limits: { <state>: N }` and N documents of the type are in `<state>` in the commit
-the transition is decided at, a verb that would move another one there — `add` for the initial state,
-`submit`, `approve`, `reject`, `park`, and the `supersedes:` trigger — refuses with `CONFLICT` (exit
-`1`) before anything is written:
+**A WIP limit binds every verb that enters the state, except the two that send an element back**
+(`dl-110` P3 (a), `task-180`; `dl-156`, `task-274`). When the type's machine declares
+`limits: { <state>: N }` and N documents of the type hold `<state>` — counted in the commit the
+transition is decided at **and** at the tip of every local branch and remote-tracking ref, each
+document once — in the state a ref records only when that ref changed its `status` since its
+merge-base with the decided commit, otherwise in the decided commit's (`spec-001` `limits`, `dl-156`
+Q1 (a), the approver's ruling of 2026-10-11) — a verb that would
+move another one there — `add` for the initial state, `submit`, `approve`, and the `supersedes:`
+trigger — refuses with `CONFLICT` (exit `1`) before anything is written. `reject` (a `gates` reject
+edge) and `park` (a `returns` edge) are not refused, and may leave the state above its limit
+(`dl-156` Q2 (i)):
 
 ```
-WIP limit reached for '<state>' on type '<type>' (limit <N>): held by <id1>, <id2>. Move one of them out of '<state>', then retry.
+WIP limit reached for '<state>' on type '<type>' (limit <N>): held by <id1>, <id2>. Move one of them out of '<state>', then retry. The holders are counted at HEAD and on every local and remote-tracking branch that changed them since it forked from HEAD, so the count depends on which refs were last fetched; a holder another branch records is moved out on that branch.
 ```
 
 **A chained bracket** is read from its first state to its last. Those two states are compared with
@@ -685,7 +691,7 @@ CLI reference's *Git side effects* says the same to users.
 
 | Baseline | Commands | Why |
 |----------|----------|-----|
-| **committed at `HEAD`** | `memory add`, `memory submit`, `memory approve`, `memory reject`, `memory deprecate`, `memory park`, `memory amend` (their `memory.yaml`, the document the `<id>` names and its status, and approver authority — the content `submit` and `amend` commit is the working tree's); `dna set`, `dna add`, `dna update`, `dna remove`; `directive assign`; `directive remove`'s referrer check; `workflow next` (v0.3); `agent execute` (v0.3: `dna.yaml`, `memory.yaml`, the element, the adapter, the run log's count and the context, all at the one `HEAD` that becomes the run's `state_ref`, `spec-016` §3.2–§3.3 — with one declared exception: the MCP pre-flight starts `wingfoil mcp`, whose own start-up check reads the working tree's `dna.yaml` (`spec-014` §1), so an uncommitted change there can refuse the pre-flight, `spec-016` §3.3 step 11) | a read that can refuse the command or change what it writes (`spec-006` §6 items 1–2). When the working tree defines a type the commit does not, `memory add`'s refusal says the change is not committed (`dl-084` (D), `task-095`); the `dna` verbs first refuse a `dna.yaml` that differs from `HEAD`, so what they then read is `HEAD`'s; `memory add`'s `{n}` counter reads the wider baseline the `command-baseline` directive declares, which can only raise the number |
+| **committed at `HEAD`** | `memory add`, `memory submit`, `memory approve`, `memory reject`, `memory deprecate`, `memory park`, `memory amend` (their `memory.yaml`, the document the `<id>` names and its status, and approver authority — the content `submit` and `amend` commit is the working tree's); `dna set`, `dna add`, `dna update`, `dna remove`; `directive assign`; `directive remove`'s referrer check; `workflow next` (v0.3); `agent execute` (v0.3: `dna.yaml`, `memory.yaml`, the element, the adapter, the run log's count and the context, all at the one `HEAD` that becomes the run's `state_ref`, `spec-016` §3.2–§3.3 — with one declared exception: the MCP pre-flight starts `wingfoil mcp`, whose own start-up check reads the working tree's `dna.yaml` (`spec-014` §1), so an uncommitted change there can refuse the pre-flight, `spec-016` §3.3 step 11) | a read that can refuse the command or change what it writes (`spec-006` §6 items 1–2). When the working tree defines a type the commit does not, `memory add`'s refusal says the change is not committed (`dl-084` (D), `task-095`); the `dna` verbs first refuse a `dna.yaml` that differs from `HEAD`, so what they then read is `HEAD`'s; `memory add`'s `{n}` counter reads the wider baseline the `command-baseline` directive declares, which can only raise the number; the WIP-limit holder count of `add`, `submit` and `approve` reads the decided commit plus every local and remote-tracking branch tip and its merge-base with that commit, the second baseline that directive declares (`dl-156` Q1 (a)) |
 | **committed at `HEAD`, declared** (v0.3, as each ships) | `workflow status`, `workflow list`, `workflow show`, `agent list`, `agent show` | approver ruling R15: one deduction, one baseline; a working tree that differs is reported as the warning `W_UNCOMMITTED_INPUTS`, and never decides the answer (`spec-006` §6 item 6, `spec-017` §1.2) |
 | **working tree** | `dna show`, `paths`, `directives list`, `memory search`, `memory history` | a read that gates nothing: a draft you have not committed is what `memory search` exists to find (`spec-006` §6 item 4). `memory history` reads git's log for the entries and the working tree's `memory.yaml` |
 | **filesystem** | the confinement and symlink guards of every command that writes or deletes a file; `directive create`'s check that its target does not exist | the read predicts where a syscall will land, which no commit records (`spec-006` §6 item 5, `dl-086`) |
@@ -1243,3 +1249,17 @@ the notice (the launch banner) and on the success report a command that hands it
 prints on stderr, in the shapes a warning takes; the unknown-field row says `agent execute` prints each
 once with a `HEAD:` label. No exit code changes. Edited in place without a supersede or a state change
 (`dl-047`).
+
+**Revision (2026-10-10, `task-274-count-wip-limit-holders-across-every-ref-and-exempt-reject-and-returns-edges-from-the-limit`) —
+the WIP-limit refusal counts across refs and no longer binds `reject` or `park`.** `dl-156` (`ready`,
+approve `f3354102`) Q2 (i): §2's WIP-limit paragraph lists the verbs the refusal binds without `reject`
+and `park`, and the `park` paragraph drops its WIP refusal. Q1 (a): the holders are counted at the
+decided commit and on every local and remote-tracking branch tip, a tip's copy counting only when
+that ref changed the element's `status` since its merge-base with the decided commit (the approver's
+ruling of 2026-10-11, option (a), at `task-274`'s review), and the refusal gains a closing sentence
+saying so and where a holder another branch records is moved out; its first two sentences keep the
+text `task-180` wrote, which `test/core/memory-wip-limits.test.ts` pins verbatim. §11's
+committed-`HEAD` row names the count, merge-bases included, as the second declared baseline
+(`command-baseline` 1.5). No flag or exit code changes. Edited in
+place without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at
+`task-274`'s review.
