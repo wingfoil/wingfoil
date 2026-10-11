@@ -41,6 +41,7 @@ interface WorkflowStep {
   readonly name?: string;
   readonly uses?: string;
   readonly run?: string;
+  readonly shell?: string;
   readonly if?: string;
   readonly env?: Readonly<Record<string, string>>;
   readonly with?: Readonly<Record<string, unknown>>;
@@ -474,8 +475,13 @@ describe('mcp-registry job (task-238) — the MCP Registry listing follows npm',
 
     afterEach(() => rmSync(work, { recursive: true, force: true }));
 
+    it('declares `shell: bash`, so GitHub runs it with -eo pipefail as this test does (review F5)', () => {
+      expect(step('sha256sum --check --strict')?.shell).toBe('bash');
+    });
+
     function runInstall(sha256: string): number | null {
       const install = step('sha256sum --check --strict');
+      // `shell: bash` runs `bash --noprofile --norc -eo pipefail {0}` on GitHub-hosted runners.
       const result = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', install?.run ?? 'exit 99'], {
         cwd: work,
         encoding: 'utf-8',
@@ -522,15 +528,17 @@ describe('job timeouts (task-238) — dl-057 (b)', () => {
     }
   });
 
-  it('states each value and its source (task-077’s measured table) in the header', () => {
+  it('states each value and its sources (task-077’s measured table, the CI packaging gate) in the header', () => {
     const { raw, parsed } = readWorkflow();
     const header = raw.slice(0, raw.indexOf('\nname: publish'));
     expect(header).toContain('task-077');
     expect(header).toContain('dl-057');
+    // review F1: today's prepublishOnly takes ~7 min on a hosted runner (CI run 38166281488), not task-077's 3.
+    expect(header).toContain('38166281488');
     for (const [name, job] of Object.entries(parsed.jobs)) {
       expect(header).toContain(`${name} ${String(job['timeout-minutes'])}`);
     }
-    expect(parsed.jobs.gate?.['timeout-minutes']).toBe(15);
+    expect(parsed.jobs.gate?.['timeout-minutes']).toBe(30);
     expect(parsed.jobs.stage?.['timeout-minutes']).toBe(20);
     expect(parsed.jobs.promote?.['timeout-minutes']).toBe(30);
   });
