@@ -345,7 +345,7 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
     expect(result.error.message).toContain("(limit 2): held by wide-001, wide-002. Move one of them out of 'in-progress'");
   });
 
-  it('the most advanced state wins: a holder another branch has finished frees its slot', async () => {
+  it('a branch that changed a holder since the fork counts with its copy: one it finished frees its slot', async () => {
     const main = trunk();
     git(repo, ['checkout', '--quiet', '-b', 'task/card-001']);
     commitStatus('docs/memory/cards/card-001.md', 'card-001', 'card', 'done');
@@ -354,6 +354,49 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
     const result = await verb('memorySubmit', repo, 'card-002');
     expect(result.ok).toBe(true);
     expect(gitOut(repo, ['log', '-1', '--format=%s'])).toBe('wf(card): submit card-002');
+  });
+
+  // Review F1 (approver ruling 2026-10-11, option (a)): a ref's copy counts only when that ref changed
+  // the element since its merge-base with the decided commit; otherwise the decided commit's copy wins.
+  it('a stale branch does not keep a parked holder counted: park on the trunk, then submit succeeds', async () => {
+    git(repo, ['branch', 'stale-feature']);
+    const parked = await verb('memoryPark', repo, 'card-001', { reason: 'blocked' });
+    expect(parked.ok).toBe(true);
+    const result = await verb('memorySubmit', repo, 'card-002');
+    expect(result.ok).toBe(true);
+    expect(gitOut(repo, ['log', '-1', '--format=%s'])).toBe('wf(card): submit card-002');
+  });
+
+  it('after a reject on the task branch, the trunk\'s older in-review copy does not hide the holder', async () => {
+    git(repo, ['checkout', '--quiet', '-b', 'task/card-003']);
+    expect((await verb('memoryReject', repo, 'card-003', { reason: 'tests missing' })).ok).toBe(true);
+    expect((await verb('memoryPark', repo, 'card-001', { reason: 'make room' })).ok).toBe(true);
+    // On this branch card-003 is in-progress (its reject) and card-001 draft (its park); the trunk still
+    // records card-003 in-review and card-001 in-progress, both unchanged since the fork, so neither counts.
+    const result = await verb('memorySubmit', repo, 'card-002');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("(limit 1): held by card-003. Move one of them out of 'in-progress'");
+  });
+
+  it('when several refs changed an element, the most advanced of their changed copies wins over the decided one', async () => {
+    const main = trunk();
+    git(repo, ['branch', 'task/x']);
+    commitStatus('docs/memory/wide/wide-003.md', 'wide-003', 'wide', 'done');
+    git(repo, ['checkout', '--quiet', '-b', 'task/y', 'task/x']);
+    commitStatus('docs/memory/wide/wide-003.md', 'wide-003', 'wide', 'in-progress');
+    git(repo, ['checkout', '--quiet', 'task/x']);
+    commitStatus('docs/memory/wide/wide-002.md', 'wide-002', 'wide', 'in-progress');
+    // At task/x: wide-001 and wide-002 in-progress, wide-003 draft. task/y changed wide-003 to
+    // in-progress and the trunk changed it to done: the most advanced changed copy, done, wins.
+    git(repo, ['checkout', '--quiet', main]);
+    git(repo, ['checkout', '--quiet', 'task/x']);
+    writeFixtureFile(repo, 'docs/memory/wide/wide-005.md', doc('wide-005', 'wide', 'draft'));
+    commitAll(repo, 'wide-005 draft');
+    const result = await verb('memorySubmit', repo, 'wide-005');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('(limit 2): held by wide-001, wide-002.');
   });
 
   it('an element two refs record in the same state is one holder, not two (characterization)', async () => {
