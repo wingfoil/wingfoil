@@ -2,7 +2,7 @@
 id: "task-224-add-readme-badges-reproducible-terminal-demo-drives-example"
 type: task
 title: "Add README badges and a reproducible terminal demo that drives an example"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "low"
