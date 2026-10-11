@@ -2,7 +2,7 @@
 id: "task-240-wingfoil-agent-list-past-waiting-lists-recorded-runs"
 type: task
 title: "`wingfoil agent list --past|--waiting` lists recorded runs and the frontier steps an agent role can take, from `HEAD`"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "medium"
