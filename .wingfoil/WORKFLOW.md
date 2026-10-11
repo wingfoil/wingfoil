@@ -675,5 +675,5 @@ stateDiagram-v2
 | `developer` | TDD dev-loop (green/refactor), branch management, user-facing docs (`align-user-docs`), bug capture, service capture |
 | `reviewer` | Code review in dev-loop (tests and code, under the developer's and qa's directives too, `dl-134`) |
 | `qa` | BDD specification, the dev-loop `red` phase (black-box tests, `dl-134`), end-to-end smoke (`e2e-smoke`), pre-release checks, release-health measurement (`measure`) |
-| `facilitator` | Lean inception sessions, release-health comparison and proposals (`compare`, `propose`), retrospective exploration and capture |
+| `facilitator` | Lean inception sessions, release-health comparison and proposals (`compare`, `propose`), retrospective exploration, consumer feedback collection and capture |
 | `approver` | All approval gates (bug triage, vision-change acceptance, governance reconcile, backlog commit, task review, documentation, e2e smoke, release, retrospective, end-of-life, service verification) |

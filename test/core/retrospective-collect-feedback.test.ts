@@ -68,7 +68,8 @@ describe('AC 1 — collect-feedback: a read-only phase between explore and addit
     const description = text('collect-feedback');
     expect(description).toMatch(/every `active` service of kind `repository` that declares a `feedback_inbox`/);
     expect(description).toMatch(/at the consumer's `main`/);
-    expect(description).toMatch(/the remote, or a local checkout recorded per machine outside this repository/);
+    // Review fix (2026-10-11): a private consumer (svc-019) is read with the approver's access, no credential recorded.
+    expect(description).toMatch(/through the remote the service's `verify` reads, with the approver's read access \(no credential is recorded, dl-088\), or a local checkout recorded per machine outside this repository/);
     expect(description).toMatch(/records the commit read/);
   });
 
@@ -90,6 +91,8 @@ describe('AC 1 — collect-feedback: a read-only phase between explore and addit
     const description = text('collect-feedback');
     expect(description).toMatch(/one row per note/);
     expect(description).toMatch(/`<service id>\/F-<nnn>@<sha>`/);
+    // Review fix (2026-10-11): full ids and shas, so a cite pastes into task-271's reported_by:.
+    expect(description).toMatch(/with the full service id and the full 40-hex sha, so a cite pastes unchanged into `reported_by:`/);
     expect(description).toMatch(/restated in WingFoil's words/);
     for (const outcome of SIX) expect(description).toContain(outcome);
     expect(description).toMatch(/never holds a consumer's configuration, paths or prose/);

@@ -43,12 +43,14 @@ phases:
   - name: collect-feedback
     description: >-
       Read-only (dl-163 S3d). Reads the feedback inbox of every `active` service of kind `repository`
-      that declares a `feedback_inbox`, at the consumer's `main` — the remote, or a local checkout
-      recorded per machine outside this repository — and records the commit read for each. Lists the
+      that declares a `feedback_inbox`, at the consumer's `main` — through the remote the service's
+      `verify` reads, with the approver's read access (no credential is recorded, dl-088), or a local
+      checkout recorded per machine outside this repository — and records the commit read for each. Lists the
       notes in status `open`, the `needs-info` notes the consumer has since answered, the `captured`
       notes whose elements shipped in this release, and the notes triaged outside the retrospective
       into a patch (dl-163 R6), as that patch release's `## Scope changes` records them. The read record
-      has one row per note: its cite `<service id>/F-<nnn>@<sha>`, the commit read, the note's content
+      has one row per note: its cite `<service id>/F-<nnn>@<sha>`, with the full service id and the
+      full 40-hex sha, so a cite pastes unchanged into `reported_by:`; the commit read, the note's content
       restated in WingFoil's words (a defect is reproduced in this repository before it becomes an
       element, R2), and a proposed outcome among six — dl-115's four (covered | element | restated |
       superseded) or declined | needs-info. The record lists every service read with the commit read,
