@@ -1,0 +1,47 @@
+---
+id: decision-log-ingest-rel-v0.3-gate-concurrency-plan
+type: plan
+title: "Decision-log-ingest — rel-v0.3 gate concurrency"
+status: draft
+version: ""            # optional — plan version
+workflow: "decision-log-ingest"
+phase: "rel-v0.3-gate-concurrency"
+element: ""            # optional — the Memory element this phase iterates (e.g. a release id)
+release: ""            # optional — target release, e.g. "v0.1"
+tmpl_version: 261007   # Orignal template version
+---
+
+<!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
+     `--tags` or `--set` value). Fill the required frontmatter fields and replace these placeholder
+     comments yourself; `wingfoil memory submit` then checks the required fields, moves `status`
+     forward and commits the document as you left it, naming in the commit body the content it
+     carries. -->
+
+## Context
+
+<!-- Why this phase runs now, its preconditions, and what it produces. Keep coherent with the
+     workflow definition's phases / roles / actions / produces / checks (dl-019).
+     Every plan's preconditions include that the build in use is the pinned one (dl-095):
+     `npm run -s wingfoil -- --version` prints the version package.json pins for
+     `wingfoil-released`. -->
+
+## Phases / Steps
+
+<!-- The ordered steps to execute against the workflow phase — actions, roles, gates, models. -->
+
+## Handoff
+
+<!-- What requires the approver vs. the agent; the checkpoint(s) and the completion criteria. -->
+
+## Execution Notes
+
+<!-- Running log of what actually happened while executing this plan — rulings, deviations from the
+     steps above, blockers — filled in as the phase runs, not written after the fact. -->
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     An item met by the phase as a whole goes here; one met on a single task or bug goes in that
+     element's own subsection. The retrospective's `explore` reads this subsection first. -->
