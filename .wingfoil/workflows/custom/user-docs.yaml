@@ -12,7 +12,7 @@ description: >-
   assembled: README, user guide, CLI reference, working examples, CHANGELOG, and the community
   health files a contributor meets (dl-127). Makes documentation a hard release blocker (dl-013)
   instead of an unenforced convention.
-version: 1.4                     # 1.1 dl-025: + align-agent-docs; 1.2 bug-170: align-agent-docs produces .wingfoil/WORKFLOW.md (task-148); 1.3 dl-025 (task-199): align-agent-docs includes the agent-docs workflow, which release-line-cycle reuses; 1.4 dl-127 Q4 (a) (task-214): align-user-docs produces COLLABORATION.md and the community health files
+version: 1.5                     # 1.1 dl-025: + align-agent-docs; 1.2 bug-170: align-agent-docs produces .wingfoil/WORKFLOW.md (task-148); 1.3 dl-025 (task-199): align-agent-docs includes the agent-docs workflow, which release-line-cycle reuses; 1.4 dl-127 Q4 (a) (task-214): align-user-docs produces COLLABORATION.md and the community health files; 1.5 dl-128 items 1–2 (task-224): align-user-docs produces the README demo's VHS tape and its GIF, checked by presentation.current and demo.rendered (manual)
 element: release
 
 phases:
@@ -41,8 +41,15 @@ phases:
       - "SECURITY.md"
       - ".github/ISSUE_TEMPLATE/"
       - ".github/PULL_REQUEST_TEMPLATE.md"
+      # dl-128 items 1–2 (Q1 (a), Q2 (a)): the README's demo — a VHS tape that drives example 01, and the GIF it
+      # renders, committed and regenerated each release. The README's badges are part of README.md above.
+      - "docs/examples/01-first-project/demo.tape"
+      - "docs/assets/wingfoil-demo-first-project.gif"
     checks:
-      post: ["user-facing docs aligned with the release's shipped CLI/feature surface"]
+      post:
+        - "user-facing docs aligned with the release's shipped CLI/feature surface"
+        - presentation.current       # dl-128: badges derived, tape drives the example, GIF committed and shown
+        - demo.rendered              # dl-128, manual (approver 2026-10-10): re-record the tape by hand, see docs/assets/README.md § "Regenerating the demo GIF"
     approval: { by_role: approver }
 
   - name: align-agent-docs                   # [SPEC] dl-025 — agent-facing docs gate (shape B)

@@ -4,6 +4,11 @@
 
 # WingFoil
 
+[![npm version](https://img.shields.io/npm/v/wingfoil)](https://www.npmjs.com/package/wingfoil)
+[![licence](https://img.shields.io/npm/l/wingfoil)](https://github.com/wingfoil/wingfoil/blob/main/LICENSE)
+[![node](https://img.shields.io/node/v/wingfoil)](https://www.npmjs.com/package/wingfoil)
+[![publish](https://github.com/wingfoil/wingfoil/actions/workflows/publish.yml/badge.svg)](https://github.com/wingfoil/wingfoil/actions/workflows/publish.yml)
+
 **A structured harness for deterministic AI-assisted software development.**
 
 WingFoil solves a critical problem: as your software project grows, AI agents lose consistency and control. Context gets
@@ -11,6 +16,13 @@ scattered, conventions drift, and decisions made in one session don't carry forw
 
 WingFoil centralizes your project's **memory, DNA, and directives** in a structured, git-backed format — giving both
 humans and AI agents a shared source of truth.
+
+![WingFoil in a terminal: init, configure an approver, add a task, submit and approve it, then show its git log](docs/assets/wingfoil-demo-first-project.gif)
+
+*The first example, [`docs/examples/01-first-project`](docs/examples/01-first-project/run.sh), recorded from
+[`docs/examples/01-first-project/demo.tape`](docs/examples/01-first-project/demo.tape). The example checks its own
+results, and the recording stops if a check fails, so if WingFoil stops matching the example the recording fails
+instead of going stale.*
 
 ---
 

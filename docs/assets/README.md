@@ -20,6 +20,7 @@ None of them ships in the npm package: `package.json` `files` is `["dist", "READ
 | `wingfoil-social-preview-dark.svg` | 1280×640 banner, dark background | source | — |
 | `wingfoil-social-preview-dark.png` | the dark banner, rendered | generated | alternative to the light banner |
 | `wingfoil-avatar.png` | 500×500, the mark centred on white | generated | organisation avatar (`svc-001-github-organisation-wingfoil`) |
+| `wingfoil-demo-first-project.gif` | terminal recording of example 01, 1200×760 | generated from `docs/examples/01-first-project/demo.tape` | `README.md` demo |
 
 The SVGs are the sources, and the PNGs are generated from them. Edit an SVG, never a PNG. All text in
 the SVGs is converted to paths, so they render the same on any machine without the Inter fonts.
@@ -58,6 +59,51 @@ Check the result:
 file docs/assets/*.png   # 1280 x 640 banners, 500 x 500 avatar, 512 x 525 logo, 512 x 364 mark
 ls -l docs/assets/*.png  # each banner must stay under 1 MB (GitHub's limit)
 ```
+
+## Regenerating the demo GIF
+
+The README's demo is rendered by [VHS](https://github.com/charmbracelet/vhs) from a tape next to the example it
+records (`dl-128` Q1 (a)). The tape runs `docs/examples/01-first-project/run.sh || exit 1` against the build in
+`dist/` and waits for the shell's prompt to return. A build that no longer passes the example makes the example
+exit non-zero, `|| exit 1` closes the shell, the prompt never returns, and `vhs` stops with
+`timeout waiting for …` before rendering, so no new GIF is written. (The tape waits on the cursor's line, not with
+`Wait+Screen`: the screen scope reads the top rows of the terminal buffer, which the example's output scrolls past.)
+VHS (with its `ttyd` and `ffmpeg`) is not a project dependency: install it on the machine that
+regenerates the asset. Rendering is a manual step of each release's `user-docs` phase (`align-user-docs`, check
+`demo.rendered`), done by hand on the approver's ruling of 2026-10-10.
+
+**1. Install the tools (Ubuntu/Debian).** VHS comes from Charm's apt repository; `ttyd` and `ffmpeg` from the
+distribution:
+
+```bash
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" \
+  | sudo tee /etc/apt/sources.list.d/charm.list
+sudo apt update && sudo apt install vhs ttyd ffmpeg
+vhs --version && ttyd --version && ffmpeg -version | head -1
+```
+
+If `vhs` refuses the distribution's `ttyd` as too old, install a newer `ttyd` from its GitHub releases page
+(<https://github.com/tsl0922/ttyd/releases>) and put it first on `PATH`.
+VHS drives a headless Chrome/Chromium: on a machine without one, its browser launcher downloads Chromium on the
+first run. The approver's render of 2026-10-11 used vhs v0.12.1 with Ubuntu's `ttyd` 1.7.4.
+
+**2. Render**, from the repository root:
+
+```bash
+npm run build && vhs docs/examples/01-first-project/demo.tape   # writes docs/assets/wingfoil-demo-first-project.gif
+```
+
+**3. Check the result:**
+
+```bash
+git diff --stat                                # lists docs/assets/wingfoil-demo-first-project.gif (new or changed)
+npx jest test/docs/presentation.test.ts        # passes
+```
+
+Commit hashes and timestamps differ on every recording, so the GIF changes each time it is regenerated. Commit it
+with the release's documentation changes.
 
 ## Editing the wordmark
 
