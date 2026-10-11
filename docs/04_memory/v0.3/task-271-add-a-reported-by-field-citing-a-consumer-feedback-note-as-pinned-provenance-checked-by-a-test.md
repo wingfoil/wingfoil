@@ -61,11 +61,99 @@ own (documentation directive D2).
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (architect)
+
+- **depends_on (dl-015):** none (`depends_on: []`). Read: `dl-163` (`ready`) S3c, R2, R4, R8; `task-269`'s notes
+  (`feedbackInboxProblems` in `test/core/helpers/service-fields.ts`, built to be reused here); `task-214`'s
+  handover (extend the existing GitHub-issue bullet of `COLLABORATION.md` `## Credit`). `task-212`, `task-213`,
+  `task-214`, `task-269` are `done` (`grep -m1 '^status:' docs/04_memory/v0.3/task-2{12,13,14,69}-*.md`).
+  `spec-010` and `spec-001` are `approved`; `bug-195` is `triaged` (v0.4).
+- **Where the field is declared in `memory.yaml`.** `memory.yaml` has no key for an optional field
+  (`TemplateFrontmatter` in `src/memory/schema.ts` knows `required`, `not_applicable_allowed`, `lists`), so, as
+  `task-269` did for `feedback_inbox`, each of the five types' `description` names it; no `required` list changes.
+  Decision D1.
+- **Where the check lives.** `dl-163` R8: no product feature in v0.3; a repository test,
+  `test/docs/reported-by.test.ts`, with its pure engine in `test/docs/support/reported-by.ts` reusing
+  `feedbackInboxProblems`.
+- **The review rule** goes into `COLLABORATION.md` (the AC allows either): `code-review.md` is `task-276`'s in B5.
+- **Versions:** `memory.yaml` 2.8 → 2.9 (`task-275` also goes 2.8 → 2.9 and merges first: re-bump at the gate);
+  the five scaffolds' `tmpl_version` → `261010` (date stamp, as `task-213`/`task-269`); `COLLABORATION.md`
+  1.4 → 1.5 (last committed on main at `0c557d6f`). `spec-010` takes a dated Revision note, no version field.
+
+**AC classification** (testing directive, T1/T3):
+
+| AC | Class | Why |
+|---|---|---|
+| 1 — field on five scaffolds + `memory.yaml`; `add`/`submit` keep it | red-first | the field does not exist (`grep -rln reported_by .wingfoil src` → nothing at `30b268a3`); fails at red |
+| 2 — `test/docs/reported-by.test.ts` refuses bad entries, passes here | red-first for the declaration it reads; the refusal fixtures pin a new checker | the checker is test code written with its test, so its refusal cases pass at red (as `task-269`'s D1); the repository case fails at red because no type declares the field |
+| 3 — `COLLABORATION.md` `## Credit` | characterization (doc) | the text is new, but it is documentation: pinned by phrase tests written after the edit, which pass on first run. Recorded as such, not as a red |
+| 4 — `spec-010` lists the field | characterization; pending amendment | an approved spec: edited in the worktree, uncommitted, not tested (the branch HEAD would not carry it) |
+
+### red
+
+`88fc1d22`: `test/docs/reported-by.test.ts` + `test/docs/support/reported-by.ts`. `npx jest test/docs/reported-by.test.ts`
+→ **18 failed, 30 passed, 48**: AC 1's 17 cases (declaring set, 5 field lines, 5 `tmpl_version`, `memory.yaml`
+names, 5 add/submit walks) and AC 2's repository case (`declaringTypesAtHead()` → 0, expected 5). Passing at red:
+the 30 refusal/acceptance fixtures of the checker. One fixture assertion was corrected before the commit (an
+absolute inbox `/docs/…/` also has an empty segment, so the case asserts `arrayContaining`).
+
+### green
+
+`589689eb`: the five scaffolds gain `reported_by: []` with an `# optional` comment (format, registered inbox,
+restate never copy, GitHub issue → `contributor` + `credit`), `tmpl_version: 261010`; `memory.yaml` 2.9 names the
+field in the five descriptions. Red's files untouched (`git diff --name-only 88fc1d22 589689eb -- test/` → nothing).
+`npx jest test/docs/reported-by.test.ts` → **48 passed**.
+`9ee64234`: `COLLABORATION.md` 1.5 — `change-proposal` joins the types carrying `contributor:`; three bullets after
+the GitHub-issue one (inbox note → `reported_by:`, who/where split; consumer feature request → `change-proposal`
+through `vision-change`; review rule: `reported_by:` survives an amendment) — plus AC 3's characterization block
+(8 cases). `npx jest test/docs/reported-by.test.ts test/docs/community-health.test.ts` → **82 passed**.
+
+### refactor
+
+Run with the `spec-010` pending amendment in the working tree, under the dl-170 interim gate rule (one heavy gate
+across all worktrees, load ≤ 14, `--maxWorkers=2`):
+- `npm run test:coverage -- --maxWorkers=2` (2026-10-11, load 2.45 at start) → 348 suites, **6531 passed**, exit 0;
+  All files 99.29 / 97.04 / 97.74 / 99.69, equal to the W3 B4 gate's line
+  (`grep '^All files' ../devloop-kit/gate-w3b4-cov.log`). It runs `jest.config.js`, the same suite set as
+  `npm test`'s parallel run (`scripts/run-tests.cjs`, no `WINGFOIL_LATENCY`), so no second full run was made.
+  Earlier full runs were killed by machine shutdowns and coordinator restarts and left no result.
+- `npm run lint`, `npm run docs:api`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json
+  --noEmit` → exit 0 each (no source or test change since, `git diff --stat 9ee64234 -- src test` → empty).
+- `node scripts/check-governance.cjs --base 30b268a3` → 1 wf() commit checked, 0 findings, exit 0 (before submit).
+- `node scripts/lint-claims.cjs --base 30b268a3` → 0 warnings, exit 0.
+- `memory.yaml`: this branch bumps 2.8 → 2.9 once; `task-275` (→ 2.9) and `task-217` (→ 3.0 at the gate) merge
+  first, so the gate re-bumps this branch to the number after theirs (3.1 after a 3.0) and keeps one history
+  entry for `task-271`.
+- BDD: none named the field (see review); no scenario added.
+
+### review (self, reviewer)
+
+- AC 1: `test/docs/reported-by.test.ts` AC 1 block (17 cases) — scaffolds read at `HEAD` through `resolveAddType`,
+  the walk through the registered `memoryAdd`/`memorySubmit` in a throwaway repo. AC 2: 30 checker cases, a tree
+  scan fixture, and the repository case (3 citable inboxes today: `svc-018`..`svc-020`). AC 3: 8 phrase cases.
+  AC 4: `grep -n "reported_by" docs/04_memory/design/specs/spec-010-*.md` → the new subsection and Revision note
+  (uncommitted).
+- Same class: the `## Credit` list of types carrying `contributor:` lacked `change-proposal`, whose template has
+  it since `task-212` (`grep -n '^contributor' .wingfoil/memory/templates/change-proposal.md`): fixed in `9ee64234`.
+- No element of this repository carries `reported_by:` yet (`grep -rln '^reported_by:' docs/04_memory` →
+  nothing): the first will come from the v0.3 retrospective's `collect-feedback` (`task-272`).
+- No BDD scenario names the credit fields (`grep -rln "contributor\|reported_by" docs/02_requirements/02_bdd/features`
+  → nothing); none added (product validation is v0.4).
+
+**Decisions for the approver:**
+- D1 — `memory.yaml` declares the field in the five types' `description` (the `task-269` precedent), not with a
+  new schema key; a structured `template.frontmatter` key would be new `spec-001` vocabulary.
+- D2 — entry format, as the check enforces it: the service's **full** id (the file stem, as `supersedes:` takes a
+  full id; `svc-018/…` is refused); `F-` and **three digits or more**; the commit as a **full** lowercase object
+  name (40 hex, or 64 for SHA-256) — an abbreviated sha is refused, since the pin must not become ambiguous.
+- D3 — the field is refused on a type that does not declare it (derived from the scaffolds at `HEAD`), and a
+  scalar value is refused (the field is a list).
+- D4 — the amend review rule is stated in `COLLABORATION.md`, not `code-review.md` (B5: `task-276` owns it).
+
+**Pending amendments (approver)** — uncommitted in the worktree, for `memory amend`:
+- `spec-010-memory-frontmatter-schema` — `--reason "task-271, from dl-163 S3c: a new subsection lists the optional reported_by field the bug, decision-log, adr, tech-spec and change-proposal scaffolds declare, its entry shape, who writes it, how it survives an amendment and the repository test that checks it. See the dated Revision note at the end."`
+
+### Retrospective
+
+- The coordinator session and the machine stopped this task three times during `refactor`; each full `npm test`
+  had to be re-run from the start (no partial result is reusable). One `tsc` run was killed (exit 137) under load.
