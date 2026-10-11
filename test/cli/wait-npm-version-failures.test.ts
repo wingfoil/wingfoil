@@ -14,7 +14,7 @@ import { spawnSync } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 
 import { NPM_VIEW_TIMEOUT_MS, npmView, waitForNpmVersion } from '../../scripts/wait-npm-version.cjs';
 import type { NpmViewAnswer } from '../../scripts/wait-npm-version.cjs';
@@ -115,7 +115,8 @@ describe('npmView (task-229 F3) — a bounded npm call', () => {
     const file = join(work, 'bin', 'npm');
     writeFileSync(file, `#!/bin/sh\n${body}\n`);
     chmodSync(file, 0o755);
-    return { ...process.env, PATH: join(work, 'bin') };
+    // The fake first, then the caller's PATH: the fake itself needs `sleep`.
+    return { ...process.env, PATH: `${join(work, 'bin')}${delimiter}${process.env.PATH ?? ''}` };
   }
 
   it('kills an npm that hangs past the timeout and reports timedOut', async () => {
