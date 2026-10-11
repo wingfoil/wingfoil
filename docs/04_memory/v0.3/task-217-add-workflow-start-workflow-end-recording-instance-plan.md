@@ -205,3 +205,9 @@ Uncommitted in the worktree (`git status --short docs/04_memory/design`):
 - Notes corrected: the red split is 24 core / 13 CLI; the two `lint-claims` warnings name their commands.
 - Not changed, per the review: `workflow next`'s "unknown workflow" for a non-open plan id (D5, a follow-up
   bug) and the `finalize` resolution's name.
+- Gates after the fixes, at `4345b9b5`: `npm run test:coverage -- --maxWorkers=2` (dl-170 slot check first) →
+  exit 0, 353 suites / 6569 tests, 99.29 / 97.11 / 97.79 / 99.70 against main `30b268a3`'s 99.29 / 97.04 /
+  97.74 / 99.69 (the reviewer's `task-217-review/cov-base.log`): no regression. `4345b9b5` added the last two
+  arms: `refusalOf`'s mapped refusal (a manifest naming a missing file) and the barrel's two message constants.
+  `npx tsc --noEmit -p tsconfig.json` and `npm run -s lint` exit 0; `node scripts/lint-claims.cjs --base
+  30b268a3` → 0 warnings.
