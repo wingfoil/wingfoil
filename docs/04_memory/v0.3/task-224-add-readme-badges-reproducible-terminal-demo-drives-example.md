@@ -149,3 +149,23 @@ The README shows nothing of what WingFoil does. The demo is a self-check: if the
 - `npm run lint` exit 0, `npx tsc --noEmit -p tsconfig.json` exit 0 after the change.
 - Next: the approver renders the GIF in this worktree per `docs/assets/README.md` § "Regenerating the demo GIF";
   then the GIF is committed, the full suite re-run, and the task submitted.
+
+### Render fix (2026-10-11) — the tape waits for the prompt on the cursor line
+
+- The approver's render (`npm run build && vhs docs/examples/01-first-project/demo.tape`) failed with
+  `timeout waiting for "Screen OK: first project" to match`, its "last value" the top of the buffer. Cause, read in
+  VHS's source (text files read from `raw.githubusercontent.com/charmbracelet/vhs/main/`, nothing installed):
+  `Buffer()` in `testing.go` evaluates `term.buffer.active.getLine(i)` for `i` in `0..term.rows`, the top rows of
+  the buffer, not the scrolled viewport; `CurrentLine()` reads `getLine(cursorY + viewportY)`, the cursor's row. The
+  README documents the default `Wait` as regex `/>$/`, timeout `15s`, scope `Line`. `shell.go` sets bash's
+  `PS1` to `> ` (coloured). `evaluator.go` returns a command's error before `v.Render`, so a lapsed wait writes no GIF.
+- red `19af8960`: `npx jest test/docs/presentation.test.ts` → **3 failed / 19 passed** (the two new tape tests and
+  the known GIF one).
+- fix: the tape types `bash docs/examples/01-first-project/run.sh || exit 1` and waits with `Wait@120s /^>$/`
+  (line scope, anchored, so no output line such as `… <ada@example.com>` matches), then `Sleep 4s` on the frame
+  showing the `OK:` line. A failing example exits the shell, the prompt never returns, `vhs` errors before
+  rendering. `Wait+Line /OK: …/` was not used: when the prompt is drawn the cursor has already left the `OK:` row,
+  so a line-scoped wait on it can miss it. Tape comment, `docs/assets/README.md`, `docs/examples/README.md` and the
+  README caption updated.
+- `npx jest test/docs/presentation.test.ts test/core/workflow-repository-conformance.test.ts test/lint/control-characters.test.ts`
+  → **54 passed / 1 failed** (the GIF only). `npm run -s lint:claims` exit 0. Next: the approver re-renders.
