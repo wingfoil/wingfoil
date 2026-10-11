@@ -1,6 +1,6 @@
 # Contributing to WingFoil — through Memory, not (only) code
 
-**Version:** 1.4 · **Date:** 2026-10-09
+**Version:** 1.5 · **Date:** 2026-10-10
 
 WingFoil is a harness for **AI-assisted, deterministic software development**. It manages its own
 development the same way it asks other projects to (dogfooding): every change flows through
@@ -117,7 +117,7 @@ agent — not the contributor — authors the commits.
 So the contribution model **layers** a credit convention on top of git identity (it does not replace
 it, and it never rewrites git history):
 
-- Every ingested artifact (`bug`, `decision-log`, `adr`, `tech-spec`) carries an optional
+- Every ingested artifact (`bug`, `decision-log`, `adr`, `tech-spec`, `change-proposal`) carries an optional
   **`contributor:`** frontmatter field — your name/handle, set when the artifact originates from
   someone other than the committing git identity — plus an optional **`credit:`** note.
 - **An artifact captured from a GitHub issue** records you as `contributor:` (your GitHub handle) and
@@ -125,9 +125,24 @@ it, and it never rewrites git history):
   GitHub issue is not a registered feedback inbox, so it never gets a `reported_by:` field: that field
   is only for notes filed in a registered consumer repository's inbox
   ([`dl-163`](docs/04_memory/design/dls/dl-163-consumer-projects-feedback-sources-and-the-feedback-loop.md)).
+- **A note filed in a registered consumer inbox** — the `feedback_inbox` of a consumer repository
+  registered here as an `active` `service` of kind `repository` — is cited in the artifact's optional
+  **`reported_by:`** list, one entry per note, as `<service id>/F-<nnn>@<sha>`: the service's full id,
+  the note's id in that inbox, and the full sha of the consumer commit read. `contributor:` says **who**
+  originated the contribution; `reported_by:` says **where** it was reported, in a form
+  `test/docs/reported-by.test.ts` checks against the registered services. It is provenance only: the
+  artifact restates the defect or request in its own words and reads on its own, a defect is reproduced
+  in this repository before it is filed, and the note's text is never copied. The `bug`,
+  `decision-log`, `adr`, `tech-spec` and `change-proposal` templates carry the field.
+- **A consumer's feature request** is filed as a `change-proposal` through `vision-change`
+  ([`dl-132`](docs/04_memory/design/dls/dl-132-vision-change-and-feature-ingest.md)); a `decision-log`
+  is for input about the process or a decision.
+- **Review rule: `reported_by:` survives an amendment.** `memory amend` may rewrite the field like any
+  other content field, so a reviewer refuses an amendment that drops or changes a `reported_by:` entry
+  unless its `Reason:` says why (for example, the entry cited the wrong note or commit).
 - When an agent turns your ratified artifact into delivered work (tasks reaching `done`), **you are
   credited** as the source of that AI-generated output. Because a task traces back to the artifact it
-  implements, the credit stays attached to the specific `bug`/`DL`/`ADR`/`tech-spec` id.
+  implements, the credit stays attached to the specific `bug`/`DL`/`ADR`/`tech-spec`/`change-proposal` id.
 
 This keeps credit **machine-visible and git-versioned**, consistent with WingFoil’s single-source-of-
 truth model — no external contributor database, no commit rewriting.

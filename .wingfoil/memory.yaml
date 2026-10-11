@@ -59,7 +59,7 @@
 # docs/03_backlog/; each `requirements:` points to its by-release backlog JSON) plus the initial `adr`
 # and `decision-log` content recorded by initial-design (under design/adrs/ and design/dls/).
 # The per-type `template.file:` scaffolds live alongside the config under .wingfoil/memory/templates/.
-version: 3.0                     # [AUTHORING] content revision (WingFoil convention, dl-047) — the file's FORMAT is the separate `format:` key [SPEC: spec-001, dl-149], absent here and so read as 1; a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable); 2.2 -> 2.3 at task-164 (release path folder = the release-line id, bug-163); 2.3 -> 2.4 at task-251 (this annotation: content revision, not format, dl-149); 2.4 -> 2.5 at task-180 (task `returns`, dl-110); 2.5 -> 2.6 at task-205 (bug `returns: { in-progress: planned }`, dl-110 P1 (a)/P2: the dev-loop park sync's edge); 2.6 -> 2.7 at task-212 (the `change-proposal` type, dl-132 Q1 (a)); 2.7 -> 2.8 at task-269 (service kind `repository` and its optional `feedback_inbox`, dl-163 S3b); 2.8 -> 2.9 at task-275 (`task.stop_the_line.open` excludes `deprecated`, approver ruling 2026-10-10 on task-221 decision 3); 2.9 -> 3.0 at task-217 (the `plan` type's optional `parent` field, spec-017 §3.1)
+version: 3.1                     # [AUTHORING] content revision (WingFoil convention, dl-047) — the file's FORMAT is the separate `format:` key [SPEC: spec-001, dl-149], absent here and so read as 1; a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable); 2.2 -> 2.3 at task-164 (release path folder = the release-line id, bug-163); 2.3 -> 2.4 at task-251 (this annotation: content revision, not format, dl-149); 2.4 -> 2.5 at task-180 (task `returns`, dl-110); 2.5 -> 2.6 at task-205 (bug `returns: { in-progress: planned }`, dl-110 P1 (a)/P2: the dev-loop park sync's edge); 2.6 -> 2.7 at task-212 (the `change-proposal` type, dl-132 Q1 (a)); 2.7 -> 2.8 at task-269 (service kind `repository` and its optional `feedback_inbox`, dl-163 S3b); 2.8 -> 2.9 at task-275 (`task.stop_the_line.open` excludes `deprecated`, approver ruling 2026-10-10 on task-221 decision 3); 2.9 -> 3.0 at task-217 (the `plan` type's optional `parent` field, spec-017 §3.1); 3.0 -> 3.1 at task-271 (the optional `reported_by:` on bug, decision-log, adr, tech-spec and change-proposal, dl-163 S3c)
 
 # Default machine used by any type that does not declare its own `states` block.
 # [SPEC: REQ-STATE-08] default machine: draft -> pending -> approved, reject from pending back to draft,
@@ -157,7 +157,7 @@ types:
     path: "docs/04_memory/design/adrs/{id}.md"
     id_pattern: "adr-{n}-{slug}"          # [AUTHORING] e.g. adr-001-git-backed-storage; exact numbering format (padding) is an ID-generation-engine detail, not fixed here
     name: Architectural Decision Record
-    description: An architectural decision with context, decision, and consequences (renamed from `decision`). Workflow — created (optional) by initial-design & release-planning, and on demand via the `adr-ingest` main during dev-loop / other phases.
+    description: An architectural decision with context, decision, and consequences (renamed from `decision`). Workflow — created (optional) by initial-design & release-planning, and on demand via the `adr-ingest` main during dev-loop / other phases. An optional `reported_by:` list cites the consumer feedback notes it answers, as provenance only — `<service id>/F-<nnn>@<sha>`, a note in a registered inbox (dl-163 S3c).
     tags: [ adr, architecture, design ]
     template:                   # [AUTHORING]
       frontmatter:
@@ -174,7 +174,7 @@ types:
     path: "docs/04_memory/design/dls/{id}.md"
     id_pattern: "dl-{n}-{slug}"           # [AUTHORING] e.g. dl-001-keyword-search; exact numbering format (padding) is an ID-generation-engine detail, not fixed here
     name: Decision Log
-    description: A product/process decision record (DL). Workflow — produced by retrospective / end-of-life, and on demand via the `decision-log-ingest` main.
+    description: A product/process decision record (DL). Workflow — produced by retrospective / end-of-life, and on demand via the `decision-log-ingest` main. An optional `reported_by:` list cites the consumer feedback notes it answers, as provenance only — `<service id>/F-<nnn>@<sha>`, a note in a registered inbox (dl-163 S3c).
     tags: [ decision-log, decision, product ]
     template:                   # [AUTHORING]
       frontmatter:
@@ -193,7 +193,7 @@ types:
     path: "docs/04_memory/design/specs/{id}.md"
     id_pattern: "spec-{n}-{slug}"         # [AUTHORING] e.g. spec-003-workflows-yaml-schema; exact numbering format (padding) is an ID-generation-engine detail, not fixed here
     name: Technical Specification
-    description: A definition of a shared file format, schema, constant set, or module API implemented by one or more tasks. Workflow — produced by initial-design (`seed-specs`, per release-line) and proactively by release-planning (`identify-specs`, per release scope); dev-loop/design is a reactive fallback for artefacts discovered only during a task.
+    description: A definition of a shared file format, schema, constant set, or module API implemented by one or more tasks. Workflow — produced by initial-design (`seed-specs`, per release-line) and proactively by release-planning (`identify-specs`, per release scope); dev-loop/design is a reactive fallback for artefacts discovered only during a task. An optional `reported_by:` list cites the consumer feedback notes it answers, as provenance only — `<service id>/F-<nnn>@<sha>`, a note in a registered inbox (dl-163 S3c).
     tags: [ tech-spec, design, architecture ]
     template:                   # [AUTHORING]
       frontmatter:
@@ -210,7 +210,7 @@ types:
     path: "docs/04_memory/bugs/{id}.md"
     id_pattern: "bug-{n}-{slug}"          # [AUTHORING] e.g. bug-001-null-deref; exact numbering format (padding) is an ID-generation-engine detail, not fixed here
     name: Bug
-    description: A defect report. Workflow — created on demand via the `bug-ingest` main (e.g. raised during dev-loop); triaged by bug-ingest, then release-planning's build-backlog creates its fix task(s) and schedules it into a release. From there its state tracks its fix task(s) automatically (dev-loop's `bug.sync_state`) — there is no separate bug-fix workflow.
+    description: A defect report. Workflow — created on demand via the `bug-ingest` main (e.g. raised during dev-loop); triaged by bug-ingest, then release-planning's build-backlog creates its fix task(s) and schedules it into a release. From there its state tracks its fix task(s) automatically (dev-loop's `bug.sync_state`) — there is no separate bug-fix workflow. An optional `reported_by:` list cites the consumer feedback notes it answers, as provenance only — `<service id>/F-<nnn>@<sha>`, a note in a registered inbox (dl-163 S3c).
     tags: [ bug, defect ]
     template:                   # [AUTHORING]
       frontmatter:
@@ -272,7 +272,7 @@ types:
     path: "docs/04_memory/change-proposals/{id}.md"   # [AUTHORING] dl-132 Action 2 — resolved against the repository root
     id_pattern: "cp-{n}-{slug}"                       # [AUTHORING] e.g. cp-001-a-feature-ingest-workflow
     name: Change Proposal                             # [AUTHORING] dl-132
-    description: A proposed change to the vision — a new feature (kind `feature`) or any other edit of docs/01_vision/ (kind `vision`) — with its impact analysis along the traceability chain (P* → US-* → BDD → REQ-* → delivered tasks/ADRs/specs; "no impact" recorded per layer, dl-132 Q2 (ii)) and its target release. Workflow — created by the startable `vision-change` main (capture), accepted at its impact-analysis gate, downcast only for the layers the analysis names, and `scheduled` once a release carries it (dl-132 element 4). See dl-132-vision-change-and-feature-ingest.   # [AUTHORING]
+    description: A proposed change to the vision — a new feature (kind `feature`) or any other edit of docs/01_vision/ (kind `vision`) — with its impact analysis along the traceability chain (P* → US-* → BDD → REQ-* → delivered tasks/ADRs/specs; "no impact" recorded per layer, dl-132 Q2 (ii)) and its target release. Workflow — created by the startable `vision-change` main (capture), accepted at its impact-analysis gate, downcast only for the layers the analysis names, and `scheduled` once a release carries it (dl-132 element 4). See dl-132-vision-change-and-feature-ingest. An optional `reported_by:` list cites the consumer feedback notes it answers, as provenance only — `<service id>/F-<nnn>@<sha>`, a note in a registered inbox (dl-163 S3c).   # [AUTHORING]
     tags: [ change-proposal, vision, feature ]        # [AUTHORING]
     template:                   # [AUTHORING] dl-132 Action 2 — scaffold for `wingfoil memory add --type change-proposal`
       frontmatter:

@@ -40,7 +40,8 @@ namespace block. Two zones, both flat:
 
 1. **Base fields** — present on every type, defined below.
 2. **Type-specific fields** — additional flat keys declared by that type's
-   `template.frontmatter.required` list in `memory.yaml` (`spec-001`), scaffolded in that type's
+   `template.frontmatter.required` list in `memory.yaml` (`spec-001`) or, for an optional field, by the
+   type's scaffold alone (see "Optional provenance field: `reported_by`" below), scaffolded in that type's
    `.wingfoil/memory/templates/{type}.md`.
 
 A `.md` file under a Memory `path` pattern without a `type` key matching a registered
@@ -62,7 +63,9 @@ All type-specific required fields (e.g. `adr.sard_ref`, `task.release`, `release
 are out of scope here — they belong to each type's own template and, at the schema-registry level,
 to `spec-001`'s `template.frontmatter.required` list per type. This spec guarantees the five required
 fields above are present, in that role, on every type, plus the one optional `rejection_reason` field
-whose presence/absence is itself meaningful (see its row above).
+whose presence/absence is itself meaningful (see its row above). The one type-specific field it lists
+is the exception below: the optional `reported_by`, shared by five types (see "Optional provenance
+field: `reported_by`").
 
 ### Document template shape (what `memory.add` produces)
 
@@ -97,6 +100,23 @@ step. The author then fills the other required fields and replaces the placehold
 `memory.submit` writes none of that. It checks the required fields,
 moves `status` to the type's post-submit state, and commits the document as the author left it,
 declaring in the commit body the content it carries (`spec-008` §2; `dl-106` W1 (a), `bug-146`).
+
+### Optional provenance field: `reported_by`
+
+One optional type-specific field is shared by five types, so it is listed here although its owner is
+each type's template (`dl-163` S3c, R2). The `bug`, `decision-log`, `adr`, `tech-spec` and
+`change-proposal` scaffolds declare `reported_by: []`, and `memory.yaml` names it in those five types'
+`description`; no type requires it.
+
+| Field         | Type            | Required | Set by                                   | Description / constraints |
+|---------------|-----------------|----------|------------------------------------------|---------------------------|
+| `reported_by` | list of strings | no       | the author (copied as `[]` by `memory.add`; kept by `memory.submit`, which does not write it) | The consumer feedback notes the element answers, as **provenance only**. Each entry is `<service id>/F-<nnn>@<sha>`: the full id of a registered `service` that is `active`, of kind `repository`, with a `feedback_inbox` (`dl-163` S3b); the note's id in that inbox (`F-` and three digits or more, `dl-163` R4); and the full object name of the consumer commit read (40 lowercase hexadecimal digits, or 64 in a SHA-256 repository). The element restates the note in its own words and reads on its own (`documentation` directive D2): no reader needs to open the note. A GitHub issue is not a registered inbox: it is credited through `contributor` and `credit` (`dl-020`), never `reported_by`. |
+
+`memory.amend` may change the field like any other content field; keeping its entries through an
+amendment is a review rule (`COLLABORATION.md`, `## Credit`), not a check of the verb. In v0.3 the
+format and the service are checked by a repository test over every Memory document,
+`test/docs/reported-by.test.ts`; WingFoil itself does not validate the field (product-level
+validation of declared values is `bug-195`, v0.4).
 
 ### No document-version counter, no in-frontmatter audit array
 
@@ -317,3 +337,13 @@ in the one meaning every element shares (the release its change is assigned to, 
 `vision-change` workflow's `schedule` step), keeping the proposer's request apart as `target_release`.
 No field, rule or ownership row changes. Edited in place without a supersede or a state change
 (`dl-047`), pending the approver's `memory amend` at `task-212`'s review.
+
+**Revision (2026-10-10, `task-271-add-a-reported-by-field-citing-a-consumer-feedback-note-as-pinned-provenance-checked-by-a-test`)
+— the optional `reported_by` field.** `dl-163` (`ready`) S3c adds an optional list on five types that
+records which consumer feedback note an element answers, and asks this spec to list it. The new
+subsection "Optional provenance field: `reported_by`" gives its shape, who writes it, how it survives
+an amendment and where it is checked. The zone model's second zone now says an optional type-specific
+field is declared by the type's scaffold, and the sentence closing "Base fields" names `reported_by` as
+the one type-specific field this spec lists. No base field, rule or ownership row changes. Edited in place
+without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at
+`task-271`'s review.
