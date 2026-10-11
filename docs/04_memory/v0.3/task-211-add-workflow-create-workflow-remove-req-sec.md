@@ -213,7 +213,7 @@ Gates (with the pending spec amendments in the working tree):
 
 | AC | Status | Evidence |
 |---|---|---|
-| 1 | met | `workflow-create-remove.test.ts` P4.8: the file under `custom/` (`existsSync` of the `built-in/` path is false), the manifest gaining one line with every comment kept, one commit `wf(workflow): create <name>` holding exactly the two paths; sc. 2 the instance's plan bytes and frontier keys unchanged; sc. 3 loaded name, built-in name, file-only (`dl-086`); seven `UsageError`s; CLI exits 0/1/2 in `workflow-create-remove.integration.test.ts` |
+| 1 | met | `workflow-create-remove.test.ts` P4.8: the file under `custom/` (`existsSync` of the `built-in/` path is false), the manifest gaining one line with every comment kept, one commit `wf(workflow): create <name>` holding exactly the two paths; sc. 2 the instance's plan bytes and frontier keys equal before and after (`npx jest test/core/workflow-create-remove.test.ts -t "sc. 2"` → 2 passed, P4.8's and P4.9's); sc. 3 loaded name, built-in name, file-only (`dl-086`); seven `UsageError`s; CLI exits 0/1/2 in `workflow-create-remove.integration.test.ts` |
 | 2 | met | P4.9 sc. 1 (file and include line gone, one commit, registry without it), sc. 2 (`CONFLICT`, first referrer named, all in `details`), sc. 3 (`built-in workflows cannot be removed`), the open instance (`CONFLICT`, named or by instance id), the write guard on `workflows.yaml` and on the file; CLI exits 1 |
 | 3 | met | four create forms, then `loadWorkflowRegistryAtHead` reports no error and the declared facts (`AC 3` case); the prospective load refuses before writing (unknown `--element` type, last startable, includable-only first workflow) |
 | 4 | met (documentation) | the greps in refactor's third bullet; `cd992f83` |
