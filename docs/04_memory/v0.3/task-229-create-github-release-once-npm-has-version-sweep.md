@@ -205,10 +205,34 @@ service machine and non-mapping frontmatter (4/4). The scripts are outside `coll
 Earlier full runs were killed by machine restarts, and a run at load ~160 showed a p95 failure in
 `test/mcp/resource-latency.test.ts`. The idle coverage run above passed it.
 
+### review fixes (2026-10-11, independent review: approve with fixes)
+
+Red `bcf78a10` (`npx jest test/cli/wait-npm-version-failures.test.ts test/core/workflow-repository-conformance.test.ts`
+→ 2 suites failed, 9 failed / 29); `93c276df` fixes one red test defect; green `c5770d38`.
+- **F1** (dl-130 Action 2): `publish.checks.post[0]` reads "staged version approved on npm, live on the npm
+  registry, and its GitHub Release created": the same prose check, so spec-017 §12's counts do not move
+  (`test/core/workflow-repository-conformance.test.ts` pins the new string; still 1.5, no second bump). The
+  former "candidate finding 1" is withdrawn.
+- **F2:** the `agent.execute` comment names `→ release`. Same-class sweep: `grep -rn "live on the npm registry\|gate → stage → promote" .wingfoil test` → the yaml (lines 80, 84), its conformance pin, `.wingfoil/WORKFLOW.md`'s publish node and the publish-pipeline test title, each naming the release step; older task notes and the v0.2.2 plan are history.
+- **F3:** `scripts/wait-npm-version.cjs` — npm that cannot be run (`status: null`, not a timeout) fails at once;
+  `npm error code E401` / `npm ERR! code E403` fail at once ("waiting will not change"), told apart by npm's own
+  `code` line; E404 (the staged, unapproved version), empty output, network codes and a killed call keep polling;
+  each call is bounded by `NPM_VIEW_TIMEOUT_MS` (60 s, `npmView` kills with SIGKILL and reports `timedOut`).
+  New suite `test/cli/wait-npm-version-failures.test.ts` (15/15), including a real hanging fake npm killed after
+  300 ms and the CLI with no npm on PATH (exit 1). The red test's fake npm first had a PATH without `sleep`, so it
+  exited 127 instead of hanging: fixed back in red (`93c276df`).
+- **F4:** the spec-015 stage 5 text says "a missing, duplicated or empty section fails", names the job's
+  ephemeral `GITHUB_TOKEN` as the holder of `contents: write`, and the E401/E403 and per-call bound; the
+  `--reason` below is updated.
+- Gates (targeted, dl-170: `scripts/` is outside coverage and `src/` is untouched): `npx jest` over the
+  conformance, wait-npm-version (both), edges, publish-pipeline, service-verify-sweep, git-log-readers and
+  workflow-md suites → 8 suites, 103/103; `npm run lint`, `npx tsc --noEmit -p tsconfig.json` exit 0;
+  `check-governance.cjs --base 30b268a3` 0 findings.
+
 ### Pending amendments (approver)
 
 - `spec-015-packaging-publishing` (§3 stage 5 + Revision 2026-10-10):
-  `--reason "task-229 (dl-130 step 1, Q1 (a)): §3 gains stage 5, the GitHub Release - after promote a release job holding contents: write alone extracts the version's CHANGELOG section, waits with a bounded poll until npm serves exactly that version, since promote only stages it (adr-011), then creates the Release on the existing tag; the bound sits under the hosted runner's 6-hour job limit and a later approval is recovered by re-running the failed job. Revision note added."`
+  `--reason "task-229 (dl-130 step 1, Q1 (a)): §3 gains stage 5, the GitHub Release - after promote a release job whose ephemeral GITHUB_TOKEN alone holds contents: write extracts the version's CHANGELOG section (a missing, duplicated or empty section fails), waits with a bounded poll until npm serves exactly that version, since promote only stages it (adr-011), failing at once when npm cannot be run or answers E401/E403, then creates the Release on the existing tag; the bound sits under the hosted runner's 6-hour job limit and a later approval is recovered by re-running the failed job. Revision note added."`
 
 ### Retrospective
 
