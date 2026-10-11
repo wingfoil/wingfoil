@@ -2565,7 +2565,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
   },
   {
     name: 'workflow',
-    description: 'read the workflows the project declares (there is no workflow engine yet)',
+    description: 'read the workflows the project declares and record the steps nothing else completes (there is no workflow engine yet)',
     operations: {
       // task-204 (`spec-017` §7.5–§7.6, §8): both read `HEAD`, a declared exception (§1.1, ruling R15;
       // `spec-006` §6 item 6), from the snapshot and deduction `workflow next` / `status` answer from. A
