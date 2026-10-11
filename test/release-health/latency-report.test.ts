@@ -38,6 +38,11 @@ describe('parseLatencyReport reads what latencyReport prints (task-232, Q12)', (
     expect(reading!.machine).toMatch(/^loaded: floor p95 900 ms/);
   });
 
+  it('reads the load from the report\'s own window, not from another suite\'s line printed before it', () => {
+    const other = 'workflow next: p95 40 ms (n=25, min 30 ms, max 41 ms); load average (1-min / 5-min): before 7.04 / 6.00, after 9.62 / 7.00\n';
+    expect(parseLatencyReport(`${other}${latencyReport(samples(200, [300, 250, 420]), COMMANDS, LOAD)}`)).toMatchObject({ load: { before: 1.5, after: 1.75 } });
+  });
+
   it('an output with no report is null', () => {
     expect(parseLatencyReport('PASS test/cli/command-latency.test.ts\n')).toBeNull();
   });

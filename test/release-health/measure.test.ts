@@ -787,7 +787,8 @@ function stubTools(overrides: Readonly<Record<string, Outcome>> = {}): { tools: 
   const tools: ToolRunner = (call) => {
     calls.push(call);
     const outcome = overrides[call.step] ?? defaults[call.step] ?? { status: 0 };
-    return { status: 0, signal: null, stdout: '', stderr: '', ...(typeof outcome === 'function' ? outcome(call) : outcome) };
+    // No stdout/stderr defaults: the runner reads a missing one as empty (and test/lint/no-fabricated-stderr.test.ts).
+    return { status: 0, signal: null, ...(typeof outcome === 'function' ? outcome(call) : outcome) };
   };
   return { tools, calls };
 }

@@ -1160,7 +1160,8 @@ const withRaw = (m, extra) => entry(m.id, { ...m, raw: { ...(m.raw ?? {}), ...ex
 function parseLatencyReport(text) {
   const machine = /^[ \t]*machine: (.+?)[ \t]*$/m.exec(text);
   if (machine === null) return null;
-  const load = /load average \(1-min \/ 5-min\): before ([\d.]+) \/ [\d.]+, after ([\d.]+) \/ [\d.]+/.exec(text);
+  // The report's own load window is its header line; another latency suite (workflow next) prints a load line too.
+  const load = /load average \(1-min \/ 5-min\): before ([\d.]+) \/ [\d.]+, after ([\d.]+) \/ [\d.]+ \(one window: /.exec(text);
   const floor = /^[ \t]*floor \(--version\): p95 (-?\d+) ms/m.exec(text);
   const commands = [...text.matchAll(/^[ \t]*([a-z][a-z -]*?): marginal p95 (-?\d+) ms \([^)]*\); total p95 (-?\d+) ms/gm)].map((m) => ({
     command: m[1],
