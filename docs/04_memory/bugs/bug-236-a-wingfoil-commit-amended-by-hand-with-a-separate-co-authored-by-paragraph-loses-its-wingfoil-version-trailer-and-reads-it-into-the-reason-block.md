@@ -78,3 +78,22 @@ misstates `git commit -m`'s cleanup.
 Captured on 2026-10-05 by `bug-ingest-rel-v0.3-w2b1-review-findings-plan`, from the independent reviews of wave 2
 batch B1 (`dev-loop-rel-v0.3-plan`: `task-192` review F3), reproduced against `main` at `0b297169` with the code
 build (`npm run -s build && node dist/cli.js`).
+
+**Amendment (2026-10-11, approver triage of the W3 B5 follow-ups, `bug-ingest-rel-v0.3-w3b5-review-findings-plan`
+item 14).** Since `task-226` and `task-227` the final paragraph carries more than the signature, so the same hand
+amend now loses more. Found by `task-227`'s independent review (W3 B5), checked on `main` at `29b8406a`:
+
+- **The linkage and phase-record trailers are lost too.** `memory add --workflow <ref> --step <key>` writes
+  `WingFoil-Instance:` and `WingFoil-Step:` (`sed -n 29,32p src/core/memory-add-link.ts`), and `workflow finalize`
+  writes `WingFoil-Phase:` and `WingFoil-Instance:` (`src/core/workflow-finalize.ts:77`), all in the final paragraph
+  before `WingFoil-Version:` (`src/storage/commit.ts:52-58`). The deduction reads them with git's
+  `%(trailers:only,unfold)` (`src/core/workflow-deduction.ts:135`), which reads the final paragraph only, so a
+  `Co-Authored-By:` added as a separate paragraph silently unlinks the element from its step or erases the record.
+- **Nothing flags it.** `grep -n "WingFoil-Instance\|WingFoil-Step\|WingFoil-Phase" scripts/check-governance.cjs` →
+  no match (the positive case, `grep -n "WingFoil-Instance" src/core/workflow-deduction.ts`, matches line 197). A
+  governance rule could report a `wf(…): add` or a `finalize` whose body has `WingFoil-Instance:`/`WingFoil-Step:`/
+  `WingFoil-Phase:` lines outside the final paragraph, as it already reports a `WingFoil-Version:` line inside a
+  reason.
+
+The fix (whoever carries this bug, `task-252` today) states the `--trailer` rule for these trailers as well, and the
+governance rule above is part of the expected behaviour.
