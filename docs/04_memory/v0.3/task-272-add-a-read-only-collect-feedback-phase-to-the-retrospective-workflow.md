@@ -61,11 +61,113 @@ between `explore` and `additional-points`, and writes a read record the approver
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (architect)
+
+- **depends_on:** none declared. The other writers of `retrospective.yaml` are done on `main`: `task-213` (1.4) and
+  `task-222` (1.5) — `grep -n '^version' .wingfoil/workflows/custom/retrospective.yaml` → `version: 1.5` at
+  `30b268a3`. Their Execution Notes were read (`task-213`'s green note: its check is written over "every secondary
+  source listed before this gate (the friction inventory's list, and the read record of any read-only phase run
+  between explore and this one)", because `collect-feedback` runs after `explore`).
+- **Specs:** spec-017 is `approved` (`grep -m1 '^status:' docs/04_memory/design/specs/spec-017-*.md`); the AC asks
+  for a §12 Revision note only. No spec is missing: the phase uses only declared constructs (`role`, `actions:
+  [agent.execute]`, a string `produces`, `checks.post`), as `explore` does.
+- **Phase shape.** `collect-feedback`: role `facilitator` (as `explore`), one action `agent.execute` (`dl-090` Q6:
+  one agent step per phase, pinned by the conformance test), no `approval`, `produces` the read record at
+  `docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md` (the AC's path; `dl-163`
+  still names `docs/06_retrospectives/`, superseded by `bug-299`/`task-222`), one unbound `checks.post`
+  `feedback-notes.recorded(...)` stating the row contract (decision D2). No `where:`: a selection is evidence only
+  when it empties (spec-017 §12, `build-backlog`), which a set of `active` services never does.
+- **AC classification (corrected).** The task labels AC 1 and AC 2 `characterization`, but the phase does not exist
+  at `30b268a3` (`git show 30b268a3:.wingfoil/workflows/custom/retrospective.yaml | grep -c 'name: collect-feedback'`
+  → `0`; the one other mention is `task-213`'s comment) and neither
+  `explore`, `additional-points` nor `capture` names the read record or the ruling's destination
+  (`git show 30b268a3:.wingfoil/workflows/custom/retrospective.yaml | grep -n 'Consumer feedback\|read record'` →
+  lines 52 and 59 only, `additional-points`' comment and check: "the read record of any read-only phase"). So:
+
+  | AC | part | class | why |
+  |----|------|-------|-----|
+  | 1 | the phase, its reads, lists, `produces`, rows, six outcomes, version 1.6 | red-first | new configuration |
+  | 2 | `additional-points`' check accepts the six outcomes | characterization | `task-213`'s check, pinned by `test/core/retrospective-notes.test.ts` (passes before and after) |
+  | 2 | `explore` names the read record; `additional-points` presents it; `capture` records the ruling in Dispositions / `## Consumer feedback` | red-first | new description text |
+  | 3 | zero errors, conformance + evidence tests pin the phase, WORKFLOW.md diagram | red-first | new rows / phase |
+  | 3 | spec-017 §12 Revision note | n/a (document) | pending amendment |
+
+- **Decision D1 (approver) — "`explore` lists the read record as a secondary source".** Read literally this
+  cannot hold: `dl-163` S3d puts `collect-feedback` after `explore`, so `explore` cannot read, or record the commit
+  of, a record not yet written; `task-213` narrowed its check for the same reason. I made `explore`'s description
+  name the read record as the secondary source `collect-feedback` adds after it ("not on this inventory's list, and
+  is the other secondary source additional-points reads"), and removed the earlier parenthetical that listed "a
+  consumer feedback triage record" among the sources `explore` reads (a false claim about the order). The
+  alternative — `explore` lists the record's path as a source to come — would put an entry with no commit read on a
+  list whose check requires one.
+- **Decision D2 (approver) — a `checks.post` on `collect-feedback`.** Not asked by the AC; added so the row contract
+  (services with the commit read; cite, commit, restatement, one of six outcomes; no consumer configuration, paths or
+  prose) is stated where a check is, as `explore`'s `secondary-sources.listed` is. Cost: one more unbound-check
+  warning (77 → 78). Dropping it removes the conformance row and the AC 1 `post` assertion.
+
+### red
+
+- `d812f325`: new `test/core/retrospective-collect-feedback.test.ts` (AC 1, AC 2, AC 3's WORKFLOW.md node); the
+  conformance test gains the `feedback-notes.recorded` row (retrospective rows shift to `phases[2]`/`[3]`) and a case
+  that `collect-feedback` is neither a checkpoint nor a finalize approval; `workflow-evidence.test.ts` pins its
+  `produces`; `retrospective-notes.test.ts`'s phase-name list gains it.
+- Run: `npx jest test/core/retrospective-collect-feedback.test.ts test/core/retrospective-notes.test.ts
+  test/core/workflow-repository-conformance.test.ts test/core/workflow-evidence.test.ts test/docs/workflow-md.test.ts`
+  → **15 failed, 68 passed, 83** (4 suites failed): the 11 new cases, the conformance row list and new case, the
+  evidence case and the phase-name list. `workflow-md.test.ts` passes (no phase yet to document).
+
+### green
+
+- `c1821345`: `retrospective.yaml` 1.5 → 1.6 (header history `1.6 dl-163 S3d (task-272)`): the `collect-feedback`
+  phase; `explore`, `additional-points` and `capture` descriptions; `.wingfoil/WORKFLOW.md`'s `RT` node chains
+  `explore → collect-feedback → additional-points → capture → approve` and names the read record. No test changed
+  after red (`git diff d812f325 c1821345 --stat -- test` → empty).
+- Same run → **83 passed, 83** (5 suites).
+- Measured (`npm run build`; `node -e` over `require('./dist/core').loadWorkflowRegistryAtRev(root, rev)`):
+  `30b268a3` → 26 workflows, 100 phases, 0 errors, 77 warnings; `HEAD` → 26, 101, 0 errors, 78 warnings (all
+  `W_WORKFLOW_UNBOUND_TOKEN`). `node dist/cli.js workflow list --all --format json` → exit 0, 78 unbound-token
+  warnings plus 6 `W_MEMORY_UNREADABLE` on the grandfathered frontmatter-less `X`/rel-v0.1 plans (unrelated).
+
+### refactor
+
+- `npm test` → **348 suites, 6486 passed**, exit 0 (load average 24 at start, `uptime`).
+- `npm run test:coverage` → **not obtained.** Five attempts (2026-10-10/11) were stopped from outside: three by
+  session or machine restarts, two killed by a signal within seconds (exit 143 `Terminated`, then 144) at load
+  average 120–145 on 12 cores (`uptime`, `nproc`). One run that got further failed only on load timeouts
+  (`test/lint/coverage-parity.test.ts` `spawnSync … ETIMEDOUT`, `test/mcp/resource-latency.test.ts`). The branch
+  changes no `src/` file (`git diff --stat 30b268a3..HEAD -- src` → empty), so the coverage figures cannot move
+  from the W3 B4 gate's `All files 99.29 / 97.04 / 97.74 / 99.69` (`grep '^All files'
+  ../devloop-kit/gate-w3b4-cov.log`). The coordinator's gate run settles it.
+- `npm run lint` → exit 0. `npm run docs:api` → exit 0. `npx tsc --noEmit -p tsconfig.json` → exit 0.
+  `npx tsc -p tsconfig.build.json --noEmit` → exit 0.
+- `node scripts/check-governance.cjs --base 30b268a3` → "1 wf() commits … and 2 other commits", gated 0 findings,
+  history 0 findings, exit 0 (config-version: `retrospective.yaml` 1.5 → 1.6).
+- No `src/` change, so coverage cannot move; no CLI command or help changed (`cli-reference.md` untouched).
+- BDD: no feature file mentions the retrospective (`grep -rln 'retrospective' docs/02_requirements/02_bdd/features/`
+  → nothing); nothing to extend.
+
+### review (self, reviewer)
+
+- AC 1: `retrospective-collect-feedback.test.ts` AC 1 block (7 cases) + `workflow-evidence.test.ts`'s `produces`
+  case — green. AC 2: its AC 2 block (3 cases) + `retrospective-notes.test.ts`'s six-outcome case — green. AC 3:
+  conformance row list (0 errors, the new warning row) + not-a-checkpoint case, `workflow-md.test.ts` (phase
+  documented for its workflow), the `RT` node case — green; spec-017 §12 Revision note below (pending amendment).
+- Same-class sweep in the files touched: the only other claim about phase order was `explore`'s parenthetical
+  (fixed, D1). `WORKFLOW.md` has no other retrospective node (`grep -n 'additional-points' .wingfoil/WORKFLOW.md`
+  → line 204 only).
+
+### Pending amendments (approver)
+
+- `spec-017-workflow-commands-and-state-deduction` — Revision (2026-10-10, `task-272`) appended after `task-212`'s:
+  §12 re-measured with `collect-feedback` (101 phases, 0 errors, 78 warnings; checkpoints and approvals unchanged).
+  Proposed `--reason`: "task-272 (dl-163 S3d): Revision note re-measuring §12 with the read-only
+  retrospective.collect-feedback phase; its produces is evidence, so the checkpoint and approval lists are unchanged.
+  No rule, command or diagnostic changes."
+
+### Retrospective
+
+- The task's AC labels said `characterization` for configuration that did not exist yet; the design re-classified
+  them (no `name: collect-feedback` at `30b268a3`, the design's command). Proposal:
+  release-planning labels an AC that adds configuration red-first.
+- A handover (`task-213`'s, "listed as a secondary source of `explore`") and the AC repeated an ordering that the
+  ratified decision (`dl-163` S3d: after `explore`) rules out; D1 records it.
