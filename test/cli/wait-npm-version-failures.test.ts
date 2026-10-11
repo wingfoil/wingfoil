@@ -119,15 +119,14 @@ describe('npmView (task-229 F3) — a bounded npm call', () => {
     return { ...process.env, PATH: `${join(work, 'bin')}${delimiter}${process.env.PATH ?? ''}` };
   }
 
+  // The 10 s bound is the test's own timeout, not a clock read here (one clock: `latency-budget-placement`):
+  // an npmView that waited for the 30 s `sleep` instead of killing it fails the test by timing out.
   it('kills an npm that hangs past the timeout and reports timedOut', async () => {
     const env = fake('exec sleep 30');
-    const started = process.hrtime.bigint();
     const answer = await npmView(['view', 'wingfoil@0.3.0', 'version'], { timeoutMs: 300, env });
-    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
     expect(answer.timedOut).toBe(true);
     expect(answer.status).toBeNull();
-    expect(elapsedMs).toBeLessThan(10_000);
-  });
+  }, 10_000);
 
   it('returns npm’s status and output when it answers in time', async () => {
     const env = fake("printf '0.3.0\\n'; exit 0");
