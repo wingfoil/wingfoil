@@ -8,7 +8,7 @@ kind: "feature"
 priority: "medium"
 tags: ["v0.3", "process", "release-health", "scripts"]
 ref: "dl-089"
-bug: []
+bug: ["bug-329"]
 depends_on: ["task-134-report-source-file-coverage-so-untested-file-counts", "task-222-declare-release-health-catalogue-v2-report-schema-release"]
 tmpl_version: 260703
 ---
