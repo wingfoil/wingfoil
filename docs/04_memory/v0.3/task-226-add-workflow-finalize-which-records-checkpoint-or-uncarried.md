@@ -2,7 +2,7 @@
 id: "task-226-add-workflow-finalize-which-records-checkpoint-or-uncarried"
 type: task
 title: "Add `workflow finalize`, which records a checkpoint or an uncarried approval as a phase-record commit"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "high"
