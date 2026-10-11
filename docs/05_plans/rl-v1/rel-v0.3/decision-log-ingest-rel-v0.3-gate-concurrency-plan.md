@@ -2,46 +2,64 @@
 id: decision-log-ingest-rel-v0.3-gate-concurrency-plan
 type: plan
 title: "Decision-log-ingest — rel-v0.3 gate concurrency"
-status: draft
-version: ""            # optional — plan version
+status: active
+version: "1.0"
 workflow: "decision-log-ingest"
 phase: "rel-v0.3-gate-concurrency"
-element: ""            # optional — the Memory element this phase iterates (e.g. a release id)
-release: ""            # optional — target release, e.g. "v0.1"
+element: "minor-v0.3"
+release: "v0.3"
 tmpl_version: 261007   # Orignal template version
 ---
 
-<!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
-     `--tags` or `--set` value). Fill the required frontmatter fields and replace these placeholder
-     comments yourself; `wingfoil memory submit` then checks the required fields, moves `status`
-     forward and commits the document as you left it, naming in the commit body the content it
-     carries. -->
-
 ## Context
 
-<!-- Why this phase runs now, its preconditions, and what it produces. Keep coherent with the
-     workflow definition's phases / roles / actions / produces / checks (dl-019).
-     Every plan's preconditions include that the build in use is the pinned one (dl-095):
-     `npm run -s wingfoil -- --version` prints the version package.json pins for
-     `wingfoil-released`. -->
+On 2026-10-11 the v0.3 dev-loop's wave 3 batch B5 saturated the machine it runs on. Measured from outside: 12
+cores, load average 33 (peak 76, and 165 earlier the same morning), 43 node processes; `npm run test:coverage` and
+`tsc` running at once in 8–10 task worktrees (task-217, 225, 226, 227, 229, 231, 272, 274, 276, 278); one `npm
+test` tree orphaned to `systemd` after its session ended, at 458 % CPU on its own; dozens of `until grep …; do
+sleep N; done` pollers. The machine was unusable for the approver, who stopped the batch.
+
+The suites already ran with `--maxWorkers=2` (the batch's load rule of the same morning). The cause is the number of
+worktrees whose gates run **at the same time**: 8 worktrees × 2 workers plus the `tsc` runs is over 20 active
+processes on 12 cores, so the runs overlap faster than they finish. `dev-loop.yaml`'s `start` phase creates one
+worktree per task (`git.create_worktree(task: "{task.id}")`, `dl-014` G2, REQ-INT-06), which is what lets dev-loops
+run in parallel; nothing in the project bounds how many of those worktrees run their gates at once.
+
+A concurrency cap is a rule for all future work, not a mechanical fix, so under the traceability directive's filing
+rule (`dl-118`) it is captured as a decision-log, through `decision-log-ingest`
+(`.wingfoil/workflows/custom/decision-log-ingest.yaml` v1.1), on branch `ingest/dl-gate-concurrency` in its own
+worktree. Memory operations use the pinned build, as the approver asked: `npm run -s wingfoil -- --version` prints
+`0.2.2`, the version `package.json` pins for `wingfoil-released`.
+
+Interim behaviour, in force without waiting for the ratification (approver, 2026-10-11): one worktree's test or
+coverage gate at a time, one poller at a time, no gate started while the 1-minute load is above 14, no run detached
+from the session that launched it.
 
 ## Phases / Steps
 
-<!-- The ordered steps to execute against the workflow phase — actions, roles, gates, models. -->
+1. **capture** (product-owner): `memory add --type decision-log`, then `memory submit` → `in-discussion`. The
+   decision-log states the numeric cap and how it is measured, why it leaves `dl-014` G2 / REQ-INT-06 untouched (the
+   per-task worktree stays; only how many gates run together is bounded), and where the enforcement lives. Check
+   `frontmatter.required: [title]`.
+2. **approve** (⛔ approver): `memory approve` (`in-discussion → ready`) only on the approver's instruction; a reject
+   returns to capture. Not run by an agent on its own.
 
 ## Handoff
 
-<!-- What requires the approver vs. the agent; the checkpoint(s) and the completion criteria. -->
+- **Approver:** the ratification (or reject to `draft`), and the option for each question the decision-log asks.
+- **Agent:** capture and its fact checks. After the ratification, the tooling change (the semaphore in
+  `scripts/run-tests.cjs` and/or a `dev-loop.yaml` gate) is a `task` delivered through `dev-loop`, never an ad hoc
+  edit.
+- **Merge:** the branch is merged `--no-ff` onto `main` by the dev-loop coordinator, as the ingest branches are.
+- **Completion criteria:** the decision-log `ready` (or rejected and re-captured); this plan `active → done`.
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while executing this plan — rulings, deviations from the
-     steps above, blockers — filled in as the phase runs, not written after the fact. -->
+- **capture (2026-10-11)** — see below.
 
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
-     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
-     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
-     An item met by the phase as a whole goes here; one met on a single task or bug goes in that
-     element's own subsection. The retrospective's `explore` reads this subsection first. -->
+- 14 task agents in parallel (W3 B5) each ran a full coverage gate at the end of their cycle; with no cap on
+  concurrent gates the load reached 165 on 12 cores, restarts orphaned the runs, and resuming agents blindly spawned
+  duplicate instances (task-231). Proposal: the cap this plan captures, plus resuming an agent only after checking
+  its worktree has no live process.
