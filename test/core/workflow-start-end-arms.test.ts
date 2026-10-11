@@ -158,3 +158,49 @@ describe('resolveWaitingTarget — the edge workflow end takes (task-217)', () =
     expect(() => resolveWaitingTarget(memory, 'plan', state, 'p/x.md')).toThrow(`illegal transition ${state} -> (none) for type 'plan'`);
   });
 });
+
+describe('workflow start / end — refusals before any read (task-217)', () => {
+  let repo: string;
+  afterEach(() => removeTempDir(repo));
+
+  it('no git identity: both refuse before reading (REQ-SEC-01)', async () => {
+    repo = makeTempGitRepo();
+    writeProject(repo, { path: 'docs/plans/{scope}/{id}.md', idPattern: '{workflow}-{phase}-plan' });
+    git(repo, ['config', '--unset', 'user.email']);
+    const saved = { ...process.env };
+    const empty = `${repo}/.git/empty-config`;
+    writeFixtureFile(repo, '.git/empty-config', '');
+    Object.assign(process.env, { GIT_CONFIG_GLOBAL: empty, GIT_CONFIG_NOSYSTEM: '1' });
+    delete process.env['GIT_AUTHOR_EMAIL'];
+    delete process.env['GIT_COMMITTER_EMAIL'];
+    delete process.env['EMAIL'];
+    try {
+      const started = await operation('workflowStart')({ root: repo, positional: 'tidy', options: {} });
+      const ended = await operation('workflowEnd')({ root: repo });
+      expect([started.ok, ended.ok]).toEqual([false, false]);
+      expect(started.ok ? '' : started.error.message).toMatch(/identity|user\.email/);
+    } finally {
+      process.env = saved;
+    }
+  });
+
+  it('a project with no .wingfoil/ is refused as not initialized', async () => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, 'README.md', '# x\n');
+    commitAll(repo, 'bare');
+    for (const name of ['workflowStart', 'workflowEnd']) {
+      const result = await operation(name)({ root: repo, positional: 'tidy', options: {} });
+      expect(result.ok ? null : result.error.code).toBe('VALIDATION');
+    }
+  });
+
+  it('a repeated --element keeps the last; a refused add is returned unchanged', async () => {
+    repo = makeTempGitRepo();
+    writeProject(repo, { path: 'docs/plans/{scope}/{id}.md', idPattern: '{workflow}-{phase}-plan' });
+    git(repo, ['rm', '-q', '.wingfoil/memory/templates/plan.md']);
+    commitAll(repo, 'no plan template');
+    const result = await operation('workflowStart')({ root: repo, positional: 'release-cycle', options: { element: ['release:ghost', 'release:minor-v1'] } });
+    expect(result.ok).toBe(false);
+    expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe('no plan template');
+  });
+});

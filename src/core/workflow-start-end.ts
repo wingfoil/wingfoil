@@ -246,7 +246,8 @@ export async function workflowStart(params: WorkflowStartParams, verbs: StartVer
     ...(recorded === null ? {} : { fields: { element: recorded.id } }),
   });
   if (!added.ok) return added;
-  const addCommit = added.commit?.sha ?? '';
+  // A successful `memoryAdd` / `memorySubmit` always carries its commit (`coreOk(…, { sha, message })`).
+  const addCommit = added.commit!.sha;
 
   let submitted: CoreResult<unknown>;
   try {
@@ -260,7 +261,7 @@ export async function workflowStart(params: WorkflowStartParams, verbs: StartVer
   const next = workflowNextAtHead(root, added.value.id);
   if (!next.ok) return next;
   return coreOk(
-    { baseline: next.value.baseline, instance: next.value.instance!, next: next.value.next, commits: [addCommit, submitted.commit?.sha ?? ''] },
+    { baseline: next.value.baseline, instance: next.value.instance!, next: next.value.next, commits: [addCommit, submitted.commit!.sha] },
     submitted.commit,
     [...(added.warnings ?? []), ...(submitted.warnings ?? [])],
   );
