@@ -76,7 +76,7 @@ describe('the `task` type declares `kind` and the stop-the-line threshold (task-
       field: 'kind',
       counts: 'fix',
       blocks: 'feature',
-      open: 'status != done',
+      open: 'status not in [done, deprecated]', // task-275: `deprecated` is not open (approver ruling 2026-10-10)
       scope: 'release',
       max_share: 30,
       at: 'dev-loop start',
