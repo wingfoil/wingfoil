@@ -77,11 +77,11 @@ phases:
       one-time registry-side setup this step presupposes.
     role: tech-lead
     actions:
-      - agent.execute        # push the tag (publish.yml runs gate → stage → promote, `npm stage publish`), then report the stage id promote printed; nothing is live yet
+      - agent.execute        # push the tag (publish.yml runs gate → stage → promote, `npm stage publish`, → release, the GitHub Release once the version is live), then report the stage id promote printed; nothing is live yet
       - 'approver.execute(command: "npm stage approve <stage-id>")'   # 2FA on npm — the version goes live (adr-011 point 3)
     checks:
       pre: ["tests.passing", "services.verify-sweep"]   # dl-130 Q3 (a): the sweep is bound at severity warn
-      post: ["staged version approved on npm and live on the npm registry"]
+      post: ["staged version approved on npm, live on the npm registry, and its GitHub Release created"]   # dl-130 Action 2: the Release is checked in the same prose check (task-229), so the unbound-check count does not move
     approval: { by_role: approver }   # the npm-publish environment deployment AND the npm stage approval (adr-011 point 3, dl-087 Q2 (iii))
 
   - name: mark-released

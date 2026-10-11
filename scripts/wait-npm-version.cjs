@@ -11,6 +11,9 @@
  * the recovery is to re-run the failed job once the version is live (the header runbook of `publish.yml`).
  * `task-238`'s `mcp-registry` job needs the same wait.
  *
+ * It fails at once when npm cannot be run, or answers E401/E403; every other non-answer (E404 — the staged,
+ * unapproved version —, empty output, a network error, a call killed after NPM_VIEW_TIMEOUT_MS) is "not live yet".
+ *
  * Usage: node scripts/wait-npm-version.cjs <vX.Y.Z> --timeout-minutes <n ≥ 0> --interval-seconds <n ≥ 1>
  *        (CI passes "$GITHUB_REF_NAME"; the tag must name package.json's version, as the gate asserted)
  * Exit:  0 live · 1 not live when the timeout passed · 2 usage error
@@ -24,6 +27,25 @@ const { join } = require('node:path');
 const RELEASE_TAG = /^v((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))$/;
 
 /**
+ * The bound of one `npm view` call (task-229 review F3). A call still running after it is killed and counts as
+ * "not live yet", so a hung npm ends with this script's own message at its deadline instead of the job's
+ * `timeout-minutes`.
+ */
+const NPM_VIEW_TIMEOUT_MS = 60_000;
+
+/**
+ * npm error codes that waiting cannot cure: authentication (E401) and permission (E403). A version still in npm's
+ * stage queue answers E404; network codes (ETIMEDOUT, ECONNRESET, EAI_AGAIN, …) and E5xx are transient.
+ */
+const PERMANENT_CODES = new Set(['E401', 'E403']);
+
+/** @param {string} stderr @returns {string | undefined} the code of `npm error code X` / `npm ERR! code X` */
+function npmErrorCode(stderr) {
+  const match = /^npm (?:error|ERR!) code (\S+)/m.exec(stderr);
+  return match === null ? undefined : match[1];
+}
+
+/**
  * The `npm` arguments that ask the registry for one exact version.
  *
  * @param {string} name
@@ -34,9 +56,10 @@ function npmViewArgs(name, version) {
   return ['view', `${name}@${version}`, 'version'];
 }
 
-/** @param {{ status: number | null, stdout: string, stderr: string }} answer */
+/** @param {{ status: number | null, stdout: string, stderr: string, timedOut?: boolean }} answer */
 function describeAnswer(answer) {
   const said = `${answer.stdout}\n${answer.stderr}`.split('\n').map((l) => l.trim()).filter((l) => l !== '');
+  if (answer.timedOut === true) return `npm view killed after ${Math.round(NPM_VIEW_TIMEOUT_MS / 1000)} s`;
   return `npm view exit ${answer.status}${said.length > 0 ? `: ${said[0]}` : ''}`;
 }
 
@@ -49,7 +72,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
  *
  * @param {{
  *   name: string, version: string, timeoutMs: number, intervalMs: number,
- *   view: (args: string[]) => Promise<{ status: number | null, stdout: string, stderr: string }>,
+ *   view: (args: string[], options: { timeoutMs: number }) => Promise<{ status: number | null, stdout: string, stderr: string, timedOut?: boolean }>,
  *   now: () => number, sleep: (ms: number) => Promise<void>, log: (line: string) => void,
  * }} options
  * @returns {Promise<{ ok: boolean, attempts: number, message: string }>}
@@ -59,10 +82,21 @@ async function waitForNpmVersion(options) {
   const spec = `${name}@${version}`;
   const start = now();
   for (let attempts = 1; ; attempts += 1) {
-    const answer = await view(npmViewArgs(name, version));
+    const answer = await view(npmViewArgs(name, version), { timeoutMs: NPM_VIEW_TIMEOUT_MS });
     if (answer.status === 0 && answer.stdout.trim() === version) {
       log(`attempt ${attempts}: ${spec} is live`);
       return { ok: true, attempts, message: `${spec} is live on npm (${plural(attempts, 'attempt')})` };
+    }
+    if (answer.status === null && answer.timedOut !== true) {
+      return { ok: false, attempts, message: `npm could not be run: ${answer.stderr.trim() || 'no error text'}` };
+    }
+    const code = npmErrorCode(answer.stderr);
+    if (code !== undefined && PERMANENT_CODES.has(code)) {
+      return {
+        ok: false,
+        attempts,
+        message: `npm answered ${code} for ${spec} (${describeAnswer(answer)}): an authentication or permission error, which waiting will not change`,
+      };
     }
     log(`attempt ${attempts}: ${spec} not live yet (${describeAnswer(answer)})`);
     const elapsed = now() - start;
@@ -80,18 +114,33 @@ async function waitForNpmVersion(options) {
 }
 
 /**
- * @param {string[]} args
- * @returns {Promise<{ status: number | null, stdout: string, stderr: string }>}
+ * Run `npm` with `args`, killing it after `timeoutMs`.
+ *
+ * @param {readonly string[]} args
+ * @param {{ timeoutMs: number, env?: NodeJS.ProcessEnv }} options
+ * @returns {Promise<{ status: number | null, stdout: string, stderr: string, timedOut: boolean }>}
  */
-function npmView(args) {
+function npmView(args, options) {
   return new Promise((resolve) => {
-    const child = spawn('npm', args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
+    let settled = false;
+    const finish = (status, extra = '') => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ status, stdout, stderr: `${stderr}${extra}`, timedOut });
+    };
+    const child = spawn('npm', [...args], { stdio: ['ignore', 'pipe', 'pipe'], env: options.env ?? process.env });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+    }, options.timeoutMs);
     child.stdout.on('data', (chunk) => (stdout += chunk));
     child.stderr.on('data', (chunk) => (stderr += chunk));
-    child.on('error', (error) => resolve({ status: null, stdout, stderr: `${stderr}${error.message}` }));
-    child.on('close', (status) => resolve({ status, stdout, stderr }));
+    child.on('error', (error) => finish(null, error.message));
+    child.on('close', (status) => finish(timedOut ? null : status));
   });
 }
 
@@ -159,4 +208,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { npmViewArgs, waitForNpmVersion };
+module.exports = { NPM_VIEW_TIMEOUT_MS, npmView, npmViewArgs, waitForNpmVersion };

@@ -6,6 +6,8 @@ export interface NpmViewAnswer {
   readonly stdout: string;
   /** npm's standard error. */
   readonly stderr: string;
+  /** `true` when the call was killed after its timeout (then `status` is `null`). */
+  readonly timedOut?: boolean;
 }
 
 /** Inputs of {@link waitForNpmVersion}; the clock, the sleep and npm are injected. */
@@ -18,8 +20,8 @@ export interface WaitForNpmVersionOptions {
   readonly timeoutMs: number;
   /** The wait between attempts (the last one is shortened to the deadline). */
   readonly intervalMs: number;
-  /** Runs `npm` with the given arguments. */
-  readonly view: (args: readonly string[]) => Promise<NpmViewAnswer>;
+  /** Runs `npm` with the given arguments, bounded by `options.timeoutMs` ({@link NPM_VIEW_TIMEOUT_MS}). */
+  readonly view: (args: readonly string[], options: { readonly timeoutMs: number }) => Promise<NpmViewAnswer>;
   /** The current time, in milliseconds. */
   readonly now: () => number;
   /** Waits the given milliseconds. */
@@ -34,7 +36,7 @@ export interface WaitForNpmVersionResult {
   readonly ok: boolean;
   /** How many times npm was asked. */
   readonly attempts: number;
-  /** One readable line: live, or not live after the timeout with npm's last answer. */
+  /** One readable line: live; not live after the timeout, with npm's last answer; npm not runnable; or E401/E403. */
   readonly message: string;
 }
 
@@ -43,3 +45,12 @@ export function npmViewArgs(name: string, version: string): string[];
 
 /** task-229 (`dl-130` step 1, `adr-011`): poll npm until it serves `version`, at most `timeoutMs`. */
 export function waitForNpmVersion(options: WaitForNpmVersionOptions): Promise<WaitForNpmVersionResult>;
+
+/** task-229 review F3: the bound of one `npm view` call, in milliseconds. */
+export const NPM_VIEW_TIMEOUT_MS: number;
+
+/** task-229 review F3: run `npm` with `args`, killed after `options.timeoutMs` (then `timedOut: true`, `status: null`). */
+export function npmView(
+  args: readonly string[],
+  options: { readonly timeoutMs: number; readonly env?: NodeJS.ProcessEnv },
+): Promise<NpmViewAnswer & { readonly timedOut: boolean }>;
