@@ -89,6 +89,16 @@ import {
 } from './workflow-start-end';
 import { renderFinalizeConsole, workflowFinalizeAtHead, type FinalizeResult } from './workflow-finalize';
 import { renderStatusConsole, workflowStatusAtHead, type StatusResult } from './workflow-status';
+import {
+  renderCreateConsole,
+  renderRemoveConsole,
+  workflowCreate,
+  workflowRemove,
+  type CreateResult,
+  type RemoveResult,
+  type WorkflowCreateParams,
+  type WorkflowRemoveParams,
+} from './workflow-create-remove';
 import { loadDirectiveListing, type DirectiveListing } from './directives-list';
 import { selectDirectivesById } from './context';
 import { checkAssignable, checkUnreferenced, updateRoleAssignments } from './directive-assign';
@@ -164,6 +174,8 @@ export type { ActionView, Awaiting, CadenceView, CheckView, Member, NextInputs, 
 // task-217: `CORE_MODULES`' `workflowStart` / `workflowEnd` (`spec-017` §7.1–§7.2) and their values.
 export { NO_ACTIVE_WORKFLOW_MESSAGE, NO_PLAN_TYPE_MESSAGE, renderEndConsole, renderStartConsole } from './workflow-start-end';
 export type { EndResult, StartResult, StartVerbs, WorkflowEndParams, WorkflowStartParams } from './workflow-start-end';
+export { KIND_CONFLICT_MESSAGE, NO_DECLARATION_MESSAGE, renderCreateConsole, renderRemoveConsole, workflowExistsMessage, WORKFLOWS_MANIFEST_PATH } from './workflow-create-remove';
+export type { CreateResult, RemoveResult, WorkflowCreateParams, WorkflowRemoveParams } from './workflow-create-remove';
 // task-225: `workflow status` at `HEAD` (`spec-017` §5.1–§5.4, §7.4, §8 `StatusResult`); approval detection and
 // routing live in the step builder above, so `next` reports them too. The operation is `CORE_MODULES`' `workflowStatus`.
 export { approvalDiagnostics, routeApproval, W_APPROVAL_ROLE_WITHOUT_AUTHORITY } from './workflow-next';
@@ -2323,6 +2335,15 @@ const workflowStartFn: CoreFn<unknown, StartResult> = (params) =>
 
 const workflowEndFn: CoreFn<unknown, EndResult> = (params) => refusalOf(() => workflowEnd(params as WorkflowEndParams));
 
+/**
+ * `workflowCreate` / `workflowRemove` `CoreOperation.fn`s (P4.8, P4.9; `spec-017` §7.7–§7.8; task-211): the two
+ * operations of `./workflow-create-remove`. A `spec-003` error at `HEAD` is `VALIDATION`, exit 1
+ * ({@link coreErrorOf}); the argument errors are thrown `UsageError`s (exit 2).
+ */
+const workflowCreateFn: CoreFn<unknown, CreateResult> = (params) => refusalOf(() => workflowCreate(params as WorkflowCreateParams));
+
+const workflowRemoveFn: CoreFn<unknown, RemoveResult> = (params) => refusalOf(() => workflowRemove(params as WorkflowRemoveParams));
+
 /** `wingfoil workflow status [<ref>]` params (task-225): the `<ref>` rides the bare positional. */
 export interface WorkflowStatusParams {
   readonly root: string;
@@ -2672,7 +2693,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
   },
   {
     name: 'workflow',
-    description: 'start and end workflows, read the workflows the project declares, and record the steps nothing else completes (no step is executed yet)',
+    description: 'start and end workflows, read, create and remove the workflows the project declares, and record the steps nothing else completes (no step is executed yet)',
     operations: {
       // task-204 (`spec-017` §7.5–§7.6, §8): both read `HEAD`, a declared exception (§1.1, ruling R15;
       // `spec-006` §6 item 6), from the snapshot and deduction `workflow next` / `status` answer from. A
@@ -2770,6 +2791,38 @@ export const CORE_MODULES: readonly CoreModule[] = [
         positional: { name: 'ref', required: true, description: 'a workflow name, or the id of an open workflow instance' },
         example: 'wingfoil workflow show release-cycle',
         fn: workflowShowFn,
+      },
+      // task-211 (`spec-017` §7.7–§7.8, REQ-SEC-07): both decide at `HEAD` (§11) and write one commit with the
+      // workflow file and `workflows.yaml` (`wf(workflow): create|remove <name>`), after loading the registry the
+      // commit would leave. `create`'s one filesystem read is its target's existence (`dl-086`); `remove` refuses
+      // a built-in, a workflow another one includes (`dl-030`; the referrer source is `include:` alone, `dl-066`
+      // option 1) and one with an open instance. The MCP Tools `workflow.create` / `workflow.remove` are v0.4.
+      workflowCreate: {
+        name: 'workflowCreate',
+        mutates: true,
+        description: 'create a custom workflow file with one phase and include it in workflows.yaml',
+        positional: { name: 'name', required: true, description: 'the new workflow, written to .wingfoil/workflows/custom/<name>.yaml' },
+        options: [
+          { name: 'kind', valueName: 'main|sub', description: 'main: startable; sub: includable (or declare --startable / --includable instead)' },
+          { name: 'element', valueName: 'type', description: 'the Memory type the workflow runs on' },
+          { name: 'description', valueName: 'text', description: "the workflow's description" },
+        ],
+        flags: [
+          { name: 'startable', description: 'the workflow can be started on its own (instead of --kind)' },
+          { name: 'includable', description: "a phase can include the workflow (instead of --kind)" },
+        ],
+        example: 'wingfoil workflow create arch-review --kind main',
+        fn: workflowCreateFn,
+        renderConsole: renderCreateConsole as (value: unknown) => string,
+      },
+      workflowRemove: {
+        name: 'workflowRemove',
+        mutates: true,
+        description: 'delete a custom workflow no other workflow includes and no open workflow runs, and its workflows.yaml entry',
+        positional: { name: 'ref', required: true, description: 'a workflow name, or the id of an open workflow instance (built-in workflows cannot be removed)' },
+        example: 'wingfoil workflow remove arch-review',
+        fn: workflowRemoveFn,
+        renderConsole: renderRemoveConsole as (value: unknown) => string,
       },
     },
   },

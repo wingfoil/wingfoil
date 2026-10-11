@@ -122,12 +122,15 @@ export function loadWorkflowRegistry(root: string): WorkflowsLoadResult {
  * workflow files, `bindings.yaml`, `memory.yaml`, `dna.yaml` and the Memory templates are all read at
  * that commit, so a dirty working tree changes nothing (the `command-baseline` directive).
  *
+ * @param overlay - Workflow files (the manifest, an included file) that replace the commit's own, keyed by
+ *   repository-relative path, `null` for absent: the registry a commit about to be made would leave
+ *   (`workflow create` / `remove`, task-211). `memory.yaml`, `dna.yaml` and the templates stay the commit's.
  * @throws `RevisionError` for a malformed rev or one naming no commit; `DiagnosticsError`
  *   (`VALIDATION`) when the loader or a core check reports an error.
  */
-export function loadWorkflowRegistryAtRev(root: string, rev: string): WorkflowsLoadResult {
+export function loadWorkflowRegistryAtRev(root: string, rev: string, overlay?: ReadonlyMap<string, string | null>): WorkflowsLoadResult {
   const sha = resolveRevision(root, rev);
-  return withCoreChecks(loadWorkflowsYamlAtRev(root, sha), {
+  return withCoreChecks(loadWorkflowsYamlAtRev(root, sha, overlay), {
     memoryYaml: () => loadMemoryYamlAtRev(root, sha),
     dnaYaml: () => loadDnaYamlAtRev(root, sha),
     configFile: (relative) => {
