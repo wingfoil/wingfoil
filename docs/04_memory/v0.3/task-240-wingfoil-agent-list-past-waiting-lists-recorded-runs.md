@@ -108,6 +108,9 @@ is added (CLI only in v0.3, `spec-016` §8).
 
 ### red (developer)
 
+*As executed:* this phase was run by the developer agent, not by `qa` as `dev-loop` 1.8 assigns it
+(`dl-134`, separation of duties): the same agent wrote red, green and refactor. Not relabelled.
+
 `a027acd3` — `test/core/agent-list.test.ts` (the registered operation, 18 cases) and
 `test/cli/agent-list.integration.test.ts` (compiled CLI bytes, 8 cases).
 - `npx jest test/core/agent-list.test.ts` → **18 failed, 18 total** (`"agentList" is not registered on the
@@ -196,6 +199,50 @@ Retrospective items (one line each):
 - `spec-008` §2 and `docs/cli-reference.md` said "one command" had its own console text after
   `workflow next|status|start|end|finalize` gained one: the console-exception sentence had no owner.
 
+### Review fixes
+
+Independent review, 2026-10-11: **APPROVE WITH FIXES** (decisions 1, 2, 4, 5 sound; 3 acceptable if
+documented). The task stays `in-review`; no re-submit.
+
+- **F1** — past order was full-path byte order, not element-id order (`minor-v0.3.1.jsonl` sorted before
+  `minor-v0.3.jsonl`, `.` < `.j`). `readRunLogsAt` now sorts on the basename without `.jsonl`; docstring
+  corrected. Case: `test/core/agent-list-edges.test.ts` "an element id that is a prefix of another".
+- **F2** — `tests.unchanged(since: red)`: `git log --first-parent --no-merges --format=%h a027acd3..HEAD --
+  test/core/agent-list.test.ts test/cli/agent-list.integration.test.ts` → `665c05dc 4558ad62 20fd6b41` (the
+  history stays; it is not rewritten). Net effect: `git diff --stat a027acd3 HEAD -- <both files>` →
+  `test/core/agent-list.test.ts | 2 +-`, the one line of green's type-only cast (`result.warnings` →
+  `(result as { warnings?: readonly string[] }).warnings`, `tsc` refused the union access); the CLI suite is
+  byte-identical to red. **Deviations, for the approver:** (a) refactor `4558ad62` appended seven cases to
+  red's file; `665c05dc` moved them to `test/core/agent-list-edges.test.ts` over a fixture copy in
+  `test/core/helpers/agent-list-fixture.ts`; (b) **waiver requested** for green's type-only cast in red's file
+  (no assertion changed). Separation of duties: see the note under red.
+- **F3** — the two further exit-`1` refusals of the past section (`dna.yaml` not committed at `HEAD`;
+  `paths.runs` outside the root) and "every run log is read whatever `--element`/`--phase`" are now in
+  `docs/cli-reference.md`'s Errors bullet (`6cee6ceb`) and in `spec-016` §5's Exit codes (pending amendment).
+  Decision 3 is thereby documented.
+- **F4** — the `spec-016` Revision note said "three" details and listed four: now "four".
+- **F5** — `W_UNCOMMITTED_INPUTS` covered the whole `paths.runs` directory. `isRunLogPath` /
+  `runLogDirPrefix` (`src/agent/run-log.ts`) name the run logs (direct `*.jsonl` children);
+  `readDirtyRunLogs` (`src/core/workflow-deduction.ts`) keeps only those, used by `agent list --past` and by
+  the deduction's `readDirty` (the other input pathspecs unchanged in shape). `spec-017` §1.2 already reads
+  "the run-log files (`<runs>/<element-id>.jsonl`)" (`grep -n "run-log files" …spec-017…` → line 99), so the
+  deduction now matches its spec and no spec-017 amendment is needed. Cases (edges file): a dirty README and a
+  nested `.jsonl` are not reported by `agent list --past` nor by `deduceWorkflowStateAtHead`; with `paths.runs:
+  [ ./ ]` a dirty `src/x.ts` is not reported by either. No other suite changed (full run below).
+- **F6** — `test/cli/agent-list-edges.integration.test.ts`: `--format json` with a dirty run log → stdout one
+  JSON line (the payload, its diagnostic in `diagnostics`), stderr exactly one `{"warning": "W_UNCOMMITTED_INPUTS
+  (docs/runs/task-1.jsonl): …"}` line, exit 0.
+- Red for F1/F5: with `src/` restored to `7bb82bbb` (files copied aside and back), `npx jest
+  test/core/agent-list-edges.test.ts` → **4 failed, 7 passed** (the F1 case and the three F5 cases); after
+  `6cee6ceb` → 11 passed.
+- Gates after the fixes: `npm run test:coverage -- --maxWorkers=2` under the slot (load 2.6) → **386 suites,
+  7115 passed, 0 failed**, exit 0; All files **99.29 | 97.14 | 97.96 | 99.70**; `agent-list.ts` 98.09 | 92.22 |
+  100 | 98.85, `run-log.ts` 99.24 | 94.85 | 100 | 99.54, `workflow-deduction.ts` 100 | 98.94 | 100 | 100.
+  `npm run lint` 0; `npm run docs:api` 0; `npx tsc --noEmit -p tsconfig.json` 0; `npx tsc -p
+  tsconfig.build.json --noEmit` 0 (slot); `node scripts/check-governance.cjs --base 0671d035` → 0 findings.
+- **Merge hazard (gate):** task-211 merges first and also bumps `06_features.md` to 1.13: at the gate this
+  branch re-bumps it to 1.14 and re-runs the `00_index.md` line-range sync (task-141's script).
+
 ### Pending amendments (approver)
 
 - `spec-006-core-domain-api` — proposed `--reason`: "agentList ships (task-240): its section 3 row loses
@@ -206,9 +253,10 @@ Retrospective items (one line each):
   with console text of its own, workflow next, status, start, end and finalize included; no flag, exit
   code or error format changes."
 - `spec-016-agent-execution` — proposed `--reason`: "agentList is registered (task-240), so section 8's
-  module cell loses the planned marker, and section 5 states the console details it left open: duration in
-  seconds with one decimal, a heading per non-empty section, none for a step with no agent, and the warning
-  line of a diagnostic; no record key, payload key or exit code changes."
+  module cell loses the planned marker; section 5 states the four console details it left open (duration in
+  seconds with one decimal, a heading per non-empty section, none for a step with no agent, the warning line
+  of a diagnostic) and its exit codes name the two further exit 1 refusals of the past section and that every
+  run log is validated whatever the filters; no record key, payload key or exit code changes."
 - `minor-v0.3` `features:` gains `P5.3.4` — **`memory amend` refuses it**: the `release` type is
   `amendable: false`. Per ruling R1 the coordinator records it by hand at the gate as `wf(release): amend
   minor-v0.3 [in-development → in-development]` (precedent `3b585e33`). Proposed reason: "P5.3.4 (wingfoil
