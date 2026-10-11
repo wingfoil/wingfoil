@@ -9,7 +9,9 @@
  * or `window+snapshot`) and a kind (`floor` with its floor, `trend` with its direction, or `info`). A metric
  * is never dropped silently: the `changes` log records, per catalogue version, the ids it added, redefined
  * and retired; every id ever added is still listed, and a retired one is marked `status: retired` with the
- * release that retired it (`retired_in`).
+ * release that retired it (`retired_in`). A floor is never null, a `direction` (on any kind) is one of the declared
+ * set, and a `changes` entry's `added`/`redefined`/`retired` are lists whose redefined and retired ids name listed
+ * metrics (task-231, from task-222's review).
  *
  * Read-only and deterministic: issues are returned in document order; no clock, no randomness, no git.
  */
@@ -38,6 +40,9 @@ function blank(value) {
 function idList(value) {
   return Array.isArray(value) ? value.map(String) : [];
 }
+
+/** The id lists a `changes` entry may carry (task-231: each must be a list, and name metrics of the catalogue). */
+const CHANGE_LISTS = ['added', 'redefined', 'retired'];
 
 /**
  * The repository-relative path of the catalogue: `metrics.yaml` in the one directory `.wingfoil/dna.yaml`
@@ -73,9 +78,12 @@ function checkMetric(metric, at, issues) {
   const kind = metric['kind'];
   if (kind === undefined) issues.push(`${at}: kind is missing`);
   else if (!KINDS.includes(String(kind))) issues.push(`${at}: kind '${String(kind)}' is not one of ${KINDS.join(', ')}`);
-  if (kind === 'floor' && metric['floor'] === undefined) issues.push(`${at}: a floor metric declares its floor`);
+  if (kind === 'floor' && (metric['floor'] === undefined || metric['floor'] === null)) issues.push(`${at}: a floor metric declares its floor`);
   if (kind === 'trend' && !DIRECTIONS.includes(String(metric['direction']))) {
     issues.push(`${at}: a trend metric declares its direction (${DIRECTIONS.slice(0, -1).join(', ')} or ${DIRECTIONS[DIRECTIONS.length - 1]})`);
+  } else if (metric['direction'] !== undefined && !DIRECTIONS.includes(String(metric['direction']))) {
+    // task-231: a direction outside the set is refused on every kind, not only on a trend.
+    issues.push(`${at}: direction '${String(metric['direction'])}' is not one of ${DIRECTIONS.join(', ')}`);
   }
   const status = metric['status'] === undefined ? 'active' : String(metric['status']);
   if (!STATUSES.includes(status)) issues.push(`${at}: status '${status}' is not one of ${STATUSES.join(', ')}`);
@@ -115,6 +123,9 @@ function validateCatalogue(doc) {
     if (version <= last) issues.push(`changes[${i}]: version ${version} does not follow version ${last}`);
     last = version;
     if (blank(change['source'])) issues.push(`changes[${i}]: source is missing (the decision-log that changed the catalogue)`);
+    for (const list of CHANGE_LISTS) {
+      if (change[list] !== undefined && !Array.isArray(change[list])) issues.push(`changes[${i}]: ${list} is not a list of ids`);
+    }
     for (const id of idList(change['added'])) {
       if (addedIn.has(id)) issues.push(`changes: ${id} is added more than once`);
       else addedIn.set(id, version);
@@ -144,6 +155,15 @@ function validateCatalogue(doc) {
   for (const [id, version] of addedIn) {
     if (!listed.has(id)) issues.push(`changes: ${id} was added in version ${version} and is no longer listed (retire it, never drop it)`);
   }
+  // task-231: a redefined or retired id names a metric the catalogue lists.
+  changes.forEach((change, i) => {
+    if (!isMapping(change)) return;
+    for (const list of ['redefined', 'retired']) {
+      for (const id of idList(change[list])) {
+        if (!listed.has(id)) issues.push(`changes[${i}]: ${list} ${id} names no metric of the catalogue`);
+      }
+    }
+  });
   return issues;
 }
 
