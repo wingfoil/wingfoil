@@ -1285,3 +1285,16 @@ ungated elements (bug `triaged` / `planned`, `dl-123`): no approver can act on i
 whenever no instance is open, as P4.5 sc. 3 states it, with the ungated elements after it. §5.1's count of approvals recorded by `finalize` stays six
 (seven before `task-199`). No command, deduction rule or diagnostic code is added. Edited in place without a
 supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-225`'s review.
+
+**Revision (2026-10-10, `task-272-add-a-read-only-collect-feedback-phase-to-the-retrospective-workflow`) — §12
+re-measured with `retrospective.collect-feedback`.** `dl-163` S3d adds a read-only phase between `explore` and
+`additional-points` that reads the registered consumer inboxes and `produces` its read record,
+`docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md`: a string `produces`, so
+it is evidence (§4.3) and no checkpoint, and it carries no approval. Re-measured on `task-272`'s branch at its green
+commit (from `main` `30b268a3`), through `loadWorkflowRegistryAtRev` at that commit and at `30b268a3`, and `node
+dist/cli.js workflow list --all --format json`: 26 workflows, 101 phases (100 at `30b268a3`), **0 errors, 78
+`W_WORKFLOW_UNBOUND_TOKEN` warnings** (77 at `30b268a3`; the new one is the phase's own `feedback-notes.recorded`
+check, which no command asserts yet). The checkpoint list (29), the 6 approvals recorded by `workflow finalize` and
+the 15 carried by Memory are unchanged, so the bullets above stand as written; the figures are those
+`test/core/workflow-repository-conformance.test.ts` pins. No rule, command or diagnostic changes. Edited in place
+without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-272`'s review.

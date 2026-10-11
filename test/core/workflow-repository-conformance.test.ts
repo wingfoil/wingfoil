@@ -142,8 +142,10 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-health", "phases[1].checks.post[0]", "every regressed metric and every breached floor has a finding"],
       ["release-health", "phases[2].checks.post[0]", "every finding is tracked by an element or carries an RH proposal in the report's Proposals section"],
       ["retrospective", "phases[0].checks.post[0]", "secondary-sources.listed"],
-      ["retrospective", "phases[1].checks.pre[0]", "proposals.disposed"],
-      ["retrospective", "phases[2].checks.post[0]", "frontmatter.required"],
+      // task-272 (dl-163 S3d): collect-feedback's read record is checked by the facilitator; no command asserts it yet.
+      ["retrospective", "phases[1].checks.post[0]", "feedback-notes.recorded"],
+      ["retrospective", "phases[2].checks.pre[0]", "proposals.disposed"],
+      ["retrospective", "phases[3].checks.post[0]", "frontmatter.required"],
       ["end-of-life", "phases[0].checks.post[0]", "frontmatter.required"],
       ["end-of-life", "phases[1].checks.post[0]", "deprecated content excluded from agent context and default search"],
     ]);
@@ -342,6 +344,14 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'release-line': '{release-line.version}',
       status: ['draft', 'planning', 'in-development', 'releasing'],
     });
+  });
+
+  it('retrospective.collect-feedback is no checkpoint: its produces is evidence, and it records no approval (task-272, dl-163 S3d)', () => {
+    const { checkpoints, finalizeApprovals } = measure(registry().workflows);
+    const retrospective = registry().workflows.find((w) => w.name === 'retrospective')!;
+    expect(retrospective.phases.map((p) => p.name)).toEqual(['explore', 'collect-feedback', 'additional-points', 'capture', 'approve']);
+    expect(checkpoints).not.toContain('retrospective.collect-feedback');
+    expect(finalizeApprovals).not.toContain('retrospective.collect-feedback');
   });
 
   it('retrospective.approve declares the transition it stands for: wf(decision-log): approve retro-{version}', () => {

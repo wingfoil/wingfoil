@@ -201,7 +201,7 @@ flowchart TD
 
     RP2["**publishing** → `release-publishing`\nrelease-commit → staging-rehearsal → tag → publish → mark-released\nrelease commit = the candidate · staging rehearsal on it · git tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released\n(see sub-diagram below)"]
 
-    RT["**retrospective** → `retrospective`\nexplore → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115), the release-health report among them\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
+    RT["**retrospective** → `retrospective`\nexplore → collect-feedback → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115), the release-health report among them\ncollect-feedback (read-only, dl-163) reads every active repository service's feedback_inbox at its main, one row per note with a proposed outcome: `docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md`\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
 
     RH["**release-health** → `release-health`\nmeasure → compare → propose\ncatalogue `docs/08_health/metrics.yaml` · report `docs/08_health/release-health-{version}.md`\nnot a gate (dl-089 §5)"]
 
@@ -675,5 +675,5 @@ stateDiagram-v2
 | `developer` | TDD dev-loop (green/refactor), branch management, user-facing docs (`align-user-docs`), bug capture, service capture |
 | `reviewer` | Code review in dev-loop (tests and code, under the developer's and qa's directives too, `dl-134`) |
 | `qa` | BDD specification, the dev-loop `red` phase (black-box tests, `dl-134`), end-to-end smoke (`e2e-smoke`), pre-release checks, release-health measurement (`measure`) |
-| `facilitator` | Lean inception sessions, release-health comparison and proposals (`compare`, `propose`), retrospective exploration and capture |
+| `facilitator` | Lean inception sessions, release-health comparison and proposals (`compare`, `propose`), retrospective exploration, consumer feedback collection and capture |
 | `approver` | All approval gates (bug triage, vision-change acceptance, governance reconcile, backlog commit, task review, documentation, e2e smoke, release, retrospective, end-of-life, service verification) |

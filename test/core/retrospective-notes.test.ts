@@ -114,7 +114,8 @@ describe('AC 2 — retrospective.yaml: explore lists its secondary sources; addi
 
   it('the other phases keep their shape (task-199 pins approve; capture keeps its one post check)', () => {
     const phases = retrospective().phases;
-    expect(phases.map((p) => p.name)).toEqual(['explore', 'additional-points', 'capture', 'approve']);
+    // task-272 (dl-163 S3d) adds the read-only collect-feedback between explore and additional-points.
+    expect(phases.map((p) => p.name)).toEqual(['explore', 'collect-feedback', 'additional-points', 'capture', 'approve']);
     expect(phases.find((p) => p.name === 'capture')?.checks).toEqual({ post: ['frontmatter.required: [title]'] });
     expect(phases.find((p) => p.name === 'additional-points')?.approval).toEqual({ by_role: 'approver' });
   });
