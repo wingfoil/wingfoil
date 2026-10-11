@@ -625,7 +625,7 @@ async function runPipeline<T>(
       workflow: step?.workflow ?? NO_WORKFLOW,
       phase,
       role,
-      // Every v0.3 run is fresh, whatever the step's allowedModes; distinct_from is not checked (§3.2 step 6).
+      // Every v0.3 run is fresh, whatever the step's allowedModes; the phase's separation of executors is not checked (§3.2 step 6, P4.12 in v1.0).
       mode: FRESH_MODE,
       agent: agent.value,
       adapter: adapter.value,

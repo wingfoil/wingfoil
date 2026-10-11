@@ -17,7 +17,7 @@ import { withWarningSink } from '../../src/validation/warning';
 import { TASK_ID } from '../agent/helpers/agent-execute-fixture';
 import { GHOSTLY, GHOSTLY_FILE, RELEASE_ID, seedStep, SIBLING_ID, startInstance, STEP_WORKFLOWS } from '../agent/helpers/agent-execute-step-fixture';
 import { CLI_ENTRY } from '../cli/helpers/spawn-cli';
-import { removeTempDir } from '../storage/helpers/git-fixture';
+import { makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const HOST: AgentExecuteHost = { mcpServer: { command: process.execPath, args: [CLI_ENTRY, 'mcp'] }, isTerminal: () => false };
 
@@ -185,6 +185,22 @@ describe('agentExecuteFn — the step forms (dry run, in process)', () => {
     expect(error.message).toMatch(/unknown role 'ghost' \(not defined in dna\.yaml\)$/);
     expect(error.details?.['diagnostics']).toEqual([expect.objectContaining({ code: 'E_PHASE_ROLE_UNKNOWN' })]);
   }, 60000);
+
+  it('an invalid roles.yaml at HEAD under a step form: VALIDATION with its issues, as workflow next refuses it', async () => {
+    const broken = seedStep((root) => writeFixtureFile(root, '.wingfoil/roles.yaml', 'version: 1.0\nassignments: 3\n'));
+    repos.push(broken);
+    startInstance(broken, 'delivery-1', 'delivery', RELEASE_ID);
+    const error = runOf(await plan(broken, { next: true })) as { code: string; details?: Record<string, unknown> };
+    expect(error.code).toBe('VALIDATION');
+    expect(error.details?.['issues']).toBeDefined();
+  }, 60000);
+
+  it('a repository with no commit under a step form: HEAD names no commit, as the stepless form', async () => {
+    const empty = makeTempGitRepo();
+    repos.push(empty);
+    writeFixtureFile(empty, '.wingfoil/dna.yaml', 'version: 1\n');
+    expect((await plan(empty, { next: true })).result.ok).toBe(false);
+  });
 
   it('none of --next, --workflow, --step, --element: the usage error, before the project is read', async () => {
     await expect(agentExecuteFn({ root: '/nonexistent', options: { role: 'developer' } })).rejects.toThrow('missing required argument: --next or --element');

@@ -12,9 +12,9 @@
  * - {@link resolveStepRole}: `--role`, else the step's role, which `dna.yaml` must define.
  *
  * All four are pure but the first, which reads `HEAD` only (`dl-080` (B)): the step a run takes is a
- * function of committed state and the request (`REQ-SYS-07`). `distinct_from` is not checked and every v0.3
- * run is `fresh` whatever the phase allows (§3.2 step 6, `dl-135` point 3): the step's `allowedModes` and
- * `distinctFrom` are not read here.
+ * function of committed state and the request (`REQ-SYS-07`). The phase's separation of executors is not
+ * checked (P4.12, v1.0) and every v0.3 run is `fresh` whatever the phase allows (§3.2 step 6, `dl-135`
+ * point 3): neither executor attribute of the step is read here.
  */
 import { isRoleDefined } from '../dna/roles';
 import type { DnaYaml } from '../dna/schema';
