@@ -1,16 +1,20 @@
 /**
  * `wingfoil agent execute`, the pre-launch half (`spec-016-agent-execution` §3, task-218): everything
  * the command does before it spawns the agent — the stepless (`adhoc`) form, `--element` with an
- * optional `--role` and `--agent`. The launch (§3.3 steps 13–18) is `./launch.ts` (task-228); the step
- * forms (`--next`, `--workflow`, `--step`) are task-235's.
+ * optional `--role` and `--agent`, and the step forms `--next`, `--workflow <ref>`, `--step <key>`
+ * (task-235, `./step.ts`). The launch (§3.3 steps 13–18) is `./launch.ts` (task-228).
  *
  * The pipeline ({@link agentExecutePipeline}) is §3.3's, in its order, and the first failure stops it:
  *
- * 2. `dna.yaml` and `memory.yaml` at `HEAD`, resolved once; the adapter tree listed, every entry that is
- *    not an adapter printed as a warning (`bug-290`).
- * 3. Resolution (§3.2 steps 2–5): the element at `HEAD`; the role (`--role`, else the `developer`
- *    default with a warning, approver ruling R18); never `approver` (`REQ-SEC-03`); the agent
- *    ({@link selectAgent}); its adapter (`loadAdapter`, at `HEAD`).
+ * 2. With a step form, `workflow next`'s deduction at `HEAD` first (task-235): its commit is the `HEAD`
+ *    every later read takes, and a `spec-003` error in the registry refuses here. Then `dna.yaml` and
+ *    `memory.yaml` at that `HEAD` (the stepless form resolves `HEAD` itself and reads no workflow file);
+ *    the adapter tree listed, every entry that is not an adapter printed as a warning (`bug-290`).
+ * 3. Resolution (§3.2 steps 1–5): the step ({@link selectFrontierStep}), its workflow and phase; the
+ *    element (`--element`, else the step's, {@link stepTargetElement}) at `HEAD`; the role (`--role`, else
+ *    the step's, {@link resolveStepRole}, else — stepless — the `developer` default with a warning,
+ *    approver ruling R18); never `approver` (`REQ-SEC-03`); the agent ({@link selectAgent}); its adapter
+ *    (`loadAdapter`, at `HEAD`).
  * 4. The adapter's `command` on `PATH` or at its repository path ({@link agentCommandFound}).
  * 5. The git identity (`requireGitIdentity`), since the record is committed.
  * 6. The run log declared and unmodified (`runLogPreflight`, task-206).
@@ -61,9 +65,12 @@ import { DNA_YAML_PATH, loadDnaYamlAtRev, loadMemoryYamlAtRev, MEMORY_YAML_PATH 
 import { resolveRevision, RevisionError } from '../core/revision';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
 
+import type { Step } from '../core/workflow-next';
+
 import type { LaunchHost } from './launch';
 import { adapterTreeDiagnosticsAtRev, duplicateAdapterRefusal, loadAdapter, type LoadedAdapter } from './discovery';
 import { ADHOC_PHASE, executionNotesSection, nextRunId, NO_WORKFLOW, recordSubject, runLogPreflight } from './run-log';
+import { readNextAtHead, resolveStepRole, selectFrontierStep, stepTargetElement, type StepSelector } from './step';
 
 /** The role of a run with no step and no `--role` (`X_cli-cmds.md:223`, approver ruling R18). */
 export const DEFAULT_ROLE = 'developer' as const;
@@ -333,10 +340,19 @@ export async function mcpPreflight(input: McpPreflightInput): Promise<CoreResult
   }
 }
 
-/** The request of the stepless form (§3.1): `--element`, `--role`, `--agent`. */
+/**
+ * The request (§3.1): `--element`, `--role`, `--agent`, and, for a step form, the step selector. At least one
+ * of `element` and `step` is given (the caller's usage check, §3.1).
+ */
 export interface AgentExecuteRequest {
-  readonly element: ExecutionContextElement;
-  /** `--role`; absent → {@link DEFAULT_ROLE} with {@link DEFAULT_ROLE_WARNING}. */
+  /** `--element`; with a step form it overrides the step's element and keeps its phase and role. */
+  readonly element?: ExecutionContextElement;
+  /** `--next`, `--workflow <ref>`, `--step <key>` (task-235): present for a step form, even empty (`--next`). */
+  readonly step?: StepSelector;
+  /**
+   * `--role`; absent → the step's role (a step form), else {@link DEFAULT_ROLE} with
+   * {@link DEFAULT_ROLE_WARNING}.
+   */
   readonly role?: string;
   /** `--agent`; absent → the first agent with an adapter that executes the role. */
   readonly agent?: string;
@@ -477,10 +493,14 @@ async function runPipeline<T>(
   launch: (prepared: PreparedLaunch, releaseSignals: () => void) => Promise<CoreResult<T>>,
   onHead: (sha: string) => void,
 ): Promise<CoreResult<T>> {
-  // Step 2 — one HEAD, every gating read at it.
+  // Step 2 — one HEAD, every gating read at it. A step form reads the deduction first, so the HEAD it was
+  // deduced at is the one every later read takes (task-235); a registry error refuses here.
+  const deduced = request.step === undefined ? undefined : readNextAtHead(root, request.step.workflow);
+  if (deduced !== undefined && !deduced.ok && deduced.error.code === 'VALIDATION') return deduced;
   let sha: string;
   try {
-    sha = resolveRevision(root, 'HEAD');
+    // The deduction of a repository with no commit has no commit either: resolving HEAD then refuses it.
+    sha = deduced?.ok === true && deduced.value.baseline.commit !== '' ? deduced.value.baseline.commit : resolveRevision(root, 'HEAD');
   } catch (error) {
     if (error instanceof RevisionError) return coreErr(error.toCoreError());
     throw error;
@@ -491,20 +511,46 @@ async function runPipeline<T>(
   const { dna, memoryYaml } = config.value;
   for (const diagnostic of adapterTreeDiagnosticsAtRev(root, sha)) reportWarning(formatDiagnostic(diagnostic));
   // A name in both built-in/ and custom/ is refused where the tree is listed (§2.1), before resolution.
-  const duplicate = duplicateAdapterRefusal(root, 'HEAD');
+  // Every adapter read takes the one resolved commit, spelled `HEAD` in messages (task-235's review F3).
+  const duplicate = duplicateAdapterRefusal(root, sha, 'HEAD');
   if (duplicate !== undefined) return duplicate;
 
-  // Step 3 — resolution (§3.2 steps 2–5).
-  const elementRef = `${request.element.type}:${request.element.id}`;
-  const element = requireElement(root, sha, memoryYaml, request.element);
+  // Step 3 — resolution (§3.2 steps 1–5).
+  // §3.2 step 1 — the step (a step form only), which names the run's workflow and phase.
+  let step: Step | undefined;
+  if (deduced !== undefined) {
+    if (!deduced.ok) return deduced;
+    const selected = selectFrontierStep(deduced.value, request.step!.key);
+    if (!selected.ok) return selected;
+    step = selected.value;
+  }
+  // §3.2 step 2 — the element: `--element`, else the step's; it must exist at HEAD.
+  let target: ExecutionContextElement;
+  if (step === undefined) {
+    target = request.element!; // the stepless form always names its element (the caller's usage check)
+  } else {
+    const stepElement = stepTargetElement(step, deduced!.ok ? deduced!.value.instance : null, request.element);
+    if (!stepElement.ok) return stepElement;
+    target = stepElement.value;
+  }
+  const elementRef = `${target.type}:${target.id}`;
+  const element = requireElement(root, sha, memoryYaml, target);
   if (!element.ok) return element;
-  if (request.role === undefined) reportWarning(DEFAULT_ROLE_WARNING);
-  const role = request.role ?? DEFAULT_ROLE;
+  // §3.2 step 3 — the role: `--role`, else the step's, else (stepless) the developer default, with a warning.
+  let role: string;
+  if (step === undefined) {
+    if (request.role === undefined) reportWarning(DEFAULT_ROLE_WARNING);
+    role = request.role ?? DEFAULT_ROLE;
+  } else {
+    const stepRole = resolveStepRole(dna, step, request.role);
+    if (!stepRole.ok) return stepRole;
+    role = stepRole.value;
+  }
   if (!isRoleDefined(dna, role)) return coreErr({ code: 'VALIDATION', message: `unknown role '${role}' (not defined in dna.yaml)` });
   if (role === APPROVER_ROLE) return coreErr({ code: 'VALIDATION', message: `role '${APPROVER_ROLE}' is never executed by an agent` });
   const agent = selectAgent(dna, role, request.agent);
   if (!agent.ok) return agent;
-  const adapter = loadAdapter(root, agent.value.adapter!, 'HEAD');
+  const adapter = loadAdapter(root, agent.value.adapter!, sha, 'HEAD');
   if (!adapter.ok) return adapter;
   const manifest = adapter.value.manifest;
 
@@ -519,11 +565,11 @@ async function runPipeline<T>(
 
   // Step 6 — the run log, declared and unmodified (`paths` is passthrough; `runs` is spec-016 §4.1's).
   const runs = (dna.paths as Record<string, readonly string[] | undefined> | undefined)?.['runs'];
-  const logPath = runLogPreflight(root, runs, request.element.id);
+  const logPath = runLogPreflight(root, runs, target.id);
   if (!logPath.ok) return logPath;
 
   // Step 7 — the context, assembled and validated at state_ref.
-  const assembled = assembleExecutionContext(root, { role, element: request.element, stateRef: sha });
+  const assembled = assembleExecutionContext(root, { role, element: target, stateRef: sha });
   // The element was found at this same commit (step 3), so the builder's NOT_FOUND with
   // `details.unreadable` cannot arise here; its refusals pass through as they are.
   if (!assembled.ok) return assembled;
@@ -534,11 +580,13 @@ async function runPipeline<T>(
   }
 
   // Step 9 — the run id.
-  const runId = nextRunId(root, { logPath: logPath.value, element: elementRef, phase: ADHOC_PHASE, stateRef: sha });
+  // `n` counts per (element, phase), whatever the workflow (§4.3).
+  const phase = step?.phase ?? ADHOC_PHASE;
+  const runId = nextRunId(root, { logPath: logPath.value, element: elementRef, phase, stateRef: sha });
   if (!runId.ok) return runId;
 
   // Step 10 — the bootstrap and the temporary files.
-  const templatePath = templatePathOf(memoryYaml, request.element.type);
+  const templatePath = templatePathOf(memoryYaml, target.type);
   const bootstrap = renderBootstrap({
     role,
     element: elementRef,
@@ -575,9 +623,10 @@ async function runPipeline<T>(
     return launch({
       runId: runId.value,
       element: elementRef,
-      workflow: NO_WORKFLOW,
-      phase: ADHOC_PHASE,
+      workflow: step?.workflow ?? NO_WORKFLOW,
+      phase,
       role,
+      // Every v0.3 run is fresh, whatever the step's allowedModes; the phase's separation of executors is not checked (§3.2 step 6, P4.12 in v1.0).
       mode: FRESH_MODE,
       agent: agent.value,
       adapter: adapter.value,

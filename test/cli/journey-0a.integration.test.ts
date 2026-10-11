@@ -123,7 +123,7 @@ describe('Journey 0a (v0.1-scoped slice) — real CLI, fresh throwaway project (
     expect(show.stderr).toBe('');
   });
 
-  it('Journey 0a step 3 — `wingfoil workflow start <workflow>` starts the kickoff workflow (task-217); `agent execute --next` is still a known gap (Journey 1 steps 2-4)', () => {
+  it('Journey 0a step 3 — `wingfoil workflow start <workflow>` starts the kickoff workflow (task-217); the step form `agent execute --next` ships (task-235) and the first step has no element (NO_STEP_ELEMENT)', () => {
     expect(runCliInRoot(repo, 'init', '--template', 'Scrum').status).toBe(0);
 
     // task-217 ships `workflow start` with the positional `<workflow>` (no `--name`, spec-017 §7): the
@@ -132,11 +132,12 @@ describe('Journey 0a (v0.1-scoped slice) — real CLI, fresh throwaway project (
     expect([workflowStart.status, workflowStart.stderr]).toEqual([0, '']);
     expect(workflowStart.stdout).toContain('started sw-life-cycle as sw-life-cycle-1-plan (active)');
 
-    // task-218 ships `agent execute --element`; its step form `--next` is task-235's, so it is still
-    // an unknown option (usage error), and the launch itself is task-228's.
+    // task-235 ships the step form `--next`: it takes the started instance's next step,
+    // `sw-life-cycle.inception`, whose phase binds no element, so the step form is refused
+    // (NO_STEP_ELEMENT): exit 1, the message names the `--element` to give, and no agent is launched.
     const agentExecute = runCliInRoot(repo, 'agent', 'execute', '--next');
-    expect(agentExecute.status).toBe(2);
-    expect(agentExecute.stderr).toContain("unknown option '--next'");
+    expect(agentExecute.status).toBe(1);
+    expect(agentExecute.stderr).toContain("error: step 'sw-life-cycle.inception' has no element: give --element <type>:<id>");
   });
 
   it('`dna set` still writes scalars only — but it now names the verb that reaches an array-typed field, and that verb works (bug-083, task-093)', () => {

@@ -1162,10 +1162,10 @@ text is what `agent execute` loads), and each action with its interpolated text 
   the ids it acts on (`<id>` when none is known yet) and, for `approve` / `reject`, `--reason <reason>`;
 - `agent`: `wingfoil agent execute --workflow <instance> --step <key>`.
 
-**Planned:** `agent execute --workflow` / `--step` are not available in this build yet; until they are, give
-`agent execute` the step's element with `--element <type>:<id>`. The `memory add` command runs as printed
-(see [`memory add`](#wingfoil-memory-add)). A step that waits for a third party is completed by a phase record that
-[`wingfoil workflow finalize`](#wingfoil-workflow-finalize) writes; its "waiting for" line names the whole command.
+The `memory add` command runs as printed (see [`memory add`](#wingfoil-memory-add)). The `agent` binding runs as
+printed (see [`wingfoil agent execute`](#wingfoil-agent-execute)). A step that waits for a third party is completed by a
+phase record that [`wingfoil workflow finalize`](#wingfoil-workflow-finalize) writes; its "waiting for" line names the
+whole command.
 
 The other binding kinds:
 
@@ -1414,18 +1414,36 @@ run outside a workflow step), and a count from 1, e.g. `task-042-login-form/red/
 Launch an agent CLI through its adapter on one Memory element, with its context assembled and checked first.
 
 ```
-wingfoil agent execute --element <type:id> [--role <role>] [--agent <name>]
+wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <type:id>]
+                       [--role <role>] [--agent <name>]
 ```
+
+At least one of `--next`, `--workflow`, `--step` and `--element` is required.
 
 | Option | Description |
 |---|---|
-| `--element <type:id>` | The element the agent works on, as `<type>:<id>` with the element's full id, e.g. `task:task-042-login-form`. Required in this release (the workflow-step forms `--next`, `--workflow` and `--step` are not available yet, and are refused as unknown options). |
-| `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is `developer`, and a `warning:` line says so. `approver` is refused: an agent never runs as the role that approves. |
+| `--next` | Take the workflow, phase, element and role from the next step of the active workflow (the open workflow started most recently): the step [`wingfoil workflow next`](#wingfoil-workflow-next) prints first. |
+| `--workflow <ref>` | Take the step from this workflow instead: a workflow name (its most recently started open instance) or an open instance id. Implies `--next`. |
+| `--step <key>` | Take this step, which must be on the frontier of the selected workflow (`--workflow`, else the active one), e.g. `dev-loop.red@task:task-042-login-form`: when several steps are ready at once, it is how each one's agent launches on its own step. Implies `--next`. `wingfoil workflow next` prints each `agent` step as `wingfoil agent execute --workflow <instance> --step <key>`, which runs as written. |
+| `--element <type:id>` | The element the agent works on, as `<type>:<id>` with the element's full id, e.g. `task:task-042-login-form`. With a step, it replaces the step's element and keeps its phase and role. |
+| `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is the step's; with no step, it is `developer`, and a `warning:` line says so. `approver` is refused: an agent never runs as the role that approves. |
 | `--agent <name>` | The `team.agents` entry to launch. Without it, the first entry, in `dna.yaml` order, that declares an `adapter` and lists the role in `executes_as`. |
+
+With a step (`--next`, `--workflow` or `--step`), the run's workflow and phase are the step's, so its run
+id is `<element-id>/<phase>/<n>`, `n` counting the runs of that element in that phase; the element is the
+step's (or, for a step with none of its own, the workflow's element), and the role the phase's. Every run
+in this release starts a fresh agent session, whatever the phase allows (`--resume` and `--ref` are
+planned, and refused as unknown options); a phase's `distinct_from` is not checked. The step's refusals
+come first, each exit `1`: `error: no next step to execute` (no open workflow, or none of its steps is
+ready), `error: unknown workflow: <name>`, `error: workflow is not open: <ref>`,
+`error: step '<key>' is not on the frontier of <instance>`, `error: step '<key>' has no element: give
+--element <type>:<id>`, `error: step '<key>' declares no role: give --role <role>`. A workflow file with an
+error (for example a phase whose role `dna.yaml` does not define) refuses every step form, as it refuses
+`wingfoil workflow next`.
 
 Unreleased (v0.3). It reads **as committed at `HEAD`** (see [Git side effects](#git-side-effects)):
 `dna.yaml`, `memory.yaml`, the element, the agent's adapter under `.wingfoil/agents/built-in/` or
-`.wingfoil/agents/custom/`, and the run log. That commit is the run's `state_ref`. The one read outside
+`.wingfoil/agents/custom/`, the run log, and, with a step, the workflows and the Memory they deduce from. That commit is the run's `state_ref`. The one read outside
 it: the WingFoil MCP server it starts for the pre-flight reads your working tree's `dna.yaml` when it
 starts, so an uncommitted change there can refuse the pre-flight. In order, it checks:
 the element exists; the role is defined and is not `approver`; an agent with an adapter runs the role;
@@ -1470,8 +1488,8 @@ summary.
 With `--dry-run` it runs every check above, launches nothing, and prints on stdout the launch it would
 make: `{"dryRun": true, "subject": "agent: record <run-id>", "paths": [<run log>], "run": {id, element,
 workflow, phase, role, mode, agent, adapter, state_ref}, "bootstrap": "<the prompt the agent would
-receive>"}`. Without `--element` it exits `2` with `error: missing required argument: --next or
---element`.
+receive>"}`. With none of `--next`, `--workflow`, `--step` and `--element` it exits `2` with
+`error: missing required argument: --next or --element`.
 
 - **Commit:** `agent: record <run-id>`, containing only the element's run log, with the
   `WingFoil-Version:` trailer and no other body; made whatever the agent's exit, unless the record

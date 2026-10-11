@@ -2383,12 +2383,16 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'agentExecute',
         mutates: true,
         description: 'launch an agent CLI through its adapter on one Memory element, with its context assembled and checked first',
+        // task-235 (spec-016 §3.1, ruling R16): the step forms. `--workflow` and `--step` imply `--next`.
+        flags: [{ name: 'next', description: "take the workflow, phase, element and role from the active workflow's next step" }],
         options: [
-          { name: 'element', valueName: 'type:id', description: 'the element the agent works on, e.g. task:task-042-login-form' },
-          { name: 'role', valueName: 'role', description: 'the role the agent runs as, a dna.yaml team.roles name (default: developer, with a warning)' },
+          { name: 'workflow', valueName: 'ref', description: 'take the step from this workflow (its most recent open instance) or open instance id; implies --next' },
+          { name: 'step', valueName: 'key', description: 'take this step of the frontier, e.g. dev-loop.red@task:task-042-login-form; implies --next' },
+          { name: 'element', valueName: 'type:id', description: "the element the agent works on, e.g. task:task-042-login-form; with a step, it overrides the step's element" },
+          { name: 'role', valueName: 'role', description: "the role the agent runs as, a dna.yaml team.roles name (default: the step's role; with no step, developer, with a warning)" },
           { name: 'agent', valueName: 'name', description: 'the team.agents entry to launch (default: the first with an adapter that executes the role)' },
         ],
-        example: 'wingfoil agent execute --element task:task-042-login-form --role developer',
+        example: 'wingfoil agent execute --next',
         fn: agentExecuteFn,
         // spec-016 §3.4 (task-228): the agent owns stdout, so the recorded run is reported on stderr.
         renderToStderr: renderAgentExecuteStderr as (value: unknown) => ReturnType<typeof renderAgentExecuteStderr>,
