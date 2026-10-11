@@ -153,7 +153,7 @@ This task wires `spec-017`'s deduction into step 1 of the resolution: - `--workf
   met against the amended scenario.** `test/cli/agent-execute-step.integration.test.ts` › "sc. 3 (amended
   2026-10-11)" pins it on a real repository fixture: exit 1, stderr line `error: E_PHASE_ROLE_UNKNOWN
   phases[0].role (workflows/custom/ghostly.yaml): unknown role 'ghost' (not defined in dna.yaml)`, no fake
-  invocation, `HEAD` and the working tree unchanged.
+  invocation, and `expectNothingRan` checks `HEAD` and `git status --porcelain` against their values before the run.
 - `resolveStepRole`'s check stays as a defence, pinned on a synthetic step; its test comment and the
   function's doc (`src/agent/step.ts`, comment only) say a repository cannot reach it.
 - spec-016 pending amendment: §3.1's closing line names P5.3.2 sc. 3's registry message, the §3.7 step-role
