@@ -102,6 +102,18 @@ Part (b), the generated export, is v0.4 (`dl-137` Q3) and is not in scope.
     in 0.2.2)" and §9 "Known limits in 0.2.2" describe the 0.2.2 surface; `workflow show`/`next`, `memory amend`/`park`,
     the `change-proposal` type and `agent execute` shipped in v0.3 (`grep -c "workflow next\|memory amend\|agent
     execute" docs/agents.md` → `0`). `bug-302` covers the "`workflow list` is the only workflow command" passages.
+- **Handover from wave 3 B5 (2026-10-11, W3 B5 follow-ups, `bug-ingest-rel-v0.3-w3b5-review-findings-plan` item 11;
+  for the `user-docs` phase's `align-user-docs` step, which owns `CHANGELOG.md` (dl-013), recorded here because this
+  is the phase's only task in `backlog`).** Measured on `main` at `29b8406a`; no criterion of this task changes.
+  - `CHANGELOG.md` needs a "Fixed" entry for `bug-308`, delivered by `task-278`: `memory history` (and the governance
+    check) now take a transition's from-state from the commit's parent instead of the previous log entry, which
+    corrects the from-states it reports on histories with parallel branches (`task-278`'s notes and review counted 13
+    corrected trail entries in 8 documents). `grep -c "bug-308" CHANGELOG.md` → `0`.
+  - The v0.3 section must be headed exactly `## [0.3.0]`: `task-229`'s `publish.yml` `release` job extracts it first
+    with `node scripts/changelog-section.cjs 0.3.0` and fails when it is missing (today → exit 1, ``no section `## [0.3.0]`
+    in the changelog``; `grep -n "^## \[" CHANGELOG.md | head -1` → `## [0.2.2] - 2026-09-29`). `release-publishing`'s
+    `release-commit` phase already lists `CHANGELOG.md` among the files the release commit carries
+    (`sed -n 15,18p .wingfoil/workflows/custom/release-publishing.yaml`); the section must exist by then.
 
 ## Execution Notes
 
