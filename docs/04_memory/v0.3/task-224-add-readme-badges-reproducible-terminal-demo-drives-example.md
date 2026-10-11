@@ -169,3 +169,23 @@ The README shows nothing of what WingFoil does. The demo is a self-check: if the
   README caption updated.
 - `npx jest test/docs/presentation.test.ts test/core/workflow-repository-conformance.test.ts test/lint/control-characters.test.ts`
   → **54 passed / 1 failed** (the GIF only). `npm run -s lint:claims` exit 0. Next: the approver re-renders.
+
+### GIF rendered, final gates and submit (2026-10-11)
+
+- The approver rendered the GIF in this worktree with the fixed tape (`npm run build && vhs docs/examples/01-first-project/demo.tape`);
+  committed as `27d526e0`. `head -c 6` → `GIF89a`; Pillow: 1200×760, 201 frames; 1,349,072 bytes (`ls -l`). The
+  coordinator checked the last frame: the git log, `OK: first project: init → add → submit → approve`, the prompt.
+  This lifts the blocker recorded under green and the review's "AC 2 partly met" / "Not submitted": **AC 2 is met**.
+- `npx jest test/docs/presentation.test.ts test/lint/control-characters.test.ts` → **41 / 41 passed**.
+- Gates on `27d526e0`, one heavy gate at a time (dl-170 interim rule: `uptime` 1-minute load 2.78 at start,
+  `pgrep -af "jest --coverage|scripts/run-tests.cjs|tsc -p tsconfig.build.json"` empty before each heavy gate; the
+  build `tsc` waited for another worktree's coverage run to end):
+  - `npm run test:coverage -- --maxWorkers=2` → **348 suites, 6495 / 6495 passed** (613 s); all files 99.29 % statements,
+    97.04 % branches, 97.74 % functions, 99.69 % lines. No file under `src/` changed
+    (`git diff 30b268a3 --stat -- src` → empty), so coverage cannot differ from main.
+  - `npm run lint` exit 0; `npm run docs:api` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
+    `npx tsc -p tsconfig.build.json --noEmit` exit 0.
+  - `node scripts/check-governance.cjs --base 30b268a3` → 1 `wf()` commit and 11 other commits checked, 0 findings.
+- Final AC status: AC 1 met (4 tests), AC 2 met (12 tests + the control-character binary list), AC 3 met (7 tests:
+  `produces:`, `checks.post` with `presentation.current` bound and `demo.rendered` manual, the render note).
+- Pending amendments: none. `bug:` is empty, so no bug status sync follows the submit.
