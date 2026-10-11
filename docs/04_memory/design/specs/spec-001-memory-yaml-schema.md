@@ -123,7 +123,7 @@ const StateMachine = z.object({
 | `gates`    | `{ <state>: { reject: <target> } }`. Listing a state here means its forward edge is an **approval gate**: the forward move (to the next state in `sequence`) fires only via `wingfoil memory approve`, and `reject` names the explicit target of `wingfoil memory reject`. |
 | `waiting`  | States whose forward edge has **no CLI verb at all** — it fires only as a side effect of a Workflow step's `element.set_state(...)` action or an engine trigger (e.g. another element's `supersedes:` field). `submit`/`approve` on a `waiting` state is illegal. |
 | `returns`  | `{ <state>: <earlier state> }` (`dl-110` P1 (a)). A declared **return edge** that is not a rejection: `wingfoil memory park` takes it, moving a started element back along the chain (e.g. `task`'s `in-progress: backlog`). The target must be an earlier state of `sequence`. A park says the work is not being done now; a reject says it was wrong, so the two are different edges and different verbs. |
-| `limits`   | `{ <state>: <positive integer> }` (`dl-110` P3 (a)). An optional **WIP limit**: at most N documents of the type in that state. The verb that enters the state enforces it — `memory add` for `sequence[0]`, `submit`, `approve`, `reject`, `park`, and the `supersedes:` trigger — refusing (exit `1`) before anything is written and naming the documents that hold the state. The holders are counted in the commit the transition is decided at (`dl-080`). The limit counts per type, also when it is declared in `defaults.states`. |
+| `limits`   | `{ <state>: <positive integer> }` (`dl-110` P3 (a)). An optional **WIP limit**: at most N documents of the type in that state. The verb that enters the state enforces it — `memory add` for `sequence[0]`, `submit`, `approve`, and the `supersedes:` trigger — refusing (exit `1`) before anything is written and naming the documents that hold the state. A transition along a `gates` reject edge (`reject`) or a `returns` edge (`park`) is **exempt**: a reject or returns edge takes no slot check, so it may leave the state above its limit (`dl-156` Q2 (i)). The holders are counted in the commit the transition is decided at (`dl-080`) **and** at the tip of every local branch and remote-tracking ref — the refs the `{n}` counter reads (`dl-101` §2 (a)) — each document of the type once, by its `id`: in the state a ref records when that ref **changed** its `status` since the ref's merge-base with the decided commit (or the element is new on that ref; a ref sharing no history counts every copy), the most advanced of those copies when several refs changed it (later in `sequence`; a state off `sequence` after every `sequence` state, `deprecated` last); otherwise in the state the decided commit records. A ref that is an ancestor of the decided commit, or that left the element's status as the fork had it, counts nothing for it, so the verdict depends on which refs are fetched (`dl-156` Q1 (a); the approver's ruling of 2026-10-11, option (a), at `task-274`'s review). The limit counts per type, also when it is declared in `defaults.states`. |
 
 **Which verb drives each forward edge — fully determined by the schema:**
 
@@ -623,3 +623,15 @@ edge driven by the `vision-change` workflow's `schedule` step, not by a CLI verb
 diagnostic changes, and no source file names the type (REQ-SYS-04's fit criterion). Edited in place
 without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-212`'s
 review.
+
+**Revision (2026-10-10, `task-274-count-wip-limit-holders-across-every-ref-and-exempt-reject-and-returns-edges-from-the-limit`) —
+where `limits` holders are counted, and which edges are exempt.** `dl-156` (`ready`, approve `f3354102`):
+Q1 (a), the holders of a limited state are counted at the decided commit and at every local and
+remote-tracking branch tip, so parallel task branches see each other's holders; a tip's copy counts
+only when that ref changed the element's `status` since its merge-base with the decided commit,
+otherwise the decided commit's copy does (approver ruling 2026-10-11, option (a), at `task-274`'s
+review: "most advanced wins" kept a parked holder counted from a stale branch and hid a rejected one
+behind an older copy; among several changed copies the most advanced wins); Q2 (i), a `reject` along a `gates` reject edge and a `park` along a
+`returns` edge take no slot check. The `limits` row says both. No key, rule or diagnostic changes.
+Edited in place without a supersede or a state change (`dl-047`); pending the approver's `memory amend`
+at `task-274`'s review.
