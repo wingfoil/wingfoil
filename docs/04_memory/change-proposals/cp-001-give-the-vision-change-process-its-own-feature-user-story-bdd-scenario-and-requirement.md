@@ -96,7 +96,9 @@ receiving AI-generated contributions) is the one who receives feature requests f
 - `spec-001`, `spec-003`, `spec-004`, `spec-010`, `spec-011`, `spec-017` (`approved`, amended at `task-212`'s merge):
   no impact — they specify the type and the workflow, not the feature id.
 - `task-277` (`backlog`, v0.3): the `define-scope` sweep scenario 5 relies on; the BDD scenario is pinned once it lands.
-- `task-271` (`backlog`, v0.3): adds `reported_by` to the change-proposal template; no impact on this change.
+- `task-271` (`done`, v0.3, merged `301e0da4`; status updated 2026-10-11, it read `backlog` at analysis): added
+  `reported_by` to the change-proposal template (`grep -n reported_by .wingfoil/memory/templates/change-proposal.md`
+  → line 12); no impact on this change.
 - `dl-166` (`in-discussion`): whether the scoped downcast and the exit become checks; REQ-STATE-11's fit criterion is
   the property such a check would test, and is written so either ruling satisfies it.
 - No ADR touches the vision-change process: no impact.

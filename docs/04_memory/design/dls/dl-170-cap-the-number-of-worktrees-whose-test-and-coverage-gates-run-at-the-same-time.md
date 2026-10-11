@@ -116,3 +116,24 @@ Questions for the approver:
 - `task-263`, `task-216` and `bug-276`: the latency pass refuses a loaded run, a stricter rule for timing only.
 - `bug-095`: two jest runs in one worktree corrupt `dist/`, which the lock also prevents.
 - `decision-log-ingest-rel-v0.3-gate-concurrency-plan`: the plan that captured this decision.
+
+**Note (2026-10-11, evidence from the rest of wave 3 batch B5 under the interim rule; W3 B5 follow-ups,
+`bug-ingest-rel-v0.3-w3b5-review-findings-plan` item 18).** Recorded as evidence for Q1–Q3; the Decision above is
+unchanged.
+
+- **The check and the start raced.** Two coverage runs, `task-274`'s and `task-217`'s, started together: each
+  agent's check found no heavy gate running, and both started before either was visible (`task-226`'s review). The
+  interim rule then gained a second check 5 s after the first, which an in-script lock (Q2 (A)) makes unnecessary.
+- **`pgrep` matched the pollers.** `pgrep -af "jest --coverage|…"` also matched the shells of other agents' waiting
+  loops, whose command lines contain the same pattern, so pollers could block each other with no gate running
+  (`task-235`'s report). The rule now matches only processes whose command starts with `node` or `npm`
+  (`ps -eo args | grep -E '^(node|npm).*(jest --coverage|scripts/run-tests.cjs|tsc -p tsconfig.build.json)'`).
+- **Load from outside the project.** Busy loops of another project's sessions on the same machine held the 1-minute
+  load near 35 for about an hour, with no WingFoil gate running (the coordinator's observation during the batch):
+  the load threshold of Decision 3, not the lock, is what kept gates from starting then.
+- **Interrupted runs left `dist/` missing.** A run stopped while the jest `globalSetup` rebuilt `dist/` left none,
+  and the next CLI command failed with "Cannot find module …/dist/cli.js"; filed as
+  `bug-336-an-interrupted-jest-run-can-leave-dist-missing` (`triaged`, v0.4).
+- **The interim rule absorbed all four.** The batch finished its remaining gates one at a time with no further
+  overload; each case above is one the lock with a pid and a load wait (Decisions 2–4) would handle without anyone
+  remembering a rule.
