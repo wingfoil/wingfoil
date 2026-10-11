@@ -21,7 +21,7 @@ humans and AI agents a shared source of truth.
 
 *The first example, [`docs/examples/01-first-project`](docs/examples/01-first-project/run.sh), recorded from
 [`docs/examples/01-first-project/demo.tape`](docs/examples/01-first-project/demo.tape). The example checks its own
-results, and the recording waits for its `OK:` line, so if WingFoil stops matching the example the recording fails
+results, and the recording stops if a check fails, so if WingFoil stops matching the example the recording fails
 instead of going stale.*
 
 ---

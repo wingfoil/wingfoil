@@ -42,7 +42,8 @@ Commit hashes and timestamps in the printed output differ on every run; everythi
 does not.
 
 `01-first-project/demo.tape` records example 01 with [VHS](https://github.com/charmbracelet/vhs) for the
-README's demo, and waits for its `OK:` line, so a recording of a failing example is never produced. How to
+README's demo; a failing example closes the recording's shell before the prompt returns, so a recording of a
+failing example is never produced. How to
 regenerate it is in [`docs/assets/README.md`](../assets/README.md).
 
 `lib.sh` holds the small helpers the scripts share (`step`, `expect_exit`, `json_field`, …). It is

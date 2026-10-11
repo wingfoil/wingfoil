@@ -1,8 +1,9 @@
 # WingFoil — the README's terminal demo (dl-128 item 2, Q1 (a)): a VHS tape, https://github.com/charmbracelet/vhs
 #
 # It records example 01 (run.sh, next to this file) and renders it to the GIF the README shows. The example
-# checks itself, and the tape waits on screen for its closing `OK:` line: if the tool no longer matches the
-# example, the wait lapses and `vhs` exits non-zero, so a stale animation is never rendered.
+# checks itself and exits non-zero on its first failed check; the typed `|| exit 1` then closes the shell, so the
+# prompt never comes back, the wait for it lapses, and `vhs` stops with an error before rendering: a stale
+# animation is never produced.
 #
 # Run from the repository root, after building the commit to record:
 #
@@ -32,10 +33,14 @@ Type `export WINGFOIL="node $PWD/dist/cli.js" && clear`
 Enter
 Show
 
-Type "bash docs/examples/01-first-project/run.sh"
+Type "bash docs/examples/01-first-project/run.sh || exit 1"
 Sleep 500ms
 Enter
 
-# The example prints `OK: …` as its last line only if every check passed; it prints `FAIL: …` otherwise.
-Wait+Screen@120s /OK: first project/
+# Wait for the prompt (VHS's bash prompt is `> `) on the cursor's line. Not `Wait+Screen /OK: …/`: the screen scope
+# reads the top rows of the terminal buffer, not the scrolled view, and the example's output is taller than the
+# window, so its closing `OK:` line is never there (the render of 2026-10-10 timed out on it). The line scope reads
+# the row the cursor is on, where the prompt returns only after `OK: …` has been printed.
+Wait@120s /^>$/
+# Hold the last frame, which shows the `OK: …` line above the prompt.
 Sleep 4s

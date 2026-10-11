@@ -63,9 +63,12 @@ ls -l docs/assets/*.png  # each banner must stay under 1 MB (GitHub's limit)
 ## Regenerating the demo GIF
 
 The README's demo is rendered by [VHS](https://github.com/charmbracelet/vhs) from a tape next to the example it
-records (`dl-128` Q1 (a)). The tape runs `docs/examples/01-first-project/run.sh` against the build in `dist/` and
-waits for the example's `OK:` line, so a build that no longer passes the example makes `vhs` exit non-zero and
-leaves no new GIF. VHS (with its `ttyd` and `ffmpeg`) is not a project dependency: install it on the machine that
+records (`dl-128` Q1 (a)). The tape runs `docs/examples/01-first-project/run.sh || exit 1` against the build in
+`dist/` and waits for the shell's prompt to return. A build that no longer passes the example makes the example
+exit non-zero, `|| exit 1` closes the shell, the prompt never returns, and `vhs` stops with
+`timeout waiting for …` before rendering, so no new GIF is written. (The tape waits on the cursor's line, not with
+`Wait+Screen`: the screen scope reads the top rows of the terminal buffer, which the example's output scrolls past.)
+VHS (with its `ttyd` and `ffmpeg`) is not a project dependency: install it on the machine that
 regenerates the asset. Rendering is a manual step of each release's `user-docs` phase (`align-user-docs`, check
 `demo.rendered`), done by hand on the approver's ruling of 2026-10-10.
 
