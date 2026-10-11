@@ -68,6 +68,141 @@ that it is fixed in v0.3 before branch protection makes the check binding (`git-
 
 ## Execution Notes
 
+### design (architect)
+
+- **depends_on `task-208`** — Execution Notes read: its *review (self, reviewer)* section records the false positive
+  on `d818c0dd` and the 38 min whole-history run under load; its `dl-139` rule reads the commit and its parent
+  through `git cat-file --batch` (`readBlobTexts` in `scripts/check-governance.cjs`). That reader lives in the
+  script and `src/` cannot import it, so the `src` counterpart is used instead: `catFileBatch` in
+  `src/storage/commit.ts`, exposed as a new `readRevisionPaths` (many `<rev>:<path>` reads in one batch).
+- **Specs:** no approved tech-spec, SARD or BDD text declares how `fromState` is derived:
+  `grep -rln "fromState\|reconstructMemoryTransitions" docs/04_memory/design/specs docs/02_requirements` → no
+  file. `bug-308`'s Expected Behavior is the contract; no spec edit, no pending amendment.
+- **Scope:** `src/memory/history.ts` (the walk carries `parentPath`, read off the same `--follow --name-status`
+  probe that already gives `path`: one probe, two parsers), `src/memory/audit.ts` (`fromState` read at
+  `<sha>^1:<parentPath>`), `src/storage/commit.ts` (`readRevisionPaths`). `scripts/check-governance.cjs` is NOT
+  changed: both of its state readers (`verifyTransitionConsistency`, `reconstructMemoryTransitions`) come from
+  `dist`, so the fix at the source corrects it, and `memory history` with it.
+- **Walk fact that shapes the design:** `git log --follow` lists no merge commit in `bug-308`'s shape — in a
+  scratch repository built as the bug's steps say, `git log --follow --format='%h %s' -- docs/task-1.md` printed
+  the add, start and amend only, while the same log without `--follow` also printed the merge. So the parent read
+  must not depend on the walk's order, and a merge is handled by rule (read at `<sha>^1` at its own path), not
+  by a case the walk is known to produce.
+- **AC classification (T1):**
+
+| AC | Class | Why |
+|----|-------|-----|
+| 1 — bug-308 fixture: amend `backlog -> backlog`, start `backlog -> in-progress` | red-first | new behaviour; fails on the pre-fix code (amend read `in-progress -> backlog`) |
+| 2 — `fromState` from the first parent at its path; `null` on creation; merge vs first parent | red-first | `parentPath` and `parseParentPaths`/`attachParentPaths` are new; the rename and creation answers it pins also held on linear history before |
+| 3 — governance fixture: 0 findings for the amend; a real move against the parent still fails | red-first | both halves fail before the fix (a false positive and a false negative) |
+| 4 — whole-history run no longer reports `d818c0dd` | characterization | measured after the fix; neighbourhood range recorded before and after |
+| 5 — `memory history` unchanged on linear history | characterization | before/after JSON diffs |
+| 6 — approver told branch protection is unblocked | characterization | a sentence in these notes (review section) |
+| 7 — gates green | characterization | the refactor runs |
+
+### red (qa)
+
+- `c9ba836b` — `test/memory/audit-parent-state.test.ts` (AC1, plus a commit after the merge judged against the
+  merge), `test/memory/history-parent-path.test.ts` (AC2), `test/cli/check-governance-parent-state.test.ts`
+  (AC3). Fixed commit dates (`GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE`) so the walk's order is the bug's on every
+  machine.
+- Failing run: `npx jest test/memory/audit-parent-state.test.ts test/memory/history-parent-path.test.ts
+  test/cli/check-governance-parent-state.test.ts` → `Tests: 10 failed, 2 passed, 12 total`. The two passing tests
+  are the fixture's precondition (the walk lists the amend after the start) and the start/add derivation, which
+  the old code already got right. AC3's positive case also failed: the old code derived `backlog → backlog` for a
+  commit that moved the merged `in-progress` back to `backlog` (a false negative of the same defect).
+- `d8f504fd` — a fixture error in the red rename case, found at green: `git mv` into a folder that did not exist
+  (`fatal: renaming … failed: No such file or directory`). The fixture creates the folder; the assertion is
+  unchanged. Recorded here because it is an edit to red's file after red.
+
+### green (developer)
+
+- `be6411eb` — `MemoryHistoryEntry.parentPath` (optional in the type so hand-built entries in existing tests stay
+  valid; set on every entry `getMemoryHistory` returns), `parseParentPaths` (`R` → the rename's source; `A` and
+  `C` → `null`; `M`/`D`/`T` → the line's path), `attachParentPaths` (a sha with no status line, a merge, falls
+  back to its own path); `reconstructMemoryTransitions` reads each commit at `<sha>:<path>` and at
+  `<sha>^1:<parentPath>` in one `readRevisionPaths` batch, strict mode throwing on either unreadable revision.
+  `readStatusAt` (one `git show` per commit) became `parseStatus` over the batched bytes.
+- Run: the three files → `Tests: 12 passed, 12 total`; `npx jest test/memory test/cli/check-governance` (34
+  suites) → `Tests: 1 failed, 700 passed, 701 total` before `d8f504fd`, the one failure being that fixture error.
+- `ebdb38ad` — `test/storage/read-revision-paths.test.ts` (8 tests): per-revision reads in order, `null` for an
+  absent path, a directory and the parent of a root commit, the newline-path fallback, `[]`, the four refused revs.
+
+
+### refactor (developer)
+
+- `04176e32` — `getMemoryHistory` returns `WalkedHistoryEntry[]` (`parentPath` always set; `dropPreCreationAncestry`
+  generic over the entry type), so `reconstructMemoryTransitions` has no fallback arm left; the strict read throws
+  on the commit's revision or its parent's alike (`read.unreadable ?? before.unreadable`).
+  `test/memory/audit-parent-unreadable.test.ts` (2 tests): an unreadable parent revision gives `fromState: null`
+  tolerantly and throws strictly, also when the date-ordered walk lists the child first.
+- Main moved during the task (`30b268a3` → `c9438481`, one merge of two Memory documents of `dl-170`:
+  `git diff --stat 30b268a3 c9438481` → 2 files under `docs/04_memory/` and `docs/05_plans/`). Not merged: the batch
+  notes reserve merging main to the coordinator, and nothing it carries touches this task's files.
+- Gates, run one at a time under the interim gate rule (`dl-170`), on `04176e32`:
+  - `npm run test:coverage -- --maxWorkers=2` → `Test Suites: 352 passed, 352 total`, `Tests: 6503 passed, 6503
+    total`, exit 0; `All files | 99.29 | 97.06 | 97.76 | 99.69` against the W3 B4 gate's main run
+    (`devloop-kit/gate-w3b4-cov.log`: `99.29 | 97.04 | 97.74 | 99.69`) — not regressing. `audit.ts` branches 86.3
+    (85.07 on that main run); its uncovered lines 111, 191, 349-352 predate this task (the main run lists 111, 191,
+    353-356, the same lines before the shift). `commit.ts` 775 is the main run's 733 shifted by the 42 added lines.
+    The run includes every `npm test` suite (same `testMatch`, no latency suites).
+  - `npm run lint` → exit 0; `npm run docs:api` → exit 0; `npx tsc --noEmit -p tsconfig.json` → exit 0;
+    `npx tsc -p tsconfig.build.json --noEmit` → exit 0.
+  - `node scripts/check-governance.cjs --base 30b268a3` → `2 wf() commits … and 5 other commits`, `gated: 0
+    findings on 0 commits`.
+- BDD: P1.10 (`memory history`) is exercised by `test/core/memory-history.test.ts` inside the run above; no scenario
+  states how the from-state is derived (design, the `grep` there), so none was added.
+
+### review (self, reviewer)
+
+- **AC1** — `test/memory/audit-parent-state.test.ts`: the amend derives `backlog -> backlog`, the start
+  `backlog -> in-progress`, the add `null -> backlog`, tolerant and strict; red at `c9ba836b` (amend read
+  `in-progress -> backlog`), green from `be6411eb`.
+- **AC2** — `test/memory/history-parent-path.test.ts`: `parentPath` is `null` on an `A` creation and on a `C` copy
+  of the template, the document's path on a modification, the source on a rename whose commit also moves the status
+  (read there: `backlog -> in-progress`); the pure parser on `A/M/R/C/D/T` lines; a sha with no status line (a merge)
+  falls back to its own path, read at `<sha>^1`. Plus the commit after the merge judged against the merge
+  (`in-progress -> backlog`, AC1 file).
+- **AC3** — `test/cli/check-governance-parent-state.test.ts`: the governed fixture (add, submit, approve, start on
+  the branch, approver's amend on main, merge) → `report.findings` `[]`; a later approver amend on main that moves
+  the merged `in-progress` to `backlog` → one `state` finding, "the bracket declares backlog → backlog, the
+  frontmatter went in-progress → backlog". Red at `c9ba836b` on both (a false positive and a false negative).
+- **AC4** — `d818c0dd`'s neighbourhood, a detached scratch worktree at `45338809` (the merge of `task/task-152`
+  into main, `git log --first-parent --reverse d818c0dd..main -- <task-152 file>` → first line), range
+  `--base d818c0dd~1` (94 `wf()` commits, 60 other):
+  - before (the script and `dist` built from `c9ba836b`'s `src`): `FAIL — … d818c0dd… state: …task-152….md: the
+    bracket declares backlog → backlog, the frontmatter went in-progress → backlog`, `gated: 1 findings on 1
+    commits (state 1)`, exit 1, `real 4m6s`;
+  - after (this branch): `gated: 0 findings on 0 commits`, exit 0, `real 3m14s`.
+  - Whole history (`node scripts/check-governance.cjs --base fcd43569`): first line `governance check: 1964 wf() commits in
+    fcd43569…..HEAD (1964 after the introduction commit fcd43569…), and 758 other commits`; `gated: 0 findings on 0
+    commits`; `history: 126 findings on 63 commits (body 126)` (the `bug-307` AI-trailer commits, reported, not
+    failing); `state not checked: 0 entries`; exit 0; `real 8m21s` at load 8.6–11.8 (`uptime` before and after).
+    `d818c0dd` is not reported (`grep -c d818c0dd` on the log → 0). `task-208` measured 38 min for the same range
+    under nine agents' load; the two runs are not comparable as a speed-up, but this one spawns one
+    `git cat-file --batch` per document where the old read spawned one `git show` per commit.
+- **AC5** — `node dist/cli.js memory history <id> --format json` before (build of `c9ba836b`, captured before any
+  `src` edit) and after, `diff`ed: `task-125`, `adr-009`, `dl-018` → no difference (diff exit 0). The fourth,
+  `task-152` (non-linear: started on its branch, amended on main), differs in exactly two entries, both corrections:
+  `d818c0dd` `in-progress → backlog` became `backlog → backlog`, and `bee82b90` (a `docs(memory)` commit on the task
+  branch that changes no status) `backlog → in-progress` became `in-progress → in-progress`.
+- **AC6 — for the approver:** the governance check no longer reports `d818c0dd`, so the whole-history fallback of
+  `governance.yml` no longer fails on it, and turning on branch protection for the `governance` check (`task-208`
+  AC 5, `git-conventions` §9) is unblocked by this fix once it is merged.
+- **AC7** — the refactor gates above.
+- Same-class sweep in the files touched: `grep -rn "previousState" src scripts` → nothing; the only other readers of
+  a from-state are `scripts/check-governance.cjs`'s `dl-139` and gone-at-HEAD reads, which already read
+  `commit.parent` (`readBlobTexts` with `${commit.parent}:…`, lines 784 and 867).
+- Claims re-run: every command above was run on `04176e32` or, for "before" values, on `c9ba836b`'s build.
+
 ### Retrospective
 
-None yet.
+- A fixture that reproduces an ordering bug needs fixed commit dates: without `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE`
+  the walk's order (and so the red) would depend on the second the commits were made in (evidence: the precondition
+  test in `test/memory/audit-parent-state.test.ts` pins the walk's order before asserting the fix).
+- The same defect produced a false negative as well as the false positive the bug reported: a commit after the merge
+  that moved the status back read `backlog → backlog` (AC3's positive case, red at `c9ba836b`). A positive case
+  written against the fixed shape found it.
+- The session was stopped five times by restarts and load (machine at load 165); detached gate runs were orphaned
+  and two jest runs once overlapped in this worktree — the batch's later "one heavy gate at a time" rule
+  (`dl-170`) would have prevented both.
