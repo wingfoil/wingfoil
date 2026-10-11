@@ -63,7 +63,7 @@ Accepted by every command, except `--dry-run`, which only the commands that chan
 | Option | Effect |
 |---|---|
 | `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (Unreleased (v0.3): except `agent show`, which prints `key: value` lines); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
-| `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, and for a `memory approve` that also moves a superseded document it shows only the approve commit. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
+| `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
@@ -104,7 +104,8 @@ document). Stdout is the same with or without warnings, so a script parsing it i
 
 ### Git side effects
 
-Every command that changes the project writes **exactly one git commit**, authored by your git identity.
+Every command that changes the project writes **exactly one git commit**, authored by your git identity
+(unreleased, v0.3: `workflow start` writes two, an `add` and a `submit` of its plan).
 Read-only commands never commit. Unreleased (v0.3): if git refuses that commit — a `pre-commit` hook
 that fails, a full disk, another git command holding the index lock — the command puts back every file
 it wrote (removing the files and folders it created), and the index, as they were, and
@@ -139,6 +140,8 @@ Which state a command reads depends on whether that state can stop it:
   `memory search` should find. So `memory add --type <t>` can refuse a type your working copy of
   `memory.yaml` declares, while `memory search` searches the documents that same working copy
   declares — the type is on disk and in no commit; commit `memory.yaml` and the two agree.
+- Unreleased (v0.3): **`workflow start` and `workflow end` read `HEAD`** like the other commands that
+  write: the workflow files, `memory.yaml`, the element and the open workflows.
 - Unreleased (v0.3): **`agent execute` reads `HEAD`** like the other commands that write: the
   commit it reads becomes the run's `state_ref`.
 - Unreleased (v0.3): **`agent show` reads `HEAD`**, though it changes nothing: it answers from the
@@ -1022,6 +1025,37 @@ Built-in directives are refused (`error: built-in directives cannot be removed`)
 
 ## Workflow
 
+### `wingfoil workflow end`
+
+End a complete workflow: move its plan element to done; the previous open workflow becomes active.
+
+```
+wingfoil workflow end [<ref>]
+```
+
+Unreleased (v0.3). `<ref>` is a workflow name (its most recently started open instance) or the id of an
+open instance; without it, the active instance. It decides at `HEAD`, as `workflow next` does: the plan,
+the workflow files and the deduction of the instance's steps.
+
+It refuses an instance that is not finished: one whose plan is still `draft` (a `workflow start` whose
+second commit failed), and one whose steps are not all complete — the error names the current step, and a
+`hint:` line says that `wingfoil memory deprecate <id>` abandons the instance instead. Otherwise it moves
+the plan `active → done` and prints the ended instance and the one now active (`active: none` when none is
+left open); `--format json|yaml` prints `{"baseline": {…}, "ended": {…}, "active": {…} | null, "commit": "<sha>"}`.
+
+```console
+$ wingfoil workflow end
+ended report-bug (report-bug-minor-v1-plan)
+active: release-cycle (release-cycle-minor-v1-plan)
+```
+
+- **Errors:** no open instance → `no active workflow to end`; a `<ref>` that names a workflow or a plan
+  with no open instance → `workflow is not open: <ref>`; a `<ref>` that names neither →
+  `unknown workflow: <ref>`; a `draft` plan → `workflow '<name>' was not submitted: run wingfoil memory
+  submit <id>`; an incomplete instance → `workflow '<name>' is not complete: current step <key>`; all exit
+  `1`. More than one `<ref>` → exit `2`.
+- **Commit:** `wf(plan): finalize <id> [active → done]`, the plan file only.
+
 ### `wingfoil workflow list`
 
 List the workflows you can run now, as committed at `HEAD`.
@@ -1164,6 +1198,58 @@ another workflow, that workflow resolved the same way under `sub`. The payload i
 - **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <name>` —
   `<ref>` itself, or, for an open instance whose workflow is not loaded, that workflow's name — exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
 - **Commit:** none.
+
+### `wingfoil workflow start`
+
+Start a workflow: record it as an active plan element and print its first step.
+
+```
+wingfoil workflow start <name> [--element <type>:<id>] [--title <title>] [--set phase=<v>] [--set scope=<v>]
+```
+
+| Option | Description |
+|---|---|
+| `--element <type>:<id>` | The element the workflow runs on, when the workflow declares one (`element:`). Without it, the active workflow's element is used if it has that type. |
+| `--title <title>` | The plan's title. Default: `<workflow> — <phase>`. |
+| `--set phase=<v>` | The plan's `phase` token. Default: the element's id, else `1`. |
+| `--set scope=<v>` | The plan's `scope` token, the folder its file goes in. Default: the workflow name. |
+
+Unreleased (v0.3). It decides at `HEAD`: the workflow files, `memory.yaml`, the element and the open
+workflows. A started workflow is an **instance**, recorded as a Memory document of type `plan` whose
+`workflow` names the workflow and whose `element` holds the element it runs on. The new instance becomes
+the active one; the others stay open (`wingfoil workflow end` closes one).
+
+- A workflow that declares `element: <type>` needs one: `--element`, or the active workflow's element of
+  that type. It must be committed at `HEAD`.
+- A workflow that declares no element takes no `--element`. Started while the active workflow has an
+  element, it records that element in its plan as the context (a bug reported during a release names the
+  release).
+- The plan's id comes from the `plan` type's `id_pattern` (`{workflow}-{phase}-plan` here). When the
+  derived id is already taken on any branch, `-2`, `-3`, … is added to the phase; an id taken by a
+  `--set phase=` is refused instead.
+
+It writes **two commits**, each touching only the plan file: `wf(plan): add <id>` then
+`wf(plan): submit <id>` (`draft → active`). If the second one fails, the plan stays `draft` and the error
+says to run `wingfoil memory submit <id>`. With `--dry-run` it prints the first commit's plan only. The
+output names the instance and its first step, as `workflow next` prints it; `--format json|yaml` prints
+`{"baseline": {…}, "instance": {…}, "next": {…} | null, "commits": ["<add sha>", "<submit sha>"]}`.
+
+```console
+$ wingfoil workflow start release-cycle --element release:minor-v1
+started release-cycle as release-cycle-minor-v1-plan (active)
+next step: release-cycle.ship@release:minor-v1
+  …
+```
+
+A project's `memory.yaml` must declare a `plan` type; `wingfoil init` declares one.
+
+- **Errors (exit `1`):** `unknown workflow: <name>`; `cannot start a sub workflow directly: <name>`;
+  `memory type 'plan' is not declared in memory.yaml; workflow start records an instance as a plan element`;
+  `workflow '<name>' needs a <type> element: give --element <type>:<id>`; `workflow '<name>' declares no
+  element: --element is not accepted`; `element not found: <type>:<id>`; `plan id already exists: <id>`.
+- **Errors (exit `2`):** no `<name>`, more than one positional, a malformed `--element`
+  (`malformed element-ref "<ref>": expected <type>:<id>`), or a `--set` other than `phase=` / `scope=`.
+- **Commit:** `wf(plan): add <id>`, then `wf(plan): submit <id>`.
 
 ## Agent
 

@@ -58,7 +58,7 @@
 
 * **[MVP · v0.3]** US-0A-15: As Morgan, I want to define workflow structure (phases → steps → atomic actions) with
   `kind: main/sub` classification in `.wingfoil/workflows.yaml` so that I model the team process. _(feat: P4.1)_
-* **[MVP · v0.3]** US-0A-16: As Alex, I want to start a main workflow with `wingfoil workflow start --name [workflow]`
+* **[MVP · v0.3]** US-0A-16: As Alex, I want to start a main workflow with `wingfoil workflow start <workflow>`
   setting it as active context so that I officially begin the project. _(feat: P4.2)_
 * **[MVP · v0.3]** US-0A-17: As Alex, I want to close the active main workflow with `wingfoil workflow end` so that I
   reset/clear active context when done. _(feat: P4.3)_

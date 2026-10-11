@@ -45,9 +45,10 @@
 ### REQ-STATE-03 — Active workflow context with multiple open mains
 
 * **Description:** `workflow start` sets the active context; multiple main workflows may be open; commands target the
-  last started unless `--name` is given; `end` clears or restores context.
+  last started unless a positional `<ref>` (a workflow name or an open instance id) is given; `end` clears or restores
+  context.
 * **Rationale:** Real teams interleave workflows (e.g., a bug report during a release cycle).
-* **Fit Criterion:** With two mains open, a command without `--name` targets the last started; `workflow end --name X`
+* **Fit Criterion:** With two mains open, a command without `<ref>` targets the last started; `workflow end X`
   closes X and restores the previously active workflow (P4.2/P4.3 scenarios pass).
 * **Traceability:** Feature P4.2 (US-0A-16, BDD `p4-workflow/P4.2-workflow-start.feature`); Feature P4.3 (US-0A-17,
   BDD `p4-workflow/P4.3-workflow-end.feature`).

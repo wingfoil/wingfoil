@@ -1,7 +1,7 @@
 # User Journeys — WingFoil
 
-**Version:** 1.5
-**Date:** 2026-10-07
+**Version:** 1.6
+**Date:** 2026-10-10
 **Status:** Approved
 
 ---
@@ -22,7 +22,7 @@ automatically.
 |      | - Select reference workflow       | Menu: Scrum / Kanban / Lean Inception / Trunk-Based / Custom | Workflow template selected; auto-generates phases, directives, Memory     |
 |      | - Wizard mode (default)           | Questions + multiple choice options                          | Fast setup with sensible defaults; template serves as baseline            |
 |      | - Agent-assisted mode             | Natural conversation with AI agent                           | More flexible, personalized answers; template adapted to team context     |
-| 3    | Start kickoff workflow phase      | CLI: `wingfoil workflow start --name [workflow]`             | First workflow step executes; project is officially started               |
+| 3    | Start kickoff workflow phase      | CLI: `wingfoil workflow start <workflow>`                     | First workflow step executes; project is officially started               |
 | 4    | Verify project structure paths    | CLI: `wingfoil paths` or `wingfoil paths sources --list`     | User confirms all resource paths (code, docs, config) are properly mapped |
 
 **Obstacles:**
