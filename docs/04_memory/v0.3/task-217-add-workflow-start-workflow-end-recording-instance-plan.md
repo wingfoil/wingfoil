@@ -2,7 +2,7 @@
 id: "task-217-add-workflow-start-workflow-end-recording-instance-plan"
 type: task
 title: "Add `workflow start` and `workflow end`, recording each instance as a `plan` element"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "high"
