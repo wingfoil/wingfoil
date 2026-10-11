@@ -103,8 +103,10 @@ function buildFixture(): string {
   const workflowsPath = join(repo, '.wingfoil', 'workflows.yaml');
   writeFileSync(
     workflowsPath,
-    `${readFileSync(workflowsPath, 'utf-8')}  - workflows/custom/quick.yaml\n  - workflows/custom/finished.yaml\n  - workflows/custom/checkpoint.yaml\n`,
+    `${readFileSync(workflowsPath, 'utf-8')}  - workflows/custom/quick.yaml\n  - workflows/custom/finished.yaml\n  - workflows/custom/checkpoint.yaml\n  - workflows/custom/retired.yaml\n`,
   );
+  // `workflow remove` (task-211): a custom workflow nothing includes and no instance runs.
+  writeFileSync(join(repo, '.wingfoil', 'workflows', 'custom', 'retired.yaml'), 'name: retired\nstartable: true\nphases:\n  - name: one\n    role: developer\n');
   for (const name of ['quick', 'finished']) {
     writeFileSync(
       join(repo, '.wingfoil', 'workflows', 'custom', `${name}.yaml`),
@@ -182,6 +184,8 @@ const ROWS: Readonly<Record<string, Row>> = {
   workflowStart: { args: ['workflow', 'start', 'quick'], commits: 2 },
   workflowEnd: { args: ['workflow', 'end', 'finished'] },
   workflowFinalize: { args: ['workflow', 'finalize', 'checkpoint-1-plan'], empty: true },
+  workflowCreate: { args: ['workflow', 'create', 'dry-flow', '--kind', 'main'] },
+  workflowRemove: { args: ['workflow', 'remove', 'retired'] },
   // Last: its preparation leaves a modified document in the tree for the rows after it.
   memoryAmend: {
     args: ['memory', 'amend', 'task-005-amend-me', '--reason', 'Corrected the scope paragraph.'],
@@ -232,7 +236,7 @@ describe('--dry-run on every mutating operation of the registry (task-210, dl-10
     // Measured, not assumed: the task's "28" and the batch notes' "34" both counted
     // `grep -c "mutates: true" src/core/index.ts`, which also matches comment lines.
     expect(Object.keys(ROWS).sort()).toEqual(mutatingOperations());
-    expect(mutatingOperations()).toHaveLength(18);
+    expect(mutatingOperations()).toHaveLength(20);
   });
 
   it.each(Object.entries(ROWS))('%s: plans the commit, writes nothing, and the real run makes that commit', (_name, row) => {
@@ -305,6 +309,8 @@ describe('--dry-run of a refused operation exits with the refusal\'s code and wr
     ['a blank reason', ['memory', 'reject', 'task-003-reject-me', '--reason', '   '], 2],
     ['an occupied directive name', ['directive', 'create', '--name', 'remove-me'], 1],
     ['a path the schema does not declare', ['dna', 'set', 'project.nope', '--value', 'x'], 1],
+    ['an existing workflow name (task-211)', ['workflow', 'create', 'quick', '--kind', 'main'], 1],
+    ['an unknown workflow (task-211)', ['workflow', 'remove', 'nope'], 1],
   ] as const)('%s', (_label, args, code) => {
     const before = snapshotPersistence(repo);
     const run = wingfoil(repo, [...args, '--dry-run']);
