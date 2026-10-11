@@ -820,6 +820,10 @@ function singleOption(options: MemoryAddParams['options'], name: string): string
  *    none, so no call path can reach the decision with a working-tree registry. An unknown type is a
  *    domain `NOT_FOUND` (exit 1) with the exact P1.3 message
  *    `unknown memory type '<t>' (not defined in memory.yaml)`, returned BEFORE any write.
+ *    With `--workflow <ref> [--step <key>]` (task-227, `spec-017` §7.10), the step the element is linked to
+ *    is then resolved from the deduction at `HEAD` ({@link resolveAddLink}); a refusal (`NOT_FOUND`,
+ *    `CONFLICT`, `VALIDATION`) is returned before the id is allocated, and the add commit carries the
+ *    `WingFoil-Instance` / `WingFoil-Step` trailers. `--step` without `--workflow` is a usage error (exit 2).
  * 4. **Generate the id** deterministically from the type's committed `id_pattern` (task-002's
  *    `generateId`, REQ-SYS-07), in `spec-001`'s fixed order (task-110, `dl-107` S2): first every
  *    frontmatter/context token from `--set` (a `--set` name the committed `id_pattern` and `path` do

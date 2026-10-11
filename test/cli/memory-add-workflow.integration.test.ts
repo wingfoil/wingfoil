@@ -84,6 +84,16 @@ describe('wingfoil memory add --workflow / --step (task-227, spec-008 §12)', ()
     );
   });
 
+  it('--dry-run plans the linkage trailers and writes nothing', () => {
+    const before = git(repo, ['rev-parse', 'HEAD']).trim();
+    const run = wingfoil(repo, 'memory', 'add', '--type', 'bug', '--title', 'B', '--workflow', 'cap-1', '--dry-run', '--format', 'json');
+    expect(run.status).toBe(0);
+    const plan = JSON.parse(run.stdout) as { dryRun: boolean; message: string };
+    expect(plan.dryRun).toBe(true);
+    expect(plan.message).toMatch(/\n\nWingFoil-Instance: cap-1\nWingFoil-Step: capture\.record\nWingFoil-Version: [^\n]+$/);
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(before);
+  });
+
   it('a step that adds no such type is exit 1 with one error line', () => {
     writeFixtureFile(repo, '.wingfoil/memory.yaml', `${MEMORY_YAML}  note:\n    path: "docs/note/{id}.md"\n    id_pattern: "note-{n}-{slug}"\n    template:\n      file: "memory/templates/note.md"\n      frontmatter:\n        required: [title]\n`);
     writeFixtureFile(repo, '.wingfoil/memory/templates/note.md', TEMPLATE('note'));
