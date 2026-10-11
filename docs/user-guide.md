@@ -102,7 +102,7 @@ commits:
 .wingfoil/
 ├── dna.yaml                  project, modules, stacks, team & roles, paths
 ├── memory.yaml               Memory types and their state machines
-├── memory/templates/         one Markdown scaffold per type (adr, bug, decision-log, release, release-line, task, tech-spec)
+├── memory/templates/         one Markdown scaffold per type (adr, bug, decision-log, plan, release, release-line, task, tech-spec)
 ├── roles.yaml                which directives apply to which role
 ├── directives/
 │   ├── built-in/             architecture, code-quality, code-review, documentation, security, testing
@@ -249,6 +249,9 @@ listed.
 
 From v0.3, the `bug` type in the scaffold carries a commented-out `states:` block of its own. Uncomment
 it to see how a type overrides the default; the states in it are an example, not a recommendation.
+Unreleased (v0.3): the scaffold also declares `plan`, the record of a started workflow, with its own
+machine `draft → active → done`: `wingfoil workflow start` adds and submits a plan (`draft → active`), and
+`wingfoil workflow end` takes its `waiting` edge (`active → done`), which no `memory` verb drives.
 Commit the edited `memory.yaml` before running Memory commands: they read it as committed, not from
 your working tree. Existing `bug` documents whose status is not a state of the new machine (for
 example `pending` or `approved`) are no longer in a valid state once it applies.
@@ -364,12 +367,16 @@ has reached (`--all` lists every workflow), as committed at `HEAD`; `wingfoil wo
 one workflow's phases, each with its role, that role's directives, its actions and checks, and the
 workflows it includes nested under it. `wingfoil workflow next` names the next step of an open workflow:
 its role and that role's directives, the element it works on, and for each action the command to run or
-the commit subject it expects (`--assigned-to me` keeps the steps your role holds). See the
+the commit subject it expects (`--assigned-to me` keeps the steps your role holds).
+`wingfoil workflow start <name>` opens a workflow — it records it as a `plan` document and makes it the
+active workflow (`--element <type>:<id>` names the element it runs on) — and `wingfoil workflow end`
+closes the active one once its steps are complete, making the previous one active again. See the
 [CLI reference](cli-reference.md#wingfoil-workflow-list).
 
-**WingFoil 0.2.2 has no workflow engine**: nothing starts a workflow, tracks its phase or runs its
-checks. The workflow files describe your process so that people and agents read the same one, and you
-follow it by hand. In practice:
+**No workflow engine runs your steps**: in 0.2.2 nothing starts a workflow; unreleased (v0.3),
+`workflow start` / `end` record an open workflow and `workflow next` names its next step, but nothing
+executes a step or runs its checks. The workflow files describe your process so that people and agents read
+the same one, and you follow it by hand. In practice:
 
 1. Pick the workflow and phase you are in, from `workflow list` and `workflow show <name>` (0.2.x: `workflow list`).
 2. Do that phase's work in the role it names, with that role's directives loaded.

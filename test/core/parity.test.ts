@@ -146,7 +146,7 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
     // task-127 adds `memory amend` (`dl-108`), the approver-gated amendment verb; task-180 adds
     // `memory park` (`dl-110`), the verb that takes a declared `returns` edge. task-218 adds
     // `agent execute` (`spec-016` §8): a Tool here, through the mechanical registrar; the production
-    // server registers none before v0.4 (spec-016 §7).
+    // server registers none before v0.4 (spec-016 §7). task-217 adds `workflow start` / `workflow end`.
     const expected = [
       'agent execute',
       'directive assign',
@@ -163,6 +163,9 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'memory park',
       'memory reject',
       'memory submit',
+      // task-217 (`spec-017` §7.1–§7.2): Tools here; the production server serves none before v0.4.
+      'workflow end',
+      'workflow start',
     ];
     expect(cli).toEqual(expected);
     expect(tools).toEqual(expected);
@@ -219,6 +222,9 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'memory.park',
       'memory.reject',
       'memory.submit',
+      // task-217 (`spec-017` §9): v0.4 Tools of the production server; here through the mechanical registrar.
+      'workflow.end',
+      'workflow.start',
     ]);
     // No mutating op is ALSO a Resource: the exact Resources list above already excludes them. The
     // cross-check below ties the Tools count to the registry's `mutates: true` count.

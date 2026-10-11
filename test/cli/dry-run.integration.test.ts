@@ -96,8 +96,17 @@ function buildFixture(): string {
   writeFileSync(join(repo, '.wingfoil', 'agents', 'custom', 'fake.yaml'), readFileSync(join(fixtures, 'custom', 'fake.yaml')));
   mkdirSync(join(repo, 'test', 'fixtures', 'agents'), { recursive: true });
   copyFileSync(join(fixtures, 'fake-agent.cjs'), join(repo, 'test', 'fixtures', 'agents', 'fake-agent.cjs'));
+  // `workflow start` / `end` (task-217): two startable workflows that complete from a committed file.
+  const workflowsPath = join(repo, '.wingfoil', 'workflows.yaml');
+  writeFileSync(workflowsPath, `${readFileSync(workflowsPath, 'utf-8')}  - workflows/custom/quick.yaml\n  - workflows/custom/finished.yaml\n`);
+  for (const name of ['quick', 'finished']) {
+    writeFileSync(
+      join(repo, '.wingfoil', 'workflows', 'custom', `${name}.yaml`),
+      `name: ${name}\nstartable: true\nphases:\n  - name: check\n    role: developer\n    produces: [ ".wingfoil/dna.yaml" ]\n`,
+    );
+  }
   git(repo, ['add', '-A']);
-  git(repo, ['commit', '--quiet', '-am', 'configure approver, the bug machine and the fake agent']);
+  git(repo, ['commit', '--quiet', '-am', 'configure approver, the bug machine, the fake agent and two workflows']);
 
   step(repo, 'memory', 'add', '--type', 'task', '--title', 'Submit me');
   step(repo, 'memory', 'add', '--type', 'task', '--title', 'Approve me');
@@ -113,6 +122,7 @@ function buildFixture(): string {
   step(repo, 'memory', 'approve', 'task-005-amend-me', '--reason', 'scope agreed');
   step(repo, 'directive', 'create', '--name', 'remove-me');
   step(repo, 'dna', 'add', 'modules', '--value', 'api');
+  step(repo, 'workflow', 'start', 'finished');
   if (gitOut(repo, ['status', '--porcelain']) !== '') throw new Error('fixture bug: the fixture left the tree dirty');
   return repo;
 }
@@ -129,6 +139,11 @@ interface Row {
    * the fake agent and makes the planned commit (task-228).
    */
   readonly launch?: true;
+  /**
+   * The commits the real run makes (default 1). `workflow start` (task-217) makes two, `add` then `submit`;
+   * its dry run stops at the first, so the plan is compared with that one (spec-008 §2).
+   */
+  readonly commits?: number;
 }
 
 /** Keyed by the operation's camelCase registry name; the completeness test holds the keys to the registry. */
@@ -147,6 +162,8 @@ const ROWS: Readonly<Record<string, Row>> = {
   directiveCreate: { args: ['directive', 'create', '--name', 'dry-rule'] },
   directiveAssign: { args: ['directive', 'assign', '--directive', 'traceability', '--role', 'qa'] },
   directiveRemove: { args: ['directive', 'remove', 'remove-me'] },
+  workflowStart: { args: ['workflow', 'start', 'quick'], commits: 2 },
+  workflowEnd: { args: ['workflow', 'end', 'finished'] },
   // Last: its preparation leaves a modified document in the tree for the rows after it.
   memoryAmend: {
     args: ['memory', 'amend', 'task-005-amend-me', '--reason', 'Corrected the scope paragraph.'],
@@ -197,7 +214,7 @@ describe('--dry-run on every mutating operation of the registry (task-210, dl-10
     // Measured, not assumed: the task's "28" and the batch notes' "34" both counted
     // `grep -c "mutates: true" src/core/index.ts`, which also matches comment lines.
     expect(Object.keys(ROWS).sort()).toEqual(mutatingOperations());
-    expect(mutatingOperations()).toHaveLength(15);
+    expect(mutatingOperations()).toHaveLength(17);
   });
 
   it.each(Object.entries(ROWS))('%s: plans the commit, writes nothing, and the real run makes that commit', (_name, row) => {
@@ -232,11 +249,13 @@ describe('--dry-run on every mutating operation of the registry (task-210, dl-10
     const head = gitOut(repo, ['rev-parse', 'HEAD']);
     const real = wingfoil(repo, [...row.args, '--format', 'json']);
     expect(real.status).toBe(0);
-    expect(gitOut(repo, ['rev-parse', 'HEAD~1'])).toBe(head);
-    expect(gitOut(repo, ['log', '-1', '--format=%s'])).toBe(plan.subject);
-    expect(gitOut(repo, ['log', '-1', '--format=%B'])).toBe(plan.message.trim());
-    expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD']).split('\n')).toEqual(plan.paths);
-    const shown = git(repo, ['show', '--format=', '--no-color', '--no-ext-diff', '--unified=3', '--diff-algorithm=myers', 'HEAD']);
+    const commits = row.commits ?? 1;
+    expect(gitOut(repo, ['rev-parse', `HEAD~${commits}`])).toBe(head);
+    const first = `HEAD~${commits - 1}`;
+    expect(gitOut(repo, ['log', '-1', '--format=%s', first])).toBe(plan.subject);
+    expect(gitOut(repo, ['log', '-1', '--format=%B', first])).toBe(plan.message.trim());
+    expect(gitOut(repo, ['show', '--name-only', '--format=', first]).split('\n')).toEqual(plan.paths);
+    const shown = git(repo, ['show', '--format=', '--no-color', '--no-ext-diff', '--unified=3', '--diff-algorithm=myers', first]);
     expect(hunkLines(plan.diff)).toEqual(hunkLines(shown));
   });
 });

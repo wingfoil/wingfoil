@@ -50,11 +50,15 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memorySearch',
       'memory.memorySubmit',
       'paths.paths',
+      // task-217 (`spec-017` §7.2): mutating.
+      'workflow.workflowEnd',
       'workflow.workflowList',
       // task-216 (`spec-017` §7.3): read-only.
       'workflow.workflowNext',
       // task-204 (`spec-017` §7.6): read-only.
       'workflow.workflowShow',
+      // task-217 (`spec-017` §7.1): mutating.
+      'workflow.workflowStart',
     ]);
   });
 
@@ -76,6 +80,9 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memoryPark',
       'memory.memoryReject',
       'memory.memorySubmit',
+      // task-217 (`spec-017` §7.1–§7.2): a Tool only through the mechanical registrar (v0.4, P5.2.3).
+      'workflow.workflowEnd',
+      'workflow.workflowStart',
     ]);
   });
 });

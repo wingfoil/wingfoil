@@ -59,6 +59,14 @@ const MALFORMED: readonly (readonly [string, Record<string, unknown>])[] = [
 
 const MUTATING = enumerateOperations(CORE_MODULES).filter(({ operation }) => operation.mutates);
 
+/**
+ * Mutating operations that take no required operand, so no argument set here is malformed for them:
+ * `workflow end [<ref>]` (task-217, `spec-017` §7.2) acts on the active instance when given nothing. Its
+ * surplus operand is refused by the registrar, before any read (`spec-008` §1). They are still swept: any
+ * usage error they did throw would have to be identity-independent.
+ */
+const NOTHING_REQUIRED: ReadonlySet<string> = new Set(['workflow.workflowEnd']);
+
 describe('usage errors do not depend on the git identity (task-125, bug-172)', () => {
   let withIdentity: string;
   let withoutIdentity: string;
@@ -95,7 +103,7 @@ describe('usage errors do not depend on the git identity (task-125, bug-172)', (
 
   it.each(MUTATING.map(({ module, operation }) => [`${module.name}.${operation.name}`, operation.fn] as const))(
     '%s refuses a malformed invocation with the same usage error with and without a git identity',
-    async (_label, fn) => {
+    async (label, fn) => {
       let usageErrorsSeen = 0;
       for (const [, params] of MALFORMED) {
         const expected = await usageOutcome(fn as CoreFn<unknown, unknown>, { root: withIdentity, ...params });
@@ -103,8 +111,9 @@ describe('usage errors do not depend on the git identity (task-125, bug-172)', (
         usageErrorsSeen += 1;
         await expect(usageOutcome(fn as CoreFn<unknown, unknown>, { root: withoutIdentity, ...params })).resolves.toBe(expected);
       }
-      // Every mutating verb requires something, so the empty set alone must produce a usage error.
-      expect(usageErrorsSeen).toBeGreaterThan(0);
+      // Every other mutating verb requires something, so the empty set alone must produce a usage error.
+      if (NOTHING_REQUIRED.has(label)) expect(usageErrorsSeen).toBe(0);
+      else expect(usageErrorsSeen).toBeGreaterThan(0);
     },
   );
 });

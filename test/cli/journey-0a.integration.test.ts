@@ -123,15 +123,14 @@ describe('Journey 0a (v0.1-scoped slice) — real CLI, fresh throwaway project (
     expect(show.stderr).toBe('');
   });
 
-  it('known gap (out of v0.1 scope, not a release blocker): `wingfoil workflow start`/`wingfoil agent execute` are not implemented — Journey 0a step 3 / Journey 1 steps 2-4', () => {
+  it('Journey 0a step 3 — `wingfoil workflow start <workflow>` starts the kickoff workflow (task-217); `agent execute --next` is still a known gap (Journey 1 steps 2-4)', () => {
     expect(runCliInRoot(repo, 'init', '--template', 'Scrum').status).toBe(0);
 
-    // Exit 2, not 1: an unknown command is a USAGE error under spec-005 §1, and since
-    // task-101-route-commander-parse-errors-through-the-exit-code-contract (`bug-098`) Commander's own
-    // parse errors are routed through that contract instead of ending at Commander's suggested 1.
-    const workflowStart = runCliInRoot(repo, 'workflow', 'start', '--name', 'Scrum');
-    expect(workflowStart.status).toBe(2);
-    expect(workflowStart.stderr).toContain("unknown command 'start'");
+    // task-217 ships `workflow start` with the positional `<workflow>` (no `--name`, spec-017 §7): the
+    // fresh project's `memory.yaml` declares `plan`, so the instance is recorded with no edit.
+    const workflowStart = runCliInRoot(repo, 'workflow', 'start', 'sw-life-cycle');
+    expect([workflowStart.status, workflowStart.stderr]).toEqual([0, '']);
+    expect(workflowStart.stdout).toContain('started sw-life-cycle as sw-life-cycle-1-plan (active)');
 
     // task-218 ships `agent execute --element`; its step form `--next` is task-235's, so it is still
     // an unknown option (usage error), and the launch itself is task-228's.

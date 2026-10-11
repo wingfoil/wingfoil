@@ -213,6 +213,33 @@ export function nextSequenceNumber(root: string, pathPattern: string, idPattern:
   return highestSequenceNumber(sequenceCandidatePaths(root, prefix), pathPattern, idPattern) + 1;
 }
 
+/**
+ * Which ids of a type with `path` pattern `pathPattern` exist on any baseline a number can be taken on —
+ * the ones {@link nextSequenceNumber} reads (every local branch, remote-tracking ref, `HEAD`, the index and
+ * the untracked working-tree files; `dl-101` §2 (a)) — in any folder the pattern resolves to: every token
+ * other than `{id}` matches one or more path segments. The paths are listed once; the returned predicate
+ * answers for any id. `workflow start` asks it of a derived or `--set phase=` plan id (`spec-017` §7.1,
+ * task-217): ids are unique per type, so a plan held by another branch, or under another `{scope}`,
+ * occupies its id.
+ *
+ * @throws {@link StorageError} `E_GIT_READ_FAILED` when a git read fails.
+ */
+export function idOccupancy(root: string, pathPattern: string): (id: string) => boolean {
+  const paths = sequenceCandidatePaths(root, literalPrefix(pathPattern));
+  return (id: string): boolean => {
+    let source = '^';
+    let last = 0;
+    for (const match of pathPattern.matchAll(TOKEN_RE)) {
+      const index = match.index as number;
+      source += escapeRegExp(pathPattern.slice(last, index));
+      source += match[1] === 'id' ? escapeRegExp(id) : PATH_TOKEN_SOURCE;
+      last = index + match[0].length;
+    }
+    const re = new RegExp(`${source}${escapeRegExp(pathPattern.slice(last))}$`);
+    return paths.some((path) => re.test(path));
+  };
+}
+
 /** The fields `memory.add` pins on the freshly-created document (P1.3 memory.add / spec-010). */
 export interface AddDocumentFields {
   readonly id: string;

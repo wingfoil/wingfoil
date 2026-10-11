@@ -197,8 +197,8 @@ for cell):
 
 | function          | module                  | mutates | CLI                          | MCP                                          | feature |
 |--------------------|--------------------------|---------|-------------------------------|-----------------------------------------------|---------|
-| `workflowStart`    | `workflow` *(planned)*   | true    | `wingfoil workflow start`     | Tool `workflow.start` *(v0.4, P5.2.3)*        | P4.2    |
-| `workflowEnd`      | `workflow` *(planned)*   | true    | `wingfoil workflow end`       | Tool `workflow.end` *(v0.4)*                  | P4.3    |
+| `workflowStart`    | `workflow`                 | true    | `wingfoil workflow start`     | Tool `workflow.start` *(v0.4, P5.2.3)*        | P4.2    |
+| `workflowEnd`      | `workflow`                 | true    | `wingfoil workflow end`       | Tool `workflow.end` *(v0.4)*                  | P4.3    |
 | `workflowNext`     | `workflow`               | false   | `wingfoil workflow next`      | Resource `wingfoil://workflows/-/next` (the active instance) — v0.3, ruling R12 | P4.4    |
 | `workflowStatus`   | `workflow` *(planned)*   | false   | `wingfoil workflow status`    | Resource `wingfoil://workflows/-/status` — v0.3, ruling R12 | P4.5    |
 | `workflowFinalize` | `workflow` *(planned)*   | true    | `wingfoil workflow finalize`  | Tool `workflow.finalize` *(v0.4)*             | ruling R11 (`dl-104` D1) |
@@ -854,3 +854,10 @@ a tip's copy only when that ref changed the element's `status` since its merge-b
 counter, as a read wider than `HEAD` that `command-baseline` 1.5 declares. No operation, result shape
 or exit code changes. Edited in place without a supersede or a state change (`dl-047`); pending the
 approver's `memory amend` at `task-274`'s review.
+
+**Revision (2026-10-10, `task-217-add-workflow-start-workflow-end-recording-instance-plan`) — §3's
+`workflowStart` and `workflowEnd` rows ship.** `task-217` registers both in `CORE_MODULES` (`mutates: true`,
+`wingfoil workflow start` / `wingfoil workflow end`), so the two rows lose their planned marker. Their MCP
+Tools stay v0.4 (P5.2.3): the production server serves no Tool. No other row changes. Edited in place
+without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-217`'s
+review.

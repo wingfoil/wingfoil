@@ -25,7 +25,7 @@ import { DirectiveFrontmatter } from '../../src/directives/schema';
 import { DnaYaml } from '../../src/dna/schema';
 import { loadDnaYaml } from '../../src/core/loaders';
 import { MemoryYaml } from '../../src/memory/schema';
-import { DEPRECATED_STATE, resolveStateMachine, resolveTypeTransition } from '../../src/memory/state-machine';
+import { DEPRECATED_STATE, resolveStateMachine, resolveTypeTransition, resolveWaitingTarget } from '../../src/memory/state-machine';
 
 function pathsOf(files: readonly ScaffoldFile[]): string[] {
   return files.map((f) => f.path);
@@ -94,7 +94,7 @@ describe('templateScaffold — complete spec-011 layout (P5.1.1 AC (a))', () => 
 
   it('creates one memory template scaffold per Memory element type (spec-011)', () => {
     const paths = pathsOf(templateScaffold(scrum));
-    for (const type of ['adr', 'bug', 'decision-log', 'release', 'release-line', 'task', 'tech-spec']) {
+    for (const type of ['adr', 'bug', 'decision-log', 'plan', 'release', 'release-line', 'task', 'tech-spec']) {
       expect(paths).toContain(`.wingfoil/memory/templates/${type}.md`);
     }
   });
@@ -240,7 +240,8 @@ describe('scaffolded memory.yaml resolves a state machine for every declared typ
       // submit/approve/reject/deprecate each resolve a target for every scaffolded type, so no verb
       // can fail on state-machine resolution in a freshly-`init`-ed project.
       const parsed = MemoryYaml.parse(loadYaml(scaffoldedMemoryYaml(def)));
-      for (const type of Object.keys(parsed.types).sort()) {
+      // `plan` (task-217, spec-017 §3.1) has its own machine, pinned in the next test.
+      for (const type of Object.keys(parsed.types).filter((t) => t !== 'plan').sort()) {
         const machine = resolveStateMachine(parsed, type);
         const head = machine.sequence[0]!;
         // `memory add` writes `status: draft`; the chain head must be that state for the verbs to apply.
@@ -251,6 +252,16 @@ describe('scaffolded memory.yaml resolves a state machine for every declared typ
         expect([type, resolveTypeTransition(parsed, type, afterSubmit, 'reject')]).toEqual([type, 'draft']);
         expect([type, resolveTypeTransition(parsed, type, head, 'deprecate')]).toEqual([type, DEPRECATED_STATE]);
       }
+    });
+
+    it(`${def.name}: the scaffolded \`plan\` type runs draft -> active (submit) -> done (its waiting edge, workflow end) (task-217)`, () => {
+      const parsed = MemoryYaml.parse(loadYaml(scaffoldedMemoryYaml(def)));
+      expect(parsed.types['plan']).toMatchObject({ path: 'docs/memory/plan/{scope}/{id}.md', id_pattern: '{workflow}-{phase}-plan' });
+      expect(parsed.types['plan']!.template!.frontmatter!.required).toEqual(['id', 'type', 'title', 'status', 'workflow', 'phase']);
+      expect(resolveTypeTransition(parsed, 'plan', 'draft', 'submit')).toBe('active');
+      expect(resolveWaitingTarget(parsed, 'plan', 'active', '')).toBe('done');
+      const template = templateScaffold(def).find((f) => f.path === '.wingfoil/memory/templates/plan.md')!.content;
+      for (const field of ['workflow', 'phase', 'element', 'parent']) expect(template).toMatch(new RegExp(`^${field}: ""$`, 'm'));
     });
   }
 });
@@ -312,7 +323,7 @@ describe('scaffolded memory.yaml carries a commented per-type `states:` example 
         expect([state, resolveTypeTransition(parsed, 'bug', state, op)]).toEqual([state, next]);
         state = next;
       }
-      for (const type of Object.keys(parsed.types).filter((t) => t !== 'bug')) {
+      for (const type of Object.keys(parsed.types).filter((t) => t !== 'bug' && t !== 'plan')) {
         expect([type, resolveStateMachine(parsed, type)]).toEqual([type, parsed.defaults!.states]);
       }
     });

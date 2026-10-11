@@ -179,7 +179,7 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
       });
     });
 
-    it.each(SMOKE_TEMPLATES)('[%s] a fresh init declares one machine shape, `defaults`, so one task per verb covers it', (template) => {
+    it.each(SMOKE_TEMPLATES)('[%s] a fresh init declares one machine shape for the verbs, `defaults`, so one task per verb covers it', (template) => {
       const repo = mkdtempSync(join(tmpdir(), 'wf-smoke-shape-'));
       try {
         const env = { ...process.env, GIT_AUTHOR_NAME: 'S', GIT_AUTHOR_EMAIL: 's@s.invalid', GIT_COMMITTER_NAME: 'S', GIT_COMMITTER_EMAIL: 's@s.invalid' };
@@ -191,7 +191,11 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
           types: Record<string, { states?: unknown }>;
         };
         expect(memory.defaults.states).toEqual({ sequence: ['draft', 'pending', 'approved'], gates: { pending: { reject: 'draft' } } });
-        expect(Object.entries(memory.types).filter(([, t]) => t.states !== undefined)).toEqual([]);
+        // `plan` (task-217) has its own machine, `draft → active → done`: `workflow start` / `end` drive it,
+        // not the transition verbs this scenario runs, so it is the one declared exception.
+        expect(Object.entries(memory.types).filter(([, t]) => t.states !== undefined)).toEqual([
+          ['plan', expect.objectContaining({ states: { sequence: ['draft', 'active', 'done'], waiting: ['active'] } })],
+        ]);
         expect(Object.keys(memory.types)).toContain('task');
       } finally {
         rmSync(repo, { recursive: true, force: true });

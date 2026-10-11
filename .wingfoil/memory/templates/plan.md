@@ -7,8 +7,9 @@ version: ""            # optional — plan version
 workflow: ""           # REQUIRED — the workflow this plan executes, e.g. "dev-loop"
 phase: ""              # REQUIRED — the phase/scope this plan covers, e.g. "rel-v0.1" or "retrospective"
 element: ""            # optional — the Memory element this phase iterates (e.g. a release id)
+parent: ""             # optional — empty for a started workflow (an instance, `wingfoil workflow start`); "<workflow>.<phase>" for the plan of one phase (spec-017 §3.1)
 release: ""            # optional — target release, e.g. "v0.1"
-tmpl_version: 261007   # Orignal template version
+tmpl_version: 261010   # Orignal template version
 ---
 
 <!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any

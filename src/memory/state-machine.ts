@@ -421,6 +421,38 @@ export function resolveSupersedeTarget(
 }
 
 /**
+ * The target of the forward `waiting` edge out of `currentState` for a document of type `typeName` — the
+ * next `sequence` entry after a state listed in `waiting`, which no verb drives and a workflow action fires
+ * (`spec-001`). `workflow end` takes it to close a plan, `active → done` (task-217, `spec-017` §7.2): the
+ * commit is `wf(plan): finalize <id> [active → done]` (`spec-008` §2's `finalize` row). A `superseded`
+ * target is not this edge's: it is the `supersedes:` trigger's ({@link resolveSupersedeTarget}).
+ *
+ * @throws {@link ../validation.ValidationError} `E_INVALID_TRANSITION` with `dl-032`'s contract message,
+ *   `illegal transition <from> -> (none) for type '<type>'` (`dl-154`), when `currentState` has no such edge.
+ * @throws `Error` when `typeName` is not registered (see {@link resolveStateMachine}).
+ */
+export function resolveWaitingTarget(
+  memoryYaml: MemoryYaml,
+  typeName: string,
+  currentState: string,
+  filePath: string,
+): string {
+  const machine = resolveStateMachine(memoryYaml, typeName);
+  const index = machine.sequence.indexOf(currentState);
+  const next = index === -1 ? undefined : machine.sequence[index + 1];
+  if ((machine.waiting ?? []).includes(currentState) && next !== undefined && next !== SUPERSEDED_STATE) return next;
+  throw new ValidationError([
+    {
+      code: E_INVALID_TRANSITION,
+      path: 'status',
+      file: filePath,
+      message: `illegal transition ${currentState} -> ${NO_TARGET} for type '${typeName}'`,
+      detail: `only a \`waiting\` state followed by another \`sequence\` state can be finalized (spec-001); '${currentState}' is not one`,
+    },
+  ]);
+}
+
+/**
  * True when `from → to` is an edge of `machine`, whichever verb or engine action drives it — the
  * question a hop of a chained transition bracket asks (`[a → b → c]`, `task-126`, `bug-155`), where
  * the commit names states and no verb per hop. The edges are exactly the targets

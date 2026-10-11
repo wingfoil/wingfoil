@@ -77,6 +77,16 @@ import {
 } from './loaders';
 import { workflowListAtHead, workflowShowAtHead, type ListResult, type ShowResult } from './workflow-list-show';
 import { renderNextConsole, workflowNextAtHead, type NextResult } from './workflow-next';
+import {
+  renderEndConsole,
+  renderStartConsole,
+  workflowEnd,
+  workflowStart,
+  type EndResult,
+  type StartResult,
+  type WorkflowEndParams,
+  type WorkflowStartParams,
+} from './workflow-start-end';
 import { loadDirectiveListing, type DirectiveListing } from './directives-list';
 import { selectDirectivesById } from './context';
 import { checkAssignable, checkUnreferenced, updateRoleAssignments } from './directive-assign';
@@ -144,6 +154,9 @@ export type { CheckTokenView, ListEntry, ListResult, PhaseView, ShowInputs, Show
 // (task-225) reuse.
 export { buildStep, nextWorkflow, renderNextConsole } from './workflow-next';
 export type { ActionView, Awaiting, CadenceView, CheckView, Member, NextInputs, NextOptions, NextResult, Step, StepBinding } from './workflow-next';
+// task-217: `CORE_MODULES`' `workflowStart` / `workflowEnd` (`spec-017` §7.1–§7.2) and their values.
+export { NO_ACTIVE_WORKFLOW_MESSAGE, NO_PLAN_TYPE_MESSAGE, renderEndConsole, renderStartConsole } from './workflow-start-end';
+export type { EndResult, StartResult, StartVerbs, WorkflowEndParams, WorkflowStartParams } from './workflow-start-end';
 export { W_WORKFLOW_CHECKS_NOT_RUN, workflowCoreDiagnostics } from './workflow-core-checks';
 export type { CheckedRegistry, WorkflowCoreInputs } from './workflow-core-checks';
 export { iterationStartState, machineStates, workflowExitStates } from './workflow-exit-state';
@@ -791,6 +804,12 @@ const DNA_ENTRY_OPTIONS: readonly CoreOption[] = dnaEntryOptionNames().map((fiel
 export interface MemoryAddParams {
   readonly root: string;
   readonly options?: Readonly<Record<string, string | readonly string[]>>;
+  /**
+   * Frontmatter fields written as given, after the `--set` ones and sorted by name — for a core caller only:
+   * `workflow start` records the plan's `element` through it (task-217, `spec-017` §7.1), a field that is no
+   * token. The CLI and MCP never populate it, so no command line can.
+   */
+  readonly fields?: Readonly<Record<string, string>>;
 }
 
 /** A single-valued option of {@link MemoryAddParams.options}: a repeated occurrence keeps the last. */
@@ -844,7 +863,7 @@ function singleOption(options: MemoryAddParams['options'], name: string): string
  * only exit-2 path and are thrown before this try.
  */
 const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params) => {
-  const { root, options } = params as MemoryAddParams;
+  const { root, options, fields: extraFields } = params as MemoryAddParams;
 
   const type = singleOption(options, 'type');
   if (type === undefined) throw new UsageError('missing required argument: --type');
@@ -884,7 +903,10 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
       ? nextSequenceNumber(root, pathPattern, materialized)
       : 0;
     const id = generateId(materialized, { slug: slugifyTitle(title), n: sequence });
-    const content = renderAddDocument(scaffold, { id, title, tags, fields: writtenFields(scaffold, set.values), status: initialState });
+    const extra = Object.keys(extraFields ?? {})
+      .sort()
+      .map((name): [string, string] => [name, extraFields![name]!]);
+    const content = renderAddDocument(scaffold, { id, title, tags, fields: [...writtenFields(scaffold, set.values), ...extra], status: initialState });
     const pathValues = { ...set.values, id };
     const message = `wf(${type}): add ${id}`;
 
@@ -2225,6 +2247,27 @@ const workflowNextFn: CoreFn<unknown, NextResult> = async (params) => {
 };
 
 /**
+ * `workflowStart` / `workflowEnd` `CoreOperation.fn`s (P4.2, P4.3; `spec-017` §7.1–§7.2; task-217): the two
+ * operations of `./workflow-start-end`, with `start` writing through this registry's own `memoryAdd` and
+ * `memorySubmit`. A `spec-003` error at `HEAD` (or a token value outside the id class) is `VALIDATION`,
+ * exit 1, as every workflow operation maps it ({@link coreErrorOf}).
+ */
+async function refusalOf<T>(run: () => Promise<CoreResult<T>>): Promise<CoreResult<T>> {
+  try {
+    return await run();
+  } catch (error) {
+    const refusal = coreErrorOf(error);
+    if (refusal === null) throw error;
+    return coreErr(refusal);
+  }
+}
+
+const workflowStartFn: CoreFn<unknown, StartResult> = (params) =>
+  refusalOf(() => workflowStart(params as WorkflowStartParams, { add: memoryAddFn, submit: memorySubmitFn }));
+
+const workflowEndFn: CoreFn<unknown, EndResult> = (params) => refusalOf(() => workflowEnd(params as WorkflowEndParams));
+
+/**
  * The production `CoreModule` registry (spec-006 §2, §4). `src/cli`'s command registrar and
  * `src/mcp`'s Tool/Resource registrar both import this exact array — see spec-006 §4.1: "no
  * duplicated or hand-copied operation list in either surface module".
@@ -2541,7 +2584,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
   },
   {
     name: 'workflow',
-    description: 'read the workflows the project declares (there is no workflow engine yet)',
+    description: 'start and end workflows, and read the workflows the project declares (no step is executed yet)',
     operations: {
       // task-204 (`spec-017` §7.5–§7.6, §8): both read `HEAD`, a declared exception (§1.1, ruling R15;
       // `spec-006` §6 item 6), from the snapshot and deduction `workflow next` / `status` answer from. A
@@ -2569,6 +2612,38 @@ export const CORE_MODULES: readonly CoreModule[] = [
         example: 'wingfoil workflow next --assigned-to me',
         fn: workflowNextFn,
         renderConsole: renderNextConsole as (value: unknown) => string,
+      },
+      // task-217 (`spec-017` §7.1–§7.2): both decide at `HEAD` (§1.1 item 1, gating). `start` records the
+      // instance as a `plan` element in two commits (`wf(plan): add`, `wf(plan): submit`); `end` closes it
+      // with `wf(plan): finalize <id> [active → done]`. The MCP Tools `workflow.start` / `workflow.end` are
+      // v0.4 (P5.2.3); the production server serves no Tool.
+      workflowStart: {
+        name: 'workflowStart',
+        mutates: true,
+        description: 'start a workflow: record it as an active plan element and print its first step',
+        positional: { name: 'name', required: true, description: 'the startable workflow to start' },
+        options: [
+          { name: 'element', valueName: 'type:id', description: 'the element the workflow runs on, when it declares one (default: the active workflow\'s element of that type)' },
+          { name: 'title', valueName: 'title', description: "the plan's title (default: '<workflow> — <phase>')" },
+          {
+            name: 'set',
+            repeatable: true,
+            valueName: 'name=value',
+            description: "override a derived plan token: phase=<v> (default: the element's id, else 1) or scope=<v> (default: the workflow name)",
+          },
+        ],
+        example: 'wingfoil workflow start release-cycle --element release:minor-v1',
+        fn: workflowStartFn,
+        renderConsole: renderStartConsole as (value: unknown) => string,
+      },
+      workflowEnd: {
+        name: 'workflowEnd',
+        mutates: true,
+        description: 'end a complete workflow: move its plan element to done; the previous open workflow becomes active',
+        positional: { name: 'ref', description: 'a workflow name or an open workflow instance id (default: the active instance)' },
+        example: 'wingfoil workflow end',
+        fn: workflowEndFn,
+        renderConsole: renderEndConsole as (value: unknown) => string,
       },
       workflowShow: {
         name: 'workflowShow',

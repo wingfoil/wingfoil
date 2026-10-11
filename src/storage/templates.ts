@@ -189,8 +189,12 @@ export function builtinTemplateSources(files: readonly ScaffoldFile[]): BuiltinT
 
 const wf = (relative: string): string => `${WINGFOIL_DIR}/${relative}`;
 
-/** The Memory element types spec-011 requires a template scaffold for, in fixed order. */
-const MEMORY_TYPES = ['adr', 'bug', 'decision-log', 'release', 'release-line', 'task', 'tech-spec'] as const;
+/**
+ * The Memory element types spec-011 requires a template scaffold for, in fixed order — plus `plan`, the
+ * record of a started workflow (`spec-017` §3.1, task-217): `wingfoil workflow start` adds and submits one,
+ * so a project `init` creates can start a workflow with no edit.
+ */
+const MEMORY_TYPES = ['adr', 'bug', 'decision-log', 'plan', 'release', 'release-line', 'task', 'tech-spec'] as const;
 
 /**
  * Default `id_pattern` per scaffolded type (task-002-validation-id-engine's `{n}`/`{slug}` token
@@ -212,6 +216,7 @@ const MEMORY_AMENDABLE: Readonly<Record<(typeof MEMORY_TYPES)[number], boolean>>
   adr: true,
   bug: true,
   'decision-log': true,
+  plan: true,
   release: false,
   'release-line': false,
   task: true,
@@ -222,6 +227,7 @@ const MEMORY_ID_PATTERNS: Readonly<Record<(typeof MEMORY_TYPES)[number], string>
   adr: 'adr-{n}-{slug}',
   bug: 'bug-{n}-{slug}',
   'decision-log': 'dl-{n}-{slug}',
+  plan: '{workflow}-{phase}-plan',
   release: 'release-{n}',
   'release-line': 'rl-{n}',
   task: 'task-{n}-{slug}',
@@ -326,6 +332,26 @@ const BUG_STATES_EXAMPLE = `
     #   limits: { in-progress: 3 }        # at most 3 bugs in progress at once`;
 
 /**
+ * The scaffolded `plan` type (`spec-017` §3.1, task-217): the record `wingfoil workflow start` writes for a
+ * started workflow. Its `id_pattern` and `path` take the tokens `workflow start` derives (`{workflow}`,
+ * `{phase}`, `{scope}`, ruling R18); its own machine is `draft → active → done`, with `active` a `waiting`
+ * state: `workflow start` submits the plan (`draft → active`) and `workflow end` takes the `waiting` edge
+ * (`active → done`), which no verb drives.
+ */
+const PLAN_TYPE_YAML = `  plan:
+    path: docs/memory/plan/{scope}/{id}.md
+    id_pattern: "${MEMORY_ID_PATTERNS.plan}"
+    amendable: ${MEMORY_AMENDABLE.plan}
+    template:
+      file: memory/templates/plan.md
+      frontmatter:
+        required: [id, type, title, status, workflow, phase]
+    # A started workflow: \`wingfoil workflow start\` adds and submits it, \`wingfoil workflow end\` closes it.
+    states:
+      sequence: [ draft, active, done ]
+      waiting: [ active ]`;
+
+/**
  * The scaffolded `memory.yaml` (P1.13, `spec-001-memory-yaml-schema`) — type registry **plus** the
  * `defaults.states` machine every scaffolded type runs on.
  *
@@ -341,8 +367,10 @@ const BUG_STATES_EXAMPLE = `
  * be a product decision beyond this scaffold.
  */
 function memoryYaml(): string {
-  const types = MEMORY_TYPES.map(
-    (type) => `  ${type}:
+  const types = MEMORY_TYPES.map((type) =>
+    type === 'plan'
+      ? PLAN_TYPE_YAML
+      : `  ${type}:
     path: docs/memory/${type}/{id}.md
     id_pattern: "${MEMORY_ID_PATTERNS[type]}"
     amendable: ${MEMORY_AMENDABLE[type]}
@@ -501,6 +529,18 @@ function supersedesNote(type: string): string {
 }
 
 /**
+ * The fields of the scaffolded `plan` template beyond the common four (`spec-017` §3.1, task-217):
+ * `workflow` and `phase` (required, filled by `workflow start`), the `element` the instance is bound to (or
+ * its context element), and `parent`, empty for an instance — a plan whose `parent` names
+ * `<workflow>.<phase>` is a phase plan, never an instance.
+ */
+const PLAN_TEMPLATE_FIELDS = `workflow: ""
+phase: ""
+element: ""
+parent: ""
+`;
+
+/**
  * One scaffolded Memory template. Its body comment states what the two verbs that touch it actually
  * do (task-209, `bug-146`): `memory add` sets `id`, `title`, `status` and any `--tags` / `--set` value
  * (`renderAddDocument`, `src/memory/add.ts`), and `memory submit` checks the required fields, moves
@@ -513,7 +553,7 @@ id: ""
 type: ${type}
 title: ""
 status: draft
-format: ${MEMORY_TEMPLATE_FORMAT}
+${type === 'plan' ? PLAN_TEMPLATE_FIELDS : ''}format: ${MEMORY_TEMPLATE_FORMAT}
 ---
 
 <!-- ${type} body. \`wingfoil memory add\` copies this scaffold, setting only \`id\`, \`title\` and
