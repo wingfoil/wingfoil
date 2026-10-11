@@ -114,6 +114,13 @@ that it is fixed in v0.3 before branch protection makes the check binding (`git-
 - `d8f504fd` — a fixture error in the red rename case, found at green: `git mv` into a folder that did not exist
   (`fatal: renaming … failed: No such file or directory`). The fixture creates the folder; the assertion is
   unchanged. Recorded here because it is an edit to red's file after red.
+- **This was a `testing` T4 return to red** (a test found wrong goes back to red), not a green-phase edit:
+  `git log --first-parent --no-merges --format='%h %s' c9ba836b..HEAD -- test/memory/audit-parent-state.test.ts
+  test/memory/history-parent-path.test.ts test/cli/check-governance-parent-state.test.ts` is not empty, it prints
+  `d8f504fd test(memory): task-278 — correct the rename fixture: create the destination folder before git mv`
+  (and nothing else). Red stayed genuine after it: on a detached worktree at `d8f504fd` (its `src` is still the
+  pre-fix code), `npx jest --maxWorkers=2` over the three red suites → `Tests: 10 failed, 2 passed, 12 total`, and
+  the rename case now fails on its assertion (`parentPath` `undefined` where `null` is expected), not on the fixture.
 
 ### green (developer)
 
@@ -135,7 +142,9 @@ that it is fixed in v0.3 before branch protection makes the check binding (`git-
   generic over the entry type), so `reconstructMemoryTransitions` has no fallback arm left; the strict read throws
   on the commit's revision or its parent's alike (`read.unreadable ?? before.unreadable`).
   `test/memory/audit-parent-unreadable.test.ts` (2 tests): an unreadable parent revision gives `fromState: null`
-  tolerantly and throws strictly, also when the date-ordered walk lists the child first.
+  tolerantly and throws strictly. (Correction, review fixes 2026-10-11: this line first said the strict case
+  covered a walk that lists the child before the unreadable parent; it did not — a `git log` walk never lists a
+  commit before its parent, so the strict test threw on the broken commit's own read. See below.)
 - Main moved during the task (`30b268a3` → `c9438481`, one merge of two Memory documents of `dl-170`:
   `git diff --stat 30b268a3 c9438481` → 2 files under `docs/04_memory/` and `docs/05_plans/`). Not merged: the batch
   notes reserve merging main to the coordinator, and nothing it carries touches this task's files.
@@ -194,6 +203,33 @@ that it is fixed in v0.3 before branch protection makes the check binding (`git-
   a from-state are `scripts/check-governance.cjs`'s `dl-139` and gone-at-HEAD reads, which already read
   `commit.parent` (`readBlobTexts` with `${commit.parent}:…`, lines 784 and 867).
 - Claims re-run: every command above was run on `04176e32` or, for "before" values, on `c9ba836b`'s build.
+
+### review fixes (2026-10-11, independent review: APPROVE WITH FIXES)
+
+- **F1** — `bug-308`'s Triage & Execution Notes gain a paragraph: the false negative the fix also removes, and the
+  13 corrected trail entries in 8 documents the review found by reconstructing all 900 Memory/plan documents before
+  and after (`devloop-kit/task-278-review/cmp.log`), with two examples re-checked here by `git show <sha>^1:<path>`
+  (`417e223f`: parent `in-review`; `901b3fb5`: parent `planned`) and `git merge-base --is-ancestor <sha> fcd43569`
+  (true for the eleven bug entries; false for `task-152`'s `d818c0dd`, `bee82b90`). A body edit of another Memory
+  element: left uncommitted as a pending amendment (below).
+- **F2** — the T4 disclosure under *red (qa)* above, with the command and the run at `d8f504fd`.
+- **F3** — `test/memory/audit-parent-unreadable.test.ts`'s strict case now proves the parent read is the one that
+  throws: the unreadable revision is written by a merge's conflict-style resolution (a commit `git log --follow` does
+  not list), so the only read that meets it is the next commit's `<sha>^1` read, and the test asserts the error names
+  `${DOC}@<fixed>^1`. The first attempt (only adding that assertion to the old fixture) failed — the error named the
+  broken commit's own revision — which showed the old strict case never exercised the parent read; the fixture was
+  rewritten. A strengthening of a test added after green, not a change to red's files.
+  Run: `npx jest test/memory/audit-parent-unreadable.test.ts test/memory/audit-parent-state.test.ts
+  test/memory/history-parent-path.test.ts test/cli/check-governance-parent-state.test.ts
+  test/storage/read-revision-paths.test.ts` → `Tests: 22 passed, 22 total`; `npx tsc --noEmit -p tsconfig.json` →
+  exit 0; `npx eslint test/memory/audit-parent-unreadable.test.ts` → no output. No `src` change, so no coverage run.
+
+### Pending amendments (approver)
+
+- `bug-308-the-governance-state-rule-takes-a-transition-s-from-state-from-the-previous-log-entry-not-the-commit-s-parent-so-non-linear-history-raises-false-positives`
+  (body only, status untouched) — proposed `--reason`: "Records what task-278's fix also corrected: the false
+  negative after a merge, and the 13 trail entries in 8 documents that the review's before/after reconstruction
+  found, each checked against the commit's first parent."
 
 ### Retrospective
 
