@@ -198,6 +198,9 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'wingfoil://workflow/next',
       // task-204's `workflow.workflowShow` (read-only); not served by the production server (spec-017 §9).
       'wingfoil://workflow/show',
+      // task-225's `workflow.workflowStatus` (read-only): the mechanical test-only Resource; the production
+      // `wingfoil://workflows/-/status` is a later task's (spec-017 §9).
+      'wingfoil://workflow/status',
     ]);
     // Every `mutates: true` operation is registered ONLY as a Tool (never a Resource), so none appears
     // above; the Tools list below is the mutating set the surface advertises.
