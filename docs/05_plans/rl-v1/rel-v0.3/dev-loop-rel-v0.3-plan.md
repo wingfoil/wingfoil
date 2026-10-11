@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.25"
+version: "1.26"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -78,7 +78,8 @@ Each task follows `dev-loop.yaml` (v1.4 at the opening; v1.5 from `task-205`, v1
   evaluates them:
   - `start`: no `kind: feature` task is picked up while the release's open `fix` tasks are strictly
     more than `max_share` percent of its open tasks (`memory.yaml` `task.stop_the_line`, `dl-133` §3
-    Q4 (i)); an open task is any task of the release that is not `done`. A fix task is never blocked.
+    Q4 (i)); which tasks are open is `memory.yaml` `task.stop_the_line.open`'s to say (it leaves out
+    `done` and `deprecated` since `task-275`). A fix task is never blocked.
   - `design`: each acceptance criterion is read against the executing role's directives and the
     ratified specs and decision-logs it touches; a contradiction goes to the approver (`dl-102` §4).
   - `refactor`: also `typecheck.clean`, `npm run typecheck` (`dl-044`).
@@ -203,8 +204,8 @@ and the tasks that unblock the most later work first (`task-194` → 37 later ta
 | **B2** | 264, 199, 198, 200, 261, 220, 223, 260 | `199` the only writer of `workflows.yaml`, first `bindings.yaml`; `223` of `memory.yaml` (if the approver confirms its branch patterns); `260` of `git-conventions.md`; `264` (added at the B1 triage) first, `199` keeps its check green; `261` → `220` (`00_index.md`) |
 | **B3** | 203, 202, 204, 207, 218, 213, 205, 214, 268 | `203` → `202` (deduction modules); `204` → `207` (`scripts/e2e-smoke.cjs`); `205` the only writer of `roles.yaml`, `testing.md` |
 | **B4** | 216, 228, 219, 222, 221, 212, 197, 208, 269, 270 | `222` → `221` (`bindings.yaml`); `219`, `222`, `212` (`WORKFLOW.md`); `222` writes `dna.yaml`, `212` `memory.yaml` and `workflows.yaml`, `197` `traceability.md`, `208` `code-review.md`, `git-conventions.md` |
-| **B5** | 225, 217, 226, 227, 235, 229, 231, 224, 271, 272, 274, 275, 276, 277, 278 | `217` and `275` both write `memory.yaml` (second re-bumps); `229` first of three writers of `publish.yml`; `276` the only writer of `git-conventions.md`, `code-review.md`, `roles.yaml`; `278` (`bug-308`) before branch protection |
-| **B6** | 211, 240, 239, 238, 232, 233, 230 | `232` → `233` (`scripts/release-health/`); `230` the only writer of `memory.yaml`; `238` after `229` |
+| **B5** | 225, 217, 226, 227, 235, 229, 231, 224, 271, 272, 274, 275, 276, 278 | `217` and `275` both write `memory.yaml` (second re-bumps); `229` first of three writers of `publish.yml`; `276` the only writer of `git-conventions.md`, `code-review.md`, `roles.yaml`; `278` (`bug-308`) before branch protection |
+| **B6** | 211, 240, 239, 238, 232, 233, 230, 277 | `232` → `233` (`scripts/release-health/`); `230` the only writer of `memory.yaml`; `238` after `229`; `277` after `230` (moved from B5) |
 | **B7** | 215, 236, 237, 243, 244, 241, 234 | `236` the only writer of `dna.yaml`; `244` last on `publish.yml` |
 | **B8** | 242, 245, 246 | `245` (`X_cli-cmds.md`) after every command task |
 | **B9** | 265, 266, 267 | `dl-159` (parallel release lines), added 2026-10-07; starts only once `dl-159` is `ready`; `publish.yml` 244 → 265 → 266, `ci.yml` 207 → 267 |
@@ -941,3 +942,39 @@ commit, right after the task's transition and on the task branch:
     consumer services `svc-018` (WingFoil-Templates), `svc-019` (WingFoil-UI), `svc-020` (WingFoil2-Benchmark), all
     `pending` until the approver runs `verify`.
   - W3 is now 72 tasks (68 + `275`–`278`).
+- **2026-10-11 — batch B5 `done`** (`task-278`, `275`, `276`, `274`, `217`, `226`, `227`, `225`, `235`, `271`, `272`,
+  `231`, `229`, `224`; `task-277` moved to B6, it depends on `task-230`).
+  - **Machine load.** On 2026-10-11 fourteen parallel full suites drove the load to 165; the batch was paused and
+    resumed under an interim rule, one heavy gate (full suite, coverage, build) at a time across all worktrees and
+    load ≤ 14, now `dl-170` (`in-discussion`). Busy loops from another project's session later held the load near
+    35 for about an hour; the rule kept the gates waiting rather than overlapping.
+  - **Review.** Every task had an independent review, all "approve with fixes", every fix applied in-task. Defects
+    found by review and fixed: `217`'s `workflow start` looped forever when the id pattern could not vary; `274`'s
+    "most advanced state wins" refused a submit on the trunk after a park while a stale branch held the old copy, and
+    cost about 140 ms per ref (now about 0.4 s on 40 refs); `225` offered `approve` on verb-less gate states (80 of
+    120 lines); `278`'s strict test never exercised the parent read; `275`'s notes tripped the secret scan; `235`'s
+    "one HEAD" claim was false in two calls; `229` lacked `dl-130` Action 2's post check and treated every npm failure
+    as "not live yet"; `231` pruned other worktrees on cleanup.
+  - **Approver rulings (2026-10-11):** `274` F1 option (a), a ref's copy counts only when that ref changed the
+    element's status since its merge-base with the decided commit (`dl-156` amended); `235` D1 option (a), BDD P5.3.2
+    sc. 3 takes the registry's `E_PHASE_ROLE_UNKNOWN` message; `225` AC 5 accepted with six approval phases (seven
+    before `task-199`); interim gate-concurrency rule (`dl-170`).
+  - **Amendments: 23** — `278`: bug-308; `275`: dl-133; `274`: spec-001, spec-008, spec-006, dl-156; `217`: spec-017,
+    spec-008, spec-006; `226`: spec-004, spec-006, spec-008, spec-017; `227`: spec-008, spec-017; `225`: spec-017,
+    spec-006; `235`: spec-008, spec-016; `271`: spec-010; `272`: spec-017, dl-163; `229`: spec-015; this plan (1.26,
+    the stop-the-line sentence after `task-275`). `276`, `231` and `224` had none.
+  - **Bugs closed:** bug-308.
+  - **Merges** on `gate/w3-b5`, in order 278 → 275 → 276 → 274 → 217 → 226 → 227 → 225 → 235 → 271 → 272 → 231 →
+    229 → 224 (last `5ccc2309`), then `main` fast-forwarded. Re-bumps: `memory.yaml` 2.9 → 3.0 → 3.1, `dev-loop.yaml`
+    1.7 → 1.8, `bindings.yaml` 1.7 → 1.8. Conflicts: spec Revision notes (both kept); spec-008 §11's committed-HEAD
+    row merged by hand (274, 217, 226, 235); `CORE_MODULES` and the rosters (union); `commit.ts` keeps `226`'s
+    `CommitOptions.trailers` (`227` wrote the same); `workflowStatusAtHead` reuses `226`'s `readNextInputs`. Gate
+    fixes: the dry-run fixture (`plan` now in the init scaffold), `journey-0a` (the first step has no element),
+    `de5ea121` (`229`'s test read a clock), `50e3d7df` (tests for `226`'s barrel re-exports and its evidence refusal).
+  - **Gates on `50e3d7df`:** `test:coverage` 382 suites, 7065 tests, coverage 99.30 / 97.22 / 97.93 / 99.70; build,
+    lint, `docs:api`, typecheck, `check:audit` exit 0; e2e smoke 53 ok; `lint:claims` advisory (18 warnings).
+    Governance `--base 30b268a3`: 87 `wf()` commits, 0 findings; no AI trailer on any approve. `test:latency` idle
+    (load 2.86): 13 tests passed, `workflow next` p95 567 ms.
+  - **Branch protection:** unblocked by `task-278` (`bug-308` closed); turning it on is the approver's.
+  - **Follow-ups:** to be filed through a `bug-ingest` plan after the approver's triage.
+  - W3: 50 of 72 tasks `done`.
