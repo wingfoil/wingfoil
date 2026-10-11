@@ -66,6 +66,132 @@ The approver ruled on 2026-10-10 (W3 B4 rulings, item 1, "come raccomandato"): t
 
 ## Execution Notes
 
+Branch `task/task-275-exclude-deprecated-tasks-from-the-stop-the-line-open-count`, worktree
+`../.wf2-wt/task-275`, cut from `main` at `30b268a3` (pre-batch main, W3 B5); start `e15aca32`.
+No `bug:` entry, so no bug status sync.
+
+### design (architect)
+
+**`depends_on` read (dl-015).** Both `done` (`awk '/^status:/{print $2;exit}'` on each file):
+- `task-150` declared `task.stop_the_line` in `memory.yaml` (1.9) as the one statement of the threshold,
+  with `open: "status != done"`; its observation for the approver counted `deprecated` as open.
+- `task-221` declared `dev-loop` `start.checks.pre`
+  `stop-the-line.clear(rule: memory.yaml task.stop_the_line; a fix task is never blocked)` and, in its design
+  decision 3, left the exclusion of `deprecated` to the approver. The ruling of 2026-10-10 (W3 B4 rulings,
+  item 1) is what this task carries.
+
+**Specs.** No tech-spec states the rule: `grep -n "stop_the_line\|stop-the-line" docs/04_memory/design/specs/*.md`
+→ nothing. The key is `[AUTHORING]` (`memory.yaml` line 136). The governing text is `dl-133` §3 (`ready`),
+which is amended by a dated note only (AC 3), its Decision text untouched.
+
+**Readers.** `grep -rn "stop_the_line" src scripts` → nothing: no code reads the key, so no code changes
+(Implementation Notes). The statements of the rule outside `memory.yaml`
+(`grep -rn "status != done\|not \`done\`" --include=*.md --include=*.yaml --include=*.ts --include=*.cjs .`,
+Memory and plans excluded):
+- `.wingfoil/workflows/custom/dev-loop.yaml` header (lines 82–85): "an open task is any task of the release that
+  is not `done`". It restates the definition and becomes false with AC 1: same class as AC 2 ("the definition has
+  one home"), fixed here, header comment only → `dev-loop.yaml` 1.6 → 1.7 (decision D2).
+- `test/core/task-kind.test.ts` (task-150 AC 1) pins the exact rule with `open: 'status != done'`: updated in the
+  red commit to the new value, so it fails with the new test and passes with the green change.
+- `.wingfoil/WORKFLOW.md` (line 245) names the key without restating statuses: unchanged.
+- `docs/08_health/metrics.yaml` Q18/Q19 define the fix share over the release's tasks without an "open"
+  definition: unchanged.
+
+**AC classification (testing T1).**
+
+| AC | Class | Evidence before the change |
+|---|---|---|
+| 1 — `open` excludes `done` and `deprecated`, comment, `memory.yaml` 2.9 | red-first | `open: "status != done"` at `30b268a3` |
+| 2a — the check token names the rule and no status | **characterization** (reclassified) | the token carries no status today (task-221): a test passes on first run; a red would be fabricated |
+| 2b — no line of `dev-loop.yaml` defines what an open task is | red-first | the v1.6 header line 83 "an open task is …" |
+| 3 — `dl-133` dated note | red-first (document), verified by command, no jest test | no such note at HEAD (the `git show HEAD:… \| grep -c` in green → 0); the note is a pending amendment (uncommitted), so a committed test would fail on any checkout of this branch before the coordinator's `memory amend` — `task-221` AC 3's precedent (checked by reading) |
+| 4 — verdict unchanged on `main` | characterization | command below |
+| 5 — gates | verification | refactor below |
+
+**AC 4 — the verdict on `main` `30b268a3`** (one line per v0.3 task, `status` and `kind`):
+```
+git ls-tree --name-only 30b268a3 docs/04_memory/v0.3/ | grep '/task-.*\.md$' | while read f; do t=$(git show 30b268a3:"$f"); \
+  s=$(echo "$t" | grep -m1 -E '^status:' | awk '{print $2}'); k=$(echo "$t" | grep -m1 -E '^kind:' | sed -E 's/^kind:[[:space:]]*"?([a-z]*)"?.*/\1/'); \
+  echo "$s $k"; done | sort | uniq -c
+     33 backlog feature
+      3 backlog fix
+      1 deprecated feature
+     64 done feature
+     52 done fix
+```
+Open fix tasks 3. With the deprecated task: 3 / 37 = 8.1 %; without it: 3 / 36 = 8.3 %. Both below 30 %:
+the rule does not fire either way, so the ruling changes no verdict today.
+
+### red (qa)
+
+`2ef0f718`: new `test/core/stop-the-line-open.test.ts` (reads `memory.yaml` and `dev-loop.yaml` at `HEAD`)
+and the pin in `test/core/task-kind.test.ts`.
+`npx jest test/core/stop-the-line-open.test.ts test/core/task-kind.test.ts` → **7 failed, 8 passed**: the five
+AC 1 tests, AC 2b and task-kind's AC 1 pin fail on `"status != done"` / the v1.6 header; AC 2a
+(characterization) passes on first run.
+
+### green (developer)
+
+`511c88f9`: `memory.yaml` 2.8 → 2.9, `open: "status not in [done, deprecated]"` with its line comment
+(ruling of 2026-10-10 on task-221 decision 3, task-275; `draft`/`pending` stay open per dl-133 §3), the key's
+header comment names task-275 (2.9), history entry `2.8 -> 2.9 at task-275`. `dev-loop.yaml` 1.6 → 1.7, header
+comment only: it says which statuses count as open is declared by `open` in `memory.yaml`; history entry keeps
+1.6's (`test/core/dev-loop-v1-6.test.ts`'s history regex still matches).
+`npx jest test/core/stop-the-line-open.test.ts test/core/task-kind.test.ts test/core/dev-loop-v1-6.test.ts
+test/core/dev-loop-v1-5.test.ts test/core/workflow-repository-conformance.test.ts test/lint` → 16 suites,
+**166 passed**.
+
+**AC 3 (pending amendment, uncommitted).** `dl-133` gains, after Relations, `**Note (2026-10-10, approver ruling
+on task-221 design decision 3; …)**`: a `deprecated` task is not open for the §3 share; `draft`/`pending` stay
+open; task-275 carried it into `memory.yaml` 2.9; "The Decision above is otherwise unchanged."
+`grep -c "a \`deprecated\` task is not open" docs/04_memory/design/dls/dl-133-fix-task-tail.md` → 1 in the
+working tree, `git show HEAD:docs/04_memory/design/dls/dl-133-fix-task-tail.md | grep -c …` → 0.
+
+### refactor (developer)
+
+The first full `npm test` (`node scripts/run-tests.cjs`) → 1 failed, 6479 passed: `test/validation/secret-scan.test.ts`
+(dl-122 S1, which scans tracked files at HEAD) flagged `const token = stopTheLineToken()` in the new test as
+`generic-api-key-assignment`. `ac8b66d7` renames the two locals (`declared`, `found`); no assertion changed.
+This touches a red test after red (`tests.unchanged(since: red)`): a declared deviation, rename only (decision D3).
+`npx jest test/validation/secret-scan.test.ts test/core/stop-the-line-open.test.ts` → 92 passed.
+
+Gates, run with the `dl-133` amendment in the working tree:
+- `npm run test:coverage -- --maxWorkers=2` (dl-170 interim gate rule: one heavy gate at a time, load ≤ 14) →
+  exit 0, 348 suites, **6480 passed**; All files 99.29 % stmts / 97.04 % branches / 97.74 % funcs / 99.69 % lines,
+  equal to `main`'s W3 B4 gate run (`gate-w3b4-cov.log`: 99.29 / 97.04 / 97.74 / 99.69, 6471 tests). It is
+  `npm test`'s parallel run (`scripts/run-tests.cjs` without `WINGFOIL_LATENCY` runs the same `jest.config.js`) with
+  coverage, so `npm test` was not run a second time under the one-heavy-gate rule.
+- `npm run lint` → exit 0; `npm run docs:api` → exit 0
+- `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx tsc -p tsconfig.build.json --noEmit` → exit 0
+- `node scripts/check-governance.cjs --base 30b268a3` → first line "1 wf() commits … and 3 other commits";
+  gated 0 findings, history 0 findings (exit 0).
+- Several earlier runs were interrupted by session restarts and a machine at load 165; the results above are the
+  completed runs on `ac8b66d7`.
+
+### review (reviewer, self)
+
+- AC 1: met — `open` value, comment, 2.9 + history, at-HEAD test (`stop-the-line-open.test.ts` AC 1, 5 tests).
+- AC 2: met — token names the rule and no status (characterization); no `dev-loop.yaml` line defines an open
+  task (`grep -n -i "open task is" .wingfoil/workflows/custom/dev-loop.yaml` → nothing).
+- AC 3: met as a pending amendment (below); Decision text not rewritten (`git diff` on dl-133 is additions only:
+  `git diff --numstat docs/04_memory/design/dls/dl-133-fix-task-tail.md` → `7 0`).
+- AC 4: met — command and output in design.
+- AC 5: met — gates above.
+- Same class in files touched: the only other restatement of the open set was `dev-loop.yaml`'s header (fixed)
+  and task-150's test pin (updated).
+
+**Decisions for the approver.**
+- D1. AC 2 reclassified: its token half is characterization (true since task-221); the red half is the
+  `dev-loop.yaml` header line, which restated the definition.
+- D2. `dev-loop.yaml` touched (header comment only, 1.6 → 1.7), beyond the task's listed files, because the
+  header's "is not `done`" became false and restated the definition AC 2 gives one home.
+- D3. The `ac8b66d7` rename in the red test after red (secret-scan false positive on `token = …`).
+- D4. AC 3 checked by command, not by a jest test (pending amendment; task-221 AC 3 precedent).
+
+**Pending amendments (approver).**
+- `dl-133-fix-task-tail` — `--reason "Dated note: a deprecated task is not open for the §3 share (approver ruling 2026-10-10 on task-221 design decision 3, W3 B4 rulings item 1). task-275 carried it into memory.yaml task.stop_the_line.open (2.9). The Decision text is unchanged."`
+
 ### Retrospective
 
-None yet.
+- The secret scan reads `const token = …` as a credential assignment in a test (`ac8b66d7`): naming a
+  workflow check token `token` is enough to trip dl-122 S1.
