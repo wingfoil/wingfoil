@@ -111,6 +111,9 @@ describe('REQ-SEC-05 — the operation-derived surface over the real CORE_MODULE
       'memoryPark',
       'memoryReject',
       'memorySubmit',
+      // task-226 — `workflow finalize` (`spec-017` §7.9): a Tool only through the mechanical registrar; the
+      // production server serves its Tool from v0.4 (P5.2.3, §9).
+      'workflowFinalize',
     ]);
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
@@ -129,6 +132,7 @@ describe('REQ-SEC-05 — the operation-derived surface over the real CORE_MODULE
       'memory.park',
       'memory.reject',
       'memory.submit',
+      'workflow.finalize',
     ]);
   });
 

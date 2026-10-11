@@ -50,6 +50,8 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memorySearch',
       'memory.memorySubmit',
       'paths.paths',
+      // task-226 (`spec-017` §7.9): mutating — an empty phase-record commit.
+      'workflow.workflowFinalize',
       'workflow.workflowList',
       // task-216 (`spec-017` §7.3): read-only.
       'workflow.workflowNext',
@@ -76,6 +78,7 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memoryPark',
       'memory.memoryReject',
       'memory.memorySubmit',
+      'workflow.workflowFinalize',
     ]);
   });
 });

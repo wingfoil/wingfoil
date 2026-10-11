@@ -163,6 +163,8 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'memory park',
       'memory reject',
       'memory submit',
+      // task-226 (`spec-017` §7.9): `workflow finalize`, a Tool here through the mechanical registrar.
+      'workflow finalize',
     ];
     expect(cli).toEqual(expected);
     expect(tools).toEqual(expected);
@@ -219,6 +221,7 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'memory.park',
       'memory.reject',
       'memory.submit',
+      'workflow.finalize',
     ]);
     // No mutating op is ALSO a Resource: the exact Resources list above already excludes them. The
     // cross-check below ties the Tools count to the registry's `mutates: true` count.

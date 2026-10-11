@@ -364,7 +364,10 @@ has reached (`--all` lists every workflow), as committed at `HEAD`; `wingfoil wo
 one workflow's phases, each with its role, that role's directives, its actions and checks, and the
 workflows it includes nested under it. `wingfoil workflow next` names the next step of an open workflow:
 its role and that role's directives, the element it works on, and for each action the command to run or
-the commit subject it expects (`--assigned-to me` keeps the steps your role holds). See the
+the commit subject it expects (`--assigned-to me` keeps the steps your role holds). A step that nothing
+in the repository can show as done — a checkpoint, a wait for a third party, an approval no element
+carries — is recorded with `wingfoil workflow finalize`, an empty commit that `workflow next` then moves
+past (on a phase with `approval:`, only an approver can, with `--reason`). See the
 [CLI reference](cli-reference.md#wingfoil-workflow-list).
 
 **WingFoil 0.2.2 has no workflow engine**: nothing starts a workflow, tracks its phase or runs its
