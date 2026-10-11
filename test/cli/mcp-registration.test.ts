@@ -22,9 +22,12 @@ import { join } from 'node:path';
 import { load } from 'js-yaml';
 
 import {
+  DEV_BUILD_ENTRY,
   EXPECTED_CHANNELS,
+  KNOWN_READ_FAILURES,
   channelSet,
   checkMcpRegistration,
+  evaluateDevBuild,
   evaluateRegistration,
   pinnedVersion,
   registrationProblems,
@@ -55,6 +58,8 @@ const HEALTHY_OBSERVATION: McpServerObservation = {
   version: '0.2.1',
   channels: ['prompts', 'resources'],
   lists: { prompts: 8, resources: 2 },
+  resourceReads: { 'wingfoil://dna': true, 'wingfoil://workflows': true },
+  promptGets: { 'developer-session': true },
 };
 
 describe('the committed declarations (task-112 AC 1, AC 2)', () => {
@@ -149,6 +154,68 @@ describe('scripts/check-mcp-registration.cjs — pure parts', () => {
   });
 });
 
+/**
+ * task-239 (`bug-292`): the check reads every static Resource and gets every Prompt the server lists, so a
+ * server that lists what it cannot serve fails it; a failure the pinned build is known to have is declared in
+ * `KNOWN_READ_FAILURES`, keyed by version, reported on success, and fails the check once it no longer applies.
+ * The build under development (`dist/cli.js mcp`) is observed the same way, with no known failure allowed.
+ */
+describe('scripts/check-mcp-registration.cjs — every Resource is read, every Prompt got (task-239, bug-292)', () => {
+  it('refuses a listed Resource whose read fails, naming the URI and the error', () => {
+    const broken = { ...HEALTHY_OBSERVATION, resourceReads: { 'wingfoil://dna': true, 'wingfoil://workflows': { error: 'MCP error -32603: E_VALIDATION' } } } as const;
+    const result = evaluateRegistration(HEALTHY_MANIFEST, HEALTHY_CONFIG, broken, EXPECTED_CHANNELS, []);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('wingfoil://workflows');
+    expect(result.message).toContain('MCP error -32603: E_VALIDATION');
+  });
+
+  it('refuses a listed Prompt whose get fails, naming the Prompt', () => {
+    const broken = { ...HEALTHY_OBSERVATION, promptGets: { 'developer-session': { error: 'Invalid arguments' } } } as const;
+    const result = evaluateRegistration(HEALTHY_MANIFEST, HEALTHY_CONFIG, broken, EXPECTED_CHANNELS, []);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('developer-session');
+    expect(result.message).toContain('Invalid arguments');
+  });
+
+  it('accepts a declared known failure of the pinned version, and names it in the verdict', () => {
+    const known = [{ version: '0.2.1', uri: 'wingfoil://workflows', reason: 'bug-292: the pin cannot read this configuration' }];
+    const failing = { ...HEALTHY_OBSERVATION, resourceReads: { 'wingfoil://dna': true, 'wingfoil://workflows': { error: 'MCP error -32603' } } } as const;
+    const result = evaluateRegistration(HEALTHY_MANIFEST, HEALTHY_CONFIG, failing, EXPECTED_CHANNELS, known);
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain('known failure');
+    expect(result.message).toContain('wingfoil://workflows');
+    expect(result.message).toContain('bug-292');
+  });
+
+  it('refuses a known failure that no longer fails, or that names another version than the pin', () => {
+    const known = [{ version: '0.2.1', uri: 'wingfoil://workflows', reason: 'bug-292' }];
+    const healed = evaluateRegistration(HEALTHY_MANIFEST, HEALTHY_CONFIG, HEALTHY_OBSERVATION, EXPECTED_CHANNELS, known);
+    expect(healed.ok).toBe(false);
+    expect(healed.message).toContain('KNOWN_READ_FAILURES');
+    const otherPin = [{ version: '0.2.0', uri: 'wingfoil://workflows', reason: 'bug-292' }];
+    const moved = evaluateRegistration(HEALTHY_MANIFEST, HEALTHY_CONFIG, HEALTHY_OBSERVATION, EXPECTED_CHANNELS, otherPin);
+    expect(moved.ok).toBe(false);
+    expect(moved.message).toContain('0.2.0');
+  });
+
+  it('declares the pinned 0.2.2 build’s one known failure: wingfoil://workflows (spec-017 §12)', () => {
+    expect(KNOWN_READ_FAILURES.map(({ version, uri }) => `${version} ${uri}`)).toEqual(['0.2.2 wingfoil://workflows']);
+    expect(KNOWN_READ_FAILURES[0]?.reason).toContain('bug-292');
+  });
+
+  it('observes the build under development as `node dist/cli.js mcp`', () => {
+    expect(DEV_BUILD_ENTRY).toEqual({ command: 'node', args: ['dist/cli.js', 'mcp'] });
+  });
+
+  it('judges the build under development: every read must answer, with no known failure', () => {
+    const dev = { ...HEALTHY_OBSERVATION, lists: { prompts: 8, resources: 4 }, resourceReads: { 'wingfoil://dna': true, 'wingfoil://workflows/-/next': true } } as const;
+    expect(evaluateDevBuild(dev)).toEqual({ problems: [], summary: expect.stringContaining('resources: 4') });
+    const failing = { ...dev, resourceReads: { 'wingfoil://dna': true, 'wingfoil://workflows/-/next': { error: 'boom' } } } as const;
+    expect(evaluateDevBuild(failing).problems).toEqual([expect.stringContaining('wingfoil://workflows/-/next')]);
+    expect(evaluateDevBuild({ error: 'dist/cli.js is not built' }).problems).toEqual([expect.stringContaining('dist/cli.js is not built')]);
+  });
+});
+
 /** Each case below starts a real server process; under a full parallel suite that can exceed jest's 5 s. */
 const SERVER_TIMEOUT_MS = 60_000;
 
@@ -156,6 +223,13 @@ describe('scripts/check-mcp-registration.cjs — against the real pinned build',
   it('passes on this repository: the registered server is the pin and advertises the expected set', async () => {
     const result = await checkMcpRegistration(REPO_ROOT);
     expect(result).toEqual({ ok: true, message: expect.stringContaining(pinFromPackageJson()) });
+  }, SERVER_TIMEOUT_MS);
+
+  it('task-239 (bug-292): on this repository it also reads every Resource of the build under development, the two workflow-state Resources included', async () => {
+    const result = await checkMcpRegistration(REPO_ROOT);
+    expect(result.ok).toBe(true);
+    // `wingfoil://dna`, `wingfoil://workflows`, `wingfoil://workflows/-/next`, `wingfoil://workflows/-/status`.
+    expect(result.message).toMatch(/build under development \(dist\/cli\.js\) .*resources: 4/);
   }, SERVER_TIMEOUT_MS);
 
   it('exits 0 as `npm run check:mcp` would run it', () => {
