@@ -126,6 +126,12 @@ scan of the Memory and plan folders of every local and remote-tracking ref gave 
 - **Ids not pushed.** `git-conventions` §6 step 2 asks for the `add` commits to be pushed at once; this branch is not
   pushed by instruction, so the ids are local proposals until the coordinator merges and pushes it.
 
+- **Governance (2026-10-11).** `node scripts/check-governance.cjs --base 29b8406a` on `ingest/w3b5-review-findings`
+  at `8d80e5bb` (this plan's submit): 82 `wf()` commits and 0 other commits, gated 0 findings, history 0 findings, 0
+  entries not checked. Every `approve` commit of the branch carries no `Co-Authored-By:` or `AI-Model:` line and
+  every other commit carries both (a loop over `git rev-list 29b8406a..HEAD`, 0 exceptions; the check's
+  `approval-ai-trailer` rule agrees). The branch is neither pushed nor merged.
+
 ### Retrospective
 
 - One item of the follow-up log (22) was a test fixture's intentional noise, read as a product defect; it was caught
