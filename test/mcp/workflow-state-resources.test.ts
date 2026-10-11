@@ -204,7 +204,7 @@ describe('task-239 — wingfoil://workflows/-/next and -/status on the productio
 });
 
 describe('task-239 — a refusal reaches the client as the CLI prints it', () => {
-  it('an invalid workflow file at HEAD: both reads fail with the CLI error and its details (spec-004 §4.3 item 4)', async () => {
+  it('an invalid workflow file at HEAD: both reads fail with the error `--format json` prints, details included (spec-004 §4.3 item 4)', async () => {
     const repo = makeTempGitRepo();
     try {
       writeProject(repo);
@@ -216,14 +216,14 @@ describe('task-239 — a refusal reaches the client as the CLI prints it', () =>
           [NEXT_URI, 'next'],
           [STATUS_URI, 'status'],
         ] as const) {
-          const run = runCliEntry(repo, ['workflow', verb]);
-          expect(run.status).toBe(1);
+          const run = runCliEntry(repo, ['workflow', verb, '--format', 'json']);
+          expect([run.status, run.stdout]).toEqual([1, '']);
+          const cli = JSON.parse(run.stderr) as { error: string; details?: unknown[] };
           const error = (await client.readResource({ uri }).catch((caught: unknown) => caught)) as McpError;
           expect(error).toBeInstanceOf(McpError);
-          // The CLI's first stderr line is `error: <reason>`; the read error carries the same reason.
-          const reason = run.stderr.split('\n')[0]!.replace(/^error: /, '');
-          expect(error.message).toContain(reason);
-          expect((error.data as { details?: unknown[] } | undefined)?.details?.length ?? 0).toBeGreaterThan(0);
+          // The same reason, and the same details as JSON-RPC `error.data.details` (none → no `data`).
+          expect(error.message).toContain(cli.error);
+          expect(error.data).toEqual(cli.details === undefined ? undefined : { details: cli.details });
         }
       } finally {
         await client.close();
