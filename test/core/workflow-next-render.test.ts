@@ -115,7 +115,7 @@ describe('task-216 — nextWorkflow on a hand-built deduction (spec-017 §7.3)',
     late: [],
   });
   const step = { role: null } as unknown as DeducedStep;
-  const deduction: Deduction = { baseline: { rev: 'HEAD', commit: 'abc' }, active: 'rc-1', instances: [instance([step])], diagnostics: [] };
+  const deduction: Deduction = { baseline: { rev: 'HEAD', commit: 'abc' }, active: 'rc-1', instances: [instance([step])], diagnostics: [], gated: [] };
 
   it('a step with no role is dropped by any --assigned-to filter', () => {
     const result = nextWorkflow(INPUTS, deduction, { assignedTo: 'developer' });

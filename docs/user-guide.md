@@ -373,7 +373,10 @@ active workflow (`--element <type>:<id>` names the element it runs on) — and `
 closes the active one once its steps are complete, making the previous one active again. A step that nothing
 in the repository can show as done — a checkpoint, a wait for a third party, an approval no element
 carries — is recorded with `wingfoil workflow finalize`, an empty commit that `workflow next` then moves
-past (on a phase with `approval:`, only an approver can, with `--reason`). See the
+past (on a phase with `approval:`, only an approver can, with `--reason`). `wingfoil workflow status`
+lists every open workflow with its phases and ready steps, the approvals waiting for a decision and who they
+are routed to, and the documents sitting at a gate that no open workflow carries, each as a "human needed"
+line. See the
 [CLI reference](cli-reference.md#wingfoil-workflow-list).
 
 **No workflow engine runs your steps**: in 0.2.2 nothing starts a workflow; unreleased (v0.3),

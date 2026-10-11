@@ -444,16 +444,19 @@ approval carries `routedTo: []` and `routingError: "no approver found for role '
 (P4.14 sc. 3); this is reported, not an exit `1`, because `status` and `next` do not refuse on it.
 Routing reports who is asked and does not change who may decide: authority stays with the `approver`
 role (REQ-SEC-03, `APPROVER_ROLE`, `src/core/approval-authority.ts:43`), so a routed member who lacks
-it is flagged `W_APPROVAL_ROLE_WITHOUT_AUTHORITY`. The routed members are reported (`routedTo`), not
+it is flagged `W_APPROVAL_ROLE_WITHOUT_AUTHORITY` (`file` `.wingfoil/dna.yaml`, `path` `team.members[<i>].roles`,
+one per step and member, by `next` and `status` alike). The routed members are reported (`routedTo`), not
 recorded anywhere: nothing in Memory changes when an approval becomes pending.
 
 Separately, `status` lists **ungated elements**: Memory elements sitting in a `gates` state of their
-type that no pending approval of an open instance carries. They are the "human needed" set that
+type that no pending approval of an open instance carries. A state that is also `waiting` is left out: its
+forward edge has no verb, so a workflow action advances it, not the approver (`memory approve` refuses it). They are the "human needed" set that
 exists outside any started workflow.
 
 **5.2 Fallback** (P4.15). After a reject, §4.8 makes the `fallback.step` the current step; `next`
 reports it with `reentered: true`, the reject commit, and the `fallback.set_state` the phase
-declares. WingFoil does not apply `set_state` in v0.3: the element's state after a reject is always
+declares — in the step's `fallback`, which on a re-entered step is the fallback that re-entered it (the
+phase whose gate the newest reaching re-entry left), and on any other step its own phase's. WingFoil does not apply `set_state` in v0.3: the element's state after a reject is always
 `memory.yaml`'s reject target, written by `memory reject`. When the reject target already equals
 `set_state` (true of the three reject-reachable fallbacks with `set_state` in this repository:
 `dev-loop.review`, `release-planning.triage-bugs`, `release-planning.reconcile-governance`, checked
@@ -470,7 +473,8 @@ the reject: `memory reject` reads no workflow.
 output: `workflow status` prints every pending approval and every ungated element as a "human needed"
 line naming the required action (`approve or reject`, or `finalize` for an approval record), the
 element id(s) or step key, and the routed members; `workflow next` prints the same line when its first
-step awaits approval. Steps between automated states print none (X1.1 sc. 2). Role routing is §5.1's
+step awaits approval. An ungated element belongs to no step, so its line names the holders of the
+`approver` role, the one role that may decide it (REQ-SEC-03); `StatusResult.ungatedRoutedTo` carries them. Steps between automated states print none (X1.1 sc. 2). Role routing is §5.1's
 (X1.2 sc. 1). Delivery through git hooks, the "notifications enabled" setting, delivery failure
 (X1.1 sc. 3) and decision-type routing (X1.2 sc. 2) are v0.4 (ruling R13).
 
@@ -505,7 +509,9 @@ not name it. A `<T>.sync_state(for_each: <S>.<field>)` moves each element the fi
 the same name as `<S>`'s at that action, or, when `<S>` is in its type's last state, to `<T>`'s last state;
 its bracket chains the states it passes forward (`[in-review → resolved → closed]`), and an element
 already there needs no commit. The aggregate rule of `dev-loop`'s header (a bug moves once all its tasks
-have) is not applied in v0.3: the subject is the one this task's progress implies.
+have) is applied to a forward move: the element moves only once every other element of `<S>` whose
+`<field>` names it (archived ones aside) has reached `<S>`'s state at that action — `<S>`'s last state when the
+source is in its last — and otherwise needs no commit yet; a move back (after a reject) is never held.
 
 **6.2 Role and directives** (P4.4, P3.6, REQ-STATE-05). The step reports its `role`, the members who
 hold it (§5.1 ordering), and the role's directives resolved by `spec-012` §5 (`resolveRoleDirectives`,
@@ -600,7 +606,7 @@ reported as a warning.
 **7.4 `status`** (P4.5, REQ-INT-05). Every open instance (or the one `<ref>` selects), active first
 and marked, each with its top-level phase progress (`complete` | `current` | `pending` | `skipped`),
 its frontier, its pending approvals and its `late` candidates (§4.7); then the ungated elements
-(§5.1). With no open instance and nothing ungated: `no open workflows`, exit `0` (P4.5 sc. 3).
+(§5.1). With no open instance: `no open workflows`, exit `0` (P4.5 sc. 3), the ungated elements listed after it.
 
 **7.5 `list`** (P4.6). Without `--all`: the startable workflows, plus every includable workflow that
 is the current phase's sub on some open instance's frontier (P4.6 sc. 1–2). With `--all`: every
@@ -732,7 +738,7 @@ interface PendingApproval { step: string | null; instance: string | null; trail:
 interface StatusResult { baseline: Baseline; active: string | null;
                          open: { instance: Instance; complete: boolean; phases: PhaseProgress[]; frontier: Step[];
                                  late: ElementRef[] }[];
-                         pendingApprovals: PendingApproval[]; ungated: ElementRef[];
+                         pendingApprovals: PendingApproval[]; ungated: ElementRef[]; ungatedRoutedTo: Member[];
                          message?: string; diagnostics: Diagnostic[] }
 interface StartResult    { baseline: Baseline; instance: Instance; next: Step | null; commits: string[] }
 interface EndResult      { baseline: Baseline; ended: Instance; active: Instance | null; commit: string }
@@ -1266,3 +1272,16 @@ without `--workflow` are refused. §10 gains the rows for the "none" and "severa
 named, and the `<ref>` and off-frontier rows name `memory add` too. No deduction rule changes. Edited in
 place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at
 `task-227`'s review.
+
+**Revision (2026-10-10, `task-225-add-workflow-status-pending-approvals-role-routing-fallback`) — `workflow
+status` and approvals implemented; four readings stated.** §6.1 applies the aggregate rule of `dev-loop`'s
+header to a forward `sync_state` (a bug passes `in-review` only once every task naming it is `done`), as the
+W3 B4 review of `task-216` asked, instead of declaring it not applied. §5.1 gives the
+`W_APPROVAL_ROLE_WITHOUT_AUTHORITY` diagnostic its file and path. §5.2 says that a re-entered step's `fallback`
+is the one that re-entered it, which is how the fallback step reports the declared `set_state`. §5.3 and §8 route
+an ungated element's line to the `approver` role's holders and carry them in `StatusResult.ungatedRoutedTo`, so
+the console view is rendered from the payload alone. §5.1 leaves a gate state that is also `waiting` out of the
+ungated elements (bug `triaged` / `planned`, `dl-123`): no approver can act on it. §7.4 prints `no open workflows`
+whenever no instance is open, as P4.5 sc. 3 states it, with the ungated elements after it. §5.1's count of approvals recorded by `finalize` stays six
+(seven before `task-199`). No command, deduction rule or diagnostic code is added. Edited in place without a
+supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-225`'s review.

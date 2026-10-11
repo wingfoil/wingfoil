@@ -1266,6 +1266,64 @@ next step: dev-loop.green@task:task-130
   blank or malformed `--reason`, on any phase; more than one `<ref>`.
 - **Commit:** `workflow: finalize <instance> <key>`, no file changed.
 
+### `wingfoil workflow status`
+
+Print every open workflow, its pending approvals and who they are routed to, and the elements waiting at a gate, as committed at HEAD.
+
+```
+wingfoil workflow status [<ref>]
+```
+
+Unreleased (v0.3). Read-only, and it reads `HEAD` from the same deduction as `workflow next`: an uncommitted
+change is reported as `W_UNCOMMITTED_INPUTS`, never read. Without `<ref>`, every open instance, the active one
+(the most recently started) first and marked `*`; with `<ref>` (a workflow name or an open instance id), that one.
+
+For each instance: its element, its top-level phases (`complete`, `current`, `pending`, `skipped`, with the
+iteration counts of an `iterate_over` phase), its frontier — the ready steps, each as `workflow next` reports it
+— and its `late` elements (matched by a live query after a later phase closed it).
+
+Then the **pending approvals**: a step whose phase declares `approval:` and whose element sits in the gate state
+the phase is there to decide (a task `in-review` at `dev-loop.review`), or, for a phase that moves no element
+through a gate, a step whose only missing evidence is its phase record. Each is routed from `dna.yaml`:
+`by_role` to every member holding the role, `by_person` to that member. When no member holds the role the
+approval says `no approver found for role '<role>' in dna.yaml` and the command still exits `0`. Routing only
+reports who is asked: a routed member without the `approver` role is flagged
+`W_APPROVAL_ROLE_WITHOUT_AUTHORITY`, and only an approver can decide. Nothing is written.
+
+Last, the **ungated elements**: elements sitting in a gate state of their type that no pending approval of an open
+workflow carries, routed to the holders of the `approver` role.
+
+Each pending approval and ungated element prints a **"human needed"** line naming the action
+(`approve or reject`, or `finalize` for a phase record), the element ids or the step key, and the members it is
+routed to. In v0.3 this output is the notification channel; hook delivery comes later. `workflow next` prints the
+same line when its next step awaits an approval.
+
+```console
+$ wingfoil workflow status
+open workflows: 2
+* rl-minor-2 (release-line) — active, complete
+    element: release:minor-2 (active)
+    phases: submit complete, approve complete
+  rl-minor-1 (release-line)
+    element: release:minor-1 (planning)
+    phases: submit complete, approve current
+    frontier:
+      - release-line.approve@release:minor-1 (developer; missing: state)
+pending approvals: 1
+  human needed: approve or reject minor-1 — routed to Morgan <morgan@example.invalid> (rl-minor-1, release-line.approve@release:minor-1)
+```
+
+`--format json|yaml` prints the full payload, `{"baseline": {…}, "active": …, "open": [{"instance", "complete",
+"phases", "frontier", "late"}], "pendingApprovals": [{"step", "instance", "trail", "awaiting"}], "ungated": […],
+"ungatedRoutedTo": […], "diagnostics": […]}`.
+
+- **Exit `0`** for every deduced outcome; with no open workflow and nothing waiting at a gate, the message
+  `no open workflows`.
+- **Errors:** a `<ref>` that names no workflow and no open instance → `unknown workflow: <ref>`; a workflow
+  with no open instance → `workflow is not open: <ref>`; both exit `1`; an error in the workflow files → exit
+  `1`, as `workflow list`; more than one `<ref>` → exit `2`.
+- **Commit:** none.
+
 ### `wingfoil workflow show`
 
 Print one workflow resolved, its included workflows nested under their phases, as committed at `HEAD`.

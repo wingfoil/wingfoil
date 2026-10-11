@@ -17,9 +17,11 @@
  * and `evaluated: false`, the evidence, `awaits`, fallback and re-entry, the executor attributes and the
  * cadence (`lastRun: "not-recorded"`, §6.4). Nothing is executed.
  *
- * Approval detection and routing (§5.1–§5.3) are `workflow status`'s (task-225): until it lands, a step's
- * `awaiting` reports only a third party (§5.4), and the console renderer already prints an approval's "human
- * needed" line when one is given.
+ * **Approvals** (§5.1–§5.3, task-225): a step whose phase declares `approval:` awaits it while a carried element
+ * sits in a gate the phase holds, or — when the phase holds no gate — once only its `workflow finalize` record is
+ * missing. It is routed to the `dna.yaml` members `by_role` / `by_person` names, and a routed member without the
+ * `approver` role is flagged `W_APPROVAL_ROLE_WITHOUT_AUTHORITY`; nothing is recorded. The console prints a "human
+ * needed" line for it (§5.3). `workflow status` (`./workflow-status.ts`) builds its steps here too.
  */
 import type { RolesYaml } from '../directives/schema';
 import type { DnaYaml } from '../dna/schema';
@@ -46,6 +48,7 @@ import {
 } from '../workflow/deduce';
 import type { Phase, PhaseMode, Workflow } from '../workflow/schema';
 
+import { APPROVER_ROLE } from './approval-authority';
 import { resolveRoleDirectives } from './context';
 import { readGitIdentity } from './git-identity';
 import { loadDirectivesAtRev, loadRolesYamlAtRev, type DirectiveFile } from './loaders';
@@ -58,6 +61,15 @@ export const NO_OPEN_WORKFLOWS = 'no open workflows';
 
 /** `NextResult.message` when the selected instance's frontier is empty and it is complete (BDD P4.4 sc. 3). */
 export const noNextStepMessage = (workflow: string): string => `no next step: workflow '${workflow}' is complete`;
+
+/** `W_APPROVAL_ROLE_WITHOUT_AUTHORITY` (`spec-017` §2, §5.1): an approval is routed to a member without the `approver` role. */
+export const W_APPROVAL_ROLE_WITHOUT_AUTHORITY = 'W_APPROVAL_ROLE_WITHOUT_AUTHORITY';
+
+/** The `dna.yaml` path every member reference of a routing warning is reported against (repository-relative). */
+const DNA_FILE = '.wingfoil/dna.yaml';
+
+/** `routingError` when no member holds the approval's role (`spec-017` §5.1, BDD P4.14 sc. 3). */
+export const noApproverMessage = (role: string): string => `no approver found for role '${role}' in dna.yaml`;
 
 /** The `<who>` of `--assigned-to` that stands for the git identity (`spec-017` §7.3, BDD P4.4 sc. 2). */
 export const ASSIGNED_TO_ME = 'me';
@@ -284,6 +296,14 @@ function expectedCommit(action: DeducedAction, phase: Phase, memoryYaml: MemoryY
   if (!name.endsWith('.sync_state') || source === undefined || source.state === null) return undefined;
   const sourceMachine = machineOf(source.type);
   const sourceLast = sourceMachine !== null && lastOf(sourceMachine) === source.state;
+  // The aggregate rule (task-225, W3 B4 handover): a forward move waits until every other source naming the target
+  // has reached the source's state — its last state when the source is in its last (a bug passes `in-review` once
+  // every task naming it is `done`). A move back is never held.
+  // A state the source's machine does not place (`-1`) holds nothing back.
+  const rank = (state: string): number => sourceMachine?.sequence.indexOf(state) ?? -1;
+  const required = rank(sourceLast ? lastOf(sourceMachine!) : source.state);
+  // The deduction lists the peers of every target it names (`DeducedAction.source.peers`).
+  const peersReached = (id: string): boolean => source.peers.find((entry) => entry.id === id)!.sources.every((peer) => rank(peer.status) >= required);
   const entries: SubjectEntry[] = [];
   for (const target of action.targets) {
     const machine = machineOf(target.type)!; // a target was found as a Memory element of its type
@@ -291,7 +311,9 @@ function expectedCommit(action: DeducedAction, phase: Phase, memoryYaml: MemoryY
     if (to === null || target.status === to) continue;
     const from = machine.sequence.indexOf(target.status);
     const toIndex = machine.sequence.indexOf(to);
-    const chain = from !== -1 && toIndex > from ? machine.sequence.slice(from, toIndex + 1) : [target.status, to];
+    const forward = from !== -1 && toIndex > from;
+    if (forward && !peersReached(target.id)) continue;
+    const chain = forward ? machine.sequence.slice(from, toIndex + 1) : [target.status, to];
     entries.push({ type: target.type, verb: 'sync', bracket: chain.join(' → '), id: target.id });
   }
   return renderSubjects(entries);
@@ -353,6 +375,51 @@ function roleDirectives(role: string | null, inputs: NextInputs): Pick<Step, 'di
 }
 
 /**
+ * Who an approval is routed to (`spec-017` §5.1, BDD P4.14, `dl-033`): `by_role: R` → every member holding `R`,
+ * ascending `(name, email)`, or `routedTo: []` with `routingError` when none does; `by_person: P` → the member whose
+ * name or email is `P` (the registry refuses one naming nobody, `E_PHASE_APPROVER_UNKNOWN`). Reported only.
+ */
+export function routeApproval(
+  approval: NonNullable<Phase['approval']>,
+  dnaYaml: DnaYaml | null,
+): { byRole: string; routedTo: Member[]; routingError?: string } | { byPerson: string; routedTo: Member[]; routingError?: string } {
+  if ('by_role' in approval) {
+    const routedTo = membersHoldingRole(dnaYaml, approval.by_role);
+    return routedTo.length > 0 ? { byRole: approval.by_role, routedTo } : { byRole: approval.by_role, routedTo, routingError: noApproverMessage(approval.by_role) };
+  }
+  const person = approval.by_person;
+  const member = (dnaYaml?.team?.members ?? []).find((candidate) => candidate.name === person || candidate.email === person);
+  return member === undefined
+    ? { byPerson: person, routedTo: [], routingError: `no member '${person}' found in dna.yaml` }
+    : { byPerson: person, routedTo: [{ name: member.name, email: member.email ?? '' }] };
+}
+
+/**
+ * `W_APPROVAL_ROLE_WITHOUT_AUTHORITY` for every member a step's approval is routed to who does not hold the
+ * `approver` role (`spec-017` §2, §5.1; REQ-SEC-03: routing never changes who may decide), in step order then
+ * routing order (§1.3), each against the member's `dna.yaml` entry.
+ */
+export function approvalDiagnostics(steps: readonly Step[], dnaYaml: DnaYaml | null): Diagnostic[] {
+  const members = dnaYaml?.team?.members ?? [];
+  const out: Diagnostic[] = [];
+  for (const step of steps) {
+    if (step.awaiting?.kind !== 'approval') continue;
+    for (const routed of step.awaiting.routedTo) {
+      const index = members.findIndex((member) => member.name === routed.name && (member.email ?? '') === routed.email);
+      if (index === -1 || members[index]!.roles.includes(APPROVER_ROLE)) continue;
+      out.push({
+        code: W_APPROVAL_ROLE_WITHOUT_AUTHORITY,
+        severity: 'warning',
+        file: DNA_FILE,
+        path: `team.members[${index}].roles`,
+        message: `approval of ${step.key} is routed to ${routed.name} <${routed.email}>, who does not hold the '${APPROVER_ROLE}' role: only an approver may decide it`,
+      });
+    }
+  }
+  return out;
+}
+
+/**
  * Build the reported step from a deduced frontier step (`spec-017` §6, §8 `Step`). Pure: it reads the
  * deduced step and `inputs` only.
  */
@@ -364,8 +431,15 @@ export function buildStep(step: DeducedStep, inputs: NextInputs): Step {
   const role = step.role;
   const agentRole = role !== null && (inputs.dnaYaml?.team?.agents ?? []).some((agent) => agent.executes_as.includes(role));
   const otherMissing = step.evidence.missing.filter((kind) => kind !== 'awaits' && kind !== 'record');
-  const awaiting: Awaiting | null =
-    phase.awaits !== undefined && otherMissing.length === 0 ? { kind: 'party', party: phase.awaits.party, evidence: checkView(phase.awaits.evidence, inputs.bindings) } : null;
+  const approval = step.approval;
+  // §5.1: a carried element awaits, or the phase holds no gate and only its record is missing.
+  const approvalPending =
+    approval !== null && phase.approval !== undefined && (approval.elements.length > 0 || (approval.recordNeeded && otherMissing.length === 0 && step.evidence.missing.includes('record')));
+  const awaiting: Awaiting | null = approvalPending
+    ? { kind: 'approval', ...routeApproval(phase.approval!, inputs.dnaYaml), elements: approval.elements, recordNeeded: approval.elements.length === 0 }
+    : phase.awaits !== undefined && otherMissing.length === 0
+      ? { kind: 'party', party: phase.awaits.party, evidence: checkView(phase.awaits.evidence, inputs.bindings) }
+      : null;
   return {
     key: step.key,
     instance: step.instance,
@@ -393,7 +467,13 @@ export function buildStep(step: DeducedStep, inputs: NextInputs): Step {
     evidence: step.evidence,
     optional: step.optional,
     awaiting,
-    fallback: phase.fallback === undefined ? null : { step: phase.fallback.step, setState: phase.fallback.set_state ?? null },
+    // A re-entered step reports the fallback that re-entered it (§5.2); any other step its phase's own.
+    fallback:
+      step.reentered && step.reentryFallback !== null
+        ? step.reentryFallback
+        : phase.fallback === undefined
+          ? null
+          : { step: phase.fallback.step, setState: phase.fallback.set_state ?? null },
     reentered: step.reentered,
     reentryCommit: step.reentryCommit,
     mode: 'fresh',
@@ -479,7 +559,8 @@ export function nextWorkflow(inputs: NextInputs, deduction: Deduction, options: 
     return coreOk({ ...base, instance, complete, next: null, more: [], message: `no next step of workflow '${instance.workflow}' is assigned to '${assignedTo}'` });
   }
   const steps = kept.map((step) => buildStep(step, inputs));
-  return coreOk({ ...base, instance, complete, next: steps[0]!, more: steps.slice(1) });
+  const diagnostics = [...deduction.diagnostics, ...approvalDiagnostics(steps, inputs.dnaYaml)];
+  return coreOk({ ...base, diagnostics, instance, complete, next: steps[0]!, more: steps.slice(1) });
 }
 
 /**
@@ -527,16 +608,28 @@ function describeScope(scope: ScopeRef | null): string {
   return `${scope.element.type}:${scope.element.id} (${scope.element.status})`;
 }
 
+/** Members as `Name <email>, …`, or `fallback` when there is none. */
+export function describeMembers(members: readonly Member[], fallback: string): string {
+  return members.length > 0 ? members.map((member) => `${member.name} <${member.email}>`).join(', ') : fallback;
+}
+
+/**
+ * The "human needed" line of a pending approval (`spec-017` §5.3, X1.1, X1.2): the action (`approve or reject`, or
+ * `finalize` for an approval record), the element ids or, for a record, the step key, and the routed members.
+ */
+export function approvalLine(awaiting: Extract<Awaiting, { kind: 'approval' }>, stepKey: string): string {
+  const action = awaiting.recordNeeded ? 'finalize' : 'approve or reject';
+  const what = awaiting.elements.length > 0 ? awaiting.elements.map((element) => element.id).join(', ') : stepKey;
+  return `human needed: ${action} ${what} — routed to ${describeMembers(awaiting.routedTo, awaiting.routingError ?? 'nobody')}`;
+}
+
 /** The "human needed" line of a step that awaits a decision (`spec-017` §5.3), or `null`. */
 export function humanNeededLine(step: Step): string | null {
   const awaiting = step.awaiting;
   if (awaiting === null) return null;
   // `workflow finalize` writes the record (spec-017 §7.9, §5.4; task-226): the whole command for this step.
   if (awaiting.kind === 'party') return `waiting for ${awaiting.party}: ${awaiting.evidence.token} (a phase record completes it: wingfoil workflow finalize ${step.instance} --step ${step.key})`;
-  const action = awaiting.recordNeeded ? 'finalize' : 'approve or reject';
-  const what = awaiting.elements.length > 0 ? awaiting.elements.map((element) => element.id).join(', ') : step.key;
-  const routed = awaiting.routedTo.length > 0 ? awaiting.routedTo.map((member) => `${member.name} <${member.email}>`).join(', ') : (awaiting.routingError ?? 'nobody');
-  return `human needed: ${action} ${what} — routed to ${routed}`;
+  return approvalLine(awaiting, step.key);
 }
 
 /** The console lines of one step (`spec-017` §8: key, trail, role, scope, actions with bindings, directive ids, human needed). */

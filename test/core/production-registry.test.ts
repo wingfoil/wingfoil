@@ -60,7 +60,9 @@ describe('CORE_MODULES — production registry', () => {
       // task-204 (`spec-017` §7.6): read-only.
       'workflow.workflowShow',
       // task-217 (`spec-017` §7.1): mutating.
+      // task-225 (`spec-017` §7.4): read-only.
       'workflow.workflowStart',
+      'workflow.workflowStatus',
     ]);
   });
 

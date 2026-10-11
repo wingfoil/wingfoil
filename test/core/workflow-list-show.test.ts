@@ -260,9 +260,11 @@ describe('task-204 AC 1 — BDD P4.6 sc. 2: a sub appears when it is the next st
   beforeAll(() => {
     repo = makeTempGitRepo();
     writeProject(repo);
-    // release-cycle on rel-1: `plan` is complete (in-development), `develop` enters dev-loop.
+    // release-cycle on rel-1: `plan` is complete (in-development, and its approval recorded: the release carries no
+    // gate, task-225, spec-017 §5.1), `develop` enters dev-loop.
     commitFiles(repo, { 'docs/releases/rel-1.md': element('release', 'rel-1', 'in-development') }, 'release');
     commitFiles(repo, { 'docs/plans/rc-plan.md': plan('rc-plan', 'release-cycle', 'rel-1') }, 'start release-cycle');
+    git(repo, ['commit', '--allow-empty', '--quiet', '-m', 'workflow: finalize rc-plan release-cycle.plan', '-m', 'WingFoil-Phase: release-cycle.plan completed\nWingFoil-Instance: rc-plan\nWingFoil-Element: release:rel-1']);
   });
   afterAll(() => removeTempDir(repo));
 
@@ -324,6 +326,7 @@ describe('task-204 AC 2 — BDD P4.7: wingfoil workflow show (spec-017 §7.6)', 
     writeProject(repo);
     commitFiles(repo, { 'docs/releases/rel-1.md': element('release', 'rel-1', 'in-development') }, 'release');
     commitFiles(repo, { 'docs/plans/rc-plan.md': plan('rc-plan', 'release-cycle', 'rel-1') }, 'start release-cycle');
+    git(repo, ['commit', '--allow-empty', '--quiet', '-m', 'workflow: finalize rc-plan release-cycle.plan', '-m', 'WingFoil-Phase: release-cycle.plan completed\nWingFoil-Instance: rc-plan\nWingFoil-Element: release:rel-1']); // the approval no gate carries (task-225)
   });
   afterAll(() => removeTempDir(repo));
 
@@ -357,7 +360,8 @@ describe('task-204 AC 2 — BDD P4.7: wingfoil workflow show (spec-017 §7.6)', 
       selection: null,
       include: null,
       sub: null,
-      evidence: ['state'],
+      // The release type has no gate, so its approval is recorded by `workflow finalize` (task-225, spec-017 §5.1).
+      evidence: ['state', 'record'],
       cadence: 'once',
     });
     expect(ship).toMatchObject({ role: null, directives: [], evidence: ['state'], cadence: { recurring: { on: 'release-released' } } });

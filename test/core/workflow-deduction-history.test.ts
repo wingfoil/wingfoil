@@ -269,9 +269,9 @@ describe.each(['reject', 'park'])('task-203 AC 2 — re-entry after a `%s` (spec
 
   const loop = (): InstanceDeduction => only(deduceWorkflowStateAtHead(repo), 'loop-1');
 
-  it('before the re-entry the pass waits on `done`', () => {
-    expect(keys(loop())).toEqual(['loop.done@task:task-1']);
-    expect(loop().frontier[0]).toMatchObject({ reentered: false, reentryCommit: null });
+  it('before the re-entry the pass waits on the review: the task it carries awaits the approval (task-225, spec-017 §5.1)', () => {
+    expect(keys(loop())).toEqual(['loop.review@task:task-1']);
+    expect(loop().frontier[0]).toMatchObject({ reentered: false, reentryCommit: null, approval: { elements: [{ id: 'task-1', status: 'in-review' }], recordNeeded: false } });
   });
 
   it('after it, `start` and `design` stay complete and `red` needs a new record', () => {
@@ -291,6 +291,9 @@ describe.each(['reject', 'park'])('task-203 AC 2 — re-entry after a `%s` (spec
     expect(instance.frontier[0]).toMatchObject({ reentered: true, reentryCommit: reentry, evidence: { kinds: ['state'], missing: ['state'] } });
 
     commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-review') }, 'wf(task): submit task-1');
+    // The review awaits its approval again (task-225, spec-017 §5.1); the approval moves the pass on.
+    expect(keys(loop())).toEqual(['loop.review@task:task-1']);
+    commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'approved') }, 'wf(task): approve task-1 [in-review → approved]');
     instance = loop();
     // `done` lies after `fallback.step` too: the re-entry reaches it, and its evidence must be newer.
     expect(keys(instance)).toEqual(['loop.done@task:task-1']);

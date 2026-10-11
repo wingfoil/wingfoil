@@ -205,10 +205,10 @@ function allowedModes(mode: PhaseMode | undefined): PhaseMode[] {
  * The evidence kinds `phase` declares (`spec-017` §4.3), by the rules the deduction's leaf step applies
  * (`src/workflow/deduce.ts`), in its order: a plain `include` is `include` alone (§4.5); otherwise
  * `include` for an `iterate_over`, `state` (`declaresState`, shared), `created`, `produces` (string
- * entries with an explicit owner), `selection`, `awaits`, then `record` for an `awaits` or a phase with
- * no kind but `created`.
+ * entries with an explicit owner), `selection`, `awaits`, then `record` for an `awaits`, a phase with
+ * no kind but `created`, or an `approval:` whose phase holds no gate (`holdsGate: false`, §5.1, task-225).
  */
-export function declaredEvidenceKinds(workflow: Workflow, p: number, boundType: string | null): EvidenceKind[] {
+export function declaredEvidenceKinds(workflow: Workflow, p: number, boundType: string | null, holdsGate: boolean): EvidenceKind[] {
   const phase = workflow.phases[p]!;
   if (phase.include !== undefined && phase.iterate_over === undefined) return ['include'];
   const kinds: EvidenceKind[] = [];
@@ -218,7 +218,7 @@ export function declaredEvidenceKinds(workflow: Workflow, p: number, boundType: 
   if ((phase.produces ?? []).some((entry) => typeof entry === 'string' && !isImplicitOwnerProduces(workflow, p, entry))) kinds.push('produces');
   if (phase.where !== undefined && phase.iterate_over === undefined) kinds.push('selection');
   if (phase.awaits !== undefined) kinds.push('awaits');
-  if (phase.awaits !== undefined || !kinds.some((kind) => kind !== 'created')) kinds.push('record');
+  if (phase.awaits !== undefined || (phase.approval !== undefined && !holdsGate) || !kinds.some((kind) => kind !== 'created')) kinds.push('record');
   return kinds;
 }
 
@@ -240,13 +240,15 @@ class Resolver {
    * The bound type of each phase (`spec-017` §4.4, as the core checks compute it): from the exit-state
    * computation when `memory.yaml` is present, otherwise the declared `element` or the includer's.
    */
-  private boundTypes(workflow: Workflow, start: ExitStart): (string | null)[] {
+  private boundTypes(workflow: Workflow, start: ExitStart): { type: string | null; holdsGate: boolean }[] {
     const { memoryYaml } = this.inputs;
-    if (memoryYaml === null) return workflow.phases.map(() => workflow.element ?? start.boundType);
+    // Without `memory.yaml` no gate is known, so no approval is read as recorded by `finalize` (§5.1).
+    if (memoryYaml === null) return workflow.phases.map(() => ({ type: workflow.element ?? start.boundType, holdsGate: true }));
     const states = workflowExitStates(workflow, memoryYaml, start, this.byName);
     // A self-creating instance's element is in scope for all of its phases (§3.4).
     const selfType = start.instance ? (states.find((state) => state.boundType !== null)?.boundType ?? null) : null;
-    return states.map((state) => state.boundType ?? selfType);
+    // Whether the phase holds a gate (§5.1): an approval that holds none is recorded by `workflow finalize`.
+    return states.map((state) => ({ type: state.boundType ?? selfType, holdsGate: state.held.length > 0 }));
   }
 
   /** The start of a sub included by phase `p` of `workflow` (§4.4–§4.6; `workflow-core-checks.ts` `contextChecks`). */
@@ -300,7 +302,7 @@ class Resolver {
         produces: (phase.produces ?? []).map((entry) => {
           if (typeof entry !== 'string') return { pattern: entry.path, owner: entry.type, evidence: false };
           const implicit = isImplicitOwnerProduces(workflow, p, entry);
-          return { pattern: entry, owner: implicit ? null : bound[p]!, evidence: !implicit };
+          return { pattern: entry, owner: implicit ? null : bound[p]!.type, evidence: !implicit };
         }),
         approval: approval === undefined ? null : approval.by_role !== undefined ? { byRole: approval.by_role } : { byPerson: approval.by_person! },
         awaits: phase.awaits === undefined ? null : { party: phase.awaits.party, evidence: this.check(phase.awaits.evidence) },
@@ -311,7 +313,7 @@ class Resolver {
         allowedModes: allowedModes(phase.mode),
         distinctFrom: phase.distinct_from ?? [],
         cadence: phase.cadence,
-        evidence: declaredEvidenceKinds(workflow, p, bound[p]!),
+        evidence: declaredEvidenceKinds(workflow, p, bound[p]!.type, bound[p]!.holdsGate),
         include: phase.include ?? null,
         // The include resolves: the registry refuses one naming no loaded workflow (`E_WORKFLOW_INCLUDE_UNRESOLVED`).
         sub: sub === undefined ? null : this.view(sub, this.includeStart(workflow, p, start, sub)),
