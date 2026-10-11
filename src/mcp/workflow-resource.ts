@@ -18,20 +18,11 @@
  * payload, while these keep theirs and the working tree in v0.3 (spec-017 §9); same
  * spec-006-core-domain-api §4 parity deviation `memory-resource.ts`/`dna-resource.ts` document for
  * their own Resources, for the same reason (task-030-implement-mcp-resources' scope).
- *
- * task-239 adds the two v0.3 workflow-state Resources (`spec-017` §9, ruling R12; `spec-004` §2.1),
- * {@link registerWorkflowStateResources}: `wingfoil://workflows/-/next` and `wingfoil://workflows/-/status`
- * answer `NextResult` and `StatusResult` exactly as `wingfoil workflow next|status --format json` prints them,
- * read at `HEAD` (ruling R15). They cannot collide with `wingfoil://workflows/{name}`: their second segment is
- * `-`, which no workflow name can be (`spec-003` names start with a letter), and they have a third segment,
- * which the single-segment `{name}` template never matches — so a workflow named `next` stays
- * `wingfoil://workflows/next`.
  */
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import { loadWorkflowsYaml, workflowNextAtHead, workflowStatusAtHead } from '../core';
-import type { CoreResult } from '../core/types';
+import { loadWorkflowsYaml, workflowNextAtHead, workflowStatusAtHead, type CoreResult } from '../core';
 
 import { coreResultResource, jsonResourceResult, refuseIfWriteIntent, resourceNotFoundError, withRefusalDetails } from './read-only';
 
@@ -98,7 +89,10 @@ export const WORKFLOW_NEXT_URI = 'wingfoil://workflows/-/next';
 export const WORKFLOW_STATUS_URI = 'wingfoil://workflows/-/status';
 
 /**
- * Register the two workflow-state Resources on `server` (`spec-017` §9, ruling R12). Each read runs the core
+ * Register the two workflow-state Resources on `server` (task-239; `spec-017` §9, ruling R12; `spec-004` §2.1).
+ * They cannot collide with `wingfoil://workflows/{name}`: their second segment is `-`, which no workflow name
+ * can be (`spec-003` names start with a letter), and they have a third segment, which the single-segment
+ * `{name}` template never matches — so a workflow named `next` stays `wingfoil://workflows/next`. Each read runs the core
  * function the CLI command runs with no operand — `workflowNextAtHead` / `workflowStatusAtHead`, the
  * deduction at `HEAD` — and returns its value serialized as the CLI's `--format json` prints it (without the
  * final newline). Nothing is cached: every read deduces again. A refusal is a failed read carrying the CLI's

@@ -239,6 +239,10 @@ loaded also exits `1`, with the reason. The `<role>-session` Prompts take two op
 execution context for that element at that commit. Memory Resource reads and those Prompts report the
 documents that could not be read in a `warnings` array beside the content.
 
+Also unreleased (v0.3): the Resources `wingfoil://workflows/-/next` and `wingfoil://workflows/-/status`
+return what `wingfoil workflow next --format json` and `wingfoil workflow status --format json` print, as
+committed at `HEAD`. A workflow named `next` or `status` stays `wingfoil://workflows/<name>`.
+
 ---
 
 ## DNA — the project's structural map
@@ -1203,6 +1207,8 @@ next step: decision-log-ingest.capture
   with no open instance → `workflow is not open: <ref>`; both exit `1`; an error in
   the workflow files → exit `1`, as `workflow list`; more than one `<ref>` → exit `2`.
 - **Commit:** none.
+- **MCP:** the Resource `wingfoil://workflows/-/next` returns the same `--format json` payload (no `<ref>`, no
+  `--assigned-to`).
 
 ### `wingfoil workflow finalize`
 
@@ -1323,6 +1329,7 @@ pending approvals: 1
   with no open instance → `workflow is not open: <ref>`; both exit `1`; an error in the workflow files → exit
   `1`, as `workflow list`; more than one `<ref>` → exit `2`.
 - **Commit:** none.
+- **MCP:** the Resource `wingfoil://workflows/-/status` returns the same `--format json` payload (no `<ref>`).
 
 ### `wingfoil workflow show`
 

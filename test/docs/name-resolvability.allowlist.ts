@@ -209,7 +209,7 @@ export const NAME_ALLOWLIST: readonly AllowlistEntry[] = [
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'config', name: 'workflow.create', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'config', name: 'workflow.end', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'config', name: 'workflow.finalize', reason: UNTRIAGED },
-  { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'config', name: 'workflow.next', reason: PLANNED, plannedBy: ['task-239'] },
+  { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'config', name: 'workflow.next', reason: "retired on purpose: spec-017's Consequences name spec-004 §4.1's former Tool row to say it moves to v1.0 step advancement; task-239 removed the row" },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'config', name: 'workflow.start', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'path', name: '.wingfoil/state/', reason: 'retired on purpose: REQ-SYS-03 forbids a state index, and the document names the path to say there is none' },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'path', name: 'bindings.yaml', reason: PLANNED, plannedBy: ['task-175', 'task-199', 'task-221', 'task-222'] },

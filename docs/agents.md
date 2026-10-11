@@ -91,6 +91,8 @@ equivalent:
 | `wingfoil://memory/{type}/{id}` — one full document | `wingfoil memory search <id> --type <type>` → read the file at `matches[].path` |
 | `wingfoil://workflows` | `wingfoil workflow list` |
 | `wingfoil://workflows/{name}` | `wingfoil workflow list`, the entry with that `name` (full file: `.wingfoil/workflows/*/<name>.yaml`) |
+| `wingfoil://workflows/-/next` — the active workflow's next step, at `HEAD` (Unreleased, v0.3) | `wingfoil workflow next` |
+| `wingfoil://workflows/-/status` — every open workflow, at `HEAD` (Unreleased, v0.3) | `wingfoil workflow status` |
 | Prompt `<role>-session` — role instructions with its directives embedded | `wingfoil directives list --role <role>` → read each entry's `path` under `.wingfoil/` |
 | *(no MCP equivalent)* | `wingfoil paths [<category>]`, `wingfoil memory history <id>`, keyword `wingfoil memory search <keyword>` |
 

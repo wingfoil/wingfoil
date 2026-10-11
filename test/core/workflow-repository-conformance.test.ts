@@ -133,7 +133,7 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["e2e-smoke", "phases[1].checks.post[2]", "the working tree is clean after every step"],
       ["e2e-smoke", "phases[2].checks.post[0]", "exit-code-zero"],
       ["e2e-smoke", "phases[2].checks.post[1]", "registered server version == package.json pin"],
-      ["e2e-smoke", "phases[2].checks.post[2]", "advertised channel set == EXPECTED_CHANNELS, every advertised list answers"],
+      ["e2e-smoke", "phases[2].checks.post[2]", "advertised channel set == EXPECTED_CHANNELS, every advertised list answers, every listed Resource reads and Prompt gets except a declared KNOWN_READ_FAILURES entry, on the pinned build and the build under development"],
       ["release-submit", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
       ["release-submit", "phases[0].checks.pre[1]", "all bugs where tags=[{release.version}] are status"],
       // task-219: release-commit and staging-rehearsal precede tag; the rehearsal's check is bound.
