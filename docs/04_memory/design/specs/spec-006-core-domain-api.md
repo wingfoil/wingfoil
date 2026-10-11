@@ -394,7 +394,7 @@ users is `spec-008-cli-grammar` §11):
 
 | Baseline | Operations |
 |----------|------------|
-| `HEAD`, gating (item 1) | `memoryAdd` (type registry and scaffold; its `{n}` counter reads the wider baseline `command-baseline` declares, which can only raise the id), `memorySubmit`, `memoryApprove`, `memoryReject`, `memoryDeprecate`, `memoryAmend` (state machine, the document their `<id>` names and its committed `status` — `findMemoryDocumentByIdAtRev` at the one sha `prepareMemoryTransition` resolves — and approver authority on the gated verbs; the working tree supplies the content `memorySubmit` and `memoryAmend` commit and is checked to be the element `HEAD` records); `dnaSet`, `dnaAdd`, `dnaUpdate`, `dnaRemove` (`dna.yaml`, read only after item 2 has refused any difference from `HEAD`); `directiveAssign` (role catalogue, directive inventory, bindings); `directiveRemove`'s referrer check (`roles.yaml`, `loadRolesYamlAtHead`); `workflowNext`, from the task that ships it in v0.3 |
+| `HEAD`, gating (item 1) | `memoryAdd` (type registry and scaffold; its `{n}` counter reads the wider baseline `command-baseline` declares, which can only raise the id), `memorySubmit`, `memoryApprove`, `memoryReject`, `memoryDeprecate`, `memoryAmend` (the WIP-limit holder count of `memoryAdd`, `memorySubmit` and `memoryApprove` reads the decided commit plus every local and remote-tracking branch tip and its merge-base with that commit, the second baseline `command-baseline` declares, `dl-156` Q1 (a); state machine, the document their `<id>` names and its committed `status` — `findMemoryDocumentByIdAtRev` at the one sha `prepareMemoryTransition` resolves — and approver authority on the gated verbs; the working tree supplies the content `memorySubmit` and `memoryAmend` commit and is checked to be the element `HEAD` records); `dnaSet`, `dnaAdd`, `dnaUpdate`, `dnaRemove` (`dna.yaml`, read only after item 2 has refused any difference from `HEAD`); `directiveAssign` (role catalogue, directive inventory, bindings); `directiveRemove`'s referrer check (`roles.yaml`, `loadRolesYamlAtHead`); `workflowNext`, from the task that ships it in v0.3 |
 | `HEAD`, declared (item 6) | `workflowStatus`, `workflowList`, `workflowShow`, `agentList`, `agentShow`, the two v0.3 workflow Resources — each from the task that ships it in v0.3 |
 | working tree, gating nothing (item 4) | `dnaShow`, `paths`, `directivesList`, `memorySearch`, `memoryHistory` (its log is git's, its `memory.yaml` the working tree's), the shipped MCP Resources and the role Prompts |
 | filesystem, predicting an effect (item 5) | the confinement and symlink guards of every writing or deleting operation, and `directiveCreate`'s check that its target file does not exist |
@@ -417,8 +417,12 @@ the single write, so "the state is unchanged" holds on every refusal by construc
 3. **Transition legality** — the document located, its type and state resolved against the
    `memory.yaml` committed at `HEAD` (§6), the verb's edge resolved (`dl-032`, `dl-053`) → exit `1`.
    When the target state declares a WIP limit (`spec-001` `limits`) that the documents of the type
-   in that commit already reach, the transition is refused here too (`CONFLICT`, exit `1`), whichever
-   verb or engine action asked for it (`requireWipSlot`, `task-180`).
+   already reach — counted in that commit and at every local and remote-tracking branch tip, each
+   once, a tip's copy only when that ref changed the element's `status` since its merge-base with the
+   commit (`dl-156` Q1 (a), the approver's ruling of 2026-10-11) — the transition is refused here too
+   (`CONFLICT`, exit `1`), whichever verb or engine action asked for it (`requireWipSlot`,
+   `task-180`), except `reject` and `park`, which return the element along a reject or `returns`
+   edge and take no slot check (`dl-156` Q2 (i), `task-274`).
 4. **Authority** (REQ-SEC-03), on `approve` and `reject` → exit `1`,
    `user not authorized to approve type '<type>'`, read from the `dna.yaml` committed at `HEAD`.
 5. **Write** — one commit, scoped to the document. An `approve` that fires the `supersedes:` trigger
@@ -840,3 +844,13 @@ row ships.** `task-216` registers `workflowNext` in `CORE_MODULES` (`mutates: fa
 next`), so §3's row loses its planned marker. Its MCP Resource stays `task-239`'s. No other row changes.
 Edited in place without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at
 `task-216`'s review.
+
+**Revision (2026-10-10, `task-274-count-wip-limit-holders-across-every-ref-and-exempt-reject-and-returns-edges-from-the-limit`) —
+the WIP-limit check reads every ref and exempts the returns.** `dl-156` (`ready`, approve `f3354102`):
+§7 step 3 counts the holders at the decided commit and at every local and remote-tracking branch tip,
+a tip's copy only when that ref changed the element's `status` since its merge-base with the commit
+(Q1 (a), as the approver ruled on 2026-10-11 at `task-274`'s review), and exempts `reject` and `park`
+(Q2 (i)); §6's table names that count, beside the `{n}`
+counter, as a read wider than `HEAD` that `command-baseline` 1.5 declares. No operation, result shape
+or exit code changes. Edited in place without a supersede or a state change (`dl-047`); pending the
+approver's `memory amend` at `task-274`'s review.
