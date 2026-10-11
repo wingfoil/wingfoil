@@ -2,7 +2,7 @@
 id: "task-235-agent-execute-next-workflow-ref-step-key-take"
 type: task
 title: "`agent execute --next`, `--workflow <ref>` and `--step <key>` take workflow, phase, element and role from the workflow's frontier"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "high"
