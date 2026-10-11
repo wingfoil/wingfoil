@@ -207,8 +207,8 @@ The quality half that runs the toolchain: build/typecheck/lint, tests, coverage 
 - `897b8673` (fix):
   - **F1** (bug-329): a signal that lands while the guarded function is synchronous (history half, `--no-toolchain`,
     the pinned-Node refusal) was swallowed: Node delivers it to the handler only in the poll phase, and the guard
-    removed its handlers first. `withGuardedWorktree` now yields one macrotask (`setImmediate`) after the function
-    settles and, if a signal arrived, awaits the teardown and rejects `interrupted by <signal>` instead of returning a
+    removed its handlers first. `withGuardedWorktree` now yields after the function settles (one `setImmediate` at
+    `897b8673`, which the re-review showed insufficient; two since `e9e8803d`, N1 below) and, if a signal arrived, awaits the teardown and rejects `interrupted by <signal>` instead of returning a
     report. Header sentence corrected. Tests: `test/release-health/measure-signals.test.ts` (injected target; real child).
   - **F2**: a failure's reason was npm's last stderr line, its debug-log pointer (home path, timestamp). `reasonLine`
     prefers `npm error code <CODE>` and skips the pointer and bare `npm error` lines; the `npm ci` and `npm view` stubs
@@ -238,6 +238,38 @@ The quality half that runs the toolchain: build/typecheck/lint, tests, coverage 
 - T4 (`git log --first-parent --no-merges --format=%h a581f107..HEAD -- test/release-health/measure.test.ts
   test/release-health/latency-report.test.ts`) → `0127e723`, `fd03acfa`: the review-fix red (stubs replaced by real npm
   output, one F7 case added) and the accepted earlier fix; no assertion of red weakened.
+
+### re-review (independent, 2026-10-12) and fixes (developer)
+
+- Verdict at `15d33220`: APPROVE WITH FIXES; F2, F3, F4, F7 fixed; T4 holds (`0127e723` weakens nothing). Evidence in
+  `../devloop-kit/task-232-rereview/` (`scen.cjs`, `drive.sh`, a patched copy under `sc/`).
+- `1edec9f6` (red): `npx jest test/release-health` → `Tests: 4 failed, 96 passed, 100 total` — the two new N1 cases,
+  the N4 case and the tree-path case.
+- `e9e8803d` (fix):
+  - **N1** (bug-329): one `setImmediate` runs in the same iteration's check phase when the guarded function resumed
+    from a poll-phase callback (a child's `close`, an fs read) and then blocked, so the handlers went before the next
+    poll phase delivered the signal (the reviewer: `rc=3` 4/4, 3/3, 3/3). The guard now yields twice; the second
+    immediate is scheduled from the check phase, so a poll phase falls between. The real-child case in
+    `measure-signals.test.ts` runs three ways (right away; after an fs callback; after a child whose stdio closed early)
+    and passed 3 runs of 3 (`npx jest test/release-health/measure-signals`, repeated).
+  - **N2** (docs): the form is `n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <v>` (`-d`
+    downloads an uncached version; without it `n` refuses one, per the reviewer's `n --offline exec 22.12.0` →
+    "not in downloads cache"), in the header and `.wingfoil/WORKFLOW.md`; the "both download" sentence corrected.
+  - **N3**: the normal path removes the handlers in a `finally` around the cleanup.
+  - **N4** (coordinator ruling): 126/127 are tool errors only for Q01's `npm run` scripts; an example's is a command
+    missing inside it, a measured failure (test case adjusted).
+  - **Tree paths** (same class as F2): the runner reads every tool's output and error relative to the worktree
+    (`<tree>/x` → `x`, `<tree>` → `.`), so no reason carries the random `/tmp/wf-release-health-*/tree` path; new test.
+  - The optional F3/F4 tests were not written (`toolchain()` is internal; a failing cleanup is hard to provoke).
+- Gates at `e9e8803d`, under the slot (load 1.4–3.3, `../devloop-kit/task-232-scratch/gates3.log`): `npm test --
+  --maxWorkers=2` → `Test Suites: 384 passed`, `Tests: 7098 passed, 7098 total`; `npm run test:coverage --
+  --maxWorkers=2` → 7098 passed, 99.3 / 97.22 / 97.93 / 99.7; lint, docs:api, both tsc → 0;
+  `node scripts/check-governance.cjs --base 0671d035` → `gated: 0 findings`; `node scripts/lint-claims.cjs --base
+  0671d035` → 0 warnings.
+- T4 (`git log --first-parent --no-merges --format=%h a581f107..HEAD -- test/release-health/measure.test.ts
+  test/release-health/latency-report.test.ts`) → `1edec9f6`, `0127e723`, `fd03acfa`. `1edec9f6` changes one
+  expectation of `0127e723`'s F7 case (Q11 126 → measured failure, the N4 ruling) and adds a case; no red assertion
+  of `a581f107` weakened.
 
 ### Pending amendments (approver)
 
