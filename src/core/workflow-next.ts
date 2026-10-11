@@ -297,9 +297,11 @@ function expectedCommit(action: DeducedAction, phase: Phase, memoryYaml: MemoryY
   // The aggregate rule (task-225, W3 B4 handover): a forward move waits until every other source naming the target
   // has reached the source's state — its last state when the source is in its last (a bug passes `in-review` once
   // every task naming it is `done`). A move back is never held.
-  const required = sourceMachine === null ? -1 : sourceMachine.sequence.indexOf(sourceLast ? lastOf(sourceMachine) : source.state);
-  const peersReached = (id: string): boolean =>
-    (source.peers.find((entry) => entry.id === id)?.sources ?? []).every((peer) => required === -1 || sourceMachine!.sequence.indexOf(peer.status) >= required);
+  // A state the source's machine does not place (`-1`) holds nothing back.
+  const rank = (state: string): number => sourceMachine?.sequence.indexOf(state) ?? -1;
+  const required = rank(sourceLast ? lastOf(sourceMachine!) : source.state);
+  // The deduction lists the peers of every target it names (`DeducedAction.source.peers`).
+  const peersReached = (id: string): boolean => source.peers.find((entry) => entry.id === id)!.sources.every((peer) => rank(peer.status) >= required);
   const entries: SubjectEntry[] = [];
   for (const target of action.targets) {
     const machine = machineOf(target.type)!; // a target was found as a Memory element of its type
@@ -384,11 +386,10 @@ export function routeApproval(
     return routedTo.length > 0 ? { byRole: approval.by_role, routedTo } : { byRole: approval.by_role, routedTo, routingError: noApproverMessage(approval.by_role) };
   }
   const person = approval.by_person;
-  const routedTo = (dnaYaml?.team?.members ?? [])
-    .filter((member) => member.name === person || member.email === person)
-    .map((member) => ({ name: member.name, email: member.email ?? '' }))
-    .sort((a, b) => compareText(a.name, b.name) || compareText(a.email, b.email));
-  return routedTo.length > 0 ? { byPerson: person, routedTo } : { byPerson: person, routedTo, routingError: `no member '${person}' found in dna.yaml` };
+  const member = (dnaYaml?.team?.members ?? []).find((candidate) => candidate.name === person || candidate.email === person);
+  return member === undefined
+    ? { byPerson: person, routedTo: [], routingError: `no member '${person}' found in dna.yaml` }
+    : { byPerson: person, routedTo: [{ name: member.name, email: member.email ?? '' }] };
 }
 
 /**
