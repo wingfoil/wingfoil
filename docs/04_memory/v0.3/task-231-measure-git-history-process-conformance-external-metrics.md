@@ -62,8 +62,9 @@ tmpl_version: 260703
   (`.wingfoil/workflows/bindings.yaml`). Its handover (B4 review) is in scope: four validator gaps and REQ-STATE-10's
   BDD kinds 2–5.
 - **Decisions cited are ratified:** `grep -m1 '^status' docs/04_memory/design/dls/dl-{089,101,111,117,130,131}-*.md`
-  → all `ready`. No tech-spec governs `scripts/release-health/` (`grep -ln "release-health" docs/04_memory/design/specs/`
-  → nothing): the contract is dl-089 §1/§6, the catalogue and the schema. No spec edit is required.
+  → all `ready`. No tech-spec governs `scripts/release-health/` (`grep -ln "scripts/release-health" docs/04_memory/design/specs/`
+  → nothing; a bare `release-health` matches spec-002, spec-003 and spec-017, which name the folder and the workflow, not the
+  script — corrected at review, F1): the contract is dl-089 §1/§6, the catalogue and the schema. No spec edit is required.
 - **Scope split (from the sibling tasks' Descriptions):** this task writes `measure.cjs` and its history half — G01–G16,
   P01–P07 and E01–E05. Q01–Q04, Q11, Q12, Q17 are `task-232`'s, Q05–Q10, Q13–Q16, Q18–Q20 are `task-233`'s (Q20 is
   handed to 233 by its own B4 handover), and the comparison is `task-241`'s. `measure.cjs` writes one entry per catalogue
@@ -162,7 +163,7 @@ tmpl_version: 260703
   median 15 / p90 128 / 2.65 % over 500, G04 mean 103.24 / 76.94 % over 72, G05 100 % (38/38), G06 100 % (92/92),
   G07 22 of 573, G08 0 of 346 judged conforming (`Co-Authored-By: Claude Opus 5.5 …`, no `AI-Model:`), 30 approve/reject
   with AI attribution, G09 1.31 % (4/306), G10 99.45 % (180/181), G11 1.12, G12 50 % (7/14), G14 0, G15 2 stale remote
-  branches / 0 duplicate ids, G16 0 % (the trailer is v0.3's); P01 35, P02 1 (121 unchecked), P03 2 of 10 (19
+  branches / 0 duplicate ids, G16 0 % (the trailer is v0.3's); P01 35, P02 1 (121 unchecked; that one item is bug-308's false positive, so it becomes 0 once task-278 merges), P03 2 of 10 (19
   unresolved), P04 5 of 932, P05 1 (59 unchecked), P06 not-comparable (patch), P07 true. Not committed: the reports
   are task-241's (backfill).
 - The live external readers parse what the services answer: `gh api --include repos/wingfoil/wingfoil` and `curl
@@ -193,6 +194,21 @@ tmpl_version: 260703
 - Handover met: four validator rule tests; the P1.2 Scenario Outline kinds 2–5 with `@REQ-STATE-10`, exercised by
   "Process conformance names every failing item — kind 1…5" and the rerun scenario.
 - Same class in files touched: `catalogue.cjs`'s header names the new rules; WORKFLOW.md's sentence on the scripts.
+
+### review fixes (developer, 2026-10-11)
+
+- The independent review (APPROVE WITH FIXES; its coverage run on `d9f22ad7`: 6520 tests, 99.29 / 97.04 / 97.74 / 99.69)
+  asked for:
+  - F1: the design note's spec grep corrected (above).
+  - F2: G15 reads the running clone's live refs, so it is not reproducible at a fixed point. The header says so, and
+    the G15 entry carries `raw.refs_from: "live refs at run time"`, pinned in the G15 test. The catalogue wording is a
+    follow-up the coordinator files; `metrics.yaml` is unchanged.
+  - F3: `withWorktree` no longer runs the repository-wide `git worktree prune` after every run, only when its own
+    `worktree remove --force` failed.
+  - F9: the fixture report and the online (stub) report are validated against `release-health.schema.json` with ajv
+    (`ajv/dist/2020`, present as `@modelcontextprotocol/sdk`'s dependency: `npm ls ajv`).
+  - The header gives the manual cleanup for a worktree left behind by a signal
+    (`git worktree remove --force /tmp/wf-release-health-<suffix>/tree`); signal handling is a follow-up.
 
 ### Pending amendments (approver)
 
