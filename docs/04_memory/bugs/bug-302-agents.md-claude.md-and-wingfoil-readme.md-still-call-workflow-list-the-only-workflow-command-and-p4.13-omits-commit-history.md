@@ -65,6 +65,20 @@ As in steps 2–3.
 Captured on 2026-10-09 by `bug-ingest-rel-v0.3-w3b3-review-findings-plan`, from `task-204`'s and `task-203`'s
 reviews (W3 B3, `dev-loop-rel-v0.3-plan`), checked on `main` at `02121a96`.
 
+**Amendment (2026-10-11, approver triage of the W3 B5 follow-ups, `bug-ingest-rel-v0.3-w3b5-review-findings-plan`
+item 7).** Two more vision locations of the same class, found by `task-217`'s and `task-225`'s reviews and checked on
+`main` at `29b8406a`; whoever fixes this bug corrects them too:
+
+- `docs/01_vision/05_journeys.md:224` (journey step 4.5) still reads "`wingfoil workflow status` (P4.5, planned);
+  until it ships, `wingfoil memory search --type release`", though `task-225` shipped `workflow status`
+  (`node dist/cli.js workflow status --help` → `status [ref]`). The same file's `workflow show --name …` at lines
+  119, 152 and 256 (`grep -n "workflow show --name" docs/01_vision/05_journeys.md`) uses the `--name` spelling that
+  `spec-017` OQ-2 replaced with the positional `<ref>`.
+- `docs/01_vision/06_features.md:408` ("Active context") says commands target the active workflow "unless `--name` is
+  given"; the workflow commands take a positional `<ref>` and no `--name` (`node dist/cli.js workflow next --help` →
+  `Usage: wingfoil workflow next [options] [ref]`; `spec-017` OQ-2). `dl-109` Action 3 (P4.2/P4.6 descriptions in the
+  same file) was not carried by `task-217` either.
+
 ### Retrospective
 
 None.
