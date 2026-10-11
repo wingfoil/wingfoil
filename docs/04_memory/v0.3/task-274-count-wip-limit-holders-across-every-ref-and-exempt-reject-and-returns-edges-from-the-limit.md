@@ -47,7 +47,7 @@ scenarios in `P1.13-memory-element-schema.feature` says.
   `returns` edge takes no slot check. The test "`reject` into a full state is refused the same way" is rewritten
   to its new outcome (exit 0, one commit), with a `park` counterpart; every other entry (`memory add` for
   `sequence[0]`, `submit`, `approve`, the `supersedes:` trigger) still refuses.
-- (characterization) The chained `wf()` grammar and the refusal message are unchanged for the verbs that keep the
+- (characterization) The chained `wf()` grammar and the refusal message keep their current text for the verbs that keep the
   check (`spec-008` § the WIP-limit refusal: "WIP limit reached for '<state>' on type '<type>' (limit <N>): held
   by …").
 - (red-first, document) `spec-001`'s `limits` row says where holders are counted (every ref, deduplicated) and
@@ -104,7 +104,7 @@ branches" to this task. Its *For the coordinator* asks for exactly this task.
   `refBaselineCommits(root)` (deduplicated, sorted shas), which both the counter and the WIP count call,
   so the two scans cannot disagree about which refs exist (task Notes; `command-baseline`'s declared
   baseline).
-- **Across refs (Q1 (a)).** `requireWipSlot` loads the type's documents at the decided commit **and** at
+- **Across refs (Q1 (a)).** *(Superseded at review by F1, below: a ref's copy counts only when the ref changed it since its merge-base.)* `requireWipSlot` loads the type's documents at the decided commit **and** at
   every commit `refBaselineCommits` returns (each sha once, the decided one first), groups them by
   frontmatter `id` (by path when a document has none), and keeps for each element its **most advanced
   state**: the later position in the type's `sequence`; a state outside `sequence` (an off-chain reject
@@ -136,7 +136,7 @@ branches" to this task. Its *For the coordinator* asks for exactly this task.
 |----|-------|-----|
 | AC1 across refs: two branches cannot both take the last slot; the refusal names the other branch's holder and says the count depends on fetched refs | red-first | `requireWipSlot` reads `loadMemoryDocumentsAtRev(root, sha, …)` only (`grep -n "loadMemoryDocumentsAtRev" src/core/memory-transition.ts`) |
 | AC2 `reject` and `park` take no slot check; the other entries still refuse | red-first for `reject`/`park` (the pinned tests assert a refusal today); characterization for `submit`, `approve`, `add`, `supersedes:` (they refuse today) | `prepareMemoryTransitionAtRev` calls `requireWipSlot` whenever `to !== from` |
-| AC3 refusal grammar unchanged for the verbs that keep the check | characterization | the `spec-008` first sentence is what the code prints today; pinned by the existing exact-message tests, extended by the new sentence of AC1 |
+| AC3 refusal grammar kept for the verbs that keep the check | characterization | the `spec-008` first sentence is what the code prints today (`grep -n "WIP limit reached" src/core/memory-transition.ts`); pinned by the existing exact-message tests, extended by the new sentence of AC1 |
 | AC4 `spec-001` / `spec-008` text | red-first (document) | `grep -n "counted in the commit the transition is decided at" docs/04_memory/design/specs/spec-001-memory-yaml-schema.md` → line 126 before the edit; `spec-008` line 281 lists `reject`, `park` |
 | AC5 two P1.13 scenarios, each pinned by a test | red-first | the feature file has no such scenarios (`grep -c "Scenario" …P1.13-memory-element-schema.feature` → 9) |
 | AC6 gates green | characterization | gate runs, refactor |
@@ -193,8 +193,9 @@ Gates (one heavy gate at a time, `--maxWorkers=2`, the B5 notes' interim gate ru
   An earlier full run at `803cd7f8` gave 347 suites / 6483 tests passed.
 - `npm run lint` → exit 0; `npm run docs:api` → exit 0, no warning (`grep -ci warning` → 0);
   `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx tsc -p tsconfig.build.json --noEmit` → exit 0;
-  `npm run -s lint:claims` → 0 warnings; `node scripts/check-governance.cjs --base 30b268a3` → exit 0,
-  "1 wf() commits … and 6 other commits", 0 findings.
+  `npm run -s lint:claims` → "0 warnings in 0 files … 0 files read": a vacuous run, corrected at review
+  (F5, below); `node scripts/check-governance.cjs --base 30b268a3` → exit 0, "1 wf() commits … and 6
+  other commits", 0 findings (before the submit; see review fixes for the final count).
 - `test/docs/cli-reference.test.ts` is in the suite above (no command added or renamed).
 - BDD: P1.13 scenarios run as `test/memory/element-schema-park-limits.test.ts` (the repository's BDD
   form: suites citing the feature file, `grep -rln "P1.13-memory-element-schema" test`).
@@ -228,26 +229,107 @@ Gates (one heavy gate at a time, `--maxWorkers=2`, the B5 notes' interim gate ru
 - **`command-baseline`.** The WIP count can refuse a command from a read wider than `HEAD`; *Declared
   baselines* names it (1.5), and `spec-006` §6, the normative text, says the same (pending).
 
+### review fixes (developer, 2026-10-11)
+
+Independent review: APPROVE WITH FIXES. Status stays `in-review`.
+
+- **F1 — approver ruling, option (a).** "Most advanced state wins" over-counted (a stale branch kept a
+  parked holder counted: `git branch stale-feature`, park `card-001`, then `submit card-002` exits 1)
+  and under-counted (an older `in-review` copy hid an element a reject moved back). New rule in
+  `requireWipSlot`: a ref's copy counts only when that ref changed the element since its merge-base
+  with the decided commit; otherwise the decided commit's copy wins. Red `1da4c7aa`
+  (`npx jest test/core/memory-wip-limits.test.ts` → 2 failed: the stale-branch case `Expected: true,
+  Received: false`; the reject case `held by card-001` where `card-003` was expected), green `be65e623`.
+  **Decisions for the approver:**
+  - *"Changed" compares `status`, not the blob.* A body-only edit (Execution Notes, an `amend`) on a
+    stale branch is no move; comparing bytes would bring back the very overcount F1 removes.
+  - *Several refs changed it:* the most advanced of the **changed** copies wins, and the decided
+    commit's copy does not compete, even when the decided commit changed it too. Divergent histories
+    are rare, and this is the ruling's "otherwise the decided commit's copy wins" read literally.
+    Pinned by "when several refs changed an element, the most advanced of their changed copies wins".
+  - *Element new on a ref:* counts with the ref's copy. *Ref with no shared history:* every copy counts.
+    *Ref that is an ancestor of the decided commit* (a merged or stale branch): read nothing.
+  - *Refusal's third sentence* now reads "The holders are counted at HEAD and on every local and
+    remote-tracking branch that changed them since it forked from HEAD, so the count depends on which
+    refs were last fetched; a holder another branch records is moved out on that branch." That last
+    clause makes the "Move one of them out …" advice actionable for a holder only another branch
+    records. The first two sentences keep `task-180`'s text (AC3).
+- **F2 — performance (`bug-178` class).** `loadTypeDocumentCopiesAtRevs` (`src/memory/query.ts`)
+  lists only the limited type's static directory, at every commit in one batched walk
+  (`listBlobsAtRevs`, `src/storage/commit.ts`), reads every distinct blob in one batch (`readBlobs`)
+  and parses each oid once; `mergeBasesWith` runs one `git merge-base` per ref, and a ref that is an
+  ancestor of the decided commit reads nothing. New suite `test/storage/list-blobs-at-revs.test.ts`
+  compares `listBlobsAtRevs` with `git ls-tree -r` at every revision. Measured with the review's
+  `perf.cjs` (`node perf.cjs <clone> 1`, `limits: { in-progress: 1 }` on `task`, load 4.7–5.9):
+  | clone | refs (`git for-each-ref \| wc -l`) | before (`8c190661` build) | after (`be65e623` build), three runs |
+  |-------|------|--------|-------|
+  | `perf` | 40 | 7582 ms | 436, 385, 421 ms |
+  | `one` | 4 | 729 ms | 136, 140, 131 ms |
+- **F3.** `.wingfoil/workflows/custom/dev-loop.yaml` header: the WIP paragraph says `dl-156` is
+  implemented (task-274) and states the counting rule; `version` 1.6 → 1.7 (`0a008a78`). task-275
+  merges first with 1.6 → 1.7, so the coordinator re-bumps this one at the gate.
+  `npx jest test/core/dev-loop-v1-6.test.ts test/core/dev-loop-v1-5.test.ts test/core/workflow-repository-conformance.test.ts test/lint/version-bump.test.ts`
+  → 80 passed.
+- **F4.** "The element held the state before" is false for `bug`'s forward reject edges (`open`,
+  `triaged`, `planned → closed`). Reworded to "a reject or returns edge is exempt" in the `spec-001`
+  `limits` row, the `cli-reference` park bullet, the comment in `prepareMemoryTransitionAtRev` and the
+  WIP suite's header (`grep -rn "held the state before" src docs/cli-reference.md docs/04_memory/design/specs`
+  → nothing).
+- **F5.** My earlier "`lint:claims` 0 warnings" was vacuous: the default run read 0 files. Explicit run
+  `node scripts/lint-claims.cjs <task file> <dl-156> <spec-001> <spec-006> <spec-008>` first gave 27
+  warnings in 5 files. I fixed the three on text this task wrote (task file lines 50 and 139, `dl-156`'s
+  new Revision, and `spec-008`'s Revision "unchanged", now citing the test that pins the text). The run
+  then gave 24 warnings in 3 files. None is on a line this task's amendments add: each warned line
+  number was checked against `git diff -U0 HEAD -- <spec>` hunks, and none matched.
+- `command-baseline` 1.5's row now also names the merge-bases it reads (`1f4344c4`, no second bump:
+  same branch); `docs/cli-reference.md` states the counting rule.
+
+Gates after the fixes (dl-170 interim rule: one heavy gate at a time, `--maxWorkers=2`):
+- `npm run test:coverage -- --maxWorkers=2` at `1f4344c4`, every source change of the fixes included, with
+  the pending amendments in the tree (16:38–16:53, load 5.3 at start and 21.2 at end) →
+  `Test Suites: 348 passed, 348 total`, `Tests: 6499 passed, 6499 total`, exit 0; All files 99.29 %
+  statements, 96.93 % branches, 97.78 % functions, 99.70 % lines. The branch figure was below the
+  97.06 % of the pre-review run, so `012ef971` (tests only) covers the new branches: unrelated history, a
+  link and an unreadable path on two refs, a gitlink, and an undeclared type.
+  `npx jest test/core/memory-wip-limits.test.ts test/storage/list-blobs-at-revs.test.ts test/memory/element-schema-park-limits.test.ts`
+  at `012ef971` → 47 passed. A second full run at `012ef971` was queued but not started: the load stayed
+  above 14 (33–37) with no gate running, because another session's processes, not this task's, were
+  holding the CPU. It was stopped rather than left queued; see *For the coordinator*.
+- `npm run build` (the `tsconfig.build.json` compile) at `be65e623` → exit 0; no `src/` file has
+  changed since (`git diff --stat be65e623 HEAD -- src` → empty). `npm run lint` → 0, `npm run
+  docs:api` → 0 with no warning, `npx tsc --noEmit -p tsconfig.json` → 0, all at `1f4344c4`.
+- `node scripts/check-governance.cjs --base 30b268a3` → exit 0, "2 wf() commits … and 12 other
+  commits", 0 findings, before this notes commit, which makes 13 others.
+
 ### Pending amendments (approver)
 
-Left uncommitted in the worktree; the gates ran with them in the tree.
+Left uncommitted in the worktree; the gates ran with them in the tree. Final list after the review fixes.
 
-- `spec-001-memory-yaml-schema` — `--reason "task-274 (dl-156 Q1 (a), Q2 (i)): the limits row says the holders are counted at the decided commit and at every local and remote-tracking branch tip, each document once in its most advanced state, and that reject and park along a reject or returns edge are exempt. Dated Revision note added."`
-- `spec-008-cli-grammar` — `--reason "task-274 (dl-156): the WIP-limit paragraph binds add, submit, approve and the supersedes trigger, not reject or park; the park paragraph drops its WIP refusal; the refusal gains a sentence saying the count depends on fetched refs; section 11 names the count as a declared baseline. Dated Revision note added."`
-- `spec-006-core-domain-api` — `--reason "task-274 (dl-156): section 7 step 3 counts WIP holders across every ref and exempts reject and park; the section 6 table names that count as a read wider than HEAD that command-baseline 1.5 declares. Dated Revision note added."`
+- `spec-001-memory-yaml-schema` — `--reason "task-274 (dl-156 Q1 (a), Q2 (i), and the approver ruling of 2026-10-11 at its review): the limits row says the holders are counted at the decided commit and at every local and remote-tracking branch tip, a tip's copy only when that ref changed the element's status since its merge-base with the decided commit, and that a reject or returns edge is exempt. Dated Revision note added."`
+- `spec-008-cli-grammar` — `--reason "task-274 (dl-156; approver ruling of 2026-10-11 at its review): the WIP-limit paragraph binds add, submit, approve and the supersedes trigger, not reject or park; the park paragraph drops its WIP refusal; the refusal gains a sentence saying where holders are counted, that the count depends on fetched refs and where a holder on another branch is moved out; section 11 names the count, merge-bases included, as a declared baseline. Dated Revision note added."`
+- `spec-006-core-domain-api` — `--reason "task-274 (dl-156; approver ruling of 2026-10-11 at its review): section 7 step 3 counts WIP holders at the decided commit and at every ref tip that changed them since its merge-base, and exempts reject and park; the section 6 table names that count as a read wider than HEAD that command-baseline 1.5 declares. Dated Revision note added."`
+- `dl-156-…` — `--reason "Approver ruling 2026-10-11 (option (a)) at task-274's review: Q1 (a) no longer deduplicates by the most advanced state, because states are not monotone; the review repro showed a stale branch keeping a parked holder counted (git branch stale-feature, park card-001, submit card-002 exits 1 until the branch is deleted). A ref's copy now counts only when that ref changed the element since its merge-base with the decided commit. Dated Revision note added."`
 
 ### For the coordinator
 
-- **Not edited, and why.** `.wingfoil/memory.yaml` (its comment "no `limits:` declared" stays true; no
-  bump on this branch, so nothing to re-bump against task-275's 2.9) and `dev-loop.yaml` (task-276's
-  ground is the directives; this file's header, lines 75–77, says "This repository declares no
-  `limits:` until that is implemented" — once this merges, "until that is implemented" is stale; a
-  one-line edit for whichever task next bumps `dev-loop.yaml`).
+- **Not edited, and why.** `.wingfoil/memory.yaml`: its comment "no `limits:` declared" stays true, and
+  there is no bump on this branch, so nothing to re-bump against task-275's 2.9. `dev-loop.yaml` was
+  edited at review (F3, 1.7); task-275 also takes 1.7, so re-bump at the gate.
+- `dl-156` is a fourth pending amendment (F1, the approver's ruling).
 - `spec-006` is a third pending amendment the task's Files list did not name: the across-refs read is a
   gating read wider than `HEAD`, and `spec-006` §6 is the normative baseline text.
+- **Gate rule as written self-matches.** `pgrep -af "jest --coverage|…"` also matches every waiting
+  agent's own `bash -c` poller, whose command line contains the pattern text, so pollers block one
+  another. This task's wrapper adds `grep -v "bash -c"`
+  (`devloop-kit/task-274-scratch/gate.sh`). Also, at 17:15–17:25 about 30 `sh -c while :; do :; done`
+  processes, with their working directory in `WingFoil-UI`, held the load at 33–37 with no gate running.
+  They are not this task's, and I did not stop them.
 - Merge order: no shared code file with the other B5 tasks expected; `spec-001` (also 217?, 271),
   `spec-008` (217, 226, 227, 225, 235) and `spec-006` (command-surface tasks) amendments are recorded in
-  merge order. `docs/cli-reference.md`: this task edits only the `memory park` WIP bullet.
+  merge order. `docs/cli-reference.md`: this task edits only the `memory park` WIP bullet. New storage
+  primitives `listBlobsAtRevs`, `readBlobs`, `mergeBasesWith` are appended at the end of
+  `src/storage/commit.ts` and exported from `src/storage/index.ts` line 22 (an adjacent-line conflict there
+  is possible with any task that exports from `./commit`).
 
 ### Retrospective
 
