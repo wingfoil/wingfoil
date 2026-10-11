@@ -154,8 +154,8 @@ export { loadWorkflowRegistry, loadWorkflowRegistryAtHead, loadWorkflowRegistryA
 export type { CheckTokenView, ListEntry, ListResult, PhaseView, ShowInputs, ShowResult, TokenView, WorkflowView } from './workflow-list-show';
 // task-216: `workflow next` at `HEAD` (`spec-017` §6, §7.3, §8 `Step` / `NextResult`); the operation is
 // `CORE_MODULES`' `workflowNext`, and the step builder is what `agent execute --next` (task-235) and `status`
-// (task-225) reuse.
-export { buildStep, nextWorkflow, renderNextConsole } from './workflow-next';
+// (task-225) reuse. `workflowNextAtHead` is also what the MCP Resource `wingfoil://workflows/-/next` serves (task-239).
+export { buildStep, nextWorkflow, renderNextConsole, workflowNextAtHead } from './workflow-next';
 // task-226: `workflow finalize` (`spec-017` §7.9, §8 `FinalizeResult`); the operation is `CORE_MODULES`'
 // `workflowFinalize`.
 export { NO_ACTIVE_WORKFLOW_TO_FINALIZE, phaseRecordTrailers, renderFinalizeConsole, workflowFinalizeAtHead } from './workflow-finalize';
@@ -2690,7 +2690,8 @@ export const CORE_MODULES: readonly CoreModule[] = [
       // task-216 (`spec-017` §7.3): reads `HEAD`, gating (§1.1 item 1): its first step is what `agent execute
       // --next` launches on. Exit 0 for every deduced outcome; 1 for a `spec-003` error or an unknown `<ref>`.
       // Console: the step's key, trail, role, scope, actions with bindings, directive ids and any "human
-      // needed" line (§8). The MCP Resource `wingfoil://workflows/-/next` is task-239's.
+      // needed" line (§8). The MCP Resource `wingfoil://workflows/-/next` serves the same payload (task-239,
+      // `src/mcp/workflow-resource.ts`).
       workflowNext: {
         name: 'workflowNext',
         mutates: false,
@@ -2753,7 +2754,8 @@ export const CORE_MODULES: readonly CoreModule[] = [
       // task-225 (`spec-017` §7.4, §5.1–§5.4): reads `HEAD`, declared (§1.1, ruling R15), from the deduction `next`
       // answers from. Every open instance with its phases, frontier and late elements, the pending approvals routed
       // to `dna.yaml` members, and the ungated elements; the console view's "human needed" lines are the v0.3
-      // notification channel (§5.3). The MCP Resource `wingfoil://workflows/-/status` is a later task's.
+      // notification channel (§5.3). The MCP Resource `wingfoil://workflows/-/status` serves the same payload
+      // (task-239, `src/mcp/workflow-resource.ts`).
       workflowStatus: {
         name: 'workflowStatus',
         mutates: false,

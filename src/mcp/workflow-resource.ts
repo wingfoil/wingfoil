@@ -18,13 +18,22 @@
  * payload, while these keep theirs and the working tree in v0.3 (spec-017 §9); same
  * spec-006-core-domain-api §4 parity deviation `memory-resource.ts`/`dna-resource.ts` document for
  * their own Resources, for the same reason (task-030-implement-mcp-resources' scope).
+ *
+ * task-239 adds the two v0.3 workflow-state Resources (`spec-017` §9, ruling R12; `spec-004` §2.1),
+ * {@link registerWorkflowStateResources}: `wingfoil://workflows/-/next` and `wingfoil://workflows/-/status`
+ * answer `NextResult` and `StatusResult` exactly as `wingfoil workflow next|status --format json` prints them,
+ * read at `HEAD` (ruling R15). They cannot collide with `wingfoil://workflows/{name}`: their second segment is
+ * `-`, which no workflow name can be (`spec-003` names start with a letter), and they have a third segment,
+ * which the single-segment `{name}` template never matches — so a workflow named `next` stays
+ * `wingfoil://workflows/next`.
  */
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import { loadWorkflowsYaml } from '../core';
+import { loadWorkflowsYaml, workflowNextAtHead, workflowStatusAtHead } from '../core';
+import type { CoreResult } from '../core/types';
 
-import { jsonResourceResult, refuseIfWriteIntent, resourceNotFoundError, withRefusalDetails } from './read-only';
+import { coreResultResource, jsonResourceResult, refuseIfWriteIntent, resourceNotFoundError, withRefusalDetails } from './read-only';
 
 /** Options for {@link registerWorkflowResources}. */
 export interface RegisterWorkflowResourcesOptions {
@@ -80,5 +89,37 @@ export function registerWorkflowResources(server: McpServer, options: RegisterWo
 
         return jsonResourceResult(uri, workflow);
       }),
+  );
+}
+
+/** spec-017 §9 — the active instance's next step: `wingfoil workflow next --format json`'s `NextResult`, at `HEAD`. */
+export const WORKFLOW_NEXT_URI = 'wingfoil://workflows/-/next';
+/** spec-017 §9 — every open instance: `wingfoil workflow status --format json`'s `StatusResult`, at `HEAD`. */
+export const WORKFLOW_STATUS_URI = 'wingfoil://workflows/-/status';
+
+/**
+ * Register the two workflow-state Resources on `server` (`spec-017` §9, ruling R12). Each read runs the core
+ * function the CLI command runs with no operand — `workflowNextAtHead` / `workflowStatusAtHead`, the
+ * deduction at `HEAD` — and returns its value serialized as the CLI's `--format json` prints it (without the
+ * final newline). Nothing is cached: every read deduces again. A refusal is a failed read carrying the CLI's
+ * message and details (spec-004 §4.3 item 4), whether core returns it (`CoreResult.error`, through
+ * `coreResultResource`) or a loader throws it (`withRefusalDetails`); a read carrying a write intent is refused
+ * first (spec-004 §2.3). With no operand neither function returns a `CoreResult.error` today (only an
+ * unresolvable `<ref>` does, `spec-017` §10), so the first path is the shared helper's, tested on its own.
+ */
+export function registerWorkflowStateResources(server: McpServer, options: RegisterWorkflowResourcesOptions): void {
+  const register = (name: string, uri: string, description: string, read: (root: string) => CoreResult<unknown>): void => {
+    server.registerResource(name, uri, { description }, (readUri, extra) =>
+      withRefusalDetails(() => {
+        refuseIfWriteIntent(extra._meta);
+        return coreResultResource(readUri, read(options.resolveRoot()));
+      }),
+    );
+  };
+  register('workflows.next', WORKFLOW_NEXT_URI, 'the next step of the active workflow instance, as committed at HEAD (read-only)', (root) =>
+    workflowNextAtHead(root),
+  );
+  register('workflows.status', WORKFLOW_STATUS_URI, 'every open workflow instance, its pending approvals and the elements waiting at a gate, as committed at HEAD (read-only)', (root) =>
+    workflowStatusAtHead(root),
   );
 }

@@ -27,6 +27,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import { coreErrorOf } from '../core';
 import { errorDetails, type ErrorDetail } from '../core/error-details';
+import type { CoreResult } from '../core/types';
 
 /** spec-004 §2.3's exact, verbatim write-refusal string. */
 export const WRITE_REFUSAL_MESSAGE = 'resources are read-only';
@@ -117,6 +118,18 @@ export function jsonResourceResult(uri: URL, value: unknown): { contents: [{ uri
       },
     ],
   };
+}
+
+/**
+ * A core operation's result as a JSON-bodied Resource read (task-239): its value as {@link jsonResourceResult}'s
+ * `text` — the bytes the CLI's `--format json` prints, without the final newline — with its warnings beside
+ * `contents` ({@link withWarnings}); a `CoreResult.error` is thrown as the failed read
+ * {@link readRefusalError} builds, with the CLI's message and details (spec-004 §4.3 item 4). The registrar's
+ * derived Resources (`./registrar.ts`) shape theirs the same way.
+ */
+export function coreResultResource(uri: URL, result: CoreResult<unknown>): ReturnType<typeof jsonResourceResult> & { warnings?: string[] } {
+  if (!result.ok) throw readRefusalError(result.error.message, errorDetails(result.error));
+  return withWarnings(jsonResourceResult(uri, result.value), result.warnings ?? []);
 }
 
 /** The raw JSON-RPC shape of an (unsupported) `resources/write` request — just enough to extract the

@@ -11,7 +11,8 @@
  * channel (REQ-INT-01 / REQ-SEC-05): `registerMemoryResources` (`wingfoil://memory/{type}`,
  * `wingfoil://memory/{type}/{id}` — REPLACING task-009-mcp-resource-fetch-latency's placeholder
  * `wingfoil://memory/{id}` adapter), `registerDnaResources` (`wingfoil://dna`, `wingfoil://dna/{section}`),
- * `registerWorkflowResources` (`wingfoil://workflows`, `wingfoil://workflows/{name}`), and
+ * `registerWorkflowResources` (`wingfoil://workflows`, `wingfoil://workflows/{name}`; task-239 adds
+ * `registerWorkflowStateResources`, `wingfoil://workflows/-/next` and `-/status`), and
  * `registerWriteRefusalHandler` (the structural `resources/write` refusal, spec-004 §2.3).
  * `registerReadOnlyResources` wires all four together — the one call a future production entry point
  * (`task-030-implement-mcp-resources`'s `StdioServerTransport`/`wingfoil mcp` command, out of this
@@ -38,8 +39,11 @@ export type { RegisterDnaResourcesOptions } from './dna-resource';
 
 export {
   registerWorkflowResources,
+  registerWorkflowStateResources,
   WORKFLOWS_COLLECTION_URI,
   WORKFLOW_DOCUMENT_URI_TEMPLATE,
+  WORKFLOW_NEXT_URI,
+  WORKFLOW_STATUS_URI,
 } from './workflow-resource';
 export type { RegisterWorkflowResourcesOptions } from './workflow-resource';
 
@@ -62,7 +66,7 @@ export type { RegisterRolePromptsOptions } from './prompt';
 import { registerDnaResources } from './dna-resource';
 import { registerMemoryResources } from './memory-resource';
 import { registerWriteRefusalHandler } from './read-only';
-import { registerWorkflowResources } from './workflow-resource';
+import { registerWorkflowResources, registerWorkflowStateResources } from './workflow-resource';
 
 /** Options for {@link registerReadOnlyResources}. */
 export interface RegisterReadOnlyResourcesOptions {
@@ -72,7 +76,8 @@ export interface RegisterReadOnlyResourcesOptions {
 
 /**
  * Wire the full spec-004 §2 read-only Resources channel onto `server` in one call: the Memory, DNA,
- * and Workflow Resources plus the structural `resources/write` refusal. Deliberately does not touch
+ * and Workflow Resources — the two workflow-state Resources `wingfoil://workflows/-/next` and `-/status`
+ * included (task-239, `spec-017` §9) — plus the structural `resources/write` refusal. Deliberately does not touch
  * `registerCoreModules`/`CORE_MODULES` — a caller building a real server still calls that separately
  * for the (today, zero) Tools/legacy-shaped Resources it derives from `src/core`.
  */
@@ -81,6 +86,7 @@ export function registerReadOnlyResources(server: McpServer, options: RegisterRe
   registerMemoryResources(server, options);
   registerDnaResources(server, options);
   registerWorkflowResources(server, options);
+  registerWorkflowStateResources(server, options);
 }
 
 // The production stdio entry point (task-030-implement-mcp-resources, spec-014-mcp-server-entry-point):

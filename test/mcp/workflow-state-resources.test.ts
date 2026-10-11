@@ -14,9 +14,12 @@
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { McpError } from '@modelcontextprotocol/sdk/types.js';
 
-import { WRITE_REFUSAL_MESSAGE } from '../../src/mcp';
+import { coreErr, coreOk } from '../../src/core';
+import { registerWorkflowStateResources, WORKFLOW_NEXT_URI, WORKFLOW_STATUS_URI, WRITE_REFUSAL_MESSAGE } from '../../src/mcp';
+import { coreResultResource } from '../../src/mcp/read-only';
 import { createMcpServer } from '../../src/mcp/server';
 import { runCliEntry } from '../cli/helpers/spawn-cli';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -231,5 +234,42 @@ describe('task-239 — a refusal reaches the client as the CLI prints it', () =>
     } finally {
       removeTempDir(repo);
     }
+  });
+});
+
+describe('task-239 — the registration and the shared result helper', () => {
+  it('registerWorkflowStateResources registers exactly the two URIs, which the barrel exports', async () => {
+    expect([WORKFLOW_NEXT_URI, WORKFLOW_STATUS_URI]).toEqual([NEXT_URI, STATUS_URI]);
+    const server = new McpServer({ name: 'task-239', version: '0.0.0' });
+    registerWorkflowStateResources(server, { resolveRoot: () => '/unused' });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'task-239', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      expect((await client.listResources()).resources.map((resource) => resource.uri).sort()).toEqual([NEXT_URI, STATUS_URI]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('coreResultResource: a value is the JSON text, its warnings ride beside contents', () => {
+    const uri = new URL(NEXT_URI);
+    expect(coreResultResource(uri, coreOk({ a: 1 }))).toEqual({ contents: [{ uri: NEXT_URI, mimeType: 'application/json', text: '{"a":1}' }] });
+    expect(coreResultResource(uri, { ok: true, value: [], warnings: ['W_X (f): w'] })).toEqual({
+      contents: [{ uri: NEXT_URI, mimeType: 'application/json', text: '[]' }],
+      warnings: ['W_X (f): w'],
+    });
+  });
+
+  it('coreResultResource: a CoreResult.error is thrown with its message and details as `data.details`', () => {
+    const refusal = coreErr({ code: 'NOT_FOUND', message: 'unknown workflow: ghost', details: { issues: [{ file: 'workflows.yaml', detail: 'not a list' }] } });
+    let thrown: unknown;
+    try {
+      coreResultResource(new URL(STATUS_URI), refusal);
+    } catch (error) {
+      thrown = error;
+    }
+    expect((thrown as Error).message).toBe('unknown workflow: ghost');
+    expect((thrown as { data?: unknown }).data).toEqual({ details: [{ file: 'workflows.yaml', detail: 'not a list' }] });
   });
 });

@@ -107,7 +107,9 @@ describe('scripts/check-mcp-registration.cjs — pure parts', () => {
 
   it('accepts a registration of the pinned build that answers as declared', () => {
     expect(registrationProblems(HEALTHY_CONFIG)).toEqual([]);
-    expect(evaluateRegistration(HEALTHY_MANIFEST, HEALTHY_CONFIG, HEALTHY_OBSERVATION).ok).toBe(true);
+    // No known read failure: the repository's KNOWN_READ_FAILURES belong to the real pin, not this fixture's 0.2.1
+    // (task-239; an entry for another version than the pin fails the check, tested below).
+    expect(evaluateRegistration(HEALTHY_MANIFEST, HEALTHY_CONFIG, HEALTHY_OBSERVATION, EXPECTED_CHANNELS, []).ok).toBe(true);
   });
 
   it('refuses a missing server entry', () => {
