@@ -56,7 +56,9 @@ This task wires `spec-017`'s deduction into step 1 of the resolution: - `--workf
   maps them), `selectFrontierStep`, `stepTargetElement`, `resolveStepRole` — pure but the first. The
   pipeline (`src/agent/execute.ts`) reads the deduction first under a step form and takes its
   `baseline.commit` as the run's one `HEAD` (no second `rev-parse`, so no race between two reads); the
-  stepless form is unchanged. `CORE_MODULES` gains the flag `--next` and the options `--workflow <ref>`,
+  stepless form keeps its own `resolveRevision(root, 'HEAD')` (`grep -n "resolveRevision(root, 'HEAD')"
+  src/agent/execute.ts` → the one call, in the fallback for the stepless form and a repository with no
+  commit). `CORE_MODULES` gains the flag `--next` and the options `--workflow <ref>`,
   `--step <key>`; `agentExecuteFn` treats either option as implying `--next`.
 - **AC classification.**
 
@@ -123,6 +125,26 @@ This task wires `spec-017`'s deduction into step 1 of the resolution: - `--workf
 - `NO_STEP_ELEMENT` / `NO_STEP_ROLE` stay as spec identifiers (no constant), as §3.7 says; the
   name-resolvability allowlist entries naming them did not go stale (that suite passed).
 
+### Review fixes (independent review: approve with fixes, 2026-10-11)
+
+- **F3** — every adapter read now takes the run's one resolved commit: `duplicateAdapterRefusal(root, sha,
+  'HEAD')` and `loadAdapter(root, name, sha, 'HEAD')` (`src/agent/execute.ts`), both forms; the two
+  functions gain a `label` parameter (`src/agent/discovery.ts`, default `rev`) so messages still say
+  `HEAD`. Test: `test/core/agent-execute-step.test.ts` › "review F3" moves `HEAD` (a commit that breaks the
+  fake adapter) right after the deduction (step form) or the `resolveRevision` (stepless form) and expects
+  the plan at the first commit. With the two calls reverted to `'HEAD'`:
+  `npx jest test/core/agent-execute-step.test.ts -t "review F3"` → 2 failed (the duplicate-adapter refusal);
+  with the fix → 2 passed. The spec-016 / spec-008 amendment wording ("the one `HEAD`") is now true.
+- **F5** — two "unchanged" claims reworded with their commands (`node scripts/lint-claims.cjs --base
+  30b268a3`).
+- A third case pins `duplicateAdapterRefusal` at `HEAD`, at a sha with the `HEAD` label, and with no commit:
+  no production caller passes `'HEAD'` any longer, and the first coverage run after F3 showed
+  `discovery.ts` functions at 94.73 (main 100).
+- Gates at `3824a8a9`: `npm run test:coverage -- --maxWorkers=2` → 349 suites, 6517 tests passed; All files
+  99.27 / 97.12 / 97.75 / 99.68 (the W3 B4 gate's main: 99.29 / 97.04 / 97.74 / 99.69); `discovery.ts`
+  97.82 / 96.66 / 100 / 98.64. `npx tsc --noEmit -p tsconfig.json` → 0; `npx eslint src/agent
+  test/core/agent-execute-step.test.ts` → 0.
+
 ### Decisions for the approver
 
 1. **P5.3.2 sc. 3 is not reachable verbatim through a repository.** The registry refuses a phase whose role
@@ -142,7 +164,8 @@ This task wires `spec-017`'s deduction into step 1 of the resolution: - `--workf
    avoid two competing implementations in `src/core/workflow-next.ts`. Ruling needed on which task (225)
    amends spec-017 §6.1 and implements it.
 4. Deduction diagnostics (`NextResult.diagnostics`, e.g. this repository's unbound-check warnings) are not
-   printed by `agent execute`; only the context warnings are (unchanged).
+   printed by `agent execute`; only the context warnings are, through the same `reportWarning` loop as
+   before (`git diff 30b268a3 -- src/agent/execute.ts | grep -n "context.warnings"` → no changed line).
 5. The deduction runs only under a step form; the stepless form reads no workflow file (§3.3 step 2).
 
 ### Pending amendments (approver)
