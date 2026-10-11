@@ -376,7 +376,9 @@ registered, so they are rejected as unknown options, exit `2`, per `spec-005` §
   interactive agent then fetches it is the agent's behaviour, which WingFoil cannot assert; the
   fake adapter's optional fetch (§2.7) asserts that the context is fetchable.
 
-The three BDD refusal messages are adopted verbatim (§3.7).
+The BDD refusal messages are adopted verbatim (§3.7). P5.3.2 sc. 3's is the workflow registry's
+`E_PHASE_ROLE_UNKNOWN` refusal (`unknown role '<r>' (not defined in dna.yaml)`, §3.7's step-2 `VALIDATION`
+row), which is what a repository reaches (approver ruling 2026-10-11, task-235 D1).
 
 #### 3.2 Resolution
 
@@ -389,7 +391,10 @@ In this order, each a gating read at `HEAD` (`spec-006` §6):
    `--step`, it is `NextResult.next`, the first frontier step in `spec-017` §1.3's order (§7.3); it gives
    `workflow`, `phase`, `scope`, `role`, `allowedModes` and `distinctFrom` (`spec-017` §6.3, §8).
    A `<ref>` that resolves to no open instance is `spec-017` §10's refusal (`unknown workflow:
-   <name>` or `workflow is not open: <ref>`). No open instance, or `next: null` → `NO_NEXT_STEP`.
+   <name>` or `workflow is not open: <ref>`). No open instance, or `next: null` without `--step` →
+   `NO_NEXT_STEP`; with `--step`, an open instance whose frontier is empty is the `CONFLICT` above, since
+   the key names no step of it. The deduction's commit is the `HEAD` every other read of the run takes
+   (§3.3 step 2), so the step, the element and the context come from one commit.
 2. **Element**: `--element` if given, else the step's scope element, else the instance's bound
    element (`spec-017` §3.4). A step with none of the three (a collection-entry scope on an unbound
    instance) → `NO_STEP_ELEMENT`. The element must exist at `HEAD` → else `NOT_FOUND`.
@@ -555,7 +560,7 @@ P4.12:
 | `NO_STEP_ELEMENT` | `VALIDATION` | `1` | `step '<key>' has no element: give --element <type>:<id>` |
 | element absent at `HEAD` | `NOT_FOUND` | `1` | `element not found: <type>:<id>` |
 | `NO_STEP_ROLE` | `VALIDATION` | `1` | `step '<key>' declares no role: give --role <role>` |
-| step role not in DNA | `VALIDATION` | `1` | `step role '<r>' not defined in dna.yaml` (P5.3.2 sc. 3, verbatim) |
+| step role not in DNA | `VALIDATION` | `1` | `step role '<r>' not defined in dna.yaml` — a defence, reached only by a step deduced without `spec-003`'s role check: against the same committed `dna.yaml` the registry already refuses such a phase at step 2 (`E_PHASE_ROLE_UNKNOWN`, `unknown role '<r>' (not defined in dna.yaml)`, the row above), which is what a repository shows and what P5.3.2 sc. 3 expects (approver ruling 2026-10-11) |
 | `--role` not in DNA | `VALIDATION` | `1` | `unknown role '<r>' (not defined in dna.yaml)` (P5.4.2 sc. 3 text) |
 | `APPROVER_ROLE` | `VALIDATION` | `1` | `role 'approver' is never executed by an agent` (`REQ-SEC-03`) |
 | `NO_AGENT` (no `--agent`, and no agent with an adapter executes the role) | `VALIDATION` | `1` | `no agent in dna.yaml with an adapter executes as role '<r>'` |
@@ -1079,3 +1084,15 @@ spawn. §4.1 states that path categories may nest (approver ruling, W3 B1 triage
 `0`–`255` or `signal:<NAME>`, and §4.2/§4.5 make each line exactly the writer's serialization
 (`bug-288`). The step-11 working-tree exception is unchanged: `dl-165` is still `in-discussion`. No key
 of §4.2 and no rule of §4.3 changes. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-10, `task-235-agent-execute-next-workflow-ref-step-key-take`) — the step forms ship;
+§3.2 step 1 says which refusal an empty frontier gives under `--step`; P5.3.2 sc. 3 takes the registry's
+message, and §3.7's step-role row becomes a defence.** `--next`, `--workflow <ref>` and `--step <key>` are registered (§3.1). §3.2 step 1:
+without `--step`, no open instance or `next: null` is `NO_NEXT_STEP`; with `--step`, an open instance whose
+frontier is empty is `CONFLICT` (the rows' pipeline order), and the deduction's commit is the run's one
+`HEAD`. §3.7's "step role not in DNA" row: the registry check of `spec-003` (`E_PHASE_ROLE_UNKNOWN`) refuses
+such a phase at load against the same `dna.yaml`, so a repository reaches the `VALIDATION` row of step 2,
+not this message. By the approver's ruling of 2026-10-11 (task-235 D1, option (a)) P5.3.2 sc. 3 now expects
+that registry message, `unknown role '<r>' (not defined in dna.yaml)`; §3.1's closing line says so, and the
+step-role row stays as a defence for a step deduced without the check. No exit code changes, and no key of §4.2. Edited in place without a supersede or a state change
+(`dl-047`).
