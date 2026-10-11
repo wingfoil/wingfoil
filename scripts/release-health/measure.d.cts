@@ -110,6 +110,19 @@ export interface MeasureOptions {
   readonly interrupts?: Interrupts;
 }
 
+/**
+ * Run `fn` with a throw-away worktree of `commit` (detached, under a temporary directory), removed afterwards, guarded
+ * against SIGINT, SIGTERM and SIGHUP (`bug-329`): a signal stops the running tool, removes the worktree and the
+ * directory and re-raises, including one that landed while `fn` was synchronous; the promise then rejects
+ * (`interrupted by <signal>`) instead of resolving.
+ */
+export function withGuardedWorktree<T>(
+  root: string,
+  commit: string,
+  fn: (tree: string, dir: string, guard: { readonly interrupted: string | null; readonly stoppers: Set<() => Promise<void>> }) => Promise<T>,
+  interrupts?: Interrupts,
+): Promise<T>;
+
 /** Measure a release of the repository at `root`: one entry per catalogue metric, in catalogue order. */
 export function measureRelease(root: string, options: MeasureOptions): Promise<Report>;
 

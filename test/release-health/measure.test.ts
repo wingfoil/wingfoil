@@ -765,6 +765,13 @@ const latencyOutput = (machine: string, history: { marginal: number; total: numb
   '      at Object.log (test/cli/command-latency.test.ts:114:15)',
 ].join('\n');
 
+/**
+ * Real npm stderr, copied verbatim but for the home directory (task-232 review F2): `npm ci` in a directory with no lockfile (npm 11.6.2), and
+ * `npm view <missing package> version --json`. The last line of each is npm's log pointer, a home path and a timestamp.
+ */
+const NPM_CI_EUSAGE_STDERR = "npm error code EUSAGE\nnpm error\nnpm error The `npm ci` command can only install with an existing package-lock.json or\nnpm error npm-shrinkwrap.json with lockfileVersion >= 1. Run an install with npm@5 or\nnpm error later to generate a package-lock.json file, then try again.\nnpm error\nnpm error Clean install a project\nnpm error\nnpm error Usage:\nnpm error npm ci\nnpm error\nnpm error Options:\nnpm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]\nnpm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]\nnpm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]\nnpm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]\nnpm error [--no-bin-links] [--no-fund] [--dry-run]\nnpm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]\nnpm error [--workspaces] [--include-workspace-root] [--install-links]\nnpm error\nnpm error aliases: clean-install, ic, install-clean, isntall-clean\nnpm error\nnpm error Run \"npm help ci\" for more info\nnpm error A complete log of this run can be found in: /home/user/.npm/_logs/2026-10-11T21_16_36_719Z-debug-0.log\n";
+const NPM_VIEW_E404_STDERR = "npm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/wingfoil-no-such-package-xyz - Not found\nnpm error 404\nnpm error 404  The requested resource 'wingfoil-no-such-package-xyz@*' could not be found or you do not have permission to access it.\nnpm error 404\nnpm error 404 Note that you can also install from a\nnpm error 404 tarball, folder, http url, or git url.\nnpm error A complete log of this run can be found in: /home/user/.npm/_logs/2026-10-11T21_21_03_749Z-debug-0.log\n";
+
 type Outcome = Partial<ToolResult> | ((call: ToolCall) => Partial<ToolResult>);
 
 /** A stub runner: every step succeeds with a well-formed output unless `overrides` says otherwise; it records the calls. */
@@ -831,6 +838,17 @@ describe('the toolchain half — Q01–Q04, Q11, Q12, Q17 from stubbed tool outp
     const { tree, scratch } = toolTree();
     const red = byId(await measureToolchain(tree, scratch, { tools: stubTools({ lint: { status: 1 } }).tools }));
     expect(red['Q01']).toMatchObject({ status: 'measured', value: false, raw: { build: 0, typecheck: 0, lint: 1 }, failing: ['npm run lint (exit 1)'] });
+  });
+
+  it('Q01/Q11 — an exit that means the tool itself could not run (eslint 2, a shell\'s 126/127) is not-measurable, not a measured false (review F7)', async () => {
+    const lint = toolTree();
+    expect(byId(await measureToolchain(lint.tree, lint.scratch, { tools: stubTools({ lint: { status: 2 } }).tools }))['Q01'])
+      .toMatchObject({ status: 'not-measurable', reason: 'npm run lint exited 2, which means the tool itself could not run' });
+    const build = toolTree();
+    const m = byId(await measureToolchain(build.tree, build.scratch, { tools: stubTools({ typecheck: { status: 127 }, 'examples/02-second': { status: 126 } }).tools }));
+    expect(m['Q01']).toMatchObject({ status: 'not-measurable', reason: 'npm run typecheck exited 127, which means the tool itself could not run' });
+    expect(m['Q11']).toMatchObject({ status: 'not-measurable', reason: 'docs/examples/02-second/run.sh exited 126, which means the tool itself could not run' });
+    expect(m['Q01']).not.toHaveProperty('value');
   });
 
   it('Q02 — total, failing and disabled tests read from jest\'s JSON, each failing test and broken suite named', async () => {
@@ -929,7 +947,7 @@ describe('the toolchain half — a tool that fails is not-measurable with the re
 
   it('npm ci failing makes all seven not-measurable, naming npm ci and its last error line', async () => {
     const { tree, scratch } = toolTree();
-    const { tools, calls } = stubTools({ install: { status: 1, stderr: 'npm warn x\nnpm error code EUSAGE\n' } });
+    const { tools, calls } = stubTools({ install: { status: 1, stderr: NPM_CI_EUSAGE_STDERR } });
     const entries = await measureToolchain(tree, scratch, { tools });
     expect(entries.map((m) => [m.id, m.status, m.reason])).toEqual(TOOL_IDS.map((id) => [id, 'not-measurable', 'npm ci failed (exit 1): npm error code EUSAGE']));
     expect(calls.map((c) => c.step)).toEqual(['install']);
@@ -960,12 +978,13 @@ describe('the toolchain half — a tool that fails is not-measurable with the re
   it('jest leaving no JSON, a coverage run leaving no summary, a latency run printing no report: not-measurable', async () => {
     const { tree, scratch } = toolTree();
     const m = byId(await measureToolchain(tree, scratch, {
-      tools: stubTools({ test: { status: 1, stderr: 'boom' }, coverage: { status: 1 }, latency: { status: 0, stdout: 'PASS test/cli/command-latency.test.ts\n' }, 'npm-view': { status: 1, stderr: 'npm error 404 Not Found' } }).tools,
+      tools: stubTools({ test: { status: 1, stderr: 'boom' }, coverage: { status: 1 }, latency: { status: 0, stdout: 'PASS test/cli/command-latency.test.ts\n' }, 'npm-view': { status: 1, stderr: NPM_VIEW_E404_STDERR } }).tools,
     }));
     expect(m['Q02']).toMatchObject({ status: 'not-measurable', reason: expect.stringMatching(/^npm test wrote no readable JSON results \(exit 1\)/) });
     expect(m['Q03']).toMatchObject({ status: 'not-measurable', reason: expect.stringMatching(/^npm run test:coverage wrote no readable coverage summary/) });
     expect(m['Q12']).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('printed no latency report') });
-    expect(m['Q17']).toMatchObject({ status: 'not-measurable', reason: 'npm view wingfoil version --json failed (exit 1): npm error 404 Not Found' });
+    expect(m['Q17']).toMatchObject({ status: 'not-measurable', reason: 'npm view wingfoil version --json failed (exit 1): npm error code E404' });
+    for (const x of Object.values(m)) expect(x.reason ?? '').not.toMatch(/_logs|complete log/);
     noZero(Object.values(m));
   });
 });
