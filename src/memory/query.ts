@@ -77,7 +77,7 @@ import {
 
 import type { MemoryYaml } from './schema';
 import { isArchivedStatus } from './state-machine';
-import { readDocument, readPathsAtRev, splitFrontmatter } from '../storage';
+import { listBlobsAtRevs, readBlobs, readDocument, readPathsAtRev, splitFrontmatter } from '../storage';
 // The module, not the `../core` barrel: `src/core` imports this module, and `./revision` depends on
 // `../storage` alone, so nothing here closes a load-time cycle.
 import { listBlobEntriesAtCommit, resolveRevision } from '../core/revision';
@@ -786,5 +786,69 @@ export function searchMemoryDocuments(
     const scoreB = b.metadataMatch ? 1 : 0;
     if (scoreA !== scoreB) return scoreB - scoreA;
     return compareText(a.id, b.id) || compareText(a.path, b.path);
+  });
+}
+
+/** One copy of a document of a type, as one commit holds it (task-274). */
+export interface TypeDocumentCopy {
+  readonly path: string;
+  /** The blob's object name: two commits holding the same oid hold the same bytes. */
+  readonly oid: string;
+  readonly frontmatter: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * The documents of type `type` each of `revs` holds, one sorted list per revision, in input order —
+ * the read the WIP-limit count across refs takes (`requireWipSlot`, `dl-156` Q1 (a), task-274).
+ *
+ * Narrow and batched, unlike one {@link loadMemoryDocumentsAtRev} per revision (which parses every
+ * document of every type at each commit): only the type's own static directory is listed, every
+ * revision's listing in one batched walk (`listBlobsAtRevs`), every distinct blob read in one batch and
+ * parsed **once** however many revisions hold it. A document counts when its own frontmatter `type` is
+ * `type`, as in every Memory scan. A link, an unparsable document and one written in a newer format are
+ * left out and reported through `options.onDiagnostic` as {@link W_MEMORY_UNREADABLE} (task-171,
+ * task-257), once per blob.
+ *
+ * @throws `StorageError` `E_GIT_READ_FAILED` when a revision names no commit or a batch read fails.
+ */
+export function loadTypeDocumentCopiesAtRevs(
+  root: string,
+  revs: readonly string[],
+  memoryYaml: MemoryYaml,
+  type: string,
+  options: MemoryScanOptions = {},
+): TypeDocumentCopy[][] {
+  const typeEntry = memoryYaml.types[type];
+  const directory = typeEntry === undefined ? '' : staticDirPrefix(typeEntry.path);
+  const listings = listBlobsAtRevs(root, revs, directory).map((blobs) => blobs.filter((blob) => blob.path.endsWith('.md')));
+  const reported = new Set<string>();
+  const contents = readBlobs(
+    root,
+    listings.flatMap((blobs) => blobs.filter((blob) => !blob.symlink).map((blob) => blob.oid)),
+  );
+  const parsed = new Map<string, Record<string, unknown> | null>();
+  const frontmatterOf = (path: string, oid: string): Record<string, unknown> | null => {
+    if (parsed.has(oid)) return parsed.get(oid) as Record<string, unknown> | null;
+    const scanned = parseScanned(contents.get(oid) as string, path, `${oid}:${path}`, options);
+    let frontmatter: Record<string, unknown> | null = null;
+    if (scanned !== undefined) {
+      if (scanned.newer !== null) options.onDiagnostic?.(newerFormatDiagnostic(scanned.newer));
+      else frontmatter = scanned.summary.frontmatter;
+    }
+    parsed.set(oid, frontmatter);
+    return frontmatter;
+  };
+  return listings.map((blobs) => {
+    const copies: TypeDocumentCopy[] = [];
+    for (const blob of blobs) {
+      if (blob.symlink) {
+        if (!reported.has(blob.path)) options.onDiagnostic?.(memoryUnreadableDiagnostic(blob.path, SYMLINK_REASON));
+        reported.add(blob.path);
+        continue;
+      }
+      const frontmatter = frontmatterOf(blob.path, blob.oid);
+      if (frontmatter !== null && frontmatter.type === type) copies.push({ path: blob.path, oid: blob.oid, frontmatter });
+    }
+    return copies;
   });
 }

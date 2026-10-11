@@ -729,13 +729,19 @@ $ wingfoil memory park task-001-my-first-task --reason "Blocked on the schema de
 - **Commit:** `wf(<type>): park <id> [<from> → <to>]` with a `Reason:` body line; `wingfoil memory
   history` reports it as `"operation": "park"`.
 - **WIP limits.** A machine may also declare `limits: { in-progress: 3 }`: at most that many documents
-  of the type in that state. Every command that moves a document into a limited state (`add`, `submit`,
-  `approve`, `reject`, `park`) is refused at exit `1` once the limit is reached, before anything is
-  written, and the message names the documents holding the state:
-  `error: WIP limit reached for 'in-progress' on type 'task' (limit 3): held by task-004-…, task-007-…, task-009-…. Move one of them out of 'in-progress', then retry.`
+  of the type in that state. A command that moves a document into a limited state (`add`, `submit`,
+  `approve`) is refused at exit `1` once the limit is reached, before anything is written, and the
+  message names the documents holding the state:
+  `error: WIP limit reached for 'in-progress' on type 'task' (limit 3): held by task-004-…, task-007-…, task-009-…. Move one of them out of 'in-progress', then retry. The holders are counted at HEAD and on every local and remote-tracking branch that changed them since it forked from HEAD, so the count depends on which refs were last fetched; a holder another branch records is moved out on that branch.`
+  Each document counts once. Its state is the one `HEAD` records, unless another local branch or
+  remote-tracking ref changed its `status` since that branch forked from `HEAD` (a task started on a
+  task branch, say): then the branch's state counts, the most advanced one if several branches changed
+  it. A branch that changed nothing — a stale one, or one already merged — counts nothing, so a task
+  parked on `HEAD` frees its slot even while an old branch still records it in progress. Run
+  `git fetch` first to count what others have pushed. `reject` and `park` are never refused by a
+  limit: a reject or returns edge is exempt, so the state may end up above its limit.
 - **Errors:** missing or blank `--reason` → exit `2`; the document's state declares no `returns` edge →
-  exit `1` (`error: illegal transition in-review -> (none) for type 'task'`); the target state is at
-  its WIP limit → exit `1`.
+  exit `1` (`error: illegal transition in-review -> (none) for type 'task'`).
 
 ### `wingfoil memory amend`
 
