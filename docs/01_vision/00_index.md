@@ -1,6 +1,6 @@
 # WingFoil — Product Vision (docs/vision)
 
-**Last indexed:** 2026-10-10
+**Last indexed:** 2026-10-11
 
 This folder holds the **product-vision specification** for WingFoil, produced through a Lean Inception workshop (see
 [`X_lean-inception-plan.md`](X_lean-inception-plan.md)). This README is a **navigation index**: it tells you which
@@ -37,14 +37,14 @@ line count (`awk 'END{print NR}'`).
 
 | Document                                               | Ver | Date       | Status   | Lines | What it contains                                                                                                        |
 |--------------------------------------------------------|-----|------------|----------|-------|-------------------------------------------------------------------------------------------------------------------------|
-| [`01_product-brief.md`](01_product-brief.md)           | 1.9 | 2026-10-07 | Approved | 362   | Executive summary: vision, problem, pillars, differentiators, personas, metrics, GTM, timeline, tech stack, constraints |
+| [`01_product-brief.md`](01_product-brief.md)           | 1.10 | 2026-10-11 | Approved | 362   | Executive summary: vision, problem, pillars, differentiators, personas, metrics, GTM, timeline, tech stack, constraints |
 | [`02_product-vision.md`](02_product-vision.md)         | 1.3 | 2026-10-06 | Approved | 103   | Vision statement, key decisions, and the reference-workflow/methodology-template model                                  |
 | [`03_is-isnot.md`](03_is-isnot.md)                     | 1.4 | 2026-10-06 | Approved | 59    | Scope boundaries: what WingFoil IS / IS NOT / DOES / DOES NOT                                                           |
 | [`04_personas.md`](04_personas.md)                     | 1.2 | 2026-10-07 | Approved | 149   | The primary persona (Morgan) and the 7 personas (Alex, Sam, Jordan, Morgan, Casey, Taylor, the maintainer)              |
 | [`05_journeys.md`](05_journeys.md)                     | 1.6 | 2026-10-10 | Approved | 287   | 8 end-to-end user journeys (0a, 0b, 1–6): steps, obstacles, success                                                     |
-| [`06_features.md`](06_features.md)                     | 1.12 | 2026-10-09 | Approved | 520   | 64 features (by pillar + by release) and the data-model / implementation notes                                          |
+| [`06_features.md`](06_features.md)                     | 1.13 | 2026-10-11 | Approved | 522   | 65 features (by pillar + by release) and the data-model / implementation notes                                          |
 | [`07_sequencer.md`](07_sequencer.md)                   | 1.8 | 2026-10-01 | Approved | 471   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
-| [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.10 | 2026-10-07 | Approved | 220   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
+| [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.11 | 2026-10-11 | Approved | 220   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
 | [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.6 | 2026-10-06 | Approved | 408   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
 | [`X_lean-inception-plan.md`](X_lean-inception-plan.md) | —   | 2026-06-11 | —        | 42    | Workshop plan: sessions, key decisions, output list                                                                     |
 
@@ -61,10 +61,10 @@ line count (`awk 'END{print NR}'`).
 | The primary persona (Morgan) and why                                | `04_personas` L9–20 · `01_product-brief` note L108 · `08_mvp-canvas` note L57                          |
 | Persona details (pains, goals, AI-usage)                            | `04_personas` L9–149 · quick summary `01_product-brief` L106–160                                       |
 | End-to-end user flows                                               | `05_journeys` (per-journey ranges below)                                                               |
-| The full feature list + feature IDs (P1.x…X1.x)                     | `06_features` L9–160                                                                                   |
-| Which feature ships in which version                                | `06_features` L161–302 · `07_sequencer` scope changes L108–133 · `01_product-brief` GTM L203–248       |
+| The full feature list + feature IDs (P1.x…X1.x)                     | `06_features` L9–161                                                                                   |
+| Which feature ships in which version                                | `06_features` L162–304 · `07_sequencer` scope changes L108–133 · `01_product-brief` GTM L203–248       |
 | CLI commands, flags & parameters                                    | `X_cli-cmds` (per pillar below)                                                                        |
-| Data model: `memory.yaml`, state machines, workflow kinds, fallback | `06_features` L357–520 · `02_product-vision` Main/Sub L62–69                                           |
+| Data model: `memory.yaml`, state machines, workflow kinds, fallback | `06_features` L359–522 · `02_product-vision` Main/Sub L62–69                                           |
 | Reference workflow templates (Scrum/Kanban/Lean/Trunk-Based)        | `02_product-vision` L31–103 · `06_features` P4.18–P4.20 (L102–104)                                     |
 | Schedule: active-day budgets, actuals, forecast                     | `07_sequencer` L9–133 · original plan L134–145 · `01_product-brief` L249–265                           |
 | Definition of Done per release                                      | `07_sequencer` L369–438                                                                                |
@@ -132,18 +132,18 @@ line count (`awk 'END{print NR}'`).
 
 ### `06_features.md`
 
-- Feature List by Pillar — L9–160
+- Feature List by Pillar — L9–161
     - Pillar 1 Project Memory (P1.1–P1.13) — L17–40
     - Pillar 2 Project DNA (P2.1–P2.5) — L41–54
     - Pillar 3 Project Directives (P3.1–P3.8) — L55–71
     - Pillar 4 Project Workflow (P4.1–P4.20) — L72–107
-    - Pillar 5 Interaction Layer (P5.1.1–P5.4.5) — L108–149 (5.1 L112, 5.2 L121, 5.3 L129, 5.4 L138)
-    - Extra 1 Notifications (X1.1–X1.2) — L150–160
-- Features by Release (v0.1 L163, v0.2 L185, v0.3 L208, v0.4 L252, v1.0 L272, Post-MVP L287) — L161–302
-- MVP Feature Set Summary (incl. total = 64 features) — L303–356
-- Key Implementation Notes — L357–520 (State Deduction L359, `memory.yaml` schema L371, Workflow Kinds/Composition L401,
-  Fallback L423, Team & Approval Routing L433, Git Ops L450, Built-in Directive Templates L470, Agent Roles L484,
-  Complexity/Risk/Priority ratings L501)
+    - Pillar 5 Interaction Layer (P5.1.1–P5.4.5) — L108–150 (5.1 L112, 5.2 L121, 5.3 L129, 5.4 L139)
+    - Extra 1 Notifications (X1.1–X1.2) — L151–161
+- Features by Release (v0.1 L164, v0.2 L186, v0.3 L209, v0.4 L254, v1.0 L274, Post-MVP L289) — L162–304
+- MVP Feature Set Summary (incl. total = 65 features) — L305–358
+- Key Implementation Notes — L359–522 (State Deduction L361, `memory.yaml` schema L373, Workflow Kinds/Composition L403,
+  Fallback L425, Team & Approval Routing L435, Git Ops L452, Built-in Directive Templates L472, Agent Roles L486,
+  Complexity/Risk/Priority ratings L503)
 
 ### `07_sequencer.md`
 
