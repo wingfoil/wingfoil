@@ -1,6 +1,6 @@
 /**
- * `wingfoil://workflows` (collection) and `wingfoil://workflows/{name}` (a single workflow
- * definition) Resources — task-011-mcp-resources-read-only, REQ-INT-01,
+ * `wingfoil://workflows` (collection), `wingfoil://workflows/{name}` (one workflow definition) and,
+ * since task-239, `wingfoil://workflows/-/next` and `-/status` Resources — task-011, REQ-INT-01,
  * spec-004-mcp-surface-contract §2.1. Distinct from `registerCoreModules`'s existing
  * `wingfoil://workflow/list` Resource (task-006-dual-interface-shared-core, the generic
  * `wingfoil://{module}/{verb}` transform of the `workflowList` `CoreOperation`) — both coexist; this
@@ -14,8 +14,8 @@
  * here distinguishes them beyond what each workflow's own `kind` field already reports.
  *
  * Registered directly via `McpServer.registerResource`, not through `registerCoreModules`'s
- * `CoreModule[]` registry — `workflowList` / `workflowShow` (task-204) answer from `HEAD` with another
- * payload, while these keep theirs and the working tree in v0.3 (spec-017 §9); same
+ * `CoreModule[]` registry — `workflowList` / `workflowShow` answer from `HEAD` with another payload, while
+ * the first two keep theirs and the working tree in v0.3, the state Resources answer at `HEAD` (spec-017 §9); same
  * spec-006-core-domain-api §4 parity deviation `memory-resource.ts`/`dna-resource.ts` document for
  * their own Resources, for the same reason (task-030-implement-mcp-resources' scope).
  */
