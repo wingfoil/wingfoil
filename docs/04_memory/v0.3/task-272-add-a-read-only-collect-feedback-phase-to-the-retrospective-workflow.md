@@ -131,13 +131,11 @@ between `explore` and `additional-points`, and writes a read record the approver
 ### refactor
 
 - `npm test` → **348 suites, 6486 passed**, exit 0 (load average 24 at start, `uptime`).
-- `npm run test:coverage` → **not obtained.** Five attempts (2026-10-10/11) were stopped from outside: three by
-  session or machine restarts, two killed by a signal within seconds (exit 143 `Terminated`, then 144) at load
-  average 120–145 on 12 cores (`uptime`, `nproc`). One run that got further failed only on load timeouts
-  (`test/lint/coverage-parity.test.ts` `spawnSync … ETIMEDOUT`, `test/mcp/resource-latency.test.ts`). The branch
-  changes no `src/` file (`git diff --stat 30b268a3..HEAD -- src` → empty), so the coverage figures cannot move
-  from the W3 B4 gate's `All files 99.29 / 97.04 / 97.74 / 99.69` (`grep '^All files'
-  ../devloop-kit/gate-w3b4-cov.log`). The coordinator's gate run settles it.
+- `npm run test:coverage` (run as `npx jest --coverage --maxWorkers=2` after five full runs were stopped from
+  outside — session/machine restarts, and signals at load average 120–145 on 12 cores) → **348 suites, 6486
+  passed**, `All files 99.29 / 97.04 / 97.74 / 99.69`, equal to the W3 B4 gate's line (`grep '^All files'
+  ../devloop-kit/gate-w3b4-cov.log`); the branch changes no `src/` file (`git diff --stat 30b268a3..HEAD -- src` →
+  empty).
 - `npm run lint` → exit 0. `npm run docs:api` → exit 0. `npx tsc --noEmit -p tsconfig.json` → exit 0.
   `npx tsc -p tsconfig.build.json --noEmit` → exit 0.
 - `node scripts/check-governance.cjs --base 30b268a3` → "1 wf() commits … and 2 other commits", gated 0 findings,
