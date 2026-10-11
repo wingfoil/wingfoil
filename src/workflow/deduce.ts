@@ -382,7 +382,10 @@ export interface Deduction {
   readonly instances: readonly InstanceDeduction[];
   /** The registry's diagnostics, then this deduction's, in `spec-017` §1.3's order. */
   readonly diagnostics: readonly Diagnostic[];
-  /** Every Memory element at `HEAD` sitting in a `gates` state of its type, ascending `(type, id)` (§5.1, ungated elements). */
+  /**
+   * Every Memory element at `HEAD` sitting in a `gates` state of its type that is not also a `waiting` state (an approver
+   * acts on it), ascending `(type, id)` (§5.1, ungated elements).
+   */
   readonly gated: readonly ElementRef[];
 }
 
@@ -1568,9 +1571,14 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
   }));
 
   // The elements waiting at a gate (§5.1): `status` lists those no pending approval carries. Every element's type is
-  // declared in `memory.yaml` (`readElements` leaves the others out), so the machine resolves.
+  // declared in `memory.yaml` (`readElements` leaves the others out), so the machine resolves. A gate that is also a
+  // `waiting` state is left out: its forward edge is verb-less, so no approver acts on it — a workflow action advances
+  // it (dl-123; `memory approve` refuses it).
   const gated = elements
-    .filter((element) => Object.prototype.hasOwnProperty.call(resolveStateMachine(snapshot.memoryYaml!, element.type).gates ?? {}, element.status))
+    .filter((element) => {
+      const machine = resolveStateMachine(snapshot.memoryYaml!, element.type);
+      return Object.prototype.hasOwnProperty.call(machine.gates ?? {}, element.status) && !(machine.waiting ?? []).includes(element.status);
+    })
     .map(refOf)
     .sort(compareRefs);
 

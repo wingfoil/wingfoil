@@ -77,7 +77,7 @@ export interface StatusResult {
    * `approver` role, the one role that may decide it (REQ-SEC-03), ascending `(name, email)`; `[]` when none does.
    */
   readonly ungatedRoutedTo: readonly Member[];
-  /** `no open workflows` when no instance is open and nothing is ungated (BDD P4.5 sc. 3). */
+  /** `no open workflows` when no instance is open (BDD P4.5 sc. 3), whatever is ungated. */
   readonly message?: string;
   readonly diagnostics: readonly Diagnostic[];
 }
@@ -119,7 +119,8 @@ export function statusWorkflow(inputs: NextInputs, deduction: Deduction, ref?: s
   const carried = new Set(deduction.instances.flatMap((entry) => entry.frontier.flatMap((step) => (step.approval?.elements ?? []).map(keyOf))));
   const ungated = deduction.gated.filter((element) => !carried.has(keyOf(element)));
 
-  const nothing = deduction.instances.length === 0 && ungated.length === 0;
+  // BDD P4.5 sc. 3: the message says no instance is open; the ungated elements are listed after it.
+  const nothing = deduction.instances.length === 0;
   return coreOk({
     baseline: deduction.baseline,
     active: deduction.active,
@@ -193,7 +194,7 @@ function instanceLines(entry: StatusEntry): string[] {
 export function renderStatusConsole(result: StatusResult): string {
   const lines: string[] = [];
   if (result.message !== undefined) lines.push(result.message);
-  else lines.push(`open workflows: ${result.open.length === 0 ? 'none' : String(result.open.length)}`);
+  else lines.push(`open workflows: ${result.open.length}`); // no message: some instance is open
   for (const entry of result.open) lines.push(...instanceLines(entry));
   if (result.pendingApprovals.length > 0) {
     lines.push(`pending approvals: ${result.pendingApprovals.length}`);

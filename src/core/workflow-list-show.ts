@@ -208,7 +208,7 @@ function allowedModes(mode: PhaseMode | undefined): PhaseMode[] {
  * entries with an explicit owner), `selection`, `awaits`, then `record` for an `awaits`, a phase with
  * no kind but `created`, or an `approval:` whose phase holds no gate (`holdsGate: false`, §5.1, task-225).
  */
-export function declaredEvidenceKinds(workflow: Workflow, p: number, boundType: string | null, holdsGate = true): EvidenceKind[] {
+export function declaredEvidenceKinds(workflow: Workflow, p: number, boundType: string | null, holdsGate: boolean): EvidenceKind[] {
   const phase = workflow.phases[p]!;
   if (phase.include !== undefined && phase.iterate_over === undefined) return ['include'];
   const kinds: EvidenceKind[] = [];
