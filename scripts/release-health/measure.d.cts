@@ -58,6 +58,9 @@ export function measureRelease(root: string, options: MeasureOptions): Report;
 /** The process conformance of `base..point` (REQ-STATE-10): P01–P06, each with items checked and failing items named. */
 export function processConformance(root: string, point: string, base: string | null): MetricEntry[];
 
+/** The measurement point of the release `version` (`dl-089` §1): `at` when given, else the published tag, else the released transition. */
+export function resolveMeasurementPoint(root: string, version: string, at?: string): Report['measurement_point'];
+
 /** The report as written: two-space JSON and a final newline. */
 export function formatReportJson(report: Report): string;
 

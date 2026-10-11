@@ -928,6 +928,12 @@ function measurementPoint(root, release, at) {
   throw new UsageError(`--release ${release.version}: no published tag and no released transition of ${release.id} on HEAD`);
 }
 
+/** The measurement point of the release `version` at `root` (`dl-089` §1), `at` overriding it. */
+function resolveMeasurementPoint(root, version, at) {
+  if (!VERSION_RE.test(String(version))) throw new UsageError(`--release ${version} is not a release version (vX.Y or vX.Y.Z)`);
+  return measurementPoint(root, findRelease(root, version), at);
+}
+
 function previousRun(root, healthDir, release, previous) {
   if (previous !== undefined) return { release: `--previous ${previous}`, commit: resolveCommit(root, previous, '--previous'), report: '(none: named by --previous)' };
   const dir = join(root, healthDir);
@@ -1059,7 +1065,7 @@ function main(argv) {
   }
 }
 
-module.exports = { measureRelease, processConformance, formatReportJson, parseHttp, httpDay, main };
+module.exports = { measureRelease, processConformance, resolveMeasurementPoint, formatReportJson, parseHttp, httpDay, main };
 
 if (require.main === module) {
   process.exitCode = main(process.argv.slice(2));

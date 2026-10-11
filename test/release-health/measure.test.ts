@@ -14,10 +14,11 @@
  */
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { measureRelease, processConformance, formatReportJson } from '../../scripts/release-health/measure.cjs';
+import { formatReportJson, httpDay, main, measureRelease, parseHttp, processConformance, resolveMeasurementPoint } from '../../scripts/release-health/measure.cjs';
 import type { ExternalReader, MetricEntry, Report } from '../../scripts/release-health/measure.cjs';
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { FAKE_AWS_ACCESS_KEY_ID } from '../validation/helpers/secret-fixtures';
@@ -279,6 +280,15 @@ function historyFixture(): History {
   return { repo: r, base, point, c };
 }
 
+/** A light fixture — the base configuration and two commits — for the tests that do not read the history ledger. */
+function lightFixture(): { repo: Repo; base: string; point: string } {
+  const r = repo();
+  const base = r.commit('chore: configure wingfoil', { author: ADA, date: DAY0, files: BASE_FILES });
+  r.commit('feat(core): add the a module (task-001)', { body: 'Adds a.', files: { 'src/a.ts': 'a\n' } });
+  const point = r.commit('docs: note', { files: { 'docs/note.md': 'Note.\n' } });
+  return { repo: r, base, point };
+}
+
 function entry(report: Report, id: string): MetricEntry {
   const found = report.metrics.find((m) => m.id === id);
   if (!found) throw new Error(`no ${id} in the report`);
@@ -440,8 +450,11 @@ describe('the measurement point (dl-089 §1)', () => {
     git(r.root, ['tag', 'v0.2.0', tagged0]);
     const tagged1 = r.commit('docs: two', { files: { 'docs/two.md': '2\n' } });
     git(r.root, ['tag', 'v0.2.1', tagged1]);
-    const report = measureRelease(r.root, { release: 'v0.2', previous: base, ...OFFLINE });
-    expect(report.measurement_point).toEqual({ ref: 'v0.2.1', commit: tagged1, basis: 'published-tag' });
+    // v0.2.2 is another release's version (a patch), so it is never v0.2's point.
+    git(r.root, ['tag', 'v0.2.2', r.commit('docs: three', { files: { 'docs/memory/release/patch-v0.2.2.md': RELEASE_DOC.replace(/minor-v0\.2/g, 'patch-v0.2.2').replace('version: "v0.2"', 'version: "v0.2.2"') } })]);
+    expect(base).not.toBe(tagged1);
+    expect(resolveMeasurementPoint(r.root, 'v0.2')).toEqual({ ref: 'v0.2.1', commit: tagged1, basis: 'published-tag' });
+    expect(resolveMeasurementPoint(r.root, 'v0.2.2')).toEqual({ ref: 'v0.2.2', commit: r.rev('v0.2.2'), basis: 'published-tag' });
   });
 
   it('falls back to the commit carrying the release\'s released transition when no tag exists', () => {
@@ -449,14 +462,15 @@ describe('the measurement point (dl-089 §1)', () => {
     const base = r.commit('chore: configure wingfoil', { author: ADA, date: DAY0, files: { ...BASE_FILES, 'docs/memory/release/minor-v0.2.md': RELEASE_DOC.replace('released', 'releasing') } });
     const released = r.commit('wf(release): approve minor-v0.2 [releasing → released]', { author: ADA, body: APPROVAL('Shipped.'), files: { 'docs/memory/release/minor-v0.2.md': RELEASE_DOC } });
     r.commit('docs: after', { files: { 'docs/after.md': 'a\n' } });
-    const report = measureRelease(r.root, { release: 'v0.2', previous: base, ...OFFLINE });
-    expect(report.measurement_point).toEqual({ ref: released, commit: released, basis: 'released-transition' });
+    expect(base).not.toBe(released);
+    expect(resolveMeasurementPoint(r.root, 'v0.2')).toEqual({ ref: released, commit: released, basis: 'released-transition' });
+    expect(() => resolveMeasurementPoint(r.root, 'v0.9')).toThrow('no release element at HEAD has version v0.9');
   });
 });
 
 describe('never writes git configuration (AC 2, dl-089 §6)', () => {
   it('leaves `git config --list --show-origin` byte-identical, and leaves no worktree behind', () => {
-    const h = historyFixture();
+    const h = lightFixture();
     const before = git(h.repo.root, ['config', '--list', '--show-origin']);
     const worktreesBefore = git(h.repo.root, ['worktree', 'list', '--porcelain']);
     measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, ...OFFLINE });
@@ -466,7 +480,7 @@ describe('never writes git configuration (AC 2, dl-089 §6)', () => {
 });
 
 describe('the toolchain record (AC 4)', () => {
-  const h = historyFixture();
+  const h = lightFixture();
   const report = measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, ...OFFLINE });
 
   it('records the Node and npm versions and the sha256 of the lockfile at the point', () => {
@@ -483,7 +497,7 @@ describe('the toolchain record (AC 4)', () => {
 });
 
 describe('the external snapshot E01–E05 (AC 3, dl-130 Q2 (a))', () => {
-  const h = historyFixture();
+  const h = lightFixture();
   const DATE = 'Fri, 09 Oct 2026 10:00:00 GMT';
   const reader: ExternalReader = (source) => {
     if (source.target === 'repos/wingfoil/wingfoil') return { ok: true, date: DATE, body: { stargazers_count: 12, forks_count: 3, subscribers_count: 4 } };
@@ -498,8 +512,10 @@ describe('the external snapshot E01–E05 (AC 3, dl-130 Q2 (a))', () => {
     for (const id of ['E01', 'E02', 'E03', 'E04', 'E05']) expect(entry(report, id)).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('offline') });
   });
 
+  const online = measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, external: reader });
+
   it('online, each value is recorded with the command and the date it was read (the response\'s Date header)', () => {
-    const report = measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, external: reader });
+    const report = online;
     expect(entry(report, 'E01')).toMatchObject({ status: 'measured', value: 12, evidence: { command: 'gh api repos/wingfoil/wingfoil', read_on: '2026-10-09' } });
     expect(entry(report, 'E02')).toMatchObject({ value: 3 });
     expect(entry(report, 'E03')).toMatchObject({ value: 4 });
@@ -508,7 +524,7 @@ describe('the external snapshot E01–E05 (AC 3, dl-130 Q2 (a))', () => {
   });
 
   it('a read that fails is not-measurable with what failed, never a zero', () => {
-    const report = measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, external: reader });
+    const report = online;
     expect(entry(report, 'E04')).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('HTTP 403') });
   });
 });
@@ -544,7 +560,7 @@ describe('Process conformance (REQ-STATE-10, P1.2 @REQ-STATE-10 scenarios)', () 
     const { r, base } = clean();
     const p = processConformance(r.root, r.rev('HEAD'), base);
     expect(p.map((m) => m.id)).toEqual(['P01', 'P02', 'P03', 'P04', 'P05', 'P06']);
-    expect(failingByCheck(r.root, base)).toMatchObject(NONE);
+    expect(Object.fromEntries(p.map((m) => [m.id, m.failing ?? []]))).toMatchObject(NONE);
     for (const m of p.slice(0, 5)) expect(m.raw).toHaveProperty('checked');
   });
 
@@ -575,5 +591,42 @@ describe('Process conformance (REQ-STATE-10, P1.2 @REQ-STATE-10 scenarios)', () 
     const { r, base } = clean();
     const head = r.rev('HEAD');
     expect(JSON.stringify(processConformance(r.root, head, base))).toBe(JSON.stringify(processConformance(r.root, head, base)));
+  });
+});
+
+describe('the HTTP reading of the external snapshot', () => {
+  it('reads the status, the Date header and the JSON body, skipping an interim 100 response', () => {
+    const text = 'HTTP/1.1 100 Continue\r\n\r\nHTTP/2.0 200 OK\r\nDate: Sat, 10 Oct 2026 08:00:00 GMT\r\n\r\n{"downloads": 9}';
+    expect(parseHttp(text)).toEqual({ ok: true, date: 'Sat, 10 Oct 2026 08:00:00 GMT', body: { downloads: 9 } });
+    expect(httpDay('Sat, 10 Oct 2026 08:00:00 GMT')).toBe('2026-10-10');
+  });
+
+  it('a non-2xx status is a failure naming the status; a malformed date is no day', () => {
+    expect(parseHttp('HTTP/2.0 404 Not Found\nDate: x\n\n{"message":"Not Found"}')).toEqual({ ok: false, error: 'HTTP 404: {"message":"Not Found"}' });
+    expect(httpDay('yesterday')).toBeNull();
+    expect(httpDay(null)).toBeNull();
+  });
+});
+
+describe('the command line (the release-health.measure binding)', () => {
+  it('writes the report where --out says and prints its path; a missing --release is exit 2', () => {
+    const h = lightFixture();
+    const dir = mkdtempSync(join(tmpdir(), 'wf-rh-out-'));
+    const out = join(dir, 'report.json');
+    const write = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const err = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      expect(main(['--release', 'v0.2', '--at', h.point, '--previous', h.base, '--offline', '--root', h.repo.root, '--out', out])).toBe(0);
+      expect(write).toHaveBeenCalledWith(`${out}\n`);
+      const report = JSON.parse(readFileSync(out, 'utf-8')) as Report;
+      expect(report.measurement_point.commit).toBe(h.point);
+      expect(main(['--offline'])).toBe(2);
+      expect(err).toHaveBeenLastCalledWith('release-health measure: missing required argument: --release <vX.Y[.Z]>\n');
+      expect(main(['--release', 'v9'])).toBe(2);
+    } finally {
+      write.mockRestore();
+      err.mockRestore();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

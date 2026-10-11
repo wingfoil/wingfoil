@@ -9,7 +9,9 @@
  * or `window+snapshot`) and a kind (`floor` with its floor, `trend` with its direction, or `info`). A metric
  * is never dropped silently: the `changes` log records, per catalogue version, the ids it added, redefined
  * and retired; every id ever added is still listed, and a retired one is marked `status: retired` with the
- * release that retired it (`retired_in`).
+ * release that retired it (`retired_in`). A floor is never null, a `direction` (on any kind) is one of the declared
+ * set, and a `changes` entry's `added`/`redefined`/`retired` are lists whose redefined and retired ids name listed
+ * metrics (task-231, from task-222's review).
  *
  * Read-only and deterministic: issues are returned in document order; no clock, no randomness, no git.
  */
