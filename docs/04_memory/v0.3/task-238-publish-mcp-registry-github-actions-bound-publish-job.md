@@ -108,7 +108,9 @@ docs/02_requirements/02_bdd/features` → nothing).
   20:39:07Z, `started_at` 20:40:58Z (after the `npm-publish` approval), `completed_at` 20:41:14Z — so 30
   minutes bounds 16 s of work and is not raised for human latency. Measured on the same run: gate 1m22s,
   stage 42s (v0.2.1 run `36402219753`: gate 1m46s, stage 37s, promote 17s after a 1m37s wait). Decision for
-  the approver (D5).
+  the approver (D5). *Review (F1, 2026-10-11): gate raised to 30, see "review fixes".* The reviewer confirmed
+  the wait from the deployment: `6744965514` statuses waiting 20:39:08Z → queued 20:40:56Z → in_progress
+  20:40:59Z, job start 20:40:58Z.
 - **D6 — dl-057 (d): the check is NOT moot; option 1.** The v0.2.2 gate log (`gh api
   repos/wingfoil/wingfoil/actions/jobs/109608425923/logs`) shows `actions/checkout` (fetch-depth 0) run
   `git fetch … origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/*`, `* [new tag] v0.2.2 ->
@@ -223,9 +225,9 @@ found`, nothing on stdout (git gets one argument, no shell). 6/6. `scripts/` is 
   `publish runbook (task-238)`.
 - **AC 5:** the `act` section says it cannot run from a `git worktree` because `.git` is a file naming a host
   path the container does not mount, and to `git clone` first. Pinned.
-- **AC 6:** every job has a positive integer `timeout-minutes` ≤ 360 (gate 15, stage 20, promote 30, release
-  345, mcp-registry 345), each stated in the header with its source (task-077's table, the v0.2.2 timings, the
-  approval-before-start evidence). Pinned by `job timeouts (task-238)`.
+- **AC 6:** every job has a positive integer `timeout-minutes` ≤ 360 (gate 30 after review F1, stage 20,
+  promote 30, release 345, mcp-registry 345), each stated in the header with its source (task-077's table, CI
+  run `38166281488` for the gate, the v0.2.2 timings, the approval-before-start evidence). Pinned by `job timeouts (task-238)`.
 - **AC 7:** option 1: the gate step `node scripts/check-release-tag.cjs --annotated "$GITHUB_REF_NAME"`; the
   v0.2.2 run log is cited in design (D6). Pinned on a fixture repository with one lightweight and one annotated
   tag.
@@ -256,10 +258,43 @@ After the v0.3.0 tag's run, once the `mcp-registry` job is green:
    then on (dl-130 Action 4, dl-088).
 3. Record the outcome in the release-publishing phase plan's Execution Notes with the date and command.
 
+### review fixes (2026-10-11, independent review: approve with fixes; D1, D5, D6 judged sound)
+
+Red `806bc57a` (`npx jest test/cli/publish-pipeline.test.ts --maxWorkers=2` → 2 failed, 45 passed / 47); green
+`bb41e2ca`.
+- **F1:** gate `timeout-minutes` 15 → 30. task-077's table predates the suite's growth: ci.yml's packaging-gate
+  step "prepublishOnly gate — build, test, lint" took 7m22s in CI run `38166281488` (`gh api
+  repos/wingfoil/wingfoil/actions/runs/38166281488/jobs` → step 19:02:04Z–19:09:26Z, job 19:01:48Z–19:09:44Z),
+  against v0.2.2's 1m22s gate. The header cites that run beside task-077's table; spec-015's timeout paragraph
+  says gate is sized from CI (pending amendment). The test pins 30 and the run id.
+- **F2:** the credential paragraph says `id-token: write` is held by promote and mcp-registry.
+- **F3:** the OAuth-app cause of the 403 is written as `bug-173`'s suspected, unverified cause in `publish.yml`'s
+  header, spec-015's Revision note and §3 stage 6, and the spec `--reason`; the OIDC grant is cited from registry
+  v1.8.1 `github_oidc.go` `buildPermissions`. Same-class sweep: `grep -rn "OAuth" .github/workflows/publish.yml
+  .wingfoil/workflows/custom/release-publishing.yaml docs/04_memory/design/specs/spec-015-packaging-publishing.md`
+  → only the hedged lines and "no OAuth app in between". This task's Description (planning text) still states
+  the cause; left as written at planning.
+- **F4:** the main-sync merge is `e0372b42` (the gates table is corrected).
+- **F5:** the install step declares `shell: bash`, so GitHub runs it with `-eo pipefail`, the flags the test uses;
+  pinned by a new case.
+- **F6:** bugs 060, 173, 174 gain a `### Retrospective`; 173 and 174 get their triage notes. They are edits to
+  amendable Memory elements past their first state: uncommitted, listed under *Pending amendments*. The
+  reviewer's optional follow-up 4 ("only package maintainers see Staged Packages") was not added: no source
+  establishes it (bug-174 records only the account-menu location).
+- Gates after the fixes: the 19 suites that read `publish.yml` or the touched files → 404/404; `npm run lint`,
+  `npx tsc --noEmit -p tsconfig.json` exit 0. No `src/` or `scripts/` change, so the earlier full coverage run
+  stands.
+
 ### Pending amendments (approver)
 
 - `spec-015-packaging-publishing` (§1a, §3 stage 6 + job timeouts, §4 annotated tag, Revision 2026-10-11):
-  `--reason "task-238 (dl-130 step 2, dl-057 (b) and (d), bug-173): §3 gains stage 6, the mcp-registry job - after promote it installs a pinned mcp-publisher whose archive is checked against a SHA-256 in the workflow, validates server.json, waits until npm serves the exact version because the registry reads the published mcpName, then logs in with the workflow's GitHub OIDC token (io.github.wingfoil/*, no OAuth app, the cause of bug-173) and publishes; §1a points to it instead of a manual approver step. §3 states that every job declares timeout-minutes, and §4 that the gate refuses a lightweight tag, since the v0.2.2 gate log shows checkout fetching the pushed tag refs. Revision note added."`
+  `--reason "task-238 (dl-130 step 2, dl-057 (b) and (d), bug-173): §3 gains stage 6, the mcp-registry job - after promote it installs a pinned mcp-publisher whose archive is checked against a SHA-256 in the workflow, validates server.json, waits until npm serves the exact version because the registry reads the published mcpName, then logs in with the workflow's GitHub OIDC token (io.github.wingfoil/*, no OAuth app, which bug-173 suspects refused the manual publish) and publishes; §1a points to it instead of a manual approver step. §3 states that every job declares timeout-minutes, and §4 that the gate refuses a lightweight tag, since the v0.2.2 gate log shows checkout fetching the pushed tag refs. Revision note added."`
+
+- `bug-060-act-recipe-unusable-from-git-worktree`, `bug-173-the-first-mcp-registry-publish-is-refused-the-wingfoil-organization-namespace-is-not-granted-to-its-owner`, `bug-174-the-publish-runbook-does-not-say-where-npm-s-staged-packages-tab-is-nor-that-an-automated-review-precedes-approve` (review F6, dl-115 Q2 (a)) — one `memory amend` each:
+  - bug-060: `--reason "task-238 review F6 (dl-115 Q2 (a)): the bug gains its ### Retrospective subsection - none beyond its finding, a one-line caveat carried by task-238 once a task next touched publish.yml."`
+  - bug-173: `--reason "task-238 review F6 (dl-115 Q2 (a)): the Triage & Execution Notes placeholder is filled with the triage (e4859473) and the v0.3 planning (3e9a73b3) that absorbed the bug into task-238, which publishes over GitHub OIDC whatever the unverified OAuth-app cause was; the bug gains its ### Retrospective subsection."`
+  - bug-174: `--reason "task-238 review F6 (dl-115 Q2 (a)): the Triage & Execution Notes placeholder is filled with the triage (78b941cb) and the v0.3 planning (3e9a73b3) that absorbed the bug into task-238, which rewrote runbook step 6 and the publish phase description; the bug gains its ### Retrospective subsection."`
+- spec-015's `--reason` above already reflects review F1/F3 (the gate's timeout from CI; the OAuth-app cause as bug-173's suspicion).
 
 ### Gates (dl-170 interim rule: one heavy gate at a time via `waitslot.sh`, `--maxWorkers=2`)
 
@@ -268,7 +303,7 @@ After the v0.3.0 tag's run, once the `mcp-registry` job is green:
 | `npm run test:coverage -- --maxWorkers=2` at `483084a8` (whole suite, 2026-10-11 19:55–20:07Z, load 3.3 → 9.8) | **382 suites, 7089 tests, all passed**; coverage 99.3 / 97.22 / 97.93 / 99.7 (stmts / branches / funcs / lines), equal to main at the B5 gate (`devloop-kit/gate-w3b5-cov2.log`: 99.3 / 97.22 / 97.93 / 99.7) |
 | `npm run lint`; `npm run docs:api` | exit 0 each |
 | `npx tsc --noEmit -p tsconfig.json`; `npx tsc -p tsconfig.build.json --noEmit` (after the main-sync) | exit 0 each |
-| main-sync (refactor's last action): `git merge --no-ff main` → `e253e072` (4 Memory files of task-232/233 and bug-329/331, none of this task's) | then the 7 touched suites → 214/214 |
+| main-sync (refactor's last action): `git merge --no-ff main` → `e0372b42` (amended with the §7 trailers; `e253e072` before the amend, same tree) (4 Memory files of task-232/233 and bug-329/331, none of this task's) | then the 7 touched suites → 214/214 |
 | `node scripts/check-governance.cjs --base 0671d035` | 0 findings, exit 0 |
 | `node scripts/lint-claims.cjs --base 0671d035` | 0 warnings, exit 0 |
 
