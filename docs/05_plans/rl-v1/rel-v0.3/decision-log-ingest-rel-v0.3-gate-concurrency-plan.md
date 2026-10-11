@@ -55,7 +55,16 @@ from the session that launched it.
 
 ## Execution Notes
 
-- **capture (2026-10-11)** — see below.
+- **capture (2026-10-11)** — `dl-170-cap-the-number-of-worktrees-whose-test-and-coverage-gates-run-at-the-same-time`,
+  `in-discussion`. It bounds heavy gates (full suite, coverage, production build) per machine with a pid-holding
+  lock plus a load threshold, leaves `dl-014` G2 / REQ-INT-06 untouched, and asks Q1 (the cap; recommended 1),
+  Q2 (enforcement: `scripts/run-tests.cjs` and a `dev-loop.yaml` token; recommended both), Q3 (load > cores).
+- **deviation (2026-10-11): the decision-log was added with the code build, not the pinned one.** The pinned
+  `wingfoil@0.2.2` allocated `dl-169`, an id already taken on this branch
+  (`dl-169-whether-team.agents-entries-count-as-authors-…`; `ls docs/04_memory/design/dls/ | grep ^dl-169` printed
+  two files). That is `bug-087`'s defect, tagged `pinned-build`, fixed by `task-128` in the code build. The
+  colliding commit was local to this unmerged branch and was dropped (`git reset --hard HEAD~1`); `node
+  dist/cli.js memory add` then allocated `dl-170`. The plan's `add` and `submit` ran on the pinned build.
 
 ### Retrospective
 
