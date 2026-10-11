@@ -145,9 +145,28 @@ This task wires `spec-017`'s deduction into step 1 of the resolution: - `--workf
   97.82 / 96.66 / 100 / 98.64. `npx tsc --noEmit -p tsconfig.json` → 0; `npx eslint src/agent
   test/core/agent-execute-step.test.ts` → 0.
 
+### Approver ruling on decision 1 (2026-10-11, option (a))
+
+- P5.3.2 sc. 3 now expects the registry's message, `unknown role 'ghost' (not defined in dna.yaml)`, and still
+  "execution does not start"; the feature file has a dated `# Revised 2026-10-11` header citing the ruling,
+  and the gap note is gone. **AC 3 says "verbatim": the ruling replaced the scenario's message, so AC 3 is
+  met against the amended scenario.** `test/cli/agent-execute-step.integration.test.ts` › "sc. 3 (amended
+  2026-10-11)" pins it on a real repository fixture: exit 1, stderr line `error: E_PHASE_ROLE_UNKNOWN
+  phases[0].role (workflows/custom/ghostly.yaml): unknown role 'ghost' (not defined in dna.yaml)`, no fake
+  invocation, `HEAD` and the working tree unchanged.
+- `resolveStepRole`'s check stays as a defence, pinned on a synthetic step; its test comment and the
+  function's doc (`src/agent/step.ts`, comment only) say a repository cannot reach it.
+- spec-016 pending amendment: §3.1's closing line names P5.3.2 sc. 3's registry message, the §3.7 step-role
+  row is a defence, and the Revision note says so; the proposed `--reason` changed (below).
+- Checks: `npx jest --maxWorkers=2 test/core/agent-execute-step.test.ts
+  test/cli/agent-execute-step.integration.test.ts test/docs/` → 20 suites, 153 tests passed;
+  `npx tsc --noEmit -p tsconfig.json` → 0; `npx eslint` on the three touched code files → 0. No full coverage
+  run: the only `src/` change is a three-line doc comment (`git diff 3824a8a9 -- src/` → `src/agent/step.ts`,
+  comment lines only).
+
 ### Decisions for the approver
 
-1. **P5.3.2 sc. 3 is not reachable verbatim through a repository.** The registry refuses a phase whose role
+1. **(Ruled 2026-10-11, option (a): see above.) P5.3.2 sc. 3 is not reachable verbatim through a repository.** The registry refuses a phase whose role
    `dna.yaml` lacks at load (`E_PHASE_ROLE_UNKNOWN`, task-194) against the same committed `dna.yaml`, so the
    CLI exits 1 with `error: E_PHASE_ROLE_UNKNOWN phases[0].role (workflows/custom/ghostly.yaml): unknown
    role 'ghost' (not defined in dna.yaml)` and spawns nothing (CLI test AC 3 sc. 3). The verbatim
@@ -171,7 +190,7 @@ This task wires `spec-017`'s deduction into step 1 of the resolution: - `--workf
 ### Pending amendments (approver)
 
 - `spec-008-cli-grammar` — `--reason "task-235: section 12's step-form row is registered and no longer says the step forms are unregistered, the element row no longer says it is required until they ship, and section 11 names the step forms' baseline, the deduction's commit being the one HEAD every read takes."`
-- `spec-016-agent-execution` — `--reason "task-235: the step forms ship; section 3.2 step 1 says an empty frontier under --step is the CONFLICT row and that the deduction's commit is the run's one HEAD, and section 3.7's step-role row says the registry's E_PHASE_ROLE_UNKNOWN is what a repository reaches."`
+- `spec-016-agent-execution` — `--reason "task-235: the step forms ship; section 3.2 step 1 says an empty frontier under --step is the CONFLICT row and that the deduction's commit is the run's one HEAD; by the approver's ruling of 2026-10-11 P5.3.2 scenario 3 takes the registry's E_PHASE_ROLE_UNKNOWN message, which section 3.1 now names, and section 3.7's step-role row stays as a defence."`
 
 ### Candidate findings (not filed)
 
