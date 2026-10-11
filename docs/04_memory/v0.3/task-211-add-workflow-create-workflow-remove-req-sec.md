@@ -233,6 +233,33 @@ documented `TOOLS_V04` surplus.
 **Decision 10 (for the approver).** `test/cli/dry-run.integration.test.ts`'s `hunkLines` changed at
 `5afec5c4`, a red commit of its own, not in green (see red).
 
+### review fixes (2026-10-11, independent review: approve with fixes)
+
+- **F1** — removing the last `include:` entry was refused as CONFLICT `workflows.yaml cannot be edited in place:
+  the edited file does not read back as the expected include: list`, not as the VALIDATION "the workflows would
+  not load" that design decision 2, the pending `spec-017` §7.8 and `docs/cli-reference.md` describe: an
+  `include:` with no entry reads back as no list, and `verified` refused it. `16b802b3`: `withIncludeRemoved`
+  makes that edit and leaves the refusal to the prospective load. Pinned in a new file,
+  `test/workflow/manifest-edit-last-entry.test.ts` (the edit; `workflow remove` of the only workflow →
+  `VALIDATION` `cannot remove 'solo': the workflows would not load: …`, nothing written): `npx jest
+  test/workflow/manifest-edit test/core/workflow-create-remove` → 60 passed. My arms test had a second,
+  includable entry in the manifest, so it never reached the empty list.
+- **F2** — `docs/cli-reference.md`'s `workflow remove` errors now name `workflows.yaml cannot be edited in place:
+  …` (which the pending `spec-017` §10 assigns to both commands) and the last-entry case (`e0796bc5`).
+- **F3** — `5afec5c4`, the second red commit, was written by the green session, in the same second as
+  `b0b7f766` (`git log -2 --format="%h %ad" --date=iso 5afec5c4 b0b7f766` → both 22:06:06): green's first run found
+  the helper bug and the same session committed the test fix before the implementation. The separation of
+  duties of `dl-134` (red by a distinct, fresh session) was therefore not applied to it. The approver is asked to
+  accept `5afec5c4` as part of red.
+- T4 check (`tests.unchanged(since: red)`), red's files being those of `63b6836d` and `5afec5c4`:
+  `git log --first-parent --no-merges --format=%h 5afec5c4..HEAD -- test/core/workflow-create-remove.test.ts
+  test/workflow/manifest-edit.test.ts test/cli/workflow-create-remove.integration.test.ts
+  test/cli/dry-run.integration.test.ts` → empty.
+- Gates after the fixes: `npm run test:coverage -- --maxWorkers=2` (under the slot, load 2.67) → **388 suites, 7163
+  tests passed**; All files 99.3 / 97.19 / 97.74 / 99.71 (log `devloop-kit/task-211-cov2.log`),
+  `src/workflow/manifest-edit.ts` 100 / 91.11 / 100 / 100; `npm run lint`, `npm run docs:api`, `npx tsc --noEmit -p
+  tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` (under the slot) all exit 0.
+
 ### Pending amendments (approver)
 
 Left uncommitted in the worktree; the coordinator runs `memory amend` at the review gate.
