@@ -111,6 +111,9 @@ describe('REQ-SEC-05 — the operation-derived surface over the real CORE_MODULE
       'memoryPark',
       'memoryReject',
       'memorySubmit',
+      // task-217 — `workflow start` / `workflow end`, mutating (each writes its plan's commits).
+      'workflowEnd',
+      'workflowStart',
     ]);
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
@@ -129,6 +132,9 @@ describe('REQ-SEC-05 — the operation-derived surface over the real CORE_MODULE
       'memory.park',
       'memory.reject',
       'memory.submit',
+      // task-217 (`spec-017` §9): v0.4 Tools of the production server; here through the mechanical registrar.
+      'workflow.end',
+      'workflow.start',
     ]);
   });
 
