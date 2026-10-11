@@ -80,8 +80,8 @@ template with `workflow`/`phase`/`element`/`parent`).
 
 ### red (qa)
 
-`cb77570f`: `test/core/workflow-start-end.test.ts` (27 cases), `test/cli/workflow-start-end.integration.test.ts`
-(11, through `dist/`), `test/core/plan-parent-field.test.ts` (2). `npx jest` on the three files →
+`cb77570f`: `test/core/workflow-start-end.test.ts` (24 cases), `test/cli/workflow-start-end.integration.test.ts`
+(13, through `dist/`), `test/core/plan-parent-field.test.ts` (2). `npx jest` on the three files →
 **3 suites failed, 39 of 39 tests failed**, each because `workflowStart`/`workflowEnd` were not registered
 (core: thrown "is not registered"; CLI: exit 2 `unknown command`) or the template lacked `parent:`. One
 correction before green, amended into the red commit before any later commit existed (nothing pushed): the
@@ -113,14 +113,15 @@ test/cli/workflow-start-end.integration.test.ts`).
   REQ-SEC-05 `read-only-agent-channel`), `usage-before-identity` (`workflow end` requires no operand, so it is
   exempted from "throws at least one usage error", with the reason), journey 0a's "known gap" now starts
   `sw-life-cycle`, `e2e-smoke`'s fresh-init shape test names `plan`'s own machine, `templates.test.ts` pins
-  the scaffolded `plan` type. The first full run found these 9 failures in 6 suites (all rosters/pins of the
-  surface this task changes), nothing else.
+  the scaffolded `plan` type. The first full run (`npm run test:coverage -- --maxWorkers=2`, log
+  `task-217-scratch/cov.log`, `grep -E "^FAIL "` → 6 suites, `Tests: 9 failed, 6524 passed`) failed in these
+  six suites only, each on a roster or pin of the surface this task changes.
 - `ea16d2f0`, `097e2220`: `test/core/workflow-start-end-arms.test.ts` for the arms the acceptance suite does
   not reach (renderers, a `{n}` plan id, a submit refused by result, abandoned / not-loaded instances,
   `resolveWaitingTarget`, no identity, no `.wingfoil/`), and two impossible `?? ''` branches removed.
   `workflow-start-end.ts` → 100 % lines, 91 % branches (targeted run).
-- red's tests unchanged since red: `git log --first-parent --no-merges --format=%h cb77570f..HEAD --
-  <the three red files>` → empty.
+- red's tests: `git log --first-parent --no-merges --format=%h cb77570f..HEAD -- <the three red files>`
+  prints no commit.
 
 Gates, at `097e2220` (interim gate rule dl-170: one heavy gate at a time, `--maxWorkers=2`, load ≤ 14):
 
@@ -180,3 +181,27 @@ Uncommitted in the worktree (`git status --short docs/04_memory/design`):
   interim rule (one heavy gate at a time) from the start of a batch.
 - A test-only type error (`entry.moduleName`) surfaced only at `tsc`, after the red commit: run
   `npx tsc --noEmit` before the red commit.
+
+### review fixes (developer, independent review: APPROVE WITH FIXES)
+
+- **F1** (`workflow start` looped forever when the `-<n>` suffix cannot change the id). Red `de6c87a6`:
+  `test/cli/workflow-start-plan-patterns.integration.test.ts` drives `dist/` with a 20 s limit — `{phase}` only
+  in the `path` (`id_pattern: "{workflow}-plan"`), a `path` with no `{id}`, and a `{phase}-{slug}` id. `npx jest`
+  on it → 3 failed (two `timedOut: true`, one wrong second id). One expectation was corrected and amended into
+  the red commit before the fix was committed: with `--format json` the error is `{"error": …}` on stderr.
+  Green `2ad0d6d4`: the suffix is tried only when `{phase}` is a token of the `id_pattern`, at most 1000 times
+  (then `CONFLICT`); otherwise, and for `--set phase=`, the id is checked once; a `path` with no `{id}` is left to
+  `memory add`'s absent-target check; the predicted id slugs the same title `memory add` is given. → 3/3.
+- **F2** (coverage): `06cd2124`, `test/core/workflow-start-end-coverage.test.ts` — in-process usage errors, a
+  thrown non-storage submit failure, `end`'s preamble (deleted plan) and unmodified-target (modified plan)
+  refusals, a real start's console rendering, the 1000-suffix safeguard, `refusalOf`'s rethrow (a branch naming a
+  blob makes the plan-id read fail in git), `resolveWaitingTarget` with no `waiting` edge. `idOccupied` became
+  `idOccupancy` (the paths are listed once for every id tried). Targeted: `workflow-start-end.ts` 99.45 / 97.81 /
+  100 / 100.
+- **F3** (`docs/user-guide.md`, `05a2ef42`): the scaffold type list names `plan`; §5.1 says what `plan`'s machine
+  is; §7's "0.2.2 has no workflow engine: nothing starts a workflow" now says what v0.3 starts and records and
+  that no step is executed. `grep -rn "release-line.*tech-spec" docs/cli-reference.md docs/user-guide.md
+  README.md` → the one corrected line.
+- Notes corrected: the red split is 24 core / 13 CLI; the two `lint-claims` warnings name their commands.
+- Not changed, per the review: `workflow next`'s "unknown workflow" for a non-open plan id (D5, a follow-up
+  bug) and the `finalize` resolution's name.
