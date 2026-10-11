@@ -62,11 +62,19 @@ export interface MemoryHistoryEntry {
    * Read off the same `--follow --name-status` line as {@link path} ({@link parseParentPaths}), never
    * from the walk's previous entry: the walk is ordered by date, not by ancestry, so on interleaved
    * branches the previous entry is another branch's commit. Set on every entry
-   * {@link getMemoryHistory} returns; absent only on an entry built by hand, read then as {@link path}
-   * (as is a commit git printed no diff for, {@link attachParentPaths}).
+   * {@link getMemoryHistory} returns ({@link WalkedHistoryEntry}); optional here only so that the pure
+   * helpers' inputs, built before it is known, keep this shape. A commit git printed no diff for
+   * (a merge) gets its own {@link path} ({@link attachParentPaths}).
    */
   readonly parentPath?: string | null;
 }
+
+/**
+ * A {@link MemoryHistoryEntry} as {@link getMemoryHistory} returns it: {@link MemoryHistoryEntry.parentPath}
+ * is always set (`task-278`), so a reader never has to guess where the commit's first parent held the
+ * document.
+ */
+export type WalkedHistoryEntry = MemoryHistoryEntry & { readonly parentPath: string | null };
 
 const LOG_FIELDS = ['%H', '%an', '%ae', '%aI', '%s', '%b'];
 
@@ -161,10 +169,10 @@ export function findElementCreationSha(root: string, relativePath: string): stri
  * @param creationSha - The element's creation commit, from {@link findElementCreationSha}.
  * @returns `entries` from the creation commit onward (a new array; `entries` is not mutated).
  */
-export function dropPreCreationAncestry(
-  entries: readonly MemoryHistoryEntry[],
+export function dropPreCreationAncestry<Entry extends MemoryHistoryEntry>(
+  entries: readonly Entry[],
   creationSha: string | null,
-): MemoryHistoryEntry[] {
+): Entry[] {
   if (creationSha === null) return [...entries];
 
   const creationIndex = entries.findIndex((entry) => entry.sha === creationSha);
@@ -335,7 +343,7 @@ export function attachHistoricalPaths(
 export function attachParentPaths(
   entries: readonly MemoryHistoryEntry[],
   parentPathBySha: ReadonlyMap<string, string | null>,
-): MemoryHistoryEntry[] {
+): WalkedHistoryEntry[] {
   return entries.map((entry) => ({
     ...entry,
     parentPath: parentPathBySha.has(entry.sha) ? (parentPathBySha.get(entry.sha) as string | null) : entry.path,
@@ -363,7 +371,7 @@ export function attachParentPaths(
  * commit — `./audit`'s `reconstructMemoryTransitions`, which reads the frontmatter `status:` — must
  * take the path from here rather than re-using its own argument (`bug-080`).
  */
-export function getMemoryHistory(root: string, relativePath: string): MemoryHistoryEntry[] {
+export function getMemoryHistory(root: string, relativePath: string): WalkedHistoryEntry[] {
   const records = walkGitLogFields(root, LOG_FIELDS, [relativePath], ['--follow']);
 
   // One field per slot, `%b` included. Two consequences of task-086's arity-based framing, both
@@ -388,7 +396,7 @@ export function getMemoryHistory(root: string, relativePath: string): MemoryHist
     return { sha, authorName, authorEmail, date, subject, body: body.trim(), path: relativePath };
   });
 
-  if (entries.length === 0) return entries;
+  if (entries.length === 0) return [];
   // One probe answers both questions: where the document was at each commit, and in its first parent.
   const probe = readPathProbe(root, relativePath);
   const located = attachParentPaths(attachHistoricalPaths(entries, parseHistoricalPaths(probe), relativePath), parseParentPaths(probe));

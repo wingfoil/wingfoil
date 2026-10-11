@@ -420,19 +420,19 @@ export function reconstructMemoryTransitions(
   const requests: RevisionPath[] = [];
   for (const entry of history) {
     requests.push({ rev: entry.sha, path: entry.path });
-    const parentPath = entry.parentPath === undefined ? entry.path : entry.parentPath;
-    if (parentPath !== null) requests.push({ rev: `${entry.sha}^1`, path: parentPath });
+    if (entry.parentPath !== null) requests.push({ rev: `${entry.sha}^1`, path: entry.parentPath });
   }
+  // One answer per request, in request order (`readRevisionPaths`).
   const raws = readRevisionPaths(root, requests);
 
   const transitions: MemoryTransition[] = [];
   let next = 0;
   for (const entry of history) {
-    const read = parseStatus(raws[next++] ?? null, `${entry.path}@${entry.sha}`);
-    const parentPath = entry.parentPath === undefined ? entry.path : entry.parentPath;
-    const before = parentPath === null ? { status: null } : parseStatus(raws[next++] ?? null, `${parentPath}@${entry.sha}^1`);
-    if (strict && read.unreadable !== undefined) throw read.unreadable;
-    if (strict && before.unreadable !== undefined) throw before.unreadable;
+    const read = parseStatus(raws[next++] as string | null, `${entry.path}@${entry.sha}`);
+    const before = entry.parentPath === null ? { status: null } : parseStatus(raws[next++] as string | null, `${entry.parentPath}@${entry.sha}^1`);
+    // Strict: neither the commit's revision nor its parent's may go unread (task-171, `bug-188`).
+    const strictFailure = read.unreadable ?? before.unreadable;
+    if (strict && strictFailure !== undefined) throw strictFailure;
     const unreadable = read.unreadable?.issues[0]?.message ?? read.unreadable?.message;
     transitions.push({
       sha: entry.sha,
