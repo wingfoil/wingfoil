@@ -17,7 +17,9 @@ import { withWarningSink } from '../../src/validation/warning';
 import { TASK_ID } from '../agent/helpers/agent-execute-fixture';
 import { GHOSTLY, GHOSTLY_FILE, RELEASE_ID, seedStep, SIBLING_ID, startInstance, STEP_WORKFLOWS } from '../agent/helpers/agent-execute-step-fixture';
 import { CLI_ENTRY } from '../cli/helpers/spawn-cli';
-import { makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import * as revision from '../../src/core/revision';
+import * as stepModule from '../../src/agent/step';
+import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const HOST: AgentExecuteHost = { mcpServer: { command: process.execPath, args: [CLI_ENTRY, 'mcp'] }, isTerminal: () => false };
 
@@ -206,4 +208,45 @@ describe('agentExecuteFn — the step forms (dry run, in process)', () => {
     await expect(agentExecuteFn({ root: '/nonexistent', options: { role: 'developer' } })).rejects.toThrow('missing required argument: --next or --element');
     await expect(agentExecuteFn({ root: '/nonexistent', next: false, options: {} })).rejects.toThrow('missing required argument: --next or --element');
   });
+});
+
+describe('task-235 review F3 — every adapter read takes the run’s one HEAD, not HEAD read again', () => {
+  /** A commit that breaks the fake adapter's manifest, made right after the pipeline resolved its HEAD. */
+  const breakAdapter = (root: string): void => {
+    writeFixtureFile(root, '.wingfoil/agents/custom/fake.yaml', 'name: fake\nargz: [ oops ]\n');
+    writeFixtureFile(root, '.wingfoil/agents/built-in/fake.yaml', 'name: fake\n');
+    commitAll(root, 'break the adapter after HEAD was resolved');
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('step form: HEAD moves after the deduction; the adapter is still read at the deduction’s commit', async () => {
+    const repo = seedStep();
+    repos.push(repo);
+    startInstance(repo, 'delivery-1', 'delivery', RELEASE_ID);
+    const real = stepModule.readNextAtHead;
+    let deducedAt = '';
+    jest.spyOn(stepModule, 'readNextAtHead').mockImplementation((root, ref) => {
+      const result = real(root, ref);
+      if (result.ok) deducedAt = result.value.baseline.commit;
+      breakAdapter(root);
+      return result;
+    });
+    const outcome = await plan(repo, { next: true });
+    expect(runOf(outcome)).toMatchObject({ id: `${TASK_ID}/implement/1`, state_ref: deducedAt });
+  }, 60000);
+
+  it('stepless form: HEAD moves after it is resolved; the adapter is still read at that commit', async () => {
+    const repo = seedStep();
+    repos.push(repo);
+    const real = revision.resolveRevision;
+    let resolvedAt = '';
+    jest.spyOn(revision, 'resolveRevision').mockImplementationOnce((root, rev) => {
+      resolvedAt = real(root, rev);
+      breakAdapter(root);
+      return resolvedAt;
+    });
+    const outcome = await plan(repo, { options: { element: `task:${TASK_ID}`, role: 'developer' } });
+    expect(runOf(outcome)).toMatchObject({ element: `task:${TASK_ID}`, state_ref: resolvedAt });
+  }, 60000);
 });

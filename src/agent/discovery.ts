@@ -144,11 +144,14 @@ export function listAdaptersAtRev(root: string, rev: string): AdapterEntry[] {
  *
  * @param rev - A revision naming one commit (a sha, or `HEAD`; at `HEAD` a repository with no commit has
  *   no adapter).
+ * @param label - How the refusal spells the revision; defaults to `rev`. A caller that resolved `HEAD`
+ *   to a sha once, to read everything at that one commit, passes the sha as `rev` and `HEAD` here
+ *   (task-235's review F3).
  */
-export function duplicateAdapterRefusal(root: string, rev: string): CoreResult<never> | undefined {
+export function duplicateAdapterRefusal(root: string, rev: string, label = rev): CoreResult<never> | undefined {
   const sha = rev === 'HEAD' ? atHeadOr(root, () => resolveRevision(root, rev), null) : resolveRevision(root, rev);
   if (sha === null) return undefined;
-  const duplicates = duplicateIssues(entriesAtCommit(root, sha), `${rev}:${ADAPTERS_DIR_PATH}`);
+  const duplicates = duplicateIssues(entriesAtCommit(root, sha), `${label}:${ADAPTERS_DIR_PATH}`);
   if (duplicates.length === 0) return undefined;
   const [first] = duplicates;
   return coreErr({
@@ -176,8 +179,10 @@ function render(issue: ValidationIssue): string {
  * - a `RevisionError`'s own code and message when `rev`, other than `HEAD`, names no commit.
  *
  * @param rev - Defaults to `HEAD` (`dl-080` (B)).
+ * @param label - How refusals and issue paths spell the revision; defaults to `rev` (see
+ *   {@link duplicateAdapterRefusal}).
  */
-export function loadAdapter(root: string, name: string, rev = 'HEAD'): CoreResult<LoadedAdapter> {
+export function loadAdapter(root: string, name: string, rev = 'HEAD', label = rev): CoreResult<LoadedAdapter> {
   const refuse = (
     code: 'VALIDATION' | 'NOT_FOUND',
     reason: string,
@@ -203,7 +208,7 @@ export function loadAdapter(root: string, name: string, rev = 'HEAD'): CoreResul
   const entries = sha === null ? [] : entriesAtCommit(root, sha);
 
   // Every duplicated name is a dl-055 detail line; the message names the first (task-177 review F2).
-  const duplicates = duplicateIssues(entries, `${rev}:${ADAPTERS_DIR_PATH}`);
+  const duplicates = duplicateIssues(entries, `${label}:${ADAPTERS_DIR_PATH}`);
   if (duplicates.length > 0) {
     const [first] = duplicates;
     return refuse('VALIDATION', first!.issue.message, duplicates.map(({ issue }) => issue), first!.name);
@@ -212,11 +217,11 @@ export function loadAdapter(root: string, name: string, rev = 'HEAD'): CoreResul
   const entry = entries.find((candidate) => candidate.name === name);
   const text = entry === undefined || sha === null ? null : readPathAtRev(root, sha, entry.path);
   if (entry === undefined || text === null) {
-    return refuse('NOT_FOUND', `no ${ADAPTERS_DIR_PATH}/built-in/${name}.yaml or ${ADAPTERS_DIR_PATH}/custom/${name}.yaml at ${rev}`);
+    return refuse('NOT_FOUND', `no ${ADAPTERS_DIR_PATH}/built-in/${name}.yaml or ${ADAPTERS_DIR_PATH}/custom/${name}.yaml at ${label}`);
   }
 
   try {
-    const manifest = parseAdapterManifest(text, { name, kind: entry.kind, file: `${rev}:${entry.path}` });
+    const manifest = parseAdapterManifest(text, { name, kind: entry.kind, file: `${label}:${entry.path}` });
     return coreOk({ ...entry, manifest });
   } catch (error) {
     if (!(error instanceof ValidationError)) throw error;

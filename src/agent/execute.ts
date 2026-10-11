@@ -511,7 +511,8 @@ async function runPipeline<T>(
   const { dna, memoryYaml } = config.value;
   for (const diagnostic of adapterTreeDiagnosticsAtRev(root, sha)) reportWarning(formatDiagnostic(diagnostic));
   // A name in both built-in/ and custom/ is refused where the tree is listed (§2.1), before resolution.
-  const duplicate = duplicateAdapterRefusal(root, 'HEAD');
+  // Every adapter read takes the one resolved commit, spelled `HEAD` in messages (task-235's review F3).
+  const duplicate = duplicateAdapterRefusal(root, sha, 'HEAD');
   if (duplicate !== undefined) return duplicate;
 
   // Step 3 — resolution (§3.2 steps 1–5).
@@ -549,7 +550,7 @@ async function runPipeline<T>(
   if (role === APPROVER_ROLE) return coreErr({ code: 'VALIDATION', message: `role '${APPROVER_ROLE}' is never executed by an agent` });
   const agent = selectAgent(dna, role, request.agent);
   if (!agent.ok) return agent;
-  const adapter = loadAdapter(root, agent.value.adapter!, 'HEAD');
+  const adapter = loadAdapter(root, agent.value.adapter!, sha, 'HEAD');
   if (!adapter.ok) return adapter;
   const manifest = adapter.value.manifest;
 
