@@ -47,17 +47,19 @@
  *   that file is absent; G09, G10 and G16 count the Memory `wf()` commits (configuration scopes excluded); G13 every
  *   `wf(` subject;
  * - G11 back-merges: `Merge … 'main' into task/…` subjects, over the `Merge branch 'task/…'` ones;
- * - G15 refs: the branches under refs/heads and refs/remotes (not the symbolic HEAD refs); a stale branch is a remote-tracking ref whose tip
- *   is not an ancestor of the point and is older than it; a duplicate is one `<prefix>-<n>` carried by two
+ * - G15 refs: the branches under refs/heads and refs/remotes (not the symbolic HEAD refs); a stale branch is a
+ *   remote-tracking ref whose tip is not an ancestor of the point and is older than it; a duplicate is one `<prefix>-<n>` carried by two
  *   different ids across the refs' Memory folders and the point's;
  * - P03 a phase recorded complete: a `plan` element `done` at the point and not at the previous point; it is judged
  *   on its workflow's string `produces:` entries (the phase its `phase:` names, else every phase), tokens resolved
- *   from its `element` (`{<type>.<field>}`, `{release-line}`); an entry left with a token is counted `unresolved`,
- *   not judged; a typed `{ type, path }` entry is a Memory element, judged by P02;
+ *   from its `element` (`{<type>.<field>}`, `{release-line}`); an entry left with a token, or written as free text
+ *   rather than a path, is counted `unresolved`, not judged; a typed `{ type, path }` entry is a Memory element, judged by P02;
+ * - P02, P05: a governance finding saying no `memory.yaml`/`dna.yaml` was committed at the commit (history
+ *   before the configuration existed) is counted `unchecked`, not failing;
  * - P04 the tasks touched in the window; each link must resolve at the point: `ref`, `bug`, `depends_on`,
- *   `supersedes` element ids, feature ids in `docs/01_vision/06_features.md`, `REQ-*` headings under
- *   `docs/02_requirements/03_sard/`, `US-*` ids in `docs/02_requirements/01_user_story_map/`, cited `.feature`
- *   paths;
+ *   `supersedes` values (a `REQ-*` or feature id as such, else a Memory element id), feature ids in
+ *   `docs/01_vision/06_features.md`, `REQ-*` headings under `docs/02_requirements/03_sard/`, `US-*` ids in
+ *   `docs/02_requirements/01_user_story_map/`, cited `.feature` paths (from the root or the BDD folder);
  * - P05 the approval authority of the governance check, plus the run records the window adds under `paths.runs`:
  *   the record's role is its phase's declared role, its agent's `executes_as` holds it, and it shares no `session`
  *   with a record of a phase its `distinct_from` names;
@@ -98,7 +100,7 @@ const BRACKET_RE = /\[[^\]]*(?:->|→)[^\]]*\]/;
 const BACK_MERGE_RE = /^merge (?:remote-tracking )?(?:branch )?'?(?:origin\/)?main'? into '?task\//i;
 const TASK_MERGE_RE = /^merge (?:remote-tracking )?branch '(?:origin\/)?task\//i;
 const NUMBERED_ID_RE = /^([a-z][a-z-]*?)-(\d+)(?:-|$)/;
-const FEATURE_ID_RE = /\bP\d+(?:\.\d+)+\b/g;
+const FEATURE_ID_RE = /(?<![\w/.-])P\d+(?:\.\d+)+(?![\w-])/g;
 const REQ_ID_RE = /\bREQ-[A-Z]+-\d+\b/g;
 const US_ID_RE = /\bUS-[0-9A-Z]+-\d+\b/g;
 const FEATURE_FILE_RE = /[\w./-]+\.feature\b/g;
@@ -377,7 +379,7 @@ function declaredVerbs(root, point, dist) {
 }
 
 function measureHistory(ctx) {
-  const { root, point, base, commits, dna, dist, smallSample } = ctx;
+  const { root, point, commits, dna, dist, smallSample } = ctx;
   const nonMerge = commits.filter((c) => !c.merge);
   const n = nonMerge.length;
   const sources = pathsOf(dna, 'sources');
@@ -597,12 +599,27 @@ function measureBranches(ctx) {
 
 // --- process conformance (P01–P06, REQ-STATE-10) -----------------------------------------------------
 
+/**
+ * A governance finding that says a commit could not be judged — no `memory.yaml` or `dna.yaml` committed there
+ * (history before the configuration existed): counted `unchecked`, never failing.
+ */
+const UNCHECKABLE_RE = /^no \.wingfoil\/(memory|dna)\.yaml is committed/;
+
+/** The commits whose `rules` findings are all uncheckable: counted apart from the failing ones. */
+function uncheckedCommits(report, rules) {
+  const shas = new Set();
+  for (const finding of report.findings) {
+    if (rules.includes(finding.rule) && UNCHECKABLE_RE.test(finding.message)) shas.add(finding.sha);
+  }
+  return shas.size;
+}
+
 /** Governance findings of `rules`, one failing item per commit: `<sha> <subject>: <messages>`. */
 function groupFindings(report, rules) {
   /** @type {Map<string, { subject: string, messages: string[] }>} */
   const bySha = new Map();
   for (const finding of report.findings) {
-    if (!rules.includes(finding.rule)) continue;
+    if (!rules.includes(finding.rule) || UNCHECKABLE_RE.test(finding.message)) continue;
     if (!bySha.has(finding.sha)) bySha.set(finding.sha, { subject: finding.subject, messages: [] });
     bySha.get(finding.sha).messages.push(finding.message);
   }
@@ -662,6 +679,10 @@ function producesPresent(root, point, base, memoryYaml) {
     for (const phase of named.length > 0 ? named : phases) {
       for (const pattern of Array.isArray(phase && phase.produces) ? phase.produces : []) {
         if (typeof pattern !== 'string') continue;
+        if (/\s/.test(pattern.trim())) {
+          unresolved += 1; // free text, not a path (older workflow files described an artifact in words)
+          continue;
+        }
         let open = false;
         const resolved = pattern.replace(/\{([^}]+)\}/g, (token, name) => {
           const [owner, field] = name.includes('.') ? name.split('.', 2) : ['release', name === 'release-line' ? 'release-line' : null];
@@ -699,7 +720,7 @@ function traceability(root, point, commits, memoryYaml) {
     feature: (v) => word(features, v),
     req: (v) => new RegExp(`^#+\\s+${v}\\b`, 'm').test(sard),
     story: (v) => storyMap.includes(v),
-    bdd: (v) => (v.includes('/') ? exists(root, point, v) : bddFiles.some((f) => posix.basename(f) === v)),
+    bdd: (v) => exists(root, point, v) || bddFiles.includes(`${BDD_DIR}${v}`) || (!v.includes('/') && bddFiles.some((f) => posix.basename(f) === v)),
   };
   let checked = 0;
   const failing = [];
@@ -709,7 +730,9 @@ function traceability(root, point, commits, memoryYaml) {
     if (!fm || fm.type !== 'task') continue;
     const id = fm.id ?? posix.basename(path, '.md');
     const links = [];
-    for (const field of ELEMENT_LINK_FIELDS) for (const v of asList(fm[field])) links.push([field, v, 'element']);
+    // A frontmatter value is resolved by what it names: a requirement, a feature, else a Memory element.
+    const kindOf = (v) => (/^REQ-[A-Z]+-\d+$/.test(v) ? 'req' : /^P\d+(?:\.\d+)+$/.test(v) ? 'feature' : 'element');
+    for (const field of ELEMENT_LINK_FIELDS) for (const v of asList(fm[field])) links.push([field, v, kindOf(v)]);
     const body = bodyOf(text);
     for (const v of unique(body.match(FEATURE_ID_RE) ?? [])) links.push(['feature', v, 'feature']);
     for (const v of unique(body.match(REQ_ID_RE) ?? [])) links.push(['req', v, 'req']);
@@ -770,7 +793,7 @@ function rolesAndSessions(root, point, base, commits, dna, governance, dist) {
       }
     }
   }
-  return countEntry('P05', approvals + records, [...failing, ...recordFailing], { approvals, run_records: records });
+  return countEntry('P05', approvals + records, [...failing, ...recordFailing], { approvals, run_records: records, unchecked: uncheckedCommits(governance, ['authority']) });
 }
 
 function conformanceIn(root, tree, point, base, dist) {
@@ -779,8 +802,8 @@ function conformanceIn(root, tree, point, base, dist) {
   const memoryYaml = loadYamlAt(root, point, '.wingfoil/memory.yaml');
   const dna = loadYamlAt(root, point, '.wingfoil/dna.yaml');
   return [
-    countEntry('P01', governance.checked, groupFindings(governance, ['subject', 'bracket', 'body'])),
-    countEntry('P02', governance.checked + governance.otherCommits, groupFindings(governance, ['state'])),
+    countEntry('P01', governance.checked, groupFindings(governance, ['subject', 'bracket', 'body']), { unchecked: uncheckedCommits(governance, ['subject', 'bracket', 'body']) }),
+    countEntry('P02', governance.checked + governance.otherCommits, groupFindings(governance, ['state']), { unchecked: uncheckedCommits(governance, ['state']) }),
     producesPresent(root, point, base, memoryYaml),
     traceability(root, point, commits, memoryYaml),
     rolesAndSessions(root, point, base, commits, dna, governance, dist),
@@ -816,7 +839,7 @@ function parseHttp(text) {
   const status = Number((/^HTTP\/\S+ (\d{3})/.exec(head) ?? [])[1]);
   const date = (/^date:\s*(.+)$/im.exec(head) ?? [])[1] ?? null;
   const rawBody = blocks.slice(i + 1).join('\n\n');
-  let body = null;
+  let body;
   try {
     body = JSON.parse(rawBody);
   } catch {

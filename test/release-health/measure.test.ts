@@ -130,6 +130,7 @@ const BASE_FILES: Readonly<Record<string, string>> = {
   'docs/02_requirements/03_sard/01_architecture.md': '# SARD\n\n### REQ-SYS-01 — Git-backed\n',
   'docs/02_requirements/01_user_story_map/01_map.md': '# Map\n\n* US-1-01: As Morgan, I want it.\n',
   'docs/out/present.md': 'Present.\n',
+  'docs/02_requirements/02_bdd/features/p1-memory/P1.1-storage.feature': 'Feature: P1.1\n',
   'docs/out/rel-v0.2-report.md': 'Report.\n',
   'docs/memory/release/minor-v0.2.md': RELEASE_DOC,
   'docs/memory/dls/dl-117-ai.md': DL_DOC('in-discussion'),
@@ -585,6 +586,31 @@ describe('Process conformance (REQ-STATE-10, P1.2 @REQ-STATE-10 scenarios)', () 
     const failing = failingByCheck(r.root, base);
     expect(failing[check]).toHaveLength(1);
     expect({ ...failing, [check]: [] }).toMatchObject(NONE);
+  });
+
+  it('a frontmatter REQ or feature id resolves as one, and a .feature path resolves from the BDD folder', () => {
+    const { r, base } = clean();
+    r.commit('wf(task): add task-003-gamma', { files: { 'docs/memory/task/task-003-gamma.md': taskDoc('task-003-gamma', 'draft', '', 'Scenarios in p1-memory/P1.1-storage.feature.').replace('ref: "dl-117"', 'ref: "REQ-SYS-01"') } });
+    const p04 = processConformance(r.root, r.rev('HEAD'), base).find((m) => m.id === 'P04')!;
+    expect(p04.failing).toEqual([]);
+    expect(p04.raw).toMatchObject({ checked: 4 });
+  });
+
+  it('a commit made before the configuration existed is unchecked, not failing; a free-text produces entry is unresolved', () => {
+    const r = repo();
+    const first = r.commit('wf(task): add task-001-alpha', { date: DAY0, files: { 'docs/memory/task/task-001-alpha.md': taskDoc('task-001-alpha', 'draft') } });
+    // The configuration alone, no Memory document: a non-wf() commit creating one would be a P02 finding of its own.
+    const config = Object.fromEntries(Object.entries(BASE_FILES).filter(([path]) => !path.startsWith('docs/memory/')));
+    r.commit('chore: configure wingfoil', { author: ADA, files: { ...config, '.wingfoil/workflows/custom/demo.yaml': DEMO_WORKFLOW.replace('"docs/out/present.md"', '"the release notes, in words"') } });
+    r.commit('wf(plan): add demo-plan', { files: { 'docs/plans/demo-plan.md': planDoc('draft') } });
+    r.commit('wf(plan): submit demo-plan', { files: { 'docs/plans/demo-plan.md': planDoc('active') } });
+    r.commit('wf(plan): finalize demo-plan [active → done]', { files: { 'docs/plans/demo-plan.md': planDoc('done') } });
+    const p = processConformance(r.root, r.rev('HEAD'), null);
+    const byId = Object.fromEntries(p.map((m) => [m.id, m]));
+    expect(byId['P02']).toMatchObject({ failing: [], raw: { unchecked: 1 } });
+    // The plan's element is absent, so the report path keeps its token; the free text and `{id}` are unresolved too.
+    expect(byId['P03']).toMatchObject({ failing: [], raw: { checked: 0, unresolved: 3 } });
+    expect(first).toMatch(/^[0-9a-f]{40}$/);
   });
 
   it('Process conformance is byte-identical on a rerun', () => {
