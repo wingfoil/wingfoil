@@ -349,9 +349,12 @@ export function readRunLogAt(root: string, rev: string, path: string): CoreResul
  * @throws `StorageError` when git cannot list the commit.
  */
 export function readRunLogsAt(root: string, sha: string, dir: string): CoreResult<RunRecord[]> {
-  const confined = requireConfinedTarget(root, dir, 'read');
-  if (!confined.ok) return confined;
   const prefix = relative(resolve(root), resolve(root, dir.split(sep).join('/'))).split(sep).join('/');
+  // The root itself (`./`) is the one directory the confinement check names as outside: it is the boundary.
+  if (prefix !== '') {
+    const confined = requireConfinedTarget(root, dir, 'read');
+    if (!confined.ok) return confined;
+  }
   const parent = prefix === '' ? '.' : prefix;
   const paths = listPathsAtCommit(root, sha, prefix)
     .filter((path) => path.endsWith('.jsonl') && posix.dirname(path) === parent)

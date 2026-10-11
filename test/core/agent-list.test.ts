@@ -486,3 +486,68 @@ describe('task-240 AC 5 — no paths.runs, and a run log that breaks spec-016 §
     expect(result).toMatchObject({ error: { code: 'VALIDATION', message: 'run log docs/runs/task-a.jsonl: run id task-a/green/1 recorded twice' } });
   });
 });
+
+describe('task-240 — refusals and edges (refactor)', () => {
+  let repo: string;
+  afterEach(() => removeTempDir(repo));
+
+  it('a repository with no commit: the HEAD refusal agent show gives, whichever section', async () => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, '.wingfoil/dna.yaml', dnaYaml('docs/runs/'));
+    for (const request of [{ past: true }, { waiting: true }]) {
+      const result = await list(repo, request);
+      expect(result.ok).toBe(false);
+      expect(exitCodeForResult(result)).toBe(1);
+    }
+  });
+
+  it('dna.yaml not committed at HEAD, past selected → NOT_FOUND, exit 1', async () => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, 'README.md', 'x\n');
+    commitAll(repo, 'seed');
+    writeFixtureFile(repo, '.wingfoil/dna.yaml', dnaYaml('docs/runs/'));
+    const result = await list(repo, { past: true });
+    expect(result).toMatchObject({ ok: false, error: { code: 'NOT_FOUND', message: '.wingfoil/dna.yaml is not committed at HEAD, which agent list reads: commit it first' } });
+  });
+
+  it('an invalid dna.yaml at HEAD → VALIDATION with its issues, exit 1', async () => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, '.wingfoil/dna.yaml', 'version: 1\nmodules: 3\n');
+    commitAll(repo, 'seed');
+    const result = await list(repo, { past: true });
+    expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION', details: { issues: expect.any(Array) } } });
+  });
+
+  it('a workflow registry with an error at HEAD → VALIDATION with its diagnostics, exit 1, as workflow status', async () => {
+    repo = makeTempGitRepo();
+    writeProject(repo);
+    writeFixtureFile(repo, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/missing.yaml\n');
+    commitAll(repo, 'broken registry');
+    const result = await list(repo, { waiting: true });
+    expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION', details: { diagnostics: expect.any(Array) } } });
+    expect(exitCodeForResult(result)).toBe(1);
+  });
+
+  it('a paths.runs outside the project root is refused, not read', async () => {
+    repo = makeTempGitRepo();
+    writeProject(repo, '../elsewhere/');
+    const result = await list(repo, { past: true });
+    expect(result.ok).toBe(false);
+    expect(exitCodeForResult(result)).toBe(1);
+  });
+
+  it('only <element-id>.jsonl files directly in the run-log directory are read; a run-log directory at the root works', async () => {
+    repo = makeTempGitRepo();
+    writeProject(repo, './');
+    writeFixtureFile(repo, 'notes.txt', 'not a run log\n');
+    writeFixtureFile(repo, 'sub/task-z.jsonl', 'not a run log either\n');
+    recorded(repo, run('task-a', 'green', 1), '.');
+    commitAll(repo, 'other files');
+    expect((await listed(repo, { past: true })).past!.map((record) => record.id)).toEqual(['task-a/green/1']);
+  });
+
+  it('a waiting step whose role no agent with an adapter executes prints "none"', () => {
+    const step = { instance: 'i', key: 'w.p', workflow: 'w', phase: 'p', element: null, role: 'r', allowedModes: ['fresh'], agents: [] };
+    expect(render({ baseline: { rev: 'HEAD', commit: 'c' }, waiting: [step], diagnostics: [] })).toBe('waiting steps: 1\nw.p  r  none\n');
+  });
+});
