@@ -663,8 +663,11 @@ element it adds to a step (§4.8), which is explicit and survives concurrent ins
 - `<ref>` resolves to an open instance (§3.3); `--step` selects a frontier step whose phase declares
   `memory.add(type: T)` for the `--type` given; without `--step`, the one such frontier step of the
   instance. None: `no step of <instance> adds a <type>` (`CONFLICT`); several: the same refusal
-  listing their keys, asking for `--step`.
-- The add commit carries the trailers `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>`.
+  listing their keys, asking for `--step`. A `--step` that is not on the instance's frontier is refused as
+  `finalize` refuses it (§10); `--step` without `--workflow` is a usage error (`spec-008` §12).
+- The add commit carries the trailers `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>`, in
+  its final paragraph with the `WingFoil-Version:` build signature (`dl-111`), which stays its last line:
+  git reads trailers from that paragraph only, and so does the walk (§4.8).
 - Without `--workflow`, `memory add` is unchanged and links nothing.
 
 ### 8. Output shapes
@@ -802,10 +805,12 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | `--set phase=` collides (`start`) | `plan id already exists: <id>` | `CONFLICT` | 1 |
 | second `start` commit failed | `plan <id> was added but not submitted: run wingfoil memory submit <id>` | as the failure | 1 |
 | no open instance (`end`) | `no active workflow to end` | `NOT_FOUND` | 1 |
-| `<ref>` names no open instance | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
+| `<ref>` names no open instance (also `memory add --workflow <ref>`) | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
 | plan in `draft` at `end` | `workflow '<name>' was not submitted: run wingfoil memory submit <id>` | `INVALID_TRANSITION` | 1 |
 | incomplete at `end` | `workflow '<name>' is not complete: current step <key>` | `CONFLICT` | 1 |
-| step not on the frontier (`finalize`) | `step '<key>' is not on the frontier of <instance>` | `CONFLICT` | 1 |
+| step not on the frontier (`finalize`, `memory add --step`) | `step '<key>' is not on the frontier of <instance>` | `CONFLICT` | 1 |
+| no frontier step adds the type (`memory add --workflow`, §7.10) | `no step of <instance> adds a <type>` | `CONFLICT` | 1 |
+| several frontier steps add the type, no `--step` (`memory add --workflow`) | `no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>` (the keys in frontier order, also in `details.steps`) | `CONFLICT` | 1 |
 | step has deducible evidence (`finalize`) | `phase '<workflow>.<phase>' completes from its evidence: <kinds>` | `CONFLICT` | 1 |
 | approval phase without authority (`finalize`) | the message `memory approve` gives (REQ-SEC-03) | as today | 1 |
 | approval phase without `--reason`, or a blank or malformed one (`finalize`) | `spec-008` / `dl-067` reason messages | — | 2 |
@@ -1219,3 +1224,12 @@ warnings, `task-222`'s 69) stay as the record of their measurements. The figures
 `test/core/workflow-repository-conformance.test.ts` pins after the merge. No rule, command or diagnostic
 changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend` at `task-212`'s review.
+
+**Revision (2026-10-10, `task-227-link-added-element-workflow-step-memory-add-workflow`) — §7.10 and §10 for
+`memory add --workflow` / `--step`.** `task-227` ships the two options. §7.10 now says where the linkage
+trailers sit — in the final paragraph, before `WingFoil-Version:`, since `%(trailers)` reads only that
+paragraph (`readFacts`, `src/core/workflow-deduction.ts`) — and how a `--step` off the frontier and a `--step`
+without `--workflow` are refused. §10 gains the rows for the "none" and "several" refusals §7.10 already
+named, and the `<ref>` and off-frontier rows name `memory add` too. No deduction rule changes. Edited in
+place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at
+`task-227`'s review.
