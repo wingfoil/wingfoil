@@ -654,7 +654,14 @@ has no Memory or file evidence to deduce it from.
 - Writes one commit with no file change: subject `workflow: finalize <instance-id> <key>`, which is
   outside the `wf({type})` grammar (`spec-003` verb table, closing paragraph) so `memory history`
   does not read it as a Memory operation; the trailer block carries `spec-003`'s phase-record
-  trailers. A git identity is required (REQ-SEC-01).
+  trailers. The trailer block is the message's final paragraph — the one git reads trailers from — so
+  the record's trailers share it with the `WingFoil-Version:` line, which stays last (`spec-008` §2);
+  an `Approver:` / `Reason:` body is its own paragraph before it. A git identity is required (REQ-SEC-01).
+  The commit is made with `git commit --only --allow-empty`, so nothing staged rides along, and it is
+  refused while the index holds staged changes (`dl-106`; the write-guard row of §10).
+- No `<ref>` and no open instance: `no active workflow to finalize` (`NOT_FOUND`); an instance whose
+  frontier is empty: `CONFLICT` with `next`'s message (§7.3). The authority refusal names the step's
+  scope element's type, else the bound element's, else `plan`.
 - Output: the finalized step and the instance's new next step.
 
 **7.10 What this spec requires of `memory add`** (`spec-008` owns the grammar; Consequences;
@@ -1219,3 +1226,11 @@ warnings, `task-222`'s 69) stay as the record of their measurements. The figures
 `test/core/workflow-repository-conformance.test.ts` pins after the merge. No rule, command or diagnostic
 changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend` at `task-212`'s review.
+
+**Revision (2026-10-10, `task-226-add-workflow-finalize-which-records-checkpoint-or-uncarried`) — §7.9
+details.** `task-226` implements `workflow finalize`. §7.9 now says where the record's trailers go — the
+final paragraph, with `WingFoil-Version:` last, since git reads trailers from that paragraph only
+(`spec-008` §2's build-signature bullet is amended with it) — that the empty commit uses
+`git commit --only --allow-empty` and is refused on a dirty index (`dl-106`), and the two refusals and the
+authority type the section left open. No rule of §4 or §5 changes. Edited in place without a supersede or
+a state change (`dl-047`); pending the approver's `memory amend` at `task-226`'s review.
