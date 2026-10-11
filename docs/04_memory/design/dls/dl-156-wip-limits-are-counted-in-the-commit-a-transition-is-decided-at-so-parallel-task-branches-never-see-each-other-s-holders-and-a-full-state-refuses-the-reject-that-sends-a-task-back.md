@@ -43,8 +43,10 @@ dev-loop side of `park`) are the next writers of this ground.
 **Q1 — counting.**
 
 - **(a) Count across refs.** Holders are counted at the decided commit **and** on every local and
-  remote-tracking branch (the `dl-101` allocation rule), deduplicated by id with the most advanced state
-  winning. A limit then means what it says in a branch-per-task workflow; the verdict depends on which refs
+  remote-tracking branch (the `dl-101` allocation rule), each element once: a ref's copy counts only
+  when that ref changed the element's `status` since its merge-base with the decided commit (or the
+  element is new on the ref), otherwise the decided commit's copy does; among several changed copies
+  the most advanced wins (approver ruling 2026-10-11, see the Revision below). A limit then means what it says in a branch-per-task workflow; the verdict depends on which refs
   are fetched, which the refusal message states.
 - **(b) Count on the trunk.** Holders are counted at `main` (or the branch the workflow declares as trunk),
   and `dev-loop` commits each `in-progress` transition on the trunk before cutting the task branch (an
@@ -91,3 +93,13 @@ dev-loop side of `park`) are the next writers of this ground.
 - **Related:** `dl-110` (P2, P3), `dl-134` (dev-loop rewrite), `dl-101` (per-branch id allocation),
   `dl-080` (the decided-at commit), `dl-062` (`--force` shape), `spec-001`, `spec-008`, `task-180`,
   `task-205`, `task-221`.
+
+**Revision (2026-10-11, `task-274-count-wip-limit-holders-across-every-ref-and-exempt-reject-and-returns-edges-from-the-limit`) —
+Q1 (a)'s deduplication rule.** At `task-274`'s review the approver ruled (option (a), 2026-10-11) that
+"most advanced state wins" is wrong, because an element's states are not monotone: a stale branch
+holding an old `in-progress` copy kept an element parked on the trunk counted (review repro: create a
+branch, park the holder on the trunk, and the next `submit` exits 1 until the branch is deleted), and an
+older `in-review` copy elsewhere hid an element a `reject` had moved back. The rule in Q1 (a) now reads:
+a ref's copy counts only when that ref changed the element since its merge-base with the decided commit;
+otherwise the decided commit's copy wins. "Changed" compares `status`. The ruling of Q1 (a) and Q2 (i)
+stands; this corrects how its count deduplicates. Edited in place without a state change (`dl-047`).
