@@ -118,7 +118,10 @@ describe('resolveStepRole — spec-016 §3.2 step 3 (P5.3.2)', () => {
     });
   });
 
-  it("a step role dna.yaml does not define → P5.3.2 sc. 3's message, verbatim", () => {
+  // Defence only: through a repository this cannot be reached, because the registry refuses such a phase at
+  // load (E_PHASE_ROLE_UNKNOWN) against the same committed dna.yaml; P5.3.2 sc. 3 now carries that message
+  // (approver ruling 2026-10-11, task-235 D1). The step here is synthetic.
+  it('a step role dna.yaml does not define → VALIDATION, for a step deduced without the registry check', () => {
     expect(resolveStepRole(DNA, step('solo.go', null, 'ghost'), undefined)).toEqual({
       ok: false,
       error: { code: 'VALIDATION', message: "step role 'ghost' not defined in dna.yaml" },

@@ -80,9 +80,9 @@ export function stepTargetElement(step: Step, instance: Instance | null, overrid
 
 /**
  * §3.2 step 3 (P5.3.2): `--role` if given — the pipeline checks it as it checks every `--role` — else the
- * step's role. A step with no role is `NO_STEP_ROLE`; a step role `dna.yaml` does not define is P5.3.2 sc. 3's
- * refusal, verbatim. The registry refuses such a role at load (`E_PHASE_ROLE_UNKNOWN`, task-194) against the
- * same `dna.yaml`, so this check holds only for a step deduced from a registry that did not check it.
+ * step's role. A step with no role is `NO_STEP_ROLE`; a step role `dna.yaml` does not define is refused here as a
+ * defence only: the registry refuses such a role at load (`E_PHASE_ROLE_UNKNOWN`, task-194, P5.3.2 sc. 3) against
+ * the same `dna.yaml`, so this check holds only for a step deduced from a registry that did not check it.
  */
 export function resolveStepRole(dna: DnaYaml, step: Step, override: string | undefined): CoreResult<string> {
   if (override !== undefined) return coreOk(override);

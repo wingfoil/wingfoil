@@ -12,7 +12,8 @@
  * - AC 2 (P5.3.1 sc. 3): no open instance, or a complete one (`next: null`) → exit 1 `no next step to
  *   execute`, nothing spawned, nothing written;
  * - AC 3 (P5.3.2): the role comes from the step (sc. 1–2); a step role not in `dna.yaml` stops execution
- *   before anything starts (sc. 3; the registry refuses it at load, Execution Notes decision 1);
+ *   before anything starts with the registry's `E_PHASE_ROLE_UNKNOWN` message (sc. 3 as amended by the
+ *   approver's ruling of 2026-10-11 on decision 1);
  * - AC 4: `--step` off the frontier (`CONFLICT`), `--workflow` naming no workflow or no open instance,
  *   `NO_STEP_ELEMENT`, `NO_STEP_ROLE`;
  * - AC 5: with two parallel frontier steps, the `agent` binding argv `workflow next` prints for the second
@@ -195,13 +196,13 @@ describe('task-235 AC 3 — P5.3.2: the role comes from the step', () => {
     expect(plan(['--next', '--element', `task:${SIBLING_ID}`])).toMatchObject({ id: `${SIBLING_ID}/implement/1`, role: 'developer', workflow: 'loop', phase: 'implement', element: `task:${SIBLING_ID}` });
   });
 
-  it('sc. 3 — a step role not in dna.yaml: execution does not start, exit 1, the message names the role and dna.yaml', () => {
+  it("sc. 3 (amended 2026-10-11) — a step role not in dna.yaml: execution does not start, exit 1, the registry's message", () => {
     const repo = track(seedStep(undefined, { ...STEP_WORKFLOWS, [GHOSTLY_FILE]: GHOSTLY }));
     startInstance(repo, 'ghostly-1', 'ghostly', RELEASE_ID);
     const before = headOf(repo);
     const run = execute(repo, ['--next']);
     expect(run.status).toBe(1);
-    expect(run.stderr.split('\n')[0]).toMatch(/^error: .*unknown role 'ghost' \(not defined in dna\.yaml\)$/);
+    expect(run.stderr.split('\n')[0]).toBe("error: E_PHASE_ROLE_UNKNOWN phases[0].role (workflows/custom/ghostly.yaml): unknown role 'ghost' (not defined in dna.yaml)");
     expectNothingRan(repo, run, before);
   });
 });
