@@ -208,3 +208,10 @@ Alternatives considered:
   `dl-096` (active days), `dl-103` (CI on push), `dl-114` (per-run cost), `retro-v0.2`.
 - **Traceability:** P4.12 (workflow checks), P1.13 (`task` type fields), P4.17 (release workflow
   templates); REQ-STATE-01.
+
+**Note (2026-10-10, approver ruling on `task-221` design decision 3; W3 B4 follow-ups, `bug-ingest-rel-v0.3-w3b4-review-findings-plan`, item A1).**
+For the §3 share, a `deprecated` task is not open: it never reaches `done`, so counting it would keep it in the
+denominator for the life of the release. An open task is any task of the release that is neither `done` nor
+`deprecated`; `draft` and `pending` tasks stay open, as §3 counts them. `task-275` carried the ruling into the one
+statement of the rule, `memory.yaml` `task.stop_the_line.open` (`"status not in [done, deprecated]"`, 2.9), which
+the `dev-loop` `start` check names (`task-221`). The Decision above is otherwise unchanged.
