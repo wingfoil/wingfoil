@@ -7,14 +7,15 @@
  *
  * task-274 (`dl-156`, ratified Q1 (a), Q2 (i)):
  * - the holders are counted at the commit the transition is decided at (`HEAD`, `dl-080`) **and** on
- *   every local and remote-tracking branch — the refs `memory add`'s id counter reads (`dl-101`) —
- *   deduplicated by id, the most advanced state winning; the refusal says the count depends on which
- *   refs were fetched;
- * - a `reject` along a gate's reject edge and a `park` along a `returns` edge take no slot check: the
- *   element was in the state before, and sending work back is not capped by a capacity rule.
+ *   every local and remote-tracking branch — the refs `memory add`'s id counter reads (`dl-101`) — a
+ *   ref's copy counting only when that ref changed the element's status since its merge-base with the
+ *   decided commit (approver ruling 2026-10-11 at the review, option (a)); the refusal says the count
+ *   depends on which refs were fetched;
+ * - a `reject` along a gate's reject edge and a `park` along a `returns` edge take no slot check: a
+ *   reject or returns edge is exempt.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CORE_MODULES } from '../../src/core';
@@ -111,7 +112,8 @@ function gitOut(repo: string, args: string[]): string {
 
 /** The sentence every WIP refusal ends with since task-274 (`dl-156` Q1 (a)). */
 const REFS_SENTENCE =
-  'The holders are counted at HEAD and on every local and remote-tracking branch, so the count depends on which refs were last fetched.';
+  'The holders are counted at HEAD and on every local and remote-tracking branch that changed them since it forked from HEAD, ' +
+  'so the count depends on which refs were last fetched; a holder another branch records is moved out on that branch.';
 
 const verb = (name: string, repo: string, id: string, options?: Record<string, string>) =>
   operation(name)({ root: repo, positional: id, positionals: [id], ...(options ? { options } : {}) });
@@ -491,6 +493,18 @@ describe('the across-refs count, edge cases (task-274)', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.warnings?.filter((line) => line.includes('docs/memory/wide/wide-zzz.md'))).toHaveLength(1);
+  });
+
+  it('a symbolic link and a newer-format document in the type\'s directory are warned about, not counted', async () => {
+    symlinkSync('wide-001.md', join(repo, 'docs/memory/wide/wide-link.md'));
+    writeFixtureFile(repo, 'docs/memory/wide/wide-new.md', doc('wide-new', 'wide', 'in-progress').replace('---\n', '---\nformat: 99\n'));
+    commitAll(repo, 'a link and a newer-format document');
+    const result = await verb('memorySubmit', repo, 'wide-002');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const warnings = result.warnings?.join('\n') ?? '';
+    expect(warnings).toMatch(/W_MEMORY_UNREADABLE[\s\S]*docs\/memory\/wide\/wide-link\.md/);
+    expect(warnings).toMatch(/W_MEMORY_UNREADABLE[\s\S]*docs\/memory\/wide\/wide-new\.md/);
   });
 
   it('a copy with no status on another ref neither holds the state nor hides the holder', async () => {

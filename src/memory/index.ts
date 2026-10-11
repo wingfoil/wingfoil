@@ -68,6 +68,7 @@ export {
   listMemoryDocumentsByType,
   loadMemoryDocuments,
   loadMemoryDocumentsAtRev,
+  loadTypeDocumentCopiesAtRevs,
   loadMemoryDocumentSummary,
   loadMemoryDocumentSummaryAtRev,
   memoryUnreadableDiagnostic,
@@ -75,6 +76,7 @@ export {
   validateSearchQuery,
   W_MEMORY_UNREADABLE,
 } from './query';
+export type { TypeDocumentCopy } from './query';
 export type {
   MemoryDocumentFrontmatterSummary,
   MemoryDocumentSummary,

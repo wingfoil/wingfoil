@@ -30,9 +30,9 @@ import {
   E_INVALID_TRANSITION,
   findMemoryDocumentById,
   findMemoryDocumentByIdAtRev,
-  loadMemoryDocumentsAtRev,
   loadMemoryDocumentSummary,
   loadMemoryDocumentSummaryAtRev,
+  loadTypeDocumentCopiesAtRevs,
   refBaselineCommits,
   resolveStateMachine,
   resolveSupersedeTarget,
@@ -41,7 +41,7 @@ import {
   verifyDocumentEdit,
 } from '../memory';
 import type { DocumentScope, MemoryYaml, StateMachine, TransitionOp } from '../memory';
-import { pathPorcelainStatus, readDocument, readPathAtRev, writeAndCommit } from '../storage';
+import { mergeBasesWith, pathPorcelainStatus, readDocument, readPathAtRev, writeAndCommit } from '../storage';
 import { type Diagnostic, formatDiagnostic, isNewerFormatError, ValidationError } from '../validation';
 
 import { requireConfinedWriteTarget } from './confinement';
@@ -414,9 +414,10 @@ export function prepareMemoryTransitionAtRev(
           : resolveTypeTransition(memoryYaml, type, from, op, path);
     // A self-loop (`amend`) enters no state, so it takes no slot. Nor does a return (`dl-156` Q2 (i),
     // task-274): `reject` only ever takes a `gates.<from>.reject` edge and `park` only a
-    // `returns.<from>` edge (`resolveTransitionTarget`), the element held the state before, and sending
-    // work back is not capped by a capacity rule. Keyed on the verb, not on the target, so an `approve`
-    // whose forward target equals the gate's reject target still takes the check.
+    // `returns.<from>` edge (`resolveTransitionTarget`), and a reject or returns edge is exempt: the
+    // approver's verdict and a scheduling step are not capped by a capacity rule (a `bug`'s reject edges
+    // even lead forward, to `closed`). Keyed on the verb, not on the target, so an `approve` whose
+    // forward target equals the gate's reject target still takes the check.
     if (to !== from && op !== 'reject' && op !== 'park') {
       const slot = requireWipSlot(root, sha, memoryYaml, type, to, id);
       if (!slot.ok) return slot;
@@ -467,11 +468,12 @@ export function prepareMemoryTransitionAtRev(
 }
 
 /**
- * The sentence every WIP refusal ends with (`dl-156` Q1 (a), task-274): the count reads refs, and a
- * clone sees only the refs it has fetched.
+ * The sentence every WIP refusal ends with (`dl-156` Q1 (a), task-274): where the holders were counted,
+ * that a clone sees only the refs it has fetched, and where a holder recorded elsewhere is moved out.
  */
 export const WIP_REFS_SENTENCE =
-  'The holders are counted at HEAD and on every local and remote-tracking branch, so the count depends on which refs were last fetched.';
+  'The holders are counted at HEAD and on every local and remote-tracking branch that changed them since it forked from HEAD, ' +
+  'so the count depends on which refs were last fetched; a holder another branch records is moved out on that branch.';
 
 /**
  * Refuse to move an element into `state` when the type's machine declares a WIP limit there
@@ -479,24 +481,34 @@ export const WIP_REFS_SENTENCE =
  * hold it — `CONFLICT`, exit `1`, naming every holder in path order, before anything is written.
  *
  * The one shared check: {@link prepareMemoryTransitionAtRev} calls it for every transition into a new
- * state except the two that send an element back (`submit`, `approve`, the `supersedes:` trigger, and
+ * state except along a reject or `returns` edge (`submit`, `approve`, the `supersedes:` trigger, and
  * any workflow emitter that prepares its transition there — not `reject` nor `park`, `dl-156` Q2 (i)),
  * and `memory add` calls it for the initial state, since `add` is the verb that enters that state.
  *
- * **Where the holders are counted** (`dl-156` Q1 (a), task-274): in commit `sha` — the one the
- * transition is decided at (`dl-080`) — **and** at the tip of every local branch and remote-tracking
- * ref, the commits {@link refBaselineCommits} lists for `memory add`'s id counter (`dl-101` §2 (a)), so
- * parallel branches see each other's holders. Documents are matched by their own `type`, grouped by
- * `id` (by path when a document has none), and each element counts in its **most advanced** state
- * across those commits ({@link isMoreAdvancedState}); `exceptId`, the element being moved, is never its
- * own holder. The refusal ends with {@link WIP_REFS_SENTENCE}. This is a read wider than `HEAD`, which
- * the `command-baseline` directive declares by name.
+ * **Where the holders are counted** (`dl-156` Q1 (a), task-274, as the approver ruled on 2026-10-11 at
+ * its review, option (a)): each element of the type counts in one state —
  *
- * A document the scan cannot read, on any of those commits, is not counted (task-171's tolerant
- * scan), since its `type` and `status` are unknown; it is returned as a `W_MEMORY_UNREADABLE`
- * diagnostic, once per file (the decided commit's first), which the caller's success carries as a
- * warning and a refusal carries in `details.issues`, so a limit that may be undercounted says so.
- * Without a declared limit nothing is read and nothing is returned.
+ * - the state a ref records, when that ref **changed** the element since its merge-base with commit
+ *   `sha` (the one the transition is decided at, `dl-080`): its `status` differs from the merge-base
+ *   copy's, or the merge-base has no copy (an element added on the ref; a ref sharing no history with
+ *   `sha` counts every copy it holds). The refs are those {@link refBaselineCommits} lists for
+ *   `memory add`'s id counter (`dl-101` §2 (a)); a ref that is an ancestor of `sha` changed nothing.
+ *   When several refs changed it, the most advanced of their copies wins
+ *   ({@link isMoreAdvancedState}), the decided commit's copy not competing;
+ * - otherwise the state commit `sha` records.
+ *
+ * So a stale branch does not keep a parked holder counted, and an older copy elsewhere does not hide an
+ * element a reject moved back into the state. "Changed" compares `status`, not bytes: an edit that
+ * leaves the status alone (Execution Notes, an amend) is not a move. `exceptId`, the element being
+ * moved, is never its own holder. The refusal ends with {@link WIP_REFS_SENTENCE}. This read is wider
+ * than `HEAD`, which the `command-baseline` directive declares by name.
+ *
+ * Only the type's directory is read, every commit's listing and every distinct blob in one batch each,
+ * each blob parsed once (`loadTypeDocumentCopiesAtRevs`; task-274 review F2, the `bug-178` class);
+ * one `git merge-base` per ref. A document none of those reads can parse is not counted (task-171's
+ * tolerant scan) and is returned as a `W_MEMORY_UNREADABLE` diagnostic, once per file, which the
+ * caller's success carries as a warning and a refusal carries in `details.issues`, so a limit that may
+ * be undercounted says so. Without a declared limit nothing is read and nothing is returned.
  */
 export function requireWipSlot(
   root: string,
@@ -510,28 +522,41 @@ export function requireWipSlot(
   const limit = machine.limits?.[state];
   if (limit === undefined) return coreOk([]);
   const decided = resolveRevision(root, sha);
-  const commits = [decided, ...refBaselineCommits(root).filter((commit) => commit !== decided)];
+  const refs = refBaselineCommits(root).filter((commit) => commit !== decided);
+  const bases = mergeBasesWith(root, decided, refs);
+  // A ref that is an ancestor of the decided commit changed nothing the decided commit lacks.
+  const moved = refs.map((ref, index) => ({ ref, base: bases[index] as string | null })).filter(({ ref, base }) => base !== ref);
+  const revs = [...new Set([decided, ...moved.map(({ ref }) => ref), ...moved.flatMap(({ base }) => (base === null ? [] : [base]))])];
 
   const unreadable: Diagnostic[] = [];
   const onDiagnostic = (diagnostic: Diagnostic): void => {
     if (!unreadable.some((known) => known.file === diagnostic.file)) unreadable.push(diagnostic);
   };
-  // Each element once: its most advanced state across the commits, and the path it holds it at.
-  const elements = new Map<string, { readonly name: string; readonly path: string; readonly state: string }>();
-  for (const commit of commits) {
-    for (const { frontmatter, path } of loadMemoryDocumentsAtRev(root, commit, memoryYaml, { onDiagnostic })) {
-      if (frontmatter.type !== type) continue;
+  const copiesAt = new Map<string, Map<string, WipCopy>>();
+  loadTypeDocumentCopiesAtRevs(root, revs, memoryYaml, type, { onDiagnostic }).forEach((copies, index) => {
+    const byKey = new Map<string, WipCopy>();
+    for (const { frontmatter, path } of copies) {
+      // A copy with no string `status` holds no state, and is no move either.
+      if (typeof frontmatter.status !== 'string') continue;
       const id = frontmatter.id === undefined ? undefined : String(frontmatter.id);
-      const key = id === undefined ? `path:${path}` : `id:${id}`;
-      // A document with no string `status` holds no state, and must not outrank one that does.
-      const status = frontmatter.status;
-      if (typeof status !== 'string') continue;
-      const known = elements.get(key);
-      if (known === undefined || isMoreAdvancedState(machine, status, known.state)) {
-        elements.set(key, { name: id ?? path, path, state: status });
-      }
+      byKey.set(id === undefined ? `path:${path}` : `id:${id}`, { name: id ?? path, path, state: frontmatter.status });
+    }
+    copiesAt.set(revs[index] as string, byKey);
+  });
+
+  // The decided commit's copy, unless a ref changed the element since the fork.
+  const elements = new Map<string, WipCopy>(copiesAt.get(decided));
+  const changed = new Map<string, WipCopy>();
+  for (const { ref, base } of moved) {
+    const atBase = base === null ? new Map<string, WipCopy>() : (copiesAt.get(base) as Map<string, WipCopy>);
+    for (const [key, copy] of copiesAt.get(ref) as Map<string, WipCopy>) {
+      if (atBase.get(key)?.state === copy.state) continue;
+      const known = changed.get(key);
+      if (known === undefined || isMoreAdvancedState(machine, copy.state, known.state)) changed.set(key, copy);
     }
   }
+  for (const [key, copy] of changed) elements.set(key, copy);
+
   // Path order, then the element key (unique), as one string each: the default sort is by UTF-16 code
   // units, independent of locale and of the order the commits were read in (REQ-SYS-07).
   const named = new Map<string, string>();
@@ -547,6 +572,13 @@ export function requireWipSlot(
       `Move one of them out of '${state}', then retry. ${WIP_REFS_SENTENCE}`,
     ...(unreadable.length > 0 ? { details: { issues: unreadable } } : {}),
   });
+}
+
+/** One element's copy as one commit records it, for the WIP count. */
+interface WipCopy {
+  readonly name: string;
+  readonly path: string;
+  readonly state: string;
 }
 
 /**

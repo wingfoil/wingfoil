@@ -867,3 +867,125 @@ export function listPathsAtRevs(
   }
   return [...paths].sort();
 }
+
+// --- Blobs of a directory at MANY revisions, and blobs by oid (task-274) -----------------------
+
+/** A blob a revision holds under a directory: its path, its object name, and whether it is a link. */
+export interface BlobAtRev extends BlobEntry {
+  /** The blob's object name: equal oids are equal bytes, so a reader parses each distinct one once. */
+  readonly oid: string;
+}
+
+/**
+ * The blobs each of `revs` holds under `directory`, one sorted list per revision, in input order —
+ * {@link listPathsAtRevs}' batched walk (task-142, `bug-178`), keeping per revision what it holds and
+ * each blob's oid. The walk asks one `git cat-file --batch` per directory level for the trees no earlier
+ * answer held, so revisions that share a subtree read it once, and the process count is the directory's
+ * depth plus one whatever the number of revisions (task-274, the WIP-limit count across refs).
+ *
+ * A revision without `directory` holds nothing there. Gitlinks are skipped; a symbolic link is listed,
+ * marked. `directory` is root-relative, without a trailing `/`; empty means the whole tree.
+ *
+ * @throws {@link StorageError} `E_INVALID_REVISION` for a revision that cannot travel on the batch
+ *   protocol; `E_GIT_READ_FAILED` when a revision names no commit or tree, or the batch read fails.
+ */
+export function listBlobsAtRevs(
+  root: string,
+  revs: readonly string[],
+  directory: string,
+  options: CommitOptions = {},
+): BlobAtRev[][] {
+  for (const rev of revs) {
+    if (/[\n\r:\0]/.test(rev)) {
+      throw new StorageError(E_INVALID_REVISION, `revision ${JSON.stringify(rev)} cannot be read in a batch: it holds a newline, a carriage return, a ':' or a NUL`);
+    }
+  }
+  if (/[\n\r]/.test(directory)) {
+    throw new StorageError(E_INVALID_REVISION, `directory ${JSON.stringify(directory)} cannot be read in a batch: it holds a newline or a carriage return`);
+  }
+  const answers = catFileBatch(root, revs.flatMap((rev) => [`${rev}^{tree}`, directory.length === 0 ? `${rev}^{tree}` : `${rev}:${directory}`]), options);
+  const trees = new Map<string, Buffer>();
+  const roots: (string | null)[] = revs.map((rev, index) => {
+    const commit = answers[2 * index] ?? null;
+    if (commit === null || commit.type !== 'tree') {
+      throw new StorageError(E_GIT_READ_FAILED, `git cat-file --batch in ${root}: ${rev} names no commit whose tree can be listed`);
+    }
+    const at = answers[2 * index + 1] ?? null;
+    if (at === null || at.type !== 'tree') return null;
+    trees.set(at.oid, at.content);
+    return at.oid;
+  });
+  const oidBytes = (roots.find((oid) => oid !== null) ?? '0'.repeat(40)).length / 2;
+
+  // Read every subtree, one batch per level, each tree once.
+  let frontier = [...new Set(roots.filter((oid): oid is string => oid !== null))];
+  while (frontier.length > 0) {
+    const next = new Set<string>();
+    for (const oid of frontier) {
+      for (const entry of treeEntries(trees.get(oid) as Buffer, oidBytes)) {
+        if ((Number.parseInt(entry.mode, 8) & MODE_TYPE_MASK) === MODE_TREE && !trees.has(entry.oid)) next.add(entry.oid);
+      }
+    }
+    const unread = [...next].sort();
+    catFileBatch(root, unread, options).forEach((answer, index) => {
+      if (answer === null) throw new StorageError(E_GIT_READ_FAILED, `git cat-file --batch in ${root}: tree ${unread[index]} is missing`);
+      trees.set(answer.oid, answer.content);
+    });
+    frontier = unread;
+  }
+
+  // Flatten each tree once, relative to itself; a revision's listing is its root tree's, prefixed.
+  const flat = new Map<string, { path: string; oid: string; symlink: boolean }[]>();
+  const flatten = (oid: string): { path: string; oid: string; symlink: boolean }[] => {
+    const known = flat.get(oid);
+    if (known !== undefined) return known;
+    const out: { path: string; oid: string; symlink: boolean }[] = [];
+    for (const entry of treeEntries(trees.get(oid) as Buffer, oidBytes)) {
+      const type = Number.parseInt(entry.mode, 8) & MODE_TYPE_MASK;
+      if (type === MODE_TREE) {
+        for (const inner of flatten(entry.oid)) out.push({ ...inner, path: `${entry.name}/${inner.path}` });
+      } else if (type !== MODE_GITLINK) {
+        out.push({ path: entry.name, oid: entry.oid, symlink: entry.mode === LS_TREE_SYMLINK_MODE });
+      }
+    }
+    flat.set(oid, out);
+    return out;
+  };
+  return roots.map((oid) =>
+    oid === null
+      ? []
+      : flatten(oid)
+          .map((blob) => ({ ...blob, path: directory.length === 0 ? blob.path : `${directory}/${blob.path}` }))
+          .sort((a, b) => Number(a.path > b.path) - Number(a.path < b.path)),
+  );
+}
+
+/**
+ * The content of each blob `oids` names, as UTF-8, read through one `git cat-file --batch` (task-274).
+ * Duplicates are read once.
+ *
+ * @throws {@link StorageError} `E_GIT_READ_FAILED` when an oid names no blob or the batch read fails.
+ */
+export function readBlobs(root: string, oids: readonly string[], options: CommitOptions = {}): Map<string, string> {
+  const unique = [...new Set(oids)].sort();
+  const contents = new Map<string, string>();
+  catFileBatch(root, unique, options).forEach((answer, index) => {
+    if (answer === null || answer.type !== 'blob') throw new StorageError(E_GIT_READ_FAILED, `git cat-file --batch in ${root}: blob ${unique[index]} is missing`);
+    contents.set(unique[index] as string, answer.content.toString('utf-8'));
+  });
+  return contents;
+}
+
+/**
+ * The best common ancestor of `base` with each of `revs` (`git merge-base`), in input order, or `null`
+ * for a revision that shares no history with `base` (task-274: a ref's copy of an element counts only
+ * when the ref changed it since this commit). One `git merge-base` per revision.
+ *
+ * @throws {@link StorageError} `E_GIT_READ_FAILED` when git fails for another reason.
+ */
+export function mergeBasesWith(root: string, base: string, revs: readonly string[], options: CommitOptions = {}): (string | null)[] {
+  return revs.map((rev) => {
+    const run = runGitRead(root, ['merge-base', base, rev], gitReadOptions(options, [0, 1]));
+    return run.status === 1 ? null : run.stdout.trim();
+  });
+}

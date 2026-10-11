@@ -61,7 +61,7 @@ Feature: P1.13 (US-0A-04) - Memory Element Schema (memory.yaml)
     And card "card-001" is "in-progress" and card "card-002" is "draft"
     When I run "wingfoil memory submit card-002"
     Then the command exits 1
-    And the error message is "WIP limit reached for 'in-progress' on type 'card' (limit 1): held by card-001. Move one of them out of 'in-progress', then retry. The holders are counted at HEAD and on every local and remote-tracking branch, so the count depends on which refs were last fetched."
+    And the error message is "WIP limit reached for 'in-progress' on type 'card' (limit 1): held by card-001. Move one of them out of 'in-progress', then retry. The holders are counted at HEAD and on every local and remote-tracking branch that changed them since it forked from HEAD, so the count depends on which refs were last fetched; a holder another branch records is moved out on that branch."
     And nothing is written
 
   Scenario: Error - the supersedes trigger into a state at its WIP limit is refused before anything is written
@@ -86,5 +86,5 @@ Feature: P1.13 (US-0A-04) - Memory Element Schema (memory.yaml)
     And card "card-002" is "draft"
     When I run "wingfoil memory submit card-002"
     Then the command exits 1
-    And the error message is "WIP limit reached for 'in-progress' on type 'card' (limit 1): held by card-003. Move one of them out of 'in-progress', then retry. The holders are counted at HEAD and on every local and remote-tracking branch, so the count depends on which refs were last fetched."
+    And the error message is "WIP limit reached for 'in-progress' on type 'card' (limit 1): held by card-003. Move one of them out of 'in-progress', then retry. The holders are counted at HEAD and on every local and remote-tracking branch that changed them since it forked from HEAD, so the count depends on which refs were last fetched; a holder another branch records is moved out on that branch."
     And nothing is written

@@ -91,7 +91,8 @@ function gitOut(repo: string, args: string[]): string {
 
 /** The sentence every WIP refusal ends with since task-274 (`dl-156` Q1 (a)). */
 const REFS_SENTENCE =
-  'The holders are counted at HEAD and on every local and remote-tracking branch, so the count depends on which refs were last fetched.';
+  'The holders are counted at HEAD and on every local and remote-tracking branch that changed them since it forked from HEAD, ' +
+  'so the count depends on which refs were last fetched; a holder another branch records is moved out on that branch.';
 
 const status = (repo: string, path: string): string => /^status: (\S+)/m.exec(readFileSync(join(repo, path), 'utf-8'))![1]!;
 
