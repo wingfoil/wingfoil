@@ -27,7 +27,7 @@ import {
   expandFieldTokens,
   formatMemoryCommitMessage,
   hasNumericToken,
-  idOccupied,
+  idOccupancy,
   parseSetOptions,
   setFrontmatterField,
   slugifyTitle,
@@ -196,18 +196,19 @@ function planTokens(
   const planned = (values: Readonly<Record<string, string>>): StartPlan => ({ id: idOf(values), title: titleOf(values['phase']), tokens: values });
 
   // A `{n}` id is unique by construction; a `path` with no `{id}` names one file per other tokens, which
-  // `memory add`'s absent-target check decides (`idOccupied` would read every plan as that one).
+  // `memory add`'s absent-target check decides (`idOccupancy` would read every plan as that one).
   if (hasNumericToken(idPattern) || !patternTokens(pathPattern).includes('id')) return coreOk(planned(tokens));
   // Only a `{phase}` in the id itself can be made unique by the `-<n>` suffix (review F1): otherwise, and for
   // a `--set phase=`, the id is checked once.
+  const occupied = idOccupancy(root, pathPattern);
   if (!patternTokens(idPattern).includes('phase') || set['phase'] !== undefined) {
     const plan = planned(tokens);
-    if (idOccupied(root, pathPattern, plan.id)) return coreErr({ code: 'CONFLICT', message: `plan id already exists: ${plan.id}`, details: { id: plan.id } });
+    if (occupied(plan.id)) return coreErr({ code: 'CONFLICT', message: `plan id already exists: ${plan.id}`, details: { id: plan.id } });
     return coreOk(plan);
   }
   for (let n = 1; n <= MAX_PHASE_SUFFIX; n += 1) {
     const plan = planned({ ...tokens, phase: n === 1 ? base : `${base}-${n}` });
-    if (!idOccupied(root, pathPattern, plan.id)) return coreOk(plan);
+    if (!occupied(plan.id)) return coreOk(plan);
   }
   const last = idOf({ ...tokens, phase: `${base}-${MAX_PHASE_SUFFIX}` });
   return coreErr({ code: 'CONFLICT', message: `plan id already exists: ${last}`, details: { id: last } });

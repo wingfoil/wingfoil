@@ -95,7 +95,7 @@ export {
   hasNumericToken,
   highestSequenceNumber,
   identDate,
-  idOccupied,
+  idOccupancy,
   nextSequenceNumber,
   parseSetOptions,
   parseTags,
