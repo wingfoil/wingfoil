@@ -377,7 +377,8 @@ external metrics (task-231) and the toolchain metrics Q01–Q04, Q11, Q12, Q17 b
 after `npm ci` with the pipeline's pinned Node (task-232; a loaded latency run is not-measurable), and records the
 other quality metrics as not-measurable until task-233 lands; `compare.cjs` is task-241's. Under any other Node the
 toolchain metrics are not-measurable unless `--any-node` is passed: run it under the pinned Node (`publish.yml`
-`env.NODE_VERSION`), e.g. `n exec 22.12.0 node scripts/release-health/measure.cjs --release <version>` or
+`env.NODE_VERSION`), e.g. `n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <version>` (`-d`
+downloads that Node when it is not cached) or
 `npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <version>`;
 dl-089 §6 forbids them writing git configuration.
 

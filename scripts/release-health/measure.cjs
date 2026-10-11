@@ -35,12 +35,14 @@
  * pipeline's pinned Node (`.github/workflows/publish.yml` `env.NODE_VERSION` at the point); with another, its seven
  * metrics are `not-measurable` naming both versions, unless `--any-node`, which measures and records `node` and
  * `node_pinned` in each entry's `raw`. To run under the pinned Node, start the script with it, e.g.
- * `n exec 22.12.0 node scripts/release-health/measure.cjs --release <vX.Y[.Z]>` (that Node and its npm first on
- * `PATH`) or `npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <vX.Y[.Z]>`; both download that
- * Node when it is missing. A tool that cannot run, is killed, or leaves an output the reader cannot parse makes its
- * metric `not-measurable` with the reason, never a zero; so does an exit that means the tool itself failed (a
- * shell's 126/127, eslint's 2). A check that runs and fails is a measured failure. A failure's reason is npm's
- * `npm error code …` line when there is one, never npm's pointer to its dated debug log.
+ * `n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <vX.Y[.Z]>` (that Node and its npm first on
+ * `PATH`; `-d` downloads the version when it is not cached, and without it `n` refuses an uncached one) or
+ * `npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <vX.Y[.Z]>` (npx installs the `node` package
+ * when it is missing). A tool that cannot run, is killed, or leaves an output the reader cannot parse makes its
+ * metric `not-measurable` with the reason, never a zero; so does an exit of a Q01 script that means its tool itself
+ * failed (a shell's 126/127, eslint's 2). A check that runs and fails is a measured failure. A failure's reason is
+ * npm's `npm error code …` line when there is one, never npm's pointer to its dated debug log, and it names paths
+ * relative to the worktree, never the worktree's random temporary path.
  * - Q01 `npm run build`, `npm run typecheck`, `npm run lint`, all three run: `true` when each exits 0;
  * - Q02 `npm test -- --json --outputFile=…`: jest's counts; disabled = skipped + todo; failing = failed tests plus
  *   suites that failed to run, each named;
@@ -272,7 +274,7 @@ function raiseSignal(signal) {
  * stop the running tool (each tool registers a stopper in `guard.stoppers`), remove the worktree and its directory,
  * remove the handlers and re-raise the signal, as `scripts/publish-staging.cjs` (`installTeardownHandlers`) does.
  * Node runs a handler only in the event loop's poll phase, so a signal that lands while `fn` is synchronous waits
- * until `fn` settles; the guard then yields one macrotask before removing its handlers, so the signal still tears
+ * until `fn` settles; the guard then yields past the next poll phase before removing its handlers, so the signal still tears
  * down and re-raises, and the promise rejects (`interrupted by <signal>`) rather than returning a result. SIGKILL
  * is the one case left to the user (`git worktree remove --force`).
  *
@@ -319,16 +321,22 @@ async function withGuardedWorktree(root, commit, fn, interrupts = {}) {
     outcome = { error };
   }
   // Node hands a signal to its handler only in the event loop's poll phase. A signal that landed while `fn` was
-  // synchronous (the history half, `--no-toolchain`, the pinned-Node refusal) is still pending here: one macrotask
-  // lets it reach the handler before the handlers go (review F1).
+  // synchronous (the history half, `--no-toolchain`, the pinned-Node refusal) is still pending here. One immediate is
+  // not enough when `fn` resumed from a poll-phase callback (a child's close, an fs read): it runs in that same
+  // iteration's check phase, before the next poll. The second, scheduled from the check phase, runs only after a
+  // poll phase, where the handler gets the signal before the handlers go (review F1, re-review N1).
+  await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
   if (interrupting !== null) {
     await interrupting;
     // An interrupted run returns nothing: its reads may have failed with the children the signal killed.
     throw new Interrupted(guard.interrupted);
   }
-  cleanup();
-  uninstall();
+  try {
+    cleanup();
+  } finally {
+    uninstall();
+  }
   if ('error' in outcome) throw outcome.error;
   return outcome.value;
 }
@@ -1110,12 +1118,14 @@ function toolRunner(options, guard) {
     if (options.log) options.log(`${call.step}: ${[call.command, ...call.args].join(' ')} in ${call.cwd}`);
     const result = await tools(call);
     check();
+    // The worktree lives under a random temporary path: read relative to it, so no reason carries it.
+    const relativize = (text) => String(text ?? '').split(`${call.cwd}/`).join('').split(call.cwd).join('.');
     return {
       status: typeof result.status === 'number' ? result.status : null,
       signal: result.signal ?? null,
-      stdout: result.stdout ?? '',
-      stderr: result.stderr ?? '',
-      error: result.error,
+      stdout: relativize(result.stdout),
+      stderr: relativize(result.stderr),
+      error: result.error === undefined ? undefined : relativize(result.error),
     };
   };
 }
@@ -1151,8 +1161,9 @@ function didNotRun(label, result) {
 }
 
 /**
- * Exit statuses that mean the tool itself could not run rather than that the check failed (review F7): a shell's
- * 126 (not executable) and 127 (not found) for every command, and eslint's 2 (configuration or internal error).
+ * Exit statuses of Q01's `npm run` scripts that mean the tool itself could not run rather than that the check failed
+ * (review F7): a shell's 126 (not executable) and 127 (not found), and eslint's 2 (configuration or internal error).
+ * Not applied to the examples (re-review N4).
  */
 const TOOL_ERROR_EXITS = Object.freeze({ '*': [126, 127], lint: [2] });
 
@@ -1310,7 +1321,9 @@ async function q11(tree, run, env, built) {
   for (const name of names) {
     const script = `docs/examples/${name}/run.sh`;
     const result = await run({ step: `examples/${name}`, command: 'bash', args: [join(dir, name, 'run.sh')], cwd: tree, env: { ...env, WINGFOIL: `node ${join(tree, 'dist', 'cli.js')}` } });
-    const reason = didNotRun(script, result) ?? toolError(script, result);
+    // An example's 126/127 is a command missing inside it (bash runs run.sh by its absolute path): a defect it
+    // reports, so a measured failure, not a tool error (re-review N4).
+    const reason = didNotRun(script, result);
     if (reason !== null) unrunnable ??= reason;
     else if (result.status !== 0) failing.push(`${script} (exit ${result.status})`);
   }
