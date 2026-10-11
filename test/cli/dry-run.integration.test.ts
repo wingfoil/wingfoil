@@ -208,11 +208,15 @@ function mutatingOperations(): string[] {
 function hunkLines(diff: string): string[] {
   const out: string[] = [];
   let inHunk = false;
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('diff --git ')) inHunk = false;
+  const lines = diff.split('\n');
+  lines.forEach((line, index) => {
+    // A plan of several paths (task-211) concatenates per-file diffs with no `diff --git` line between them,
+    // so the next file's `---`/`+++` pair is what ends the previous file's last hunk.
+    const fileHeader = line.startsWith('--- ') && (lines[index + 1] ?? '').startsWith('+++ ');
+    if (line.startsWith('diff --git ') || fileHeader) inHunk = false;
     else if (line.startsWith('@@')) inHunk = true;
     if (inHunk) out.push(line);
-  }
+  });
   return out.filter((line) => line.length > 0);
 }
 
