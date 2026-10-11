@@ -7,7 +7,7 @@
 import { mkdirSync, rmSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
-import { CORE_MODULES, enumerateOperations, renderStartConsole, type StartResult } from '../../src/core';
+import { CORE_MODULES, enumerateOperations, NO_ACTIVE_WORKFLOW_MESSAGE, NO_PLAN_TYPE_MESSAGE, renderStartConsole, type StartResult } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { UsageError } from '../../src/core/usage-error';
@@ -131,6 +131,28 @@ describe('workflow start / end — refusals and rendering past the acceptance ca
     const blob = git(repo, ['rev-parse', 'HEAD:README.md']).trim();
     writeFileSync(join(repo, '.git', 'refs', 'heads', 'not-a-commit'), `${blob}\n`);
     await expect(operation('workflowStart')({ root: repo, positional: 'tidy', options: {} })).rejects.toThrow();
+  });
+});
+
+describe('the barrel exports and refusalOf\'s mapping (task-217 review F2)', () => {
+  it('the two message constants are spec-017 §10\'s', () => {
+    expect(NO_ACTIVE_WORKFLOW_MESSAGE).toBe('no active workflow to end');
+    expect(NO_PLAN_TYPE_MESSAGE).toBe("memory type 'plan' is not declared in memory.yaml; workflow start records an instance as a plan element");
+  });
+
+  it('a spec-003 error at HEAD is mapped to VALIDATION with its diagnostics (start and end)', async () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeProject(repo);
+      writeFixtureFile(repo, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/tidy.yaml\n  - workflows/custom/missing.yaml\n');
+      commitAll(repo, 'a manifest naming a missing file');
+      for (const name of ['workflowStart', 'workflowEnd']) {
+        const result = await operation(name)({ root: repo, positional: 'tidy', options: {} });
+        expect(result.ok ? null : result.error).toMatchObject({ code: 'VALIDATION', details: { diagnostics: [expect.objectContaining({ code: 'E_WORKFLOW_FILE_NOT_FOUND' })] } });
+      }
+    } finally {
+      removeTempDir(repo);
+    }
   });
 });
 
