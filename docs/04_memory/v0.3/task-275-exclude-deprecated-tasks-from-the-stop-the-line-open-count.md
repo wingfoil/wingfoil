@@ -150,12 +150,13 @@ working tree, `git show HEAD:docs/04_memory/design/dls/dl-133-fix-task-tail.md |
 ### refactor (developer)
 
 The first full `npm test` (`node scripts/run-tests.cjs`) → 1 failed, 6479 passed: `test/validation/secret-scan.test.ts`
-(dl-122 S1, which scans tracked files at HEAD) flagged `const token = stopTheLineToken()` in the new test as
+(dl-122 S1, which scans tracked files at HEAD) flagged a local named `token`, holding the value `stopTheLineToken()` returns, in the new test as
 `generic-api-key-assignment`. `ac8b66d7` renames the two locals (`declared`, `found`); no assertion changed.
 This touches a red test after red (`tests.unchanged(since: red)`): a declared deviation, rename only (decision D3).
 `npx jest test/validation/secret-scan.test.ts test/core/stop-the-line-open.test.ts` → 92 passed.
 
-Gates, run with the `dl-133` amendment in the working tree:
+Gates, measured on `ac8b66d7` (the code and test head; the later commits change only this file), with the
+`dl-133` amendment in the working tree:
 - `npm run test:coverage -- --maxWorkers=2` (dl-170 interim gate rule: one heavy gate at a time, load ≤ 14) →
   exit 0, 348 suites, **6480 passed**; All files 99.29 % stmts / 97.04 % branches / 97.74 % funcs / 99.69 % lines,
   equal to `main`'s W3 B4 gate run (`gate-w3b4-cov.log`: 99.29 / 97.04 / 97.74 / 99.69, 6471 tests). It is
@@ -167,6 +168,9 @@ Gates, run with the `dl-133` amendment in the working tree:
   gated 0 findings, history 0 findings (exit 0).
 - Several earlier runs were interrupted by session restarts and a machine at load 165; the results above are the
   completed runs on `ac8b66d7`.
+- Review fix (independent review, 2026-10-11): the notes commit `c31330cf` quoted the flagged assignment again,
+  so `npm test` failed at the submitted head `77114c62` (secret scan, this file's refactor paragraph). The quotes
+  are reworded in the review-fix commit; `npx jest test/validation/secret-scan.test.ts` with the reworded file staged → 85 passed (the scan reads the index, tracked + staged).
 
 ### review (reviewer, self)
 
@@ -185,7 +189,7 @@ Gates, run with the `dl-133` amendment in the working tree:
   `dev-loop.yaml` header line, which restated the definition.
 - D2. `dev-loop.yaml` touched (header comment only, 1.6 → 1.7), beyond the task's listed files, because the
   header's "is not `done`" became false and restated the definition AC 2 gives one home.
-- D3. The `ac8b66d7` rename in the red test after red (secret-scan false positive on `token = …`).
+- D3. The `ac8b66d7` rename in the red test after red (secret-scan false positive on a local named `token`).
 - D4. AC 3 checked by command, not by a jest test (pending amendment; task-221 AC 3 precedent).
 
 **Pending amendments (approver).**
@@ -193,5 +197,5 @@ Gates, run with the `dl-133` amendment in the working tree:
 
 ### Retrospective
 
-- The secret scan reads `const token = …` as a credential assignment in a test (`ac8b66d7`): naming a
+- The secret scan reads a local named `token` that is assigned a call result as a credential (`ac8b66d7`): naming a
   workflow check token `token` is enough to trip dl-122 S1.
