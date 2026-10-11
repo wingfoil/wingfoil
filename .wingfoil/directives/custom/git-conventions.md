@@ -6,13 +6,13 @@ kind: custom
 title: "Git conventions: branches, sync, tags, subjects, identity, id allocation, attribution"
 tags: [custom, git, process, security]
 scope: global
-version: "1.4"   # 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1) (prev 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260)
+version: "1.5"   # 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260)
 ref: [P3.5, P3.7, REQ-SEC-01, REQ-SYS-08]
 ---
 
 # Directive — Git conventions
 
-**Date:** 2026-10-09
+**Date:** 2026-10-10
 
 Custom WingFoil rule. Applies to **every role**: whoever writes a commit or names a branch in this
 repository — a `developer` on a task branch, the `approver` whose `approve` commit an agent types, a
@@ -40,11 +40,18 @@ Do not re-open a choice here — if you believe a rule is wrong for your case, f
 do not deviate. The general commit bullet of `code-quality` (conventional messages, one state change
 per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules on top of it.
 
-## 1. Branches (`dl-024` rule 1, as amended by `dl-119` Q1 (b) and `dl-152`)
+## 1. Branches (`dl-024` rule 1, as amended by `dl-119` Q1 (b) and `dl-152`; `dl-014` G2–G3)
 
 - A `dev-loop` task runs on `task/<task-id>`, cut from `main`. A workflow phase runs on its own branch.
   Both merge into `main` with `git merge --no-ff`, never fast-forward, so every unit of work stays one
   revertible merge commit. The one exception is `intake/` (below), which reaches `main` by fast-forward.
+- **One worktree per task** (`dl-014` G2; `dev-loop-rel-v0.2-plan` §2 *Branch, worktree & merge*,
+  `dev-loop-rel-v0.2.2-plan` §1 *Per-task contract*). A `dev-loop` task runs in its own worktree on
+  `task/<task-id>`, created at `start` and removed after the merge, before the branch is deleted.
+- **No task commit in the shared working tree** (`dev-loop-rel-v0.2.2-plan` §1 *Per-task contract*).
+  The main working tree is shared with other sessions, and its checked-out branch can change under a
+  session that works there: no task commit is made in it, and `git branch --show-current` is checked
+  before every commit — it must name the task branch, or the commit is not made.
 - A branch name starts with one prefix from this **closed list**; an unlisted prefix is a deviation
   to fix, not a new convention:
 
@@ -52,7 +59,7 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
   |------------|----------------------------------------------------------------------------------|
   | `task/`    | one `dev-loop` task: `task/<task-id>`                                             |
   | `design/`  | one lifecycle phase (`sw-life-cycle` / `release-cycle`): `design/<phase>_<version>` |
-  | `ingest/`  | one ingest main (`bug-ingest`, `decision-log-ingest`, `adr-ingest`, `service-ingest`) — always `ingest/`, never `design/` |
+  | `ingest/`  | one ingest main (`bug-ingest`, `decision-log-ingest`, `adr-ingest`, `service-ingest`), or one `vision-change` run, which files a `change-proposal` (`dl-132`) — always `ingest/`, never `design/` |
   | `fix/`     | an out-of-band fix outside a `dev-loop` task                                     |
   | `docs/`    | a documentation-only change                                                      |
   | `qa/`      | a quality gate (e.g. the `e2e-smoke` phase)                                      |
@@ -62,16 +69,26 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
 - **The specific prefix wins** (`dl-152` Q3 (i)). A quality-gate phase (`e2e-smoke`) runs on `qa/`, a
   documentation phase (`user-docs`) on `docs/`, and every other lifecycle phase on `design/`, although
   `e2e-smoke` and `user-docs` are `release-cycle` phases too.
-- **Commits made directly on `main`** (`dl-152` Q1 (A)). This **closed list** of operations is
+- **Commits made directly on `main`** (`dl-152` Q1 (A)). This **closed list** of operations may be
   committed on `main` itself, with no branch and no merge commit, because each is one `wf()` commit
-  whose subject, `Approver:` and `Reason:` already are the record (P1.7, P1.10):
-  1. the approver's `approve` and `reject` commits;
+  whose subject, `Approver:` and `Reason:` already are the record (P1.7, P1.10); each may equally be
+  committed on the branch of the run that makes it (an `ingest/` or `backlog/` triage):
+  1. the approver's `approve` and `reject` commits that are not part of a `dev-loop` task's run — triage
+     (`[open → triaged]`), a task's `[pending → backlog]`, a decision-log's ratification;
   2. the triage mechanics that follow them: `assign`, `sync`, and the `amend` of the tasks that
      absorb an approved change;
   3. the `dev-loop` coordinator's `docs(plans)` bookkeeping of a plan already merged.
 
   Everything else — captures, new elements, content, code — goes through a branch. A commit on
   `main` outside this list is a deviation to fix, not a new convention.
+
+  A `dev-loop` task's `approve`, `reject` and `finalize` are committed on `task/<task-id>`, before
+  the merge, so the merge carries them into `main` with the rest of the task
+  (`dev-loop-rel-v0.2-plan` §2 *Branch, worktree & merge*; the merge itself is `--no-ff`, `dl-014`
+  G3): they are ancestors of `main`, not on its first-parent line. `finalize` is a declared verb
+  (`dl-079-wf-commit-verbs-outside-the-declared-grammar` option (A), `spec-008-cli-grammar` §2).
+  `dev-loop.yaml`'s `done` still declares the merge before `element.set_state(done)`; aligning it is
+  `bug-313-dev-loop.yaml-done-orders-approve-merge-then-set-state-done-while-practice-finalizes-the-task-on-its-branch-before-the-merge`.
 
 ## 2. Staying current (`dl-035`)
 
@@ -94,13 +111,20 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
 A version tag is created on `main`, after the release's last phase branch has merged **and after
 `main` has been pushed to `origin`**. It is never created on a phase branch.
 
-## 4. Memory-operation subjects (`dl-054`)
+## 4. Commit subjects (`dl-054`; code commits: `dev-loop-rel-v0.2-plan` §2)
 
 - Subjects take the form `wf({type}): {verb} {ids}`.
 - `approve`, `reject` and `deprecate` end in a `[{from} → {to}]` bracket, written with `→` as in
   `spec-004-mcp-surface-contract` §4.3. `add` and `submit` carry no bracket.
-- Which verbs beyond the declared five are legal is not decided here: that is
-  `dl-079-wf-commit-verbs-outside-the-declared-grammar`.
+- The verbs are a closed, declared list — `add`, `submit`, `approve`, `reject`, `deprecate`,
+  `start`, `finalize`, `sync`, `amend`, `park`, `assign` — each with its bracket rule and emitter
+  (`dl-079-wf-commit-verbs-outside-the-declared-grammar` option (A), `spec-008-cli-grammar` §2).
+- **Code commits on a task branch** (`dev-loop-rel-v0.2-plan` §2 *Commits*). A commit that is not a
+  Memory operation takes the subject `test|feat|fix|refactor|docs({module}): {task.id} — <summary>`:
+  `test` for `red`'s failing tests, `feat` or `fix` for `green` (a `fix` cites the bugs it closes, in
+  parentheses), `refactor` for `refactor`, `docs` for documentation and the task's own Execution Notes.
+  `{module}` is the `dna.yaml` module or area the change belongs to: e.g. `mcp`, `memory` (also
+  `docs(memory)` for the Execution Notes), `docs`, `lint`. A fix made at review is a `fix` commit.
 
 ## 5. Identity (`dl-094` (ii))
 
@@ -187,16 +211,16 @@ be the last one, and a reader of the `Reason:` block (`dl-067-reason-trailer-con
 
 - **CI is the enforcement point.** `.github/workflows/governance.yml` runs
   `scripts/check-governance.cjs` over every range pushed to `main` and every pull request into it. It
-  checks §4's subjects and brackets, the `Reason:`/`Approver:` shape (`dl-067`), approval authority
-  (§5, `dl-094`), state legality and the verb each transition uses, status changes outside a `wf()`
-  operation (`dl-139`), an approve whose `supersedes:` target is not `superseded` at `HEAD` (`bug-218`),
-  and §7's exclusion of `approve` and `reject` (`bug-307`), enforced as: those commits carry no
-  `Co-Authored-By:` and no `AI-Model:` line at all, anywhere in the body, whoever it names. With
-  `--base` only (CI passes it), it also checks the version bump of the four versioned config files
-  over the range (`bug-249`); a whole-history run has no range and does not judge it. Each rule fails only commits
-  after the one that introduced it; older history is reported, never rewritten (§2, §8). Beside it, a
-  warn-only lint (`scripts/lint-claims.cjs`, `dl-097` §2 (b)) annotates claims with no command in the
-  Memory documents the range changed.
+  checks §4's `wf()` subjects and brackets (not its code-commit subjects), the `Reason:`/`Approver:`
+  shape (`dl-067`), approval authority (§5, `dl-094`), state legality and the verb each transition
+  uses, status changes outside a `wf()` operation (`dl-139`), an approve whose `supersedes:` target is
+  not `superseded` at `HEAD` (`bug-218`), and §7's exclusion of `approve` and `reject` (`bug-307`),
+  enforced as: those commits carry no `Co-Authored-By:` and no `AI-Model:` line at all, anywhere in the body,
+  whoever it names. With `--base` only (CI passes it), it also checks the version bump of the four versioned
+  config files over the range (`bug-249`); a whole-history run has no range and does not judge it. Each rule
+  fails only commits after the one that introduced it; older history is reported, never rewritten (§2, §8).
+  Beside it, a warn-only lint (`scripts/lint-claims.cjs`, `dl-097` §2 (b)) annotates claims with no command in
+  the Memory documents the range changed.
 - **Branch protection makes it binding.** Requiring the `governance` status on `main` is a repository
   setting only the approver changes (`dl-103` §1 (C)), recorded as a `service` element.
 - **The pre-push hook is a local convenience** (`dl-103` §1 (B)). Opt in once per clone with

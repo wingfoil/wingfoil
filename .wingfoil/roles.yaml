@@ -23,10 +23,13 @@
 # repository (the code build for Memory operations, the pinned build for the read commands and MCP), and
 # every role runs commands. Declared global here and by `scope: global` in its file.
 #
+# `tech-lead` also loads `traceability` (approver ruling 2026-10-10, task-276): its § "Who authors acceptance
+# criteria" makes the `tech-lead` the author of out-of-band task criteria (dl-102 §3), so the role loads the rule.
+#
 # `reviewer` also loads `code-quality`, `testing` and `determinism` (dl-134 §3, task-205): it judges
 # both the tests `qa` writes in `dev-loop`'s `red` and the code the developer writes in `green` and
 # `refactor`, so it reviews under the directives of the roles it checks, beside its own.
-version: 1.6
+version: 1.7
 
 assignments:
   developer:
@@ -53,6 +56,7 @@ assignments:
   tech-lead:
     - architecture
     - code-review
+    - traceability
 
 # Global directives apply to every role.
 global:
