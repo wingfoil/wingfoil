@@ -80,6 +80,175 @@ scenarios in `P1.13-memory-element-schema.feature` says.
 
 ## Execution Notes
 
+Branch `task/task-274-count-wip-limit-holders-across-every-ref-and-exempt-reject-and-returns-edges-from-the-limit`,
+worktree `../.wf2-wt/task-274`, cut from `main` at `30b268a3`. Start `c4f255b1`. No `bug:` to sync.
+
+### design (architect)
+
+**Upstream notes read (`dl-015`).** `task-180` (`done`) wrote `requireWipSlot` as the one shared check,
+called by `prepareMemoryTransitionAtRev` for every entry into a new state and by `memory add` for the
+initial state, counting in the decided commit only. `task-205` (`done`) decision 4 names this ruling as
+code in `requireWipSlot` / the transition preamble and `spec-001`/`spec-008`, not dev-loop configuration,
+and its decision 5 leaves the two P1.13 scenarios "a reject into a full state" and "holders on other
+branches" to this task. Its *For the coordinator* asks for exactly this task.
+
+**Decision and specs.** `dl-156` is `ready` (approve `f3354102`: Q1 (a), Q2 (i)); `dl-101` is `ready`.
+`spec-001`, `spec-006` and `spec-008` are `approved`
+(`awk '/^status:/{print $2;exit}'` on each file → `approved`). `tech-spec` is `amendable: true`
+(`.wingfoil/memory.yaml`), so all three edits are pending amendments (below).
+
+**Design.**
+- **One ref enumeration, shared with the id counter.** `memory add`'s counter lists its commits inline in
+  `sequenceCandidatePaths` (`src/memory/add.ts`: `for-each-ref refs/heads refs/remotes` plus
+  `rev-parse --verify --quiet HEAD^{commit}`). That listing becomes an exported function,
+  `refBaselineCommits(root)` (deduplicated, sorted shas), which both the counter and the WIP count call,
+  so the two scans cannot disagree about which refs exist (task Notes; `command-baseline`'s declared
+  baseline).
+- **Across refs (Q1 (a)).** `requireWipSlot` loads the type's documents at the decided commit **and** at
+  every commit `refBaselineCommits` returns (each sha once, the decided one first), groups them by
+  frontmatter `id` (by path when a document has none), and keeps for each element its **most advanced
+  state**: the later position in the type's `sequence`; a state outside `sequence` (an off-chain reject
+  target, `deprecated`) ranks after every `sequence` state, `deprecated` last of all, ties broken by name
+  so the answer never depends on read order (REQ-SYS-07). The holders are the elements whose most
+  advanced state is the limited one, minus the moving element, named in path order as today. Only a
+  declared limit triggers the read: without one nothing is read, as before.
+- **The refusal** keeps `spec-008`'s first sentence and its "Move one of them out …" sentence verbatim and
+  appends one: "The holders are counted at HEAD and on every local and remote-tracking branch, so the
+  count depends on which refs were last fetched."
+- **Returns exempt (Q2 (i)).** `prepareMemoryTransitionAtRev` skips the slot check for op `reject` and
+  op `park`. Keyed on the verb, not on comparing `to` with the machine's reject/returns targets: `reject`
+  only ever takes a `gates.<from>.reject` edge and `park` only a `returns.<from>` edge
+  (`resolveTransitionTarget`, `src/memory/state-machine.ts`), while a target comparison would also
+  exempt an `approve` whose forward target happens to equal the gate's reject target. `submit`,
+  `approve`, the `supersedes:` trigger and `memory add` keep the check.
+- **Unreadable documents** on any scanned commit are still returned as `W_MEMORY_UNREADABLE`
+  diagnostics, one per file (the decided commit's first), since any of them may be an uncounted holder.
+- **`command-baseline`.** The across-refs read gates the command (it can refuse it), so it is a read
+  wider than `HEAD` that the directive's *Declared baselines* must name: a second row there (directive
+  1.4 → 1.5). `spec-006` §6's table and §7 step 3 and `spec-008` §11 say the same (pending amendments).
+- **Not in scope.** No `limits:` is declared in this repository (approver, `f3354102`), so
+  `.wingfoil/memory.yaml` and `dev-loop.yaml` are not edited; their comments stay true (see *For the
+  coordinator*).
+
+**AC classification (T1).**
+
+| AC | Class | Why |
+|----|-------|-----|
+| AC1 across refs: two branches cannot both take the last slot; the refusal names the other branch's holder and says the count depends on fetched refs | red-first | `requireWipSlot` reads `loadMemoryDocumentsAtRev(root, sha, …)` only (`grep -n "loadMemoryDocumentsAtRev" src/core/memory-transition.ts`) |
+| AC2 `reject` and `park` take no slot check; the other entries still refuse | red-first for `reject`/`park` (the pinned tests assert a refusal today); characterization for `submit`, `approve`, `add`, `supersedes:` (they refuse today) | `prepareMemoryTransitionAtRev` calls `requireWipSlot` whenever `to !== from` |
+| AC3 refusal grammar unchanged for the verbs that keep the check | characterization | the `spec-008` first sentence is what the code prints today; pinned by the existing exact-message tests, extended by the new sentence of AC1 |
+| AC4 `spec-001` / `spec-008` text | red-first (document) | `grep -n "counted in the commit the transition is decided at" docs/04_memory/design/specs/spec-001-memory-yaml-schema.md` → line 126 before the edit; `spec-008` line 281 lists `reject`, `park` |
+| AC5 two P1.13 scenarios, each pinned by a test | red-first | the feature file has no such scenarios (`grep -c "Scenario" …P1.13-memory-element-schema.feature` → 9) |
+| AC6 gates green | characterization | gate runs, refactor |
+
+### red (developer)
+
+`9eee4cbd`. `test/core/memory-wip-limits.test.ts`: the `reject` and `park` "refused the same way" tests are
+rewritten to their new outcome (exit 0, one commit; after the reject the next `submit` names both
+holders, above the limit); a new `approve` case (type `gated`) pins that `approve` keeps the check; the
+exact-message tests gain the refs sentence; five across-refs cases — two branches cut from one commit,
+a holder only a remote-tracking ref records, the most advanced state wins, one element on two refs is
+one holder (characterization), `memory add` counting a holder on another branch.
+`test/memory/element-schema-park-limits.test.ts`: scenario 8's message, scenarios 10–11; the task type
+gains `limits: { in-progress: 1 }`. The P1.13 feature file gains scenarios 10–11, its comment updated.
+`npx jest test/core/memory-wip-limits.test.ts test/memory/element-schema-park-limits.test.ts`
+→ `Tests: 12 failed, 14 passed, 26 total`. Each failure is the missing behaviour: the refs sentence
+absent (`Received: "… then retry."`), the reject/park refusal still returned, the other-branch holder
+not seen (`Expected: false, Received: true` on the remote-tracking case). The one-element-on-two-refs
+case passes, as a characterization should.
+
+### green (developer)
+
+`9992f9bd`. `refBaselineCommits(root)` (`src/memory/add.ts`, exported through the `src/memory` barrel)
+is the ref listing `sequenceCandidatePaths` used inline, now shared. `requireWipSlot` loads the type's
+documents at the decided commit, then at every other sha that listing returns, groups them by `id`, keeps
+each element's most advanced state (`isMoreAdvancedState`), and ends the refusal with
+`WIP_REFS_SENTENCE`. `prepareMemoryTransitionAtRev` calls it only when `op` is neither `reject` nor
+`park`. TSDoc of `memoryAddFn`, `memoryParkFn` and `StateMachine` updated to match.
+Same command → `Tests: 26 passed, 26 total`.
+`1aa3844b`: `command-baseline` 1.4 → 1.5 (*Declared baselines* row for the WIP count, revision note);
+`docs/cli-reference.md` (the park entry's WIP bullet: the new sentence, counting across refs, `reject`
+and `park` exempt; the park *Errors* line drops the WIP refusal).
+
+### refactor (developer)
+
+`a8467192`: unit tests of `isMoreAdvancedState` (sequence order, off-chain after the sequence,
+`deprecated` last, name tie-break) and a structural test that `'for-each-ref'` appears once in `src/`
+(`git grep -l "'for-each-ref'" -- src/` → `src/memory/add.ts`), in `refBaselineCommits`, which both
+reads call. `803cd7f8`: `test/directives/schema.test.ts` pinned `command-baseline`'s version as exactly
+`'1.4'` (the `bug-314` class); it now asserts at least 1.4 and the Revision 1.4 line.
+
+`639a3cc9`: a document with no string `status` on some ref is skipped rather than ranked as an
+off-sequence state that could outrank a real holder; holders are ordered by one sort key
+(`<path>\0<element key>`, default UTF-16 order) instead of a four-arm comparator; two more cases (an
+unreadable file two refs hold is warned once; a status-less copy neither holds nor hides the holder).
+
+Gates (one heavy gate at a time, `--maxWorkers=2`, the B5 notes' interim gate rule, `dl-170`):
+- `npm run test:coverage -- --maxWorkers=2` at `639a3cc9` (load 4.6 at start, 7.8 at end; the same
+  jest config `npm test` runs, `scripts/run-tests.cjs` adding the latency suites only on request) →
+  `Test Suites: 347 passed, 347 total`, `Tests: 6485 passed, 6485 total`, exit 0; All files
+  99.29 % statements, 97.06 % branches, 97.75 % functions, 99.70 % lines — the W3 B4 gate on main read
+  99.29 / 97.04 / 97.74 / 99.69 (`gate-w3b4-cov.log`), so not regressing. `src/core/memory-transition.ts`
+  100 % lines, its one uncovered branch line 462 predating this task; `src/memory/add.ts` 100 % lines.
+  An earlier full run at `803cd7f8` gave 347 suites / 6483 tests passed.
+- `npm run lint` → exit 0; `npm run docs:api` → exit 0, no warning (`grep -ci warning` → 0);
+  `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx tsc -p tsconfig.build.json --noEmit` → exit 0;
+  `npm run -s lint:claims` → 0 warnings; `node scripts/check-governance.cjs --base 30b268a3` → exit 0,
+  "1 wf() commits … and 6 other commits", 0 findings.
+- `test/docs/cli-reference.test.ts` is in the suite above (no command added or renamed).
+- BDD: P1.13 scenarios run as `test/memory/element-schema-park-limits.test.ts` (the repository's BDD
+  form: suites citing the feature file, `grep -rln "P1.13-memory-element-schema" test`).
+
+### review (reviewer, self-review)
+
+- **AC1** — `test/core/memory-wip-limits.test.ts` "two task branches cut from the same commit cannot
+  both take the last slot" (second verb exits 1, message names `wide-002`, held only on `task/a`, and
+  ends with the refs sentence); "a holder only a remote-tracking ref records counts"; "the most
+  advanced state wins"; "`memory add` counts a holder … another branch records". Met.
+- **AC2** — "`reject` into a full state is not refused" (exit 0, one commit, then `submit` names both
+  holders) and "`park` into a full state is not refused" (exit 0, one commit); `submit`, `approve`
+  (new `gated` case), `add` and the `supersedes:` trigger (P1.13 scenario 9) still refuse. Met.
+- **AC3** — every exact-message test keeps `WIP limit reached for '<state>' on type '<type>' (limit
+  <N>): held by … Move one of them out of '<state>', then retry.` verbatim before the new sentence; the
+  chained grammar is untouched (`git diff 30b268a3 -- src/memory/audit.ts src/memory/state-machine.ts`
+  → empty). Met.
+- **AC4** — `spec-001` `limits` row, `spec-008` §2 (park paragraph, WIP paragraph, refusal block) and
+  §11, plus `spec-006` §6/§7 (same baseline, its normative text), each with a dated Revision note:
+  pending amendments below, left uncommitted. Met, pending the approver's `memory amend`.
+- **AC5** — P1.13 scenarios 10 ("A reject into a state at its WIP limit is not refused") and 11
+  ("Error - a holder committed only on another branch counts toward the WIP limit"), the comment above
+  scenario 5 updated; pinned by `test/memory/element-schema-park-limits.test.ts` "scenario 10" and
+  "scenario 11". Met.
+- **AC6** — gates above. Met.
+- **Same class in files touched.** `docs/cli-reference.md`'s park *Errors* line still listed a WIP
+  refusal: removed. `test/directives/schema.test.ts` pinned the exact directive version (`bug-314`
+  class): fixed to "at least, plus the history line". `grep -rn "WIP limit reached" src test docs
+  --include=*.ts --include=*.md --include=*.feature` → every hit carries the new sentence or a prefix
+  match (`toContain`).
+- **`command-baseline`.** The WIP count can refuse a command from a read wider than `HEAD`; *Declared
+  baselines* names it (1.5), and `spec-006` §6, the normative text, says the same (pending).
+
+### Pending amendments (approver)
+
+Left uncommitted in the worktree; the gates ran with them in the tree.
+
+- `spec-001-memory-yaml-schema` — `--reason "task-274 (dl-156 Q1 (a), Q2 (i)): the limits row says the holders are counted at the decided commit and at every local and remote-tracking branch tip, each document once in its most advanced state, and that reject and park along a reject or returns edge are exempt. Dated Revision note added."`
+- `spec-008-cli-grammar` — `--reason "task-274 (dl-156): the WIP-limit paragraph binds add, submit, approve and the supersedes trigger, not reject or park; the park paragraph drops its WIP refusal; the refusal gains a sentence saying the count depends on fetched refs; section 11 names the count as a declared baseline. Dated Revision note added."`
+- `spec-006-core-domain-api` — `--reason "task-274 (dl-156): section 7 step 3 counts WIP holders across every ref and exempts reject and park; the section 6 table names that count as a read wider than HEAD that command-baseline 1.5 declares. Dated Revision note added."`
+
+### For the coordinator
+
+- **Not edited, and why.** `.wingfoil/memory.yaml` (its comment "no `limits:` declared" stays true; no
+  bump on this branch, so nothing to re-bump against task-275's 2.9) and `dev-loop.yaml` (task-276's
+  ground is the directives; this file's header, lines 75–77, says "This repository declares no
+  `limits:` until that is implemented" — once this merges, "until that is implemented" is stale; a
+  one-line edit for whichever task next bumps `dev-loop.yaml`).
+- `spec-006` is a third pending amendment the task's Files list did not name: the across-refs read is a
+  gating read wider than `HEAD`, and `spec-006` §6 is the normative baseline text.
+- Merge order: no shared code file with the other B5 tasks expected; `spec-001` (also 217?, 271),
+  `spec-008` (217, 226, 227, 225, 235) and `spec-006` (command-surface tasks) amendments are recorded in
+  merge order. `docs/cli-reference.md`: this task edits only the `memory park` WIP bullet.
+
 ### Retrospective
 
 None yet.
