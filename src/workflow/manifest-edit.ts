@@ -122,8 +122,10 @@ export function withIncludeRemoved(text: string, entry: string): ManifestEdit {
   const removed = new Set(found.items.filter((item) => posix.normalize(item.value) === target).map((item) => item.line));
   if (removed.size === 0) return { ok: false, reason: `no include: entry resolves to ${entry}` };
   const edited = lines.filter((_, line) => !removed.has(line)).join(eol);
-  return verified(
-    edited,
-    before.filter((value) => posix.normalize(value) !== target),
-  );
+  const expected = before.filter((value) => posix.normalize(value) !== target);
+  // Removing the last entry leaves an `include:` with no value, which reads back as no list at all: not a
+  // failure of the edit but a manifest `spec-003` refuses (Layer 1 needs one entry). The caller's prospective
+  // load reports that as the workflows not loading (task-211 review F1), so it is not refused here.
+  if (expected.length === 0) return { ok: true, text: edited };
+  return verified(edited, expected);
 }
