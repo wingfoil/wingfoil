@@ -523,17 +523,22 @@ export function requireWipSlot(
       if (frontmatter.type !== type) continue;
       const id = frontmatter.id === undefined ? undefined : String(frontmatter.id);
       const key = id === undefined ? `path:${path}` : `id:${id}`;
-      const status = typeof frontmatter.status === 'string' ? frontmatter.status : String(frontmatter.status ?? '');
+      // A document with no string `status` holds no state, and must not outrank one that does.
+      const status = frontmatter.status;
+      if (typeof status !== 'string') continue;
       const known = elements.get(key);
       if (known === undefined || isMoreAdvancedState(machine, status, known.state)) {
         elements.set(key, { name: id ?? path, path, state: status });
       }
     }
   }
-  const holders = [...elements.values()]
-    .filter((element) => element.state === state && element.name !== exceptId)
-    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-    .map((element) => element.name);
+  // Path order, then the element key (unique), as one string each: the default sort is by UTF-16 code
+  // units, independent of locale and of the order the commits were read in (REQ-SYS-07).
+  const named = new Map<string, string>();
+  for (const [key, element] of elements) {
+    if (element.state === state && element.name !== exceptId) named.set(`${element.path}\u0000${key}`, element.name);
+  }
+  const holders = [...named.keys()].sort().map((order) => named.get(order) as string);
   if (holders.length < limit) return coreOk(unreadable);
   return coreErr({
     code: 'CONFLICT',

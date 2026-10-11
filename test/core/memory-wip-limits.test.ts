@@ -420,3 +420,47 @@ describe('one listing of every ref (task-274): the id counter and the WIP count 
     expect(source).toMatch(/listPathsAtRevs\(root, refBaselineCommits\(root\), prefix\)/);
   });
 });
+
+describe('the across-refs count, edge cases (task-274)', () => {
+  let repo: string;
+
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, '.wingfoil/memory.yaml', MEMORY_YAML);
+    writeFixtureFile(repo, '.wingfoil/dna.yaml', DNA_YAML);
+    writeFixtureFile(repo, 'docs/memory/wide/wide-001.md', doc('wide-001', 'wide', 'in-progress'));
+    writeFixtureFile(repo, 'docs/memory/wide/wide-002.md', doc('wide-002', 'wide', 'draft'));
+    commitAll(repo, 'seed');
+  });
+
+  afterEach(() => removeTempDir(repo));
+
+  it('an unreadable document two refs hold is warned about once', async () => {
+    writeFixtureFile(repo, 'docs/memory/wide/wide-zzz.md', '---\nid: [unclosed\n---\n\nBody.\n');
+    commitAll(repo, 'an unreadable document');
+    const trunk = gitOut(repo, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    git(repo, ['checkout', '--quiet', '-b', 'other']);
+    writeFixtureFile(repo, 'notes.txt', 'unrelated\n');
+    commitAll(repo, 'other differs from the trunk; the unreadable file is on both');
+    git(repo, ['checkout', '--quiet', trunk]);
+
+    const result = await verb('memorySubmit', repo, 'wide-002');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings?.filter((line) => line.includes('docs/memory/wide/wide-zzz.md'))).toHaveLength(1);
+  });
+
+  it('a copy with no status on another ref neither holds the state nor hides the holder', async () => {
+    const trunk = gitOut(repo, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    git(repo, ['checkout', '--quiet', '-b', 'other']);
+    writeFixtureFile(repo, 'docs/memory/wide/wide-001.md', doc('wide-001', 'wide', 'in-progress').replace(/^status: .*\n/m, ''));
+    writeFixtureFile(repo, 'docs/memory/wide/wide-003.md', doc('wide-003', 'wide', 'in-progress'));
+    commitAll(repo, 'wide-001 without a status, wide-003 in-progress, on other only');
+    git(repo, ['checkout', '--quiet', trunk]);
+
+    const result = await verb('memorySubmit', repo, 'wide-002');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('(limit 2): held by wide-001, wide-003.');
+  });
+});
