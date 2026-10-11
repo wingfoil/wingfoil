@@ -164,7 +164,9 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'memory reject',
       'memory submit',
       // task-217 (`spec-017` §7.1–§7.2): Tools here; the production server serves none before v0.4.
+      // task-226 (`spec-017` §7.9): `workflow finalize`, a Tool here through the mechanical registrar.
       'workflow end',
+      'workflow finalize',
       'workflow start',
     ];
     expect(cli).toEqual(expected);
@@ -224,6 +226,7 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'memory.submit',
       // task-217 (`spec-017` §9): v0.4 Tools of the production server; here through the mechanical registrar.
       'workflow.end',
+      'workflow.finalize',
       'workflow.start',
     ]);
     // No mutating op is ALSO a Resource: the exact Resources list above already excludes them. The

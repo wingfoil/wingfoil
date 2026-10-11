@@ -63,7 +63,7 @@ Accepted by every command, except `--dry-run`, which only the commands that chan
 | Option | Effect |
 |---|---|
 | `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (Unreleased (v0.3): except `agent show`, which prints `key: value` lines); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
-| `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
+| `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `finalize`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `workflow finalize`'s commit changes no file, so its `paths` is `[]` and its `diff` is empty. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
@@ -123,7 +123,9 @@ WingFoil-Version: 0.3.0 (4f1c2d9b7e3a5c80d61f2a94b7c3e5d08a1f9e9a)
 the same value `wingfoil --version` prints: the package version, then the full commit hash the build
 was made from (with `-dirty` when the build had uncommitted changes to its own inputs — the sources,
 `package.json`, `package-lock.json`, a `tsconfig` or `scripts/write-build-info.cjs` — and `unknown` when the build recorded none). A commit without that line was not written by WingFoil. Read it with
-`git log --format='%(trailers:key=WingFoil-Version,valueonly)'`. The commit body is also normalized
+`git log --format='%(trailers:key=WingFoil-Version,valueonly)'`. A commit that carries other trailers of
+its own — `workflow finalize`'s phase record — writes them in that same last paragraph, before the
+`WingFoil-Version:` line, since git reads trailers from the last paragraph only. The commit body is also normalized
 the same way whatever your git `commit.cleanup` setting (trailing whitespace removed, runs of blank
 lines collapsed, lines starting with `#` kept).
 
@@ -1141,7 +1143,7 @@ text is what `agent execute` loads), and each action with its interpolated text 
 **Planned:** `memory add --workflow` / `--step` (which link the added element to the step) and
 `agent execute --workflow` / `--step` are not available in this build yet; until they are, run `memory add`
 without those two options, and give `agent execute` the step's element with `--element <type>:<id>`. A step that waits for a third party is completed by a phase record that
-`wingfoil workflow finalize` writes, which is not available yet either.
+[`wingfoil workflow finalize`](#wingfoil-workflow-finalize) writes; its "waiting for" line names the whole command.
 
 The other binding kinds:
 
@@ -1179,6 +1181,68 @@ next step: decision-log-ingest.capture
   with no open instance → `workflow is not open: <ref>`; both exit `1`; an error in
   the workflow files → exit `1`, as `workflow list`; more than one `<ref>` → exit `2`.
 - **Commit:** none.
+
+### `wingfoil workflow finalize`
+
+Record that a step of an open workflow is complete, as an empty commit with the phase-record trailers.
+
+```
+wingfoil workflow finalize [<ref>] [--step <key>] [--reason <text>]
+```
+
+| Option | Description |
+|---|---|
+| `--step <key>` | The frontier step to record, by the key `workflow next` prints (e.g. `dev-loop.red@task:task-130`). Default: the instance's next step. |
+| `--reason <text>` | Why. Required on a phase that declares `approval:`, where it is recorded with an `Approver:` line as `memory approve` records it; optional elsewhere. Same shape rules as every `--reason`. |
+
+Unreleased (v0.3). Some phases have nothing in the repository to show they are done: a checkpoint (a
+phase with no state, `produces`, selection or created evidence, such as `dev-loop.red`), a phase that waits
+for a third party (`awaits:`), a step that was to create an element and created none, and an approval
+that no Memory element carries. `workflow finalize` records such a step as complete, and `workflow next`
+then moves past it. `<ref>` selects the instance as for `workflow next`.
+
+The record is **one commit that changes no file**:
+
+```
+workflow: finalize <instance> <key>
+
+Approver: <name> <email> (approver)     ← a phase with approval: only
+Reason: <text>                          ← when --reason is given
+
+WingFoil-Phase: <workflow>.<phase> completed
+WingFoil-Instance: <instance>
+WingFoil-Element: <type>:<id>           ← or WingFoil-Item: <collection>#<key>; none for a step with no scope
+WingFoil-Version: <semver> (<sha>)
+```
+
+The subject is not a Memory operation, so `memory history` never lists it. The trailers share the last
+paragraph with `WingFoil-Version:`, because git reads trailers from the last paragraph only. On a phase
+with `approval:` your git identity must hold the `approver` role in the committed `dna.yaml`, and the
+commit is authored by that same identity.
+
+```console
+$ wingfoil workflow finalize --step dev-loop.red@task:task-130
+workflow: release-cycle (release-cycle-rel-v0.3-plan)
+finalized: dev-loop.red@task:task-130 (3f1c…)
+next step: dev-loop.green@task:task-130
+  …
+```
+
+`--format json|yaml` prints `{"baseline": {…}, "instance": {…}, "finalized": {…}, "next": {…} | null, "commit": "<sha>"}`,
+`finalized` and `next` as `workflow next` reports a step.
+
+- **Errors, exit `1`:** a step not on the frontier → `step '<key>' is not on the frontier of <instance>`;
+  a step whose phase completes from evidence the repository can show → `phase '<workflow>.<phase>' completes from its evidence: <kinds>`;
+  an instance with no next step → `workflow next`'s message (`no next step: workflow '<name>' is complete`);
+  no open instance and no `<ref>` → `no active workflow to finalize`; a `<ref>` that selects no open
+  instance → `workflow is not open: <ref>` / `unknown workflow: <ref>`; on an approval phase, an identity
+  without the `approver` role → `user not authorized to approve type '<type>'`; staged changes in the index
+  → `refusing to commit '<subject>': the index holds staged changes (<paths>) …` (the record never takes
+  them along); no git identity → `git identity not configured (user.name/user.email)`; an error in the
+  workflow files, as `workflow list`.
+- **Errors, exit `2`:** on an approval phase, no `--reason` → `missing required argument: --reason`; a
+  blank or malformed `--reason`, on any phase; more than one `<ref>`.
+- **Commit:** `workflow: finalize <instance> <key>`, no file changed.
 
 ### `wingfoil workflow show`
 

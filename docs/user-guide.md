@@ -370,7 +370,10 @@ its role and that role's directives, the element it works on, and for each actio
 the commit subject it expects (`--assigned-to me` keeps the steps your role holds).
 `wingfoil workflow start <name>` opens a workflow — it records it as a `plan` document and makes it the
 active workflow (`--element <type>:<id>` names the element it runs on) — and `wingfoil workflow end`
-closes the active one once its steps are complete, making the previous one active again. See the
+closes the active one once its steps are complete, making the previous one active again. A step that nothing
+in the repository can show as done — a checkpoint, a wait for a third party, an approval no element
+carries — is recorded with `wingfoil workflow finalize`, an empty commit that `workflow next` then moves
+past (on a phase with `approval:`, only an approver can, with `--reason`). See the
 [CLI reference](cli-reference.md#wingfoil-workflow-list).
 
 **No workflow engine runs your steps**: in 0.2.2 nothing starts a workflow; unreleased (v0.3),

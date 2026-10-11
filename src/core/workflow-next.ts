@@ -35,9 +35,11 @@ import {
   type DeducedAction,
   type DeducedStep,
   type Deduction,
+  type DeductionSnapshot,
   type ElementRef,
   type EvidenceKind,
   type Instance,
+  type InstanceDeduction,
   type ProducesView,
   type ScopeRef,
   type TrailEntry,
@@ -435,6 +437,27 @@ function warnUnknownAssignee(dnaYaml: DnaYaml | null, who: string, identityEmail
 }
 
 /**
+ * The refusal of a `<ref>` that selects no open instance (`spec-017` §10, task-216 review fix 1): a loaded
+ * workflow with no open instance is `workflow is not open: <ref>`; any other `<ref>` names nothing,
+ * `unknown workflow: <ref>`. Both `NOT_FOUND`. Shared by `next` and `finalize` (task-226).
+ */
+export function unresolvedRef<T>(workflows: readonly Workflow[], ref: string): CoreResult<T> {
+  if (workflows.some((workflow) => workflow.name === ref)) return coreErr({ code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } });
+  return coreErr({ code: 'NOT_FOUND', message: unknownWorkflowMessage(ref), details: { ref } });
+}
+
+/**
+ * Why an instance whose frontier is empty has no next step (`spec-017` §7.3): complete, abandoned (§4.11)
+ * or its workflow not loaded. Shared by `next` and `finalize` (task-226).
+ */
+export function emptyFrontierMessage(selected: InstanceDeduction): string {
+  const { instance, complete } = selected;
+  if (complete) return noNextStepMessage(instance.workflow);
+  if (instance.abandoned) return `no next step: workflow '${instance.workflow}' is abandoned: its element ${instance.element!.type}:${instance.element!.id} is ${instance.element!.status}`;
+  return `no next step: workflow '${instance.workflow}' is not loaded`;
+}
+
+/**
  * `workflow next`'s answer from one deduction (`spec-017` §7.3, §10). Pure. Exit `0` in every deduced
  * case — `no open workflows`; `no next step: workflow '<name>' is complete`; a filter that keeps nothing — and
  * `NOT_FOUND` `workflow is not open: <ref>` for a `ref` naming no open instance.
@@ -444,20 +467,11 @@ export function nextWorkflow(inputs: NextInputs, deduction: Deduction, options: 
   const base = { baseline: deduction.baseline, diagnostics: deduction.diagnostics };
   const selected = resolveInstanceRef(deduction, ref);
   if (selected === null) {
-    // A loaded workflow with no open instance is "not open"; any other `<ref>` names nothing (§10, review fix 1).
-    if (ref !== undefined && inputs.workflows.some((workflow) => workflow.name === ref)) return coreErr({ code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } });
-    if (ref !== undefined) return coreErr({ code: 'NOT_FOUND', message: unknownWorkflowMessage(ref), details: { ref } });
+    if (ref !== undefined) return unresolvedRef(inputs.workflows, ref);
     return coreOk({ ...base, instance: null, complete: false, next: null, more: [], message: NO_OPEN_WORKFLOWS });
   }
   const { instance, complete, frontier } = selected;
-  if (frontier.length === 0) {
-    const message = complete
-      ? noNextStepMessage(instance.workflow)
-      : instance.abandoned
-        ? `no next step: workflow '${instance.workflow}' is abandoned: its element ${instance.element!.type}:${instance.element!.id} is ${instance.element!.status}`
-        : `no next step: workflow '${instance.workflow}' is not loaded`;
-    return coreOk({ ...base, instance, complete, next: null, more: [], message });
-  }
+  if (frontier.length === 0) return coreOk({ ...base, instance, complete, next: null, more: [], message: emptyFrontierMessage(selected) });
   if (assignedTo !== undefined) warnUnknownAssignee(inputs.dnaYaml, assignedTo, options.identityEmail ?? '');
   const roles = assignedTo === undefined ? null : assigneeRoles(inputs.dnaYaml, assignedTo, options.identityEmail ?? '');
   const kept = roles === null ? frontier : frontier.filter((step) => step.role !== null && roles.has(step.role));
@@ -466,6 +480,25 @@ export function nextWorkflow(inputs: NextInputs, deduction: Deduction, options: 
   }
   const steps = kept.map((step) => buildStep(step, inputs));
   return coreOk({ ...base, instance, complete, next: steps[0]!, more: steps.slice(1) });
+}
+
+/**
+ * What building steps reads besides the deduction (`spec-017` §6), all at the snapshot's commit: the
+ * snapshot's workflows, `memory.yaml`, `dna.yaml` and `bindings.yaml`, and — only when some instance has a
+ * frontier step to report — `roles.yaml` and the directive files.
+ *
+ * @throws a `ValidationError` for an invalid `roles.yaml` or directive file at the snapshot's commit.
+ */
+export function readNextInputs(root: string, snapshot: DeductionSnapshot, deduction: Deduction): NextInputs {
+  const hasSteps = deduction.instances.some((entry) => entry.frontier.length > 0);
+  return {
+    workflows: snapshot.workflows,
+    memoryYaml: snapshot.memoryYaml,
+    dnaYaml: snapshot.dnaYaml ?? null,
+    bindings: snapshot.bindings ?? null,
+    rolesYaml: hasSteps ? loadRolesYamlAtRev(root, snapshot.commit) : null,
+    directiveFiles: hasSteps ? loadDirectivesAtRev(root, snapshot.commit) : [],
+  };
 }
 
 /**
@@ -480,15 +513,7 @@ export function nextWorkflow(inputs: NextInputs, deduction: Deduction, options: 
 export function workflowNextAtHead(root: string, ref?: string, assignedTo?: string): CoreResult<NextResult> {
   const snapshot = readDeductionSnapshotAtHead(root);
   const deduction = deduceWorkflowState(snapshot);
-  const hasSteps = deduction.instances.some((entry) => entry.frontier.length > 0);
-  const inputs: NextInputs = {
-    workflows: snapshot.workflows,
-    memoryYaml: snapshot.memoryYaml,
-    dnaYaml: snapshot.dnaYaml ?? null,
-    bindings: snapshot.bindings ?? null,
-    rolesYaml: hasSteps ? loadRolesYamlAtRev(root, snapshot.commit) : null,
-    directiveFiles: hasSteps ? loadDirectivesAtRev(root, snapshot.commit) : [],
-  };
+  const inputs = readNextInputs(root, snapshot, deduction);
   const identityEmail = assignedTo === ASSIGNED_TO_ME ? readGitIdentity(root).email : '';
   return nextWorkflow(inputs, deduction, { ...(ref === undefined ? {} : { ref }), ...(assignedTo === undefined ? {} : { assignedTo }), identityEmail });
 }
@@ -506,8 +531,8 @@ function describeScope(scope: ScopeRef | null): string {
 export function humanNeededLine(step: Step): string | null {
   const awaiting = step.awaiting;
   if (awaiting === null) return null;
-  // `workflow finalize` writes the record (spec-017 §7.9) and is not shipped yet (review fix 4).
-  if (awaiting.kind === 'party') return `waiting for ${awaiting.party}: ${awaiting.evidence.token} (a phase record completes it: wingfoil workflow finalize, not available yet)`;
+  // `workflow finalize` writes the record (spec-017 §7.9, §5.4; task-226): the whole command for this step.
+  if (awaiting.kind === 'party') return `waiting for ${awaiting.party}: ${awaiting.evidence.token} (a phase record completes it: wingfoil workflow finalize ${step.instance} --step ${step.key})`;
   const action = awaiting.recordNeeded ? 'finalize' : 'approve or reject';
   const what = awaiting.elements.length > 0 ? awaiting.elements.map((element) => element.id).join(', ') : step.key;
   const routed = awaiting.routedTo.length > 0 ? awaiting.routedTo.map((member) => `${member.name} <${member.email}>`).join(', ') : (awaiting.routingError ?? 'nobody');
@@ -515,7 +540,7 @@ export function humanNeededLine(step: Step): string | null {
 }
 
 /** The console lines of one step (`spec-017` §8: key, trail, role, scope, actions with bindings, directive ids, human needed). */
-function stepLines(step: Step, heading: string): string[] {
+export function stepLines(step: Step, heading: string): string[] {
   const lines = [`${heading}: ${step.key}`];
   lines.push(`  trail: ${step.trail.map((entry) => `${entry.workflow}.${entry.phase}`).join(' > ')}`);
   lines.push(`  scope: ${describeScope(step.scope)}`);

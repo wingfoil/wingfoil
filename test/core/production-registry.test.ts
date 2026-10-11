@@ -51,7 +51,9 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memorySubmit',
       'paths.paths',
       // task-217 (`spec-017` §7.2): mutating.
+      // task-226 (`spec-017` §7.9): mutating — an empty phase-record commit.
       'workflow.workflowEnd',
+      'workflow.workflowFinalize',
       'workflow.workflowList',
       // task-216 (`spec-017` §7.3): read-only.
       'workflow.workflowNext',
@@ -82,6 +84,7 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memorySubmit',
       // task-217 (`spec-017` §7.1–§7.2): a Tool only through the mechanical registrar (v0.4, P5.2.3).
       'workflow.workflowEnd',
+      'workflow.workflowFinalize',
       'workflow.workflowStart',
     ]);
   });

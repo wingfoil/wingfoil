@@ -87,6 +87,7 @@ import {
   type WorkflowEndParams,
   type WorkflowStartParams,
 } from './workflow-start-end';
+import { renderFinalizeConsole, workflowFinalizeAtHead, type FinalizeResult } from './workflow-finalize';
 import { loadDirectiveListing, type DirectiveListing } from './directives-list';
 import { selectDirectivesById } from './context';
 import { checkAssignable, checkUnreferenced, updateRoleAssignments } from './directive-assign';
@@ -153,6 +154,10 @@ export type { CheckTokenView, ListEntry, ListResult, PhaseView, ShowInputs, Show
 // `CORE_MODULES`' `workflowNext`, and the step builder is what `agent execute --next` (task-235) and `status`
 // (task-225) reuse.
 export { buildStep, nextWorkflow, renderNextConsole } from './workflow-next';
+// task-226: `workflow finalize` (`spec-017` §7.9, §8 `FinalizeResult`); the operation is `CORE_MODULES`'
+// `workflowFinalize`.
+export { NO_ACTIVE_WORKFLOW_TO_FINALIZE, phaseRecordTrailers, renderFinalizeConsole, workflowFinalizeAtHead } from './workflow-finalize';
+export type { FinalizeRequest, FinalizeResult } from './workflow-finalize';
 export type { ActionView, Awaiting, CadenceView, CheckView, Member, NextInputs, NextOptions, NextResult, Step, StepBinding } from './workflow-next';
 // task-217: `CORE_MODULES`' `workflowStart` / `workflowEnd` (`spec-017` §7.1–§7.2) and their values.
 export { NO_ACTIVE_WORKFLOW_MESSAGE, NO_PLAN_TYPE_MESSAGE, renderEndConsole, renderStartConsole } from './workflow-start-end';
@@ -2246,6 +2251,27 @@ const workflowNextFn: CoreFn<unknown, NextResult> = async (params) => {
   return result.ok ? result.value : result;
 };
 
+/** `wingfoil workflow finalize [<ref>] [--step <key>] [--reason <text>]` params (task-226): `<ref>` rides the bare positional. */
+export interface WorkflowFinalizeParams {
+  readonly root: string;
+  readonly positional?: string;
+  readonly options?: Readonly<Record<string, string>>;
+}
+
+/**
+ * `workflowFinalize` `CoreOperation.fn` (`spec-017` §7.9, ruling R11): {@link workflowFinalizeAtHead}, its
+ * refusals returned (`CONFLICT`, `NOT_FOUND`, `VALIDATION`: exit 1) or thrown as a `UsageError` (an
+ * unrecordable or missing `--reason`: exit 2); a `spec-003` error at `HEAD` is `VALIDATION`, exit 1.
+ */
+const workflowFinalizeFn: CoreFn<unknown, FinalizeResult> = async (params) => {
+  const { root, positional, options } = params as WorkflowFinalizeParams;
+  const step = options?.['step'];
+  const result = loadOrError(() =>
+    workflowFinalizeAtHead(root, { ...(positional === undefined ? {} : { ref: positional }), ...(step === undefined ? {} : { step }), ...(options === undefined ? {} : { options }) }),
+  );
+  return result.ok ? result.value : result;
+};
+
 /**
  * `workflowStart` / `workflowEnd` `CoreOperation.fn`s (P4.2, P4.3; `spec-017` §7.1–§7.2; task-217): the two
  * operations of `./workflow-start-end`, with `start` writing through this registry's own `memoryAdd` and
@@ -2584,7 +2610,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
   },
   {
     name: 'workflow',
-    description: 'start and end workflows, and read the workflows the project declares (no step is executed yet)',
+    description: 'start and end workflows, read the workflows the project declares, and record the steps nothing else completes (no step is executed yet)',
     operations: {
       // task-204 (`spec-017` §7.5–§7.6, §8): both read `HEAD`, a declared exception (§1.1, ruling R15;
       // `spec-006` §6 item 6), from the snapshot and deduction `workflow next` / `status` answer from. A
@@ -2644,6 +2670,23 @@ export const CORE_MODULES: readonly CoreModule[] = [
         example: 'wingfoil workflow end',
         fn: workflowEndFn,
         renderConsole: renderEndConsole as (value: unknown) => string,
+      },
+      // task-226 (`spec-017` §7.9, ruling R11): records a checkpoint, an `awaits` or an approval no element
+      // carries as one commit with no file change, `workflow: finalize <instance> <key>`, carrying the
+      // phase-record trailers. Gates on the deduction and `dna.yaml` at `HEAD` (§11). The MCP Tool
+      // `workflow.finalize` is v0.4 (P5.2.3): the production server serves no Tool (§9).
+      workflowFinalize: {
+        name: 'workflowFinalize',
+        mutates: true,
+        description: 'record that a step of an open workflow is complete, as an empty commit with the phase-record trailers',
+        positional: { name: 'ref', description: 'a workflow name or an open workflow instance id (default: the active instance)' },
+        options: [
+          { name: 'step', valueName: 'key', description: 'the frontier step to record, by its key (default: the next step)' },
+          { name: 'reason', valueName: 'text', description: 'why; required on a phase that declares approval:, recorded with an Approver: line' },
+        ],
+        example: 'wingfoil workflow finalize --step dev-loop.red@task:task-130',
+        fn: workflowFinalizeFn,
+        renderConsole: renderFinalizeConsole as (value: unknown) => string,
       },
       workflowShow: {
         name: 'workflowShow',

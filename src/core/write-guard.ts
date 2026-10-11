@@ -58,6 +58,7 @@ import {
   readDocument,
   readPathAtRev,
   splitFrontmatter,
+  stagedPaths,
 } from '../storage';
 
 import { coreErr, coreOk, type CoreResult } from './types';
@@ -388,5 +389,26 @@ export function committedScopeError(
   return coreErr({
     code: 'VALIDATION',
     message: `commit ${sha} carries more than the change it declares: ${leaked.join('; ')}`,
+  });
+}
+
+/**
+ * Refuse an empty commit while the index holds staged changes (task-226, `dl-106`): `workflow finalize`'s
+ * phase record changes no file, so a staged change has no place in it. `commitEmpty`
+ * (`src/storage/commit.ts`) commits with `--only` and would leave it staged anyway; refusing first is the
+ * predictable answer `dl-106` asks for — the operator learns the record was not written beside their
+ * change, rather than finding the two interleaved. A read, so a dry run refuses too.
+ *
+ * @param subject - The subject of the commit about to be made, named in the refusal.
+ */
+export function requireCleanIndex(root: string, subject: string): CoreResult<undefined> {
+  const staged = stagedPaths(root);
+  if (staged.length === 0) return coreOk(undefined);
+  return coreErr({
+    code: 'VALIDATION',
+    message:
+      `refusing to commit '${subject}': the index holds staged changes (${staged.join(', ')}), and this commit records ` +
+      'no file change; commit or unstage them first, then retry.',
+    details: { staged },
   });
 }
