@@ -2,7 +2,7 @@
 id: "task-211-add-workflow-create-workflow-remove-req-sec"
 type: task
 title: "Add `workflow create` and `workflow remove`, with the REQ-SEC-07 referrer check"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "medium"
