@@ -77,6 +77,25 @@ Captured on 2026-10-10 by `bug-ingest-rel-v0.3-w3b4-review-findings-plan` (item 
 `main` at `02800955` in a scratch repository. Absorbed by `task-278-take-the-governance-state-rule-s-from-state-from-the-commit-s-parent`
 (v0.3, W3 B5), whose `bug:` list names it.
 
+Fixed by `task-278` (`be6411eb`, `04176e32`; 2026-10-11): `fromState` is read at `<sha>^1`, at the path that parent
+used. Two things the Summary above does not say:
+
+- **The same defect also hid a real move (a false negative).** A commit on `main` after the merge that moved the
+  merged `in-progress` back to `backlog` was derived as `backlog → backlog`, because the walk's previous entry was the
+  earlier amend, not the merge (`git log --follow` lists no merge). `test/cli/check-governance-parent-state.test.ts`
+  ("still reports a commit that does move in-progress → backlog against its parent") was red on it at `c9ba836b`.
+- **The trail entries the fix corrects in this repository.** Reconstructing all 900 Memory and plan documents
+  before and after the fix (the review of `task-278`) changes 13 entries in 8 documents: `bug-076` (`03c81c3b`,
+  `6437dbc4`), `bug-080` (`a67ff7c8`, `50e57a04`), `bug-090` (`a42e75a6`, `28e41379`), `bug-117` (`720d36b3`,
+  `417e223f`), `bug-156` (`901b3fb5`), `bug-157` and `bug-158` (`3e9a73b3`), `task-152` (`d818c0dd`, `bee82b90`).
+  Each was checked against `git show <sha>^1:<path>`, and every change is a correction: e.g. `417e223f` `reject
+  … [in-review → in-progress]` was derived `planned → in-progress` (its parent holds `status: in-review`), and
+  `901b3fb5` `sync … [planned → in-progress]` was derived `open → in-progress` (its parent holds `status: planned`).
+  The eleven entries of the seven bugs predate the governance check's introduction commit (`git merge-base
+  --is-ancestor <sha> fcd43569` → true for each), so none of them was gated. Of `task-152`'s two, which come after
+  it, `d818c0dd` is the false positive this bug reports, and `bee82b90` is a `docs(memory)` commit that is not a
+  `wf()` operation (no state-rule reading uses its derived transition) and that changes no status.
+
 ### Retrospective
 
 None.
