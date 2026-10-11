@@ -24,8 +24,9 @@
  * --detach`, hooks off through `git -c`, removed afterwards). Nothing writes git configuration, and nothing needs an
  * identity, since nothing is committed. The only file written is the report (the toolchain's own outputs stay in
  * the temporary directory). **Signals** (`bug-329`): SIGINT, SIGTERM and SIGHUP stop the running tool, remove the
- * worktree and its temporary directory, and re-raise; one that lands during the synchronous history half is handled
- * when that half returns, since Node runs no handler during synchronous code. A run killed by SIGKILL leaves its
+ * worktree and its temporary directory, and re-raise. One that lands during synchronous work (the history half, a
+ * `--no-toolchain` run, the pinned-Node refusal) reaches its handler once that work returns, since Node runs no
+ * handler during synchronous code; the run then ends by the signal, writing no report. A run killed by SIGKILL leaves its
  * worktree registered; remove it by hand with `git worktree remove --force /tmp/wf-release-health-<suffix>/tree`
  * (the path `git worktree list` shows).
  *
@@ -33,8 +34,13 @@
  * each metric's command, every tool with the running Node's directory first on `PATH`. It runs only under the
  * pipeline's pinned Node (`.github/workflows/publish.yml` `env.NODE_VERSION` at the point); with another, its seven
  * metrics are `not-measurable` naming both versions, unless `--any-node`, which measures and records `node` and
- * `node_pinned` in each entry's `raw`. A tool that cannot run, is killed, or leaves an output the reader cannot parse
- * makes its metric `not-measurable` with the reason, never a zero; a check that runs and fails is a measured failure.
+ * `node_pinned` in each entry's `raw`. To run under the pinned Node, start the script with it, e.g.
+ * `n exec 22.12.0 node scripts/release-health/measure.cjs --release <vX.Y[.Z]>` (that Node and its npm first on
+ * `PATH`) or `npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <vX.Y[.Z]>`; both download that
+ * Node when it is missing. A tool that cannot run, is killed, or leaves an output the reader cannot parse makes its
+ * metric `not-measurable` with the reason, never a zero; so does an exit that means the tool itself failed (a
+ * shell's 126/127, eslint's 2). A check that runs and fails is a measured failure. A failure's reason is npm's
+ * `npm error code …` line when there is one, never npm's pointer to its dated debug log.
  * - Q01 `npm run build`, `npm run typecheck`, `npm run lint`, all three run: `true` when each exits 0;
  * - Q02 `npm test -- --json --outputFile=…`: jest's counts; disabled = skipped + todo; failing = failed tests plus
  *   suites that failed to run, each named;
@@ -110,6 +116,7 @@ const { Buffer } = require('node:buffer');
 const { createHash } = require('node:crypto');
 const { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
+const { setImmediate } = require('node:timers');
 const { delimiter, dirname, isAbsolute, join, posix, relative } = require('node:path');
 const yaml = require('js-yaml');
 
@@ -264,8 +271,10 @@ function raiseSignal(signal) {
  * {@link withWorktree} for an asynchronous `fn`, guarded against signals (`bug-329`): `SIGINT`, `SIGTERM` and `SIGHUP`
  * stop the running tool (each tool registers a stopper in `guard.stoppers`), remove the worktree and its directory,
  * remove the handlers and re-raise the signal, as `scripts/publish-staging.cjs` (`installTeardownHandlers`) does.
- * Node runs a handler only between synchronous stretches, so a signal that lands during the synchronous history half
- * is handled when that stretch returns; SIGKILL is the one case left to the user (`git worktree remove --force`).
+ * Node runs a handler only in the event loop's poll phase, so a signal that lands while `fn` is synchronous waits
+ * until `fn` settles; the guard then yields one macrotask before removing its handlers, so the signal still tears
+ * down and re-raises, and the promise rejects (`interrupted by <signal>`) rather than returning a result. SIGKILL
+ * is the one case left to the user (`git worktree remove --force`).
  *
  * @param {string} root @param {string} commit
  * @param {(tree: string, dir: string, guard: { interrupted: string | null, stoppers: Set<() => Promise<void>> }) => Promise<unknown>} fn
@@ -288,26 +297,40 @@ async function withGuardedWorktree(root, commit, fn, interrupts = {}) {
     if (interrupting !== null) return;
     guard.interrupted = signal;
     interrupting = (async () => {
-      await Promise.allSettled([...guard.stoppers].map((stop) => stop()));
-      cleanup();
-      uninstall();
-      await die(signal);
+      try {
+        await Promise.allSettled([...guard.stoppers].map((stop) => stop()));
+        cleanup();
+      } finally {
+        // Even when the cleanup throws, the handlers go and the signal is re-raised (review F4).
+        uninstall();
+        await die(signal);
+      }
     })();
   }]);
   const uninstall = () => {
     for (const [signal, handler] of handlers.splice(0)) target.removeListener(signal, handler);
   };
   for (const [signal, handler] of handlers) target.on(signal, handler);
+  let outcome;
   try {
     addWorktree(root, tree, commit);
-    return await fn(tree, dir, guard);
-  } finally {
-    if (interrupting !== null) await interrupting;
-    else {
-      cleanup();
-      uninstall();
-    }
+    outcome = { value: await fn(tree, dir, guard) };
+  } catch (error) {
+    outcome = { error };
   }
+  // Node hands a signal to its handler only in the event loop's poll phase. A signal that landed while `fn` was
+  // synchronous (the history half, `--no-toolchain`, the pinned-Node refusal) is still pending here: one macrotask
+  // lets it reach the handler before the handlers go (review F1).
+  await new Promise((resolve) => setImmediate(resolve));
+  if (interrupting !== null) {
+    await interrupting;
+    // An interrupted run returns nothing: its reads may have failed with the children the signal killed.
+    throw new Interrupted(guard.interrupted);
+  }
+  cleanup();
+  uninstall();
+  if ('error' in outcome) throw outcome.error;
+  return outcome.value;
 }
 
 // --- the compiled readers ----------------------------------------------------------------------------
@@ -1107,6 +1130,18 @@ function toolEnv() {
 
 const lastLine = (text) => String(text).split('\n').map((line) => line.trim()).filter((line) => line !== '').pop() ?? '';
 
+/** npm's pointer to its debug log (a home path and a timestamp), and its bare `npm error` separator lines. */
+const NPM_NOISE_RE = /^npm (?:error|ERR!)(?:$| A complete log of this run can be found in)|\/_logs\//;
+
+/**
+ * The line of a tool's output that says why it failed, stable across runs (review F2): npm's `npm error code <CODE>`
+ * when there is one, else the last line that is not npm's log pointer or a bare `npm error`.
+ */
+function reasonLine(text) {
+  const lines = String(text).split('\n').map((line) => line.trim()).filter((line) => line !== '' && !NPM_NOISE_RE.test(line));
+  return lines.find((line) => /^npm (?:error|ERR!) code \S/.test(line)) ?? lines.pop() ?? '';
+}
+
 /** Why a command gave no reading, or `null` when it ran to an exit status. */
 function didNotRun(label, result) {
   if (result.error !== undefined) return `${label} could not run: ${result.error}`;
@@ -1115,11 +1150,23 @@ function didNotRun(label, result) {
   return null;
 }
 
+/**
+ * Exit statuses that mean the tool itself could not run rather than that the check failed (review F7): a shell's
+ * 126 (not executable) and 127 (not found) for every command, and eslint's 2 (configuration or internal error).
+ */
+const TOOL_ERROR_EXITS = Object.freeze({ '*': [126, 127], lint: [2] });
+
+/** Why an exit status is a tool error rather than a result, or `null`. */
+function toolError(label, result, name = '*') {
+  const codes = [...TOOL_ERROR_EXITS['*'], ...(TOOL_ERROR_EXITS[name] ?? [])];
+  return codes.includes(result.status) ? `${label} exited ${result.status}, which means the tool itself could not run` : null;
+}
+
 /** Why a command failed: did not run, or exited non-zero (with its last error line). */
 function failure(label, result) {
   const reason = didNotRun(label, result);
   if (reason !== null) return reason;
-  const line = lastLine(result.stderr) || lastLine(result.stdout);
+  const line = reasonLine(result.stderr) || reasonLine(result.stdout);
   return `${label} failed (exit ${result.status})${line === '' ? '' : `: ${line}`}`;
 }
 
@@ -1182,7 +1229,7 @@ function q01(scripts, results) {
   const missing = Q01_SCRIPTS.find((name) => !(name in scripts));
   if (missing !== undefined) return notMeasurable('Q01', `package.json at the measurement point has no \`${missing}\` script`);
   for (const name of Q01_SCRIPTS) {
-    const reason = didNotRun(`npm run ${name}`, results[name]);
+    const reason = didNotRun(`npm run ${name}`, results[name]) ?? toolError(`npm run ${name}`, results[name], name);
     if (reason !== null) return notMeasurable('Q01', reason);
   }
   const failing = Q01_SCRIPTS.filter((name) => results[name].status !== 0).map((name) => `npm run ${name} (exit ${results[name].status})`);
@@ -1196,7 +1243,7 @@ function q02(tree, result, resultsFile) {
   const json = readJson(resultsFile);
   const counts = ['numTotalTests', 'numPassedTests', 'numFailedTests', 'numPendingTests', 'numTodoTests', 'numRuntimeErrorTestSuites'];
   if (json === null || !counts.every((key) => isCount(json[key])) || !Array.isArray(json.testResults)) {
-    const line = lastLine(result.stderr);
+    const line = reasonLine(result.stderr);
     return notMeasurable('Q02', `npm test wrote no readable JSON results (exit ${result.status})${line === '' ? '' : `: ${line}`}`);
   }
   const failing = [];
@@ -1263,7 +1310,7 @@ async function q11(tree, run, env, built) {
   for (const name of names) {
     const script = `docs/examples/${name}/run.sh`;
     const result = await run({ step: `examples/${name}`, command: 'bash', args: [join(dir, name, 'run.sh')], cwd: tree, env: { ...env, WINGFOIL: `node ${join(tree, 'dist', 'cli.js')}` } });
-    const reason = didNotRun(script, result);
+    const reason = didNotRun(script, result) ?? toolError(script, result);
     if (reason !== null) unrunnable ??= reason;
     else if (result.status !== 0) failing.push(`${script} (exit ${result.status})`);
   }
@@ -1443,7 +1490,8 @@ function previousRun(root, healthDir, release, previous) {
 function toolchain(root, point) {
   const lock = readBlobBytes(root, point, 'package-lock.json');
   if (lock === null) throw new UsageError(`no package-lock.json at the measurement point ${point}`);
-  const npm = spawnSync('npm', ['--version'], { encoding: 'utf-8' });
+  // The npm the tools run: the one beside this Node first on PATH (review F3).
+  const npm = spawnSync('npm', ['--version'], { encoding: 'utf-8', env: toolEnv() });
   return {
     node: process.version,
     npm: npm.status === 0 ? String(npm.stdout).trim() : 'unknown',
@@ -1571,7 +1619,7 @@ async function main(argv) {
   }
 }
 
-module.exports = { measureRelease, measureToolchain, parseLatencyReport, processConformance, resolveMeasurementPoint, formatReportJson, parseHttp, httpDay, main };
+module.exports = { measureRelease, measureToolchain, withGuardedWorktree, parseLatencyReport, processConformance, resolveMeasurementPoint, formatReportJson, parseHttp, httpDay, main };
 
 if (require.main === module) {
   void main(process.argv.slice(2)).then((code) => {
