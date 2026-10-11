@@ -136,7 +136,8 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       // task-219: release-commit and staging-rehearsal precede tag; the rehearsal's check is bound.
       ["release-publishing", "phases[2].checks.pre[0]", "on-branch-is-main"],
       ["release-publishing", "phases[2].checks.pre[1]", "release-branch-merged-to-main"],
-      ["release-publishing", "phases[3].checks.post[0]", "staged version approved on npm and live on the npm registry"],
+      // task-229 (dl-130 Action 2): the prose post check also names the GitHub Release.
+      ["release-publishing", "phases[3].checks.post[0]", "staged version approved on npm, live on the npm registry, and its GitHub Release created"],
       // task-222 (dl-089 §1): the report checks, unbound until scripts/release-health/ ships them (task-231, task-241).
       ["release-health", "phases[0].checks.post[0]", "every catalogue metric has a value or an explicit not-measurable reason"],
       ["release-health", "phases[1].checks.post[0]", "every regressed metric and every breached floor has a finding"],

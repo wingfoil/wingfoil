@@ -47,6 +47,8 @@ interface WorkflowStep {
 interface WorkflowJob {
   readonly needs?: string | readonly string[];
   readonly if?: string;
+  readonly 'timeout-minutes'?: number;
+  readonly environment?: string;
   readonly permissions?: Readonly<Record<string, string>>;
   readonly env?: Readonly<Record<string, string>>;
   readonly steps: readonly WorkflowStep[];
@@ -127,12 +129,13 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
     expect(parsed.on.push).toEqual({ tags: ['v[0-9]+.[0-9]+.[0-9]+'] });
   });
 
-  it('runs gate → stage → promote as a strict `needs` chain', () => {
+  it('runs gate → stage → promote → release as a strict `needs` chain (task-229 adds release)', () => {
     const { parsed } = readWorkflow();
-    expect(Object.keys(parsed.jobs)).toEqual(['gate', 'stage', 'promote']);
+    expect(Object.keys(parsed.jobs)).toEqual(['gate', 'stage', 'promote', 'release']);
     expect(parsed.jobs.gate?.needs).toBeUndefined();
     expect(parsed.jobs.stage?.needs).toBe('gate');
     expect(parsed.jobs.promote?.needs).toBe('stage');
+    expect(parsed.jobs.release?.needs).toBe('promote');
   });
 
   it('gate asserts tag-on-main + tag↔version, then prepublishOnly, the dry-run manifest, and packs once', () => {
@@ -180,10 +183,11 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
     expect(runs(promote)).not.toContain('npm publish');
   });
 
-  it('grants `id-token: write` (OIDC provenance) to promote only; the workflow default is read-only', () => {
+  it('grants `id-token: write` (OIDC provenance) to promote only and `contents: write` to release only; the workflow default is read-only', () => {
     const { parsed } = readWorkflow();
     expect(parsed.permissions).toEqual({ contents: 'read' });
     expect(parsed.jobs.promote?.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
+    expect(parsed.jobs.release?.permissions).toEqual({ contents: 'write' });
     expect(parsed.jobs.gate?.permissions).toBeUndefined();
     expect(parsed.jobs.stage?.permissions).toBeUndefined();
   });
@@ -249,6 +253,93 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
     const { raw } = readWorkflow();
     expect(raw).toContain('act push');
     expect(raw).toContain('--artifact-server-path');
+  });
+});
+
+/**
+ * task-229 (`dl-130` step 1, Q1 (a); spec-015 §3) — a GitHub Release for every version npm serves. Since
+ * `adr-011`, `promote` only STAGES the version, so `release` waits until `npm view wingfoil@<version> version`
+ * answers that exact version: a bounded poll (planning ruling R20, Q3), capped below the hosted runner's 6-hour
+ * job limit. The notes are the version's CHANGELOG.md section, extracted before the wait so a missing section
+ * fails at once. `latest` is never hard-coded (dl-159 handover: `task-266` sets it from one job-level value).
+ */
+describe('release job (task-229) — the GitHub Release follows npm', () => {
+  const release = (): WorkflowJob | undefined => readWorkflow().parsed.jobs.release;
+  const step = (needle: string): WorkflowStep | undefined => release()?.steps.find((s) => s.run?.includes(needle));
+
+  it('extracts the notes, then waits for the exact version on npm, then creates the Release — in that order', () => {
+    const script = runs(release());
+    const order = [
+      'node scripts/changelog-section.cjs "${GITHUB_REF_NAME#v}"',
+      'node scripts/wait-npm-version.cjs "$GITHUB_REF_NAME"',
+      'gh release create "$GITHUB_REF_NAME"',
+    ].map((cmd) => script.indexOf(cmd));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('bounds the poll with declared values, and the script gives up before GitHub kills the job (≤ 6 h hosted limit)', () => {
+    const wait = step('node scripts/wait-npm-version.cjs');
+    const match = /--timeout-minutes (\d+) --interval-seconds (\d+)/.exec(wait?.run ?? '');
+    expect(match).not.toBeNull();
+    const timeout = Number(match?.[1]);
+    const interval = Number(match?.[2]);
+    expect(timeout).toBeGreaterThan(0);
+    expect(interval).toBeGreaterThan(0);
+    const jobTimeout = release()?.['timeout-minutes'] ?? 0;
+    expect(Number.isInteger(jobTimeout)).toBe(true);
+    expect(jobTimeout).toBeGreaterThan(timeout);
+    expect(jobTimeout).toBeLessThanOrEqual(360);
+  });
+
+  it('writes the notes to a file the create step reads, and creates only for an existing tag', () => {
+    const notes = step('node scripts/changelog-section.cjs');
+    expect(notes?.run).toContain('> "$RUNNER_TEMP/release-notes.md"');
+    const create = step('gh release create');
+    expect(create?.run).toContain('--verify-tag');
+    expect(create?.run).toContain('--notes-file "$RUNNER_TEMP/release-notes.md"');
+  });
+
+  it('never hard-codes `latest`: one job-level value, empty by default, feeds an optional `--latest=`', () => {
+    expect(release()?.env).toEqual({ RELEASE_MAKE_LATEST: '' });
+    const create = step('gh release create');
+    expect(create?.run).toContain('${RELEASE_MAKE_LATEST:+--latest="$RELEASE_MAKE_LATEST"}');
+    expect(create?.run).not.toMatch(/--latest(?!=")/);
+    for (const s of release()?.steps ?? []) expect(s.run ?? '').not.toMatch(/@latest\b/);
+  });
+
+  it('authenticates gh with the job token on the create step alone; no other secret, no environment', () => {
+    const job = release();
+    const create = job?.steps.find((s) => s.run?.includes('gh release create'));
+    expect(create?.env).toEqual({ GH_TOKEN: '${{ github.token }}' });
+    expect(job?.environment).toBeUndefined();
+    // One parse: `release()` re-reads the file, so identity holds only within `job`.
+    const others = (job?.steps ?? []).filter((s) => s !== create);
+    for (const s of others) expect(s.env).toBeUndefined();
+    expect(JSON.stringify(release())).not.toContain('secrets.');
+  });
+
+  it('skips the poll and the create under act, which stages nothing (like promote)', () => {
+    expect(step('node scripts/wait-npm-version.cjs')?.if).toBe('${{ !env.ACT }}');
+    expect(step('gh release create')?.if).toBe('${{ !env.ACT }}');
+    expect(step('node scripts/changelog-section.cjs')?.if).toBeUndefined();
+  });
+
+  it('checks out the tagged tree without persisting the token and runs on the gate’s Node floor', () => {
+    const job = release();
+    const checkout = job?.steps.find((s) => s.uses?.startsWith('actions/checkout@'));
+    expect(checkout?.with?.['persist-credentials']).toBe(false);
+    const setup = job?.steps.find((s) => s.uses?.startsWith('actions/setup-node@'));
+    expect(setup?.with?.['node-version']).toBe('${{ env.NODE_VERSION }}');
+  });
+
+  it('documents the release job and its recovery (re-run the failed job) in the header runbook', () => {
+    const { raw } = readWorkflow();
+    const header = raw.slice(0, raw.indexOf('\nname: publish'));
+    expect(header).toMatch(/release\s+→/);
+    expect(header).toContain('npm view wingfoil@<version> version');
+    expect(header).toMatch(/Re-run failed jobs/);
+    expect(header).toContain('task-229');
   });
 });
 

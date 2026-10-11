@@ -171,6 +171,17 @@ Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a de
    `env.NODE_VERSION`, the `adr-010` floor. Whether `--access public` is passed as a flag or only through
    `publishConfig` is settled by the implementing task (`adr-011`, *Consequences*). Triggered on a
    `vX.Y.Z` tag on `main`.
+5. **release** — after promote, a GitHub Release for the version (`dl-130` step 1, Q1 (a)). The job's
+   ephemeral `GITHUB_TOKEN` holds `contents: write`, and no other job's does; it extracts the notes first —
+   the version's `## [X.Y.Z]` section of `CHANGELOG.md` (`scripts/changelog-section.cjs`; a missing,
+   duplicated or empty section fails) — then polls `npm view wingfoil@<version> version` until npm answers exactly that version
+   (`scripts/wait-npm-version.cjs`; npm that cannot be run, or answers E401/E403, fails at once, and each
+   call is bounded), and only then runs `gh release create` on the existing tag. Since
+   stage 4 only stages the version, "promote succeeded" no longer means "npm has it": the poll is what
+   makes a Release follow the publish, so an unapproved or rejected stage never gets one. The poll is
+   bounded by declared values below the GitHub-hosted runner's 6-hour job limit; when the approval comes
+   later, the approver re-runs the failed job. Whether the Release is marked latest is one job-level value,
+   left at `gh`'s default.
 
 Every third-party action the workflow uses is pinned by commit SHA to a release whose `runs.using`
 is a Node runtime the GitHub-hosted runners still ship, so no job runs an action on a runtime it was
@@ -671,4 +682,15 @@ and `--check-transcript <path>` is the phase's check, whose printed commit is th
 commit does not re-cut the candidate, whose first e2e-smoke run is the rehearsal's own smoke; a re-cut
 candidate re-enters the checks. The pipeline's stages, the scripts' other options and the publish workflow
 are unchanged. The pins are `test/cli/staging-rehearsal.test.ts` and `test/cli/publish-staging.test.ts`.
+Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions above.
+
+**Revision (2026-10-10, `task-229-create-github-release-once-npm-has-version-sweep`) — §3: stage 5, the GitHub
+Release (`dl-130` step 1, Q1 (a)).** `dl-130` ratified a `publish.yml` job after `promote` that creates the
+version's GitHub Release with its `CHANGELOG.md` section as notes, on the premise that after `promote` npm has
+the version. Since the 2026-09-29 revision `promote` only stages it (`adr-011`), so the job waits until npm
+serves the exact version, with a bounded poll (planning ruling R20, Q3) rather than a second environment
+approval. §3 gains stage 5 accordingly. The poll's bound is 330 minutes inside a 345-minute job, not the 24 h
+the ruling gave as an example: a GitHub-hosted job runs for at most 6 hours; the recovery for a later approval
+is re-running the failed job, written in `publish.yml`'s header runbook. The pins are
+`test/cli/publish-pipeline.test.ts`, `test/cli/changelog-section.test.ts` and `test/cli/wait-npm-version.test.ts`.
 Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions above.

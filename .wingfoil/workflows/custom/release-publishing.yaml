@@ -7,7 +7,7 @@ description: >-
   local staging registry, tag the candidate, publish it to the npm registry, and mark the release
   element as released. A candidate that has not passed both the e2e-smoke gate and the staging
   rehearsal is not tagged (dl-099 §1).
-version: 1.4                     # 1.2 spec-003 alignment (task-199): the two agent.execute steps are one (the instructions are the description, dl-090 Q6 (b)), git and approver tokens take key: value arguments (spec-003 open question 6); 1.3 task-214: the tag phase names the release bump commit's files, SECURITY.md among them (its supported row follows package.json's minor, dl-127); 1.4 dl-099 §1–§2 (task-219): the release commit is its own phase, `release-commit`, so the `staging-rehearsal` phase (qa) runs on the candidate it cuts, and `tag` tags the candidate the rehearsal's transcript names
+version: 1.5                     # 1.2 spec-003 alignment (task-199): the two agent.execute steps are one (the instructions are the description, dl-090 Q6 (b)), git and approver tokens take key: value arguments (spec-003 open question 6); 1.3 task-214: the tag phase names the release bump commit's files, SECURITY.md among them (its supported row follows package.json's minor, dl-127); 1.4 dl-099 §1–§2 (task-219): the release commit is its own phase, `release-commit`, so the `staging-rehearsal` phase (qa) runs on the candidate it cuts, and `tag` tags the candidate the rehearsal's transcript names; 1.5 dl-130 steps 1 and 4 (task-229): `publish` declares the service verify sweep as a `checks.pre` (warn), and its description names publish.yml's `release` job, which creates the GitHub Release once npm serves the version
 element: release
 
 phases:
@@ -68,15 +68,20 @@ phases:
       publisher — no token (adr-011, spec-015 §3 stage 4). A staged version is not live: after the
       pipeline run, the approver inspects it (`npm stage view <stage-id>`) and approves it on npm
       with 2FA (`npm stage approve <stage-id>`, or Approve on npmjs.com), or discards it with
-      `npm stage reject` (dl-087 Action 3). The runbook in publish.yml's header lists the one-time
-      registry-side setup this step presupposes.
+      `npm stage reject` (dl-087 Action 3). Once npm serves that exact version, publish.yml's `release`
+      job creates the GitHub Release with the version's CHANGELOG.md section as its notes; it polls npm for
+      a bounded time, and if the approval comes later the approver re-runs that failed job (dl-130 step 1).
+      Before the tag is pushed, the service verify sweep lists every pending and active `service` element's
+      `verify` command; the approver runs each and records its result with the date in this phase's plan
+      (dl-130 step 4, Q3 (a): it reports and blocks nothing). The runbook in publish.yml's header lists the
+      one-time registry-side setup this step presupposes.
     role: tech-lead
     actions:
-      - agent.execute        # push the tag (publish.yml runs gate → stage → promote, `npm stage publish`), then report the stage id promote printed; nothing is live yet
+      - agent.execute        # push the tag (publish.yml runs gate → stage → promote, `npm stage publish`, → release, the GitHub Release once the version is live), then report the stage id promote printed; nothing is live yet
       - 'approver.execute(command: "npm stage approve <stage-id>")'   # 2FA on npm — the version goes live (adr-011 point 3)
     checks:
-      pre: ["tests.passing"]
-      post: ["staged version approved on npm and live on the npm registry"]
+      pre: ["tests.passing", "services.verify-sweep"]   # dl-130 Q3 (a): the sweep is bound at severity warn
+      post: ["staged version approved on npm, live on the npm registry, and its GitHub Release created"]   # dl-130 Action 2: the Release is checked in the same prose check (task-229), so the unbound-check count does not move
     approval: { by_role: approver }   # the npm-publish environment deployment AND the npm stage approval (adr-011 point 3, dl-087 Q2 (iii))
 
   - name: mark-released
