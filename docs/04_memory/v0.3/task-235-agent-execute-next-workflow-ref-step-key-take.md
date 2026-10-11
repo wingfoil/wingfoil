@@ -135,7 +135,7 @@ This task wires `spec-017`'s deduction into step 1 of the resolution: - `--workf
   the plan at the first commit. With the two calls reverted to `'HEAD'`:
   `npx jest test/core/agent-execute-step.test.ts -t "review F3"` → 2 failed (the duplicate-adapter refusal);
   with the fix → 2 passed. The spec-016 / spec-008 amendment wording ("the one `HEAD`") is now true.
-- **F5** — two "unchanged" claims reworded with their commands (`node scripts/lint-claims.cjs --base
+- **F5** — the two state claims the claim lint flagged (Design, decision 4) now name their commands (`node scripts/lint-claims.cjs --base
   30b268a3`).
 - A third case pins `duplicateAdapterRefusal` at `HEAD`, at a sha with the `HEAD` label, and with no commit:
   no production caller passes `'HEAD'` any longer, and the first coverage run after F3 showed
