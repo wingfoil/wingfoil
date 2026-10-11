@@ -238,7 +238,7 @@ export async function workflowStart(params: WorkflowStartParams, verbs: StartVer
 
   const plan = planTokens(root, usage.name, planType.id_pattern ?? '{workflow}-{phase}-plan', planType.path, usage.set, base, usage.title);
   if (!plan.ok) return plan;
-  const { id, title, tokens } = plan.value;
+  const { title, tokens } = plan.value;
 
   const added = await verbs.add({
     root,
