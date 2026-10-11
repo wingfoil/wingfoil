@@ -1459,13 +1459,15 @@ workflow. It decides at `HEAD`, and refuses, in this order:
   'release-cycle'` — the error lists every such workflow on its own line under it;
 - a workflow with an open instance: `error: cannot remove 'arch-review': open instance <id>` — end it
   (`workflow end`) or abandon it (`memory deprecate <id>`) first; every open instance is listed under the error;
-- a removal after which the workflows would not load, such as removing the last startable workflow.
+- a removal after which the workflows would not load, such as removing the last startable workflow or the
+  last entry of `workflows.yaml`: `error: cannot remove '<name>': the workflows would not load: …`.
 
 Otherwise it deletes the file and its `include:` entry, keeping the rest of `workflows.yaml` as it is.
 `--format json|yaml` prints `{"baseline": {…}, "name", "file", "commit"}`.
 
-- **Errors (exit `1`):** the four refusals above; `unknown workflow: <name>`; an uncommitted change to the
-  workflow file or to `workflows.yaml`.
+- **Errors (exit `1`):** the four refusals above; `unknown workflow: <name>`; `workflows.yaml cannot be
+  edited in place: …` (an `include:` written inline as `[ … ]`: write it as one `- <file>` per line); an
+  uncommitted change to the workflow file or to `workflows.yaml`.
 - **Errors (exit `2`):** no `<ref>`, or more than one positional.
 - **Commit:** `wf(workflow): remove <name>`, holding the deletion and `workflows.yaml`.
 
