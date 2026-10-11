@@ -473,7 +473,7 @@ phases:
   it('a repository with no commit has an empty answer', () => {
     const repo = makeTempGitRepo();
     try {
-      expect(deduceWorkflowStateAtHead(repo)).toEqual({ baseline: { rev: 'HEAD', commit: '' }, active: null, instances: [], diagnostics: [] });
+      expect(deduceWorkflowStateAtHead(repo)).toEqual({ baseline: { rev: 'HEAD', commit: '' }, active: null, instances: [], diagnostics: [], gated: [] });
       expect(resolveInstanceRef(deduceWorkflowStateAtHead(repo))).toBeNull();
     } finally {
       removeTempDir(repo);
