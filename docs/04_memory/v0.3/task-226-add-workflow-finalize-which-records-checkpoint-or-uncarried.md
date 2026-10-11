@@ -107,7 +107,9 @@ WingFoil-Instance: p" -m "WingFoil-Version: 0.3.0 (abc)"`, then `git log -1
    paragraph `WingFoil-Phase: …`, `WingFoil-Instance: …`, `WingFoil-Element|Item: …` (none for an unscoped
    step) and `WingFoil-Version: …` last. Implemented once as `CommitOptions.trailers` in the commit
    primitive (also what `task-227`'s `WingFoil-Instance` / `WingFoil-Step` on `memory add` needs).
-   `spec-008` §2's build-signature bullet and `spec-003`'s record paragraph are amended (pending).
+   `spec-008` §2's build-signature bullet and `spec-017` §7.9 are amended (pending). `spec-003` needs no
+   amendment: its § "Evidence" already puts the record in "the trailer block" (`spec-003` line 239), which is
+   the final paragraph (review F3, 2026-10-11).
 4. **Refusal order:** an unrecordable `--reason` (exit 2, `optionalReason`, before any read) → git identity
    (REQ-SEC-01) → instance → step on the frontier → evidence → `--reason` missing on an `approval:` phase
    (exit 2, `missing required argument: --reason`; known only once the phase is) → authority → clean index
@@ -138,7 +140,7 @@ Run: `npx jest test/core/workflow-finalize.test.ts test/storage/commit-empty.tes
 test/core/workflow-next-review-fixes.test.ts test/cli/workflow-finalize.integration.test.ts
 test/cli/dry-run.integration.test.ts` → **32 failed, 30 passed** (62): every new case fails on the missing
 operation or the missing `commitEmpty` export; AC 4's characterization fails only because it needs a
-finalize commit to look for (it passes unchanged at green); the dry-run table's other 15 rows pass.
+finalize commit to look for (the same test passes at green, `35144856`, with no edit to it); the dry-run table's other 15 rows pass.
 
 ### green (developer)
 
@@ -175,8 +177,9 @@ Gates (with the pending spec amendments in the working tree):
   before `b5e6cd05` covered the renderer and the `plan` fallback; `src/storage/commit.ts` 98.96 / 97.54 / 100
   / 99.6 (line 204, the refused empty commit, covered by `b5e6cd05`).
 - `npm run lint` exit 0; `npm run docs:api` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
-  `npx tsc -p tsconfig.build.json --noEmit` exit 0; `npm run -s lint:claims` 0 warnings;
-  `node scripts/check-governance.cjs --base 30b268a3` → 1 `wf()` commit checked, 0 findings.
+  `npx tsc -p tsconfig.build.json --noEmit` exit 0; `node scripts/lint-claims.cjs --base 30b268a3` → 2 warn-only `state-claim` hits in this file, reworded at review
+  (F4; without `--base` the script reads no file, so the earlier "0 warnings" said nothing);
+  `node scripts/check-governance.cjs --base 30b268a3` → 2 `wf()` commits checked (start, submit), 0 findings.
 - Earlier full-suite runs (`npmtest1/2.log`) were killed by session restarts; their partial output showed the
   four roster/parity failures fixed in `575e96b9` and REQ-PERF latency failures under load 30+ (not re-run
   alone: the coverage run above passed them at load ≈ 8).
@@ -189,7 +192,7 @@ Gates (with the pending spec amendments in the working tree):
 | 2 | met | AC 2 cases: not on the frontier, completes from its evidence (`state`), unknown `<ref>`, no instance, empty frontier; REQ-SEC-01 with an isolated empty git config; CLI exit 1 in `workflow-finalize.integration.test.ts` |
 | 3 | met | non-approver → `user not authorized to approve type 'task'`; missing / blank / `Approver:`-leading reason → `UsageError` (CLI exit 2); `Approver: Morgan …` + `Reason:` with `%an <%ae>` = the `GIT_AUTHOR_*` identity, not `user.*` (`bug-149`) |
 | 4 | met (characterization) | `memory history` of the task and of the plan does not list the finalize sha |
-| 5 | met | `commit-empty.test.ts`: `--allow-empty`, `commit.cleanup=strip` keeps `#`, staged file untouched; finalize on a dirty index → `VALIDATION`, persistence unchanged; dry-run row with `paths: []` |
+| 5 | met | `commit-empty.test.ts`: `--allow-empty`, `commit.cleanup=strip` keeps `#`, staged file untouched; finalize on a dirty index → `VALIDATION`, `assertPersistenceUnchanged` holds; dry-run row with `paths: []` |
 
 Same-class fixes in touched files: `workflow next`'s third-party line and `docs/cli-reference.md`'s "not
 available yet" (both replaced); the module description. Not done here (other tasks own them): see
@@ -200,12 +203,22 @@ an allowlist only loses entries): `spec-004` §4.1 must list `workflow.finalize`
 the production server registers no Tool before v0.4, so the finding is the documented `TOOLS_V04` class.
 The alternative — leaving `workflow.finalize` out of §4.1 — breaks §4.2.
 
+### review fixes (2026-10-11, independent review: approve with fixes)
+
+- F1: `spec-008` §2's build-signature bullet now opens "ends with a trailer paragraph whose last line is
+  `WingFoil-Version: …`" (it still said "a paragraph of its own holding one trailer line"); its Revision note and
+  the proposed `--reason` below say so.
+- F2: `stampedMessage`'s doc comment (`src/storage/commit.ts`) describes the final trailer paragraph and the
+  `trailers` parameter (task-227's wording, naming both tasks). Comment only.
+- F3: design decision 3 no longer claims a `spec-003` amendment.
+- F4: the claim lint run with `--base`, its two hits reworded; the governance count corrected to 2.
+
 ### Pending amendments (approver)
 
 Left uncommitted in the worktree; the coordinator runs `memory amend` at the review gate.
 - `spec-004-mcp-surface-contract` — `--reason "task-226 ships workflow finalize, registered mutates: true, so section 4.1 gains the workflow.finalize Tool row that section 4.2's parity rule requires; the Tool is served from v0.4 with the others (P5.2.3). No URI, Resource or other Tool changes."`
 - `spec-006-core-domain-api` — `--reason "task-226 registers workflowFinalize in CORE_MODULES, so section 3's row loses its planned marker. Its MCP Tool stays v0.4; no other row changes."`
-- `spec-008-cli-grammar` — `--reason "task-226 ships workflow finalize: section 2's --dry-run list gains it with its empty plan, the build-signature bullet says a commit's own trailers share the final paragraph with WingFoil-Version because git reads trailers from that paragraph only, and sections 11 and 12 gain the command and its --step option. No exit code changes."`
+- `spec-008-cli-grammar` — `--reason "task-226 ships workflow finalize: section 2's --dry-run list gains it with its empty plan, the build-signature bullet says every commit ends with a trailer paragraph whose last line is WingFoil-Version and that a commit's own trailers open that paragraph, because git reads trailers from the final paragraph only, and sections 11 and 12 gain the command and its --step option. No exit code changes."`
 - `spec-017-workflow-commands-and-state-deduction` — `--reason "task-226 implements section 7.9 and records what it left open: the record's trailers go in the final paragraph with WingFoil-Version last, the empty commit uses git commit --only --allow-empty and is refused on a dirty index, and the no-instance, empty-frontier and authority-type answers. No rule of sections 4 or 5 changes."`
 
 ### Retrospective
