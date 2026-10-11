@@ -22,3 +22,10 @@ Feature: P4.9 (US-6-11) - wingfoil workflow remove
     When I run "wingfoil workflow remove release-cycle"
     Then the workflow is not removed
     And the command exits with code 1 and message "built-in workflows cannot be removed"
+
+  Scenario: Error - removing a workflow with an open instance
+    Given "arch-review" is not included by any other workflow
+    And an instance "arch-review-1-plan" of "arch-review" is open
+    When I run "wingfoil workflow remove arch-review"
+    Then the workflow is not removed
+    And the command exits with code 1 and message "cannot remove 'arch-review': open instance arch-review-1-plan"
