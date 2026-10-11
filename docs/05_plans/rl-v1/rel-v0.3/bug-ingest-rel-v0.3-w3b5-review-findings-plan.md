@@ -132,6 +132,13 @@ scan of the Memory and plan folders of every local and remote-tracking ref gave 
   every other commit carries both (a loop over `git rev-list 29b8406a..HEAD`, 0 exceptions; the check's
   `approval-ai-trailer` rule agrees). The branch is neither pushed nor merged.
 
+- **Finalized by hand.** `node dist/cli.js workflow end bug-ingest-rel-v0.3-w3b5-review-findings-plan --dry-run` →
+  `error: workflow 'bug-ingest' is not complete: current step bug-ingest.capture`: the plan reads as one `bug-ingest`
+  instance, whose capture step knows none of the seventeen bugs because their `add` commits carry no
+  `--workflow` linkage, and one instance captures one bug. As the W3 B4 plan did, this plan is moved `active → done`
+  with a hand `wf(plan): finalize … [active → done]` commit that changes only `status:` (`wingfoil-cli` §2). Whether a
+  batch ingest plan should be an instance at all (`parent` empty) is the `bug-324` class.
+
 ### Retrospective
 
 - One item of the follow-up log (22) was a test fixture's intentional noise, read as a product defect; it was caught
