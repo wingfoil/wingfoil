@@ -22,7 +22,13 @@
  * **Read-only** (`dl-089` §6): every read is `git log`, `git show <rev>:<path>`, `git ls-tree` or
  * `git for-each-ref` at the point; the commit-dependent checks run in a throw-away worktree (`git worktree add
  * --detach`, hooks off through `git -c`, removed afterwards). Nothing writes git configuration, and nothing needs an
- * identity, since nothing is committed. The only file written is the report.
+ * identity, since nothing is committed. The only file written is the report. A run killed by a signal (SIGINT,
+ * SIGTERM, SIGKILL) leaves its worktree registered; remove it by hand with
+ * `git worktree remove --force /tmp/wf-release-health-<suffix>/tree` (the path `git worktree list` shows).
+ *
+ * **G15 is not reproducible at a fixed point.** Unlike every other metric, it reads the live `refs/heads` and
+ * `refs/remotes` of the clone that runs it, at run time, so a later run at the same point can answer differently;
+ * its entry says so in `raw.refs_from`.
  *
  * **Reuse.** The commit-grammar readers come from `dist/memory` (`parseMemoryOperation`, `parseApproverTrailerLine`,
  * `parseReasonBlock`, `parseVersionTrailer`, `isValidAttribution`), the spec-007 scanner from `dist/validation`
@@ -195,9 +201,10 @@ function withWorktree(root, commit, fn) {
     git(root, ['-c', 'core.hooksPath=/dev/null', 'worktree', 'add', '--quiet', '--detach', tree, commit]);
     return fn(tree);
   } finally {
-    gitOr(root, ['worktree', 'remove', '--force', tree]);
+    const removed = gitOr(root, ['worktree', 'remove', '--force', tree]) !== null;
     rmSync(dir, { recursive: true, force: true });
-    gitOr(root, ['worktree', 'prune']);
+    // `prune` acts on every worktree of the repository: run it only when this one could not be removed.
+    if (!removed) gitOr(root, ['worktree', 'prune']);
   }
 }
 
@@ -592,7 +599,7 @@ function measureBranches(ctx) {
     .sort();
   return entry('G15', {
     value: { stale_branches: stale.length, duplicate_ids: duplicates.length },
-    raw: { refs_read: refs.length, stale_branches: stale.length, duplicate_ids: duplicates.length },
+    raw: { refs_read: refs.length, refs_from: 'live refs at run time', stale_branches: stale.length, duplicate_ids: duplicates.length },
     failing: [...stale, ...duplicates],
   });
 }

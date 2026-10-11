@@ -18,6 +18,8 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import Ajv2020 from 'ajv/dist/2020';
+
 import { formatReportJson, httpDay, main, measureRelease, parseHttp, processConformance, resolveMeasurementPoint } from '../../scripts/release-health/measure.cjs';
 import type { ExternalReader, MetricEntry, Report } from '../../scripts/release-health/measure.cjs';
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -298,6 +300,14 @@ function entry(report: Report, id: string): MetricEntry {
 
 const OFFLINE = { offline: true } as const;
 
+/** The report schema's errors for `report` (ajv, draft 2020-12), as `<path> <message>` lines; empty when valid. */
+function schemaErrors(report: Report): string[] {
+  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  const validate = ajv.compile(JSON.parse(readFileSync(join(REPO_ROOT, 'docs', '08_health', 'release-health.schema.json'), 'utf-8')) as object);
+  validate(JSON.parse(formatReportJson(report)));
+  return (validate.errors ?? []).map((e) => `${e.instancePath} ${e.message ?? ''}`);
+}
+
 describe('measureRelease — the history metrics on a fixture with known answers (AC 1, AC 5)', () => {
   const h = historyFixture();
   const report = measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, ...OFFLINE });
@@ -397,6 +407,8 @@ describe('measureRelease — the history metrics on a fixture with known answers
       value: { stale_branches: 1, duplicate_ids: 1 },
       failing: ['refs/remotes/origin/old', 'task-001: task-001-alpha, task-001-other'],
     });
+    // Not reproducible at a fixed point: the refs are the running clone's, read at run time.
+    expect(entry(report, 'G15').raw).toMatchObject({ refs_from: 'live refs at run time' });
   });
 
   it('G16 — wf() commits signed with the WingFoil-Version trailer (AC 5, dl-111)', () => {
@@ -425,6 +437,10 @@ describe('measureRelease — the history metrics on a fixture with known answers
     for (const id of ['G01', 'G02', 'G05', 'G06', 'G09', 'G10', 'G12', 'G16']) {
       expect(Object.keys(entry(report, id).raw ?? {}).length).toBeGreaterThanOrEqual(2);
     }
+  });
+
+  it('validates against docs/08_health/release-health.schema.json', () => {
+    expect(schemaErrors(report)).toEqual([]);
   });
 
   it('is byte-identical on a second run at the same point (REQ-SYS-07)', () => {
@@ -522,6 +538,10 @@ describe('the external snapshot E01–E05 (AC 3, dl-130 Q2 (a))', () => {
     expect(entry(report, 'E03')).toMatchObject({ value: 4 });
     expect(entry(report, 'E05')).toMatchObject({ value: { last_week: 40, last_month: 150 }, evidence: { read_on: '2026-10-09' } });
     expect(entry(report, 'E05').evidence?.command).toContain('https://api.npmjs.org/downloads/point/last-week/wingfoil');
+  });
+
+  it('an online report validates against the report schema too (evidence.read_on)', () => {
+    expect(schemaErrors(online)).toEqual([]);
   });
 
   it('a read that fails is not-measurable with what failed, never a zero', () => {
