@@ -15,10 +15,11 @@ import type { DnaYaml } from '../../src/dna/schema';
 import type { Instance } from '../../src/workflow/deduce';
 import { withWarningSink } from '../../src/validation/warning';
 import { TASK_ID } from '../agent/helpers/agent-execute-fixture';
-import { GHOSTLY, GHOSTLY_FILE, RELEASE_ID, seedStep, SIBLING_ID, startInstance, STEP_WORKFLOWS } from '../agent/helpers/agent-execute-step-fixture';
+import { GHOSTLY, GHOSTLY_FILE, headOf, RELEASE_ID, seedStep, SIBLING_ID, startInstance, STEP_WORKFLOWS } from '../agent/helpers/agent-execute-step-fixture';
 import { CLI_ENTRY } from '../cli/helpers/spawn-cli';
 import * as revision from '../../src/core/revision';
 import * as stepModule from '../../src/agent/step';
+import { duplicateAdapterRefusal } from '../../src/agent/discovery';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const HOST: AgentExecuteHost = { mcpServer: { command: process.execPath, args: [CLI_ENTRY, 'mcp'] }, isTerminal: () => false };
@@ -249,4 +250,20 @@ describe('task-235 review F3 — every adapter read takes the run’s one HEAD, 
     const outcome = await plan(repo, { options: { element: `task:${TASK_ID}`, role: 'developer' } });
     expect(runOf(outcome)).toMatchObject({ element: `task:${TASK_ID}`, state_ref: resolvedAt });
   }, 60000);
+});
+
+describe('duplicateAdapterRefusal — at HEAD, at a sha, and the label its refusal spells', () => {
+  it('HEAD resolves itself; a sha with a label reads that commit and says HEAD; no commit has no adapter', () => {
+    const repo = seedStep((root) => writeFixtureFile(root, '.wingfoil/agents/built-in/fake.yaml', 'name: fake\n'));
+    repos.push(repo);
+    const sha = headOf(repo);
+    const atHead = duplicateAdapterRefusal(repo, 'HEAD');
+    expect(atHead?.ok).toBe(false);
+    expect(duplicateAdapterRefusal(repo, sha, 'HEAD')).toEqual(atHead);
+    const issues = (atHead as unknown as { error: { details: { issues: { detail: string }[] } } }).error.details.issues;
+    expect(issues.every((issue) => !issue.detail.includes(sha))).toBe(true);
+    const empty = makeTempGitRepo();
+    repos.push(empty);
+    expect(duplicateAdapterRefusal(empty, 'HEAD')).toBeUndefined();
+  });
 });
