@@ -108,6 +108,153 @@ inventory rows above are its tracked source and this task's criteria restate it.
 
 ## Execution Notes
 
+Branch `task/task-276-align-git-conventions-code-review-and-roles.yaml-with-the-dev-loop-practice-the-w3-b4-reviews-found`,
+worktree `../.wf2-wt/task-276`, cut from `main` at `30b268a3` (pre-batch main, W3 B5); start `f5f08849`. No linked
+bug (`bug: []`): `bug-313` is the workflow half of criterion 1 and stays out of this task's list.
+
+### design (architect)
+
+**`depends_on` read (dl-015).** `task-197`, `task-208`, `task-270` are `done` (`grep -m1 '^status'` on each file).
+- `task-197`: its inventory (Execution Notes, *design*, AC 2) gives the source plan heading of each rule this task
+  lands: row 4 (one worktree per task) `dev-loop-rel-v0.2-plan` §2 *Branch, worktree & merge* and
+  `dev-loop-rel-v0.2.2-plan` §1; row 6 (approve/finalize on the branch) the same §2 and §3.7; row 8 (no commit in the
+  shared tree, `git branch --show-current`) `dev-loop-rel-v0.2.2-plan` §1, closing paragraph; row 12 (code-commit
+  subjects) `dev-loop-rel-v0.2-plan` §2 *Commits*; row 21 (same-class) `dev-loop-rel-v0.2.2-plan` *Execution Notes
+  (close-out)*, "Standing rule learned". Each heading re-checked: `grep -n "^#" <plan>` prints `### Branch, worktree
+  & merge …` (line 74), `### Commits` (89), `### 1. Per-task contract` (50), `## Execution Notes (close-out,
+  2026-09-29)` (163); the row-8 text is at `dev-loop-rel-v0.2.2-plan` lines 66–67 and row 21's at line 185
+  (`grep -n -i -E "show-current|Standing rule learned"`).
+- `task-208`: wrote `git-conventions` 1.4 §9 and `code-review`'s unattended-run policy; §9 says the governance check
+  "checks §4's subjects and brackets". Since this task adds code-commit subjects to §4, which the check does not read,
+  that sentence would become false: fixed in the same edit (same class, `code-review`).
+- `task-270`: `roles.yaml` 1.5 → 1.6 (`grep -n '^version' .wingfoil/roles.yaml` → `version: 1.6`); its retrospective
+  records that a test pinning `roles.yaml`'s exact version broke on the next bump (also `bug-314`): this task's test
+  asserts "≥".
+
+**Read with the task (Implementation Notes).** `bug-313` (`triaged`): `dev-loop.yaml` `done` declares approve → merge →
+remove worktree → `set_state(done)` (`grep -n "name: done" -A9 .wingfoil/workflows/custom/dev-loop.yaml`), while the
+practice finalizes on the branch. §1 states the practice and points at `bug-313` for the workflow; `dev-loop.yaml` is
+not touched (batch notes). `dl-079` (`in-discussion`) owns whether `finalize` is ratified: §1 names the practice and
+defers the verb to it, as §4 already did.
+
+**Evidence re-checked on this branch.**
+- The four shas of the description: `git log --first-parent main --format=%h | grep -c <sha>` → `0` and
+  `git merge-base --is-ancestor <sha> main` → true for each of `1a276f87`, `d4a2a1dc`, `4b80b0b2`, `a4808d1f`; positive
+  case of the same first-parent command: `960de962` → `1`.
+- Beyond the four: every task review `approve` (`[in-review → approved]` or `[approved → done]`, 241 commits), every
+  `finalize` `[approved → done]` (228) and every `wf(task): reject` (29) reachable from `main` is off its first-parent
+  line (loop over `git log main -F --grep='wf(task): <verb>' --format=%H`, testing each against
+  `git log --first-parent main --format=%H`): 0 on it in each set.
+- `code-review.md` declares no `version` at `02800955` (`git show 02800955:.wingfoil/directives/custom/code-review.md
+  | grep -n '^version'` → nothing; the same on `git-conventions.md` → `version: "1.4"`): none is added (`dl-047`).
+- The three target files are unchanged between `02800955` and the start (`git diff --stat 02800955 f5f08849 --
+  <three files>` → nothing), so "fails on `02800955`" and "fails on the start" are the same claim.
+
+**Specs.** No tech-spec governs a custom directive's prose or a role binding (P3.5/P3.7, REQ-SYS-08 are the
+features/requirement): none to verify or amend. `dl-102`, `dl-152`, `dl-119`, `dl-014` are `ready`
+(`grep -m1 '^status'`). No ADR touched. `memory.yaml`'s `amendable` is not needed: no amendment.
+
+**AC classification (T1).**
+
+| AC | Class | Why |
+|---|---|---|
+| 1 — §1 on-main item 1 + the on-branch sentence | red-first (document) | new prose; the live test fails until it exists |
+| 2 — rows 4, 8, 12 with their plan headings | red-first (document) | new prose; pinned by bullet/section and by the cited heading existing in its plan |
+| 3 — `ingest/` row names `vision-change` | red-first (document) | new cell text |
+| 4 — `code-review` row 21 | red-first (document) | new section |
+| 5 — `roles.yaml` `tech-lead` → `traceability`, bump | red-first | binding absent (`grep -n -A3 '^  tech-lead:' .wingfoil/roles.yaml`); pinned through the YAML and `directives list --role tech-lead` |
+| 6 — the live test fails on `main`; version bumps | red-first | the test itself; `git-conventions` 1.4 → 1.5 with a history entry naming `task-276`; `code-review` gets none |
+| 7 — governance check, 0 findings | characterization | the check reads `wf()` commits, not directive prose |
+| 8 — gates green | characterization | no `src/` change |
+
+**Decisions (approver to confirm).**
+- D1 — §4's heading becomes "Commit subjects" (it was "Memory-operation subjects"), since it now holds the
+  code-commit subjects too; `dl-119`'s own wording is history and is not touched.
+- D2 — `{module}` in the code-commit subject is "the `dna.yaml` module the change belongs to; a change outside every
+  module names its area (`docs`, `lint`)". The practice uses non-module scopes too: on `02800955`,
+  `git log --no-merges --format=%s | grep -E "^(test|feat|fix|refactor|docs)\([^)]*\): task-"` grouped by scope shows
+  `docs(self)` 183, `docs(vision)` 21, `test(lint)` 12, `fix(governance)` 9 beside the module scopes. A strict
+  "module only" rule would make most of the history a deviation.
+- D3 — §1's sentence covers a task's review `reject` as well as `approve` and `finalize` (the AC says so); the 29
+  task rejects above are all on branches.
+- D4 — the `ingest/` row cites `dl-132` as the source of `vision-change`; the branch prefix itself is the approver's
+  ruling of 2026-10-10 (rulings 2–3, `bug-ingest-rel-v0.3-w3b4-review-findings-plan` item A2), cited in the version
+  history entry rather than in the table cell.
+
+### red (developer)
+
+`539ef1bc`: `test/directives/dev-loop-practice.test.ts` (new, 14 tests): §1 item 1 and the on-branch sentence (with
+`bug-313` and `dl-079`), the worktree and shared-tree bullets, §4's code-commit subject, each with its plan heading
+asserted to exist in the plan file; §9 reading only `wf()` subjects; the `ingest/` row; `code-review`'s new section;
+`roles.yaml` `tech-lead` (YAML and `directives list --role tech-lead`, a role binding, not global); both version bumps
+(≥ 1.7 / ≥ 1.5, history entry naming `task-276`).
+`npx jest test/directives/dev-loop-practice.test.ts` → **14 failed, 14 total**, each on the absent text/binding/version
+(`Expected substring: "that are not part of a \`dev-loop\` task's run"`, `no bullet containing "**One worktree per
+task**"`, `no section "## Same-class findings"`, `Expected value: "traceability"`, `Expected: >= 1007`, …). Re-run on
+a throw-away detached worktree at `539ef1bc` (scratch dir, removed after): 14 failed, 14 total.
+The red commit was amended twice before any later commit existed (never pushed): a vacuous `not.toContain` that spanned
+a line break, and two `string | undefined` arguments that `typecheck.clean` refused (`?? ''`). Assertions unchanged.
+Not asserted (T1, prose quality): the wording beyond the pinned phrases; `code-review`'s absent `version` (a later,
+legitimate first version would break such a pin; checked by `grep` above).
+
+### green (developer)
+
+`e0d5c6c1`:
+- `git-conventions.md` 1.4 → 1.5 (history entry names `task-276` and the rulings), `**Date:** 2026-10-10`. §1 heading
+  adds `dl-014` G2–G3; new bullets *One worktree per task* and *No task commit in the shared working tree*; the
+  `ingest/` row names a `vision-change` run; on-main item 1 per AC 1; the paragraph after the list puts a `dev-loop`
+  task's `approve`, `reject` and `finalize` on `task/<task-id>` (`dl-014` G3), points at `bug-313` and `dl-079`. §4
+  renamed (D1) with the *Code commits on a task branch* bullet. §9: "§4's `wf()` subjects and brackets (not its
+  code-commit subjects)".
+- `code-review.md`: new section *Same-class findings are fixed before approval*, before the re-review section; the
+  Source line names it. No `version` added.
+- `roles.yaml` 1.6 → 1.7: `tech-lead` gains `traceability`; a header comment gives the reason (`traceability` §
+  *Who authors acceptance criteria*, `dl-102` §3).
+`npx jest test/directives test/lint/version-bump.test.ts` → 8 suites, **178 passed**. No code changed:
+`git diff --stat 30b268a3 HEAD -- src` prints nothing.
+
+### refactor (developer)
+
+Run on the branch at `e0d5c6c1`, the working tree clean. Four earlier runs were interrupted (session restarts, a
+machine shutdown, and the coordinator stopping orphaned runs at load 165); the run below follows the batch's load rule
+(`--maxWorkers=2`, started at a 1-minute load below 24):
+- `npm run test:coverage -- --maxWorkers=2` → exit 0, **348 suites, 6487 passed**; All files 99.29 statements /
+  97.04 branches / 97.74 functions / 99.69 lines, equal to the W3 B4 gate on `main`
+  (`grep "All files" devloop-kit/gate-w3b4-cov.log` → 99.29 / 97.04 / 97.74 / 99.69): not regressing. Load average
+  22.76 at start, 29.19 at the end (`uptime`). This is the full Jest suite with coverage; `npm test`
+  (`scripts/run-tests.cjs`) was not run on its own after the interruptions, by the coordinator's instruction.
+- `npm run lint` → exit 0. `npm run docs:api` → exit 0. `npx tsc --noEmit -p tsconfig.json` → exit 0.
+  `npx tsc -p tsconfig.build.json --noEmit` → exit 0.
+- `node scripts/check-governance.cjs --base 30b268a3` → "1 wf() commits … and 2 other commits", "gated: 0 findings on
+  0 commits", exit 0 (AC 7). The check judges `wf()` commits (subjects, `Reason:`/`Approver:`, authority, state,
+  verb edge, status outside `wf()`, config version), not directive prose: the rules this task writes are not checked
+  by it, and AC 7 is characterization only.
+- Main-sync (`dev-loop.yaml` 1.6 `refactor`): not run; the batch merges `main` at the gate, in merge order (B5 notes:
+  this task after `task-278` and `task-275`).
+
+### review (reviewer, self-review)
+
+Against `code-review` (including its new section), `traceability`, `claim-evidence`, `doc-versioning`:
+- AC 1: `grep -n "task's run — triage" .wingfoil/directives/custom/git-conventions.md` →
+  one line in §1; the on-branch paragraph follows the list. Met.
+- AC 2: `grep -n -E "One worktree per task|No task commit in the shared working tree|Code commits on a task branch"
+  .wingfoil/directives/custom/git-conventions.md` → three lines (two in §1, one in §4), each with its plan heading;
+  the test asserts each heading exists in its plan. Met.
+- AC 3: `grep -n "or one .vision-change. run" .wingfoil/directives/custom/git-conventions.md` → the `ingest/` row. Met.
+- AC 4: `grep -n "## Same-class findings" .wingfoil/directives/custom/code-review.md` → one line; `grep -n '^version'`
+  on the file → nothing (none added, `dl-047`). Met.
+- AC 5: `grep -n -A3 '^  tech-lead:' .wingfoil/roles.yaml` → `architecture`, `code-review`, `traceability`;
+  `grep -n '^version' .wingfoil/roles.yaml` → `version: 1.7`. Met.
+- AC 6: red 14/14 failing at `539ef1bc` (above); `grep -n '^version' .wingfoil/directives/custom/git-conventions.md`
+  → `version: "1.5"   # 1.5 … (task-276, …)`. Met.
+- AC 7, AC 8: refactor above. Met.
+- Same class in the files touched: §9's "checks §4's subjects" (fixed, pinned). `CLAUDE.md` §7's table still lists
+  `tech-lead: architecture, code-review` (`grep -n "tech-lead  " CLAUDE.md`): mirrored docs are `task-252`'s
+  (Implementation Notes), not a file this task touched; reported to the coordinator.
+- Pending amendments (approver): none. No Memory element other than this task file is edited.
+
 ### Retrospective
 
-None yet.
+- A test pinned a phrase across a line break (`not.toContain("It checks §4's …")` while the file wraps after "It"),
+  so the absence check passed vacuously; found only by re-reading the directive. Evidence: the first amend of the red
+  commit (red section above).
