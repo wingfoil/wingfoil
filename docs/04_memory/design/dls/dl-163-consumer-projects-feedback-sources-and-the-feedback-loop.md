@@ -245,6 +245,10 @@ in the batches given (the coordinator updates `dev-loop-rel-v0.3-plan`'s W3 tabl
     words, and the proposed outcome. The record goes under the path family `retrospective.yaml` already declares,
     `docs/06_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md`. It never holds a
     consumer's configuration, paths or prose.
+    *(Amended 2026-10-11, with `task-272`.)* The folder is now `docs/09_retrospectives/`: `bug-299`'s numbering,
+    applied by `task-222`, moved `explore`'s friction inventory there, and `retrospective.yaml` 1.6 declares the read
+    record as `docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md`. The
+    measurements in *Context*, dated at `25b513b8`, stay as read.
   - **The outcomes, six of them.** `dl-115`'s four, plus `declined` and `needs-info`.
   - **The ruling.** The approver rules in `additional-points`. The decision, the elements and the target release
     go into `retro-{version}`'s Dispositions (or a `## Consumer feedback` section), and `capture` runs the
