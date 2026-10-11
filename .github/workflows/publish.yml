@@ -26,18 +26,23 @@
 #             against a frozen SHA-256 before it is unpacked, validates `server.json`, then the job waits with
 #             the same bounded poll as release — the registry reads `mcpName` from the PUBLISHED package.json,
 #             so the version must be live on npm — then `mcp-publisher login github-oidc` and `publish`.
-#             The OIDC token is granted `io.github.<repository owner>/*` = `io.github.wingfoil/*` with no OAuth
-#             app in between, which is what refused v0.2.2's manual publish (bug-173). `id-token: write` is
+#             The OIDC token is granted `io.github.<repository owner>/*` = `io.github.wingfoil/*` (registry
+#             v1.8.1, `github_oidc.go` `buildPermissions`) with no OAuth app in between; v0.2.2's manual publish
+#             was refused with a 403, the registry's OAuth app likely not seeing the organisation (bug-173's
+#             suspected cause, not verified) — the OIDC grant holds either way. `id-token: write` is
 #             granted to this job and promote only. Its one job-level `if:` is where task-266 adds its
 #             "newest version only" rule; nothing here names `latest`.
 #
 # ── Job timeouts (dl-057 (b) option 1, task-238) ──
 #
-#   Every job declares `timeout-minutes`:  gate 15 · stage 20 · promote 30 · release 345 · mcp-registry 345.
-#   gate, stage and promote are task-077's measured table ("Suggested `timeout-minutes`", sized from the
-#   first real `act` run, generous enough not to flake); the v0.2.2 run took gate 1m22s, stage 42s and
-#   promote 16s. promote is not raised for its `npm-publish` approval: that wait happens before the job
-#   starts on a runner (v0.2.2: created 20:39:07Z, started 20:40:58Z after the approval), so the timeout
+#   Every job declares `timeout-minutes`:  gate 30 · stage 20 · promote 30 · release 345 · mcp-registry 345.
+#   stage and promote are task-077's measured table ("Suggested `timeout-minutes`", sized from the first
+#   real `act` run, generous enough not to flake); the v0.2.2 run took stage 42s and promote 16s. gate
+#   is raised from that table's 15: it runs `prepublishOnly`, whose suite has grown since — the same step
+#   in ci.yml's packaging gate took 7m22s in CI run 38166281488 (2026-10-11, job 7m56s; 6m18s–7m56s
+#   over the three main pushes before it), against v0.2.2's 1m22s gate. promote is not raised for its
+#   `npm-publish` approval: that wait happens before the job starts on a runner (v0.2.2: deployment
+#   6744965514 waiting 20:39:08Z → in_progress 20:40:59Z; job started 20:40:58Z), so the timeout
 #   bounds only its work. release and mcp-registry carry their 330-minute npm poll plus a margin, under the
 #   hosted runner's 6-hour job limit.
 #
@@ -48,7 +53,7 @@
 #
 #   There is NO publish credential anywhere: no secret in this workflow, no token in any secret store,
 #   no `.npmrc` written. `promote` authenticates to npm as a trusted publisher over GitHub OIDC
-#   (`id-token: write`, promote only), configured on npmjs.com with permission limited to staging: it can
+#   (`id-token: write`, held by promote and, for the MCP Registry, mcp-registry), configured on npmjs.com with permission limited to staging: it can
 #   put a version in the stage queue and nothing else — a plain `npm publish` from this workflow is refused.
 #   The same OIDC identity signs the provenance statement. Locally, a developer needs no npm credential
 #   for a release at all; the only human npm act is the 2FA approval below.
@@ -195,7 +200,7 @@ env:
 jobs:
   gate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -321,6 +326,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
       - name: Install mcp-publisher — the pinned release, its archive checked before it is unpacked (bug-173)
+        shell: bash          # GitHub then runs `bash --noprofile --norc -eo pipefail {0}`, as the test does
         run: |
           archive="$RUNNER_TEMP/mcp-publisher_linux_amd64.tar.gz"
           curl -fsSL --retry 3 -o "$archive" "https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
