@@ -167,6 +167,7 @@ so no scenario changes. The P4.4/P4.5 scenarios are the commands', pinned by tas
 | 2 | met | `AC 2 — a read of each, and both write shapes against each, persist nothing`: `snapshotFiles` → 2 reads + 4 write attempts (each `resources are read-only`) → `assertFilesUnchanged` (task-147's files/status/HEAD/refs) |
 | 3 | met | example 04 OK (Green); `node scripts/check-mcp-registration.cjs` exit 0 with resources 2 (pin) and 4 (dev build); bug-292: every Resource read, every Prompt got, the known failure named, a stale entry fails (7 pure cases) |
 | 4 | met | spec-004 §2.1 block + bullet, §4.1 without the next row (moved to v1.0 in prose), §4.2; spec-005 §Context; dated Revision notes (uncommitted, below); `npx jest test/docs` → 191 passed with them |
+| T4 `tests.unchanged(since: red)` | **not met as written; waiver asked** | See "Review fixes" below: green `f9226c3b` edited one red case in `test/cli/mcp-registration.test.ts` |
 
 Same-class sweep: the two `CORE_MODULES` comments and the two `parity.test.ts` comments that called the
 Resources "task-239's" / "a later task's" are updated; `grep -rn "is task-239's\|a later task's" src test` now
@@ -176,7 +177,7 @@ finds only `src/agent/placeholders.ts:9`, which is about an agent step, not thes
 
 Uncommitted in the worktree; the gates ran with them. spec-004/005 must be amended before the parity gates are
 green on the merged branch (the allowlist entries they replace are already gone).
-- `spec-004-mcp-surface-contract`: `--reason "task-239 serves wingfoil://workflows/-/next and -/status, so §2.1 lists both with their payload and the non-collision rule of spec-017 §9. §4.1 drops the workflow next row, which spec-017 §9 makes a read-only Resource, and says a step-advancing Tool belongs with v1.0 (spec-006 §3 open question 1). It gains the nine state-mutating verbs shipped since it was written, as v0.4 Tools, and §4.2 counts them, as bug-258 asks. No rule changes."` (after task-211's spec-004 amendment, in merge order)
+- `spec-004-mcp-surface-contract`: `--reason "task-239 serves wingfoil://workflows/-/next and -/status, so §2.1 lists both with their payload and the non-collision rule of spec-017 §9. §4.1 drops the workflow next row, which spec-017 §9 makes a read-only Resource, and says a step-advancing Tool belongs with v1.0 (spec-017 Consequences; open question 1 of spec-006's 2026-09-30 Revision note). It gains the nine state-mutating verbs shipped since it was written, as v0.4 Tools, and §4.2 counts them, as bug-258 asks. No rule changes."` (after task-211's spec-004 amendment, in merge order)
 - `spec-005-cli-command-contract`: `--reason "bug-259: §Context's noun list gains directives, the noun wingfoil directives list ships under and spec-008 §1 names. No exit code, format or rule changes."`
 - `spec-006-core-domain-api`: `--reason "task-239 registers the two v0.3 workflow Resources through registerWorkflowStateResources, so §3's bullet names that function and its file instead of the src/mcp/index.ts line range the new call moved. No row, payload or baseline changes."` (after task-211's and task-240's spec-006 amendments)
 
@@ -211,6 +212,52 @@ green on the merged branch (the allowlist entries they replace are already gone)
 - **A single-diagnostic workflow refusal prints no details** on the CLI or in MCP (`errorDetails` drops the
   diagnostic the reason already is): consistent, but an operator sees no other diagnostic of the load. Only a
   note, from the red correction.
+
+
+### Review fixes (independent review: approve with fixes, 2026-10-11)
+
+The task stays `in-review`; not re-submitted. Commit `eedd53fd`.
+
+- **F1 (T4).** `git log --first-parent --no-merges --format=%h e372f245..HEAD -- test/mcp/workflow-state-resources.test.ts test/cli/mcp-registration.test.ts`
+  → `eedd53fd`, `f9226c3b`. Green `f9226c3b` did two things to red's files:
+  - it **edited a red-era case**, "accepts a registration of the pinned build that answers as declared", to
+    pass `EXPECTED_CHANNELS, []` (the fixture pins 0.2.1, the repository's known failure is 0.2.2's, and an
+    entry for another version fails the check). The case is the same assertion with the new parameter, but
+    T4 read literally fails: **the approver is asked for a waiver**;
+  - it appended three cases to red's MCP file (the registration lists the two URIs; two `coreResultResource`
+    cases). `eedd53fd` moves them to `test/mcp/workflow-state-resources-review-fixes.test.ts` and restores red's
+    MCP file to `e372f245`'s content. `git diff --stat e372f245 HEAD -- test/mcp/workflow-state-resources.test.ts test/cli/mcp-registration.test.ts`
+    → `test/cli/mcp-registration.test.ts | 4 +++-`, 1 file changed, 3 insertions(+), 1 deletion(-): only the
+    edited case. (`eedd53fd` appears in the log because it reverted the appended cases.)
+  - **Separation of duties (`dl-134`) was not applied:** red (`93dd9b87`), its correction (`e372f245`) and
+    green (`f9226c3b`) were all written and run by this one developer session.
+- **F3.** The red correction left the only end-to-end "details reach the client" case vacuous: one invalid file
+  gives no details on either side. New case (review-fixes file): `a.yaml` and `b.yaml` both invalid; the CLI's
+  `--format json` error carries `"details":[{"detail":"E_VALIDATION phases (workflows/custom/b.yaml): …"}]`
+  (probe in a scratch repo, both `next` and `status`, exit 1), and both Resources return the same reason and the
+  same `data.details`. It passed on first run: characterization of what green already does.
+- **F4.** `src/mcp/index.ts`'s module doc says `registerReadOnlyResources` wires five registrars (was "four");
+  `src/mcp/workflow-resource.ts`'s header names the two state Resources and their `HEAD` baseline, rewritten
+  within the same line count so `src/mcp/workflow-resource.ts:34-37` (spec-017 §9's citation) is unmoved.
+- **F5.** spec-004 cited "`spec-006` §3, open question 1"; the question is in `spec-006`'s 2026-09-30 Revision
+  note (Process Notes), not §3. The §4.1 sentence now cites `spec-017` Consequences and that note; the Revision
+  note likewise; the proposed `--reason` above is updated. (Uncommitted, pending amendment.)
+- **F6.** New pure case: a `KNOWN_READ_FAILURES` entry for a URI the server does not list fails the check, with
+  "…but the server does not list it: remove the entry". Mutation (uncommitted, restored): replacing that branch's
+  condition with `false` → `npx jest test/mcp/workflow-state-resources-review-fixes.test.ts -t F6` → 1 failed.
+- **F2 (gate, coordinator).** After `task-211`'s spec-004 §4.1 rows (`workflow create` / `remove`) land, this
+  task's §4.2 sentence must read "for the Workflow pillar `workflow start`, `end`, `finalize`, `create` and
+  `remove`"; the coordinator merges it.
+- **F7.** The `advance-pinned-build` note for `release-planning.yaml` goes to `task-230` through the coordinator.
+
+Gates after the fixes:
+
+| Command | Result |
+|---|---|
+| `npm run test:coverage -- --maxWorkers=2` (at `eedd53fd` + the uncommitted spec amendments, under the dl-170 slot, load 3.2) | exit 0; **384 suites, 7092 passed**. All files **99.3 / 97.22 / 97.94 / 99.7** (unchanged); `read-only.ts` 100 on every metric; `workflow-resource.ts` 100 / 50 / 100 / 100, line 58 as on main |
+| `npm run lint`, `npm run docs:api`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` (under the slot) | exit 0 each |
+| `npx jest test/docs` (with the amendments) | 191 passed |
+| `npm run check:mcp` | exit 0 |
 
 ### Retrospective
 
