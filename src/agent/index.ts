@@ -21,6 +21,7 @@ export {
   executionNotesSection,
   formatRunId,
   isRunId,
+  isRunLogPath,
   nextRunId,
   NO_WORKFLOW,
   NOT_REPORTED,
@@ -35,6 +36,7 @@ export {
   runIdElementId,
   RUN_RECORD_KEYS,
   RUN_TOKEN_KEYS,
+  runLogDirPrefix,
   runLogPreflight,
   serializeRunRecord,
 } from './run-log';

@@ -1525,7 +1525,8 @@ unknown option, exit `2`.
 It reads the run log, `dna.yaml` and the workflow state **as committed at `HEAD`**, not the working tree
 (see [Git side effects](#git-side-effects)), so it agrees with `agent show` and with the run ids `agent
 execute` counts. A run log you changed and did not commit is not read: a `warning:` line names it
-(`W_UNCOMMITTED_INPUTS`), one per file.
+(`W_UNCOMMITTED_INPUTS`), one per file. Only the run logs themselves count: another file in that
+directory is neither read nor reported.
 
 ```console
 $ wingfoil agent list
@@ -1549,8 +1550,11 @@ section prints `no past runs` or `no waiting steps`.
 - **Exit `0`** on every result, an empty one included. A `dna.yaml` with no `paths.runs` lists no past
   runs and prints `warning: dna.yaml declares no run log (paths.runs)`.
 - **Errors:** a run log at `HEAD` that is not valid JSON Lines, or holds a run id twice → exit `1`, naming
-  the file and the line; an error in the workflow files → exit `1`, as `workflow status`; a malformed
-  `--element`, or `--active` → exit `2`.
+  the file and the line — every run log is checked, whatever `--element` and `--phase` keep; with the past
+  section, a `dna.yaml` not committed at `HEAD` → exit `1`, `error: .wingfoil/dna.yaml is not committed at
+  HEAD, which agent list reads: commit it first`, and a `paths.runs` outside the project → exit `1`; an
+  error in the workflow files → exit `1`, as `workflow status`; a malformed `--element`, or `--active` →
+  exit `2`.
 - **Commit:** none.
 
 ### `wingfoil agent show`

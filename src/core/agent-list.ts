@@ -30,7 +30,7 @@ import type { CoreFn } from './registry';
 import { resolveRevision, RevisionError } from './revision';
 import { coreErr, coreOk, type CoreResult } from './types';
 import { UsageError } from './usage-error';
-import { readDeductionSnapshotAtHead, readDirtyPaths } from './workflow-deduction';
+import { readDeductionSnapshotAtHead, readDirtyRunLogs } from './workflow-deduction';
 import { buildStep, readNextInputs } from './workflow-next';
 
 /** The warning of a project whose `dna.yaml` declares no run log (§5: not an error for `list`). */
@@ -164,7 +164,7 @@ export function agentListAtHead(root: string, selection: Selection): CoreResult<
         (record) => (selection.element === undefined || record.element === selection.element) && (selection.phase === undefined || record.phase === selection.phase),
       );
       // §5: with no deduction, `agent list` emits the deduction's code itself, once per dirty path.
-      if (!selection.waiting) diagnostics.push(...readDirtyPaths(root, [dir]).map(uncommittedInputDiagnostic));
+      if (!selection.waiting) diagnostics.push(...readDirtyRunLogs(root, dir).map(uncommittedInputDiagnostic));
     }
   }
 
