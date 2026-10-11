@@ -2,7 +2,7 @@
 id: "task-229-create-github-release-once-npm-has-version-sweep"
 type: task
 title: "Create a GitHub Release once npm has the version, and sweep service verifies before publishing"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "high"
