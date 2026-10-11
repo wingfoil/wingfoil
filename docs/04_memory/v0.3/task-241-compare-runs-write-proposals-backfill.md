@@ -31,6 +31,16 @@ tmpl_version: 260703
 - **Notes:** Proposal key: D18.
 - Planned by `release-planning-rel-v0.3-plan` step 6 (build-backlog), 2026-09-30.
 
+- **Handover from wave 3 B5 (2026-10-11, W3 B5 follow-ups, `bug-ingest-rel-v0.3-w3b5-review-findings-plan` item 12;
+  `task-231`'s independent review, finding F7).** Measured on `main` at `29b8406a`; no criterion changes. With
+  `--previous <rev>`, `measure.cjs` writes placeholders in the report's `previous` object: `release` is the string
+  `--previous <rev>` and `report` is `(none: named by --previous)` (`sed -n 967,968p
+  scripts/release-health/measure.cjs`), while `docs/08_health/release-health.schema.json` documents `report` as the
+  "Repository-relative path of the previous JSON report" (`grep -n "Repository-relative path" docs/08_health/release-health.schema.json`)
+  and its `type: string` accepts either. `compare.cjs`, the reader of `previous`, decides how it treats such a run
+  (no previous report to settle proposals against) and the schema either allows `report: null` with a `basis`
+  (`report` or `--previous`) or the script writes the version the revision carries.
+
 ## Execution Notes
 
 <!-- Running log of what actually happened while working this task through dev-loop — filled in
