@@ -114,8 +114,11 @@ describe('REQ-SEC-05 — the operation-derived surface over the real CORE_MODULE
       // task-217 — `workflow start` / `workflow end`, mutating (each writes its plan's commits).
       // task-226 — `workflow finalize` (`spec-017` §7.9): a Tool only through the mechanical registrar; the
       // production server serves its Tool from v0.4 (P5.2.3, §9).
+      // task-211 — `workflow create` / `workflow remove` (`spec-017` §7.7–§7.8), likewise.
+      'workflowCreate',
       'workflowEnd',
       'workflowFinalize',
+      'workflowRemove',
       'workflowStart',
     ]);
     const { tools } = await client.listTools();
@@ -136,8 +139,11 @@ describe('REQ-SEC-05 — the operation-derived surface over the real CORE_MODULE
       'memory.reject',
       'memory.submit',
       // task-217 (`spec-017` §9): v0.4 Tools of the production server; here through the mechanical registrar.
+      // task-211 (`spec-017` §9): `workflow.create` / `workflow.remove`, v0.4 Tools of the production server too.
+      'workflow.create',
       'workflow.end',
       'workflow.finalize',
+      'workflow.remove',
       'workflow.start',
     ]);
   });

@@ -50,6 +50,8 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memorySearch',
       'memory.memorySubmit',
       'paths.paths',
+      // task-211 (`spec-017` §7.7): mutating — the workflow file and `workflows.yaml`.
+      'workflow.workflowCreate',
       // task-217 (`spec-017` §7.2): mutating.
       // task-226 (`spec-017` §7.9): mutating — an empty phase-record commit.
       'workflow.workflowEnd',
@@ -57,6 +59,8 @@ describe('CORE_MODULES — production registry', () => {
       'workflow.workflowList',
       // task-216 (`spec-017` §7.3): read-only.
       'workflow.workflowNext',
+      // task-211 (`spec-017` §7.8): mutating — deletes the file and its `include` entry.
+      'workflow.workflowRemove',
       // task-204 (`spec-017` §7.6): read-only.
       'workflow.workflowShow',
       // task-217 (`spec-017` §7.1): mutating.
@@ -85,8 +89,11 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memoryReject',
       'memory.memorySubmit',
       // task-217 (`spec-017` §7.1–§7.2): a Tool only through the mechanical registrar (v0.4, P5.2.3).
+      // task-211 (`spec-017` §7.7–§7.8): `workflowCreate` / `workflowRemove`, likewise.
+      'workflow.workflowCreate',
       'workflow.workflowEnd',
       'workflow.workflowFinalize',
+      'workflow.workflowRemove',
       'workflow.workflowStart',
     ]);
   });
