@@ -13,15 +13,16 @@
  * Deterministic: every date is fixed; the external reader is a stub; no clock, no network.
  */
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 
 import Ajv2020 from 'ajv/dist/2020';
 
-import { formatReportJson, httpDay, main, measureRelease, parseHttp, processConformance, resolveMeasurementPoint } from '../../scripts/release-health/measure.cjs';
-import type { ExternalReader, MetricEntry, Report } from '../../scripts/release-health/measure.cjs';
+import { formatReportJson, httpDay, main, measureRelease, measureToolchain, parseHttp, processConformance, resolveMeasurementPoint } from '../../scripts/release-health/measure.cjs';
+import type { ExternalReader, MetricEntry, Report, ToolCall, ToolResult, ToolRunner } from '../../scripts/release-health/measure.cjs';
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { FAKE_AWS_ACCESS_KEY_ID } from '../validation/helpers/secret-fixtures';
 
@@ -298,7 +299,8 @@ function entry(report: Report, id: string): MetricEntry {
   return found;
 }
 
-const OFFLINE = { offline: true } as const;
+/** No network and no toolchain: the history tests measure git alone (the toolchain half has its own block below). */
+const OFFLINE = { offline: true, toolchain: false } as const;
 
 /** The report schema's errors for `report` (ajv, draft 2020-12), as `<path> <message>` lines; empty when valid. */
 function schemaErrors(report: Report): string[] {
@@ -310,7 +312,10 @@ function schemaErrors(report: Report): string[] {
 
 describe('measureRelease — the history metrics on a fixture with known answers (AC 1, AC 5)', () => {
   const h = historyFixture();
-  const report = measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, ...OFFLINE });
+  let report: Report;
+  beforeAll(async () => {
+    report = await measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, ...OFFLINE });
+  });
   const c = (n: number): string => h.c[n - 1]!;
 
   it('writes one entry per catalogue metric, in catalogue order, each measured or with a reason', () => {
@@ -428,8 +433,8 @@ describe('measureRelease — the history metrics on a fixture with known answers
     expect(entry(report, 'P07')).toMatchObject({ status: 'measured', value: true });
   });
 
-  it('the quality metrics are left to their owning tasks, each with the reason', () => {
-    expect(entry(report, 'Q01')).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('task-232') });
+  it('the quality metrics are left to their owning tasks, each with the reason; the toolchain half is skipped by --no-toolchain', () => {
+    expect(entry(report, 'Q01')).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('--no-toolchain') });
     expect(entry(report, 'Q05')).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('task-233') });
   });
 
@@ -443,18 +448,18 @@ describe('measureRelease — the history metrics on a fixture with known answers
     expect(schemaErrors(report)).toEqual([]);
   });
 
-  it('is byte-identical on a second run at the same point (REQ-SYS-07)', () => {
-    const again = measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, ...OFFLINE });
+  it('is byte-identical on a second run at the same point (REQ-SYS-07)', async () => {
+    const again = await measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, ...OFFLINE });
     expect(formatReportJson(again)).toBe(formatReportJson(report));
   });
 });
 
 describe('small-sample flag (dl-089 §3)', () => {
-  it('is false once a window holds 30 relevant items', () => {
+  it('is false once a window holds 30 relevant items', async () => {
     const r = repo();
     const base = r.commit('chore: configure wingfoil', { author: ADA, date: DAY0, files: BASE_FILES });
     for (let i = 0; i < 30; i += 1) r.commit(`docs: note ${i}`, { files: { [`docs/n${i}.md`]: `${i}\n` } });
-    const report = measureRelease(r.root, { release: 'v0.2', at: r.rev('HEAD'), previous: base, ...OFFLINE });
+    const report = await measureRelease(r.root, { release: 'v0.2', at: r.rev('HEAD'), previous: base, ...OFFLINE });
     expect(entry(report, 'G01')).toMatchObject({ items: 30, small_sample: false, value: 100 });
   });
 });
@@ -486,11 +491,11 @@ describe('the measurement point (dl-089 §1)', () => {
 });
 
 describe('never writes git configuration (AC 2, dl-089 §6)', () => {
-  it('leaves `git config --list --show-origin` byte-identical, and leaves no worktree behind', () => {
+  it('leaves `git config --list --show-origin` byte-identical, and leaves no worktree behind', async () => {
     const h = lightFixture();
     const before = git(h.repo.root, ['config', '--list', '--show-origin']);
     const worktreesBefore = git(h.repo.root, ['worktree', 'list', '--porcelain']);
-    measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, ...OFFLINE });
+    await measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, ...OFFLINE });
     expect(git(h.repo.root, ['config', '--list', '--show-origin'])).toBe(before);
     expect(git(h.repo.root, ['worktree', 'list', '--porcelain'])).toBe(worktreesBefore);
   });
@@ -498,7 +503,10 @@ describe('never writes git configuration (AC 2, dl-089 §6)', () => {
 
 describe('the toolchain record (AC 4)', () => {
   const h = lightFixture();
-  const report = measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, ...OFFLINE });
+  let report: Report;
+  beforeAll(async () => {
+    report = await measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, ...OFFLINE });
+  });
 
   it('records the Node and npm versions and the sha256 of the lockfile at the point', () => {
     expect(report.toolchain.node).toBe(process.version);
@@ -524,12 +532,15 @@ describe('the external snapshot E01–E05 (AC 3, dl-130 Q2 (a))', () => {
     return { ok: true, date: DATE, body: { downloads: 150 } };
   };
 
-  it('offline, every E metric is not-measurable with the reason', () => {
-    const report = measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, offline: true });
+  it('offline, every E metric is not-measurable with the reason', async () => {
+    const report = await measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, offline: true, toolchain: false });
     for (const id of ['E01', 'E02', 'E03', 'E04', 'E05']) expect(entry(report, id)).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('offline') });
   });
 
-  const online = measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, external: reader });
+  let online: Report;
+  beforeAll(async () => {
+    online = await measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, external: reader, toolchain: false });
+  });
 
   it('online, each value is recorded with the command and the date it was read (the response\'s Date header)', () => {
     const report = online;
@@ -655,24 +666,417 @@ describe('the HTTP reading of the external snapshot', () => {
 });
 
 describe('the command line (the release-health.measure binding)', () => {
-  it('writes the report where --out says and prints its path; a missing --release is exit 2', () => {
+  it('writes the report where --out says and prints its path; a missing --release is exit 2', async () => {
     const h = lightFixture();
     const dir = mkdtempSync(join(tmpdir(), 'wf-rh-out-'));
     const out = join(dir, 'report.json');
     const write = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const err = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     try {
-      expect(main(['--release', 'v0.2', '--at', h.point, '--previous', h.base, '--offline', '--root', h.repo.root, '--out', out])).toBe(0);
+      expect(await main(['--release', 'v0.2', '--at', h.point, '--previous', h.base, '--offline', '--no-toolchain', '--root', h.repo.root, '--out', out])).toBe(0);
       expect(write).toHaveBeenCalledWith(`${out}\n`);
       const report = JSON.parse(readFileSync(out, 'utf-8')) as Report;
       expect(report.measurement_point.commit).toBe(h.point);
-      expect(main(['--offline'])).toBe(2);
+      expect(await main(['--offline'])).toBe(2);
       expect(err).toHaveBeenLastCalledWith('release-health measure: missing required argument: --release <vX.Y[.Z]>\n');
-      expect(main(['--release', 'v9'])).toBe(2);
+      expect(await main(['--release', 'v9'])).toBe(2);
     } finally {
       write.mockRestore();
       err.mockRestore();
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// ── task-232: the toolchain half (Q01–Q04, Q11, Q12, Q17) ─────────────────────────────────────────────────
+//
+// Every tool output is stubbed (approver ruling R4, W3 B6): the stub runner answers each command by its step and
+// writes the files a real run would write (jest's JSON results, the coverage summary). The one real run is recorded
+// in the task's Execution Notes, not taken here.
+
+const PINNED_NODE = process.version.slice(1);
+const publishYml = (version: string): string => `name: publish\nenv:\n  NODE_VERSION: '${version}'\njobs: {}\n`;
+const TOOL_SCRIPTS = { build: 'tsc', typecheck: 'tsc --noEmit', lint: 'eslint .', test: 'jest', 'test:coverage': 'jest --coverage', 'test:latency': 'jest -c jest.latency.config.js' };
+const toolPackageJson = (scripts: Readonly<Record<string, string>> = TOOL_SCRIPTS): string =>
+  `${JSON.stringify({ name: 'wingfoil', version: '0.3.0', repository: { type: 'git', url: 'git+https://github.com/wingfoil/wingfoil.git' }, scripts }, null, 2)}\n`;
+const USER_GUIDE = '# User guide\n\nA step-by-step guide to configuring and using WingFoil **0.3.0** in your own project.\n\n## 2. Install\n\n```bash\nnpm install -g wingfoil\nwingfoil --version\n```\n';
+
+/** The files the toolchain half reads at the point, beside the package's own scripts. */
+const TOOL_FILES: Readonly<Record<string, string>> = {
+  'package.json': toolPackageJson(),
+  '.github/workflows/publish.yml': publishYml(PINNED_NODE),
+  'docs/user-guide.md': USER_GUIDE,
+  'docs/examples/lib.sh': 'step() { :; }\n',
+  'docs/examples/01-first/run.sh': '#!/usr/bin/env bash\necho "OK: first"\n',
+  'docs/examples/02-second/run.sh': '#!/usr/bin/env bash\necho "OK: second"\n',
+};
+
+/** A checkout-shaped directory (no git needed: the half reads the tree it is given) and a scratch directory. */
+const toolDirs: string[] = [];
+afterAll(() => toolDirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+function toolTree(files: Readonly<Record<string, string | null>> = {}): { tree: string; scratch: string } {
+  const tree = mkdtempSync(join(tmpdir(), 'wf-rh-tool-tree-'));
+  const scratch = mkdtempSync(join(tmpdir(), 'wf-rh-tool-out-'));
+  toolDirs.push(tree, scratch);
+  for (const [path, content] of Object.entries({ ...TOOL_FILES, ...files })) if (content !== null) writeFileAt(tree, path, content);
+  return { tree, scratch };
+}
+
+function writeFileAt(root: string, path: string, content: string): void {
+  mkdirSync(dirname(join(root, path)), { recursive: true });
+  writeFileSync(join(root, path), content);
+}
+
+/** jest's `--json` results: 10 tests, one failing, one skipped, one todo, one suite that failed to run. */
+const jestJson = (tree: string): string => JSON.stringify({
+  numTotalTests: 10, numPassedTests: 7, numFailedTests: 1, numPendingTests: 1, numTodoTests: 1, numFailedTestSuites: 2, numRuntimeErrorTestSuites: 1,
+  testResults: [
+    { name: join(tree, 'test', 'a.test.ts'), status: 'failed', message: '', assertionResults: [{ fullName: 'a works', status: 'failed' }, { fullName: 'a is fine', status: 'passed' }] },
+    { name: join(tree, 'test', 'b.test.ts'), status: 'failed', message: 'Cannot find module', assertionResults: [], testExecError: { message: 'Cannot find module' } },
+    { name: join(tree, 'test', 'c.test.ts'), status: 'passed', message: '', assertionResults: [{ fullName: 'c', status: 'passed' }] },
+  ],
+});
+
+const metricCounts = (total: number, covered: number): { total: number; covered: number; skipped: number; pct: number } => ({ total, covered, skipped: 0, pct: Math.round((covered * 10000) / total) / 100 });
+/** jest's `json-summary`: the totals, and the three critical modules (audit under the 90 % floor). */
+const coverageSummary = (tree: string, files: readonly string[] = ['audit', 'commit-message', 'state-machine']): string => {
+  const branches: Record<string, [number, number]> = { audit: [20, 17], 'commit-message': [40, 40], 'state-machine': [50, 46] };
+  const out: Record<string, unknown> = {
+    total: { lines: metricCounts(1000, 990), statements: metricCounts(1200, 1180), functions: metricCounts(300, 291), branches: metricCounts(500, 470), branchesTrue: metricCounts(1, 1) },
+    [join(tree, 'src', 'core', 'index.ts')]: { lines: metricCounts(10, 10), statements: metricCounts(10, 10), functions: metricCounts(2, 2), branches: metricCounts(4, 4) },
+  };
+  for (const name of files) {
+    const [total, covered] = branches[name]!;
+    out[join(tree, 'src', 'memory', `${name}.ts`)] = { lines: metricCounts(10, 10), statements: metricCounts(10, 10), functions: metricCounts(2, 2), branches: metricCounts(total, covered) };
+  }
+  return JSON.stringify(out);
+};
+
+/** The latency pass's report as `test/core/helpers/latency.ts` `latencyReport` prints it, inside jest's console block. */
+const latencyOutput = (machine: string, history: { marginal: number; total: number } = { marginal: 120, total: 330 }): string => [
+  '  console.log',
+  '    load average (1-min / 5-min): before 1.50 / 2.00, after 1.75 / 2.10 (one window: the commands are sampled interleaved)',
+  `    machine: ${machine}`,
+  '    floor (--version): p95 210 ms (n=25, min 190 ms, max 230 ms)',
+  '    memory search: marginal p95 106 ms (n=25, min 80 ms, max 120 ms); total p95 287 ms (n=25, min 250 ms, max 300 ms)',
+  '    dna show: marginal p95 60 ms (n=25, min 40 ms, max 70 ms); total p95 250 ms (n=25, min 230 ms, max 260 ms)',
+  `    memory history: marginal p95 ${history.marginal} ms (n=25, min 90 ms, max ${history.marginal} ms); total p95 ${history.total} ms (n=25, min 280 ms, max ${history.total} ms)`,
+  '',
+  '      at Object.log (test/cli/command-latency.test.ts:114:15)',
+].join('\n');
+
+type Outcome = Partial<ToolResult> | ((call: ToolCall) => Partial<ToolResult>);
+
+/** A stub runner: every step succeeds with a well-formed output unless `overrides` says otherwise; it records the calls. */
+function stubTools(overrides: Readonly<Record<string, Outcome>> = {}): { tools: ToolRunner; calls: ToolCall[] } {
+  const calls: ToolCall[] = [];
+  const arg = (call: ToolCall, prefix: string): string => call.args.find((a) => a.startsWith(prefix))!.slice(prefix.length);
+  const defaults: Record<string, Outcome> = {
+    test: (call) => {
+      writeFileSync(arg(call, '--outputFile='), jestJson(call.cwd));
+      return { status: 1 };
+    },
+    coverage: (call) => {
+      mkdirSync(arg(call, '--coverageDirectory='), { recursive: true });
+      writeFileSync(join(arg(call, '--coverageDirectory='), 'coverage-summary.json'), coverageSummary(call.cwd));
+      return { status: 1 };
+    },
+    latency: { status: 0, stdout: latencyOutput('otherwise idle') },
+    'npm-view': { status: 0, stdout: '"0.3.0"\n' },
+  };
+  const tools: ToolRunner = (call) => {
+    calls.push(call);
+    const outcome = overrides[call.step] ?? defaults[call.step] ?? { status: 0 };
+    return { status: 0, signal: null, stdout: '', stderr: '', ...(typeof outcome === 'function' ? outcome(call) : outcome) };
+  };
+  return { tools, calls };
+}
+
+function byId(entries: readonly MetricEntry[]): Record<string, MetricEntry> {
+  return Object.fromEntries(entries.map((m) => [m.id, m]));
+}
+
+const TOOL_IDS = ['Q01', 'Q02', 'Q03', 'Q04', 'Q11', 'Q12', 'Q17'];
+
+describe('the toolchain half — Q01–Q04, Q11, Q12, Q17 from stubbed tool outputs (task-232 AC 1)', () => {
+  it('runs npm ci and then each metric\'s command in the tree, with the running Node first on PATH', async () => {
+    const { tree, scratch } = toolTree();
+    const { tools, calls } = stubTools();
+    const entries = await measureToolchain(tree, scratch, { tools, maxWorkers: 2 });
+    expect(entries.map((m) => m.id)).toEqual(TOOL_IDS);
+    expect(calls.map((c) => c.step)).toEqual(['install', 'build', 'typecheck', 'lint', 'test', 'coverage', 'examples/01-first', 'examples/02-second', 'latency', 'npm-view']);
+    expect(calls.map((c) => [c.command, ...c.args].join(' ')).slice(0, 4)).toEqual(['npm ci', 'npm run build', 'npm run typecheck', 'npm run lint']);
+    for (const c of calls) {
+      expect(c.cwd).toBe(tree);
+      expect(String(c.env['PATH']).split(delimiter)[0]).toBe(dirname(process.execPath));
+      expect(c.env['WINGFOIL_LATENCY']).toBeUndefined();
+      expect(c.env['GIT_DIR']).toBeUndefined();
+    }
+    const step = (name: string): ToolCall => calls.find((c) => c.step === name)!;
+    expect(step('test').args).toEqual(expect.arrayContaining(['test', '--', '--json', '--maxWorkers=2']));
+    expect(step('coverage').args).toEqual(expect.arrayContaining(['run', 'test:coverage', '--', '--coverageReporters=json-summary', '--maxWorkers=2']));
+    expect(step('test').args.find((a) => a.startsWith('--outputFile='))!.startsWith(`--outputFile=${scratch}`)).toBe(true);
+    expect(step('examples/01-first')).toMatchObject({ command: 'bash', args: [join(tree, 'docs', 'examples', '01-first', 'run.sh')] });
+    expect(step('examples/01-first').env['WINGFOIL']).toBe(`node ${join(tree, 'dist', 'cli.js')}`);
+    expect(step('latency')).toMatchObject({ command: 'npm', args: ['run', 'test:latency'] });
+    expect(step('latency').env['WINGFOIL_LATENCY_REPORT']).toBe('1');
+    expect(step('npm-view')).toMatchObject({ command: 'npm', args: ['view', 'wingfoil', 'version', '--json'] });
+  });
+
+  it('Q01 — build, typecheck and lint: true when all three exit 0, else false naming each that did not', async () => {
+    const first = toolTree();
+    const green = byId(await measureToolchain(first.tree, first.scratch, { tools: stubTools().tools }));
+    expect(green['Q01']).toMatchObject({ status: 'measured', value: true, raw: { build: 0, typecheck: 0, lint: 0 }, failing: [] });
+    const { tree, scratch } = toolTree();
+    const red = byId(await measureToolchain(tree, scratch, { tools: stubTools({ lint: { status: 1 } }).tools }));
+    expect(red['Q01']).toMatchObject({ status: 'measured', value: false, raw: { build: 0, typecheck: 0, lint: 1 }, failing: ['npm run lint (exit 1)'] });
+  });
+
+  it('Q02 — total, failing and disabled tests read from jest\'s JSON, each failing test and broken suite named', async () => {
+    const { tree, scratch } = toolTree();
+    const q = byId(await measureToolchain(tree, scratch, { tools: stubTools().tools }))['Q02'];
+    expect(q).toMatchObject({
+      status: 'measured',
+      value: { total: 10, failing: 2, disabled: 2 },
+      raw: { total: 10, passed: 7, failed: 1, skipped: 1, todo: 1, failed_suites: 1 },
+      failing: ['test/a.test.ts › a works', 'test/b.test.ts (suite failed to run)'],
+    });
+  });
+
+  it('Q03 — the coverage totals with their counts; Q04 — branch coverage of the three critical modules, floor 90 % (AC 2)', async () => {
+    const { tree, scratch } = toolTree();
+    const m = byId(await measureToolchain(tree, scratch, { tools: stubTools().tools }));
+    expect(m['Q03']).toMatchObject({
+      status: 'measured',
+      value: { statements: 98.33, branches: 94, functions: 97, lines: 99 },
+      raw: { statements_covered: 1180, statements_total: 1200, branches_covered: 470, branches_total: 500, functions_covered: 291, functions_total: 300, lines_covered: 990, lines_total: 1000, files: 4 },
+    });
+    expect(m['Q04']).toMatchObject({
+      status: 'measured',
+      value: { 'src/memory/audit.ts': 85, 'src/memory/commit-message.ts': 100, 'src/memory/state-machine.ts': 92 },
+      raw: { 'src/memory/audit.ts covered': 17, 'src/memory/audit.ts total': 20, 'src/memory/state-machine.ts covered': 46, 'src/memory/state-machine.ts total': 50 },
+      failing: ['src/memory/audit.ts: branches 85% (17/20) < 90%'],
+    });
+  });
+
+  it('Q04 — a critical module missing from the coverage summary is not-measurable, naming it', async () => {
+    const { tree, scratch } = toolTree();
+    const tools = stubTools({
+      coverage: (call) => {
+        const dir = call.args.find((a) => a.startsWith('--coverageDirectory='))!.slice('--coverageDirectory='.length);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, 'coverage-summary.json'), coverageSummary(call.cwd, ['audit', 'commit-message']));
+        return { status: 0 };
+      },
+    }).tools;
+    const m = byId(await measureToolchain(tree, scratch, { tools }));
+    expect(m['Q04']).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('src/memory/state-machine.ts') });
+    expect(m['Q03']).toMatchObject({ status: 'measured' });
+  });
+
+  it('Q11 — the share of docs/examples scripts that pass, each failing one named; none can run without the build', async () => {
+    const { tree, scratch } = toolTree();
+    const m = byId(await measureToolchain(tree, scratch, { tools: stubTools({ 'examples/01-first': { status: 1, stdout: 'FAIL: first' } }).tools }));
+    expect(m['Q11']).toMatchObject({ status: 'measured', value: 50, raw: { executed: 2, passed: 1 }, failing: ['docs/examples/01-first/run.sh (exit 1)'] });
+    const unbuilt = toolTree();
+    const n = byId(await measureToolchain(unbuilt.tree, unbuilt.scratch, { tools: stubTools({ build: { status: 2 } }).tools }));
+    expect(n['Q11']).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('npm run build') });
+    expect(n['Q01']).toMatchObject({ value: false, failing: ['npm run build (exit 2)'] });
+  });
+
+  it('Q12 — the highest total p95 of the standard commands, with the floor, every p95 and the load of the run', async () => {
+    const { tree, scratch } = toolTree();
+    const m = byId(await measureToolchain(tree, scratch, { tools: stubTools({ latency: { status: 1, stdout: latencyOutput('otherwise idle', { marginal: 1010, total: 1200 }) } }).tools }));
+    expect(m['Q12']).toMatchObject({
+      status: 'measured',
+      value: 1200,
+      raw: {
+        machine: 'otherwise idle', load_1m_before: 1.5, load_1m_after: 1.75, floor_p95_ms: 210,
+        'memory search total_p95_ms': 287, 'memory search marginal_p95_ms': 106, 'dna show total_p95_ms': 250, 'memory history total_p95_ms': 1200, 'memory history marginal_p95_ms': 1010,
+      },
+      failing: ['memory history: total p95 1200 ms >= 1000 ms', 'memory history: marginal p95 1010 ms >= 1000 ms'],
+    });
+  });
+
+  it('Q12 — a loaded run is not-measurable, quoting the suite\'s own verdict, and still records the load (R4)', async () => {
+    const { tree, scratch } = toolTree();
+    const loaded = 'loaded: floor p95 826 ms (n=25, min 700 ms, max 900 ms) >= 500 ms; load average (1-min / 5-min): before 18.00 / 12.00, after 19.00 / 13.00; not a REQ-PERF-02 measurement';
+    const m = byId(await measureToolchain(tree, scratch, { tools: stubTools({ latency: { status: 1, stdout: latencyOutput(loaded) } }).tools }));
+    expect(m['Q12']).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('loaded: floor p95 826 ms'), raw: { load_1m_before: 1.5, load_1m_after: 1.75, floor_p95_ms: 210 } });
+    expect(m['Q12']).not.toHaveProperty('value');
+  });
+
+  it('Q17 — the documented install command resolves to the documented version through npm view', async () => {
+    const { tree, scratch } = toolTree();
+    const ok = byId(await measureToolchain(tree, scratch, { tools: stubTools().tools }));
+    expect(ok['Q17']).toMatchObject({
+      status: 'measured', value: true, failing: [],
+      raw: { install_command: 'npm install -g wingfoil', documented: '0.3.0', resolved: '0.3.0', documented_in: 'docs/user-guide.md', resolved_from: 'the registry at run time' },
+      evidence: { command: 'npm view wingfoil version --json' },
+    });
+    const stale = byId(await measureToolchain(tree, scratch, { tools: stubTools({ 'npm-view': { status: 0, stdout: '"0.2.2"\n' } }).tools }));
+    expect(stale['Q17']).toMatchObject({ value: false, failing: ['npm install -g wingfoil resolves to 0.2.2, the documentation says 0.3.0'] });
+    const offline = byId(await measureToolchain(tree, scratch, { tools: stubTools().tools, offline: true }));
+    expect(offline['Q17']).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('offline') });
+  });
+});
+
+describe('the toolchain half — a tool that fails is not-measurable with the reason, never a zero (task-232 AC 3)', () => {
+  const noZero = (entries: readonly MetricEntry[]): void => {
+    for (const m of entries) if (m.status !== 'measured') expect(m).not.toHaveProperty('value');
+  };
+
+  it('npm ci failing makes all seven not-measurable, naming npm ci and its last error line', async () => {
+    const { tree, scratch } = toolTree();
+    const { tools, calls } = stubTools({ install: { status: 1, stderr: 'npm warn x\nnpm error code EUSAGE\n' } });
+    const entries = await measureToolchain(tree, scratch, { tools });
+    expect(entries.map((m) => [m.id, m.status, m.reason])).toEqual(TOOL_IDS.map((id) => [id, 'not-measurable', 'npm ci failed (exit 1): npm error code EUSAGE']));
+    expect(calls.map((c) => c.step)).toEqual(['install']);
+  });
+
+  it('a script missing from package.json, a spawn error, a signal, unreadable output: each not-measurable', async () => {
+    const scripts: Record<string, string> = { ...TOOL_SCRIPTS };
+    delete scripts['lint'];
+    delete scripts['test:latency'];
+    const { tree, scratch } = toolTree({ 'package.json': toolPackageJson(scripts), 'docs/user-guide.md': '# Guide\n\nNo install here.\n' });
+    const m = byId(await measureToolchain(tree, scratch, {
+      tools: stubTools({
+        test: { status: null, error: 'spawn npm ENOENT' },
+        coverage: { status: null, signal: 'SIGKILL' },
+        'examples/02-second': { status: null, error: 'spawn bash ENOENT' },
+      }).tools,
+    }));
+    expect(m['Q01']).toMatchObject({ status: 'not-measurable', reason: 'package.json at the measurement point has no `lint` script' });
+    expect(m['Q02']).toMatchObject({ status: 'not-measurable', reason: 'npm test could not run: spawn npm ENOENT' });
+    expect(m['Q03']).toMatchObject({ status: 'not-measurable', reason: 'npm run test:coverage was killed by SIGKILL' });
+    expect(m['Q04']).toMatchObject({ status: 'not-measurable', reason: 'npm run test:coverage was killed by SIGKILL' });
+    expect(m['Q11']).toMatchObject({ status: 'not-measurable', reason: 'docs/examples/02-second/run.sh could not run: spawn bash ENOENT' });
+    expect(m['Q12']).toMatchObject({ status: 'not-measurable', reason: 'package.json at the measurement point has no `test:latency` script' });
+    expect(m['Q17']).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('no `npm install -g` command') });
+    noZero(Object.values(m));
+  });
+
+  it('jest leaving no JSON, a coverage run leaving no summary, a latency run printing no report: not-measurable', async () => {
+    const { tree, scratch } = toolTree();
+    const m = byId(await measureToolchain(tree, scratch, {
+      tools: stubTools({ test: { status: 1, stderr: 'boom' }, coverage: { status: 1 }, latency: { status: 0, stdout: 'PASS test/cli/command-latency.test.ts\n' }, 'npm-view': { status: 1, stderr: 'npm error 404 Not Found' } }).tools,
+    }));
+    expect(m['Q02']).toMatchObject({ status: 'not-measurable', reason: expect.stringMatching(/^npm test wrote no readable JSON results \(exit 1\)/) });
+    expect(m['Q03']).toMatchObject({ status: 'not-measurable', reason: expect.stringMatching(/^npm run test:coverage wrote no readable coverage summary/) });
+    expect(m['Q12']).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('printed no latency report') });
+    expect(m['Q17']).toMatchObject({ status: 'not-measurable', reason: 'npm view wingfoil version --json failed (exit 1): npm error 404 Not Found' });
+    noZero(Object.values(m));
+  });
+});
+
+describe('the toolchain half — the pipeline\'s pinned Node (dl-089 §6, task-232 AC 1)', () => {
+  it('a running Node other than publish.yml\'s NODE_VERSION makes the seven not-measurable, naming both, and runs nothing', async () => {
+    const { tree, scratch } = toolTree({ '.github/workflows/publish.yml': publishYml('0.0.1') });
+    const { tools, calls } = stubTools();
+    const entries = await measureToolchain(tree, scratch, { tools });
+    const reason = `the running Node ${process.version} is not the pipeline's pinned v0.0.1 (.github/workflows/publish.yml env.NODE_VERSION at the point): run under it, or pass --any-node`;
+    expect(entries.map((m) => [m.id, m.status, m.reason])).toEqual(TOOL_IDS.map((id) => [id, 'not-measurable', reason]));
+    expect(calls).toEqual([]);
+  });
+
+  it('--any-node measures anyway and records both versions on every entry', async () => {
+    const { tree, scratch } = toolTree({ '.github/workflows/publish.yml': publishYml('0.0.1') });
+    const entries = await measureToolchain(tree, scratch, { tools: stubTools().tools, anyNode: true });
+    for (const m of entries) expect(m.raw).toMatchObject({ node: process.version, node_pinned: 'v0.0.1' });
+    expect(byId(entries)['Q01']).toMatchObject({ status: 'measured', value: true });
+  });
+
+  it('a point with no pinned Node is refused the same way, unless --any-node', async () => {
+    const { tree, scratch } = toolTree({ '.github/workflows/publish.yml': null });
+    expect((await measureToolchain(tree, scratch, { tools: stubTools().tools }))[0]).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('no pinned Node') });
+    const any = await measureToolchain(tree, scratch, { tools: stubTools().tools, anyNode: true });
+    expect(any[0]!.raw).toMatchObject({ node: process.version, node_pinned: null });
+  });
+});
+
+describe('measureRelease runs the toolchain half in its worktree (task-232)', () => {
+  function toolFixture(): { repo: Repo; base: string; point: string } {
+    const r = repo();
+    const base = r.commit('chore: configure wingfoil', { author: ADA, date: DAY0, files: { ...BASE_FILES, ...TOOL_FILES } });
+    const point = r.commit('docs: note', { files: { 'docs/note.md': 'Note.\n' } });
+    return { repo: r, base, point };
+  }
+
+  it('writes the seven entries in catalogue order, in a report the schema accepts; task-233\'s stay its own', async () => {
+    const h = toolFixture();
+    const { tools, calls } = stubTools();
+    const report = await measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, external: () => ({ ok: false, error: 'stub' }), tools });
+    expect(TOOL_IDS.map((id) => entry(report, id).status)).toEqual(TOOL_IDS.map(() => 'measured'));
+    expect(entry(report, 'Q05')).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('task-233') });
+    expect(calls[0]!.cwd).not.toBe(h.repo.root);
+    expect(calls[0]!.cwd.startsWith(tmpdir())).toBe(true);
+    expect(schemaErrors(report)).toEqual([]);
+  });
+});
+
+describe('bug-329 — a signal removes the throw-away worktree and its directory, then re-raises', () => {
+  it('SIGTERM during a tool: the handler removes the worktree and the directory, then dies on SIGTERM', async () => {
+    const r = repo();
+    const base = r.commit('chore: configure wingfoil', { author: ADA, date: DAY0, files: { ...BASE_FILES, ...TOOL_FILES } });
+    const point = r.commit('docs: note', { files: { 'docs/note.md': 'Note.\n' } });
+    const worktreesBefore = git(r.root, ['worktree', 'list', '--porcelain']);
+    const target = new EventEmitter();
+    const died: string[] = [];
+    let cwd = '';
+    const { tools } = stubTools({
+      test: (call) => {
+        cwd = call.cwd;
+        expect(existsSync(cwd)).toBe(true);
+        target.emit('SIGTERM');
+        return { status: null, signal: 'SIGTERM' };
+      },
+    });
+    await expect(measureRelease(r.root, { release: 'v0.2', at: point, previous: base, offline: true, tools, interrupts: { target, die: (s) => void died.push(s) } })).rejects.toThrow('interrupted by SIGTERM');
+    expect(died).toEqual(['SIGTERM']);
+    expect(existsSync(dirname(cwd))).toBe(false);
+    expect(git(r.root, ['worktree', 'list', '--porcelain'])).toBe(worktreesBefore);
+    expect(target.listenerCount('SIGTERM') + target.listenerCount('SIGINT') + target.listenerCount('SIGHUP')).toBe(0);
+  });
+
+  it('a normal return removes the handlers too', async () => {
+    const r = repo();
+    const base = r.commit('chore: configure wingfoil', { author: ADA, date: DAY0, files: { ...BASE_FILES, ...TOOL_FILES } });
+    const point = r.commit('docs: note', { files: { 'docs/note.md': 'Note.\n' } });
+    const target = new EventEmitter();
+    await measureRelease(r.root, { release: 'v0.2', at: point, previous: base, offline: true, tools: stubTools().tools, interrupts: { target, die: () => undefined } });
+    expect(target.eventNames()).toEqual([]);
+  });
+
+  it('a real process killed with SIGTERM while a tool runs leaves no worktree and no directory, and exits by the signal', async () => {
+    const r = repo();
+    // `build` hangs: the default runner spawns it through npm, so the handler has a real child to stop.
+    const hang = toolPackageJson({ ...TOOL_SCRIPTS, build: 'node -e "setInterval(() => {}, 1000)"' });
+    const base = r.commit('chore: configure wingfoil', { author: ADA, date: DAY0, files: { ...BASE_FILES, ...TOOL_FILES, 'package.json': hang } });
+    const point = r.commit('docs: note', { files: { 'docs/note.md': 'Note.\n' } });
+    const worktreesBefore = git(r.root, ['worktree', 'list', '--porcelain']);
+    const script = [
+      `const { measureRelease } = require(${JSON.stringify(join(REPO_ROOT, 'scripts', 'release-health', 'measure.cjs'))});`,
+      `measureRelease(${JSON.stringify(r.root)}, { release: 'v0.2', at: ${JSON.stringify(point)}, previous: ${JSON.stringify(base)}, offline: true,`,
+      '  log: (line) => process.stdout.write(line + "\\n") }).then(() => process.exit(3), (e) => { process.stderr.write(String(e) + "\\n"); process.exit(4); });',
+    ].join('\n');
+    const child = spawn(process.execPath, ['-e', script], { cwd: r.root, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    let err = '';
+    child.stderr.on('data', (chunk: Buffer) => { err += chunk.toString(); });
+    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => child.on('exit', (code, signal) => resolve({ code, signal })));
+    await new Promise<void>((resolve) => {
+      child.stdout.on('data', (chunk: Buffer) => {
+        out += chunk.toString();
+        if (/build: npm run build/.test(out)) resolve();
+      });
+      void exited.then(() => resolve());
+    });
+    child.kill('SIGTERM');
+    const { code, signal } = await exited;
+    expect({ code, signal, err }).toMatchObject({ code: null, signal: 'SIGTERM' });
+    const tree = /in (\S+)\n/.exec(out)?.[1] ?? '';
+    expect(tree).toMatch(/wf-release-health-/);
+    expect(existsSync(dirname(tree))).toBe(false);
+    expect(git(r.root, ['worktree', 'list', '--porcelain'])).toBe(worktreesBefore);
   });
 });
