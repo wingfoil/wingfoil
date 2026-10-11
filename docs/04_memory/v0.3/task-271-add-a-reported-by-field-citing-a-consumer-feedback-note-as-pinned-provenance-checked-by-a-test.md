@@ -84,7 +84,7 @@ own (documentation directive D2).
 
 | AC | Class | Why |
 |---|---|---|
-| 1 — field on five scaffolds + `memory.yaml`; `add`/`submit` keep it | red-first | the field does not exist (`grep -rln reported_by .wingfoil src` → nothing at `30b268a3`); fails at red |
+| 1 — field on five scaffolds + `memory.yaml`; `add`/`submit` keep it | red-first | no type or scaffold declared the field at `30b268a3` (`git grep -n '^reported_by:' 30b268a3 -- .wingfoil/memory/templates` and `git grep -n reported_by 30b268a3 -- .wingfoil/memory.yaml src` → nothing; the only `.wingfoil` mention is a comment in `user-docs.yaml`); fails at red |
 | 2 — `test/docs/reported-by.test.ts` refuses bad entries, passes here | red-first for the declaration it reads; the refusal fixtures pin a new checker | the checker is test code written with its test, so its refusal cases pass at red (as `task-269`'s D1); the repository case fails at red because no type declares the field |
 | 3 — `COLLABORATION.md` `## Credit` | characterization (doc) | the text is new, but it is documentation: pinned by phrase tests written after the edit, which pass on first run. Recorded as such, not as a red |
 | 4 — `spec-010` lists the field | characterization; pending amendment | an approved spec: edited in the worktree, uncommitted, not tested (the branch HEAD would not carry it) |
@@ -151,7 +151,19 @@ across all worktrees, load ≤ 14, `--maxWorkers=2`):
 - D4 — the amend review rule is stated in `COLLABORATION.md`, not `code-review.md` (B5: `task-276` owns it).
 
 **Pending amendments (approver)** — uncommitted in the worktree, for `memory amend`:
-- `spec-010-memory-frontmatter-schema` — `--reason "task-271, from dl-163 S3c: a new subsection lists the optional reported_by field the bug, decision-log, adr, tech-spec and change-proposal scaffolds declare, its entry shape, who writes it, how it survives an amendment and the repository test that checks it. See the dated Revision note at the end."`
+- `spec-010-memory-frontmatter-schema` — `--reason "task-271, from dl-163 S3c: a new subsection lists the optional reported_by field the bug, decision-log, adr, tech-spec and change-proposal scaffolds declare, its entry shape, who writes it, how it survives an amendment and the repository test that checks it; the zone model's second zone and the sentence closing Base fields now say an optional type-specific field is declared by its scaffold and name reported_by as the one such field this spec lists. See the dated Revision note at the end."`
+
+### Review fixes (2026-10-11, independent review: approve with fixes)
+
+- **F1** — `spec-010` (pending amendment): zone 2 now says an optional type-specific field is declared by the
+  type's scaffold alone, and the sentence closing "Base fields" names `reported_by` as the one type-specific field
+  the spec lists; the Revision note and the proposed `--reason` say so.
+- **F2** — `COLLABORATION.md`: the credit sentence lists `change-proposal` beside `bug`/`DL`/`ADR`/`tech-spec`
+  (`grep -n 'change-proposal. id' COLLABORATION.md` → line 145). No AC 3 phrase test pins it.
+- **F3** — the AC 1 classification claim named a command that does find a mention (a comment in `user-docs.yaml`,
+  `git grep -l reported_by 30b268a3 -- .wingfoil src`); it now says what was meant, no declaring type or scaffold,
+  with the commands that show it.
+- Runs: `npx jest test/docs` (includes reported-by and community-health), `node scripts/lint-claims.cjs --base 30b268a3`.
 
 ### Retrospective
 

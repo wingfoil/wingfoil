@@ -142,7 +142,7 @@ it, and it never rewrites git history):
   unless its `Reason:` says why (for example, the entry cited the wrong note or commit).
 - When an agent turns your ratified artifact into delivered work (tasks reaching `done`), **you are
   credited** as the source of that AI-generated output. Because a task traces back to the artifact it
-  implements, the credit stays attached to the specific `bug`/`DL`/`ADR`/`tech-spec` id.
+  implements, the credit stays attached to the specific `bug`/`DL`/`ADR`/`tech-spec`/`change-proposal` id.
 
 This keeps credit **machine-visible and git-versioned**, consistent with WingFoil’s single-source-of-
 truth model — no external contributor database, no commit rewriting.
