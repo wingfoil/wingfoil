@@ -142,19 +142,34 @@ describe('AC 2 — a VHS tape drives docs/examples/01-first-project/run.sh, rend
     expect(typed).toContainEqual(expect.stringContaining('WINGFOIL="node $PWD/dist/cli.js"'));
   });
 
-  it('waits on screen for the example\'s own OK line, so a failing example fails the recording', () => {
+  // The render of 2026-10-10 timed out on `Wait+Screen /OK: first project/`: VHS's screen scope reads rows
+  // 0..term.rows of xterm's buffer (`Buffer()` in VHS's testing.go), the TOP of a scrolled buffer, so the closing
+  // `OK:` line was never in it. The line scope reads the cursor's row in the viewport (`CurrentLine()`), so the
+  // tape waits there for the prompt to come back, and a failing example exits the shell so it never does.
+  it('the shell exits if the example fails, so the prompt never returns and VHS renders nothing', () => {
+    const typed = tapeCommands()
+      .filter(([command]) => command === 'Type')
+      .map(([, text]) => text);
+    expect(typed).toContainEqual(expect.stringMatching(new RegExp(`bash ${EXAMPLE.replace(/[.]/g, '\\.')} \\|\\| exit 1`)));
+  });
+
+  it('waits on the cursor line for the returning prompt, never on the screen scope', () => {
     const done = /^done_ok "(.+)"$/m.exec(read(EXAMPLE));
     expect(done).not.toBeNull();
     const waits = tapeCommands().filter(([command]) => command.startsWith('Wait'));
     expect(waits).toHaveLength(1);
     const [command, pattern] = waits[0]!;
-    // `+Screen` matches anywhere on the screen; the `@` timeout makes VHS exit non-zero when it lapses.
-    expect(command).toMatch(/^Wait\+Screen@\d+(?:ms|s|m)$/);
+    // Line scope (the default, or `+Line`); the `@` timeout makes VHS return an error, and render nothing, when it lapses.
+    expect(command).toMatch(/^Wait(?:\+Line)?@\d+(?:ms|s|m)$/);
     const regex = /^\/(.+)\/$/.exec(pattern);
     expect(regex).not.toBeNull();
-    expect(new RegExp(regex![1]!).test(`OK: ${done![1]!}`)).toBe(true);
-    // The example's failure line does not satisfy the wait.
-    expect(new RegExp(regex![1]!).test('FAIL: history operations')).toBe(false);
+    const prompt = new RegExp(regex![1]!);
+    // VHS's bash prompt is `> ` (PS1 in its shell.go), read back trimmed.
+    expect(prompt.test('>')).toBe(true);
+    // No line the example prints satisfies it: neither its closing lines nor an identity ending in `>`.
+    for (const line of [`OK: ${done![1]!}`, 'FAIL: history operations', '  "approver": "Ada Lovelace <ada@example.com>', '$ wingfoil init --template Scrum']) {
+      expect(prompt.test(line)).toBe(false);
+    }
   });
 
   it('requires the tools the example needs, so a machine without them fails before recording', () => {
