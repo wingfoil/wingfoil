@@ -40,7 +40,10 @@ describe('listBlobsAtRevs / readBlobs / mergeBasesWith (task-274)', () => {
     commitAll(repo, 'one');
     first = git(repo, ['rev-parse', 'HEAD']).trim();
     writeFixtureFile(repo, 'docs/mem/c/deep/er/two.md', 'two\n');
-    commitAll(repo, 'two');
+    // A gitlink: an entry of the tree, not a file; staged after `git add -A`, which would drop it.
+    git(repo, ['add', '-A']);
+    git(repo, ['update-index', '--add', '--cacheinfo', `160000,${first},docs/mem/submodule`]);
+    git(repo, ['commit', '--quiet', '-m', 'two']);
     second = git(repo, ['rev-parse', 'HEAD']).trim();
     git(repo, ['checkout', '--quiet', '-b', 'side', first]);
     writeFixtureFile(repo, 'docs/mem/a/one.md', 'changed on side\n');
@@ -53,6 +56,11 @@ describe('listBlobsAtRevs / readBlobs / mergeBasesWith (task-274)', () => {
   it.each([['docs/mem'], ['docs'], ['']])('answers what git ls-tree answers at every revision, under %j', (dir) => {
     const revs = [second, first, side, second];
     expect(listBlobsAtRevs(repo, revs, dir)).toEqual(revs.map((rev) => lsTree(repo, rev, dir)));
+  });
+
+  it('drops the gitlink, which really is in the tree', () => {
+    expect(git(repo, ['ls-tree', '-r', second, '--', 'docs/mem/submodule'])).toMatch(/^160000 commit /);
+    expect(listBlobsAtRevs(repo, [second], 'docs/mem')[0]!.map((blob) => blob.path)).not.toContain('docs/mem/submodule');
   });
 
   it('a revision without the directory holds nothing there', () => {

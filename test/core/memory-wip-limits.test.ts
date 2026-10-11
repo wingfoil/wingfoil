@@ -19,6 +19,8 @@ import { existsSync, readFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CORE_MODULES } from '../../src/core';
+import { loadTypeDocumentCopiesAtRevs } from '../../src/memory';
+import type { MemoryYaml } from '../../src/memory';
 import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import { isMoreAdvancedState, prepareMemoryTransition } from '../../src/core/memory-transition';
@@ -485,8 +487,8 @@ describe('the across-refs count, edge cases (task-274)', () => {
     commitAll(repo, 'an unreadable document');
     const trunk = gitOut(repo, ['rev-parse', '--abbrev-ref', 'HEAD']);
     git(repo, ['checkout', '--quiet', '-b', 'other']);
-    writeFixtureFile(repo, 'notes.txt', 'unrelated\n');
-    commitAll(repo, 'other differs from the trunk; the unreadable file is on both');
+    writeFixtureFile(repo, 'docs/memory/wide/wide-zzz.md', '---\nid: [still unclosed\n---\n\nOther bytes.\n');
+    commitAll(repo, 'other holds the same unreadable path with other bytes');
     git(repo, ['checkout', '--quiet', trunk]);
 
     const result = await verb('memorySubmit', repo, 'wide-002');
@@ -499,12 +501,32 @@ describe('the across-refs count, edge cases (task-274)', () => {
     symlinkSync('wide-001.md', join(repo, 'docs/memory/wide/wide-link.md'));
     writeFixtureFile(repo, 'docs/memory/wide/wide-new.md', doc('wide-new', 'wide', 'in-progress').replace('---\n', '---\nformat: 99\n'));
     commitAll(repo, 'a link and a newer-format document');
+    const trunk = gitOut(repo, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    git(repo, ['checkout', '--quiet', '-b', 'other']);
+    writeFixtureFile(repo, 'notes.txt', 'unrelated\n');
+    commitAll(repo, 'other holds the same link');
+    git(repo, ['checkout', '--quiet', trunk]);
     const result = await verb('memorySubmit', repo, 'wide-002');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const warnings = result.warnings?.join('\n') ?? '';
     expect(warnings).toMatch(/W_MEMORY_UNREADABLE[\s\S]*docs\/memory\/wide\/wide-link\.md/);
     expect(warnings).toMatch(/W_MEMORY_UNREADABLE[\s\S]*docs\/memory\/wide\/wide-new\.md/);
+    expect(result.warnings?.filter((line) => line.includes('wide-link.md'))).toHaveLength(1);
+  });
+
+  it('a ref that shares no history with HEAD counts every copy it holds', async () => {
+    const trunk = gitOut(repo, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    git(repo, ['checkout', '--quiet', '--orphan', 'unrelated']);
+    git(repo, ['rm', '-r', '--quiet', '--cached', '.']);
+    writeFixtureFile(repo, 'docs/memory/wide/wide-009.md', doc('wide-009', 'wide', 'in-progress'));
+    git(repo, ['add', 'docs/memory/wide/wide-009.md']);
+    git(repo, ['commit', '--quiet', '-m', 'an unrelated root holding wide-009']);
+    git(repo, ['checkout', '--quiet', '--force', trunk]);
+    const result = await verb('memorySubmit', repo, 'wide-002');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('(limit 2): held by wide-001, wide-009.');
   });
 
   it('a copy with no status on another ref neither holds the state nor hides the holder', async () => {
@@ -519,5 +541,21 @@ describe('the across-refs count, edge cases (task-274)', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toContain('(limit 2): held by wide-001, wide-003.');
+  });
+});
+
+describe('loadTypeDocumentCopiesAtRevs (task-274 review F2)', () => {
+  it('a type memory.yaml does not declare reads the whole tree and finds no copy; the options are optional', () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeFixtureFile(repo, 'docs/memory/wide/wide-001.md', doc('wide-001', 'wide', 'in-progress'));
+      commitAll(repo, 'seed');
+      const head = gitOut(repo, ['rev-parse', 'HEAD']);
+      const yaml = { version: 1, types: { wide: { path: 'docs/memory/wide/{id}.md' } } } as unknown as MemoryYaml;
+      expect(loadTypeDocumentCopiesAtRevs(repo, [head], yaml, 'nope')).toEqual([[]]);
+      expect(loadTypeDocumentCopiesAtRevs(repo, [head], yaml, 'wide')[0]!.map((copy) => copy.path)).toEqual(['docs/memory/wide/wide-001.md']);
+    } finally {
+      removeTempDir(repo);
+    }
   });
 });
