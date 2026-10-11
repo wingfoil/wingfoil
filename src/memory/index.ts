@@ -85,7 +85,7 @@ export type {
   MemoryTypeScanOptions,
 } from './query';
 export { getMemoryHistory } from './history';
-export type { MemoryHistoryEntry } from './history';
+export type { MemoryHistoryEntry, WalkedHistoryEntry } from './history';
 export { writeMemoryEntry } from './entry';
 export type { MemoryEntryWrite } from './entry';
 export {
