@@ -202,7 +202,8 @@ tmpl_version: 260703
   - F1: the design note's spec grep corrected (above).
   - F2: G15 reads the running clone's live refs, so it is not reproducible at a fixed point. The header says so, and
     the G15 entry carries `raw.refs_from: "live refs at run time"`, pinned in the G15 test. The catalogue wording is a
-    follow-up the coordinator files; `metrics.yaml` is unchanged.
+    follow-up the coordinator files; `metrics.yaml` is unchanged
+    (`git diff 30b268a3 HEAD -- docs/08_health/metrics.yaml` → empty).
   - F3: `withWorktree` no longer runs the repository-wide `git worktree prune` after every run, only when its own
     `worktree remove --force` failed.
   - F9: the fixture report and the online (stub) report are validated against `release-health.schema.json` with ajv
