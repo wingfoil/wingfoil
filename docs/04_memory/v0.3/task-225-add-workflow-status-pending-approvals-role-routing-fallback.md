@@ -309,7 +309,7 @@ Uncommitted in the worktree; the gates ran with them.
 
 Final `--reason` texts, which supersede the ones under "Pending amendments" above:
 - `spec-017`: "task-225 implements workflow status and approvals. §6.1 now applies dev-loop's aggregate rule to a forward sync_state, as the W3 B4 review of task-216 asked: a bug passes in-review only once every task naming it is done, and a move back is never held. §5.1 gives W_APPROVAL_ROLE_WITHOUT_AUTHORITY its file and path, and leaves a gate state that is also waiting out of the ungated elements, since no approver can act on it. §5.2 says a re-entered step reports the fallback that re-entered it. §5.3 and §8 route an ungated element's line to the approver role's holders, carried in StatusResult.ungatedRoutedTo. §7.4 prints no open workflows whenever no instance is open, as BDD P4.5 sc. 3 states it. No command, deduction rule or diagnostic code is added."
-- `spec-006`: unchanged.
+- `spec-006`: the text above stays as given; the review fixes did not edit spec-006 (`git diff a17d4896 -- docs/04_memory/design/specs/spec-006-core-domain-api.md` shows only the uncommitted §3 row and Revision note written before submit).
 
 ### Retrospective
 
