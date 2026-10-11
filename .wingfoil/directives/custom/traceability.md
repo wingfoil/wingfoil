@@ -6,16 +6,17 @@ kind: custom
 title: "Requirement traceability chain"
 tags: [custom, traceability, requirements]
 ref: [docs/02_requirements/X_specs-downcast-plan.md]
-version: "1.1"   # 1.1 the filing-type rule (dl-118 (B)), who files and who authors criteria (dl-102 §1 (a), §3), a plan's release (bug-186) — task-197
+version: "1.2"   # 1.2 the roles.yaml sentence names tech-lead (task-276, roles.yaml 1.7) (prev 1.1 the filing-type rule (dl-118 (B)), who files and who authors criteria (dl-102 §1 (a), §3), a plan's release (bug-186) — task-197)
 ---
 
 # Directive — Requirement traceability chain
 
-**Date:** 2026-10-09
+**Date:** 2026-10-11
 
-Custom WingFoil rule. `roles.yaml` binds it to reviewers, architects and product owners. Its filing
-rule is addressed to whoever files a Memory element: the `capture` phase of `bug-ingest` (role
-`developer`) and of `decision-log-ingest` (role `product-owner`) point here (`dl-118` option (B)).
+Custom WingFoil rule. `roles.yaml` binds it to reviewers, architects, product owners and tech
+leads. Its filing rule is addressed to whoever files a Memory element: the `capture` phase of
+`bug-ingest` (role `developer`) and of `decision-log-ingest` (role `product-owner`) point here
+(`dl-118` option (B)).
 
 ## The traceability chain
 

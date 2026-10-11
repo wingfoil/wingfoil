@@ -71,6 +71,8 @@ function versionNumber(raw: string): number {
 describe('git-conventions §1 — commits made directly on main (task-197 row 6)', () => {
   const s1 = section(GIT, '1. Branches');
   const list = s1.slice(s1.indexOf('**Commits made directly on `main`**'));
+  /** `list` with every run of whitespace as one space, so a pinned sentence survives a rewrap (review fix). */
+  const flat = list.replace(/\s+/g, ' ');
 
   it("item 1 is the approver's approve/reject outside a dev-loop task's run, with the three examples", () => {
     const item1 = /\n {2}1\. ([\s\S]*?)\n {2}2\. /.exec(list);
@@ -83,14 +85,22 @@ describe('git-conventions §1 — commits made directly on main (task-197 row 6)
   });
 
   it("states that a dev-loop task's approve, reject and finalize are committed on task/<id> before the merge", () => {
-    expect(list).toContain(
+    expect(flat).toContain(
       "A `dev-loop` task's `approve`, `reject` and `finalize` are committed on `task/<task-id>`, before the merge, so the merge carries them",
     );
   });
 
-  it('points at bug-313 for the workflow half and at dl-079 for the verb, without ruling on it', () => {
+  it('says the list may be committed on main, not that it must (review fix, dl-152 Q1 (A))', () => {
+    expect(flat).toContain('This **closed list** of operations may be committed on `main` itself');
+  });
+
+  // Review correction (2026-10-11): the red-era test pinned that §1 did not rule on `finalize`, citing dl-079 as
+  // undecided. dl-079 is `ready` (approve 3262ad92, option (A)): `finalize` is a declared verb (spec-008 §2).
+  it('points at bug-313 for the workflow half and states finalize is a declared verb (dl-079 (A), spec-008 §2)', () => {
     expect(list).toContain('`bug-313');
-    expect(list).toContain('`dl-079');
+    expect(flat).toContain('`finalize` is a declared verb (`dl-079-wf-commit-verbs-outside-the-declared-grammar` option (A), `spec-008-cli-grammar` §2)');
+    expect(flat).not.toContain('is not decided here: that is `dl-079');
+    expect(GIT.replace(/\s+/g, ' ')).not.toContain('Which verbs beyond the declared five are legal is not decided here');
   });
 });
 
@@ -162,6 +172,13 @@ function directivesList(): CoreOperation {
 }
 
 describe('roles.yaml — tech-lead loads traceability (task-197 review follow-up (d))', () => {
+  // Review fix (2026-10-11): the two directives' intros name every role roles.yaml binds them to.
+  it('the intros of traceability and code-review name tech leads', () => {
+    const trace = readFileSync(join(DIRECTIVES, 'traceability.md'), 'utf-8');
+    expect(trace.replace(/\s+/g, ' ')).toContain('binds it to reviewers, architects, product owners and tech leads');
+    expect(REVIEW).toContain('Applies to reviewers and tech leads (`roles.yaml`)');
+  });
+
   it('assignments.tech-lead lists traceability', () => {
     const roles = load(ROLES_TEXT) as { assignments: Record<string, string[]> };
     expect(roles.assignments['tech-lead']).toContain('traceability');

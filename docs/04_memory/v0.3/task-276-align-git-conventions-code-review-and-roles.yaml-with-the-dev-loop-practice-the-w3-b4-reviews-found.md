@@ -88,8 +88,9 @@ inventory rows above are its tracked source and this task's criteria restate it.
   - `bug-313` (`dev-loop.yaml` `done` orders approve → merge → `set_state(done)`, while practice finalizes on the
     branch) is the workflow half of item 1; this task states the rule, `bug-313`'s fix aligns the workflow. Read
     both before writing §1.
-  - `dl-079` (verbs outside the declared grammar, `in-discussion`) still owns whether `finalize` is ratified; §1
-    names the practice without ruling on the verb.
+  - `dl-079` (verbs outside the declared grammar) is `ready` (approve `3262ad92`, option (A)): `finalize` is a
+    declared verb (`spec-008` §2), and §1 says so. (Corrected at review, 2026-10-11: this bullet said
+    `in-discussion`.)
   - `CLAUDE.md` §7's table and `docs/agents.md` mirror `roles.yaml`: `task-252` owns them (its handover).
 
 - **Coordinator handover, W3 B4 gate (2026-10-10): the proposed text verbatim.** task-197's developer report and its
@@ -134,15 +135,17 @@ bug (`bug: []`): `bug-313` is the workflow half of criterion 1 and stays out of 
 **Read with the task (Implementation Notes).** `bug-313` (`triaged`): `dev-loop.yaml` `done` declares approve → merge →
 remove worktree → `set_state(done)` (`grep -n "name: done" -A9 .wingfoil/workflows/custom/dev-loop.yaml`), while the
 practice finalizes on the branch. §1 states the practice and points at `bug-313` for the workflow; `dev-loop.yaml` is
-not touched (batch notes). `dl-079` (`in-discussion`) owns whether `finalize` is ratified: §1 names the practice and
-defers the verb to it, as §4 already did.
+not touched (batch notes). `dl-079` is `ready` (`grep -m1 '^status' docs/04_memory/design/dls/dl-079-*.md` →
+`status: ready`; approve `3262ad92`, option (A)): `finalize` is a declared verb (`spec-008` §2). Corrected at
+review: this design first took the Implementation Notes' "`in-discussion`" without running the command.
 
 **Evidence re-checked on this branch.**
 - The four shas of the description: `git log --first-parent main --format=%h | grep -c <sha>` → `0` and
   `git merge-base --is-ancestor <sha> main` → true for each of `1a276f87`, `d4a2a1dc`, `4b80b0b2`, `a4808d1f`; positive
   case of the same first-parent command: `960de962` → `1`.
 - Beyond the four: every task review `approve` (`[in-review → approved]` or `[approved → done]`, 241 commits), every
-  `finalize` `[approved → done]` (228) and every `wf(task): reject` (29) reachable from `main` is off its first-parent
+  `finalize` `[approved → done]` (228) and every `wf(task): reject` (28: `git log main --format=%s | grep -c '^wf(task): reject'`; the `--grep` loop
+  also hit one body line, corrected at review) reachable from `main` is off its first-parent
   line (loop over `git log main -F --grep='wf(task): <verb>' --format=%H`, testing each against
   `git log --first-parent main --format=%H`): 0 on it in each set.
 - `code-review.md` declares no `version` at `02800955` (`git show 02800955:.wingfoil/directives/custom/code-review.md
@@ -175,7 +178,7 @@ features/requirement): none to verify or amend. `dl-102`, `dl-152`, `dl-119`, `d
   `git log --no-merges --format=%s | grep -E "^(test|feat|fix|refactor|docs)\([^)]*\): task-"` grouped by scope shows
   `docs(self)` 183, `docs(vision)` 21, `test(lint)` 12, `fix(governance)` 9 beside the module scopes. A strict
   "module only" rule would make most of the history a deviation.
-- D3 — §1's sentence covers a task's review `reject` as well as `approve` and `finalize` (the AC says so); the 29
+- D3 — §1's sentence covers a task's review `reject` as well as `approve` and `finalize` (the AC says so); the 28
   task rejects above are all on branches.
 - D4 — the `ingest/` row cites `dl-132` as the source of `vision-change`; the branch prefix itself is the approver's
   ruling of 2026-10-10 (rulings 2–3, `bug-ingest-rel-v0.3-w3b4-review-findings-plan` item A2), cited in the version
@@ -203,7 +206,7 @@ legitimate first version would break such a pin; checked by `grep` above).
 - `git-conventions.md` 1.4 → 1.5 (history entry names `task-276` and the rulings), `**Date:** 2026-10-10`. §1 heading
   adds `dl-014` G2–G3; new bullets *One worktree per task* and *No task commit in the shared working tree*; the
   `ingest/` row names a `vision-change` run; on-main item 1 per AC 1; the paragraph after the list puts a `dev-loop`
-  task's `approve`, `reject` and `finalize` on `task/<task-id>` (`dl-014` G3), points at `bug-313` and `dl-079`. §4
+  task's `approve`, `reject` and `finalize` on `task/<task-id>`, points at `bug-313` and `dl-079`. §4
   renamed (D1) with the *Code commits on a task branch* bullet. §9: "§4's `wf()` subjects and brackets (not its
   code-commit subjects)".
 - `code-review.md`: new section *Same-class findings are fixed before approval*, before the re-review section; the
@@ -253,8 +256,34 @@ Against `code-review` (including its new section), `traceability`, `claim-eviden
   (Implementation Notes), not a file this task touched; reported to the coordinator.
 - Pending amendments (approver): none. No Memory element other than this task file is edited.
 
+### review fixes (developer, independent review: APPROVE WITH FIXES, 2026-10-11)
+
+Commit below; the task stays `in-review` (not re-submitted).
+1. `dl-079` is `ready`, option (A): `git-conventions` §1 now says `finalize` is a declared verb (`dl-079` (A),
+   `spec-008` §2); §4's bullet "Which verbs beyond the declared five are legal is not decided here" (same class) now
+   lists the declared verbs, matching `spec-008` §2's table (`grep -n '^| \`[a-z]*\` ' <spec-008>` lines 170–180:
+   add … assign). Implementation and Execution Notes corrected (above).
+   **Labelled correction of a red-era test:** `dev-loop-practice.test.ts` "points at … dl-079 for the verb, without
+   ruling on it" is renamed and now pins the declared-verb sentence and the absence of both "not decided here"
+   sentences; the on-branch sentence and the new ones are matched on whitespace-normalized text so the rewrap holds.
+2. `traceability.md` intro names tech leads; 1.1 → 1.2 (`git show main:.wingfoil/directives/custom/traceability.md
+   | grep '^version'` → `"1.1"`, committed by `task-197`), Date 2026-10-11.
+3. `code-review.md` intro: "Applies to reviewers and tech leads (`roles.yaml`), and to the approver gate." No version.
+4. §1: the closed list "may be committed on `main`", and equally on the branch of the run that makes it (counts in
+   the final report: 97/234, 24/169, 34/119 on `main`'s first-parent line).
+5. `{module}`: "the `dna.yaml` module or area", examples `mcp`, `memory`, `docs(memory)`, `docs`, `lint`; a review
+   fix is a `fix` commit.
+6. Nits: the on-branch sentence cites `dev-loop-rel-v0.2-plan` §2 for approve/finalize on the branch and `dl-014` G3
+   only for `--no-ff`; new lines rewrapped (`awk 'length>120'` on `git-conventions.md` now lists only lines also long
+   on `main`, the table rows, the version line and the unbreakable `bug-313` id); the reject count above.
+Tests added for 2–4. `npx jest test/directives test/lint/version-bump.test.ts` → 8 suites, 180 passed;
+`npx tsc --noEmit -p tsconfig.json` → exit 0; `npm run lint` → exit 0; `node scripts/check-governance.cjs --base
+30b268a3` → 0 findings, exit 0. No full suite (interim gate rule); no `src/` change.
+
 ### Retrospective
 
 - A test pinned a phrase across a line break (`not.toContain("It checks §4's …")` while the file wraps after "It"),
   so the absence check passed vacuously; found only by re-reading the directive. Evidence: the first amend of the red
   commit (red section above).
+- The design copied `dl-079`'s state ("`in-discussion`") from the task's Implementation Notes instead of running
+  `grep -m1 '^status'` on the decision-log, which is `ready`; the review caught it. Evidence: review fix 1 above.
