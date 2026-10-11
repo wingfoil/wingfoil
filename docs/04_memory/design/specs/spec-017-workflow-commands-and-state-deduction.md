@@ -556,7 +556,10 @@ with `--set` (`spec-008` §10, whose invalid-value errors apply unchanged):
 - `phase` = the bound element's id; with no bound element, the context element's id; with neither,
   `1` (approver ruling R18, 2026-09-30, `release-planning-rel-v0.3-plan`). When the resulting plan id exists at `HEAD` or on any ref `dl-101` names, the lowest suffix
   `-<n>` (`n ≥ 2`) that makes it free is appended to `phase`. A `--set phase=` value that collides is
-  refused (`CONFLICT`).
+  refused (`CONFLICT`). The suffix is tried only when `{phase}` is a token of the `id_pattern` itself, and at
+  most up to `n = 1000`: a `{phase}` in the `path` alone cannot change the id, so a colliding id is then
+  refused (`CONFLICT`) as a `--set phase=` one is. An `id_pattern` with a `{n}` counter, and a `path` with no
+  `{id}`, are not checked here: the counter makes the id unique, and `memory add` refuses an occupied path.
 - `scope` = the workflow's name (ruling R18).
 - `title` = `--title`, else `<workflow> — <phase>`.
 
@@ -797,14 +800,15 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | unknown workflow name (`start`, `show`, `remove`, a name `<ref>`) | `unknown workflow: <name>` | `NOT_FOUND` | 1 |
 | not startable | `cannot start a sub workflow directly: <name>` | `VALIDATION` | 1 |
 | no `plan` type in `memory.yaml` | `memory type 'plan' is not declared in memory.yaml; workflow start records an instance as a plan element` | `VALIDATION` | 1 |
-| element required and absent | `workflow '<name>' needs a <type> element: give --element <type>:<id>` | `VALIDATION` | 1 |
+| element required and absent, or `--element` of another type | `workflow '<name>' needs a <type> element: give --element <type>:<id>` | `VALIDATION` | 1 |
+| `--element` on a workflow that declares no element (`start`) | `workflow '<name>' declares no element: --element is not accepted` | `VALIDATION` | 1 |
 | element not found at `HEAD` | `element not found: <type>:<id>` | `NOT_FOUND` | 1 |
 | `--set phase=` collides (`start`) | `plan id already exists: <id>` | `CONFLICT` | 1 |
 | second `start` commit failed | `plan <id> was added but not submitted: run wingfoil memory submit <id>` | as the failure | 1 |
 | no open instance (`end`) | `no active workflow to end` | `NOT_FOUND` | 1 |
 | `<ref>` names no open instance | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
 | plan in `draft` at `end` | `workflow '<name>' was not submitted: run wingfoil memory submit <id>` | `INVALID_TRANSITION` | 1 |
-| incomplete at `end` | `workflow '<name>' is not complete: current step <key>` | `CONFLICT` | 1 |
+| incomplete at `end` | `workflow '<name>' is not complete: current step <key>` — with an empty frontier, `…: it is abandoned: its element <type>:<id> is <status>` or `…: workflow '<name>' is not loaded`; the hint `wingfoil memory deprecate <id> abandons it` | `CONFLICT` | 1 |
 | step not on the frontier (`finalize`) | `step '<key>' is not on the frontier of <instance>` | `CONFLICT` | 1 |
 | step has deducible evidence (`finalize`) | `phase '<workflow>.<phase>' completes from its evidence: <kinds>` | `CONFLICT` | 1 |
 | approval phase without authority (`finalize`) | the message `memory approve` gives (REQ-SEC-03) | as today | 1 |
@@ -814,7 +818,7 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | included elsewhere (`remove`) | `cannot remove '<name>': included by '<referrer>'` | `CONFLICT` | 1 |
 | open instance (`remove`) | `cannot remove '<name>': open instance <id>` | `CONFLICT` | 1 |
 | dirty write target, missing git identity | the existing messages of `write-guard.ts` and REQ-SEC-01 | as today | 1 |
-| missing `<name>`; malformed `--element` (`spec-008` §7); invalid `<name>` syntax; `--kind` with `--startable`/`--includable`; `create` with neither; unknown flag | `spec-008` §2/§5 messages | — | 2 |
+| missing `<name>`; malformed `--element` (`spec-008` §7); a `--set` name other than `phase` / `scope` on `start`; invalid `<name>` syntax; `--kind` with `--startable`/`--includable`; `create` with neither; unknown flag | `spec-008` §2/§5 messages | — | 2 |
 
 `next`, `status`, `list` and `show` exit `0` for every deduced outcome and `1` only for a `spec-003`
 error or an unresolvable `<ref>`/name (`spec-005` §1's read-only rule).
@@ -1219,3 +1223,17 @@ warnings, `task-222`'s 69) stay as the record of their measurements. The figures
 `test/core/workflow-repository-conformance.test.ts` pins after the merge. No rule, command or diagnostic
 changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend` at `task-212`'s review.
+
+**Revision (2026-10-10, `task-217-add-workflow-start-workflow-end-recording-instance-plan`) — §10's `start`
+and `end` refusals completed.** Implementing `workflow start` and `workflow end` needed three cases §10 left
+open: `--element` naming another type than the workflow declares reads as the element being absent (the
+same message); `--element` given to a workflow that declares no element is refused, since §3.4–§3.5 give it
+no element to bind and its context comes from the active instance only; a `--set` name other than `phase` or
+`scope` is a usage error (exit `2`), since §7.1 lets only those two tokens be overridden. `end`'s refusal of
+an incomplete instance names why an empty frontier is not complete (§4.9, §4.11) and carries the
+`memory deprecate` hint as a `hint:` line. §7.1 says when the `-<n>` suffix applies (only for a `{phase}`
+in the `id_pattern`, at most 1000 times; otherwise a colliding id is `CONFLICT`), since a `{phase}` in the
+`path` alone made the suffix loop without changing the id (task-217 review F1). No deduction rule or other
+command changes. Edited in place
+without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-217`'s
+review.
