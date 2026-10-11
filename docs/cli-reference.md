@@ -502,7 +502,7 @@ recorded with the same date. `{author}` is the git author name, slugged like the
 token `{n}` is padded to three digits; `{n:N}` pads to `N` digits instead, and `{n:1}` not at all.
 
 Unreleased (v0.3): with `--workflow`, the document is **created by** a step of that instance, the way
-`workflow next` and `workflow status` read it. The step is one of the instance's ready steps (its frontier)
+`workflow next` reads it. The step is one of the instance's ready steps (its frontier)
 whose phase declares `memory.add` of this `--type`: the only one, or the one `--step` names. The add commit
 records the link in its trailers, `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>`, next to
 `WingFoil-Version:`. `workflow next` prints the whole command for each step that adds an element, so you
