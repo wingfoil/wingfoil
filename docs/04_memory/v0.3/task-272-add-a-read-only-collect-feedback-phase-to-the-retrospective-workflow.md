@@ -138,8 +138,9 @@ between `explore` and `additional-points`, and writes a read record the approver
   empty).
 - `npm run lint` → exit 0. `npm run docs:api` → exit 0. `npx tsc --noEmit -p tsconfig.json` → exit 0.
   `npx tsc -p tsconfig.build.json --noEmit` → exit 0.
-- `node scripts/check-governance.cjs --base 30b268a3` → "1 wf() commits … and 2 other commits", gated 0 findings,
-  history 0 findings, exit 0 (config-version: `retrospective.yaml` 1.5 → 1.6).
+- `node scripts/check-governance.cjs --base 30b268a3` → before submit "1 wf() commits … and 2 other commits"; after
+  submit (`e070f5f7`) "2 wf() commits … and 4 other commits", gated 0 findings, history 0 findings, exit 0
+  (config-version: `retrospective.yaml` 1.5 → 1.6).
 - No `src/` change, so coverage cannot move; no CLI command or help changed (`cli-reference.md` untouched).
 - BDD: no feature file mentions the retrospective (`grep -rln 'retrospective' docs/02_requirements/02_bdd/features/`
   → nothing); nothing to extend.
@@ -154,6 +155,23 @@ between `explore` and `additional-points`, and writes a read record the approver
   (fixed, D1). `WORKFLOW.md` has no other retrospective node (`grep -n 'additional-points' .wingfoil/WORKFLOW.md`
   → line 204 only).
 
+### Review fixes (2026-10-11, independent review: approve with fixes)
+
+- `collect-feedback` reads the consumer's `main` through the remote the service's `verify` reads, with the
+  approver's read access, recording no credential (dl-088): `svc-019` is private, so an unauthenticated https
+  read fails on it (`grep -n '^verify' docs/04_memory/services/svc-019-*.md` → the SSH remote). The read record
+  cites each note with the full service id and the full 40-hex sha, so a cite pastes into `task-271`'s
+  `reported_by:`. Both pinned in `retrospective-collect-feedback.test.ts`.
+- `.wingfoil/WORKFLOW.md` role table: the facilitator row names consumer feedback collection.
+- dl-163's S3d path (`docs/06_retrospectives/…`) gets a dated amendment note (pending amendment below); the dated
+  Context measurements stay as read.
+- **Handover (coordinator files it):** `collect-feedback`'s description forward-references a patch release's
+  `## Scope changes` (dl-163 R6), which `task-230` (B6) introduces; until it lands no release document has that
+  section, so the R6 notes are listed from wherever the patch recorded its triage.
+- Run: `npx jest test/core/retrospective-collect-feedback.test.ts test/core/retrospective-notes.test.ts
+  test/core/workflow-repository-conformance.test.ts test/core/workflow-evidence.test.ts test/docs/workflow-md.test.ts
+  test/lint/version-bump.test.ts` → **6 suites, 104 passed** (at `c71cca82`). No heavy gate (interim gate rule, dl-170).
+
 ### Pending amendments (approver)
 
 - `spec-017-workflow-commands-and-state-deduction` — Revision (2026-10-10, `task-272`) appended after `task-212`'s:
@@ -161,6 +179,10 @@ between `explore` and `additional-points`, and writes a read record the approver
   Proposed `--reason`: "task-272 (dl-163 S3d): Revision note re-measuring §12 with the read-only
   retrospective.collect-feedback phase; its produces is evidence, so the checkpoint and approval lists are unchanged.
   No rule, command or diagnostic changes."
+- `dl-163-consumer-projects-feedback-sources-and-the-feedback-loop` — dated amendment note (2026-10-11) under S3d's
+  read record: the folder is `docs/09_retrospectives/` (bug-299, task-222). Proposed `--reason`: "task-272 review
+  (2026-10-11): S3d's read record path moves from docs/06_retrospectives/ to docs/09_retrospectives/, as bug-299's
+  numbering applied by task-222 and retrospective.yaml 1.6 declare it; the dated Context measurements stay as read."
 
 ### Retrospective
 
