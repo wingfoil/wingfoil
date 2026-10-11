@@ -86,6 +86,8 @@ vhs --version && ttyd --version && ffmpeg -version | head -1
 
 If `vhs` refuses the distribution's `ttyd` as too old, install a newer `ttyd` from its GitHub releases page
 (<https://github.com/tsl0922/ttyd/releases>) and put it first on `PATH`.
+VHS drives a headless Chrome/Chromium: on a machine without one, its browser launcher downloads Chromium on the
+first run. The approver's render of 2026-10-11 used vhs v0.12.1 with Ubuntu's `ttyd` 1.7.4.
 
 **2. Render**, from the repository root:
 

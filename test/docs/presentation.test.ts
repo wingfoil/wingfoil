@@ -9,8 +9,9 @@
  *   Each is rendered from the registry or from the workflow run, never typed in: a static
  *   `img.shields.io/badge/…` badge states a value the repository cannot check, and is refused here;
  * - **a demo**: a VHS tape next to `docs/examples/01-first-project/` that runs that example's `run.sh`
- *   and waits for its own `OK:` line, so a tool that no longer matches the example fails the recording
- *   instead of leaving a stale animation. The rendered GIF is committed under `docs/assets/` (Q2 (a))
+ *   as `run.sh || exit 1` and waits for the shell's prompt to return: a failing example exits the shell, the
+ *   prompt never returns and the recording fails, so a tool that no longer matches the example leaves no
+ *   stale animation. The rendered GIF is committed under `docs/assets/` (Q2 (a))
  *   and the README shows it. The recorder is a separate binary, never an npm dependency
  *   (`dl-010-minimal-dependencies`).
  *
