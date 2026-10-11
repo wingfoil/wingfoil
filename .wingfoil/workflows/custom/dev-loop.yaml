@@ -72,9 +72,10 @@
 # goes back to `red` when it cannot be resolved there, because the conflict may touch `red`'s frozen
 # tests, which only `qa` may change.
 #
-# WIP limits (dl-156, ratified Q1 (a), Q2 (i)): when a `limits:` is declared, holders are counted
-# across every ref, and `reject` and `returns` edges are exempt. This repository declares no
-# `limits:` until that is implemented (approver, dl-156 ratification), so no phase here meets a limit.
+# WIP limits (dl-156, ratified Q1 (a), Q2 (i); implemented by task-274): when a `limits:` is declared,
+# holders are counted at HEAD and on every ref that changed them since its merge-base with HEAD, and
+# `reject` and `returns` edges are exempt. This repository declares no `limits:` (a value is the
+# approver's to choose), so no phase here meets a limit.
 #
 # The v0.3 gates (v1.6, task-221). Each check below cites the decision-log that ratified it. Like every
 # check, none is evaluated before P4.12 (v1.0, dl-090 Q2 (c)); until then the role named on the phase
@@ -89,7 +90,7 @@ description: >-
   Test-first development loop for a single task: design -> red -> green -> refactor -> review.
   `red` is qa's, the rest the developer's, the reviewer's and the approver's.
   On review rejection, fall back to `red` and return the task to in-progress.
-version: 1.6                     # 1.6 the v0.3 gates in one revision (task-221): start.checks.pre stop-the-line (dl-133 §3 Q4 (i), threshold read from memory.yaml task.stop_the_line), design.checks.post criteria vs directives/specs (dl-102 §4), refactor.checks.post typecheck.clean (dl-044), review.checks.pre claim re-run (dl-097 (a)) + previous reject re-verified (dl-098) + document-parity suites (dl-116), done.checks.post ### Retrospective present (dl-115 Q2 (a)) (prev 1.5 dl-134 separation of duties (task-205): red by qa, green distinct_from [red], refactor mode: resume, review distinct_from [red, green, refactor], tests.unchanged(since: red) on green and refactor; dl-061 A.1 fourth bug.sync_state as red's first action (B.1/C.1 in the header); dl-110 P2 parking and dl-035 main-sync (red, end of refactor) (prev 1.41 spec-003 alignment (task-199): start's git tokens take a key: value argument with no partial interpolation (spec-003 open question 6), design's three agent.<x> become one agent.execute with the instructions in its description (dl-090 Q6 (b)), design names its produces owner as { type, path } (dl-104 D3); 1.4, header comment only: dl-123 gives `triaged`/`planned` a reject to `closed` — no phase or step change; 1.3: dl-045 `task.bug` is a LIST, so a bug absorbed into an existing task's ACs is sync-able; 1.2: dl-034 lint.clean gate in `refactor`; 1.1: dl-014 git ergonomics (branch/worktree/merge) + docs-api checks; T1 test-strategy classification)
+version: 1.7                     # 1.7 header comment only: the WIP-limit paragraph says dl-156 is implemented (task-274); no phase or step change (prev 1.6 the v0.3 gates in one revision (task-221): start.checks.pre stop-the-line (dl-133 §3 Q4 (i), threshold read from memory.yaml task.stop_the_line), design.checks.post criteria vs directives/specs (dl-102 §4), refactor.checks.post typecheck.clean (dl-044), review.checks.pre claim re-run (dl-097 (a)) + previous reject re-verified (dl-098) + document-parity suites (dl-116), done.checks.post ### Retrospective present (dl-115 Q2 (a)) (prev 1.5 dl-134 separation of duties (task-205): red by qa, green distinct_from [red], refactor mode: resume, review distinct_from [red, green, refactor], tests.unchanged(since: red) on green and refactor; dl-061 A.1 fourth bug.sync_state as red's first action (B.1/C.1 in the header); dl-110 P2 parking and dl-035 main-sync (red, end of refactor) (prev 1.41 spec-003 alignment (task-199): start's git tokens take a key: value argument with no partial interpolation (spec-003 open question 6), design's three agent.<x> become one agent.execute with the instructions in its description (dl-090 Q6 (b)), design names its produces owner as { type, path } (dl-104 D3); 1.4, header comment only: dl-123 gives `triaged`/`planned` a reject to `closed` — no phase or step change; 1.3: dl-045 `task.bug` is a LIST, so a bug absorbed into an existing task's ACs is sync-able; 1.2: dl-034 lint.clean gate in `refactor`; 1.1: dl-014 git ergonomics (branch/worktree/merge) + docs-api checks; T1 test-strategy classification))
 element: task          # the iterated element provided by release-cycle
 
 phases:
