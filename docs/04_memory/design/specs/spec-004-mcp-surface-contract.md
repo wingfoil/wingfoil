@@ -242,6 +242,7 @@ wingfoil memory deprecate       → memory.deprecate
 wingfoil workflow start         → workflow.start
 wingfoil workflow end           → workflow.end
 wingfoil workflow next          → workflow.next        (advances/reads active step)
+wingfoil workflow finalize      → workflow.finalize    (v0.4, P5.2.3; spec-017 §7.9, §9)
 wingfoil agent execute          → agent.execute        (v0.4; refuses every call until v1.0, spec-016 §7)
 ```
 
@@ -522,3 +523,10 @@ state change, per `dl-047` (no `version:` field).
 Context does. The rule it illustrates — `{type}` is any key `memory.yaml` declares — is unchanged, and no
 URI, Resource or Tool changes. Edited in place without a supersede or a state change, per `dl-047` (no
 `version:` field); pending the approver's `memory amend` at `task-212`'s review.
+
+**Revision (2026-10-10, `task-226-add-workflow-finalize-which-records-checkpoint-or-uncarried`) — §4.1
+gains `workflow.finalize`.** `wingfoil workflow finalize` ships in v0.3, registered `mutates: true` in
+`CORE_MODULES` (`spec-017` §9), so §4.2's parity rule pairs it with a Tool. The row records the Tool
+`spec-017` §9 schedules for v0.4 with the rest of the Tools (P5.2.3); the shipped server registers no Tool
+in v0.3 (`spec-014` §3). Edited in place without a supersede or a state change, per `dl-047` (no
+`version:` field); pending the approver's `memory amend` at `task-226`'s review.
