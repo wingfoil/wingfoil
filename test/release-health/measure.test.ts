@@ -840,15 +840,17 @@ describe('the toolchain half — Q01–Q04, Q11, Q12, Q17 from stubbed tool outp
     expect(red['Q01']).toMatchObject({ status: 'measured', value: false, raw: { build: 0, typecheck: 0, lint: 1 }, failing: ['npm run lint (exit 1)'] });
   });
 
-  it('Q01/Q11 — an exit that means the tool itself could not run (eslint 2, a shell\'s 126/127) is not-measurable, not a measured false (review F7)', async () => {
+  it('Q01 — an exit that means the npm script\'s tool could not run (eslint 2, a shell\'s 126/127) is not-measurable; an example\'s 126 is a measured failure (review F7, re-review N4)', async () => {
     const lint = toolTree();
     expect(byId(await measureToolchain(lint.tree, lint.scratch, { tools: stubTools({ lint: { status: 2 } }).tools }))['Q01'])
       .toMatchObject({ status: 'not-measurable', reason: 'npm run lint exited 2, which means the tool itself could not run' });
     const build = toolTree();
     const m = byId(await measureToolchain(build.tree, build.scratch, { tools: stubTools({ typecheck: { status: 127 }, 'examples/02-second': { status: 126 } }).tools }));
     expect(m['Q01']).toMatchObject({ status: 'not-measurable', reason: 'npm run typecheck exited 127, which means the tool itself could not run' });
-    expect(m['Q11']).toMatchObject({ status: 'not-measurable', reason: 'docs/examples/02-second/run.sh exited 126, which means the tool itself could not run' });
     expect(m['Q01']).not.toHaveProperty('value');
+    // Re-review N4 (coordinator ruling): bash runs run.sh by its absolute path, so an example's 126/127 is a command
+    // missing inside the example, a defect it reports: a measured failure.
+    expect(m['Q11']).toMatchObject({ status: 'measured', value: 50, failing: ['docs/examples/02-second/run.sh (exit 126)'] });
   });
 
   it('Q02 — total, failing and disabled tests read from jest\'s JSON, each failing test and broken suite named', async () => {
@@ -973,6 +975,14 @@ describe('the toolchain half — a tool that fails is not-measurable with the re
     expect(m['Q12']).toMatchObject({ status: 'not-measurable', reason: 'package.json at the measurement point has no `test:latency` script' });
     expect(m['Q17']).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('no `npm install -g` command') });
     noZero(Object.values(m));
+  });
+
+  it('a reason names paths relative to the tree, never the random worktree path (re-review, as F2)', async () => {
+    const { tree, scratch } = toolTree();
+    const m = byId(await measureToolchain(tree, scratch, {
+      tools: stubTools({ test: (call) => ({ status: 1, stderr: `Error: Cannot find module '${call.cwd}/dist/core/index.js' from ${call.cwd}\n` }) }).tools,
+    }));
+    expect(m['Q02']).toMatchObject({ status: 'not-measurable', reason: "npm test wrote no readable JSON results (exit 1): Error: Cannot find module 'dist/core/index.js' from ." });
   });
 
   it('jest leaving no JSON, a coverage run leaving no summary, a latency run printing no report: not-measurable', async () => {

@@ -48,13 +48,19 @@ describe('the guarded worktree under a signal that lands during synchronous work
     expect(target.eventNames()).toEqual([]);
   });
 
-  it('a real process SIGTERM\'d during a synchronous stretch exits by the signal and leaves no worktree', async () => {
+  it.each([
+    ['right away', ''],
+    // Re-review N1: resumed from a poll-phase callback, one setImmediate ran before the next poll phase.
+    ['after an fs callback', 'await new Promise((r) => require("node:fs").readFile(__filename, r));'],
+    ['after a child whose stdio closed early', 'await new Promise((r) => { const c = require("node:child_process").spawn("sh", ["-c", "exec >&- 2>&-; sleep 0.3"], { stdio: ["ignore", "pipe", "pipe"] }); c.stdout.on("data", () => {}); c.stderr.on("data", () => {}); c.on("close", () => r()); });'],
+  ])('a real process SIGTERM\'d during a synchronous stretch (%s) exits by the signal and leaves no worktree', async (_when, resume) => {
     const { root, point } = fixture();
     const before = git(root, ['worktree', 'list', '--porcelain']);
     const script = [
       `const { withGuardedWorktree } = require(${JSON.stringify(MEASURE)});`,
       'const block = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);',
       `withGuardedWorktree(${JSON.stringify(root)}, ${JSON.stringify(point)}, async (tree) => {`,
+      `  ${resume}`,
       '  process.stdout.write("ready " + tree + "\\n");',
       '  block(3000);',
       '  return "a report";',
