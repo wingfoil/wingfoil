@@ -204,7 +204,7 @@ each scenario.
 | AC | Status | Evidence |
 |---|---|---|
 | 1 P4.5 | met | "AC 1" blocks: both instances, active first and marked, 1 pending approval, ungated listed. The CLI suite covers `--format json` and `yaml` (parsed with `JSON.parse` / `js-yaml`) and `no open workflows` at exit 0 |
-| 2 P4.14 | met | sc. 1 routes to Morgan with HEAD and the tree unchanged. sc. 2 routes to Casey, raises `W_APPROVAL_ROLE_WITHOUT_AUTHORITY` at `team.members[1].roles`, and `next` reports the same approval. sc. 3 gives `routedTo: []` and the routing error at exit 0 |
+| 2 P4.14 | met | sc. 1 routes to Morgan, and the test asserts `git rev-parse HEAD` is the same before and after and `git status --porcelain` is empty. sc. 2 routes to Casey, raises `W_APPROVAL_ROLE_WITHOUT_AUTHORITY` at `team.members[1].roles`, and `next` reports the same approval. sc. 3 gives `routedTo: []` and the routing error at exit 0 |
 | 3 P4.15 | met | sc. 1: red with `reentered`, the reject sha and `fallback: { step: red, setState: in-progress }`; the scope status is the reject target. sc. 2: `setState: null`. `done`'s fallback is reported, `reentered: false` |
 | 4 X1.1/X1.2 | met | the line names the action, `spec-1` and Casey; no line for `red`; routed to Morgan, not Casey |
 | 5 finalize record | met | `planning.commit-backlog`: `['state','record']`, `recordNeeded: true` once the state holds, complete after the record. On this repository the six phases are pinned by the characterization test. The AC says "seven", which is the count before task-199 (§12) |
@@ -269,6 +269,47 @@ Uncommitted in the worktree; the gates ran with them.
 - spec-017 and spec-006: the pending amendments are recorded after task-226's (merge order 226 → 227 → 225).
 - task-235 consumes `NextResult.next`: an approval step now carries `awaiting.kind: 'approval'`, and a review step
   stays the next step while its task is `in-review`.
+
+### Review fixes (independent review: approve with fixes, 2026-10-11)
+
+- **Red** `7aab0f4d`: failing tests for F1 and F2 in `test/core/workflow-status.test.ts`. The fixture bug machine
+  gains `triaged` as both a gate and a `waiting` state, as this repository's does. The run before the fix,
+  `npx jest test/core/workflow-status.test.ts`, gave 2 failed, 29 passed.
+- **Green** `a17d4896`:
+  - **F1**: `Deduction.gated` leaves out a gate state that is also `waiting`. Its forward edge is verb-less (dl-123),
+    so `memory approve` refuses it, and no "approve or reject" line may name it.
+  - **F2**: `no open workflows` is set whenever no instance is open (BDD P4.5 sc. 3 says only that), and the ungated
+    elements are listed after it. The renderer's `open workflows: none` arm became unreachable and is removed.
+  - **F3**: `docs/user-guide.md` §7 has one sentence on `workflow status`.
+  - **F5**: `declaredEvidenceKinds` takes `holdsGate` as a required argument; its default arm was never used.
+- **F5** `b2b5790e`: the functions drop in `src/core/index.ts` was three compiled re-export getters that no test
+  reached through the barrel: `statusWorkflow`, `workflowStatusAtHead` and `W_APPROVAL_ROLE_WITHOUT_AUTHORITY`.
+  `workflowStatusFn` itself was already hit 31 times in-process (a targeted coverage run with
+  `--coverageReporters=json` over `test/core/workflow-status.test.ts`). A test now uses the three through
+  `src/core`.
+- **Repository re-measured** at `a17d4896`: `node dist/cli.js workflow status --format json` gives 8 open
+  instances, 0 pending approvals and **40 ungated elements** (was 119). They are 21 decision-log `in-discussion`,
+  15 bug `open`, 2 service `pending`, 1 task `in-review` and 1 change-proposal `in-analysis`.
+- **`tests.unchanged(since: red)`**:
+  `git log --first-parent --no-merges --format='%h %s' e0c63ba9..HEAD -- test/core/workflow-status.test.ts
+  test/cli/workflow-status.integration.test.ts test/core/workflow-next.test.ts` prints three commits:
+  - `7aab0f4d` (the review fixes' own red);
+  - `e94c2728` red correction: the CLI fixture submits before it approves;
+  - `15e6bc8e` red correction: StatusResult also carries ungatedRoutedTo.
+
+  Read literally, the check therefore fails. The two red corrections were made before green. Each returns to a red
+  that is correct under the spec, and its commit body gives the reason.
+- AC 5's text still says "seven"; six is correct (spec-017 §5.1, §12). The AC text is left for the coordinator to
+  raise with the approver.
+
+| Command | Result |
+|---|---|
+| `npm run test:coverage -- --maxWorkers=2` (at `b2b5790e`, gate slot free, load 2.4) | 350 suites, **6528 passed**. All files **99.3 / 97.06 / 97.8 / 99.7**, against main's 99.29 / 97.04 / 97.74 / 99.69. `src/core/index.ts` functions 89.72 (main 89.13) |
+| `npm run lint`, `npm run docs:api`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` | exit 0 each |
+
+Final `--reason` texts, which supersede the ones under "Pending amendments" above:
+- `spec-017`: "task-225 implements workflow status and approvals. §6.1 now applies dev-loop's aggregate rule to a forward sync_state, as the W3 B4 review of task-216 asked: a bug passes in-review only once every task naming it is done, and a move back is never held. §5.1 gives W_APPROVAL_ROLE_WITHOUT_AUTHORITY its file and path, and leaves a gate state that is also waiting out of the ungated elements, since no approver can act on it. §5.2 says a re-entered step reports the fallback that re-entered it. §5.3 and §8 route an ungated element's line to the approver role's holders, carried in StatusResult.ungatedRoutedTo. §7.4 prints no open workflows whenever no instance is open, as BDD P4.5 sc. 3 states it. No command, deduction rule or diagnostic code is added."
+- `spec-006`: unchanged.
 
 ### Retrospective
 
