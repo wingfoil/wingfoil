@@ -5,8 +5,18 @@
  * and the routing arms no fixture repository reaches (a `by_person` naming nobody, which the registry refuses at
  * load, `E_PHASE_APPROVER_UNKNOWN`; a routed member `dna.yaml` does not list).
  */
-import { approvalDiagnostics, renderStatusConsole, routeApproval, type StatusResult, type Step } from '../../src/core';
+import {
+  approvalDiagnostics,
+  renderStatusConsole,
+  routeApproval,
+  statusWorkflow,
+  W_APPROVAL_ROLE_WITHOUT_AUTHORITY,
+  workflowStatusAtHead,
+  type StatusResult,
+  type Step,
+} from '../../src/core';
 import type { DnaYaml } from '../../src/dna/schema';
+import { makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 
 const DNA = {
   team: {
@@ -100,5 +110,30 @@ describe('task-225 — the routing arms no fixture repository reaches', () => {
     expect(approvalDiagnostics([approvalStep([{ name: 'Morgan', email: '' }])], DNA)).toEqual([]);
     expect(approvalDiagnostics([approvalStep([{ name: 'Alex', email: 'alex@example.invalid' }])], null)).toEqual([]);
     expect(approvalDiagnostics([approvalStep([{ name: 'Alex', email: 'alex@example.invalid' }]), STEP], DNA).map((d) => d.path)).toEqual(['team.members[0].roles']);
+  });
+});
+
+describe('task-225 — the status API through the src/core barrel', () => {
+  it('statusWorkflow on an empty deduction: no open workflows, the approvers named for the ungated lines', () => {
+    const deduction = { baseline: { rev: 'HEAD' as const, commit: 'abc' }, active: null, instances: [], diagnostics: [], gated: [] };
+    const inputs = { workflows: [], memoryYaml: null, dnaYaml: DNA, bindings: null, rolesYaml: null, directiveFiles: [] };
+    expect(statusWorkflow(inputs, deduction)).toEqual({
+      ok: true,
+      value: { baseline: deduction.baseline, active: null, open: [], pendingApprovals: [], ungated: [], ungatedRoutedTo: [{ name: 'Morgan', email: '' }], message: 'no open workflows', diagnostics: [] },
+    });
+  });
+
+  it('workflowStatusAtHead on a repository with no workflow configuration answers no open workflows', () => {
+    const repo = makeTempGitRepo();
+    try {
+      const result = workflowStatusAtHead(repo);
+      expect(result.ok && result.value.message).toBe('no open workflows');
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+
+  it("the routing warning's code is spec-017 §2's", () => {
+    expect(W_APPROVAL_ROLE_WITHOUT_AUTHORITY).toBe('W_APPROVAL_ROLE_WITHOUT_AUTHORITY');
   });
 });
