@@ -193,6 +193,52 @@ The quality half that runs the toolchain: build/typecheck/lint, tests, coverage 
   (`// --- the toolchain half …`) with its own constants; `measureRelease` and `main` are async, so its tests `await`
   them and pass `toolchain: false` (the `OFFLINE` constant does) unless they exercise the toolchain.
 
+### review (independent, 2026-10-11) and fixes (developer, 2026-10-12)
+
+- Verdict: REJECT-level on bug-329, acceptable as "approve with fixes" if F1 and F2 land with tests (coordinator,
+  review evidence in `../devloop-kit/task-232-review/`). D1, D2, D4, D5, D6 judged sound; D3 acceptable (the catalogue
+  note is a follow-up); `fd03acfa`'s change to red's test file accepted. Whether a reject commit is recorded is the
+  approver's call; the task stays `in-review`, bug-329 too.
+- `0127e723` (red): `npx jest test/release-health` → `Tests: 5 failed, 92 passed, 97 total`. Both F1 cases also failed
+  only because `withGuardedWorktree` was not exported, so the behaviour was shown with the export alone
+  (`npx jest test/release-health/measure-signals` → `2 failed`): the injected case "Received promise resolved instead
+  of rejected", and the real child SIGTERM'd during `Atomics.wait` exited `code: 3` (the report path), not by the signal —
+  the reviewer's finding, reproduced.
+- `897b8673` (fix):
+  - **F1** (bug-329): a signal that lands while the guarded function is synchronous (history half, `--no-toolchain`,
+    the pinned-Node refusal) was swallowed: Node delivers it to the handler only in the poll phase, and the guard
+    removed its handlers first. `withGuardedWorktree` now yields one macrotask (`setImmediate`) after the function
+    settles and, if a signal arrived, awaits the teardown and rejects `interrupted by <signal>` instead of returning a
+    report. Header sentence corrected. Tests: `test/release-health/measure-signals.test.ts` (injected target; real child).
+  - **F2**: a failure's reason was npm's last stderr line, its debug-log pointer (home path, timestamp). `reasonLine`
+    prefers `npm error code <CODE>` and skips the pointer and bare `npm error` lines; the `npm ci` and `npm view` stubs
+    now carry real npm 11.6.2 stderr (the review's `npmci/err.txt`, and `npm view wingfoil-no-such-package-xyz version
+    --json`), home directory redacted; every reason is checked free of `_logs`.
+  - **F3**: the report's `toolchain.npm` is read with the tools' environment (`toolEnv()`), so it names the npm the
+    tools ran.
+  - **F4**: the signal handler removes itself and re-raises in a `finally`, even if the worktree cleanup throws.
+  - **F7**: eslint's exit 2 and a shell's 126/127 (Q01), and 126/127 for an example (Q11), are `not-measurable` with
+    the reason ("exited N, which means the tool itself could not run"), not a measured false; new case in
+    `measure.test.ts`.
+  - **F5** (docs): the header and `.wingfoil/WORKFLOW.md` say that under another Node the toolchain metrics are
+    not-measurable unless `--any-node`, and how to run under the pinned one: `n exec 22.12.0 node
+    scripts/release-health/measure.cjs --release <v>` or `npx -p node@22.12.0 node scripts/release-health/measure.cjs
+    --release <v>`. Forms checked against `n --help` ("n exec <vers> <cmd> [args...]") and `npm exec --help`
+    (`--package=<pkg>[@<version>] -- <cmd>`), and `npm view node@22.12.0 version` → `22.12.0`; neither was executed,
+    since both download that Node (only v22.21.0 is installed: `ls /usr/local/n/versions/node`). `bindings.yaml`
+    unchanged (the binding's flags are a follow-up).
+  - F6 (the Q04 breach of `src/memory/audit.ts`, 86.3 %) is a follow-up bug, nothing here.
+- No second real measurement (coordinator). Gates at `897b8673`, under the slot (load 2.0–3.6,
+  `../devloop-kit/task-232-scratch/gates2.log`): `npm test -- --maxWorkers=2` → `Test Suites: 384 passed`,
+  `Tests: 7095 passed, 7095 total`; `npm run test:coverage -- --maxWorkers=2` → 7095 passed, All files 99.3 / 97.22 /
+  97.93 / 99.7 (still no `src/` change; the 97.2 of the earlier run is run-to-run variation of the same source);
+  `npm run lint`, `npm run docs:api`, `npx tsc --noEmit -p tsconfig.json`, `npx tsc -p tsconfig.build.json --noEmit` → 0;
+  `node scripts/check-governance.cjs --base 0671d035` → `8 wf() commits`, `gated: 0 findings`;
+  `node scripts/lint-claims.cjs --base 0671d035` → 0 warnings.
+- T4 (`git log --first-parent --no-merges --format=%h a581f107..HEAD -- test/release-health/measure.test.ts
+  test/release-health/latency-report.test.ts`) → `0127e723`, `fd03acfa`: the review-fix red (stubs replaced by real npm
+  output, one F7 case added) and the accepted earlier fix; no assertion of red weakened.
+
 ### Pending amendments (approver)
 
 - None. No tech-spec, ratified decision-log or other task needed an edit.
