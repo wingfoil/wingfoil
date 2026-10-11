@@ -459,7 +459,7 @@ describe('task-240 AC 5 — no paths.runs, and a run log that breaks spec-016 §
     expect(exitCodeForResult(result)).toBe(0);
     const value = (result as { value: ListValue }).value;
     expect(value.past).toEqual([]);
-    expect(result.warnings).toEqual(['dna.yaml declares no run log (paths.runs)']);
+    expect((result as { warnings?: readonly string[] }).warnings).toEqual(['dna.yaml declares no run log (paths.runs)']);
     expect(render(value)).toBe('no past runs\n');
   });
 

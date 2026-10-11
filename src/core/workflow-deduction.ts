@@ -319,7 +319,18 @@ function readDirty(root: string, memoryYaml: MemoryYaml | null, dnaYaml: DnaYaml
     }
   }
   for (const dir of dnaYaml?.paths?.runs ?? []) specs.add(dir);
-  const pathspecs = [...specs].sort().map((spec) => `:(literal)${spec}`);
+  return readDirtyPaths(root, [...specs]);
+}
+
+/**
+ * The working-tree paths under `specs` (literal pathspecs: files or directories ending in `/`) that differ
+ * from `HEAD` — modified, staged, deleted or untracked — sorted, each once (`spec-017` §1.2). The deduction's
+ * input check, and `agent list --past`'s for the run log when no deduction runs (`spec-016` §5, task-240).
+ *
+ * @throws `StorageError` when git cannot answer.
+ */
+export function readDirtyPaths(root: string, specs: readonly string[]): string[] {
+  const pathspecs = [...new Set(specs)].sort().map((spec) => `:(literal)${spec}`);
   const status = runGitRead(root, ['status', '--porcelain=v1', '-z', '--no-renames', '--untracked-files=all', '--', ...pathspecs]).stdout;
   const dirty = status
     .split('\0')

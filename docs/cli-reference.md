@@ -62,7 +62,7 @@ Accepted by every command, except `--dry-run`, which only the commands that chan
 
 | Option | Effect |
 |---|---|
-| `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (Unreleased (v0.3): except `agent show`, which prints `key: value` lines); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
+| `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (Unreleased (v0.3): except the commands whose entry shows their own console text — `agent list`, `agent show`, `workflow next`, `workflow status`, `workflow start`, `workflow end`, `workflow finalize`); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
 | `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `finalize`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `workflow finalize`'s commit changes no file, so its `paths` is `[]` and its `diff` is empty. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
@@ -149,6 +149,9 @@ Which state a command reads depends on whether that state can stop it:
 - Unreleased (v0.3): **`agent show` reads `HEAD`**, though it changes nothing: it answers from the
   same commit as the run ids `agent execute` counts, and when only your working tree holds the run it
   is asked for, it says so on a `hint:` line instead of showing it.
+- Unreleased (v0.3): **`agent list` reads `HEAD`**, though it changes nothing: its past runs and its
+  waiting steps come from one commit, the one `agent show` and `workflow status` answer from, and a run
+  log changed in your working tree is named on a `W_UNCOMMITTED_INPUTS` `warning:` line, not read.
 - Unreleased (v0.3): **`workflow list` and `workflow show` read `HEAD`**, though they change nothing:
   they answer from the same commit as the other workflow commands, and an uncommitted change to a file
   they read is reported as a `W_UNCOMMITTED_INPUTS` warning instead of being used.
@@ -1495,6 +1498,61 @@ receive>"}`. With none of `--next`, `--workflow`, `--step` and `--element` it ex
   `WingFoil-Version:` trailer and no other body; made whatever the agent's exit, unless the record
   cannot be committed.
 
+### `wingfoil agent list`
+
+List the recorded agent runs and the workflow steps waiting for an agent, as committed at HEAD.
+
+```
+wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>]
+```
+
+Unreleased (v0.3). Read-only. It has two sections:
+
+- **past** (`--past`) — the runs the run log holds: every `<element-id>.jsonl` file directly in the
+  directory `dna.yaml` declares in `paths.runs`, ordered by element id and then in the order the runs
+  were recorded;
+- **waiting** (`--waiting`) — the ready steps of every open workflow (the frontier `workflow status`
+  shows, in the same order) whose role an agent executes, that is, a role some `team.agents` entry lists
+  in `executes_as`. Each step names the agents, in `dna.yaml` order, that execute its role and declare an
+  `adapter`, so `agent execute` can launch them.
+
+Without `--past` or `--waiting`, or with both, it prints both sections, past first. `--element
+<type>:<id>` keeps the runs and steps of one element (a step's element is the element it works on, else
+its workflow's), and `--phase <name>` those of one phase. Nothing tracks running agents yet: a step an
+agent is working on right now is still listed as waiting, and `--active` comes later (v0.4); today it is an
+unknown option, exit `2`.
+
+It reads the run log, `dna.yaml` and the workflow state **as committed at `HEAD`**, not the working tree
+(see [Git side effects](#git-side-effects)), so it agrees with `agent show` and with the run ids `agent
+execute` counts. A run log you changed and did not commit is not read: a `warning:` line names it
+(`W_UNCOMMITTED_INPUTS`), one per file.
+
+```console
+$ wingfoil agent list
+past runs: 2
+task-042-login-form/red/1  developer  claude  0  61.0s  1200/340
+task-042-login-form/green/1  developer  claude  130  245.3s  not-reported
+waiting steps: 1
+dev-loop.green@task:task-043-logout  developer  claude
+```
+
+A past run prints `<run-id>  <role>  <agent>  <exit status>  <duration>  <tokens>`: the duration in
+seconds, the tokens as `input/output`, or `not-reported` when the agent reported neither. A waiting step
+prints `<step key>  <role>  <agents>` (`none` when no agent of the role declares an adapter). An empty
+section prints `no past runs` or `no waiting steps`.
+
+`--format json` and `--format yaml` print `{"baseline": {"rev": "HEAD", "commit": "<sha>"}, "past":
+[…records…], "waiting": [{"instance", "key", "workflow", "phase", "element", "role", "allowedModes",
+"agents"}…], "diagnostics": […]}`, with only the sections selected: each record is the run log's line, as
+[`agent show`](#wingfoil-agent-show) prints it; `element` is `<type>:<id>` or `null`.
+
+- **Exit `0`** on every result, an empty one included. A `dna.yaml` with no `paths.runs` lists no past
+  runs and prints `warning: dna.yaml declares no run log (paths.runs)`.
+- **Errors:** a run log at `HEAD` that is not valid JSON Lines, or holds a run id twice → exit `1`, naming
+  the file and the line; an error in the workflow files → exit `1`, as `workflow status`; a malformed
+  `--element`, or `--active` → exit `2`.
+- **Commit:** none.
+
 ### `wingfoil agent show`
 
 Print one recorded agent run and the commit that added it.
@@ -1537,7 +1595,7 @@ notes: task-042-login-form#execution-notes
 commit: 3c5d7e9f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d
 ```
 
-This is the one command whose `console` output is not the indented JSON of
+Like `agent list`, its `console` output is not the indented JSON of
 [`--format`](#global-options). `--format json` and `--format yaml` print
 `{"baseline": {"rev": "HEAD", "commit": "<sha>"}, "run": {…the record…}, "commit": "<sha>"}`:
 `baseline.commit` is the `HEAD` it read, `commit` the commit that added the record. A value the

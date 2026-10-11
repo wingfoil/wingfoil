@@ -23,7 +23,7 @@ import { basename, posix, relative, resolve, sep } from 'node:path';
 import { CommitFailure, isDryRunActive, pathPorcelainStatus, readPathAtRev, writeAndCommit } from '../storage';
 import { isIdPiece } from '../validation/id';
 import { requireConfinedTarget, requireConfinedWriteTarget } from '../core/confinement';
-import { resolveRevision, RevisionError } from '../core/revision';
+import { listPathsAtCommit, resolveRevision, RevisionError } from '../core/revision';
 import { coreErr, coreOk, type CoreError, type CoreResult } from '../core/types';
 import { requireInspectableTarget, type WriteTargetContract } from '../core/write-guard';
 
@@ -333,6 +333,36 @@ export function readRunLogAt(root: string, rev: string, path: string): CoreResul
   }
   const text = readPathAtRev(root, sha, path);
   return text === null ? coreOk([]) : parseRunLog(text, path);
+}
+
+/**
+ * Every run log commit `sha` holds in the run-log directory `dir` (§4.1, §4.5): each `<element-id>.jsonl`
+ * directly inside it, in path byte order — that is, element id order — read strictly ({@link parseRunLog}),
+ * its records in line order. The reader `agent list` lists past runs from (task-240, `spec-016` §5).
+ *
+ * `dir` is joined as {@link resolveRunLogPath} joins it (a trailing slash, `./` or a doubled `/` changes
+ * nothing) and confined to the project root first (`REQ-SEC-06`). A file of any other name, or one in a
+ * subdirectory, is not a run log and is not read.
+ *
+ * @param dir - `dna.yaml` `paths.runs`' one directory, non-blank.
+ * @returns The records, or the first §4.5 violation (`VALIDATION`), or a confinement refusal.
+ * @throws `StorageError` when git cannot list the commit.
+ */
+export function readRunLogsAt(root: string, sha: string, dir: string): CoreResult<RunRecord[]> {
+  const confined = requireConfinedTarget(root, dir, 'read');
+  if (!confined.ok) return confined;
+  const prefix = relative(resolve(root), resolve(root, dir.split(sep).join('/'))).split(sep).join('/');
+  const parent = prefix === '' ? '.' : prefix;
+  const paths = listPathsAtCommit(root, sha, prefix)
+    .filter((path) => path.endsWith('.jsonl') && posix.dirname(path) === parent)
+    .sort((a, b) => Number(a > b) - Number(a < b));
+  const records: RunRecord[] = [];
+  for (const path of paths) {
+    const parsed = parseRunLog(readPathAtRev(root, sha, path) ?? '', path);
+    if (!parsed.ok) return parsed;
+    records.push(...parsed.value);
+  }
+  return coreOk(records);
 }
 
 /**

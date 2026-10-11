@@ -27,6 +27,7 @@ export {
   notesField,
   parseRunLog,
   readRunLogAt,
+  readRunLogsAt,
   recordRun,
   recordSubject,
   requireWritableRunLog,
