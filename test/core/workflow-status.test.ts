@@ -48,7 +48,9 @@ types:
     states:
       sequence: [ draft, open, triaged, planned, in-progress, in-review, resolved, closed ]
       gates:
+        triaged:   { reject: closed }
         in-review: { reject: in-progress }
+      waiting: [ triaged ]
   spec:
     path: "docs/specs/{id}.md"
     states:
@@ -397,16 +399,29 @@ describe('task-225 AC 1 — BDD P4.5 sc. 3: no open workflows', () => {
     }
   });
 
-  it('no instance open but an element waits at a gate: no message, the element listed ungated', async () => {
+  it("no instance open but an element waits at a gate: 'no open workflows' all the same (sc. 3 says only that none is open), the element listed ungated after it", async () => {
     const repo = makeTempGitRepo();
     try {
       writeProject(repo);
       commit(repo, task('task-1', 'pending'), 'seed');
       const value = await status(repo);
-      expect(value.message).toBeUndefined();
+      expect(value.message).toBe('no open workflows');
       expect(value.open).toEqual([]);
       expect(value.ungated).toEqual([{ type: 'task', id: 'task-1', status: 'pending' }]);
-      expect(renderStatusConsole(value)).toContain('open workflows: none');
+      const lines = renderStatusConsole(value).split('\n');
+      expect(lines[0]).toBe('no open workflows');
+      expect(lines).toContain('ungated elements: 1');
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+
+  it('a state that is both a gate and waiting is no ungated element: no CLI verb approves it, a workflow action advances it (review F1)', async () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeProject(repo);
+      commit(repo, { 'docs/bugs/bug-5.md': element('bug', 'bug-5', 'triaged'), 'docs/bugs/bug-6.md': element('bug', 'bug-6', 'in-review') }, 'seed');
+      expect((await status(repo)).ungated).toEqual([{ type: 'bug', id: 'bug-6', status: 'in-review' }]);
     } finally {
       removeTempDir(repo);
     }
