@@ -725,6 +725,8 @@ has no reference entry.
 |---------|------|-----------|
 | `paths` | `--list` | Accepted for the planned drill-down view; it does not change the output yet. |
 | `workflow start` | `--element <type>:<id>`, `--title <t>`, `--set <name>=<value>` | `spec-017` §7.1, §3.4: `--element` names the element a workflow that declares `element:` runs on (§7's element-ref; default: the active instance's bound element of that type); a workflow that declares none refuses it (exit `1`, `workflow '<name>' declares no element: --element is not accepted`). `--title` is the plan's title (default `<workflow> — <phase>`). `--set` is repeatable and overrides a derived plan token: only `phase=<v>` and `scope=<v>` are accepted; any other name is a usage error (exit `2`, `invalid flag value: --set <name>: workflow start sets only phase and scope`), and §10's spelling errors apply unchanged. |
+| `memory add` | `--workflow <ref>` | A value option: links the added document to a step of the open instance `<ref>` names — an instance id, or a workflow name (its most recently started open instance) — through the add commit's trailers `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>` (`spec-017` §4.8, §7.10, ruling R16). The step is the one frontier step whose phase declares `memory.add` of the `--type` given; none, or several without `--step`, is refused (`CONFLICT`, exit `1`, `spec-017` §10). Without it, `memory add` links nothing and its commit is unchanged. |
+| `memory add` | `--step <key>` | A value option: the frontier step to link to, by its key (`spec-017` §4.9), when several steps of the instance add the type. Needs `--workflow`: alone it is exit `2`, `missing required argument: --workflow`. A key not on the instance's frontier is refused (`CONFLICT`, exit `1`). |
 | `workflow next` | `--assigned-to <who>` | An option with a value: keeps the frontier steps whose role `<who>` holds — `me` (the `team.members[]` entry whose email is the git identity's), a member's name or email, or a role name (`spec-017` §7.3, BDD P4.4 sc. 2). |
 | `workflow finalize` | `--step <key>` | An option with a value: the frontier step to record, by its key (`<workflow>.<phase>[@<scope>]`, `spec-017` §4.9); without it, the instance's next step (`spec-017` §7.9). `--reason` on this command is §2's row, required only on a phase that declares `approval:`. |
 | `workflow list` | `--all` | Lists every workflow the registry loads, not only the ones executable now: the includable workflows no open instance's frontier enters are listed too, with `executableNow: false` (`spec-017` §7.5, BDD P4.6 sc. 3). |
@@ -1294,3 +1296,10 @@ only (measured: a record in a paragraph of its own before the signature is not r
 `%(trailers:only)`); §11's committed-`HEAD` row and §12 (`--step <key>`) gain the command. No exit code or
 error format changes. Edited in place without a supersede or a state change (`dl-047`); pending the
 approver's `memory amend` at `task-226`'s review.
+
+**Revision (2026-10-10, `task-227-link-added-element-workflow-step-memory-add-workflow`) — `memory add
+--workflow <ref> [--step <key>]`.** `task-227` ships the two value options `spec-017` §7.10 requires of
+`memory add` (ruling R16); §12 gains a row for each, with `--step`'s dependency on `--workflow` (exit `2`)
+and the refusals' exit `1`. The command already reads `HEAD` (§11), and the deduction that picks the step
+reads it too (`spec-017` §11). No global flag, exit code or error format changes. Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-227`'s review.

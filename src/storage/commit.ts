@@ -52,8 +52,10 @@ export interface CommitOptions {
   /**
    * Trailer lines (`Key: value`) the commit records in its **final** paragraph, before the
    * `WingFoil-Version:` line ({@link stampedMessage}) — the one paragraph git reads trailers from
-   * (`%(trailers)`). `workflow finalize`'s phase-record trailers (`spec-003` § "Evidence", task-226) ride
-   * here: in a paragraph of their own before the signature, git would not read them.
+   * (`%(trailers)`). `workflow finalize`'s phase-record trailers (`spec-003` § "Evidence", task-226) and
+   * `memory add --workflow`'s step linkage (task-227, `spec-017` §4.8) ride here: in a paragraph of their
+   * own before the signature, git would not read them. Absent or empty, the message is exactly what it was
+   * before.
    */
   readonly trailers?: readonly string[];
 }

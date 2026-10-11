@@ -103,6 +103,7 @@ import { beginMemoryTransition, checkMemoryTransition, commitMemoryTransition, r
 import { prepareSupersede, supersedeReason } from './memory-supersede';
 import { amendReservedFields, requireAmendableEdit, requireAmendableType, requireReadableScaffold, requireRequiredFieldsKept } from './memory-amend';
 import { resolveAddType } from './memory-add-type';
+import { addLinkTrailers, resolveAddLink, type AddLink } from './memory-add-link';
 import { committedScopeError, requireAbsentTarget, requireUnmodifiedTarget } from './write-guard';
 import { agentExecuteFn, renderAgentExecuteStderr } from './agent-execute';
 import { agentShowFn, renderAgentShowConsole } from './agent-show';
@@ -843,6 +844,10 @@ function singleOption(options: MemoryAddParams['options'], name: string): string
  *    none, so no call path can reach the decision with a working-tree registry. An unknown type is a
  *    domain `NOT_FOUND` (exit 1) with the exact P1.3 message
  *    `unknown memory type '<t>' (not defined in memory.yaml)`, returned BEFORE any write.
+ *    With `--workflow <ref> [--step <key>]` (task-227, `spec-017` §7.10), the step the element is linked to
+ *    is then resolved from the deduction at `HEAD` ({@link resolveAddLink}); a refusal (`NOT_FOUND`,
+ *    `CONFLICT`, `VALIDATION`) is returned before the id is allocated, and the add commit carries the
+ *    `WingFoil-Instance` / `WingFoil-Step` trailers. `--step` without `--workflow` is a usage error (exit 2).
  * 4. **Generate the id** deterministically from the type's committed `id_pattern` (task-002's
  *    `generateId`, REQ-SYS-07), in `spec-001`'s fixed order (task-110, `dl-107` S2): first every
  *    frontmatter/context token from `--set` (a `--set` name the committed `id_pattern` and `path` do
@@ -877,6 +882,10 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
   const tags = parseTags(singleOption(options, 'tags'));
   const set = parseSetOptions(options?.set);
   if (!set.ok) throw new UsageError(set.message);
+  // task-227 (`spec-017` §7.10): `--step` picks a step of the instance `--workflow` names.
+  const workflowRef = singleOption(options, 'workflow');
+  const stepKey = singleOption(options, 'step');
+  if (stepKey !== undefined && workflowRef === undefined) throw new UsageError('missing required argument: --workflow');
 
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
@@ -899,6 +908,18 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
   }
 
   try {
+    // task-227: the step the element is linked to, decided at HEAD before the id is allocated, so every
+    // refusal precedes the write (and a dry run refuses the same way). A `spec-003` error at HEAD maps as
+    // `workflow next` maps it; a git failure is a `StorageError`, mapped below.
+    let link: AddLink | undefined;
+    if (workflowRef !== undefined) {
+      const resolvedLink = loadOrError(() => resolveAddLink(root, workflowRef, stepKey, type));
+      const linked = resolvedLink.ok ? resolvedLink.value : resolvedLink;
+      if (!linked.ok) return linked;
+      link = linked.value;
+    }
+    const trailers = link === undefined ? [] : addLinkTrailers(link);
+
     // spec-001's order: {date} → {author} → field/context tokens → {slug} → {n}, so the counter sees
     // the materialized prefix. {date} is read ONCE, from the author date git records for this add's
     // commit, and the commit is pinned to it below, as it is to the author {author} slugs (task-163).
@@ -913,7 +934,9 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
       .map((name): [string, string] => [name, extraFields![name]!]);
     const content = renderAddDocument(scaffold, { id, title, tags, fields: [...writtenFields(scaffold, set.values), ...extra], status: initialState });
     const pathValues = { ...set.values, id };
-    const message = `wf(${type}): add ${id}`;
+    const subject = `wf(${type}): add ${id}`;
+    // What the operation reports is the message it records, the build signature aside (`commitPaths`).
+    const message = trailers.length === 0 ? subject : `${subject}\n\n${trailers.join('\n')}`;
 
     // dl-080 (B) / bug-078, AC3: this verb CREATES, so the rule is absence rather than cleanliness.
     // Since task-128 a `{n}` id is above every number any baseline holds, but a slug-only id
@@ -934,9 +957,10 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
     if (!slot.ok) return slot;
 
     const warnings = slot.value.map(formatDiagnostic);
-    const { path, sha } = writeMemoryEntry(root, pathPattern, pathValues, content, message, {
+    const { path, sha } = writeMemoryEntry(root, pathPattern, pathValues, content, subject, {
       author: identity.value,
       warnings,
+      trailers,
       // `@`: git reads a bare `<seconds> <offset>` as a timestamp only from 9 digits of seconds up
       // (`0 +0000` is "invalid date format"); `@<seconds> <offset>` is a timestamp at any width.
       ...(date === undefined ? {} : { env: { GIT_AUTHOR_DATE: `@${date}` } }),
@@ -2455,6 +2479,18 @@ export const CORE_MODULES: readonly CoreModule[] = [
             valueName: 'name=value',
             description:
               'fill the id_pattern/path token {name} and write the frontmatter field of that name (repeatable)',
+          },
+          // task-227 (`spec-017` §7.10, ruling R16; `spec-008` §12): link the added element to a workflow step,
+          // through the `WingFoil-Instance` / `WingFoil-Step` trailers of the add commit (§4.8).
+          {
+            name: 'workflow',
+            valueName: 'ref',
+            description: 'link the document to a step of this open workflow instance (an instance id, or a workflow name)',
+          },
+          {
+            name: 'step',
+            valueName: 'key',
+            description: 'the frontier step to link to, when several of the instance add this type (needs --workflow)',
           },
         ],
         example: 'wingfoil memory add --type task --title "My first task" --tags demo,quickstart',

@@ -462,7 +462,7 @@ Unreleased (v0.3): the initial state is the first state of the type's `sequence`
 [`memory park`](#wingfoil-memory-park)) that its documents have reached, `add` is refused at exit `1`.
 
 ```
-wingfoil memory add --type <type> --title <title> [--tags <t1,t2>] [--set <name>=<value> ...]
+wingfoil memory add --type <type> --title <title> [--tags <t1,t2>] [--set <name>=<value> ...] [--workflow <ref> [--step <key>]]
 ```
 
 ```console
@@ -479,6 +479,8 @@ $ wingfoil memory add --type task --title "My first task" --tags demo,quickstart
 | `--title <title>` | The document title; also the source of the `{slug}` token. Required. |
 | `--tags <t1,t2>` | Comma-separated tags, written as the `tags` list. |
 | `--set <name>=<value>` | New in 0.2.2. Repeatable. Gives the `id_pattern` or `path` token `{name}` its value and writes the frontmatter field `name`, so the id and the field agree. |
+| `--workflow <ref>` | Unreleased (v0.3). Links the document to a step of an open workflow instance: `<ref>` is the instance id, or a workflow name (its most recently started open instance). |
+| `--step <key>` | Unreleased (v0.3). The step to link to, by its key, when several ready steps of the instance add this type. Needs `--workflow`. |
 
 The id comes from the type's `id_pattern`. For `task-{n}-{slug}` that is a per-type counter plus a
 slug of the title. The slug keeps a `.` between two letters or digits (`v0.2` stays `v0.2`); every
@@ -504,9 +506,24 @@ commit's author date: today (UTC), or the date in `GIT_AUTHOR_DATE` when that is
 recorded with the same date. `{author}` is the git author name, slugged like the title. The counter
 token `{n}` is padded to three digits; `{n:N}` pads to `N` digits instead, and `{n:1}` not at all.
 
-- **Commit:** `wf(<type>): add <id>`
+Unreleased (v0.3): with `--workflow`, the document is **created by** a step of that instance, the way
+`workflow next` reads it. The step is one of the instance's ready steps (its frontier)
+whose phase declares `memory.add` of this `--type`: the only one, or the one `--step` names. The add commit
+records the link in its trailers, `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>`, next to
+`WingFoil-Version:`. `workflow next` prints the whole command for each step that adds an element, so you
+only fill in the title:
+
+```console
+$ wingfoil memory add --type bug --title "Broken link" --workflow bug-ingest-1-plan --step bug-ingest.capture
+```
+
+Without `--workflow`, `memory add` links nothing and its commit is unchanged.
+
+- **Commit:** `wf(<type>): add <id>`; with `--workflow`, the trailers `WingFoil-Instance: <instance-id>` and
+  `WingFoil-Step: <key>`.
 - **Errors:**
-  - Exit `2`: a missing `--type` or `--title`. Also a `--set` with no `=`, a name that is not a field
+  - Exit `2`: a missing `--type` or `--title`, or `--step` without `--workflow`. Also a `--set` with no `=`,
+    a name that is not a field
     name (`[a-z][a-z0-9_-]*`, so no dots), a blank value, or the same name twice. So is a name
     `memory add` fills itself: `id`, `type`, `status`, `title`, `tags`, `n`, `slug`, `date`, `author`.
   - Exit `1`: a type not in the committed `memory.yaml`. Also a `--set` name the type's `id_pattern`
@@ -516,6 +533,11 @@ token `{n}` is padded to three digits; `{n:N}` pads to `N` digits instead, and `
     (`value for token {author} is empty once the git author name "李明" is slugged`), and, for a
     pattern with `{date}`, a `GIT_AUTHOR_DATE` git cannot parse
     (`E_GIT_READ_FAILED: git var GIT_AUTHOR_IDENT failed in <root>: fatal: invalid date format: <value>`).
+  - Exit `1`, with `--workflow`: a `<ref>` that names no open instance (`workflow is not open: <ref>`, or
+    `unknown workflow: <ref>`); a `--step` that is not a ready step of the instance
+    (`step '<key>' is not on the frontier of <instance>`); no ready step that adds this type
+    (`no step of <instance> adds a <type>`); several, and no `--step`
+    (`no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>`). Nothing is written.
 
 ### `wingfoil memory submit`
 
@@ -1140,9 +1162,9 @@ text is what `agent execute` loads), and each action with its interpolated text 
   the ids it acts on (`<id>` when none is known yet) and, for `approve` / `reject`, `--reason <reason>`;
 - `agent`: `wingfoil agent execute --workflow <instance> --step <key>`.
 
-**Planned:** `memory add --workflow` / `--step` (which link the added element to the step) and
-`agent execute --workflow` / `--step` are not available in this build yet; until they are, run `memory add`
-without those two options, and give `agent execute` the step's element with `--element <type>:<id>`. A step that waits for a third party is completed by a phase record that
+**Planned:** `agent execute --workflow` / `--step` are not available in this build yet; until they are, give
+`agent execute` the step's element with `--element <type>:<id>`. The `memory add` command runs as printed
+(see [`memory add`](#wingfoil-memory-add)). A step that waits for a third party is completed by a phase record that
 [`wingfoil workflow finalize`](#wingfoil-workflow-finalize) writes; its "waiting for" line names the whole command.
 
 The other binding kinds:
