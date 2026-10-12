@@ -7,10 +7,10 @@
  *
  * It holds the **history half** (task-231): the git-history metrics G01–G16, the process-conformance measures
  * P01–P07 (`REQ-STATE-10`, `dl-131` Decision 3), the external visibility snapshot E01–E05 (`dl-130` Q2 (a)) and the
- * toolchain record; and the **toolchain half** (task-232): Q01–Q04, Q11, Q12 and Q17, measured by running the
- * project's own commands. The other Q metrics are task-233's; until it lands, the report carries each of them as
- * `not-measurable`, naming its owner. D01 and P06 need the benchmark's two runs (`dl-089` §2, `dl-131`):
- * `not-comparable` on a patch release, else `not-measurable`.
+ * toolchain record; the **toolchain half** (task-232): Q01–Q04, Q11, Q12 and Q17, measured by running the
+ * project's own commands; and the **static and Memory half** (task-233): Q05–Q10, Q13–Q16 and Q18–Q20, read from git
+ * at the point (and the previous point, for the window). D01 and P06 need the benchmark's two runs (`dl-089` §2,
+ * `dl-131`): `not-comparable` on a patch release, else `not-measurable`.
  *
  * **The measurement point** (`dl-089` §1). `--at <rev>` names it. Otherwise the release element whose `version` is
  * `--release` is read at `HEAD`, and the point is the highest tag named `<version>` or `<version>.<n>` (a patch:
@@ -56,6 +56,48 @@
  * - Q17 the first `npm install -g <spec>` of `docs/user-guide.md` (else `README.md`), the version that document states
  *   in bold, and `npm view <spec> version --json`; it reads the registry at run time, so like G15 and E01–E05 a later
  *   run can answer differently (`raw.resolved_from`); `--offline` skips it.
+ *
+ * **The static and Memory half** (task-233; `dl-089` §2) runs in the same worktree after the history half and before
+ * the toolchain half, so `npm ci` and the build never reach what it reads: the files `git ls-tree` lists at the point,
+ * read with one `git cat-file --batch`. It adds no dependency (`dl-010`): ESLint, typescript-eslint and TypeScript are
+ * the measuring checkout's devDependencies, and a metric whose module is missing is `not-measurable` with the reason.
+ * Definitions it fixes where the catalogue leaves a choice:
+ * - Q05 ESLint's `complexity` (classic) above 15 and `max-lines-per-function` above 80 (blank and comment lines
+ *   counted, IIFEs included), inline configuration ignored, over the code files of `paths.sources`; a file ESLint
+ *   cannot parse makes Q05 `not-measurable`, naming it;
+ * - Q06 a clone is 8 or more consecutive non-blank lines, compared trimmed, found at two places of the same category
+ *   (`paths.sources`, `paths.tests`); every line of one is duplicated;
+ * - Q07 imports read with the TypeScript AST; a cycle is a strongly connected component of the runtime import graph of
+ *   `paths.sources` (type-only imports are erased), named by its shortest cycle from its first file; a bypass is an
+ *   import, type-only included, from `src/cli.ts`, `src/cli/` or `src/mcp/` into `src/storage`, `src/memory`,
+ *   `src/dna`, `src/directives` or `src/workflow` (spec-006 §1), recorded when a Memory document line names the
+ *   importing file and the word "deviation";
+ * - Q08 unused: a `dependencies` or `optionalDependencies` entry that no runtime import of `paths.sources` names;
+ *   install size, after the toolchain half's `npm ci` only: every production package's directory (`npm ls --omit=dev
+ *   --all --json --long`, nested `node_modules` counted apart) plus the tarball's `unpackedSize` (`npm pack --dry-run
+ *   --json --ignore-scripts`), else `null` with the reason in `raw.install_size`; `raw.runtime_dependencies` is the
+ *   production dependency count of `dl-010` Action 3 — the top level of that `npm ls` (what `npm ls --omit=dev
+ *   --depth=0` lists), else `package.json`'s, `raw.runtime_dependencies_from` saying which;
+ * - Q09 a reference is a `task|bug|dl|adr|spec|svc-<n>` in a comment or in the title of a `describe`/`it`/`test`
+ *   call (other string literals are fixture data), outside `fixtures/` directories; it resolves when a Memory document
+ *   at the point has the same prefix and number;
+ * - Q10 the scope is the `REQ-*` ids of the file the release's `requirements:` names (or of its list), cited when one
+ *   appears as a word in a file of `paths.tests` outside `fixtures/`;
+ * - Q13, Q20 compare each bug at the point with the document of the same name at the previous point: added = absent
+ *   then; closed = `closed` now and not then; terminal = `closed` or `deprecated` now and not then; open = neither;
+ * - Q14 the age runs from the oldest `wf(decision-log): add` naming the id (else the oldest commit adding the file at
+ *   its path) to the point, in days of commit time;
+ * - Q15 a bug added in the window is judged on the non-merge, non-`wf()` commits citing both its id and the id of a
+ *   task whose `bug:` names it (a bug absorbed by a feature task is judged on its own commits, not the feature's);
+ *   with no such commit it is unclassified; a changed line under `paths.sources` that is blank or starts a comment
+ *   (`//`, `/*`, `*`) is not executable;
+ * - Q16 words are the whitespace-separated tokens of a document's body; a comment line is a non-blank line of
+ *   `paths.sources` whose every character lies in a comment;
+ * - Q18, Q19 a task of the release has `release:` equal to its version (deprecated ones included); before v0.3 it is
+ *   a fix when an id segment is `fix` or its `bug:` names a bug (`dl-133` §1's backfill); from v0.3 by the field and
+ *   value `memory.yaml` `task.stop_the_line` declares (`field: kind`, `counts: fix`; `bug-331`), another declared
+ *   value being a feature and none unclassified; Q19's commit-backlog commit is the oldest `wf(release)` transition of
+ *   the release into `in-development`, and a task added after it is one whose `<id>.md` is not in that commit's tree.
  *
  * **G15 is not reproducible at a fixed point.** Unlike every other metric, it reads the live `refs/heads` and
  * `refs/remotes` of the clone that runs it, at run time, so a later run at the same point can answer differently;
@@ -1512,9 +1554,12 @@ function shortId(id) {
   return match ? match[1] : String(id);
 }
 
-/** Whether `text` cites `short` (`task-003`), not as the prefix of a longer number. */
+/** The pattern of a citation of `short` (`task-003`), not as the prefix of a longer number; built once per id. */
+const CITATIONS = new Map();
+/** Whether `text` cites `short`. */
 function cites(text, short) {
-  return new RegExp(`(?<![\\w-])${short.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d)`).test(text);
+  if (!CITATIONS.has(short)) CITATIONS.set(short, new RegExp(`(?<![\\w-])${short.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d)`));
+  return CITATIONS.get(short).test(text);
 }
 
 /** The ids a `wf(...)` subject names (`wf(task): add a, b [x → y]` → `[a, b]`). */
