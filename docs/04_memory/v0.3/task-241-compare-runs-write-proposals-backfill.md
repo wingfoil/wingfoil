@@ -8,7 +8,7 @@ kind: "feature"
 priority: "medium"
 tags: ["v0.3", "process", "release-health", "scripts"]
 ref: "dl-089"
-bug: ["bug-344-the-release-health.measure-binding-passes-neither-any-node-nor-max-workers-to-measure.cjs"]
+bug: ["bug-344-the-release-health.measure-binding-passes-neither-any-node-nor-max-workers-to-measure.cjs", "bug-332-a-test-imports-ajv-which-package.json-does-not-declare"]
 depends_on: ["task-231-measure-git-history-process-conformance-external-metrics", "task-232-measure-build-test-coverage-example-latency-install-metrics", "task-233-measure-static-memory-metrics-including-fix-share"]
 tmpl_version: 260703
 ---
@@ -65,6 +65,13 @@ tmpl_version: 260703
   `--max-workers 2`; the bindings test and `release-health.yaml`'s step description follow. Also from `task-232`'s
   review, for `compare.cjs`: Q17 (like G15 and E01–E05) is a reading at run time, not at the point, so a changed
   value between two reports is not a regression (`dl-089` §1); `dl-173` holds the catalogue question.
+
+- **Handover from the approver's absorption of the inherited v0.3 bugs (2026-10-12,
+  `bug-ingest-rel-v0.3-w3b6-review-findings-plan`).** This task also absorbs `bug-332`:
+  `test/release-health/measure.test.ts:22` imports `ajv/dist/2020`, which `package.json` does not declare (`grep -n
+  '"ajv"' package.json` → no match; `npm ls ajv` → only through `@modelcontextprotocol/sdk`). Declare `ajv` in
+  `devDependencies` at the major the test uses (8), with the lockfile, sequenced with `task-234`'s `package.json`
+  edit (`homepage`) so the two do not conflict.
 
 ## Execution Notes
 
