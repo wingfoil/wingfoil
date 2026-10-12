@@ -75,4 +75,15 @@ What the membership looks like on GitHub (2026-09-29):
 
 ## Triage & Execution Notes
 
-<!-- Filled at triage. -->
+Triaged `open → triaged` on 2026-09-29 by the approver (`e4859473`) and scheduled into v0.3; planned
+`triaged → planned` at v0.3 release-planning (`3e9a73b3`, 2026-09-30), absorbed into
+`task-238-publish-mcp-registry-github-actions-bound-publish-job` (`release-planning-rel-v0.3-plan` row
+`task-238`) with the second candidate fix above: publish from GitHub Actions with `mcp-publisher login
+github-oidc`. The suspected OAuth-app cause stays unverified; the fix does not depend on it, since the registry
+grants an OIDC token `io.github.<repository owner>/*` (registry v1.8.1, `github_oidc.go` `buildPermissions`).
+Execution: task-238's Execution Notes (the `mcp-registry` job in `.github/workflows/publish.yml`); the listing
+itself and its `service` element come after the next publish (task-238's AC 3 handover).
+
+### Retrospective
+
+- The manual publish was the first use of the registry; the 403's cause was never confirmed, and the fix (OIDC from CI) was chosen because it does not depend on that cause (`github_oidc.go` `buildPermissions`, registry v1.8.1).
