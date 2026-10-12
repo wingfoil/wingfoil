@@ -162,3 +162,13 @@ Alternatives considered:
   P4.16 with `REQ-SYS-06` (a new main composed with `include:`,
   `docs/02_requirements/02_bdd/features/p4-workflow/P4.1-workflow-config.feature`,
   `P4.16-include-composition.feature`).
+
+**Note (2026-10-12, approver ruling 2026-10-10 item 5 on `task-212` decision 4, and rulings 2026-10-12 D1 (c), D2;
+`task-277`).** Element 4's "in that release's element (`features:`)" is met by `release-planning`'s `define-scope`,
+which sweeps the `scheduled` change-proposals whose `release` is the release in planning into its `features:`, as
+`dl-016` sweeps decision-logs and bugs into scope. `vision-change`'s `schedule` stamps the change-proposal's
+`release` and writes the sequencer entry; it no longer edits the release element. On a release already past `draft`
+the sweep is a `memory amend` of the release by the approver, or a hand `wf(release): amend` on the approver's
+instruction while `memory amend` refuses a release with no `kind:`. The sweep is declared as the unbound `define-scope` post-check
+`change-proposals.swept(…)` (`release-planning.yaml` 2.0), which `dl-166` Q2 may bind. The Decision above is
+otherwise unchanged.

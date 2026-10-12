@@ -119,7 +119,8 @@ Vision change (startable on demand, dl-132):
   vision-change        → capture a change-proposal → impact-analysis (approver accepts)
                          → update-vision (+ 00_index.md) → downcast only the layers the analysis names
                            (user-story-mapping / specification-by-examples / volere-requirements, each optional)
-                         → schedule (sequencer + the release's `features:`; accepted → scheduled)
+                         → schedule (sequencer + the element's `release`; accepted → scheduled)
+                         (release-planning's define-scope sweeps it into the release's `features:`)
 ```
 
 `lean-inception` and `specification-downcast` are marked **done** and modeled from their existing
