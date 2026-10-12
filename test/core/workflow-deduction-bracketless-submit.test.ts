@@ -79,14 +79,15 @@ phases:
       - element.set_state(done)
 `;
 
-/** The control of a plain file edit: `rework` (the fallback step) holds a `state` evidence equal to the re-entry's target. */
+/**
+ * The control of a plain file edit: `rework` (the fallback step, the first phase) holds a `state` evidence equal to
+ * the re-entry's target. No phase before it sets the same state, so every exit state is determined (task-281 red
+ * send-back: a leading `start` phase made `rework` undeterminable, and the control vacuous).
+ */
 const REWORK = `name: rework
 kind: main
 element: task
 phases:
-  - name: start
-    actions:
-      - element.set_state(in-progress)
   - name: rework
     actions:
       - element.set_state(in-progress)
@@ -211,12 +212,21 @@ describe('task-281 AC 1 (bug-300) — controls of the state rule (characterizati
       commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'backlog') }, 'task');
       commit(repo, { 'docs/plans/rw-1.md': plan('rw-1', 'rework', 'task-1') }, 'wf(plan): add rw-1');
       commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-progress') }, 'wf(task): start task-1 [backlog → in-progress]');
+      // The fixture is not vacuous: `rework` completes from its state, and the review from the bracketed submit.
+      let instance = only(repo, 'rw-1');
+      expect(states(instance)).toEqual(['rework:complete', 'review:current']);
       commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-review') }, 'wf(task): submit task-1 [in-progress → in-review]');
-      commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-progress') }, 'wf(task): reject task-1 [in-review → in-progress]');
+      instance = only(repo, 'rw-1');
+      expect(instance.frontier[0]).toMatchObject({ key: 'rework.review@task:task-1', evidence: { missing: [] } });
+
+      const reentry = commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-progress') }, 'wf(task): reject task-1 [in-review → in-progress]');
       const before = only(repo, 'rw-1');
-      expect(before.frontier[0]).toMatchObject({ key: 'rework.rework@task:task-1', evidence: { missing: ['state'] } });
+      expect(states(before)).toEqual(['rework:current', 'review:pending']);
+      expect(before.frontier[0]).toMatchObject({ key: 'rework.rework@task:task-1', reentered: true, reentryCommit: reentry, evidence: { kinds: ['state'], missing: ['state'] } });
 
       commit(repo, { 'docs/tasks/task-1.md': element('task', 'task-1', 'in-progress', 'notes: "execution notes"\n') }, 'docs(memory): task-1 — execution notes');
+      const deduction = deduceWorkflowStateAtHead(repo);
+      expect(deduction.diagnostics).toEqual([]);
       const after = only(repo, 'rw-1');
       expect(states(after)).toEqual(states(before));
       expect(after.frontier).toEqual(before.frontier);
