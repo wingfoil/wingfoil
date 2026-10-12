@@ -563,8 +563,8 @@ const ELEMENT_COLLECTION = 'element:';
 
 /**
  * The entries of an `element:<field>` collection (`spec-017` §4.6): the list in `<field>` of the innermost
- * bound element, labelled `<type>:<id>/<field>`. An absent field is an empty list. No bound element, a value
- * that is not a list, or an entry key problem (`collectionKeyIssues`, the rule `bindings.yaml` collections
+ * bound element, labelled `<type>:<id>/<field>`; an explicit `[]` has no entries. No bound element, an absent
+ * field, a value that is not a list, or an entry key problem (`collectionKeyIssues`, the rule `bindings.yaml` collections
  * are loaded under) leaves the entries undecided, with the reason.
  */
 function elementCollection(reference: string, frames: readonly Frame[]): { label: string; entries: readonly CollectionEntry[] } | { reason: string } {
@@ -574,7 +574,9 @@ function elementCollection(reference: string, frames: readonly Frame[]): { label
   if (frame.element === null) return { reason: `collection '${reference}' has no ${frame.type} element bound` };
   const ref = `${frame.element.type}:${frame.element.id}`;
   const raw = frame.element.frontmatter[field];
-  if (raw === undefined || raw === null) return { label: `${ref}/${field}`, entries: [] };
+  // An absent field is undecided, not empty (task-230 review F1): a release planned before its waves were declared
+  // must not read as a finished implementation. An explicit `[]` is a declared empty list (vacuous, §4.6).
+  if (raw === undefined || raw === null) return { reason: `collection '${reference}' of ${ref} has no field '${field}'` };
   if (!Array.isArray(raw)) return { reason: `collection '${reference}' of ${ref} is not a list` };
   const entries = raw as CollectionEntry[];
   const issue = collectionKeyIssues(entries)[0];

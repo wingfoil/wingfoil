@@ -35,11 +35,13 @@ phases:
 
   - name: implementation                     # dl-100 §1 (a) (task-230): the wave is the declared unit of implementation
     description: >-
-      Run the release's waves in declared order (the release's `waves:`, fixed at commit-backlog and
-      extended only at a wave's re-plan): each wave runs the TDD dev-loop once per backlog task tagged for
-      this release and carrying that wave's key — including the fix tasks derived from bugs scheduled into
-      this release, each keeping its source bug in sync (`bug.sync_state`) — then its boundary: the
-      governance re-sweep, the re-plan checkpoint and the wave-end smoke and user-doc checks (`wave.yaml`).
+      Run the release's waves (the release's `waves:`, fixed at commit-backlog and extended only at a
+      wave's re-plan). The waves are ordered keys, but the deduction runs every listed wave at once
+      (spec-017 §4.6): the next wave is opened by appending its key at the previous wave's re-plan. Each
+      wave runs the TDD dev-loop once per backlog task whose `release` is this release and whose `wave` is
+      that wave's key — including the fix tasks derived from bugs scheduled into this release, each keeping
+      its source bug in sync (`bug.sync_state`) — then its boundary: the wave-end smoke and user-doc
+      checks, the governance re-sweep and the re-plan checkpoint (`wave.yaml`).
     include: wave
     iterate_over: element:waves              # spec-003 § "Collections": the list in this release's `waves:` field, per release (dl-159)
 

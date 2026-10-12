@@ -159,18 +159,25 @@ phases:
         - "frontmatter.required: [title, release, kind]"   # dl-133 Q1 (b): + kind (feature | fix), set here; mirrors memory.yaml `task` template.frontmatter.required
         # dl-102 §2 (task-230): the check that ran before each task's pending -> backlog approval, stated in its Reason:.
         - "acceptance-criteria.consistent(each criterion read against the directives bound to the executing role and the ratified specs and decision-logs it touches, before pending -> backlog)"
+        # task-230 review F1: a task whose wave is not listed never runs (wave.yaml's tasks filter on it).
+        - "task.wave.declared(each task's wave is one of the release's waves)"
 
   - name: commit-backlog
     description: >-
       Approve the planned tasks into the backlog so the dev-loop can pick them up, then move the
       release into development. Before the approval the release document fixes `backlog_committed` (the
       count of its tasks now, dl-100 §2: the growth threshold's baseline, memory.yaml
-      `release.growth_threshold`) and `waves:` (the keys of its waves in order, dl-100 §1 (a)); after it,
-      only a wave's re-plan changes either, through `## Scope changes` (task-230).
+      `release.growth_threshold`) and `waves:` (a non-empty list of wave keys, dl-100 §1 (a): a release with
+      no `waves:` leaves implementation undecided, spec-017 §4.6); after it, only a wave's re-plan changes
+      either, through `## Scope changes` (task-230). The deduction runs every listed wave at once, so
+      commit-backlog lists only the waves to open now; re-plan appends the next.
     role: tech-lead
     actions:
       - task.set_state(backlog)                # task: pending -> backlog (per planned task)
       - release.set_state(in-development)       # release: planning -> in-development
     checks:
-      pre: ["frontmatter.required: [backlog_committed]"]   # dl-100 §2 (task-230): fixed here, before the approval
+      pre:
+        - "frontmatter.required: [backlog_committed]"   # dl-100 §2 (task-230): fixed here, before the approval
+        # task-230 review F1: a separate check, since frontmatter.required counts a list value as missing outside memory.yaml's `lists:`.
+        - "waves.declared(the release's waves: is a non-empty list of wave keys)"
     approval: { by_role: approver }

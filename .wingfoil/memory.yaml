@@ -118,7 +118,7 @@ types:
       file: "memory/templates/release.md"
     fields:                     # [AUTHORING] task-230 (3.2): optional frontmatter the release workflow phases read; `memory submit` does not require them
       backlog_committed: "the count of the release's tasks when release-planning's commit-backlog ran (dl-100 §2); fixed there, never recounted; the growth threshold's baseline"
-      waves: "the release's waves, keys in declared order, e.g. [w0, w1] (dl-100 §1 (a)); release-cycle's implementation runs the `wave` sub once per entry (iterate_over: element:waves); fixed at commit-backlog, extended only at a wave's re-plan"
+      waves: "the release's wave keys, e.g. [w0, w1] (dl-100 §1 (a)); release-cycle's implementation runs the `wave` sub once per entry (iterate_over: element:waves), every listed wave at once, so a wave is opened by appending its key at the previous wave's re-plan; a non-empty list fixed at commit-backlog; absent, implementation is undecided (spec-017 §4.6)"
     growth_threshold:           # [AUTHORING] dl-100 §3 (a), task-230 (3.2) — the ONE statement of the threshold; read by dev-loop `start.checks.pre`
                                 # (growth.clear). No code reads it yet (P4.12, v1.0). Per `release` element, never per branch (dl-159 handover).
       field: backlog_committed  # the baseline; a release without it (every release planned before dl-100) never fires

@@ -7,11 +7,12 @@
  * Exercises the REAL, registered `CORE_MODULES` `memory.memoryAmend` operation — the exact `CoreFn`
  * the CLI command and the MCP Tool dispatch to. Every write lands in a THROWAWAY temp git repo.
  *
- * The fixture's `tech-spec`, `adr` and `release` carry this repository's own machines
+ * The fixture's `tech-spec`, `adr` and `release` carry this repository's own state machines
  * (`.wingfoil/memory.yaml`): `tech-spec` and `adr` declare `amendable: true` (an `adr` takes dated
  * correction and Revision notes; a changed decision is still a new ADR, `dl-108` A3 — approver ruling
- * at `task-158`, 2026-10-02), `release` declares `amendable: false`, and `note` declares nothing —
- * absent means not amendable.
+ * at `task-158`, 2026-10-02). The fixture's `release` declares `amendable: false` to exercise a type
+ * that refuses — this repository's own `release` is amendable since `memory.yaml` 3.2 (approver ruling
+ * at `task-230`, 2026-10-12) — and `note` declares nothing: absent means not amendable.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

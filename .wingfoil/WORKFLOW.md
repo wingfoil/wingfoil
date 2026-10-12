@@ -191,7 +191,7 @@ dl-023), `submit` (`release-submit`), `publishing` (`release-publishing`), `rele
 flowchart TD
     RP["**planning** → `release-planning`\nadvance-pinned-build → define-scope → triage-bugs → reconcile-governance\n→ record-adrs (opt.) → identify-specs → build-backlog → commit-backlog\n✔ P4.12 per step (see sub-diagram below)\n🔑 Approval gates — *approver*\nrelease: draft → planning → in-development"]
 
-    DL["**implementation** → `wave` *(iterate_over: element:waves)*\none wave per entry of the release's waves:, in order\ntasks → re-sweep → re-plan → wave-checks\n(see sub-diagram below)"]
+    DL["**implementation** → `wave` *(iterate_over: element:waves)*\none wave per entry of the release's waves: (all listed waves open at once)\ntasks → wave-checks → re-sweep → re-plan\n(see sub-diagram below)"]
 
     UD["**user-docs** → `user-docs`\ncheck-implementation-complete → align-user-docs → align-agent-docs\n🔑 Approval gates — *approver*\n(see sub-diagram below)"]
 
@@ -223,23 +223,26 @@ rehearsal transcript names.
 ### Wave — `wave`
 
 The unit of `implementation` (`dl-100` §1 (a), `task-230`): `release-cycle` runs it once per entry of the
-release's `waves:` field (`iterate_over: element:waves`, `spec-003` § "Collections"), in declared order. Each
-wave runs its tasks' dev-loops, then its boundary. Everything is per `release` element (`dl-159`): the wave's
-tasks are the ones tagged with this release's version and carrying the wave's key in `wave:`. `waves:` and
-`backlog_committed` are fixed at `commit-backlog`; only a wave's `re-plan` changes them afterwards, recording
-the delta in the release's `## Scope changes`. The growth threshold (`memory.yaml`
+release's `waves:` field (`iterate_over: element:waves`, `spec-003` § "Collections"). The waves are ordered
+keys, but the deduction runs every listed wave at once (`spec-017` §4.6), so a wave is opened by appending its
+key at the previous wave's `re-plan`. Each wave runs its tasks' dev-loops, then its boundary: the wave-end
+checks (a failure opens a bug in the same wave, `dl-133` §2), the re-sweep that schedules it, and the re-plan.
+Everything is per `release` element (`dl-159`): the wave's tasks are the ones whose `release` is this release
+and whose `wave:` is the wave's key. `waves:` (non-empty) and `backlog_committed` are fixed at
+`commit-backlog`; a release with no `waves:` leaves `implementation` undecided. Only a wave's `re-plan` changes
+them afterwards, recording the delta in the release's `## Scope changes`. The growth threshold (`memory.yaml`
 `release.growth_threshold`, `dl-100` §3 (a)) stops `dev-loop` `start` once the release's tasks exceed
 `backlog_committed` by more than 25 %, until a `re-plan` has run — in force from v0.4 (approver ruling
 2026-10-12).
 
 ```mermaid
 flowchart TD
-    WT["**tasks** → `dev-loop` *(iterate_over: task)*\nwhere: status=backlog, tags=[release.version], wave={item}\n— design gate + TDD cycle per task, incl. bug-fix tasks —\nkeeps source bug in sync via bug.sync_state"]
-    WS["**re-sweep** *(tech-lead)*\nselection: unscheduled bugs, decision-logs, ADRs (release empty)\nmemory.approve · element.set_release (this or a named later release) · memory.deprecate\n🔑 Approval gate — *approver*"]
-    WP["**re-plan** *(tech-lead)* · checkpoint\n## Scope changes · count vs backlog_committed (growth threshold)\nplanning plan revised · next wave opened in waves:\n🔑 Approval gate — *approver*"]
+    WT["**tasks** → `dev-loop` *(iterate_over: task)*\nwhere: status=backlog, release=release.version, wave={item}\n— design gate + TDD cycle per task, incl. bug-fix tasks —\nkeeps source bug in sync via bug.sync_state"]
+    WS["**re-sweep** *(tech-lead)*\nselection: unscheduled bugs, decision-logs, ADRs (release empty)\nmemory.approve (open bug → triaged only) · element.set_release (this or a named later release)\nmemory.reject (a bug's legal close) · memory.deprecate\n🔑 Approval gate — *approver*"]
+    WP["**re-plan** *(tech-lead)* · checkpoint\n## Scope changes · count vs backlog_committed (growth threshold)\nplanning plan revised · next wave appended to waves:\n🔑 Approval gate — *approver*"]
     WC["**wave-checks** *(qa)*\ne2e smoke (report per wave) · docs/examples · docs.parity\na failure opens a bug (bug-ingest)\n`docs/07_gates/rl-{release.release-line}/rel-{release.version}-{item}-e2e-smoke.md`"]
 
-    WT --> WS --> WP --> WC
+    WT --> WC --> WS --> WP
 ```
 
 ### Dev Loop — `dev-loop`
@@ -316,8 +319,8 @@ flowchart TD
     RG["**reconcile-governance** *(product-owner)*\nmemory.approve: decision-log in-discussion → ready\nadr pending → accepted\nready decision-logs: coverage check only (a task ref: names each)\n🔑 Approval gate — *approver*\n↩ REJECT → draft"]
     RA["**record-adrs** *(architect)* · **OPTIONAL**\nmemory.add(type: adr) → memory.submit → memory.approve\n✔ spec-review.passed · P4.12: [title, sard_ref]\n🔑 Approval gate — *approver*\n`{ type: adr, path: docs/04_memory/design/adrs/{adr.id}.md }`"]
     IS["**identify-specs** *(architect)*\nagent.execute: survey → memory.add(type: tech-spec) → memory.submit\n✔ P4.12: [title, scope]\n🔑 Approval gate — *approver*\n`{ type: tech-spec, path: docs/04_memory/design/specs/{tech-spec.id}.md }`"]
-    BB["**build-backlog** *(product-owner)*\nselection: in-scope ready decision-logs + triaged bugs\nmemory.add(type: task) → memory.submit\nper selected DL / bug: memory.add(type: task, dl: {decision-log.id} / bug: {bug.id}) → memory.submit\n→ bug.set_state(planned) · element.set_release · wave:\n✔ P4.12: [title, release, kind] · acceptance-criteria.consistent (dl-102)\n`{ type: task, path: docs/04_memory/{task.release}/{task.id}.md }`"]
-    CB["**commit-backlog** *(tech-lead)*\n✔ pre: backlog_committed (and waves:) fixed\ntask.set_state(backlog) · release.set_state(in-development)\n🔑 Approval gate — *approver*"]
+    BB["**build-backlog** *(product-owner)*\nselection: in-scope ready decision-logs + triaged bugs\nmemory.add(type: task) → memory.submit\nper selected DL / bug: memory.add(type: task, dl: {decision-log.id} / bug: {bug.id}) → memory.submit\n→ bug.set_state(planned) · element.set_release · wave:\n✔ P4.12: [title, release, kind] · acceptance-criteria.consistent (dl-102)\n✔ each task's wave is one of the release's waves\n`{ type: task, path: docs/04_memory/{task.release}/{task.id}.md }`"]
+    CB["**commit-backlog** *(tech-lead)*\n✔ pre: backlog_committed fixed · waves: a non-empty list\ntask.set_state(backlog) · release.set_state(in-development)\n🔑 Approval gate — *approver*"]
 
     AB --> DS --> TB --> RG --> RA --> IS --> BB --> CB
     RG --> IS

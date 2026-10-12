@@ -11,7 +11,7 @@ features:              # REQUIRED — feature IDs covered by this release, e.g. 
 requirements: ""       # REQUIRED — path to per-release backlog JSON, e.g. "docs/03_backlog/04_backlog/by-release/v0.1.json"
 release-line: ""       # REQUIRED — version of the parent release-line, e.g. "v1"; the file sits under the release-line's id, planning/rl-v1/ (memory.yaml `release` path)
 backlog_committed:     # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
-waves: []              # optional — the release's waves, keys in declared order, e.g. [w0, w1, w2] (dl-100 §1 (a)); fixed at commit-backlog, extended only at a wave's re-plan
+waves: []              # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
 tmpl_version: 261012   # Original template version
 ---
 
