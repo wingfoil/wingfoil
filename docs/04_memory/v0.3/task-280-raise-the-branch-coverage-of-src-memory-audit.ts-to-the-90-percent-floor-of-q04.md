@@ -133,6 +133,29 @@ path `docs/04_memory/v0.1/task-1.md`. Each case commits a first revision with th
   failing. **Recommendation: (b) as the real fix, filed as a follow-up; (a) here as well only if the approver wants
   Q04 green before (b) lands.** Without (a) this task cannot meet AC2 as written. `:191` stays uncovered until (b).
 
+### red (qa, 2026-10-12)
+
+- **Scope (approver ruling after design, A (b) in-task).** The dead defaults at `:111` and `:191` are removed by the
+  developer in green; P3 is not written (no stub test). qa pins only the reachable branches `:349` and `:352` of
+  `parseStatus`.
+- **File:** `test/memory/audit-status-shapes.test.ts` (new). Reuses `makeTempGitRepo`, `writeFixtureFile`, `git`,
+  `removeTempDir` from `test/storage/helpers/git-fixture` and the `commitAt` pattern (fixed author/committer dates)
+  of `audit-parent-unreadable.test.ts`; `afterAll` removes the repos. Each case commits the shape under test
+  (`wf(task): add task-1`), then `id: task-1` / `status: draft` (`wf(task): submit task-1`), and pins, for
+  `reconstructMemoryTransitions(root, DOC)`: `[first, null, null]` and `[second, null, 'draft']` with no
+  `unreadable` key on either; and the same states under `{ strict: true }`, without throwing.
+- **Per AC:**
+  - AC 1 (characterization) — P1 `:349`: `it.each` over a scalar, YAML null (`~`), a comment-only block. P2 `:352`:
+    `it.each` over `status: 3`, `status: [draft]`, a mapping with no `status`, a top-level sequence. All seven pass on
+    first run (characterization: behaviour exists, no red).
+  - AC 2, 3, 4 — not red's: session 3 (green removes the defaults, then the gates).
+- **Run:** `npx jest test/memory/audit-status-shapes.test.ts --maxWorkers=2` → 1 suite, 7 passed, 0 failed.
+  `npx eslint test/memory/audit-status-shapes.test.ts` → exit 0.
+- **Coverage (once, after `waitslot.sh`):** `npx jest test/memory --coverage --collectCoverageFrom=src/memory/audit.ts
+  --maxWorkers=2` → 32 suites, 640 tests passed; `audit.ts | 100 | 89.04 | 100 | 100 | 111,191` — 65/73 before the
+  developer's change, as the design predicted (only `:111` and `:191` uncovered).
+- **Red commit:** `e9f040fc` (T4 is measured from it).
+
 ### Retrospective
 
 None yet.
