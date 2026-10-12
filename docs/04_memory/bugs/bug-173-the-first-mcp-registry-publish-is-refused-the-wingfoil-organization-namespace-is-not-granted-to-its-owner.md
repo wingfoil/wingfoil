@@ -2,7 +2,7 @@
 id: bug-173-the-first-mcp-registry-publish-is-refused-the-wingfoil-organization-namespace-is-not-granted-to-its-owner
 type: bug
 title: "The first MCP Registry publish is refused: the wingfoil organization namespace is not granted to its owner"
-status: in-review
+status: closed
 severity: "medium"
 release-origin: "v0.2.2"
 release: "v0.3"
