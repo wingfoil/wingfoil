@@ -2,7 +2,7 @@
 id: bug-174-the-publish-runbook-does-not-say-where-npm-s-staged-packages-tab-is-nor-that-an-automated-review-precedes-approve
 type: bug
 title: "The publish runbook does not say where npm's Staged Packages tab is, nor that an automated review precedes Approve"
-status: in-review
+status: closed
 severity: "low"
 release-origin: "v0.2.2"
 release: "v0.3"
