@@ -15,7 +15,7 @@ longer matches the tool fails loudly instead of going stale.
 | [`01-first-project`](01-first-project/run.sh) | `init` → configure an approver → `memory add` → `submit` → `approve` → `history` / `search` |
 | [`02-custom-memory-type`](02-custom-memory-type/run.sh) | Declare a `story` type with its own state machine and a gate; why configuration must be committed |
 | [`03-directives-per-role`](03-directives-per-role/run.sh) | Write a custom directive, assign it to a role, list a role's rules, unassign and remove it |
-| [`04-mcp-server`](04-mcp-server/run.sh) | Speak MCP to `wingfoil mcp` over stdio: Resources, Resource templates, role Prompts, a Memory read |
+| [`04-mcp-server`](04-mcp-server/run.sh) | Speak MCP to `wingfoil mcp` over stdio: Resources, Resource templates, role Prompts, a Memory read, the workflow status |
 | [`05-ci-json-exit-codes`](05-ci-json-exit-codes/run.sh) | `--format json`, the `0`/`1`/`2` exit codes, and a CI gate on pending approvals |
 
 ## Running them

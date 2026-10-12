@@ -273,8 +273,9 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
   caller has no terminal.
 - **The two workflow Resources of v0.3** (ruling R12): `workflowNext` and `workflowStatus` are
   served on the production server in v0.3, at `wingfoil://workflows/-/next` and
-  `wingfoil://workflows/-/status`, registered next to `registerWorkflowResources` through
-  `registerReadOnlyResources` (`src/mcp/index.ts:79-83`), with the same read-only refusal. They extend
+  `wingfoil://workflows/-/status`, registered by `registerWorkflowStateResources`
+  (`src/mcp/workflow-resource.ts`) next to `registerWorkflowResources` through
+  `registerReadOnlyResources` (`src/mcp/index.ts`), with the same read-only refusal. They extend
   the already-shipping `wingfoil://workflows…` family (`src/mcp/workflow-resource.ts`) without
   colliding with `wingfoil://workflows/{name}`: their second segment is `-`, which no workflow name
   can be (`spec-003` § "Names", `[a-z][a-z0-9-]*`), and they have a third segment, which the
@@ -887,3 +888,11 @@ loses *(planned)* and its `feature` cell, which cited `dl-135` point 4, is `P5.3
 gained for it (`dl-135` Action 3); the bullet under the table says both ids are in place. Its MCP Resource
 stays v0.4 (`spec-016` §7). No other row changes. Edited in place without a supersede or a state change
 (`dl-047`); pending the approver's `memory amend` at `task-240`'s review.
+
+**Revision (2026-10-11, `task-239-serve-wingfoil-workflows-next-wingfoil-workflows-status-production`) — §3's
+bullet on the two workflow Resources of v0.3 names where they are registered.** `task-239` registers
+`wingfoil://workflows/-/next` and `wingfoil://workflows/-/status` on the production server through
+`registerWorkflowStateResources`, called by `registerReadOnlyResources` after `registerWorkflowResources`. The
+bullet cited `src/mcp/index.ts:79-83`, which the new call moves; it now names the two functions and their
+files instead of a line range (`dl-075`). The rows, the payloads and §6 item 6 are unchanged. Edited in place
+without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-239`'s review.

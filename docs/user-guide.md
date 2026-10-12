@@ -499,6 +499,8 @@ What the server exposes — all **read-only**:
 | Resource template | `wingfoil://memory/{type}/{id}` | one document, full content |
 | Resource | `wingfoil://workflows` | every workflow, summary |
 | Resource template | `wingfoil://workflows/{name}` | one workflow, full definition |
+| Resource | `wingfoil://workflows/-/next` | Unreleased (v0.3): the next step of the active workflow, as `wingfoil workflow next --format json` prints it |
+| Resource | `wingfoil://workflows/-/status` | Unreleased (v0.3): every open workflow, as `wingfoil workflow status --format json` prints it |
 | Prompt | `<role>-session` (one per role, e.g. `developer-session`) | session instructions for the role, embedding its directives |
 
 The server has **no Tools**: an agent cannot change anything through MCP. It writes by running the CLI,

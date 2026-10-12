@@ -6,7 +6,7 @@
  * list is sorted by that key (`enumeration-parity.allowlist.test.ts` enforces the order, the
  * uniqueness and a non-empty reason). Reasons, by kind:
  *
- * - `PLANNED` (or another `planned:` reason, such as {@link WORKFLOW_NEXT_ROW}) with `plannedBy` — the document names an item a non-done task is to build (a `surplus`),
+ * - `PLANNED` (or another `planned:` reason) with `plannedBy` — the document names an item a non-done task is to build (a `surplus`),
  *   or a task is to amend the document. Once every cited task is `done` and the finding remains, the
  *   gate reports the entry (warn) or fails (from v0.4); when the item ships, the entry goes stale;
  * - {@link AUDIT_V04} — a command a later release's `features:` schedules with no task yet;
@@ -33,16 +33,6 @@ export const PARITY_MODE = 'warn' as 'warn' | 'fail';
 /** Named by the non-done task(s) in `plannedBy`; spent once all of them are `done`. */
 export const PLANNED = 'planned: the non-done task(s) in plannedBy build the item or amend the document';
 
-/**
- * `spec-004` §4.1's `workflow.next` Tool row: approved `spec-017` §9 makes `workflowNext`
- * `mutates: false`, served as the Resource `wingfoil://workflows/-/next`, so no Tool will ever list
- * it in v0.3 or v0.4; spec-017's Consequences move the row to v1.0 step advancement, and `task-239`
- * (its AC) makes that amendment. Review fix F2: these entries cited `task-216`, which builds the
- * command, not the Tool.
- */
-export const WORKFLOW_NEXT_ROW =
-  "planned: spec-017 §9 makes workflowNext a Resource (mutates: false), not a Tool; task-239 moves spec-004 §4.1's workflow.next row to v1.0";
-
 /** An MCP Tool `spec-004` §4.1 declares, deliberately unregistered until P5.2.3 (v0.4). */
 export const TOOLS_V04 =
   'scheduled: the shipped server registers no Tools until P5.2.3 (v0.4), spec-014 §3 — the list is the v0.4 target';
@@ -61,30 +51,27 @@ const SPEC_008 = 'docs/04_memory/design/specs/spec-008-cli-grammar.md';
 
 /** Every allowed finding, sorted by `enumeration|document|direction|item`. */
 export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [
-  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'directive.assign', reason: UNTRIAGED },
-  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'directive.create', reason: UNTRIAGED },
-  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'directive.remove', reason: UNTRIAGED },
-  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'dna.add', reason: UNTRIAGED },
-  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'dna.remove', reason: UNTRIAGED },
-  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'dna.set', reason: UNTRIAGED },
-  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'dna.update', reason: UNTRIAGED },
-  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'memory.amend', reason: UNTRIAGED },
-  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'missing', item: 'memory.park', reason: UNTRIAGED },
-  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'surplus', item: 'workflow.next', reason: WORKFLOW_NEXT_ROW, plannedBy: ['task-239'] },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'agent.execute', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'directive.assign', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'directive.create', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'directive.remove', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'dna.add', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'dna.remove', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'dna.set', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'dna.update', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.add', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.amend', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.approve', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.deprecate', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.park', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.reject', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.submit', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.create', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.end', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.finalize', reason: TOOLS_V04 },
-  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.next', reason: WORKFLOW_NEXT_ROW, plannedBy: ['task-239'] },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.remove', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.start', reason: TOOLS_V04 },
   { enumeration: 'spec-005 Context flat commands', document: SPEC_005, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
-  { enumeration: 'spec-005 Context nouns', document: SPEC_005, direction: 'missing', item: 'directives', reason: UNTRIAGED },
   { enumeration: 'spec-008 §1 flat commands', document: SPEC_008, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
 ];
 
