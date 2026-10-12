@@ -181,7 +181,8 @@ Complexity, duplication, import cycles and bypasses, unused dependencies and ins
 - **A run on this repository, static half only** (no toolchain: not a heavy gate):
   `node scripts/release-health/measure.cjs --release v0.3 --at HEAD --previous 0671d035 --offline --no-toolchain`
   → 26 s at load 18; Q05 35 complex / 19 long functions (127 files), Q06 0.22 % sources / 5.96 % tests, Q07 2 cycles
-  and 5 bypasses, Q09 9 dangling (as the design probe), Q10 66.67 % (8/12), Q16 comment-line ratio 44.15 %, Q18 35.95 %
+  and 5 bypasses, Q09 9 dangling (as the design probe; 8 once `4030aeb4` removed the `dl-999` comment of
+  `measure-static.test.ts`, review F8), Q10 66.67 % (8/12), Q16 comment-line ratio 44.15 %, Q18 35.95 %
   (55 fix of 153, by `kind`), Q19 32 added after `2bc3071e`, 46.88 % fix. It found one defect: the bypass of
   `src/cli.ts` was counted "recorded" because `task-020` has a line naming `src/cli.ts` and saying "No deviation".
 - **The full suite found two more** (`npm test -- --maxWorkers=2` under the slot at `e1b1c3b9`, load 9.8 → 6.4:
@@ -194,7 +195,10 @@ Complexity, duplication, import cycles and bypasses, unused dependencies and ins
   as an outcome object. Rerun on the real repository: Q07 6 bypasses, `recorded_deviations: 0`.
   `npx jest test/release-health test/lint/no-fabricated-stderr test/lint/git-log-readers --maxWorkers=2` →
   `Tests: 129 passed, 129 total`. This touches red's test file again (T4): one stub made real, one fixture body
-  given the "No deviation" line (the DL median stays 2), one comment no longer citing a fake id; no assertion weakened.
+  given the "No deviation" line (the DL median stays 2), one comment no longer citing a fake id, and two assertion
+  edits in the Q08 failure case — `toContain('ELSPROBLEMS')` narrowed to `toContain('npm error code ELSPROBLEMS')`, and
+  `not.toContain('_logs')` added (the reason must not carry npm's dated log pointer); none weakened. (Corrected at the
+  independent review, F8.)
 - **A run on this repository over v0.3's window** (`--previous v0.2.2 --offline --no-toolchain`, 4106 commits; 23 min
   29 s, almost all of it the history half's governance passes): Q13 169 added / 162 closed (95.86 %), 15 open without a
   release; Q14 25 in-discussion, median 6.72 days; Q15 36.99 % (27 of 73 classified, 96 unclassified); Q20 −7 (162
@@ -233,6 +237,35 @@ Complexity, duplication, import cycles and bypasses, unused dependencies and ins
   through the runner's relativizing).
 - Determinism: no clock (Q14 uses commit times), no randomness, every list sorted; the static case's second run is
   byte-identical (`is byte-identical on a second run at the same point`).
+
+### independent review (2026-10-12) and fixes (developer)
+
+- Verdict: APPROVE WITH FIXES (coordinator; probe `../devloop-kit/task-233-review/m.cjs`): every number re-derived
+  matches; decisions 1–5 and the T4 deviations accepted. In-task fixes F1, F2, F3, F6, F8; the follow-ups (Q15's
+  catalogue text vs code, Q09 fictional ids, Q14 `--follow`, v0.1/v0.2 at their own points) are the coordinator's.
+- `aa8a49a5` (red, new `test/release-health/measure-static-guards.test.ts`, so red's earlier files stay as they were):
+  run against `064e1d6a`'s parent `measure.cjs` → `Tests: 3 failed, 3 total`; against the fix → `3 passed`.
+- `064e1d6a` (fix):
+  - **F1**: a point with no `.wingfoil/dna.yaml` (e.g. `v0.2.1`, before task-111) or no source file leaves Q05, Q07,
+    Q08, Q09, Q10 and Q16 `not-measurable` with the reason (naming `--at`), instead of zeros and a false Q08 breach
+    (all six real dependencies "unused" at `v0.2.1`); Q16 keeps a measured half with the other `null` and its reason in
+    `raw` when only one input is missing; the header says v0.1/v0.2 are backfilled by measuring at a later commit.
+  - **F2**: `afterToolchain` receives `built`; after a failed build Q08's install size is `null` with "npm run build did
+    not succeed, so npm pack would pack an incomplete dist/", and neither `npm ls` nor `npm pack` runs.
+  - **F3** (bug-331, same class): the `memory.yaml` comment says the threshold is declared by dev-loop
+    `start.checks.pre` and applied by hand until checks run — no code in `src/` reads it
+    (`grep -rn "stop_the_line\|stop-the-line" src/` → nothing); no second version bump (one per file per branch).
+  - **F6**: Q05 records `eslint version` and `typescript-eslint version`; Q07, Q09 and Q16 `typescript version`.
+  - T4: `measure.test.ts`'s toolchain-fixture assertion "Q05 measured" becomes "Q05 not-measurable: no code file under
+    paths.sources" — that fixture has no source file, so F1 changes the answer; the point it pins (no longer left to
+    task-233) holds.
+- Gates at `064e1d6a`, under the slot: `npm test -- --maxWorkers=2` (load 4.4 → 3.6) → `Test Suites: 386 passed`,
+  `Tests: 7127 passed, 7127 total`; `npm run test:coverage -- --maxWorkers=2` → 7127 passed, All files 99.3 / 97.22 /
+  97.93 / 99.7; `npm run lint` → 0; `npx tsc --noEmit -p tsconfig.json` → 0;
+  `node scripts/check-governance.cjs --base 0671d035` → `gated: 0 findings`; `node scripts/lint-claims.cjs --base
+  0671d035` → 0 warnings. No real measurement run.
+- T4 (`git log --first-parent --no-merges --format=%h d983e28f..HEAD -- test/release-health/measure.test.ts
+  test/release-health/measure-static.test.ts`) → `064e1d6a`, `4030aeb4`, `638afd72`, each accounted for above.
 
 ### Pending amendments (approver)
 
