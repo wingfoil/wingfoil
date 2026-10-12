@@ -52,4 +52,8 @@ Captured on 2026-10-11 by `bug-ingest-rel-v0.3-w3b5-review-findings-plan` (item 
 
 ### Retrospective
 
-None.
+- The comment listed Q18/Q19 as readers of the block before any code read it (`task-150` wrote "No code reads it
+  yet"); when `task-233` wrote the reader, it read only `field` and `counts` (`taskClassRule`,
+  `scripts/release-health/measure.cjs`). A reader list written ahead of its code is a forecast: name the reader once
+  the code exists, or say "planned". The first rewrite then dropped the still-true "no code in src/ reads it" (review F3,
+  `064e1d6a`): correcting a reader list must keep the facts it did not get wrong.
