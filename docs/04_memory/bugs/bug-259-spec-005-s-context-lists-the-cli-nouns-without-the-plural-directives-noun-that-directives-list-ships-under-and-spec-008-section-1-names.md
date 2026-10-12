@@ -57,3 +57,10 @@ fails on it from v0.4.
 
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b4a-review-findings-plan`, from the independent reviews of
 `task-187` and `task-255` (W2 B4a, `dev-loop-rel-v0.3-plan`), checked against `main` at `b0c3e472`.
+
+### Retrospective
+
+- Triage: `open → triaged` at `10f91587`; absorbed into `task-239` by the W2 B4a triage, `triaged → planned`
+  at `83a5f64e` (2026-10-06).
+- Fixed by `task-239`: spec-005 §Context lists `directives` (amend `28ac70be`); the allowlist entry is gone
+  (`3e644cc8`). None further.
