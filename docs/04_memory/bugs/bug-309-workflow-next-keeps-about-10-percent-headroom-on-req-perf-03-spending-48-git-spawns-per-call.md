@@ -62,6 +62,12 @@ idle verdict `task-216` added (`inProcessIdleVerdict`), bounds the total as `dl-
 Captured on 2026-10-10 by `bug-ingest-rel-v0.3-w3b4-review-findings-plan` (item A5); the spawn count re-measured on
 `main` at `02800955`.
 
+**Note (2026-10-12, moved from v0.3 to v0.4 at the approver's absorption of the inherited v0.3 bugs;
+`bug-ingest-rel-v0.3-w3b6-review-findings-plan`).** The approver ruled on 2026-10-10 (W3 B4 rulings, item 8, quoted
+above) that the in-process REQ-PERF-03 check is enough for v0.3; the spawned-total check and the spawn reduction need
+a refactor of the deduction's snapshot loading, which belongs with v0.4's planning, not a v0.3 batch. The `release`
+field was reassigned by a hand `wf(bug): assign release v0.4` commit, since `memory amend` does not own `release`.
+
 ### Retrospective
 
 None.
