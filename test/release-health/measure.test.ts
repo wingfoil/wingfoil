@@ -1042,7 +1042,8 @@ describe('measureRelease runs the toolchain half in its worktree (task-232)', ()
     const { tools, calls } = stubTools();
     const report = await measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, external: () => ({ ok: false, error: 'stub' }), tools });
     expect(TOOL_IDS.map((id) => entry(report, id).status)).toEqual(TOOL_IDS.map(() => 'measured'));
-    expect(entry(report, 'Q05')).toMatchObject({ status: 'measured' });
+    // This fixture has no source file: Q05 is not-measurable for that reason, no longer left to task-233 (review F1).
+    expect(entry(report, 'Q05')).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('no code file under paths.sources') });
     expect(calls[0]!.cwd).not.toBe(h.repo.root);
     expect(calls[0]!.cwd.startsWith(tmpdir())).toBe(true);
     expect(schemaErrors(report)).toEqual([]);

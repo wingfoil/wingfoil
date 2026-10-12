@@ -61,6 +61,10 @@
  * the toolchain half, so `npm ci` and the build never reach what it reads: the files `git ls-tree` lists at the point,
  * read with one `git cat-file --batch`. It adds no dependency (`dl-010`): ESLint, typescript-eslint and TypeScript are
  * the measuring checkout's devDependencies, and a metric whose module is missing is `not-measurable` with the reason.
+ * A point with no `.wingfoil/dna.yaml` (before task-111 moved the configuration to the root, e.g. `v0.2.1`) or no
+ * source file leaves Q05, Q07, Q08, Q09, Q10 and Q16's halves `not-measurable`, never zero: v0.1 and v0.2 are
+ * backfilled by measuring at a later commit that has the configuration (`--at`). Q05, Q07, Q09 and Q16 record the
+ * ESLint, typescript-eslint and TypeScript versions they ran (`raw`), and Q08's install size needs a successful build.
  * Definitions it fixes where the catalogue leaves a choice:
  * - Q05 ESLint's `complexity` (classic) above 15 and `max-lines-per-function` above 80 (blank and comment lines
  *   counted, IIFEs included), inline configuration ignored, over the code files of `paths.sources`; a file ESLint
@@ -1479,7 +1483,7 @@ async function toolchainEntries(tree, scratch, options, run) {
   const q12Entry = 'test:latency' in scripts ? q12(await npm('latency', ['run', 'test:latency'], { WINGFOIL_LATENCY_REPORT: '1' })) : noScript('Q12', 'test:latency');
   const q17Entry = await q17(tree, run, env, options.offline === true);
   // What measureRelease reads from the installed tree after the seven (Q08's install size, task-233).
-  if (options.afterToolchain) await options.afterToolchain(run, env);
+  if (options.afterToolchain) await options.afterToolchain(run, env, built);
   return [q01(scripts, q01Results), q02Entry, ...coverage, q11Entry, q12Entry, q17Entry];
 }
 
@@ -1713,6 +1717,16 @@ function importCycles(graph) {
   }).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 }
 
+/** The versions of the measuring checkout's modules a static metric ran (`<name> version`), for a like-for-like recomputation. */
+function toolVersions(names) {
+  const version = (name) => {
+    if (name === 'eslint') return devModule('eslint')?.Linter?.version ?? null;
+    if (name === 'typescript') return devModule('typescript')?.version ?? null;
+    return devModule(`${name}/package.json`)?.version ?? null;
+  };
+  return Object.fromEntries(names.map((name) => [`${name} version`, version(name)]));
+}
+
 /** Q05 — functions above complexity 15 and above 80 lines (ESLint's `complexity` and `max-lines-per-function`). */
 function q05(sources) {
   const eslint = devModule('eslint');
@@ -1744,7 +1758,7 @@ function q05(sources) {
   const named = (items) => items.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : a.line - b.line)).map((i) => `${i.path}:${i.line} ${i.text}`);
   return entry('Q05', {
     value: { complex: complex.length, long: long.length },
-    raw: { functions_over_complexity: complex.length, functions_over_lines: long.length, files: sources.length },
+    raw: { functions_over_complexity: complex.length, functions_over_lines: long.length, files: sources.length, ...toolVersions(['eslint', 'typescript-eslint']) },
     failing: [...named(complex), ...named(long)],
   });
 }
@@ -1802,7 +1816,7 @@ function q07(parsed, docs) {
   const cycles = importCycles(graph).map((cycle) => `cycle: ${cycle.join(' → ')}`);
   return entry('Q07', {
     value: { cycles: cycles.length, bypasses: unrecorded.length },
-    raw: { cycles: cycles.length, bypasses: unrecorded.length, recorded_deviations: unique(bypasses.filter((b) => recorded(b)).map((b) => `${b.path} ${b.spec}`)).length },
+    raw: { ...toolVersions(['typescript']), cycles: cycles.length, bypasses: unrecorded.length, recorded_deviations: unique(bypasses.filter((b) => recorded(b)).map((b) => `${b.path} ${b.spec}`)).length },
     failing: [...unrecorded, ...cycles],
   });
 }
@@ -1831,7 +1845,7 @@ function q09(ts, files, docs) {
       }
     }
   }
-  return entry('Q09', { value: dangling.size, raw: { references: references.size, dangling: dangling.size }, failing: [...dangling].sort() });
+  return entry('Q09', { value: dangling.size, raw: { references: references.size, dangling: dangling.size, ...toolVersions(['typescript']) }, failing: [...dangling].sort() });
 }
 
 /** Q16's second half: the share of non-blank source lines whose every character is inside a comment. */
@@ -2043,15 +2057,20 @@ function q18q19(root, point, release, docs, memoryYaml, smallSample) {
 
 /** Q16 — words per Memory document (median per type), and the comment-line ratio of the sources. */
 function q16(docs, sourceComments) {
-  const types = unique(docs.map((d) => d.type)).sort();
+  if (docs.reason !== undefined && sourceComments.reason !== undefined) return notMeasurable('Q16', `${docs.reason}; ${sourceComments.reason}`);
   const words = (d) => bodyOf(d.text).split(/\s+/).filter((w) => w !== '').length;
-  const medians = Object.fromEntries(types.map((type) => [type, round2(median(docs.filter((d) => d.type === type).map(words).sort((a, b) => a - b)))]));
+  const types = docs.reason === undefined ? unique(docs.map((d) => d.type)).sort() : [];
+  const medians = docs.reason === undefined ? Object.fromEntries(types.map((type) => [type, round2(median(docs.filter((d) => d.type === type).map(words).sort((a, b) => a - b)))])) : null;
+  const ratio = sourceComments.reason === undefined ? pct(sourceComments.comment, sourceComments.nonBlank) : null;
   return entry('Q16', {
-    value: { words_median: medians, comment_line_ratio: sourceComments.nonBlank === 0 ? null : pct(sourceComments.comment, sourceComments.nonBlank) },
+    value: { words_median: medians, comment_line_ratio: ratio },
     raw: {
-      comment_lines: sourceComments.comment,
-      non_blank_lines: sourceComments.nonBlank,
-      ...Object.fromEntries(types.map((type) => [`${type} documents`, docs.filter((d) => d.type === type).length])),
+      ...(sourceComments.reason === undefined
+        ? { comment_lines: sourceComments.comment, non_blank_lines: sourceComments.nonBlank, ...toolVersions(['typescript']) }
+        : { comment_line_ratio: `not measured: ${sourceComments.reason}` }),
+      ...(docs.reason === undefined
+        ? Object.fromEntries(types.map((type) => [`${type} documents`, docs.filter((d) => d.type === type).length]))
+        : { words_median: `not measured: ${docs.reason}` }),
     },
   });
 }
@@ -2067,7 +2086,12 @@ function measureStatic(ctx, release) {
   const sources = codeFiles(root, point, sourceDirs);
   const tests = codeFiles(root, point, pathsOf(dna, 'tests'));
   const docs = memoryYaml ? memoryDocsAt(root, point, memoryYaml) : [];
-  const out = [q05(sources), q06(sources, tests)];
+  // A point with no configuration (before task-111 moved it to the root) or no source file gives no reading, never a
+  // zero: v0.1 and v0.2 are backfilled by measuring at a later commit with `--at`.
+  const noSources = sourceDirs.length === 0
+    ? 'dna.yaml at the measurement point declares no paths.sources (no .wingfoil/dna.yaml there: measure at a commit that has one, with --at)'
+    : sources.length === 0 ? `no code file under paths.sources (${sourceDirs.join(', ')}) at the measurement point` : null;
+  const out = [noSources === null ? q05(sources) : notMeasurable('Q05', noSources), q06(sources, tests)];
 
   const ts = devModule('typescript');
   const noTs = 'the measuring checkout has no typescript (devDependency): run npm ci';
@@ -2075,7 +2099,7 @@ function measureStatic(ctx, release) {
     const sf = parse(ts, path, text);
     return { path, text, sf, imports: importsOf(ts, sf), comments: commentRanges(ts, sf, text) };
   });
-  out.push(ts === null ? notMeasurable('Q07', noTs) : q07(parsedSources, docs));
+  out.push(ts === null ? notMeasurable('Q07', noTs) : noSources !== null ? notMeasurable('Q07', noSources) : q07(parsedSources, docs));
   const pkg = (() => {
     try {
       return JSON.parse(readBlob(root, point, 'package.json') ?? 'null');
@@ -2085,9 +2109,10 @@ function measureStatic(ctx, release) {
   })();
   const declared = pkg ? unique([...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.optionalDependencies ?? {})]).sort() : null;
   const used = new Set(parsedSources.flatMap((p) => p.imports.filter((i) => !i.typeOnly && !i.spec.startsWith('.')).map((i) => packageOf(i.spec))));
-  const q08Static = ts === null ? { reason: noTs } : declared === null ? { reason: 'no readable package.json at the measurement point' } : { declared, unused: declared.filter((d) => !used.has(d)) };
+  const q08Static = ts === null ? { reason: noTs } : noSources !== null ? { reason: noSources } : declared === null ? { reason: 'no readable package.json at the measurement point' } : { declared, unused: declared.filter((d) => !used.has(d)) };
 
   if (ts === null) out.push(notMeasurable('Q09', noTs));
+  else if (noSources !== null) out.push(notMeasurable('Q09', noSources));
   else {
     const citing = [...parsedSources, ...tests.filter(([path]) => !FIXTURE_DIR_RE.test(path)).map(([path, text]) => {
       const sf = parse(ts, path, text);
@@ -2095,8 +2120,11 @@ function measureStatic(ctx, release) {
     })].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     out.push(q09(ts, citing, docs));
   }
-  const testTexts = unique(pathsOf(dna, 'tests').flatMap((dir) => listFiles(root, point, dir))).filter((p) => !FIXTURE_DIR_RE.test(p)).sort();
-  out.push(q10(root, point, release, docs, [...readBlobs(root, point, testTexts)].filter(([, t]) => t !== null), smallSample));
+  const testDirs = pathsOf(dna, 'tests');
+  const testTexts = unique(testDirs.flatMap((dir) => listFiles(root, point, dir))).filter((p) => !FIXTURE_DIR_RE.test(p)).sort();
+  out.push(testDirs.length === 0
+    ? notMeasurable('Q10', 'dna.yaml at the measurement point declares no paths.tests (no .wingfoil/dna.yaml there: measure at a commit that has one, with --at)')
+    : q10(root, point, release, docs, [...readBlobs(root, point, testTexts)].filter(([, t]) => t !== null), smallSample));
 
   const types = typeRoots(memoryYaml);
   if (types['bug'] === undefined) for (const id of ['Q13', 'Q15', 'Q20']) out.push(notMeasurable(id, 'memory.yaml at the point declares no bug type'));
@@ -2105,7 +2133,11 @@ function measureStatic(ctx, release) {
     out.push(q13(flow, smallSample), q15(root, point, flow, docs, sourceDirs, smallSample), q20(flow, smallSample));
   }
   out.push(types['decision-log'] === undefined ? notMeasurable('Q14', 'memory.yaml at the point declares no decision-log type') : q14(root, point, docs));
-  out.push(ts === null ? notMeasurable('Q16', noTs) : q16(docs, commentLines(parsedSources)));
+  const memoryDocs = memoryYaml ? docs : { reason: 'no .wingfoil/memory.yaml at the measurement point' };
+  const counted = ts === null || noSources !== null ? null : commentLines(parsedSources);
+  const sourceComments = ts === null ? { reason: noTs } : noSources !== null ? { reason: noSources }
+    : counted.nonBlank === 0 ? { reason: 'every source line at the measurement point is blank' } : counted;
+  out.push(q16(memoryDocs, sourceComments));
   if (types['task'] === undefined) out.push(notMeasurable('Q18', 'memory.yaml at the point declares no task type'), notMeasurable('Q19', 'memory.yaml at the point declares no task type'));
   else out.push(...q18q19(root, point, release, docs, memoryYaml, smallSample));
   return { entries: out, q08: q08Static };
@@ -2306,8 +2338,9 @@ async function measureRelease(root, options) {
     if (options.toolchain !== false) {
       const scratch = join(dir, 'out');
       mkdirSync(scratch);
-      const afterToolchain = async (run, env) => {
-        installed = await footprint(tree, run, env);
+      const afterToolchain = async (run, env, built) => {
+        // Without a build, `npm pack` would pack an incomplete dist/: a too-small size is no reading.
+        installed = built ? await footprint(tree, run, env) : { reason: 'npm run build did not succeed, so npm pack would pack an incomplete dist/' };
       };
       for (const m of await measureToolchain(tree, scratch, { ...options, afterToolchain }, guard)) measured.set(m.id, m);
     }
