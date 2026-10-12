@@ -56,6 +56,13 @@ As in steps 1 and 3.
 
 Captured on 2026-10-11 by `bug-ingest-rel-v0.3-w3b5-review-findings-plan` (item 6), from the wave 3 batch B5 follow-ups (`dev-loop-rel-v0.3-plan`), re-checked on `main` at `29b8406a` with the code build of that commit (`npm run build`, then `node dist/cli.js`).
 
+**Note (2026-10-12, moved from v0.3 to v0.4 at the approver's absorption of the inherited v0.3 bugs;
+`bug-ingest-rel-v0.3-w3b6-review-findings-plan`).** The behaviour is as designed (no argument reads nothing; `--base`
+checks only items holding an added line), and every gate and kit invocation passes `--base` (`grep -rn "lint-claims"
+.github/workflows/governance.yml` → the `--base` invocation); what remains is the usage line and the summary wording,
+not a v0.3 blocker. The `release` field was reassigned by a hand `wf(bug): assign release v0.4` commit, since `memory
+amend` does not own `release`.
+
 ### Retrospective
 
 None.
