@@ -71,6 +71,105 @@ that already owns it (`define-scope` produces the release document: `release-pla
 
 ## Execution Notes
 
+### Design, first pass (architect, 2026-10-12) — STOPPED: a selection on `define-scope` retargets its `memory.submit`
+
+Read (dl-015): the Execution Notes of `task-212` (decision 4, the `schedule` step, the review fixes) and of
+`task-230` (its handover: `release` is `amendable: true` since `memory.yaml` 3.2, D3; `release-planning.yaml` 1.9 in
+per-phase blocks), `dl-132` element 4, `dl-016` §1–§4, `dl-166` (`in-discussion`, Q2 (i) is this task's sweep),
+`cp-001`, `spec-003` § "Evidence" / § "Selections" / the action table, `spec-017` §4.1–§4.7 and §12. Specs
+`spec-003` and `spec-017` are `approved` (`grep -m1 '^status:' docs/04_memory/design/specs/spec-00{3,17}-*.md`).
+Branch: `task-230` merged at `91f7a530` (`git log --oneline -1 91f7a530`).
+
+**AC 2 cannot be met as written without breaking `define-scope`.** A `where` without `iterate_over` is a
+*selection*, and a selection is an **action target**: `spec-017` §4.2 sends every untyped Memory verb before a
+`memory.add` (`memory.submit` included) to "the phase's selection when it declares one; otherwise the bound
+element" (code: `actionTarget`, `src/workflow/deduce.ts:1431`; `declaresState`, `src/workflow/deduce.ts:669`, drops
+the phase's `state` evidence when the phase has a selection). `define-scope`'s only action is the release's
+`memory.submit` (draft → planning). Probe on a throw-away clone of this branch
+(`devloop-kit/task-277-scratch`, one probe commit, never in the repository), the worktree build
+(`node dist/cli.js workflow show release-planning --format json`):
+- at `91f7a530` (no selection): `define-scope` evidence `["state", "produces"]`, action `memory.submit` bound to
+  `wingfoil memory submit`;
+- with `where: { type: change-proposal, status: [scheduled], release: ["{release.version}"] }` and the action left as
+  is: evidence `["produces", "selection"]` and no diagnostic about it on `phases[1]` (only the existing
+  `W_WORKFLOW_UNBOUND_TOKEN` on `frontmatter.required`). So the release's draft → planning is no longer evidence,
+  `memory.submit` targets the scheduled change-proposals (whose machine has no edge out of `scheduled`, the last
+  state: `grep -n 'sequence: \[ draft, in-analysis' .wingfoil/memory.yaml` → line 300), and with no scheduled change-proposal the phase
+  completes as soon as the release file exists — before the release is submitted;
+- with the action rewritten as the typed `release.set_state(planning)` (which §4.2 sends to the bound release):
+  evidence `["state", "produces", "selection"]`, 0 errors, but the binding becomes `manual` with expected verbs
+  `approve` / `finalize` / `start` (`spec-003`'s verb rule), while this repository writes draft → planning as
+  `wf(release): submit` (`git log --format='%h %s' | grep -E 'wf\(release\): submit'` → `5ca16df0`, `715b327b`,
+  `e88de04f`).
+- In both selection variants a `scheduled` change-proposal never leaves the selection (`scheduled` is the last
+  state; `missing.push('selection')` while anything matches, `src/workflow/deduce.ts:1310`), so `define-scope`
+  completes only through `spec-017` §4.7, once a later phase completes other than vacuously; until then the frontier
+  stays on `define-scope` (the `build-backlog` precedent, `spec-017` §12 "A selection that never empties", but here
+  at the head of the phase list, ahead of `triage-bugs`).
+
+What the sweep needs is a **read-only** query: the change-proposals are inputs whose `feature` ids the phase copies
+into the release; the phase moves none of them. `spec-003` has no such form.
+
+**Options (for the approver's ruling):**
+- **(a) a read-only selection** — `spec-003` gains a phase key `reads:` (the `where` shape and match rule, `type`
+  mandatory as `E_PHASE_SELECTION_UNTYPED` requires) naming Memory elements the phase reads: their types are in
+  scope for `{T.<field>}` tokens (§4.1), they are never an action target (§4.2) and never evidence (§4.3);
+  `workflow show` / `next` list what it matches. `define-scope` keeps `memory.submit` and its `state` evidence and
+  gains `reads: { type: change-proposal, status: [scheduled], release: ["{release.version}"] }`. Code: the schema and
+  loader checks (`type` mandatory, `E_WORKFLOW_ELEMENT_TYPE_UNKNOWN` on `reads.type`, token scope), the deduction's
+  scope and the `show` output; `spec-003` and `spec-017` §4.1–§4.3 pending amendments. Task size S → M.
+- **(b) the selection plus a typed transition** — `where` as the AC says, `define-scope`'s action becomes
+  `release.set_state(planning)`. No code, no spec change; costs: `next` prints a manual step expecting
+  `wf(release): start … [draft → planning]` instead of `wingfoil memory submit` (or `spec-003`'s verb rule gains a
+  `submit` case, a spec amendment), and the frontier sits on `define-scope` while a scheduled change-proposal
+  exists.
+- **(c) no `where`** — the sweep is stated in `define-scope`'s description, and its post-check names the query in
+  prose: `change-proposals.swept(every feature id of a change-proposal with status scheduled and release
+  {release.version} is in the release's features:)`, unbound like the phase's `frontmatter.required` (bound later
+  under `dl-166` Q2 (ii)). No code, no spec change; the query is declared as a check, not as a selection, so AC 2's
+  "a selection" and AC 3's "pin the new selection" are amended to "the declared sweep check".
+
+**Recommendation: (a)**, with the code in this task (as `task-230` D1 (i)): the query stays data that `show` prints
+and a later bound check (`dl-166` Q2 (ii)) can read, `define-scope` keeps its `state` evidence and its
+`wingfoil memory submit` step, and no phase is held on the frontier by elements it never moves. (c) is the
+smallest if the approver prefers no new key now.
+
+**A second point for the ruling: "before its submit".** `initial-design.seed-releases` says releases stay `draft`
+until `release-planning` (`.wingfoil/workflows/custom/initial-design.yaml:34-35`), but here `minor-v0.4` and
+`minor-v1.0` are already `planning` (`grep -m1 -H '^status:' docs/04_memory/planning/rl-v1/*.md`; submitted together
+at `e88de04f`). So `cp-001`'s target (`minor-v0.4`) is past its submit. Proposed wording: the sweep writes
+`features:` before the submit, and on a release already past `draft` through `memory amend` (`release`
+`amendable: true` since `memory.yaml` 3.2, `task-230` D3), its `--reason` naming the change-proposals swept.
+
+**Design of the other ACs (ready once the ruling is in; nothing written yet):**
+- *AC 1 — `vision-change.yaml` 1.0 → 1.1:* `schedule`'s description names the sequencer entry (with the budget it
+  moves, `dl-096`) and the `release` stamp from `target_release`, and says `release-planning`'s `define-scope` writes
+  the release's `features:`; actions and checks as they are. Same-class sentences in files this task touches:
+  `.wingfoil/WORKFLOW.md:502` (the `schedule` node), `.wingfoil/README.md:122`, and the `change-proposal` template's
+  `## Target release` comment (`.wingfoil/memory/templates/change-proposal.md:67`, a `tmpl_version` bump)
+  (`grep -rn "features:" .wingfoil | grep -iE "schedule|change-proposal|sequencer"`).
+- *AC 2 — `release-planning.yaml` 1.9 → 2.0* (numerically, never 1.10), `task-230`'s blocks kept: the
+  `define-scope` sweep per the ruling, the post-check `change-proposals.swept(…)` (unbound, prose), the description
+  naming `dl-016`'s pattern; `frontmatter.required` and its exemptions untouched (`test/workflow/release-kind-rule.test.ts`).
+- *AC 3 — tests:* new suite `test/core/define-scope-sweep.test.ts` (red-first: the sweep's query and check, the
+  narrowed `schedule` description, the versions ≥ 1.1 / ≥ 2.0 with their history lines, bug-314), plus the
+  conformance pins in `test/core/workflow-repository-conformance.test.ts` (one more unbound check). Red's files are
+  never edited after red.
+- *AC 4 — documents:* `WORKFLOW.md`'s `DS` node (`.wingfoil/WORKFLOW.md:317`) and the `RP` summary (`:192`) draw
+  the sweep; `spec-017` §12's unbound-warning count and, under (a), `spec-003` / `spec-017` §4 as pending amendments.
+- *AC 5 — `dl-132`:* a dated **Note (2026-10-12, approver ruling 2026-10-10 item 5; `task-277`)** after its
+  Relations, in the form of `dl-133`'s note: element 4's "in that release's element (`features:`)" is met by
+  `define-scope`'s sweep; the Decision is not rewritten. Pending amendment.
+- *AC 6 — gates* as the brief lists, under the dl-170 slot.
+
+AC classification (testing directive T1; the configuration is new declared content, as `task-230` classed it):
+AC 1–3 red-first (`test/core/define-scope-sweep.test.ts`), AC 4–5 red-first as documents (the same suite reads
+`WORKFLOW.md`'s nodes; the `dl-132` note is a pending amendment), AC 6 characterization.
+
+No red, green or refactor ran; no gate ran (`git diff --stat 91f7a530 -- src test .wingfoil` → empty).
+
 ### Retrospective
 
-None yet.
+- The task's AC named a `where` selection for an input the phase only reads; the vocabulary makes every selection
+  an action target, which the task's text did not consider. A probe of the configuration change with `workflow
+  show` on a throw-away clone settled it before any test was written. Evidence: the first-pass design above.
