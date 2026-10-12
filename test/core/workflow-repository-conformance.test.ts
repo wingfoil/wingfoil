@@ -95,6 +95,8 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-planning", "phases[0].checks.post[1]", "the switch commit changes only package.json and package-lock.json"],
       ["release-planning", "phases[0].checks.post[2]", "the wingfoil-cli directive re-checked against the new pin"],
       ["release-planning", "phases[1].checks.post[0]", "frontmatter.required"],
+      // task-277 (approver ruling 2026-10-12 D1 (c)): define-scope's sweep of the scheduled change-proposals, bound later under dl-166 Q2 (ii).
+      ["release-planning", "phases[1].checks.post[1]", "change-proposals.swept"],
       // task-230 (dl-100 §1, approver ruling 2026-10-12 D2): the coverage of the ready decision-logs, read by the product-owner.
       ["release-planning", "phases[3].checks.post[0]", "ready-decision-logs.covered"],
       ["release-planning", "phases[4].checks.pre[0]", "spec-review.passed"],
