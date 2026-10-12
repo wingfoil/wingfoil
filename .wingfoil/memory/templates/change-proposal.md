@@ -10,7 +10,7 @@ release: ""            # optional — the release the change is assigned to, sta
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
 reported_by: []        # optional — LIST of consumer feedback notes this element answers, as provenance only (dl-163 S3c), each "<service id>/F-<nnn>@<sha>": the full id of an active kind: repository service with a feedback_inbox, the note's id in that inbox, and the full sha of the consumer commit read; restate the note in this element, never copy it; a GitHub issue gets contributor + credit instead (COLLABORATION.md)
-tmpl_version: 261010   # Orignal template version
+tmpl_version: 261012   # Orignal template version
 ---
 
 <!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
@@ -64,8 +64,9 @@ tmpl_version: 261010   # Orignal template version
 ## Target release
 
 <!-- The release the change should land in, and why (proposal D13). vision-change's schedule step
-     assigns it: an entry in docs/01_vision/07_sequencer.md, the release element's `features:`, and
-     this element's `release`. A change that is accepted but not assigned is not done (dl-132 element 4). -->
+     assigns it: an entry in docs/01_vision/07_sequencer.md and this element's `release`; that release's
+     release-planning define-scope then sweeps the change's feature ids into the release's `features:`.
+     A change that is accepted but not assigned is not done (dl-132 element 4). -->
 
 ## Notes
 
