@@ -145,6 +145,109 @@ Complexity, duplication, import cycles and bypasses, unused dependencies and ins
   heavy gate) is taken only if the refactor gates leave a doubt, under the slot (`--max-workers 2`), and the notes
   say whether it ran.
 
+### red (qa role, developer agent — B6 runs red in the developer session, W3 B6 rulings, second set, T4)
+
+- `d983e28f`: new `test/release-health/measure-static.test.ts` (a fixture repository whose ledger lists what each file
+  and commit shows, one case per metric with hard-coded answers; the v0.2 heuristic fixture; the unparsable-source
+  case; Q08's toolchain path with a stub runner; `classifyTask`; the characterization of this repository's v0.2
+  tasks); `measure.test.ts`'s two placeholder assertions ("Q05 not-measurable … task-233") now expect Q05 measured;
+  `classifyTask` and the footprint step names declared in `measure.d.cts` so the red fails on behaviour, not on a
+  missing type.
+- Failing run: `npx jest test/release-health/measure-static test/release-health/measure.test.ts --maxWorkers=2` →
+  `Tests: 23 failed, 65 passed, 88 total`: the assertions (each metric still `not-measurable … task-233`) and
+  `classifyTask is not a function`; no fixture or setup error (`grep -E "Expected|Received|TypeError"` of the run).
+
+### green (developer, 2026-10-12)
+
+- `638afd72` (`feat`): the static and Memory block of `measure.cjs` as designed; `QUALITY_OWNERS` and its loop
+  removed; `measureRelease` runs `measureStatic` after the history half and before the toolchain half, and builds Q08
+  after the toolchain half (its install size reads the installed tree through an `afterToolchain` hook of
+  `toolchainEntries`, called only after `npm ci` passed, so task-232's step list is unchanged when no hook is passed).
+  `npx jest test/release-health --maxWorkers=2` → `Tests: 122 passed, 122 total`.
+- **Test change after red** (T4): both measure test files gained `jest.setTimeout(60_000)` with the reason in a comment.
+  Every measure now loads ESLint and TypeScript once per test file and lints and parses the fixture: the first
+  `beforeAll` took 10.4 s (timed by a throw-away copy of the test, not kept), the default is 5 s. No assertion changed.
+- `886ed1ba` (`fix(config)`, bug-331): `memory.yaml`'s `task.stop_the_line` comment names dev-loop `start.checks.pre`
+  as the one reader of the threshold, and Q18/Q19 as readers of `field`/`counts` only, counting every task of the
+  release; `version: 3.1 → 3.2` with its history line. **task-230 also takes 3.1 → 3.2 on its own branch and merges
+  first: the gate re-bumps this branch to 3.3** (B6 rulings R5). `npx jest test/lint/version-bump test/core/task-kind`
+  → `29 passed`.
+
+### refactor (developer, 2026-10-12)
+
+- `e1b1c3b9`: `measure.cjs`'s header states the static half and each definition it fixes; `.wingfoil/WORKFLOW.md`'s
+  release-health paragraph says what `measure.cjs` measures now (no "until task-233 lands"); each citation pattern
+  of Q15 is compiled once.
+- **A run on this repository, static half only** (no toolchain: not a heavy gate):
+  `node scripts/release-health/measure.cjs --release v0.3 --at HEAD --previous 0671d035 --offline --no-toolchain`
+  → 26 s at load 18; Q05 35 complex / 19 long functions (127 files), Q06 0.22 % sources / 5.96 % tests, Q07 2 cycles
+  and 5 bypasses, Q09 9 dangling (as the design probe), Q10 66.67 % (8/12), Q16 comment-line ratio 44.15 %, Q18 35.95 %
+  (55 fix of 153, by `kind`), Q19 32 added after `2bc3071e`, 46.88 % fix. It found one defect: the bypass of
+  `src/cli.ts` was counted "recorded" because `task-020` has a line naming `src/cli.ts` and saying "No deviation".
+- **The full suite found two more** (`npm test -- --maxWorkers=2` under the slot at `e1b1c3b9`, load 9.8 → 6.4:
+  `Tests: 2 failed, 7120 passed, 7122 total`): `test/lint/git-log-readers` (a `git show` of a commit in Q15's diff
+  reader, task-268's rule) and `test/lint/no-fabricated-stderr` (the Q08 failure stub returned a written `stderr`,
+  bug-070). `4030aeb4` fixes all three: `git diff-tree --no-commit-id -p --unified=0 --no-renames --root`; a deviation
+  is recorded only by a line naming the importing file, the module it reaches and "deviation" (new pin: `dl-003`'s
+  body "No deviation in src/cli/run.ts here." records nothing); the stub's `stderr` is real npm 11.6.2 output of
+  `npm ls --omit=dev --all --json --long` with `left-pad` declared and not installed (home directory redacted), passed
+  as an outcome object. Rerun on the real repository: Q07 6 bypasses, `recorded_deviations: 0`.
+  `npx jest test/release-health test/lint/no-fabricated-stderr test/lint/git-log-readers --maxWorkers=2` →
+  `Tests: 129 passed, 129 total`. This touches red's test file again (T4): one stub made real, one fixture body
+  given the "No deviation" line (the DL median stays 2), one comment no longer citing a fake id; no assertion weakened.
+- **A run on this repository over v0.3's window** (`--previous v0.2.2 --offline --no-toolchain`, 4106 commits; 23 min
+  29 s, almost all of it the history half's governance passes): Q13 169 added / 162 closed (95.86 %), 15 open without a
+  release; Q14 25 in-discussion, median 6.72 days; Q15 36.99 % (27 of 73 classified, 96 unclassified); Q20 −7 (162
+  terminal, 169 added: floor breached); Q18/Q19 as above. Report at `../devloop-kit/task-233-scratch/real-static3.json`.
+  **No toolchain run was taken** (R4-style heavy gate): Q08's install half is pinned by the stubbed case only.
+- **Gates at `4030aeb4`**, under the slot: `npm run test:coverage -- --maxWorkers=2` (load 7.4 → 3.1) → `Test Suites: 385
+  passed`, `Tests: 7122 passed, 7122 total`, All files 99.3 / 97.22 / 97.93 / 99.7 — unchanged from task-232's
+  (`git diff --stat 3e692099 HEAD -- src jest.config.js` → empty; `scripts/` is outside `collectCoverageFrom`);
+  `npm run lint` → 0; `npm run docs:api` → 0; `npx tsc --noEmit -p tsconfig.json` → 0;
+  `npx tsc -p tsconfig.build.json --noEmit` → 0; `node scripts/check-governance.cjs --base 0671d035` → `17 wf()
+  commits`, `gated: 0 findings`; `node scripts/lint-claims.cjs --base 0671d035` → `0 warnings in 0 files, 4 files read`.
+  Main-sync: `main` is still `3e692099`, an ancestor of HEAD (`git merge-base --is-ancestor main HEAD`).
+- T4 (`git log --first-parent --no-merges --format=%h d983e28f..HEAD -- test/release-health/`) → `4030aeb4`, `638afd72`:
+  the timeouts and the three changes above.
+- BDD: `grep -rln "release-health\|measure.cjs" docs/02_requirements/02_bdd/features/` → no scenario for the Q metrics
+  (task-232's finding, unchanged); none added. No CLI command touched: `docs/cli-reference.md` not concerned.
+
+### review (reviewer, self, 2026-10-12)
+
+- AC 1 met: one case per metric on `staticFixture` with hard-coded answers (`measure-static.test.ts`), the
+  unparsable-source case (Q05 `not-measurable` naming the file), Q10/Q19 `not-measurable` with the reason; no new
+  dependency (`git diff 3e692099 HEAD -- package.json package-lock.json` → empty); Q06's detector is in-repo.
+- AC 2 met: "Q18 — … by `kind` (v0.3+); an absorbed bug stays a feature" (task-004, `kind: feature`, `bug: [bug-004]`),
+  "Q19 — … after the commit-backlog commit", the v0.2 fixture (heuristic, `task-021` with `kind: feature` and a bug
+  counted fix), and this repository's v0.2 tasks → 46 fix of 75 (dl-133's baseline).
+- AC 3 met: the catalogue's Q15 states dl-116's definition (`grep -n "dl-116" docs/08_health/metrics.yaml` → its
+  `decision` and the v2 `changes` source); the classifier applies it, restricted to the commits citing the bug.
+- AC 4 met: Q08 `raw.runtime_dependencies` (2 from `package.json` without the toolchain; 2 from `npm ls`'s top level
+  with it), `runtime_dependencies_from` naming the source; on this repository 4.
+- bug-331 met: `sed -n 136,139p .wingfoil/memory.yaml` → the readers stated as above; `taskClassRule` reads
+  `field`/`counts` from the point's `memory.yaml` (`classifyTask` case with `field: category`).
+- `dl-173`'s five definitions untouched: `git diff 988b99e0 HEAD -- scripts/release-health/measure.cjs | grep -nE
+  "^[-+].*(measureAttribution|declaredVerbs|measureBranches|uncheckedCommits|producesPresent)"` → nothing.
+- Same class in the files touched: no other `git show` of a commit and no other written `stderr` in them (the two lint
+  suites pass); no reason carries the worktree path (Q05's names repository-relative paths; the footprint reasons go
+  through the runner's relativizing).
+- Determinism: no clock (Q14 uses commit times), no randomness, every list sorted; the static case's second run is
+  byte-identical (`is byte-identical on a second run at the same point`).
+
+### Pending amendments (approver)
+
+- `bug-331` (uncommitted): its `### Retrospective` gains one item (dl-115 Q2 (a)). Proposed `--reason`: "Retrospective
+  item for bug-331, written by task-233 while fixing it: the reader list was written before any code read the block."
+- No tech-spec, ratified decision-log or other task needed an edit.
+
 ### Retrospective
 
-<!-- filled while working -->
+- A real run on this repository found a defect no fixture had (a "No deviation" line counted as a recorded
+  deviation, `4030aeb4`), and the full suite's lint gates found two more (a commit-showing git reader, a written
+  stderr): rules that exist as lint tests are cheaper to run before the full suite (`npx jest test/lint`).
+- Every measure now loads ESLint and TypeScript (about 4 s per test file, first `beforeAll` 10.4 s): the two measure
+  test files needed `jest.setTimeout(60_000)`.
+- The history half dominates a real run: 23 min 29 s over v0.3's 4106 commits with `--no-toolchain`, the static half
+  under 30 s of it (26 s for a 34-commit window, all included) — the governance passes run twice (P07).
+- Q15's mechanical rule counts a fix that changes only configuration or tests as a divergence (e.g. `bug-181`,
+  `bug-225` among the 27 on this repository): a candidate for the catalogue's next decision-log.
