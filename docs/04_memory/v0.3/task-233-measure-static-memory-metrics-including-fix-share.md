@@ -2,7 +2,7 @@
 id: "task-233-measure-static-memory-metrics-including-fix-share"
 type: task
 title: "Measure the static and Memory metrics, including the fix share"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "medium"
