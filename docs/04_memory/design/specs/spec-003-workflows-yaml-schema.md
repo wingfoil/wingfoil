@@ -122,7 +122,7 @@ Every workflow-definition file validates against the following schema. Top-level
 one or both of `startable` / `includable`:
 
 - with `kind` only, the two facts follow the alias above, so every workflow file on disk validates
-  unchanged (26 files since `task-222` added `release-health.yaml` and `task-212` `vision-change.yaml`, each `kind: main` or `kind: sub`:
+  unchanged (27 files since `task-230` added `wave.yaml`, after `task-222`'s `release-health.yaml` and `task-212`'s `vision-change.yaml`, each `kind: main` or `kind: sub`:
   `grep -L "^kind: \(main\|sub\)$" .wingfoil/workflows/custom/*.yaml` → nothing);
 - with the booleans, at least one of them is `true` (`E_WORKFLOW_NEITHER_STARTABLE_NOR_INCLUDABLE`);
   an absent boolean reads as `false`;
@@ -289,8 +289,9 @@ never matches a selection (`spec-017` §4.3, §4.11).
 |---|---|
 | `dna:<path>` | the list at `<path>` in `dna.yaml` (the `spec-008` §9 path syntax), e.g. `dna:modules` |
 | `bindings:<name>` | the list declared under `collections.<name>` in `workflows/bindings.yaml` (Layer 3), e.g. the `init` templates `e2e-smoke`'s `fresh-init` prose names |
+| `element:<field>` | the list in frontmatter field `<field>` (`[a-z][a-z0-9_-]*`) of the including workflow's bound element, read at the snapshot's commit like every Memory read (REQ-SYS-03), e.g. `release-cycle`'s `iterate_over: element:waves` over the release's `waves:` (`dl-100` §1 (a); `task-230`) |
 
-Both sources are versioned, which keeps REQ-STATE-09's determinism (`dl-104` D2 rationale); a
+All three sources are versioned, which keeps REQ-STATE-09's determinism (`dl-104` D2 rationale); a
 command's runtime output is not a collection (D2 (c) was not chosen). Each entry is one iteration:
 
 - its **key** is the entry itself for a scalar entry, and the entry's `id` field, else its `name`
@@ -299,7 +300,13 @@ command's runtime output is not a collection (D2 (c) was not chosen). Each entry
 - `where` filters entry fields with the same match rule; collections have no `status`, so every
   matching entry is a candidate until the included workflow is complete for it;
 - the included workflow declares no `element` (`E_WORKFLOW_ELEMENT_MISMATCH` otherwise), and its
-  phases interpolate the entry as `{item}` (the key) or `{item.<field>}`.
+  phases interpolate the entry as `{item}` (the key) or `{item.<field>}`;
+- over `element:<field>` the iteration **keeps the enclosing bound element**: the included workflow may
+  declare no `element` or the including workflow's own type (any other is `E_WORKFLOW_ELEMENT_MISMATCH`),
+  so it can itself `include` a workflow bound to that type, and its tokens resolve against both the entry
+  (`{item}`) and the element (`{<type>.<field>}`). The including workflow must declare an `element`
+  (`E_WORKFLOW_COLLECTION_UNRESOLVED` otherwise). The entries are Memory content, not configuration, so
+  their keys are checked when deduction reads them (`spec-017` §4.6), not at load time.
 
 REQ-STATE-07's fit criterion ("given N elements matching the `where` filter") reads "N elements or
 collection entries" under this rule; the SARD amendment is `dl-104` Action 1's and is listed under
@@ -739,7 +746,7 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 | `E_PHASE_DUPLICATE_NAME` | error | loader | a phase name repeats within one workflow | Layer 2 `name` |
 | `E_WORKFLOW_INCLUDE_UNRESOLVED` | error | loader | a phase `include` names no loaded workflow (including a value written as a file path) | `bug-145`, `bug-144` |
 | `E_WORKFLOW_NOT_INCLUDABLE` | error | loader | a phase `include` names a workflow that is not includable | `dl-109` K3 |
-| `E_WORKFLOW_ELEMENT_MISMATCH` | error | loader | an included workflow declares `element: T` and the including phase neither iterates over `T` nor runs in a workflow bound to `T`; or it declares an element and is iterated over a collection | Layer 2 `element` |
+| `E_WORKFLOW_ELEMENT_MISMATCH` | error | loader | an included workflow declares `element: T` and the including phase neither iterates over `T` nor runs in a workflow bound to `T`; or it declares an element and is iterated over a `dna:` / `bindings:` collection; or it is iterated over an `element:` collection and `T` is not the including workflow's element (message `workflow '<w>' declares element '<T>', but collection '<ref>' is read from workflow '<including>''s element '<E>'`) | Layer 2 `element`; § "Collections" |
 | `E_WORKFLOW_INCLUDE_CYCLE` | error | loader | the include graph has a cycle; message `include cycle: <w1> -> … -> <w1>` | P4.16 |
 | `E_PHASE_FALLBACK_STEP_UNKNOWN` | error | loader | `fallback.step` names no phase of the same workflow; message `fallback step '<step>' not found in workflow` | P4.15 sc. 3 |
 | `E_PHASE_DISTINCT_FROM_UNKNOWN` | error | loader | a `distinct_from` entry names no phase of the same workflow; path `phases[<i>].distinct_from[<k>]`, message `distinct_from phase '<entry>' not found in workflow` | `dl-134` §4 |
@@ -756,7 +763,7 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 | `E_PHASE_ROLE_UNKNOWN` | error | core | `role` or `approval.by_role` is not a `dna.yaml` `team.roles` name; message `unknown role '<role>' (not defined in dna.yaml)` | P3.2, P4.14 |
 | `E_PHASE_APPROVER_UNKNOWN` | error | core | `approval.by_person` names no `team.members[]` `name` or `email` | P4.14 sc. 2 |
 | `E_WORKFLOW_ELEMENT_TYPE_UNKNOWN` | error | core | `element`, a Memory `iterate_over`, a `memory.add(type: T)`, a `produces` owner type, the `T` of a typed `<T>.set_state(s)` or `<T>.sync_state` action (`element.set_state` / `element.sync_state` name the bound element, not a type), or a value of a selection's `where.type` (§ "Selections"; a value carrying a `{…}` token is not decided) is not a `memory.yaml` type; path `element`, `phases[<i>].iterate_over`, `phases[<i>].where.type` (`phases[<i>].where.type[<k>]` for a list), `phases[<i>].actions[<a>]` or `phases[<i>].produces[<k>].type`, visited in that order within a phase; message `unknown memory type '<T>' (not defined in memory.yaml)` | P1.13; `bug-282` |
-| `E_WORKFLOW_COLLECTION_UNRESOLVED` | error | core | a collection `iterate_over` names no list in `dna.yaml` / `bindings.yaml`, or a `dna.yaml` list it names has an entry with no key, two entries sharing a key, or a key outside the ID characters (a `bindings.yaml` collection's keys are `E_BINDING_COLLECTION_KEY`'s) | `dl-104` D2 (b) |
+| `E_WORKFLOW_COLLECTION_UNRESOLVED` | error | core | a collection `iterate_over` names no list in `dna.yaml` / `bindings.yaml`, or a `dna.yaml` list it names has an entry with no key, two entries sharing a key, or a key outside the ID characters (a `bindings.yaml` collection's keys are `E_BINDING_COLLECTION_KEY`'s); or an `element:<field>` names no field (`collection '<ref>' names no frontmatter field (expected [a-z][a-z0-9_-]*)`) or sits in a workflow that declares no `element` (`collection '<ref>' reads a field of the bound element, but workflow '<w>' declares no element`) | `dl-104` D2 (b); `task-230` |
 | `E_PHASE_CADENCE_EVENT_UNKNOWN` | error | core | a `cadence: { recurring: { on } }` event splits into no `<memory-type>-<state>` whose type `memory.yaml` registers and whose state an element of that type can enter (a `sequence` state, a reject or return target, or `deprecated`); path `phases[<i>].cadence.recurring.on`, message `cadence event '<on>' names no memory.yaml type and state (<memory-type>-<state>)` | open question 3, settled |
 | `W_WORKFLOW_UNBOUND_TOKEN` | warning | loader | an action or check token has neither a built-in nor a `bindings.yaml` binding | `dl-090` Q2 (c); open question 1, settled |
 | `W_PHASE_PRODUCES_OWNER_IMPLICIT` | warning | loader | a string `produces` entry with an `{id}` or `{<field>}` token in a phase that `memory.add`s (not a self-creating workflow's creating phase) | `dl-104` D3 |
@@ -1113,3 +1120,17 @@ The Layer 2 count of files that validate under the `kind` alias is now 26, with 
 changes: a `kind: sub` with no `element` was already includable by any phase (`dl-109`). Edited in place
 without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-212`'s
 review.
+
+**Revision (2026-10-12, `task-230-add-waves-governance-resweep-growth-threshold-release-process`) — a collection
+read from the bound element (`element:<field>`).** Approver ruling D1 (a) of 2026-10-12: `dl-100` §1 (a) declares
+the wave as the unit of `implementation`, per `release` element (`dl-159`), and neither `dna:` nor `bindings:`
+is per element. § "Collections" gains the third reference `element:<field>` — the list in a frontmatter field of
+the including workflow's bound element, versioned and read at the snapshot's commit — and the rule that such an
+iteration keeps the enclosing bound element, so the iterated workflow may declare that type and include a sub
+bound to it. `E_WORKFLOW_ELEMENT_MISMATCH` and `E_WORKFLOW_COLLECTION_UNRESOLVED` gain the `element:` cases
+(`src/core/workflow-diagnostics.ts`, `src/core/workflow-core-checks.ts`; pinned by
+`test/core/workflow-element-collection-checks.test.ts`). This repository uses it once:
+`release-cycle.implementation` includes the new `wave.yaml` over `element:waves`, so the Layer 2 count of files
+that validate under the `kind` alias is 27 (`ls .wingfoil/workflows/custom/*.yaml | wc -l` → 27). The
+deduction side is `spec-017` §4.6's revision of the same date. Edited in place without a supersede or a state
+change (`dl-047`), pending the approver's `memory amend` at `task-230`'s review.
