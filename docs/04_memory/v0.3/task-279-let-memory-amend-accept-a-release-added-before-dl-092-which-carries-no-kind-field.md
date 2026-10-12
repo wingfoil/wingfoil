@@ -197,6 +197,39 @@ unchanged).
 `wf(release): amend` form for `minor-v0.3`/`minor-v0.4` is retired for the code build (`node dist/cli.js memory
 amend`); the pinned build (0.2.2) still refuses until the pin advances.
 
+### red (qa, 2026-10-12)
+
+Role qa, separate agent (dl-134). Red commit **`26c2ac94`** (T4 is measured from it). Test files only, no `src/` or
+config change. Specification: the `### design` section above and the approver rulings after design (D1 (a), D2, D3,
+AC 4 red-first).
+
+**Files.** New `test/core/memory-amend-release-kind-exemption.test.ts` (AC 1–4; fixture `memory.yaml` `release`
+with `required: [title, kind, version]`, `amendable: true`, `exempt` varied per row; `template.file` is given because
+`TemplateConfig` requires it, the scaffold file is not written, so `release` stays reserved); `test/memory/schema.test.ts`
+(new `describe('MemoryYaml — template.frontmatter.exempt (bug-342, task-279)')` + one row in the live-file block);
+`test/workflow/release-kind-rule.test.ts` (one `it`: both checks' `exempt` equal the declaration).
+
+**Run.** `npx jest test/core/memory-amend-release-kind-exemption.test.ts test/memory/schema.test.ts test/workflow/release-kind-rule.test.ts --maxWorkers=2`
+→ 14 failed, 36 passed, 50 total: exemption suite 8 failed / 4 passed; `schema.test.ts` 5 / 26; `release-kind-rule.test.ts`
+1 / 6. `npx tsc --noEmit -p tsconfig.json` and `npx eslint` on the three files: clean.
+
+| AC | Class | Test(s) | Today (`26c2ac94`) — first failing assertion |
+|----|-------|---------|-----------------------------------------------|
+| 1 | red-first | `AC 1: minor-v0.1 released, no kind: key …`; `AC 1: … blank kind: "" → accepted` | fail: `result.error.message` is `"missing required field on amend: kind"`, expected `null` |
+| 2 | characterization | `AC 2 (a): … patch-v9.9 … blank kind → refused`; `AC 2 (b): … blank title and no kind → still refused, naming title` | pass (VALIDATION, exit 1, nothing written; (b) matched as `/^missing required field on amend: title\b/`) |
+| 2 / 1 | red-first | `AC 2 (b) companion: … names title only, not kind` | fail: received `"missing required field on amend: title, kind"`, expected `"… title"` |
+| 3 | red-first | `AC 3 (ii): … minor-v9.8 … accepted`; `AC 3 (iii), D2: memory submit minor-v0.1 …`; schema `rejects a key that is not in required`, `rejects title as a key`, `rejects a non-mapping value`, `rejects a non-list id value`; live-file `release declares the pre-dl-092 minors exempt …`; release-kind-rule `both checks' except kind for […] equal …` | fail: amend `"missing required field on amend: kind"`; submit `"missing required field on submit: kind"`; schema rows `success` is `true` (passthrough accepts the key unchecked); live `exempt` is `undefined`; declaration `undefined` |
+| 3 | guards (pass today) | `AC 3 (i): without the exempt key … refused`; `AC 3 (ii): … minor-v0.1 refused (no id hard-coded)`; schema `accepts a mapping … and returns it parsed` | pass: they pin that the fix reads the declaration and does not widen it (the accept row passes via `.passthrough()`) |
+| 4 | red-first | `release-planning.yaml version: is at least 2.1 …`; `define-scope's description drops the hand-amend clause and cites bug-342`; `WORKFLOW.md drops the hand-amend clause …` | fail: version `2` < `2.1`; description contains `refuses a release with no`; three `WORKFLOW.md` lines carry the clause |
+| 5, 6 | characterization, by hand / gates | — (developer, session 3) | not red's |
+
+**Deviation from the design, for the coordinator.** The design listed AC 2 (b) as a characterization row with the
+exact message `missing required field on amend: title`. On the start sha that row is refused but the message is
+`missing required field on amend: title, kind`, so the exact form is new behaviour: it is split into a
+characterization row (refused, names `title`) and a red-first companion (names `title` only). The design's
+"stay green" notes hold: `test/core/define-scope-sweep.test.ts:73` still needs a `kind:` mention in `define-scope`'s
+description.
+
 ### Retrospective
 
 None yet.
