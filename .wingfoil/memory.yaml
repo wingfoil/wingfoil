@@ -9,7 +9,9 @@
 # true for tech-spec, decision-log, service, task, bug and plan; false for release and release-line
 # (approver ruling, task-127 review, 2026-10-01). true for adr since the approver ruling of 2026-10-02
 # (task-158): dated correction and Revision notes only, since a change to the decision is a new ADR
-# (dl-108 A3). true for change-proposal from its introduction (task-212, dl-132).
+# (dl-108 A3). true for change-proposal from its introduction (task-212, dl-132). true for release since the
+# approver ruling of 2026-10-12 (task-230 D3): dated notes and corrected facts (`## Scope changes`, `backlog_committed`);
+# release-line stays false.
 # Source: docs/01_vision/06_features.md, docs/02_requirements/.../P1.13-memory-element-schema.feature
 #          docs/02_requirements/03_sard/03_state-context.md (REQ-STATE-01, REQ-STATE-08)
 #
@@ -59,7 +61,7 @@
 # docs/03_backlog/; each `requirements:` points to its by-release backlog JSON) plus the initial `adr`
 # and `decision-log` content recorded by initial-design (under design/adrs/ and design/dls/).
 # The per-type `template.file:` scaffolds live alongside the config under .wingfoil/memory/templates/.
-version: 3.1                     # [AUTHORING] content revision (WingFoil convention, dl-047) — the file's FORMAT is the separate `format:` key [SPEC: spec-001, dl-149], absent here and so read as 1; a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable); 2.2 -> 2.3 at task-164 (release path folder = the release-line id, bug-163); 2.3 -> 2.4 at task-251 (this annotation: content revision, not format, dl-149); 2.4 -> 2.5 at task-180 (task `returns`, dl-110); 2.5 -> 2.6 at task-205 (bug `returns: { in-progress: planned }`, dl-110 P1 (a)/P2: the dev-loop park sync's edge); 2.6 -> 2.7 at task-212 (the `change-proposal` type, dl-132 Q1 (a)); 2.7 -> 2.8 at task-269 (service kind `repository` and its optional `feedback_inbox`, dl-163 S3b); 2.8 -> 2.9 at task-275 (`task.stop_the_line.open` excludes `deprecated`, approver ruling 2026-10-10 on task-221 decision 3); 2.9 -> 3.0 at task-217 (the `plan` type's optional `parent` field, spec-017 §3.1); 3.0 -> 3.1 at task-271 (the optional `reported_by:` on bug, decision-log, adr, tech-spec and change-proposal, dl-163 S3c)
+version: 3.2                     # [AUTHORING] content revision (WingFoil convention, dl-047) — the file's FORMAT is the separate `format:` key [SPEC: spec-001, dl-149], absent here and so read as 1; a NUMBER, compared numerically (spec-001) — 1.9 -> 2.0 at task-168, never 1.10, which YAML reads as 1.1; 2.0 -> 2.1 at task-153 ([SPEC] annotations reconciled with spec-001, bug-052/053); 2.1 -> 2.2 at task-158 (adr amendable); 2.2 -> 2.3 at task-164 (release path folder = the release-line id, bug-163); 2.3 -> 2.4 at task-251 (this annotation: content revision, not format, dl-149); 2.4 -> 2.5 at task-180 (task `returns`, dl-110); 2.5 -> 2.6 at task-205 (bug `returns: { in-progress: planned }`, dl-110 P1 (a)/P2: the dev-loop park sync's edge); 2.6 -> 2.7 at task-212 (the `change-proposal` type, dl-132 Q1 (a)); 2.7 -> 2.8 at task-269 (service kind `repository` and its optional `feedback_inbox`, dl-163 S3b); 2.8 -> 2.9 at task-275 (`task.stop_the_line.open` excludes `deprecated`, approver ruling 2026-10-10 on task-221 decision 3); 2.9 -> 3.0 at task-217 (the `plan` type's optional `parent` field, spec-017 §3.1); 3.0 -> 3.1 at task-271 (the optional `reported_by:` on bug, decision-log, adr, tech-spec and change-proposal, dl-163 S3c); 3.1 -> 3.2 at task-230 (`release` amendable, its optional `backlog_committed` / `waves` and `growth_threshold`, the `task` `wave`, dl-100 §1–§3; approver rulings 2026-10-12 D1, D3, D4)
 
 # Default machine used by any type that does not declare its own `states` block.
 # [SPEC: REQ-STATE-08] default machine: draft -> pending -> approved, reject from pending back to draft,
@@ -114,7 +116,18 @@ types:
         not_applicable_allowed: [ pillar, requirements ]   # [AUTHORING] dl-124 Action 4, task-168 (2.0, approver ruling 2026-10-02): a patch may write "n/a — <reason>" here; `features` takes [] instead
         lists: [ features ]   # [AUTHORING] bug-147, task-168 (2.0, approver ruling 2026-10-02): the required fields whose value is a list — there `[]` is filled ("none"); a list anywhere else is missing
       file: "memory/templates/release.md"
-    amendable: false     # key [SPEC: spec-001, dl-108 A3]; value: approver ruling 2026-10-01 (task-127)
+    fields:                     # [AUTHORING] task-230 (3.2): optional frontmatter the release workflow phases read; `memory submit` does not require them
+      backlog_committed: "the count of the release's tasks when release-planning's commit-backlog ran (dl-100 §2); fixed there, never recounted; the growth threshold's baseline"
+      waves: "the release's waves, keys in declared order, e.g. [w0, w1] (dl-100 §1 (a)); release-cycle's implementation runs the `wave` sub once per entry (iterate_over: element:waves); fixed at commit-backlog, extended only at a wave's re-plan"
+    growth_threshold:           # [AUTHORING] dl-100 §3 (a), task-230 (3.2) — the ONE statement of the threshold; read by dev-loop `start.checks.pre`
+                                # (growth.clear). No code reads it yet (P4.12, v1.0). Per `release` element, never per branch (dl-159 handover).
+      field: backlog_committed  # the baseline; a release without it (every release planned before dl-100) never fires
+      counts: "tasks whose release is this release's version and whose status is not deprecated"
+      max_growth: 25            # percent; fires when the count is STRICTLY MORE than backlog_committed × 1.25 (v0.3: 152 > 151.25)
+      cleared_by: "a wave's re-plan checkpoint recorded after the count crossed the threshold; it records the delta in the release's `## Scope changes`"
+      at: "dev-loop start"      # blocks the next task start, not admission and not a task already started
+      in_force_from: v0.4       # approver ruling 2026-10-12 (task-230 D4): declared during v0.3, enforced from v0.4's release-planning; minor-v0.3 records its +25.6 % in `## Scope changes`
+    amendable: true      # key [SPEC: spec-001, dl-108 A3]; value: approver ruling 2026-10-12 (task-230 D3), revising task-127's as task-158 did for adr: dated notes and corrected facts are amendments (dl-108 A3) — `## Scope changes` and `backlog_committed` change at every checkpoint while the release is in-development
     states: # [SPEC] structure (P1.13 / REQ-SYS-04); sequence/gates/waiting below is [AUTHORING] vocabulary+encoding
       sequence: [ draft, planning, in-development, releasing, released ]  # [SPEC] (BDD P1.13: release exposes initial state 'draft' = sequence[0])
       # draft->planning: memory.submit; the rest are workflow-phase transitions (no CLI verb)
@@ -133,6 +146,8 @@ types:
         values:                 # [AUTHORING] dl-133 Q1 (b): the declared value set; not enforced by the tool (no frontmatter enum validation, spec-001 passthrough)
           kind: [ feature, fix ]   # a feature task that absorbs a bug (dl-045) stays `feature`
       file: "memory/templates/task.md"
+    fields:                     # [AUTHORING] task-230 (3.2): optional frontmatter the release workflow phases read
+      wave: "the release wave the task runs in, one of its release's `waves:` keys (dl-100 §1 (a)); set at build-backlog or when the task is admitted, recorded in the release's `## Scope changes`; release-cycle's `wave` sub selects its tasks by it"
     stop_the_line:              # [AUTHORING] dl-133 §3 (amends dl-100 §3) Q3 (a), Q4 (i), task-150 (1.9), task-275 (2.9: `open`) — the ONE statement of the threshold;
                                 # read by dev-loop `start.checks.pre` (task-221) and the release-health Q18/Q19 (task-222, task-233). No code reads it yet.
       field: kind               # the classification it counts by

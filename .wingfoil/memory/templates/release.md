@@ -10,7 +10,9 @@ pillar: ""             # REQUIRED — primary feature pillar, e.g. "P1"
 features:              # REQUIRED — feature IDs covered by this release, e.g. [P1.1, P1.2, P1.13]; [] if none. Left empty so an untouched scaffold fails submit (bug-147)
 requirements: ""       # REQUIRED — path to per-release backlog JSON, e.g. "docs/03_backlog/04_backlog/by-release/v0.1.json"
 release-line: ""       # REQUIRED — version of the parent release-line, e.g. "v1"; the file sits under the release-line's id, planning/rl-v1/ (memory.yaml `release` path)
-tmpl_version: 261006   # Orignal template version
+backlog_committed:     # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
+waves: []              # optional — the release's waves, keys in declared order, e.g. [w0, w1, w2] (dl-100 §1 (a)); fixed at commit-backlog, extended only at a wave's re-plan
+tmpl_version: 261012   # Original template version
 ---
 
 <!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
@@ -31,6 +33,16 @@ tmpl_version: 261006   # Orignal template version
 
 <!-- Measurable criteria that mark this release as complete.
      Reference the MVP Canvas if applicable (docs/01_vision/08_mvp-canvas.md). -->
+
+## Scope changes
+
+<!-- One row per task added after commit-backlog (dl-100 §2), written at the wave's re-plan checkpoint
+     that admitted it: the task, the element it came from (a bug, a decision-log, a review finding),
+     the checkpoint (`wave.re-plan` of which wave), and the count against `backlog_committed`. A patch
+     also records here the consumer notes triaged into it outside the retrospective (dl-163 R6). -->
+
+| Task | From | Admitted at | Count vs backlog_committed |
+|---|---|---|---|
 
 ## Execution Notes
 

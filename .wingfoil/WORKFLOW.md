@@ -182,7 +182,7 @@ delivery starts.
 Iterated once per release (`iterate_over: release`, `where: release-line = {release-line.version},
 status ∈ [draft, planning, in-development]` — scoped to the current release-line-cycle iteration).
 Eight phases in sequence, each including one sub-workflow: `planning` (`release-planning`),
-`implementation` (`dev-loop`), `user-docs` (`user-docs`, dl-013/dl-025), `e2e-smoke` (`e2e-smoke`,
+`implementation` (`wave`, once per entry of the release's `waves:`), `user-docs` (`user-docs`, dl-013/dl-025), `e2e-smoke` (`e2e-smoke`,
 dl-023), `submit` (`release-submit`), `publishing` (`release-publishing`), `release-health`
 (`release-health`, dl-089) and `retrospective` (`retrospective`). A patch runs every phase except
 `retrospective` (dl-092); its release-health run reports D01 as not-comparable.
@@ -191,7 +191,7 @@ dl-023), `submit` (`release-submit`), `publishing` (`release-publishing`), `rele
 flowchart TD
     RP["**planning** → `release-planning`\nadvance-pinned-build → define-scope → triage-bugs → reconcile-governance\n→ record-adrs (opt.) → identify-specs → build-backlog → commit-backlog\n✔ P4.12 per step (see sub-diagram below)\n🔑 Approval gates — *approver*\nrelease: draft → planning → in-development"]
 
-    DL["**implementation** → `dev-loop` *(iterate_over: task)*\nwhere: status=backlog, tags=[release.version]\n— design gate + TDD cycle per task, incl. bug-fix tasks —\nkeeps source bug in sync via bug.sync_state"]
+    DL["**implementation** → `wave` *(iterate_over: element:waves)*\none wave per entry of the release's waves:, in order\ntasks → re-sweep → re-plan → wave-checks\n(see sub-diagram below)"]
 
     UD["**user-docs** → `user-docs`\ncheck-implementation-complete → align-user-docs → align-agent-docs\n🔑 Approval gates — *approver*\n(see sub-diagram below)"]
 
@@ -220,9 +220,31 @@ then `staging-rehearsal`. Only a candidate that passed both is tagged; a commit 
 (a gate report, a transcript, a Memory transition) does not re-cut, because `tag` tags the candidate the
 rehearsal transcript names.
 
+### Wave — `wave`
+
+The unit of `implementation` (`dl-100` §1 (a), `task-230`): `release-cycle` runs it once per entry of the
+release's `waves:` field (`iterate_over: element:waves`, `spec-003` § "Collections"), in declared order. Each
+wave runs its tasks' dev-loops, then its boundary. Everything is per `release` element (`dl-159`): the wave's
+tasks are the ones tagged with this release's version and carrying the wave's key in `wave:`. `waves:` and
+`backlog_committed` are fixed at `commit-backlog`; only a wave's `re-plan` changes them afterwards, recording
+the delta in the release's `## Scope changes`. The growth threshold (`memory.yaml`
+`release.growth_threshold`, `dl-100` §3 (a)) stops `dev-loop` `start` once the release's tasks exceed
+`backlog_committed` by more than 25 %, until a `re-plan` has run — in force from v0.4 (approver ruling
+2026-10-12).
+
+```mermaid
+flowchart TD
+    WT["**tasks** → `dev-loop` *(iterate_over: task)*\nwhere: status=backlog, tags=[release.version], wave={item}\n— design gate + TDD cycle per task, incl. bug-fix tasks —\nkeeps source bug in sync via bug.sync_state"]
+    WS["**re-sweep** *(tech-lead)*\nselection: unscheduled bugs, decision-logs, ADRs (release empty)\nmemory.approve · element.set_release (this or a named later release) · memory.deprecate\n🔑 Approval gate — *approver*"]
+    WP["**re-plan** *(tech-lead)* · checkpoint\n## Scope changes · count vs backlog_committed (growth threshold)\nplanning plan revised · next wave opened in waves:\n🔑 Approval gate — *approver*"]
+    WC["**wave-checks** *(qa)*\ne2e smoke (report per wave) · docs/examples · docs.parity\na failure opens a bug (bug-ingest)\n`docs/07_gates/rl-{release.release-line}/rel-{release.version}-{item}-e2e-smoke.md`"]
+
+    WT --> WS --> WP --> WC
+```
+
 ### Dev Loop — `dev-loop`
 
-Iterated once per task (`iterate_over: task`) — including fix tasks derived from bugs. A `design`
+Iterated once per task of a wave (`iterate_over: task`) — including fix tasks derived from bugs. A `design`
 gate precedes the TDD red-green-refactor cycle; rejection at review sends the task back to `red`.
 Every phase that changes the task's state also calls `bug.sync_state`: a no-op unless the task
 carries a `bug:` field, in which case it recomputes the source bug's own state from the aggregate
@@ -246,12 +268,14 @@ the share `memory.yaml` `task.stop_the_line` declares (`dl-133`); `design` reads
 criterion against the bound directives and the ratified specs (`dl-102` §4); `refactor` also runs
 `typecheck.clean` (`dl-044`); `review` re-runs the summary's claims (`dl-097`), re-verifies a previous
 reject's items first on a re-review (`dl-098`) and runs the document-parity suites (`docs.parity`,
-`dl-116`); `done` checks that the task's `### Retrospective` subsection exists, and that of each bug
+`dl-116`); since v1.9 (`task-230`) `start` also waits while the release's tasks exceed `backlog_committed`
+by more than `memory.yaml` `release.growth_threshold` allows, until a wave's `re-plan` (`dl-100` §3, from
+v0.4); `done` checks that the task's `### Retrospective` subsection exists, and that of each bug
 it closes (`dl-115`). No check is evaluated before v1.0 (P4.12); until then the phase's role applies it.
 
 ```mermaid
 flowchart TD
-    ST["**start** *(developer)*\n✔ pre: stop-the-line clear (feature tasks only, dl-133)\ngit.create_branch(task: {task.id}) → branch task/{task.id}\ntask: backlog → in-progress\n↳ bug.sync_state: source bug planned → in-progress"]
+    ST["**start** *(developer)*\n✔ pre: stop-the-line clear (feature tasks only, dl-133)\n✔ pre: growth clear (release.growth_threshold, dl-100 §3; from v0.4)\ngit.create_branch(task: {task.id}) → branch task/{task.id}\ntask: backlog → in-progress\n↳ bug.sync_state: source bug planned → in-progress"]
     DES["📐 **design** *(architect)* · safety net\nverify a tech-spec exists + is approved for every\nfile format/schema/constant/API the task implements\n✔ P4.12: [title, scope] (if scaffolded) + tech-spec: approved\n✔ each AC consistent with the directives and specs (dl-102)"]
     RED["🔴 **red** *(qa)* · fresh\n↳ bug.sync_state: source bug in-review → in-progress (after a reject)\ndeveloper merges main first (on a resume)\nwrite the tests black-box from the ACs\n✔ tests.exist + tests.failing"]
     GREEN["🟢 **green** *(developer)* · distinct from red\nmin code to pass\n✔ tests.passing + tests.unchanged(since: red)"]
@@ -274,7 +298,12 @@ Eight steps in sequence; `record-adrs` is optional. `advance-pinned-build` moves
 published build forward first (dl-095) and re-checks the `wingfoil-cli` directive against the new
 pin (dl-163 S3e); `triage-bugs` and `reconcile-governance` sweep in-scope
 `open` bugs and not-ready decision-logs/ADRs into their gated states (dl-016), selecting only
-elements whose `release` is empty or this release. Each `memory.add` step carries a P4.12 check gate
+elements whose `release` is empty or this release; `reconcile-governance` also selects `ready`
+decision-logs, for a coverage check only: each one of this release must be named by a task's `ref:`
+(approver ruling 2026-10-12). `define-scope` states the 20 % reserved for fixes and governance debt
+(`dl-100` §4 (b)); `build-backlog` checks every criterion against the bound directives and ratified
+specs (`dl-102` §2) and gives each task its `wave:`; `commit-backlog` fixes `backlog_committed` and
+`waves:` (`dl-100` §1–§2, `task-230`). Each `memory.add` step carries a P4.12 check gate
 enforcing the required frontmatter fields before the next step begins. `define-scope`'s gate exempts
 the releases added before dl-092 (`minor-v0.1` … `minor-v1.0`) from `kind`, which they do not carry
 (bug-175).
@@ -282,13 +311,13 @@ the releases added before dl-092 (`minor-v0.1` … `minor-v1.0`) from `kind`, wh
 ```mermaid
 flowchart TD
     AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only\n✔ check:lockfile · check:mcp · wingfoil-cli re-check"]
-    DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)"]
+    DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n20 % reserved for fixes and debt (dl-100 §4 (b))"]
     TB["**triage-bugs** *(tech-lead)*\nmemory.approve: bug open → triaged\n🔑 Approval gate — *approver*\n↩ REJECT → closed"]
-    RG["**reconcile-governance** *(product-owner)*\nmemory.approve: decision-log in-discussion → ready\nadr pending → accepted\n🔑 Approval gate — *approver*\n↩ REJECT → draft"]
+    RG["**reconcile-governance** *(product-owner)*\nmemory.approve: decision-log in-discussion → ready\nadr pending → accepted\nready decision-logs: coverage check only (a task ref: names each)\n🔑 Approval gate — *approver*\n↩ REJECT → draft"]
     RA["**record-adrs** *(architect)* · **OPTIONAL**\nmemory.add(type: adr) → memory.submit → memory.approve\n✔ spec-review.passed · P4.12: [title, sard_ref]\n🔑 Approval gate — *approver*\n`{ type: adr, path: docs/04_memory/design/adrs/{adr.id}.md }`"]
     IS["**identify-specs** *(architect)*\nagent.execute: survey → memory.add(type: tech-spec) → memory.submit\n✔ P4.12: [title, scope]\n🔑 Approval gate — *approver*\n`{ type: tech-spec, path: docs/04_memory/design/specs/{tech-spec.id}.md }`"]
-    BB["**build-backlog** *(product-owner)*\nselection: in-scope ready decision-logs + triaged bugs\nmemory.add(type: task) → memory.submit\nper selected DL / bug: memory.add(type: task, dl: {decision-log.id} / bug: {bug.id}) → memory.submit\n→ bug.set_state(planned) · element.set_release\n✔ P4.12: [title, release, kind]\n`{ type: task, path: docs/04_memory/{task.release}/{task.id}.md }`"]
-    CB["**commit-backlog** *(tech-lead)*\ntask.set_state(backlog) · release.set_state(in-development)\n🔑 Approval gate — *approver*"]
+    BB["**build-backlog** *(product-owner)*\nselection: in-scope ready decision-logs + triaged bugs\nmemory.add(type: task) → memory.submit\nper selected DL / bug: memory.add(type: task, dl: {decision-log.id} / bug: {bug.id}) → memory.submit\n→ bug.set_state(planned) · element.set_release · wave:\n✔ P4.12: [title, release, kind] · acceptance-criteria.consistent (dl-102)\n`{ type: task, path: docs/04_memory/{task.release}/{task.id}.md }`"]
+    CB["**commit-backlog** *(tech-lead)*\n✔ pre: backlog_committed (and waves:) fixed\ntask.set_state(backlog) · release.set_state(in-development)\n🔑 Approval gate — *approver*"]
 
     AB --> DS --> TB --> RG --> RA --> IS --> BB --> CB
     RG --> IS
@@ -539,6 +568,9 @@ stateDiagram-v2
     in_development : in-development
 ```
 
+A release is amendable (`memory amend`, approver ruling 2026-10-12, `task-230`): dated notes and corrected
+facts, such as the rows a wave's `re-plan` adds to `## Scope changes`; its state never changes that way.
+
 ### Task
 
 ```mermaid
@@ -672,10 +704,10 @@ stateDiagram-v2
 | Role | Responsibilities in workflows |
 |---|---|
 | `product-owner` | Vision change (`vision-change` capture, update-vision, schedule), release-line seeding/closing (`seed-first-release-line`, `plan-next-release-line`), release-line roadmap (`seed-releases`), release planning, scope definition, governance reconcile, backlog creation |
-| `tech-lead` | Config init, release-line approval, pinned-build advance, bug triage, backlog approval, implementation-complete check, release submission and publishing, deprecation |
+| `tech-lead` | Config init, release-line approval, pinned-build advance, bug triage, backlog approval, wave re-sweep and re-plan (`wave`), implementation-complete check, release submission and publishing, deprecation |
 | `architect` | Vision-change impact analysis, features session, Volere requirements, ADR authoring, tech-spec identification/authoring (`identify-specs`, `dev-loop/design`), agent-facing docs (`align-agent-docs`) |
 | `developer` | TDD dev-loop (green/refactor), branch management, user-facing docs (`align-user-docs`), bug capture, service capture |
 | `reviewer` | Code review in dev-loop (tests and code, under the developer's and qa's directives too, `dl-134`) |
-| `qa` | BDD specification, the dev-loop `red` phase (black-box tests, `dl-134`), end-to-end smoke (`e2e-smoke`), pre-release checks, release-health measurement (`measure`) |
+| `qa` | BDD specification, the dev-loop `red` phase (black-box tests, `dl-134`), end-to-end smoke (`e2e-smoke`, and per wave in `wave-checks`), pre-release checks, release-health measurement (`measure`) |
 | `facilitator` | Lean inception sessions, release-health comparison and proposals (`compare`, `propose`), retrospective exploration, consumer feedback collection and capture |
-| `approver` | All approval gates (bug triage, vision-change acceptance, governance reconcile, backlog commit, task review, documentation, e2e smoke, release, retrospective, end-of-life, service verification) |
+| `approver` | All approval gates (bug triage, vision-change acceptance, governance reconcile, wave re-sweep and re-plan, backlog commit, task review, documentation, e2e smoke, release, retrospective, end-of-life, service verification) |

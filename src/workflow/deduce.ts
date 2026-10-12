@@ -57,7 +57,7 @@ import { iterationStartState, workflowExitStates, type ExitStart, type PhaseExit
 
 import type { DnaYaml } from '../dna/schema';
 
-import { collectionEntryKey, memoryAddType, tokenName, typedStateType, type BindingsYaml, type CollectionEntry } from './bindings';
+import { collectionEntryKey, collectionKeyIssues, memoryAddType, tokenName, typedStateType, type BindingsYaml, type CollectionEntry } from './bindings';
 import { workflowFacts, type Phase, type Workflow } from './schema';
 
 /** `W_UNCOMMITTED_INPUTS` (`spec-017` §1.2): a deduction input differs from `HEAD`; the answer is `HEAD`'s. */
@@ -521,7 +521,11 @@ interface ElementFrame {
 /** One enclosing scope: the collection entry an `iterate_over` over a collection runs on (§4.6). */
 interface ItemFrame {
   readonly kind: 'item';
-  /** The `iterate_over` reference, `dna:<path>` or `bindings:<name>`. */
+  /**
+   * The collection's label in the step's scope: the `iterate_over` reference (`dna:<path>`,
+   * `bindings:<name>`), or, for `element:<field>`, `<type>:<id>/<field>` — the element the list was read
+   * from, so that two elements' entries with the same key never share a record (task-230).
+   */
   readonly collection: string;
   readonly key: string;
   readonly entry: CollectionEntry;
@@ -548,8 +552,35 @@ interface Resolved {
 
 const TOKEN_RE = /\{([^{}]+)\}/g;
 
-/** A collection reference (`dna:<path>`, `bindings:<name>`) rather than a Memory type (`spec-003` § "Collections"). */
-const COLLECTION_REF_RE = /^(dna|bindings):/;
+/**
+ * A collection reference (`dna:<path>`, `bindings:<name>`, `element:<field>`) rather than a Memory type
+ * (`spec-003` § "Collections"; `element:` since task-230).
+ */
+const COLLECTION_REF_RE = /^(dna|bindings|element):/;
+
+/** A list read from a frontmatter field of the innermost bound element (`spec-017` §4.6, task-230). */
+const ELEMENT_COLLECTION = 'element:';
+
+/**
+ * The entries of an `element:<field>` collection (`spec-017` §4.6): the list in `<field>` of the innermost
+ * bound element, labelled `<type>:<id>/<field>`. An absent field is an empty list. No bound element, a value
+ * that is not a list, or an entry key problem (`collectionKeyIssues`, the rule `bindings.yaml` collections
+ * are loaded under) leaves the entries undecided, with the reason.
+ */
+function elementCollection(reference: string, frames: readonly Frame[]): { label: string; entries: readonly CollectionEntry[] } | { reason: string } {
+  const field = reference.slice(ELEMENT_COLLECTION.length);
+  const frame = [...frames].reverse().find((candidate): candidate is ElementFrame => candidate.kind === 'element');
+  if (frame === undefined) return { reason: `collection '${reference}' has no element in scope` };
+  if (frame.element === null) return { reason: `collection '${reference}' has no ${frame.type} element bound` };
+  const ref = `${frame.element.type}:${frame.element.id}`;
+  const raw = frame.element.frontmatter[field];
+  if (raw === undefined || raw === null) return { label: `${ref}/${field}`, entries: [] };
+  if (!Array.isArray(raw)) return { reason: `collection '${reference}' of ${ref} is not a list` };
+  const entries = raw as CollectionEntry[];
+  const issue = collectionKeyIssues(entries)[0];
+  if (issue !== undefined) return { reason: `collection '${reference}' of ${ref} entry ${issue.index}: ${issue.message}` };
+  return { label: `${ref}/${field}`, entries };
+}
 
 /** `{item}` / `{item.<field>}` against the innermost collection entry (§4.1, `spec-003` § "Collections"). */
 function itemValue(inner: string, frames: readonly Frame[]): { value: string } | { reason: string } {
@@ -1093,14 +1124,27 @@ class Deducer {
 
     // Each candidate: the frame it adds, the state its sub starts from, whether it passes the entry filter.
     const candidates: { frame: Frame; start: ExitStart; entry: boolean; ref: ElementRef | null }[] = [];
+    let label = over;
+    let entries: readonly CollectionEntry[] = this.snapshot.collections?.get(over) ?? [];
+    if (over.startsWith(ELEMENT_COLLECTION)) {
+      const read = elementCollection(over, frames);
+      if ('reason' in read) {
+        // Undecided, like a `where` token with no value: one unexpanded step, reported.
+        whereDiagnostics.push({ code: W_UNRESOLVED_TOKEN, severity: 'warning', file: this.fileOf.get(workflow.name)!, path: `phases[${p}].iterate_over`, message: read.reason });
+        const leaf = this.leaf(instanceId, startCommit, workflow, p, frames, exit, trail, scope, reentries);
+        return { complete: false, vacuous: false, liveQuery: true, frontier: [leaf.step], diagnostics: [...whereDiagnostics, ...leaf.diagnostics], late: [], closed: { late: [], count: 0 } };
+      }
+      label = read.label;
+      entries = read.entries;
+    }
     if (COLLECTION_REF_RE.test(over)) {
-      for (const item of this.snapshot.collections?.get(over) ?? []) {
+      for (const item of entries) {
         // Every key exists: the registry refuses a collection with a key problem (`E_BINDING_COLLECTION_KEY`,
         // `E_WORKFLOW_COLLECTION_UNRESOLVED`).
         const key = collectionEntryKey(item)!;
         const fields = typeof item === 'object' && item !== null ? item : {};
         if (!wanted.every(([field, values]) => matches(fields[field], values))) continue;
-        candidates.push({ frame: { kind: 'item', collection: over, key, entry: item }, start: { boundType: null, state: null, instance: false }, entry: true, ref: null });
+        candidates.push({ frame: { kind: 'item', collection: label, key, entry: item }, start: { boundType: null, state: null, instance: false }, entry: true, ref: null });
       }
     } else {
       const status = wanted.find(([key]) => key === 'status')?.[1];

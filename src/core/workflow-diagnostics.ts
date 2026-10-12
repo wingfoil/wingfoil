@@ -54,8 +54,14 @@ export interface WorkflowRegistryIndex {
   readonly namesComplete: boolean;
 }
 
-/** A collection reference (`dna:<path>`, `bindings:<name>`) rather than a Memory type (spec-003 § "Collections"). */
-const COLLECTION_REF_RE = /^(dna|bindings):/;
+/**
+ * A collection reference (`dna:<path>`, `bindings:<name>`, `element:<field>`) rather than a Memory type
+ * (spec-003 § "Collections"; `element:` since task-230).
+ */
+const COLLECTION_REF_RE = /^(dna|bindings|element):/;
+
+/** The collection reference read from the bound element's frontmatter (spec-003 § "Collections", task-230). */
+const ELEMENT_COLLECTION = 'element:';
 
 /** A value that reads as a file path rather than a workflow name — the `bug-144` shape. */
 function looksLikePath(value: string): boolean {
@@ -152,6 +158,12 @@ function elementMismatch(including: Workflow, phase: Workflow['phases'][number],
   const element = included.element;
   const over = phase.iterate_over;
   if (element === undefined) return null;
+  // An `element:` collection keeps the enclosing bound element (task-230): the iterated workflow may declare
+  // the including workflow's own type, so that it can include a sub bound to it.
+  if (over !== undefined && over.startsWith(ELEMENT_COLLECTION)) {
+    if (element === including.element) return null;
+    return `workflow '${included.name}' declares element '${element}', but collection '${over}' is read from workflow '${including.name}''s element '${including.element ?? '(none)'}'`;
+  }
   if (over !== undefined && COLLECTION_REF_RE.test(over)) {
     return `workflow '${included.name}' declares element '${element}' and cannot be iterated over collection '${over}'`;
   }

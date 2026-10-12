@@ -1,5 +1,5 @@
 # WingFoil — release-cycle (SUB workflow)
-# One iteration per release wave (v0.1 .. v1.0). Composes planning, per-task dev loops,
+# One iteration per release (v0.1 .. v1.0). Composes planning, per-wave dev loops,
 # submission, publishing, and retrospective. Best practice adapted to WingFoil's weekly,
 # per-pillar cadence. Include-only; sw-life-cycle iterates it over `release`.
 # Git conventions: the `git-conventions` directive (.wingfoil/directives/custom/git-conventions.md,
@@ -10,8 +10,9 @@
 name: release-cycle
 kind: sub
 description: >-
-  Deliver one release: plan scope -> run a TDD dev-loop per backlog task (including bug-fix
-  tasks) -> align user-facing docs -> e2e-smoke -> submit -> publish to npm -> measure release health -> retrospective.
+  Deliver one release: plan scope -> run the release's waves, each a TDD dev-loop per backlog task
+  (including bug-fix tasks) closed by a governance re-sweep, a re-plan checkpoint and the wave-end
+  checks -> align user-facing docs -> e2e-smoke -> submit -> publish to npm -> measure release health -> retrospective.
   A release candidate is the commit of the release's integration branch proposed for the version
   tag (dl-099 §1); it is cut by release-publishing's `release-commit`. The two checks are the
   e2e-smoke gate (against the packed candidate, `e2e-smoke-passed`) and release-publishing's
@@ -24,7 +25,7 @@ description: >-
   (and `submit`'s checks) and then `staging-rehearsal`, and only a candidate that has passed both is
   tagged. A commit that only records evidence (a gate report, a transcript, a Memory transition) does
   not re-cut: the tag goes on the candidate the checks named.
-version: 1.4                     # dl-013: added user-docs phase (1.1); dl-119: git comment points to git-conventions (1.2); dl-099 §1 (task-219): the release candidate and its re-cut re-entry into e2e-smoke and staging-rehearsal (1.3); dl-089 §1 (task-222): + release-health between publishing and retrospective (1.4)
+version: 1.5                     # dl-013: added user-docs phase (1.1); dl-119: git comment points to git-conventions (1.2); dl-099 §1 (task-219): the release candidate and its re-cut re-entry into e2e-smoke and staging-rehearsal (1.3); dl-089 §1 (task-222): + release-health between publishing and retrospective (1.4); dl-100 §1 (a), dl-133 §2 (task-230): implementation runs the release's waves (`wave`, iterate_over element:waves), each ending with re-sweep, re-plan and wave-checks (1.5)
 element: release        # the iterated element provided by sw-life-cycle (iterate_over: release)
 
 phases:
@@ -32,14 +33,15 @@ phases:
     description: "Define release scope, story points, and the task backlog for this release."
     include: release-planning
 
-  - name: implementation
+  - name: implementation                     # dl-100 §1 (a) (task-230): the wave is the declared unit of implementation
     description: >-
-      Run the TDD dev-loop once per backlog task tagged for this release — including the fix
-      tasks derived from bugs scheduled into this release; each keeps its source bug in sync
-      (`bug.sync_state`, see dev-loop.yaml).
-    include: dev-loop
-    iterate_over: task
-    where: { status: [backlog], tags: ["{release.version}"] }
+      Run the release's waves in declared order (the release's `waves:`, fixed at commit-backlog and
+      extended only at a wave's re-plan): each wave runs the TDD dev-loop once per backlog task tagged for
+      this release and carrying that wave's key — including the fix tasks derived from bugs scheduled into
+      this release, each keeping its source bug in sync (`bug.sync_state`) — then its boundary: the
+      governance re-sweep, the re-plan checkpoint and the wave-end smoke and user-doc checks (`wave.yaml`).
+    include: wave
+    iterate_over: element:waves              # spec-003 § "Collections": the list in this release's `waves:` field, per release (dl-159)
 
   - name: user-docs                          # dl-013 — user-facing docs gate before submit
     description: >-

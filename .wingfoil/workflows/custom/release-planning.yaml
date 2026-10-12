@@ -7,7 +7,7 @@ description: >-
   governance into their gated states, identify and spec shared artefacts up front, pull backlog
   tasks for the release, and stamp each included element with its `release`. Set the release
   element to `planning` then `in-development`.
-version: 1.8                     # dl-016: added triage-bugs + reconcile-governance, record-adrs approve, build-backlog release-stamping; 1.2 dl-092: define-scope check gains `kind`; 1.3 dl-095 Q3 (B): + advance-pinned-build (task-112); 1.4 dl-133 Q1 (b): build-backlog check gains the task `kind` (task-150); 1.5 bug-175: define-scope check exempts the pre-dl-092 minors from `kind` (task-148); 1.6 bug-163: define-scope produces under rl-{release-line}/, as memory.yaml 2.3 files a release (task-164); 1.7 spec-003 alignment (task-199): record-adrs/identify-specs/build-backlog name their produces owner as { type, path } (dl-104 D3), build-backlog derives its DL and fix tasks from a selection, npm.pin_advance takes a key: value argument and the lockfile/MCP post-checks are two bound tokens (dl-090), agent.survey_specs becomes agent.execute; 1.8 dl-163 S3e (task-270): advance-pinned-build re-checks the wingfoil-cli directive against the new pin
+version: 1.9                     # dl-016: added triage-bugs + reconcile-governance, record-adrs approve, build-backlog release-stamping; 1.2 dl-092: define-scope check gains `kind`; 1.3 dl-095 Q3 (B): + advance-pinned-build (task-112); 1.4 dl-133 Q1 (b): build-backlog check gains the task `kind` (task-150); 1.5 bug-175: define-scope check exempts the pre-dl-092 minors from `kind` (task-148); 1.6 bug-163: define-scope produces under rl-{release-line}/, as memory.yaml 2.3 files a release (task-164); 1.7 spec-003 alignment (task-199): record-adrs/identify-specs/build-backlog name their produces owner as { type, path } (dl-104 D3), build-backlog derives its DL and fix tasks from a selection, npm.pin_advance takes a key: value argument and the lockfile/MCP post-checks are two bound tokens (dl-090), agent.survey_specs becomes agent.execute; 1.8 dl-163 S3e (task-270): advance-pinned-build re-checks the wingfoil-cli directive against the new pin; 1.9 dl-100 §1–§4 (b), dl-102 §2 (task-230): reconcile-governance selects ready decision-logs for a coverage check only (approver ruling 2026-10-12 D2), define-scope states the 20 % reservation, build-backlog checks every criterion and stamps `wave:`, commit-backlog fixes `backlog_committed` and `waves:`; advance-pinned-build's mcp.registered names the KNOWN_READ_FAILURES cleanup (task-239 handover, bug-292)
 element: release
 
 # Selection filter (dl-016 §1) — every phase that considers accumulated elements picks those whose
@@ -40,9 +40,14 @@ phases:
         - "the wingfoil-cli directive re-checked against the new pin (its pinned-build bugs read, its build table confirmed)"
         - "lockfile.pinned"           # `npm run check:lockfile` exit 0 (bound in workflows/bindings.yaml)
         - "mcp.registered"            # `npm run check:mcp` exit 0 (bound in workflows/bindings.yaml)
+        # task-239 handover (bug-292, task-230): a KNOWN_READ_FAILURES entry for the old pin fails check:mcp: delete it when the new pin reads the Resource (scripts/check-mcp*).
 
   - name: define-scope
-    description: "Confirm pillar focus + feature scope for the release (from the release Memory doc)."
+    description: >-
+      Confirm pillar focus + feature scope for the release (from the release Memory doc). The scope
+      reserves 20 % of the release's task budget for bug fixes and governance debt (dl-100 §4 (b), the
+      planning rule; §4 (a), net bug flow, is release-health's measure): the reservation is stated in the
+      release's `## Scope`, and build-backlog plans the feature tasks within the other 80 %.
     role: product-owner
     actions:
       - memory.submit                          # release: draft -> planning
@@ -72,12 +77,21 @@ phases:
       Sweep accumulated not-ready in-scope governance into its gated state so build-backlog/identify-specs
       never silently skip it. Idempotent — acts only on pre-gate elements (selection filter: release empty
       or == {release in planning}). Not-selected elements are left untouched.
+      `ready` decision-logs are selected too (dl-100 §1, task-230), for a coverage check only (approver
+      ruling 2026-10-12, D2): each one whose `release` is this release must be named by the `ref:` of a
+      task of the release, else it is flagged for build-backlog. A `ready` one is never moved (it has no
+      forward edge, dl-017) and never assigned here (assignment stays in build-backlog, dl-016 §4); since it
+      stays `ready`, the selection never empties and the phase completes through spec-017 §4.7, as
+      build-backlog's does.
     role: product-owner
-    where: { type: [decision-log, adr], status: [in-discussion, pending], release: ["", "{release.version}"] }
+    where: { type: [decision-log, adr], status: [in-discussion, pending, ready], release: ["", "{release.version}"] }   # + ready: task-230 (dl-100 §1, D2)
     actions:
       - memory.approve                         # decision-log: in-discussion -> ready; adr (optional sweep, dl-016 open-q (a)=yes): pending -> accepted
     approval: { by_role: approver }
     fallback: { step: reconcile-governance, set_state: draft }   # reject (element incomplete): -> draft
+    checks:
+      # task-230 (D2): unbound — no command asserts it yet (W_WORKFLOW_UNBOUND_TOKEN until P4.12, v1.0).
+      post: ["ready-decision-logs.covered(each ready decision-log with release {release.version} is named by the ref: of a task of the release; an uncovered one is flagged, never moved or assigned here)"]
 
   - name: record-adrs
     description: "Optionally record + approve Architectural Decision Records for this release's scope."
@@ -121,7 +135,8 @@ phases:
       `triaged` bug, create one or more fix tasks (task.bug = the source bug's id) and schedule the bug
       into the release; from here the bug's own state tracks its derived task(s) automatically
       (dev-loop's `bug.sync_state`). Assignment (dl-016 §4): stamp `release = {release.version}` on
-      every included decision-log, bug, tech-spec, adr, and task.
+      every included decision-log, bug, tech-spec, adr, and task. Each task carries the key of the wave it
+      runs in (`wave:`, dl-100 §1 (a), task-230), one of the waves commit-backlog fixes.
     role: product-owner
     # Selection (dl-016 §1, spec-003 § "Selections"): the in-scope `ready` decision-logs and `triaged` bugs
     # the derived tasks come from. `{decision-log.id}` / `{bug.id}` name each selected element of that type
@@ -140,14 +155,22 @@ phases:
       # dl-104 D3: the tasks this phase adds, filed under their own `release` (memory.yaml `task` path)
       - { type: task, path: "docs/04_memory/{task.release}/{task.id}.md" }
     checks:
-      post: ["frontmatter.required: [title, release, kind]"]   # dl-133 Q1 (b): + kind (feature | fix), set here; mirrors memory.yaml `task` template.frontmatter.required
+      post:
+        - "frontmatter.required: [title, release, kind]"   # dl-133 Q1 (b): + kind (feature | fix), set here; mirrors memory.yaml `task` template.frontmatter.required
+        # dl-102 §2 (task-230): the check that ran before each task's pending -> backlog approval, stated in its Reason:.
+        - "acceptance-criteria.consistent(each criterion read against the directives bound to the executing role and the ratified specs and decision-logs it touches, before pending -> backlog)"
 
   - name: commit-backlog
     description: >-
       Approve the planned tasks into the backlog so the dev-loop can pick them up, then move the
-      release into development.
+      release into development. Before the approval the release document fixes `backlog_committed` (the
+      count of its tasks now, dl-100 §2: the growth threshold's baseline, memory.yaml
+      `release.growth_threshold`) and `waves:` (the keys of its waves in order, dl-100 §1 (a)); after it,
+      only a wave's re-plan changes either, through `## Scope changes` (task-230).
     role: tech-lead
     actions:
       - task.set_state(backlog)                # task: pending -> backlog (per planned task)
       - release.set_state(in-development)       # release: planning -> in-development
+    checks:
+      pre: ["frontmatter.required: [backlog_committed]"]   # dl-100 §2 (task-230): fixed here, before the approval
     approval: { by_role: approver }
