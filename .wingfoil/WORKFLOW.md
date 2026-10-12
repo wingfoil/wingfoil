@@ -407,8 +407,13 @@ metric with the previous release's run and turns each regression or breached flo
 `RH-{version}-NN` proposal for the retrospective. It blocks nothing; a breach of G07, G10, G14, Q01 or Q02
 is filed at once through `bug-ingest`. `release-health.measure` / `.compare` are bound to
 `scripts/release-health/measure.cjs` / `compare.cjs`: `measure.cjs` measures the history, process-conformance and
-external metrics (task-231) and records the quality metrics as not-measurable until task-232/233 land; `compare.cjs`
-is task-241's;
+external metrics (task-231) and the toolchain metrics Q01–Q04, Q11, Q12, Q17 by running the project's own commands
+after `npm ci` with the pipeline's pinned Node (task-232; a loaded latency run is not-measurable), and records the
+other quality metrics as not-measurable until task-233 lands; `compare.cjs` is task-241's. Under any other Node the
+toolchain metrics are not-measurable unless `--any-node` is passed: run it under the pinned Node (`publish.yml`
+`env.NODE_VERSION`), e.g. `n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <version>` (`-d`
+downloads that Node when it is not cached) or
+`npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <version>`;
 dl-089 §6 forbids them writing git configuration.
 
 ```mermaid
