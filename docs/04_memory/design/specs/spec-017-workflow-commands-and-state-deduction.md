@@ -313,6 +313,30 @@ The entry filter alone would drop an element the moment the sub moves it on (a `
 is complete for it, entered once a phase of it before its current phase is complete other than vacuously, and
 complete with the sub.
 
+*Over an element's field* (`iterate_over: element:<field>`, `spec-003` § "Collections", `task-230`). The
+entries are the list in `<field>` of the innermost bound element (the frontmatter read at the snapshot's
+commit, §1), and they follow the collection rule above. The iteration's scope is labelled
+`<type>:<id>/<field>#<key>` — the element the list was read from, then the entry's key (§4.8 `WingFoil-Item`,
+§8) — so two elements whose lists share a key (two releases' `w0`) never share a phase record. An explicit
+empty list (`waves: []`) has no entries: the phase is vacuously complete, with the note below. An **absent**
+field, no bound element, a value that is not a list, or entries with a key problem (no key, a duplicate, a key
+outside the ID characters) leave the candidates undecided, as a `where` token with no value does: the phase is
+one unexpanded step, reported as `W_UNRESOLVED_TOKEN` at `phases[<i>].iterate_over` with the reason
+(`collection 'element:<field>' of <type>:<id> has no field '<field>'`, `… is not a list`, `… entry <n>: <key
+problem>`), so a release planned without `waves:` never reads as a finished implementation.
+
+The entries are ordered keys, but like every collection entry each is a candidate until its iteration is
+complete: **all listed entries are open at once**, and the frontier carries the steps of every one. Nothing
+makes a later wave wait for an earlier one; a project that wants waves in sequence lists only the waves to open
+now and appends the next at the previous one's re-plan (`wave.yaml`). A sequential `element:` iteration is not
+specified here.
+
+*Limit.* Inside an `element:` iteration the innermost frame is the collection entry, so a sub bound to the
+enclosing element and included there (§4.5) runs on the entry's scope: its steps are keyed and recorded per
+entry, and its `state` evidence (an action moving the bound element) has no element scope to read and cannot be
+satisfied (`src/workflow/deduce.ts`, the leaf's `state` evidence). No sub this repository includes inside an
+`element:` iteration moves the release's state (`wave.yaml` includes only `dev-loop`, iterated over `task`).
+
 The phase is complete when no candidate is eligible or entered. When no candidate is eligible, entered
 or complete — there is none, or every one is ignored (P4.16 sc. 3's "no task has `status: backlog`",
 where an empty scope filter makes every task a candidate) — it completes with the note
@@ -431,7 +455,7 @@ The approval is given when no carried element awaits any more — by `memory app
 §4.4) on each of them — and the phase's other evidence is satisfied. A phase whose actions carry
 **no** element through a gate has its approval recorded by `workflow finalize` with approver
 authority (§7.9): the step awaits that record once its other evidence is satisfied. On this repository
-those are `user-docs.align-user-docs`, `agent-docs.align-agent-docs` (included by `user-docs` and
+those are `wave.re-plan` (since `task-230`), `user-docs.align-user-docs`, `agent-docs.align-agent-docs` (included by `user-docs` and
 `release-line-cycle`), `e2e-smoke.gate`, `release-submit.approve-release`, `release-publishing.publish`
 and `retrospective.additional-points` (§12); `retrospective.approve` carries its decision-log since
 `task-199` (`decision-log.set_state(ready)`, the run elements row).
@@ -1298,3 +1322,25 @@ check, which no command asserts yet). The checkpoint list (29), the 6 approvals 
 the 15 carried by Memory are unchanged, so the bullets above stand as written; the figures are those
 `test/core/workflow-repository-conformance.test.ts` pins. No rule, command or diagnostic changes. Edited in place
 without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-272`'s review.
+
+**Revision (2026-10-12, `task-230-add-waves-governance-resweep-growth-threshold-release-process`) — §4.6
+iterates a list read from the bound element, and §12 re-measured.** Approver ruling D1 (a) of 2026-10-12
+(`spec-003` § "Collections", Revision of the same date): §4.6 gains *Over an element's field* —
+`iterate_over: element:<field>` reads its entries from the innermost bound element at the snapshot's commit,
+labels each scope `<type>:<id>/<field>#<key>` so that records stay per element, treats an explicit `[]` as no
+entries and an absent field or a malformed list as undecided, states that every listed entry is open at once,
+and states the limit of a sub bound to the enclosing element (`src/workflow/deduce.ts`; pinned by
+`test/workflow/deduce-element-collection.test.ts` and `deduce-element-collection-absent.test.ts`). §12, on this repository at `task-230`'s branch (the
+configuration `HEAD` holds, `loadWorkflowRegistryAtRev(root, 'HEAD')`): 27 workflows and 105 phases, 0 errors,
+86 warnings (`main` at `3e692099`: 26 workflows, 101 phases, 79 warnings), every one a
+`W_WORKFLOW_UNBOUND_TOKEN`; the seven new ones are `release-planning.reconcile-governance`'s
+`ready-decision-logs.covered`, `build-backlog`'s `acceptance-criteria.consistent` and `task.wave.declared`,
+`commit-backlog`'s `frontmatter.required: [backlog_committed]` and `waves.declared`, `dev-loop.start`'s
+`growth.clear` and `wave.wave-checks`' `docs.examples.passing`. The checkpoints are 30 and the approvals recorded by `finalize` 7, both with
+`wave.re-plan` added (`test/core/workflow-repository-conformance.test.ts`), which §5.1's list names too
+(`test/core/workflow-status.test.ts`). `wave.re-sweep` is a selection
+over the unscheduled elements (`release: [""]`), which empties once each is stamped, deprecated or closed;
+`release-planning.reconcile-governance`, which now selects `ready` decision-logs too (ruling D2), never
+empties and completes through §4.7, as `build-backlog` does. No sw-life-cycle instance is open on this
+repository (`node dist/cli.js workflow status`), so no deduction it reports changes. Edited in place without
+a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-230`'s review.

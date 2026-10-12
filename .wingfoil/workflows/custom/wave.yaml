@@ -1,0 +1,84 @@
+# WingFoil — wave (SUB workflow)
+# One wave of a release's implementation (dl-100 §1 (a)): release-cycle's `implementation` runs it once per
+# entry of the release's `waves:` field (`iterate_over: element:waves`, spec-003 § "Collections", task-230).
+# The waves are ordered keys, but the deduction opens every entry at once (a collection entry is a candidate
+# until its iteration completes, spec-017 §4.6): nothing makes wave 2 wait for wave 1, and a wave is opened by
+# appending its key at the previous wave's re-plan. A wave runs the dev-loop of each of its tasks, then its
+# boundary: the wave-end checks (dl-133 §2: a failure opens a bug in the same wave), the governance re-sweep
+# (dl-100 §1, which then schedules that bug) and the re-plan checkpoint (dl-100 §2, §3).
+# Everything is declared per `release` element (dl-159 handover): the wave's tasks are the ones whose `release`
+# is this release's version and whose `wave` is this wave's key, the threshold counts this release's tasks, the
+# report names this release — never "the tasks on main" or a branch, so two open release-cycles never count each
+# other's work.
+# Include-only.
+name: wave
+kind: sub
+description: >-
+  One wave of a release: the dev-loop of each of the wave's backlog tasks, then the wave boundary — the
+  wave-end e2e smoke and mechanical user-doc checks, a governance re-sweep of the unscheduled elements, and a
+  re-plan checkpoint that records the scope delta, clears the growth threshold and opens the next wave.
+version: 1.0                     # 1.0 dl-100 §1 (a), §2, §3 (a); dl-133 §2 (task-230): the first wave workflow
+element: release        # the enclosing release-cycle's element, kept by an element: collection (spec-003, task-230)
+
+phases:
+  - name: tasks
+    description: >-
+      Run the TDD dev-loop once per backlog task of this wave: its `release` is this release's version (the
+      dl-159 handover: per release element, not per tag) and its `wave:` is this wave's key (memory.yaml
+      `task.fields.wave`) — including the fix tasks derived
+      from bugs scheduled into this release; each keeps its source bug in sync (`bug.sync_state`, see
+      dev-loop.yaml). Tasks run in parallel inside the wave as their own `depends_on` allow.
+    include: dev-loop
+    iterate_over: task
+    where: { status: [backlog], release: "{release.version}", wave: "{item}" }
+
+  - name: wave-checks                        # dl-133 §2 (amends dl-099 §4): the smoke and the mechanical user-doc checks at every wave end, Q2 (a)
+    description: >-
+      Run the e2e smoke against the wave's head (the `e2e-smoke` workflow's scenario, `scripts/e2e-smoke.cjs`)
+      and the mechanical checks of `user-docs`: the `docs/examples` scripts and the document-parity suites.
+      The smoke's report is this wave's own, so the release's `e2e-smoke` gate is never satisfied by a wave
+      run; the approval of `align-user-docs` and the staging rehearsal stay once per release (dl-133 §2,
+      dl-099 §4). A failure opens a bug through `bug-ingest` in the same wave (dl-133 §2), before the wave's
+      re-sweep, which then schedules it.
+    role: qa
+    produces:
+      - "docs/07_gates/rl-{release.release-line}/rel-{release.version}-{item}-e2e-smoke.md"
+    checks:
+      post:
+        - "e2e-smoke-passed(report: docs/07_gates/rl-{release.release-line}/rel-{release.version}-{item}-e2e-smoke.md)"
+        - "docs.examples.passing"           # every docs/examples/*/run.sh ends with OK against the wave's build; unbound: no single command runs them (docs/examples/README.md)
+        - "docs.parity"                     # the document-parity suites dev-loop.review runs (bound in workflows/bindings.yaml)
+
+  - name: re-sweep                           # dl-100 §1: triage-bugs + reconcile-governance, widened to ready decision-logs, at every wave boundary
+    description: >-
+      Governance re-sweep (dl-100 §1). Select every element that is unscheduled now — a bug, decision-log
+      or ADR whose `release` is empty, whatever its gate state (`open` and `triaged` bugs, `in-discussion`
+      and `ready` decision-logs, `pending` ADRs) — and propose each one for this release, for a named later
+      release, or for an exit. `memory.approve` moves only an `open` bug to `triaged`, an `in-discussion`
+      decision-log to `ready` and a `pending` ADR to `accepted` — never a `triaged` bug to `planned`, which
+      waits for its fix task (build-backlog, or a task admitted at re-plan); `element.set_release` stamps the
+      release the approver chose, this one or a named later release; the exits are `memory.reject` (a bug's
+      legal close, `open` or `triaged` → `closed`, dl-123) and `memory.deprecate`. The approver rules in
+      blocks; an agent proposes and never stamps a release alone. The selection empties when no unscheduled
+      element is left.
+    role: tech-lead
+    where: { type: [bug, decision-log, adr], status: [open, triaged, in-discussion, ready, pending], release: [""] }
+    actions:
+      - memory.approve                         # only bug open -> triaged; decision-log in-discussion -> ready; adr pending -> accepted
+      - 'element.set_release("{release.version}")'   # the release the approver chose: this one, or a named later release (dl-100 §1)
+      - memory.reject                          # a bug's legal close: open/triaged -> closed (dl-123)
+      - memory.deprecate                       # the exit for a decision-log or an ADR
+    approval: { by_role: approver }
+
+  - name: re-plan                            # dl-100 §2–§3: the re-plan checkpoint; a checkpoint (spec-003 § "Evidence"), closed by `workflow finalize`
+    description: >-
+      Re-plan checkpoint (dl-100 §2). Write into the release's `## Scope changes` one row per task added
+      since `commit-backlog` and not listed yet — the task, the element it came from, this checkpoint — and
+      the release's task count against `backlog_committed`; the growth threshold (memory.yaml
+      `release.growth_threshold`, dl-100 §3 (a)) is cleared by this checkpoint once recorded after the count
+      crossed it. Revise the release-planning phase plan (never left `active` and stale), and open the next
+      wave by appending its key to the release's `waves:` — here and only here — and giving its tasks that
+      key in `wave:`. A wave is opened only by this append: the deduction runs every listed wave at once. The release document is amended (`memory amend`, release amendable since
+      task-230). The approver closes the checkpoint.
+    role: tech-lead
+    approval: { by_role: approver }

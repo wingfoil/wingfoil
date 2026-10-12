@@ -8,6 +8,7 @@ pillar: "P4"
 features: [P4.1, P4.2, P4.3, P4.4, P4.5, P4.6, P4.7, P4.8, P4.9, P4.11, P4.13, P4.14, P4.15, P4.16, P5.3.1, P5.3.2, P5.3.3, P5.3.5, P5.4.1, P5.4.2, P5.4.3, P5.4.4, X1.1, X1.2]
 requirements: "docs/03_backlog/04_backlog/by-release/v0.3.json"
 release-line: "v1"
+backlog_committed: 121   # release-planning-rel-v0.3-plan Appendix E (task-126 … task-246), fixed here by amendment on 2026-10-12 (task-230 D4)
 tmpl_version: 260703
 ---
 
@@ -55,6 +56,17 @@ Per `docs/01_vision/07_sequencer.md` (Week 3 Definition of Done):
 - npm package v0.3.0 published
 - Journey 4 (Morgan - enforce) manually tested end-to-end
 - The workflows under `.wingfoil/workflows/custom/` load through the workflow commands with zero errors
+
+## Scope changes
+
+Recorded by amendment on 2026-10-12 (approver ruling D4 at `task-230`'s design): v0.3 ran no wave
+re-plan checkpoint, because `task-230` declared it during the release. The growth threshold
+(`memory.yaml` `release.growth_threshold`, `dl-100` §3 (a)) is in force from v0.4's release-planning, so
+it gated nothing here.
+
+| Task | From | Admitted at | Count vs backlog_committed |
+|---|---|---|---|
+| `task-247` … `task-278` (32 tasks) | the wave 1–3 review findings, out-of-band backlog and ingest plans (each task's Implementation Notes name its source) | outside any checkpoint (before `task-230`) | 153 task files carry `release: "v0.3"`; `task-223` is `deprecated`, so 152 count against 121: +25.6 %, over the limit of 151.25 (`grep -l '^release: "v0.3"' docs/04_memory/v0.3/task-*.md \| wc -l` → 153) |
 
 ## Execution Notes
 
