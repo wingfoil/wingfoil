@@ -7,7 +7,9 @@ Feature: P3.3 (US-6-07) - wingfoil directive remove
     And a custom directive "legacy-rule" exists
 
   Scenario: Remove an unreferenced custom directive
-    Given "legacy-rule" is not assigned to any role or workflow step
+    # dl-066 option 1: a workflow step reaches directives only through its role (spec-003 Phase.role),
+    # so roles.yaml is the only referrer source a directive has.
+    Given "legacy-rule" is not assigned to any role
     When I run "wingfoil directive remove legacy-rule"
     Then the directive file is deleted
     And the removal is committed to git

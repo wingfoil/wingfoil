@@ -1,7 +1,7 @@
 # Features — WingFoil
 
-**Version:** 1.12
-**Date:** 2026-10-09  
+**Version:** 1.13
+**Date:** 2026-10-11  
 **Status:** Approved
 
 ---
@@ -84,7 +84,7 @@ the Memory documents, at the paths `.wingfoil/memory.yaml` declares).
 | P4.5  | `wingfoil workflow status`                  | 2, 3, 4, 5, 6      | Morgan, Casey | Show state of all open (active) main workflows and pending approvals; highlights the active one. *Also called:* pending gates                                                                                                                                     | Command        |
 | P4.6  | `wingfoil workflow list`                    | 0a, 0b             | All           | List workflows **executable now** (startable workflows + an includable one when it is the next step); `--all` lists every defined workflow                                                                                          | Command        |
 | P4.7  | `wingfoil workflow show`                    | 0a, 0b, 6          | All           | Display details of a workflow (phases, steps, directives, Memory structure)                                                                                                                                                         | Command        |
-| P4.8  | `wingfoil workflow create`                  | 0a, 0b, 2, 4, 6    | Morgan, Alex  | Create new custom workflow file (interactive or flag-based)                                                                                                                                                                         | Command        |
+| P4.8  | `wingfoil workflow create`                  | 0a, 0b, 2, 4, 6    | Morgan, Alex  | Create new custom workflow file (flag-based; interactive post-v0.3)                                                                                                                                                                  | Command        |
 | P4.9  | `wingfoil workflow remove`                  | 2, 4, 6            | Morgan, Alex  | Remove custom workflow after verifying it's not included elsewhere                                                                                                                                                                  | Command        |
 | P4.10 | Workflow Steps (atomic actions)             | 0a, 0b, 1, 2, 4    | All           | Steps execute: memory.add, memory.submit, agent.execute, git operations (branch, worktree, merge)                                                                                                                                   | Feature        |
 | P4.11 | Deliverables (Memory + State)               | 0a, 0b, 2, 4       | All           | Memory files with frontmatter state tracking; states follow the element's **per-type** state machine in `.wingfoil/memory.yaml` (default: draft → pending → approved/rejected → deprecated)                                         | Feature        |
@@ -229,7 +229,7 @@ Notifications and alerts across all features.
 | P4.5       | `wingfoil workflow status`                  | Low        | Workflow state                           | Low      | Critical | See project state                     | For Casey + Morgan                                |
 | P4.6       | `wingfoil workflow list`                    | Low        | Workflow config                          | Low      | High     | Browse available workflows            | Built-in + custom                                 |
 | P4.7       | `wingfoil workflow show`                    | Low        | Workflow config                          | Low      | High     | View workflow details                 | Phases, steps, directives                         |
-| P4.8       | `wingfoil workflow create`                  | Low        | Workflow config                          | Low      | High     | Create custom workflows               | Interactive or flag-based                         |
+| P4.8       | `wingfoil workflow create`                  | Low        | Workflow config                          | Low      | High     | Create custom workflows               | Flag-based (interactive post-v0.3)                |
 | P4.9       | `wingfoil workflow remove`                  | Low        | Workflow config                          | Low      | Medium   | Remove custom workflows               | Verify not included elsewhere                     |
 | P4.11      | Deliverables (Memory + State)               | Medium     | Memory, git versioning                   | Medium   | Critical | Track work items                      | Frontmatter-based state                           |
 | P4.13      | Workflow State Deduction (from Memory)      | Low        | Git, Memory frontmatter                  | Low      | Critical | Deduce state from Memory files        | No separate `.wingfoil/state/` index needed       |

@@ -473,22 +473,32 @@ export function loadWorkflowsYaml(root: string): WorkflowsLoadResult {
  * absent (`E_WORKFLOW_FILE_NOT_FOUND`).
  *
  * @param rev - A revision naming one commit, resolved once (`resolveRevision`, `./revision.ts`).
+ * @param overlay - Files that replace the commit's own, keyed by repository-relative path (`.wingfoil/…`);
+ *   `null` reads as absent. `workflow create` / `remove` (task-211) load the registry as their commit would
+ *   leave it, before writing it. Empty by default: the commit alone.
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty registry.
  */
-export function loadWorkflowsYamlAtRev(root: string, rev: string): WorkflowsLoadResult {
+export function loadWorkflowsYamlAtRev(root: string, rev: string, overlay: ReadonlyMap<string, string | null> = new Map()): WorkflowsLoadResult {
   const sha = resolveRevision(root, rev);
   const committedPath = (file: string): string => posix.normalize(`.wingfoil/${file}`);
   // The included files and `bindings.yaml`, read in one `cat-file --batch` once the manifest names them
   // (task-216, REQ-PERF-03: one spawn instead of one per workflow file).
   const fetched = new Map<string, string | null>();
+  const fetch = (files: readonly string[]): (string | null)[] => {
+    const answers = readPathsAtRev(root, sha, files.map(committedPath));
+    return files.map((file, index) => {
+      const path = committedPath(file);
+      return overlay.has(path) ? overlay.get(path)! : (answers[index] ?? null);
+    });
+  };
   return loadWorkflowsFrom({
     read: (file) => {
       if (fetched.has(file)) return fetched.get(file)!;
-      const [raw = null] = readPathsAtRev(root, sha, [committedPath(file)]);
+      const [raw = null] = fetch([file]);
       return raw;
     },
     prefetch: (files) => {
-      const answers = readPathsAtRev(root, sha, files.map(committedPath));
+      const answers = fetch(files);
       files.forEach((file, index) => fetched.set(file, answers[index] ?? null));
     },
     label: (file) => `${rev}:${committedPath(file)}`,

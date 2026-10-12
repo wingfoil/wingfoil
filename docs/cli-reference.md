@@ -63,7 +63,7 @@ Accepted by every command, except `--dry-run`, which only the commands that chan
 | Option | Effect |
 |---|---|
 | `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (Unreleased (v0.3): except `agent show`, which prints `key: value` lines); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
-| `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `finalize`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `workflow finalize`'s commit changes no file, so its `paths` is `[]` and its `diff` is empty. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
+| `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `finalize`, `create`, `remove`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `workflow finalize`'s commit changes no file, so its `paths` is `[]` and its `diff` is empty. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
@@ -144,6 +144,9 @@ Which state a command reads depends on whether that state can stop it:
   declares — the type is on disk and in no commit; commit `memory.yaml` and the two agree.
 - Unreleased (v0.3): **`workflow start` and `workflow end` read `HEAD`** like the other commands that
   write: the workflow files, `memory.yaml`, the element and the open workflows.
+- Unreleased (v0.3): **`workflow create` and `workflow remove` read `HEAD`** too: the workflow files, and
+  for `remove` the workflows that include it and its open instances. `create` also looks at the disk for a
+  file already at the path it would write.
 - Unreleased (v0.3): **`agent execute` reads `HEAD`** like the other commands that write: the
   commit it reads becomes the run's `state_ref`.
 - Unreleased (v0.3): **`agent show` reads `HEAD`**, though it changes nothing: it answers from the
@@ -1400,6 +1403,73 @@ A project's `memory.yaml` must declare a `plan` type; `wingfoil init` declares o
 - **Errors (exit `2`):** no `<name>`, more than one positional, a malformed `--element`
   (`malformed element-ref "<ref>": expected <type>:<id>`), or a `--set` other than `phase=` / `scope=`.
 - **Commit:** `wf(plan): add <id>`, then `wf(plan): submit <id>`.
+
+### `wingfoil workflow create`
+
+Create a custom workflow file with one phase and include it in workflows.yaml.
+
+```
+wingfoil workflow create <name> (--kind main|sub | [--startable] [--includable]) [--element <type>] [--description <text>]
+```
+
+| Option | Description |
+|---|---|
+| `--kind main\|sub` | `main`: the workflow can be started on its own (written `startable: true`); `sub`: a phase can include it (written `includable: true`). |
+| `--startable` | Instead of `--kind`: the workflow can be started on its own. |
+| `--includable` | Instead of `--kind`: a phase can include the workflow. Give both flags for a workflow that is both. |
+| `--element <type>` | The Memory type the workflow runs on (`element:`); `memory.yaml` must declare it. |
+| `--description <text>` | The workflow's `description:`. |
+
+Unreleased (v0.3). It writes `.wingfoil/workflows/custom/<name>.yaml` — never under `workflows/built-in/` —
+with `name`, the declaration, the description and element you gave, `version: 1.0` and one phase,
+`step-1`, which you then replace with the real phases. It adds `workflows/custom/<name>.yaml` as the last
+entry of `workflows.yaml`'s `include:` list, keeping the file's comments and layout. Before writing, it
+checks that the workflows would still load with the new file; workflows already running are not affected.
+
+```console
+$ wingfoil workflow create arch-review --kind main
+created workflow arch-review (.wingfoil/workflows/custom/arch-review.yaml) in 4f1c2d9b7e3a5c80d61f2a94b7c3e5d08a1f9e9a
+```
+
+`--format json|yaml` prints `{"baseline": {…}, "name", "file", "startable", "includable", "commit"}`.
+
+- **Errors (exit `1`):** `workflow already exists: <name>` — a workflow of that name in the committed
+  workflow files, or a file already at the path; `workflow '<name>' would not load: …` (for example an
+  `--element` type `memory.yaml` does not declare); `workflows.yaml cannot be edited in place: …` (an
+  `include:` written inline as `[ … ]`: write it as one `- <file>` per line); an uncommitted change to
+  `workflows.yaml`.
+- **Errors (exit `2`):** no `<name>`, or more than one positional; a name outside `[a-z][a-z0-9-]*`
+  (`invalid workflow name '<name>' (allowed: [a-z][a-z0-9-]*)`); `--kind` other than `main` or `sub`;
+  `--kind` together with `--startable` or `--includable`; none of the three.
+- **Commit:** `wf(workflow): create <name>`, holding the new file and `workflows.yaml`.
+
+### `wingfoil workflow remove`
+
+Delete a custom workflow and its workflows.yaml entry, unless another workflow includes it or an open workflow runs it.
+
+```
+wingfoil workflow remove <ref>
+```
+
+Unreleased (v0.3). `<ref>` is a workflow name, or the id of an open workflow instance, which stands for its
+workflow. It decides at `HEAD`, and refuses, in this order:
+
+- a workflow under `workflows/built-in/`: `error: built-in workflows cannot be removed`;
+- a workflow another workflow's phase includes: `error: cannot remove 'arch-review': included by
+  'release-cycle'` — the error lists every such workflow on its own line under it;
+- a workflow with an open instance: `error: cannot remove 'arch-review': open instance <id>` — end it
+  (`workflow end`) or abandon it (`memory deprecate <id>`) first; every open instance is listed under the error;
+- a removal after which the workflows would not load, such as removing the last startable workflow or the
+  last entry of `workflows.yaml`: `error: cannot remove '<name>': the workflows would not load: …`.
+
+Otherwise it deletes the file and its `include:` entry, keeping the rest of `workflows.yaml` as it is.
+`--format json|yaml` prints `{"baseline": {…}, "name", "file", "commit"}`.
+
+- **Errors (exit `1`):** the four refusals above; `unknown workflow: <name>`; `workflows.yaml cannot be
+  edited in place: …` (an `include:` written inline as `[ … ]`: write it as one `- <file>` per line); an
+  uncommitted change to the workflow file or to `workflows.yaml`.
+- **Errors (exit `2`):** no `<ref>`, or more than one positional.
+- **Commit:** `wf(workflow): remove <name>`, holding the deletion and `workflows.yaml`.
 
 ## Agent
 

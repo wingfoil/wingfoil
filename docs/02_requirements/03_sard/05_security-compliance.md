@@ -104,7 +104,11 @@
 * **Rationale:** Protect the baseline; prevent dangling references. An installed built-in adapter also pins the launch
   argv in the project's history, so two clones launch the same agent the same way (REQ-SYS-07).
 * **Fit Criterion:** `directive remove` / `workflow remove` on a built-in is rejected ("built-in … cannot be removed");
-  removal of a still-referenced custom asset is rejected naming the referrer. No command removes or rewrites a built-in
+  removal of a still-referenced custom asset is rejected naming the referrer. A directive's referrers are the
+  `roles.yaml` bindings alone (a role, or `global`): a workflow step reaches directives only through its `role`, so
+  phases are covered through the role that runs them (`dl-066` option 1, `spec-003` `Phase.role`). A workflow's
+  referrers are the phases of other workflows that `include:` it, and its open instances (`spec-017` §7.8,
+  `dl-030`). No command removes or rewrites a built-in
   agent adapter: 0 operations in the command surface do (`npx jest test/core/builtin-adapter-writers.test.ts`),
   and a future one is held to the same refusal.
 * **Traceability:** Feature P3.3 (US-6-07, BDD `p3-directives/P3.3-directive-remove.feature`); Feature P4.9 (US-6-11,

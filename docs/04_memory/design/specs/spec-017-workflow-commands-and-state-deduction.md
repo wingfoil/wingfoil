@@ -634,7 +634,17 @@ loaded at `HEAD`, or when the target file exists on disk (`dl-086`):
 `workflow already exists: <name>` (P4.8 sc. 3); the write guard refuses a modified `workflows.yaml`.
 `<name>` must match `spec-003`'s name class `[a-z][a-z0-9-]*` (else exit `2`). Instances in flight
 are untouched (P4.8 sc. 2), since deduction reads each instance's own workflow. Interactive creation
-is not in v0.3 (`dl-082` point 3 records that only `init` prompts).
+is not in v0.3 (`dl-082` point 3 records that only `init` prompts). `--kind main` is written
+`startable: true` and `--kind sub` `includable: true`, the booleans `dl-109` K1 (a) makes canonical;
+`description` is written double-quoted, `element` plain when it is a name of that class. The
+`include` entry is appended after the last entry of a block list, at its indentation, keeping every
+comment; a `workflows.yaml` the edit cannot make in place (a flow-style `include: [ … ]`, no
+`include:` list) is refused (`CONFLICT`), never rewritten as a whole; with no `workflows.yaml`,
+one is written holding that entry. Before writing, `create` loads the registry the commit would
+leave — `HEAD`'s files with the new file and the edited manifest in their place — through the
+loader and the core checks (§2), and refuses on any `spec-003` error (`VALIDATION`): the created
+file therefore loads with zero errors, and an `--element` type `memory.yaml` does not declare is
+refused.
 
 **7.8 `remove`** (P4.9, REQ-SEC-07, `dl-030`, `dl-066`). Refused for a workflow whose file is under
 `workflows/built-in/`: `built-in workflows cannot be removed` (P4.9 sc. 3). Refused while another
@@ -643,7 +653,11 @@ all referrers in `details`, ascending) — the check always runs, so there is no
 flag. The referrer source is `include:` alone: under `dl-066` option 1 no phase references a
 directive, so removal checks no directive, and `directive remove` checks no workflow. Refused while an
 open instance of it exists: an open instance is a referrer in REQ-SEC-07's sense ("prevent dangling
-references"). Otherwise deletes the file and its `include` line in one commit,
+references"); the first open instance id ascending is named, all in `details.instances`. Refusals
+come in that order — built-in, included, open instance — then the write guard on the file and on
+`workflows.yaml`. As `create` does, `remove` loads the registry the commit would leave before
+writing and refuses on any `spec-003` error (`VALIDATION`): removing the last startable workflow
+(`E_NO_MAIN_WORKFLOW`) or the last entry would leave a registry no command can read. Otherwise deletes the file and its `include` line in one commit,
 `wf(workflow): remove <name>` (P4.9 sc. 1).
 
 **7.9 `finalize`** (ruling R11; `dl-104` D1 (b)–(c)). Records a phase's completion where the phase
@@ -743,6 +757,8 @@ interface StatusResult { baseline: Baseline; active: string | null;
 interface StartResult    { baseline: Baseline; instance: Instance; next: Step | null; commits: string[] }
 interface EndResult      { baseline: Baseline; ended: Instance; active: Instance | null; commit: string }
 interface FinalizeResult { baseline: Baseline; instance: Instance; finalized: Step; next: Step | null; commit: string }
+interface CreateResult   { baseline: Baseline; name: string; file: string; startable: boolean; includable: boolean; commit: string }
+interface RemoveResult   { baseline: Baseline; name: string; file: string; commit: string }
 interface ListResult     { baseline: Baseline; workflows: { name: string; startable: boolean; includable: boolean;
                            description: string | null; executableNow: boolean }[]; message?: string; diagnostics: Diagnostic[] }
 type TokenBinding = { kind: "wingfoil" | "manual" | "agent" | "run" | "unbound"; source: "built-in" | "project" | "none";
@@ -835,6 +851,8 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | built-in (`remove`) | `built-in workflows cannot be removed` | `VALIDATION` | 1 |
 | included elsewhere (`remove`) | `cannot remove '<name>': included by '<referrer>'` | `CONFLICT` | 1 |
 | open instance (`remove`) | `cannot remove '<name>': open instance <id>` | `CONFLICT` | 1 |
+| the registry the commit would leave has a `spec-003` error (`create`, `remove`) | `workflow '<name>' would not load: <first error>` / `cannot remove '<name>': the workflows would not load: <first error>`; every diagnostic in `details` | `VALIDATION` | 1 |
+| `workflows.yaml` cannot be edited in place (`create`, `remove`) | `workflows.yaml cannot be edited in place: <reason>` | `CONFLICT` | 1 |
 | dirty write target, missing git identity | the existing messages of `write-guard.ts` and REQ-SEC-01 | as today | 1 |
 | missing `<name>`; malformed `--element` (`spec-008` §7); a `--set` name other than `phase` / `scope` on `start`; invalid `<name>` syntax; `--kind` with `--startable`/`--includable`; `create` with neither; unknown flag | `spec-008` §2/§5 messages | — | 2 |
 
@@ -1298,3 +1316,13 @@ check, which no command asserts yet). The checkpoint list (29), the 6 approvals 
 the 15 carried by Memory are unchanged, so the bullets above stand as written; the figures are those
 `test/core/workflow-repository-conformance.test.ts` pins. No rule, command or diagnostic changes. Edited in place
 without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-272`'s review.
+
+**Revision (2026-10-11, `task-211-add-workflow-create-workflow-remove-req-sec`) — §7.7, §7.8, §8 and §10 for
+`workflow create` / `workflow remove`.** `task-211` implements both. §7.7 now says how `--kind` is written (the
+`dl-109` booleans), how the `include` entry is added in place and when that edit is refused, and that `create`
+loads the registry its commit would leave and refuses a `spec-003` error before writing — which is what makes
+the created file load with zero errors. §7.8 gives the refusal order, names the open instance it reports, and
+applies the same prospective load to `remove`. §8 gains `CreateResult` and `RemoveResult`; §10 gains the
+"would not load" and "cannot be edited in place" rows. No deduction rule, other command or exit code changes.
+Edited in place without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at
+`task-211`'s review.

@@ -204,8 +204,8 @@ for cell):
 | `workflowFinalize` | `workflow`               | true    | `wingfoil workflow finalize`  | Tool `workflow.finalize` *(v0.4)*             | ruling R11 (`dl-104` D1) |
 | `workflowList`     | `workflow`               | false   | `wingfoil workflow list`      | the shipped `wingfoil://workflows` keeps its payload in v0.3 | P4.6    |
 | `workflowShow`     | `workflow`               | false   | `wingfoil workflow show`      | the shipped `wingfoil://workflows/{name}` keeps its payload in v0.3 | P4.7    |
-| `workflowCreate`   | `workflow` *(planned)*   | true    | `wingfoil workflow create`    | Tool `workflow.create` *(v0.4)*               | P4.8    |
-| `workflowRemove`   | `workflow` *(planned)*   | true    | `wingfoil workflow remove`    | Tool `workflow.remove` *(v0.4)*               | P4.9    |
+| `workflowCreate`   | `workflow`               | true    | `wingfoil workflow create`    | Tool `workflow.create` *(v0.4)*               | P4.8    |
+| `workflowRemove`   | `workflow`               | true    | `wingfoil workflow remove`    | Tool `workflow.remove` *(v0.4)*               | P4.9    |
 
 - **Why each `mutates` value.** `workflowStart` / `workflowEnd` open and close a startable workflow
   instance and set or clear the active context (P4.2, P4.3, REQ-STATE-03); `workflowFinalize` writes
@@ -873,3 +873,9 @@ approver's `memory amend` at `task-226`'s review.
 `wingfoil workflow status`, reading `HEAD` as item 6 declares), so the row loses its planned marker. Its MCP
 Resource `wingfoil://workflows/-/status` is still a later task's. No other row changed. Edited in place without a
 supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-225`'s review.
+
+**Revision (2026-10-11, `task-211-add-workflow-create-workflow-remove-req-sec`) — §3's `workflowCreate` and
+`workflowRemove` rows ship.** `task-211` registers both in `CORE_MODULES` (`mutates: true`, `wingfoil workflow
+create` / `wingfoil workflow remove`), so the two rows lose their planned marker. Their MCP Tools stay v0.4
+(P5.2.3): the production server serves no Tool. No other row changes. Edited in place without a supersede or
+a state change (`dl-047`); pending the approver's `memory amend` at `task-211`'s review.
