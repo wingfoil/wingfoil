@@ -60,3 +60,10 @@ an owner is named for keeping it so until the switch, so the count does not keep
 
 Captured on 2026-10-07 by `bug-ingest-rel-v0.3-w3b1-review-findings-plan`, from `task-196`'s developer notes (W3 B1,
 `dev-loop-rel-v0.3-plan`), re-measured on `main` at `0962f85f`.
+
+**Note (2026-10-12, re-measured after wave 3 batch B6; W3 B6 follow-ups,
+`bug-ingest-rel-v0.3-w3b6-review-findings-plan` item C5).** On `main` at `0da232cb`, `npx jest
+test/docs/name-resolvability.test.ts --maxWorkers=2` → `name-resolvability (warn mode until v0.4): 29 untriaged
+first-run finding(s), 84 stale allowlist entries, 5 planned entries whose tasks are all done.` The stale list has
+grown from 37 to 84 (`task-240`'s developer notes counted 87 on its branch) as the v0.3 tasks delivered the names the
+allowlist held as planned, so the v0.4 switch to `fail` mode is further away than this bug's Summary states.
