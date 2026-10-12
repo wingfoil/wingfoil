@@ -242,7 +242,7 @@ Findings and what changed (all same-class instances in the files this task touch
   `W_UNRESOLVED_TOKEN`, `src/workflow/deduce.ts`); an explicit `[]` stays vacuous. `commit-backlog` gains
   `waves.declared` (a non-empty list; a separate token because `frontmatter.required` counts a list value as
   missing outside `memory.yaml`'s `lists:`), `build-backlog` gains `task.wave.declared`. Red first: `438071b7`
-  (`test/workflow/deduce-element-collection-absent.test.ts`, 1 failed against the unchanged `deduce.ts`), fix
+  (`npx jest test/workflow/deduce-element-collection-absent.test.ts` → 1 failed with `deduce.ts` as committed at `1b933a1b`, `git diff --stat 1b933a1b 438071b7 -- src` → empty), fix
   `1c7a3741`.
 - **F2** — `wave.tasks` selected by `tags: ["{release.version}"]`; per the `dl-159` handover it now selects
   `release: "{release.version}"` (22 of 153 v0.3 tasks carry no `v0.3` tag, the reviewer's count). Also in
