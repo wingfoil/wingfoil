@@ -256,11 +256,19 @@ fixed in `memory.yaml`, the template, README, `WORKFLOW.md`, and `spec-001`'s wo
 task's files), `dl-132:67` (its Decision, covered by the dated note), `cp-001`'s scenario 5 (it already reads the
 sweep, `task-277`).
 
+**Independent review (2026-10-12): approve with fixes.** F1 — the sweep's write path is an approver operation
+(`memory amend` needs the approver, `docs/cli-reference.md:182`; the hand amends `4c5fec67` / `d5cb532f` carry
+`Approver:`): `release-planning.yaml`'s `define-scope` description, `WORKFLOW.md`'s release-planning prose and its `DS`
+node now say "by the approver" / "on the approver's instruction" (version stays 2.0: same unmerged task). F2 — the
+pending `dl-132` note names the hand-amend path and the approver too. Red's files are not edited
+(`git diff --stat 831e5ee7 HEAD -- test/core/define-scope-sweep.test.ts` → empty).
+
 ### Pending amendments (approver) — uncommitted in the worktree
 
 - `dl-132-vision-change-and-feature-ingest` — Proposed `--reason`: "task-277 (approver rulings 2026-10-10 item 5 and
   2026-10-12 D1 (c), D2): a dated note records that element 4's write of the release's features is met by
-  release-planning's define-scope sweep; the Decision is not rewritten."
+  release-planning's define-scope sweep, written on a release past draft by the approver's memory amend or, for a
+  release with no kind:, a hand amend on the approver's instruction; the Decision is not rewritten."
 - `spec-017-workflow-commands-and-state-deduction` — Proposed `--reason`: "task-277 (approver ruling 2026-10-12 D1
   (c)): §12 is re-measured at 27 workflows, 105 phases and 87 warnings, the new one define-scope's unbound
   change-proposals.swept check. No rule changes."

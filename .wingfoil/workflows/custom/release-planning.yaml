@@ -51,9 +51,10 @@ phases:
       The scope also sweeps the vision changes scheduled into this release (dl-132 element 4, as dl-016
       sweeps decision-logs and bugs): read the `scheduled` change-proposals whose `release` is
       {release.version} and write their `feature` ids into the release's `features:` before its submit.
-      On a release already past `draft`, the write is a `memory amend` of the release whose `--reason`
-      names the change-proposals swept; while `memory amend` refuses a release with no `kind:` (one
-      predating dl-092), it is a hand `wf(release): amend` commit in the same form.
+      On a release already past `draft`, the write is a `memory amend` of the release by the approver,
+      whose `--reason` names the change-proposals swept; while `memory amend` refuses a release with no
+      `kind:` (one predating dl-092), it is a hand `wf(release): amend` commit in the same form, on the
+      approver's instruction.
     role: product-owner
     actions:
       - memory.submit                          # release: draft -> planning

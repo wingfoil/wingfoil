@@ -305,8 +305,8 @@ elements whose `release` is empty or this release; `reconcile-governance` also s
 decision-logs, for a coverage check only: each one of this release must be named by a task's `ref:`
 (approver ruling 2026-10-12). `define-scope` states the 20 % reserved for fixes and governance debt
 (`dl-100` §4 (b)) and sweeps the `scheduled` change-proposals whose `release` is this release into the
-release's `features:` (`dl-132` element 4, `task-277`): a `memory amend` of a release already past `draft`, or a hand
-`wf(release): amend` while `memory amend` refuses a release with no `kind:`; `build-backlog` checks every criterion against the bound directives and ratified
+release's `features:` (`dl-132` element 4, `task-277`): a `memory amend` by the approver of a release already past `draft`, or a hand
+`wf(release): amend` on the approver's instruction while `memory amend` refuses a release with no `kind:`; `build-backlog` checks every criterion against the bound directives and ratified
 specs (`dl-102` §2) and gives each task its `wave:`; `commit-backlog` fixes `backlog_committed` and
 `waves:` (`dl-100` §1–§2, `task-230`). Each `memory.add` step carries a P4.12 check gate
 enforcing the required frontmatter fields before the next step begins. `define-scope`'s gate exempts
@@ -316,7 +316,7 @@ the releases added before dl-092 (`minor-v0.1` … `minor-v1.0`) from `kind`, wh
 ```mermaid
 flowchart TD
     AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only\n✔ check:lockfile · check:mcp · wingfoil-cli re-check"]
-    DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n20 % reserved for fixes and debt (dl-100 §4 (b))\nsweeps the scheduled change-proposals of the release\ninto its features: (dl-132 element 4; ✔ change-proposals.swept)\npast draft: memory amend (no kind: → hand amend)"]
+    DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n20 % reserved for fixes and debt (dl-100 §4 (b))\nsweeps the scheduled change-proposals of the release\ninto its features: (dl-132 element 4; ✔ change-proposals.swept)\npast draft: memory amend by the approver\n(no kind: → hand amend on the approver's instruction)"]
     TB["**triage-bugs** *(tech-lead)*\nmemory.approve: bug open → triaged\n🔑 Approval gate — *approver*\n↩ REJECT → closed"]
     RG["**reconcile-governance** *(product-owner)*\nmemory.approve: decision-log in-discussion → ready\nadr pending → accepted\nready decision-logs: coverage check only (a task ref: names each)\n🔑 Approval gate — *approver*\n↩ REJECT → draft"]
     RA["**record-adrs** *(architect)* · **OPTIONAL**\nmemory.add(type: adr) → memory.submit → memory.approve\n✔ spec-review.passed · P4.12: [title, sard_ref]\n🔑 Approval gate — *approver*\n`{ type: adr, path: docs/04_memory/design/adrs/{adr.id}.md }`"]
