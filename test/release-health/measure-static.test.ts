@@ -18,6 +18,10 @@ import type { MetricEntry, Report, ToolCall, ToolResult, ToolRunner } from '../.
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const REPO_ROOT = join(__dirname, '..', '..');
+
+// Every measure runs the static half (task-233), which loads ESLint and TypeScript once per test file (about 4 s)
+// and lints and parses the fixture's files on each run: the default 5 s is too short for a hook or a test that measures.
+jest.setTimeout(60_000);
 const CATALOGUE = readFileSync(join(REPO_ROOT, 'docs', '08_health', 'metrics.yaml'), 'utf-8');
 
 const ADA = { name: 'Ada Approver', email: 'ada@wingfoil.dev' };

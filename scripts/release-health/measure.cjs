@@ -116,7 +116,7 @@
 const { execFileSync, spawn, spawnSync } = require('node:child_process');
 const { Buffer } = require('node:buffer');
 const { createHash } = require('node:crypto');
-const { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } = require('node:fs');
+const { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { setImmediate } = require('node:timers');
 const { delimiter, dirname, isAbsolute, join, posix, relative } = require('node:path');
@@ -154,11 +154,6 @@ const SARD_DIR = 'docs/02_requirements/03_sard/';
 const STORY_MAP_DIR = 'docs/02_requirements/01_user_story_map/';
 const BDD_DIR = 'docs/02_requirements/02_bdd/features/';
 const ELEMENT_LINK_FIELDS = ['ref', 'bug', 'depends_on', 'supersedes'];
-
-/** The quality metrics this script leaves to their owning tasks, until those tasks land (task-232's: the toolchain half). */
-const QUALITY_OWNERS = Object.freeze({
-  'task-233': ['Q05', 'Q06', 'Q07', 'Q08', 'Q09', 'Q10', 'Q13', 'Q14', 'Q15', 'Q16', 'Q18', 'Q19', 'Q20'],
-});
 
 const BENCHMARK_REASON = "needs D01's two benchmark runs with the build just published (dl-089 §2, dl-131); no run of this script performs them";
 const MONTHS = Object.freeze({ Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' });
@@ -1441,7 +1436,707 @@ async function toolchainEntries(tree, scratch, options, run) {
   const q11Entry = await q11(tree, run, env, built);
   const q12Entry = 'test:latency' in scripts ? q12(await npm('latency', ['run', 'test:latency'], { WINGFOIL_LATENCY_REPORT: '1' })) : noScript('Q12', 'test:latency');
   const q17Entry = await q17(tree, run, env, options.offline === true);
+  // What measureRelease reads from the installed tree after the seven (Q08's install size, task-233).
+  if (options.afterToolchain) await options.afterToolchain(run, env);
   return [q01(scripts, q01Results), q02Entry, ...coverage, q11Entry, q12Entry, q17Entry];
+}
+
+// --- the static and Memory metrics (Q05–Q10, Q13–Q16, Q18–Q20; task-233) --------------------------------
+
+/** The code files the static metrics read (paths.sources, paths.tests). */
+const CODE_FILE_RE = /\.[cm]?[jt]sx?$/;
+/** A file under a `fixtures/` directory: fixture data, not a citation or a test (Q09, Q10). */
+const FIXTURE_DIR_RE = /(^|\/)fixtures\//;
+/** Q05's thresholds (catalogue Q05). */
+const COMPLEXITY_MAX = 15;
+const FUNCTION_LINES_MAX = 80;
+/** Q06's smallest clone, in lines (catalogue Q06). */
+const CLONE_MIN_LINES = 8;
+/** spec-006 §1: the surfaces, and the modules underneath `src/core` they never import directly (Q07). */
+const isSurface = (path) => path === 'src/cli.ts' || path.startsWith('src/cli/') || path.startsWith('src/mcp/');
+const UNDERNEATH_CORE = Object.freeze(['src/storage', 'src/memory', 'src/dna', 'src/directives', 'src/workflow']);
+/** A process id (Q09): a task, bug, decision-log, ADR, tech-spec or service id with its number. */
+const PROCESS_ID_RE = /(?<![\w-])(task|bug|dl|adr|spec|svc)-(\d+)(?!\d)/g;
+/** The calls whose first argument is a test title (Q09). */
+const TEST_CALLS = new Set(['describe', 'it', 'test']);
+/** From this release on a task's class is its declared field (`dl-133` Q1 (b), task-150); before it, the heuristic. */
+const KIND_DECLARED_FROM = 'v0.3';
+const TERMINAL_BUG_STATES = Object.freeze(['closed', 'deprecated']);
+const SEVERITY_ORDER = Object.freeze(['critical', 'high', 'medium', 'low']);
+const DAY_SECONDS = 86400;
+
+/** A devDependency of the measuring checkout (eslint, typescript), or `null` when it is not installed. */
+function devModule(name) {
+  try {
+    return require(name);
+  } catch {
+    return null;
+  }
+}
+
+/** The blobs at `rev` of `paths`, with one `git cat-file --batch`: path → text, or `null` when there is none. */
+function readBlobs(root, rev, paths) {
+  /** @type {Map<string, string | null>} */
+  const out = new Map();
+  if (paths.length === 0) return out;
+  const raw = execFileSync('git', ['-C', root, 'cat-file', '--batch'], {
+    input: `${paths.map((p) => `${rev}:${p}`).join('\n')}\n`,
+    maxBuffer: 1024 * 1024 * 1024,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  let pos = 0;
+  for (const path of paths) {
+    const nl = raw.indexOf(10, pos);
+    const header = raw.toString('utf-8', pos, nl);
+    pos = nl + 1;
+    if (!/^[0-9a-f]+ blob \d+$/.test(header)) {
+      out.set(path, null); // `<rev:path> missing`, or not a blob
+      continue;
+    }
+    const size = Number(header.split(' ')[2]);
+    out.set(path, raw.toString('utf-8', pos, pos + size));
+    pos += size + 1;
+  }
+  return out;
+}
+
+/** `<prefix>-<number>` of an id (`bug-003-crash` → `bug-3`), or `null`. */
+function idKey(id) {
+  const match = NUMBERED_ID_RE.exec(String(id));
+  return match ? `${match[1]}-${Number(match[2])}` : null;
+}
+
+/** The short form an id is cited by (`bug-003-crash` → `bug-003`), or the id itself. */
+function shortId(id) {
+  const match = /^([a-z][a-z-]*?-\d+)(?:-|$)/.exec(String(id));
+  return match ? match[1] : String(id);
+}
+
+/** Whether `text` cites `short` (`task-003`), not as the prefix of a longer number. */
+function cites(text, short) {
+  return new RegExp(`(?<![\\w-])${short.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d)`).test(text);
+}
+
+/** The ids a `wf(...)` subject names (`wf(task): add a, b [x → y]` → `[a, b]`). */
+function subjectIds(subject) {
+  return subject.replace(/^wf\([^)]*\):\s*\S+\s+/, '').replace(/\s*[[(].*$/, '').split(/,\s*/).filter((id) => id !== '');
+}
+
+/** Every Memory document at `rev` under `memoryYaml`'s type folders: `{ path, id, type, fm, text }`, by path. */
+function memoryDocsAt(root, rev, memoryYaml) {
+  const paths = unique(Object.values(typeRoots(memoryYaml))).flatMap((dir) => listFiles(root, rev, dir)).filter((p) => p.endsWith('.md'));
+  const texts = readBlobs(root, rev, unique(paths).sort());
+  const docs = [];
+  for (const [path, text] of texts) {
+    const fm = frontmatter(text);
+    if (!fm || typeof fm.type !== 'string') continue;
+    docs.push({ path, id: String(fm.id ?? posix.basename(path, '.md')), type: fm.type, fm, text });
+  }
+  return docs;
+}
+
+/** `.md` file name (without `.md`) → path, for every Markdown file at `rev`: a document found by name across moves. */
+function markdownByName(root, rev) {
+  const index = new Map();
+  for (const path of listFiles(root, rev, '.')) if (path.endsWith('.md') && !index.has(posix.basename(path, '.md'))) index.set(posix.basename(path, '.md'), path);
+  return index;
+}
+
+/** The code files under `dirs` at the point, sorted, with their text: `[path, text][]`. */
+function codeFiles(root, point, dirs, filter = () => true) {
+  const paths = unique(dirs.flatMap((dir) => listFiles(root, point, dir))).filter((p) => CODE_FILE_RE.test(p) && filter(p)).sort();
+  return [...readBlobs(root, point, paths)].filter(([, text]) => text !== null);
+}
+
+/** The comment ranges of a parsed file, by position (every token's leading and trailing comments). */
+function commentRanges(ts, sf, text) {
+  const seen = new Map();
+  const add = (ranges) => {
+    for (const r of ranges ?? []) if (!seen.has(r.pos)) seen.set(r.pos, r);
+  };
+  const walk = (node) => {
+    add(ts.getLeadingCommentRanges(text, node.pos));
+    add(ts.getTrailingCommentRanges(text, node.end));
+    for (const child of node.getChildren(sf)) walk(child);
+  };
+  walk(sf);
+  return [...seen.values()].sort((a, b) => a.pos - b.pos);
+}
+
+const parse = (ts, path, text) => ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, /\.[cm]?jsx?$/.test(path) ? ts.ScriptKind.JS : ts.ScriptKind.TS);
+
+/** Every module a file imports: import/export declarations, `import x = require()`, `require()`, `import()`, `import('x').T`. */
+function importsOf(ts, sf) {
+  const out = [];
+  const allTypes = (elements) => elements.length > 0 && elements.every((e) => e.isTypeOnly);
+  const visit = (node) => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const clause = node.importClause;
+      const typeOnly = clause !== undefined && (clause.isTypeOnly || (!clause.name && clause.namedBindings !== undefined && ts.isNamedImports(clause.namedBindings) && allTypes(clause.namedBindings.elements)));
+      out.push({ spec: node.moduleSpecifier.text, typeOnly });
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+      out.push({ spec: node.moduleSpecifier.text, typeOnly: node.isTypeOnly || (node.exportClause !== undefined && ts.isNamedExports(node.exportClause) && allTypes(node.exportClause.elements)) });
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference) && ts.isStringLiteral(node.moduleReference.expression)) {
+      out.push({ spec: node.moduleReference.expression.text, typeOnly: node.isTypeOnly });
+    } else if (ts.isCallExpression(node) && node.arguments.length >= 1 && ts.isStringLiteralLike(node.arguments[0])
+      && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) {
+      out.push({ spec: node.arguments[0].text, typeOnly: false });
+    } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal)) {
+      out.push({ spec: node.argument.literal.text, typeOnly: true });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+/** A relative import's target: the file it resolves to among `files`, else the normalized path; `null` for a package. */
+function resolveImport(from, spec, files) {
+  if (!spec.startsWith('.')) return null;
+  const target = posix.normalize(posix.join(posix.dirname(from), spec));
+  const bare = target.replace(/\.[cm]?js$/, '');
+  for (const candidate of [target, ...['.ts', '.tsx', '.cts', '.mts', '.js', '.cjs', '.mjs'].map((ext) => `${bare}${ext}`), `${bare}/index.ts`, `${bare}/index.js`]) {
+    if (files.has(candidate)) return candidate;
+  }
+  return target;
+}
+
+/** The package a bare specifier names (`@scope/name/sub` → `@scope/name`), or `null` for a Node builtin. */
+function packageOf(spec) {
+  if (spec.startsWith('node:')) return null;
+  const parts = spec.split('/');
+  return spec.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
+}
+
+/** The strongly connected components of `graph` (node → sorted targets) with a cycle, each as one cycle from its first node. */
+function importCycles(graph) {
+  const nodes = [...graph.keys()].sort();
+  const index = new Map();
+  const low = new Map();
+  const onStack = new Set();
+  const stack = [];
+  const components = [];
+  let counter = 0;
+  const connect = (v) => {
+    index.set(v, counter);
+    low.set(v, counter);
+    counter += 1;
+    stack.push(v);
+    onStack.add(v);
+    for (const w of graph.get(v) ?? []) {
+      if (!index.has(w)) {
+        connect(w);
+        low.set(v, Math.min(low.get(v), low.get(w)));
+      } else if (onStack.has(w)) low.set(v, Math.min(low.get(v), index.get(w)));
+    }
+    if (low.get(v) === index.get(v)) {
+      const component = [];
+      let w;
+      do {
+        w = stack.pop();
+        onStack.delete(w);
+        component.push(w);
+      } while (w !== v);
+      components.push(component.sort());
+    }
+  };
+  for (const v of nodes) if (!index.has(v)) connect(v);
+  const cyclic = components.filter((c) => c.length > 1 || (graph.get(c[0]) ?? []).includes(c[0]));
+  // One cycle per component: the shortest path from its first file back to it, inside the component.
+  return cyclic.map((component) => {
+    const inside = new Set(component);
+    const start = component[0];
+    const previous = new Map([[start, null]]);
+    const queue = [start];
+    let last = null;
+    while (queue.length > 0 && last === null) {
+      const v = queue.shift();
+      for (const w of graph.get(v) ?? []) {
+        if (w === start) {
+          last = v;
+          break;
+        }
+        if (inside.has(w) && !previous.has(w)) {
+          previous.set(w, v);
+          queue.push(w);
+        }
+      }
+    }
+    const path = [];
+    for (let v = last; v !== null; v = previous.get(v)) path.unshift(v);
+    return path;
+  }).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+}
+
+/** Q05 — functions above complexity 15 and above 80 lines (ESLint's `complexity` and `max-lines-per-function`). */
+function q05(sources) {
+  const eslint = devModule('eslint');
+  const tseslint = devModule('typescript-eslint');
+  if (eslint === null || tseslint === null) return notMeasurable('Q05', 'the measuring checkout has no eslint and typescript-eslint (devDependencies): run npm ci');
+  const linter = new eslint.Linter({ configType: 'flat' });
+  const config = [{
+    files: ['**/*.{ts,tsx,cts,mts,js,jsx,cjs,mjs}'],
+    languageOptions: { parser: tseslint.parser, sourceType: 'module' },
+    linterOptions: { noInlineConfig: true, reportUnusedDisableDirectives: 'off' },
+    rules: { complexity: ['error', COMPLEXITY_MAX], 'max-lines-per-function': ['error', { max: FUNCTION_LINES_MAX, skipBlankLines: false, skipComments: false, IIFEs: true }] },
+  }];
+  const complex = [];
+  const long = [];
+  const unparsable = [];
+  for (const [path, text] of sources) {
+    for (const m of linter.verify(text, config, { filename: path })) {
+      if (m.fatal) unparsable.push(`${path}:${m.line} ${m.message}`);
+      else if (m.ruleId === 'complexity') {
+        const match = /^(.*) has a complexity of (\d+)/.exec(m.message);
+        complex.push({ path, line: m.line, text: match ? `${match[1]}: complexity ${match[2]}` : m.message });
+      } else if (m.ruleId === 'max-lines-per-function') {
+        const match = /^(.*) has too many lines \((\d+)\)/.exec(m.message);
+        long.push({ path, line: m.line, text: match ? `${match[1]}: ${match[2]} lines` : m.message });
+      }
+    }
+  }
+  if (unparsable.length > 0) return notMeasurable('Q05', `ESLint could not parse ${unparsable.join('; ')}`);
+  const named = (items) => items.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : a.line - b.line)).map((i) => `${i.path}:${i.line} ${i.text}`);
+  return entry('Q05', {
+    value: { complex: complex.length, long: long.length },
+    raw: { functions_over_complexity: complex.length, functions_over_lines: long.length, files: sources.length },
+    failing: [...named(complex), ...named(long)],
+  });
+}
+
+/** Lines of `files` inside a clone: a run of at least 8 non-blank lines (compared trimmed) found at two places or more. */
+function duplicatedLines(files) {
+  const trimmed = files.map(([, text]) => text.split('\n').map((line) => line.trim()).filter((line) => line !== ''));
+  const key = (lines, i) => createHash('sha1').update(lines.slice(i, i + CLONE_MIN_LINES).join('\n')).digest('hex');
+  const seen = new Map();
+  for (const lines of trimmed) for (let i = 0; i + CLONE_MIN_LINES <= lines.length; i += 1) seen.set(key(lines, i), (seen.get(key(lines, i)) ?? 0) + 1);
+  let duplicated = 0;
+  let total = 0;
+  for (const lines of trimmed) {
+    const marked = new Array(lines.length).fill(false);
+    for (let i = 0; i + CLONE_MIN_LINES <= lines.length; i += 1) {
+      if (seen.get(key(lines, i)) > 1) for (let j = i; j < i + CLONE_MIN_LINES; j += 1) marked[j] = true;
+    }
+    duplicated += marked.filter(Boolean).length;
+    total += lines.length;
+  }
+  return { duplicated, total };
+}
+
+/** Q06 — the duplicated-line share of each category. */
+function q06(sources, tests) {
+  const s = duplicatedLines(sources);
+  const t = duplicatedLines(tests);
+  if (s.total + t.total === 0) return notMeasurable('Q06', 'no code line under paths.sources or paths.tests at the measurement point');
+  return entry('Q06', {
+    value: { sources: s.total === 0 ? null : pct(s.duplicated, s.total), tests: t.total === 0 ? null : pct(t.duplicated, t.total) },
+    raw: { sources_duplicated: s.duplicated, sources_lines: s.total, tests_duplicated: t.duplicated, tests_lines: t.total },
+  });
+}
+
+/** Q07 — import cycles among the sources, and surface imports bypassing src/core that no Memory element records. */
+function q07(parsed, docs) {
+  const files = new Set(parsed.map((p) => p.path));
+  const graph = new Map();
+  const bypasses = [];
+  for (const { path, imports } of parsed) {
+    const targets = new Set();
+    for (const { spec, typeOnly } of imports) {
+      const target = resolveImport(path, spec, files);
+      if (target === null) continue;
+      if (!typeOnly && files.has(target)) targets.add(target);
+      const module = isSurface(path) ? UNDERNEATH_CORE.find((dir) => target === dir || target.startsWith(`${dir}/`)) : undefined;
+      if (module !== undefined) bypasses.push({ path, spec, module });
+    }
+    graph.set(path, [...targets].sort());
+  }
+  const deviationLines = docs.flatMap((d) => d.text.split('\n')).filter((line) => /deviation/i.test(line));
+  const recorded = (path) => deviationLines.some((line) => line.includes(path));
+  const unrecorded = unique(bypasses.filter((b) => !recorded(b.path)).map((b) => `bypass: ${b.path} imports ${b.spec} (${b.module})`)).sort();
+  const cycles = importCycles(graph).map((cycle) => `cycle: ${cycle.join(' → ')}`);
+  return entry('Q07', {
+    value: { cycles: cycles.length, bypasses: unrecorded.length },
+    raw: { cycles: cycles.length, bypasses: unrecorded.length, recorded_deviations: unique(bypasses.filter((b) => recorded(b.path)).map((b) => `${b.path} ${b.spec}`)).length },
+    failing: [...unrecorded, ...cycles],
+  });
+}
+
+/** Q09 — process ids cited in comments and test titles that resolve to no Memory element. */
+function q09(ts, files, docs) {
+  const known = new Set(docs.map((d) => idKey(d.id)).filter((k) => k !== null));
+  const references = new Set();
+  const dangling = new Set();
+  for (const { path, sf, text, comments } of files) {
+    const chunks = comments.map((r) => text.slice(r.pos, r.end));
+    const visit = (node) => {
+      if (ts.isCallExpression(node) && node.arguments.length > 0 && ts.isStringLiteralLike(node.arguments[0])) {
+        let callee = node.expression;
+        while (ts.isPropertyAccessExpression(callee)) callee = callee.expression;
+        if (ts.isIdentifier(callee) && TEST_CALLS.has(callee.text)) chunks.push(node.arguments[0].text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    for (const chunk of chunks) {
+      for (const match of chunk.matchAll(PROCESS_ID_RE)) {
+        const item = `${path}: ${match[0]}`;
+        references.add(item);
+        if (!known.has(`${match[1]}-${Number(match[2])}`)) dangling.add(item);
+      }
+    }
+  }
+  return entry('Q09', { value: dangling.size, raw: { references: references.size, dangling: dangling.size }, failing: [...dangling].sort() });
+}
+
+/** Q16's second half: the share of non-blank source lines whose every character is inside a comment. */
+function commentLines(files) {
+  let comment = 0;
+  let nonBlank = 0;
+  for (const { text, comments } of files) {
+    const mask = new Uint8Array(text.length);
+    for (const r of comments) mask.fill(1, r.pos, r.end);
+    let start = 0;
+    for (const line of text.split('\n')) {
+      if (line.trim() !== '') {
+        nonBlank += 1;
+        let inside = true;
+        for (let i = 0; i < line.length && inside; i += 1) if (!/\s/.test(line[i]) && mask[start + i] !== 1) inside = false;
+        if (inside) comment += 1;
+      }
+      start += line.length + 1;
+    }
+  }
+  return { comment, nonBlank };
+}
+
+/** Q10 — the share of the release's requirements cited by a test outside fixtures. */
+function q10(root, point, release, docs, tests, smallSample) {
+  const doc = docs.find((d) => d.type === 'release' && String(d.fm.version) === release.version);
+  const declared = doc ? asList(doc.fm.requirements) : [];
+  if (declared.length === 0) return notMeasurable('Q10', `the release element ${release.id} at the point declares no requirements: scope`);
+  const ids = unique(declared.flatMap((value) => (/^REQ-[A-Z]+-\d+$/.test(value) ? [value] : (readBlob(root, point, value) ?? '').match(REQ_ID_RE) ?? []))).sort();
+  if (ids.length === 0) return notMeasurable('Q10', `the requirements: scope of ${release.id} (${declared.join(', ')}) names no REQ id at the point`);
+  const text = tests.map(([, t]) => t).join('\n');
+  const uncited = ids.filter((id) => !new RegExp(`\\b${id}\\b`).test(text));
+  return share('Q10', ids.length - uncited.length, ids.length, ['cited', 'total'], ids.length, uncited, smallSample);
+}
+
+/** The bugs at the point, each with its frontmatter at the previous point (`null` when it did not exist then). */
+function bugFlow(root, base, docs) {
+  const bugs = docs.filter((d) => d.type === 'bug').sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const before = base === null ? new Map() : markdownByName(root, base);
+  const paths = bugs.map((b) => before.get(posix.basename(b.path, '.md'))).filter((p) => p !== undefined);
+  const texts = base === null ? new Map() : readBlobs(root, base, paths);
+  return bugs.map((b) => {
+    const path = before.get(posix.basename(b.path, '.md'));
+    return { ...b, was: path === undefined ? null : frontmatter(texts.get(path) ?? null) ?? {} };
+  });
+}
+
+/** Q13 — bug flow: added and closed in the window; open bugs by severity and without a release. */
+function q13(flow, smallSample) {
+  const added = flow.filter((b) => b.was === null);
+  const closed = flow.filter((b) => b.fm.status === 'closed' && (b.was === null || b.was.status !== 'closed'));
+  const open = flow.filter((b) => !TERMINAL_BUG_STATES.includes(b.fm.status));
+  const unassigned = open.filter((b) => asList(b.fm.release).length === 0);
+  const severities = unique(open.map((b) => String(b.fm.severity ?? 'none')));
+  const ordered = [...SEVERITY_ORDER.filter((s) => severities.includes(s)), ...severities.filter((s) => !SEVERITY_ORDER.includes(s)).sort()];
+  return entry('Q13', {
+    value: { added: added.length, closed: closed.length, closure_ratio: added.length === 0 ? null : pct(closed.length, added.length), open_unassigned: unassigned.length },
+    raw: {
+      added: added.length,
+      closed: closed.length,
+      open: open.length,
+      open_unassigned: unassigned.length,
+      ...Object.fromEntries(ordered.map((s) => [`open ${s}`, open.filter((b) => String(b.fm.severity ?? 'none') === s).length])),
+    },
+    items: added.length,
+    small_sample: added.length < smallSample,
+  });
+}
+
+/** Q20 — bugs moved to a terminal state in the window minus bugs added in it. */
+function q20(flow, smallSample) {
+  const added = flow.filter((b) => b.was === null).length;
+  const terminal = flow.filter((b) => TERMINAL_BUG_STATES.includes(b.fm.status) && (b.was === null || !TERMINAL_BUG_STATES.includes(b.was.status))).length;
+  const net = terminal - added;
+  return entry('Q20', {
+    value: net,
+    raw: { terminal, added },
+    items: added,
+    small_sample: added < smallSample,
+    failing: net < 0 ? [`net flow ${net}: ${terminal} bugs reached closed or deprecated, ${added} were added`] : [],
+  });
+}
+
+/** Q14 — decision-logs in-discussion at the point: count and median age in days since their add commit. */
+function q14(root, point, docs) {
+  const open = docs.filter((d) => d.type === 'decision-log' && d.fm.status === 'in-discussion').sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const log = git(root, ['log', '--no-show-signature', '--format=%H%x00%ct%x00%s', point]).split('\n').filter((line) => line !== '').map((line) => line.split('\0'));
+  const pointTime = commitTime(root, point);
+  const ages = open.map((d) => {
+    // The oldest `wf(decision-log): add` naming it (moves keep it), else the oldest commit adding the file at its path.
+    const adds = log.filter(([, , subject]) => subject.startsWith('wf(decision-log): add ') && subjectIds(subject).includes(d.id));
+    let time = adds.length > 0 ? Number(adds[adds.length - 1][1]) : null;
+    if (time === null) {
+      const created = git(root, ['log', '--no-show-signature', '--diff-filter=A', '--format=%ct', point, '--', d.path]).split('\n').filter((line) => line !== '');
+      time = created.length > 0 ? Number(created[created.length - 1]) : pointTime;
+    }
+    return round2((pointTime - time) / DAY_SECONDS);
+  }).sort((a, b) => a - b);
+  return entry('Q14', {
+    value: { count: open.length, median_age_days: ages.length === 0 ? null : round2(median(ages)) },
+    raw: { in_discussion: open.length, oldest_age_days: ages.length === 0 ? null : ages[ages.length - 1] },
+    items: open.length,
+  });
+}
+
+/** Whether `sha` changes a line under `dirs` that is neither blank nor a comment. */
+function changesExecutable(root, sha, dirs) {
+  if (dirs.length === 0) return false;
+  const diff = git(root, ['show', '--no-show-signature', '--format=', '--unified=0', '--no-renames', sha, '--', ...dirs]);
+  return diff.split('\n').some((line) => {
+    if (!/^[+-]/.test(line) || /^(\+\+\+|---) /.test(line)) return false;
+    const content = line.slice(1).trim();
+    return content !== '' && !/^(\/\/|\/\*|\*)/.test(content);
+  });
+}
+
+/** Q15 — the share of the bugs added in the window that are document divergences (dl-116; the B4 handover). */
+function q15(root, point, flow, docs, sources, smallSample) {
+  const added = flow.filter((b) => b.was === null);
+  if (added.length === 0) return notMeasurable('Q15', 'no bug was added in the window');
+  const tasks = docs.filter((d) => d.type === 'task');
+  const commits = git(root, ['log', '--no-show-signature', '--no-merges', '--format=%x01%H%x00%s%x00%b', point]).split('\u0001').slice(1).map((record) => {
+    const [sha, subject, body] = record.split('\0');
+    return { sha: requireCommitName(sha, 'git log --no-merges'), subject, message: `${subject}\n${body}` };
+  }).filter((c) => !WF_RE.test(c.subject));
+  const divergences = [];
+  let classified = 0;
+  for (const b of added) {
+    const short = shortId(b.id);
+    const fixers = tasks.filter((t) => asList(t.fm.bug).some((v) => shortId(v) === short)).map((t) => shortId(t.id));
+    const own = commits.filter((c) => cites(c.message, short) && fixers.some((t) => cites(c.message, t)));
+    if (own.length === 0) continue; // no fix task, or none of its commits cites the bug: unclassified
+    classified += 1;
+    if (!own.some((c) => changesExecutable(root, c.sha, sources))) divergences.push(b.id);
+  }
+  if (classified === 0) return notMeasurable('Q15', `none of the ${added.length} bugs added in the window has a fix task with a commit citing it`);
+  return entry('Q15', {
+    value: pct(divergences.length, classified),
+    raw: { divergences: divergences.length, classified, unclassified: added.length - classified, added: added.length },
+    items: added.length,
+    small_sample: added.length < smallSample,
+    failing: divergences.sort(),
+  });
+}
+
+/**
+ * A task's class for Q18/Q19 (`dl-133` §1): before v0.3 the heuristic — fix when an id segment is `fix` or `bug:`
+ * names a bug; from v0.3 the declared field (`memory.yaml` `task.stop_the_line.field`): `counts` → fix, another
+ * declared value → feature (a feature that absorbed a bug stays one), else `null` (unclassified).
+ */
+function classifyTask(fm, rule) {
+  if (compareVersions(String(rule.version), KIND_DECLARED_FROM) < 0) {
+    return asList(fm.bug).length > 0 || String(fm.id ?? '').split('-').includes('fix') ? 'fix' : 'feature';
+  }
+  const value = fm[rule.field];
+  if (typeof value !== 'string' || value === '') return null;
+  if (value === rule.counts) return 'fix';
+  return rule.values === undefined || rule.values.includes(value) ? 'feature' : null;
+}
+
+/** The classification rule of `memory.yaml` at the point: `task.stop_the_line`'s `field` and `counts` (bug-331). */
+function taskClassRule(memoryYaml, version) {
+  const taskType = memoryYaml && memoryYaml.types && memoryYaml.types.task ? memoryYaml.types.task : {};
+  const stl = taskType.stop_the_line ?? {};
+  const field = typeof stl.field === 'string' ? stl.field : 'kind';
+  const counts = typeof stl.counts === 'string' ? stl.counts : 'fix';
+  const declared = taskType.template && taskType.template.frontmatter && taskType.template.frontmatter.values ? taskType.template.frontmatter.values[field] : undefined;
+  return { version, field, counts, values: Array.isArray(declared) ? declared.map(String) : undefined };
+}
+
+function classCounts(tasks, rule) {
+  const classes = tasks.map((t) => classifyTask({ ...t.fm, id: t.id }, rule));
+  return { fix: classes.filter((c) => c === 'fix').length, feature: classes.filter((c) => c === 'feature').length, unclassified: classes.filter((c) => c === null).length };
+}
+
+/** Q18 and Q19 — the release's fix share, and the tasks added after its commit-backlog commit. */
+function q18q19(root, point, release, docs, memoryYaml, smallSample) {
+  const rule = taskClassRule(memoryYaml, release.version);
+  const by = compareVersions(release.version, KIND_DECLARED_FROM) < 0 ? 'heuristic (name or bug:)' : rule.field;
+  const tasks = docs.filter((d) => d.type === 'task' && asList(d.fm.release)[0] === release.version).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const all = classCounts(tasks, rule);
+  const classified = all.fix + all.feature;
+  const q18 = classified === 0
+    ? notMeasurable('Q18', `no task of ${release.version} can be classified (${tasks.length} with release: ${release.version})`)
+    : entry('Q18', {
+      value: pct(all.fix, classified),
+      raw: { ...all, tasks: tasks.length, deprecated: tasks.filter((t) => t.fm.status === 'deprecated').length, classified_by: by, counts: rule.counts },
+      items: classified,
+      small_sample: classified < smallSample,
+    });
+  let backlog = null;
+  for (const line of git(root, ['log', '--no-show-signature', '--format=%H%x00%s', point]).split('\n')) {
+    const [sha, subject] = line.split('\0');
+    if (subject && subject.startsWith('wf(release):') && /→ in-development\]\s*$/.test(subject) && subjectIds(subject).includes(release.id)) backlog = requireCommitName(sha, 'git log');
+  }
+  if (backlog === null) return [q18, notMeasurable('Q19', `no commit-backlog commit: no wf(release) transition of ${release.id} into in-development is reachable from the point`)];
+  const before = markdownByName(root, backlog);
+  const after = tasks.filter((t) => !before.has(posix.basename(t.path, '.md')));
+  const late = classCounts(after, rule);
+  const lateClassified = late.fix + late.feature;
+  return [q18, entry('Q19', {
+    value: { added_after: after.length, ...late, fix_share: lateClassified === 0 ? null : pct(late.fix, lateClassified) },
+    raw: { added_after: after.length, ...late, classified_by: by, commit_backlog: backlog },
+    items: after.length,
+    small_sample: after.length < smallSample,
+  })];
+}
+
+/** Q16 — words per Memory document (median per type), and the comment-line ratio of the sources. */
+function q16(docs, sourceComments) {
+  const types = unique(docs.map((d) => d.type)).sort();
+  const words = (d) => bodyOf(d.text).split(/\s+/).filter((w) => w !== '').length;
+  const medians = Object.fromEntries(types.map((type) => [type, round2(median(docs.filter((d) => d.type === type).map(words).sort((a, b) => a - b)))]));
+  return entry('Q16', {
+    value: { words_median: medians, comment_line_ratio: sourceComments.nonBlank === 0 ? null : pct(sourceComments.comment, sourceComments.nonBlank) },
+    raw: {
+      comment_lines: sourceComments.comment,
+      non_blank_lines: sourceComments.nonBlank,
+      ...Object.fromEntries(types.map((type) => [`${type} documents`, docs.filter((d) => d.type === type).length])),
+    },
+  });
+}
+
+/**
+ * The static and Memory half (task-233): Q05–Q07, Q09, Q10, Q13–Q16, Q18–Q20, read from git at the point (and the
+ * previous point for the window), and what Q08 needs from the sources; Q08 itself is built once the toolchain half
+ * has run, since its install size needs `npm ci` ({@link q08}).
+ */
+function measureStatic(ctx, release) {
+  const { root, point, base, dna, memoryYaml, smallSample } = ctx;
+  const sourceDirs = pathsOf(dna, 'sources');
+  const sources = codeFiles(root, point, sourceDirs);
+  const tests = codeFiles(root, point, pathsOf(dna, 'tests'));
+  const docs = memoryYaml ? memoryDocsAt(root, point, memoryYaml) : [];
+  const out = [q05(sources), q06(sources, tests)];
+
+  const ts = devModule('typescript');
+  const noTs = 'the measuring checkout has no typescript (devDependency): run npm ci';
+  const parsedSources = ts === null ? [] : sources.map(([path, text]) => {
+    const sf = parse(ts, path, text);
+    return { path, text, sf, imports: importsOf(ts, sf), comments: commentRanges(ts, sf, text) };
+  });
+  out.push(ts === null ? notMeasurable('Q07', noTs) : q07(parsedSources, docs));
+  const pkg = (() => {
+    try {
+      return JSON.parse(readBlob(root, point, 'package.json') ?? 'null');
+    } catch {
+      return null;
+    }
+  })();
+  const declared = pkg ? unique([...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.optionalDependencies ?? {})]).sort() : null;
+  const used = new Set(parsedSources.flatMap((p) => p.imports.filter((i) => !i.typeOnly && !i.spec.startsWith('.')).map((i) => packageOf(i.spec))));
+  const q08Static = ts === null ? { reason: noTs } : declared === null ? { reason: 'no readable package.json at the measurement point' } : { declared, unused: declared.filter((d) => !used.has(d)) };
+
+  if (ts === null) out.push(notMeasurable('Q09', noTs));
+  else {
+    const citing = [...parsedSources, ...tests.filter(([path]) => !FIXTURE_DIR_RE.test(path)).map(([path, text]) => {
+      const sf = parse(ts, path, text);
+      return { path, text, sf, comments: commentRanges(ts, sf, text) };
+    })].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    out.push(q09(ts, citing, docs));
+  }
+  const testTexts = unique(pathsOf(dna, 'tests').flatMap((dir) => listFiles(root, point, dir))).filter((p) => !FIXTURE_DIR_RE.test(p)).sort();
+  out.push(q10(root, point, release, docs, [...readBlobs(root, point, testTexts)].filter(([, t]) => t !== null), smallSample));
+
+  const types = typeRoots(memoryYaml);
+  if (types['bug'] === undefined) for (const id of ['Q13', 'Q15', 'Q20']) out.push(notMeasurable(id, 'memory.yaml at the point declares no bug type'));
+  else {
+    const flow = bugFlow(root, base, docs);
+    out.push(q13(flow, smallSample), q15(root, point, flow, docs, sourceDirs, smallSample), q20(flow, smallSample));
+  }
+  out.push(types['decision-log'] === undefined ? notMeasurable('Q14', 'memory.yaml at the point declares no decision-log type') : q14(root, point, docs));
+  out.push(ts === null ? notMeasurable('Q16', noTs) : q16(docs, commentLines(parsedSources)));
+  if (types['task'] === undefined) out.push(notMeasurable('Q18', 'memory.yaml at the point declares no task type'), notMeasurable('Q19', 'memory.yaml at the point declares no task type'));
+  else out.push(...q18q19(root, point, release, docs, memoryYaml, smallSample));
+  return { entries: out, q08: q08Static };
+}
+
+/**
+ * What Q08's install size reads once the toolchain half has installed (`npm ci`): `npm ls --omit=dev --all --json
+ * --long` (the production packages, and the top level that `npm ls --omit=dev --depth=0` lists) and the packed
+ * tarball's `unpackedSize`. Either failing leaves the install size unmeasured, with the reason.
+ */
+async function footprint(tree, run, env) {
+  const npm = (step, args) => run({ step, command: 'npm', args, cwd: tree, env });
+  const lsArgs = ['ls', '--omit=dev', '--all', '--json', '--long'];
+  const ls = await npm('footprint-ls', lsArgs);
+  const lsLabel = `npm ${lsArgs.join(' ')}`;
+  if (didNotRun(lsLabel, ls) !== null || ls.status !== 0) return { reason: failure(lsLabel, ls) };
+  let tree0;
+  try {
+    tree0 = JSON.parse(ls.stdout);
+  } catch {
+    tree0 = null;
+  }
+  if (tree0 === null || typeof tree0 !== 'object') return { reason: `${lsLabel} printed no readable JSON` };
+  const top = Object.keys(tree0.dependencies ?? {}).length;
+  const dirs = new Set();
+  const walk = (node) => {
+    for (const child of Object.values(node.dependencies ?? {})) {
+      if (child && typeof child.path === 'string') dirs.add(child.path);
+      if (child && typeof child === 'object') walk(child);
+    }
+  };
+  walk(tree0);
+  const bytesUnder = (dir) => {
+    let sum = 0;
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return 0;
+    }
+    for (const e of entries) {
+      if (e.isDirectory()) sum += e.name === 'node_modules' ? 0 : bytesUnder(join(dir, e.name)); // nested packages count apart
+      else if (e.isFile()) sum += statSync(join(dir, e.name)).size;
+    }
+    return sum;
+  };
+  const dependenciesBytes = [...dirs].sort().reduce((sum, dir) => sum + bytesUnder(isAbsolute(dir) ? dir : join(tree, dir)), 0);
+  const packArgs = ['pack', '--dry-run', '--json', '--ignore-scripts'];
+  const pack = await npm('footprint-pack', packArgs);
+  const packLabel = `npm ${packArgs.join(' ')}`;
+  if (didNotRun(packLabel, pack) !== null || pack.status !== 0) return { reason: failure(packLabel, pack) };
+  let unpacked;
+  try {
+    const parsed = JSON.parse(pack.stdout);
+    unpacked = Array.isArray(parsed) && parsed[0] ? parsed[0].unpackedSize : undefined;
+  } catch {
+    unpacked = undefined;
+  }
+  if (!isCount(unpacked)) return { reason: `${packLabel} printed no unpackedSize` };
+  return { top, packages: dirs.size, dependenciesBytes, ownBytes: unpacked };
+}
+
+/** Q08 — unused runtime dependencies (floor 0), install size, and the dependency count of `dl-010` Action 3. */
+function q08(q08Static, installed, notInstalled) {
+  if (q08Static.reason !== undefined) return notMeasurable('Q08', q08Static.reason);
+  const size = installed !== null && installed.reason === undefined ? installed : null;
+  return entry('Q08', {
+    value: { unused_runtime_dependencies: q08Static.unused.length, install_size_bytes: size === null ? null : size.ownBytes + size.dependenciesBytes },
+    raw: {
+      runtime_dependencies: size === null ? q08Static.declared.length : size.top,
+      runtime_dependencies_from: size === null ? 'package.json dependencies at the point' : 'npm ls --omit=dev --depth=0',
+      unused: q08Static.unused.length,
+      ...(size === null
+        ? { install_size: `not measured: ${installed === null ? notInstalled : installed.reason}` }
+        : { transitive_runtime_packages: size.packages, own_unpacked_bytes: size.ownBytes, dependencies_bytes: size.dependenciesBytes }),
+    },
+    failing: q08Static.unused,
+  });
 }
 
 // --- the release, the point, the previous run --------------------------------------------------------
@@ -1538,6 +2233,8 @@ async function measureRelease(root, options) {
   const smallSample = Number(catalogue.defaults && catalogue.defaults.small_sample) || 30;
 
   const measured = new Map();
+  let staticHalf = null;
+  let installed = null;
   await withGuardedWorktree(root, point.commit, async (tree, dir, guard) => {
     const ctx = {
       root,
@@ -1556,22 +2253,27 @@ async function measureRelease(root, options) {
     for (const m of first) measured.set(m.id, m);
     const identical = JSON.stringify(first) === JSON.stringify(second);
     measured.set('P07', entry('P07', { value: identical, raw: { runs: 2, identical }, failing: identical ? [] : ['P01–P06 differ between two computations on the same range'] }));
+    // The static half reads git at the point, before the toolchain half writes node_modules and dist/ into the tree.
+    staticHalf = measureStatic(ctx, release);
+    for (const m of staticHalf.entries) measured.set(m.id, m);
     if (options.toolchain !== false) {
       const scratch = join(dir, 'out');
       mkdirSync(scratch);
-      for (const m of await measureToolchain(tree, scratch, options, guard)) measured.set(m.id, m);
+      const afterToolchain = async (run, env) => {
+        installed = await footprint(tree, run, env);
+      };
+      for (const m of await measureToolchain(tree, scratch, { ...options, afterToolchain }, guard)) measured.set(m.id, m);
     }
   }, options.interrupts);
   if (options.toolchain === false) for (const id of TOOLCHAIN_IDS) measured.set(id, notMeasurable(id, 'the toolchain half was not run (--no-toolchain)'));
+  const notInstalled = options.toolchain === false ? 'the toolchain half was not run (--no-toolchain)' : `the toolchain half did not install: ${measured.get('Q01').reason ?? 'npm ci did not complete'}`;
+  measured.set('Q08', q08(staticHalf.q08, installed, notInstalled));
   for (const m of measureExternal(root, point.commit, options)) measured.set(m.id, m);
   if (release.kind === 'patch') {
     measured.set('D01', entry('D01', { status: 'not-comparable', reason: 'a patch release: D01 is measured on major and minor releases only (dl-089 §2)' }));
     measured.set('P06', entry('P06', { status: 'not-comparable', reason: 'a patch release: P06 is measured with D01, on major and minor releases only' }));
   } else {
     measured.set('D01', notMeasurable('D01', BENCHMARK_REASON));
-  }
-  for (const [owner, ids] of Object.entries(QUALITY_OWNERS)) {
-    for (const id of ids) if (!measured.has(id)) measured.set(id, notMeasurable(id, `measured by the quality half of measure.cjs (${owner}), not written yet`));
   }
 
   const metrics = catalogue.metrics.map((metric) => {
@@ -1632,7 +2334,7 @@ async function main(argv) {
   }
 }
 
-module.exports = { measureRelease, measureToolchain, withGuardedWorktree, parseLatencyReport, processConformance, resolveMeasurementPoint, formatReportJson, parseHttp, httpDay, main };
+module.exports = { measureRelease, measureToolchain, classifyTask, withGuardedWorktree, parseLatencyReport, processConformance, resolveMeasurementPoint, formatReportJson, parseHttp, httpDay, main };
 
 if (require.main === module) {
   void main(process.argv.slice(2)).then((code) => {
