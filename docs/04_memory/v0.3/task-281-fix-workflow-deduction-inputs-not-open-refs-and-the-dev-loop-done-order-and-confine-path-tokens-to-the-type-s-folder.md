@@ -286,6 +286,46 @@ included); `spec-008` §10 (the three spelling rows, exit 2; the type-folder row
   `end`'s answer for it from `workflow is not open` (`namesKnownInstance` read any plan; no test pins that case:
   `grep -n "is not open" test/core/workflow-start-end*.ts` → only the `checklist` workflow name).
 
+### red (qa, 2026-10-13)
+
+Red commit **`640a480e`** (test files and two fixture helpers only; T4 is measured from it:
+`git log --first-parent --no-merges --format=%h 640a480e..HEAD -- <the files below>`). Files:
+`test/core/workflow-deduction-bracketless-submit.test.ts`, `test/core/workflow-uncommitted-config.test.ts`,
+`test/core/memory-add-path-tokens.test.ts`, `test/cli/memory-add-path-tokens.integration.test.ts`,
+`test/storage/memory-path-type-folder.test.ts`, `test/core/workflow-ref-not-open.test.ts`,
+`test/cli/workflow-ref-not-open.integration.test.ts`, `test/core/dev-loop-v2-0.test.ts`,
+`test/directives/dev-loop-done-order.test.ts`; helpers `test/core/helpers/path-token-fixture.ts`,
+`test/core/helpers/ref-not-open-fixture.ts`.
+
+Run: `npx jest <the nine files> --maxWorkers=2` → **60 failed, 26 passed** (86). Per file (failed/passed):
+memory-add-path-tokens 15/2, memory-add-path-tokens.integration 16/1, memory-path-type-folder 7/2,
+workflow-uncommitted-config 8/4, workflow-deduction-bracketless-submit 1/3, workflow-ref-not-open 5/10,
+workflow-ref-not-open.integration 2/3, dev-loop-v2-0 2/1, dev-loop-done-order 4/0. Every failing test is a
+red-first row; every characterization row passes. `npx eslint` on the eleven files and `npx tsc --noEmit -p
+tsconfig.json` exit 0.
+
+| AC | Class | Tests | Fails for the right reason (first failing assertion) |
+|---|---|---|---|
+| 1 `bug-300` | red-first | "red-first: after `wf(task): submit task-1` (no bracket), review's state evidence is met" | `expect(review!.evidence.missing).not.toContain('state')`: received `["state"]` |
+| 1 | characterization | before the re-submit, review is current with `missing: ['state']`; a bracketless `submit task-2` whose commit also edits task-1's file does not count; a plain `docs(memory)` edit after the re-entry leaves the deduction unchanged (a `rework` workflow whose fallback step holds `state` `in-progress`) | pass |
+| 2 `bug-301` (D2) | red-first | `workflowNext` and `workflowStatus` × `.wingfoil/dna.yaml`, `memory.yaml`, `roles.yaml`, `directives/custom/testing.md`: exactly one `W_UNCOMMITTED_INPUTS` with the design's object, the answer otherwise the clean run's | `expect(uncommitted(dirty)).toEqual([...])`: received `[]` |
+| 2 | characterization | the clean run reports none; an edited `README.md` reports none | pass |
+| 3 `bug-325` (D1, D3) | red-first | core: `memory add` and `workflow start` × 7 spelling values (`../../etc`, `../../.wingfoil`, `../../../../tmp`, `/etc`, `a//b`, `rl-v1/`, `./x`) → `UsageError`, exit 2, the exact message, persistence unchanged; CLI: the same for `memory add` with and without `--dry-run`, and `workflow start w --set scope=../../etc`; type `t` (`docs/t/{scope}/../../{id}.md`) → `VALIDATION`, exit 1, `E_PATH_OUTSIDE_TYPE_FOLDER: Memory entries must reside in their type's folder: …`; pure: `resolveConfinedMemoryPath` throws `E_PATH_OUTSIDE_TYPE_FOLDER` (the literal-`..` pattern, and a `..` value staying in the root), `pathPatternFolder` on the design's four patterns | core: "expected a UsageError, the call succeeded"; CLI: status `0` with `{"id":"w-p-plan","path":"etc/w-p-plan.md"}` (the bug: written under `etc/`); `workflow start`: exit `1`, `plan w-1-plan was added but not submitted` (the plan was added outside its folder); type `t`: `existsSync('docs/t-one.md')` true; resolver: "expected a StorageError, the call returned"; `pathPatternFolder`: `typeof` is `"undefined"`, expected `"function"` (reached through the module namespace, so an assertion, not a compile error) |
+| 3 | characterization | a nested value `rl-v1/rel-v0.3` is accepted (core); a root escape (type `r`, and the resolver's `release: '../../../../../tmp'`) is still `E_PATH_ESCAPES_ROOT`, `VALIDATION`, exit 1 (core, CLI, pure); `v0.1/sub/..` and a nested value resolve (pure) | pass |
+| 4 `bug-326` (D4) | red-first | `workflowNext`, `workflowStatus`, `workflowFinalize`, `memoryAdd --workflow` on `old-1-plan` (a `done` instance plan) → `NOT_FOUND`, `workflow is not open: old-1-plan`, `details: { ref }`; `workflowEnd` on `phase-1-plan` → `unknown workflow: phase-1-plan`; CLI `workflow next|finalize old-1-plan` → exit 1, `error: workflow is not open: old-1-plan` | received `unknown workflow: old-1-plan`; for `end` on the phase plan, received `workflow is not open: phase-1-plan` |
+| 4 | characterization | `workflowEnd` on `old-1-plan` (task-217 D5, core and CLI); all five on `ghost`; the four others on `phase-1-plan`; CLI `next|finalize ghost` | pass |
+| 5 `bug-313` (D6) | red-first | `done`'s actions equal `[memory.approve, element.set_state(done), bug.sync_state(for_each: task.bug), git.merge(to: main, ff: false), git.remove_worktree]` at `HEAD`; `version` ≥ 2.0 naming `task-281`, `bug-313`, `prev 1.9`; §1 (whitespace-normalized) contains the design's two phrases and not "still declares the merge before"; `git-conventions` ≥ 1.6 naming `task-281` | actions: received the 1.9 order (merge, remove_worktree before set_state); version: received `1.9`; §1: phrase not found |
+| 5 | characterization | `workflowShowAtHead(ROOT, 'dev-loop')` has no `error` diagnostic | pass |
+| 6 | characterization | the gates, session 3 (no test) | — |
+
+Notes for green:
+- `dev-loop-v2-0.test.ts` reads `dev-loop.yaml` **at `HEAD`** (as `dev-loop-v1-6.test.ts` does): it turns green only
+  once the config change is committed. `dev-loop-done-order.test.ts` reads the working tree.
+- The type-folder message is the `StorageError` message, so it carries the code prefix (`src/storage/errors.ts:15`,
+  `${code}: ${message}`): the CLI prints `error: E_PATH_OUTSIDE_TYPE_FOLDER: Memory entries must reside in their
+  type's folder: …`, as it prints `E_PATH_ESCAPES_ROOT: …` today.
+- The fixture `t`/`r` types carry `template.frontmatter.required` (the schema requires it beside `template.file`).
+
 ### Retrospective
 
 None yet.
