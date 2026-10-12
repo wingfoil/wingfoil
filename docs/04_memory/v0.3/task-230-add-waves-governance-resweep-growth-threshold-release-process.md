@@ -185,8 +185,9 @@ AC classification (testing directive T1; config is new declared content, so red-
   (`TypeError: Cannot read properties of undefined (reading 'id_pattern')`: `element:waves` read as a type);
   `test/core/workflow-element-collection-checks.test.ts` → 5 failed, 1 passed; `test/core/release-waves-config.test.ts`
   → **21 failed / 21** (e.g. `Expected: "wave"`, `Received: "dev-loop"`; `no workflow 'wave' in the registry`).
-- Two red corrections, each committed before green and each re-run red against the unchanged `src/` (deviation
-  from T4's single red, recorded as `task-211` did): `af9a0b13` — the load fixture's `dna.yaml` lacked `paths:`, so
+- Two red corrections, each committed before green and each re-run red against the unchanged `src/`
+  (`git diff --stat 8febbd06 2b6669f1 -- src` → empty; deviation from T4's single red, recorded as `task-211`
+  did): `af9a0b13` — the load fixture's `dna.yaml` lacked `paths:`, so
   the registry refused it before any workflow check (still 5 failed, 1 passed); `2b6669f1` — a trail scope's
   `ElementRef` carries `status` (still 7 failed / 7).
 
@@ -228,9 +229,54 @@ AC classification (testing directive T1; config is new declared content, so red-
   - `node dist/cli.js workflow list --format json` → **0 errors**, 90 warnings, exit 0. The registry at `HEAD`:
     27 workflows, 105 phases, 0 errors, 84 warnings (`main` `3e692099`: 26, 101, 0, 79).
   - `node scripts/check-governance.cjs --base 0671d035` → 0 findings; `node scripts/lint-claims.cjs --base 0671d035`
-    → 0 warnings.
+    → 0 warnings before these notes were written, then 1 on this notes file (the red-corrections line, fixed at
+    review, F4).
 - No sw-life-cycle instance is open here (`node dist/cli.js workflow status`: nine ingest instances), so the
   repository's reported deduction does not change.
+
+### Review (2026-10-12) — independent review: approve with fixes
+
+Findings and what changed (all same-class instances in the files this task touched):
+- **F1** — an absent `waves:` made `implementation` vacuously complete, the template defaults to `waves: []`, and
+  `commit-backlog` checked only `backlog_committed`. Now an **absent** field is undecided (one unexpanded step +
+  `W_UNRESOLVED_TOKEN`, `src/workflow/deduce.ts`); an explicit `[]` stays vacuous. `commit-backlog` gains
+  `waves.declared` (a non-empty list; a separate token because `frontmatter.required` counts a list value as
+  missing outside `memory.yaml`'s `lists:`), `build-backlog` gains `task.wave.declared`. Red first: `438071b7`
+  (`test/workflow/deduce-element-collection-absent.test.ts`, 1 failed against the unchanged `deduce.ts`), fix
+  `1c7a3741`.
+- **F2** — `wave.tasks` selected by `tags: ["{release.version}"]`; per the `dl-159` handover it now selects
+  `release: "{release.version}"` (22 of 153 v0.3 tasks carry no `v0.3` tag, the reviewer's count). Also in
+  `WORKFLOW.md` and `.wingfoil/README.md`.
+- **F3 (option (a))** — "in declared order" was false: every collection entry is a candidate at once. Reworded
+  in `release-cycle.yaml`, `wave.yaml`, `memory.yaml`, the release template, `release-planning.yaml`,
+  `WORKFLOW.md`, `.wingfoil/README.md` and `spec-017` §4.6: waves are ordered keys, all listed waves open at
+  once, and `re-plan` appends the next. A sequential `element:` iteration is a follow-up decision-log (the
+  coordinator's).
+- **Wave order (reviewer suggestion, adopted)** — `tasks → wave-checks → re-sweep → re-plan`, so a wave-check
+  failure is a bug the same wave's re-sweep schedules (`dl-133` §2).
+- **F4** — the red-corrections line now names its command (above); the claims-lint count is corrected.
+- **F5** — `test/core/memory-amend.test.ts`'s header describes the fixture's `release`, not this repository's.
+- **F6** — `spec-017` §4.6 (pending) states the limit: inside an `element:` iteration a sub bound to the enclosing
+  element runs on the entry's scope and its `state` evidence cannot be satisfied; no included sub moves the
+  release's state today.
+- **F7** — the re-sweep's prose and actions agree: `memory.approve` only for `open` bug → `triaged`,
+  `in-discussion` decision-log → `ready`, `pending` ADR → `accepted` (never `triaged` → `planned` without a fix
+  task); a new `memory.reject` action is a bug's legal close (`dl-123`); `memory.deprecate` for the others.
+- Decision 2 (no `include: e2e-smoke` in the wave) stays as is; it goes to the approver (reviewer).
+- **T4 deviation (for the approver).** `1bb7882a` edits two of red's files after green: in
+  `deduce-element-collection.test.ts` the vacuous case now declares `waves: []` (F1 changed what an absent field
+  means), and `release-waves-config.test.ts` follows F2, F7, the wave order and F1's two checks. Check: `git log
+  --first-parent --no-merges --format='%h %s' 2b6669f1..HEAD -- test/workflow/deduce-element-collection.test.ts
+  test/core/workflow-element-collection-checks.test.ts test/core/release-waves-config.test.ts` → that one commit.
+- Conformance at `HEAD` (re-pinned in `1417ee8a`, `test/core/workflow-repository-conformance.test.ts`): 27 workflows, 105 phases, 0 errors, 86
+  warnings (+ `waves.declared`, `task.wave.declared`; `docs.examples.passing` now at `wave` `phases[1]`).
+- Gates after the fixes (slot via `waitslot.sh`, `--maxWorkers=2`): `npm test -- --maxWorkers=2` → **388 suites,
+  7115 passed**; `npm run test:coverage -- --maxWorkers=2` → 388 suites, 7115 passed, All files **99.31 / 97.22 /
+  97.94 / 99.71** (`deduce.ts` 100 / 99.8, `workflow-core-checks.ts` 100, `workflow-diagnostics.ts` 100 / 99.46);
+  `npm run typecheck` exit 0; `npm run lint` exit 0; `npm run docs:api` exit 0; `node dist/cli.js workflow list
+  --format json` → 0 errors, 97 warnings; `node scripts/check-governance.cjs --base 0671d035` → 0 findings.
+- **Handover to `task-277`:** D3 made `release` `amendable: true` (`memory.yaml` 3.2); `task-277`'s description
+  assumes `false` — its ruling stands, only that premise changed.
 
 ### Pending amendments (approver) — uncommitted in the worktree
 
@@ -240,7 +286,9 @@ AC classification (testing directive T1; config is new declared content, so red-
   Layer 2 file count is 27. The code is in task-230."
 - `spec-017-workflow-commands-and-state-deduction` — Proposed `--reason`: "task-230 (approver ruling D1 (a),
   2026-10-12): §4.6 iterates an element's field with a per-element scope label, §5.1 lists wave.re-plan among the
-  approvals finalize records, and §12 is re-measured at 27 workflows, 105 phases and 84 warnings."
+  approvals finalize records, and §12 is re-measured at 27 workflows, 105 phases and 86 warnings. It also states
+  that an absent field is undecided, that every listed entry is open at once, and the limit of a sub bound to the
+  enclosing element."
 - `spec-001-memory-yaml-schema` — Proposed `--reason`: "task-230 (approver ruling D3, 2026-10-12): the release type
   is amendable in this repository's example, as memory.yaml 3.2 declares; release-line stays false."
 - `minor-v0.3` (release; amendable only once this branch's `memory.yaml` 3.2 is on `main`, so the coordinator
