@@ -60,6 +60,143 @@ amendable (approver ruling 2026-10-12, `task-230` D3), and `define-scope` now wr
 
 ## Execution Notes
 
+### design (developer, 2026-10-12)
+
+Role architect. Branch start `868d664e` (= `db0e2752` + the `start` and `bug-342` sync commits). Read: the brief,
+`w3-b7-notes.md` (task-279 hazards entry), `bug-342`, and the Execution Notes of the two `depends_on` tasks
+(`dl-015`): `task-230` (D3: `release` `amendable: true`, `memory.yaml` 3.2) and `task-277` (D1 (c): the sweep is a
+prose post-check, no selection; D2: the hand `wf(release): amend` this task retires). Cited elements:
+`spec-001-memory-yaml-schema` and `spec-010-memory-frontmatter-schema` `approved`; `dl-092` and `dl-108` `ready`
+(`grep -n "^status" docs/04_memory/design/specs/spec-0{01,10}-*.md docs/04_memory/design/dls/dl-{092,108}-*.md`).
+
+**Where the refusal comes from.** `memory amend` past the initial state calls `requireRequiredFieldsKept`
+(`src/core/memory-amend.ts:159-166`), which calls `requireRequiredFields(memoryYaml, type, frontmatter, 'amend')`
+(`src/core/required-fields.ts:35-52`). That function applies the type's whole `template.frontmatter.required`;
+`memory submit` calls the same function with `'submit'` (`src/core/index.ts:1354`). No code reads the `define-scope`
+check: `frontmatter.required: […] except kind for […]` is a prose check, deliberately unbound
+(`.wingfoil/workflows/bindings.yaml:15`), and its only reader is `test/workflow/release-kind-rule.test.ts`
+(`grep -rn "frontmatter\.required\|except " src --include=*.ts` → 23 lines, doc comments and unrelated "except" prose, no parser of the check). The five ids are listed in two
+workflow checks today: `release-planning.yaml:73` and `initial-design.yaml:44`
+(`grep -rn "minor-v0.1, minor-v0.2" .wingfoil`).
+
+**AC 3 — the single declared source (decision D1 below, recommendation (a)).** The exemption is declared once, in
+`.wingfoil/memory.yaml`, on the `release` type, as a new optional key of `template.frontmatter`, beside its two
+siblings `not_applicable_allowed` and `lists` (precedent: `spec-001` Revision of 2026-10-02, `task-168`):
+
+```yaml
+template:
+  frontmatter:
+    required: [ title, kind, version, pillar, features, requirements, release-line ]
+    exempt: { kind: [ minor-v0.1, minor-v0.2, minor-v0.3, minor-v0.4, minor-v1.0 ] }   # dl-092, bug-175, bug-342
+```
+
+Meaning: a document whose `id` is listed under a field does not need that field; the field is dropped from the
+`required` list for that document only, before both the missing-field and the not-applicable checks. Every other
+field is still required of it, and every other id still needs the field. Semantic validation, as for the two
+siblings (`src/memory/schema.ts:158-173`): each key of `exempt` must be a member of `required` (`exempt entry
+'<field>' is not in template.frontmatter.required`), `title` may never be a key (`exempt may not list 'title':
+spec-010 requires it of every type`), each value is a list of strings. `requireRequiredFields` reads it, so `submit`
+and `amend` keep sharing one rule (the reason that function exists, its header). Its signature does not change; the
+document id is read from `frontmatter.id` (an amendment may not change `id`, `AMEND_RESERVED_FIELDS`, so the edited
+frontmatter's id is the committed one).
+
+Why `memory.yaml` and not the `define-scope` check: (1) it is the declaration `memory amend` and `submit` already
+read for `required`, from `HEAD` (`command-baseline`); reading a workflow's prose check would make a Memory verb
+depend on one project's workflow named `release-planning`, a phase named `define-scope` and the free-text grammar of
+an unbound check, none of which a project using WingFoil has; (2) the fact is about the element type's ids, and
+`memory.yaml:109` already states it in a comment, so the key turns that comment into data; (3) the two workflow checks
+already restate `memory.yaml`'s `required` list, held equal by `release-kind-rule.test.ts`; the exemption follows
+the same pattern, and that test gains the assertion that both checks' `except kind for […]` equals the declaration.
+No list is hard-coded in `src/` (`grep -rn "minor-v0\.[1-4]\|minor-v1\.0" src` → two comments, `run-log.ts:359`,
+`index.ts:2493`, neither a list).
+
+**AC classification (T1).**
+
+| AC | Class | Why |
+|----|-------|-----|
+| 1 — pre-`dl-092` release without `kind` amends | red-first | new behaviour; refused today (`bug-342` repro) |
+| 2 — positive cases kept | characterization rows inside the red suite | the two refusals already hold on the start sha; they pin that the fix does not widen the exemption |
+| 3 — one declared source | red-first | the `exempt` key, its schema checks and its reader do not exist |
+| 4 — hand-amend clause dropped, `release-planning.yaml` 2.1 | **red-first (corrected from characterization)** | a document assertion that fails on the start sha for a real reason (the clause is there, the version is 2.0), as `task-277` classified its document ACs |
+| 5 — `memory amend minor-v0.4 --dry-run` | characterization, by hand (developer, session 3) | not red's; run after green, recorded here, edit discarded |
+| 6 — gates | characterization (developer, session 3) | not red's |
+
+**What the qa agent pins (red).** Interface: the registered `CORE_MODULES` `memory.memoryAmend` / `memorySubmit`
+operations in a throwaway git repo, exactly as `test/core/memory-amend.test.ts` does (reuse its `APPROVER_DNA`,
+`doc()`, `operationFn()`, `gitOut()` pattern; `makeTempGitRepo`/`commitAll`/`writeFixtureFile` from
+`test/storage/helpers/git-fixture`; `snapshotPersistence`/`assertPersistenceUnchanged`; `STAMP_TRAILER`); plus
+`MemoryYaml.safeParse` (`src/memory/schema.ts`) and `loadMemoryYaml` (`src/core/loaders`). No new export is needed.
+Fixture `memory.yaml` `release` type: `path: "docs/memory/planning/{id}.md"`, `amendable: true`,
+`template.frontmatter`: `required: [title, kind, version]`, `exempt: { kind: [minor-v0.1] }`, no `template.file`
+(no scaffold is read; `release` stays reserved), machine `sequence: [draft, planning, in-development, releasing,
+released]`. Each document is committed, then edited in the body only, then amended with `--reason`.
+
+- **New suite `test/core/memory-amend-release-kind-exemption.test.ts`** (AC 1–4):
+  - AC 1: `minor-v0.1`, status `released`, `title` and `version` filled, no `kind:` key → `memory amend minor-v0.1
+    --reason "…"` ok, exit `0`; exactly one new commit, subject `wf(release): amend minor-v0.1 [released →
+    released]`, `git show --name-only` lists only that file; the committed file has the body edit and still no
+    `kind`. Also `kind: ""` (blank) on `minor-v0.1` → accepted (the field is not required of it).
+  - AC 2 (characterization rows): (a) `patch-v9.9` (not listed), `released`, `kind: ""` → refused, `VALIDATION`,
+    exit `1`, message exactly `missing required field on amend: kind`, nothing written (persistence snapshot
+    unchanged, working-tree edit kept); (b) `minor-v0.1` with `title: ""` and no `kind` → refused, message exactly
+    `missing required field on amend: title` (no `kind` named).
+  - AC 3, the source is the declaration: (i) the AC 1 document with the fixture's `exempt` key removed → refused
+    `missing required field on amend: kind`; (ii) fixture `exempt: { kind: [minor-v9.8] }` → `minor-v0.1` refused,
+    `minor-v9.8` accepted (no id hard-coded); (iii) `memory submit minor-v0.1` from `draft` with every field but
+    `kind` filled → ok, one commit `wf(release): submit minor-v0.1`, status `planning` (one rule for both verbs, D2).
+  - AC 4 (this repository's files): `.wingfoil/workflows/custom/release-planning.yaml` `version:` ≥ 2.1, compared
+    as a number, and its version comment matches `/2\.1 [^;]*task-279/` (bug-314: "≥" plus the history line;
+    `task-215` re-bumps to 2.2); `define-scope`'s `description` does not contain `refuses a release with no` and
+    does contain `bug-342`; `.wingfoil/WORKFLOW.md` contains neither `refuses a release with no` nor `hand amend on
+    the approver's instruction`, and contains `bug-342`.
+- **`test/memory/schema.test.ts`**: a new `describe('MemoryYaml — template.frontmatter.exempt (bug-342, task-279)')`
+  beside the `lists` one: accepts `{ required: ['title','kind'], exempt: { kind: ['minor-v0.1'] } }` and returns it
+  parsed; refuses a key not in `required` (message above); refuses `title` as a key (message above); refuses a
+  non-mapping (`exempt: ['kind']`) and a non-list value (`exempt: { kind: 'minor-v0.1' }`) (`success: false`). In the
+  existing "validates the real, live `.wingfoil/memory.yaml`" block: `release`'s `exempt` equals `{ kind:
+  ['minor-v0.1','minor-v0.2','minor-v0.3','minor-v0.4','minor-v1.0'] }`, and `task`'s is `undefined`.
+- **`test/workflow/release-kind-rule.test.ts`**: one new `it`: the `define-scope` check's `exempt` and the
+  `seed-releases` check's `exempt` each deep-equal `loadMemoryYaml(repoRoot).types.release.template.frontmatter.exempt`.
+  The existing `it`s stay (under (a) the check grammar does not change).
+- Stay green, not edited by red: `test/core/define-scope-sweep.test.ts` (line 73 asserts the `define-scope`
+  description still matches `/kind:/`: green keeps a `kind:` mention in the sentence citing `bug-342`);
+  `test/core/workflow-repository-conformance.test.ts` (no new check row: the check strings are unchanged).
+
+**Files I expect to touch (session 3).** `src/memory/schema.ts` (`exempt` and its two semantic checks),
+`src/core/required-fields.ts` (drop exempt fields per id; header), `src/core/memory-amend.ts` (the doc comment of
+`requireRequiredFieldsKept` only); `.wingfoil/memory.yaml` 3.4 → **3.5** (the `exempt` key; the `:109` comment points
+at it); `.wingfoil/workflows/custom/release-planning.yaml` 2.0 → **2.1** (`define-scope` description: the hand-amend
+clause becomes "a release predating dl-092, which carries no `kind:`, is amended the same way since `bug-342`
+(`task-279`)"; the check comment names the `memory.yaml` declaration as the source); `.wingfoil/WORKFLOW.md` (the
+`define-scope` sentence ~:308-309, the gate sentence ~:312-314 citing the declaration, the `DS` node's last line);
+`docs/cli-reference.md` (an "Unreleased (v0.3)" paragraph after the `lists` one, ~:571). `initial-design.yaml`
+unchanged under (a). Pending amendments (uncommitted, session 3): `spec-001` (Revision: `template.frontmatter.exempt`,
+its paragraph and Zod line), `spec-010` (§ Validation rules: the required-field row gains "except the fields the
+type's `exempt` lists for this id"), `bug-342` `### Retrospective`. No `spec-008` change (grammar and message are
+unchanged).
+
+**Decisions for the approver.**
+- **D1 — where the exemption is declared.** (a) **recommended:** `memory.yaml` `release.template.frontmatter.exempt`,
+  read by `requireRequiredFields` (both verbs); the two prose checks keep restating it, held equal by
+  `release-kind-rule.test.ts` exactly as they already restate `required`. (b) as (a), and the two check strings stop
+  restating the list (`… except as memory.yaml release template.frontmatter.exempt declares`): literally one list, but
+  a new check grammar, `initial-design.yaml` 1.3 → 1.4 and a rewrite of `release-kind-rule.test.ts`'s parser, for a
+  check no code reads. (c) the code parses `release-planning.yaml:73`: rejected, a Memory verb would depend on one
+  workflow's name, phase and prose grammar, which a project using WingFoil does not have.
+- **D2 — `submit` is affected too.** One function serves both verbs, so a listed id is exempt on `submit` as well.
+  Recommended: accept (no listed release is in `draft`: `grep -H "^status:" docs/04_memory/planning/rl-v1/*.md` →
+  `minor-v0.4`, `minor-v1.0` `planning`, `minor-v0.3` `in-development`, the others `released`; and "the two verbs
+  never disagree" is the function's reason to exist).
+- **D3 — scope.** `memory.yaml` (3.4 → 3.5), `src/memory/schema.ts`, `docs/cli-reference.md` and the
+  `spec-001`/`spec-010` pending amendments are not in the task's Files list; they follow from AC 3. Recommended:
+  accept, size stays S.
+
+**Risks for the batch.** `memory.yaml` has no other B7 writer (`w3-b7-notes.md` hazards), so 3.5 is uncontested.
+`task-215` merges this branch for `release-planning.yaml` (→ 2.2, keeping the 2.1 history entry) and `WORKFLOW.md`
+(its reconcile-governance sentence is a different paragraph from `define-scope`'s). Once this lands, the hand
+`wf(release): amend` form for `minor-v0.3`/`minor-v0.4` is retired for the code build (`node dist/cli.js memory
+amend`); the pinned build (0.2.2) still refuses until the pin advances.
+
 ### Retrospective
 
 None yet.
