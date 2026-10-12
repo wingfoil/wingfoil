@@ -19,6 +19,8 @@ describe('CORE_MODULES — production registry', () => {
     expect(flat).toEqual([
       // task-218 (`spec-016` §3): `agent execute`, mutating — its one write is the run record (task-228).
       'agent.agentExecute',
+      // task-240 (`spec-016` §5): `agent list`, read-only.
+      'agent.agentList',
       // task-220 (`spec-016` §6): the `agent` module's first operation, read-only.
       'agent.agentShow',
       // task-050-directive-create registers a `directive` (SINGULAR) module, because

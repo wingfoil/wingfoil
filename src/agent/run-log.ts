@@ -23,7 +23,7 @@ import { basename, posix, relative, resolve, sep } from 'node:path';
 import { CommitFailure, isDryRunActive, pathPorcelainStatus, readPathAtRev, writeAndCommit } from '../storage';
 import { isIdPiece } from '../validation/id';
 import { requireConfinedTarget, requireConfinedWriteTarget } from '../core/confinement';
-import { resolveRevision, RevisionError } from '../core/revision';
+import { listPathsAtCommit, resolveRevision, RevisionError } from '../core/revision';
 import { coreErr, coreOk, type CoreError, type CoreResult } from '../core/types';
 import { requireInspectableTarget, type WriteTargetContract } from '../core/write-guard';
 
@@ -333,6 +333,57 @@ export function readRunLogAt(root: string, rev: string, path: string): CoreResul
   }
   const text = readPathAtRev(root, sha, path);
   return text === null ? coreOk([]) : parseRunLog(text, path);
+}
+
+/**
+ * The run-log directory `dir` (`dna.yaml` `paths.runs`' one entry) as a root-relative POSIX path, joined
+ * as {@link resolveRunLogPath} joins it (a trailing slash, `./` or a doubled `/` changes nothing): `''` for
+ * the root itself.
+ */
+export function runLogDirPrefix(root: string, dir: string): string {
+  return relative(resolve(root), resolve(root, dir.split(sep).join('/'))).split(sep).join('/');
+}
+
+/**
+ * Whether the root-relative `path` is a run log of the directory `prefix` ({@link runLogDirPrefix}): a
+ * `.jsonl` file directly inside it (§4.1, `<runs>/<element-id>.jsonl`). Anything else there — a README, a
+ * file in a subdirectory — is not a run log: no reader reads it, and nothing reports it (task-240 review F5).
+ */
+export function isRunLogPath(prefix: string, path: string): boolean {
+  return path.endsWith('.jsonl') && posix.dirname(path) === (prefix === '' ? '.' : prefix);
+}
+
+/**
+ * Every run log commit `sha` holds in the run-log directory `dir` (§4.1, §4.5): each `<element-id>.jsonl`
+ * directly inside it ({@link isRunLogPath}), ordered by element id in byte order — the basename without
+ * `.jsonl`, never the whole path, under which `minor-v0.3.1.jsonl` would sort before `minor-v0.3.jsonl`
+ * (task-240 review F1) — each read strictly ({@link parseRunLog}), its records in line order. The reader
+ * `agent list` lists past runs from (task-240, `spec-016` §5).
+ *
+ * `dir` is confined to the project root first (`REQ-SEC-06`), unless it is the root itself, the boundary.
+ *
+ * @param dir - `dna.yaml` `paths.runs`' one directory, non-blank.
+ * @returns The records, or the first §4.5 violation (`VALIDATION`), or a confinement refusal.
+ * @throws `StorageError` when git cannot list the commit.
+ */
+export function readRunLogsAt(root: string, sha: string, dir: string): CoreResult<RunRecord[]> {
+  const prefix = runLogDirPrefix(root, dir);
+  // The root itself (`./`) is the one directory the confinement check names as outside: it is the boundary.
+  if (prefix !== '') {
+    const confined = requireConfinedTarget(root, dir, 'read');
+    if (!confined.ok) return confined;
+  }
+  const elementOf = (path: string): string => basename(path, '.jsonl');
+  const paths = listPathsAtCommit(root, sha, prefix)
+    .filter((path) => isRunLogPath(prefix, path))
+    .sort((a, b) => Number(elementOf(a) > elementOf(b)) - Number(elementOf(a) < elementOf(b)));
+  const records: RunRecord[] = [];
+  for (const path of paths) {
+    const parsed = parseRunLog(readPathAtRev(root, sha, path) ?? '', path);
+    if (!parsed.ok) return parsed;
+    records.push(...parsed.value);
+  }
+  return coreOk(records);
 }
 
 /**

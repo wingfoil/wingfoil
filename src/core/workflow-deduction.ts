@@ -23,6 +23,7 @@
  */
 import { posix } from 'path';
 
+import { isRunLogPath, runLogDirPrefix } from '../agent/run-log';
 import { resolveDnaPath } from '../dna/path';
 import type { DnaYaml } from '../dna/schema';
 import { parseBracketHops, parseMemoryOperation } from '../memory/audit';
@@ -318,8 +319,32 @@ function readDirty(root: string, memoryYaml: MemoryYaml | null, dnaYaml: DnaYaml
       }
     }
   }
-  for (const dir of dnaYaml?.paths?.runs ?? []) specs.add(dir);
-  const pathspecs = [...specs].sort().map((spec) => `:(literal)${spec}`);
+  const runLogs = (dnaYaml?.paths?.runs ?? []).flatMap((dir) => readDirtyRunLogs(root, dir));
+  return [...new Set([...readDirtyPaths(root, [...specs]), ...runLogs])].sort();
+}
+
+/**
+ * The run logs of the directory `dir` (`paths.runs`) that differ from `HEAD`: only the `.jsonl` files
+ * directly inside it, the files a run-log reader reads (`isRunLogPath`, `spec-016` §4.1). A dirty README
+ * there, or a nested file, is no deduction input and no `agent list` input, so it is not reported
+ * (task-240 review F5). Sorted.
+ *
+ * @throws `StorageError` when git cannot answer.
+ */
+export function readDirtyRunLogs(root: string, dir: string): string[] {
+  const prefix = runLogDirPrefix(root, dir);
+  return readDirtyPaths(root, [dir]).filter((path) => isRunLogPath(prefix, path));
+}
+
+/**
+ * The working-tree paths under `specs` (literal pathspecs: files or directories ending in `/`) that differ
+ * from `HEAD` — modified, staged, deleted or untracked — sorted, each once (`spec-017` §1.2). The deduction's
+ * input check, and `agent list --past`'s for the run log when no deduction runs (`spec-016` §5, task-240).
+ *
+ * @throws `StorageError` when git cannot answer.
+ */
+export function readDirtyPaths(root: string, specs: readonly string[]): string[] {
+  const pathspecs = [...new Set(specs)].sort().map((spec) => `:(literal)${spec}`);
   const status = runGitRead(root, ['status', '--porcelain=v1', '-z', '--no-renames', '--untracked-files=all', '--', ...pathspecs]).stdout;
   const dirty = status
     .split('\0')

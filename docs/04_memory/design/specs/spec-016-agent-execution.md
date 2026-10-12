@@ -754,14 +754,22 @@ wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>
   When `--past` alone is selected and no deduction runs, `agent list` emits that code itself under
   the same rule.
 - **Console.** One section per selected source, with a heading and one line per item:
-  - past: `<id>  <role>  <agent>  <exit_status>  <duration>  <tokens>`, where `<tokens>` is
-    `in/out` or `not-reported`;
-  - waiting: `<key>  <role>  <agents>`.
+  - past: `<id>  <role>  <agent>  <exit_status>  <duration>  <tokens>`, where `<duration>` is
+    `duration_ms` in seconds with one decimal and an `s` (`61.0s`, as `agent execute`'s run summary
+    rounds it) and `<tokens>` is `in/out`, or `not-reported` when both are;
+  - waiting: `<key>  <role>  <agents>`, the agents joined by `, `, or `none`.
 
-  An empty section prints `no past runs` or `no waiting steps`. Diagnostics print on stderr as
-  `warning:` lines.
+  A non-empty section opens with the heading `past runs: <n>` or `waiting steps: <n>`; an empty one
+  prints `no past runs` or `no waiting steps` instead. Diagnostics print on stderr as `warning:` lines,
+  `<code> (<file>): <message>` (`spec-008` §6's form), carried as success warnings, so `json`/`yaml`
+  print them on stderr too, beside the payload's `diagnostics`.
 - **Exit codes.** `0` on a result, including an empty one. `1` on a §4.5 violation, or when the
-  `spec-017` deduction fails, with its own message. `2` on a usage error only. A missing `paths.runs`
+  `spec-017` deduction fails, with its own message; also, with the past section, when `dna.yaml` is not
+  committed at `HEAD` (`NOT_FOUND`, `.wingfoil/dna.yaml is not committed at HEAD, which agent list reads:
+  commit it first`, as `agent show`) or when `paths.runs` resolves outside the project root (the
+  confinement refusal, `REQ-SEC-06`). Every run log is read and validated whatever `--element` and
+  `--phase` select: the filters choose what is listed, not what is checked, so a §4.5 violation in another
+  element's log still exits `1`. `2` on a usage error only. A missing `paths.runs`
   is not an error for `list`: `past` is empty, with `warning: dna.yaml declares no run log
   (paths.runs)`.
 
@@ -834,7 +842,7 @@ Fixed here so that v0.3 does not foreclose it (`dl-135` release split, plan R5):
 | function | module | mutates | CLI | MCP |
 |---|---|---|---|---|
 | `agentExecute` | `agent` | true | `wingfoil agent execute` | Tool `agent.execute` *(v0.4; refuses until v1.0, §7)* |
-| `agentList` | `agent` *(planned)* | false | `wingfoil agent list` | Resource `wingfoil://agent/list` *(v0.4; URI per `dl-040`)* |
+| `agentList` | `agent` | false | `wingfoil agent list` | Resource `wingfoil://agent/list` *(v0.4; URI per `dl-040`)* |
 | `agentShow` | `agent` | false | `wingfoil agent show` | Resource `wingfoil://agent/show/{run-id}` *(v0.4; URI per `dl-040`, encoding per §7)* |
 
 These rows are the ones `spec-006` §3 carries, cell for cell. The production server does not run
@@ -1096,3 +1104,14 @@ not this message. By the approver's ruling of 2026-10-11 (task-235 D1, option (a
 that registry message, `unknown role '<r>' (not defined in dna.yaml)`; §3.1's closing line says so, and the
 step-role row stays as a defence for a step deduced without the check. No exit code changes, and no key of §4.2. Edited in place without a supersede or a state change
 (`dl-047`).
+
+**Revision (2026-10-11, `task-240-wingfoil-agent-list-past-waiting-lists-recorded-runs`) — `agent list`
+ships; §5's console is fixed to the byte and §8's row is registered.** `task-240` registers `agentList`
+(`mutates: false`), so §8's module cell loses *(planned)*, keeping §8 equal to `spec-006` §3 cell for cell.
+§5 left four console details open, now stated as built: `<duration>` is seconds with one decimal (the
+rounding of the §3.3 run summary), each non-empty section has a `<source>: <n>` heading, a step whose
+role no agent with an adapter executes prints `none`, and a diagnostic's `warning:` line is `<code> (<file>):
+<message>`, the success-warning channel, so it also reaches stderr under `json`/`yaml`. §5's exit codes
+name the two further exit-`1` refusals of the past section (`dna.yaml` not committed at `HEAD`; `paths.runs`
+outside the root) and say that every run log is validated whatever the filters select. No key of §4.2,
+no payload key and no exit code changes. Edited in place without a supersede or a state change (`dl-047`).

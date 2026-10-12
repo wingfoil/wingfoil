@@ -1,7 +1,7 @@
 # Features — WingFoil
 
-**Version:** 1.13
-**Date:** 2026-10-11  
+**Version:** 1.14
+**Date:** 2026-10-12  
 **Status:** Approved
 
 ---
@@ -133,6 +133,7 @@ Dual interface (CLI for humans, MCP Server for agents).
 | P5.3.1 | `wingfoil agent execute [--next]` | 0a, 1, 2, 4, 6 | All          | Wrapper that launches the agent's own CLI through its adapter with auto-loaded context; with `--next` the role and target element are resolved from the current workflow step (explicit override via `--element type:id`); every run is recorded in the run log (`dl-114`) with the execution mode that ran (`fresh`, `resume` or `reference`; only `fresh` in v0.3, `dl-135`) | Command |
 | P5.3.2 | Agent Role Selection per Step     | 0a, 1, 2, 4    | All          | Route agent to correct role based on current workflow step                                                                                                                                  | Feature |
 | P5.3.3 | Relevance Filtering               | 1, 2, 3        | Alex, Agents | Agent loads only relevant Memory docs, avoiding noise                                                                                                                                       | Feature |
+| P5.3.4 | `wingfoil agent list`             | 2, 4           | Sam, Morgan  | List the recorded agent runs (`--past`) and the workflow steps waiting for an agent (`--waiting`: ready steps whose role an agent executes), both read at `HEAD`; `--active` (running agents) is v0.4 (`dl-135` Action 3) | Command |
 | P5.3.5 | `wingfoil agent show <run-id>`    | 2, 4           | Sam, Morgan  | Print one recorded agent run (role, agent, exit status, duration, token counts) and the commit that added it, read at `HEAD` (`dl-135` Action 3)                                          | Command |
 
 #### **5.4 — Agent Configurations**
@@ -239,6 +240,7 @@ Notifications and alerts across all features.
 | P5.3.1     | `wingfoil agent execute [--next]`           | Medium     | Agent CLI adapter, MCP, Directives       | High     | Critical | Launch agents with context            | Foundation for agent journeys                     |
 | P5.3.2     | Agent Role Selection per Step               | Medium     | Workflow system                          | Medium   | High     | Route agent by step                   | Correct role per phase                            |
 | P5.3.3     | Relevance Filtering                         | Medium     | Memory, Agent context                    | Medium   | Medium   | Load only relevant docs               | Avoid context window exhaustion                   |
+| P5.3.4     | `wingfoil agent list`                       | Medium     | Run log (P5.3.1), state deduction (P4.13) | Low      | Medium   | See past and waiting agent runs       | Read-only, at `HEAD`; `--active` in v0.4          |
 | P5.3.5     | `wingfoil agent show <run-id>`              | Low        | Run log (P5.3.1)                         | Low      | Medium   | Inspect one agent run                 | Read-only, at `HEAD`; record + adding commit      |
 | P5.4.1     | Agent Role Definition                       | Low        | None                                     | Low      | Critical | Define agent personas                 | Developer, Reviewer, QA, Architect                |
 | P5.4.2     | Agent Role → Directives Binding             | Low        | Directive system                         | Low      | Critical | Auto-load rules for agent             | Core differentiator                               |
@@ -348,7 +350,7 @@ Notifications and alerts across all features.
 - ✓ Reference Workflow Templates (P4.18–P4.20) — Scrum, Kanban, Lean, Trunk-Based — **v0.4**
 - ✓ Notification System (X1) — Basic approvals
 
-**Total Features (MVP):** 64 core features across all pillars
+**Total Features (MVP):** 65 core features across all pillars
 **Release Timeline:** 5 weeks (v0.1 → v1.0)
 **Target Adoption:** ≥1 real team by v0.2, ≥3 teams by v1.0
 

@@ -245,7 +245,7 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
 | function         | module                | mutates | CLI                        | MCP                                         | feature |
 |-------------------|------------------------|---------|-----------------------------|----------------------------------------------|---------|
 | `agentExecute`    | `agent`                | true    | `wingfoil agent execute`    | Tool `agent.execute` *(v0.4; refuses until v1.0)* | P5.3.1  |
-| `agentList`       | `agent` *(planned)*    | false   | `wingfoil agent list`       | Resource `wingfoil://agent/list` *(v0.4; URI per `dl-040`)* | `dl-135` point 4 |
+| `agentList`       | `agent`                | false   | `wingfoil agent list`       | Resource `wingfoil://agent/list` *(v0.4; URI per `dl-040`)* | P5.3.4  |
 | `agentShow`       | `agent`                | false   | `wingfoil agent show`       | Resource `wingfoil://agent/show/{run-id}` *(v0.4; URI per `dl-040`)* | P5.3.5  |
 
 - **`agentExecute` is `mutates: true`** because it commits the run record of `dl-114` (Q2 (b), with
@@ -259,8 +259,8 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
 - **`agentList` / `agentShow` read** the run log and the workflow deduction: `agent list --past` and
   `--waiting` ship in v0.3, `--active` (the git-ignored `.wingfoil/run/` registry, `dl-135` Q1 (a))
   in v0.4; `agent show` takes a run id `<element-id>/<phase>/<n>` (`dl-135` Q3 (a)). The `feature`
-  cells carry `dl-135` until `06_features.md` gains the P5.3 rows `dl-135` Action 3 asks for; the new
-  ids then replace it (`agentShow`: P5.3.5, task-220).
+  cells carry the P5.3 rows `06_features.md` gained for them, as `dl-135` Action 3 asks (`agentShow`:
+  P5.3.5, task-220; `agentList`: P5.3.4, task-240).
 
 **MCP exposure of the v0.3 rows.** v0.3 ships every operation above on the **CLI**. On MCP:
 
@@ -879,3 +879,11 @@ supersede or a state change (`dl-047`); pending the approver's `memory amend` at
 create` / `wingfoil workflow remove`), so the two rows lose their planned marker. Their MCP Tools stay v0.4
 (P5.2.3): the production server serves no Tool. No other row changes. Edited in place without a supersede or
 a state change (`dl-047`); pending the approver's `memory amend` at `task-211`'s review.
+
+**Revision (2026-10-11, `task-240-wingfoil-agent-list-past-waiting-lists-recorded-runs`) — §3's `agentList`
+row ships and gains its feature id.** `task-240` registers `agentList` in `CORE_MODULES` under `agent`
+(`mutates: false`, `wingfoil agent list`, reading `HEAD` as §6 item 6 already declares), so its module cell
+loses *(planned)* and its `feature` cell, which cited `dl-135` point 4, is `P5.3.4`, the row `06_features.md`
+gained for it (`dl-135` Action 3); the bullet under the table says both ids are in place. Its MCP Resource
+stays v0.4 (`spec-016` §7). No other row changes. Edited in place without a supersede or a state change
+(`dl-047`); pending the approver's `memory amend` at `task-240`'s review.

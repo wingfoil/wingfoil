@@ -1,7 +1,7 @@
 # Product Brief — WingFoil
 
-**Version:** 1.9
-**Date:** 2026-10-07  
+**Version:** 1.10
+**Date:** 2026-10-11  
 **Status:** Approved
 
 ---
@@ -346,7 +346,7 @@ This brief summarizes outputs from a 2-day Lean Inception workshop (June 2026). 
 - [`03_is-isnot.md`](03_is-isnot.md) — Scope boundaries
 - [`04_personas.md`](04_personas.md) — User types and pain points
 - [`05_journeys.md`](05_journeys.md) — 8 end-to-end user journeys
-- [`06_features.md`](06_features.md) — 64 features across 5 pillars
+- [`06_features.md`](06_features.md) — 65 features across 5 pillars
 
 **Technical & Planning:**
 

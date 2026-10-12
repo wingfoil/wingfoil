@@ -117,6 +117,7 @@ import { resolveAddType } from './memory-add-type';
 import { addLinkTrailers, resolveAddLink, type AddLink } from './memory-add-link';
 import { committedScopeError, requireAbsentTarget, requireUnmodifiedTarget } from './write-guard';
 import { agentExecuteFn, renderAgentExecuteStderr } from './agent-execute';
+import { agentListFn, renderAgentListConsole } from './agent-list';
 import { agentShowFn, renderAgentShowConsole } from './agent-show';
 import { UsageError } from './usage-error';
 import type { CoreFlag, CoreFn, CoreModule, CoreOption } from './registry';
@@ -2391,7 +2392,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
   // task-177 (`spec-016` §1): the `agent` module, registered under the name its operations carry
   // (`agentExecute`, `agentList`, `agentShow`, spec-016 §8). `agentShow` is the first (task-220);
   // `agentExecute` follows (task-218 the pre-launch half, task-228 the launch), and `agentList`
-  // (task-240) joins them. `src/agent` holds the adapter manifest, the run log and the pipeline.
+  // (task-240) completes the v0.3 set. `src/agent` holds the adapter manifest, the run log and the pipeline.
   {
     name: 'agent',
     description: 'launch an agent on an element, and read recorded agent runs',
@@ -2417,6 +2418,27 @@ export const CORE_MODULES: readonly CoreModule[] = [
         fn: agentExecuteFn,
         // spec-016 §3.4 (task-228): the agent owns stdout, so the recorded run is reported on stderr.
         renderToStderr: renderAgentExecuteStderr as (value: unknown) => ReturnType<typeof renderAgentExecuteStderr>,
+      },
+      // task-240 (`spec-016` §5): read-only, and a declared `HEAD` read (§5.1, `spec-006` §6 item 6): the
+      // run log and the workflow deduction at one commit. Its console rendering is §5's sections
+      // (`renderConsole`); each diagnostic is also a success warning, the console's `warning:` line.
+      // `--active` is v0.4 and not declared, so it is refused as an unknown option (exit 2). CLI only
+      // in v0.3 (spec-016 §7, §8).
+      agentList: {
+        name: 'agentList',
+        mutates: false,
+        description: 'list the recorded agent runs and the workflow steps waiting for an agent, as committed at HEAD',
+        flags: [
+          { name: 'past', description: 'list the recorded runs (the run log at HEAD); without --past or --waiting, both sections' },
+          { name: 'waiting', description: "list the open workflows' ready steps whose role an agent executes; without --past or --waiting, both sections" },
+        ],
+        options: [
+          { name: 'element', valueName: 'type:id', description: 'keep the runs and steps of this element, e.g. task:task-042-login-form' },
+          { name: 'phase', valueName: 'name', description: 'keep the runs and steps of this workflow phase, e.g. red' },
+        ],
+        example: 'wingfoil agent list --past --element task:task-042-login-form',
+        fn: agentListFn,
+        renderConsole: renderAgentListConsole,
       },
       // task-220 (`spec-016` §6): read-only, and a declared `HEAD` read (§5.1, `spec-006` §6 item 6).
       // Its console rendering is the `key: value` lines §6 defines, not the indented JSON every other

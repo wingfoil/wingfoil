@@ -62,6 +62,21 @@ import { workflowFacts, type Phase, type Workflow } from './schema';
 
 /** `W_UNCOMMITTED_INPUTS` (`spec-017` §1.2): a deduction input differs from `HEAD`; the answer is `HEAD`'s. */
 export const W_UNCOMMITTED_INPUTS = 'W_UNCOMMITTED_INPUTS';
+
+/**
+ * The `W_UNCOMMITTED_INPUTS` diagnostic of one dirty input path (`spec-017` §1.2; one per path, task-198).
+ * The deduction builds its own through here, and so does `agent list --past`, which runs no deduction and
+ * emits the code itself under the same rule (`spec-016` §5, task-240), so the two cannot word it apart.
+ */
+export function uncommittedInputDiagnostic(path: string): Diagnostic {
+  return {
+    code: W_UNCOMMITTED_INPUTS,
+    severity: 'warning',
+    file: path,
+    path: '',
+    message: `uncommitted change to a deduction input, not read (the answer is computed from HEAD): ${path}`,
+  };
+}
 /** `W_MEMORY_INVALID_STATE` (`spec-017` §1.4, P4.13 sc. 3): a status its type's machine does not declare. */
 export const W_MEMORY_INVALID_STATE = 'W_MEMORY_INVALID_STATE';
 /** `W_UNRESOLVED_TOKEN` (`spec-017` §4.1): a token with no value on the element it resolves against. */
@@ -1562,13 +1577,7 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
     };
   });
 
-  const uncommitted: Diagnostic[] = snapshot.dirty.map((path) => ({
-    code: W_UNCOMMITTED_INPUTS,
-    severity: 'warning',
-    file: path,
-    path: '',
-    message: `uncommitted change to a deduction input, not read (the answer is computed from HEAD): ${path}`,
-  }));
+  const uncommitted: Diagnostic[] = snapshot.dirty.map(uncommittedInputDiagnostic);
 
   // The elements waiting at a gate (§5.1): `status` lists those no pending approval carries. Every element's type is
   // declared in `memory.yaml` (`readElements` leaves the others out), so the machine resolves. A gate that is also a
