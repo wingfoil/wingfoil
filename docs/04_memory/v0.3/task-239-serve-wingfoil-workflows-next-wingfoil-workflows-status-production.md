@@ -2,7 +2,7 @@
 id: "task-239-serve-wingfoil-workflows-next-wingfoil-workflows-status-production"
 type: task
 title: "Serve `wingfoil://workflows/-/next` and `wingfoil://workflows/-/status` on the production MCP server"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "medium"
