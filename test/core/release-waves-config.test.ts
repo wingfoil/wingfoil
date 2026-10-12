@@ -53,10 +53,10 @@ describe('task-230 AC 1 — the wave and its boundary phases', () => {
     expect(implementation.where).toBeUndefined();
   });
 
-  it('wave.yaml runs on the release: tasks, re-sweep, re-plan, wave-checks', () => {
+  it('wave.yaml runs on the release: tasks, wave-checks, re-sweep, re-plan (a wave-check failure is a bug the same wave re-sweeps)', () => {
     const wave = workflow('wave');
     expect(wave.element).toBe('release');
-    expect(wave.phases.map((p) => p.name)).toEqual(['tasks', 're-sweep', 're-plan', 'wave-checks']);
+    expect(wave.phases.map((p) => p.name)).toEqual(['tasks', 'wave-checks', 're-sweep', 're-plan']);
     expect(read('.wingfoil/workflows.yaml')).toMatch(/^ {2}- workflows\/custom\/wave\.yaml/m);
   });
 
@@ -64,13 +64,13 @@ describe('task-230 AC 1 — the wave and its boundary phases', () => {
     const tasks = phase('wave', 'tasks');
     expect(tasks.include).toBe('dev-loop');
     expect(tasks.iterate_over).toBe('task');
-    expect(tasks.where).toEqual({ status: ['backlog'], tags: ['{release.version}'], wave: '{item}' });
+    expect(tasks.where).toEqual({ status: ['backlog'], release: '{release.version}', wave: '{item}' });
   });
 
   it('re-sweep: one selection over the unscheduled bugs, decision-logs and ADRs; the approver rules; never stamped alone', () => {
     const sweep = phase('wave', 're-sweep');
     expect(sweep.where).toEqual({ type: ['bug', 'decision-log', 'adr'], status: ['open', 'triaged', 'in-discussion', 'ready', 'pending'], release: [''] });
-    expect(sweep.actions).toEqual(['memory.approve', 'element.set_release("{release.version}")', 'memory.deprecate']);
+    expect(sweep.actions).toEqual(['memory.approve', 'element.set_release("{release.version}")', 'memory.reject', 'memory.deprecate']);
     expect(sweep.approval).toEqual({ by_role: 'approver' });
     expect(sweep.description).toMatch(/named later release/);
   });
@@ -104,7 +104,11 @@ describe('task-230 AC 2 — release-planning and the growth check', () => {
   });
 
   it('commit-backlog fixes backlog_committed; build-backlog checks every criterion; define-scope states the 20 % reservation', () => {
-    expect(phase('release-planning', 'commit-backlog').checks?.pre).toEqual(['frontmatter.required: [backlog_committed]']);
+    expect(phase('release-planning', 'commit-backlog').checks?.pre).toEqual([
+      'frontmatter.required: [backlog_committed]',
+      "waves.declared(the release's waves: is a non-empty list of wave keys)",
+    ]);
+    expect(phase('release-planning', 'build-backlog').checks?.post).toContain("task.wave.declared(each task's wave is one of the release's waves)");
     expect(phase('release-planning', 'build-backlog').checks?.post).toContain(
       'acceptance-criteria.consistent(each criterion read against the directives bound to the executing role and the ratified specs and decision-logs it touches, before pending -> backlog)',
     );

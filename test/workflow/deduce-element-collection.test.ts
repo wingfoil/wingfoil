@@ -182,8 +182,8 @@ phases:
     expect(keys(entry)).toEqual(['wave.re-plan@release:r2/waves#w0']);
   });
 
-  it('an element with no such field has no entries: the phase is vacuously complete, with the note', () => {
-    const deduction = deduceWorkflowState(snapshot([CYCLE, WAVE, DEV], [release('r1', 'v1'), plan('p1', 'cycle', 'r1')]));
+  it('an element whose field is an empty list has no entries: the phase is vacuously complete, with the note', () => {
+    const deduction = deduceWorkflowState(snapshot([CYCLE, WAVE, DEV], [release('r1', 'v1', { waves: [] }), plan('p1', 'cycle', 'r1')]));
     expect(deduction.instances[0]!.phases[0]).toEqual({
       phase: 'implementation',
       state: 'complete',
