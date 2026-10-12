@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.26"
+version: "1.27"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -114,11 +114,18 @@ forward (reading of `release-planning-rel-v0.3-plan`, confirmed by the planning 
   not the in-release tail the rule measures. Tracked from wave 1 on, by hand, in each wave's revision
   of this plan.
 - **`dl-134` separation of duties** (`red` by `qa`, independent executors): `dev-loop.yaml` v1.5,
-  `task-205`. Until then the v1.4 roles apply.
+  `task-205`. Until then the v1.4 roles apply. In practice one developer agent ran every phase of a task
+  through W3 B6, and the batch's test-file deviations were accepted per task; from W3 B7 the `red` phase is
+  run by a separate `qa` agent and the Execution Notes record each phase's agent (approver ruling,
+  2026-10-12).
 - **`dl-100` §1 (a) governance re-sweep** and **`dl-133` §2 smoke + user-doc checks at each wave
   end**: declared as a wave-boundary phase by `task-230`. Not mandatory before it; at the end of wave
   0 the smoke (`node scripts/e2e-smoke.cjs`, `test/cli/e2e-smoke.test.ts`) and `docs/examples` are run anyway as a cheap check, and a
-  failure is filed through `bug-ingest`.
+  failure is filed through `bug-ingest`. `task-230` (W3 B6) declared it as `wave.yaml`, iterated over a
+  release's `waves:`; `minor-v0.3` declares no `waves:`, so v0.3 finishes without wave instances. Its growth
+  threshold (`memory.yaml` `release.growth_threshold`) is in force from v0.4 planning (approver ruling D4,
+  2026-10-12): v0.3 committed 121 tasks and counts 152 (+25.6 %), recorded in `minor-v0.3`'s
+  `## Scope changes`; whoever binds `growth.clear` reads `in_force_from`.
 - **`dl-102`**: ratified (a), rules in directives (`task-197`); no standing section in this plan.
 
 ### 3. Waves
@@ -593,7 +600,8 @@ commit, right after the task's transition and on the task branch:
     - D1 (`task-175`): the key rules of a `bindings.yaml` collection are a loader row,
       `E_BINDING_COLLECTION_KEY`, not a structural failure, so the file stays decided.
     - D2 (`task-175`): the retrospective's friction inventory lives outside every Memory path,
-      `docs/06_retrospectives/rl-{release-line}/rel-{version}-friction-inventory.md`.
+      `docs/06_retrospectives/rl-{release-line}/rel-{version}-friction-inventory.md` (`docs/09_retrospectives/` since
+      `task-222`; note of 2026-10-12).
     - D3 (`task-176`): a module is selected by name or by path prefix at a `/` boundary; when nothing matches,
       all modules and a note.
     - D4 (`task-192`): `-dirty` only for a change to a build input (`src`, `package*.json`, `tsconfig*.json`,
@@ -978,3 +986,46 @@ commit, right after the task's transition and on the task branch:
   - **Branch protection:** unblocked by `task-278` (`bug-308` closed); turning it on is the approver's.
   - **Follow-ups:** to be filed through a `bug-ingest` plan after the approver's triage.
   - W3: 50 of 72 tasks `done`.
+- **2026-10-12 — batch B6 `done`** (`task-238`, `211`, `240`, `239`, `230`, `277`, `232`, `233`; `task-277` from B5).
+  - **Process.** Agents started in three rounds of at most three developers (dl-170's single heavy-gate slot);
+    `task-277` and `task-233` were cut from `main` and merged their approved predecessor's branch (`230`, `232`).
+    bug-329 joined `task-232` and bug-331 `task-233` before start (approver's absorption, merge `3e692099`).
+  - **Review.** Every task had an independent review; `task-232` was REJECTED (`3e1054e3`): its bug-329 fix lost a
+    signal arriving during synchronous work, the default path on this machine, and its failure reasons carried
+    npm's timestamped log path; a re-review found a second drain gap, fixed with real-process tests. Other defects
+    found and fixed: `240` ordered past runs by path, not element id, and reported every dirty file under
+    `paths.runs`; `211` refused the last include entry with the wrong error; `230` left a release with no `waves:`
+    vacuously complete and selected wave tasks by tag, not `release:`; `233` recorded measured zeros where the
+    point has no configuration; `238`'s gate timeout rested on a stale measurement.
+  - **Approver rulings (2026-10-11/12):** R1–R5 at start (`minor-v0.3` P5.3.4 by hand; local `mcp-publisher`
+    validate; `238` AC3 deferred to v0.3 release-publishing; one real measure run; bug-329/331 absorption);
+    `task-230` D1 (a) `element:<field>` collection inside the task (M → L), D2 coverage-only check of `ready`
+    DLs, D3 `release` `amendable: true`, D4 growth threshold from v0.4, decision 2 (no e2e-smoke in a wave)
+    confirmed; `task-277` D1 (c) prose sweep with an unbound `change-proposals.swept` check, D2 amend (by hand on a
+    release predating dl-092); `232` N4 (an example's 126/127 is a measured failure); `docs/agents.md` rows of
+    `239` confirmed; red-file deviations of `211`, `239`, `240`, `230`, `233` accepted for this batch, separate
+    `qa` agent from B7 (§2).
+  - **Amendments: 27** — `238`: spec-015, bug-060, bug-173, bug-174; `211`: spec-004, spec-006, spec-008,
+    spec-017; `240`: spec-006, spec-008, spec-016, `minor-v0.3` (by hand, `4c5fec67`); `239`: spec-004, spec-005,
+    spec-006, bug-258, bug-259, bug-292; `230`: spec-003, spec-017, spec-001, `minor-v0.3` (by hand, `d5cb532f`:
+    `memory amend` refuses a release with no `kind:`); `277`: dl-132, spec-017, spec-001; `233`: bug-331; this
+    plan (1.27). `232` had none. Before the batch, the absorption amended the `bug:` lists of `232` and `233`
+    (`git log --oneline 0671d035..1c66ef31 | grep -cE "wf\([a-z-]+\): amend"` → 28 = 26 + 2).
+  - **Bugs closed:** bug-060, bug-173, bug-174, bug-258, bug-259, bug-292, bug-329, bug-331.
+  - **Merges** on `gate/w3-b6`, in order 238 → 211 → 240 → 239 → 230 → 277 → 232 → 233, then `main`
+    fast-forwarded to `1c66ef31`. Re-bumps: `06_features.md` 1.14 (with the `00_index.md` sync), `memory.yaml`
+    3.2 → 3.3 → 3.4. Conflicts: spec Revision notes (both kept); spec-004 §4.2 names `workflow create` and
+    `remove` (239 after 211); the parity allowlist (211's Tool rows, 239's reclassification). Gate commits:
+    `eb3feb21` (spec-017's citation of `src/mcp/index.ts`, moved by `239`), `777f3683`, `42ad7dd5`, `1c66ef31`
+    (tests for `211`'s and `240`'s uncovered branches and barrel getters).
+  - **Gates on `1c66ef31`:** `test:coverage` 409 suites, 7408 tests, coverage 99.32 / 97.23 / 97.98 / 99.71; build,
+    lint, `docs:api`, typecheck, `check:audit` exit 0; e2e smoke 53 ok; `check:mcp` 0; `workflow list` 27
+    workflows, 0 errors; `lint:claims` advisory (3 warnings). Governance `--base 0671d035`: 90 `wf()` commits,
+    0 findings; no AI trailer on any approve or reject. `test:latency` idle (load 1.9): 13 tests passed,
+    `workflow next` p95 476 ms. Branch coverage has 0.01 of margin (`memory-transition.ts:468` is hit in some
+    runs only).
+  - **Config versions:** `memory.yaml` 3.4, `workflows.yaml` 1.6, `dev-loop.yaml` 1.9, `release-cycle.yaml` 1.5,
+    `release-planning.yaml` 2.0, `release-publishing.yaml` 1.6, `e2e-smoke.yaml` 1.5, `vision-change.yaml` 1.1,
+    `wave.yaml` 1.0.
+  - **Follow-ups:** to be filed through a `bug-ingest` plan after the approver's triage.
+  - W3: 58 of 72 tasks `done`.
