@@ -724,7 +724,7 @@ describe('task-225 handover (W3 B4) — the sync_state aggregate rule: a bug mov
   });
 });
 
-describe('task-225 AC 5 (characterization) — on this repository, six approval phases carry no element through a gate (spec-017 §5.1, §12)', () => {
+describe('task-225 AC 5 (characterization) — on this repository, seven approval phases (six until task-230) carry no element through a gate (spec-017 §5.1, §12)', () => {
   it("the approval phases whose actions hold no gate are §5.1's list (seven before task-199; the AC's count is that older one)", () => {
     const root = join(__dirname, '..', '..');
     const { workflows } = loadWorkflowRegistryAtHead(root);
@@ -743,6 +743,7 @@ describe('task-225 AC 5 (characterization) — on this repository, six approval 
       });
     }
     expect(unheld).toEqual([
+      'wave.re-plan', // task-230: the re-plan checkpoint (dl-100 §2) carries no element; workflow finalize records its approval
       'user-docs.align-user-docs',
       'agent-docs.align-agent-docs',
       'e2e-smoke.gate',
