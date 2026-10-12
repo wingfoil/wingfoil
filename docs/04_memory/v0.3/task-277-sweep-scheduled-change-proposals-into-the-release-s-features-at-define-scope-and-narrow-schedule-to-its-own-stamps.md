@@ -197,8 +197,87 @@ AC classification (T1): AC 1–4 red-first, in the new suite `test/core/define-s
 row the new unbound check adds to `test/core/workflow-repository-conformance.test.ts` (both committed at red, and
 not edited after it); AC 5 a document (pending amendment, read by the reviewer); AC 6 characterization.
 
+### Red (2026-10-12, `831e5ee7`)
+
+New suite `test/core/define-scope-sweep.test.ts` and one row in `test/core/workflow-repository-conformance.test.ts`
+(`release-planning` `phases[1].checks.post[1]` `change-proposals.swept`), committed together and not edited after.
+`npx jest test/core/define-scope-sweep.test.ts test/core/workflow-repository-conformance.test.ts` at `831e5ee7` →
+**2 suites failed, 10 failed / 16 passed**: every failure an assertion on the configuration under test (e.g.
+`Expected: >= 1.1`, `Received: 1`; `Expected length: 2`, `Received length: 1`; the conformance row missing). The
+passing cases are characterization in the same suite: `schedule`'s actions and checks, and `define-scope`'s evidence
+`["state", "produces"]` at `HEAD`, which the ruling requires to stay as it is.
+
+### Green (2026-10-12, `8c5f3442`)
+
+Configuration and documents only (`git diff --stat 831e5ee7 8c5f3442 -- src` → empty):
+- `vision-change.yaml` 1.0 → 1.1: `schedule` writes the sequencer entry and stamps `release`; the release element is
+  left to `define-scope`.
+- `release-planning.yaml` 1.9 → 2.0 (task-230's blocks kept): `define-scope`'s description states the sweep and the
+  amend path (D2), `checks.post[1]` is `change-proposals.swept(…)`, with a comment saying why it is not a selection
+  and that `dl-166` Q2 (ii) binds it later.
+- `memory.yaml` 3.2 → 3.3 (comments at the `change-proposal` description and `waiting`); the `change-proposal`
+  template's `## Target release` comment, `tmpl_version` 261010 → 261012; `.wingfoil/README.md`; `.wingfoil/WORKFLOW.md`
+  (`DS`, `V7`, the release-planning prose, the Change Proposal state diagram, a paragraph after the vision-change table).
+- Targeted run: `npx jest test/core/define-scope-sweep.test.ts test/core/workflow-repository-conformance.test.ts
+  test/core/vision-change-workflow.test.ts test/workflow/release-kind-rule.test.ts test/core/release-waves-config.test.ts
+  test/core/change-proposal-type.test.ts test/memory/template-wording.test.ts test/docs test/lint
+  test/core/workflow-status.test.ts test/core/adr-amendable.test.ts test/core/workflow-next.test.ts
+  test/core/workflow-core-checks.test.ts` → **42 suites, 478 passed**.
+- `node dist/cli.js workflow show release-planning --format json` → `define-scope` evidence `["state", "produces"]`,
+  `selection` null, action argv `wingfoil memory submit` (the ruling's verification). `node dist/cli.js workflow list
+  --all --format json` → 27 workflows, **0 errors**, 96 warnings: 87 `W_WORKFLOW_UNBOUND_TOKEN` (task-230's 86 + this
+  check), 6 `W_MEMORY_UNREADABLE`, 3 `W_UNCOMMITTED_INPUTS` (the three pending amendments in the working tree).
+
+### Refactor (2026-10-12)
+
+No refactor of the configuration was needed. Gates, with the pending amendments in the working tree:
+- `npm run test:coverage -- --maxWorkers=2` (dl-170 slot, `waitslot.sh`; log `devloop-kit/task-277-cov.log`) →
+  **389 suites, 7128 passed**, All files **99.31 / 97.22 / 97.94 / 99.71** (task-230's gate: 99.31 / 97.22 / 97.94 /
+  99.71, its notes). `npm test` without `WINGFOIL_LATENCY` runs the same parallel jest suites
+  (`scripts/run-tests.cjs` header), so the coverage run stands for it; no second heavy run.
+- `npm run lint` exit 0; `npm run docs:api` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
+  `npx tsc -p tsconfig.build.json --noEmit` exit 0 (slot).
+- Main-sync: `git merge-base --is-ancestor main HEAD` → true (`main` `3e692099`), nothing to merge.
+
+### Review (self, reviewer, 2026-10-12)
+
+| AC | Status | Evidence |
+|---|---|---|
+| 1 — `schedule` narrowed, actions kept, 1.1 | met | `define-scope-sweep.test.ts` AC 1; `vision-change-workflow.test.ts` green |
+| 2 — sweep prose + `change-proposals.swept`, no `where`, 2.0, `frontmatter.required` kept (amended, D1 (c), D2) | met | AC 2 block; `test/workflow/release-kind-rule.test.ts` green; `workflow show` above |
+| 3 — conformance + suites pin it; zero errors | met | conformance row; `workflow list --all` → 0 errors |
+| 4 — `WORKFLOW.md` nodes; `spec-017` §12 count | met (spec pending) | AC 4 block; `spec-017` Revision below (86 → 87 warnings); `spec-003` counts no workflow file added (27, `ls .wingfoil/workflows/custom/*.yaml \| wc -l`), so no amendment |
+| 5 — `dl-132` dated note | written, pending | `git diff docs/04_memory/design/dls/dl-132-*.md` |
+| 6 — gates, governance 0 | met | above; governance below |
+
+Same-class sweep (`grep -rn "a release carries it\|release element's \`features:\`" --include=*.md --include=*.yaml .`):
+fixed in `memory.yaml`, the template, README, `WORKFLOW.md`, and `spec-001`'s worked-example comment (pending). Left:
+`COLLABORATION.md:35` ("done only once a release carries it" — still true of the `release` stamp, and outside this
+task's files), `dl-132:67` (its Decision, covered by the dated note), `cp-001`'s scenario 5 (it already reads the
+sweep, `task-277`).
+
+### Pending amendments (approver) — uncommitted in the worktree
+
+- `dl-132-vision-change-and-feature-ingest` — Proposed `--reason`: "task-277 (approver rulings 2026-10-10 item 5 and
+  2026-10-12 D1 (c), D2): a dated note records that element 4's write of the release's features is met by
+  release-planning's define-scope sweep; the Decision is not rewritten."
+- `spec-017-workflow-commands-and-state-deduction` — Proposed `--reason`: "task-277 (approver ruling 2026-10-12 D1
+  (c)): §12 is re-measured at 27 workflows, 105 phases and 87 warnings, the new one define-scope's unbound
+  change-proposals.swept check. No rule changes."
+- `spec-001-memory-yaml-schema` — Proposed `--reason`: "task-277: the change-proposal example's waiting comment says
+  the schedule step stamps release, as memory.yaml 3.3 does. No key or rule changes."
+
+### Decisions for the approver
+
+1. The ACs 2 and 3 amendment (D1 (c)) is in this file, dated, as the ruling asked.
+2. `memory.yaml` goes 3.2 → 3.3 for comments only; `task-233` (merging after) also takes 3.2 → 3.3, so the gate
+   re-bumps it to 3.4.
+3. `npm test` was not run separately from `npm run test:coverage` (same suites, dl-170 slot economy).
+
 ### Retrospective
 
 - The task's AC named a `where` selection for an input the phase only reads; the vocabulary makes every selection
   an action target, which the task's text did not consider. A probe of the configuration change with `workflow
   show` on a throw-away clone settled it before any test was written. Evidence: the first-pass design above.
+- The ruling's choice (c) needed no code: the probe that stopped the first pass also served as the green
+  verification command (`workflow show … --format json`, evidence `["state", "produces"]`).
