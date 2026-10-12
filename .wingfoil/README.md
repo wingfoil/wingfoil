@@ -89,8 +89,12 @@ sw-life-cycle (main)
 │                              │     ├── release-planning  (advance-pinned-build → define-scope → triage-bugs
 │                              │     │                      → reconcile-governance → record-adrs → identify-specs
 │                              │     │                      → build-backlog → commit-backlog)
-│                              │     ├── dev-loop  (design gate + TDD, iterate_over: task; gate runs BDD;
-│                              │     │              fix tasks keep their source bug in sync via bug.sync_state)
+│                              │     ├── wave  (iterate_over: element:waves — one per entry of the release's waves:, dl-100)
+│                              │     │     ├── dev-loop  (design gate + TDD, iterate_over: task where wave = this one;
+│                              │     │     │              gate runs BDD; fix tasks keep their source bug in sync via bug.sync_state)
+│                              │     │     ├── re-sweep  (unscheduled bugs / decision-logs / ADRs, approver rules)
+│                              │     │     ├── re-plan   (checkpoint: ## Scope changes, growth threshold)
+│                              │     │     └── wave-checks  (e2e smoke + docs/examples + docs.parity — dl-133 §2)
 │                              │     ├── user-docs  (align-user-docs + align-agent-docs → agent-docs — dl-013, dl-025)
 │                              │     ├── e2e-smoke  (fresh-init + CLI end-to-end smoke gate + mcp-registration — dl-023)
 │                              │     ├── release-submit
