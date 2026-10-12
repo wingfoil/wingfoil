@@ -42,3 +42,7 @@ None of the new refusals is documented for agents.
 
 Captured on 2026-10-02 by `bug-ingest-rel-v0.3-w1b4-review-findings-plan`, from the independent reviews of wave 1
 batch B4 (`dev-loop-rel-v0.3-plan`), against `main` at `243f8f05` (B4 merges up to `ea637c43`).
+
+**Note (2026-10-12, the approver's absorption of the inherited v0.3 bugs; `bug-ingest-rel-v0.3-w3b6-review-findings-plan`).**
+Owner: the v0.3 `user-docs` phase (`align-user-docs`, `dl-013`, `sed -n 1,20p .wingfoil/workflows/custom/user-docs.yaml`),
+not a `dev-loop` task: the bug stays `triaged` with release v0.3 and is closed by that phase's commits.
