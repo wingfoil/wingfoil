@@ -59,3 +59,13 @@ only, and fails on it from v0.4 (`PARITY_MODE`).
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b4a-review-findings-plan`, from the independent review of
 `task-187` (W2 B4a, `dev-loop-rel-v0.3-plan`) and its own Execution Notes ("9 untriaged"), checked against
 `main` at `b0c3e472`.
+
+### Retrospective
+
+- Triage: `open → triaged` at `cfe77a9d`; absorbed into `task-239` by the W2 B4a triage, `triaged → planned`
+  at `11d3d3ce` (2026-10-06), since that task already amended spec-004 §4.1.
+- Fixed by `task-239`: spec-004 §4.1 lists the nine verbs as v0.4 Tools and §4.2 counts them (amend `09b6c9eb`);
+  the nine `UNTRIAGED` allowlist entries became `TOOLS_V04` surplus entries (`3e644cc8`), since the production
+  Tools channel is still empty.
+- Proposal: an enumeration-parity gate turns a stale spec into a bug only once someone triages its allowlist;
+  the warn release could list the `UNTRIAGED` count in the release-health catalogue so it is seen before v0.4.
