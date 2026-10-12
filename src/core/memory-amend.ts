@@ -153,7 +153,8 @@ export function requireAmendableEdit(
  * type's initial state (task-127 review F1). The rule is `memory submit`'s own
  * (`requireRequiredFields`, declared not-applicable values included — task-168), applied to the
  * edited frontmatter, because an amendment is the one other
- * verb that writes those fields. "Draft" is read as the machine's initial state (`sequence[0]`),
+ * verb that writes those fields; a field the type's `template.frontmatter.exempt` lists for this id is
+ * not required of it (`bug-342`, task-279). "Draft" is read as the machine's initial state (`sequence[0]`),
  * which is `draft` for every type `spec-001` declares.
  */
 export function requireRequiredFieldsKept(

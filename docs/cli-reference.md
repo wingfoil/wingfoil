@@ -571,6 +571,12 @@ Unreleased (v0.3): a list, an explicit empty list (`features: []`) included, cou
 on a field the type declares in `template.frontmatter.lists` in `memory.yaml`. On any other required
 field a list or a mapping counts as missing. An empty value (`features:`) is always missing.
 
+Unreleased (v0.3): a document can be exempt from a required field by id. The type lists the field
+and the ids in `template.frontmatter.exempt` in `memory.yaml` (`exempt: { kind: [ minor-v0.1 ] }`):
+that field is not required of those documents, on `submit` and on `amend` alike, and a refusal does
+not name it. Every other field is still required of them, and every other document still needs the
+field. Each key must be one of `required`, and never `title`.
+
 ```console
 $ wingfoil memory submit task-001-my-first-task
 {
