@@ -115,6 +115,17 @@ Part (b), the generated export, is v0.4 (`dl-137` Q3) and is not in scope.
     `release-commit` phase already lists `CHANGELOG.md` among the files the release commit carries
     (`sed -n 15,18p .wingfoil/workflows/custom/release-publishing.yaml`); the section must exist by then.
 
+- **Handover from wave 3 B6 (2026-10-12, W3 B6 follow-ups, `bug-ingest-rel-v0.3-w3b6-review-findings-plan` item B5;
+  `task-230` and `task-277` developer notes and reviews).** Measured on `main` at `0da232cb`; no criterion changes.
+  - The agent file's §6 (`sed -n 371,376p CLAUDE.md`) still describes `delivery` → `release-cycle` →
+    `release-planning` → `dev-loop` with no wave: since `task-230` the implementation phase includes `wave` over the
+    release's `waves:` (`sed -n 45,46p .wingfoil/workflows/custom/release-cycle.yaml`), each wave a set of
+    `dev-loop`s, then re-sweep, re-plan and wave-checks.
+  - `COLLABORATION.md` lines 35–37 say a change-proposal is "triaged, approved, and scheduled into a release during
+    `release-planning` (see `dl-016` — `triage-bugs` + `reconcile-governance`)"; since `task-212`/`task-277` it is
+    scheduled by `vision-change`'s `schedule` step (which stamps its `release`) and swept into the release's
+    `features:` by `release-planning`'s `define-scope` (`sed -n 305,309p .wingfoil/WORKFLOW.md`).
+
 ## Execution Notes
 
 <!-- Running log of what actually happened while working this task through dev-loop — filled in
