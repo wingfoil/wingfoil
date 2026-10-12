@@ -50,6 +50,89 @@ this task adds tests only.
 
 ## Execution Notes
 
+### design (developer, 2026-10-12)
+
+- **depends_on read (dl-015).** `task-278` (`done`) last changed `src/memory/audit.ts` (`04176e32`) and recorded
+  `audit.ts` branches 86.3 % in its gate run; `task-232` (`done`) wrote Q04's measurement and measured audit.ts at
+  86.3 % (63/73), commit-message 100 % (93/93), state-machine 96.2 % (76/79), filing the breach as its F6. Cited
+  elements: `dl-011` and `dl-089` `ready`, `bug-343` `in-progress` (`grep -m1 '^status:'` on each file).
+  `git diff --stat 0da232cb db0e2752 -- src/memory/audit.ts` → empty, so the AC's line numbers hold at the base.
+- **The ten uncovered branches** (63/73, task-232's run; no coverage run in design, as the batch notes ask). Their
+  identity is read from the last `coverage/coverage-final.json` in the main tree (2026-10-10, before `04176e32`; the
+  two at the end of `parseStatus` sat at 353/356 then and are at 349/352 now), listing the `branchMap` entries with a
+  zero hit:
+  - `:111` `auditAttribution` — five `default-arg` branches (`sha = ''` … `subject = ''`).
+  - `:191` `parseApprovalMetadata` — three `default-arg` branches (`approverName = ''`, `approverEmail = ''`,
+    `approverRole = ''`).
+  - `:349` `parseStatus` — the `if` taken (the frontmatter parses to `null` or to a non-object).
+  - `:352` `parseStatus` — the conditional's `: null` arm (`status` absent or not a string).
+- **Reachability.**
+  - `:349` and `:352` are reachable from the public API (`reconstructMemoryTransitions`), through a committed
+    document whose frontmatter block is non-empty but not a mapping, or a mapping whose `status` is not a string.
+    Covering both gives **65/73 = 89.04 %: one branch short of the 90 % floor** (66/73 = 90.41 %).
+  - `:191` is **unreachable from any input**: `APPROVER_LINE_RE` (`:143`) has three non-optional groups, so a
+    non-null `exec` result always defines all three; the defaults exist only for `noUncheckedIndexedAccess`. No test
+    reaches them short of replacing `RegExp.prototype.exec`. → approver (decision A).
+  - `:111` is **unreachable through git**: `walkGitLogFields` (`src/memory/git-log.ts`) guarantees "every returned
+    record has exactly `fields.length` entries" (its TSDoc; pinned by `test/memory/git-log-framing.test.ts`), and
+    `AUDIT_LOG_FIELDS` has five. It is reached only if a test stubs `walkGitLogFields` to return a short record: a
+    test-only change covering all five (70/73 = 95.89 %), but it pins a fallback for a record the collaborator never
+    produces. → approver (decision A).
+- **YAML shapes checked** with the locked js-yaml 4.3.2 (`node -e` over `load()` in the main tree's install; the lock
+  entry is the same at `db0e2752`): `just text` → string; `~` and `# nothing` → `null`; `status: 3` →
+  `{status: 3}`; `status: [draft]` → `{status: ['draft']}`; `id: task-1` → no `status`; `- id: task-1` → an array.
+
+#### AC classification
+
+| AC | Class | What it is |
+|----|-------|------------|
+| 1 — tests cover the uncovered branches, pinning existing behaviour | characterization | P1–P3 below; pass on first run |
+| 2 — `test:coverage` audit.ts ≥ 90 % branches, the other two not lower | characterization | session 3, under the slot; met only under decision A (a) |
+| 3 — no change under `src/`; unreachable branches reported | characterization | `git diff --stat db0e2752 HEAD -- src` → empty; `:111`/`:191` reported here |
+| 4 — `npm test`, lint, both tsc green | characterization | session 3 gates |
+
+#### What the qa agent pins (red)
+
+New suite `test/memory/audit-status-shapes.test.ts` (beside `audit-parent-state.test.ts`; `audit.test.ts` left
+alone). Reuse `makeTempGitRepo`, `writeFixtureFile`, `git`, `removeTempDir` from `test/storage/helpers/git-fixture`
+and the local `commitAt(repo, time, message)` pattern of `test/memory/audit-parent-unreadable.test.ts` (fixed
+`GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE`, so the walk order is deterministic); `afterAll` removes the repos. Document
+path `docs/04_memory/v0.1/task-1.md`. Each case commits a first revision with the shape under test
+(`wf(task): add task-1`), then a second with `id: task-1` / `status: draft` (`wf(task): submit task-1`).
+
+- **P1 — `:349`, a frontmatter that is not a mapping.** One `it.each` over a scalar (`---\njust text\n---\n\nBody.\n`),
+  YAML null (`---\n~\n---\n\nBody.\n`) and a comment-only block (`---\n# nothing\n---\n\nBody.\n`). Pin, for
+  `reconstructMemoryTransitions(root, DOC)`: two transitions; the first has `fromState` `null`, `toState` `null` and
+  **no `unreadable` key** (`'unreadable' in t` → `false`: the shape was read, it is not a parse error); the second has
+  `fromState` `null`, `toState` `'draft'`. Pin also that `{ strict: true }` returns the same states without throwing
+  (strict refuses only a parse error, `ReconstructOptions.strict`).
+- **P2 — `:352`, `status` not a string.** One `it.each` over `status: 3`, `status: [draft]`, a mapping with no
+  `status` key (`---\nid: task-1\n---\n`), and a top-level sequence (`---\n- id: task-1\n---\n`: an object, so it
+  passes `:349` and reads `.status` as `undefined`). Same pins as P1.
+- **P3 — `:111`, only under decision A (a).** New suite `test/memory/audit-attribution-short-record.test.ts`:
+  `jest.spyOn(gitLog, 'walkGitLogFields')` on `import * as gitLog from '../../src/memory/git-log'` (audit.ts calls it
+  through that module's export object in ts-jest's CommonJS output; if the spy does not take, `jest.mock` with
+  `jest.requireActual` is the fallback), `mockReturnValue([[]])`, then `[[<a 40-hex sha>, 'Name']]`; `mockRestore`
+  in `afterEach`. Pin `auditAttribution(<any dir>, ['x'])` → `[{ sha: '', authorName: '', authorEmail: '', date: '',
+  subject: '', valid: false }]`, and for the second record the given `sha` and `authorName`, the other three `''`,
+  `valid: false`. The test's comment names the arity postcondition it bypasses.
+- **`:191`** — no test (unreachable; decision A).
+
+#### Files
+
+- New: `test/memory/audit-status-shapes.test.ts` (qa); `test/memory/audit-attribution-short-record.test.ts` (qa, only
+  under A (a)); this task file (notes). No `src/`, no config, no `version:` bump.
+
+#### Decisions for the approver
+
+- **A — the floor needs one branch no real input reaches.** The reachable branches give 89.04 %. Options:
+  (a) cover `:111` with P3's stub (test-only; 95.89 %; pins a fallback the collaborator's postcondition rules out);
+  (b) a separate fix replacing the eight defaults with the non-null assertions the same file already uses for groups
+  that always participate (`:259–260`, `:528`), removing eight branches the `code-quality` directive's "no dead code"
+  covers (P1 + P2 then give 65/65) — a `src/` change, outside this task's AC3; (c) accept 89.04 % and leave Q04
+  failing. **Recommendation: (b) as the real fix, filed as a follow-up; (a) here as well only if the approver wants
+  Q04 green before (b) lands.** Without (a) this task cannot meet AC2 as written. `:191` stays uncovered until (b).
+
 ### Retrospective
 
 None yet.
