@@ -137,6 +137,42 @@ allocated `bug-342`…`bug-357`, `dl-174`…`dl-176`, `task-279` and `task-280` 
   plans (one instance captures one bug; the adds carry no `--workflow` linkage, the `bug-324` class). This plan moves
   `active → done` with a hand `wf(plan): finalize … [active → done]` commit that changes only `status:`.
 
+- **Second block (2026-10-12): the inherited v0.3 `triaged` bugs with no task**, absorbed on the approver's ruling
+  of 2026-10-12 ("ok come proponi, stesso branch"), on the same branch after this plan's finalize; recorded here by
+  amendment, the plan not reopened.
+  - **New fix tasks (`backlog`, `kind: fix`, v0.3):** `task-281` (Fix A, W3 B7, size M) "Fix workflow deduction
+    inputs, not-open refs and the dev-loop done order, and confine path tokens to the type's folder", `bug:`
+    `bug-300`, `bug-301`, `bug-313`, `bug-325`, `bug-326` (its notes record that the handover of `bug-300`/`bug-301`
+    to `task-216` lapsed); `task-282` (Fix B, W3 B8, size M) "Harden the release-gate scripts: pack-input candidate
+    check, strict transcript check, evidence-only tag pre-check", `bug:` `bug-310`, `bug-311`, `bug-312` (its
+    `e2e-smoke.cjs` edit before `task-242`'s hook; `bug-321` related). Adds `e909e881`, `f5769c8c`; submits
+    `8a00c248`, `c6c2ac60`; approves `1c8b7beb`, `c2413996` (no AI trailers); the eight bugs' syncs `[triaged →
+    planned]` `5e0c72e8`…`9da7ae40`.
+  - **Absorbed by existing tasks (one `memory amend` each, bugs `[triaged → planned]`):** `task-242` (`c0a435ba`:
+    `bug-327`, `bug-328`, two criteria and a handover; syncs `a1fd4b33`, `1a2b5baa`); `task-241` (`d08301a6`:
+    `bug-332`, declare `ajv` in `devDependencies` with `task-234`'s `package.json` edit; sync `55544fe4`); `task-252`
+    (`e2db571c`: `bug-220`, `bug-302`; syncs `bc550ada`, `47230471`).
+  - **User-docs owners (dated notes, the bugs stay `triaged`, v0.3):** `bug-210` (`dac2801b`), `bug-227`
+    (`9e9db122`), `bug-239` (`37cf0423`), `bug-285` (`34049b11`), `bug-298` (`1cebbd0d`, its vision-index test may
+    carry to v0.4 by a dated note).
+  - **Moved to v0.4:** `memory amend` refuses a `release` change (`node dist/cli.js memory amend <id> --reason probe
+    --dry-run` after editing `release:` → "release is assign's"), so each move is a hand `wf(bug): assign release
+    v0.4 to <id>` commit, the form of the earlier triages, followed by a `memory amend` giving the reason: `bug-309`
+    (`b9d95dfa`, `9d1f0911`), `bug-330` (`eb195f62`, `cdb228a0`), `bug-333` (`7923058f`, `e2648582`).
+  - **Note on `bug-321`** (v0.4, `8a54d4e6`): `task-282` changes the same script.
+  - **Stop-the-line share after filing:** 18 open v0.3 tasks, 5 of them `kind: fix` (`task-245`, `task-279`,
+    `task-280`, `task-281`, `task-282`) = 27.8 % (≤ 30 %). Command: `for f in docs/04_memory/v0.3/task-*.md; do
+    s=$(grep -m1 '^status:' $f | awk '{print $2}'); case $s in done|deprecated) ;; *) grep -m1 '^kind:' $f | awk
+    '{print $2}';; esac; done | sort | uniq -c` → `13 "feature"`, `5 "fix"`. Batch rule: the fix tasks start first in
+    B7 (`task-279`, `task-280`, `task-281`) and B8 (`task-282`, `task-245`).
+
+  - **Checks after the second block (before this amendment):** `node scripts/check-governance.cjs --base 0da232cb` →
+    130 `wf()` commits, 0 other, gated 0 findings, history 0 findings; `node scripts/lint-claims.cjs --base 0da232cb`
+    → `4 warnings in 4 files (warn-only), 57 files read`, the three "Decision above is unchanged" lines named above
+    and `task-281`'s `bug-326` criterion ("`spec-017` §10 is unchanged or amended to say so", a criterion's
+    alternative, not a claim); `npx jest test/docs --maxWorkers=2` → `Test Suites: 20 passed`, `Tests: 191 passed`.
+    Every approve commit of the block carries no AI trailer and every other commit carries both.
+
 ### Retrospective
 
 - One count in the follow-up list (E2, four requirements) had changed by the time of filing because the batch itself
