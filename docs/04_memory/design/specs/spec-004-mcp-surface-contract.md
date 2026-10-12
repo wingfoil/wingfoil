@@ -35,9 +35,9 @@ state (REQ-SEC-05).
 
 ```
 MCP server surface
-├── Resources   (read-only)   — wingfoil://dna, wingfoil://memory/*, wingfoil://workflows
+├── Resources   (read-only)   — wingfoil://dna, wingfoil://memory/*, wingfoil://workflows, wingfoil://workflows/-/*
 ├── Prompts     (read-only)   — one per role, e.g. "developer-session", "reviewer-session"
-└── Tools       (mutating)    — memory.* and workflow.* actions, 1:1 with CLI state-mutating verbs
+└── Tools       (mutating)    — memory.*, dna.*, directive.*, workflow.* and agent.* actions, 1:1 with CLI state-mutating verbs
 ```
 
 ### 2. Resources (REQ-INT-01, REQ-SEC-05)
@@ -51,6 +51,8 @@ wingfoil://memory/{type}                      # list of elements of that type
 wingfoil://memory/{type}/{id}                 # a single Memory document (content + frontmatter)
 wingfoil://workflows
 wingfoil://workflows/{name}                   # a single workflow definition (main or sub)
+wingfoil://workflows/-/next                   # the active workflow instance's next step (spec-017 §9)
+wingfoil://workflows/-/status                 # every open workflow instance (spec-017 §9)
 ```
 
 - `{type}` is any type key declared in `memory.yaml` `types:` (`release-line, release, task, adr,
@@ -64,6 +66,15 @@ wingfoil://workflows/{name}                   # a single workflow definition (ma
   collection listing; `wingfoil://memory/{type}/{id}` still returns one, because addressing an element
   by id is explicit retrieval. The scan primitives exclude archived elements by default and the
   single-document Resource opts in (`dl-038` option 1, `task-171`).
+- `wingfoil://workflows/-/next` and `wingfoil://workflows/-/status` (v0.3, `spec-017` §9, ruling R12)
+  return, as their `text` (`mimeType: application/json`), the payload that `wingfoil workflow next` and
+  `wingfoil workflow status` print with `--format json` and no operand — `NextResult` for the active
+  instance and `StatusResult` (`spec-017` §8) — read at `HEAD` (`spec-017` §1.1, ruling R15), without the
+  CLI's final newline; a refusal is a failed read with the CLI's message and details (§4.3 item 4). They
+  cannot collide with `wingfoil://workflows/{name}`: their second segment is `-`, which no workflow name can
+  be (`spec-003` names start with a letter), and they have a third segment, which the single-segment
+  `{name}` template never matches. A workflow named `next` or `status` stays `wingfoil://workflows/next` /
+  `wingfoil://workflows/status`.
 
 #### 2.2 Read contract
 
@@ -239,18 +250,29 @@ wingfoil memory submit          → memory.submit
 wingfoil memory approve         → memory.approve
 wingfoil memory reject          → memory.reject
 wingfoil memory deprecate       → memory.deprecate
+wingfoil memory amend           → memory.amend         (v0.4, P5.2.3; dl-108)
+wingfoil memory park            → memory.park          (v0.4, P5.2.3; dl-110)
+wingfoil dna set                → dna.set              (v0.4, P5.2.3)
+wingfoil dna add                → dna.add              (v0.4, P5.2.3; dl-081)
+wingfoil dna update             → dna.update           (v0.4, P5.2.3; dl-081)
+wingfoil dna remove             → dna.remove           (v0.4, P5.2.3; dl-081)
+wingfoil directive create       → directive.create     (v0.4, P5.2.3)
+wingfoil directive assign       → directive.assign     (v0.4, P5.2.3)
+wingfoil directive remove       → directive.remove     (v0.4, P5.2.3)
 wingfoil workflow start         → workflow.start
 wingfoil workflow end           → workflow.end
-wingfoil workflow next          → workflow.next        (advances/reads active step)
 wingfoil workflow finalize      → workflow.finalize    (v0.4, P5.2.3; spec-017 §7.9, §9)
 wingfoil agent execute          → agent.execute        (v0.4; refuses every call until v1.0, spec-016 §7)
 ```
 
 Read-only CLI query commands (`memory search`, `memory history`, `dna show`, `paths`, `workflow
-status/list/show`) are **not** duplicated as Tools — they are already served by the Resources channel
+next/status/list/show`) are **not** duplicated as Tools — they are already served by the Resources channel
 (§2) or are non-mutating enough to be exposed as Resources in a future revision; this spec scopes Tools
 to the **state-mutating** surface only, per REQ-INT-03's own scope ("Tools for agents to submit
-deliverables and update workflow state").
+deliverables and update workflow state"). `wingfoil workflow next` only reads in v0.3 (`mutates: false`,
+`spec-017` §9): it **names** the next step and is served as the Resource `wingfoil://workflows/-/next`
+(§2.1). A Tool that advances the active step belongs with v1.0's step advancement (`spec-017`
+Consequences; open question 1 of `spec-006`'s 2026-09-30 Revision note), and this table gains its row then.
 
 #### 4.2 Parity requirement (REQ-SYS-05)
 
@@ -263,9 +285,12 @@ closed bijection, not a best-effort overlap:
 ```
 
 Concretely, for the Memory pillar this is exactly the five lifecycle verbs (`add, submit, approve,
-reject, deprecate` — features P1.3/P1.6/P1.7/P1.8/P1.9) plus whatever workflow-action verbs `workflows.yaml` steps
+reject, deprecate` — features P1.3/P1.6/P1.7/P1.8/P1.9), plus `amend` (`dl-108`) and `park` (`dl-110`); for
+the DNA pillar the four write verbs (`dna set`, `add`, `update`, `remove`); for the Directives pillar the
+three (`directive create`, `assign`, `remove`); for the Workflow pillar `workflow start`, `end` and
+`finalize`, and `agent execute`; plus whatever workflow-action verbs `workflows.yaml` steps
 invoke (`element.set_state`, `git.*` actions wrapped by `agent.execute`, etc., per P4.10) once those
-ship in v1.0.
+ship in v1.0. Every one of them is a row of §4.1.
 
 The two **bootstrap commands** are outside both sets: `wingfoil init`, which mutates state but must run
 before a WingFoil project exists, and `wingfoil mcp`, which starts this server. Neither has a Tool or a
@@ -530,3 +555,18 @@ gains `workflow.finalize`.** `wingfoil workflow finalize` ships in v0.3, registe
 `spec-017` §9 schedules for v0.4 with the rest of the Tools (P5.2.3); the shipped server registers no Tool
 in v0.3 (`spec-014` §3). Edited in place without a supersede or a state change, per `dl-047` (no
 `version:` field); pending the approver's `memory amend` at `task-226`'s review.
+
+**Revision (2026-10-11, `task-239-serve-wingfoil-workflows-next-wingfoil-workflows-status-production`) — §2.1
+gains the two workflow-state Resources; §4.1 and §4.2 list every state-mutating verb, and the workflow next
+row moves to v1.0, per `spec-017` §9 and Consequences (rulings R12, R15), open question 1 of `spec-006`'s 2026-09-30 Revision note,
+`bug-258`.** §2.1's URI block lists `wingfoil://workflows/-/next` and `wingfoil://workflows/-/status`, which
+`task-239` registers on the production server, and a bullet states their payload (the CLI's `--format json`
+of `workflow next|status`, at `HEAD`) and the non-collision rule. §4.1's workflow next row ("advances/reads
+active step") is removed: in v0.3 `workflowNext` is `mutates: false` and a Resource, and a Tool that
+advances the step belongs with v1.0's step advancement, which the paragraph under the table now says. §4.1
+gains the nine state-mutating verbs shipped since it was written — `memory amend`, `memory park`, the four
+`dna` write verbs and the three `directive` verbs — each a v0.4 Tool (P5.2.3), and §4.2's pillar sentence
+counts them, as its own bijection requires. §1's channel sketch names the new Resources and Tool families.
+No rule changes, and the shipped server still registers no Tool (`spec-014` §3). Edited in place without a
+supersede or a state change, per `dl-047` (no `version:` field); pending the approver's `memory amend` at
+`task-239`'s review.
