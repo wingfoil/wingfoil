@@ -2,7 +2,7 @@
 id: "task-230-add-waves-governance-resweep-growth-threshold-release-process"
 type: task
 title: "Add waves, the governance re-sweep and the growth threshold to the release process"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "medium"
