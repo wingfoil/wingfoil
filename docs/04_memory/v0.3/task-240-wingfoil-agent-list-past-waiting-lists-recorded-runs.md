@@ -193,12 +193,6 @@ Decisions for the approver:
 4. **Every run log is read, whatever `--element`**: a §4.5 violation in another element's log still exits 1.
 5. With the waiting section the run logs are read at the deduction snapshot's commit, so one `baseline`.
 
-Retrospective items (one line each):
-- `waitslot.sh` does not see the `npm run build` every targeted jest run starts in `globalSetup`
-  (`test/global-setup.cjs`): targeted suites are "free" but each rebuilds `dist/`.
-- `spec-008` §2 and `docs/cli-reference.md` said "one command" had its own console text after
-  `workflow next|status|start|end|finalize` gained one: the console-exception sentence had no owner.
-
 ### Review fixes
 
 Independent review, 2026-10-11: **APPROVE WITH FIXES** (decisions 1, 2, 4, 5 sound; 3 acceptable if
@@ -262,3 +256,14 @@ documented). The task stays `in-review`; no re-submit.
   minor-v0.3 [in-development → in-development]` (precedent `3b585e33`). Proposed reason: "P5.3.4 (wingfoil
   agent list) is delivered by task-240 and enters minor-v0.3's features as dl-135 Action 3 asks; recorded
   by hand because the release type is amendable: false."
+
+### Retrospective
+
+- `waitslot.sh` does not see the `npm run build` every targeted jest run starts in `test/global-setup.cjs`:
+  targeted suites are "free" for the slot but each rebuilds `dist/`.
+- `spec-008` §2 and `docs/cli-reference.md` still said "one command" had its own console text after
+  `workflow next|status|start|end|finalize` gained one: the console-exception sentence had no owner.
+- Red was run by the developer agent, not by `qa` as `dev-loop` 1.8 assigns it (`dl-134`): separation of
+  duties not applied in this batch's single-agent task sessions.
+- Refactor appended cases to red's test file, breaking `tests.unchanged(since: red)` until review F2 moved them:
+  new cases after red belong in a new file.
