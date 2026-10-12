@@ -2,7 +2,7 @@
 id: "task-232-measure-build-test-coverage-example-latency-install-metrics"
 type: task
 title: "Measure the build, test, coverage, example, latency and install metrics"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "medium"
