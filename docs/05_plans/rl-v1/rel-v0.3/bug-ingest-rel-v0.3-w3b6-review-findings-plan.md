@@ -123,6 +123,20 @@ allocated `bug-342`…`bug-357`, `dl-174`…`dl-176`, `task-279` and `task-280` 
 - **Ids not pushed.** `git-conventions` §6 asks for the `add` commits to be pushed at once; this branch is not pushed by
   instruction, so the ids are local proposals until the coordinator merges and pushes it.
 
+- **Governance (2026-10-12).** `node scripts/check-governance.cjs --base 0da232cb` on `ingest/w3b6-review-findings` at
+  `2fabed82` (this plan's submit): 94 `wf()` commits and 0 other commits, gated 0 findings, history 0 findings, 0
+  entries not checked. Every `approve` commit of the branch carries no `Co-Authored-By:` or `AI-Model:` line and every
+  other commit carries both (a loop over `git rev-list 0da232cb..HEAD`, 0 exceptions; the check's
+  `approval-ai-trailer` rule agrees). `node scripts/lint-claims.cjs --base 0da232cb` → `3 warnings in 3 files
+  (warn-only), 33 files read`: the closing sentence of the dated notes on `dl-166`, `dl-170` and `dl-173` ("the
+  Decision above is unchanged"), the form of the W3 B5 note on `dl-170`; each amend adds lines after the existing
+  text only (`git diff 0da232cb HEAD -- <file>` → additions at the end). `npx jest test/docs --maxWorkers=2` before
+  the submit → `Test Suites: 20 passed`, `Tests: 191 passed`. The branch is neither pushed nor merged.
+- **Finalized by hand.** `node dist/cli.js workflow end bug-ingest-rel-v0.3-w3b6-review-findings-plan --dry-run` →
+  `error: workflow 'bug-ingest' is not complete: current step bug-ingest.capture`, as for the W3 B4 and B5 ingest
+  plans (one instance captures one bug; the adds carry no `--workflow` linkage, the `bug-324` class). This plan moves
+  `active → done` with a hand `wf(plan): finalize … [active → done]` commit that changes only `status:`.
+
 ### Retrospective
 
 - One count in the follow-up list (E2, four requirements) had changed by the time of filing because the batch itself
