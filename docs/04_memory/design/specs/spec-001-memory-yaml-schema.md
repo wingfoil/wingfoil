@@ -306,7 +306,7 @@ types:
   release:
     path: "docs/04_memory/planning/rl-{release-line}/{id}.md"   # folder = the release-line's id; the field holds its version (bug-163)
     id_pattern: "{kind}-{version}"      # dl-092: minor-v0.3, patch-v0.2.2 (ids added earlier are immutable)
-    amendable: false
+    amendable: true                     # dated notes and corrected facts, e.g. `## Scope changes` (approver ruling 2026-10-12, task-230)
     states:
       sequence: [ draft, planning, in-development, releasing, released ]
       # draft→planning: memory.submit; the rest are workflow-phase transitions (no CLI verb)
@@ -635,3 +635,14 @@ behind an older copy; among several changed copies the most advanced wins); Q2 (
 `returns` edge take no slot check. The `limits` row says both. No key, rule or diagnostic changes.
 Edited in place without a supersede or a state change (`dl-047`); pending the approver's `memory amend`
 at `task-274`'s review.
+
+**Revision (2026-10-12, `task-230-add-waves-governance-resweep-growth-threshold-release-process`) — `release` is
+amendable.** Approver ruling D3 of 2026-10-12, revising `task-127`'s value for `release` as `task-158` did for
+`adr`: dated notes and corrected facts are amendments (`dl-108` A3), here the rows a wave's re-plan adds to the
+release's `## Scope changes` and its `backlog_committed` (`dl-100` §2). The example above follows this
+repository's `memory.yaml` 3.2; `release-line` stays `false`, and so does the `amendable` rule itself (no
+default, read at `HEAD`). The same version declares, `[AUTHORING]` and so outside this schema's fixed keys
+(every node passes unknown keys through), the release's optional `fields` (`backlog_committed`, `waves`), its
+`growth_threshold` (`dl-100` §3 (a), in force from v0.4) and the task's `fields.wave`; the `init` scaffold's
+`release` is amendable too (`src/storage/templates.ts`). Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend` at `task-230`'s review.
