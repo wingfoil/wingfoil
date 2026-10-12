@@ -38,7 +38,10 @@ export type ExternalReader = (source: { readonly kind: 'gh' | 'url'; readonly ta
 
 /** One toolchain command of the quality half (task-232), run in the measurement worktree. */
 export interface ToolCall {
-  /** What the command measures: `install`, `build`, `typecheck`, `lint`, `test`, `coverage`, `examples/<name>`, `latency`, `npm-view`. */
+  /**
+   * What the command measures: `install`, `build`, `typecheck`, `lint`, `test`, `coverage`, `examples/<name>`, `latency`,
+   * `npm-view`; and, run by {@link measureRelease} after them (task-233, Q08's install size), `footprint-ls`, `footprint-pack`.
+   */
   readonly step: string;
   readonly command: string;
   readonly args: readonly string[];
@@ -161,3 +164,22 @@ export function httpDay(header: string | null | undefined): string | null;
 
 /** The command line: writes the report, prints its path; returns the exit code (0, or 2 when it could not run). */
 export function main(argv: readonly string[]): Promise<number>;
+
+/** How {@link classifyTask} reads a task (Q18/Q19, `dl-133` §1; `memory.yaml` `task.stop_the_line`). */
+export interface TaskClassRule {
+  /** The release's version: before v0.3 the name-or-`bug:` heuristic decides, from v0.3 the declared field. */
+  readonly version: string;
+  /** The field the classification is declared in (`stop_the_line.field`, `kind`). */
+  readonly field: string;
+  /** The value that makes a task a fix (`stop_the_line.counts`, `fix`). */
+  readonly counts: string;
+  /** The field's declared values (`template.frontmatter.values`), when declared. */
+  readonly values?: readonly string[];
+}
+
+/**
+ * A task's class for Q18/Q19: `fix`, `feature`, or `null` when it cannot be classified. Before v0.3 (`dl-133` §1
+ * backfill): fix when an id segment is `fix` or `bug:` names a bug. From v0.3: the declared field, `counts` → fix,
+ * another declared value → feature; a feature task that absorbed a bug stays a feature.
+ */
+export function classifyTask(frontmatter: Readonly<Record<string, unknown>>, rule: TaskClassRule): 'fix' | 'feature' | null;

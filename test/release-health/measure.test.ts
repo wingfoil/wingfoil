@@ -433,9 +433,10 @@ describe('measureRelease — the history metrics on a fixture with known answers
     expect(entry(report, 'P07')).toMatchObject({ status: 'measured', value: true });
   });
 
-  it('the quality metrics are left to their owning tasks, each with the reason; the toolchain half is skipped by --no-toolchain', () => {
+  it('the toolchain half is skipped by --no-toolchain, with the reason; the static half is measured all the same (task-233)', () => {
     expect(entry(report, 'Q01')).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('--no-toolchain') });
-    expect(entry(report, 'Q05')).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('task-233') });
+    expect(entry(report, 'Q05')).toMatchObject({ status: 'measured' });
+    expect(report.metrics.filter((m) => /not written yet/.test(m.reason ?? ''))).toEqual([]);
   });
 
   it('every percentage carries its raw counts (dl-089 §6)', () => {
@@ -1032,12 +1033,12 @@ describe('measureRelease runs the toolchain half in its worktree (task-232)', ()
     return { repo: r, base, point };
   }
 
-  it('writes the seven entries in catalogue order, in a report the schema accepts; task-233\'s stay its own', async () => {
+  it('writes the seven entries in catalogue order, in a report the schema accepts, beside task-233\'s static half', async () => {
     const h = toolFixture();
     const { tools, calls } = stubTools();
     const report = await measureRelease(h.repo.root, { release: 'v0.2', at: h.point, previous: h.base, external: () => ({ ok: false, error: 'stub' }), tools });
     expect(TOOL_IDS.map((id) => entry(report, id).status)).toEqual(TOOL_IDS.map(() => 'measured'));
-    expect(entry(report, 'Q05')).toMatchObject({ status: 'not-measurable', reason: expect.stringContaining('task-233') });
+    expect(entry(report, 'Q05')).toMatchObject({ status: 'measured' });
     expect(calls[0]!.cwd).not.toBe(h.repo.root);
     expect(calls[0]!.cwd.startsWith(tmpdir())).toBe(true);
     expect(schemaErrors(report)).toEqual([]);
