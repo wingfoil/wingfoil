@@ -95,13 +95,25 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-planning", "phases[0].checks.post[1]", "the switch commit changes only package.json and package-lock.json"],
       ["release-planning", "phases[0].checks.post[2]", "the wingfoil-cli directive re-checked against the new pin"],
       ["release-planning", "phases[1].checks.post[0]", "frontmatter.required"],
+      // task-230 (dl-100 §1, approver ruling 2026-10-12 D2): the coverage of the ready decision-logs, read by the product-owner.
+      ["release-planning", "phases[3].checks.post[0]", "ready-decision-logs.covered"],
       ["release-planning", "phases[4].checks.pre[0]", "spec-review.passed"],
       ["release-planning", "phases[4].checks.post[0]", "frontmatter.required"],
       ["release-planning", "phases[5].checks.pre[0]", "spec-review.passed"],
       ["release-planning", "phases[5].checks.post[0]", "frontmatter.required"],
       ["release-planning", "phases[6].checks.post[0]", "frontmatter.required"],
+      // task-230 (dl-102 §2): build-backlog's criteria check; (dl-100 §2) commit-backlog's backlog_committed.
+      ["release-planning", "phases[6].checks.post[1]", "acceptance-criteria.consistent"],
+      // task-230 review F1: each task's wave is listed; commit-backlog's waves is a non-empty list.
+      ["release-planning", "phases[6].checks.post[2]", "task.wave.declared"],
+      ["release-planning", "phases[7].checks.pre[0]", "frontmatter.required"],
+      ["release-planning", "phases[7].checks.pre[1]", "waves.declared"],
+      // task-230 (dl-133 §2): no single command runs the docs/examples scripts (docs/examples/README.md).
+      ["wave", "phases[1].checks.post[1]", "docs.examples.passing"],
       // task-221 (dl-133 Q4 (i)): the stop-the-line check reads memory.yaml's rule; no command asserts it yet.
       ["dev-loop", "phases[0].checks.pre[0]", "stop-the-line.clear"],
+      // task-230 (dl-100 §3 (a)): the growth check reads memory.yaml's release.growth_threshold; no command asserts it yet.
+      ["dev-loop", "phases[0].checks.pre[1]", "growth.clear"],
       ["dev-loop", "phases[1].checks.post[0]", "frontmatter.required"],
       ["dev-loop", "phases[1].checks.post[1]", "tech-spec.approved"],
       ["dev-loop", "phases[1].checks.post[2]", "depends_on.acknowledged"],
@@ -274,7 +286,7 @@ function measure(workflows: readonly Workflow[]): { checkpoints: string[]; final
 }
 
 describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => {
-  it('29 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 27 again from task-219: release-publishing.release-commit, while staging-rehearsal produces its transcript; 28 from task-222: release-health.propose writes into the report compare produced; 29 from task-212: vision-change.update-vision)', () => {
+  it('30 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 27 again from task-219: release-publishing.release-commit, while staging-rehearsal produces its transcript; 28 from task-222: release-health.propose writes into the report compare produced; 29 from task-212: vision-change.update-vision; 30 from task-230: wave.re-plan, the re-plan checkpoint of dl-100 §2)', () => {
     expect(measure(registry().workflows).checkpoints).toEqual([
       'vision-change.update-vision',
       'user-story-mapping.backbone',
@@ -289,6 +301,7 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'backlog-export.map-dependencies',
       'backlog-export.validate',
       'release-planning.advance-pinned-build',
+      'wave.re-plan',
       'dev-loop.red',
       'dev-loop.green',
       'dev-loop.refactor',
@@ -308,8 +321,9 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
     ]);
   });
 
-  it('6 approvals recorded by workflow finalize (7 at 4fd77678: retrospective.approve now carries its decision-log; align-agent-docs lives in agent-docs)', () => {
+  it('7 approvals recorded by workflow finalize (7 at 4fd77678: retrospective.approve now carries its decision-log; align-agent-docs lives in agent-docs; 6 until task-230 added wave.re-plan)', () => {
     expect(measure(registry().workflows).finalizeApprovals).toEqual([
+      'wave.re-plan',
       'user-docs.align-user-docs',
       'agent-docs.align-agent-docs',
       'e2e-smoke.gate',

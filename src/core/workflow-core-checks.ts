@@ -75,6 +75,10 @@ const TYPED_TOKEN_RE = /\{([a-z][a-z0-9-]*)\.([A-Za-z0-9_-]+)\}/g;
 
 const DNA_COLLECTION = 'dna:';
 const BINDINGS_COLLECTION = 'bindings:';
+/** A list read from a frontmatter field of the bound element (spec-003 § "Collections", task-230). */
+const ELEMENT_COLLECTION = 'element:';
+/** The frontmatter field name an `element:` reference may name. */
+const ELEMENT_FIELD_RE = /^[a-z][a-z0-9_-]*$/;
 
 /** Collects diagnostics by position, dedupes them by `(file, path, code)`, and emits them in order. */
 class Collector {
@@ -172,7 +176,7 @@ function staticChecks(out: Collector, i: number, workflow: Workflow, bindings: B
     }
 
     const over = phase.iterate_over;
-    const isCollection = over !== undefined && (over.startsWith(DNA_COLLECTION) || over.startsWith(BINDINGS_COLLECTION));
+    const isCollection = over !== undefined && [DNA_COLLECTION, BINDINGS_COLLECTION, ELEMENT_COLLECTION].some((prefix) => over.startsWith(prefix));
     if (memoryYaml) {
       if (over !== undefined && !isCollection && !knownType(over)) out.add(i, p, 'E_WORKFLOW_ELEMENT_TYPE_UNKNOWN', at('iterate_over'), unknownType(over));
       // A selection's `where.type` (`bug-282`): only without `iterate_over` (with it, `where` filters the
@@ -197,7 +201,7 @@ function staticChecks(out: Collector, i: number, workflow: Workflow, bindings: B
     }
 
     if (over !== undefined && isCollection) {
-      for (const message of collectionProblems(over, dnaYaml, bindings)) out.add(i, p, 'E_WORKFLOW_COLLECTION_UNRESOLVED', at('iterate_over'), message, message);
+      for (const message of collectionProblems(over, dnaYaml, bindings, workflow)) out.add(i, p, 'E_WORKFLOW_COLLECTION_UNRESOLVED', at('iterate_over'), message, message);
     }
 
     const cadence = phase.cadence as unknown;
@@ -218,9 +222,19 @@ function staticChecks(out: Collector, i: number, workflow: Workflow, bindings: B
  * `E_WORKFLOW_COLLECTION_UNRESOLVED`'s messages for a collection reference (`spec-003` § "Collections"):
  * a `dna:` path that names no list, a `bindings:` name that names no collection, and the key problems
  * of a `dna.yaml` list's entries (a `bindings.yaml` collection's keys are the loader's
- * `E_BINDING_COLLECTION_KEY`). A `dna:` reference without `dna.yaml` is not decided.
+ * `E_BINDING_COLLECTION_KEY`). A `dna:` reference without `dna.yaml` is not decided. An `element:<field>`
+ * reference (task-230) needs a field name and an including workflow bound to an element; its entries are
+ * Memory content, checked when deduction reads them (`spec-017` §4.6).
  */
-function collectionProblems(reference: string, dnaYaml: DnaYaml | null, bindings: BindingsYaml | null): string[] {
+function collectionProblems(reference: string, dnaYaml: DnaYaml | null, bindings: BindingsYaml | null, workflow: Workflow): string[] {
+  if (reference.startsWith(ELEMENT_COLLECTION)) {
+    const field = reference.slice(ELEMENT_COLLECTION.length);
+    if (!ELEMENT_FIELD_RE.test(field)) return [`collection '${reference}' names no frontmatter field (expected [a-z][a-z0-9_-]*)`];
+    if (workflow.element === undefined) {
+      return [`collection '${reference}' reads a field of the bound element, but workflow '${workflow.name}' declares no element`];
+    }
+    return [];
+  }
   if (reference.startsWith(BINDINGS_COLLECTION)) {
     const name = reference.slice(BINDINGS_COLLECTION.length);
     const collections = bindings?.collections ?? {};

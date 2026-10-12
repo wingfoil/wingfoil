@@ -35,7 +35,7 @@ describe("this repository's memory.yaml declares `adr` amendable (task-158)", ()
     expect(amendableOf('adr')).toBe(true);
   });
 
-  it('every other type keeps the value task-127 declared', () => {
+  it('every other type keeps the value task-127 declared, but release (approver ruling 2026-10-12, task-230 D3)', () => {
     const others = ['task', 'decision-log', 'tech-spec', 'bug', 'plan', 'service', 'release', 'release-line'];
     expect(Object.fromEntries(others.map((type) => [type, amendableOf(type)]))).toEqual({
       task: true,
@@ -44,7 +44,7 @@ describe("this repository's memory.yaml declares `adr` amendable (task-158)", ()
       bug: true,
       plan: true,
       service: true,
-      release: false,
+      release: true, // task-230 D3: dated notes and corrected facts (`## Scope changes`, `backlog_committed`)
       'release-line': false,
     });
   });
