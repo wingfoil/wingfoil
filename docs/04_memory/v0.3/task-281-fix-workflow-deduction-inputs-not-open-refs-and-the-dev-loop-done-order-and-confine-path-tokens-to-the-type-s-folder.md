@@ -325,6 +325,15 @@ Notes for green:
   `${code}: ${message}`): the CLI prints `error: E_PATH_OUTSIDE_TYPE_FOLDER: Memory entries must reside in their
   type's folder: …`, as it prints `E_PATH_ESCAPES_ROOT: …` today.
 - The fixture `t`/`r` types carry `template.frontmatter.required` (the schema requires it beside `template.file`).
+- **Send-back 2026-10-13 (developer's probe, via the coordinator): AC 1 control (c) was vacuous.** The `rework`
+  fixture's leading `start` phase left `rework`'s and `review`'s exit states undetermined
+  (`W_PHASE_EXIT_STATE_UNDETERMINED`), so `rework` stayed current with `missing: ["state"]` under any state rule. Fixed
+  by the qa agent in **`1b7102fe`** (that file only): the workflow is `rework` then `review`; the control now asserts
+  `rework:complete`/`review:current` after the start, review `missing: []` after the bracketed submit,
+  `rework:current`, `reentered: true`, `missing: ["state"]` after the reject, the same answer after the plain edit,
+  and no deduction diagnostics. `npx jest test/core/workflow-deduction-bracketless-submit.test.ts --maxWorkers=2` →
+  1 failed (the red-first row, `missing` received `["state"]`), 3 passed (the three controls). T4 for that file is
+  measured from `1b7102fe`.
 
 ### Retrospective
 
