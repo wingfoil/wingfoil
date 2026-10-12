@@ -398,7 +398,7 @@ types:
       sequence: [ draft, in-analysis, accepted, scheduled ]
       gates:
         in-analysis: { reject: draft }       # approve: in-analysis→accepted (vision-change's impact analysis) · reject: →draft
-      waiting: [ accepted ]                  # accepted→scheduled: vision-change's schedule step, once a release carries it
+      waiting: [ accepted ]                  # accepted→scheduled: vision-change's schedule step, which stamps `release`
 ```
 
 `triaged` and `planned` are the first states in any machine that are **both** in `waiting` and keys
@@ -646,3 +646,11 @@ default, read at `HEAD`). The same version declares, `[AUTHORING]` and so outsid
 `growth_threshold` (`dl-100` §3 (a), in force from v0.4) and the task's `fields.wave`; the `init` scaffold's
 `release` is amendable too (`src/storage/templates.ts`). Edited in place without a supersede or a state change
 (`dl-047`), pending the approver's `memory amend` at `task-230`'s review.
+
+**Revision (2026-10-12, `task-277-sweep-scheduled-change-proposals-into-the-release-s-features-at-define-scope-and-narrow-schedule-to-its-own-stamps`)
+— the `change-proposal` example's `waiting` comment.** Approver ruling 2026-10-10 (item 5 on `task-212` decision 4):
+`vision-change`'s `schedule` stamps the element's `release` and the sequencer entry only, and the release's
+`features:` gain the change at `release-planning`'s `define-scope`. The worked example's comment now says the
+`schedule` step stamps `release`, as this repository's `memory.yaml` 3.3 does. No key, rule or diagnostic
+changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`
+at `task-277`'s review.
