@@ -129,9 +129,9 @@ describe('task-230 — iterate_over element:<field> (spec-003 § "Collections", 
     // Declared order (w1 before w0), then each wave's own tasks only (task-3 is another release's).
     expect(keys(entry)).toEqual(['dev.start@task:task-2-b', 'dev.start@task:task-1-a']);
     expect(entry.frontier[0]!.trail.map((t) => [t.workflow, t.phase, t.scope])).toEqual([
-      ['cycle', 'implementation', { element: { type: 'release', id: 'r1' } }],
+      ['cycle', 'implementation', { element: { type: 'release', id: 'r1', status: 'in-development' } }],
       ['wave', 'tasks', { item: { collection: 'release:r1/waves', key: 'w1' } }],
-      ['dev', 'start', { element: { type: 'task', id: 'task-2-b' } }],
+      ['dev', 'start', { element: { type: 'task', id: 'task-2-b', status: 'backlog' } }],
     ]);
     expect(entry.phases[0]).toEqual({ phase: 'implementation', state: 'current', iterations: { eligible: 2, entered: 0, complete: 0, late: 0 } });
   });
