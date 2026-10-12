@@ -24,7 +24,7 @@ loader gives no diagnostic.
 As `task-277`'s first design pass recorded it (`sed -n 86,104p docs/04_memory/v0.3/task-277-*.md`), on a throw-away
 clone with the worktree build, `node dist/cli.js workflow show release-planning --format json`:
 
-1. Unchanged `define-scope` → evidence `["state", "produces"]`, action `memory.submit` bound to the release.
+1. `define-scope` as committed → evidence `["state", "produces"]`, action `memory.submit` bound to the release.
 2. With `where: { type: change-proposal, status: [scheduled], release: ["{release.version}"] }` added and the action
    left as is → evidence `["produces", "selection"]`, `memory.submit` now targets the selected change-proposals, and
    no diagnostic is reported on that phase.
