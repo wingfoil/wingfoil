@@ -159,10 +159,11 @@ function elementMismatch(including: Workflow, phase: Workflow['phases'][number],
   const over = phase.iterate_over;
   if (element === undefined) return null;
   // An `element:` collection keeps the enclosing bound element (task-230): the iterated workflow may declare
-  // the including workflow's own type, so that it can include a sub bound to it.
+  // the including workflow's own type, so that it can include a sub bound to it. An including workflow with no
+  // element is the core check's `E_WORKFLOW_COLLECTION_UNRESOLVED`, not a mismatch.
   if (over !== undefined && over.startsWith(ELEMENT_COLLECTION)) {
-    if (element === including.element) return null;
-    return `workflow '${included.name}' declares element '${element}', but collection '${over}' is read from workflow '${including.name}''s element '${including.element ?? '(none)'}'`;
+    if (including.element === undefined || element === including.element) return null;
+    return `workflow '${included.name}' declares element '${element}', but collection '${over}' is read from workflow '${including.name}''s element '${including.element}'`;
   }
   if (over !== undefined && COLLECTION_REF_RE.test(over)) {
     return `workflow '${included.name}' declares element '${element}' and cannot be iterated over collection '${over}'`;
