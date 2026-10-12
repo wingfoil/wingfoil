@@ -118,6 +118,13 @@ describe('release `kind`: memory.yaml, the define-scope check and the release do
     expect(seed.exempt).toEqual(check.exempt);
   });
 
+  it("task-279 (bug-342, D1 (a)): both checks' `except kind for [...]` equal memory.yaml's release `template.frontmatter.exempt`", () => {
+    const declared = (loadMemoryYaml(repoRoot).types['release']?.template?.frontmatter as Record<string, unknown> | undefined)?.['exempt'];
+    expect(declared).toBeDefined();
+    expect(check.exempt).toEqual(declared);
+    expect(requiredCheck('initial-design', 'seed-releases').exempt).toEqual(declared);
+  });
+
   it("initial-design's seed-releases action passes the `kind` its id_pattern needs (review F2)", () => {
     const adds = seedReleasesActions().filter((action) => action.includes('memory.add(type: release,'));
     expect(adds).toHaveLength(1);
