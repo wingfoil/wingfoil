@@ -144,7 +144,7 @@ const FLAKE_TS = 'export const stable = (): boolean => true;\n';
 const TESTS: Readonly<Record<string, string>> = {
   // A comment citing REQ-SYS-01 and task-003; a title citing a missing bug; a string literal that is fixture data.
   'test/a.test.ts': "// Covers REQ-SYS-01 (task-003).\ndescribe('bug-888 — a title citing a missing bug', () => {\n  it('works', () => {\n    const fake = 'task-555';\n    expect(fake).toBe('task-555');\n  });\n});\n",
-  // Fixtures are excluded: neither dl-999 (Q09) nor REQ-SYS-02 (Q10) counts.
+  // Fixtures are excluded: neither the decision-log id in its comment (Q09) nor REQ-SYS-02 (Q10) counts.
   'test/fixtures/data.ts': "// dl-999 is fixture data.\nexport const REQ = 'REQ-SYS-02';\n",
 };
 
@@ -258,7 +258,8 @@ function staticFixture(): Fixture {
     ...task('task-004-big-feature', 'in-progress', 'v0.3', { kind: 'feature', bug: '["bug-004"]' }, 'Deviation: src/mcp/serve.ts imports src/memory directly.'),
   });
   r.commit('wf(decision-log): add dl-002-beta', day(5), dl('dl-002-beta', 'in-discussion', 'Beta beta.'));
-  r.commit('wf(decision-log): add dl-003-gamma', day(6), dl('dl-003-gamma', 'ready', 'Gamma gamma gamma.'));
+  // A line naming a bypassing file and "deviation" but not the module it reaches records nothing (Q07).
+  r.commit('wf(decision-log): add dl-003-gamma', day(6), dl('dl-003-gamma', 'ready', 'No deviation in src/cli/run.ts here.'));
   const commitBacklog = r.commit('wf(release): approve minor-v0.3 [planning → in-development]', day(7), release('minor-v0.3', 'v0.3', 'in-development', { requirements: '"docs/backlog/v0.3.json"' }), ADA);
   r.commit('wf(task): add task-006-fix-flake, task-008-another-feature, task-009-unknown', day(8), {
     ...task('task-006-fix-flake', 'in-progress', 'v0.3', { kind: 'fix', bug: '["bug-006"]' }, 'Fix a flake now.'),
@@ -489,9 +490,17 @@ function writeAt(root: string, path: string, bytes: number): void {
   writeFileSync(join(root, path), 'x'.repeat(bytes));
 }
 
-function footprintTools(overrides: Readonly<Record<string, (call: ToolCall) => Partial<ToolResult>>> = {}): { tools: ToolRunner; calls: ToolCall[] } {
+/**
+ * Real npm 11.6.2 stderr of `npm ls --omit=dev --all --json --long` (exit 1) in a project whose `package.json` declares
+ * `left-pad` and has no `node_modules`, copied verbatim but for the home directory of npm's log pointer.
+ */
+const NPM_LS_ELSPROBLEMS_STDERR = 'npm error code ELSPROBLEMS\nnpm error missing: left-pad@^1.3.0, required by wingfoil@0.3.0\nnpm error A complete log of this run can be found in: /home/user/.npm/_logs/2026-10-12T08_43_15_997Z-debug-0.log\n';
+
+type Outcome = Partial<ToolResult> | ((call: ToolCall) => Partial<ToolResult>);
+
+function footprintTools(overrides: Readonly<Record<string, Outcome>> = {}): { tools: ToolRunner; calls: ToolCall[] } {
   const calls: ToolCall[] = [];
-  const defaults: Record<string, (call: ToolCall) => Partial<ToolResult>> = {
+  const defaults: Record<string, Outcome> = {
     'footprint-ls': (call) => {
       writeAt(call.cwd, 'node_modules/js-yaml/index.js', 100);
       writeAt(call.cwd, 'node_modules/js-yaml/node_modules/argparse/a.js', 50);
@@ -502,8 +511,8 @@ function footprintTools(overrides: Readonly<Record<string, (call: ToolCall) => P
   };
   const tools: ToolRunner = (call) => {
     calls.push(call);
-    const outcome = overrides[call.step] ?? defaults[call.step];
-    return { status: 0, signal: null, ...(outcome ? outcome(call) : {}) };
+    const outcome = overrides[call.step] ?? defaults[call.step] ?? {};
+    return { status: 0, signal: null, ...(typeof outcome === 'function' ? outcome(call) : outcome) };
   };
   return { tools, calls };
 }
@@ -533,11 +542,12 @@ describe('Q08 with the toolchain half: install size and the npm ls dependency co
 
   it('an npm ls that fails leaves the install size null with the reason, the count from package.json, never a zero', async () => {
     const t = toolFixture();
-    const { tools } = footprintTools({ 'footprint-ls': () => ({ status: 1, stderr: 'npm error code ELSPROBLEMS\nnpm error missing: left-pad@^1.3.0, required by wingfoil@0.3.0\n' }) });
+    const { tools } = footprintTools({ 'footprint-ls': { status: 1, stderr: NPM_LS_ELSPROBLEMS_STDERR } });
     const report = await measureRelease(t.root, { release: 'v0.3', at: t.point, previous: t.base, offline: true, tools });
     const q08 = entry(report, 'Q08');
     expect(q08).toMatchObject({ value: { unused_runtime_dependencies: 1, install_size_bytes: null }, raw: { runtime_dependencies: 2, runtime_dependencies_from: 'package.json dependencies at the point' } });
-    expect(String(q08.raw?.['install_size'])).toContain('ELSPROBLEMS');
+    expect(String(q08.raw?.['install_size'])).toContain('npm error code ELSPROBLEMS');
+    expect(String(q08.raw?.['install_size'])).not.toContain('_logs');
   });
 });
 

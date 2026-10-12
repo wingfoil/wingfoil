@@ -70,8 +70,8 @@
  * - Q07 imports read with the TypeScript AST; a cycle is a strongly connected component of the runtime import graph of
  *   `paths.sources` (type-only imports are erased), named by its shortest cycle from its first file; a bypass is an
  *   import, type-only included, from `src/cli.ts`, `src/cli/` or `src/mcp/` into `src/storage`, `src/memory`,
- *   `src/dna`, `src/directives` or `src/workflow` (spec-006 §1), recorded when a Memory document line names the
- *   importing file and the word "deviation";
+ *   `src/dna`, `src/directives` or `src/workflow` (spec-006 §1), recorded when one line of a Memory document names
+ *   the importing file, the module it reaches and the word "deviation";
  * - Q08 unused: a `dependencies` or `optionalDependencies` entry that no runtime import of `paths.sources` names;
  *   install size, after the toolchain half's `npm ci` only: every production package's directory (`npm ls --omit=dev
  *   --all --json --long`, nested `node_modules` counted apart) plus the tarball's `unpackedSize` (`npm pack --dry-run
@@ -1796,12 +1796,13 @@ function q07(parsed, docs) {
     graph.set(path, [...targets].sort());
   }
   const deviationLines = docs.flatMap((d) => d.text.split('\n')).filter((line) => /deviation/i.test(line));
-  const recorded = (path) => deviationLines.some((line) => line.includes(path));
-  const unrecorded = unique(bypasses.filter((b) => !recorded(b.path)).map((b) => `bypass: ${b.path} imports ${b.spec} (${b.module})`)).sort();
+  // Recorded: one line names the importing file, the module it reaches and the word "deviation".
+  const recorded = (b) => deviationLines.some((line) => line.includes(b.path) && line.includes(b.module));
+  const unrecorded = unique(bypasses.filter((b) => !recorded(b)).map((b) => `bypass: ${b.path} imports ${b.spec} (${b.module})`)).sort();
   const cycles = importCycles(graph).map((cycle) => `cycle: ${cycle.join(' → ')}`);
   return entry('Q07', {
     value: { cycles: cycles.length, bypasses: unrecorded.length },
-    raw: { cycles: cycles.length, bypasses: unrecorded.length, recorded_deviations: unique(bypasses.filter((b) => recorded(b.path)).map((b) => `${b.path} ${b.spec}`)).length },
+    raw: { cycles: cycles.length, bypasses: unrecorded.length, recorded_deviations: unique(bypasses.filter((b) => recorded(b)).map((b) => `${b.path} ${b.spec}`)).length },
     failing: [...unrecorded, ...cycles],
   });
 }
@@ -1939,7 +1940,8 @@ function q14(root, point, docs) {
 /** Whether `sha` changes a line under `dirs` that is neither blank nor a comment. */
 function changesExecutable(root, sha, dirs) {
   if (dirs.length === 0) return false;
-  const diff = git(root, ['show', '--no-show-signature', '--format=', '--unified=0', '--no-renames', sha, '--', ...dirs]);
+  // `diff-tree`, not `show`: it prints the patch alone, never a commit or its signature (task-268's readers rule).
+  const diff = git(root, ['diff-tree', '--no-commit-id', '-p', '--unified=0', '--no-renames', '--root', sha, '--', ...dirs]);
   return diff.split('\n').some((line) => {
     if (!/^[+-]/.test(line) || /^(\+\+\+|---) /.test(line)) return false;
     const content = line.slice(1).trim();
