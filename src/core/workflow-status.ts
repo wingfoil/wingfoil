@@ -89,8 +89,8 @@ function keyOf(element: ElementRef): string {
 
 /**
  * `workflow status`'s answer from one deduction (`spec-017` §7.4, §10). Pure. Exit `0` in every deduced case;
- * `NOT_FOUND` for a `ref` naming no open instance — `workflow is not open: <ref>` for a loaded workflow,
- * `unknown workflow: <ref>` otherwise, as `workflow next`.
+ * `NOT_FOUND` for a `ref` naming no open instance — `workflow is not open: <ref>` for a loaded workflow or an
+ * instance plan, `unknown workflow: <ref>` otherwise, as `workflow next` (`unresolvedRef`).
  */
 export function statusWorkflow(inputs: NextInputs, deduction: Deduction, ref?: string): CoreResult<StatusResult> {
   let shown = deduction.instances;

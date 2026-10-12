@@ -555,7 +555,8 @@ export function emptyFrontierMessage(selected: InstanceDeduction): string {
 /**
  * `workflow next`'s answer from one deduction (`spec-017` §7.3, §10). Pure. Exit `0` in every deduced
  * case — `no open workflows`; `no next step: workflow '<name>' is complete`; a filter that keeps nothing — and
- * `NOT_FOUND` `workflow is not open: <ref>` for a `ref` naming no open instance.
+ * `NOT_FOUND` for a `ref` naming no open instance — `workflow is not open: <ref>` or `unknown workflow: <ref>`
+ * ({@link unresolvedRef}).
  */
 export function nextWorkflow(inputs: NextInputs, deduction: Deduction, options: NextOptions): CoreResult<NextResult> {
   const { ref, assignedTo } = options;

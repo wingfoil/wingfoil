@@ -13,7 +13,8 @@
  * History is read at the cost §4.8 states (REQ-PERF-03): **one** `git log` over the union of the open
  * instances' walks, bounded by the parents of the starts' octopus merge base (one `git merge-base
  * --octopus`), from which each instance's own walk is cut in memory through the parent links; plus one
- * lookup per element a re-entry in the walk names.
+ * lookup per element a re-entry in the walk names, and one batched read (`git cat-file --batch`) of those
+ * elements' files at the bracketless `add` / `submit` commits that name them (task-281, `bug-300`).
  *
  * git is read with `runGitRead` (stderr captured, `bug-093`) and the `git log` walk with
  * `walkGitLogFields` (NUL-framed, `bug-050`); every `git log` passes `--no-show-signature` and checks the
@@ -270,8 +271,9 @@ interface HistoryRead {
 /**
  * Read the history every open instance's deduction needs (§4.8): one walk for the union of the instances'
  * walks, each instance's records, linkages and re-entries cut from it, the transition commits naming a
- * re-entered element, the walk's parent links, and one lookup per re-entered element (its file's latest
- * change in the walk). With no start, nothing is read.
+ * re-entered element (a bracketless `add` / `submit` through the status its file holds there, one batched
+ * read), the walk's parent links, and one lookup per re-entered element (its file's latest change in the
+ * walk). With no start, nothing is read.
  */
 function readHistory(
   root: string,

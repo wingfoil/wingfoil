@@ -536,6 +536,9 @@ Without `--workflow`, `memory add` links nothing and its commit is unchanged.
     a name that is not a field
     name (`[a-z][a-z0-9_-]*`, so no dots), a blank value, or the same name twice. So is a name
     `memory add` fills itself: `id`, `type`, `status`, `title`, `tags`, `n`, `slug`, `date`, `author`.
+    So is a value that, read as a path, is absolute or holds an empty, `.` or `..` segment, since it may
+    be placed in the type's `path` (`--set scope holds a '.' or '..' path segment: "../../etc"`); nothing is
+    written.
   - Exit `1`: a type not in the committed `memory.yaml`. Also a `--set` name the type's `id_pattern`
     and `path` do not use, or a token left without a value
     (`missing value for token {version}: give it with --set version=<value>`). Also, for a pattern
@@ -543,8 +546,11 @@ Without `--workflow`, `memory add` links nothing and its commit is unchanged.
     (`value for token {author} is empty once the git author name "李明" is slugged`), and, for a
     pattern with `{date}`, a `GIT_AUTHOR_DATE` git cannot parse
     (`E_GIT_READ_FAILED: git var GIT_AUTHOR_IDENT failed in <root>: fatal: invalid date format: <value>`).
+    Also a document the committed `path` would put outside the project root (`E_PATH_ESCAPES_ROOT: …`) or
+    outside the type's folder, the part of `path` before its first `{token}`
+    (`E_PATH_OUTSIDE_TYPE_FOLDER: Memory entries must reside in their type's folder: …`). Nothing is written.
   - Exit `1`, with `--workflow`: a `<ref>` that names no open instance (`workflow is not open: <ref>`, or
-    `unknown workflow: <ref>`); a `--step` that is not a ready step of the instance
+    `unknown workflow: <ref>`, as `workflow next` answers it); a `--step` that is not a ready step of the instance
     (`step '<key>' is not on the frontier of <instance>`); no ready step that adds this type
     (`no step of <instance> adds a <type>`); several, and no `--step`
     (`no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>`). Nothing is written.
@@ -1090,8 +1096,9 @@ ended report-bug (report-bug-minor-v1-plan)
 active: release-cycle (release-cycle-minor-v1-plan)
 ```
 
-- **Errors:** no open instance → `no active workflow to end`; a `<ref>` that names a workflow or a plan
-  with no open instance → `workflow is not open: <ref>`; a `<ref>` that names neither →
+- **Errors:** no open instance → `no active workflow to end`; a `<ref>` that names a workflow or an instance
+  plan with no open instance → `workflow is not open: <ref>`; a `<ref>` that names neither (a phase plan's
+  id included) →
   `unknown workflow: <ref>`; a `draft` plan → `workflow '<name>' was not submitted: run wingfoil memory
   submit <id>`; an incomplete instance → `workflow '<name>' is not complete: current step <key>`; all exit
   `1`. More than one `<ref>` → exit `2`.
@@ -1108,7 +1115,9 @@ wingfoil workflow list [--all]
 Unreleased (v0.3). Read-only. It reads the workflow files, `memory.yaml`, `dna.yaml` and the Memory
 documents **as committed at `HEAD`**, not the working tree (see [Git side effects](#git-side-effects)), so
 it answers from the same state as the other workflow commands. An uncommitted change to one of those inputs
-does not change the answer: it is reported as a `W_UNCOMMITTED_INPUTS` warning naming the file.
+does not change the answer: it is reported as a `W_UNCOMMITTED_INPUTS` warning naming the file. So is an
+uncommitted change to `roles.yaml` or a directive file, which `workflow next`, `status` and `show` read at
+`HEAD` too.
 
 Without `--all` it lists the workflows you can start (`startable`), plus an includable workflow when an
 open workflow has reached a phase that includes it — `dev-loop` while a `release-cycle` is in its
@@ -1210,8 +1219,9 @@ next step: decision-log-ingest.capture
   `no next step: workflow '<name>' is complete`; `no next step of workflow '<name>' is assigned to '<who>'`.
 - **Warnings:** `--assigned-to <who>` that names no member (name or email) and no `team.roles` role, or
   `me` when your git identity's email is no member's, prints a `warning:` line; the filter then keeps no step.
-- **Errors:** a `<ref>` that names no workflow and no open instance → `unknown workflow: <ref>`; a workflow
-  with no open instance → `workflow is not open: <ref>`; both exit `1`; an error in
+- **Errors:** a `<ref>` that names a workflow with no open instance, or the id of an instance plan that is
+  not open (a `done` one) → `workflow is not open: <ref>`; a `<ref>` that names neither (a phase plan's id
+  included) → `unknown workflow: <ref>`; both exit `1`; an error in
   the workflow files → exit `1`, as `workflow list`; more than one `<ref>` → exit `2`.
 - **Commit:** none.
 - **MCP:** the Resource `wingfoil://workflows/-/next` returns the same `--format json` payload (no `<ref>`, no
@@ -1270,7 +1280,7 @@ next step: dev-loop.green@task:task-130
   a step whose phase completes from evidence the repository can show → `phase '<workflow>.<phase>' completes from its evidence: <kinds>`;
   an instance with no next step → `workflow next`'s message (`no next step: workflow '<name>' is complete`);
   no open instance and no `<ref>` → `no active workflow to finalize`; a `<ref>` that selects no open
-  instance → `workflow is not open: <ref>` / `unknown workflow: <ref>`; on an approval phase, an identity
+  instance → `workflow is not open: <ref>` / `unknown workflow: <ref>`, as `workflow next` answers it; on an approval phase, an identity
   without the `approver` role → `user not authorized to approve type '<type>'`; staged changes in the index
   → `refusing to commit '<subject>': the index holds staged changes (<paths>) …` (the record never takes
   them along); no git identity → `git identity not configured (user.name/user.email)`; an error in the
@@ -1332,8 +1342,9 @@ pending approvals: 1
 
 - **Exit `0`** for every deduced outcome; with no open workflow and nothing waiting at a gate, the message
   `no open workflows`.
-- **Errors:** a `<ref>` that names no workflow and no open instance → `unknown workflow: <ref>`; a workflow
-  with no open instance → `workflow is not open: <ref>`; both exit `1`; an error in the workflow files → exit
+- **Errors:** a `<ref>` that names a workflow with no open instance, or the id of an instance plan that is
+  not open (a `done` one) → `workflow is not open: <ref>`; a `<ref>` that names neither (a phase plan's id
+  included) → `unknown workflow: <ref>`; both exit `1`; an error in the workflow files → exit
   `1`, as `workflow list`; more than one `<ref>` → exit `2`.
 - **Commit:** none.
 - **MCP:** the Resource `wingfoil://workflows/-/status` returns the same `--format json` payload (no `<ref>`).
@@ -1412,7 +1423,9 @@ A project's `memory.yaml` must declare a `plan` type; `wingfoil init` declares o
   `workflow '<name>' needs a <type> element: give --element <type>:<id>`; `workflow '<name>' declares no
   element: --element is not accepted`; `element not found: <type>:<id>`; `plan id already exists: <id>`.
 - **Errors (exit `2`):** no `<name>`, more than one positional, a malformed `--element`
-  (`malformed element-ref "<ref>": expected <type>:<id>`), or a `--set` other than `phase=` / `scope=`.
+  (`malformed element-ref "<ref>": expected <type>:<id>`), a `--set` other than `phase=` / `scope=`, or a
+  `--set` value refused as `memory add` refuses it (`--set scope holds a '.' or '..' path segment:
+  "../../etc"`); nothing is written.
 - **Commit:** `wf(plan): add <id>`, then `wf(plan): submit <id>`.
 
 ### `wingfoil workflow create`
