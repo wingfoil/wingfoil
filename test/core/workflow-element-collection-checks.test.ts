@@ -50,6 +50,8 @@ team:
       roles: [ approver ]
   roles:
     - name: approver
+paths:
+  sources: [ src/ ]
 `;
 
 function writeProject(root: string, workflows: Record<string, string>): void {
