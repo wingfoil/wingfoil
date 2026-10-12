@@ -72,3 +72,17 @@ deterministic.
 - **Refines:** `dl-132` elements 3 and 4. **Related:** `task-277` (the `define-scope` sweep, approver ruling
   2026-10-10, item 5), `dl-016` (the sweep pattern), `P4.12` (check execution).
 - **Source:** `task-212`'s independent review (W3 B4), filed by `bug-ingest-rel-v0.3-w3b4-review-findings-plan` (item C8).
+
+**Note (2026-10-12, a case for Q2 (ii) from wave 3 batch B6; W3 B6 follow-ups,
+`bug-ingest-rel-v0.3-w3b6-review-findings-plan` item C2).** Recorded as evidence; the Decision above is unchanged.
+
+- `task-277` made `define-scope` sweep the `scheduled` change-proposals into the release's `features:` as prose plus
+  an unbound post-check (approver ruling 2026-10-12, D1 (c)). `node dist/cli.js workflow show release-planning
+  --format json` on `main` at `0da232cb` → `define-scope` evidence `["state", "produces"]`, action `memory.submit`,
+  post-check `change-proposals.swept(…)` `unbound`, `evaluated: false`.
+- So on a release already past `draft` the phase is deduced complete from its state evidence, and the frontier never
+  offers the sweep again; a change-proposal scheduled after `define-scope` ran (into a release that is `planning` or
+  `in-development`) reaches no sweeping phase at all and depends on someone remembering the hand step (`task-277`'s
+  independent review, finding F3).
+- A bound Q2 (ii) exit check on `schedule` (the target release's `features:` holds the id) would close that gap where
+  the scheduling happens, whatever the release's state.
