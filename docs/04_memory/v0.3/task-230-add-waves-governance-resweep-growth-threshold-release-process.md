@@ -27,7 +27,7 @@ v0.2 grew 134 % after planning with no trigger. A wave becomes a declared unit o
 
 ## Implementation Notes
 
-- **Size:** M · **wave:** 3 · **kind:** feature (`dl-133` Q1 (b)).
+- **Size:** M, resized to **L** on 2026-10-12 (approver ruling D1 (i): the `element:<field>` loader and deduction code joins this task) · **wave:** 3 · **kind:** feature (`dl-133` Q1 (b)).
 - **Implements:** dl-100 §1 (a), §2, §3 (a), §4 ((b) planning rule); dl-102 §2; dl-133 §2 (Q2 (a)) (the wave-boundary phase).
 - **Features:** P4.1, P4.13.
 - **Planning ruling:** Approver ruling 2026-09-30 (plan R19): `dl-100` §5 (a WIP limit on decision-logs) is dropped — no limit on decision-logs is implemented.
@@ -44,7 +44,7 @@ v0.2 grew 134 % after planning with no trigger. A wave becomes a declared unit o
 
 ## Execution Notes
 
-### Design (architect, 2026-10-11) — STOPPED: the wave is not expressible in spec-003's vocabulary
+### Design, first pass (architect, 2026-10-11) — STOPPED: the wave is not expressible in spec-003's vocabulary
 
 Read (dl-015): the Execution Notes of `task-199` (zero-error test, `{ type, path }` produces, selections),
 `task-219` (release-cycle 1.3, the candidate re-cut re-entry) and `task-222` (release-cycle 1.4,
@@ -136,3 +136,125 @@ re-plan checkpoint, recorded in `## Scope changes`) and `task` gains `wave:` (`[
   the rest of v0.3 (dev-loop plan §2: a rule is in force from its task's approval).
 
 No red, green or refactor ran; no gate ran (no code or config changed).
+
+### Design, second pass (architect, 2026-10-12) — after the approver's rulings
+
+Rulings (2026-10-12, `devloop-kit/w3-b6-notes.md` "Approver rulings on task-230" and "second set"): **D1 (a)** —
+`spec-003` gains `element:<field>`, and a workflow iterated over it keeps the enclosing bound element; **(i)** the
+code joins this task (M → L); **D2** — for `ready` decision-logs `reconcile-governance` only checks coverage, no
+transition, no assignment; **D3** — `release` `amendable: true` (memory.yaml 3.2), `release-line` stays false, the
+`init` scaffold kept in sync; **D4** — the growth threshold is declared, in force from v0.4's planning;
+`minor-v0.3` gets `backlog_committed: 121` and a `## Scope changes` row by amendment. Handover from `task-239`
+(bug-292): the `KNOWN_READ_FAILURES` sentence in `advance-pinned-build`. Main merged first (`8febbd06`, main
+`3e692099`).
+
+Design decisions taken here (for the approver to confirm):
+- **Scope label.** An `element:` iteration's scope is `<type>:<id>/<field>#<key>` (e.g.
+  `release:minor-v0.4/waves#w0`), not `element:waves#w0`: a phase record carries no element for an item scope
+  (`hasRecord`, `src/workflow/deduce.ts`), so two releases' `w0` in one instance would share a record.
+- **No `include: e2e-smoke` inside the wave.** `e2e-smoke.gate` produces
+  `docs/07_gates/rl-…/rel-{release.version}-e2e-smoke.md`; a wave including it would write the release's own
+  gate report and satisfy `release-cycle.e2e-smoke` (and need its approval) at every wave. `wave-checks` is a
+  leaf phase instead, with its own per-wave report (`…-{item}-e2e-smoke.md`) checked by the bound
+  `e2e-smoke-passed`, plus `docs.parity` (bound) and `docs.examples.passing` (unbound: no single command runs the
+  five `run.sh`, `docs/examples/README.md`). The ruling's "may include" is still implemented and tested
+  (`wave.yaml` declares `element: release`).
+- **`re-plan` is its own checkpoint phase** after `re-sweep`: a selection phase cannot also be a record, and the
+  growth threshold needs a record to be cleared by. It is an approval with no carried element, so `workflow
+  finalize` records it (checkpoints 29 → 30, finalize approvals 6 → 7).
+- **The growth threshold counts** tasks with this release's `release` and a status other than `deprecated`
+  (the `task.stop_the_line.open` reading of 2026-10-10), strictly more than 125 % of `backlog_committed`; a
+  release with no `backlog_committed` never fires.
+- **Malformed entries** (not a list, a duplicate or invalid key) make the phase one unexpanded step with
+  `W_UNRESOLVED_TOKEN` at `phases[<i>].iterate_over`, like a `where` token with no value; no new diagnostic code
+  (so no spec-009 / parity change).
+
+AC classification (testing directive T1; config is new declared content, so red-first like `task-219`'s AC 2):
+
+| AC | Class | Test |
+|---|---|---|
+| 1 — wave + re-sweep in spec-003's vocabulary (+ the `element:` code, D1) | red-first | `test/workflow/deduce-element-collection.test.ts`, `test/core/workflow-element-collection-checks.test.ts`, `test/core/release-waves-config.test.ts` AC 1 |
+| 2 — release-planning reconcile/growth/build-backlog/define-scope | red-first | `release-waves-config.test.ts` AC 2 |
+| 3 — templates, `memory.yaml` release fields, zero errors | red-first | `release-waves-config.test.ts` AC 3; conformance at `HEAD` |
+| 4 — versions, `workflow list` zero errors | red-first | `release-waves-config.test.ts` AC 4; `test/lint/version-bump.test.ts`; `node dist/cli.js workflow list` |
+| 5 — WORKFLOW.md draws the wave; task-148's test green | characterization of the existing test | `test/docs/workflow-md.test.ts` |
+
+### Red (2026-10-12)
+
+- `effe3116` — three new suites. `npx jest test/workflow/deduce-element-collection.test.ts` → **7 failed / 7**
+  (`TypeError: Cannot read properties of undefined (reading 'id_pattern')`: `element:waves` read as a type);
+  `test/core/workflow-element-collection-checks.test.ts` → 5 failed, 1 passed; `test/core/release-waves-config.test.ts`
+  → **21 failed / 21** (e.g. `Expected: "wave"`, `Received: "dev-loop"`; `no workflow 'wave' in the registry`).
+- Two red corrections, each committed before green and each re-run red against the unchanged `src/` (deviation
+  from T4's single red, recorded as `task-211` did): `af9a0b13` — the load fixture's `dna.yaml` lacked `paths:`, so
+  the registry refused it before any workflow check (still 5 failed, 1 passed); `2b6669f1` — a trail scope's
+  `ElementRef` carries `status` (still 7 failed / 7).
+
+### Green (2026-10-12)
+
+- `9e5b1735` — code: `src/core/workflow-diagnostics.ts` (`element:` is a collection reference; the
+  `E_WORKFLOW_ELEMENT_MISMATCH` rule keeps the enclosing element), `src/core/workflow-core-checks.ts`
+  (`E_WORKFLOW_COLLECTION_UNRESOLVED` for no field name or no including element), `src/workflow/deduce.ts`
+  (`elementCollection`: entries from the innermost bound element, label, undecided cases). Config: new
+  `.wingfoil/workflows/custom/wave.yaml` 1.0 (`tasks`, `re-sweep`, `re-plan`, `wave-checks`), `workflows.yaml`
+  1.5 → 1.6, `release-cycle.yaml` 1.4 → 1.5, `release-planning.yaml` 1.8 → 1.9 (separate blocks per phase:
+  advance-pinned-build comment, define-scope, reconcile-governance, build-backlog, commit-backlog — `task-277`
+  adds its define-scope sweep next to them), `dev-loop.yaml` 1.8 → 1.9, `memory.yaml` 3.1 → 3.2, templates
+  `release.md` and `task.md` (`tmpl_version: 261012`), `src/storage/templates.ts` (`release: true`),
+  `WORKFLOW.md` (Phase 6, the new *Wave* sub-diagram, dev-loop start, release-planning, release amendable, roles),
+  and `test/core/adr-amendable.test.ts` (the release value it pins, D3).
+- `61e403ac`, `d57ce591` — the repository pins re-measured: `workflow-repository-conformance.test.ts` (5 new
+  unbound checks, `wave.re-plan` checkpoint and finalize approval) and `workflow-status.test.ts` (§5.1's list).
+- `cdbad5bc` — `.wingfoil/README.md` tree; `docs/cli-reference.md` `memory amend` (the `init` scaffold's amendable
+  types now include `release`, and `plan`, missing before; the error example names `release-line`).
+- `npx jest test/workflow/deduce-element-collection.test.ts test/core/workflow-element-collection-checks.test.ts
+  test/core/release-waves-config.test.ts` → 7 + 6 + 21 passed.
+
+### Refactor (2026-10-12)
+
+- `673f63ec`, `1b933a1b` (the type cast) — the mismatch rule returns no mismatch when the including workflow has no
+  element (the core check reports it, once); two refactor suites cover the unbound cases
+  (`test/workflow/deduce-element-collection-unbound.test.ts`, `test/core/workflow-element-collection-unbound-checks.test.ts`).
+- Gates (dl-170 slot via `waitslot.sh`, `--maxWorkers=2`, foreground or tracked):
+  - `npm test -- --maxWorkers=2` at `9e5b1735`+`61e403ac` → 1 failed (`workflow-status.test.ts`, §5.1's list, fixed
+    in `d57ce591`), then `npm run test:coverage -- --maxWorkers=2` at `d57ce591` → **385 suites, 7105 passed**,
+    All files **99.29 % stmts / 97.18 % branches / 97.94 % funcs / 99.71 % lines** (B5 gate: 99.3 / 97.22 / 97.93 /
+    99.7, `devloop-kit/gate-w3b5-cov2.log`); `deduce.ts` 99.69/99.42 (573-574 then uncovered, covered by the
+    refactor suite), `workflow-core-checks.ts` 100, `workflow-diagnostics.ts` 100/98.93.
+  - after the refactor: `npx jest test/core/workflow test/workflow test/docs test/lint test/core/release-waves-config.test.ts
+    test/core/adr-amendable.test.ts` → **66 suites, 835 passed**.
+  - `npm run lint` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0 (after the cast fix); `npx tsc -p
+    tsconfig.build.json --noEmit` exit 0; `npm run docs:api` exit 0.
+  - `node dist/cli.js workflow list --format json` → **0 errors**, 90 warnings, exit 0. The registry at `HEAD`:
+    27 workflows, 105 phases, 0 errors, 84 warnings (`main` `3e692099`: 26, 101, 0, 79).
+  - `node scripts/check-governance.cjs --base 0671d035` → 0 findings; `node scripts/lint-claims.cjs --base 0671d035`
+    → 0 warnings.
+- No sw-life-cycle instance is open here (`node dist/cli.js workflow status`: nine ingest instances), so the
+  repository's reported deduction does not change.
+
+### Pending amendments (approver) — uncommitted in the worktree
+
+- `spec-003-workflows-yaml-schema` — Proposed `--reason`: "task-230 (approver ruling D1 (a), 2026-10-12): §
+  Collections gains element:<field>, a list read from the bound element, and the rule that such an iteration keeps
+  the enclosing bound element; the ELEMENT_MISMATCH and COLLECTION_UNRESOLVED rows gain the element: cases and the
+  Layer 2 file count is 27. The code is in task-230."
+- `spec-017-workflow-commands-and-state-deduction` — Proposed `--reason`: "task-230 (approver ruling D1 (a),
+  2026-10-12): §4.6 iterates an element's field with a per-element scope label, §5.1 lists wave.re-plan among the
+  approvals finalize records, and §12 is re-measured at 27 workflows, 105 phases and 84 warnings."
+- `spec-001-memory-yaml-schema` — Proposed `--reason`: "task-230 (approver ruling D3, 2026-10-12): the release type
+  is amendable in this repository's example, as memory.yaml 3.2 declares; release-line stays false."
+- `minor-v0.3` (release; amendable only once this branch's `memory.yaml` 3.2 is on `main`, so the coordinator
+  records it after the merge, or by hand before) — `backlog_committed: 121` and a `## Scope changes` row: 152
+  counted against 121, +25.6 %, over 151.25. Proposed `--reason`: "task-230 (approver ruling D4, 2026-10-12): the
+  backlog committed at release-planning was 121 tasks, and the scope grew to 152 counted tasks without a re-plan
+  checkpoint. The growth threshold is in force from v0.4."
+- No `dl-100` note: D2 does not change `dl-100`, whose Action 2 already asks the filter to include `ready`
+  decision-logs.
+
+### Retrospective
+
+- Design stopped once on a vocabulary gap the AC itself foresaw; the ruling and the code then fit in one branch.
+  Evidence: the first-pass design above, `e07b9adf`.
+- Two red corrections came from fixture shape (a `dna.yaml` with no `paths:`, an `ElementRef` with `status`), not
+  behaviour: a red fixture is cheaper to check by loading it once before asserting. Evidence: `af9a0b13`, `2b6669f1`.
+- `tsc --noEmit -p tsconfig.json` caught a readonly cast in a refactor-only test that targeted jest runs accept.
