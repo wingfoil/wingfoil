@@ -98,8 +98,8 @@ A `server.json` at the repository root describes the MCP server for the registry
 `package.json` `mcpName`, the description, the repository URL, and one `packages[]` entry for the npm
 package `wingfoil` over `stdio` with the argument `mcp` (the command `wingfoil mcp` starts). Its
 `version` and every `packages[].version` equal `package.json` `version`, checked by §4. It is not in
-`files`: it is the input of the MCP Registry listing, and publishing to the registry is not part of
-this pipeline — it happens with the approver at publication time (`dl-093` point 6, `dl-130`).
+`files`: it is the input of the MCP Registry listing, which §3 stage 6 publishes from the pipeline
+(`dl-130` step 2; `dl-093` point 6 left the recurring step to `dl-130`).
 
 ### 1b. `glama.json` (Glama listing claim, `dl-093`, release-planning-rel-v0.3 R7)
 
@@ -182,6 +182,21 @@ Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a de
    bounded by declared values below the GitHub-hosted runner's 6-hour job limit; when the approval comes
    later, the approver re-runs the failed job. Whether the Release is marked latest is one job-level value,
    left at `gh`'s default.
+6. **mcp-registry** — after promote, beside stage 5, the MCP Registry listing of `server.json` (`dl-130`
+   step 2). The job alone besides promote holds `id-token: write`. It installs `mcp-publisher` from the
+   registry project's release by exact version, checking the archive against a SHA-256 pinned in the
+   workflow before unpacking it, runs `mcp-publisher validate server.json`, then waits for the exact
+   version on npm with stage 5's bounded poll — the registry verifies ownership by reading `mcpName` in the
+   **published** `package.json` — and only then runs `mcp-publisher login github-oidc` and `mcp-publisher
+   publish server.json`. The OIDC token is granted `io.github.<repository owner>/*`, i.e.
+   `io.github.wingfoil/*`, with no OAuth app in between (the route `bug-173` proposes). The job has one job-level `if:` for
+   the rule that decides whether a version is listed at all; nothing in it names `latest`.
+
+Every job declares `timeout-minutes` (`dl-057` (b), option 1): stage and promote from the first real
+run's measured table (`task-077`), gate from the CI duration of its `prepublishOnly` step, which outgrew
+that table, and the two polling jobs their poll's bound plus a margin, below
+the hosted runner's 6-hour job limit. The `npm-publish` approval happens before promote starts on a
+runner, so it is not part of promote's bound.
 
 Every third-party action the workflow uses is pinned by commit SHA to a release whose `runs.using`
 is a Node runtime the GitHub-hosted runners still ship, so no job runs an action on a runtime it was
@@ -213,7 +228,9 @@ not part of `publish.yml` or CI: it starts a local registry, so it runs once per
   merges (`dl-024`; never on a `design/*` branch). **`main` must be pushed to `origin` before the tag
   is pushed:** CI asserts that the tagged commit is an ancestor of `origin/main`, not of anyone's
   local `main` (`dl-074`). Tag ↔ `package.json` `version` must match (CI asserts this before
-  promote). See the *Revision (2026-09-28) — §4* note below.
+  promote). The gate also refuses a lightweight tag: `refs/tags/<tag>` must name a tag object
+  (`check-release-tag.cjs --annotated`, `dl-057` (d) option 1). See the *Revision (2026-09-28) — §4*
+  note below.
 - The same gate step (`checkReleaseTag`) asserts that `server.json` `version` and every
   `packages[].version` equal `package.json` `version`, so the MCP listing can never name a version
   other than the one published (`dl-093` point 5, ratified option (a)). The cases are pinned in
@@ -694,3 +711,17 @@ the ruling gave as an example: a GitHub-hosted job runs for at most 6 hours; the
 is re-running the failed job, written in `publish.yml`'s header runbook. The pins are
 `test/cli/publish-pipeline.test.ts`, `test/cli/changelog-section.test.ts` and `test/cli/wait-npm-version.test.ts`.
 Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions above.
+
+**Revision (2026-10-11, `task-238-publish-mcp-registry-github-actions-bound-publish-job`) — §1a, §3 stage 6
+and job timeouts, §4 annotated tag (`dl-130` step 2, `dl-057` (b) and (d), `bug-173`).** §1a said publishing
+to the MCP Registry was not part of this pipeline and happened with the approver at publication time; the
+approver's manual publish of v0.2.2 was refused with a 403; `bug-173`'s suspected cause (not verified) is that
+the registry's OAuth app could not see the `wingfoil` organisation. The OIDC route holds either way: the registry
+grants an OIDC token `io.github.<repository owner>/*` (`github_oidc.go` `buildPermissions`, registry v1.8.1). §3 gains stage 6, the `mcp-registry` job, which authenticates with the
+workflow's own OIDC token, and §1a now points to it. §3 also states that every job is bounded in time
+(`dl-057` (b) option 1). §4 kept "annotated" since `task-060`, but nothing checked it, and `dl-057` (d) left
+open whether `actions/checkout` keeps the pushed tag object; the v0.2.2 gate log (job `109608425923`) shows
+checkout fetching `+refs/tags/*:refs/tags/*` and checking out `refs/tags/v0.2.2`, so the check is meaningful
+and the gate now refuses a lightweight tag (option 1, not option 2's relaxation). The pins are
+`test/cli/publish-pipeline.test.ts` and `test/cli/check-release-tag.test.ts`. Edited in place: no supersede,
+no state change, no `version:` bump (`dl-047`), as in the revisions above.

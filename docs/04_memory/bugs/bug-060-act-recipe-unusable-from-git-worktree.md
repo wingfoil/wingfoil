@@ -2,7 +2,7 @@
 id: "bug-060-act-recipe-unusable-from-git-worktree"
 type: bug
 title: "The `act` recipe in `publish.yml`'s header cannot work from a git worktree, and says so nowhere"
-status: planned
+status: closed
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
@@ -82,3 +82,7 @@ Filed from finding **F5** of `task-077-first-real-staging-run` (`done`), at the 
 approve commit `ac10060` directs. Severity **low** (doc/recipe defect), unchanged by the reviewer. No
 fix task filed in this ingest: only the three release blockers (F2, F3, F4) and F1 were given tasks —
 this one is a one-line header edit best carried by whoever next touches `publish.yml`.
+
+### Retrospective
+
+- None beyond its finding: a one-line caveat carried by the next task to touch `publish.yml` (task-238, 2026-10-11); filed in v0.2 and carried by no task until v0.3 release-planning scheduled task-238.

@@ -357,7 +357,7 @@ flowchart TD
     RC["**release-commit** *(tech-lead)*\ngit.commit: the version bump (package.json, package-lock.json,\nserver.json, CHANGELOG.md, SECURITY.md) → merged: the candidate"]
     SR["**staging-rehearsal** *(qa)*\nnpm run publish:staging -- --expect-commit <candidate> --transcript …\n✔ staging-rehearsal-passed: closing line + the stamp's commit\n`docs/07_gates/rl-{release-line}/rel-{version}-staging-rehearsal.md`"]
     TG["**tag** *(tech-lead)*\n✔ pre: staging-rehearsal-passed (again)\ngit.tag on the candidate the transcript names"]
-    PB["**publish** *(tech-lead)*\n✔ pre: services.verify-sweep (warn) — the approver runs each service's verify\npush the tag → publish.yml: gate → stage → promote (npm stage publish) → release\n🔑 Approval gate — *approver* (npm stage approve, 2FA)\nrelease: GitHub Release once npm serves the version"]
+    PB["**publish** *(tech-lead)*\n✔ pre: services.verify-sweep (warn) — the approver runs each service's verify\npush the tag → publish.yml: gate → stage → promote (npm stage publish) → release + mcp-registry\n🔑 Approval gate — *approver* (npm stage approve, 2FA)\nrelease: GitHub Release · mcp-registry: MCP Registry listing (GitHub OIDC) — once npm serves the version"]
     MR["**mark-released** *(tech-lead)*\nrelease: releasing → released"]
 
     RC --> SR --> TG --> PB --> MR

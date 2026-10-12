@@ -17,7 +17,9 @@
  * `publish-metadata.test.ts`).
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { load as yamlLoad } from 'js-yaml';
@@ -39,6 +41,7 @@ interface WorkflowStep {
   readonly name?: string;
   readonly uses?: string;
   readonly run?: string;
+  readonly shell?: string;
   readonly if?: string;
   readonly env?: Readonly<Record<string, string>>;
   readonly with?: Readonly<Record<string, unknown>>;
@@ -129,13 +132,14 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
     expect(parsed.on.push).toEqual({ tags: ['v[0-9]+.[0-9]+.[0-9]+'] });
   });
 
-  it('runs gate → stage → promote → release as a strict `needs` chain (task-229 adds release)', () => {
+  it('runs gate → stage → promote, then release and mcp-registry each after promote (task-229, task-238)', () => {
     const { parsed } = readWorkflow();
-    expect(Object.keys(parsed.jobs)).toEqual(['gate', 'stage', 'promote', 'release']);
+    expect(Object.keys(parsed.jobs)).toEqual(['gate', 'stage', 'promote', 'release', 'mcp-registry']);
     expect(parsed.jobs.gate?.needs).toBeUndefined();
     expect(parsed.jobs.stage?.needs).toBe('gate');
     expect(parsed.jobs.promote?.needs).toBe('stage');
     expect(parsed.jobs.release?.needs).toBe('promote');
+    expect(parsed.jobs['mcp-registry']?.needs).toBe('promote');
   });
 
   it('gate asserts tag-on-main + tag↔version, then prepublishOnly, the dry-run manifest, and packs once', () => {
@@ -143,6 +147,7 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
     const order = [
       'git merge-base --is-ancestor "$GITHUB_SHA" origin/main',
       'node scripts/check-release-tag.cjs "$GITHUB_REF_NAME"',
+      'node scripts/check-release-tag.cjs --annotated "$GITHUB_REF_NAME"',
       'npm ci',
       'npm run prepublishOnly',
       'npm publish --dry-run --ignore-scripts',
@@ -183,13 +188,16 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
     expect(runs(promote)).not.toContain('npm publish');
   });
 
-  it('grants `id-token: write` (OIDC provenance) to promote only and `contents: write` to release only; the workflow default is read-only', () => {
+  it('grants `id-token: write` to promote (npm OIDC, provenance) and mcp-registry (registry OIDC) only, `contents: write` to release only; the workflow default is read-only', () => {
     const { parsed } = readWorkflow();
     expect(parsed.permissions).toEqual({ contents: 'read' });
     expect(parsed.jobs.promote?.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
+    expect(parsed.jobs['mcp-registry']?.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
     expect(parsed.jobs.release?.permissions).toEqual({ contents: 'write' });
     expect(parsed.jobs.gate?.permissions).toBeUndefined();
     expect(parsed.jobs.stage?.permissions).toBeUndefined();
+    const withIdToken = Object.entries(parsed.jobs).filter(([, job]) => job.permissions?.['id-token'] !== undefined);
+    expect(withIdToken.map(([name]) => name)).toEqual(['promote', 'mcp-registry']);
   });
 
   it('keeps gate and stage on the 22.12.0 floor and ties the choice to bug-023 (adr-010)', () => {
@@ -340,6 +348,243 @@ describe('release job (task-229) — the GitHub Release follows npm', () => {
     expect(header).toContain('npm view wingfoil@<version> version');
     expect(header).toMatch(/Re-run failed jobs/);
     expect(header).toContain('task-229');
+  });
+});
+
+/**
+ * task-238 (`dl-130` step 2, `bug-173`; spec-015 §3) — the MCP Registry listing is published from this
+ * workflow. `mcp-publisher login github-oidc` gets a token for `io.github.<repository owner>/*` — here
+ * `io.github.wingfoil/*` — with no OAuth app in between (the 403 of `bug-173`). The registry verifies npm
+ * ownership by reading `mcpName` in the PUBLISHED `package.json`, so the job waits for the exact version on npm
+ * with task-229's bounded poll. `mcp-publisher` is a pinned release whose archive is checked against a frozen
+ * SHA-256 before it is unpacked. `latest` is never hard-coded (dl-159 handover: task-266 extends the one `if:`).
+ */
+describe('mcp-registry job (task-238) — the MCP Registry listing follows npm', () => {
+  /** Frozen from the release's `registry_1.8.1_checksums.txt` (task-238 Execution Notes, AC 2). */
+  const MCP_PUBLISHER: readonly [version: string, sha256: string] = [
+    '1.8.1',
+    'a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc',
+  ];
+  const job = (): WorkflowJob | undefined => readWorkflow().parsed.jobs['mcp-registry'];
+  const step = (needle: string): WorkflowStep | undefined => job()?.steps.find((s) => s.run?.includes(needle));
+
+  it('runs after promote, behind one job-level `if:` a later task can extend', () => {
+    expect(job()?.needs).toBe('promote');
+    expect(job()?.if).toBe("${{ needs.promote.result == 'success' }}");
+  });
+
+  it('installs, validates, waits for the exact version on npm, logs in over OIDC, then publishes — in that order', () => {
+    const script = runs(job());
+    const order = [
+      'sha256sum --check --strict',
+      '"$RUNNER_TEMP/mcp-publisher" validate server.json',
+      'node scripts/wait-npm-version.cjs "$GITHUB_REF_NAME"',
+      '"$RUNNER_TEMP/mcp-publisher" login github-oidc',
+      '"$RUNNER_TEMP/mcp-publisher" publish server.json',
+    ].map((cmd) => script.indexOf(cmd));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('waits with the same declared bounds as the release job, below its own timeout (≤ 6 h hosted limit)', () => {
+    const wait = step('node scripts/wait-npm-version.cjs');
+    const release = readWorkflow().parsed.jobs.release?.steps.find((s) => s.run?.includes('node scripts/wait-npm-version.cjs'));
+    expect(wait?.run).toBe(release?.run);
+    const match = /--timeout-minutes (\d+) --interval-seconds (\d+)/.exec(wait?.run ?? '');
+    expect(match).not.toBeNull();
+    const jobTimeout = job()?.['timeout-minutes'] ?? 0;
+    expect(jobTimeout).toBeGreaterThan(Number(match?.[1]));
+    expect(jobTimeout).toBeLessThanOrEqual(360);
+  });
+
+  it('pins mcp-publisher to one release and one archive SHA-256, downloaded by exact version — never `releases/latest`', () => {
+    const [version, sha256] = MCP_PUBLISHER;
+    expect(job()?.env).toEqual({ MCP_PUBLISHER_VERSION: version, MCP_PUBLISHER_SHA256: sha256 });
+    const install = step('sha256sum --check --strict');
+    expect(install?.run).toContain(
+      'https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz',
+    );
+    const text = JSON.stringify(job());
+    expect(text).not.toContain('releases/latest');
+    expect(text).not.toMatch(/@latest\b/);
+    expect(text).not.toContain('--latest');
+  });
+
+  it('skips the wait, the login and the publish under act (no OIDC issuer); install and validate still run', () => {
+    expect(step('node scripts/wait-npm-version.cjs')?.if).toBe('${{ !env.ACT }}');
+    expect(step('login github-oidc')?.if).toBe('${{ !env.ACT }}');
+    expect(step('publish server.json')?.if).toBe('${{ !env.ACT }}');
+    expect(step('sha256sum --check --strict')?.if).toBeUndefined();
+    expect(step('validate server.json')?.if).toBeUndefined();
+  });
+
+  it('reads no secret and uses no environment; checks out without persisting the token, on the gate’s Node floor', () => {
+    const current = job();
+    expect(current?.environment).toBeUndefined();
+    expect(JSON.stringify(current)).not.toContain('secrets.');
+    for (const s of current?.steps ?? []) expect(s.env).toBeUndefined();
+    const checkout = current?.steps.find((s) => s.uses?.startsWith('actions/checkout@'));
+    expect(checkout?.with?.['persist-credentials']).toBe(false);
+    const setup = current?.steps.find((s) => s.uses?.startsWith('actions/setup-node@'));
+    expect(setup?.with?.['node-version']).toBe('${{ env.NODE_VERSION }}');
+  });
+
+  it('documents the job, the OIDC namespace and the re-run recovery as runbook step 8, after step 7', () => {
+    const { raw } = readWorkflow();
+    const header = raw.slice(0, raw.indexOf('\nname: publish'));
+    expect(header).toMatch(/mcp-registry\s+→/);
+    expect(header).toContain('io.github.wingfoil');
+    expect(header).toContain('bug-173');
+    const seven = header.search(/\n#\s+7\. /);
+    const eight = header.search(/\n#\s+8\. /);
+    expect(seven).toBeGreaterThan(0);
+    expect(eight).toBeGreaterThan(seven);
+    const stepEight = header.slice(eight, header.indexOf('Rollback posture'));
+    expect(stepEight).toContain('mcp-registry');
+    expect(stepEight).toMatch(/Re-run failed jobs/);
+  });
+
+  /** The install step, executed with bash and a fake `curl` that serves a locally built archive. */
+  describe('install step — executed with a fake curl', () => {
+    let work: string;
+    let archiveSha256: string;
+
+    beforeEach(() => {
+      work = mkdtempSync(join(tmpdir(), 'wf-mcp-publisher-'));
+      for (const dir of ['bin', 'pkg', 'runner-temp', 'record']) mkdirSync(join(work, dir));
+      writeFileSync(join(work, 'pkg', 'mcp-publisher'), '#!/usr/bin/env bash\necho "mcp-publisher fake"\n');
+      chmodSync(join(work, 'pkg', 'mcp-publisher'), 0o755);
+      writeFileSync(join(work, 'pkg', 'README.md'), 'not extracted\n');
+      const archive = join(work, 'archive.tar.gz');
+      const tar = spawnSync('tar', ['-czf', archive, '-C', join(work, 'pkg'), 'mcp-publisher', 'README.md']);
+      expect(tar.status).toBe(0);
+      archiveSha256 = createHash('sha256').update(readFileSync(archive)).digest('hex');
+      // Records the URL and writes the archive to the `-o` path, like `curl -fsSL -o <file> <url>`.
+      writeFileSync(
+        join(work, 'bin', 'curl'),
+        [
+          '#!/usr/bin/env bash',
+          'out=""; url=""',
+          'while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) shift;; *) url="$1"; shift;; esac; done',
+          'printf "%s\\n" "$url" > "$RECORD_DIR/url"',
+          'cp "$FAKE_ARCHIVE" "$out"',
+        ].join('\n'),
+      );
+      chmodSync(join(work, 'bin', 'curl'), 0o755);
+    });
+
+    afterEach(() => rmSync(work, { recursive: true, force: true }));
+
+    it('declares `shell: bash`, so GitHub runs it with -eo pipefail as this test does (review F5)', () => {
+      expect(step('sha256sum --check --strict')?.shell).toBe('bash');
+    });
+
+    function runInstall(sha256: string): number | null {
+      const install = step('sha256sum --check --strict');
+      // `shell: bash` runs `bash --noprofile --norc -eo pipefail {0}` on GitHub-hosted runners.
+      const result = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', install?.run ?? 'exit 99'], {
+        cwd: work,
+        encoding: 'utf-8',
+        env: {
+          PATH: `${join(work, 'bin')}:${process.env.PATH ?? ''}`,
+          RECORD_DIR: join(work, 'record'),
+          FAKE_ARCHIVE: join(work, 'archive.tar.gz'),
+          RUNNER_TEMP: join(work, 'runner-temp'),
+          MCP_PUBLISHER_VERSION: MCP_PUBLISHER[0],
+          MCP_PUBLISHER_SHA256: sha256,
+        },
+      });
+      return result.status;
+    }
+
+    it('downloads the pinned release asset and unpacks only the binary when the checksum matches', () => {
+      expect(runInstall(archiveSha256)).toBe(0);
+      expect(readFileSync(join(work, 'record', 'url'), 'utf-8').trim()).toBe(
+        `https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER[0]}/mcp-publisher_linux_amd64.tar.gz`,
+      );
+      expect(existsSync(join(work, 'runner-temp', 'mcp-publisher'))).toBe(true);
+      expect(existsSync(join(work, 'runner-temp', 'README.md'))).toBe(false);
+    });
+
+    it('fails before unpacking when the archive does not match the pinned SHA-256', () => {
+      expect(runInstall(MCP_PUBLISHER[1])).not.toBe(0);
+      expect(existsSync(join(work, 'runner-temp', 'mcp-publisher'))).toBe(false);
+    });
+  });
+});
+
+/**
+ * task-238 (`dl-057` (b), option 1) — every job is bounded in time. The values are task-077's measured table
+ * (gate 15, stage 20, promote 30), and the two polling jobs carry their poll's bound plus a margin. The header
+ * states each job's value next to its name, so a value changed in one place only fails here.
+ */
+describe('job timeouts (task-238) — dl-057 (b)', () => {
+  it('declares a positive integer `timeout-minutes` on every job, the hosted 6 h limit at most', () => {
+    const { parsed } = readWorkflow();
+    for (const [name, job] of Object.entries(parsed.jobs)) {
+      const minutes = job['timeout-minutes'];
+      expect([name, Number.isInteger(minutes) && (minutes ?? 0) > 0]).toEqual([name, true]);
+      expect(minutes).toBeLessThanOrEqual(360);
+    }
+  });
+
+  it('states each value and its sources (task-077’s measured table, the CI packaging gate) in the header', () => {
+    const { raw, parsed } = readWorkflow();
+    const header = raw.slice(0, raw.indexOf('\nname: publish'));
+    expect(header).toContain('task-077');
+    expect(header).toContain('dl-057');
+    // review F1: today's prepublishOnly takes ~7 min on a hosted runner (CI run 38166281488), not task-077's 3.
+    expect(header).toContain('38166281488');
+    for (const [name, job] of Object.entries(parsed.jobs)) {
+      expect(header).toContain(`${name} ${String(job['timeout-minutes'])}`);
+    }
+    expect(parsed.jobs.gate?.['timeout-minutes']).toBe(30);
+    expect(parsed.jobs.stage?.['timeout-minutes']).toBe(20);
+    expect(parsed.jobs.promote?.['timeout-minutes']).toBe(30);
+  });
+});
+
+/**
+ * task-238 (`bug-174`, `bug-060`) — the runbook says where npm's Staged Packages tab is, that a staged version
+ * first sits in an automated review, and how to meet npm ≥ 11.15.0 without a global upgrade; the `act` recipe
+ * says it cannot run from a git worktree, and why. The `publish` phase of `release-publishing.yaml` carries the
+ * same npm wording.
+ */
+describe('publish runbook (task-238) — bug-174, bug-060', () => {
+  const header = (): string => {
+    const { raw } = readWorkflow();
+    return raw.slice(0, raw.indexOf('\nname: publish'));
+  };
+
+  it('step 6 names the account menu → Staged Packages, the automated review before Approve, and npx npm@<version>', () => {
+    const text = header();
+    const six = text.slice(text.search(/\n#\s+6\. /), text.search(/\n#\s+7\. /));
+    expect(six).toMatch(/account menu/i);
+    expect(six).toContain('Staged Packages');
+    expect(six).toMatch(/automated review/i);
+    expect(six).toContain('npx -y npm@<version> stage approve <stage-id>');
+    expect(six).toContain('11.15.0');
+  });
+
+  it('the release-publishing `publish` phase names the same tab, review state and npx form', () => {
+    const doc = yamlLoad(
+      readFileSync(join(REPO_ROOT, '.wingfoil', 'workflows', 'custom', 'release-publishing.yaml'), 'utf-8'),
+    ) as { readonly phases: readonly { readonly name: string; readonly description?: string }[] };
+    const description = doc.phases.find((p) => p.name === 'publish')?.description ?? '';
+    expect(description).toMatch(/account menu/i);
+    expect(description).toContain('Staged Packages');
+    expect(description).toMatch(/automated review/i);
+    expect(description).toContain('npx -y npm@<version> stage approve <stage-id>');
+    expect(description).toContain('mcp-registry');
+  });
+
+  it('the act recipe says it cannot run from a git worktree, why, and to clone first', () => {
+    const text = header();
+    const act = text.slice(text.indexOf('Running this workflow locally with `act`'));
+    expect(act).toMatch(/git worktree/);
+    expect(act).toMatch(/`\.git` is a file/);
+    expect(act).toMatch(/git clone/);
+    expect(act).toContain('bug-060');
   });
 });
 

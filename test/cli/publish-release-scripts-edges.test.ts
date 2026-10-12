@@ -1,5 +1,6 @@
 /**
- * task-229 refactor — edge paths of the three release scripts that `red`'s suites do not reach
+ * task-229 refactor — edge paths of the three release scripts that `red`'s suites do not reach (task-238 adds
+ * `check-release-tag.cjs --annotated`, whose `check-release-tag.test.ts` cases are frozen too)
  * (`changelog-section.test.ts`, `wait-npm-version.test.ts`, `service-verify-sweep.test.ts` are frozen, testing T4).
  */
 import { spawnSync } from 'node:child_process';
@@ -41,5 +42,22 @@ describe('service-verify-sweep edges (task-229)', () => {
       's/a.md: service a has status "retired", not one of the service machine\'s',
       's/b.md: unreadable frontmatter (not a mapping)',
     ]);
+  });
+});
+
+describe('check-release-tag --annotated edges (task-238)', () => {
+  it('refuses a missing tag operand at exit 1 without calling git', () => {
+    const result = spawnSync(process.execPath, [join(SCRIPTS, 'check-release-tag.cjs'), '--annotated'], { encoding: 'utf-8' });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe('no release tag given\n');
+  });
+
+  it('passes a tag name to git as one argument, never through a shell', () => {
+    const result = spawnSync(process.execPath, [join(SCRIPTS, 'check-release-tag.cjs'), '--annotated', 'v1.0.0;echo injected'], {
+      encoding: 'utf-8',
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('not found');
   });
 });

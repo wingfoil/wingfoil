@@ -2,7 +2,7 @@
 id: bug-174-the-publish-runbook-does-not-say-where-npm-s-staged-packages-tab-is-nor-that-an-automated-review-precedes-approve
 type: bug
 title: "The publish runbook does not say where npm's Staged Packages tab is, nor that an automated review precedes Approve"
-status: planned
+status: closed
 severity: "low"
 release-origin: "v0.2.2"
 release: "v0.3"
@@ -63,4 +63,13 @@ state had ended. The version went live at `2026-09-29T20:47:50.934Z`.
 
 ## Triage & Execution Notes
 
-<!-- Filled at triage. -->
+Triaged `open → triaged` on 2026-09-29 by the approver (`78b941cb`) and scheduled into v0.3; planned
+`triaged → planned` at v0.3 release-planning (`3e9a73b3`, 2026-09-30), absorbed into
+`task-238-publish-mcp-registry-github-actions-bound-publish-job` (`release-planning-rel-v0.3-plan` row
+`task-238`). Execution: task-238 rewrote runbook step 6 of `.github/workflows/publish.yml` and the `publish`
+phase description of `release-publishing.yaml` (1.6): account menu → Staged Packages, the "automated review"
+state, `npx -y npm@<version> stage approve <stage-id>`.
+
+### Retrospective
+
+- None: the missing wording was the approver's own observation at the first staged publish (`28a2e36d`); fixed as written.

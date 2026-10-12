@@ -27,3 +27,15 @@ export function checkReleaseTag(
   version: string,
   server: ServerJsonVersions | undefined,
 ): ReleaseTagCheck;
+
+/**
+ * spec-015 §4 / `dl-057` (d): the release tag must be annotated — `objectType` (what `refs/tags/<tag>` names)
+ * must be `tag`. A lightweight tag (`commit`), a missing ref (`undefined`) or no tag at all is refused.
+ */
+export function checkAnnotatedTag(tag: string | undefined, objectType: string | undefined): ReleaseTagCheck;
+
+/**
+ * The object type `refs/tags/<tag>` names in the repository at `root` (`git cat-file -t`), or `undefined` when
+ * git cannot resolve the ref.
+ */
+export function tagObjectType(root: string, tag: string): string | undefined;
