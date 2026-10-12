@@ -27,7 +27,7 @@ describe('task-230 — element: collection in a workflow bound to nothing', () =
     commitAll(repo, 'fixture');
     let diagnostics: { code: string; severity: string }[];
     try {
-      diagnostics = [...(loadWorkflowRegistryAtRev(repo, 'HEAD').diagnostics as { code: string; severity: string }[])];
+      diagnostics = [...(loadWorkflowRegistryAtRev(repo, 'HEAD').diagnostics as readonly { code: string; severity: string }[])];
     } catch (err) {
       expect(err).toBeInstanceOf(ValidationError);
       diagnostics = [...(err as { diagnostics: { code: string; severity: string }[] }).diagnostics];
