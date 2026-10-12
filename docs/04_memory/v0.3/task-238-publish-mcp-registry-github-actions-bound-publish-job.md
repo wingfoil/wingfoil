@@ -2,7 +2,7 @@
 id: "task-238-publish-mcp-registry-github-actions-bound-publish-job"
 type: task
 title: "Publish to the MCP Registry from GitHub Actions, bound every publish job in time, and fix the publish runbook"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "fix"
 priority: "high"
