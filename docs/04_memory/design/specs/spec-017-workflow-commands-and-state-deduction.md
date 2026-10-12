@@ -31,7 +31,7 @@ notifications to v0.4 (R13), and fold `dl-104` into the `spec-003` revision revi
 and `E_NO_MAIN_WORKFLOW`. No check resolves a phase's `include:` against the loaded names (`bug-145`),
 which is why the Kanban scaffold's include-by-path (`bug-144`) passes. The production MCP server
 registers the read-only Resources `wingfoil://workflows` and `wingfoil://workflows/{name}`
-(`src/mcp/workflow-resource.ts:34-37`, wired by `registerReadOnlyResources`, `src/mcp/index.ts:79-84`)
+(`src/mcp/workflow-resource.ts:34-37`, wired by `registerReadOnlyResources`, `src/mcp/index.ts:84-90`)
 and deliberately does not call `registerCoreModules` (`src/mcp/server.ts:19-26`), so the mechanical
 `wingfoil://workflow/list` URI exists only in tests.
 
@@ -1384,3 +1384,10 @@ post-check `change-proposals.swept(…)`, not as a `where` selection (a selectio
 the approvals `finalize` records (7) do not move. No rule, command or diagnostic changes. Edited in place without a
 supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-277`'s review.
 
+
+**Revision (2026-10-12, W3 B6 gate, for `task-239-serve-wingfoil-workflows-next-wingfoil-workflows-status-production`)
+— the Context's line range for `registerReadOnlyResources`.** `task-239`'s call to
+`registerWorkflowStateResources` moved the function: the Context cited `src/mcp/index.ts:79-84`, it is now
+`src/mcp/index.ts:84-90` (`grep -n "^export function registerReadOnlyResources" src/mcp/index.ts` → 84; `dl-075`
+offset class). No rule changes. Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.
