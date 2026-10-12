@@ -69,3 +69,13 @@ check.
 
 Captured on 2026-10-07 by `bug-ingest-rel-v0.3-w3b2-review-findings-plan`, from `task-199`'s review (W3 B2,
 `dev-loop-rel-v0.3-plan`), reproduced against `main` at `c485e433`.
+
+### Retrospective
+
+- Triage: `open → triaged` at `ca8a762a`; `triaged → planned` at `591b6f11` (2026-10-07), absorbed into
+  `task-239`, whose acceptance criteria already touched `check:mcp`; tagged `pinned-build` at `5d6d12c1`.
+- Fixed by `task-239` (`f9226c3b`, `eedd53fd`): `check:mcp` reads every listed Resource and gets every Prompt of
+  the pinned server and of the build under development; 0.2.2's failing read of `wingfoil://workflows` is
+  declared in `KNOWN_READ_FAILURES` and printed on every run (`npm run check:mcp` → exit 0, one known failure).
+- Proposal: `advance-pinned-build` must delete that entry when the pin moves, or `check:mcp` fails; the note for
+  `release-planning.yaml` went to `task-230` through the coordinator.
