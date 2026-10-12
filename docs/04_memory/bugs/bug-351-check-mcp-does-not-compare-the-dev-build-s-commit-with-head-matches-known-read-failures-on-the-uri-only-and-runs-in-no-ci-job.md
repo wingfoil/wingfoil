@@ -23,11 +23,13 @@ and is run by no CI job.
 
 On `main` at `0da232cb`:
 
-1. `grep -n "build-info" scripts/check-mcp-registration.cjs` → no match: a stale `dist/` is checked silently.
+1. `grep -n "build-info" scripts/check-mcp-registration.cjs` → no match, while `grep -ln "build-info" scripts/*.cjs` →
+   `scripts/e2e-smoke.cjs` and `scripts/write-build-info.cjs` read or write it: a stale `dist/` is checked silently.
 2. `sed -n 66,72p scripts/check-mcp-registration.cjs` (`KNOWN_READ_FAILURES`) and `grep -n "entry.uri"
    scripts/check-mcp-registration.cjs` → an entry is a version and a URI; neither the error code nor the message is
    compared, so a different failure on the same Resource passes as the known one.
-3. `grep -rn "check:mcp" .github` → no match.
+3. `grep -rn "check:mcp" .github` → no match, while `grep -rn "check:governance" .github` → a line of
+   `.github/workflows/governance.yml`: CI runs that script, not this one.
 
 ## Expected Behavior
 
