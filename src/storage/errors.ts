@@ -36,6 +36,13 @@ export const E_MISSING_PATH_VALUE = 'E_MISSING_PATH_VALUE';
 export const E_PATH_ESCAPES_ROOT = 'E_PATH_ESCAPES_ROOT';
 
 /**
+ * Raised by {@link resolveConfinedMemoryPath} when a resolved Memory-entry path stays inside the project root
+ * but leaves its type's folder — the static prefix of the type's `path` pattern (`pathPatternFolder`;
+ * task-281, `bug-325`). Checked after the root confinement, so a root escape keeps {@link E_PATH_ESCAPES_ROOT}.
+ */
+export const E_PATH_OUTSIDE_TYPE_FOLDER = 'E_PATH_OUTSIDE_TYPE_FOLDER';
+
+/**
  * Raised by {@link resolveConfinedMemoryPath} when the target's **own name** is a symbolic link
  * (task-106, `bug-120-a-symlinked-document-leaf-is-followed-by-the-write`).
  *

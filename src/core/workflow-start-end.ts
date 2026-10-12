@@ -44,9 +44,9 @@ import { beginMemoryTransition, commitMemoryTransition } from './memory-transiti
 import { missingOperandReason, type CoreFn } from './registry';
 import { coreErr, coreOk, type CoreResult } from './types';
 import { UsageError } from './usage-error';
-import { readDeductionSnapshotAtHead } from './workflow-deduction';
+import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
 import { unknownWorkflowMessage } from './workflow-list-show';
-import { renderNextConsole, workflowNextAtHead, type Step } from './workflow-next';
+import { renderNextConsole, unresolvedRef, workflowNextAtHead, type Step } from './workflow-next';
 
 /** The `--set` names `workflow start` accepts (`spec-017` §7.1): the two derived plan tokens it lets a user override. */
 const START_SET_NAMES: readonly string[] = ['phase', 'scope'];
@@ -286,14 +286,6 @@ function submitFailure(id: string, code: Parameters<typeof coreErr>[0]['code'], 
   };
 }
 
-/** Whether `ref` names something that could be an instance — a loaded workflow or a plan — though none is open. */
-function namesKnownInstance(snapshot: ReturnType<typeof readDeductionSnapshotAtHead>, ref: string): boolean {
-  return (
-    snapshot.workflows.some((workflow) => workflow.name === ref) ||
-    snapshot.documents.some(({ frontmatter }) => frontmatter['type'] === PLAN_TYPE && frontmatter['id'] === ref)
-  );
-}
-
 /** Why an open instance whose deduction is not complete cannot end (§7.2): its current step, or why it has none. */
 function incompleteReason(selected: InstanceDeduction): string {
   const { instance, frontier } = selected;
@@ -322,8 +314,7 @@ export async function workflowEnd(params: WorkflowEndParams): Promise<CoreResult
   const selected = resolveInstanceRef(deduction, ref);
   if (selected === null) {
     if (ref === undefined) return coreErr({ code: 'NOT_FOUND', message: NO_ACTIVE_WORKFLOW_MESSAGE });
-    if (namesKnownInstance(snapshot, ref)) return coreErr({ code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } });
-    return coreErr({ code: 'NOT_FOUND', message: unknownWorkflowMessage(ref), details: { ref } });
+    return unresolvedRef({ workflows: snapshot.workflows, plans: instancePlanIds(snapshot.documents) }, ref);
   }
   const { instance } = selected;
   if (instance.planStatus === 'draft') {

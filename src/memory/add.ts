@@ -332,6 +332,23 @@ const SET_NAME_RE = /^[a-z][a-z0-9_-]*$/;
  */
 const CONTEXT_TOKENS: ReadonlySet<string> = new Set(['workflow', 'phase', 'scope']);
 
+/**
+ * The spelling refusal of a `--set` value read as a path (task-281, `bug-325`; `spec-008` §10), or `null`.
+ * A token value may be substituted into the type's `path` pattern, so it must be a relative path whose
+ * segments (split on `/` and `\`) are neither empty nor `.` / `..` — first match wins: absolute, empty
+ * segment, dot segment. Applied to every `--set` value, because which names are path tokens is known only
+ * from the committed `memory.yaml`, and spelling is decided before anything is read (exit 2).
+ */
+function pathSpellingRefusal(name: string, value: string): string | null {
+  if (/^[/\\]/.test(value) || /^[A-Za-z]:/.test(value)) return `invalid flag value: --set ${name} must be a relative path, got "${value}"`;
+  const segments = value.split(/[/\\]/);
+  if (segments.includes('')) return `invalid flag value: --set ${name} holds an empty path segment: "${value}"`;
+  if (segments.some((segment) => segment === '.' || segment === '..')) {
+    return `invalid flag value: --set ${name} holds a '.' or '..' path segment: "${value}"`;
+  }
+  return null;
+}
+
 /** The outcome of {@link parseSetOptions}: the parsed values, or the one usage-error message. */
 export type ParsedSetOptions =
   | { readonly ok: true; readonly values: Readonly<Record<string, string>> }
@@ -365,6 +382,8 @@ export function parseSetOptions(raw: string | readonly string[] | undefined): Pa
     if (value.trim().length === 0) {
       return { ok: false, message: `invalid flag value: --set ${name} must not be blank` };
     }
+    const spelling = pathSpellingRefusal(name, value);
+    if (spelling !== null) return { ok: false, message: spelling };
     if (Object.prototype.hasOwnProperty.call(values, name)) {
       return { ok: false, message: `invalid flag value: --set ${name} given more than once` };
     }

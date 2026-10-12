@@ -96,7 +96,7 @@ export function statusWorkflow(inputs: NextInputs, deduction: Deduction, ref?: s
   let shown = deduction.instances;
   if (ref !== undefined) {
     const selected = resolveInstanceRef(deduction, ref);
-    if (selected === null) return unresolvedRef(inputs.workflows, ref);
+    if (selected === null) return unresolvedRef(inputs, ref);
     shown = [selected];
   }
 

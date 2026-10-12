@@ -284,7 +284,7 @@ flowchart TD
     GREEN["🟢 **green** *(developer)* · distinct from red\nmin code to pass\n✔ tests.passing + tests.unchanged(since: red)"]
     REF["🔵 **refactor** *(developer)* · may resume green\nclean code, keep tests green\nlast: merge main (if it moved)\n✔ tests.passing + coverage ≥ 80% + lint + typecheck + tests.unchanged(since: red)"]
     REV["📋 **review** *(reviewer)* · distinct from red, green, refactor\n✔ pre: BDD + claims re-run + previous reject re-verified + docs.parity\ntask: in-progress → in-review\n↳ bug.sync_state: source bug → in-review (once ALL its fix tasks are)\n🔑 Approval gate — *approver*"]
-    DONE["✅ **done** *(developer)*\ngit merge to main\ntask: in-review → approved → done\n↳ bug.sync_state: source bug → resolved → closed (once ALL its fix tasks are done)\n✔ ### Retrospective present (task, closed bugs)"]
+    DONE["✅ **done** *(developer)*\non task/{task.id}: task: in-review → approved → done\n↳ bug.sync_state: source bug → resolved → closed (once ALL its fix tasks are done)\nthen git merge to main (--no-ff), then remove the worktree\n✔ ### Retrospective present (task, closed bugs)"]
 
     ST --> DES --> RED --> GREEN --> REF --> REV
     REV -->|APPROVE| DONE

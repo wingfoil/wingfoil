@@ -39,7 +39,7 @@ import { commitFailureSummary, documentExists, readDocument, readPathAtRev, stor
 // (same as `src/memory/entry.ts`): `memory add` needs the CONFINED target path before it writes, to
 // run task-092's absence guard on it.
 import { resolveConfinedMemoryPath } from '../storage/memory-path';
-import { E_PATH_ESCAPES_ROOT, E_TARGET_IS_SYMLINK } from '../storage/errors';
+import { E_PATH_ESCAPES_ROOT, E_PATH_OUTSIDE_TYPE_FOLDER, E_TARGET_IS_SYMLINK } from '../storage/errors';
 import {
   expandFieldTokens,
   findMemoryDocumentById,
@@ -991,8 +991,9 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
     if (error instanceof StorageError) {
       // One rule, one code (task-130, `bug-123`, `spec-005` §3): a confinement refusal is `VALIDATION`
       // here as it is from the transition verbs' guard — the request named a target REQ-SEC-06
-      // forbids. Every other storage failure (a git read, an unresolved path token) stays `IO`.
-      const confinement = error.code === E_PATH_ESCAPES_ROOT || error.code === E_TARGET_IS_SYMLINK;
+      // forbids, or one outside its type's folder (task-281, `bug-325`, approver ruling D1: exit 1).
+      // Every other storage failure (a git read, an unresolved path token) stays `IO`.
+      const confinement = error.code === E_PATH_ESCAPES_ROOT || error.code === E_PATH_OUTSIDE_TYPE_FOLDER || error.code === E_TARGET_IS_SYMLINK;
       return coreErr({ code: confinement ? 'VALIDATION' : 'IO', message: error.message });
     }
     if (error instanceof ValidationError) {
