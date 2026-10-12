@@ -10,7 +10,7 @@ tmpl_version: 260703
 
 ## Context
 
-Every `wingfoil` command — regardless of pillar (`memory`, `dna`, `directive`, `workflow`, `agent`) or
+Every `wingfoil` command — regardless of pillar (`memory`, `dna`, `directive`, `directives`, `workflow`, `agent`) or
 flat command (`init`, `mcp`, `paths`, `audit`; `init` and `mcp` are the bootstrap commands,
 `spec-008-cli-grammar` §1) — is consumed by two audiences that need a **stable, predictable
 contract** independent of the specific command's arguments: (1) humans reading console output, and
@@ -444,3 +444,10 @@ gains `spec-016` Q8's sentence.** A command that hands its stdout to a child pro
 stdout and puts its structured messages on stderr; `agent execute` is the one such command, and its
 dry-run plan stays on stdout. The envelope rules for every other command are unchanged. Edited in place
 without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-11, `task-239-serve-wingfoil-workflows-next-wingfoil-workflows-status-production`) —
+§Context's noun list gains `directives`, per `bug-259`.** The sentence that binds every command to this
+contract listed five of the six pillar nouns: `directives`, the plural noun `wingfoil directives list` ships
+under, was missing, though `spec-008-cli-grammar` §1 names it. The contract already applied to that command;
+only the list was short. No exit code, format or other rule changed. Edited in place without a supersede or
+a state change (`dl-047`); pending the approver's `memory amend` at `task-239`'s review.
