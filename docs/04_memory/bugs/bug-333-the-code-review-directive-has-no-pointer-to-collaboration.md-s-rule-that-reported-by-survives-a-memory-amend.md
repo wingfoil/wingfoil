@@ -47,6 +47,12 @@ As in step 2.
 
 Captured on 2026-10-11 by `bug-ingest-rel-v0.3-w3b5-review-findings-plan` (item 10), from the wave 3 batch B5 follow-ups (`dev-loop-rel-v0.3-plan`), re-checked on `main` at `29b8406a` with the code build of that commit (`npm run build`, then `node dist/cli.js`).
 
+**Note (2026-10-12, moved from v0.3 to v0.4 at the approver's absorption of the inherited v0.3 bugs;
+`bug-ingest-rel-v0.3-w3b6-review-findings-plan`).** The pointer from the `code-review` directive to `COLLABORATION.md`
+`## Credit` is a governance-text change best made with v0.4's `reconcile-governance` sweep of the directives, not in a
+v0.3 batch. The `release` field was reassigned by a hand `wf(bug): assign release v0.4` commit, since `memory amend`
+does not own `release`.
+
 ### Retrospective
 
 None.
