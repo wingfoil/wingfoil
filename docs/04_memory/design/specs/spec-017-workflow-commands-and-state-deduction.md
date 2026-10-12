@@ -1344,3 +1344,15 @@ over the unscheduled elements (`release: [""]`), which empties once each is stam
 empties and completes through §4.7, as `build-backlog` does. No sw-life-cycle instance is open on this
 repository (`node dist/cli.js workflow status`), so no deduction it reports changes. Edited in place without
 a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-230`'s review.
+
+**Revision (2026-10-12, `task-277-sweep-scheduled-change-proposals-into-the-release-s-features-at-define-scope-and-narrow-schedule-to-its-own-stamps`)
+— §12 re-measured with `define-scope`'s sweep check.** Approver rulings 2026-10-12 D1 (c), D2: `release-planning`'s
+`define-scope` declares the sweep of the `scheduled` change-proposals into the release's `features:` as the unbound
+post-check `change-proposals.swept(…)`, not as a `where` selection (a selection would be the target of the phase's
+`memory.submit`, §4.2, and the release's state would stop being its evidence). §12, on this repository at
+`task-277`'s branch (`loadWorkflowRegistryAtHead`): 27 workflows and 105 phases, 0 errors, 87 warnings, every one a
+`W_WORKFLOW_UNBOUND_TOKEN`; the new one is `define-scope`'s `change-proposals.swept`. `define-scope`'s evidence stays
+`state` and `produces` (`node dist/cli.js workflow show release-planning --format json`); the checkpoints (30) and
+the approvals `finalize` records (7) do not move. No rule, command or diagnostic changes. Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-277`'s review.
+
