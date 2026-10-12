@@ -5,12 +5,12 @@
  * `release-health-<version>.json` (`docs/08_health/release-health.schema.json`). Not shipped in the npm package
  * (`package.json` `files`).
  *
- * This file is the **history half** (task-231): the git-history metrics G01–G16, the process-conformance measures
+ * It holds the **history half** (task-231): the git-history metrics G01–G16, the process-conformance measures
  * P01–P07 (`REQ-STATE-10`, `dl-131` Decision 3), the external visibility snapshot E01–E05 (`dl-130` Q2 (a)) and the
- * toolchain record. The quality metrics are measured by task-232 (Q01–Q04, Q11, Q12, Q17) and task-233 (the other
- * Q metrics); until they land, the report carries each of them as `not-measurable`, naming its owner. D01 and P06
- * need the benchmark's two runs (`dl-089` §2, `dl-131`): `not-comparable` on a patch release, else
- * `not-measurable`.
+ * toolchain record; and the **toolchain half** (task-232): Q01–Q04, Q11, Q12 and Q17, measured by running the
+ * project's own commands. The other Q metrics are task-233's; until it lands, the report carries each of them as
+ * `not-measurable`, naming its owner. D01 and P06 need the benchmark's two runs (`dl-089` §2, `dl-131`):
+ * `not-comparable` on a patch release, else `not-measurable`.
  *
  * **The measurement point** (`dl-089` §1). `--at <rev>` names it. Otherwise the release element whose `version` is
  * `--release` is read at `HEAD`, and the point is the highest tag named `<version>` or `<version>.<n>` (a patch:
@@ -22,9 +22,40 @@
  * **Read-only** (`dl-089` §6): every read is `git log`, `git show <rev>:<path>`, `git ls-tree` or
  * `git for-each-ref` at the point; the commit-dependent checks run in a throw-away worktree (`git worktree add
  * --detach`, hooks off through `git -c`, removed afterwards). Nothing writes git configuration, and nothing needs an
- * identity, since nothing is committed. The only file written is the report. A run killed by a signal (SIGINT,
- * SIGTERM, SIGKILL) leaves its worktree registered; remove it by hand with
- * `git worktree remove --force /tmp/wf-release-health-<suffix>/tree` (the path `git worktree list` shows).
+ * identity, since nothing is committed. The only file written is the report (the toolchain's own outputs stay in
+ * the temporary directory). **Signals** (`bug-329`): SIGINT, SIGTERM and SIGHUP stop the running tool, remove the
+ * worktree and its temporary directory, and re-raise. One that lands during synchronous work (the history half, a
+ * `--no-toolchain` run, the pinned-Node refusal) reaches its handler once that work returns, since Node runs no
+ * handler during synchronous code; the run then ends by the signal, writing no report. A run killed by SIGKILL leaves its
+ * worktree registered; remove it by hand with `git worktree remove --force /tmp/wf-release-health-<suffix>/tree`
+ * (the path `git worktree list` shows).
+ *
+ * **The toolchain half** (task-232; `dl-089` §6) runs in the same worktree, after the history half: `npm ci`, then
+ * each metric's command, every tool with the running Node's directory first on `PATH`. It runs only under the
+ * pipeline's pinned Node (`.github/workflows/publish.yml` `env.NODE_VERSION` at the point); with another, its seven
+ * metrics are `not-measurable` naming both versions, unless `--any-node`, which measures and records `node` and
+ * `node_pinned` in each entry's `raw`. To run under the pinned Node, start the script with it, e.g.
+ * `n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <vX.Y[.Z]>` (that Node and its npm first on
+ * `PATH`; `-d` downloads the version when it is not cached, and without it `n` refuses an uncached one) or
+ * `npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <vX.Y[.Z]>` (npx installs the `node` package
+ * when it is missing). A tool that cannot run, is killed, or leaves an output the reader cannot parse makes its
+ * metric `not-measurable` with the reason, never a zero; so does an exit of a Q01 script that means its tool itself
+ * failed (a shell's 126/127, eslint's 2). A check that runs and fails is a measured failure. A failure's reason is
+ * npm's `npm error code …` line when there is one, never npm's pointer to its dated debug log, and it names paths
+ * relative to the worktree, never the worktree's random temporary path.
+ * - Q01 `npm run build`, `npm run typecheck`, `npm run lint`, all three run: `true` when each exits 0;
+ * - Q02 `npm test -- --json --outputFile=…`: jest's counts; disabled = skipped + todo; failing = failed tests plus
+ *   suites that failed to run, each named;
+ * - Q03/Q04 `npm run test:coverage -- --coverageReporters=json-summary --coverageDirectory=…`: the totals, and the
+ *   branch coverage of the three critical modules against the 90 % floor; a module missing from the summary makes Q04
+ *   `not-measurable`;
+ * - Q11 each `docs/examples/*\/run.sh`, `bash` with `WINGFOIL="node <worktree>/dist/cli.js"`, after a successful build;
+ * - Q12 `npm run test:latency` with `WINGFOIL_LATENCY_REPORT=1`, read from the suite's own report: the highest total
+ *   p95, every p95, the floor and the 1-minute load before and after; **a run the suite judges loaded is
+ *   `not-measurable`** (catalogue Q12, task-263's floor verdict), its `raw` still recording the load;
+ * - Q17 the first `npm install -g <spec>` of `docs/user-guide.md` (else `README.md`), the version that document states
+ *   in bold, and `npm view <spec> version --json`; it reads the registry at run time, so like G15 and E01–E05 a later
+ *   run can answer differently (`raw.resolved_from`); `--offline` skips it.
  *
  * **G15 is not reproducible at a fixed point.** Unlike every other metric, it reads the live `refs/heads` and
  * `refs/remotes` of the clone that runs it, at run time, so a later run at the same point can answer differently;
@@ -75,16 +106,20 @@
  * Deterministic (REQ-SYS-07): no clock, no randomness; every list is in commit order or sorted.
  *
  * Usage: node scripts/release-health/measure.cjs --release <vX.Y[.Z]> [--at <rev>] [--previous <rev>]
- *          [--out <file>] [--offline] [--root <dir>]
+ *          [--out <file>] [--offline] [--root <dir>] [--no-toolchain] [--any-node] [--max-workers <n>]
+ * `--no-toolchain` skips the toolchain half (its metrics `not-measurable`); `--max-workers` goes to the two jest runs.
+ * Progress lines go to stderr.
  * Exit: 0 the report is written (its path on stdout) · 2 the measure could not run (message on stderr).
  */
 'use strict';
 
-const { execFileSync, spawnSync } = require('node:child_process');
+const { execFileSync, spawn, spawnSync } = require('node:child_process');
+const { Buffer } = require('node:buffer');
 const { createHash } = require('node:crypto');
 const { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
-const { dirname, isAbsolute, join, posix } = require('node:path');
+const { setImmediate } = require('node:timers');
+const { delimiter, dirname, isAbsolute, join, posix, relative } = require('node:path');
 const yaml = require('js-yaml');
 
 const { catalogueLocation, validateCatalogue } = require('./catalogue.cjs');
@@ -120,9 +155,8 @@ const STORY_MAP_DIR = 'docs/02_requirements/01_user_story_map/';
 const BDD_DIR = 'docs/02_requirements/02_bdd/features/';
 const ELEMENT_LINK_FIELDS = ['ref', 'bug', 'depends_on', 'supersedes'];
 
-/** The quality metrics this script leaves to their owning tasks, until those tasks land. */
+/** The quality metrics this script leaves to their owning tasks, until those tasks land (task-232's: the toolchain half). */
 const QUALITY_OWNERS = Object.freeze({
-  'task-232': ['Q01', 'Q02', 'Q03', 'Q04', 'Q11', 'Q12', 'Q17'],
   'task-233': ['Q05', 'Q06', 'Q07', 'Q08', 'Q09', 'Q10', 'Q13', 'Q14', 'Q15', 'Q16', 'Q18', 'Q19', 'Q20'],
 });
 
@@ -198,14 +232,113 @@ function withWorktree(root, commit, fn) {
   const dir = mkdtempSync(join(tmpdir(), 'wf-release-health-'));
   const tree = join(dir, 'tree');
   try {
-    git(root, ['-c', 'core.hooksPath=/dev/null', 'worktree', 'add', '--quiet', '--detach', tree, commit]);
+    addWorktree(root, tree, commit);
     return fn(tree);
   } finally {
-    const removed = gitOr(root, ['worktree', 'remove', '--force', tree]) !== null;
-    rmSync(dir, { recursive: true, force: true });
-    // `prune` acts on every worktree of the repository: run it only when this one could not be removed.
-    if (!removed) gitOr(root, ['worktree', 'prune']);
+    removeWorktree(root, dir, tree);
   }
+}
+
+function addWorktree(root, tree, commit) {
+  git(root, ['-c', 'core.hooksPath=/dev/null', 'worktree', 'add', '--quiet', '--detach', tree, commit]);
+}
+
+/** Remove the worktree `tree` and its temporary directory `dir`. */
+function removeWorktree(root, dir, tree) {
+  const removed = gitOr(root, ['worktree', 'remove', '--force', tree]) !== null;
+  rmSync(dir, { recursive: true, force: true });
+  // `prune` acts on every worktree of the repository: run it only when this one could not be removed.
+  if (!removed) gitOr(root, ['worktree', 'prune']);
+}
+
+/** The signals that tear the measurement worktree down (`bug-329`); SIGKILL cannot be caught. */
+const TEARDOWN_SIGNALS = Object.freeze(['SIGINT', 'SIGTERM', 'SIGHUP']);
+
+/** How long a stopped tool gets between SIGTERM and SIGKILL. */
+const STOP_GRACE_MS = 10_000;
+
+class Interrupted extends Error {
+  constructor(signal) {
+    super(`interrupted by ${signal}`);
+    this.signal = signal;
+  }
+}
+
+/** Die of `signal` once its handlers are gone: the default action, so the exit status says which signal it was. */
+function raiseSignal(signal) {
+  process.kill(process.pid, signal);
+}
+
+/**
+ * {@link withWorktree} for an asynchronous `fn`, guarded against signals (`bug-329`): `SIGINT`, `SIGTERM` and `SIGHUP`
+ * stop the running tool (each tool registers a stopper in `guard.stoppers`), remove the worktree and its directory,
+ * remove the handlers and re-raise the signal, as `scripts/publish-staging.cjs` (`installTeardownHandlers`) does.
+ * Node runs a handler only in the event loop's poll phase, so a signal that lands while `fn` is synchronous waits
+ * until `fn` settles; the guard then yields past the next poll phase before removing its handlers, so the signal still tears
+ * down and re-raises, and the promise rejects (`interrupted by <signal>`) rather than returning a result. SIGKILL
+ * is the one case left to the user (`git worktree remove --force`).
+ *
+ * @param {string} root @param {string} commit
+ * @param {(tree: string, dir: string, guard: { interrupted: string | null, stoppers: Set<() => Promise<void>> }) => Promise<unknown>} fn
+ * @param {{ target?: NodeJS.EventEmitter, die?: (signal: string) => unknown, signals?: readonly string[] }} [interrupts]
+ */
+async function withGuardedWorktree(root, commit, fn, interrupts = {}) {
+  const target = interrupts.target ?? process;
+  const die = interrupts.die ?? raiseSignal;
+  const dir = mkdtempSync(join(tmpdir(), 'wf-release-health-'));
+  const tree = join(dir, 'tree');
+  const guard = { interrupted: null, stoppers: new Set() };
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    removeWorktree(root, dir, tree);
+  };
+  let interrupting = null;
+  const handlers = (interrupts.signals ?? TEARDOWN_SIGNALS).map((signal) => [signal, () => {
+    if (interrupting !== null) return;
+    guard.interrupted = signal;
+    interrupting = (async () => {
+      try {
+        await Promise.allSettled([...guard.stoppers].map((stop) => stop()));
+        cleanup();
+      } finally {
+        // Even when the cleanup throws, the handlers go and the signal is re-raised (review F4).
+        uninstall();
+        await die(signal);
+      }
+    })();
+  }]);
+  const uninstall = () => {
+    for (const [signal, handler] of handlers.splice(0)) target.removeListener(signal, handler);
+  };
+  for (const [signal, handler] of handlers) target.on(signal, handler);
+  let outcome;
+  try {
+    addWorktree(root, tree, commit);
+    outcome = { value: await fn(tree, dir, guard) };
+  } catch (error) {
+    outcome = { error };
+  }
+  // Node hands a signal to its handler only in the event loop's poll phase. A signal that landed while `fn` was
+  // synchronous (the history half, `--no-toolchain`, the pinned-Node refusal) is still pending here. One immediate is
+  // not enough when `fn` resumed from a poll-phase callback (a child's close, an fs read): it runs in that same
+  // iteration's check phase, before the next poll. The second, scheduled from the check phase, runs only after a
+  // poll phase, where the handler gets the signal before the handlers go (review F1, re-review N1).
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  if (interrupting !== null) {
+    await interrupting;
+    // An interrupted run returns nothing: its reads may have failed with the children the signal killed.
+    throw new Interrupted(guard.interrupted);
+  }
+  try {
+    cleanup();
+  } finally {
+    uninstall();
+  }
+  if ('error' in outcome) throw outcome.error;
+  return outcome.value;
 }
 
 // --- the compiled readers ----------------------------------------------------------------------------
@@ -922,6 +1055,395 @@ function measureExternal(root, point, options) {
   return out;
 }
 
+// --- the toolchain half (Q01–Q04, Q11, Q12, Q17; task-232) --------------------------------------------
+
+/** The metrics the toolchain half measures, in catalogue order. */
+const TOOLCHAIN_IDS = Object.freeze(['Q01', 'Q02', 'Q03', 'Q04', 'Q11', 'Q12', 'Q17']);
+/** Q04's modules and floor (catalogue Q04, `dl-011`). */
+const CRITICAL_MODULES = Object.freeze(['src/memory/audit.ts', 'src/memory/commit-message.ts', 'src/memory/state-machine.ts']);
+const CRITICAL_BRANCH_FLOOR = 90;
+/** Q12's budget, on the total and on the marginal p95 alike (catalogue Q12, REQ-PERF-02, `dl-146` (C)). */
+const LATENCY_BUDGET_MS = 1000;
+/** Q01's commands, in the order they run. */
+const Q01_SCRIPTS = Object.freeze(['build', 'typecheck', 'lint']);
+const COVERAGE_KINDS = Object.freeze(['statements', 'branches', 'functions', 'lines']);
+/** Variables a tool must not inherit: the latency opt-ins (set per command) and git's repository overrides. */
+const TOOL_ENV_DROPPED = Object.freeze(['WINGFOIL_LATENCY', 'WINGFOIL_LATENCY_REPORT', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR']);
+const USER_DOCS = Object.freeze(['docs/user-guide.md', 'README.md']);
+const PUBLISH_WORKFLOW = '.github/workflows/publish.yml';
+
+/** The default tool runner: spawn the command, collect its output; a stopper in `guard` lets a signal end it. */
+function spawnTools(guard) {
+  return (call) => new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(call.command, call.args, { cwd: call.cwd, env: call.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (error) {
+      resolve({ status: null, signal: null, stdout: '', stderr: '', error: error instanceof Error ? error.message : String(error) });
+      return;
+    }
+    const out = [];
+    const err = [];
+    child.stdout.on('data', (chunk) => out.push(chunk));
+    child.stderr.on('data', (chunk) => err.push(chunk));
+    const closed = new Promise((done) => child.on('close', (code, signal) => done({ code, signal })));
+    const stop = async () => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      child.kill('SIGTERM');
+      const timer = setTimeout(() => child.kill('SIGKILL'), STOP_GRACE_MS);
+      await closed;
+      clearTimeout(timer);
+    };
+    if (guard) guard.stoppers.add(stop);
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      if (guard) guard.stoppers.delete(stop);
+      resolve(result);
+    };
+    child.on('error', (error) => settle({ status: null, signal: null, stdout: '', stderr: '', error: error.message }));
+    void closed.then(({ code, signal }) => settle({ status: code, signal, stdout: Buffer.concat(out).toString('utf-8'), stderr: Buffer.concat(err).toString('utf-8') }));
+  });
+}
+
+/** The runner every step goes through: it logs the command, normalizes the result, and stops at an interrupt. */
+function toolRunner(options, guard) {
+  const tools = options.tools ?? spawnTools(guard);
+  const check = () => {
+    if (guard && guard.interrupted !== null) throw new Interrupted(guard.interrupted);
+  };
+  return async (call) => {
+    check();
+    if (options.log) options.log(`${call.step}: ${[call.command, ...call.args].join(' ')} in ${call.cwd}`);
+    const result = await tools(call);
+    check();
+    // The worktree lives under a random temporary path: read relative to it, so no reason carries it.
+    const relativize = (text) => String(text ?? '').split(`${call.cwd}/`).join('').split(call.cwd).join('.');
+    return {
+      status: typeof result.status === 'number' ? result.status : null,
+      signal: result.signal ?? null,
+      stdout: relativize(result.stdout),
+      stderr: relativize(result.stderr),
+      error: result.error === undefined ? undefined : relativize(result.error),
+    };
+  };
+}
+
+/** The environment of every tool: the running Node's directory first on `PATH`, so `npm` runs this Node. */
+function toolEnv() {
+  const env = { ...process.env };
+  for (const name of TOOL_ENV_DROPPED) delete env[name];
+  env.PATH = [dirname(process.execPath), process.env.PATH].filter((part) => part !== undefined && part !== '').join(delimiter);
+  return env;
+}
+
+const lastLine = (text) => String(text).split('\n').map((line) => line.trim()).filter((line) => line !== '').pop() ?? '';
+
+/** npm's pointer to its debug log (a home path and a timestamp), and its bare `npm error` separator lines. */
+const NPM_NOISE_RE = /^npm (?:error|ERR!)(?:$| A complete log of this run can be found in)|\/_logs\//;
+
+/**
+ * The line of a tool's output that says why it failed, stable across runs (review F2): npm's `npm error code <CODE>`
+ * when there is one, else the last line that is not npm's log pointer or a bare `npm error`.
+ */
+function reasonLine(text) {
+  const lines = String(text).split('\n').map((line) => line.trim()).filter((line) => line !== '' && !NPM_NOISE_RE.test(line));
+  return lines.find((line) => /^npm (?:error|ERR!) code \S/.test(line)) ?? lines.pop() ?? '';
+}
+
+/** Why a command gave no reading, or `null` when it ran to an exit status. */
+function didNotRun(label, result) {
+  if (result.error !== undefined) return `${label} could not run: ${result.error}`;
+  if (result.signal !== null) return `${label} was killed by ${result.signal}`;
+  if (result.status === null) return `${label} ended with no exit status`;
+  return null;
+}
+
+/**
+ * Exit statuses of Q01's `npm run` scripts that mean the tool itself could not run rather than that the check failed
+ * (review F7): a shell's 126 (not executable) and 127 (not found), and eslint's 2 (configuration or internal error).
+ * Not applied to the examples (re-review N4).
+ */
+const TOOL_ERROR_EXITS = Object.freeze({ '*': [126, 127], lint: [2] });
+
+/** Why an exit status is a tool error rather than a result, or `null`. */
+function toolError(label, result, name = '*') {
+  const codes = [...TOOL_ERROR_EXITS['*'], ...(TOOL_ERROR_EXITS[name] ?? [])];
+  return codes.includes(result.status) ? `${label} exited ${result.status}, which means the tool itself could not run` : null;
+}
+
+/** Why a command failed: did not run, or exited non-zero (with its last error line). */
+function failure(label, result) {
+  const reason = didNotRun(label, result);
+  if (reason !== null) return reason;
+  const line = reasonLine(result.stderr) || reasonLine(result.stdout);
+  return `${label} failed (exit ${result.status})${line === '' ? '' : `: ${line}`}`;
+}
+
+const readText = (path) => {
+  try {
+    return readFileSync(path, 'utf-8');
+  } catch {
+    return null;
+  }
+};
+
+const readJson = (path) => {
+  const text = readText(path);
+  if (text === null) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
+
+const isCount = (value) => typeof value === 'number' && Number.isFinite(value);
+const toPosix = (path) => path.split('\\').join('/');
+
+/** The pipeline's pinned Node (`dl-089` §6): `NODE_VERSION` of the publish workflow in `tree`, as `vX.Y.Z`, or `null`. */
+function pinnedNode(tree) {
+  const match = /^\s*NODE_VERSION:\s*['"]?v?(\d+\.\d+\.\d+)['"]?\s*(?:#.*)?$/m.exec(readText(join(tree, PUBLISH_WORKFLOW)) ?? '');
+  return match ? `v${match[1]}` : null;
+}
+
+/** An entry with `extra` merged into its `raw`, keys in the schema's order. */
+const withRaw = (m, extra) => entry(m.id, { ...m, raw: { ...(m.raw ?? {}), ...extra } });
+
+/**
+ * What the latency pass's report (`WINGFOIL_LATENCY_REPORT=1`, `test/core/helpers/latency.ts` `latencyReport`) says,
+ * read out of its output, or `null` when the output carries none.
+ */
+function parseLatencyReport(text) {
+  const machine = /^[ \t]*machine: (.+?)[ \t]*$/m.exec(text);
+  if (machine === null) return null;
+  // The report's own load window is its header line; another latency suite (workflow next) prints a load line too.
+  const load = /load average \(1-min \/ 5-min\): before ([\d.]+) \/ [\d.]+, after ([\d.]+) \/ [\d.]+ \(one window: /.exec(text);
+  const floor = /^[ \t]*floor \(--version\): p95 (-?\d+) ms/m.exec(text);
+  const commands = [...text.matchAll(/^[ \t]*([a-z][a-z -]*?): marginal p95 (-?\d+) ms \([^)]*\); total p95 (-?\d+) ms/gm)].map((m) => ({
+    command: m[1],
+    marginalP95: Number(m[2]),
+    totalP95: Number(m[3]),
+  }));
+  return {
+    machine: machine[1],
+    idle: machine[1] === 'otherwise idle',
+    load: load === null ? null : { before: Number(load[1]), after: Number(load[2]) },
+    floorP95: floor === null ? null : Number(floor[1]),
+    commands,
+  };
+}
+
+/** Q01: build, typecheck and lint each exit 0. */
+function q01(scripts, results) {
+  const missing = Q01_SCRIPTS.find((name) => !(name in scripts));
+  if (missing !== undefined) return notMeasurable('Q01', `package.json at the measurement point has no \`${missing}\` script`);
+  for (const name of Q01_SCRIPTS) {
+    const reason = didNotRun(`npm run ${name}`, results[name]) ?? toolError(`npm run ${name}`, results[name], name);
+    if (reason !== null) return notMeasurable('Q01', reason);
+  }
+  const failing = Q01_SCRIPTS.filter((name) => results[name].status !== 0).map((name) => `npm run ${name} (exit ${results[name].status})`);
+  return entry('Q01', { value: failing.length === 0, raw: Object.fromEntries(Q01_SCRIPTS.map((name) => [name, results[name].status])), failing });
+}
+
+/** Q02: total, failing and disabled tests, from jest's `--json` results. */
+function q02(tree, result, resultsFile) {
+  const reason = didNotRun('npm test', result);
+  if (reason !== null) return notMeasurable('Q02', reason);
+  const json = readJson(resultsFile);
+  const counts = ['numTotalTests', 'numPassedTests', 'numFailedTests', 'numPendingTests', 'numTodoTests', 'numRuntimeErrorTestSuites'];
+  if (json === null || !counts.every((key) => isCount(json[key])) || !Array.isArray(json.testResults)) {
+    const line = reasonLine(result.stderr);
+    return notMeasurable('Q02', `npm test wrote no readable JSON results (exit ${result.status})${line === '' ? '' : `: ${line}`}`);
+  }
+  const failing = [];
+  for (const suite of json.testResults) {
+    const file = toPosix(relative(tree, String(suite.name)));
+    const assertions = Array.isArray(suite.assertionResults) ? suite.assertionResults : [];
+    const failed = assertions.filter((a) => a.status === 'failed');
+    for (const a of failed) failing.push(`${file} › ${a.fullName}`);
+    if (suite.testExecError) failing.push(`${file} (suite failed to run)`);
+    else if (suite.status === 'failed' && failed.length === 0) failing.push(`${file} (suite failed)`);
+  }
+  failing.sort();
+  return entry('Q02', {
+    value: { total: json.numTotalTests, failing: json.numFailedTests + json.numRuntimeErrorTestSuites, disabled: json.numPendingTests + json.numTodoTests },
+    raw: {
+      total: json.numTotalTests,
+      passed: json.numPassedTests,
+      failed: json.numFailedTests,
+      skipped: json.numPendingTests,
+      todo: json.numTodoTests,
+      failed_suites: json.numRuntimeErrorTestSuites,
+    },
+    failing,
+  });
+}
+
+/** Q03 (the coverage totals) and Q04 (the critical modules' branch coverage), from jest's `json-summary`. */
+function q03q04(tree, result, summaryFile) {
+  const reason = didNotRun('npm run test:coverage', result);
+  if (reason !== null) return [notMeasurable('Q03', reason), notMeasurable('Q04', reason)];
+  const summary = readJson(summaryFile);
+  const readable = (counts) => counts && isCount(counts.covered) && isCount(counts.total) && isCount(counts.pct);
+  if (summary === null || !summary.total || !COVERAGE_KINDS.every((kind) => readable(summary.total[kind]))) {
+    const unreadable = `npm run test:coverage wrote no readable coverage summary (exit ${result.status})`;
+    return [notMeasurable('Q03', unreadable), notMeasurable('Q04', unreadable)];
+  }
+  const files = new Map(Object.keys(summary).filter((key) => key !== 'total').map((key) => [toPosix(relative(tree, key)), summary[key]]));
+  const q03 = entry('Q03', {
+    value: Object.fromEntries(COVERAGE_KINDS.map((kind) => [kind, summary.total[kind].pct])),
+    raw: {
+      ...Object.fromEntries(COVERAGE_KINDS.flatMap((kind) => [[`${kind}_covered`, summary.total[kind].covered], [`${kind}_total`, summary.total[kind].total]])),
+      files: files.size,
+    },
+  });
+  const missing = CRITICAL_MODULES.filter((file) => !files.has(file) || !readable(files.get(file).branches));
+  if (missing.length > 0) return [q03, notMeasurable('Q04', `${missing.join(', ')} not in the coverage summary of npm run test:coverage`)];
+  const branches = (file) => files.get(file).branches;
+  return [q03, entry('Q04', {
+    value: Object.fromEntries(CRITICAL_MODULES.map((file) => [file, branches(file).pct])),
+    raw: Object.fromEntries(CRITICAL_MODULES.flatMap((file) => [[`${file} covered`, branches(file).covered], [`${file} total`, branches(file).total]])),
+    failing: CRITICAL_MODULES.filter((file) => branches(file).pct < CRITICAL_BRANCH_FLOOR)
+      .map((file) => `${file}: branches ${branches(file).pct}% (${branches(file).covered}/${branches(file).total}) < ${CRITICAL_BRANCH_FLOOR}%`),
+  })];
+}
+
+/** Q11: the share of `docs/examples/*\/run.sh` that pass against the point's build. */
+async function q11(tree, run, env, built) {
+  const dir = join(tree, 'docs', 'examples');
+  const names = existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && existsSync(join(dir, d.name, 'run.sh'))).map((d) => d.name).sort() : [];
+  if (names.length === 0) return notMeasurable('Q11', 'no docs/examples/*/run.sh at the measurement point');
+  if (!built) return notMeasurable('Q11', 'npm run build did not succeed, so there is no dist/cli.js for the examples to run');
+  const failing = [];
+  let unrunnable = null;
+  for (const name of names) {
+    const script = `docs/examples/${name}/run.sh`;
+    const result = await run({ step: `examples/${name}`, command: 'bash', args: [join(dir, name, 'run.sh')], cwd: tree, env: { ...env, WINGFOIL: `node ${join(tree, 'dist', 'cli.js')}` } });
+    // An example's 126/127 is a command missing inside it (bash runs run.sh by its absolute path): a defect it
+    // reports, so a measured failure, not a tool error (re-review N4).
+    const reason = didNotRun(script, result);
+    if (reason !== null) unrunnable ??= reason;
+    else if (result.status !== 0) failing.push(`${script} (exit ${result.status})`);
+  }
+  if (unrunnable !== null) return notMeasurable('Q11', unrunnable);
+  const passed = names.length - failing.length;
+  return entry('Q11', { value: pct(passed, names.length), raw: { executed: names.length, passed }, failing });
+}
+
+/** Q12: the latency pass's p95s; a loaded run is not-measurable (catalogue Q12; approver ruling R4, W3 B6). */
+function q12(result) {
+  const reason = didNotRun('npm run test:latency', result);
+  if (reason !== null) return notMeasurable('Q12', reason);
+  const reading = parseLatencyReport(`${result.stdout}\n${result.stderr}`);
+  if (reading === null || reading.commands.length === 0) {
+    return notMeasurable('Q12', `npm run test:latency printed no latency report (exit ${result.status}; WINGFOIL_LATENCY_REPORT=1 was set)`);
+  }
+  const raw = {
+    machine: reading.machine,
+    load_1m_before: reading.load === null ? null : reading.load.before,
+    load_1m_after: reading.load === null ? null : reading.load.after,
+    floor_p95_ms: reading.floorP95,
+    ...Object.fromEntries(reading.commands.flatMap((c) => [[`${c.command} total_p95_ms`, c.totalP95], [`${c.command} marginal_p95_ms`, c.marginalP95]])),
+  };
+  if (!reading.idle) return entry('Q12', { status: 'not-measurable', reason: `a loaded run is not a REQ-PERF-02 measurement (catalogue Q12): ${reading.machine}`, raw });
+  const failing = reading.commands.flatMap((c) => [['total', c.totalP95], ['marginal', c.marginalP95]]
+    .filter(([, value]) => value >= LATENCY_BUDGET_MS)
+    .map(([quantity, value]) => `${c.command}: ${quantity} p95 ${value} ms >= ${LATENCY_BUDGET_MS} ms`));
+  return entry('Q12', { value: Math.max(...reading.commands.map((c) => c.totalP95)), raw, failing });
+}
+
+/** Q17: the user documentation's install command resolves (`npm view`) to the version it documents. */
+async function q17(tree, run, env, offline) {
+  if (offline) return notMeasurable('Q17', 'offline run (--offline): npm view was not run');
+  let found = null;
+  for (const doc of USER_DOCS) {
+    const text = readText(join(tree, doc));
+    const command = text === null ? null : /^[ \t]*(npm (?:install|i) (?:-g|--global) (\S+))[ \t]*$/m.exec(text);
+    if (command !== null) {
+      found = { doc, text, command: command[1].replace(/\s+/g, ' '), spec: command[2] };
+      break;
+    }
+  }
+  if (found === null) return notMeasurable('Q17', `the user documentation (${USER_DOCS.join(', ')}) gives no \`npm install -g\` command`);
+  const documented = /\*\*v?(\d+\.\d+\.\d+)\*\*/.exec(found.text);
+  if (documented === null) return notMeasurable('Q17', `${found.doc} states no version (a bold **X.Y.Z**) for its install command`);
+  const args = ['view', found.spec, 'version', '--json'];
+  const label = `npm ${args.join(' ')}`;
+  const result = await run({ step: 'npm-view', command: 'npm', args, cwd: tree, env });
+  if (didNotRun(label, result) !== null || result.status !== 0) return notMeasurable('Q17', failure(label, result));
+  let resolved;
+  try {
+    const parsed = JSON.parse(result.stdout);
+    resolved = Array.isArray(parsed) ? parsed[parsed.length - 1] : parsed;
+  } catch {
+    resolved = undefined;
+  }
+  if (typeof resolved !== 'string') return notMeasurable('Q17', `${label} answered no version: ${lastLine(result.stdout)}`);
+  const ok = resolved === documented[1];
+  return entry('Q17', {
+    value: ok,
+    raw: { install_command: found.command, documented: documented[1], documented_in: found.doc, resolved, resolved_from: 'the registry at run time' },
+    failing: ok ? [] : [`${found.command} resolves to ${resolved}, the documentation says ${documented[1]}`],
+    evidence: { command: label },
+  });
+}
+
+/**
+ * The toolchain half (task-232; `dl-089` §2, §6): in `tree`, a checkout of the measurement point, `npm ci` and then
+ * each metric's command, with the pipeline's pinned Node; tool outputs go under `scratch`. A tool that cannot run, is
+ * killed, or leaves an output the reader cannot parse makes its metric `not-measurable` with the reason, never a zero.
+ *
+ * @param {string} tree @param {string} scratch
+ * @param {{ tools?: Function, anyNode?: boolean, offline?: boolean, maxWorkers?: number, log?: (line: string) => void }} [options]
+ * @param {{ interrupted: string | null, stoppers: Set<() => Promise<void>> } | null} [guard] the worktree's signal guard
+ */
+async function measureToolchain(tree, scratch, options = {}, guard = null) {
+  const pinned = pinnedNode(tree);
+  if (pinned !== process.version && !options.anyNode) {
+    const reason = pinned === null
+      ? `no pinned Node at the point (${PUBLISH_WORKFLOW} env.NODE_VERSION): run under the pipeline's Node with --any-node`
+      : `the running Node ${process.version} is not the pipeline's pinned ${pinned} (${PUBLISH_WORKFLOW} env.NODE_VERSION at the point): run under it, or pass --any-node`;
+    return TOOLCHAIN_IDS.map((id) => notMeasurable(id, reason));
+  }
+  const entries = await toolchainEntries(tree, scratch, options, toolRunner(options, guard));
+  return pinned === process.version ? entries : entries.map((m) => withRaw(m, { node: process.version, node_pinned: pinned }));
+}
+
+async function toolchainEntries(tree, scratch, options, run) {
+  const env = toolEnv();
+  const npm = (step, args, extraEnv = {}) => run({ step, command: 'npm', args, cwd: tree, env: { ...env, ...extraEnv } });
+  const install = await npm('install', ['ci']);
+  if (install.error !== undefined || install.signal !== null || install.status !== 0) {
+    const reason = failure('npm ci', install);
+    return TOOLCHAIN_IDS.map((id) => notMeasurable(id, reason));
+  }
+  const pkg = readJson(join(tree, 'package.json'));
+  const scripts = pkg && pkg.scripts && typeof pkg.scripts === 'object' ? pkg.scripts : {};
+  const noScript = (id, name) => notMeasurable(id, `package.json at the measurement point has no \`${name}\` script`);
+  const workers = options.maxWorkers === undefined ? [] : [`--maxWorkers=${options.maxWorkers}`];
+
+  const q01Results = {};
+  for (const name of Q01_SCRIPTS) if (name in scripts) q01Results[name] = await npm(name, ['run', name]);
+  const built = 'build' in scripts && q01Results.build.status === 0 && q01Results.build.signal === null && q01Results.build.error === undefined;
+
+  const resultsFile = join(scratch, 'jest-results.json');
+  const q02Entry = 'test' in scripts
+    ? q02(tree, await npm('test', ['test', '--', '--json', `--outputFile=${resultsFile}`, ...workers]), resultsFile)
+    : noScript('Q02', 'test');
+
+  const coverageDir = join(scratch, 'coverage');
+  const coverage = 'test:coverage' in scripts
+    ? q03q04(tree, await npm('coverage', ['run', 'test:coverage', '--', '--coverageReporters=json-summary', `--coverageDirectory=${coverageDir}`, ...workers]), join(coverageDir, 'coverage-summary.json'))
+    : [noScript('Q03', 'test:coverage'), noScript('Q04', 'test:coverage')];
+
+  const q11Entry = await q11(tree, run, env, built);
+  const q12Entry = 'test:latency' in scripts ? q12(await npm('latency', ['run', 'test:latency'], { WINGFOIL_LATENCY_REPORT: '1' })) : noScript('Q12', 'test:latency');
+  const q17Entry = await q17(tree, run, env, options.offline === true);
+  return [q01(scripts, q01Results), q02Entry, ...coverage, q11Entry, q12Entry, q17Entry];
+}
+
 // --- the release, the point, the previous run --------------------------------------------------------
 
 function findRelease(root, version) {
@@ -981,7 +1503,8 @@ function previousRun(root, healthDir, release, previous) {
 function toolchain(root, point) {
   const lock = readBlobBytes(root, point, 'package-lock.json');
   if (lock === null) throw new UsageError(`no package-lock.json at the measurement point ${point}`);
-  const npm = spawnSync('npm', ['--version'], { encoding: 'utf-8' });
+  // The npm the tools run: the one beside this Node first on PATH (review F3).
+  const npm = spawnSync('npm', ['--version'], { encoding: 'utf-8', env: toolEnv() });
   return {
     node: process.version,
     npm: npm.status === 0 ? String(npm.stdout).trim() : 'unknown',
@@ -995,9 +1518,11 @@ function toolchain(root, point) {
  * Measure the release `options.release` of the repository at `root` and return the report (not written).
  *
  * @param {string} root
- * @param {{ release: string, at?: string, previous?: string, offline?: boolean, external?: Function, catalogue?: string }} options
+ * @param {{ release: string, at?: string, previous?: string, offline?: boolean, external?: Function, catalogue?: string,
+ *   toolchain?: boolean, tools?: Function, anyNode?: boolean, maxWorkers?: number, log?: (line: string) => void,
+ *   interrupts?: { target?: NodeJS.EventEmitter, die?: (signal: string) => unknown, signals?: readonly string[] } }} options
  */
-function measureRelease(root, options) {
+async function measureRelease(root, options) {
   if (!VERSION_RE.test(String(options.release))) throw new UsageError(`--release ${options.release} is not a release version (vX.Y or vX.Y.Z)`);
   const dist = loadDist();
   const cataloguePath = options.catalogue ?? join(root, catalogueLocation(root));
@@ -1013,7 +1538,7 @@ function measureRelease(root, options) {
   const smallSample = Number(catalogue.defaults && catalogue.defaults.small_sample) || 30;
 
   const measured = new Map();
-  withWorktree(root, point.commit, (tree) => {
+  await withGuardedWorktree(root, point.commit, async (tree, dir, guard) => {
     const ctx = {
       root,
       tree,
@@ -1031,7 +1556,13 @@ function measureRelease(root, options) {
     for (const m of first) measured.set(m.id, m);
     const identical = JSON.stringify(first) === JSON.stringify(second);
     measured.set('P07', entry('P07', { value: identical, raw: { runs: 2, identical }, failing: identical ? [] : ['P01–P06 differ between two computations on the same range'] }));
-  });
+    if (options.toolchain !== false) {
+      const scratch = join(dir, 'out');
+      mkdirSync(scratch);
+      for (const m of await measureToolchain(tree, scratch, options, guard)) measured.set(m.id, m);
+    }
+  }, options.interrupts);
+  if (options.toolchain === false) for (const id of TOOLCHAIN_IDS) measured.set(id, notMeasurable(id, 'the toolchain half was not run (--no-toolchain)'));
   for (const m of measureExternal(root, point.commit, options)) measured.set(m.id, m);
   if (release.kind === 'patch') {
     measured.set('D01', entry('D01', { status: 'not-comparable', reason: 'a patch release: D01 is measured on major and minor releases only (dl-089 §2)' }));
@@ -1068,7 +1599,13 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === '--offline') options.offline = true;
-    else if (['--release', '--at', '--previous', '--out', '--root'].includes(flag)) {
+    else if (flag === '--no-toolchain') options.toolchain = false;
+    else if (flag === '--any-node') options.anyNode = true;
+    else if (flag === '--max-workers') {
+      if (!/^[1-9][0-9]*$/.test(String(argv[i + 1]))) throw new UsageError(`--max-workers needs a positive integer, got ${argv[i + 1] === undefined ? 'nothing' : JSON.stringify(argv[i + 1])}`);
+      options.maxWorkers = Number(argv[i + 1]);
+      i += 1;
+    } else if (['--release', '--at', '--previous', '--out', '--root'].includes(flag)) {
       if (argv[i + 1] === undefined) throw new UsageError(`${flag} needs a value`);
       options[flag.slice(2)] = argv[i + 1];
       i += 1;
@@ -1078,11 +1615,11 @@ function parseArgs(argv) {
   return options;
 }
 
-function main(argv) {
+async function main(argv) {
   try {
     const options = parseArgs(argv);
     const root = options.root ?? git(process.cwd(), ['rev-parse', '--show-toplevel']).trim();
-    const report = measureRelease(root, options);
+    const report = await measureRelease(root, { ...options, log: (line) => process.stderr.write(`release-health measure: ${line}\n`) });
     const out = options.out ?? join(root, catalogueLocation(root).replace(/[^/]+$/, ''), `release-health-${options.release}.json`);
     const target = isAbsolute(out) ? out : join(process.cwd(), out);
     mkdirSync(dirname(target), { recursive: true });
@@ -1095,8 +1632,10 @@ function main(argv) {
   }
 }
 
-module.exports = { measureRelease, processConformance, resolveMeasurementPoint, formatReportJson, parseHttp, httpDay, main };
+module.exports = { measureRelease, measureToolchain, withGuardedWorktree, parseLatencyReport, processConformance, resolveMeasurementPoint, formatReportJson, parseHttp, httpDay, main };
 
 if (require.main === module) {
-  process.exitCode = main(process.argv.slice(2));
+  void main(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  });
 }
