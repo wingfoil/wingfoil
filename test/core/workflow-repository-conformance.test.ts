@@ -104,9 +104,12 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-planning", "phases[6].checks.post[0]", "frontmatter.required"],
       // task-230 (dl-102 §2): build-backlog's criteria check; (dl-100 §2) commit-backlog's backlog_committed.
       ["release-planning", "phases[6].checks.post[1]", "acceptance-criteria.consistent"],
+      // task-230 review F1: each task's wave is listed; commit-backlog's waves is a non-empty list.
+      ["release-planning", "phases[6].checks.post[2]", "task.wave.declared"],
       ["release-planning", "phases[7].checks.pre[0]", "frontmatter.required"],
+      ["release-planning", "phases[7].checks.pre[1]", "waves.declared"],
       // task-230 (dl-133 §2): no single command runs the docs/examples scripts (docs/examples/README.md).
-      ["wave", "phases[3].checks.post[1]", "docs.examples.passing"],
+      ["wave", "phases[1].checks.post[1]", "docs.examples.passing"],
       // task-221 (dl-133 Q4 (i)): the stop-the-line check reads memory.yaml's rule; no command asserts it yet.
       ["dev-loop", "phases[0].checks.pre[0]", "stop-the-line.clear"],
       // task-230 (dl-100 §3 (a)): the growth check reads memory.yaml's release.growth_threshold; no command asserts it yet.
