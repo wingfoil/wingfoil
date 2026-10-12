@@ -47,6 +47,13 @@ As in step 2.
 
 Captured on 2026-10-11 by `bug-ingest-rel-v0.3-w3b5-review-findings-plan` (item 23), from the wave 3 batch B5 follow-ups (`dev-loop-rel-v0.3-plan`), re-checked on `main` at `29b8406a` with the code build of that commit (`npm run build`, then `node dist/cli.js`).
 
+**Note (2026-10-12, wave 3 batch B6; W3 B6 follow-ups, `bug-ingest-rel-v0.3-w3b6-review-findings-plan` item E5).**
+The gap now has a consumer: `task-230`'s `wave.yaml` declares the post-check `docs.examples.passing` and leaves it
+unbound because "no single command runs them" (`sed -n 49p .wingfoil/workflows/custom/wave.yaml`), and `grep -n
+examples package.json` → no script entry. A small script (or `npm run` entry) that runs every
+`docs/examples/*/run.sh` against a given build would bind that check and serve the `e2e-smoke` gate this bug asks
+for (`task-230`'s developer notes and independent review).
+
 ### Retrospective
 
 None.
