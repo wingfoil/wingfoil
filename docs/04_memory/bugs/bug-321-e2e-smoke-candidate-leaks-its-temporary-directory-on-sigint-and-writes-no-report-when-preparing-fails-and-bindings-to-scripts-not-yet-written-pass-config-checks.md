@@ -56,6 +56,12 @@ As in the steps.
 Captured on 2026-10-10 by `bug-ingest-rel-v0.3-w3b4-review-findings-plan` (item C9); step 2 reproduced on a clean
 worktree of `main` at `02800955`.
 
+**Note (2026-10-12, the approver's absorption of the inherited v0.3 bugs;
+`bug-ingest-rel-v0.3-w3b6-review-findings-plan`).** `task-282` (Fix B, v0.3, wave 3 batch B8) now changes the same
+script's candidate path (`scripts/e2e-smoke.cjs --candidate`: the pack-inputs check and the clean `dist/` build of
+`bug-310`). This bug stays v0.4 and out of `task-282`'s scope, but whoever fixes it reads `task-282`'s Execution Notes
+first, and `task-282` is told of it in its Implementation Notes.
+
 ### Retrospective
 
 None.
