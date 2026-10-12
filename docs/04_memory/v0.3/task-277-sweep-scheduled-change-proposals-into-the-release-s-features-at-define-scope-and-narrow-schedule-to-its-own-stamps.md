@@ -39,12 +39,16 @@ that already owns it (`define-scope` produces the release document: `release-pla
   `release` stamp only, and no longer asks for an edit of the release element's `features:`; the actions stay
   `element.set_release("{change-proposal.target_release}")` and `element.set_state(scheduled)`; the version is
   bumped once.
-- (red-first) `release-planning.yaml` `define-scope`: a selection of `change-proposal` elements with `status:
-  [scheduled]` and `release: ["{release.version}"]`, whose `feature` ids are written into the release element's
-  `features:` before its submit; a post-check (prose or bound) that every such feature id appears in `features:`.
-  The version is bumped once. The phase's `frontmatter.required` check and its `kind` exemptions are unchanged.
+- (red-first) `release-planning.yaml` `define-scope` (amended 2026-10-12, approver ruling D1 (c), D2): the
+  description states the sweep — the `change-proposal` elements with `status: scheduled` and `release:
+  "{release.version}"` are read and their `feature` ids written into the release element's `features:` before its
+  submit (on a release already past `draft`, through `memory amend`, or a hand amend while `memory amend` refuses a
+  release with no `kind:`) — and an unbound post-check `change-proposals.swept(…)` states that every such feature
+  id appears in `features:` (bound later under `dl-166` Q2 (ii)). No `where`: the phase keeps `memory.submit` and its
+  `state` evidence. The version is bumped once. The phase's `frontmatter.required` check and its `kind` exemptions
+  are kept as they are.
 - (red-first) `test/core/workflow-repository-conformance.test.ts` and the `vision-change` / `release-planning`
-  tests pin the new selection and description; the repository still loads with zero errors (`node dist/cli.js
+  tests pin the new sweep check and description (amended 2026-10-12, ruling D1 (c): no selection); the repository still loads with zero errors (`node dist/cli.js
   workflow list --format json` → no diagnostic of severity `error`).
 - (red-first, document) `.wingfoil/WORKFLOW.md` draws the sweep on the `release-planning` node and the narrowed
   `schedule` step; `spec-017` §12 figures and `spec-003`, if a count they state moves, by pending amendment.
@@ -167,6 +171,31 @@ AC 1–3 red-first (`test/core/define-scope-sweep.test.ts`), AC 4–5 red-first 
 `WORKFLOW.md`'s nodes; the `dl-132` note is a pending amendment), AC 6 characterization.
 
 No red, green or refactor ran; no gate ran (`git diff --stat 91f7a530 -- src test .wingfoil` → empty).
+
+### Design, second pass (architect, 2026-10-12) — after the approver's rulings
+
+Rulings (2026-10-12, `devloop-kit/w3-b6-notes.md` "Approver rulings on task-277"): **D1 (c)** — no `where` on
+`define-scope`; the sweep is prose in its description plus an unbound post-check `change-proposals.swept(…)`, bound
+later under `dl-166` Q2 (ii); the phase keeps `memory.submit` and its `state` evidence; no `spec-003` change, no
+code. **D2** — on a release already past `draft` the sweep writes `features:` through `memory amend`, its
+`--reason` naming the change-proposals swept; on a release predating `dl-092` (no `kind:`, e.g. `minor-v0.4`)
+`memory amend` refuses (the bug found at `task-230`'s close), so a hand amend in the form of `4c5fec67` /
+`d5cb532f` (`git show --stat 4c5fec67 d5cb532f`) until that bug is fixed.
+
+Consequence, recorded here as the ruling asks: AC 2 and AC 3 above are amended in this file (their "selection"
+wording replaced by the declared sweep check, dated). The design of the first pass otherwise stands:
+- `vision-change.yaml` 1.0 → 1.1: `schedule` names the sequencer entry and the `release` stamp only.
+- `release-planning.yaml` 1.9 → 2.0 (numerically), `task-230`'s blocks kept; `define-scope` gains the sweep prose
+  and `change-proposals.swept(…)` as `checks.post[1]`.
+- `memory.yaml` 3.2 → 3.3 (comment-only: lines 290 and 303, "`scheduled` once a release carries it"); `task-233`
+  also writes `memory.yaml` (3.2 → 3.3) and merges after this task, so the gate re-bumps it.
+- `.wingfoil/memory/templates/change-proposal.md` `## Target release` comment, `tmpl_version` 261010 → 261012;
+  `.wingfoil/README.md:122`; `WORKFLOW.md`'s `DS` (`:317`), `RP` (`:192`) and `V7` (`:502`) nodes.
+- `dl-132` dated note and `spec-017` §12's unbound-warning count: pending amendments.
+
+AC classification (T1): AC 1–4 red-first, in the new suite `test/core/define-scope-sweep.test.ts` plus the one
+row the new unbound check adds to `test/core/workflow-repository-conformance.test.ts` (both committed at red, and
+not edited after it); AC 5 a document (pending amendment, read by the reviewer); AC 6 characterization.
 
 ### Retrospective
 
