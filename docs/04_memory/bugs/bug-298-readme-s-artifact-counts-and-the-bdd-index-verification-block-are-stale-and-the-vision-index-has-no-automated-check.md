@@ -69,3 +69,11 @@ of the vision index is a manual script that has itself gone stale.
 
 Captured on 2026-10-07 by `bug-ingest-rel-v0.3-w3b2-review-findings-plan`, from `task-220`'s review and `task-261`'s
 development notes (W3 B2, `dev-loop-rel-v0.3-plan`), measured on `main` at `c485e433`.
+
+**Note (2026-10-12, re-measured after wave 3 batch B6; W3 B6 follow-ups,
+`bug-ingest-rel-v0.3-w3b6-review-findings-plan` item C4).** On `main` at `0da232cb` the BDD index's verification block
+is two files further behind: `sed -n 129,135p docs/02_requirements/02_bdd/00_index.md` still reads "P1=13, P2=5,
+P3=8, P4=20, P5=15, X1=2 → **63**" and 190 scenarios, while `find docs/02_requirements/02_bdd/features -name
+'*.feature' | wc -l` → `65` (P5 now 17: `task-240` added `P5.3.4-agent-list.feature` in B6) and `grep -rhE
+'^\s*Scenario( Outline)?:' docs/02_requirements/02_bdd/features | wc -l` → `251`. Found again in `task-240`'s
+developer notes; the fix stays this bug's.
