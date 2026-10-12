@@ -137,3 +137,20 @@ unchanged.
 - **The interim rule absorbed all four.** The batch finished its remaining gates one at a time with no further
   overload; each case above is one the lock with a pid and a load wait (Decisions 2–4) would handle without anyone
   remembering a rule.
+
+**Note (2026-10-12, evidence from wave 3 batch B6 under the interim rule; W3 B6 follow-ups,
+`bug-ingest-rel-v0.3-w3b6-review-findings-plan` item C3).** Recorded as evidence for Q1–Q3; the Decision above is
+unchanged.
+
+- **A targeted jest run is a build.** `test/global-setup.cjs` runs `npm run -s build` (a full `tsc -p
+  tsconfig.build.json` and the build record) before every jest run, targeted ones included, after removing `dist/`
+  (`sed -n 31,39p test/global-setup.cjs`; `grep -n rmSync test/dist-lock.cjs`). Example: `npx jest
+  test/docs/name-resolvability.test.ts --maxWorkers=2` in a worktree whose `dist/` was built at 19:17 left
+  `dist/build-info.json` with an mtime of 19:20:30, the run's own build (`ls -l --time-style=full-iso
+  dist/build-info.json`).
+- **The interim rule does not see it.** The rule treats targeted suites as free and asks for the slot
+  (`waitslot.sh`) only before heavy gates; the slot test matches `tsc -p tsconfig.build.json` only while that
+  compile runs, so a targeted run can start its build while another worktree's coverage gate holds the slot (`task-240`'s
+  developer notes).
+- Q2 (A)'s lock taken by `prepareDist` too (today it holds only a per-worktree lock, `bug-095`), or a lighter path
+  for targeted runs that reuses a current `dist/`, would cover the case.

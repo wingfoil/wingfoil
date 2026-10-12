@@ -64,6 +64,13 @@ dist-tag explicit and correct in both directions, and checks that the MCP Regist
   it `0.3.1` could not be published from `release/0.3` (which `dl-159` forbids back-merging into); the `v0.3.0`
   publish, on the `main` path, exercises it first.
 
+- **Handover from wave 3 B6 (2026-10-12, W3 B6 follow-ups, `bug-ingest-rel-v0.3-w3b6-review-findings-plan` item B3;
+  `task-238`'s independent review).** The MCP Registry orders a server's versions by semver and marks the highest one
+  "latest" by itself (its published versioning rules, as `task-238`'s review read them), unlike npm, where this task
+  must pass an explicit dist-tag. So the `mcp-registry` job (`sed -n 309,346p .github/workflows/publish.yml`) needs no
+  "latest only for the highest version" logic of its own when a `0.3.x` patch is published after a higher minor;
+  extending the job's single `if:` (the `dl-159` handover) for `release/X.Y` tags is enough. No criterion changes.
+
 ## Execution Notes
 
 <!-- Running log of what actually happened while working this task through dev-loop — filled in

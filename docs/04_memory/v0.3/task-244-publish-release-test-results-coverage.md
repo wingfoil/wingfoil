@@ -38,6 +38,13 @@ A release keeps no test results or coverage, so its quality claims cannot be che
   `release-publishing.yaml`: a 0.3.x summary is committed on `release/0.3` and merged forward, and two lines must
   not write the same path. The `spec-015` §3 Revision note does not restate "tag on `main`".
 
+- **Handover from wave 3 B6 (2026-10-12, W3 B6 follow-ups, `bug-ingest-rel-v0.3-w3b6-review-findings-plan` item B2;
+  `task-238`'s developer notes).** This task is the last `publish.yml` writer after `task-238`. The approver runbook's
+  step 8 (`sed -n 106,111p .github/workflows/publish.yml`) says a registry refusal "(a version already listed, …)
+  fails only this job", but not that re-running a `mcp-registry` job that already succeeded is always refused: the
+  registry accepts each version once, so "Re-run failed jobs" after a late approval must not include a succeeded
+  `mcp-registry`. Add that sentence to step 8 on this task's touch of the runbook; no criterion changes.
+
 ## Execution Notes
 
 <!-- Running log of what actually happened while working this task through dev-loop — filled in

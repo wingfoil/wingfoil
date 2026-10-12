@@ -66,3 +66,7 @@ The documents describe the pre-B1 state.
 Captured on 2026-10-05 by `bug-ingest-rel-v0.3-w2b1-review-findings-plan`, from the independent reviews of wave 2
 batch B1 (`dev-loop-rel-v0.3-plan`: `task-185`, `task-175`, `task-192`, `task-177` reviews), checked against `main`
 at `0b297169`.
+
+**Note (2026-10-12, the approver's absorption of the inherited v0.3 bugs; `bug-ingest-rel-v0.3-w3b6-review-findings-plan`).**
+Owner: the v0.3 `user-docs` phase (`align-user-docs`, `dl-013`, `sed -n 1,20p .wingfoil/workflows/custom/user-docs.yaml`),
+not a `dev-loop` task: the bug stays `triaged` with release v0.3 and is closed by that phase's commits.

@@ -61,3 +61,7 @@ Neither is in the guide.
 
 Captured on 2026-10-07 by `bug-ingest-rel-v0.3-w3b1-review-findings-plan`, from `task-195`'s developer notes (W3 B1,
 `dev-loop-rel-v0.3-plan`), checked against `main` at `0962f85f`.
+
+**Note (2026-10-12, the approver's absorption of the inherited v0.3 bugs; `bug-ingest-rel-v0.3-w3b6-review-findings-plan`).**
+Owner: the v0.3 `user-docs` phase (`align-user-docs`, `dl-013`, `sed -n 1,20p .wingfoil/workflows/custom/user-docs.yaml`),
+not a `dev-loop` task: the bug stays `triaged` with release v0.3 and is closed by that phase's commits.

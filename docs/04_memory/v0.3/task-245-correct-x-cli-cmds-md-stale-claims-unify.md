@@ -42,6 +42,16 @@ The CLI vision reference declares sync against the retired `tech-stack` key, rep
   workflow (or an open instance id) is a positional and there is no `--name` (`node dist/cli.js workflow --help` →
   `show <ref>`).
 
+- **Handover from wave 3 B6 (2026-10-12, W3 B6 follow-ups, `bug-ingest-rel-v0.3-w3b6-review-findings-plan` item B4;
+  `task-211`'s developer notes and independent review).** Since `task-211`, `workflow create <name>` and `workflow
+  remove <ref>` take positionals and `remove` always checks the includes (`node dist/cli.js workflow create --help`,
+  `node dist/cli.js workflow remove --help`; `workflow start <name>` and `workflow end [ref]` likewise). `docs/01_vision/X_cli-cmds.md` still
+  shows `[--name NAME]` on `workflow start`, `end`, `create` and `remove` and the `--verify-includes` flag (lines 165,
+  166, 169, 170 and 180 on `main` `0da232cb`), and US-6-02 (`docs/02_requirements/01_user_story_map/07_workflow-config.md`
+  lines 21–22) still promises an "interactive or flag-based" `workflow create`, while the interactive form is
+  post-v0.3 (`06_features.md` P4.8, `task-211`). Both are in this task's ground; US-6-02's wording takes a
+  `doc-versioning` bump of its file.
+
 ## Execution Notes
 
 <!-- Running log of what actually happened while working this task through dev-loop — filled in

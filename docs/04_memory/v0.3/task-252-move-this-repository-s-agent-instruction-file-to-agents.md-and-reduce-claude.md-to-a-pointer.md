@@ -8,7 +8,7 @@ kind: "feature"               # REQUIRED — feature | fix (dl-133 Q1 (b)): `fix
 priority: "medium"           # optional — high | medium | low
 tags: ["agents","documentation"]               # optional — additional labels, e.g. [architecture, backend]
 ref: "dl-137"                # optional — backlog item ID, e.g. "TASK-001"
-bug: ["bug-236", "bug-284"]                # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
+bug: ["bug-236", "bug-284", "bug-220-claude.md-and-wingfoil-readme.md-predate-memory-amend-and-the-supersedes-trigger", "bug-302-agents.md-claude.md-and-wingfoil-readme.md-still-call-workflow-list-the-only-workflow-command-and-p4.13-omits-commit-history"]                # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
                        # by release-planning, and a bug ABSORBED into an existing task's Acceptance Criteria because that
                        # task already owns the ground. `bug.sync_state` iterates this list; a bug with no task naming it
                        # here never advances past `triaged` (only a reject to `closed`, dl-123). A single string is still accepted for documents predating dl-045.
@@ -114,6 +114,24 @@ Part (b), the generated export, is v0.4 (`dl-137` Q3) and is not in scope.
     in the changelog``; `grep -n "^## \[" CHANGELOG.md | head -1` → `## [0.2.2] - 2026-09-29`). `release-publishing`'s
     `release-commit` phase already lists `CHANGELOG.md` among the files the release commit carries
     (`sed -n 15,18p .wingfoil/workflows/custom/release-publishing.yaml`); the section must exist by then.
+
+- **Handover from wave 3 B6 (2026-10-12, W3 B6 follow-ups, `bug-ingest-rel-v0.3-w3b6-review-findings-plan` item B5;
+  `task-230` and `task-277` developer notes and reviews).** Measured on `main` at `0da232cb`; no criterion changes.
+  - The agent file's §6 (`sed -n 371,376p CLAUDE.md`) still describes `delivery` → `release-cycle` →
+    `release-planning` → `dev-loop` with no wave: since `task-230` the implementation phase includes `wave` over the
+    release's `waves:` (`sed -n 45,46p .wingfoil/workflows/custom/release-cycle.yaml`), each wave a set of
+    `dev-loop`s, then re-sweep, re-plan and wave-checks.
+  - `COLLABORATION.md` lines 35–37 say a change-proposal is "triaged, approved, and scheduled into a release during
+    `release-planning` (see `dl-016` — `triage-bugs` + `reconcile-governance`)"; since `task-212`/`task-277` it is
+    scheduled by `vision-change`'s `schedule` step (which stamps its `release`) and swept into the release's
+    `features:` by `release-planning`'s `define-scope` (`sed -n 305,309p .wingfoil/WORKFLOW.md`).
+
+- **Handover from the approver's absorption of the inherited v0.3 bugs (2026-10-12,
+  `bug-ingest-rel-v0.3-w3b6-review-findings-plan`).** This task also absorbs `bug-220` (the agent-facing documents
+  predate `memory amend` and the `supersedes:` trigger: `CLAUDE.md` §5.1's "exactly one git commit" against the
+  approve that fires the trigger) and `bug-302` (`docs/agents.md`, `CLAUDE.md` and `.wingfoil/README.md` still call
+  `workflow list` the only workflow command; P4.13's narrative omits the commit history). Both are agent-facing
+  documents this task rewrites; their Steps to Reproduce give the lines and commands.
 
 ## Execution Notes
 

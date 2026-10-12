@@ -8,7 +8,7 @@ kind: "feature"
 priority: "medium"
 tags: ["v0.3", "process", "release-health", "scripts"]
 ref: "dl-089"
-bug: []
+bug: ["bug-344-the-release-health.measure-binding-passes-neither-any-node-nor-max-workers-to-measure.cjs", "bug-332-a-test-imports-ajv-which-package.json-does-not-declare"]
 depends_on: ["task-231-measure-git-history-process-conformance-external-metrics", "task-232-measure-build-test-coverage-example-latency-install-metrics", "task-233-measure-static-memory-metrics-including-fix-share"]
 tmpl_version: 260703
 ---
@@ -53,6 +53,25 @@ tmpl_version: 260703
     rule that a share with no item is `not-measurable`.
   - P04 resolves an element id by prefix, so `dl-117` matches any `dl-117-*` (line 726).
   - `UNCHECKABLE_RE` (line 613) depends on the exact wording of a `check-governance.cjs` message.
+
+- **Handover from wave 3 B6 (2026-10-12, W3 B6 follow-ups, `bug-ingest-rel-v0.3-w3b6-review-findings-plan` item B1;
+  `task-232`'s independent review).** This task absorbs `bug-344`: the binding `release-health.measure`
+  (`sed -n 103p .wingfoil/workflows/bindings.yaml`) runs `measure.cjs --release {release}` with neither
+  `--any-node` nor `--max-workers`. Off Node 22.12.0 (`publish.yml` `NODE_VERSION`; this machine runs `v22.21.0`)
+  every toolchain metric is then `not-measurable` (`sed -n 1446,1448p scripts/release-health/measure.cjs`), so
+  `dl-089` §5's immediate-bug rule can never fire for them; on 22.12.0 the two jest runs use jest's default workers
+  against `dl-170`'s interim rule (`sed -n 1466p scripts/release-health/measure.cjs`). The binding either declares
+  how the step runs under the pinned Node or admits `--any-node` (recorded in the report), and passes
+  `--max-workers 2`; the bindings test and `release-health.yaml`'s step description follow. Also from `task-232`'s
+  review, for `compare.cjs`: Q17 (like G15 and E01–E05) is a reading at run time, not at the point, so a changed
+  value between two reports is not a regression (`dl-089` §1); `dl-173` holds the catalogue question.
+
+- **Handover from the approver's absorption of the inherited v0.3 bugs (2026-10-12,
+  `bug-ingest-rel-v0.3-w3b6-review-findings-plan`).** This task also absorbs `bug-332`:
+  `test/release-health/measure.test.ts:22` imports `ajv/dist/2020`, which `package.json` does not declare (`grep -n
+  '"ajv"' package.json` → no match; `npm ls ajv` → only through `@modelcontextprotocol/sdk`). Declare `ajv` in
+  `devDependencies` at the major the test uses (8), with the lockfile, sequenced with `task-234`'s `package.json`
+  edit (`homepage`) so the two do not conflict.
 
 ## Execution Notes
 

@@ -79,3 +79,32 @@ the history's age.
 - **Related:** `dl-089` (release-health), `dl-117` and `dl-158` (attribution), `dl-079` (the `wf()` grammar),
   `dl-101` (id allocation, G15), `task-231` (the history half), `task-232`, `task-233` (the quality half),
   `task-241` (compare).
+
+**Note (2026-10-12, definitions chosen by the quality half of `measure.cjs` in wave 3 batch B6; W3 B6 follow-ups,
+`bug-ingest-rel-v0.3-w3b6-review-findings-plan` item C1).** `task-232` (toolchain half) and `task-233` (static and
+Memory half) fixed six more choices that change a value, listed in the script's header (`sed -n 50,100p
+scripts/release-health/measure.cjs`). They extend the list above; the Decision above is unchanged, and each is to be
+ratified per item with the five.
+
+6. **Q15 (document divergences), the commits judged.** A bug added in the window is judged only on the non-merge,
+   non-`wf()` commits citing both its id and the id of a task whose `bug:` names it, and a fix that changes only
+   tests, configuration or a lockfile counts as a divergence (`task-233`'s run over v0.3's window: 27 of 73 bugs
+   classified, 96 unclassified; `bug-181` and `bug-225` among the test- or configuration-only fixes counted). Choose
+   whether such fixes are divergences, and whether an unclassified bug is excluded or reported apart.
+7. **Q09 (dangling ids), deliberately fictional ids.** Every dangling id Q09 finds in test comments and titles is a
+   fake id written on purpose by a negative test (`task-999`, `adr-050` …; 8 at `task-233`'s review): (a) such ids are
+   excluded by a declared marker or allowlist; (b) the metric counts them and the floor is read with that in mind.
+8. **Q08 (dependency footprint), the dependency count.** `dl-010` Action 3's count of runtime dependencies is reported
+   as `raw.runtime_dependencies` inside Q08 rather than as a metric of its own (`task-233`'s design: adding or
+   redefining a metric bumps the catalogue): (a) keep it raw; (b) a catalogue metric with its own direction.
+9. **Q17 (documented install resolves), a reading at run time.** `npm view` answers for the registry as it is when the
+   script runs, not at the point, like G15 and E01–E05; `task-241`'s `compare.cjs` must not count a changed value as a
+   regression (`dl-089` §1). Choose with item 3 (G15 (b): a `snapshot` metric excluded from comparisons).
+10. **Q12 (CLI latency), the fixture.** The catalogue and `dl-089` say "the 40-element fixture" (`grep -n
+    "40-element" docs/08_health/metrics.yaml`), while `npm run test:latency` measures REQ-PERF-02 on a
+    1,000-Memory-document reference repository (`sed -n 6,7p test/core/helpers/latency.ts`): the catalogue text
+    follows the measurement, or the measurement the text.
+11. **Backfill of v0.1 and v0.2.** A point with no `.wingfoil/dna.yaml` (before `task-111` moved the configuration
+    to the root) leaves the static metrics `not-measurable`; v0.1 and v0.2 are measurable only with `--at` a later
+    commit (`sed -n 64,66p scripts/release-health/measure.cjs`), which measures a different tree. State whether the
+    backfill uses `--at` and how the report marks it.

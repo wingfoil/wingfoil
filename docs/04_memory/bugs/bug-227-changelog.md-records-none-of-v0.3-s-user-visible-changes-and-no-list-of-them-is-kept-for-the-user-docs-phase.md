@@ -111,3 +111,7 @@ batch B6 (`dev-loop-rel-v0.3-plan`), reproduced against `main` at `ccccc227`.
   (`task-210`); the `{role}-session` MCP Prompt accepts `element` and `state` (`task-195`); `wingfoil init` installs
   the built-in adapters as protected built-in assets (`task-196`); `workflow list` checks workflows against
   `memory.yaml`, `dna.yaml` and the state machines (`task-194`).
+
+**Note (2026-10-12, the approver's absorption of the inherited v0.3 bugs; `bug-ingest-rel-v0.3-w3b6-review-findings-plan`).**
+Owner: the v0.3 `user-docs` phase (`align-user-docs`, `dl-013`, `sed -n 1,20p .wingfoil/workflows/custom/user-docs.yaml`),
+not a `dev-loop` task: the bug stays `triaged` with release v0.3 and is closed by that phase's commits.

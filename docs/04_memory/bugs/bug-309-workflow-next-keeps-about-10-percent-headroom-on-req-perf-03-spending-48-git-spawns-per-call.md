@@ -5,7 +5,7 @@ title: "workflow next keeps about 10 percent headroom on REQ-PERF-03, spending 4
 status: triaged          # auto-set by wingfoil; memory.submit → open
 severity: "medium"   # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"   # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
-release: "v0.3"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
+release: "v0.4"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
 feature: "P4.4"   # optional — related feature ID, e.g. "P1.6"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
@@ -61,6 +61,12 @@ idle verdict `task-216` added (`inProcessIdleVerdict`), bounds the total as `dl-
 
 Captured on 2026-10-10 by `bug-ingest-rel-v0.3-w3b4-review-findings-plan` (item A5); the spawn count re-measured on
 `main` at `02800955`.
+
+**Note (2026-10-12, moved from v0.3 to v0.4 at the approver's absorption of the inherited v0.3 bugs;
+`bug-ingest-rel-v0.3-w3b6-review-findings-plan`).** The approver ruled on 2026-10-10 (W3 B4 rulings, item 8, quoted
+above) that the in-process REQ-PERF-03 check is enough for v0.3; the spawned-total check and the spawn reduction need
+a refactor of the deduction's snapshot loading, which belongs with v0.4's planning, not a v0.3 batch. The `release`
+field was reassigned by a hand `wf(bug): assign release v0.4` commit, since `memory amend` does not own `release`.
 
 ### Retrospective
 
