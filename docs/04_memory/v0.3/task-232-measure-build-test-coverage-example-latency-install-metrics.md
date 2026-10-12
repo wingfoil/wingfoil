@@ -2,7 +2,7 @@
 id: "task-232-measure-build-test-coverage-example-latency-install-metrics"
 type: task
 title: "Measure the build, test, coverage, example, latency and install metrics"
-status: in-progress
+status: in-review
 release: "v0.3"
 kind: "feature"
 priority: "medium"
@@ -11,7 +11,6 @@ ref: "dl-089"
 bug: ["bug-329"]
 depends_on: ["task-134-report-source-file-coverage-so-untested-file-counts", "task-222-declare-release-health-catalogue-v2-report-schema-release"]
 tmpl_version: 260703
-rejection_reason: "Sent back for the independent review aaf50b10 of the submit at 2bf7e7e6, which found that the fix of bug-329, the bug this task closes, did not do what the bug asks on the path this machine takes by default.\n\nA signal that arrived while the guarded function ran without yielding, which is the --no-toolchain path and the pinned-Node refusal, was caught and then lost when the handlers were removed, so the script wrote its report and exited 0; with a terminal Ctrl-C the git children died too and their reads came back as absent. Failure reasons also recorded npm's debug-log pointer, a timestamp and a home path, so two runs at the same point differed. Smaller findings: npm --version read from the wrong PATH, the handler's uninstall not in a finally, and tool-error exit codes counted as measured failures.\n\nThe fixes landed at 15d33220 and, after the re-review ab548641 found that a single macrotask drain still missed a resume from a poll-phase callback, at 60b68e11 with real-process tests for each case. The toolchain half itself was judged sound and stays as it is."
 ---
 
 ## Description
