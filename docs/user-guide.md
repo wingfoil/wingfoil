@@ -108,7 +108,7 @@ commits:
 │   ├── built-in/             architecture, code-quality, code-review, documentation, security, testing
 │   └── custom/               determinism, doc-versioning, security-secrets, traceability (yours to edit)
 ├── agents/
-│   ├── built-in/             agent adapters shipped by WingFoil (none yet)
+│   ├── built-in/             agent adapters shipped by WingFoil (unreleased (v0.3): claude-code)
 │   └── custom/               your own agent adapters (empty)
 ├── workflows.yaml            the workflow manifest
 └── workflows/custom/         sw-life-cycle, bug-ingest, decision-log-ingest, adr-ingest, scrum-delivery (or kanban-delivery)
