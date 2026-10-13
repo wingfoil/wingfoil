@@ -160,6 +160,11 @@ path `docs/04_memory/v0.1/task-1.md`. Each case commits a first revision with th
   --maxWorkers=2` → 32 suites, 640 tests passed; `audit.ts | 100 | 89.04 | 100 | 100 | 111,191` — 65/73 before the
   developer's change, as the design predicted (only `:111` and `:191` uncovered).
 - **Red commit:** `e9f040fc` (T4 is measured from it).
+- **Send-back (2026-10-13, review, should-fix).** The header comment and both `describe` titles cited `audit.ts:349` /
+  `:352`, stale after green (`447169cd` moved them to `:359` / `:362`). `a5e86711` names them by function instead:
+  `parseStatus`'s non-mapping `if` and its `: null` arm for a non-string `status`. Comment and title text only, no
+  assertion changed. `npx jest test/memory/audit-status-shapes.test.ts --maxWorkers=2` → 7 passed;
+  `npx eslint` on the file → exit 0.
 
 ### Approver ruling after design (2026-10-12) and AC amendment
 
