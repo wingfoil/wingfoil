@@ -332,3 +332,56 @@ Not touched: `metrics.yaml`, `check-governance.cjs`, `src/`, `docs/cli-reference
   minor. **G — settlement mapping** of the retro outcomes as above. **H — floors also get a trend verdict** from
   `COMPONENTS` (findings still only from a breach). **I — run-time readings** (G15, Q17, E01–E05) never compared,
   declared in `compare.cjs` until `dl-173` puts it in the catalogue.
+
+### red (qa, 2026-10-13)
+
+- **Red commit `01aae1a9`** (T4 is measured from it). Files: `test/release-health/compare.test.ts`,
+  `propose.test.ts`, `measure-followups.test.ts`, `bindings-and-deps.test.ts`, `baselines.test.ts`,
+  `helpers/compare-api.ts` (the contract below, shared readers), `fixtures/compare/release-health-v0.{1,2,3}.json`
+  (sorted keys, catalogue order, no clock; v0.1 → v0.2 → v0.3 hold every floor and regress no trend), and
+  `measure.test.ts:334` (expects `basis: 'revision'`: the history fixture's point carries no `[… → released]`
+  transition, F8 (1)).
+- **How the module is reached.** `compare.cjs` is `require`d inside each test (`loadCompare()`), so a missing
+  module fails each test on `expect(error).toBeNull()` naming `Cannot find module …/compare.cjs`, not the suite on a
+  compile error; the CLI tests spawn it (`node compare.cjs`, today exit 1 ≠ 0/2).
+- **Contract the tests hold `compare.cjs` to** (`helpers/compare-api.ts`, from the design's API; where the design
+  left a shape open, this is the choice made): exports `classifyMetric`, `evaluateFloor`, `compareReports`,
+  `propose`, `parseProposals`, `settle`, `renderReport`, `FLOORS` and `COMPONENTS` (plain objects keyed by id),
+  `RUN_TIME_READINGS` (array). `classifyMetric` returns at least `{ verdict, floor, flags: string[] }`;
+  `compareReports({ catalogue, current, previous, history, remeasure })` — `history` holds every run ≤ the current
+  one, the current included — resolves to `{ rows }`, a row `{ id, previous, value, verdict, floor, flags, … }`;
+  the header facts (re-measured yes/no, the `--previous` revision) are read from `renderReport`'s Markdown;
+  `propose(comparison, { search, memoryYaml })` returns (or resolves to) a comparison that `renderReport` renders
+  with the Proposals section; `search(id)` returns the parsed `memory search --format json` object
+  `{ query, matches }`; `memoryYaml` is the parsed object; `parseProposals` returns `[{ id, metric, … }]`;
+  `settle` returns one `{ id, settled, … }` per previous proposal, in order, the text `no disposition recorded`
+  somewhere in the entry when it applies.
+- **Per AC.**
+
+| AC / item | Class | Tests | Fails today on |
+|---|---|---|---|
+| 1 | red-first | compare.test.ts: classifyMetric (14), evaluateFloor (30), table guards (3), compareReports two runs (3), like-for-like (2), trend (2), renderReport (2), CLI (7) | `loadCompare` → `Cannot find module …/compare.cjs`; CLI: `Expected: 0`/`2`, `Received: 1` |
+| F7 (schema) | red-first | compare.test.ts: fixture v0.2, v0.3 validate | ajv: `/previous must NOT have additional properties` (`basis`) |
+| 2 | red-first | propose.test.ts: search (5), immediate (5), parseProposals (1), settle (2), CLI stderr (1) | `Cannot find module`; CLI: no `immediate bug-ingest: G07` line |
+| 3 | red-first guard (runs by hand, session 3) | baselines.test.ts (9) | `expect(existsSync(…release-health-v0.1.json)).toBe(true)` → `false` |
+| 3 / ruling C | characterization | baselines.test.ts: no comparison Markdown tracked | passes |
+| F8 (1) | red-first | measure-followups.test.ts: `--at` bases; measure.test.ts:334 | `basis: 'released-transition'` received for a plain commit |
+| F7 | red-first | measure-followups.test.ts: `--previous`, report under paths.health | `release: '--previous <sha>'`, `report: '(none: named by --previous)'`; no `basis` |
+| A | red-first | measure-followups.test.ts: G07 with no `team.members` | `status: 'measured'` received |
+| F8 (4) | red-first | measure-followups.test.ts: P04 | `failing: 0` received, expected 2 |
+| F8 (5) | characterization | measure-followups.test.ts: P05 `unchecked: 1` | passes |
+| bug-344 | red-first | bindings-and-deps.test.ts: two vectors, versions | vectors lack `--any-node --max-workers 2`; `1.8` < 1.9, `1` < 1.1 |
+| bug-332 | red-first + characterization | bindings-and-deps.test.ts | `devDependencies.ajv` undefined; installed ajv 8 passes |
+
+- **Run** (`npx jest <files> --maxWorkers=2`): compare 66 failed / 2 passed (fixture v0.1 valid, the v3 catalogue
+  fixture valid); propose 14 / 0; bindings-and-deps 5 / 1; baselines 9 / 1; measure-followups 5 / 1;
+  measure.test.ts 1 / 65 (only :334). Lint (`npx eslint` on the files) and a typecheck of the seven test files
+  (`tsc` on a scratch tsconfig extending `tsconfig.json`) clean.
+- **Notes for green.** Each Q09-visible place (comments, `describe`/`it` titles) names only existing elements; the
+  fixture ids (`dl-300-solo`, `bug-301-…`) are string data. The CLI temp roots copy this repository's
+  `.wingfoil/memory.yaml` and the live `metrics.yaml` and schema; propose's CLI test runs the real search through
+  `dist/cli.js` (built by the jest global setup) in a repository with no Memory document.
+- **Not pinned (ambiguous in the design, for the coordinator):** E05 as a run-time reading — the design's test list
+  says `not-comparable`, but E01–E05 are `kind: info` and rule 4 (`info`) precedes rule 5; E04 is pinned `info`,
+  E05 left out. The exact wording of the exit-2 messages: pinned as the `release-health compare: ` prefix plus the
+  named argument, file or versions. The trend's catalogue-version mark and `--no-remeasure` are not pinned.
