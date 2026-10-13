@@ -299,3 +299,131 @@ approver's post-merge action (handover).
   non-comment lines only (a header may say what the file never does); `pip` is matched as a word. `assembleSite`'s
   returned paths are checked with `resolve(out, p)`, so relative or absolute both pass. `deploy.needs` may be
   `build` or `[build]`.
+
+### green (developer, 2026-10-13)
+
+- Approver rulings on the design (2026-10-13, w3-b7 notes): (1) release tag + `workflow_dispatch`, the `github-pages`
+  environment's `v*` rule and a handover to `task-265`/`task-266` (dl-159) in the post-merge section; (2)
+  `actions/jekyll-build-pages`; (3) one new Pages `service` + a `memory amend` of `svc-004`'s homepage line, both the
+  approver's after the push; (4) out-of-site links rewritten; (5) `docs/agents.md` on the site and in `llms.txt`, in no
+  `produces:`.
+- `3db217f9 feat(docs): task-234 — …`: `docs/site.yaml` (1.0), `scripts/build-site.cjs` + `.d.cts`
+  (`readSiteManifest`, `checkSiteManifest`, `renderLlmsTxt`, `assembleSite`, `main`), `llms.txt` (written by
+  `node scripts/build-site.cjs llms`), `.github/workflows/pages.yml`, `package.json` `homepage` →
+  `https://wingfoil.github.io/wingfoil/` (the only line changed: `git diff db0e2752 -- package.json`),
+  `user-docs.yaml` 1.5 → **1.6**, `WORKFLOW.md` (the `align-user-docs` node only), `.gitignore` (`_site-src/`, `_site/`).
+  The link rewrite also covers `src=`/`href=` attributes and skips fenced code; the Liquid check covers every `.md`
+  the site carries (the declared directories' READMEs too), a superset of the design's `pages`.
+- red → green: `npx jest test/cli/pages-workflow.test.ts test/docs/llms-txt.test.ts test/cli/publish-metadata.test.ts
+  --maxWorkers=2` → 3 suites, **136 / 136 passed** (red: 37 failed / 99 passed).
+- Trial assembly (scratch directory, nothing in the worktree): `node scripts/build-site.cjs site --out <scratch>/site
+  --ref abc123` → exit 0, 30 files; `diff` of each page against its copy shows only rewritten out-of-site links
+  (README's `docs/`, COLLABORATION.md's Memory, `.mcp.json`, `CLAUDE.md` and `.wingfoil/README.md` links →
+  `https://github.com/wingfoil/wingfoil/{blob|tree}/abc123/…`).
+- **upload-pages-artifact v5.0.0 ↔ deploy-pages v5.0.1** (design risk, settled): upload-pages-artifact's `action.yml`
+  at v5.0.0 (`gh api "repos/actions/upload-pages-artifact/contents/action.yml?ref=v5.0.0"`) uploads the tar with
+  `actions/upload-artifact` v7.0.0 under `name: ${{ inputs.name }}`, default `github-pages`; deploy-pages' `action.yml`
+  at v5.0.1 (`…/deploy-pages/contents/action.yml?ref=v5.0.1`) reads input `artifact_name`, default `github-pages`.
+  GitHub's own Jekyll starter workflow pairs `deploy-pages@v5` with `upload-pages-artifact@v3`
+  (`gh api repos/actions/starter-workflows/contents/pages/jekyll-gh-pages.yml`), and the v5.0.0 release notes of
+  upload-pages-artifact list only the upload-artifact v7 bump and `include-hidden-files`: same artefact name and tar
+  format. Dotfiles are left out by default (`--exclude=.[^/]*`), so TypeDoc's `api/.nojekyll` is not deployed, which
+  is harmless: Jekyll has already run.
+
+### refactor (developer, 2026-10-13/14)
+
+- Heavy gates under the dl-170 slot (`waitslot.sh`, FIFO), `--maxWorkers=2`, one at a time; the slot waited for
+  `task-215`'s coverage run and then for load from another project's processes (`ps -eo pcpu,args --sort=-pcpu`).
+  - `npm test -- --maxWorkers=2` on `3db217f9` (23:53–00:03) → 411 suites, **7449 passed / 1 failed**:
+    `test/core/dev-loop-v1-6.test.ts` "`docs.parity` … naming every test/docs suite that cites dl-116" — the new
+    `test/docs/llms-txt.test.ts` cites dl-116, so dev-loop's `docs.parity` binding must name it. A real omission of
+    this task, not a red-test fault: `94f38942 fix(config): …` adds the suite to `docs.parity` in `bindings.yaml`
+    (1.8 → **1.9**, history line). The suite reads the binding at `HEAD`, so it passes after the commit:
+    `npx jest test/core/dev-loop-v1-6.test.ts test/core/workflow-repository-conformance.test.ts test/workflow/bindings.test.ts test/core/format-key.test.ts --maxWorkers=2`
+    → 4 suites, 169 / 169 passed; every suite that reads `bindings.yaml` (`grep -rl "bindings.yaml\|docs.parity" test`,
+    14 of them, plus the three red files and `version-bump`) → 18 suites, 542 passed, the one failure being
+    dev-loop-v1-6 before that commit. No third full-suite run: the commit changes one list entry and the version line.
+  - `npm run test:coverage -- --maxWorkers=2` on `3db217f9` (00:04–00:16) → All files **99.32 / 97.23 / 97.98 / 99.71**,
+    equal to the B6 baseline in every column; same single failure as above. No file under `src/` changed
+    (`git diff db0e2752 --stat -- src` → empty).
+- `npm run lint` exit 0; `npm run docs:api` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0; both tsc configs also
+  ran inside `npm test` (`test/lint/typecheck-clean.test.ts`, passed).
+- `node scripts/build-site.cjs llms --check` → exit 0, "llms.txt is current".
+- `node scripts/check-governance.cjs --base db0e2752` → 1 `wf()` commit and 4 other commits checked, 0 findings.
+- Unbound check tokens unchanged: `node dist/cli.js workflow list --format json | grep -o W_WORKFLOW_UNBOUND_TOKEN | wc -l`
+  → 87 with this branch's `.wingfoil/` and 87 with `db0e2752`'s.
+- BDD: no scenario covers dl-129 (`grep -rl "dl-129\|llms\|GitHub Pages" docs/02_requirements/02_bdd/features/` → empty).
+
+### review (reviewer, self, 2026-10-14)
+
+- AC 1 met: `pages.yml` builds one artefact from the declared Markdown and `docs:api`'s HTML; `publish.yml` untouched
+  (`git diff db0e2752 --stat -- .github/workflows/publish.yml` → empty); no new dependency (`git diff db0e2752 --
+  package.json` shows only `homepage`; `build-site.cjs` requires `node:fs`, `node:path`, `js-yaml`). Tests "AC 1" (14).
+- AC 2 met: `llms.txt` generated from `docs/site.yaml`, the same bytes at both roots, the parity test fails on a missing
+  path (fixtures). Tests "AC 2" (20).
+- AC 3 met: `homepage` is the site URL; `align-user-docs` produces `llms.txt` and `docs/site.yaml`; `user-docs.yaml` 1.6.
+- AC 4: manual, the approver's after the push (handover below); unasserted here.
+- **T4:** `git log --first-parent --no-merges --format=%h c2a943a1..HEAD -- test/cli/pages-workflow.test.ts test/docs/llms-txt.test.ts test/cli/publish-metadata.test.ts`
+  → empty.
+- Same class in touched files: `bindings.yaml`'s `docs.parity` (fixed, above). Not in touched files, left to the
+  release's `align-agent-docs`: `CLAUDE.md` §2's documentation map names neither `docs/site.yaml`, `llms.txt` nor
+  `pages.yml` (`grep -c "llms\|site.yaml" CLAUDE.md` → 0) — a candidate finding for the coordinator.
+- Batch merge: `bindings.yaml` is also bumped by `task-241` (1.8 → 1.9) and `task-215` — merge order 241 → 234 → 215,
+  so this branch's 1.9 becomes 2.0 at the gate (one bump per file per branch, keep both history lines).
+
+### Post-merge handover (approver, after the push to `main`)
+
+Nothing here was done by the task: nothing deployed, pushed or enabled.
+
+1. **Enable Pages** with the workflow source: Settings → Pages → Source "GitHub Actions", or
+   `gh api -X POST repos/wingfoil/wingfoil/pages -f build_type=workflow`.
+2. **Allow the release tags to deploy:** Settings → Environments → `github-pages` → Deployment branches and tags →
+   keep `main` and add the tag rule `v*` (as `npm-publish` restricts tags to `v*`). Read back:
+   `gh api repos/wingfoil/wingfoil/environments/github-pages/deployment-branch-policies --jq '.branch_policies[] | {name, type}'`.
+3. **First deployment:** `gh workflow run pages.yml --ref main` (the site shows `main`'s documents until the `v0.3.0`
+   tag redeploys it), or wait for the tag. Verify: `gh run list --workflow pages.yml --limit 1`;
+   `curl -sI https://wingfoil.github.io/wingfoil/ | head -1` → 200;
+   `curl -s https://wingfoil.github.io/wingfoil/llms.txt | diff - llms.txt` → empty;
+   `curl -sI https://wingfoil.github.io/wingfoil/api/index.html | head -1` and
+   `curl -sI https://wingfoil.github.io/wingfoil/docs/user-guide.md | head -1` → 200.
+4. **Only then set the repository homepage** (it never points at a 404):
+   `gh api -X PATCH repos/wingfoil/wingfoil -f homepage=https://wingfoil.github.io/wingfoil/`; read back with
+   `gh api repos/wingfoil/wingfoil --jq .homepage`.
+5. **New service (ruling 3)** — `node dist/cli.js memory add service` then fill, submit, and approve after `verify`:
+   - `title: "GitHub Pages site of wingfoil/wingfoil"`, `provider: "GitHub"`, `kind: "setting"`,
+     `owner_role: "approver"`,
+     `verify: "gh api repos/wingfoil/wingfoil/pages --jq '{status,build_type,html_url}'"`,
+     `url: "https://wingfoil.github.io/wingfoil/"`, `account: "wingfoil/wingfoil"`, `renews: ""`,
+     `repo_refs: [".github/workflows/pages.yml", "docs/site.yaml", "llms.txt", "package.json"]`,
+     `decision: "dl-129-trust-signals"`, `set_up_in: "v0.3"`.
+   - Purpose: the documentation site (dl-129 Decision 2), built from the user docs and the TypeDoc output by
+     `pages.yml` at each release tag, with `llms.txt` at its root.
+   - Configuration: source GitHub Actions (`build_type: workflow`); environment `github-pages` deploys from `main` and
+     tags `v*`; first deployment run URL and date.
+   - Verification: `verify` → `build_type: workflow`, `html_url: https://wingfoil.github.io/wingfoil/`, `status: built`;
+     plus the deployment-branch-policies read of step 2.
+   - Management: re-run with `gh workflow run pages.yml`; retire with `memory deprecate` if the site moves.
+6. **`memory amend svc-004`** (ruling 3), Configuration's homepage line becomes:
+   `- **homepage:** \`https://wingfoil.github.io/wingfoil/\`, the documentation site (dl-129 Decision 2), set on
+   <date>; before it, \`https://www.npmjs.com/package/wingfoil\`.` and its Verification sentence `→ \`homepage\`
+   \`https://www.npmjs.com/package/wingfoil\`` becomes `→ \`homepage\` \`https://wingfoil.github.io/wingfoil/\``;
+   `decision:` unchanged. Proposed `--reason`: `dl-129 Decision 2: the repository homepage is the documentation site on
+   GitHub Pages since task-234, replacing the npm URL; read back with gh api repos/wingfoil/wingfoil --jq .homepage.`
+7. npm shows the new `homepage` from the next publish (`v0.3.0`) on.
+8. **dl-159 (ruling 1):** once a `release/X.Y` line publishes a patch below the highest version, its tag would redeploy
+   the older documents. Handed to `task-266` (pending amendment below), whose "latest only for the highest published
+   version" rule is the condition `pages.yml`'s `deploy` needs; `task-265` needs no sentence (its gate does not run
+   `pages.yml`, and the tag push triggers `pages.yml` with or without it).
+
+### Pending amendments (approver)
+
+- `task-266-promote-with-an-explicit-npm-dist-tag-latest-only-for-the-highest-published-version-else-latest-x.y`:
+  a "Handover from wave 3 B7" bullet in Implementation Notes (uncommitted in this worktree). Proposed `--reason`:
+  `Handover from task-234 (approver ruling 2026-10-13): pages.yml deploys the documentation site on every release tag, so a patch of an older dl-159 line would overwrite the newest documents; this task's highest-version rule is the condition its deploy job needs.`
+- `svc-004` and the new Pages service: post-merge, the approver's (handover steps 5–6), not edited here.
+
+### Retrospective
+
+- The full suite caught a cross-file rule neither the design nor red named: a `test/docs` suite that cites dl-116 must
+  be listed in dev-loop's `docs.parity` binding. A design that adds a `test/docs` parity suite should name
+  `bindings.yaml` among its files; the rule is pinned only by `test/core/dev-loop-v1-6.test.ts`.
