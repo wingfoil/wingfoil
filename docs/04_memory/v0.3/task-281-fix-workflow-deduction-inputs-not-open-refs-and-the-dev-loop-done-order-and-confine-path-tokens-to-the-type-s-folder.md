@@ -183,9 +183,11 @@ and `bug.sync_state(for_each: task.bug)` on the task branch, then `git.merge(to:
    - absolute — starts with `/` or `\`, or `^[A-Za-z]:` → `invalid flag value: --set <name> must be a relative path, got "<value>"`;
    - an empty segment (split on `/` and `\`: `a//b`, a trailing `/`) → `invalid flag value: --set <name> holds an empty path segment: "<value>"`;
    - a `.` or `..` segment → `invalid flag value: --set <name> holds a '.' or '..' path segment: "<value>"`.
-   Refusing `.` as well as `..` is decision D3 (one spelling per path). An id-token value with a `/` (`--set
-   version=a/b`) moves from §10's exit-1 "not a valid [a-z0-9-.] piece" to these exit-2 messages; no test pins that
-   case (`grep -rn "not a valid \[a-z0-9" test` → only `"V0.2"`).
+   Refusing `.` as well as `..` is decision D3 (one spelling per path). An id-token value that holds an empty, `.`
+   or `..` segment, or is absolute (`--set version=../x`), moves from §10's exit-1 "not a valid [a-z0-9-.] piece" to
+   these exit-2 messages; one with an ordinary `/` (`a/b`) does not and keeps exit 1 (corrected at the independent
+   review, F4: this sentence first named `a/b`); no test pins either case (`grep -rn "not a valid \[a-z0-9" test`
+   → only `"V0.2"`).
 2. **Type folder (after the id is generated, before the write)**, in `resolveConfinedMemoryPath`
    (`src/storage/memory-path.ts`), **after** its two root checks, so `E_PATH_ESCAPES_ROOT` stays the answer for a root
    escape and every existing resolver test holds (`test/storage/memory-path.test.ts` includes `release: 'v0.1/sub/..'`
@@ -348,9 +350,9 @@ missing under any rule. The qa agent fixed it in `1b7102fe`.
 `33b0c0f4` — `fix(workflow): task-281 — …` (bug-300, bug-301, bug-313, bug-325, bug-326):
 - `bug-300`: `readFacts` notes a bracketless `add` / `submit`; `readHistory` reads the re-entered elements' files at
   those commits in one `readRevisionPaths` batch and adds a transition with the frontmatter `status`, in walk order
-  (`src/core/workflow-deduction.ts`). `src/workflow/deduce.ts` changed in two doc comments only (`TransitionCommit.to`,
-  `stateCommit`; the design said "unchanged": `git diff db0e2752 HEAD -- src/workflow/deduce.ts` shows comment lines
-  only).
+  (`src/core/workflow-deduction.ts`). `src/workflow/deduce.ts` changed in doc comments only (the design said
+  "unchanged"); `33b0c0f4` put the new `to` text on `Reentry.to` by mistake, corrected at the independent review
+  (F1, below): `TransitionCommit`'s header and `to`, and `stateCommit`.
 - `bug-301`: `readDirty` adds `MEMORY_YAML_PATH`, `DNA_YAML_PATH`, `ROLES_YAML_PATH` and `DIRECTIVES_DIR_PATH/`
   (ruling D2).
 - `bug-326`: `unresolvedRef(known: KnownRefs, ref)` in `src/core/workflow-next.ts` with `instancePlanIds`
@@ -403,7 +405,7 @@ docs/02_requirements/02_bdd/features/` → only P4.7's `show ghost`, unchanged, 
 T4: `git log --first-parent --no-merges --format=%h 640a480e..HEAD -- <red's eleven files>` → `1b7102fe` only, the
 qa agent's send-back fix of control (c) (T4 for that file is measured from it).
 
-### review (reviewer, self, 2026-10-13)
+### self-review (developer, 2026-10-13)
 
 | AC | Status | Evidence |
 |---|---|---|
@@ -419,6 +421,36 @@ Same class in the files touched: the three copies of the `<ref>` refusal are one
 no production caller); the "first five / last three" counts of `spec-008` §10 corrected in its amendment; every
 `<ref>` paragraph of `docs/cli-reference.md` that named the old rule rewritten. Not changed: `workflow show` (its
 `<ref>` is a workflow name), reported.
+
+### independent review (2026-10-13) and fixes (developer)
+
+Verdict: **APPROVE WITH FIXES** (bug-325's refusals held against every escape the reviewer tried; `c8597a68`'s
+`liesUnder` simplification judged sound).
+- F1 — `33b0c0f4` put the bracketless `add` / `submit` text on `Reentry.to` (a re-entry only comes from a reject or
+  a park), leaving `TransitionCommit`'s header ("always has a bracket") and `to` stale. Fixed in `420ad706`:
+  `Reentry.to` is "The bracket's last state." again; `TransitionCommit`'s header names both subject shapes and its
+  `to` carries the text. The green note's claim is corrected. The other doc comments this task added were re-read
+  against the code (`git diff db0e2752 -- src | grep "^+.*\*"`): no other one sits on the wrong declaration.
+- F2 — `dev-loop.yaml`'s header still gave `done`'s fallback edge as `approved → in-progress`; in 2.0 it is
+  `done → in-progress`. Fixed in `420ad706` (header and the 2.0 history line; no second bump). `grep -rn
+  "approved → in-progress\|approved -> in-progress" .wingfoil/WORKFLOW.md .wingfoil/directives/custom/git-conventions.md
+  .wingfoil/workflows/custom/dev-loop.yaml` → nothing left.
+- F3 — the pending `spec-008` §10 sentence cited §7 (Element-ref syntax) for `workflow start --set`; it now cites
+  §12 (Command-specific flags), where `workflow start`'s row already says §10's spelling errors apply. Still
+  uncommitted (pending amendment).
+- F4 — the design's sentence that `--set version=a/b` moves to exit 2 was false: `a/b` has no empty, `.` or `..`
+  segment and keeps exit 1. Corrected in the design section.
+- F5 — the heading is `### self-review (developer, 2026-10-13)`.
+- F6 — `src/core/memory-transition.ts:560`, run-dependent: the coordinator files it, not this task.
+
+Re-run: `npx jest` on `dev-loop-v1-5`, `dev-loop-v1-6`, `dev-loop-v2-0`, `dev-loop-done-order`, `dev-loop-practice`,
+`release-waves-config`, `workflow-repository-conformance`, both bracketless suites, `workflow-deduction-history`,
+`deduce-determinism` → **143 passed**; `npm run lint`, `npm run typecheck` (both configs, under the slot) and
+`npm run docs:api` → exit 0. No full coverage run (comment and config-comment changes only, as the coordinator
+asked).
+
+T4: `git log --first-parent --no-merges --format=%h 640a480e..HEAD -- <red's eleven files>` → `1b7102fe` only (the
+qa agent's send-back fix of control (c)).
 
 ### Pending amendments (approver)
 
