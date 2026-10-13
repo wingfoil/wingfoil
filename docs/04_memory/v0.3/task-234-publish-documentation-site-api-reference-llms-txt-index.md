@@ -299,6 +299,20 @@ approver's post-merge action (handover).
   non-comment lines only (a header may say what the file never does); `pip` is matched as a word. `assembleSite`'s
   returned paths are checked with `resolve(out, p)`, so relative or absolute both pass. `deploy.needs` may be
   `build` or `[build]`.
+- **Send-back (qa, 2026-10-14), review F1 and F3, red-first.** Red commit `77794685` (T4 for these files is measured
+  from it). New `test/docs/build-site-confinement.test.ts` (10 cases); the `llms-txt` fixture helpers moved, unchanged,
+  to `test/docs/support/site-fixture.ts`, which both suites import (no assertion of `llms-txt.test.ts` changed).
+  F1: `checkSiteManifest` returns exactly `docs/site.yaml: listed path escapes the repository: <p>` for a `pages` entry
+  (`../outside/secret.md`, `docs/../../outside/secret.md`, an absolute path), a `files` entry (`../outside/`) and an
+  `llms` `path`, sorted with the others (escape + unknown script); `assembleSite` throws that line, and `site --out
+  <tmp>/out/site` exits 1 with it on stderr for `pages` and `files`, with nothing under `<tmp>/out` but an empty or
+  absent `site/`. F3: a page with `` `[inline](../other/a.txt)` `` keeps it verbatim while `[real](../other/a.txt)`
+  beside it becomes `https://github.com/example/fixture/blob/<ref>/other/a.txt`. Run (`npx jest
+  test/docs/build-site-confinement.test.ts test/docs/llms-txt.test.ts --maxWorkers=2`): confinement 10 failed / 0
+  passed, `llms-txt` 22 passed. First failing assertion: the `..` cases `Received: []`; the absolute case received
+  `listed path does not exist: <abs>`; the `llms` case received `llms entry is not part of the site: ../outside/secret.md`;
+  the sorted case lacks the escape line; `assembleSite` "did not throw"; both CLI cases `Expected: 1, Received: 0`;
+  F3 the inline span was rewritten (substring not found). eslint clean, `tsc --noEmit` no error in the three files.
 
 ### green (developer, 2026-10-13)
 
