@@ -9,7 +9,7 @@ contributor: ""        # optional — who originated this contribution, if not t
 credit: ""             # optional — free-text credit note (dl-020)
 tmpl_version: 260703   # Orignal template version
 tags: ["governance","templates","init","update"]
-reported_by: ["svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-003@6b84e18f4195533b329320c08a96f7b2b3151e38", "svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-004@6b84e18f4195533b329320c08a96f7b2b3151e38", "svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-005@6b84e18f4195533b329320c08a96f7b2b3151e38"]   # optional — consumer feedback notes this element answers, as provenance only (dl-163 S3c)
+reported_by: ["svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-003@6b84e18f4195533b329320c08a96f7b2b3151e38", "svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-004@6b84e18f4195533b329320c08a96f7b2b3151e38", "svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-005@6b84e18f4195533b329320c08a96f7b2b3151e38", "svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-027@a15b053a7174fd5fa87d472cc394c7f8ad40b0ce", "svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-029@a15b053a7174fd5fa87d472cc394c7f8ad40b0ce"]   # optional — consumer feedback notes this element answers, as provenance only (dl-163 S3c)
 ---
 
 ## Context
@@ -165,16 +165,29 @@ open question it settles.
    **Recommendation (b)**, the approver's on 2026-10-13: the same WingFoil version with the same answers gives the
    same configuration (REQ-SYS-07); under (a) two `init` runs on different days differ. (b) implies a forward-only
    step that advances the pinned catalog commit, published versions only, like `advance-pinned-build` (`dl-095`),
-   and a catalog commit the template repository never rewrites. The template repository will file a note on the
-   default set: input here and to `dl-164`'s Initialization Template.
+   and a catalog commit the template repository never rewrites. The template repository filed it as **F-027**
+   (added below): it accepts (b) and a first `init` that needs the network; it commits to never rewriting the
+   catalog commit that resolves a default set (its `main` is protected against force-push), every published
+   version resolving to an exact commit through its tag and digest (item 3); how the catalog names the default set
+   is fixed with the tech-spec. F-027 records on its side the supersession of item 1 (F-001's bundled copy, F-003's
+   step, F-005's bundled `--offline`). Input here and to `dl-164`'s Initialization Template.
 5. **The `remote` class (Action 4).** `built-in/` stays WingFoil-only: REQ-SEC-07 decides what is built-in by
    location, and `src/core/builtin-asset.ts` is an allow-list that fails closed on an unknown folder. Remote content
    lands in a `remote/` folder per asset kind; the installer maps a pack's files to it, so a pack uses kind-relative
    paths and never an absolute `.wingfoil/<kind>/<class>/` path. The folder's name and layout and the lock's format
    and location are the tech-spec's (`spec-011` declares the folder). REQ-SEC-07 and REQ-SEC-10 are amended for the
-   class through their owning tasks; none exists yet.
+   class through their owning tasks; none exists yet. The template repository accepts the class in **F-029** (added
+   below), which replaces F-005's lock request (this decision's lock covers it) and an earlier note (F-007) that had
+   packs write `built-in/`. F-029 asks the tech-spec to keep the mapping in the installer, so that a pack is
+   installable without knowing its folder, and to state the lock's location and format; the template repository's
+   reference composer follows the tech-spec once it fixes the folder, the layout and the lock.
 6. **Tell the template repository** when the tech-spec fixes the `remote/` folder, its layout and the lock, so that
-   its packs and catalog match them. This is an action of the tech-spec.
+   its packs and catalog match them (F-029). This is an action of the tech-spec.
+
+**Added 2026-10-13, after the template repository filed the notes items 4 and 5 name.** F-027 and F-029 are cited
+in `reported_by:` at its commit `a15b053a`; for more detail:
+- https://github.com/wingfoil/wingfoil-templates/blob/a15b053a7174fd5fa87d472cc394c7f8ad40b0ce/docs/wingfoil-feedback/F-027-a-pinned-default-set-of-packs-at-init.md
+- https://github.com/wingfoil/wingfoil-templates/blob/a15b053a7174fd5fa87d472cc394c7f8ad40b0ce/docs/wingfoil-feedback/F-029-packs-land-in-remote-with-the-lock.md
 
 ## Relations
 
