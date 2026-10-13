@@ -70,3 +70,10 @@ Captured on 2026-10-09 by `bug-ingest-rel-v0.3-w3b3-review-findings-plan`, from 
 
 - The count in the review (78) and the command's (83) differ; the review's command was not recorded, which is
   the `claim-evidence` habit this subsection keeps.
+- Fixed by `task-281`: a bracketless `add` / `submit` naming a re-entered element counts as a transition to the
+  status its file holds at that commit (one batched read); `spec-017` §4.8 says so. The handover to `task-216`
+  lapsed because the bug was handed over in a note, never put in that task's `bug:` list: only the list moves a
+  bug (`dl-045`).
+- The red control that was to tell the two candidate rules apart first passed for an unrelated reason (a phase
+  whose exit state was undetermined, `W_PHASE_EXIT_STATE_UNDETERMINED`); a control is checked to fail for the
+  reason it names, not only to pass.
