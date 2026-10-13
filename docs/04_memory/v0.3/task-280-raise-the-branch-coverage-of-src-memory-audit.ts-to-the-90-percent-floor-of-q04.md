@@ -24,7 +24,8 @@ Fix `bug-343`: the branch coverage of `src/memory/audit.ts` is 86.3 % (`npm run 
 `1c66ef31`: `audit.ts | 99.11 | 86.3 | 100 | 100 | 111,191,349-352`), below the 90 % floor that release-health metric
 Q04 sets for the three critical Memory modules (`sed -n 202,209p docs/08_health/metrics.yaml`, `dl-011`). The
 other two are above it on the same run (`commit-message.ts` 100 %, `state-machine.ts` 96.2 %). The behaviour exists:
-this task adds tests only.
+this task adds tests, and (approver ruling A (b), 2026-10-12) removes eight unreachable branches without changing
+behaviour.
 
 ## Acceptance Criteria
 
@@ -34,8 +35,11 @@ this task adds tests only.
 - (characterization) `npm run test:coverage` (under the `dl-170` slot, `--maxWorkers=2`) reports `audit.ts` at or
   above 90 % branches, and `commit-message.ts` and `state-machine.ts` not lower than above; the three rows are
   recorded in the Execution Notes.
-- (characterization) No change under `src/`. A branch found unreachable is reported to the approver with the
-  reason, not hidden with a coverage-ignore comment; removing it is a separate decision.
+- (characterization) No change under `src/` other than the one the approver ruled (amended 2026-10-12, approver
+  ruling A (b) after design): the eight unreachable destructuring defaults of `auditAttribution` (`:111`) and
+  `parseApprovalMetadata` (`:191`) become non-null assertions, as the file does in `parseMemoryOperation` and
+  `parseBracketHops`, with no change in behaviour. A branch found unreachable is reported to the approver with the
+  reason, never hidden with a coverage-ignore comment.
 - (characterization) `npm test` (coverage > 80 %, non-regressing), `npm run lint` and both `tsc` stay green.
 
 ## Implementation Notes
@@ -44,7 +48,8 @@ this task adds tests only.
   `bug-ingest-rel-v0.3-w3b6-review-findings-plan`, item A2). Size: S.
 - **Implements:** `bug-343`. Features P1.10 (`memory history`), P1.7 (approval evidence); `dl-011` (coverage), the
   Q04 floor of `dl-089`'s catalogue.
-- **Files:** tests under `test/memory/` (`audit.test.ts` or a new suite beside `audit-parent-state.test.ts`).
+- **Files:** tests under `test/memory/` (`audit.test.ts` or a new suite beside `audit-parent-state.test.ts`);
+  `src/memory/audit.ts` for the ruled removal of the unreachable defaults (AC 3, amended 2026-10-12).
 - **Notes:** read `task-278`'s Execution Notes first (`dl-015`): it last changed `audit.ts` and recorded the
   shortfall; `task-232` wrote Q04's measurement.
 
@@ -156,6 +161,65 @@ path `docs/04_memory/v0.1/task-1.md`. Each case commits a first revision with th
   developer's change, as the design predicted (only `:111` and `:191` uncovered).
 - **Red commit:** `e9f040fc` (T4 is measured from it).
 
+### Approver ruling after design (2026-10-12) and AC amendment
+
+- Decision A ruled **(b) in-task** (`w3-b7-notes.md`, "Approver rulings after design"): the eight unreachable defaults
+  of `:111` and `:191` become non-null assertions, as the file does in `parseMemoryOperation` and `parseBracketHops`;
+  no stub test (P3 dropped). AC 3 ("No change under `src/`") and the Description and Files lines that said "tests
+  only" were amended in this file on 2026-10-12 to name that one change; the other ACs are unchanged.
+
+### green (developer, 2026-10-13)
+
+- `447169cd` `fix(memory): task-280 — …` (`src/memory/audit.ts` only, `git diff --stat db0e2752 HEAD -- src` → that
+  one file): `auditAttribution` reads `record[0]!`…`record[4]!` (the comment names `walkGitLogFields`' arity
+  postcondition), `parseApprovalMetadata` reads `approverMatch[1]!`…`[3]!` (the comment names the three
+  non-optional groups). No behaviour change for any record or body that can occur; the red tests still pass.
+- Red → green: `npx jest test/memory --coverage --collectCoverageFrom=src/memory/audit.ts --maxWorkers=2` (after
+  `waitslot.sh`) → 32 suites, 640 passed; `audit.ts | 100 | 100 | 100 | 100 |` (was `89.04`, uncovered `111,191`, in
+  the red run).
+
+### refactor (developer, 2026-10-13)
+
+All heavy gates after `waitslot.sh`, `--maxWorkers=2`, at `447169cd` with the uncommitted pending amendment below in
+the tree.
+- `npm run test:coverage -- --maxWorkers=2` → exit 0, `Test Suites: 410 passed`, `Tests: 7417 passed, 7417 total`;
+  All files `99.33 | 97.39 | 97.98 | 99.71` against the batch baseline `99.32 | 97.23 | 97.98 | 99.71`: no column lower.
+  `src/core/memory-transition.ts:468` is uncovered in this run (the known run-dependent line; branches total still
+  above baseline).
+- **AC 2, the three Q04 rows** (same run; counts from `coverage/coverage-final.json`):
+  `audit.ts | 100 | 100 | 100 | 100` (65/65 branches; was 63/73 = 86.3 %), `commit-message.ts | 100 | 100 | 100 | 100`
+  (93/93, unchanged), `state-machine.ts | 96.93 | 96.2 | 100 | 97.8 | 316-317` (76/79, unchanged).
+- `npm test -- --maxWorkers=2` → exit 0, `Test Suites: 410 passed, 410 total`, `Tests: 7417 passed, 7417 total`.
+- `npm run -s typecheck` (both tsc configs) → exit 0; `npm run -s lint` → exit 0; `npm run -s docs:api` → exit 0.
+- `node scripts/check-governance.cjs --base db0e2752` → `2 wf() commits`, `gated: 0 findings`, `history: 0
+  findings`; `node scripts/lint-claims.cjs --base db0e2752` → `0 warnings in 0 files`.
+- BDD: no scenario of P1.10/P1.7 depends on the removed defaults; none touched.
+- **T4:** `git log --first-parent --no-merges --format=%h e9f040fc..HEAD -- test/memory/audit-status-shapes.test.ts`
+  → empty.
+
+### review (reviewer, self, 2026-10-13)
+
+- AC 1 met: `:349` and `:352` pinned by `test/memory/audit-status-shapes.test.ts` (7 tests, red `e9f040fc`);
+  `:111` and `:191` no longer exist as branches (ruling A (b)), not hidden by an ignore comment
+  (`grep -n "istanbul\|c8 ignore" src/memory/audit.ts` → nothing).
+- AC 2 met: audit.ts 100 % branches (≥ 90), the other two rows unchanged (refactor above).
+- AC 3 (amended) met: the only `src/` change is the ruled one in `src/memory/audit.ts`.
+- AC 4 met: refactor gates above.
+- Same class in the file touched: `grep -n "= ''" src/memory/audit.ts` → only a comparison (`:539`), no destructuring
+  default left. Outside it, `src/cli/program.ts:372` `[first = '', …]` is reachable (an empty Commander text), so not
+  the same class.
+
+### Pending amendments (approver)
+
+- `bug-343-src-memory-audit.ts-branch-coverage-is-86.3-percent-below-the-90-percent-floor-of-q04-and-dl-011` —
+  `### Retrospective` filled (dl-115 Q2 (a)), uncommitted in this worktree. Proposed `--reason`: "Record the bug's
+  retrospective at its close by task-280: the floor no gate read, and eight of the ten uncovered branches being dead
+  defaults removed under ruling A (b)."
+
 ### Retrospective
 
-None yet.
+- Reading reachability in design, before red, is what turned a "write tests" fix into the right one: eight of the ten
+  branches were dead code, and covering them would have meant a stub pinning a record git never produces. A coverage
+  task's design should always classify each uncovered branch as reachable or not before planning a test for it.
+- The full gate waited about 45 minutes for the dl-170 slot (load above 14 from other sessions); the targeted
+  `--collectCoverageFrom` run gave the decisive number in two minutes.
