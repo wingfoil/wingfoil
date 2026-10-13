@@ -230,6 +230,17 @@ characterization row (refused, names `title`) and a red-first companion (names `
 "stay green" notes hold: `test/core/define-scope-sweep.test.ts:73` still needs a `kind:` mention in `define-scope`'s
 description.
 
+**Send-back (qa, 2026-10-13).** Review finding: `requireRequiredFields` reads `exempt[field]` on a plain object, so
+a required field named like an `Object.prototype` member throws. Red commit **`378f539b`** adds, in
+`test/core/memory-amend-release-kind-exemption.test.ts`, the `describe` "task-279 review send-back (red-first) — a
+required field named like an Object.prototype member is refused, never a throw": pure-function rows on
+`requireRequiredFields` (type `t`, required `[title, kind, <field>]`, document lacking `<field>`): `constructor` ×
+{no `exempt`, `exempt: { kind: [other] }`} × {submit, amend}, plus `toString`, `valueOf`, `hasOwnProperty` (submit,
+no `exempt`); each expects `VALIDATION` `missing required field on <verb>: <field>`. A throw is caught and fails the
+expectation. Run `npx jest test/core/memory-amend-release-kind-exemption.test.ts --maxWorkers=2` → 7 failed, 12 passed;
+each failure receives `{ thrown: "TypeError: (exempt[field] ?? []).includes is not a function" }`. T4 for this file
+is measured from `378f539b`.
+
 ### green (developer, 2026-10-13)
 
 Approver rulings after design (`w3-b7-notes.md`): D1 (a), D2 (submit too), D3 (the extra files), AC 4 red-first.
