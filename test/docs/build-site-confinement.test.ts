@@ -65,7 +65,9 @@ const withLlmsPath = (path: string): string =>
 /** Nothing was written next to the output directory, and the output directory holds nothing. */
 function expectNothingWritten(l: Layout): void {
   expect(existsSync(join(l.tmp, 'out', 'outside'))).toBe(false);
-  expect(readdirSync(join(l.tmp, 'out')).filter((name) => name !== 'site')).toEqual([]);
+  // A refusal that writes nothing never creates `<tmp>/out`: an absent directory counts as nothing written.
+  const parent = join(l.tmp, 'out');
+  expect((existsSync(parent) ? readdirSync(parent) : []).filter((name) => name !== 'site')).toEqual([]);
   expect(existsSync(l.out) ? readdirSync(l.out) : []).toEqual([]);
 }
 
