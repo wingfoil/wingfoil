@@ -10,6 +10,11 @@
  * `template.frontmatter.not_applicable_allowed`, or the value is not `"n/a — <reason>"`. A required
  * field the type does not list — `task.kind` in this repository — therefore cannot be skipped by
  * writing `n/a` in it.
+ *
+ * A field the type's `template.frontmatter.exempt` lists for this document's `id` is not required of
+ * it at all (`bug-342`, task-279): neither checked nor named in the refusal. The declaration in
+ * `memory.yaml` is the only source of the exemption — this repository's releases added before
+ * `dl-092` carry no `kind`; no id is written here.
  */
 import { missingRequiredFields, notApplicableRefusals, type MemoryYaml, type NotApplicableRefusal } from '../memory';
 
@@ -39,7 +44,12 @@ export function requireRequiredFields(
   verb: 'submit' | 'amend',
 ): CoreResult<undefined> {
   const template = memoryYaml.types[type]?.template?.frontmatter;
-  const required = template?.required ?? [];
+  const id = frontmatter['id'];
+  const exempt = template?.exempt ?? {};
+  // Own properties only: a field named like an Object.prototype member (`constructor`, `toString`) is
+  // an ordinary required field, never the prototype's function (task-279 review F1).
+  const exemptIds = (field: string): readonly string[] => (Object.hasOwn(exempt, field) ? (exempt[field] ?? []) : []);
+  const required = (template?.required ?? []).filter((field) => !(typeof id === 'string' && exemptIds(field).includes(id)));
   const missing = missingRequiredFields(frontmatter, required, template?.lists ?? []);
   const refused = notApplicableRefusals(frontmatter, required, template?.not_applicable_allowed ?? []);
   const clauses: string[] = [];

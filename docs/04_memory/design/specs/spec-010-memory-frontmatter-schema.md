@@ -193,7 +193,7 @@ legal from any state (`dl-065` Q3; pinned by `test/core/memory-deprecate.test.ts
 | `status` must be a state of the type's machine (`spec-001`)                             | invalid state for type                                        |
 | `tmpl_version` must be present and equal to an integer the type's template has carried  | stale/unknown template version (non-fatal — informational)   |
 | `title` must be non-empty once `status` is anything other than `draft`                  | missing title on submit                                      |
-| Every field in the type's `template.frontmatter.required` must be non-empty once `status` is anything other than `draft` | missing required field on submit                              |
+| Every field in the type's `template.frontmatter.required` must be non-empty once `status` is anything other than `draft`, except a field the type's `template.frontmatter.exempt` lists for the document's `id` (`spec-001`), which is not required of it and not named in the failure | missing required field on submit                              |
 | A required field may hold a not-applicable value only if the type lists it in `template.frontmatter.not_applicable_allowed` (`spec-001`), and only as `n/a — <reason>` with a non-blank reason | not-applicable value on submit: `<field>` does not accept one / needs a reason / must be written "n/a — <reason>" |
 
 **What "non-empty" means** (`bug-147`, approver rulings 2026-10-02 at `task-168`'s reviews). A
@@ -347,3 +347,10 @@ field is declared by the type's scaffold, and the sentence closing "Base fields"
 the one type-specific field this spec lists. No base field, rule or ownership row changes. Edited in place
 without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at
 `task-271`'s review.
+
+**Revision (2026-10-12, `task-279-let-memory-amend-accept-a-release-added-before-dl-092-which-carries-no-kind-field`) —
+an exempt required field.** The § Validation rules row on `template.frontmatter.required` gains its exception:
+a field the type's `template.frontmatter.exempt` (`spec-001`) lists for the document's `id` is not required of
+that document, on `memory submit` and on `memory amend` alike, and the failure message does not name it
+(`bug-342`: the releases added before `dl-092` carry no `kind:`). Edited in place without a supersede or a state
+change (`dl-047`), pending the approver's `memory amend` at `task-279`'s review.

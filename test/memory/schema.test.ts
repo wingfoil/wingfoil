@@ -209,6 +209,42 @@ describe('MemoryYaml — template.frontmatter.lists (task-168 re-review ruling 1
   });
 });
 
+describe('MemoryYaml — template.frontmatter.exempt (bug-342, task-279)', () => {
+  const withTemplate = (frontmatter: Record<string, unknown>): unknown => ({
+    ...MINIMAL_VALID,
+    types: { task: { ...MINIMAL_VALID.types.task, template: { file: 'memory/templates/task.md', frontmatter } } },
+  });
+
+  it('accepts a mapping of required fields to id lists, and returns it parsed', () => {
+    const result = MemoryYaml.safeParse(withTemplate({ required: ['title', 'kind'], exempt: { kind: ['minor-v0.1'] } }));
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect((result.data.types.task?.template?.frontmatter as Record<string, unknown>)['exempt']).toEqual({ kind: ['minor-v0.1'] });
+  });
+
+  it('rejects a key that is not in `required`, naming it', () => {
+    const result = MemoryYaml.safeParse(withTemplate({ required: ['title'], exempt: { kind: ['minor-v0.1'] } }));
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues.map((issue) => issue.message)).toContain("exempt entry 'kind' is not in template.frontmatter.required");
+  });
+
+  it('rejects `title` as a key, which spec-010 requires of every type', () => {
+    const result = MemoryYaml.safeParse(withTemplate({ required: ['title', 'kind'], exempt: { title: ['minor-v0.1'] } }));
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues.map((issue) => issue.message)).toContain("exempt may not list 'title': spec-010 requires it of every type");
+  });
+
+  it('rejects a non-mapping value', () => {
+    expect(MemoryYaml.safeParse(withTemplate({ required: ['title', 'kind'], exempt: ['kind'] })).success).toBe(false);
+  });
+
+  it('rejects a non-list id value', () => {
+    expect(MemoryYaml.safeParse(withTemplate({ required: ['title', 'kind'], exempt: { kind: 'minor-v0.1' } })).success).toBe(false);
+  });
+});
+
 describe('MemoryYaml — validates the real, live .wingfoil/memory.yaml', () => {
   it('parses with zero structural or semantic errors', () => {
     const raw = readFileSync(
@@ -233,5 +269,12 @@ describe('MemoryYaml — validates the real, live .wingfoil/memory.yaml', () => 
     const data = MemoryYaml.parse(load(readFileSync(join(__dirname, '..', '..', '.wingfoil', 'memory.yaml'), 'utf-8')));
     expect(data.types.release?.template?.frontmatter.lists).toEqual(['features']);
     expect(data.types.task?.template?.frontmatter.lists).toBeUndefined();
+  });
+
+  it('task-279 (bug-342, D1 (a)): `release` declares the pre-dl-092 minors exempt from `kind`; `task` declares none', () => {
+    const data = MemoryYaml.parse(load(readFileSync(join(__dirname, '..', '..', '.wingfoil', 'memory.yaml'), 'utf-8')));
+    const exemptOf = (type: string): unknown => (data.types[type]?.template?.frontmatter as Record<string, unknown> | undefined)?.['exempt'];
+    expect(exemptOf('release')).toEqual({ kind: ['minor-v0.1', 'minor-v0.2', 'minor-v0.3', 'minor-v0.4', 'minor-v1.0'] });
+    expect(exemptOf('task')).toBeUndefined();
   });
 });
