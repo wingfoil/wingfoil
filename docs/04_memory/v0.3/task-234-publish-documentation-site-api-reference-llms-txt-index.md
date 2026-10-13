@@ -354,9 +354,12 @@ approver's post-merge action (handover).
     this task, not a red-test fault: `94f38942 fix(config): …` adds the suite to `docs.parity` in `bindings.yaml`
     (1.8 → **1.9**, history line). The suite reads the binding at `HEAD`, so it passes after the commit:
     `npx jest test/core/dev-loop-v1-6.test.ts test/core/workflow-repository-conformance.test.ts test/workflow/bindings.test.ts test/core/format-key.test.ts --maxWorkers=2`
-    → 4 suites, 169 / 169 passed; every suite that reads `bindings.yaml` (`grep -rl "bindings.yaml\|docs.parity" test`,
-    14 of them, plus the three red files and `version-bump`) → 18 suites, 542 passed, the one failure being
-    dev-loop-v1-6 before that commit. No third full-suite run: the commit changes one list entry and the version line.
+    → 4 suites, 169 / 169 passed. Before that commit, 18 suites → 542 passed, 1 failed (dev-loop-v1-6): 14 of the 19
+    suites `grep -rl "bindings.yaml\|docs.parity" test` lists (20 files, one of them the allowlist module
+    `test/docs/name-resolvability.allowlist.ts`), plus the three red files and `version-bump`. The five not run here
+    (`service-verify-sweep`, `e2e-smoke`, `e2e-smoke-candidate`, `staging-rehearsal`, `test-no-identity`) pass in the
+    independent reviewer's full run (7450 / 7450, 2026-10-14). (Corrected at review F5: this line first said "14 of
+    them".) No third full-suite run: the commit changes one list entry and the version line.
   - `npm run test:coverage -- --maxWorkers=2` on `3db217f9` (00:04–00:16) → All files **99.32 / 97.23 / 97.98 / 99.71**,
     equal to the B6 baseline in every column; same single failure as above. No file under `src/` changed
     (`git diff db0e2752 --stat -- src` → empty).
@@ -368,7 +371,7 @@ approver's post-merge action (handover).
   → 87 with this branch's `.wingfoil/` and 87 with `db0e2752`'s.
 - BDD: no scenario covers dl-129 (`grep -rl "dl-129\|llms\|GitHub Pages" docs/02_requirements/02_bdd/features/` → empty).
 
-### review (reviewer, self, 2026-10-14)
+### self-review (developer, 2026-10-14)
 
 - AC 1 met: `pages.yml` builds one artefact from the declared Markdown and `docs:api`'s HTML; `publish.yml` untouched
   (`git diff db0e2752 --stat -- .github/workflows/publish.yml` → empty); no new dependency (`git diff db0e2752 --
@@ -419,8 +422,9 @@ Nothing here was done by the task: nothing deployed, pushed or enabled.
    - Management: re-run with `gh workflow run pages.yml`; retire with `memory deprecate` if the site moves.
 6. **`memory amend svc-004`** (ruling 3), Configuration's homepage line becomes:
    `- **homepage:** \`https://wingfoil.github.io/wingfoil/\`, the documentation site (dl-129 Decision 2), set on
-   <date>; before it, \`https://www.npmjs.com/package/wingfoil\`.` and its Verification sentence `→ \`homepage\`
-   \`https://www.npmjs.com/package/wingfoil\`` becomes `→ \`homepage\` \`https://wingfoil.github.io/wingfoil/\``;
+   <date>; before it, \`https://www.npmjs.com/package/wingfoil\`.`; the Verification section keeps its historical
+   readings (2026-09-29 saw the npm homepage) and gains one dated sentence: `On <date>, after dl-129 Decision 2,
+   \`gh api repos/wingfoil/wingfoil --jq .homepage\` → \`https://wingfoil.github.io/wingfoil/\`.` (review F4);
    `decision:` unchanged. Proposed `--reason`: `dl-129 Decision 2: the repository homepage is the documentation site on
    GitHub Pages since task-234, replacing the npm URL; read back with gh api repos/wingfoil/wingfoil --jq .homepage.`
 7. npm shows the new `homepage` from the next publish (`v0.3.0`) on.
@@ -441,3 +445,47 @@ Nothing here was done by the task: nothing deployed, pushed or enabled.
 - The full suite caught a cross-file rule neither the design nor red named: a `test/docs` suite that cites dl-116 must
   be listed in dev-loop's `docs.parity` binding. A design that adds a `test/docs` parity suite should name
   `bindings.yaml` among its files; the rule is pinned only by `test/core/dev-loop-v1-6.test.ts`.
+
+### independent review (2026-10-14) and fixes (developer)
+
+- Verdict: APPROVE WITH FIXES (the reviewer's full run 7450 / 7450; pins, permissions, no injection, upload/deploy v5
+  verified). The task stays `in-review`; no re-submit.
+- **qa send-back (red, not the developer's):** `77794685` adds `test/docs/build-site-confinement.test.ts` (F1, F3) and
+  `test/docs/support/site-fixture.ts`, the fixture helpers moved verbatim out of `test/docs/llms-txt.test.ts`, which now
+  imports them (a refactor, no assertion changed); notes `58dd4097`. T4 for those files is measured from `77794685`.
+- **F1 (path confinement):** `scripts/build-site.cjs` `escapesRoot` — absolute (POSIX or Windows form) or a `..`
+  segment — makes `checkSiteManifest` report `docs/site.yaml: listed path escapes the repository: <p>` as the only line
+  for that `pages`/`files`/`llms` entry, sorted with the rest; the entry is never read. `assembleSite` checks before it
+  creates or copies anything, so it and `site` refuse with exit 1 and write nothing. `walk` skips symbolic links (an
+  `lstat` per entry), so a link inside a declared directory cannot pull a file in from outside the repository. By hand
+  on a scratch fixture (`pages: [README.md, ../outside/secret.md]`, `site --out <scratch>/out/site`): exit 1, stderr
+  `build-site: docs/site.yaml: listed path escapes the repository: ../outside/secret.md`, and `<scratch>/out` was not
+  created (`ls <scratch>` lists only `outside` and `repo`).
+- **F3:** links inside backtick code spans are left as written (`outsideCodeSpans`), like fenced blocks.
+- **F2:** `test/docs/build-site-extras.test.ts` (developer-owned, new): src=/href= rewrite with an in-site href kept;
+  a fenced-code link kept while the one outside is rewritten; the Liquid guard on `docs/examples/README.md`.
+- **F4, F5, F6:** the svc-004 handover keeps the historical Verification and adds a dated sentence; the refactor
+  count is corrected; the self-review heading names the developer.
+- **F7:** `pages.yml`'s header now says the `ghcr.io/actions/jekyll-build-pages:v1.0.13` image tag is mutable and not
+  covered by the SHA pin; the task-266 handover (pending amendment) gains the sentence that `pages.yml` deploys on the
+  tag even when `publish.yml` fails.
+- Code: `f386a40c fix(docs): task-234 — …`.
+- **Runs:** `npm run lint` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0;
+  `node scripts/build-site.cjs llms --check` exit 0.
+  `npx jest test/docs/build-site-confinement.test.ts test/docs/build-site-extras.test.ts test/docs/llms-txt.test.ts test/cli/pages-workflow.test.ts test/cli/workflow-action-pins.test.ts test/core/dev-loop-v1-6.test.ts --maxWorkers=2`
+  → 6 suites, **81 passed / 3 failed**. The three failures are rows of the red file:
+  `F1: assembleSite throws on an escaping pages entry and writes nothing` and both `site --out … writes nothing outside
+  the output directory` rows. Each fails with `ENOENT: no such file or directory, scandir '<tmp>/out'` at
+  `test/docs/build-site-confinement.test.ts:68`. The helper `expectNothingWritten` calls
+  `readdirSync(join(l.tmp, 'out'))` on a directory the fixture never creates, and a refusal that writes nothing
+  cannot create it either. In the same rows, the assertions before the helper pass: the throw message, exit 1, the
+  stderr line. **This is a red-test fault, sent back through the coordinator (T4).** Suggested fix for the qa agent:
+  `existsSync(join(l.tmp, 'out')) ? readdirSync(...) : []`. I did not make `assembleSite` create its output directory
+  before refusing just to satisfy the helper.
+- No full-suite run: `scripts/` is outside coverage (`collectCoverageFrom: ['src/**/*.ts', …]`, jest.config.js), and
+  no `src/` file changed (`git diff db0e2752 --stat -- src` → empty).
+- T4 for the original red files: `git log --first-parent --no-merges --format=%h c2a943a1..HEAD -- test/cli/pages-workflow.test.ts test/cli/publish-metadata.test.ts`
+  → empty; `test/docs/llms-txt.test.ts` → `77794685` only, the qa send-back's helper move. For the send-back's files
+  from `77794685`: `git log --first-parent --no-merges --format=%h 77794685..HEAD -- test/docs/build-site-confinement.test.ts test/docs/support/site-fixture.ts test/docs/llms-txt.test.ts`
+  → empty.
+
