@@ -53,12 +53,22 @@ describe('AC 3 — the v0.1 and v0.2 baselines under paths.health', () => {
     expect(report.previous).toEqual({ release: 'v0.1', commit: rev('5b16ab61'), report: 'docs/08_health/release-health-v0.1.json', basis: 'report' });
   });
 
-  it.each(['v0.1', 'v0.2'])('%s: catalogue version 2; every measured toolchain entry records node_pinned (--any-node, ruling D3)', (version) => {
-    const report = baseline(version);
+  it('v0.2: catalogue version 2; every measured toolchain entry records node_pinned (--any-node, ruling D3)', () => {
+    const report = baseline('v0.2');
     expect(report.catalogue_version).toBe(2);
     const toolchain = report.metrics.filter((m) => TOOLCHAIN.includes(m.id) && m.status === 'measured');
     expect(toolchain.length).toBeGreaterThan(0);
     for (const m of toolchain) expect(m.raw).toHaveProperty('node_pinned');
+  });
+
+  // Approver ruling 2026-10-13 (a): the partial v0.1 baseline is accepted. At 5b16ab61 `npm ci` refuses the lockfile
+  // (EUSAGE), so no toolchain metric can be measured there; each entry still records the --any-node reading.
+  it('v0.1: catalogue version 2; every toolchain entry, measured or not, records node_pinned (--any-node, ruling D3)', () => {
+    const report = baseline('v0.1');
+    expect(report.catalogue_version).toBe(2);
+    const toolchain = report.metrics.filter((m) => TOOLCHAIN.includes(m.id));
+    expect(toolchain.map((m) => m.id)).toEqual(TOOLCHAIN);
+    for (const m of toolchain) expect([m.id, m.raw && Object.prototype.hasOwnProperty.call(m.raw, 'node_pinned')]).toEqual([m.id, true]);
   });
 
   it.each(['v0.1', 'v0.2'])('%s: G07 not-measurable (ruling A); E01–E05 and Q17 not read (--offline, ruling B)', (version) => {
