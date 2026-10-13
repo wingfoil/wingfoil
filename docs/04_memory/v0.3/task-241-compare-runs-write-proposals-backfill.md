@@ -385,6 +385,18 @@ Not touched: `metrics.yaml`, `check-governance.cjs`, `src/`, `docs/cli-reference
   says `not-comparable`, but E01–E05 are `kind: info` and rule 4 (`info`) precedes rule 5; E04 is pinned `info`,
   E05 left out. The exact wording of the exit-2 messages: pinned as the `release-health compare: ` prefix plus the
   named argument, file or versions. The trend's catalogue-version mark and `--no-remeasure` are not pinned.
+- **Send-back (2026-10-13, independent review F1–F4, coordinator's choice of options): red commit `566a282b`.**
+  Red-first rows, each failing on today's head `dbf9c419` (`npx jest <files> --maxWorkers=2`): F1 — `propose.test.ts`:
+  the two tracked rows now expect the line labelled `candidate` beside the element id and its status (received
+  `- G07 — tracked: bug-301-… (open; …)`), and a spawned run with G07 = 3 and an open, unrelated DL mentioning G07
+  still writes one `release-health compare: immediate bug-ingest: G07 …` line naming the DL (received no line);
+  F2 — `propose.test.ts`: a row `| RH-v0.1-01 | G07 | element: bug-400 |` settles `not adopted` with a note
+  `unrecognised outcome "G07"` (received note `undefined`), `declined` carries no such note; F3 — new
+  `compare-remeasure.test.ts`: `compareRelease`'s default re-measurement, with `measureRelease` replaced by a
+  recording stub (`jest.doMock`), receives `at` = the previous point's commit when its `ref` is `main` (received
+  `at: "main"`); F4 — `compare.test.ts`: a catalogue G02 `tolerance: "5"` and `tolerance: "5%"` (share-only) exit 2
+  naming G02 and the value (received exit 0). Counts: compare 68 passed / 2 failed, propose 12 / 4,
+  compare-remeasure 0 / 1. Lint and the scratch typecheck clean.
 
 ### green (developer, 2026-10-13)
 
