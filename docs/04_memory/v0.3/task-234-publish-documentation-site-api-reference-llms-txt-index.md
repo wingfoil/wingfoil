@@ -439,19 +439,6 @@ Nothing here was done by the task: nothing deployed, pushed or enabled.
    version" rule is the condition `pages.yml`'s `deploy` needs; `task-265` needs no sentence (its gate does not run
    `pages.yml`, and the tag push triggers `pages.yml` with or without it).
 
-### Pending amendments (approver)
-
-- `task-266-promote-with-an-explicit-npm-dist-tag-latest-only-for-the-highest-published-version-else-latest-x.y`:
-  a "Handover from wave 3 B7" bullet in Implementation Notes (uncommitted in this worktree). Proposed `--reason`:
-  `Handover from task-234 (approver ruling 2026-10-13): pages.yml deploys the documentation site on every release tag, so a patch of an older dl-159 line would overwrite the newest documents; this task's highest-version rule is the condition its deploy job needs.`
-- `svc-004` and the new Pages service: post-merge, the approver's (handover steps 5–6), not edited here.
-
-### Retrospective
-
-- The full suite caught a cross-file rule neither the design nor red named: a `test/docs` suite that cites dl-116 must
-  be listed in dev-loop's `docs.parity` binding. A design that adds a `test/docs` parity suite should name
-  `bindings.yaml` among its files; the rule is pinned only by `test/core/dev-loop-v1-6.test.ts`.
-
 ### independent review (2026-10-14) and fixes (developer)
 
 - Verdict: APPROVE WITH FIXES (the reviewer's full run 7450 / 7450; pins, permissions, no injection, upload/deploy v5
@@ -462,8 +449,9 @@ Nothing here was done by the task: nothing deployed, pushed or enabled.
 - **F1 (path confinement):** `scripts/build-site.cjs` `escapesRoot` — absolute (POSIX or Windows form) or a `..`
   segment — makes `checkSiteManifest` report `docs/site.yaml: listed path escapes the repository: <p>` as the only line
   for that `pages`/`files`/`llms` entry, sorted with the rest; the entry is never read. `assembleSite` checks before it
-  creates or copies anything, so it and `site` refuse with exit 1 and write nothing. `walk` skips symbolic links (an
-  `lstat` per entry), so a link inside a declared directory cannot pull a file in from outside the repository. By hand
+  creates or copies anything, so it and `site` refuse with exit 1 and write nothing. `walk` skips symbolic links INSIDE
+  a declared directory (an `lstat` per entry); a declared entry that is itself a link was still followed until the
+  re-review fix below. By hand
   on a scratch fixture (`pages: [README.md, ../outside/secret.md]`, `site --out <scratch>/out/site`): exit 1, stderr
   `build-site: docs/site.yaml: listed path escapes the repository: ../outside/secret.md`, and `<scratch>/out` was not
   created (`ls <scratch>` lists only `outside` and `repo`).
@@ -493,5 +481,30 @@ Nothing here was done by the task: nothing deployed, pushed or enabled.
 - T4 for the original red files: `git log --first-parent --no-merges --format=%h c2a943a1..HEAD -- test/cli/pages-workflow.test.ts test/cli/publish-metadata.test.ts`
   → empty; `test/docs/llms-txt.test.ts` → `77794685` only, the qa send-back's helper move. For the send-back's files
   from `77794685`: `git log --first-parent --no-merges --format=%h 77794685..HEAD -- test/docs/build-site-confinement.test.ts test/docs/support/site-fixture.ts test/docs/llms-txt.test.ts`
+  → `16348b7c` only, the qa agent's fix of the helper fault (second send-back, notes `fc6ccbec`); from `16348b7c`
   → empty.
+- **Rerun after the qa helper fix `16348b7c`** (with the re-review fix below in the tree): the same six suites →
+  6 suites, **87 / 87 passed** (the 84 above, the three formerly failing rows now passing, plus the three new
+  symbolic-link cases).
+- **Re-review (APPROVE, 2026-10-14) — same-class fix:** a declared `pages`/`files` entry that is itself a symbolic link
+  (`pages: docs/top.md` → a file outside, `files: docs/dirlink/` → a directory outside) was followed: exit 0, outside
+  content copied into the site (writes stayed inside the output directory, only the read escaped). `isLinked` now
+  `lstat`s every component of a declared `pages`, `files` or `llms` path; a link anywhere on the way yields the one line
+  `docs/site.yaml: listed path is a symbolic link: <p>`, and the entry is never read, so `assembleSite` and `site`
+  refuse before writing. `test/docs/build-site-extras.test.ts` gains three cases: a declared file link and a declared
+  directory link (the problem line, the throw, no output directory), and a link inside a declared directory (no
+  problem; its name absent from `files` and from the output directory). Code `437e1f73 fix(docs): task-234 — …`;
+  `npm run lint` exit 0, `npx tsc --noEmit -p tsconfig.json` exit 0, `node scripts/build-site.cjs llms --check` exit 0.
 
+### Pending amendments (approver)
+
+- `task-266-promote-with-an-explicit-npm-dist-tag-latest-only-for-the-highest-published-version-else-latest-x.y`:
+  a "Handover from wave 3 B7" bullet in Implementation Notes (uncommitted in this worktree). Proposed `--reason`:
+  `Handover from task-234 (approver ruling 2026-10-13): pages.yml deploys the documentation site on every release tag, so a patch of an older dl-159 line would overwrite the newest documents, and it deploys even when publish.yml fails for that tag; this task's highest-version rule is the condition its deploy job needs.`
+- `svc-004` and the new Pages service: post-merge, the approver's (handover steps 5–6), not edited here.
+
+### Retrospective
+
+- The full suite caught a cross-file rule neither the design nor red named: a `test/docs` suite that cites dl-116 must
+  be listed in dev-loop's `docs.parity` binding. A design that adds a `test/docs` parity suite should name
+  `bindings.yaml` among its files; the rule is pinned only by `test/core/dev-loop-v1-6.test.ts`.
