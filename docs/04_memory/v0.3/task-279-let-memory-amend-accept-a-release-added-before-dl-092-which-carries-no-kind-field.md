@@ -323,6 +323,11 @@ Uncommitted in the worktree, present during the gates:
   lists for the document's id is not required of it, on submit and amend alike, and the refusal does not name it."
 - `bug-342`: `### Retrospective` (cause, fix, lesson). Proposed `--reason`: "task-279 closes it: the retrospective
   records the cause, the fix and the lesson (dl-115 Q2 (a))."
+- `dl-132-vision-change-and-feature-ingest` (`ready`): a dated `**Note (2026-10-13, …)**` appended after the 2026-10-12
+  one, following the file's convention of dated Notes; the earlier Note is not edited. Proposed `--reason`: "task-279
+  (bug-342, approver ruling 2026-10-13 on review F3): a dated note records that memory amend now accepts the releases
+  added before dl-092, whose kind exemption memory.yaml 3.5 declares, so the define-scope sweep writes features through
+  memory amend on every release past draft and the hand amend of the 2026-10-12 note no longer applies."
 
 ### independent review (2026-10-13) and fixes (developer)
 
@@ -344,7 +349,9 @@ Verdict: **APPROVE WITH FIXES**.
     `ownValue`'s guarded read and `frontmatter['id']`.
 - **F2 (nit), fixed in `81e6983a`.** The comment at `test/core/define-scope-sweep.test.ts:73` now names the bug-342
   sentence it guards. That test is not one of red's files.
-- **F3 (`dl-132` note): not touched**, waiting for the approver's ruling.
+- **F3 (`dl-132` note): fixed per the approver's ruling of 2026-10-13 (in-task).** A dated 2026-10-13 Note is appended
+  to `dl-132` and left uncommitted as a pending amendment (above): the hand amend of its 2026-10-12 Note no longer
+  applies.
 - **F4 (nit), fixed.** The self-review heading is now `### review (developer, self-review, 2026-10-13)`.
 
 Runs:
