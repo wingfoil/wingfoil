@@ -313,6 +313,12 @@ approver's post-merge action (handover).
   `listed path does not exist: <abs>`; the `llms` case received `llms entry is not part of the site: ../outside/secret.md`;
   the sorted case lacks the escape line; `assembleSite` "did not throw"; both CLI cases `Expected: 1, Received: 0`;
   F3 the inline span was rewritten (substring not found). eslint clean, `tsc --noEmit` no error in the three files.
+- **Send-back (qa, 2026-10-14), red-test fault after `f386a40c`.** `expectNothingWritten` read `<tmp>/out` with
+  `readdirSync`, which a refusal that writes nothing never creates, so the `assembleSite` row and both `site --out`
+  rows failed with `ENOENT … scandir '<tmp>/out'` in the helper, not on the code. Fixed in `16348b7c`: an absent
+  `<tmp>/out` counts as nothing written; the checks that `<tmp>/out/outside` does not exist and that the output
+  directory is empty or absent are unchanged. `npx jest test/docs/build-site-confinement.test.ts --maxWorkers=2` →
+  10 passed / 10; eslint clean.
 
 ### green (developer, 2026-10-13)
 
