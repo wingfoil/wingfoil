@@ -33,9 +33,219 @@ A site built from the Markdown `user-docs` already owns plus TypeDoc output, and
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+### design (developer, 2026-10-13)
+
+- **Sources read.** `dl-129` is `ready`, ratified with Q2 (b) and Q3 (b)
+  (`git log --format='%h %s%n%b' --grep=dl-129 | grep -A3 approve` → `adfc3c39 … [in-discussion → ready]`,
+  `Reason: … Q1 (b) for the first run, then (a); Q2 (b); Q3 (b).`). `dl-116`, `dl-010`, `dl-088` are `ready` and
+  `spec-015` is `approved` (`grep -n '^status' docs/04_memory/design/{dls/dl-116*,dls/dl-010*,dls/dl-088*,specs/spec-015*}.md`).
+  `spec-015` §1 already allows the change: `homepage: the repo README/pages URL`
+  (`grep -n 'homepage' docs/04_memory/design/specs/spec-015-packaging-publishing.md` → line 42), so no spec amendment.
+  `depends_on: task-224` is `done` (`grep -n '^status' docs/04_memory/v0.3/task-224-*.md`); its notes leave
+  `user-docs.yaml` at 1.5, keep `align-user-docs`' `checks.post` verbatim (pinned by
+  `test/core/workflow-repository-conformance.test.ts`, which this task keeps) and set the precedent of a post-merge
+  approver AC left unasserted (as `task-214` AC 4). Batch ruling D4 (w3-b7 notes): Pages in a NEW workflow file,
+  never `publish.yml`; Pages enable, repository homepage and the services are the approver's after a push.
+- **Facts at `db0e2752`.** `gh api repos/wingfoil/wingfoil/pages` → HTTP 404 (no site); `gh api repos/wingfoil/wingfoil
+  --jq .homepage` → `https://www.npmjs.com/package/wingfoil` (recorded in `svc-004`'s Configuration);
+  `gh api repos/wingfoil/wingfoil/environments --jq '.environments[].name'` → `npm-publish` only; `package.json`
+  `homepage` → `https://github.com/wingfoil/wingfoil#readme`, pinned by `test/cli/publish-metadata.test.ts:124–138`;
+  `git ls-files | grep -c llms` → 0. `typedoc.json` has `"emit": "none"`: `npm run docs:api` is a validation gate that
+  writes nothing, so the site passes `--emit docs --out …` on the command line. Trial (output to a scratch dir, nothing
+  in the worktree): `npm run -s docs:api -- --emit docs --out <scratch>/api` → exit 0 in 10 s, 1101 files,
+  `index.html` + `assets/ classes/ functions/ interfaces/ modules/ types/ variables/ .nojekyll`, no `_`-prefixed path.
+- **Site URL (homepage): `https://wingfoil.github.io/wingfoil/`.** Derived from `package.json` `repository.url`
+  (`git+https://github.com/wingfoil/wingfoil.git`): GitHub Pages serves a project repository `<owner>/<repo>` at
+  `https://<owner>.github.io/<repo>/`; `wingfoil/wingfoil.github.io` does not exist (`gh api
+  repos/wingfoil/wingfoil.github.io` → 404), so no organisation site or custom domain overrides it (domains wait,
+  `svc-004`, dl-091 D7).
+
+#### Design
+
+- **One declaration, two consumers — `docs/site.yaml`** (new, `version: 1.0`). It lists the site's sources and the
+  `llms.txt` index; the site assembly and the generator both read it, so the two cannot drift.
+  ```yaml
+  version: 1.0
+  title: WingFoil
+  summary: "<one line, the llms.txt blockquote>"
+  pages:            # Markdown copied into the site at the SAME relative path (relative links keep working)
+    - README.md     # becomes the site index (jekyll-readme-index)
+    - docs/user-guide.md
+    - docs/cli-reference.md
+    - docs/agents.md
+    - CHANGELOG.md
+    - COLLABORATION.md
+    - CONTRIBUTING.md
+    - SECURITY.md
+    - CODE_OF_CONDUCT.md
+  files:            # directories copied as-is, recursively (trailing slash)
+    - docs/examples/
+    - docs/assets/
+  llms:             # the llms.txt sections, in this order
+    - section: Docs
+      entries:
+        - { title: User guide, path: docs/user-guide.md, about: "…" }
+        - { title: CLI reference, path: docs/cli-reference.md, about: "…" }
+        - { title: Guide for AI agents, path: docs/agents.md, about: "…" }
+        - { title: Examples, path: docs/examples/README.md, about: "…" }
+    - section: Optional
+      entries:
+        - { title: API reference, site_path: api/, built_by: docs:api, about: "…" }
+        - { title: Changelog, path: CHANGELOG.md, about: "…" }
+  ```
+  Every `llms` entry has either `path` (a repository file that is in the site) or `site_path` + `built_by` (a page the
+  workflow generates; `built_by` names a `package.json` script). dl-129 Decision 3's four documents are the `Docs`
+  section.
+- **Generator — `scripts/build-site.cjs`** (new, + `scripts/build-site.d.cts`, as every tested script). Requires only
+  `node:` built-ins and `js-yaml` (already a dependency): no new dependency (dl-010, dl-129 Q2 (b)). Exports:
+  - `readSiteManifest(root: string): SiteManifest` — parses `<root>/docs/site.yaml`.
+  - `checkSiteManifest(root: string, manifest: SiteManifest, scripts: Readonly<Record<string, string>>): string[]` —
+    the problems, sorted; `[]` means sound. One line each, exactly:
+    `docs/site.yaml: listed path does not exist: <p>` (any `pages`, `files` or `llms` `path`);
+    `docs/site.yaml: llms entry is not part of the site: <p>` (a `path` neither in `pages` nor under a `files` dir);
+    `docs/site.yaml: unknown npm script: <s>` (`built_by`);
+    `docs/site.yaml: page contains a Liquid tag, which Jekyll would evaluate: <p>` (a `pages` file containing `{{`
+    or `{%`; none does today: `grep -c '{{\|{%'` over the nine pages → 0 each).
+  - `renderLlmsTxt(manifest: SiteManifest, homepage: string): string` — `# <title>\n\n> <summary>\n`, then per section
+    `\n## <section>\n\n` and one line per entry `- [<title>](<homepage><path | site_path>): <about>\n`; ends with exactly
+    one `\n`. Absolute URLs under `homepage`, so the SAME bytes are correct at the repository root and the site root
+    (dl-129 Decision 3: "the same file"); the raw `.md` is served next to the rendered page (below).
+  - `assembleSite(root: string, outDir: string, options: { ref: string }): { files: readonly string[] }` — `outDir`
+    must not exist or be empty (throws otherwise); copies `pages` and `files`; writes `llms.txt`
+    (= `renderLlmsTxt(manifest, package.json homepage)`) and a fixed `_config.yml` (title, description); in each
+    copied Markdown page rewrites a relative link (`](…)` / `src="…"`) whose target is NOT in the site to
+    `<repository>/blob/<ref>/<path>` (file) or `<repository>/tree/<ref>/<path>/` (directory), `<repository>` =
+    `package.json` `repository.url` without `git+`/`.git`; in-site links, anchors and absolute URLs are untouched.
+    Returns the written paths, sorted. No clock, no randomness, sorted directory walks (determinism directive).
+  - CLI: `node scripts/build-site.cjs llms` writes `<root>/llms.txt`; `llms --check` exits 1 naming `llms.txt` when it
+    differs from the render; `site --out <dir> --ref <sha>` assembles; any manifest problem → stderr lines, exit 1;
+    unknown sub-command or missing option → exit 2 (spec-008 exit codes). `--root <dir>`, default the cwd.
+- **Pages workflow — `.github/workflows/pages.yml`** (new; `publish.yml` untouched, D4). Shape:
+  - `on: { push: { tags: ['v[0-9]+.[0-9]+.[0-9]+'] }, workflow_dispatch: {} }` — the tag filter equal to publish.yml's,
+    so the site documents the released version that npm's `homepage` points at (decision 1 below).
+  - top-level `permissions: { contents: read }`; `concurrency: { group: pages, cancel-in-progress: false }`;
+    `env.NODE_VERSION` equal to publish.yml's (`22.12.0`).
+  - job `build` (`ubuntu-24.04`, `timeout-minutes: 15`, no `permissions` key): checkout (the publish.yml line,
+    `persist-credentials: false`) → setup-node (the publish.yml line, `package-manager-cache: false`) → `npm ci` →
+    `node scripts/build-site.cjs site --out _site-src --ref "$GITHUB_SHA"` → `npm run docs:api -- --emit docs --out
+    _site-src/api` → `actions/configure-pages` → `actions/jekyll-build-pages` (`source: ./_site-src`,
+    `destination: ./_site`) → `actions/upload-pages-artifact` (`path: ./_site`).
+  - job `deploy` (`needs: build`, `ubuntu-24.04`, `timeout-minutes: 10`), `permissions: { pages: write, id-token: write }`
+    (deploy-pages' documented set, on this job only), `environment: { name: github-pages, url: ${{
+    steps.deployment.outputs.page_url }} }`, one step `id: deployment` → `actions/deploy-pages`.
+  - Pins (resolved read-only: `gh api repos/<action>/releases/latest --jq .tag_name`, then
+    `gh api repos/<action>/commits/<tag> --jq .sha`):
+    `actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0`,
+    `actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1.0.13`,
+    `actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0`,
+    `actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1`.
+  - Rendering: `jekyll-build-pages` is GitHub's own Pages builder (a docker action, not an npm package); its
+    `jekyll-optional-front-matter` renders the Markdown and, by default, ALSO keeps each original `.md` in the output
+    ("By default the original markdown files will be included as static pages in the output" — the plugin README,
+    `gh api repos/benbalter/jekyll-optional-front-matter/readme`), so `llms.txt`'s `.md` URLs resolve for agents while
+    humans get HTML; `jekyll-relative-links` turns `.md` links into page links. TypeDoc's HTML has no front matter and
+    is copied as static files.
+- **`package.json`:** only `homepage` → `https://wingfoil.github.io/wingfoil/` (own line; no script line needed — the
+  workflow calls the script directly). `task-241` merges first; no overlap with its lines.
+- **`user-docs.yaml` 1.5 → 1.6** (header: `1.6 dl-129 Q2 (b), Q3 (b) (task-234): align-user-docs produces llms.txt and
+  docs/site.yaml`); `align-user-docs` `produces:` + `llms.txt`, `docs/site.yaml` (the site's declared sources; the
+  pages it lists are already produced); `checks.post` unchanged. `WORKFLOW.md`: the `align-user-docs` node only.
+  `.gitignore` + `_site/`, `_site-src/` (local assembly).
+
+#### AC classification (corrected) and what the qa agent pins
+
+None of the behaviours exists at `db0e2752` (facts above), so a guard written first fails genuinely: AC 1–3 are
+**red-first** (testing directive T1; precedent task-214/224). A few assertions are characterization by nature and pass
+on first run: the publish.yml lines reused, publish.yml not touched. AC 4 is **manual, unasserted** (GitHub's state).
+
+| AC | Class | Test file (qa) |
+|---|---|---|
+| 1 Pages workflow, one artefact, no new dependency | red-first | `test/cli/pages-workflow.test.ts` (new) |
+| 2 `llms.txt` from a declared list, parity test | red-first | `test/docs/llms-txt.test.ts` (new) |
+| 3 `homepage`; `produces:` + version | red-first | `test/cli/publish-metadata.test.ts` (edit :124–138), `test/docs/llms-txt.test.ts` "AC 3" |
+| 4 post-merge Pages + homepage as services | manual | none — handover below |
+
+- **AC 1** (offline YAML, the `scorecard-workflow.test.ts` / `ci-workflow.test.ts` pattern: `js-yaml` `load`,
+  `usesLines`): `.github/workflows/pages.yml` exists; `on` keys exactly `push`, `workflow_dispatch`; `on.push` has only
+  `tags`, equal to publish.yml's `on.push.tags`; top-level permissions exactly `{contents: read}`; `build` has no
+  `permissions`; `deploy.permissions` exactly `{pages: write, id-token: write}`, `needs: build`, environment name
+  `github-pages` with url `${{ steps.deployment.outputs.page_url }}`; concurrency `{group: pages, cancel-in-progress:
+  false}`; `env.NODE_VERSION` equal to publish.yml's; both jobs `runs-on: ubuntu-24.04` and a positive
+  `timeout-minutes`; build steps in the order above, with checkout and setup-node lines each one publish.yml already
+  has (+ `persist-credentials: false`, `package-manager-cache: false`), a `run` equal to `npm ci`, a `run` containing
+  `node scripts/build-site.cjs site --out _site-src --ref "$GITHUB_SHA"`, a `run` containing
+  `npm run docs:api -- --emit docs --out _site-src/api`, jekyll-build-pages `with` `{source: ./_site-src,
+  destination: ./_site}`, upload-pages-artifact `with.path` `./_site`; the four Pages `uses:` lines exactly the table
+  above; no `secrets.` in the file; no `upload-artifact`, `npm install`, `gem install`, `pip` anywhere; publish.yml
+  contains neither `deploy-pages` nor `pages: write` (characterization). **No new dependency:** every `require(…)` in
+  `scripts/build-site.cjs` is a `node:` built-in or `js-yaml`. Cross-pin: the `site_path` of the `built_by: docs:api`
+  entry in `docs/site.yaml` is `api/`, the suffix of the workflow's `--out _site-src/api`.
+- **AC 2** (imports `../../scripts/build-site.cjs`, signatures above; temp fixtures with `mkdtempSync(join(tmpdir(),
+  …))` + `rmSync` in `afterEach`, holding a `package.json` and a `docs/site.yaml`):
+  - the real repository: `checkSiteManifest(REPO_ROOT, readSiteManifest(REPO_ROOT), pkg.scripts)` → `[]` — **this is
+    the test that fails when a listed path does not exist** (dl-116 shape: two sides, one derived from the other);
+  - negative fixtures, one per problem line above (exact strings): a missing `pages` path, a missing `llms` `path`,
+    an `llms` path not in the site, `built_by: nope`, a page containing `{{` — each yields its line;
+  - `llms.txt` exists at the repository root and equals `renderLlmsTxt(manifest, pkg.homepage)` byte for byte;
+  - render contract on a fixture manifest: the exact expected text (header, blockquote, `## ` sections in order, entry
+    lines `- [t](<homepage><path>): about`, `site_path` entries likewise, single trailing newline); two calls equal;
+  - the real manifest's `llms` paths include `docs/user-guide.md`, `docs/cli-reference.md`, `docs/agents.md`,
+    `docs/examples/README.md`, and a `site_path: api/` entry with `built_by: docs:api` (dl-129 Decision 3);
+  - `assembleSite(REPO_ROOT, <tmp>/out, { ref: '0123456789abcdef0123456789abcdef01234567' })`: `<out>/llms.txt`
+    byte-equal to the repository-root `llms.txt`; every `pages` path and every file under each `files` dir present;
+    `_config.yml` present; README's `[...](docs/)` link (not in the site) rewritten to
+    `https://github.com/wingfoil/wingfoil/tree/0123…4567/docs/`, its `](docs/user-guide.md)` link unchanged; returned
+    `files` sorted; a second call on a non-empty `outDir` throws;
+  - CLI (`spawnSync('node', ['scripts/build-site.cjs', …])`): `llms --check` in the repository → exit 0; in a fixture
+    whose `llms.txt` differs → exit 1 and stderr naming `llms.txt`; an unknown sub-command → exit 2.
+- **AC 3:** `publish-metadata.test.ts` — `homepage` is `https://wingfoil.github.io/wingfoil/`, built in the test as
+  `https://${owner}.github.io/${repo}/` from `REPO_SLUG`; the "same repo" test keeps `repository.url` and `bugs.url`
+  containing `github.com/${REPO_SLUG}` and asserts the homepage is that slug's Pages URL. `llms-txt.test.ts` "AC 3":
+  `align-user-docs` `produces` contains `llms.txt` and `docs/site.yaml`; `version` `toBeGreaterThan(1.5)` plus the
+  header history line containing `1.6 dl-129` (bug-314 form).
+- **AC 4:** none (GitHub's state, read after a push; testing directive T1).
+
+#### Files (session 3)
+
+`.github/workflows/pages.yml`, `docs/site.yaml`, `scripts/build-site.cjs`, `scripts/build-site.d.cts`, `llms.txt`
+(generated by `node scripts/build-site.cjs llms`), `package.json` (`homepage`), `.wingfoil/workflows/custom/user-docs.yaml`
+(1.5 → 1.6), `.wingfoil/WORKFLOW.md` (align-user-docs node), `.gitignore`. No `src/` change, so coverage cannot move.
+No Memory element other than this file is edited by the task; `svc-004`'s homepage line changes only with the
+approver's post-merge action (handover).
+
+#### Post-merge handover (approver, after the push to `main`)
+
+1. Enable Pages with the workflow source: Settings → Pages → Source "GitHub Actions" (or
+   `gh api -X POST repos/wingfoil/wingfoil/pages -f build_type=workflow`).
+2. Allow the release tags to deploy: Settings → Environments → `github-pages` → Deployment branches and tags → add the
+   tag rule `v*` (GitHub's default rule admits the default branch only, so a tag run's `deploy` job would be refused).
+   Read back: `gh api repos/wingfoil/wingfoil/environments/github-pages/deployment-branch-policies`.
+3. First deployment: `gh workflow run pages.yml --ref main` (the site then shows `main`'s docs until the `v0.3.0` tag
+   redeploys it), or wait for the tag. Verify: `gh run list --workflow pages.yml --limit 1`;
+   `curl -sI https://wingfoil.github.io/wingfoil/` → 200; `curl -s https://wingfoil.github.io/wingfoil/llms.txt | diff -
+   llms.txt` → empty; `curl -sI https://wingfoil.github.io/wingfoil/api/index.html` and
+   `…/docs/user-guide.md` → 200.
+4. Only then set the repository homepage (so it never points at a 404):
+   `gh api -X PATCH repos/wingfoil/wingfoil -f homepage=https://wingfoil.github.io/wingfoil/`.
+5. Record (dl-088, dl-129 Action 4): a new `service` for Pages (`kind: setting`, `verify: "gh api
+   repos/wingfoil/wingfoil/pages --jq '{status,build_type,html_url}'"`, `url: https://wingfoil.github.io/wingfoil/`,
+   `repo_refs: [.github/workflows/pages.yml, docs/site.yaml, llms.txt, package.json]`, `decision: dl-129-trust-signals`,
+   `set_up_in: v0.3`, Configuration naming the `github-pages` tag rule), then for the homepage see decision 3.
+6. npm shows the new `homepage` only from the next publish (`v0.3.0`).
+
+#### Decisions for the approver (recommendations)
+
+1. **Trigger:** (a) release tag + manual dispatch — the site matches the published package the npm `homepage` points
+   at, at the cost of handover step 2 — or (b) every push to `main` (no environment rule; the site can describe
+   unreleased commands). **Recommend (a).**
+2. **Rendering:** GitHub's `actions/jekyll-build-pages` (HTML for humans, the raw `.md` kept for agents; no npm
+   dependency) vs. uploading the raw assembly (Markdown served as text). **Recommend Jekyll.**
+3. **The homepage's record:** D4 says "the two `service` elements", but `svc-004` already records the repository
+   `homepage` (its Configuration and `verify`), and its Management says a change is made by editing that element. A
+   second element would hold the same setting twice, and `svc-004` would read wrong anyway. **Recommend: one new
+   service for Pages + a `memory amend` of `svc-004`'s homepage line** (Reason: dl-129 Decision 2 replaces the npm URL
+   with the documentation site).
+4. **Out-of-site links** in copied pages are rewritten to the repository at the built commit (no 404 on the site, no
+   edit to the Markdown). Recommend as designed.
+5. `docs/agents.md` is published on the site and indexed in `llms.txt` (dl-129 Decision 3) while staying in no
+   phase's `produces:` (`user-docs-rel-v0.2-plan` §10); this task does not change that.
