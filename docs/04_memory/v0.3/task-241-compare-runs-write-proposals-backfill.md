@@ -452,7 +452,7 @@ Not touched: `metrics.yaml`, `check-governance.cjs`, `src/`, `docs/cli-reference
 - T4: `git log --first-parent --no-merges --format=%h 01aae1a9..HEAD -- <red's test files, helper, fixtures,
   measure.test.ts>` → empty.
 
-### review (reviewer, self, 2026-10-13)
+### self-review (developer, 2026-10-13)
 
 - AC 1 met: `compare.test.ts` (tolerance edges, the five verdicts, re-measure success and failure, three-run trend,
   render order and byte identity, the CLI exits) passes.
