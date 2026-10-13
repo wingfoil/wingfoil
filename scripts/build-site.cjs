@@ -102,6 +102,33 @@ function escapesRoot(rel) {
 }
 
 /**
+ * True when the declared path, or any directory on the way to it, is a symbolic link (re-review): following it would
+ * read from wherever the link points, possibly outside the repository. Such an entry is reported and never read.
+ *
+ * @param {string} root
+ * @param {string} rel
+ * @returns {boolean}
+ */
+function isLinked(root, rel) {
+  const parts = rel.split('/').filter((part) => part !== '' && part !== '.');
+  for (let i = 1; i <= parts.length; i += 1) {
+    const at = join(root, ...parts.slice(0, i));
+    if (!existsSync(at) && !isBrokenLink(at)) return false;
+    if (lstatSync(at).isSymbolicLink()) return true;
+  }
+  return false;
+}
+
+/** @param {string} at */
+function isBrokenLink(at) {
+  try {
+    return lstatSync(at).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Every file under `dir` (repository-relative, POSIX separators), sorted. Symbolic links are skipped, so a link
  * inside a declared directory cannot pull a file from outside the repository into the site.
  *
@@ -141,9 +168,10 @@ function isDirectory(root, rel) {
  * @returns {string[]}
  */
 function siteFiles(root, manifest) {
-  const found = new Set(manifest.pages.filter((p) => !escapesRoot(p) && isFile(root, p)));
+  const usable = (rel) => !escapesRoot(rel) && !isLinked(root, rel);
+  const found = new Set(manifest.pages.filter((p) => usable(p) && isFile(root, p)));
   for (const dir of manifest.files) {
-    if (!escapesRoot(dir) && isDirectory(root, dir)) for (const f of walk(root, dir)) found.add(f);
+    if (usable(dir) && isDirectory(root, dir)) for (const f of walk(root, dir)) found.add(f);
   }
   return [...found].sort();
 }
@@ -162,9 +190,15 @@ const LIQUID = /\{\{|\{%/;
 function checkSiteManifest(root, manifest, scripts) {
   const problems = new Set();
   const escaping = (rel) => {
-    if (!escapesRoot(rel)) return false;
-    problems.add(`${MANIFEST}: listed path escapes the repository: ${rel}`);
-    return true;
+    if (escapesRoot(rel)) {
+      problems.add(`${MANIFEST}: listed path escapes the repository: ${rel}`);
+      return true;
+    }
+    if (isLinked(root, rel)) {
+      problems.add(`${MANIFEST}: listed path is a symbolic link: ${rel}`);
+      return true;
+    }
+    return false;
   };
   for (const page of manifest.pages) {
     if (!escaping(page) && !isFile(root, page)) problems.add(`${MANIFEST}: listed path does not exist: ${page}`);
