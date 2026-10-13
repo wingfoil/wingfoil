@@ -7,7 +7,7 @@ context: "feedback"            # optional — short label for the context, e.g. 
 release: ""            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
-reported_by: ["svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-008@6b84e18f4195533b329320c08a96f7b2b3151e38"]        # optional — LIST of consumer feedback notes this element answers, as provenance only (dl-163 S3c), each "<service id>/F-<nnn>@<sha>": the full id of an active kind: repository service with a feedback_inbox, the note's id in that inbox, and the full sha of the consumer commit read; restate the note in this element, never copy it; a GitHub issue gets contributor + credit instead (COLLABORATION.md)
+reported_by: ["svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-008@6b84e18f4195533b329320c08a96f7b2b3151e38", "svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-028@a15b053a7174fd5fa87d472cc394c7f8ad40b0ce"]        # optional — LIST of consumer feedback notes this element answers, as provenance only (dl-163 S3c), each "<service id>/F-<nnn>@<sha>": the full id of an active kind: repository service with a feedback_inbox, the note's id in that inbox, and the full sha of the consumer commit read; restate the note in this element, never copy it; a GitHub issue gets contributor + credit instead (COLLABORATION.md)
 tmpl_version: 261010   # Orignal template version
 tags: ["governance","templates","stage"]
 ---
@@ -41,20 +41,29 @@ tags: ["governance","templates","stage"]
 axis and no `stage set` exist or are planned in WingFoil; WingFoil's side proposes that a stage change be **modelled
 as a governance change applied as an update of `stage/*` packs**, through `dl-164`'s mechanism, rather than as a new
 verb; meanwhile the template repository keeps stage transitions as workflows or packs a project runs, with no
-dependency on a `stage set` verb. They will file a new note on stage changes as pack updates, replacing F-008's
-request.
+dependency on a `stage set` verb.
+
+**The template repository's replacement note, F-028** (filed 2026-10-13), withdraws F-008's `stage set`:
+- a lifecycle stage (`prototype`, `mvp`, `production`, `maintenance`, `sunset`) is a `stage/*` overlay pack;
+- changing a project's stage is a pack update that replaces one `stage/*` overlay with another, through the
+  installer and its update command (`dl-138` Q2 (i)); the transition is a workflow the project runs, shipped by the
+  overlay;
+- its one request: when WingFoil specifies how a configuration changes after `init` (`dl-164`), replacing an
+  overlay of an **exclusive axis** is **one update**, not a removal followed by an addition, so that a project is
+  never left without a stage.
 
 **`dl-164` already has the mechanism, not yet ratified** (`in-discussion`, release unassigned): a governance change
 is a Memory element with an `origin` (`bootstrap | retrospective | feedback | template-update | ad-hoc`), applied
 through a governed process, verified for coherence and traced; a template update (`dl-138` Q2 (i)) is a change with
 `origin: template-update` whose apply is the three-way merge.
 
-For more detail, the note at the commit read:
-https://github.com/wingfoil/wingfoil-templates/blob/6b84e18f4195533b329320c08a96f7b2b3151e38/docs/wingfoil-feedback/F-008-no-lifecycle-stage.md
+For more detail, the notes at the commits read:
+- https://github.com/wingfoil/wingfoil-templates/blob/6b84e18f4195533b329320c08a96f7b2b3151e38/docs/wingfoil-feedback/F-008-no-lifecycle-stage.md
+- https://github.com/wingfoil/wingfoil-templates/blob/a15b053a7174fd5fa87d472cc394c7f8ad40b0ce/docs/wingfoil-feedback/F-028-stage-changes-as-pack-updates.md
 
 ## Decision
 
-Five questions decide whether and how WingFoil models a project's lifecycle stage: as a governance change
+Six questions decide whether and how WingFoil models a project's lifecycle stage: as a governance change
 (`dl-164`) whose content is an update of the project's `stage/*` packs (`dl-138`), as a dedicated field and command,
 or not at all. The recommendation follows them.
 
@@ -79,6 +88,10 @@ then redundant.
 
 **Q5 — release.** Not assigned. It depends on `dl-164` (unassigned) and on `dl-138` (v0.4).
 
+**Q6 — replacing an overlay of an exclusive axis** (F-028). Whether the update path replaces one `stage/*` overlay
+with another as **one** update (one diff, one merge, one commit, the old overlay never removed before the new one is
+in place), or as a removal followed by an addition, which leaves a window with no stage.
+
 **Recommendation:**
 
 | Question | Choice | Why |
@@ -88,6 +101,7 @@ then redundant.
 | Q3 | `dl-164`'s coherence check plus approval; stage-specific checks declared by the stage pack itself | The checks belong to the methodology, which the template repository owns |
 | Q4 | `origin: template-update`, no extra decision-log | The governance-change element is already the record |
 | Q5 | with `dl-164` | It cannot land before the mechanism it uses |
+| Q6 | one update | A project must never sit in a state no stage describes; one update is also one audited commit |
 
 ## Rationale
 
@@ -100,11 +114,11 @@ then redundant.
 
 ## Actions
 
-1. **Ratify Q1–Q5** at `in-discussion → ready`, together with or after `dl-164`. Owner: approver.
+1. **Ratify Q1–Q6** at `in-discussion → ready`, together with or after `dl-164`. Owner: approver.
 2. **If (a):** fold into `dl-138`'s Action 2 tech-spec (stage packs as a pack axis, recorded in the lock) and into
    `dl-164`'s governance-change type (the origin of Q4).
 3. **Read the template repository's replacement note** on stage changes as pack updates when it is filed, and amend
-   this element with it.
+   this element with it. **Done** on 2026-10-13: F-028, restated in Context and as Q6.
 
 ## Relations
 
