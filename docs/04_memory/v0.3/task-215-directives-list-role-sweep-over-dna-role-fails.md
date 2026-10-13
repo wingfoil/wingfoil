@@ -207,6 +207,13 @@ no other B7 writer; `CLAUDE.md` §7's role table would no longer list the two ne
   `Received: undefined`, versions `Received: 2.1` / `Received: 1.8`, `WORKFLOW.md` substring absent.
 - **For session 3:** the `HEAD` test reads the committed configuration, so it goes green only once the config change is
   committed, not on a dirty tree.
+- **Send-back (coordinator, 2026-10-14, merge-order change):** `bindings.yaml` has three B7 writers in gate order
+  task-241 (→ 1.9) → task-234 (→ 2.0) → task-215, so this task's entry is re-bumped to 2.1 at the gate. `ef4332c0`
+  changes only `test/core/reconcile-governance-role-directives.test.ts`: the task-215 history entry's number is read
+  from its `;`-separated segment and compared numerically (bug-314) — `bindings.yaml` ≥ 1.9 (the file-version ≥ 1.9
+  assertion kept), `release-planning.yaml` task-215 ≥ 2.2 and task-279 ≥ 2.1 (were exact `2.2`/`2.1` patterns).
+  `npx jest test/core/reconcile-governance-role-directives.test.ts --maxWorkers=2` → 7 passed / 7. T4 from `e243e387`
+  now lists `ef4332c0`, a qa-agent commit.
 
 ### green (developer, 2026-10-13)
 
