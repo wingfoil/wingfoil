@@ -46,9 +46,10 @@ export function requireRequiredFields(
   const template = memoryYaml.types[type]?.template?.frontmatter;
   const id = frontmatter['id'];
   const exempt = template?.exempt ?? {};
-  const required = (template?.required ?? []).filter(
-    (field) => !(typeof id === 'string' && (exempt[field] ?? []).includes(id)),
-  );
+  // Own properties only: a field named like an Object.prototype member (`constructor`, `toString`) is
+  // an ordinary required field, never the prototype's function (task-279 review F1).
+  const exemptIds = (field: string): readonly string[] => (Object.hasOwn(exempt, field) ? (exempt[field] ?? []) : []);
+  const required = (template?.required ?? []).filter((field) => !(typeof id === 'string' && exemptIds(field).includes(id)));
   const missing = missingRequiredFields(frontmatter, required, template?.lists ?? []);
   const refused = notApplicableRefusals(frontmatter, required, template?.not_applicable_allowed ?? []);
   const clauses: string[] = [];
