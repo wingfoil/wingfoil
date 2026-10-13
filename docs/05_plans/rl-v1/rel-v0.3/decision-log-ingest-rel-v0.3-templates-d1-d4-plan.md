@@ -70,6 +70,15 @@ between a pack update and a verb); a ratified "yes" reaches the vision through `
 - 2026-10-13 — map approved by the approver (R3 filed, release unassigned; default-set recommendation (b)); heads-up
   on (b) and on F-003/F-005 sent to the template repository before its default-set note.
 - 2026-10-13 — worktree `ingest/templates-d1-d4` cut from `main` at `db0e2752`; build `0.2.2 (db0e2752…)`.
+- 2026-10-13 — capture done. This plan add `2aee916c`, submit `95e8b53d` (`active`). R5 → `dl-177` (capabilities
+  query, v0.4): add `b34f827f`, submit `c24bf3f0` (`in-discussion`). R3 → `dl-178` (stage change as a pack update,
+  release unassigned): add `4d4c3221`, submit `a582a375` (`in-discussion`). R1 + R2 + R4 → `dl-138` amend
+  `dc35cabf` (`ready → ready`), on the approver's explicit instruction, with the reason proposed in this ingest.
+  R6 → no element. Ids from `memory add` (`dl-177`, `dl-178`); no other local branch or worktree carried them.
+- 2026-10-13 — deviation from a first draft: the two new decision-logs' Decision sections present the options without
+  an "unratified" preamble, as the decision-log template requires.
+- Remaining: merge on `main` by the dev-loop; the record sent to the template repository and its verification reply
+  brought to the approver; then `active → done`.
 
 ### Retrospective
 
