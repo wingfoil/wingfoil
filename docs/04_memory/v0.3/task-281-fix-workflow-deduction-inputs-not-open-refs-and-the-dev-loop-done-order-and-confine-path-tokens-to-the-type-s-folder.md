@@ -46,9 +46,12 @@ Fix five inherited v0.3 bugs that were `triaged` with no task, all in the workfl
 - (red-first, `bug-301`) An uncommitted edit of `.wingfoil/dna.yaml` is reported by `W_UNCOMMITTED_INPUTS` from
   `workflow next` and `workflow status`; `spec-017` §1.2's list gains `dna.yaml` (pending amendment).
 - (red-first, `bug-325`) `memory add --set <token>=<value>` and `workflow start --set` refuse with exit `2`, naming
-  the token, a value holding a `..` segment, an absolute path or an empty segment, or one whose resolved document is
-  not under the static prefix of its type's `path` pattern, before anything is written; the root-escape refusal
-  (`E_PATH_ESCAPES_ROOT`) is kept as the positive case.
+  the token, a value holding a `.` or `..` segment, an absolute path or an empty segment; a document whose resolved
+  path is not under the static prefix of its type's `path` pattern is refused with exit `1` (`VALIDATION`,
+  `E_PATH_OUTSIDE_TYPE_FOLDER`), as `spec-008` §10 decides a refusal that depends on the committed `memory.yaml`;
+  both before anything is written; the root-escape refusal (`E_PATH_ESCAPES_ROOT`) is kept as the positive case.
+  (Amended 2026-10-13 by approver rulings 2026-10-12 D1 (a) and D3; it read "exit `2`" for the static-prefix case and
+  named only `..` segments.)
 - (red-first, `bug-326`) `workflow next <ref>` and `workflow finalize <ref>` on a `done` instance plan answer
   `workflow is not open: <ref>`, as `workflow end` does; a `<ref>` naming neither a workflow nor a plan still answers
   `unknown workflow: <ref>`; `spec-017` §10 is unchanged or amended to say so.
@@ -335,6 +338,109 @@ Notes for green:
   1 failed (the red-first row, `missing` received `["state"]`), 3 passed (the three controls). T4 for that file is
   measured from `1b7102fe`.
 
+### green (developer, 2026-10-13)
+
+Before green, the red AC 1 control (c) was found vacuous and sent back (session-3 report): its `rework` workflow
+declared `element.set_state(in-progress)` twice, so the phase's exit state was undetermined
+(`W_PHASE_EXIT_STATE_UNDETERMINED`, seen in a throw-away probe of the fixture, deleted after) and its `state` stayed
+missing under any rule. The qa agent fixed it in `1b7102fe`.
+
+`33b0c0f4` — `fix(workflow): task-281 — …` (bug-300, bug-301, bug-313, bug-325, bug-326):
+- `bug-300`: `readFacts` notes a bracketless `add` / `submit`; `readHistory` reads the re-entered elements' files at
+  those commits in one `readRevisionPaths` batch and adds a transition with the frontmatter `status`, in walk order
+  (`src/core/workflow-deduction.ts`). `src/workflow/deduce.ts` changed in two doc comments only (`TransitionCommit.to`,
+  `stateCommit`; the design said "unchanged": `git diff db0e2752 HEAD -- src/workflow/deduce.ts` shows comment lines
+  only).
+- `bug-301`: `readDirty` adds `MEMORY_YAML_PATH`, `DNA_YAML_PATH`, `ROLES_YAML_PATH` and `DIRECTIVES_DIR_PATH/`
+  (ruling D2).
+- `bug-326`: `unresolvedRef(known: KnownRefs, ref)` in `src/core/workflow-next.ts` with `instancePlanIds`
+  (`workflow-deduction.ts`, sharing `isInstancePlan` with the candidate filter); `next`, `status`, `finalize`, `end`
+  (`namesKnownInstance` removed) and `resolveAddLink` call it (ruling D4).
+- `bug-325`: `parseSetOptions` refuses an absolute value, an empty segment, a `.`/`..` segment (exit 2, ruling D3);
+  `resolveConfinedMemoryPath` refuses `E_PATH_OUTSIDE_TYPE_FOLDER` after its root checks (`pathPatternFolder`,
+  `src/storage/memory-path.ts`), mapped to `VALIDATION` in `memoryAddFn` (ruling D1 (a)).
+- `bug-313`: `dev-loop.yaml` 1.9 → 2.0 (`done`: approve, set_state(done), bug sync, merge, remove_worktree; the
+  fallback comment says the edge now starts from `done`); `git-conventions.md` 1.5 → 1.6 (§1); the `DONE` node of
+  `.wingfoil/WORKFLOW.md`.
+
+Red → green: `npx jest <the nine red files> --maxWorkers=2` → 84 passed, 2 failed before the config commit (both in
+`dev-loop-v2-0.test.ts`, which reads `dev-loop.yaml` at `HEAD`); after `33b0c0f4`, `npx jest
+test/core/dev-loop-v2-0.test.ts` → 3 passed: **86/86**.
+
+AC 3's text is amended in this file per approver rulings D1 (a) and D3 (the static-prefix case exits `1`; `.`
+segments are refused too), with a dated note in the criterion.
+
+### refactor (developer, 2026-10-13)
+
+- `17a17b5b` — doc comments (`statusWorkflow`, `nextWorkflow`, `readHistory`, the module's cost paragraph) and
+  `docs/cli-reference.md`: `memory add`'s exit-2 spelling refusals and exit-1 `E_PATH_ESCAPES_ROOT` /
+  `E_PATH_OUTSIDE_TYPE_FOLDER`; the `<ref>` answers of `workflow next`, `status`, `finalize`, `end`, `memory add
+  --workflow`; `workflow start`'s `--set` refusal; `workflow list`'s added config inputs.
+- `c8597a68` — the first coverage run (below) showed new uncovered branches: `memory-path.ts:65` (the empty-folder
+  arm, whose climbing/absolute outcomes the root checks already refuse, so it became `return true`) and the
+  tolerant arms of `frontmatterStatus` (`workflow-deduction.ts:346–361`). New suites of mine (red's files
+  untouched): `test/core/workflow-deduction-bracketless-unreadable.test.ts` (no frontmatter, unparsable, no
+  `status`, no file at that commit, plus the readable control → 5 passed) and
+  `test/storage/memory-path-type-folder-root-level.test.ts` (2 passed).
+
+Gates (heavy ones under `waitslot.sh`, `--maxWorkers=2`):
+
+| Command | Result |
+|---|---|
+| `npm run test:coverage -- --maxWorkers=2` at `17a17b5b` | 418 suites, 7516 passed; All files 99.28 / 97.11 / 97.99 / 99.7 — below the B6 baseline 99.32 / 97.23 / 97.98 / 99.71, hence `c8597a68` |
+| `npm run test:coverage -- --maxWorkers=2` at `c8597a68` (09:09–09:29, load 7.5 → 5.6) | **420 suites, 7527 passed**; All files **99.32 / 97.22 / 97.99 / 99.71**: branches −0.01 (inside the batch margin), the others equal or above. `src/core/memory-transition.ts` reports 468 and 560 uncovered in this run (468 is the run-dependent line the batch notes name; neither file is touched here: `git diff --stat db0e2752 HEAD -- src/core/memory-transition.ts` → nothing). `workflow-deduction.ts` 100 / 99.13 / 100 / 100 (260, `readLastChange`'s pre-existing arm), `memory-path.ts` 100 / 100 / 100 / 100 |
+| `npm run lint` | exit 0 |
+| `npx tsc --noEmit -p tsconfig.json`; `npx tsc -p tsconfig.build.json --noEmit` (slot) | exit 0; exit 0 |
+| `npm run docs:api` | exit 0 |
+| `npx jest test/docs/cli-reference.test.ts` | 4 passed |
+| `node scripts/check-governance.cjs --base db0e2752` | 6 `wf()` commits checked, 0 findings |
+| `node scripts/lint-claims.cjs --base db0e2752` | 3 warn-only `state-claim` hits in this file: the design's "unchanged" sentences (corrected above for `deduce.ts`; the §1 sentence is quoted text) and the red section's (the qa agent's) |
+
+`npm test` (`scripts/run-tests.cjs`) was not run separately: the coverage run is the same full Jest suite. BDD: no
+scenario of P4.4, P4.13 or P1.3 asserts the changed messages (`grep -rln "unknown workflow\|is not open\|--set"
+docs/02_requirements/02_bdd/features/` → only P4.7's `show ghost`, unchanged, and P5.3.4's run-log warning).
+
+T4: `git log --first-parent --no-merges --format=%h 640a480e..HEAD -- <red's eleven files>` → `1b7102fe` only, the
+qa agent's send-back fix of control (c) (T4 for that file is measured from it).
+
+### review (reviewer, self, 2026-10-13)
+
+| AC | Status | Evidence |
+|---|---|---|
+| 1 `bug-300` | met | `workflow-deduction-bracketless-submit.test.ts` 4/4 (the red-first row and three controls, (c) discriminating "later of" from the chosen rule); my unreadable-status suite 5/5 |
+| 2 `bug-301` | met | `workflow-uncommitted-config.test.ts` 12/12 (`next` and `status` × `dna.yaml`, `memory.yaml`, `roles.yaml`, a directive; clean and `README.md` controls) |
+| 3 `bug-325` | met (as amended, D1 (a)) | `memory-add-path-tokens` core 17/17 and CLI 17/17, `memory-path-type-folder` 9/9: seven spelling values exit 2 with and without `--dry-run`, `workflow start` exit 2, type folder exit 1, root escape kept, nested value accepted |
+| 4 `bug-326` | met | `workflow-ref-not-open` core 15/15 and CLI 5/5 |
+| 5 `bug-313` | met | `dev-loop-v2-0` 3/3 (order, version, no error in `workflowShowAtHead`), `dev-loop-done-order` 4/4; `dev-loop-practice.test.ts` still green in the coverage run |
+| 6 | met | gates above |
+
+Same class in the files touched: the three copies of the `<ref>` refusal are one (`grep -rn "is not open" src --include=*.ts
+| grep -v ': \* \|:\s*\*\|: *//'` → two code lines, `unresolvedRef` and `selectWorkflowInstance`; the latter is a candidate finding,
+no production caller); the "first five / last three" counts of `spec-008` §10 corrected in its amendment; every
+`<ref>` paragraph of `docs/cli-reference.md` that named the old rule rewritten. Not changed: `workflow show` (its
+`<ref>` is a workflow name), reported.
+
+### Pending amendments (approver)
+
+Uncommitted in the worktree (`git status --short docs/04_memory`); the gates ran with them.
+- `spec-017-workflow-commands-and-state-deduction` — `--reason "task-281 fixes bug-300, bug-301 and bug-326. Section 4.8: a bracketless add or submit counts as the commit that set an element's status when its file holds that status at that commit, and its Cost gains one batched read. Section 1.2 lists the configuration files section 1.1 reads (ruling D2). Section 10: a ref naming an instance plan that is not open is workflow is not open for every command that takes one, and a ref naming neither a workflow nor an instance plan, a phase plan's id included, is unknown workflow (ruling D4). No command or diagnostic code changes."`
+- `spec-008-cli-grammar` — `--reason "task-281 fixes bug-325. Section 10 gains three spelling rows at exit 2, an absolute value, an empty segment and a dot or dot-dot segment (ruling D3), and one row decided by the committed path at exit 1, E_PATH_OUTSIDE_TYPE_FOLDER (ruling D1 (a)); the stale first five and last three counts now name the exit codes. No other section changes."` (after `task-279`'s Revision note, date order).
+- `bug-300-…`, `bug-301-…`, `bug-313-…`, `bug-325-…`, `bug-326-…` — each `### Retrospective` filled (bug-325's
+  names the half-started instance `workflow start --set scope=../../etc` left before the fix) — `--reason "task-281 closes it: its Retrospective records the fix and what the defect teaches, as dl-115 Q2 (a) asks of every closed bug."`
+
+### Decisions for the approver
+
+None new: D1–D4 were ruled 2026-10-12. Candidate findings (not filed): `selectWorkflowInstance` has no production
+caller and answers `workflow is not open` for any `<ref>`; `workflow show <closed plan id>` answers
+`unknown workflow`; `memory.yaml`'s `path` accepts literal `..` segments at load (`path: z.string()`), caught now
+only at write time.
+
 ### Retrospective
 
-None yet.
+- The red control (c) passed for a reason unrelated to the rule it was to test (an undetermined exit state); a
+  probe of the fixture's deduction (its warnings) found it before green. Proposal: a control states, and checks, the
+  diagnostics of its fixture.
+- The first coverage run fell below the batch baseline in branches (97.11 against 97.23): new tolerant arms
+  without a test. Covering them, and removing one arm the root checks make unreachable, recovered it.
+- The heavy gates waited behind another worktree's coverage run (dl-170 slot); the first run took the slot at
+  01:02 and ended past 08:30 under the machine's load.
