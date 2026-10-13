@@ -58,4 +58,7 @@ Captured on 2026-10-10 by `bug-ingest-rel-v0.3-w3b4-review-findings-plan` (item 
 
 ### Retrospective
 
-None.
+- Fixed by `task-281` (approver ruling 2026-10-12 D6): `dev-loop.yaml` 2.0 declares approve, finalize and the
+  bugs' sync on the task branch, then the merge, then the worktree removal; `git-conventions` 1.6 §1 says the same.
+  A declared order no command executes drifted from practice until `task-197`'s inventory found it: until the workflow
+  engine runs `done`, only a test of the declaration (`test/core/dev-loop-v2-0.test.ts`) keeps them together.
