@@ -296,7 +296,7 @@ No refactor was needed beyond green: the schema loop now builds one entry list f
 T4: `git log --first-parent --no-merges --format=%h 26c2ac94..HEAD -- test/core/memory-amend-release-kind-exemption.test.ts
 test/memory/schema.test.ts test/workflow/release-kind-rule.test.ts` → empty.
 
-### review (reviewer, self, 2026-10-13)
+### review (developer, self-review, 2026-10-13)
 
 | AC | Status | Evidence |
 |----|--------|----------|
@@ -323,6 +323,43 @@ Uncommitted in the worktree, present during the gates:
   lists for the document's id is not required of it, on submit and amend alike, and the refusal does not name it."
 - `bug-342`: `### Retrospective` (cause, fix, lesson). Proposed `--reason`: "task-279 closes it: the retrospective
   records the cause, the fix and the lesson (dl-115 Q2 (a))."
+
+### independent review (2026-10-13) and fixes (developer)
+
+Verdict: **APPROVE WITH FIXES**.
+- **F1 (should-fix), fixed in `81e6983a`.** `requireRequiredFields` read `exempt[field]` through `Object.prototype`.
+  A required field named `constructor`, `toString`, `valueOf` or `hasOwnProperty` therefore threw `(exempt[field] ?? []).includes is
+  not a function`. qa added the red rows in `378f539b` (send-back; 7 failed / 12 passed), with notes in `751ae3e7`.
+  - **Fix:** `exemptIds(field)` reads `Object.hasOwn(exempt, field) ? exempt[field] : []`.
+  - **Same class:** with only that fix, the red rows still failed. The suite went from 7 failed / 12 passed, a crash, to 7 failed /
+    12 passed, `ok: true` rather than a refusal. The cause was the read of the frontmatter's own value for the field:
+    `missingRequiredFields` and `notApplicableRefusals` (`src/memory/submit.ts`) read `frontmatter[field]`, which
+    for `constructor` is the inherited `Object` function and counts as filled. Both now read through `ownValue`, an
+    own-property read.
+  - **Before this task:** that read was already there. `git diff --stat db0e2752 ef713323 -- src/memory/submit.ts`
+    → empty. So before this task such a field was silently accepted, not refused; the fix also closes that older gap.
+  - **The sibling keys:** `not_applicable_allowed` and `lists` are arrays read through a `Set`, and the schema's
+    `exempt` loop uses `Object.keys` (own keys). Neither has the defect.
+  - `grep -n "frontmatter\[" src/memory/submit.ts src/core/required-fields.ts src/core/memory-amend.ts` → only
+    `ownValue`'s guarded read and `frontmatter['id']`.
+- **F2 (nit), fixed in `81e6983a`.** The comment at `test/core/define-scope-sweep.test.ts:73` now names the bug-342
+  sentence it guards. That test is not one of red's files.
+- **F3 (`dl-132` note): not touched**, waiting for the approver's ruling.
+- **F4 (nit), fixed.** The self-review heading is now `### review (developer, self-review, 2026-10-13)`.
+
+Runs:
+- `npx jest test/core/memory-amend-release-kind-exemption.test.ts test/memory/schema.test.ts test/workflow/release-kind-rule.test.ts
+  test/core/define-scope-sweep.test.ts test/memory/submit.test.ts test/core/memory-submit.test.ts
+  test/core/memory-amend.test.ts --maxWorkers=2` → 7 suites, 150 passed. The exemption suite alone gives 19 passed.
+- `npm run lint` → exit 0, and `npm run typecheck` → exit 0, both under `waitslot.sh`.
+- No full coverage run. Both branches of each new guard are exercised: own key present (the exempt rows and every
+  filled field) and absent (the `constructor` and `toString` rows).
+
+T4:
+- `git log --first-parent --no-merges --format=%h 26c2ac94..HEAD -- <red's three files>` → `378f539b`, the qa
+  agent's send-back commit.
+- `git log --first-parent --no-merges --format=%h 378f539b..HEAD --
+  test/core/memory-amend-release-kind-exemption.test.ts` → empty.
 
 ### Retrospective
 
