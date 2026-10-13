@@ -60,9 +60,13 @@ export function pathPatternFolder(pattern: string): string {
   return pattern.slice(0, pattern.lastIndexOf('/', end - 1) + 1);
 }
 
-/** Whether the normalized root-relative `path` lies strictly under `folder` (`''`: anywhere that does not climb). */
+/**
+ * Whether the normalized root-relative `path` lies strictly under `folder`. An empty folder confines nothing
+ * beyond the root: a path that climbs out of it or is absolute was already refused by the root checks, which
+ * run first.
+ */
 function liesUnder(path: string, folder: string): boolean {
-  if (folder === '') return path !== '..' && !path.startsWith('../') && !posix.isAbsolute(path);
+  if (folder === '') return true;
   const prefix = posix.normalize(folder);
   return path.startsWith(prefix) && path.length > prefix.length;
 }

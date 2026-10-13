@@ -343,7 +343,7 @@ function readBracketlessStatuses(root: string, entries: readonly BracketlessComm
   if (requests.length === 0) return statuses;
   const contents = readRevisionPaths(root, requests);
   requests.forEach((request, index) => {
-    const status = frontmatterStatus(contents[index] ?? null, `${request.rev}:${request.path}`);
+    const status = frontmatterStatus(contents[index]!, `${request.rev}:${request.path}`);
     if (status !== null) statuses.set(request.key, status);
   });
   return statuses;
