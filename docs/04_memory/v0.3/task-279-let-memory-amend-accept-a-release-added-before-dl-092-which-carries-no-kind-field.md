@@ -230,6 +230,91 @@ characterization row (refused, names `title`) and a red-first companion (names `
 "stay green" notes hold: `test/core/define-scope-sweep.test.ts:73` still needs a `kind:` mention in `define-scope`'s
 description.
 
+### green (developer, 2026-10-13)
+
+Approver rulings after design (`w3-b7-notes.md`): D1 (a), D2 (submit too), D3 (the extra files), AC 4 red-first.
+Red `26c2ac94`, including qa's split of AC 2 (b): the exempt field is dropped from `required` before the
+missing-field check runs, so a refusal never names it. Green commit **`0321f383`** `fix(memory): task-279 — …
+(bug-342)`:
+- `src/memory/schema.ts`: `TemplateFrontmatter.exempt` (`z.record(z.string(), z.array(z.string()))`, optional).
+  The siblings' semantic checks now run over its keys too, with the same messages and path `['exempt', <field>]`.
+- `src/core/required-fields.ts`: drops from `required` every field whose `exempt` list holds `frontmatter.id`. The
+  drop happens before both `missingRequiredFields` and `notApplicableRefusals`, for both verbs.
+- `src/core/memory-amend.ts`: doc comment of `requireRequiredFieldsKept` only.
+- `.wingfoil/memory.yaml` 3.4 → **3.5**: `release` `template.frontmatter.exempt: { kind: [ minor-v0.1 … minor-v1.0 ] }`,
+  the `id_pattern` comment pointing at it, and the history entry.
+- `.wingfoil/workflows/custom/release-planning.yaml` 2.0 → **2.1**: the `define-scope` hand-amend clause is replaced
+  by "A release predating dl-092, which carries no `kind:`, is amended the same way … (bug-342, task-279)". The
+  `kind:` mention that `define-scope-sweep.test.ts:73` needs is kept. The check comment names the `memory.yaml`
+  declaration, and the history entry is added.
+- `.wingfoil/WORKFLOW.md`: the `define-scope` sentence, the gate sentence (the declaration, bug-342) and the `DS`
+  node's last line (`(no kind: too, bug-342)`).
+- `docs/cli-reference.md`: an "Unreleased (v0.3)" paragraph on `template.frontmatter.exempt`, after the `lists` one.
+
+Red → green: `npx jest test/core/memory-amend-release-kind-exemption.test.ts test/memory/schema.test.ts
+test/workflow/release-kind-rule.test.ts test/core/define-scope-sweep.test.ts --maxWorkers=2` → red 14 failed / 36
+passed (qa's run, three suites) → **4 suites, 61 passed** (the three red suites, 50 tests, plus define-scope-sweep's 11).
+Files the design said stay as they are: `git diff --stat db0e2752 HEAD -- .wingfoil/workflows/custom/initial-design.yaml
+test/core/define-scope-sweep.test.ts test/core/workflow-repository-conformance.test.ts` → empty. No id is hard-coded in
+`src/`: `grep -rn "minor-v0\.[1-4]\|minor-v1\.0" src | wc -l` → 2, the two comments named in the design.
+
+**AC 5 (by hand).** `npm run build`, then a blank line appended to `docs/04_memory/planning/rl-v1/minor-v0.4.md`, then
+`node dist/cli.js memory amend minor-v0.4 --reason probe --dry-run` → exit `0`, `dryRun: true`, subject `wf(release):
+amend minor-v0.4 [planning → planning]`, paths `['docs/04_memory/planning/rl-v1/minor-v0.4.md']`. The edit was
+discarded (`git checkout -- docs/04_memory/planning/rl-v1/minor-v0.4.md`; afterwards `git status --short` lists only
+the three pending amendments).
+
+### refactor (developer, 2026-10-13)
+
+No refactor was needed beyond green: the schema loop now builds one entry list for the three keys. Gates at
+`0321f383`, each heavy one under `waitslot.sh`, with the pending amendments in the working tree:
+- `npm run test:coverage -- --maxWorkers=2` → **410 suites, 7429 tests passed**; All files **99.32 / 97.22 / 97.98 /
+  99.71**. The B6 baseline is 99.32 / 97.23 / 97.98 / 99.71, so branches are down 0.01, inside the notes' margin. The
+  per-file branch scan of `coverage/coverage-final.json` lists `src/core/memory-transition.ts` 468 and 560 as the
+  only uncovered branches among the files near this change. 468 is the run-dependent line the batch notes name. My
+  three source files have no uncovered branch: `required-fields.ts`, `memory/schema.ts` and `memory-amend.ts` → none.
+- `npm run lint` → exit 0.
+- `npm run docs:api` → exit 0.
+- `npm run typecheck` (both tsc configs) → exit 0.
+- `node scripts/check-governance.cjs --base db0e2752` → "2 wf() commits … and 4 other commits"; gated 0 findings,
+  history 0 findings.
+- `node scripts/lint-claims.cjs --base db0e2752` → 3 warnings (warn-only), all on the word "unchanged" in the design
+  section. The evidence for them is the `git diff --stat` command above.
+- `test/docs/cli-reference.test.ts` ran inside the full suite; no command or option was added.
+
+T4: `git log --first-parent --no-merges --format=%h 26c2ac94..HEAD -- test/core/memory-amend-release-kind-exemption.test.ts
+test/memory/schema.test.ts test/workflow/release-kind-rule.test.ts` → empty.
+
+### review (reviewer, self, 2026-10-13)
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| 1 | met | exemption suite AC 1 rows (two) green |
+| 2 | met | AC 2 (a)/(b) characterization rows and the (b) companion green; a non-listed release with a blank `kind` and a listed one with a blank `title` are still refused |
+| 3 | met | one declaration, `memory.yaml` `release` `template.frontmatter.exempt`, read by `requireRequiredFields` for both verbs; suite rows (i)–(iii), the schema `exempt` block and the live-file row, and `release-kind-rule.test.ts` (both checks equal the declaration) green |
+| 4 | met | suite AC 4 rows green; `grep -n "refuses a release with no\|hand amend" .wingfoil/WORKFLOW.md .wingfoil/workflows/custom/release-planning.yaml` → nothing; release-planning 2.1 with history; conformance suite green in the full run |
+| 5 | met | the AC 5 dry run above |
+| 6 | met | the refactor gates above |
+
+Same class, in the files I touched: the only other restatement of the five ids is `initial-design.yaml:44`'s
+`seed-releases` check. It stays, held equal to the declaration by `release-kind-rule.test.ts`'s new row (D1 (a)). The
+positive cases are kept (AC 2), so no absence claim stands without its positive case.
+
+### Pending amendments (approver)
+
+Uncommitted in the worktree, present during the gates:
+- `spec-001-memory-yaml-schema`: the `TemplateConfig` Zod line, an `exempt` paragraph after `lists`, and a dated
+  Revision. Proposed `--reason`: "task-279 (bug-342, approver ruling 2026-10-12 D1 (a)): template.frontmatter gains
+  the optional exempt mapping, a required field to the ids of the documents that do not carry it, with the same two
+  semantic checks as its siblings; this repository's memory.yaml 3.5 declares the pre-dl-092 minors exempt from kind."
+- `spec-010-memory-frontmatter-schema`: the § Validation rules required-field row gains the exempt exception, plus a
+  dated Revision. Proposed `--reason`: "task-279 (bug-342): a required field the type's template.frontmatter.exempt
+  lists for the document's id is not required of it, on submit and amend alike, and the refusal does not name it."
+- `bug-342`: `### Retrospective` (cause, fix, lesson). Proposed `--reason`: "task-279 closes it: the retrospective
+  records the cause, the fix and the lesson (dl-115 Q2 (a))."
+
 ### Retrospective
 
-None yet.
+- The design's AC 2 (b) row assumed the refusal message on the start sha; qa ran it and found `title, kind`. A design
+  that states an exact current message should quote the command that produced it.
+- The heavy gates waited a long time for the slot under the batch's load (load average about 25 at the first wait).
