@@ -63,4 +63,11 @@ follow-ups (`dev-loop-rel-v0.3-plan`), re-checked on `main` at `0da232cb` with t
 
 ### Retrospective
 
-None.
+- **Cause.** `memory.yaml` stated the exemption only in a comment (the `release` `id_pattern`), and the
+  `define-scope` check restated it as prose no code reads, so the one rule `memory submit` and `memory amend`
+  share (`requireRequiredFields`) applied the whole `required` list to every release. It surfaced once
+  `release` became amendable (`memory.yaml` 3.2, `task-230` D3).
+- **Fix.** `task-279`: the exemption is data, `memory.yaml` `release` `template.frontmatter.exempt` (3.5), read by
+  both verbs; the two workflow checks restate it, held equal by `test/workflow/release-kind-rule.test.ts`; the
+  hand-amend clause is gone from `release-planning.yaml` (2.1) and `WORKFLOW.md`.
+- **Lesson.** A fact a verb must honour is declared where the verb reads, not in a comment beside it.
