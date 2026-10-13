@@ -50,7 +50,7 @@ function parseArgs(argv) {
 }
 
 /**
- * Run one pinned-CLI command in `root` and return its stdout parsed as a JSON object.
+ * Run one pinned-CLI command in `root` with `--format json` and return its stdout parsed as a JSON object.
  *
  * @param {string} cli
  * @param {string} root
@@ -58,8 +58,14 @@ function parseArgs(argv) {
  * @returns {Record<string, unknown>}
  */
 function runJson(cli, root, args) {
-  const label = args.filter((a) => a !== '--format' && a !== 'json').join(' ');
-  const result = spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf-8' });
+  // The command as the operator would type it; `--format json` is appended here, never part of `args`, so a role
+  // named `json` stays in the label.
+  const label = args.join(' ');
+  const result = spawnSync(process.execPath, [cli, ...args, '--format', 'json'], { cwd: root, encoding: 'utf-8' });
+  if (result.error !== undefined) {
+    // The spawn itself failed (e.g. `--root` names no directory): no exit status to report.
+    throw new UsageError(`\`${label}\` could not run: ${result.error.message}`);
+  }
   const firstStderr = String(result.stderr ?? '').split('\n').find((line) => line.trim() !== '') ?? '';
   if (result.status !== 0) {
     throw new UsageError(`\`${label}\` exited ${String(result.status)}${firstStderr ? `: ${firstStderr}` : ''}`);
@@ -78,7 +84,7 @@ function check(root) {
   const cli = join(__dirname, '..', PINNED_CLI);
   if (!existsSync(cli)) throw new UsageError(`the pinned build ${PINNED_CLI} is missing: run \`npm ci\``);
 
-  const dna = runJson(cli, root, ['dna', 'show', '--format', 'json']);
+  const dna = runJson(cli, root, ['dna', 'show']);
   const team = /** @type {{ roles?: unknown }} */ (dna.team ?? {});
   const names = Array.isArray(team.roles)
     ? team.roles.map((r) => (r !== null && typeof r === 'object' ? /** @type {{ name?: unknown }} */ (r).name : undefined))
@@ -91,7 +97,7 @@ function check(root) {
   const err = [];
   let failing = 0;
   for (const role of roles) {
-    const listing = runJson(cli, root, ['directives', 'list', '--role', role, '--format', 'json']);
+    const listing = runJson(cli, root, ['directives', 'list', '--role', role]);
     if (!Array.isArray(listing.warnings)) {
       throw new UsageError(`\`directives list --role ${role}\` printed no warnings array`);
     }
