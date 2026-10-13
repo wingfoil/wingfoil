@@ -385,3 +385,88 @@ Not touched: `metrics.yaml`, `check-governance.cjs`, `src/`, `docs/cli-reference
   says `not-comparable`, but E01–E05 are `kind: info` and rule 4 (`info`) precedes rule 5; E04 is pinned `info`,
   E05 left out. The exact wording of the exit-2 messages: pinned as the `release-health compare: ` prefix plus the
   named argument, file or versions. The trend's catalogue-version mark and `--no-remeasure` are not pinned.
+
+### green (developer, 2026-10-13)
+
+- Approver rulings of 2026-10-13 (`w3-b7-notes.md`): A (a), B `--offline`, C JSON only, D `schema_version` 1, E–I as
+  designed; the dl-089 §6 note is a follow-up, not this task's. The baselines are taken after the independent review
+  and its fixes, so `baselines.test.ts` (9 tests) is the one red left red at this stop.
+- `6a13df3d` `feat(release-health)`: `scripts/release-health/compare.cjs` + `compare.d.cts` (the contract of
+  `test/release-health/helpers/compare-api.ts`); `measure.cjs` F7 (`previous.basis`, `report: null` with
+  `--previous`), F8 (1) (`releasedTransition`, basis `revision`), F8 (4) (P04 exact or unique short id, an ambiguous
+  one named with its carriers), ruling A (G07 `not-measurable` with no `team.members`); `measure.d.cts`; the schema
+  (`previous.basis` required, `report` string | null by basis, `measurement_point.basis` + `revision`);
+  `bindings.yaml` 1.8 → 1.9 and `release-health.yaml` 1.0 → 1.1 (bug-344); `package.json` `"ajv": "^8.20.0"`, the
+  lockfile changing only its root entry (`git diff db0e2752 HEAD --stat -- package-lock.json` → 1 insertion; bug-332).
+- Red → green: `npx jest test/release-health/compare test/release-health/propose test/release-health/measure-followups
+  test/release-health/bindings-and-deps --maxWorkers=2` → `Tests: 94 passed, 94 total` (red: 90 failed of 94);
+  `npx jest test/release-health --maxWorkers=2` → `Tests: 9 failed, 220 passed, 229 total`, the 9 being
+  `baselines.test.ts`.
+- Choices red left open: E01–E05 are `info` (rule 4 precedes rule 5) and also carry the `run-time reading` flag; the
+  exit-2 messages name the argument, file or both versions after the `release-health compare: ` prefix; the trend
+  marks a run measured with another catalogue `(catalogue vN)`; `--no-remeasure` takes the failure path with the
+  reason `not run (--no-remeasure)`. A metric no `COMPONENTS` entry names (a future catalogue's) is compared by its
+  value's shape (number relative, boolean, object every key) in the catalogue's direction.
+
+### refactor (developer, 2026-10-13)
+
+- `85edf8af` `docs(release-health)`: `report-layout.md` says compare drafts the Proposals section (ruling E), the
+  proposal entry format, the flags, the `--previous` and re-measure header lines, and the retrospective's
+  disposition table the next run reads back (ruling G); `.wingfoil/WORKFLOW.md`, the release-health paragraph
+  (compare.cjs, the bound `--any-node --max-workers 2`) and one stale clause of the bindings paragraph ("scripts still
+  to be written", same class). The first full run found that a wrapped line of `report-layout.md` began `## Release
+  health`, which `test/release-health/catalogue.test.ts` read as a section heading (`Tests: 1 failed`); rewrapped,
+  `npx jest test/release-health/catalogue` → `26 passed`.
+- Gates, under the dl-170 slot (`waitslot.sh`), `--maxWorkers=2`:
+  - `npm test` at `6a13df3d` + the docs (14:13–14:35, load 12.8 → 17.1) → `Tests: 10 failed, 7514 passed, 7524 total`:
+    the 9 of `baselines.test.ts` and the layout heading above, fixed in `85edf8af`.
+  - `npm run test:coverage` at `85edf8af` (15:29–15:46, load 4.6 → 7.8) → `Tests: 9 failed, 7515 passed, 7524 total`,
+    the 9 of `baselines.test.ts` only; All files 99.32 / 97.22 / 97.98 / 99.71 against the B6 baseline 99.32 / 97.23 /
+    97.98 / 99.71: branches −0.01 is the run-dependent `src/core/memory-transition.ts` (`… | 468,560` uncovered in
+    this run's table); no change under `src/` or `jest.config.js` (`git diff --stat db0e2752 HEAD -- src
+    jest.config.js` → empty; `scripts/` is outside `collectCoverageFrom`).
+  - `npm run lint` → 0; `npm run docs:api` → 0; `npx tsc --noEmit -p tsconfig.json` → 0;
+    `npx tsc -p tsconfig.build.json --noEmit` → 0.
+  - `node scripts/check-governance.cjs --base db0e2752` → `3 wf() commits`, no gated finding;
+    `node scripts/lint-claims.cjs --base db0e2752` → 0 warnings.
+- BDD: no scenario covers release-health's compare (`grep -rln "compare.cjs\|release-health.compare"
+  docs/02_requirements/02_bdd/features/` → nothing); none required by the ACs. No CLI command: `docs/cli-reference.md`
+  not concerned.
+- T4: `git log --first-parent --no-merges --format=%h 01aae1a9..HEAD -- <red's test files, helper, fixtures,
+  measure.test.ts>` → empty.
+
+### review (reviewer, self, 2026-10-13)
+
+- AC 1 met: `compare.test.ts` (tolerance edges, the five verdicts, re-measure success and failure, three-run trend,
+  render order and byte identity, the CLI exits) passes.
+- AC 2 met: `propose.test.ts` (one search per finding in catalogue order before numbering, tracking by type and open
+  state, RH entries, immediate flags by basis, settlement mapping, stderr line) passes.
+- AC 3 not yet met, by ruling: the two baseline runs follow the independent review. They will be, each once, under
+  the slot, after `npm run build`:
+  `node scripts/release-health/measure.cjs --release v0.1 --any-node --max-workers 2 --offline` then
+  `node scripts/release-health/measure.cjs --release v0.2 --any-node --max-workers 2 --offline`, the reports at
+  `docs/08_health/release-health-v0.{1,2}.json`, and the dl-089 §7 comparison in these notes.
+- F7, F8 (1), (4), (5), ruling A, bug-344, bug-332: `measure-followups.test.ts`, `bindings-and-deps.test.ts` pass.
+- `dl-173`'s definitions untouched: `git diff db0e2752 HEAD -- scripts/release-health/measure.cjs | grep -nE
+  "^[-+].*(measureAttribution|declaredVerbs|measureBranches|uncheckedCommits|producesPresent|UNCHECKABLE_RE)"` →
+  nothing; `docs/08_health/metrics.yaml` unchanged (`git diff --stat db0e2752 HEAD -- docs/08_health/metrics.yaml` →
+  empty).
+- Same class in the files touched: the WORKFLOW.md bindings clause above; `compare.cjs` runs no git, so
+  `test/lint/git-log-readers.test.ts`'s roster is unchanged; its CLI stubs in red write no stderr.
+
+### Pending amendments (approver)
+
+- `bug-344` (uncommitted): `### Retrospective` replaces "None." with one item. Proposed `--reason`: "Retrospective item
+  for bug-344, written by task-241 while fixing it: the binding predated the flags its script gained, and no test
+  held the bound vector to them."
+- `bug-332` (uncommitted): `### Retrospective` replaces "None." with one item. Proposed `--reason`: "Retrospective item
+  for bug-332, written by task-241 while fixing it: a dependency used only through hoisting is invisible until the
+  other package's tree changes."
+
+### Retrospective
+
+- A background wait for the slot that dies (a monitor's deadline) loses its FIFO ticket, and a duplicate waiter
+  queued meanwhile would rerun the same gate: one gate script per task, started once, with no deadline shorter than
+  the queue.
+- A wrapped prose line beginning `## ` is a heading to every reader of the layout: the layout test caught it, a
+  reviewer would not have.
