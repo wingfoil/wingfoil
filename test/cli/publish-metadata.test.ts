@@ -40,7 +40,9 @@
  * metadata copies equal. That block sits just before the task-074 one.
  *
  * `task-157-add-glama-json-glama-directory-listing` (`dl-093`) added the root `glama.json` of the Glama
- * listing (`spec-015` §1b), asserted right after the `server.json` block.
+ * listing (`spec-015` §1b), asserted right after the `server.json` block. *
+ * `task-234-publish-documentation-site-api-reference-llms-txt-index` (`dl-129` §2) moved `homepage` from
+ * the README anchor to the documentation site, the repo's GitHub Pages URL (`PAGES_URL`).
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -53,6 +55,13 @@ const PKG_PATH = join(REPO_ROOT, 'package.json');
 
 /** The single GitHub `owner/repo` all three attribution URLs must agree on (`spec-015` §1). */
 const REPO_SLUG = 'wingfoil/wingfoil';
+
+/**
+ * task-234 (`dl-129` §2, `spec-015` §1 "the repo README/pages URL"): the documentation site. GitHub Pages
+ * serves a project repository `<owner>/<repo>` at `https://<owner>.github.io/<repo>/`.
+ */
+const [PAGES_OWNER, PAGES_REPO] = REPO_SLUG.split('/') as [string, string];
+const PAGES_URL = `https://${PAGES_OWNER}.github.io/${PAGES_REPO}/`;
 
 /** The `spec-015` §1 publish surface, as far as this task's assertions reach into it. */
 interface PublishManifest {
@@ -121,8 +130,8 @@ describe('publish metadata (task-059) — spec-015 §1 attribution fields', () =
     expect(pkg.author).toBe('Roberto Pompermaier <robypomper@gmail.com>');
   });
 
-  it('declares `homepage` as the repo README URL', () => {
-    expect(pkg.homepage).toBe(`https://github.com/${REPO_SLUG}#readme`);
+  it('declares `homepage` as the documentation site, the Pages URL of the repo (task-234 AC 3, dl-129 §2)', () => {
+    expect(pkg.homepage).toBe(PAGES_URL);
   });
 
   it('declares `bugs` as the repo issue tracker', () => {
@@ -132,9 +141,12 @@ describe('publish metadata (task-059) — spec-015 §1 attribution fields', () =
   it('points `repository`, `homepage` and `bugs` at one and the same repo', () => {
     // npm provenance (adr-009 step 4) attests the build against `repository.url`; three URLs drifting
     // apart is the failure mode that turns a cosmetic typo into a broken promote step.
-    for (const url of [pkg.repository?.url, pkg.homepage, pkg.bugs?.url]) {
+    // task-234 (dl-129 §2): `homepage` is the documentation site since then — the GitHub Pages URL of the
+    // same repo, derived from the slug rather than written out, so it cannot drift from it either.
+    for (const url of [pkg.repository?.url, pkg.bugs?.url]) {
       expect(url).toContain(`github.com/${REPO_SLUG}`);
     }
+    expect(pkg.homepage).toBe(PAGES_URL);
   });
 });
 
