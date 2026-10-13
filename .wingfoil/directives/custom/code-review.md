@@ -10,7 +10,8 @@ ref: [P3.8]
 
 # Directive — Code Review
 
-Custom stand-in directive. Applies to reviewers and tech leads (`roles.yaml`), and to the approver gate.
+Custom stand-in directive. Applies to reviewers and tech leads (`roles.yaml`), and to the approver gate: `roles.yaml` binds it to the
+`approver` role too (task-215).
 
 > **Stand-in custom directive.** WingFoil ships its official built-in P3.8 templates, and
 > `wingfoil init` installs them under `.wingfoil/directives/built-in/` (task-057). This repository's

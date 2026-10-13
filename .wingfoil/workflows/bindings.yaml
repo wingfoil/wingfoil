@@ -16,7 +16,7 @@
 # specification-phase quality criteria, the release/branch state queries, …) have no command that asserts
 # them today; each is listed with its reason in task-199's Execution Notes and stays a
 # W_WORKFLOW_UNBOUND_TOKEN warning, which in v1.0 fails closed (dl-090 Q2 (c)).
-version: 1.8                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry; 1.1 bug-134 (task-207): e2e-smoke-passed writes its report and states severity: reject (dl-023); 1.2 git.merge also names dev-loop's main-sync, `from: main` (task-205, dl-035); 1.3 task-219 (dl-099 §1–§2): e2e-smoke-passed smokes the packed candidate (`--candidate`), staging-rehearsal-passed and tests.no-identity are bound; 1.4 dl-089 §1, dl-090 Action 4 (task-222): release-health's measure and compare bound to scripts/release-health/; 1.5 dev-loop v1.6 (task-221): typecheck.clean also gates dev-loop.refactor (dl-044), docs.parity names the document-parity suites dev-loop.review runs (dl-116 Action 4); 1.6 vision-index.current, vision-change's index check (task-212, bug-270); 1.7 services.verify-sweep, release-publishing.publish's service verify sweep at severity warn (task-229, dl-130 step 4); 1.8 presentation.current, user-docs.align-user-docs' README badges and demo (task-224, dl-128); demo.rendered stays unbound, a manual step (approver ruling 2026-10-10)
+version: 1.9                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry; 1.1 bug-134 (task-207): e2e-smoke-passed writes its report and states severity: reject (dl-023); 1.2 git.merge also names dev-loop's main-sync, `from: main` (task-205, dl-035); 1.3 task-219 (dl-099 §1–§2): e2e-smoke-passed smokes the packed candidate (`--candidate`), staging-rehearsal-passed and tests.no-identity are bound; 1.4 dl-089 §1, dl-090 Action 4 (task-222): release-health's measure and compare bound to scripts/release-health/; 1.5 dev-loop v1.6 (task-221): typecheck.clean also gates dev-loop.refactor (dl-044), docs.parity names the document-parity suites dev-loop.review runs (dl-116 Action 4); 1.6 vision-index.current, vision-change's index check (task-212, bug-270); 1.7 services.verify-sweep, release-publishing.publish's service verify sweep at severity warn (task-229, dl-130 step 4); 1.8 presentation.current, user-docs.align-user-docs' README badges and demo (task-224, dl-128); demo.rendered stays unbound, a manual step (approver ruling 2026-10-10); 1.9 role-directives.clean, release-planning.reconcile-governance's pre-check: `npm run check:role-directives` (dl-050 option 1, task-215, batch ruling D1)
 format: 1                        # dl-153 (A): a dl-149 file kind (BINDINGS_YAML_FORMAT)
 
 checks:
@@ -61,6 +61,10 @@ checks:
   # release-planning.advance-pinned-build (dl-095 Q3 (B), dl-026).
   lockfile.pinned:          { run: [npm, run, "check:lockfile"] }
   mcp.registered:           { run: [npm, run, "check:mcp"] }
+  # release-planning.reconcile-governance (dl-050 option 1, task-215; batch ruling D1: this phase only, not dev-loop):
+  # `directives list --role <r>` through the pinned build for every dna.yaml team.roles name; exit 1 on any warning
+  # (no assignments, a dangling binding, a shadowed id), 2 on a misconfiguration — scripts/check-role-directives.cjs.
+  role-directives.clean:    { run: [npm, run, "check:role-directives"] }
   # agent-docs.align-agent-docs (bug-170): WORKFLOW.md names every workflow and phase workflows.yaml includes.
   workflow-md.complete:     { run: [npm, test, --, test/docs/workflow-md.test.ts] }
   # vision-change.update-vision / schedule (dl-132 element 5, bug-270): docs/01_vision/00_index.md matches every vision file.
