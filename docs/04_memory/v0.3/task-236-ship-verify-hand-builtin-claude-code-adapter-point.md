@@ -472,3 +472,141 @@ not this entry's.
   "checked by hand in a real terminal". Do not commit it as is: the check failed on N1. It is left untouched
   for the approver's choice. `/status` session id and model, the record line and the `agent: record` commit
   are R3/R4's, after `/exit`.
+
+### design addendum (developer, 2026-10-13) — session context as a Resource
+
+**What the by-hand pass established** (approver transcript `devloop-kit/task-236-runbook.md`, the launched agent's
+note `55cf766a`, record commit `a19338c5`):
+- argv accepted; the bootstrap arrived as the first user message (`55cf766a`, `ps` of the `claude` process);
+- the connected `wingfoil` server is the adapter's: its only MCP child is `node …/task-236/dist/cli.js mcp`, and it
+  served `wingfoil://workflows/-/next`, which the pinned 0.2.2 does not have (`55cf766a`). The approver had
+  answered the `.mcp.json` dialog "Continue without using this MCP server", so which server wins with BOTH enabled
+  is still untested; `/mcp` showed `Config location: …/task-236/.mcp.json` for the server it called `wingfoil`
+  (`⚠ connected · no tools`, `Capabilities: resources · prompts`) although the process was the adapter's — Claude
+  Code's display, not evidence of precedence;
+- R4: `agent: record …/adhoc/1` at `a19338c5`, only the run log; `session` `f4458e8b-b6a3-5453-8221-90a33bb558bb`
+  = `/status`'s Session ID, and `~/.claude/projects/…task-236/f4458e8b-….jsonl` exists (the assigned UUID v5 is
+  Claude's own id); `agent_version` `2.1.296 (Claude Code)`; `model` and every `tokens` count `not-reported`;
+  `exit_status` 0; `notes` `…#execution-notes` (the agent's `55cf766a` changed the section);
+- environment, not the adapter: the login had expired, `/login` was needed before the first turn;
+- **AC 3 fails**: Claude Code 2.1.296 gives the model `ListMcpResourcesTool` and `ReadMcpResourceTool` and no tool
+  that gets an MCP Prompt; Prompts are user-typed slash commands. Ruling (a), 2026-10-13 (w3-b7-notes, task resized
+  M → L): serve the same context ALSO as a read-only Resource and make the bootstrap name it; R5 / spec-016 Q7 are
+  revised for this one session Resource only.
+
+**Discovery: why the bootstrap must carry the full URI.** `ListMcpResourcesTool` gave four entries
+(`wingfoil://dna`, `wingfoil://workflows`, `…/-/next`, `…/-/status`; `55cf766a`), i.e. only `resources/list`. The
+server also registers four resource TEMPLATES (`wingfoil://dna/{section}`, `wingfoil://memory/{type}`,
+`wingfoil://memory/{type}/{id}`, `wingfoil://workflows/{name}`: `grep -n "new ResourceTemplate" src/mcp/*.ts`), each
+`{ list: undefined }`, and none was shown: in SDK 1.32.0 (`grep '"version"'
+node_modules/@modelcontextprotocol/sdk/package.json`) `resources/list` returns the fixed resources plus only what a
+template's `listCallback` yields, templates go to `resources/templates/list`
+(`node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js:391-422`), and Claude Code's tool does not ask for
+the latter. A read, though, is matched against every template (`mcp.js:423-441`: exact resource first, then
+`uriTemplate.match`), so a concrete URI the model is GIVEN is readable without being listed. The session template
+cannot be listed (its `state` is any commit), so the bootstrap gives the concrete URI. Unverified until the re-run:
+that `ReadMcpResourceTool` accepts a URI its listing did not show (stop-and-return if not).
+
+**The Resource.**
+- **URI template** `wingfoil://session/{role}/{element}/{state}`; concrete form
+  `wingfoil://session/developer/task:task-236-…/<40-hex sha>`. `{element}` is the Prompt's `element` argument and the
+  run record's `element`, `<type>:<id>` (`spec-008` §7), one segment: `:` is a legal path character (RFC 3986
+  `pchar`), the SDK's simple-variable pattern is `([^/,]+)` (`node_modules/@modelcontextprotocol/sdk/dist/cjs/shared/uriTemplate.js:187`)
+  and no `spec-009` id holds `/` or `,`. Each variable is percent-decoded before it is validated (a client may send
+  `task%3Atask-…`). Authority `session`: the sibling of the `{role}-session` Prompt, not an agent-run Resource, so
+  not `dl-040`'s `wingfoil://agent/…` question (`dl-040` is `in-discussion`; decision D-F).
+- **Content**: one entry `{ uri: <the requested URI>, mimeType: 'text/markdown', text }` whose `text` is BYTE-EQUAL to
+  the `{role}-session` Prompt's message text for the same `(role, element, state)`, i.e. `assembleExecutionContext`'s
+  §7 payload; the same diagnostics ride as top-level `warnings` (spec-004 §2.2, as every Resource). One builder for
+  both: `buildContextPrompt` (`src/mcp/prompt.ts:143`) is split into a shared `sessionContext(root, role, element,
+  state) → { text, warnings }` that the Prompt wraps in `messages` and the Resource in `contents`.
+- **Refusals**: spec-004 §3.4's, same messages and order, `-32602` for the request ones (malformed element-ref,
+  malformed revision, revision naming no commit, element not at the sha with `W_MEMORY_UNREADABLE` details) and a
+  failed read for the repository ones (archived subject, newer `format:`, missing pillar file). The role is a URI
+  variable, not a registered name: a role outside the start-time set (§3.1) is `-32602` `no session context for
+  undefined role '<R>'` (decision D-G), checked first.
+- **Read-only (REQ-SEC-05)**: a Resource; the handler calls `refuseIfWriteIntent(extra._meta)` first, as every bespoke
+  Resource does (`grep -n refuseIfWriteIntent src/mcp/*.ts`); `tools/list` stays empty; nothing is written.
+- **Determinism (REQ-SYS-07)**: `state` is resolved once and everything is read at that sha, as the Prompt does; a
+  later commit or an uncommitted edit does not change the bytes.
+- **Code**: new `src/mcp/session-resource.ts` (`SESSION_CONTEXT_URI_TEMPLATE`, `registerSessionContextResource(server,
+  { resolveRoot, roles })`), registered in `createMcpServer` (`src/mcp/server.ts:90-98`) beside the Prompts, exported
+  from `src/mcp/index.ts`; the shared builder in `src/mcp/prompt.ts`.
+
+**The bootstrap** (`src/agent/execute.ts:133`, spec-016 §2.4's `{context_instruction}` literal): names the Resource
+only — `Read the MCP resource "wingfoil://session/{role}/{type}:{id}/{state_ref}".` — the Prompt stays served,
+unchanged, for clients that let the model get Prompts, but is not offered as an alternative: two instructions would
+let the model choose, and the bootstrap is part of the I component (`dl-131`) (decision D-E). The rest of §2.4 is
+unchanged.
+
+**AC 3's text** is amended in the task in green (recorded here, as task-277/280 did): "The session-context fetch check
+passes: the launched agent reads the session Resource the bootstrap names (ruling (a), 2026-10-13)…", the rest as is.
+
+**Per new behaviour — what the qa agent pins** (all red-first; the production server `createMcpServer` over the SDK's
+`InMemoryTransport` with a real `Client`, fixtures as in `test/mcp/role-prompt-context.test.ts`: its `MEMORY_YAML` /
+DNA / roles fixtures, `makeTempGitRepo`, `commitAll`, `writeFixtureFile`, `git`):
+- **S1 surface** (new `test/mcp/session-context-resource.test.ts`): `listResourceTemplates()` contains
+  `wingfoil://session/{role}/{element}/{state}`; `listResources()` does NOT contain any `wingfoil://session/` URI (so
+  `check:mcp`'s "every listed static Resource answers a read" is unaffected); `listTools()` → `[]`.
+- **S2 content** (same file): `readResource({ uri })` for `(developer, task:task-001-a, <sha>)` → exactly one
+  `contents` entry, `uri` = the requested URI, `mimeType` `text/markdown`, `text` byte-equal to (i)
+  `assembleExecutionContext(root, { role, element, stateRef: sha }).value.payload` and (ii) `getPrompt({ name:
+  'developer-session', arguments: { element, state } })`'s message text; the same after a later commit and with an
+  uncommitted edit of the element; a percent-encoded element (`task%3Atask-001-a`) gives the same text; `warnings`
+  equal the Prompt's for a fixture with a bound-but-missing directive.
+- **S3 refusals** (same file): `McpError` with `code === ErrorCode.InvalidParams` and the exact spec-004 §3.4 messages
+  for a malformed element-ref (`notaref`), a malformed revision (`..x`), a revision naming no commit, an element absent
+  at the sha; `no session context for undefined role 'ghost'`; a write intent in `_meta` (`wingfoil/write-intent`) is
+  refused with the write-refusal message, before any read.
+- **S4 bootstrap** (`test/agent/execute.test.ts`, `test/agent/fake-agent.test.ts`,
+  `test/cli/agent-execute.integration.test.ts`, `test/cli/agent-execute-launch.integration.test.ts`): the
+  `{context_instruction}` line becomes `Read the MCP resource "wingfoil://session/<role>/<type>:<id>/<sha>".`
+  everywhere the old literal is pinned (`grep -rln "Get the MCP prompt" test` → those four files and the fixture).
+- **S5 fake agent** (fixture `test/fixtures/agents/fake-agent.cjs`, test code, qa's): its `CONTEXT_INSTRUCTION_RE`
+  and `fetchPrompt` become a match of the new literal and a `resources/read` of that URI (the record keeps the text
+  verbatim; "names no MCP prompt" → "names no MCP resource"), so every launch test that fetches context (`execute`,
+  the two CLI integrations, `fake-agent.test.ts`) asserts the Resource's text. task-243's smoke uses this fake and
+  merges after this task.
+- **S6 spec parity** (no new test): `test/docs/mcp-surface-parity.test.ts` compares spec-004 §2.1's URI block with
+  the registered templates; once green registers the template it passes only with the spec-004 amendment below in
+  the working tree (pending amendments are gated with them in the tree).
+
+**Files I expect to touch in green**: `src/mcp/session-resource.ts` (new), `src/mcp/prompt.ts` (the shared builder),
+`src/mcp/server.ts`, `src/mcp/index.ts`, `src/agent/execute.ts` (the literal); this task's AC 3 text; docs:
+`docs/user-guide.md` (the MCP table and the `<role>-session` paragraph), `docs/agents.md` §5 (the MCP ↔ CLI table:
+the Resource's CLI equivalent is `agent execute --dry-run`'s context… none exact: "*(no CLI equivalent)*" row
+naming the Prompt), `docs/cli-reference.md` (`agent execute`: "tells it where to load its context (the
+`<role>-session` prompt …)" → the session Resource). Not `command-baseline.md`: its HEAD table lists Resources read at
+`HEAD`; this one reads at `state`, like the Prompt, which that table does not list either.
+
+**Pending amendments** (uncommitted; revised in green):
+- `spec-016-agent-execution` — §2.4 `{context_instruction}` literal and its paragraph (a Resource, R5's exception);
+  §2.8 (the check is that the model reads the session Resource; the `claude-code` row); Q7 and §7's MCP-surface bullet
+  (the session Resource is v0.3, every other agent Tool/Resource stays v0.4); the Revision note no longer says the row
+  was "checked by hand" until the re-run passes. Proposed `--reason`: "task-236: approver ruling (a) of 2026-10-13
+  after the by-hand pass found that Claude Code 2.1.296 gives the model no way to get an MCP Prompt: the execution
+  context is also served as the read-only Resource wingfoil://session/{role}/{element}/{state}, byte-equal to the
+  Prompt, and section 2.4's context instruction names that Resource; Q7 and section 7 keep every other agent Tool and
+  Resource at v0.4. Section 2.8 records the claude-code row from claude --help of 2.1.296 and what the by-hand pass
+  established."
+- `spec-004-mcp-surface-contract` — §2.1 gains the template line and its paragraph (content = the Prompt's for the
+  same arguments, the full URI given by the bootstrap since templates are not listed); §2.2/§3.4 the refusals and the
+  undefined-role message; a Revision note. Proposed `--reason`: "task-236: section 2.1 gains the session Resource
+  wingfoil://session/{role}/{element}/{state} (ruling (a), 2026-10-13), which serves the role-session Prompt's
+  execution context byte for byte to clients whose model can read Resources but not get Prompts; its refusals are
+  section 3.4's, plus one for a role outside the start-time set."
+
+**Re-run plan (after green, by the approver; ruling D2).** The runbook above is updated in green: run id
+`…/adhoc/2`; R2's observation becomes "does the agent call `ReadMcpResourceTool` on the URI the bootstrap names, with
+no user help, and get the element's context"; the discriminator for which server answered is that read itself
+(0.2.2 has no `wingfoil://session/` template: a "Resource … not found" error means `.mcp.json`'s server won). Answer the
+`.mcp.json` dialog "Use this MCP server" this time, so precedence with both enabled is observed (decision D-H; undo
+afterwards with `claude mcp reset-project-choices` from the worktree). As soon as the read's result shows, press Esc
+and type the stop line (the session ran in auto mode last time and acted unasked). Same stop-and-return rules, plus:
+`ReadMcpResourceTool` refusing an unlisted URI → stop and return.
+
+**Decisions for the approver.**
+- D-E bootstrap names the Resource only (recommended), or Resource first with the Prompt as an alternative.
+- D-F URI `wingfoil://session/{role}/{element}/{state}` (recommended) — or under `dl-040`'s pending `wingfoil://agent/…`.
+- D-G undefined-role message `no session context for undefined role '<R>'` (new spec-004 §3.4 row).
+- D-H the re-run answers the `.mcp.json` dialog "Use this MCP server", to test precedence with both servers enabled.
