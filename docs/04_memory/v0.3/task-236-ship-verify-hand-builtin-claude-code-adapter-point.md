@@ -426,3 +426,49 @@ paste the transcript, and the choice returns to the approver, if:
   the approver's OK, then R1–R4 again;
 - R2: Claude rejects the argv (e.g. reads the bootstrap as an MCP configuration) — a manifest fix in this task,
   then R1–R4 again.
+
+### by-hand R2 — observed from inside the launched agent (developer, run `task-236-…/adhoc/1`, 2026-10-13)
+
+This entry was written by the agent that `agent execute --element task:task-236-… --role developer` launched
+at `state` `20b0794d3ddfad786621d17d598a8b8a69b27991`, as R2 observed it from the inside. It covers R2 and
+the server half of R3. R0, R1, R4 and the dialogs before the session are the approver's terminal transcript,
+not this entry's.
+
+- **Launch argv accepted.** `ps -o pid,ppid,lstart,args -p 426290` → `claude WingFoil run task-236-…/adhoc/1: act
+  as role "developer" …`, started `mar ott 13 22:42:44 2026`, its parent is `426097`, which is
+  `node dist/cli.js agent execute --element task:task-236-… --role developer`. The bootstrap arrived as the
+  first user message, verbatim, so Claude did not read it as an `--mcp-config` value. `claude --version` →
+  `2.1.296 (Claude Code)` = `verified_with`.
+- **§2.5 / R3: the adapter's server is the one connected (MCP registration passes).** The only `wingfoil` MCP
+  child of the session is the adapter's: `ps -o pid,ppid,lstart,args -p 431632` →
+  `/usr/local/bin/node /home/robypomper/Workspaces/.wf2-wt/task-236/dist/cli.js mcp`, ppid `426290`.
+  No `node_modules/wingfoil-released/dist/cli.js mcp` process has `426290` as its parent (`ps -ef | grep "cli.js mcp"`).
+  The `wingfoil` resources the session sees include `wingfoil://workflows/-/next`, which
+  `grep -rln "workflows/-/next" node_modules/wingfoil-released/dist src dist` finds only in this repository's
+  `src/` and `dist/`, not in the pinned `0.2.2`. So the adapter's server is the one in use, beside `.mcp.json`'s.
+  Whether `.mcp.json`'s server was shadowed or left unapproved depends on the dialog answers, which are the approver's.
+- **Prompt-fetch check (AC 3, spec-016 §2.8 N1): FAILS.** The bootstrap asks the agent to "Get the MCP prompt
+  `developer-session` with arguments element=… and state=…". The model of Claude Code `2.1.296` has no tool
+  that fetches an MCP *Prompt*. Its MCP tools for this server are `ListMcpResourcesTool` and
+  `ReadMcpResourceTool`. The listing gave four resources (`wingfoil://dna`, `wingfoil://workflows`,
+  `…/-/next`, `…/-/status`), with no prompt among them. A tool search (`ToolSearch` "wingfoil prompt
+  developer-session") turned up no prompt-fetching tool either. Claude Code exposes an MCP Prompt only as a
+  slash command the *user* types (`/mcp__wingfoil__developer-session …`), and the model cannot invoke that
+  command. So the agent cannot get the `{role}-session` Prompt from the bootstrap without the user typing the
+  prompt name and its arguments, which the runbook's stop-and-return condition counts as "user help". **The
+  task stops here and the choice returns to the approver** (AC 3; R17 is not narrowed silently). This agent
+  did not do the developer work, because it has no element context: no edits, no commits beyond this note.
+  It also did not load the context by other means, such as reading the task file directly, which would hide
+  the failure.
+- **Options for the approver** (spec-016 §2.8: "revisited with the approver", ruling R18):
+  (a) serve the same context as a **Resource** too (e.g. `wingfoil://session/{role}?element=…&state=…`),
+  because the model *can* read Resources. The bootstrap literal of §2.4 would then name the Resource. This
+  touches R5 ("agent Resources are v0.4"); (b) serve it as an MCP **Tool**, read-only, returning the
+  Prompt's text; (c) inline the context into the bootstrap. §2.4 rejected this for argv/prompt-size bounds;
+  (d) accept that the user types `/mcp__wingfoil__developer-session` once. That narrows R17/N1 and needs an
+  explicit ruling. Not tried: whether the user-typed slash command actually renders the context for
+  `element`/`state` with the built server. If (d) is considered, test that first.
+- **Not done by this agent:** the `spec-016` Revision note (uncommitted in the worktree) still says the row is
+  "checked by hand in a real terminal". Do not commit it as is: the check failed on N1. It is left untouched
+  for the approver's choice. `/status` session id and model, the record line and the `agent: record` commit
+  are R3/R4's, after `/exit`.
