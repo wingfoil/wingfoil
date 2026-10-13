@@ -397,6 +397,11 @@ Not touched: `metrics.yaml`, `check-governance.cjs`, `src/`, `docs/cli-reference
   `at: "main"`); F4 — `compare.test.ts`: a catalogue G02 `tolerance: "5"` and `tolerance: "5%"` (share-only) exit 2
   naming G02 and the value (received exit 0). Counts: compare 68 passed / 2 failed, propose 12 / 4,
   compare-remeasure 0 / 1. Lint and the scratch typecheck clean.
+- **Send-back (2026-10-13, approver ruling (a), partial v0.1 baseline accepted): red commit `faf55b09`.** At
+  `5b16ab61` `npm ci` exits EUSAGE, so the committed v0.1 report has Q01–Q04, Q11, Q12, Q17 all `not-measurable`
+  with `raw.node_pinned: null`. `baselines.test.ts` now splits the toolchain row: v0.1 asserts `raw.node_pinned`
+  present (null allowed) on every toolchain entry, measured or not; the v0.2 assertions are unchanged.
+  `npx jest test/release-health/baselines.test.ts --maxWorkers=2` → 10 passed, 10 total.
 
 ### green (developer, 2026-10-13)
 
