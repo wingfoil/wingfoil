@@ -472,6 +472,16 @@ Not touched: `metrics.yaml`, `check-governance.cjs`, `src/`, `docs/cli-reference
   (`grep -nE "'git'|execFile" scripts/release-health/compare.cjs` → nothing), so `test/lint/git-log-readers.test.ts`
   needs no new entry (`git diff --stat db0e2752 HEAD -- test/lint/` → empty).
 
+#### Close-out (developer, 2026-10-13)
+
+- The partial v0.1 baseline is accepted by the approver's ruling (a) (`w3-b7-notes.md`): at `5b16ab61` `npm ci`
+  exits `EUSAGE` under npm 11.6.2, so the toolchain metrics are not-measurable there; the follow-up is filed by the
+  coordinator. qa send-back `faf55b09` (`baselines.test.ts`: v0.1 asserts `raw.node_pinned` on all seven toolchain
+  entries, measured or not).
+- `npx jest test/release-health --maxWorkers=2` at `4796d441` → `Tests: 234 passed, 234 total`.
+- T4: `git log --first-parent --no-merges --format=%h 01aae1a9..HEAD -- test/release-health/` → `faf55b09`,
+  `566a282b`: both qa send-backs (the v0.1 baseline test; review F1–F4); no commit of mine touches red's files.
+
 ### Pending amendments (approver)
 
 - `bug-344` (uncommitted): `### Retrospective` replaces "None." with one item. Proposed `--reason`: "Retrospective item
@@ -488,6 +498,14 @@ Not touched: `metrics.yaml`, `check-governance.cjs`, `src/`, `docs/cli-reference
   the queue.
 - A wrapped prose line beginning `## ` is a heading to every reader of the layout: the layout test caught it, a
   reviewer would not have.
+- A Memory search is a substring match: run on this repository it named task-241 itself as the "tracker" of the
+  G10 and G14 breaches (review F1). A mechanical search can propose candidates, never conclude that a finding is
+  tracked.
+- A backfill at an old point depends on today's registry: the v0.1 lockfile is refused by npm 11.6.2 (`EUSAGE`), so a
+  red test that assumed some toolchain metric measurable there could not pass; such assumptions about historical
+  trees need checking before red.
+- The baselines took 38 s and 488 s, far under the 10–15 and 25–35 min the design estimated: with no root
+  configuration at either point the static half and most of the history half have little to read.
 
 ### independent review (2026-10-13) and fixes (developer)
 
