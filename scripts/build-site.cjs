@@ -25,8 +25,8 @@
  */
 'use strict';
 
-const { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } = require('node:fs');
-const { dirname, join, posix } = require('node:path');
+const { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } = require('node:fs');
+const { dirname, isAbsolute, join, posix, win32 } = require('node:path');
 
 const { dump: yamlDump, load: yamlLoad } = require('js-yaml');
 
@@ -91,7 +91,19 @@ function readSiteManifest(root) {
 }
 
 /**
- * Every file under `dir` (repository-relative, POSIX separators), sorted.
+ * True when a declared path would leave the repository: absolute (POSIX or Windows form), or holding a `..` segment
+ * (review F1, the REQ-SEC-06 class). Such an entry is reported and never read or copied.
+ *
+ * @param {string} rel
+ * @returns {boolean}
+ */
+function escapesRoot(rel) {
+  return isAbsolute(rel) || posix.isAbsolute(rel) || win32.isAbsolute(rel) || rel.split(/[\\/]/).includes('..');
+}
+
+/**
+ * Every file under `dir` (repository-relative, POSIX separators), sorted. Symbolic links are skipped, so a link
+ * inside a declared directory cannot pull a file from outside the repository into the site.
  *
  * @param {string} root
  * @param {string} dir
@@ -102,7 +114,9 @@ function walk(root, dir) {
   const out = [];
   for (const name of readdirSync(join(root, base)).sort()) {
     const rel = `${base}/${name}`;
-    if (statSync(join(root, rel)).isDirectory()) out.push(...walk(root, rel));
+    const entry = lstatSync(join(root, rel));
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory()) out.push(...walk(root, rel));
     else out.push(rel);
   }
   return out;
@@ -127,8 +141,10 @@ function isDirectory(root, rel) {
  * @returns {string[]}
  */
 function siteFiles(root, manifest) {
-  const found = new Set(manifest.pages.filter((p) => isFile(root, p)));
-  for (const dir of manifest.files) if (isDirectory(root, dir)) for (const f of walk(root, dir)) found.add(f);
+  const found = new Set(manifest.pages.filter((p) => !escapesRoot(p) && isFile(root, p)));
+  for (const dir of manifest.files) {
+    if (!escapesRoot(dir) && isDirectory(root, dir)) for (const f of walk(root, dir)) found.add(f);
+  }
   return [...found].sort();
 }
 
@@ -145,8 +161,17 @@ const LIQUID = /\{\{|\{%/;
  */
 function checkSiteManifest(root, manifest, scripts) {
   const problems = new Set();
-  for (const page of manifest.pages) if (!isFile(root, page)) problems.add(`${MANIFEST}: listed path does not exist: ${page}`);
-  for (const dir of manifest.files) if (!isDirectory(root, dir)) problems.add(`${MANIFEST}: listed path does not exist: ${dir}`);
+  const escaping = (rel) => {
+    if (!escapesRoot(rel)) return false;
+    problems.add(`${MANIFEST}: listed path escapes the repository: ${rel}`);
+    return true;
+  };
+  for (const page of manifest.pages) {
+    if (!escaping(page) && !isFile(root, page)) problems.add(`${MANIFEST}: listed path does not exist: ${page}`);
+  }
+  for (const dir of manifest.files) {
+    if (!escaping(dir) && !isDirectory(root, dir)) problems.add(`${MANIFEST}: listed path does not exist: ${dir}`);
+  }
 
   const inSite = new Set(siteFiles(root, manifest));
   for (const file of inSite) {
@@ -158,6 +183,7 @@ function checkSiteManifest(root, manifest, scripts) {
   for (const section of manifest.llms) {
     for (const entry of section.entries) {
       if (entry.path !== undefined) {
+        if (escaping(entry.path)) continue;
         if (!isFile(root, entry.path)) problems.add(`${MANIFEST}: listed path does not exist: ${entry.path}`);
         else if (!inSite.has(entry.path)) problems.add(`${MANIFEST}: llms entry is not part of the site: ${entry.path}`);
       } else if (entry.site_path !== undefined) {
@@ -227,8 +253,27 @@ function siteLink(target, page, ctx) {
 }
 
 /**
+ * One line's text outside inline code spans, rewritten: a backtick code span is text, not a link (review F3), so it is
+ * kept as written, like a fenced block.
+ *
+ * @param {string} line
+ * @param {(text: string) => string} rewrite
+ * @returns {string}
+ */
+function outsideCodeSpans(line, rewrite) {
+  const span = /(`+)[^`][\s\S]*?\1/g;
+  let out = '';
+  let last = 0;
+  for (let m = span.exec(line); m !== null; m = span.exec(line)) {
+    out += rewrite(line.slice(last, m.index)) + m[0];
+    last = m.index + m[0].length;
+  }
+  return out + rewrite(line.slice(last));
+}
+
+/**
  * The site copy of a Markdown page: every relative `](target)`, `src="target"` and `href="target"` outside fenced
- * code blocks passes through {@link siteLink}.
+ * code blocks and inline code spans passes through {@link siteLink}.
  *
  * @param {string} text
  * @param {string} page
@@ -245,9 +290,11 @@ function rewriteLinks(text, page, ctx) {
         return line;
       }
       if (fenced) return line;
-      return line
-        .replace(/\]\(([^)\s]+)((?:\s+"[^"]*")?)\)/g, (_m, target, title) => `](${siteLink(target, page, ctx)}${title})`)
-        .replace(/\b(src|href)="([^"]+)"/g, (_m, attr, target) => `${attr}="${siteLink(target, page, ctx)}"`);
+      return outsideCodeSpans(line, (text) =>
+        text
+          .replace(/\]\(([^)\s]+)((?:\s+"[^"]*")?)\)/g, (_m, target, title) => `](${siteLink(target, page, ctx)}${title})`)
+          .replace(/\b(src|href)="([^"]+)"/g, (_m, attr, target) => `${attr}="${siteLink(target, page, ctx)}"`),
+      );
     })
     .join('\n');
 }

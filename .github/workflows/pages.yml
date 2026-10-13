@@ -30,6 +30,8 @@
 # actions were read with `gh api repos/<action>/releases/latest` and `gh api repos/<action>/commits/<tag>`;
 # upload-pages-artifact v5.0.0 uploads the artefact named `github-pages`, the default `artifact_name` that
 # deploy-pages v5.0.1 reads. Pinned by `test/cli/pages-workflow.test.ts`.
+# Not covered by the SHA pin: jekyll-build-pages runs the docker image `ghcr.io/actions/jekyll-build-pages:v1.0.13`
+# named in its action.yml, a mutable image tag (task-234 independent review F7).
 
 name: pages
 
