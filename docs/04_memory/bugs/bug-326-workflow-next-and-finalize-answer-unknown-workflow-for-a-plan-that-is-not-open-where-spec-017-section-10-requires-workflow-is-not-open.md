@@ -58,4 +58,7 @@ Captured on 2026-10-11 by `bug-ingest-rel-v0.3-w3b5-review-findings-plan` (item 
 
 ### Retrospective
 
-None.
+- Fixed by `task-281`: one refusal (`unresolvedRef`) answers `next`, `status`, `finalize`, `end` and
+  `memory add --workflow`; an instance plan that is not open is `workflow is not open`, and a phase plan's id is
+  `unknown workflow` (approver ruling 2026-10-12 D4). Three copies of the rule had grown in three tasks; each
+  new command that took a `<ref>` copied the nearest one instead of sharing it.
