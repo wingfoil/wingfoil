@@ -19,8 +19,9 @@ export interface Report {
   readonly schema_version: 1;
   readonly catalogue_version: number;
   readonly release: { readonly id: string; readonly version: string; readonly kind: 'major' | 'minor' | 'patch' };
-  readonly measurement_point: { readonly ref: string; readonly commit: string; readonly basis: 'published-tag' | 'released-transition' };
-  readonly previous: null | { readonly release: string; readonly commit: string; readonly report: string };
+  readonly measurement_point: { readonly ref: string; readonly commit: string; readonly basis: 'published-tag' | 'released-transition' | 'revision' };
+  /** How the window was chosen (task-241, F7): from the previous report under `paths.health`, or named by `--previous`. */
+  readonly previous: null | { readonly release: string; readonly commit: string; readonly report: string | null; readonly basis: 'report' | '--previous' };
   readonly toolchain: { readonly node: string; readonly npm: string; readonly lockfile_sha256: string };
   readonly metrics: readonly MetricEntry[];
 }
