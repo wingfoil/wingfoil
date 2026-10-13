@@ -31,20 +31,25 @@
  * **Findings** (`dl-089` §4): every breached floor, and every regressed `kind: trend` metric outside small-sample.
  * **Immediate** (`dl-089` §5): the catalogue's `immediate_bug` metrics, Q01 and Q02 only at a published tag.
  *
- * **Like-for-like** (`dl-089` §3): a previous report measured with an older catalogue is re-measured at its point with
+ * **Like-for-like** (`dl-089` §3): a previous report measured with an older catalogue is re-measured at its point's
+ * commit (immutable, never its ref, review F3) with
  * the current catalogue (`measureRelease`); the stored report is never rewritten. When that fails, or with
  * `--no-remeasure`, a metric redefined since is `not-comparable`, an added one `new`, the rest compared as stored.
  *
  * **Propose** (`dl-089` §4, approver rulings E, F): for each finding, `wingfoil memory search <id> --format json`
- * (the code build `dist/cli.js`, at the working tree: whether it is tracked now). A tracking element is a `bug`,
- * `task`, `decision-log` or `change-proposal` whose status is neither its type's last `sequence` state nor
- * `deprecated`. An untracked finding becomes `RH-<version>-NN`: `bug` for a breached floor, `decision-log` for a
- * regressed trend, targeting the next minor. The propose phase (facilitator) reviews the section.
+ * (the code build `dist/cli.js`, at the working tree: whether it is tracked now). The search is a substring match,
+ * so a match — a `bug`, `task`, `decision-log` or `change-proposal` whose status is neither its type's last
+ * `sequence` state nor `deprecated` — is only a **candidate** tracker, which the propose phase (facilitator)
+ * confirms or replaces with a proposal (review F1). A finding with no candidate becomes `RH-<version>-NN`: `bug` for
+ * a breached floor, `decision-log` for a regressed trend, targeting the next minor. Every immediate finding is
+ * named on stderr, with its proposal or its candidates.
  *
  * **Settle** (`dl-089` §4, ruling G): the previous report's proposals (its `.md`) against the `## Release health`
  * table of `retro-<previous version>`: `element` → adopted (effective when the linked metric improved or its floor
  * went from breached to held, else no effect yet); `covered`, `restated`, `superseded` → superseded; `declined`, no
- * row or no retrospective → not adopted (the last two: no disposition recorded).
+ * row or no retrospective → not adopted (the last two: no disposition recorded); any other outcome → not adopted,
+ * noted `unrecognised outcome "<x>"` (review F2). A metric's own `tolerance` that is neither `<N>pp` nor `<N>%`, or
+ * is in a unit none of its parts uses, is refused, exit 2 (review F4).
  *
  * Deterministic (REQ-SYS-07): no clock, no randomness; every list in catalogue order or sorted. It runs no git itself.
  *
@@ -61,6 +66,7 @@ const { dirname, isAbsolute, join } = require('node:path');
 const yaml = require('js-yaml');
 
 const { catalogueLocation, validateCatalogue } = require('./catalogue.cjs');
+const measure = require('./measure.cjs');
 
 const DIST_CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
 const VERSION_RE = /^v[0-9]+\.[0-9]+(\.[0-9]+)?$/;
@@ -195,13 +201,28 @@ function parseTolerance(text, unit, where) {
   return Number(match[1]);
 }
 
+/**
+ * A metric's own `tolerance`, checked (review F4): `<N>pp` or `<N>%`, in a unit one of its compared parts uses —
+ * never silently replaced by the default. Returns `{ unit, value }` or `null` when it declares none.
+ */
+function ownTolerance(def) {
+  const own = def.tolerance;
+  if (own === undefined || own === null) return null;
+  const text = String(own).trim();
+  const unit = /pp$/.test(text) ? 'share' : /%$/.test(text) ? 'relative' : null;
+  if (unit === null) throw new UsageError(`metric ${def.id}: tolerance ${JSON.stringify(own)} is neither <N>pp (a share) nor <N>% (relative)`);
+  const value = parseTolerance(text, unit, `metric ${def.id}`);
+  const units = new Set((COMPONENTS[def.id] ?? []).map((p) => p.unit));
+  if (COMPONENTS[def.id] && !units.has(unit)) {
+    throw new UsageError(`metric ${def.id}: tolerance ${JSON.stringify(own)} is ${unit === 'share' ? 'in percentage points' : 'relative'}, but ${def.id} compares no ${unit === 'share' ? 'share' : 'relative'} part`);
+  }
+  return { unit, value };
+}
+
 /** The tolerance of `unit` for `def`: its own `tolerance` when it is written in that unit, else the default. */
 function toleranceOf(def, unit, defaults) {
-  const own = def.tolerance;
-  if (own !== undefined && own !== null) {
-    const isShare = /pp$/.test(String(own).trim());
-    if ((unit === 'share') === isShare) return parseTolerance(own, unit, `metric ${def.id}`);
-  }
+  const own = ownTolerance(def);
+  if (own !== null && own.unit === unit) return own.value;
   const tolerance = defaults && defaults.tolerance ? defaults.tolerance : {};
   return parseTolerance(unit === 'share' ? tolerance.share ?? '2pp' : tolerance.relative ?? '10%', unit, 'catalogue defaults');
 }
@@ -297,6 +318,7 @@ function changedSince(catalogue, id, from, key) {
  */
 async function compareReports({ catalogue, current, previous, history = [], remeasure }) {
   const defaults = catalogue.defaults ?? {};
+  for (const def of catalogue.metrics) ownTolerance(def);
   const previousBasis = current.previous && current.previous.basis ? current.previous.basis : current.previous ? 'report' : null;
   const prior = previousBasis === '--previous' ? null : previous;
   let baseline = prior;
@@ -402,7 +424,8 @@ async function propose(comparison, { search, memoryYaml }) {
       .filter((m) => m && TRACKING_TYPES.includes(m.type) && m.status !== 'deprecated' && m.status !== lastState(memoryYaml, m.type))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     if (matches.length > 0) {
-      tracked.push({ id: finding.id, immediate: finding.immediate, elements: matches.map((m) => ({ id: m.id, type: m.type, status: m.status })) });
+      // Review F1: a search is a substring match, so a match is a candidate the propose phase confirms, never final.
+      tracked.push({ id: finding.id, name: finding.name, immediate: finding.immediate, elements: matches.map((m) => ({ id: m.id, type: m.type, status: m.status })) });
       continue;
     }
     const row = comparison.rows.find((r) => r.id === finding.id);
@@ -451,7 +474,7 @@ function dispositions(retroText) {
     if (/^## /.test(line)) break;
     const cells = line.split('|').map((c) => c.trim());
     if (cells.length < 3 || !/^RH-v[0-9.]+-[0-9]{2}$/.test(cells[1])) continue;
-    out.set(cells[1], { outcome: cells[2].toLowerCase(), element: cells[3] ? cells[3] : null });
+    out.set(cells[1], { outcome: cells[2], element: cells[3] ? cells[3] : null });
   }
   return out;
 }
@@ -463,13 +486,16 @@ function settle(previousProposals, retroText, comparison) {
     const row = rows.get(p.id);
     const base = { id: p.id, metric: p.metric };
     if (!row) return { ...base, settled: 'not adopted', outcome: null, element: null, note: retroText === null || retroText === undefined ? 'no disposition recorded (no retrospective)' : 'no disposition recorded' };
-    if (row.outcome === 'element') {
+    const outcome = row.outcome.toLowerCase();
+    if (outcome === 'element') {
       const metric = comparison.rows.find((r) => r.id === p.metric);
       const effective = metric !== undefined && (metric.verdict === 'improved' || (metric.previous_floor === 'breached' && metric.floor === 'held'));
       return { ...base, settled: effective ? 'adopted and effective' : 'adopted, no effect yet', outcome: row.outcome, element: row.element };
     }
-    if (['covered', 'restated', 'superseded'].includes(row.outcome)) return { ...base, settled: 'superseded', outcome: row.outcome, element: row.element };
-    return { ...base, settled: 'not adopted', outcome: row.outcome, element: row.element };
+    if (['covered', 'restated', 'superseded'].includes(outcome)) return { ...base, settled: 'superseded', outcome: row.outcome, element: row.element };
+    if (outcome === 'declined') return { ...base, settled: 'not adopted', outcome: row.outcome, element: row.element };
+    // Review F2: an outcome outside the retrospective's vocabulary is not adopted, and says why.
+    return { ...base, settled: 'not adopted', outcome: row.outcome, element: row.element, note: `unrecognised outcome ${JSON.stringify(row.outcome)}` };
   });
 }
 
@@ -516,7 +542,7 @@ function renderReport(comparison) {
   lines.push(`- Verdicts: ${verdicts}; info ${count((r) => r.verdict === 'info')}, pending ${count((r) => r.verdict === 'pending')}, not measurable ${count((r) => r.verdict === null)}.`);
   lines.push(`- Floors: held ${count((r) => r.floor === 'held')}, breached ${count((r) => r.floor === 'breached')}.`);
   lines.push(`- Findings: ${c.findings.length} (immediate ${c.findings.filter((f) => f.immediate).length}).`);
-  lines.push(`- Proposals: ${c.proposals === null ? 'not drafted' : c.proposals.length}; tracked findings: ${c.tracked === null ? '—' : c.tracked.length}.`);
+  lines.push(`- Proposals: ${c.proposals === null ? 'not drafted' : c.proposals.length}; findings with a candidate tracker: ${c.tracked === null ? '—' : c.tracked.length}.`);
   lines.push(`- Previous proposals settled: ${settled.length}.`, '');
 
   lines.push('## Comparison', '', '| id | Metric | Previous | Value | Raw | Verdict | Flags |', '|---|---|---|---|---|---|---|');
@@ -556,7 +582,9 @@ function renderReport(comparison) {
   if (c.proposals === null) lines.push('Not drafted: the propose step has not run (dl-089 §4).', '');
   else {
     if (c.tracked.length === 0 && c.proposals.length === 0) lines.push('None: no finding.', '');
-    for (const t of c.tracked) for (const e of t.elements) lines.push(`- ${t.id} — tracked: ${e.id} (${e.status}; \`${searchCommand(t.id)}\`)`);
+    for (const t of c.tracked) {
+      for (const e of t.elements) lines.push(`- ${t.id} — candidate tracker: ${e.id} (${e.status}; \`${searchCommand(t.id)}\`); the propose phase confirms it tracks the finding, else drafts a proposal${t.immediate ? '. Immediate: file through bug-ingest in this run unless it is confirmed (dl-089 §5)' : ''}`);
+    }
     if (c.tracked.length > 0) lines.push('');
     for (const p of c.proposals) {
       lines.push(`### ${p.id} — ${p.metric} ${p.name}`, '');
@@ -676,10 +704,10 @@ async function compareRelease(root, options) {
   history.push(current);
 
   const remeasure = options.remeasure === false ? undefined : options.remeasure ?? (async (report) => {
-    const { measureRelease } = require('./measure.cjs');
-    return measureRelease(root, {
+    // Review F3: the point's commit is immutable; its ref (a branch, a tag) may have moved since.
+    return measure.measureRelease(root, {
       release: report.release.version,
-      at: report.measurement_point.ref,
+      at: report.measurement_point.commit,
       ...(report.previous ? { previous: report.previous.commit } : {}),
       offline: options.offline === true,
       toolchain: options.toolchain !== false,
@@ -739,8 +767,12 @@ async function main(argv) {
     const options = parseArgs(argv);
     const root = options.root === undefined ? process.cwd() : isAbsolute(options.root) ? options.root : join(process.cwd(), options.root);
     const { path, comparison } = await compareRelease(root, options);
-    for (const p of comparison.proposals) {
-      if (p.immediate) process.stderr.write(`${PREFIX}immediate bug-ingest: ${p.metric} ${p.name} (${p.id}): file it through bug-ingest in this run (dl-089 §5)\n`);
+    // Review F1: every immediate finding is named, a candidate tracker or not (dl-089 §5).
+    for (const finding of comparison.findings.filter((f) => f.immediate)) {
+      const proposal = comparison.proposals.find((p) => p.metric === finding.id);
+      const candidates = (comparison.tracked.find((t) => t.id === finding.id) ?? { elements: [] }).elements;
+      const detail = proposal ? `(${proposal.id})` : `(candidate trackers: ${candidates.map((e) => `${e.id} (${e.status})`).join(', ')}; confirm one tracks it)`;
+      process.stderr.write(`${PREFIX}immediate bug-ingest: ${finding.id} ${finding.name} ${detail}: file it through bug-ingest in this run (dl-089 §5)\n`);
     }
     process.stdout.write(`${path}\n`);
     return 0;

@@ -412,7 +412,8 @@ after `npm ci` with the pipeline's pinned Node (task-232; a loaded latency run i
 Memory metrics Q05–Q10, Q13–Q16, Q18–Q20 from git at the point (task-233; Q08's install size after that `npm ci`);
 `compare.cjs` (task-241) classifies every metric against the previous run with the catalogue's tolerances,
 evaluates the floors, re-measures a previous point taken with an older catalogue, shows the last three runs,
-and drafts the Proposals section after searching Memory for a tracking element (`memory search`); the
+and drafts the Proposals section after searching Memory (`memory search`, whose matches are candidate trackers
+the propose phase confirms; every immediate finding is named on stderr); the
 readings taken at run time (G15, Q17, E01–E05) are never compared. Under any other Node than the pinned one
 (`publish.yml` `env.NODE_VERSION`) the toolchain metrics are not-measurable unless `--any-node` is passed; the
 bound steps pass `--any-node` and `--max-workers 2` (bug-344), so each toolchain entry records `node` and

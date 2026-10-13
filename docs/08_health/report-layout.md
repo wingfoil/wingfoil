@@ -2,9 +2,10 @@
 
 The human-readable report of one release-health run (`dl-089-release-health-analyses-before-retrospective`
 §3–§4). `release-health.compare` (`scripts/release-health/compare.cjs`) writes every section, the
-**Proposals** included as a draft: for each finding it searches Memory for a tracking element and proposes
-only for what is untracked; the `propose` phase (facilitator) reviews that draft and files the immediate
-bugs (approver ruling E, 2026-10-13, task-241). The machine-readable values it is built from are `release-health-<version>.json`
+**Proposals** included as a draft: for each finding it searches Memory (`memory search`, a substring match)
+and lists every open match as a **candidate** tracker, proposing only where there is none; the `propose`
+phase (facilitator) confirms each candidate or replaces it with a proposal, and files the immediate bugs
+(approver ruling E, 2026-10-13; review F1, task-241). Every immediate finding is also named on stderr. The machine-readable values it is built from are `release-health-<version>.json`
 (`release-health.schema.json`); the metric definitions are `metrics.yaml`. The report is not a Memory
 element: it is generated, not authored, and has no lifecycle (`dl-089` alternative (d)).
 
@@ -16,7 +17,7 @@ The sections, in this order, with these headings:
 | | |
 |---|---|
 | Release | <release id> (<kind>) |
-| Measurement point | <ref> at <commit> (<published-tag | released-transition>) |
+| Measurement point | <ref> at <commit> (<published-tag | released-transition | revision>) |
 | Previous run | <release> at <commit>, report <path> — or "<rev> at <commit>, named by --previous: no report, every metric is new" — or "none: every metric is new" |
 | Catalogue | version <N> (the previous report used version <M>; re-measured like-for-like: not needed / yes / no (<reason>)) |
 | Toolchain | Node <v>, npm <v>, lockfile sha256 <hash> |
@@ -49,10 +50,11 @@ run through bug-ingest (dl-089 §5)>
 
 ## Proposals
 
-<drafted by compare, reviewed by propose. A tracked finding, one line per tracking element (a bug, task,
-decision-log or change-proposal neither in its type's last state nor deprecated):
-"- <metric id> — tracked: <element id> (<status>; `node dist/cli.js memory search <metric id> --format json`)".
-An untracked finding, one entry each, numbered in finding order:
+<drafted by compare, reviewed by propose. A finding the search matched, one line per candidate tracker (a
+bug, task, decision-log or change-proposal neither in its type's last state nor deprecated), which the
+propose phase confirms or replaces with a proposal:
+"- <metric id> — candidate tracker: <element id> (<status>; `node dist/cli.js memory search <metric id> --format json`); …".
+A finding with no candidate, one entry each, numbered in finding order:
 
 ### RH-<version>-NN — <metric id> <metric name>
 
@@ -94,4 +96,5 @@ superseded, or declined) and the third the linked element id:
 `element` settles as adopted (effective when the linked metric improved, or its floor went from breached
 to held; otherwise no effect yet); covered, restated and superseded as superseded; declined as not
 adopted; a proposal with no row, or a release with no retrospective, as not adopted with "no disposition
-recorded" (approver ruling G, 2026-10-13).
+recorded"; any other outcome as not adopted with `unrecognised outcome "<x>"` (approver ruling G,
+2026-10-13; review F2).

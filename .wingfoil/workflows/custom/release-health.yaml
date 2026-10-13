@@ -42,8 +42,8 @@ phases:
       catalogue version), classify every metric as improved / stable / regressed / new / not-comparable,
       evaluate the floors, flag small samples, and settle the previous run's proposals (dl-089 §3–§4).
       A reading taken at run time (G15, Q17, E01–E05) is never compared, only its floor evaluated. For each
-      finding it searches Memory for a tracking element and drafts the `## Proposals` section (approver
-      ruling E, 2026-10-13). Write the human-readable report (docs/08_health/report-layout.md).
+      finding it searches Memory and drafts the `## Proposals` section, listing each match as a candidate
+      tracker (approver ruling E, 2026-10-13). Write the human-readable report (docs/08_health/report-layout.md).
     role: facilitator
     actions:
       - 'release-health.compare(release: "{release.version}")'
@@ -54,8 +54,8 @@ phases:
 
   - name: propose
     description: >-
-      Review the `## Proposals` section compare drafted: for each finding, the element that already tracks
-      it is confirmed (its status read by command); an untracked one is a proposal `RH-{release.version}-NN`
+      Review the `## Proposals` section compare drafted: for each finding, a candidate tracker is confirmed
+      as tracking it (its status read by command) or replaced; an untracked one is a proposal `RH-{release.version}-NN`
       with its evidence, a proposed element type and a proposed target release, written in the report's
       `## Proposals` section. A breach of G07, G10 or G14, or of Q01 or Q02 at a published tag, is filed
       at once through bug-ingest in this run (dl-089 §5). The proposals are input to the retrospective's
