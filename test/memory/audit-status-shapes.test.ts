@@ -1,9 +1,10 @@
 /**
  * task-280 (`bug-343`) — the frontmatter shapes `parseStatus` reads as "no state" without a parse error:
- * a block that parses to something other than a mapping (P1, the `if` at `src/memory/audit.ts:349`), and
- * a mapping or sequence whose `status` is not a string (P2, the `: null` arm at `:352`). Both are a
- * revision that WAS read: the transition carries no `unreadable` key, and strict mode does not throw
- * (it refuses only a parse error, `ReconstructOptions.strict`). Characterization: pins existing behaviour.
+ * a block that parses to something other than a mapping (P1, `parseStatus`'s non-mapping `if` in
+ * `src/memory/audit.ts`), and a mapping or sequence whose `status` is not a string (P2, `parseStatus`'s `: null`
+ * arm for a non-string `status`). Both are a revision that WAS read: the transition carries no `unreadable`
+ * key, and strict mode does not throw (it refuses only a parse error, `ReconstructOptions.strict`).
+ * Characterization: pins existing behaviour.
  */
 import { execFileSync } from 'child_process';
 
@@ -53,7 +54,7 @@ function expectNoStateThenDraft(firstRevision: string): void {
   ]);
 }
 
-describe('P1 (audit.ts:349) — a frontmatter that parses to something other than a mapping', () => {
+describe('P1 (parseStatus, the non-mapping `if`) — a frontmatter that parses to something other than a mapping', () => {
   it.each([
     ['a scalar', '---\njust text\n---\n\nBody.\n'],
     ['YAML null', '---\n~\n---\n\nBody.\n'],
@@ -63,7 +64,7 @@ describe('P1 (audit.ts:349) — a frontmatter that parses to something other tha
   });
 });
 
-describe('P2 (audit.ts:352) — a `status` that is not a string', () => {
+describe('P2 (parseStatus, the `: null` arm for a non-string status) — a `status` that is not a string', () => {
   it.each([
     ['a number', '---\nid: task-1\nstatus: 3\n---\n\nBody.\n'],
     ['a sequence', '---\nid: task-1\nstatus: [draft]\n---\n\nBody.\n'],
