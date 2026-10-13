@@ -222,3 +222,33 @@ explicit OK, runs it in a real terminal from this worktree with the green commit
 - D-C `usage.from: none`: model and usage are always `not-reported` for claude-code in v0.3 (no lookup command
   exists, evidence above). Recommendation: accept (§2.6 allows it; AC says "values or `not-reported`").
 - D-D the dna.yaml bump in a second hand commit after `wf(dna): update` (the verb does not bump `version`).
+
+### red (qa, 2026-10-13)
+
+- **Red commit `ad0d8c8d`** (T4 is measured from it). Files: NEW `test/storage/builtin-adapter-claude-code.test.ts`;
+  `test/core/init-builtin-adapters.test.ts` (header comment updated; the ternary default-list test replaced by two plain
+  ones; the P5.1.1 Scenario Outline block appended). Test files only; no `src/`, `.wingfoil/` or feature-file change.
+- **The P5.1.1 Scenario Outline is NOT in the red commit**: the design writes it in green (point (g)); the qa test reads
+  the feature file and fails on the absent title. `P5.1.1-init.feature` carries no `version`, so no bump applies.
+- **Per AC (all red-first; the by-hand ACs 2, 3 and AC 4's by-hand half are not red's):**
+  - AC 1 (a) `AC 1 (a): has exactly one entry named claude-code, …` — fails `Expected length: 1 / Received length: 0`.
+  - AC 1 (b) `AC 1 (b): validates under the task-177 schema …` and `AC 1 (b): declares terminal: required in the raw
+    YAML …` — both fail at `expect(entry).toBeDefined()` (`Received: undefined`), not on an import. Flags, argv and the
+    `verified_with` string are not pinned (design (b)).
+  - AC 1 (c) `AC 1 (c): the shipped list passes the pre-write integrity pass` — `Received: undefined` (no entry).
+  - AC 1 (d) `AC 1 (d): the default scaffold installs claude-code verbatim and no agents/built-in/.gitkeep` —
+    `Received: undefined`; in `init-builtin-adapters.test.ts`, `by default installs exactly the shipped list, … no
+    .gitkeep` fails `Expected: > 0 / Received: 0`; `with an empty adapter list keeps agents/built-in/ with a .gitkeep`
+    passes (characterization of the empty-list branch through the seam, as the design asks).
+  - AC 1 (e) `writes the shipped manifest, commits it, and the task-177 loader loads it as a built-in` (init, no seam) —
+    `Received: undefined`.
+  - BDD handover (g) `declares exactly the two rows …` and `row 1: …` / `row 2: … → init exits 1 with the row's
+    message` — fail on `{ scenario, found: false }` vs `found: true` (the outline title is absent from the feature).
+  - AC 4 static half (h) `AC 4: .wingfoil/dna.yaml team.agents entry 'Claude' names adapter: claude-code` — `Expected:
+    "claude-code" / Received: undefined`; `AC 4: every manifest under this repository's .wingfoil/agents/built-in/
+    equals the shipped entry …` — `Expected value: "claude-code.yaml" / Received array: []`. The dna.yaml version is not
+    pinned (bug-314).
+- **Run:** `npx jest test/storage/builtin-adapter-claude-code.test.ts test/core/init-builtin-adapters.test.ts
+  --maxWorkers=2` → 2 suites failed; 12 failed, 14 passed, 26 total (claude-code file: 8 failed, 0 passed;
+  init-builtin-adapters: 4 failed, 14 passed — the 13 pre-existing tests plus the new empty-list one).
+  `npx eslint` and `npx tsc --noEmit -p tsconfig.json` on the two files: no output.
