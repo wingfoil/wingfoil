@@ -274,7 +274,7 @@ export interface InitProjectValue {
  * @param builtinTemplates - test-only override for guard 5's source list, exercising the abort path
  *   without real built-in content on disk. Omit it in production: the derived set is the contract.
  * @param builtinAdapters - test-only override for the built-in adapter manifests the scaffold installs
- *   (and guard 5 therefore checks): none ships yet, so a test drives the mechanism with a fixture. Omit
+ *   (and guard 5 therefore checks), so a test drives the mechanism with a fixture or a broken copy. Omit
  *   it in production: the shipped list, `BUILTIN_ADAPTERS`, is the contract.
  */
 export function initWingfoilProject(
