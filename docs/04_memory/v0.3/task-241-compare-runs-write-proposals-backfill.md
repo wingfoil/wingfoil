@@ -463,8 +463,9 @@ Not touched: `metrics.yaml`, `check-governance.cjs`, `src/`, `docs/cli-reference
   "^[-+].*(measureAttribution|declaredVerbs|measureBranches|uncheckedCommits|producesPresent|UNCHECKABLE_RE)"` →
   nothing; `docs/08_health/metrics.yaml` unchanged (`git diff --stat db0e2752 HEAD -- docs/08_health/metrics.yaml` →
   empty).
-- Same class in the files touched: the WORKFLOW.md bindings clause above; `compare.cjs` runs no git, so
-  `test/lint/git-log-readers.test.ts`'s roster is unchanged; its CLI stubs in red write no stderr.
+- Same class in the files touched: the WORKFLOW.md bindings clause above. `compare.cjs` spawns no git
+  (`grep -nE "'git'|execFile" scripts/release-health/compare.cjs` → nothing), so `test/lint/git-log-readers.test.ts`
+  needs no new entry (`git diff --stat db0e2752 HEAD -- test/lint/` → empty).
 
 ### Pending amendments (approver)
 
@@ -482,3 +483,75 @@ Not touched: `metrics.yaml`, `check-governance.cjs`, `src/`, `docs/cli-reference
   the queue.
 - A wrapped prose line beginning `## ` is a heading to every reader of the layout: the layout test caught it, a
   reviewer would not have.
+
+### independent review (2026-10-13) and fixes (developer)
+
+- Verdict APPROVE WITH FIXES; qa send-back red `566a282b` (F1–F4; T4 for `compare.test.ts`, `propose.test.ts` and
+  the new `compare-remeasure.test.ts` is measured from it).
+- `00b9b105` `fix(release-health)`:
+  - F1: a Memory search match is listed as a `candidate tracker` the propose phase confirms or replaces, never
+    "tracked"; every immediate finding is written to stderr, with its proposal or its candidates.
+  - F2: a disposition outcome outside covered | element | restated | superseded | declined is not adopted, noted
+    `unrecognised outcome "<x>"`.
+  - F3: the default re-measurement runs `measureRelease` at `measurement_point.commit` (`measure.cjs` now required
+    at load, so the stub of `compare-remeasure.test.ts` reaches it).
+  - F4: a metric `tolerance` that is neither `<N>pp` nor `<N>%`, or in a unit none of its declared parts compares,
+    exits 2 naming the metric and the value (checked for every metric before any comparison).
+  - F5: `report-layout.md`'s measurement-point line names `revision`. `report-layout.md`, `WORKFLOW.md` and
+    `release-health.yaml` (no second bump: one per file per branch) say "candidate".
+  - F6: bug-344's pending `### Retrospective` reworded (the test pins the bound vectors; a new script flag still
+    meets no test); the review note on `git-log-readers` now carries its commands.
+- `npx jest test/release-health --maxWorkers=2` at `00b9b105` → `Tests: 9 failed, 225 passed, 234 total` (the 9:
+  `baselines.test.ts`, before the reports); `npm run lint` → 0; `npx tsc --noEmit -p tsconfig.json` → 0;
+  `npm run docs:api` → 0. No full coverage run: nothing under `src/` or `jest.config.js` changed (`git diff --stat
+  db0e2752 HEAD -- src jest.config.js` → empty).
+
+#### Baselines (AC 3; approver rulings A, B, C, D3)
+
+- Each run once, under the slot (`waitslot.sh`), after `npm run build` (exit 0), from the worktree at `00b9b105`:
+  - `node scripts/release-health/measure.cjs --release v0.1 --any-node --max-workers 2 --offline` — slot 16:03:51,
+    load 8.8; exit 0 in 38 s. Point `5b16ab61` (`released-transition`), `previous: null`, window 440 commits (399
+    non-merge).
+  - `node scripts/release-health/measure.cjs --release v0.2 --any-node --max-workers 2 --offline` — slot 16:05:12,
+    load 4.0 → 4.0; exit 0 in 488 s. Point `v0.2.1` = `9833e00a` (`published-tag`), previous the v0.1 report
+    (`basis: report`), window 1453 non-merge commits.
+  - No worktree left: `git worktree list | grep -c release-health` → 0 after each.
+  - Committed JSON only: `c37b0e29` `docs(health)`.
+- **v0.1's toolchain half did not run:** `npm ci` at `5b16ab61` exits `EUSAGE` under the running npm 11.6.2 — the
+  lockfile of that tree is not in sync with its `package.json` as npm resolves it today (`git show
+  5b16ab61:package.json`/`package-lock.json` into a scratch directory, `npm ci --dry-run --ignore-scripts` →
+  `npm error code EUSAGE` … `lock file's @emnapi/wasi-threads@1.2.2 does not satisfy @emnapi/wasi-threads@1.2.3`).
+  So Q01–Q04, Q11, Q12, Q17 are `not-measurable` with that reason, each still recording `raw.node` and
+  `raw.node_pinned: null` (no `publish.yml` there). Not measured under npm 10.9 (the pinned Node's), which may
+  resolve it differently (bug-056's class).
+- **Send-back to the qa agent (T4: a red test that no correct implementation can pass):** `baselines.test.ts` "v0.1:
+  catalogue version 2; every measured toolchain entry records node_pinned" asserts `toolchain.length > 0` measured
+  entries; at `5b16ab61` none can be measured (above). `npx jest test/release-health --maxWorkers=2` at `c37b0e29` →
+  `Tests: 1 failed, 233 passed, 234 total`, that one. The other eight baseline tests pass.
+- **dl-089 §7 compared** (the provisional table read v0.2's second half at `5269223d`; the runs read the whole
+  `5b16ab61..v0.2.1` window; values from `docs/08_health/release-health-v0.{1,2}.json`):
+
+| id | §7 v0.1 | measured v0.1 | §7 v0.2 (2nd half) | measured v0.2 | why they differ |
+|---|---|---|---|---|---|
+| G01 | 100 % | 94.99 % (379/399) | 100 % | 100 % (1453/1453) | v0.1: the run counts the inception commits before the conventional form (whole history from the first commit) |
+| G02 | 48 % | 43.86 % (175/399) | 82 % | 41.36 % (601/1453) | v0.2: the whole window, not the second half; trailer-only bodies excluded |
+| G03 median / p90 | 23 / 206 | 25 / 295 | 23 / 249 | 25 / 224 | window; binary files excluded; nearest-rank p90 |
+| G04 share > 72 | 56 % | 53.88 % | 82 % | 77.63 % | window (the second half alone was longer) |
+| G05 | 100 % | not-measurable | 99 % | not-measurable | no `paths.sources` at either point (no root `dna.yaml`) |
+| G06 | 52/52 | 53/53 | 100/100 | 210/211 (1 failing) | window boundary; v0.2's whole window holds one approval with no evidence |
+| G07 | 0 | not-measurable | 902 | not-measurable | ruling A: no `team.members` at the points |
+| G08 | 15 % | `conforming_share` null (65 before the rule) | 75 % | null (847 before the rule) | redefined in catalogue v2 (dl-117): no commit is judged before its ratification |
+| G09 | 38 % | 16.5 % (34/206) | 40 % | 0.23 % (2/876) | the verb list is the measuring build's (no `audit.ts` grammar then), `dl-173` item 2 |
+| G10 | 100 % | 100 % (153/153) | 48 % | 70.62 % (411/582) | window: the second half concentrated the ASCII arrows |
+| G12 | 6 % | not-measurable | 26 % | not-measurable | no `paths.sources` |
+| Q03 stmts / branches | — | not-measurable | 98.6 % / 94.0 % | 98.58 % / 94.03 % | agrees (v0.1: `npm ci` refused, above) |
+| Q04 `memory/audit` branches | — | not-measurable | 64.7 % | 64.7 % (22/34) | agrees |
+| Q06 `src/` | — | not-measurable | 0.15 % | not-measurable | no `paths.sources` |
+| Q08 unused runtime deps | — | not-measurable | 1 | not-measurable | no `paths.sources` |
+| Q13 closure ratio | — | not-measurable | 35 % (44/124) | not-measurable | no root `memory.yaml` at the points |
+
+- Beyond §7, v0.2's run breaches G14 (29 blocking findings, all in test fixtures of the secret scanner such as
+  `test/validation/secret-scan.test.ts`: the scanner reads test diffs), G15 (1 stale remote branch, a live reading),
+  P01 (297), P02 (15), P05 (137), Q04; Q01 is not-measurable at `v0.2.1` (no `typecheck` script). `compare.cjs` on the
+  two (`--no-remeasure`, Markdown in `../devloop-kit/task-241-scratch/`, not committed) names G10 and G14 as immediate,
+  each with `task-241` as its only candidate tracker — F1's case. Nothing is filed from the backfill (approver).
