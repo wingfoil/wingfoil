@@ -249,3 +249,53 @@ approver's post-merge action (handover).
    edit to the Markdown). Recommend as designed.
 5. `docs/agents.md` is published on the site and indexed in `llms.txt` (dl-129 Decision 3) while staying in no
    phase's `produces:` (`user-docs-rel-v0.2-plan` §10); this task does not change that.
+
+### red (qa, 2026-10-13)
+
+- **Red commit:** `c2a943a1` (T4 is measured from it). Test files: `test/cli/pages-workflow.test.ts` (new),
+  `test/docs/llms-txt.test.ts` (new), `test/cli/publish-metadata.test.ts` (edit: the `homepage` case and the
+  "same repo" case, plus a `PAGES_URL` constant derived from `REPO_SLUG` and a header line). No fixture file: the
+  fixtures are temp directories built in `llms-txt.test.ts`.
+- **Loading the script.** `scripts/build-site.cjs` is loaded inside each case with a dynamic `import()` after
+  `expect(existsSync(SCRIPT)).toBe(true)` (jest's CommonJS harness turns it into a `require`; `require` itself is
+  refused by the lint gate's `no-require-imports`). The interface is declared in the test from the design's
+  signatures; the manifest is opaque (always from `readSiteManifest`), so the tests do not fix its in-memory shape.
+- **Per AC.**
+  - **AC 1, red-first** — `pages-workflow.test.ts`, 14 cases named `AC 1…`: trigger (keys `push`,
+    `workflow_dispatch`; `on.push` only `tags`, equal to publish.yml's), permissions (top `{contents: read}`, none
+    on `build`, `{pages: write, id-token: write}` on `deploy`), jobs `build`/`deploy` on `ubuntu-24.04` with a
+    positive timeout, `deploy.needs` = `build`, concurrency, `env.NODE_VERSION` = publish.yml's, the deploy
+    environment and its single `id: deployment` step, the eight build steps in order with jekyll `with` and upload
+    `path`, checkout/setup-node lines taken from publish.yml with `persist-credentials: false` /
+    `package-manager-cache: false`, every `uses:` SHA-pinned and the four Pages pins exactly as the design lists
+    them (the set of actions is exactly the six), no `secrets.` / `upload-artifact@` / `npm install` /
+    `gem install` / `pip` on non-comment lines, every `require` of `build-site.cjs` a `node:` built-in or
+    `js-yaml`, and the `built_by: docs:api` entry's `site_path: api/` matching `--out _site-src/api`. One case is
+    **characterization** and passes: publish.yml contains neither `deploy-pages` nor `pages: write`.
+  - **AC 2, red-first** — `llms-txt.test.ts`: the real-repository parity (`checkSiteManifest` → `[]`, the case that
+    fails when a listed path does not exist), `llms.txt` at the root byte-equal to `renderLlmsTxt(manifest,
+    pkg.homepage)`, the four dl-129 Decision 3 paths + one `site_path: api/` / `built_by: docs:api` entry; one fixture
+    per problem line with the exact strings (missing page, missing llms path under a `files` dir, llms path not in the
+    site, `built_by: nope`, a page with `{{` and one with `{%`) and a sorted two-problem case; the exact render of a
+    fixture manifest and its repeatability; `assembleSite(REPO_ROOT, …, { ref })` (`llms.txt` byte-equal, every page
+    and every file under each `files` dir, `_config.yml`, `files` sorted and existing, README's `](docs/)` rewritten to
+    `https://github.com/wingfoil/wingfoil/tree/<ref>/docs/` with `](docs/user-guide.md)` kept, a second call on the
+    non-empty directory throws); the CLI (`llms --check` exit 0 here and on a fixture whose `llms.txt` is the render,
+    exit 1 naming `llms.txt` on a stale one, `nope` exit 2).
+  - **AC 3, red-first** — `publish-metadata.test.ts`: `homepage` = `https://wingfoil.github.io/wingfoil/`, built from
+    `REPO_SLUG`; the "same repo" case keeps `repository.url`/`bugs.url` containing the slug and asserts the Pages
+    URL. `llms-txt.test.ts` "AC 3": `align-user-docs` `produces` (string or `{ path }` entries) contains `llms.txt`
+    and `docs/site.yaml`; `version` > 1.5 and the `version:` line contains `1.6 dl-129` (bug-314 form).
+  - **AC 4** — manual, no test.
+- **Run** (`npx jest test/cli/pages-workflow.test.ts test/docs/llms-txt.test.ts test/cli/publish-metadata.test.ts
+  --maxWorkers=2`): 3 suites failed; 37 failed / 99 passed of 136. Per file: `pages-workflow` 13 failed / 1 passed
+  (the publish.yml characterization); `llms-txt` 22 failed / 0 passed; `publish-metadata` 2 failed / 98 passed.
+  First failing assertion of each failing case: AC 1 and AC 2 cases — `expect(existsSync(…)).toBe(true)` →
+  `Received: false` (pages.yml, build-site.cjs, docs/site.yaml or llms.txt); AC 3 `produces` — `Expected value:
+  "llms.txt"`, received the 1.5 list; AC 3 version — `Expected: > 1.5`, `Received: 1.5`; the two homepage cases —
+  `Expected: "https://wingfoil.github.io/wingfoil/"`, `Received: "https://github.com/wingfoil/wingfoil#readme"`.
+  `npx eslint` on the three files → clean; `npx tsc --noEmit -p tsconfig.json` → no error in them.
+- **Readings the developer should know** (taken from the design, not reinterpreted): the forbidden-word scan runs on
+  non-comment lines only (a header may say what the file never does); `pip` is matched as a word. `assembleSite`'s
+  returned paths are checked with `resolve(out, p)`, so relative or absolute both pass. `deploy.needs` may be
+  `build` or `[build]`.
