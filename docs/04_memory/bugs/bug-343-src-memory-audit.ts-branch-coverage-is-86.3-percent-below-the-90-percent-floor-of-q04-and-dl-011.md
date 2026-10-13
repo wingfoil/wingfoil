@@ -49,4 +49,10 @@ follow-ups (`dev-loop-rel-v0.3-plan`), re-checked against the gate's coverage ru
 
 ### Retrospective
 
-None.
+- The breach was invisible to every gate: the repository-wide coverage threshold (> 80 %) passed, and the only record
+  was a sentence in `task-278`'s Execution Notes, until `task-232`'s Q04 measurement named it. A floor that no gate
+  reads is found only by whoever happens to read the coverage row.
+- Eight of the ten uncovered branches were not missing tests but dead code: destructuring defaults written for
+  `noUncheckedIndexedAccess` on values that are always defined (`walkGitLogFields`' arity postcondition; three
+  non-optional regex groups). Reading reachability before writing tests (`task-280` design) is what kept the fix from
+  pinning a fallback that no input reaches; the approver ruled them removed in the same task (A (b), 2026-10-12).
