@@ -207,3 +207,76 @@ no other B7 writer; `CLAUDE.md` §7's role table would no longer list the two ne
   `Received: undefined`, versions `Received: 2.1` / `Received: 1.8`, `WORKFLOW.md` substring absent.
 - **For session 3:** the `HEAD` test reads the committed configuration, so it goes green only once the config change is
   committed, not on a dirty tree.
+
+### green (developer, 2026-10-13)
+
+- **Approver rulings applied (2026-10-13):** D-A (a) `roles.yaml` 1.7 → 1.8 binds `approver: [code-review]` and
+  `facilitator: [traceability]`; D-B the script spawns the pinned build; D1 `reconcile-governance` only
+  (`git diff db0e2752 -- .wingfoil/workflows/custom/dev-loop.yaml` → empty).
+- **Commit `ec54b4cd`** `feat(directives): task-215 — …`: `scripts/check-role-directives.cjs` (new, the design's
+  contract); `package.json` one `scripts` line (`check:role-directives`, after `check:governance`);
+  `bindings.yaml` 1.8 → 1.9 (`role-directives.clean: { run: [npm, run, "check:role-directives"] }`, comment);
+  `release-planning.yaml` 2.1 → 2.2 (`reconcile-governance` `checks.pre: ["role-directives.clean"]`, task-279's 2.1
+  entry kept); `WORKFLOW.md` the reconcile-governance sentence and the `RG` node; `roles.yaml` 1.8 (header paragraph +
+  the two assignments); `traceability.md` 1.2 → 1.3 (Date 2026-10-13, the roles.yaml sentence names the facilitator);
+  `code-review.md` its "Applies to" sentence names the approver binding. `code-review.md` declares no `version:`, so it
+  is not given one (doc-versioning § "Scope of the bump rule": "A document that declares no version is not given one");
+  the ruling's "with a bump" applies only where a version exists. The existing intro pins
+  (`test/directives/dev-loop-practice.test.ts:178–179`) still hold: both sentences keep their prefix.
+- **red → green:** `npx jest test/cli/check-role-directives.test.ts test/core/reconcile-governance-role-directives.test.ts
+  --maxWorkers=2` → 2 suites, **13 passed / 13** (red: 13 failed / 0 passed). The HEAD test reads the committed config,
+  so config and script went in one commit.
+- **By hand:** `npm run -s check:role-directives` on this repository → 8 lines `<role>: ok` (approver … tech-lead) and
+  `role-directives: 8 roles checked, 0 with warnings`, exit 0. Exit-2 paths not pinned by red:
+  `--root <scratch dir outside git>` → ``error: `dna show` exited 1: {"error":"E_NO_GIT_ROOT: not inside a git
+  repository"}``, exit 2; `--root` with no value → `error: --root needs a directory`, exit 2.
+
+### refactor (developer, 2026-10-14)
+
+- No refactor beyond green; the script is one file with no exports (spawned by its tests, like the design said).
+- `npm run test:coverage -- --maxWorkers=2` (slot) → 412 suites, **7453 passed / 7453**; All files **99.32 / 97.22 /
+  97.98 / 99.71** against the B6 baseline 99.32 / 97.23 / 97.98 / 99.71: branches −0.01, and the run lists
+  `memory-transition.ts … | 468` uncovered — the run-dependent line the batch notes name (no `src/` change here:
+  `git diff 235234b0..HEAD --stat -- src` → empty; 235234b0 is the task-279 merge, whose `src/` changes are 279's), so the accepted −0.01 rule applies.
+- `npm test -- --maxWorkers=2` (slot) → 412 suites, **7453 passed / 7453**, exit 0.
+- `npm run lint` → exit 0, no output. `npm run docs:api` → exit 0. `npm run typecheck` (slot, both tsc configs) → exit 0.
+- Targeted re-run of the suites reading the touched config: `npx jest test/cli/check-role-directives.test.ts
+  test/core/reconcile-governance-role-directives.test.ts test/directives test/core/workflow-repository-conformance.test.ts
+  test/lint/version-bump.test.ts test/docs/workflow-md.test.ts --maxWorkers=2` → 214 passed / 214.
+- `node scripts/check-governance.cjs --base db0e2752` → 12 `wf()` commits checked, 0 findings.
+  `node scripts/lint-claims.cjs --base db0e2752` → 4 warnings, all in task-279's and dl-132's files, none in this one.
+- No CLI command or help changed (`git diff 235234b0..HEAD --stat -- src docs/cli-reference.md` → empty); no BDD
+  scenario covers dl-050 option 1 (`grep -rln "dl-050" docs/02_requirements/02_bdd/features` → none).
+
+### review (reviewer, self, 2026-10-14)
+
+- **AC 1** met: exit 1 on the dangling fixture with the warning verbatim, exit 0 on the clean fixture and on this
+  repository, roles enumerated from `dna.yaml` (`qa` case), exit 2 on misconfiguration — the 6 tests of
+  `test/cli/check-role-directives.test.ts` pass. **AC 2** met: declared as `reconcile-governance` `checks.pre`, bound
+  in `bindings.yaml`, versions bumped with history entries — the 7 tests of
+  `test/core/reconcile-governance-role-directives.test.ts` pass, the HEAD one included.
+- **T4:** `git log --first-parent --no-merges --format=%h e243e387..HEAD -- test/cli/check-role-directives.test.ts
+  test/core/reconcile-governance-role-directives.test.ts` → empty.
+- Same-class instances in touched files: every directive whose "Applies to"/roles.yaml sentence names its roles and
+  gained a binding was updated (traceability, code-review); the other directives' role lists are unchanged by this task
+  (`git diff db0e2752..HEAD --stat -- .wingfoil/directives` → those two files only). Absence claim with its positive
+  case: the role tables outside `roles.yaml` — `grep -rn "| tech-lead" --include=*.md .` outside Memory and plans →
+  only `CLAUDE.md:415` (positive case: the grep finds that table).
+- Determinism: roles sorted ascending, a `Set` dedupes repeated names, no clock or randomness; read-only (no write
+  call in the script: `grep -n "writeFile\|git commit" scripts/check-role-directives.cjs` → none).
+
+### Pending amendments (approver)
+
+None. No Memory element besides this task is edited.
+
+**Handover to `align-agent-docs` (dl-025):** `CLAUDE.md` §7's role → directives table does not list
+`approver → code-review` or `facilitator → traceability` (`roles.yaml` 1.8, task-215). It already lagged
+`roles.yaml` 1.7: `tech-lead` without `traceability` (task-276) and `reviewer` without `code-quality`, `testing` and
+`determinism` (task-205).
+
+### Retrospective
+
+- Session 1 ran the sweep by hand before writing the AC tests, and that exposed the contradiction in the ACs
+  (two roles with no bindings would fail "any warning" today), so the approver ruled before red, not after.
+- A check reading the committed config (`loadWorkflowRegistryAtHead`) forces the config and the code into the same
+  green commit. The red notes said so, and that saved a round trip.
