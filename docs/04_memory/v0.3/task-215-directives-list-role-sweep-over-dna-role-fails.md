@@ -255,7 +255,7 @@ no other B7 writer; `CLAUDE.md` §7's role table would no longer list the two ne
 - No CLI command or help changed (`git diff 235234b0..HEAD --stat -- src docs/cli-reference.md` → empty); no BDD
   scenario covers dl-050 option 1 (`grep -rln "dl-050" docs/02_requirements/02_bdd/features` → none).
 
-### review (reviewer, self, 2026-10-14)
+### self-review (developer, 2026-10-14)
 
 - **AC 1** met: exit 1 on the dangling fixture with the warning verbatim, exit 0 on the clean fixture and on this
   repository, roles enumerated from `dna.yaml` (`qa` case), exit 2 on misconfiguration — the 6 tests of
@@ -263,7 +263,10 @@ no other B7 writer; `CLAUDE.md` §7's role table would no longer list the two ne
   in `bindings.yaml`, versions bumped with history entries — the 7 tests of
   `test/core/reconcile-governance-role-directives.test.ts` pass, the HEAD one included.
 - **T4:** `git log --first-parent --no-merges --format=%h e243e387..HEAD -- test/cli/check-role-directives.test.ts
-  test/core/reconcile-governance-role-directives.test.ts` → empty.
+  test/core/reconcile-governance-role-directives.test.ts` → `ef4332c0`, the qa agent's send-back commit (AC 2's version
+  rows compare the task-215 entry numerically, for the three-writer `bindings.yaml` re-bump); no developer commit
+  touches the red files. (Corrected at the independent review, F1: this bullet first said "empty", which was true at
+  `1ac8b278`, before the send-back.)
 - Same-class instances in touched files: every directive whose "Applies to"/roles.yaml sentence names its roles and
   gained a binding was updated (traceability, code-review); the other directives' role lists are unchanged by this task
   (`git diff db0e2752..HEAD --stat -- .wingfoil/directives` → those two files only). Absence claim with its positive
@@ -287,3 +290,27 @@ None. No Memory element besides this task is edited.
   (two roles with no bindings would fail "any warning" today), so the approver ruled before red, not after.
 - A check reading the committed config (`loadWorkflowRegistryAtHead`) forces the config and the code into the same
   green commit. The red notes said so, and that saved a round trip.
+
+### independent review (2026-10-14) and fixes (developer)
+
+Verdict: APPROVE WITH FIXES (script, config and tests correct; full suite 7453/7453 reconfirmed by the reviewer).
+- **F1 (notes)**: corrected the self-review's T4 bullet. `git log --first-parent --no-merges --format=%h
+  e243e387..HEAD -- <the two red files>` → `ef4332c0` (qa send-back), no developer commit.
+- **F2 (notes)**: heading renamed to `### self-review (developer, 2026-10-14)`, as the corrected brief asks.
+- **F3 (`code-review.md`)**: "Approval binds to the `reviewer`/`approver` role" became "binds to the `approver` role
+  only — a role, not a person (REQ-SYS-08). Reviewers review and recommend; an agent never approves (`dna.yaml`
+  `team.agents[].approval_authority: false`)". Same class in the other directive this task touched:
+  `grep -n -i "approv" .wingfoil/directives/custom/traceability.md` → lines 46, 50, 53, 54, 56 and 102 only. All of
+  them are about approved documents or an approver's choice or ruling, and none binds approval to a role, so there is
+  nothing to change there. No version added (`code-review.md` declares none, as before).
+- **F4 (script)**: `runJson` reports a spawn error (`result.error`) as ``error: `<command>` could not run:
+  <message>``, exit 2. Before the fix, `node <ec54b4cd's script> --root /nonexistent/x` printed ``error: `dna show`
+  exited null``. The `--format json` pair is appended inside `runJson` and is never part of the label, so a role
+  named `json` stays in the message. Neither changes a behaviour the red suite pins (its exit-2 cases are
+  `--bogus` and `team.roles: []`). Own test file `test/cli/check-role-directives-errors.test.ts` (2 tests: the
+  ENOENT spawn error; ``directives list --role json` exited 1`` on a `roles.yaml` the schema refuses).
+- **Re-run:** `npx jest test/cli/check-role-directives.test.ts test/core/reconcile-governance-role-directives.test.ts
+  test/cli/check-role-directives-errors.test.ts test/directives --maxWorkers=2` → 10 suites, 174 passed / 174;
+  `npm run lint` → exit 0; `npm run typecheck` (slot) → exit 0. No full run: `src/` is untouched and coverage
+  collects from `src/**/*.ts` only (`jest.config.js` `collectCoverageFrom`), so F4 cannot move it.
+- Fix commit `6994ae00` (code); this notes commit separately. The task stays `in-review`, not re-submitted.
