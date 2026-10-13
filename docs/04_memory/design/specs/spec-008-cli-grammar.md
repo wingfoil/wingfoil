@@ -666,8 +666,8 @@ wingfoil memory add --type plan --title "Dev-loop — rel-v0.2.3" \
 - It follows `dl-082`: `--type` still identifies what is created and every `--set` names an attribute
   of the action.
 
-**Error cases.** The first five are properties of how the argument is spelled, decided before anything
-is read, so they are usage errors (§5, exit `2`), each with its own message:
+**Error cases.** The rows with exit `2` are properties of how the argument is spelled, decided before
+anything is read, so they are usage errors (§5), each with its own message:
 
 | Case | Message | Exit |
 |------|---------|------|
@@ -678,15 +678,21 @@ is read, so they are usage errors (§5, exit `2`), each with its own message:
 | A name `memory add` fills itself or through its own option: `id`, `type`, `status`, `title`, `tags`, `n`, `slug` | `error: invalid flag value: --set cannot set "<name>": memory add fills it itself or through its own option` | `2` |
 | `date`, whose value is the add commit's author date (`spec-001`'s `{date}` row) | `error: invalid flag value: --set cannot set "date": memory add fills {date} from the add commit's author date (GIT_AUTHOR_DATE, or the clock)` | `2` |
 | `author`, whose value is the git author name (`spec-001`'s `{author}` row) | `error: invalid flag value: --set cannot set "author": memory add fills {author} from the git author name` | `2` |
+| A `<value>` that, read as a path, is absolute — it starts with `/` or `\`, or a drive letter and `:` — for every `<name>`, since which names are `path` tokens is known only from the committed `memory.yaml` (`bug-325`) | `error: invalid flag value: --set <name> must be a relative path, got "<value>"` | `2` |
+| A `<value>` with an empty segment (split on `/` and `\`: `a//b`, a trailing `/`) | `error: invalid flag value: --set <name> holds an empty path segment: "<value>"` | `2` |
+| A `<value>` with a `.` or `..` segment | `error: invalid flag value: --set <name> holds a '.' or '..' path segment: "<value>"` | `2` |
 | A well-formed `<name>` the type's committed `id_pattern` and `path` do not contain | `error: --set <name>: memory type '<type>' has no token {<name>} in its id_pattern or path` | `1` |
 | An `id_pattern` token with no `--set` value | `error: missing value for token {<name>}: give it with --set <name>=<value>` | `1` |
 | A value that would take the id outside `[a-z0-9-.]` (`spec-009` §1) | `error: value for token {<name>} is not a valid [a-z0-9-.] piece: "<value>"` | `1` |
 | An `{author}` token whose git author name has no `[a-z0-9]` character once slugged | `error: value for token {author} is empty once the git author name "<name>" is slugged` | `1` |
 | A `{date}` token while `GIT_AUTHOR_DATE` holds a date git cannot parse | `error: E_GIT_READ_FAILED: git var GIT_AUTHOR_IDENT failed in <root>: fatal: invalid date format: <value>` | `1` |
+| The committed `path`, rendered and normalized, leaves the type's folder — the part of `path` up to the last `/` before its first `{` — while staying in the project root (a `path` holding a literal `..`) | `error: E_PATH_OUTSIDE_TYPE_FOLDER: Memory entries must reside in their type's folder: '<rendered>' resolves to '<normalized>', outside '<folder>' (path '<path>': {<token>}="<value>", …)` | `1` |
 
-The last three depend on the committed `memory.yaml` (`dl-080` (B): a gating read at `HEAD`), which is
-what separates them from the first five — the same malformed-versus-unresolvable line §5 draws for a
-DNA path. A `path` token with no value keeps its existing storage refusal (exit `1`, naming the token).
+The rows with exit `1` depend on the committed `memory.yaml` (`dl-080` (B): a gating read at `HEAD`), which
+is what separates them from the rows with exit `2` — the same malformed-versus-unresolvable line §5 draws for a
+DNA path. A `path` token with no value keeps its existing storage refusal (exit `1`, naming the token), and a
+document outside the project root keeps `E_PATH_ESCAPES_ROOT` (REQ-SEC-06, exit `1`), checked before the
+type's folder. `workflow start --set` applies the same spelling rows (§12).
 There is no free-form `--id`: an id a type's pattern cannot express is `spec-001`'s per-action
 `id_pattern` override on a workflow's `memory.add` action (`dl-107` S3 (a)), not a CLI option.
 
@@ -1331,3 +1337,12 @@ command had console text of its own; `workflow next`, `status`, `start`, `end` a
 gained one (`spec-017`), and `agent list` adds another, so the sentence lists them. §11 already names `agent
 list`'s baseline. No global flag, exit code or error format changes. Edited in place without a supersede or
 a state change (`dl-047`).
+
+**Revision (2026-10-13, `task-281-fix-workflow-deduction-inputs-not-open-refs-and-the-dev-loop-done-order-and-confine-path-tokens-to-the-type-s-folder`)
+— §10: a `--set` value is confined to its type's folder.** `bug-325`: a `--set` value with `..` segments moved a new
+document out of its type's folder to anywhere inside the project root, `.wingfoil/` included, for `memory add` and
+`workflow start` alike. Three spelling rows (exit `2`: an absolute value, an empty segment, a `.` or `..` segment,
+approver rulings 2026-10-12 D3) and one row decided by the committed `path` (exit `1`, `E_PATH_OUTSIDE_TYPE_FOLDER`,
+ruling D1, keeping this section's line between spelling and committed state). The paragraph's "first five" / "last
+three" counts, stale since the `date` and `author` rows, now say "the rows with exit `2` / `1`". Edited in place
+without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
