@@ -8,7 +8,7 @@
 #   [AUTHORING] = authoring addition: coherent with the specs but not mandated by them.
 # Spec-required top-level sections: modules, stacks, team (BDD P2.4-project-dna-config); paths (P2.5).
 # Sections/fields without a [SPEC] ref are [AUTHORING].
-version: 1.9                     # [AUTHORING] content revision (WingFoil convention, dl-047), bumped on every content change — 1.3 -> 1.4 at task-251 (this annotation, dl-149; north_star worded as a goal, dl-131); 1.4 -> 1.5 at task-188 (the six paths categories, bug-191); 1.5 -> 1.6 at task-256 (team.agents name + email, bug-240); 1.6 -> 1.7 at task-206 (paths.runs, the run log, spec-016 §4.1); 1.7 -> 1.8 at task-260 (the team.agents comment: email required with an adapter, identities the attribution audit rejects refused, dl-158, bug-261); 1.8 -> 1.9 at task-222 (paths.health, the release-health reports, dl-089 §1 (A); the docs/NN_* numbering, bug-299). The file's FORMAT is the separate `format:` key [SPEC: spec-002, dl-149], absent here and so read as 1
+version: 2.0                     # [AUTHORING] content revision (WingFoil convention, dl-047), bumped on every content change — 1.3 -> 1.4 at task-251 (this annotation, dl-149; north_star worded as a goal, dl-131); 1.4 -> 1.5 at task-188 (the six paths categories, bug-191); 1.5 -> 1.6 at task-256 (team.agents name + email, bug-240); 1.6 -> 1.7 at task-206 (paths.runs, the run log, spec-016 §4.1); 1.7 -> 1.8 at task-260 (the team.agents comment: email required with an adapter, identities the attribution audit rejects refused, dl-158, bug-261); 1.8 -> 1.9 at task-222 (paths.health, the release-health reports, dl-089 §1 (A); the docs/NN_* numbering, bug-299); 1.9 -> 2.0 at task-236 (team.agents Claude: adapter claude-code, spec-016 §2.1, §2.8). The file's FORMAT is the separate `format:` key [SPEC: spec-002, dl-149], absent here and so read as 1
 
 # [AUTHORING] section — not required by P2.4; identity/strategy values sourced from the Product Brief.
 project:
@@ -143,7 +143,7 @@ team:
       email: noreply@anthropic.com
       executes_as: [ developer, reviewer, qa, architect ]
       approval_authority: false
-      adapter: claude-code
+      adapter: claude-code     # [SPEC: spec-016 §2.1] the built-in adapter agent execute launches it with (task-236)
   # Available agent roles (P5.4.1); nested under `team` so `dna show team` surfaces them.
   # [SPEC: REQ-SYS-08 / BDD P5.4.2 "unknown role '...' (not defined in dna.yaml)"]; per-role `description` is [AUTHORING].
   # (was cited as P4.20, which is template-customization; the quoted message is P5.4.2's — flagged in both
