@@ -172,3 +172,10 @@ the sweep is a `memory amend` of the release by the approver, or a hand `wf(rele
 instruction while `memory amend` refuses a release with no `kind:`. The sweep is declared as the unbound `define-scope` post-check
 `change-proposals.swept(…)` (`release-planning.yaml` 2.0), which `dl-166` Q2 may bind. The Decision above is
 otherwise unchanged.
+
+**Note (2026-10-13, approver ruling 2026-10-13 on `task-279`'s review F3; `bug-342`).** The hand `wf(release): amend`
+the 2026-10-12 Note allows "while `memory amend` refuses a release with no `kind:`" no longer applies: since
+`task-279`, `memory amend` accepts the releases added before `dl-092`, whose exemption from `kind` is declared once as
+`memory.yaml`'s `release` `template.frontmatter.exempt` (3.5). On every release already past `draft` the
+`define-scope` sweep writes `features:` through a `memory amend` by the approver (`release-planning.yaml` 2.1). The
+Decision above is unchanged.
