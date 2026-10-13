@@ -29,6 +29,8 @@ import { load } from 'js-yaml';
 
 import { CORE_MODULES, loadWorkflowRegistry } from '../../src/core';
 import { exitCodeForResult } from '../../src/core/exit-code';
+import { requireRequiredFields } from '../../src/core/required-fields';
+import type { MemoryYaml } from '../../src/memory';
 import type { CoreFn } from '../../src/core/registry';
 import { splitFrontmatter } from '../../src/storage';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -262,6 +264,48 @@ describe('task-279 — memory amend accepts a pre-dl-092 release with no `kind:`
       expect(gitOut(repo, ['log', '-1', '--format=%s'])).toBe('wf(release): submit minor-v0.1');
       expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD'])).toBe(pathOf('minor-v0.1'));
       expect(frontmatterOf(gitOut(repo, ['show', `HEAD:${pathOf('minor-v0.1')}`]))['status']).toBe('planning');
+    });
+  });
+});
+
+describe('task-279 review send-back (red-first) — a required field named like an Object.prototype member is refused, never a throw', () => {
+  /** A one-type `memory.yaml` whose `t` requires [title, kind, <field>] (default `constructor`), with `exempt` absent or not listing the field. */
+  const yamlWith = (exempt: Readonly<Record<string, readonly string[]>> | undefined, field = 'constructor'): MemoryYaml =>
+    ({
+      version: 1,
+      types: {
+        t: {
+          path: 'docs/t/{id}.md',
+          template: { file: 'memory/templates/t.md', frontmatter: { required: ['title', 'kind', field], ...(exempt ? { exempt } : {}) } },
+        },
+      },
+    }) as unknown as MemoryYaml;
+
+  /** The function's result, or `{ thrown }` — so a crash fails the refusal expectation instead of erroring the test. */
+  function outcome(memoryYaml: MemoryYaml, verb: 'submit' | 'amend'): unknown {
+    try {
+      return requireRequiredFields(memoryYaml, 't', { id: 'x', title: 'a', kind: 'minor' }, verb);
+    } catch (error) {
+      return { thrown: String(error) };
+    }
+  }
+
+  it.each([
+    ['no exempt map', 'submit', undefined],
+    ['no exempt map', 'amend', undefined],
+    ['an exempt map not listing the field', 'submit', { kind: ['other'] }],
+    ['an exempt map not listing the field', 'amend', { kind: ['other'] }],
+  ] as const)('%s, %s: a document lacking `constructor` → VALIDATION `missing required field on <verb>: constructor`', (_label, verb, exempt) => {
+    expect(outcome(yamlWith(exempt), verb)).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: 'VALIDATION', message: `missing required field on ${verb}: constructor` }),
+    });
+  });
+
+  it.each(['toString', 'valueOf', 'hasOwnProperty'])('the same for a required field named `%s` (submit, no exempt map)', (field) => {
+    expect(outcome(yamlWith(undefined, field), 'submit')).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: 'VALIDATION', message: `missing required field on submit: ${field}` }),
     });
   });
 });
