@@ -331,7 +331,7 @@ describe('measureRelease — the history metrics on a fixture with known answers
     }
     expect(report.schema_version).toBe(1);
     expect(report.catalogue_version).toBe(2);
-    expect(report.measurement_point).toEqual({ ref: h.point, commit: h.point, basis: 'released-transition' });
+    expect(report.measurement_point).toEqual({ ref: h.point, commit: h.point, basis: 'revision' });
     expect(report.release).toEqual({ id: 'minor-v0.2', version: 'v0.2', kind: 'minor' });
   });
 

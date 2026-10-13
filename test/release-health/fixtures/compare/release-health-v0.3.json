@@ -1,0 +1,598 @@
+{
+  "catalogue_version": 2,
+  "measurement_point": {
+    "basis": "published-tag",
+    "commit": "3333333333333333333333333333333333333333",
+    "ref": "v0.3.0"
+  },
+  "metrics": [
+    {
+      "failing": [],
+      "id": "G01",
+      "items": 40,
+      "raw": {
+        "conforming": 40,
+        "total": 40
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 100
+    },
+    {
+      "failing": [],
+      "id": "G02",
+      "items": 400,
+      "raw": {
+        "total": 400,
+        "with_body": 187
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 46.75
+    },
+    {
+      "failing": [],
+      "id": "G03",
+      "items": 40,
+      "raw": {
+        "commits": 40,
+        "over_500": 1
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": {
+        "median": 20,
+        "p90": 200,
+        "share_over_500": 2.5
+      }
+    },
+    {
+      "failing": [],
+      "id": "G04",
+      "items": 40,
+      "raw": {
+        "characters": 2000,
+        "over_72": 2,
+        "total": 40
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": {
+        "mean": 50,
+        "share_over_72": 5
+      }
+    },
+    {
+      "failing": [],
+      "id": "G05",
+      "items": 40,
+      "raw": {
+        "citing": 40,
+        "total": 40
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 100
+    },
+    {
+      "failing": [],
+      "id": "G06",
+      "items": 40,
+      "raw": {
+        "conforming": 40,
+        "total": 40
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 100
+    },
+    {
+      "failing": [],
+      "id": "G07",
+      "items": 40,
+      "raw": {
+        "failing": 0,
+        "total": 40
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 0
+    },
+    {
+      "failing": [],
+      "id": "G08",
+      "items": 40,
+      "raw": {
+        "approve_reject_with_ai": 0,
+        "before_rule": 0,
+        "conforming": 40,
+        "judged": 40,
+        "ratified_at": null
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": {
+        "approve_reject_with_ai": 0,
+        "conforming_share": 100,
+        "distinct_trailers": [
+          "AI-Model: claude-test",
+          "Co-Authored-By: Claude <noreply@anthropic.com>"
+        ]
+      }
+    },
+    {
+      "failing": [],
+      "id": "G09",
+      "items": 40,
+      "raw": {
+        "outside": 2,
+        "total": 40,
+        "verbs_from": "src/memory/audit.ts at the point"
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 4
+    },
+    {
+      "failing": [],
+      "id": "G10",
+      "items": 40,
+      "raw": {
+        "canonical": 40,
+        "total": 40
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 100
+    },
+    {
+      "failing": [],
+      "id": "G11",
+      "items": 40,
+      "raw": {
+        "back_merges": 20,
+        "task_branches_merged": 40
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 0.5
+    },
+    {
+      "failing": [],
+      "id": "G12",
+      "items": 40,
+      "raw": {
+        "total": 40,
+        "touching_docs": 12
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 30
+    },
+    {
+      "failing": [],
+      "id": "G13",
+      "items": 40,
+      "raw": {
+        "active_days": 8,
+        "total": 100,
+        "wf": 40
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": {
+        "per_active_day": 12.5,
+        "wf_share": 40
+      }
+    },
+    {
+      "failing": [],
+      "id": "G14",
+      "raw": {
+        "blocking": 0,
+        "warnings": 0
+      },
+      "status": "measured",
+      "value": 0
+    },
+    {
+      "failing": [],
+      "id": "G15",
+      "raw": {
+        "duplicate_ids": 0,
+        "refs_from": "live refs at run time",
+        "refs_read": 4,
+        "stale_branches": 0
+      },
+      "status": "measured",
+      "value": {
+        "duplicate_ids": 0,
+        "stale_branches": 0
+      }
+    },
+    {
+      "failing": [],
+      "id": "G16",
+      "items": 40,
+      "raw": {
+        "signed": 24,
+        "total": 40
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 60
+    },
+    {
+      "failing": [],
+      "id": "Q01",
+      "raw": {
+        "build": 0,
+        "lint": 0,
+        "typecheck": 0
+      },
+      "status": "measured",
+      "value": true
+    },
+    {
+      "failing": [],
+      "id": "Q02",
+      "raw": {
+        "suites": 100
+      },
+      "status": "measured",
+      "value": {
+        "disabled": 0,
+        "failing": 0,
+        "total": 1000
+      }
+    },
+    {
+      "id": "Q03",
+      "raw": {
+        "files": 100
+      },
+      "status": "measured",
+      "value": {
+        "branches": 90,
+        "functions": 93,
+        "lines": 95,
+        "statements": 95
+      }
+    },
+    {
+      "failing": [],
+      "id": "Q04",
+      "raw": {
+        "floor": 90
+      },
+      "status": "measured",
+      "value": {
+        "src/memory/audit.ts": 95,
+        "src/memory/commit-message.ts": 96,
+        "src/memory/state-machine.ts": 97
+      }
+    },
+    {
+      "failing": [],
+      "id": "Q05",
+      "raw": {
+        "complex": 10,
+        "long": 20
+      },
+      "status": "measured",
+      "value": {
+        "complex": 10,
+        "long": 20
+      }
+    },
+    {
+      "id": "Q06",
+      "raw": {
+        "sources_duplicated": 30,
+        "sources_total": 1000,
+        "tests_duplicated": 80,
+        "tests_total": 1000
+      },
+      "status": "measured",
+      "value": {
+        "sources": 3,
+        "tests": 8
+      }
+    },
+    {
+      "failing": [],
+      "id": "Q07",
+      "raw": {
+        "bypasses": 0,
+        "cycles": 0
+      },
+      "status": "measured",
+      "value": {
+        "bypasses": 0,
+        "cycles": 0
+      }
+    },
+    {
+      "failing": [],
+      "id": "Q08",
+      "raw": {
+        "runtime_dependencies": 5
+      },
+      "status": "measured",
+      "value": {
+        "install_size_bytes": 1000000,
+        "unused_runtime_dependencies": 0
+      }
+    },
+    {
+      "failing": [],
+      "id": "Q09",
+      "raw": {
+        "dangling": 0,
+        "references": 200
+      },
+      "status": "measured",
+      "value": 0
+    },
+    {
+      "failing": [],
+      "id": "Q10",
+      "items": 40,
+      "raw": {
+        "cited": 40,
+        "total": 40
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 100
+    },
+    {
+      "failing": [],
+      "id": "Q11",
+      "raw": {
+        "executed": 4,
+        "passed": 4
+      },
+      "status": "measured",
+      "value": 100
+    },
+    {
+      "failing": [],
+      "id": "Q12",
+      "raw": {
+        "floor_ms": 1000,
+        "load_after": 0.5,
+        "load_before": 0.5
+      },
+      "status": "measured",
+      "value": 350
+    },
+    {
+      "failing": [],
+      "id": "Q13",
+      "items": 40,
+      "raw": {
+        "added": 20,
+        "closed": 18,
+        "open_unassigned": 2
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": {
+        "added": 20,
+        "closed": 18,
+        "closure_ratio": 90,
+        "open_unassigned": 2
+      }
+    },
+    {
+      "id": "Q14",
+      "raw": {
+        "count": 5
+      },
+      "status": "measured",
+      "value": {
+        "count": 5,
+        "median_age_days": 10
+      }
+    },
+    {
+      "failing": [],
+      "id": "Q15",
+      "items": 40,
+      "raw": {
+        "classified": 40,
+        "divergences": 4,
+        "unclassified": 0
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 10
+    },
+    {
+      "id": "Q16",
+      "raw": {
+        "documents": 100
+      },
+      "status": "measured",
+      "value": {
+        "comment_line_ratio": 20,
+        "words_median": {
+          "task": 500
+        }
+      }
+    },
+    {
+      "failing": [],
+      "id": "Q17",
+      "raw": {
+        "resolved_from": "the registry at run time"
+      },
+      "status": "measured",
+      "value": true
+    },
+    {
+      "failing": [],
+      "id": "Q18",
+      "items": 40,
+      "raw": {
+        "classified": 40,
+        "fix": 8
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 20
+    },
+    {
+      "failing": [],
+      "id": "Q19",
+      "items": 40,
+      "raw": {
+        "added_after": 3,
+        "feature": 2,
+        "fix": 1,
+        "unclassified": 0
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": {
+        "added_after": 3,
+        "feature": 2,
+        "fix": 1,
+        "fix_share": 33.33,
+        "unclassified": 0
+      }
+    },
+    {
+      "id": "Q20",
+      "raw": {
+        "added": 20,
+        "terminal": 22
+      },
+      "status": "measured",
+      "value": 2
+    },
+    {
+      "id": "D01",
+      "reason": "the benchmark runs are not wired into this script (dl-131)",
+      "status": "not-measurable"
+    },
+    {
+      "failing": [],
+      "id": "P01",
+      "items": 100,
+      "raw": {
+        "checked": 100,
+        "failing": 0
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 0
+    },
+    {
+      "failing": [],
+      "id": "P02",
+      "items": 100,
+      "raw": {
+        "checked": 100,
+        "failing": 0
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 0
+    },
+    {
+      "failing": [],
+      "id": "P03",
+      "items": 100,
+      "raw": {
+        "checked": 100,
+        "failing": 0
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 0
+    },
+    {
+      "failing": [],
+      "id": "P04",
+      "items": 100,
+      "raw": {
+        "checked": 100,
+        "failing": 0
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 0
+    },
+    {
+      "failing": [],
+      "id": "P05",
+      "items": 100,
+      "raw": {
+        "checked": 100,
+        "failing": 0
+      },
+      "small_sample": false,
+      "status": "measured",
+      "value": 0
+    },
+    {
+      "id": "P06",
+      "reason": "the benchmark runs are not wired into this script (dl-131)",
+      "status": "not-measurable"
+    },
+    {
+      "failing": [],
+      "id": "P07",
+      "raw": {
+        "identical": true,
+        "runs": 2
+      },
+      "status": "measured",
+      "value": true
+    },
+    {
+      "id": "E01",
+      "reason": "--offline: the external snapshot was not read",
+      "status": "not-measurable"
+    },
+    {
+      "id": "E02",
+      "reason": "--offline: the external snapshot was not read",
+      "status": "not-measurable"
+    },
+    {
+      "id": "E03",
+      "reason": "--offline: the external snapshot was not read",
+      "status": "not-measurable"
+    },
+    {
+      "id": "E04",
+      "reason": "--offline: the external snapshot was not read",
+      "status": "not-measurable"
+    },
+    {
+      "id": "E05",
+      "reason": "--offline: the external snapshot was not read",
+      "status": "not-measurable"
+    }
+  ],
+  "previous": {
+    "basis": "report",
+    "commit": "2222222222222222222222222222222222222222",
+    "release": "v0.2",
+    "report": "docs/08_health/release-health-v0.2.json"
+  },
+  "release": {
+    "id": "minor-v0.3",
+    "kind": "minor",
+    "version": "v0.3"
+  },
+  "schema_version": 1,
+  "toolchain": {
+    "lockfile_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "node": "v22.12.0",
+    "npm": "10.9.0"
+  }
+}
