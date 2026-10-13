@@ -1,0 +1,90 @@
+# WingFoil — the documentation site on GitHub Pages (dl-129 §2, Q2 (b); built by task-234).
+#
+#   build  → `npm ci`; `node scripts/build-site.cjs site` copies the Markdown that `user-docs` owns, as declared in
+#            `docs/site.yaml`, to the same paths under `_site-src/` (relative links keep working; a link to a file
+#            that is not on the site is rewritten to the repository at this run's commit) and writes `llms.txt`
+#            there, the same bytes as the repository root's; `npm run docs:api -- --emit docs --out _site-src/api`
+#            adds the TypeDoc HTML (`typedoc.json` itself emits nothing: as a gate, `docs:api` only validates);
+#            GitHub's own Jekyll builder renders the Markdown into `_site/` and keeps each raw `.md` beside its page
+#            (jekyll-optional-front-matter's default), so `llms.txt`'s `.md` links resolve for agents; the result
+#            is uploaded as the ONE Pages artefact.
+#   deploy → `actions/deploy-pages` publishes that artefact to the `github-pages` environment.
+#
+# No new dependency (dl-010): the build uses what `npm ci` installs (TypeDoc is already the `docs:api` gate's) and
+# GitHub's Pages actions; `jekyll-build-pages` is a docker action, not a package of this project.
+#
+# Trigger (approver ruling 2026-10-13): the release tag — the same `vX.Y.Z` filter as publish.yml — so the site
+# documents the released version that package.json `homepage` and npm point at; plus `workflow_dispatch` for a
+# first or repeated deployment. Once dl-159's maintenance lines exist, a patch tag of an OLDER line (a `v0.3.1` after
+# `v0.4.0`) would redeploy that line's docs over the newest ones: deploying only the newest line's tag is handed to
+# task-266 (its "highest published version" rule), recorded in task-234's Execution Notes.
+#
+# Permissions: read-only at the top; the deploy job alone holds `pages: write` and `id-token: write`, the set
+# actions/deploy-pages documents. No secret. The `github-pages` environment admits only the default branch until the
+# approver adds the `v*` tag rule (task-234's post-merge handover); a tag run's deploy is refused before that.
+#
+# Concurrency: one deployment at a time, and an in-progress one is never cancelled half-way.
+#
+# Every `uses:` names a full commit SHA, with the release tag it came from in a trailing comment (dl-057);
+# checkout and setup-node are the very lines publish.yml uses, and NODE_VERSION is publish.yml's. The Pages
+# actions were read with `gh api repos/<action>/releases/latest` and `gh api repos/<action>/commits/<tag>`;
+# upload-pages-artifact v5.0.0 uploads the artefact named `github-pages`, the default `artifact_name` that
+# deploy-pages v5.0.1 reads. Pinned by `test/cli/pages-workflow.test.ts`.
+
+name: pages
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22.12.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - name: Install
+        run: npm ci
+      - name: Assemble the user docs and llms.txt from docs/site.yaml
+        run: node scripts/build-site.cjs site --out _site-src --ref "$GITHUB_SHA"
+      - name: Add the API reference (TypeDoc HTML)
+        run: npm run docs:api -- --emit docs --out _site-src/api
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1.0.13
+        with:
+          source: ./_site-src
+          destination: ./_site
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ./_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
