@@ -58,4 +58,7 @@ Captured on 2026-10-09 by `bug-ingest-rel-v0.3-w3b3-review-findings-plan`, from 
 
 ### Retrospective
 
-None.
+- Fixed by `task-281`: `W_UNCOMMITTED_INPUTS` now covers every configuration file `spec-017` §1.1 reads
+  (`memory.yaml`, `dna.yaml`, `roles.yaml`, `.wingfoil/directives/`, approver ruling 2026-10-12 D2), through the
+  loaders' path constants, so the list cannot drift from what is read. Like `bug-300`, a note-only handover to
+  `task-216` lapsed.
