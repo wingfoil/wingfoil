@@ -92,8 +92,8 @@ behaviour.
 | AC | Class | What it is |
 |----|-------|------------|
 | 1 — tests cover the uncovered branches, pinning existing behaviour | characterization | P1–P3 below; pass on first run |
-| 2 — `test:coverage` audit.ts ≥ 90 % branches, the other two not lower | characterization | session 3, under the slot; met only under decision A (a) |
-| 3 — no change under `src/`; unreachable branches reported | characterization | `git diff --stat db0e2752 HEAD -- src` → empty; `:111`/`:191` reported here |
+| 2 — `test:coverage` audit.ts ≥ 90 % branches, the other two not lower | characterization | session 3, under the slot; met only under decision A (a) (superseded by the approver ruling below: met under A (b)) |
+| 3 — no change under `src/`; unreachable branches reported | characterization | `git diff --stat db0e2752 HEAD -- src` → empty; `:111`/`:191` reported here (superseded by the approver ruling below: AC 3 amended, `src/memory/audit.ts` changes) |
 | 4 — `npm test`, lint, both tsc green | characterization | session 3 gates |
 
 #### What the qa agent pins (red)
@@ -213,6 +213,18 @@ the tree.
 - Same class in the file touched: `grep -n "= ''" src/memory/audit.ts` → only a comparison (`:539`), no destructuring
   default left. Outside it, `src/cli/program.ts:372` `[first = '', …]` is reachable (an empty Commander text), so not
   the same class.
+
+### independent review (2026-10-13) and fixes (developer)
+
+- **Verdict: APPROVE**, with two findings.
+  1. The header comment and both `describe` titles of `test/memory/audit-status-shapes.test.ts` cited `audit.ts:349` /
+     `:352`, stale after green moved them to `:359` / `:362`. Fixed by the qa agent (send-back): `a5e86711` names
+     them by function; notes `c16d441d` (red section). Comment and title text only; the qa agent's run → 7 passed.
+  2. The design's AC classification table, rows 2 and 3, still gave the pre-ruling evidence. Fixed here: both rows
+     are marked "(superseded by the approver ruling below)".
+- **T4:** `git log --first-parent --no-merges --format=%h e9f040fc..HEAD -- test/memory/audit-status-shapes.test.ts`
+  → `a5e86711` only, the qa agent's send-back commit; no developer commit touches the red file.
+- No gate re-run: the change after the gates is test comment/title text and these notes.
 
 ### Pending amendments (approver)
 
