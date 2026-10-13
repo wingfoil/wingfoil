@@ -184,6 +184,7 @@ const TemplateConfig = z.object({
     required:               z.array(z.string()),             // fields enforced on submit (P4.12)
     not_applicable_allowed: z.array(z.string()).optional(),  // required fields that may hold "n/a — <reason>" (dl-124)
     lists:                  z.array(z.string()).optional(),  // required fields whose value is a list; [] is filled there (bug-147)
+    exempt:                 z.record(z.string(), z.array(z.string())).optional(),  // required field -> ids of the documents that do not carry it (bug-342)
   }),
   file:        z.string(),                                   // scaffold path, relative to config root
 }).passthrough();
@@ -220,6 +221,17 @@ declared "none". On every other required field a list, or a mapping, counts as m
 is not in template.frontmatter.required`), and `title` may never be listed. The declaration lives here,
 not in the scaffold: a scaffold that must not pass a submit untouched leaves the field empty
 (`features:`), and nothing in it has to say the field is a list.
+
+**`exempt` — which documents do not carry a required field** (`bug-342`, `task-279`, approver ruling
+2026-10-12 D1 (a)). A mapping from a required field to the ids of the documents of the type that do not
+carry it: for a listed id the field is not required, by `memory submit` or by `memory amend` past the
+initial state, and a refusal does not name it (`spec-010` § Validation rules). Every other field is still
+required of that document, and every other document still needs the field. Absent means no document is
+exempt. The same two semantic checks as `not_applicable_allowed` apply to each key: it must be a member of
+`required` (`exempt entry '<field>' is not in template.frontmatter.required`), and `title` may never be one
+(`exempt may not list 'title': spec-010 requires it of every type`). It is the one declaration of an
+exemption: a workflow check that restates it (this repository's `define-scope` and `seed-releases`) is
+held equal to it, never read in its place.
 
 ### `id_pattern` placeholder notation
 
@@ -654,3 +666,12 @@ default, read at `HEAD`). The same version declares, `[AUTHORING]` and so outsid
 `schedule` step stamps `release`, as this repository's `memory.yaml` 3.3 does. No key, rule or diagnostic
 changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`
 at `task-277`'s review.
+
+**Revision (2026-10-12, `task-279-let-memory-amend-accept-a-release-added-before-dl-092-which-carries-no-kind-field`) —
+`template.frontmatter.exempt`.** `memory amend` refused every release added before `dl-092` (`minor-v0.1` …
+`minor-v1.0`), which carry no `kind:` by design, although `release-planning`'s `define-scope` check exempts them
+from that field (`bug-342`). `TemplateConfig.frontmatter` gains the optional `exempt` mapping, described in the
+paragraph after the `lists` one, with the same two semantic checks on its keys. This repository's `memory.yaml`
+3.5 declares `exempt: { kind: [ minor-v0.1, minor-v0.2, minor-v0.3, minor-v0.4, minor-v1.0 ] }` on `release`.
+Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at
+`task-279`'s review.
