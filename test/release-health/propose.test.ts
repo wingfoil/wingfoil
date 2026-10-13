@@ -92,10 +92,10 @@ describe('propose — search Memory before proposing (dl-089 §4)', () => {
     expect(search.mock.calls.map((call) => call[0])).toEqual(['G04', 'G07']);
   });
 
-  it('an open element that matches tracks the finding: cited with its status, no proposal for it', async () => {
+  it('an open element that matches is a candidate tracker: cited with its status and labelled candidate (review F1), no proposal for it', async () => {
     const search = stub({ G07: [{ id: 'bug-301-unknown-identities', type: 'bug', status: 'open' }] });
     const md = await proposedMarkdown(twoFindings(), search);
-    expect(section(md, 'Proposals')).toMatch(/^- G07 — tracked: bug-301-unknown-identities \(open; .+\)$/m);
+    expect(section(md, 'Proposals')).toMatch(/^- G07 — (?=.*\bcandidate\b)(?=.*bug-301-unknown-identities \(open; [^)]+\)).*$/m);
     expect(Object.keys(proposals(md))).toEqual(['### RH-v0.2-01 — G04 Subject length']);
   });
 
@@ -127,10 +127,10 @@ describe('propose — search Memory before proposing (dl-089 §4)', () => {
     expect(g07).toContain(IMMEDIATE);
   });
 
-  it('an open change-proposal tracks a finding too', async () => {
+  it('an open change-proposal is a candidate tracker too (review F1)', async () => {
     const search = stub({ G04: [{ id: 'cp-300-subjects', type: 'change-proposal', status: 'accepted' }] });
     const md = await proposedMarkdown(twoFindings(), search);
-    expect(section(md, 'Proposals')).toMatch(/^- G04 — tracked: cp-300-subjects \(accepted; .+\)$/m);
+    expect(section(md, 'Proposals')).toMatch(/^- G04 — (?=.*\bcandidate\b)(?=.*cp-300-subjects \(accepted; [^)]+\)).*$/m);
   });
 
   it('a regressed trend metric under small-sample is no finding: no search, no proposal', async () => {
@@ -251,6 +251,17 @@ describe('settle — the previous proposals (dl-089 §4, ruling G)', () => {
     expect(settled.map((s) => s.settled)).toEqual(Array(7).fill('not adopted'));
     for (const entry of settled) expect(JSON.stringify(entry)).toContain('no disposition recorded');
   });
+
+  // Review send-back F2: an outcome outside the retrospective's vocabulary is not adopted, and says why.
+  it('a disposition row whose outcome is not covered, element, restated, superseded or declined is not adopted, noted as unrecognised', async () => {
+    const { parseProposals, settle } = loadCompare();
+    const retro = ['## Release health', '', '| Proposal | Outcome | Element |', '|---|---|---|', '| RH-v0.1-01 | G07 | element: bug-400 |', '| RH-v0.1-06 | declined | |', ''].join('\n');
+    const settled = settle(parseProposals(PREVIOUS), retro, await compareWith(fixtureReport('v0.2')));
+    expect(settled[0]).toMatchObject({ id: 'RH-v0.1-01', settled: 'not adopted' });
+    expect(String(settled[0]!['note'])).toMatch(/unrecognised outcome "G07"/i);
+    expect(settled[5]).toMatchObject({ id: 'RH-v0.1-06', settled: 'not adopted' });
+    expect(String(settled[5]!['note'] ?? '')).not.toMatch(/unrecognised/);
+  });
 });
 
 describe('compare.cjs — an untracked immediate finding is named on stderr', () => {
@@ -270,6 +281,27 @@ describe('compare.cjs — an untracked immediate finding is named on stderr', ()
     writeFileSync(join(health, 'release-health-v0.2.json'), `${JSON.stringify(withEntry(fixtureReport('v0.2'), 'G07', floorBreach('G07', 2, [SHA('a'), SHA('b')])), null, 2)}\n`);
     const result = spawnSync(process.execPath, [COMPARE_SCRIPT, '--release', 'v0.2', '--root', dir], { cwd: dir, encoding: 'utf-8' });
     expect(result.stderr.split('\n').filter((line) => line.startsWith('release-health compare: immediate bug-ingest: '))).toEqual([expect.stringMatching(/^release-health compare: immediate bug-ingest: G07\b/)]);
+    expect(result.status).toBe(0);
+  });
+
+  // Review send-back F1: a search match is only a candidate tracker, so an immediate finding is always named.
+  it('G07 breached and an open decision-log mentions G07: the immediate line is still written, naming the candidate', () => {
+    const dir = makeTempGitRepo();
+    roots.push(dir);
+    const health = join(dir, 'docs', '08_health');
+    mkdirSync(health, { recursive: true });
+    mkdirSync(join(dir, '.wingfoil'), { recursive: true });
+    copyFileSync(join(REPO_ROOT, '.wingfoil', 'memory.yaml'), join(dir, '.wingfoil', 'memory.yaml'));
+    copyFileSync(join(REPO_ROOT, '.wingfoil', 'dna.yaml'), join(dir, '.wingfoil', 'dna.yaml'));
+    for (const name of ['metrics.yaml', 'release-health.schema.json']) copyFileSync(join(REPO_ROOT, 'docs', '08_health', name), join(health, name));
+    copyFileSync(join(FIXTURES, 'release-health-v0.1.json'), join(health, 'release-health-v0.1.json'));
+    writeFileSync(join(health, 'release-health-v0.2.json'), `${JSON.stringify(withEntry(fixtureReport('v0.2'), 'G07', floorBreach('G07', 3, [SHA('a'), SHA('b'), SHA('c')])), null, 2)}\n`);
+    const dls = join(dir, 'docs', '04_memory', 'design', 'dls');
+    mkdirSync(dls, { recursive: true });
+    writeFileSync(join(dls, 'dl-500-identity-audit.md'), '---\nid: "dl-500-identity-audit"\ntype: decision-log\ntitle: "Identity audit"\nstatus: in-discussion\n---\n\nUnrelated to the breach, but it mentions G07.\n');
+    const result = spawnSync(process.execPath, [COMPARE_SCRIPT, '--release', 'v0.2', '--root', dir], { cwd: dir, encoding: 'utf-8' });
+    const lines = result.stderr.split('\n').filter((line) => line.startsWith('release-health compare: immediate bug-ingest: '));
+    expect(lines).toEqual([expect.stringMatching(/^release-health compare: immediate bug-ingest: G07\b.*dl-500-identity-audit/)]);
     expect(result.status).toBe(0);
   });
 });

@@ -460,4 +460,23 @@ describe('compare.cjs — the command line', () => {
     expect(result.stderr).toContain('release-health-v0.1.json');
     expect(existsSync(join(dir, MD))).toBe(false);
   });
+
+  // Review send-back F4: a malformed catalogue tolerance is refused, never replaced by the default.
+  it.each([
+    ['no unit', '"5"', /["'`]5["'`]/],
+    ['a relative tolerance on a share-only metric', '"5%"', /5%/],
+  ])('exit 2 on a catalogue tolerance with %s, naming the metric and the value (G02)', (_what, tolerance, value) => {
+    const dir = root();
+    const path = join(dir, 'docs', '08_health', 'metrics.yaml');
+    const text = readFileSync(path, 'utf-8');
+    const patched = text.replace(/( {2}- id: G02\n(?: {4}.*\n)*? {4}direction: up\n)/, `$1    tolerance: ${tolerance}\n`);
+    expect(patched).not.toBe(text);
+    writeFileSync(path, patched);
+    const result = run(dir, ['--release', 'v0.2', '--root', dir]);
+    expect(result.status).toBe(2);
+    expect(result.stderr.startsWith('release-health compare: ')).toBe(true);
+    expect(result.stderr).toContain('G02');
+    expect(result.stderr).toMatch(value);
+    expect(existsSync(join(dir, MD))).toBe(false);
+  });
 });
