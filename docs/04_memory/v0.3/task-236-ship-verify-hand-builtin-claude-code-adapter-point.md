@@ -252,3 +252,177 @@ explicit OK, runs it in a real terminal from this worktree with the green commit
   --maxWorkers=2` → 2 suites failed; 12 failed, 14 passed, 26 total (claude-code file: 8 failed, 0 passed;
   init-builtin-adapters: 4 failed, 14 passed — the 13 pre-existing tests plus the new empty-list one).
   `npx eslint` and `npx tsc --noEmit -p tsconfig.json` on the two files: no output.
+
+### green (developer, 2026-10-13)
+
+- Read `### red (qa)`: red commit `ad0d8c8d`, test files `test/storage/builtin-adapter-claude-code.test.ts` (new) and
+  `test/core/init-builtin-adapters.test.ts`; neither is edited here (T4, below).
+- `614b1a94` `feat(agent): …`: `src/storage/builtin-adapters.ts` gains `CLAUDE_CODE` (the design's manifest, unchanged
+  but for two comment lines) and `BUILTIN_ADAPTERS = [CLAUDE_CODE]`; its header now lists the shipped adapters one
+  line each (task-237 appends a const, a list element and a line). Same-class comments: `src/storage/templates.ts`
+  (`builtinTemplateSources` doc, `adapterScaffold` doc) and `src/core/init.ts` (`builtinAdapters` param), which said
+  none ships. This repository gets init's layout: `.wingfoil/agents/built-in/claude-code.yaml`, written from the
+  built `BUILTIN_ADAPTERS` (`node -e "…require('./dist/storage/builtin-adapters.js')…"`, so byte-equal), and
+  `.wingfoil/agents/custom/.gitkeep`. `P5.1.1-init.feature` gains the design's Scenario Outline (g), title and
+  Examples header verbatim.
+- `498a33ba` `wf(dna): update team.agents.Claude`: `node dist/cli.js dna update team.agents.Claude --entry-adapter
+  claude-code` → exit 0, `{"key": "team.agents.Claude"}`, one commit with the single line `adapter: claude-code`
+  (`git show --stat HEAD` → `.wingfoil/dna.yaml | 1 +`); trailers added with `git commit --amend --no-edit
+  --trailer` (git-conventions §8). Its `WingFoil-Version:` reads `0.2.2 (586a293a…-dirty)`: dist was built before
+  the feat commit, from the then-dirty tree — the build that ran, recorded as is.
+- `11569e02` `chore(dna): …`: `version: 1.9 → 2.0` with its history entry, and the `[SPEC: spec-016 §2.1]` annotation
+  on `adapter` (ruling D-D: a second hand commit, the verb does not bump `version`).
+- `8b75d2a7` `docs: …`: `docs/cli-reference.md` (`init` entry) and `docs/user-guide.md` §3 tree, which said no
+  built-in adapter ships.
+- **red → green:** `npx jest test/storage/builtin-adapter-claude-code.test.ts test/core/init-builtin-adapters.test.ts
+  test/core/builtin-adapter-writers.test.ts --maxWorkers=2` → 3 suites, 29 passed, 29 total (red: 12 failed / 14
+  passed of the first two; `builtin-adapter-writers` 3/3: the YAML spells no adapter directory).
+- **R1 (dry run), run by me (coordinator's OK, it launches nothing).** Without a terminal it refuses at the last
+  pre-flight check: `node dist/cli.js agent execute --element task:task-236-… --role developer --dry-run` → exit 1,
+  `error: interactive launch needs a terminal on stdin and stdout` — `terminal: required` is enforced, and every
+  earlier check passed (NO_TERMINAL is §3.3 step 12, the last). Under a pseudo-terminal (`script -qec "<same>"
+  /dev/null`) → exit 0, `run.id` `task-236-…/adhoc/1`, `adapter` `built-in/claude-code`, `agent` `Claude`,
+  `state_ref` `915baaa0…` (HEAD then), path `docs/06_runs/task-236-….jsonl`, and the bootstrap with
+  `Get the MCP prompt "developer-session" with arguments element="task:task-236-…" and state="915baaa0…"`.
+- `915baaa0` `test(storage): …` — two suites red did not touch failed in the first full run (5 tests:
+  `test/storage/builtin-template-sources.test.ts` › "total coverage of the real scaffold", whose `builtinPathsOf`
+  looked only under the directives' and workflows' built-in directories, so it was vacuous for adapters while none
+  shipped; `test/core/format-init-scaffold.test.ts` › "every scaffolded file is a known kind", which had no adapter
+  kind). Both now count `agents/built-in/` (`ADAPTER_MANIFEST_FORMAT` for the second). `npx jest
+  test/storage/builtin-template-sources.test.ts test/core/format-init-scaffold.test.ts --maxWorkers=2` → 78 passed.
+
+### refactor (developer, 2026-10-13)
+
+Nothing to restructure beyond green (one const, one list). Gates, heavy ones under `waitslot.sh` with
+`--maxWorkers=2`, with the spec-016 pending amendment in the working tree:
+- `npm run test:coverage -- --maxWorkers=2` (the parallel run `npm test` makes; `WINGFOIL_LATENCY` unset) → 410
+  suites, **7424 passed, 7424 total**; coverage **99.32 / 97.23 / 97.98 / 99.71** = the B6 baseline in every
+  column. `memory-transition.ts` uncovered `468` only (run-dependent, per the batch notes); `templates.ts:666` (the
+  sort comparator's equal-path `0`) uncovered, a line this task did not change (`git diff db0e2752 HEAD --
+  src/storage/templates.ts` → two comment lines). `builtin-adapters.ts` 100 / 100 / 100 / 100.
+- `npm run lint` → exit 0; `npm run docs:api` → exit 0; `npm run typecheck` (both tsc configs) → exit 0.
+- `test/docs/cli-reference.test.ts` ran in the full run (passed); no command or option changed.
+- `node scripts/check-governance.cjs --base db0e2752` → `gated: 0 findings`, `history: 0 findings`.
+- `node scripts/lint-claims.cjs --base db0e2752` → 2 warnings, both on the word "unchanged" in my design's
+  description of what a test asserts (`persistence unchanged`, `holds for it unchanged`) — test vocabulary, not a
+  claim about the code.
+- **T4:** `git log --first-parent --no-merges --format=%h ad0d8c8d..HEAD -- test/storage/builtin-adapter-claude-code.test.ts
+  test/core/init-builtin-adapters.test.ts` → empty (positive case: the same command on
+  `test/storage/builtin-template-sources.test.ts` prints `915baaa0`).
+
+### review (reviewer, self, 2026-10-13)
+
+- AC 1 — met: the eight claude-code tests and the four of `init-builtin-adapters` red failed pass (red → green
+  above); `init` with no seam installs and commits the manifest, which loads as `built-in`.
+- BDD handover — met: the Scenario Outline is in `P5.1.1-init.feature`, and its two rows are driven against the
+  shipped manifest by red's test.
+- AC 4 static half — met: `adapter: claude-code` through `dna update --entry-adapter` (`498a33ba`), bump 1.9 → 2.0
+  (`11569e02`), installed copy byte-equal (red's parity test passes).
+- AC 2, AC 3, AC 4 by-hand half — **open**: they need the real-terminal pass below (ruling D2). The task is not
+  submitted until its transcript is in these notes.
+- Every flag of the manifest has its help line in the design notes (claim-evidence). Same-class sweep:
+  `grep -rniE "none (ships|yet)|empty today" src test docs/cli-reference.md docs/user-guide.md | grep -iE
+  "adapter|agent"` → two lines, neither about the shipped list: red's own conditional doc
+  (`builtin-adapter-claude-code.test.ts:43`, "while none ships") and `builtin-adapter-writers.test.ts:9`, which
+  calls `REVIEWED_AGENT_WRITERS` "empty today" though it holds `agentExecute` since task-218 — a stale comment in a
+  file this task does not touch (candidate finding). Before green the same grep also hit
+  `src/storage/builtin-adapters.ts:15`, `src/core/init.ts:277`, `src/storage/templates.ts:173` and the two docs.
+
+### Pending amendments (approver)
+
+- `spec-016-agent-execution` (uncommitted in the worktree): §2.8's `claude-code` row filled (declarations and
+  `verified_with` `2.1.296 (Claude Code)`), and a dated Revision note. To be completed after the by-hand pass with
+  §2.5's outcome (which `wingfoil` server the agent used beside `.mcp.json`'s). Proposed `--reason`: "task-236: the
+  claude-code row of section 2.8 is filled from claude --help of 2.1.296 (Claude Code) and checked by hand in a real
+  terminal; the prompt comes first in the launch argv because --mcp-config takes several values, and usage.from is
+  none because no command of that CLI reports a past session's model or tokens. Section 2.5 records which wingfoil
+  server the agent used beside the project's .mcp.json one."
+
+### by-hand runbook (for the approver)
+
+Run in a real terminal (a TTY on stdin and stdout), from the worktree root, by the approver, or by the
+coordinator through the app's Terminal panel on the approver's explicit OK (ruling D2). Paste the whole
+terminal transcript back. Nothing below needs a credential typed: Claude Code uses its own login.
+
+**R0 — setup and versions** (copy-paste):
+
+```bash
+cd /home/robypomper/Workspaces/.wf2-wt/task-236
+git branch --show-current          # task/task-236-ship-verify-hand-builtin-claude-code-adapter-point
+git status --short                 # only docs/04_memory/design/specs/spec-016-agent-execution.md (pending amendment)
+npm run -s build
+claude --version                   # expect: 2.1.296 (Claude Code) — the manifest's verified_with
+node dist/cli.js --version
+git rev-parse HEAD                 # the state_ref the run will pin
+export EL=task:task-236-ship-verify-hand-builtin-claude-code-adapter-point
+```
+
+Record: the three versions and the HEAD sha. If `claude --version` is not `2.1.296 (Claude Code)`, stop and
+report it (the manifest is pinned to that version).
+
+**R1 — dry run** (launches nothing):
+
+```bash
+node dist/cli.js agent execute --element "$EL" --role developer --dry-run
+```
+
+Record: exit `0` (I ran it under a pseudo-terminal: it passed); the `run.id` (`task-236-…/adhoc/1`), `run.adapter` (`built-in/claude-code`), `run.state_ref` (= R0's HEAD) and the
+`bootstrap` text. Any `error:` line → stop and report.
+
+**R2 — the real run** (Claude starts and owns the terminal):
+
+```bash
+node dist/cli.js agent execute --element "$EL" --role developer
+```
+
+1. Record the `run <run-id>: launching Claude (…claude-code) as developer on task:…` line.
+2. Record every dialog Claude shows BEFORE the session (workspace trust; `.mcp.json` server approval), and the
+   answer you give. Answer trust "yes"; answer the `.mcp.json` approval as you normally would, and say which.
+3. Then **type nothing** in the prompt box. Watch the agent's first actions for up to ~2 minutes:
+   - Does it obtain the MCP prompt `developer-session` from the `wingfoil` server with
+     `element=task:task-236-…` and `state=<R0 HEAD sha>`, on its own? Record exactly how it appears on screen
+     (tool call, `/mcp__wingfoil__developer-session …` command, or anything else) and its arguments.
+   - Does the result carry the element's execution context (the task's title, ACs, directives for developer)
+     rather than only a short role header? Only the build under test (`dist/cli.js`) serves the context for
+     `element`/`state`; the pinned 0.2.2 build that `.mcp.json` registers does not.
+   - Did a permission prompt appear for the MCP call? Record it and your answer (approving a tool permission
+     is not "user help" with the prompt; typing the prompt name or its arguments IS).
+
+**R3 — inside the session** (type these yourself, after R2's observation):
+
+```
+/mcp
+/status
+```
+
+Record from `/mcp`: every server named `wingfoil` and its command/args, and which one is connected.
+`…/task-236/dist/cli.js mcp` (absolute path, the adapter's) = the adapter's server;
+`node_modules/wingfoil-released/dist/cli.js mcp` = `.mcp.json`'s. Record from `/status`: the session id and
+the model. Then type: `Stop here: make no edits and no commits.` and then `/exit`.
+
+**R4 — after Claude exits** (copy-paste):
+
+```bash
+git log -1 --format='%H%n%s%n%b'                       # agent: record <run-id>, WingFoil-Version: trailer only
+git show --stat --format= HEAD                          # only docs/06_runs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl
+tail -1 docs/06_runs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl
+SID=$(tail -1 docs/06_runs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).session')
+echo "$SID"
+ls ~/.claude/projects/*/"$SID".jsonl                   # the assigned id is Claude's own session id
+git status --short                                      # the agent changed nothing (spec-016 amendment only)
+node dist/cli.js agent list --past
+```
+
+Record: the `run <run-id>: agent exited <status> after <s> s (recorded in <sha7>)` line; the record commit
+sha; the record line (expect `agent_version` `2.1.296 (Claude Code)`, `session` = R3's `/status` id,
+`model` and every `tokens` count `not-reported`, `adapter` `built-in/claude-code`); whether the `ls` finds the session file.
+
+**Stop-and-return (AC 3, spec-016 §2.8; R17 is not narrowed silently).** Stop after the step where it shows,
+paste the transcript, and the choice returns to the approver, if:
+- R2: the agent does not get `developer-session` with `element` and `state` without you typing the prompt or its
+  arguments, or the result is only the role header;
+- R3: the adapter's `wingfoil` server is not connected (not listed, failed, or `.mcp.json`'s one is used
+  instead). For that one case the in-task remedy is `--strict-mcp-config` in the manifest (ruling D-A), only on
+  the approver's OK, then R1–R4 again;
+- R2: Claude rejects the argv (e.g. reads the bootstrap as an MCP configuration) — a manifest fix in this task,
+  then R1–R4 again.
