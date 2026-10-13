@@ -8,8 +8,9 @@
  * - the phase's `checks.pre` is exactly the token; its `post[0]` (`ready-decision-logs.covered`, pinned by the
  *   conformance test) keeps its index;
  * - the binding is an argument vector with no `severity` (reject, the default);
- * - `doc-versioning`: `release-planning.yaml` reaches 2.2 and `bindings.yaml` 1.9 (2.0 once task-241's 1.9 merges
- *   first, re-bumped at the gate), each with a history entry naming task-215; versions are "at least" (bug-314);
+ * - `doc-versioning`: `release-planning.yaml` reaches 2.2 and `bindings.yaml` 1.9 (re-bumped at the gate after
+ *   task-241 and task-234, so 2.1 there), each with a history entry naming task-215 whose number is at least that,
+ *   compared numerically; versions are "at least" (bug-314);
  * - at `HEAD` the token is bound (no diagnostic names it) and the registry loads with zero errors;
  * - `WORKFLOW.md`'s Release Planning section names the token and the script.
  *
@@ -30,6 +31,19 @@ const BINDINGS = '.wingfoil/workflows/bindings.yaml';
 const read = (path: string): string => readFileSync(join(ROOT, path), 'utf8');
 const version = (path: string): number => Number(/^version:\s*([0-9.]+)/m.exec(read(path))![1]);
 const versionLine = (path: string): string => /^version:.*$/m.exec(read(path))![0];
+
+/**
+ * The version number of the history entry (one `;`-separated segment of the version line's comment) that names
+ * `who`, or NaN when no numbered entry names it. Compared numerically (bug-314): the gate re-bumps an entry when
+ * another writer of the same file merges first, so only a lower bound is pinned.
+ */
+function entryVersion(path: string, who: string): number {
+  const entry = versionLine(path)
+    .split(';')
+    .map((segment) => /(\d+\.\d+) [^;]*$/.exec(segment.trim()))
+    .find((match) => match !== null && match[0].includes(who));
+  return entry ? Number(entry[1]) : Number.NaN;
+}
 
 interface PhaseYaml {
   name: string;
@@ -62,14 +76,13 @@ describe('task-215 AC 2 — reconcile-governance declares the role-directives ch
 
   it('bumps release-planning.yaml to at least 2.2 with a task-215 history entry, keeping task-279\'s 2.1', () => {
     expect(version(RELEASE_PLANNING)).toBeGreaterThanOrEqual(2.2);
-    const line = versionLine(RELEASE_PLANNING);
-    expect(line).toMatch(/2\.2 [^;]*task-215/);
-    expect(line).toMatch(/2\.1 [^;]*task-279/);
+    expect(entryVersion(RELEASE_PLANNING, 'task-215')).toBeGreaterThanOrEqual(2.2);
+    expect(entryVersion(RELEASE_PLANNING, 'task-279')).toBeGreaterThanOrEqual(2.1);
   });
 
-  it('bumps bindings.yaml to at least 1.9 with a task-215 history entry (1.9, or 2.0 after task-241)', () => {
+  it('bumps bindings.yaml to at least 1.9 with a task-215 history entry numbered at least 1.9 (re-bumped at the gate)', () => {
     expect(version(BINDINGS)).toBeGreaterThanOrEqual(1.9);
-    expect(versionLine(BINDINGS)).toMatch(/(?:1\.9|2\.0) [^;]*task-215/);
+    expect(entryVersion(BINDINGS, 'task-215')).toBeGreaterThanOrEqual(1.9);
   });
 
   it('at HEAD the token is bound (no diagnostic names it) and the registry loads with zero errors', () => {
