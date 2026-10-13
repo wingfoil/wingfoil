@@ -144,21 +144,22 @@ export interface Reentry extends WalkPosition {
   readonly id: string;
   /** The bracket's first state. */
   readonly from: string;
-  /**
-   * The status the commit left: its bracket's last state, or — for a bracketless `add` / `submit` — the
-   * status the element's file holds at that commit (task-281, `bug-300`).
-   */
+  /** The bracket's last state. */
   readonly to: string;
 }
 
 /**
- * A `wf(<type>): <verb> <ids> [… → <to>]` commit naming a re-entered element: the candidates for the
- * commit that put the element in its current status (§4.8, `state` evidence after a re-entry).
+ * A Memory-operation commit naming a re-entered element — a `wf(<type>): <verb> <ids> [… → <to>]` subject, or
+ * a bracketless `wf(<type>): add|submit <ids>` (task-281, `bug-300`): the candidates for the commit that put
+ * the element in its current status (§4.8, `state` evidence after a re-entry).
  */
 export interface TransitionCommit extends WalkPosition {
   readonly type: string;
   readonly id: string;
-  /** The bracket's last state. */
+  /**
+   * The status the commit left: its bracket's last state, or — for a bracketless `add` / `submit` — the
+   * status the element's file holds at that commit (task-281, `bug-300`).
+   */
   readonly to: string;
 }
 
