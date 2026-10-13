@@ -2,7 +2,7 @@
 id: "task-241-compare-runs-write-proposals-backfill"
 type: task
 title: "Compare runs, write proposals and backfill the v0.1 and v0.2 baselines"
-status: backlog
+status: in-progress
 release: "v0.3"
 kind: "feature"
 priority: "medium"
