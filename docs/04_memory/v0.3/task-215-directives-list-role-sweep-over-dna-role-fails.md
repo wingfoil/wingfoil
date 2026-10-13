@@ -171,3 +171,39 @@ gate (the AC 2 test accepts both). `package.json`: own line only. `release-plann
 no other B7 writer; `CLAUDE.md` §7's role table would no longer list the two new bindings — owned by
 `align-agent-docs` (dl-025), a handover rather than an edit here. `test/directives/dev-loop-practice.test.ts` reads
 `roles.yaml` (≥ 1.7 and the tech-lead header line): unaffected by a ≥ bump.
+
+### red (qa, 2026-10-13)
+
+- **Red commit:** `e243e387` (T4 is measured from it: `git log --first-parent --no-merges --format=%h e243e387..HEAD --
+  test/cli/check-role-directives.test.ts test/core/reconcile-governance-role-directives.test.ts`).
+- **Files:** `test/cli/check-role-directives.test.ts` (AC 1), `test/core/reconcile-governance-role-directives.test.ts`
+  (AC 2). Test files only; no `scripts/`, config or `.wingfoil/` change.
+- **Fixture checked against the pinned build first** (`node node_modules/wingfoil-released/dist/cli.js`, 0.2.2, on a
+  scratch working tree): `dna show` refuses a technology without `category` and a member without a `roles` array, so the
+  fixture declares both (`category: language`, member `roles: []`); `team.roles: []` with member `roles: []` validates
+  (exit 0), so case 4b reaches the script's own `team.roles` check; `directives list --role reviewer` with `ghost` bound
+  → `warnings: ["directive 'ghost' bound to role 'reviewer' has no directive file"]`; an unassigned `qa` →
+  `["no directives assigned to role 'qa'"]`; the clean fixture → `[]` for both roles.
+- **Per AC (both red-first, as classified at design):**
+  - AC 1, cases 1–5 of the design: `AC 1 (exit 0)` (exact stdout `developer: ok\nreviewer: ok\nrole-directives: 2 roles
+    checked, 0 with warnings\n`, `dna.yaml` lists reviewer first; empty stderr); `AC 1 (exit 1)` (exact stderr line for
+    `ghost`, `reviewer: 1 warning(s)`, summary `1 with warnings`); `AC 1 (roles from dna.yaml)` (`qa` in `team.roles`
+    only: exact stdout over three roles, stderr `error: role 'qa': no directives assigned to role 'qa'`, exit 1 —
+    assumes D-A (a)); `AC 1 (exit 2)` ×2 (`--bogus`; `team.roles: []` naming `team.roles`; stdout empty, one `error:`
+    line); `AC 1 (exit 0 on this repository)` (`--root REPO_ROOT`: exit 0, empty stderr, last stdout line
+    `role-directives: 8 roles checked, 0 with warnings` — green only after the D-A (a) `roles.yaml` change).
+  - AC 2: `checks.pre` equals `['role-directives.clean']` and `post[0]` still `ready-decision-logs.covered`; the binding
+    deep-equals `{ run: ['npm', 'run', 'check:role-directives'] }`; the `package.json` script; `release-planning.yaml`
+    ≥ 2.2 with `/2\.2 [^;]*task-215/` and the `2.1 … task-279` entry kept; `bindings.yaml` ≥ 1.9 with
+    `/(?:1\.9|2\.0) [^;]*task-215/`; at `HEAD` (`loadWorkflowRegistryAtHead`) zero errors, no diagnostic naming the
+    token, `reconcile-governance` `checks.pre` equal to the token; `WORKFLOW.md`'s `### Release Planning` section
+    contains `role-directives.clean` and `check:role-directives`.
+- **Run:** `npx jest test/cli/check-role-directives.test.ts test/core/reconcile-governance-role-directives.test.ts
+  --maxWorkers=2` → 2 suites failed; `check-role-directives.test.ts` 6 failed / 0 passed,
+  `reconcile-governance-role-directives.test.ts` 7 failed / 0 passed (13/13). Every failure is an assertion on the
+  behaviour: AC 1 — the absent script makes node exit 1 with empty stdout (`Expected: 0 / Received: 1`,
+  `Expected: 2 / Received: 1`, `Expected: "developer: ok… / Received: ""`); AC 2 — `Expected: ["role-directives.clean"]
+  / Received: undefined` (pre-check, and again at `HEAD` after the zero-errors assertion passed), binding and script
+  `Received: undefined`, versions `Received: 2.1` / `Received: 1.8`, `WORKFLOW.md` substring absent.
+- **For session 3:** the `HEAD` test reads the committed configuration, so it goes green only once the config change is
+  committed, not on a dirty tree.
