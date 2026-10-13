@@ -13,7 +13,8 @@
  * The module is loaded inside each case through a dynamic `import()` (jest's CommonJS harness turns it
  * into a `require`) after an existence expectation: before this task neither the script nor the
  * manifest exists, and the suite must fail on that assertion, not crash while loading. The interface
- * below is the design's (`### design`, Execution Notes); the script's own `.d.cts` comes with it.
+ * is the design's (`### design`, Execution Notes); the script's own `.d.cts` comes with it. The loader and
+ * the fixture project live in `support/site-fixture.ts`, shared with `build-site-confinement.test.ts`.
  *
  * Deterministic: fixtures are temp directories built here and removed after each case; the real
  * repository is only read, and `assembleSite` writes into a temp directory.
@@ -22,38 +23,29 @@
  * `scripts/build-site.cjs`, the `produces:` rows or `user-docs.yaml` 1.6 exists at `db0e2752`).
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { load as yamlLoad } from 'js-yaml';
 
+import {
+  BUILD_SITE_SCRIPT as SCRIPT,
+  buildSite,
+  FIXTURE_HOMEPAGE,
+  FIXTURE_LLMS_TXT,
+  FIXTURE_SITE_YAML,
+  siteProblems,
+  writeSiteFixture,
+} from './support/site-fixture';
+import type { PackageJson } from './support/site-fixture';
+
 const REPO_ROOT = join(__dirname, '..', '..');
-const SCRIPT = join(REPO_ROOT, 'scripts', 'build-site.cjs');
 const SITE_MANIFEST = join(REPO_ROOT, 'docs', 'site.yaml');
 const LLMS_TXT = join(REPO_ROOT, 'llms.txt');
 const USER_DOCS = join(REPO_ROOT, '.wingfoil', 'workflows', 'custom', 'user-docs.yaml');
 
 const REF = '0123456789abcdef0123456789abcdef01234567';
-
-/** The design's interface of `scripts/build-site.cjs`; the manifest is opaque here — always obtained from `readSiteManifest`. */
-type SiteManifest = object;
-
-interface BuildSite {
-  readonly readSiteManifest: (root: string) => SiteManifest;
-  readonly checkSiteManifest: (
-    root: string,
-    manifest: SiteManifest,
-    scripts: Readonly<Record<string, string>>,
-  ) => string[];
-  readonly renderLlmsTxt: (manifest: SiteManifest, homepage: string) => string;
-  readonly assembleSite: (root: string, outDir: string, options: { readonly ref: string }) => { readonly files: readonly string[] };
-}
-
-interface PackageJson {
-  readonly homepage?: string;
-  readonly scripts?: Readonly<Record<string, string>>;
-}
 
 interface SiteManifestYaml {
   readonly pages?: readonly string[];
@@ -62,11 +54,6 @@ interface SiteManifestYaml {
     readonly section?: string;
     readonly entries?: ReadonlyArray<{ readonly path?: string; readonly site_path?: string; readonly built_by?: string }>;
   }>;
-}
-
-async function buildSite(): Promise<BuildSite> {
-  expect(existsSync(SCRIPT)).toBe(true);
-  return (await import(SCRIPT)) as BuildSite;
 }
 
 function pkg(): PackageJson {
@@ -89,41 +76,7 @@ function walk(base: string, dir: string): string[] {
   return out;
 }
 
-// ---------------------------------------------------------------- fixtures
-
-const FIXTURE_HOMEPAGE = 'https://example.github.io/fixture/';
-
-const FIXTURE_SITE_YAML = `version: 1.0
-title: Fixture
-summary: "A fixture site."
-pages:
-  - README.md
-  - docs/guide.md
-files:
-  - docs/examples/
-llms:
-  - section: Docs
-    entries:
-      - { title: Guide, path: docs/guide.md, about: "How to." }
-      - { title: Examples, path: docs/examples/README.md, about: "Runnable." }
-  - section: Optional
-    entries:
-      - { title: API, site_path: api/, built_by: "docs:api", about: "Generated." }
-`;
-
-const FIXTURE_LLMS_TXT =
-  '# Fixture\n' +
-  '\n' +
-  '> A fixture site.\n' +
-  '\n' +
-  '## Docs\n' +
-  '\n' +
-  '- [Guide](https://example.github.io/fixture/docs/guide.md): How to.\n' +
-  '- [Examples](https://example.github.io/fixture/docs/examples/README.md): Runnable.\n' +
-  '\n' +
-  '## Optional\n' +
-  '\n' +
-  '- [API](https://example.github.io/fixture/api/): Generated.\n';
+// ---------------------------------------------------------------- fixtures (test/docs/support/site-fixture.ts)
 
 let fixtures: string[] = [];
 
@@ -132,42 +85,14 @@ afterEach(() => {
   fixtures = [];
 });
 
-function put(root: string, rel: string, content: string): void {
-  mkdirSync(dirname(join(root, rel)), { recursive: true });
-  writeFileSync(join(root, rel), content);
-}
-
 /** A sound fixture project; `siteYaml` replaces the manifest, `extra` adds files. */
 function fixture(siteYaml: string = FIXTURE_SITE_YAML, extra: Readonly<Record<string, string>> = {}): string {
   const root = mkdtempSync(join(tmpdir(), 'wf-task-234-site-'));
   fixtures.push(root);
-  put(
-    root,
-    'package.json',
-    JSON.stringify(
-      {
-        name: 'fixture',
-        homepage: FIXTURE_HOMEPAGE,
-        repository: { type: 'git', url: 'git+https://github.com/example/fixture.git' },
-        scripts: { 'docs:api': 'typedoc' },
-      },
-      null,
-      2,
-    ),
-  );
-  put(root, 'docs/site.yaml', siteYaml);
-  put(root, 'README.md', '# Fixture\n\nSee [the guide](docs/guide.md).\n');
-  put(root, 'docs/guide.md', '# Guide\n');
-  put(root, 'docs/examples/README.md', '# Examples\n');
-  for (const [rel, content] of Object.entries(extra)) put(root, rel, content);
-  return root;
+  return writeSiteFixture(root, siteYaml, extra);
 }
 
-async function problems(root: string): Promise<string[]> {
-  const site = await buildSite();
-  const scripts = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8')) as PackageJson).scripts ?? {};
-  return site.checkSiteManifest(root, site.readSiteManifest(root), scripts);
-}
+const problems = siteProblems;
 
 // ---------------------------------------------------------------- AC 2: parity on the real repository
 
