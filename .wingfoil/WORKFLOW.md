@@ -410,11 +410,15 @@ is filed at once through `bug-ingest`. `release-health.measure` / `.compare` are
 external metrics (task-231) and the toolchain metrics Q01–Q04, Q11, Q12, Q17 by running the project's own commands
 after `npm ci` with the pipeline's pinned Node (task-232; a loaded latency run is not-measurable), and the static and
 Memory metrics Q05–Q10, Q13–Q16, Q18–Q20 from git at the point (task-233; Q08's install size after that `npm ci`);
-`compare.cjs` is task-241's. Under any other Node the
-toolchain metrics are not-measurable unless `--any-node` is passed: run it under the pinned Node (`publish.yml`
-`env.NODE_VERSION`), e.g. `n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <version>` (`-d`
-downloads that Node when it is not cached) or
-`npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <version>`;
+`compare.cjs` (task-241) classifies every metric against the previous run with the catalogue's tolerances,
+evaluates the floors, re-measures a previous point taken with an older catalogue, shows the last three runs,
+and drafts the Proposals section after searching Memory for a tracking element (`memory search`); the
+readings taken at run time (G15, Q17, E01–E05) are never compared. Under any other Node than the pinned one
+(`publish.yml` `env.NODE_VERSION`) the toolchain metrics are not-measurable unless `--any-node` is passed; the
+bound steps pass `--any-node` and `--max-workers 2` (bug-344), so each toolchain entry records `node` and
+`node_pinned`. To measure under the pin, run the same command under it, e.g.
+`n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <version>` (`-d` downloads that Node when
+it is not cached) or `npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <version>`;
 dl-089 §6 forbids them writing git configuration.
 
 ```mermaid
@@ -535,7 +539,7 @@ built in (`agent.*` is `wingfoil agent execute` under the phase's role; the inst
 `description`). Every other token is bound in `.wingfoil/workflows/bindings.yaml` (`format: 1`,
 dl-153): a check to an argument vector (`npm test`, `npm run lint`, `npm run docs:api`,
 `npm run typecheck`, `npm run check:lockfile`, `npm run check:mcp`, `node scripts/e2e-smoke.cjs`, …),
-an action to a command (`release-health.measure` / `.compare`, `node scripts/release-health/…`, scripts still to be written) or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
+an action to a command (`release-health.measure` / `.compare`, `node scripts/release-health/… --any-node --max-workers 2`) or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
 `approver.execute`). Token arguments are `key: value` pairs, substituted as whole argv elements, never
 through a shell. The prose checks no command asserts yet (`frontmatter.required: […]`,
 `spec-review.passed`, the specification-phase quality criteria, …) stay unbound: `workflow list` reports
