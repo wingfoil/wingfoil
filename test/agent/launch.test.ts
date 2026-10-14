@@ -12,8 +12,10 @@ import {
   readJsonPath,
   renderBootstrap,
   renderLaunchArgv,
+  renderMcpTemplate,
   SESSION_ID_NAMESPACE,
   type AdapterManifest,
+  type LaunchValues,
 } from '../../src/agent';
 
 /**
@@ -53,7 +55,7 @@ describe('assignedSessionId (§2.6) — UUID v5 over a fixed namespace and `<abs
 });
 
 /** A manifest with only what rendering reads; the rest is the fake's shape. */
-function manifestWith(overrides: { args: string[]; via?: 'config-file' | 'args'; id?: 'assign' | 'lookup' | 'none'; assign?: string[] }): AdapterManifest {
+function manifestWith(overrides: { args: string[]; via?: 'config-file' | 'args' | 'config-arg'; id?: 'assign' | 'lookup' | 'none'; assign?: string[] }): AdapterManifest {
   return {
     name: 'm',
     format: 1,
@@ -89,6 +91,31 @@ describe('renderLaunchArgv (§2.3, §3.3 step 14) — whole elements, {mcp_args}
 
   it('assign_args are not appended when the session id is not assigned', () => {
     expect(renderLaunchArgv(manifestWith({ args: ['{bootstrap}'], id: 'lookup', assign: ['--session-id', '{session_id}'] }), values)).toEqual([values.bootstrap]);
+  });
+});
+
+describe('task-237 (h) — {mcp_config} renders as exactly ONE argv element (mcp.via: config-arg, ruling D-1 (a))', () => {
+  /** A rendered TOML override as `-c` takes it: spaces, quotes, `=`, braces and a backslash, all in one element. */
+  const mcpConfig = 'mcp_servers.wingfoil={command = "/a b/node", args = ["/c\\"d/cli.js","mcp"], enabled = true, required = true}';
+  // `mcpConfig` is the new optional LaunchValues field (task-237); the cast lets this file compile
+  // before it exists, so the test fails on its assertion, not on a type error.
+  const values = {
+    bootstrap: 'WingFoil run x: "quoted"\n',
+    files: {},
+    mcpServer: { command: '/a b/node', args: ['/c"d/cli.js', 'mcp'] },
+    sessionId: '00000000-0000-5000-8000-000000000000',
+    mcpConfig,
+  } as LaunchValues;
+
+  it('replaces {mcp_config} by the rendered template, verbatim, as one element (no split, no shell)', () => {
+    const argv = renderLaunchArgv(manifestWith({ via: 'config-arg', args: ['-c', '{mcp_config}', '{bootstrap}'], id: 'none' }), values);
+    expect(argv).toHaveLength(3);
+    expect(argv).toEqual(['-c', mcpConfig, values.bootstrap]);
+  });
+
+  it('renderMcpTemplate fills a TOML template as it fills JSON: {mcp_command} as string content, {mcp_args} as an array (characterization)', () => {
+    const rendered = renderMcpTemplate('x={command = "{mcp_command}", args = {mcp_args}}', { command: '/a b/node', args: ['/c"d/cli.js', 'mcp'] });
+    expect(rendered).toBe('x={command = "/a b/node", args = ["/c\\"d/cli.js","mcp"]}');
   });
 });
 
