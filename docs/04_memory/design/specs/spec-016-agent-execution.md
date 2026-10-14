@@ -133,8 +133,8 @@ without its MCP registration.
 | `launch.headless.args` | string[] | no | Argv template for the headless launch. Read from v1.0 (§3.5). |
 | `launch.headless.output` | `json` \| `none` | with `headless` | How stdout is read after a headless run. |
 | `prompt.via` | `arg` \| `stdin` \| `file` | yes | How the bootstrap (§2.4) reaches the agent: as the `{bootstrap}` argument, on stdin, or as a file whose path is `{bootstrap_file}`. `stdin` is legal only for `headless`, because an interactive agent owns stdin. Every format-1 manifest declares `launch.interactive`, so a format-1 manifest declaring `stdin` is refused; the value is kept so that v1.0 can make `launch.interactive` optional for a headless-only adapter (§3.5) without changing this enum. |
-| `mcp.via` | `config-file` \| `args` | yes | How the `wingfoil` MCP server is registered for the launched process (§2.5). There is no `none`: an adapter that cannot register the server is refused (`adr-012` Consequences). |
-| `mcp.template` | string | `config-file`: yes | The body of the registration file, with placeholders (§2.3). Rendered to a file outside the repository, and its path passed as `{mcp_config_file}`. |
+| `mcp.via` | `config-file` \| `config-arg` \| `args` | yes | How the `wingfoil` MCP server is registered for the launched process (§2.5): a file, one argument holding the rendered `mcp.template`, or the server's command and argv as arguments. There is no `none`: an adapter that cannot register the server is refused (`adr-012` Consequences). |
+| `mcp.template` | string | `config-file`, `config-arg`: yes | The registration, with placeholders (§2.3). Under `config-file` it is rendered to a file outside the repository and its path passed as `{mcp_config_file}`; under `config-arg` the rendered text itself is passed as the one argument `{mcp_config}` (for an agent CLI that has no option taking a configuration file's path, task-237). |
 | `session.id` | `assign` \| `output` \| `lookup` \| `none` | yes | How the session id is obtained (§2.6). |
 | `session.assign_args` | string[] | `assign`: yes | Argv fragment carrying `{session_id}`, appended to the launch argv. |
 | `session.lookup_args` | string[] | `lookup`: yes | Argv run after the agent exits. Its stdout is one JSON value. |
@@ -161,6 +161,7 @@ error (`dl-090` Q3 (a): "argv, no shell. … Interpolation fills whole arguments
 | `{bootstrap}` | the bootstrap text (§2.4) | `launch.*.args` when `prompt.via: arg` |
 | `{bootstrap_file}` | absolute path of a file holding the bootstrap | `launch.*.args` when `prompt.via: file` |
 | `{mcp_config_file}` | absolute path of the rendered `mcp.template` | `launch.*.args` when `mcp.via: config-file` |
+| `{mcp_config}` | the rendered `mcp.template` itself, verbatim, as one argv element | `launch.*.args` when `mcp.via: config-arg` |
 | `{mcp_command}` | the MCP server executable (§2.5) | `mcp.template`; `launch.*.args` when `mcp.via: args` |
 | `{mcp_args}` | the MCP server's argv; expands to **several** elements in `args`, to a JSON array in `mcp.template` | same as `{mcp_command}` |
 | `{session_id}` | the assigned or recorded session id | `session.assign_args`, `session.resume.args`; `session.lookup_args` and `usage.lookup_args` only when `session.id: assign` (under `lookup` or `output` the id is not known before the lookup, and using it there is a manifest validation error) |
@@ -170,7 +171,7 @@ is a manifest validation error naming the field:
 
 - every declared `launch.*.args` carries the placeholder its `prompt.via` names (`{bootstrap}` for
   `arg`, `{bootstrap_file}` for `file`; `stdin` names none) and the ones its `mcp.via` names
-  (`{mcp_config_file}` for `config-file`; both `{mcp_command}` and `{mcp_args}` for `args`). Without
+  (`{mcp_config_file}` for `config-file`; `{mcp_config}` for `config-arg`; both `{mcp_command}` and `{mcp_args}` for `args`). Without
   them the agent starts without its bootstrap, or without the `wingfoil` server `adr-012` makes
   mandatory;
 - `session.assign_args` carries `{session_id}` when `session.id` is `assign`. Without it the assigned
@@ -252,7 +253,12 @@ component (`dl-131`).
   names its server `wingfoil`, and whether the agent's own precedence rules pick the adapter's is
   checked by hand in the built-in adapter's `verified_with` pass. It is not asserted here. For
   `claude-code` at `2.1.296` the pass found that the adapter's `--mcp-config` server is the one used and a
-  same-named `.mcp.json` server is shadowed, not started (`task-236`, 2026-10-14).
+  same-named `.mcp.json` server is shadowed, not started (`task-236`, 2026-10-14). For `codex-cli` at `codex-cli
+  0.145.0` the pass found that, with a same-named server in the project's `.codex/config.toml` loaded (the scratch
+  directory was trusted before the checked run), the server Codex started has the command and args of the adapter's
+  `-c mcp_servers.wingfoil=…` override: the session Resource, which only the build under test serves, was read
+  (`task-237`, 2026-10-14). Whether the override replaces the project's table or merges into it (a merge would keep
+  keys such as `cwd` or `env` the project sets) was not observed.
 
 #### 2.6 Session id, usage, model
 
@@ -325,7 +331,7 @@ needs:
 | `name` (file basename) | Agent CLI | `command`, `launch.interactive.args`, `prompt.via`, `mcp.*`, `session.*`, `usage.*` | `verified_with` |
 |---|---|---|---|
 | `claude-code` | Claude Code | `command: claude`; `launch.interactive.args: ["{bootstrap}", --mcp-config, "{mcp_config_file}"]`; `prompt.via: arg`; `mcp.via: config-file`; `session.id: assign` with `[--session-id, "{session_id}"]`, resume `[--resume, "{session_id}"]`; `usage.from: none` (`task-236`; launch, MCP and session id checked by hand on 2026-10-14 with 2.1.296, resume from `--help` only) | `2.1.296 (Claude Code)` |
-| `codex-cli` | Codex CLI | to be verified by hand by the implementing task | filled by the implementing task |
+| `codex-cli` | Codex CLI | `command: codex`; `launch.interactive.args: [-c, "{mcp_config}", "{bootstrap}"]`; `prompt.via: arg`; `mcp.via: config-arg` with the template `mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}, enabled = true, required = true}`; `session.id: none`, resume not supported; `usage.from: none` (`task-237`; from `codex --help` of `codex-cli 0.145.0`; checked by hand on 2026-10-14 with codex-cli 0.145.0 (ChatGPT sign-in)) | `codex-cli 0.145.0` |
 
 Each built-in declares `launch.interactive.terminal: required` (§2.2) and carries `verified_with`,
 the agent CLI version whose own help output and documentation its declarations were checked against by
@@ -1148,3 +1154,25 @@ with both same-named `wingfoil` servers enabled (the project's `.mcp.json` one a
 `claude --version` said `2.1.296`, the run record's `agent_version`, read after the run (§3.3 step 16), says
 `2.1.299 (Claude Code)`; `verified_with` stays `2.1.296`, the version the check was made with. The `codex-cli` row stays its own task's. No manifest field, placeholder
 or refusal of this spec changes. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-14, `task-237-ship-verify-hand-builtin-codex-cli-adapter`) — `mcp.via: config-arg`; the
+`codex-cli` row of §2.8 is filled.** Codex CLI `0.145.0` has no option that takes an MCP configuration file and no
+`--mcp-config`: it reads MCP servers from TOML configuration layers and from `-c <key=value>` overrides, one argument
+each (`codex --help`). An override naming the running build would need a placeholder inside one argument, which §2.3
+forbids (`dl-090` Q3 (a)). Approver ruling D-1 (a) (2026-10-14): a third `mcp.via` value, `config-arg`, passes the
+rendered `mcp.template` verbatim as the one argument `{mcp_config}`, so every placeholder still fills whole
+arguments; `mcp.template` is required with it, and `{mcp_config}` is legal and required only in `launch.*.args` under
+it. The template's `{mcp_command}` and `{mcp_args}` render as JSON string content and a JSON array, which are valid
+TOML for any value without U+007F or an unpaired surrogate (JSON leaves U+007F unescaped and TOML forbids it; an
+unpaired `\uD8xx` escape is not a TOML scalar). Codex does not refuse a `-c` value it cannot parse as TOML: it uses
+the raw text as a literal string.
+The manifest `format` stays 1: no released build reads adapter manifests. The `codex-cli` row's declarations are
+read from `codex --help` of `codex-cli 0.145.0`, the `verified_with` value; no option assigns a session id and no
+command prints a past session's id, model or token counts, so all three are `not-reported` and resume is not
+declared supported (rulings D-2, D-3). Checked by hand on 2026-10-14 with `codex-cli 0.145.0` (ChatGPT sign-in), run
+`task-001-codex-smoke/adhoc/2` in a scratch project: with nothing typed, the model listed the resources and then read
+exactly the session Resource the bootstrap names, which is never listed, and got the element's context (§2.8); the
+server Codex started for `wingfoil` had the command and args of the adapter's `-c` override although the project's
+`.codex/config.toml`, loaded because the directory was trusted before that run, names a same-named server on a build
+without the session template; whether `-c` replaces or merges that table was not observed (§2.5); the record carried `agent_version` `codex-cli 0.145.0` and `not-reported`
+for session, model and tokens. Edited in place without a supersede or a state change (`dl-047`).
