@@ -308,3 +308,77 @@ passed (e.g. `Expected: "wingfoil-test-reports" Received: undefined`, `Expected:
 "npm run build", "npm run test:report", "npm run lint"]`); `workflow-repository-conformance.test.ts` 2 failed / 13
 passed (checkpoints `+ Received + 2`; the unbound row `- Expected - 1 + Received + 1`); `vision-index.test.ts` 13
 passed. `npx eslint` on the four test files → clean.
+
+### green (developer, 2026-10-14)
+
+Approver rulings D1–D8 as recommended (`w3-b7-notes.md`, 2026-10-14). Commits `c73905ba` (the implementation) and
+`ac25373a` (two of my own lines that red's regexes read on one line: runbook step 8's "accepts each version once" was
+wrapped across two comment lines, and the v0.3/v0.4 sequencer criteria put the summary path on a continuation line;
+both rewritten, no red file touched).
+- `jest.config.js` `coverageReporters: ['json-summary', 'lcov', 'text']`; `package.json` `test:report` (one line).
+- `scripts/test-report.cjs` + `scripts/test-report.d.cts` (the `.d.cts` matches red's local `TestReportModule`;
+  qa may not write under `scripts/`). Red's readings honoured: `formatSummary` takes `summarizeResults`' output; a
+  suite that failed to run is 1 file, 0 tests, `failed` 0, and is listed as `suite failed to run`; Commit and Build
+  cells in backticks; the CLI's exit 0/1/2 with `test-report:` on stderr.
+- `publish.yml`: `env.REPORTS_ARTIFACT`; gate steps `npm run build` / `npm run test:report` / `npm run lint`, the
+  classifier (`run: >-`, one line once folded), the reports upload as the gate's last step; release downloads
+  `test-reports` (the pinned `download-artifact`, written `- uses:` first so the pin table's line form holds) and
+  `gh release create` names the four files; header (gate, release, runbook 7 and 8, the timeout paragraph says gate
+  now runs the suite with coverage and that the v0.3.0 tag run checks 30 minutes, ruling D5).
+- `release-submit.yaml` 1.3, `release-publishing.yaml` 1.7 (history on each version line), `07_sequencer.md` 1.9
+  (date 2026-10-14) and `00_index.md` (row, Last indexed), `WORKFLOW.md` (the release-submit node and the publishing
+  `publish` node only).
+- Red → green: `npx jest test/cli/test-report.test.ts test/cli/publish-pipeline.test.ts test/cli/ci-workflow.test.ts
+  test/core/workflow-repository-conformance.test.ts test/docs/vision-index.test.ts test/cli/run-tests.test.ts
+  test/cli/staging-rehearsal.test.ts test/docs/workflow-md.test.ts test/cli/publish-secrets.test.ts
+  test/cli/test-no-identity.test.ts --maxWorkers=2` at `c73905ba` → 204/206 (the two lines above); after
+  `ac25373a`, `npx jest test/cli/publish-pipeline.test.ts test/docs/vision-index.test.ts --maxWorkers=2` → 79/79.
+  Red's 59 failures → 0.
+
+### refactor (developer, 2026-10-14)
+
+| Command | Result |
+|---|---|
+| `bash ../devloop-kit/waitslot.sh && npm run test:report -- --maxWorkers=2` at `ac25373a` (07:59–08:23Z, load 6.9 at start; log `devloop-kit/task-244-test-report.log`) — the full suite with coverage AND this task's own reports | 410 suites, 7467 tests, 1 failed: `test/docs/name-resolvability.test.ts` on `spec-015…\|path\|test-results.md`, a backticked bare file name in my uncommitted spec-015 amendment; unbackticked → `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` 11/11. Coverage **99.32 / 97.23 / 97.98 / 99.71**, equal to the B6 baseline in every column. `coverage/jest-results.json` written (6,163,869 bytes), `coverage-summary.json` 38,673, `lcov.info` 302,439 |
+| `node scripts/test-report.cjs --results coverage/jest-results.json --coverage-summary coverage/coverage-summary.json --build-info dist/build-info.json --commit "$(git rev-parse HEAD)" --out coverage/test-results.md` on that real run | exit 0; unit 333 files / 6343 tests (1 failed, the one above), integration 43 / 542, BDD 31 / 545, smoke 1 / 35, API-docs 1 / 1, lint.clean 1 / 1, total 410 / 7467; coverage rows equal the console table; Build `0.2.2 (ac25373a…)`; `## Failures` lists the one failure. The counts match the design's (43 integration, 31 BDD) |
+| `npm run lint` | exit 0 |
+| `bash ../devloop-kit/waitslot.sh && npm run docs:api && npm run typecheck` | exit 0, exit 0 |
+| `node scripts/check-governance.cjs --base db0e2752` | 0 findings |
+| `node scripts/lint-claims.cjs --base db0e2752` | warn-only; in this file the two "unchanged" lines of the design and red notes (plan statements; established by the T4 and dl-159 greps below) |
+
+The spec-015 pending amendment was in the working tree for every run above. No `src/` change, so coverage could not
+move by this task; the run-dependent `memory-transition.ts:468/:560` branches landed covered in this run.
+
+### self-review (developer, 2026-10-14)
+
+- **AC 1** met: config and script, `test-report.test.ts` 38/38. **AC 2** met: `publish-pipeline.test.ts` and
+  `ci-workflow.test.ts` green. **AC 3** met: both YAMLs, versions, sequencer + index (`vision-index.test.ts`),
+  conformance at HEAD (28 checkpoints); spec-015 §2/§3 + Revision note as a pending amendment.
+- **T4:** `git log --first-parent --no-merges --format=%h 2d6f836a..HEAD -- test/cli/test-report.test.ts
+  test/fixtures/test-report/jest-results.json test/fixtures/test-report/coverage-summary.json
+  test/cli/publish-pipeline.test.ts test/cli/ci-workflow.test.ts test/core/workflow-repository-conformance.test.ts`
+  → empty.
+- **dl-159 handover:** `git diff 32d8871b HEAD -- .github/workflows/publish.yml | grep -nE "^[-+].*(merge-base|stage
+  publish|Tag commit is on main)"` → nothing (tag-on-main step and promote line untouched); `git diff 32d8871b HEAD --
+  .github/workflows/publish.yml .wingfoil docs/01_vision | grep -E "^\+" | grep -E "\bmain\b"` → nothing, and the
+  same on the spec-015 diff → nothing: no added line names `main`, the Revision note included. Positive case: the
+  produces paths carry `{release.version}` (pinned by `every new produces path is keyed by {release.version}`).
+- **Same-class sweep in touched files:** every `uses:` keeps the `- uses: <action>@<sha> # <tag>` line form (the pin
+  table passes); no new action, no secret (`grep -n "secrets\." .github/workflows/publish.yml` → nothing); no
+  latency token in publish.yml (`run-tests.test.ts` green).
+- **Unasserted (deferred by ruling D5 to v0.3 release-publishing):** the gate's duration with coverage against 30
+  minutes; the release job's same-run download with `contents: write` only; the four assets on the Release (the Jest
+  JSON is ~6 MB); artifact retention against the 30-day re-run window. Recorded in the publish.yml header.
+
+### Pending amendments (approver)
+
+- `spec-015-packaging-publishing` (§2 `test:report`, §3 stage 1 and stage 5, Revision 2026-10-14):
+  `--reason "task-244 (dl-136 Q1 (c), Q2 (a), Q3 (a); approver ruling D1 (a) 2026-10-14): §2 declares test:report, the suite once with coverage and Jest's JSON into coverage/; §3 stage 1 runs prepublishOnly's three commands as three steps with the test one as test:report, writes the Markdown summary with scripts/test-report.cjs and uploads the four reports as a second artifact; stage 5 attaches them to the GitHub Release. Revision note added; prepublishOnly itself is unchanged."`
+
+### Retrospective
+
+- Two red failures after green were my own line wrapping: a regex on one line meets a sentence wrapped across two
+  comment lines. Writing a pinned phrase on one line from the start would have saved a round.
+- The full coverage run doubled as this task's own acceptance: `npm run test:report` produced the real inputs the
+  classifier then summarised, and it caught a dangling backticked name in the uncommitted spec amendment, which a
+  targeted run would have missed.
