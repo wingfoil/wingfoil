@@ -229,3 +229,9 @@ D6 the run id is derived (`{agent.id}/adhoc/1`, spec-016 §4.3), not parsed from
 - **For green.** The probe steps are told apart from CLI steps by the `probe` key, copy steps by `copy` (the tests
   use `'args' in step`). The positive pins share one `smokeAgentRun('Scrum', …)` run in a `beforeAll`; with the
   proxy faults and the (d)/(c) variants the file runs the agent scenario six times plus the full run's two.
+- **Send-back (2026-10-14, developer via coordinator, option (a)).** `smokeAgentRun`'s declared `invoke` had no way to
+  take a per-step environment. Commit `8f228e74`: in `scripts/e2e-smoke.d.cts`, `invoke(args, cwd, env?)`, which receives
+  each step's env (`env` without `WINGFOIL_FAKE_AGENT_*`, plus CONNECT/RECORD on a `fakeAgent` step); in the test,
+  `invoke = (args, cwd, env = process.env) => spawnSync(…, { cwd, env, … })`. No assertion changed. `npx tsc --noEmit -p
+  tsconfig.test.json` and `npx eslint` on both files → exit 0. The suite was not re-run, since nothing was implemented
+  in between and the red stands as recorded above.
