@@ -80,7 +80,7 @@ export interface LaunchValues {
   readonly files: Partial<Record<'bootstrap_file' | 'mcp_config_file', string>>;
   readonly mcpServer: { readonly command: string; readonly args: readonly string[] };
   /** The rendered `mcp.template`, passed as one whole argv element; read only under `mcp.via: config-arg`. */
-  readonly mcpConfig?: string;
+  readonly mcpConfig?: string | undefined;
   /** The assigned session id; read only under `session.id: assign`. */
   readonly sessionId: string;
 }
@@ -354,8 +354,8 @@ export interface LaunchInput {
   readonly bootstrap: string;
   readonly mcpServer: { readonly command: string; readonly args: readonly string[] };
   readonly files: Partial<Record<'bootstrap_file' | 'mcp_config_file', string>>;
-  /** The rendered `mcp.template` under `mcp.via: config-arg` (§2.3 `{mcp_config}`); absent otherwise. */
-  readonly mcpConfig?: string;
+  /** The rendered `mcp.template` under `mcp.via: config-arg` (§2.3 `{mcp_config}`); `undefined` otherwise. */
+  readonly mcpConfig?: string | undefined;
 }
 
 /** A launched run, recorded: what `agent execute` reports (§3.4's `{ "run": <record> }`). */
@@ -392,7 +392,7 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
     bootstrap: input.bootstrap,
     files: input.files,
     mcpServer: input.mcpServer,
-    ...(input.mcpConfig === undefined ? {} : { mcpConfig: input.mcpConfig }),
+    mcpConfig: input.mcpConfig,
     sessionId: assigned ?? '',
   };
   const argv = renderLaunchArgv(manifest, values);

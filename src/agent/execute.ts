@@ -416,6 +416,8 @@ export interface PreparedLaunch {
   readonly mcpServer: McpServerCommand;
   /** Absolute paths of the temporary files (§2.3), valid until the launch callback settles. */
   readonly files: Partial<Record<RunFileName, string>>;
+  /** The rendered `mcp.template` under `mcp.via: config-arg` (§2.3 `{mcp_config}`); `undefined` otherwise. */
+  readonly mcpConfig?: string | undefined;
 }
 
 /** The process's own terminals: stdin and stdout both. */
@@ -659,7 +661,7 @@ async function runPipeline<T>(
       bootstrap,
       mcpServer,
       files: paths,
-      ...(mcpConfig === undefined ? {} : { mcpConfig }),
+      mcpConfig,
     }, releaseSignals);
   });
 }
