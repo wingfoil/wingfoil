@@ -192,3 +192,40 @@ smoke's `.invalid` identity is refused for agents, bug-261), as `test/agent/help
 reclassified red-first. D5 no Jest test packs a tarball (needs registry access for the dependencies; heavy): Jest drives
 `dist/cli.js`, the tarball is exercised by `ci.yml`'s `e2e-smoke` job and by the session-3 `--candidate` run above.
 D6 the run id is derived (`{agent.id}/adhoc/1`, spec-016 §4.3), not parsed from stderr.
+
+### red (qa, 2026-10-14)
+
+- **Red commit `38465ffe`** (T4 is measured from it). Files: `test/cli/e2e-smoke.test.ts` (the full-run test gains
+  the `[T/agent]` checks; a new `describe('task-243 …')` block) and `scripts/e2e-smoke.d.cts` (declarations only:
+  `SmokeStep.fakeAgent`, `SmokeCopyStep`, `SmokeProbeStep`, the union `SmokeAgentStep`, `AGENT_FIXTURES`,
+  `agentRunSteps`, `smokeAgentRun`). Nothing else under `scripts/`, no config, no `src/`.
+- **Per AC** (classification as the design's table; all red-first):
+  - AC 1: (a) `the fixtures are the checkout's test/fixtures/agents`, `[%s] the scenario as data: …` (init first, the
+    memory add step with `capture: 'agent'` and its `path` expect, the copy step and the `dna add team.agents` args
+    exactly, `agent execute` with `exit: 0, fakeAgent: true`, the `record-commit` probe after it, `agent show` after
+    the probe, `agent execute` the last writer); (b) `[Scrum] passes on the compiled CLI, every check labelled
+    [Scrum/agent], …` (labels incl. the copy label `[Scrum/agent] commit .wingfoil/agents/custom/fake.yaml,
+    test/fixtures/agents/fake-agent.cjs`, every CLI/copy detail ends `tree clean`); (c) the existing `passes against the
+    compiled CLI` test: per template the `[T/agent] wingfoil agent execute …` label, a contiguous `[T/agent]` block
+    after the last `[T] ` label and before the next template's first (its `[T] ` count unchanged); (d) `[Scrum] fails
+    the record-commit probe when agent execute runs twice / not at all` (`found 2` / `found 0`); (e) `[Scrum] fails
+    agent execute on a wrong exit …` (`SMOKE_FAULT='exit=1@agent execute'`).
+  - AC 2: (a) `[%s] agent show and agent list --past assert what was recorded` (both `expect` maps exactly, the
+    `fake-read` probe step); (b) `[Scrum] the run log is re-loaded: …` (`corrupt@agent execute` → execute and probe
+    ok, last check `agent show`, `expected exit 0, got exit 1`); (c) `[Scrum] the fake agent read the session
+    Resource, and agent list --past passed, …` and `[Scrum] fails the fake-read probe when agent execute runs without
+    the fake switched on` (`the fake agent recorded no launch`).
+  - AC 3: `e2e-smoke.yaml is at least 1.6, with a history entry for task-243 (bug-314)` (`/1\.6 [^;]*task-243/`),
+    `drive-cli declares the three agent actions …` (+ `agent execute`, `custom/fake` in the description, 3
+    `checks.post`), `the report names the agent run` (the exact `- Agent run: …` line), `WORKFLOW.md's E2E Smoke section
+    names agent execute`.
+- **Run.** `npx jest test/cli/e2e-smoke.test.ts --maxWorkers=2` → 17 failed, 34 passed, 51 total (200.966 s). Each
+  failure is an assertion: `typeof agentRunSteps` / `typeof smokeAgentRun` → `"undefined"` (expected `"function"`);
+  `AGENT_FIXTURES` → `undefined`; the full run → `Expected value: "[Scrum/agent] wingfoil agent execute --element
+  task:task-001-agent-run --role developer"` not in the labels; both proxy faults → `expect(report.ok).toBe(false)`
+  received `true` (no agent step runs yet); `version` received `1.5`; `drive-cli.actions` lack the three strings; the
+  report lacks the `- Agent run:` line; the E2E Smoke section lacks `agent execute`. The 34 passing are the existing
+  tests. `npx tsc --noEmit -p tsconfig.test.json` and `npx eslint` on both files → exit 0.
+- **For green.** The probe steps are told apart from CLI steps by the `probe` key, copy steps by `copy` (the tests
+  use `'args' in step`). The positive pins share one `smokeAgentRun('Scrum', …)` run in a `beforeAll`; with the
+  proxy faults and the (d)/(c) variants the file runs the agent scenario six times plus the full run's two.
