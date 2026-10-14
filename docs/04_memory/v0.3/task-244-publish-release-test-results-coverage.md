@@ -426,3 +426,27 @@ from it. Fix commit `a402e4c4` (`scripts/test-report.cjs`, `scripts/test-report.
 - **T4.** `git log --first-parent --no-merges --format=%h 38580877..HEAD -- test/cli/test-report.test.ts` → empty;
   `git log --first-parent --no-merges --format=%h 2d6f836a..HEAD --` on the other five red files → empty; on
   `test/cli/test-report.test.ts` from `2d6f836a` it lists only `38580877`, the qa agent's send-back.
+
+**F4 and F5 (approver rulings in-task, 2026-10-14; F5's link form a coordinator decision within the ruling, recorded
+in `w3-b7-notes.md`).** qa send-back red `b6002ee3` (`test/cli/publish-pipeline.test.ts:546` expects 45; notes
+`68fd701a`). Fix commit `3fe4094d`.
+- **F4.** `publish.yml` `gate` `timeout-minutes` 30 → 45; the header's list reads `gate 45`, and the timeout
+  paragraph gives the ruled reasons: coverage now runs in the gate, no CI run has timed the suite under coverage,
+  and a gate that times out on the tag can only be fixed by a new commit and a new tag. The tag run's duration is
+  still read at v0.3 release-publishing (D5). The spec-015 amendment states no timeout figure (`git diff --
+  docs/04_memory/design/specs/spec-015-packaging-publishing.md | grep -nE "^\+.*(CHANGELOG|minutes)"` → nothing), so
+  it is unchanged.
+- **F5.** `release-commit`'s CHANGELOG link is the absolute URL of the Release asset,
+  `https://github.com/wingfoil/wingfoil/releases/download/v{X.Y.Z}/test-results.md`, `v{X.Y.Z}` the tag the release
+  creates (`{release.version}` is `v0.3` for a minor, the tag `v0.3.0`). Why not a blob URL at the tag: the tag names
+  the candidate and `publish` commits the summary after the tag's run, so a blob at the tag never resolves; a blob at
+  a branch would name `main` or `release/X.Y` by release kind (dl-159) and move. The asset exists exactly when the
+  Release does and never moves. The description still names the committed path
+  `docs/07_gates/rl-{release.release-line}/rel-{release.version}-test-results.md` (red's D7 row).
+  `release-publishing.yaml` stays 1.7 (one bump per branch); its history line says the link is the asset's URL.
+  The approver may overrule to a branch blob (option (b)).
+- **Runs.** `npx jest test/cli/publish-pipeline.test.ts test/core/workflow-repository-conformance.test.ts
+  test/cli/ci-workflow.test.ts test/cli/test-report.test.ts test/cli/staging-rehearsal.test.ts --maxWorkers=2` →
+  153/153; after the commit, the conformance suite at HEAD → 15/15; `npm run lint` → exit 0.
+- **T4.** `git log --first-parent --no-merges --format=%h b6002ee3..HEAD -- test/cli/publish-pipeline.test.ts` →
+  empty; from `2d6f836a` over red's six files it lists only `b6002ee3` and `38580877`, the qa agent's send-backs.
