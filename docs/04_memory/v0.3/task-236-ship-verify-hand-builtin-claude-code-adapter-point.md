@@ -656,3 +656,8 @@ and type the stop line (the session ran in auto mode last time and acted unasked
   `prompts/get` (the addendum does not change the pre-flight). Contrary to the design's S5 sentence, no CLI
   integration test sets `WINGFOIL_FAKE_AGENT_CONNECT` (`grep -rn FAKE_AGENT_CONNECT test --include=*.ts` → only
   fake-agent.test.ts), so they pin the literal (S4) but not the Resource's text.
+- **Send-back (2026-10-14, developer, green at `3807dc7c`):** red 2 pinned the fake's recorded refusal with the client
+  prefix (`MCP error -32602: element … not found at <sha>`), but the fake records the raw JSON-RPC wire message, which
+  no SDK Client prefixes; it contradicted S3's one-prefix pin. Fixed by the qa agent in `f2e3318f`: `records the
+  server's refusal …` expects `element 'task:task-999-absent' not found at <sha>` exactly, code still -32602; nothing
+  else changed. `npx jest test/agent/fake-agent.test.ts --maxWorkers=2` → 54 passed, 54 total.
