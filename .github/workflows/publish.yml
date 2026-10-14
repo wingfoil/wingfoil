@@ -119,8 +119,9 @@
 #      follows from this repository's owner through GitHub OIDC. Its recovery is step 7's: after a late
 #      approval, Re-run failed jobs re-runs it with release. A registry refusal (a version already listed, a
 #      `server.json` the registry rejects) fails only this job; the npm version and the Release stand.
-#      Re-running an `mcp-registry` job that succeeded is always refused — the registry accepts each version
-#      once — so a re-run after a late approval must not include a succeeded one (Re-run all jobs would). Check:
+#      Re-running an `mcp-registry` job that succeeded is always refused — the registry
+#      accepts each version once — so a re-run after a late approval must not include a succeeded one
+#      (Re-run all jobs would). Check:
 #        curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.wingfoil/wingfoil"
 #
 #   Rollback posture: a failed stage (staging publish, install or dl-023 smoke) blocks promote — `needs:

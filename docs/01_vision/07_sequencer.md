@@ -403,8 +403,7 @@ Workflow, Interaction) are integrated progressively across 5 weeks, with weekly 
 - ✓ Approval routing by role functional
 - ✓ Notification system (basic CLI output + git hooks) functional
 - ✓ Agent execute wrapper (<30 sec context load) working
-- ✓ >80% test coverage on workflow module, read from the tag run's published summary
-  `docs/07_gates/rl-v1/rel-v0.3-test-results.md` (`dl-136`)
+- ✓ >80% test coverage on workflow module (tag run's summary: `docs/07_gates/rl-v1/rel-v0.3-test-results.md`, `dl-136`)
 - ✓ npm package v0.3.0 published
 - ✓ Journey 4 (Morgan - enforce) manually tested end-to-end
 
@@ -418,8 +417,7 @@ Workflow, Interaction) are integrated progressively across 5 weeks, with weekly 
 - ✓ MCP server stable (Resources + Tools + Prompts all working)
 - ✓ Reference workflow templates (Scrum, Kanban, Lean, Trunk-Based) functional
 - ✓ CLI help + error messages polished
-- ✓ >80% test coverage on all modules, read from the tag run's published summary
-  `docs/07_gates/rl-v1/rel-v0.4-test-results.md` (`dl-136`)
+- ✓ >80% test coverage on all modules (tag run's summary: `docs/07_gates/rl-v1/rel-v0.4-test-results.md`, `dl-136`)
 - ✓ npm package v0.4.0 published
 - ✓ Journey 5 (Casey - PM) and Journey 6 (Morgan - evolution) manually tested
 
