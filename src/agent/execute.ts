@@ -416,6 +416,8 @@ export interface PreparedLaunch {
   readonly mcpServer: McpServerCommand;
   /** Absolute paths of the temporary files (§2.3), valid until the launch callback settles. */
   readonly files: Partial<Record<RunFileName, string>>;
+  /** The rendered `mcp.template` under `mcp.via: config-arg` (§2.3 `{mcp_config}`); `undefined` otherwise. */
+  readonly mcpConfig?: string | undefined;
 }
 
 /** The process's own terminals: stdin and stdout both. */
@@ -621,6 +623,8 @@ async function runPipeline<T>(
     ...(manifest.prompt.via === 'file' ? { bootstrap_file: bootstrap } : {}),
     ...(manifest.mcp.via === 'config-file' ? { mcp_config_file: renderMcpTemplate(manifest.mcp.template!, mcpServer) } : {}),
   };
+  // Under `config-arg` the rendered template is not a file but one whole argv element (§2.3 `{mcp_config}`).
+  const mcpConfig = manifest.mcp.via === 'config-arg' ? renderMcpTemplate(manifest.mcp.template!, mcpServer) : undefined;
 
   return withRunFiles(files, async (paths, releaseSignals) => {
     // Step 11 — the MCP pre-flight.
@@ -657,6 +661,7 @@ async function runPipeline<T>(
       bootstrap,
       mcpServer,
       files: paths,
+      mcpConfig,
     }, releaseSignals);
   });
 }

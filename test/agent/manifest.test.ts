@@ -154,15 +154,11 @@ describe('AC 1 — strict schema: unknown key, missing required field, format �
 });
 
 describe('AC 2 — §2.3 placeholders', () => {
-  it('the placeholder set is closed and exactly §2.3’s', () => {
-    expect([...ADAPTER_PLACEHOLDERS]).toEqual([
-      'bootstrap',
-      'bootstrap_file',
-      'mcp_config_file',
-      'mcp_command',
-      'mcp_args',
-      'session_id',
-    ]);
+  it('the placeholder set is closed and exactly §2.3’s (task-237 D-1 (a) adds {mcp_config}; its place in the table is not pinned)', () => {
+    const byName = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+    expect([...ADAPTER_PLACEHOLDERS].sort(byName)).toEqual(
+      ['bootstrap', 'bootstrap_file', 'mcp_config_file', 'mcp_config', 'mcp_command', 'mcp_args', 'session_id'].sort(byName),
+    );
   });
 
   it('refuses an unknown placeholder', () => {
@@ -501,5 +497,96 @@ describe('bug-242 — a newer format is refused for its format alone (dl-149)', 
     const manifest = fake();
     delete manifest.format;
     expect(issuesOf(manifest).some((issue) => issue.path === 'format' && issue.code !== E_INVALID_FORMAT)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// task-237 — `mcp.via: config-arg` and `{mcp_config}` (approver ruling D-1 (a), 2026-10-14; spec-016
+// §2.2/§2.3 pending amendment): the rendered `mcp.template` as ONE whole argv element, for an agent CLI
+// that reads its MCP servers only from a `-c key=value` override (Codex CLI).
+// ---------------------------------------------------------------------------------------------
+
+/** The fake, moved to `mcp.via: config-arg`: both launches carry `{mcp_config}` as a whole element. */
+function configArg(): Manifest {
+  const manifest = fake();
+  manifest.mcp.via = 'config-arg';
+  manifest.mcp.template = 'mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}}';
+  manifest.launch.interactive.args = ['-c', '{mcp_config}', '{bootstrap}'];
+  manifest.launch.headless.args = ['--headless', '-c', '{mcp_config}', '{bootstrap}'];
+  return manifest;
+}
+
+describe('task-237 (f) — the schema accepts mcp.via: config-arg, with its template required', () => {
+  it('a manifest with mcp.via: config-arg, an mcp.template and {mcp_config} in every launch parses', () => {
+    expect(issuesOf(configArg())).toEqual([]);
+    const parsed = parseAdapterManifest(dump(configArg()), { name: 'fake', kind: 'custom', file: 'f.yaml' });
+    expect(parsed.mcp.via).toBe('config-arg');
+  });
+
+  it('mcp.template is required with mcp.via: config-arg', () => {
+    const manifest = configArg();
+    delete manifest.mcp.template;
+    expectIssue(issuesOf(manifest), 'mcp.template', /required with mcp\.via: config-arg/);
+  });
+});
+
+describe('task-237 (g) — {mcp_config}: required under config-arg, legal only there, a whole element', () => {
+  it('{mcp_config} is in the closed placeholder set', () => {
+    expect([...ADAPTER_PLACEHOLDERS]).toContain('mcp_config');
+  });
+
+  it.each([
+    ['launch.interactive.args', (m: Manifest) => (m.launch.interactive.args = ['{bootstrap}'])],
+    ['launch.headless.args', (m: Manifest) => (m.launch.headless.args = ['--headless', '{bootstrap}'])],
+  ])('mcp.via: config-arg without {mcp_config} in %s is refused', (path, mutate) => {
+    const manifest = configArg();
+    mutate(manifest);
+    expectIssue(issuesOf(manifest), path, /\{mcp_config\} is required with mcp\.via: config-arg/);
+  });
+
+  it('refuses {mcp_config} under mcp.via: config-file, naming where it is legal', () => {
+    const manifest = fake();
+    manifest.launch.interactive.args.push('{mcp_config}');
+    expectIssue(
+      issuesOf(manifest),
+      'launch.interactive.args.5',
+      /placeholder \{mcp_config\} is not legal here: it is legal in launch\.\*\.args, when mcp\.via is config-arg/,
+    );
+  });
+
+  it('refuses {mcp_config} under mcp.via: args, naming where it is legal', () => {
+    const manifest = fake();
+    manifest.mcp.via = 'args';
+    delete manifest.mcp.template;
+    manifest.launch.interactive.args = ['--mcp', '{mcp_command}', '{mcp_args}', '{mcp_config}', '{bootstrap}'];
+    manifest.launch.headless.args = ['--mcp', '{mcp_command}', '{mcp_args}', '{bootstrap}'];
+    expectIssue(
+      issuesOf(manifest),
+      'launch.interactive.args.3',
+      /placeholder \{mcp_config\} is not legal here: it is legal in launch\.\*\.args, when mcp\.via is config-arg/,
+    );
+  });
+
+  it.each([['x{mcp_config}'], ['mcp_servers.wingfoil={mcp_config}'], ['{mcp_config} ']])(
+    'refuses {mcp_config} inside an argv element under config-arg: %p',
+    (element) => {
+      const manifest = configArg();
+      manifest.launch.interactive.args = ['-c', element, '{mcp_config}', '{bootstrap}'];
+      expectIssue(issuesOf(manifest), 'launch.interactive.args.1', /whole argv element/);
+    },
+  );
+
+  it('refuses {mcp_config_file} under mcp.via: config-arg', () => {
+    const manifest = configArg();
+    manifest.launch.interactive.args.push('{mcp_config_file}');
+    expectIssue(issuesOf(manifest), 'launch.interactive.args.3', /placeholder \{mcp_config_file\} is not legal here.*mcp\.via is config-file/);
+  });
+
+  it('refuses {mcp_command} and {mcp_args} as launch elements under mcp.via: config-arg (they belong to its template)', () => {
+    const manifest = configArg();
+    manifest.launch.interactive.args.push('{mcp_command}', '{mcp_args}');
+    const issues = issuesOf(manifest);
+    expectIssue(issues, 'launch.interactive.args.3', /placeholder \{mcp_command\} is not legal here/);
+    expectIssue(issues, 'launch.interactive.args.4', /placeholder \{mcp_args\} is not legal here/);
   });
 });

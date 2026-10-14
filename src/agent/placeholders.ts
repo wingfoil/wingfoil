@@ -19,6 +19,7 @@ export const ADAPTER_PLACEHOLDERS = [
   'bootstrap',
   'bootstrap_file',
   'mcp_config_file',
+  'mcp_config',
   'mcp_command',
   'mcp_args',
   'session_id',
@@ -49,6 +50,7 @@ const LEGAL_IN: Readonly<Record<AdapterPlaceholder, string>> = {
   bootstrap: 'launch.*.args, when prompt.via is arg',
   bootstrap_file: 'launch.*.args, when prompt.via is file',
   mcp_config_file: 'launch.*.args, when mcp.via is config-file',
+  mcp_config: 'launch.*.args, when mcp.via is config-arg',
   mcp_command: 'mcp.template, and launch.*.args when mcp.via is args',
   mcp_args: 'mcp.template, and launch.*.args when mcp.via is args',
   session_id:
@@ -123,6 +125,7 @@ export function placeholderIssues(manifest: ManifestInput, file: string): Valida
   if (manifest.prompt.via === 'arg') launch.add('bootstrap');
   if (manifest.prompt.via === 'file') launch.add('bootstrap_file');
   if (manifest.mcp.via === 'config-file') launch.add('mcp_config_file');
+  if (manifest.mcp.via === 'config-arg') launch.add('mcp_config');
   if (manifest.mcp.via === 'args') {
     launch.add('mcp_command');
     launch.add('mcp_args');
@@ -163,7 +166,7 @@ function carries(args: readonly string[], name: AdapterPlaceholder): boolean {
  * a manifest that validates can launch:
  * - every declared launch's `args` carries the placeholder of `prompt.via` (`{bootstrap}` for `arg`,
  *   `{bootstrap_file}` for `file`; `stdin` needs none) and of `mcp.via` (`{mcp_config_file}` for
- *   `config-file`; `{mcp_command}` and `{mcp_args}` for `args`) — without it the agent starts without
+ *   `config-file`; `{mcp_config}` for `config-arg`; `{mcp_command}` and `{mcp_args}` for `args`) — without it the agent starts without
  *   its bootstrap, or without the `wingfoil` server `adr-012` makes mandatory;
  * - `session.assign_args`, when `session.id` is `assign`, carries `{session_id}` — without it the
  *   assigned id never reaches the agent, and the run record names a session that does not exist;
@@ -189,6 +192,7 @@ export function requiredPlaceholderIssues(manifest: ManifestInput, file: string)
     if (manifest.prompt.via === 'file') need(args, path, 'bootstrap_file', 'prompt.via: file', noBootstrap);
     const noServer = 'without it the agent runs without the wingfoil MCP server (adr-012)';
     if (manifest.mcp.via === 'config-file') need(args, path, 'mcp_config_file', 'mcp.via: config-file', noServer);
+    if (manifest.mcp.via === 'config-arg') need(args, path, 'mcp_config', 'mcp.via: config-arg', noServer);
     if (manifest.mcp.via === 'args') {
       need(args, path, 'mcp_command', 'mcp.via: args', noServer);
       need(args, path, 'mcp_args', 'mcp.via: args', noServer);

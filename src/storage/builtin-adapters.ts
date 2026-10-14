@@ -16,6 +16,7 @@
  * pass by hand: every flag a manifest declares is read from that agent CLI's own `--help` output at the
  * version `verified_with` names, never from memory. Listed in name order (REQ-SYS-07):
  * - `claude-code` — Claude Code (task-236).
+ * - `codex-cli` — Codex CLI (task-237).
  *
  * With an empty list, `init` reserves the directory with a `.gitkeep` (the seam's empty case).
  */
@@ -66,5 +67,41 @@ usage:
 `,
 };
 
+/**
+ * Codex CLI, checked against `codex --help` of `codex-cli 0.145.0` (task-237). Codex has no option that
+ * takes an MCP configuration file, only `-c <key=value>` overrides parsed as TOML, so the server is
+ * registered with `mcp.via: config-arg`: the rendered template is one `-c` value, a whole argv element
+ * (`spec-016` §2.3). `enabled` and `required` make a same-named server elsewhere, or a failed start,
+ * unable to leave the session without it. No option assigns a session id and no command prints a past
+ * session's id, model or token counts, so all three are recorded `not-reported` (`spec-016` §2.6).
+ */
+const CODEX_CLI: BuiltinAdapterManifest = {
+  name: 'codex-cli',
+  content: `# Codex CLI, a built-in adapter (spec-016 section 2.8). Every flag below is read from the
+# --help output of the version in verified_with, checked by hand (task-237).
+name: codex-cli
+format: 1
+command: codex
+verified_with: "codex-cli 0.145.0"
+version_args: [ --version ]
+launch:
+  interactive:
+    # -c takes one key=value; the prompt comes last and nothing is appended after it.
+    args: [ -c, "{mcp_config}", "{bootstrap}" ]
+    terminal: required
+prompt:
+  via: arg
+mcp:
+  via: config-arg
+  template: 'mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}, enabled = true, required = true}'
+session:
+  id: none
+  resume:
+    supported: false
+usage:
+  from: none
+`,
+};
+
 /** The built-in adapters `wingfoil init` installs, in name order. */
-export const BUILTIN_ADAPTERS: readonly BuiltinAdapterManifest[] = [CLAUDE_CODE];
+export const BUILTIN_ADAPTERS: readonly BuiltinAdapterManifest[] = [CLAUDE_CODE, CODEX_CLI];

@@ -14,8 +14,10 @@
  * - `--lookup <session-id>` — prints the declared JSON document for that session (`session.lookup_args`,
  *   `usage.lookup_args`).
  * - `--summary` — prints a one-line summary (`summary.export_args`).
- * - anything else is a launch: `[--headless] --mcp-config <file> (--prompt <text> | --prompt-file <file>)
- *   [--session-id <id>] [--resume <id>]`. A headless launch prints the declared JSON document on stdout
+ * - anything else is a launch: `[--headless] (--mcp-config <file> | --mcp-config-json <text>)
+ *   (--prompt <text> | --prompt-file <file>) [--session-id <id>] [--resume <id>]`. `--mcp-config-json`
+ *   carries the same JSON body as the file, as ONE argument: the shape of `mcp.via: config-arg`'s
+ *   `{mcp_config}` (task-237, approver ruling D-1 (a)), declared by `config-arg/fake-config-arg.yaml`. A headless launch prints the declared JSON document on stdout
  *   when it ends (`launch.headless.output: json`).
  *
  * What it does is declared by the caller through environment variables (names below; their values are
@@ -109,15 +111,18 @@ function record(entry) {
 }
 
 /**
- * Talk to the `wingfoil` server of `configFile` over stdio: `initialize`, the `initialized`
- * notification, then `resources/read` of `uri`. Resolves with what the server answered; a JSON-RPC
+ * Talk to the `wingfoil` server of the MCP config over stdio: `initialize`, the `initialized`
+ * notification, then `resources/read` of `uri`. The config is `{ file }` (`--mcp-config`) or
+ * `{ text }` (`--mcp-config-json`, task-237). Resolves with what the server answered; a JSON-RPC
  * error is an answer too (recorded, not thrown).
  */
-function fetchResource(configFile, uri) {
-  const config = JSON.parse(readFileSync(configFile, 'utf-8'));
+function fetchResource(source, uri) {
+  // A file is read and parsed exactly as before task-237; only the text form is new.
+  const label = source.file === undefined ? '--mcp-config-json' : source.file;
+  const config = JSON.parse(source.file === undefined ? source.text : readFileSync(source.file, 'utf-8'));
   const server = config.mcpServers && config.mcpServers.wingfoil;
   if (!server || typeof server.command !== 'string' || !Array.isArray(server.args)) {
-    return Promise.reject(new Error(`no "wingfoil" server with a command and args in ${configFile}`));
+    return Promise.reject(new Error(`no "wingfoil" server with a command and args in ${label}`));
   }
   return new Promise((resolve, reject) => {
     const child = spawn(server.command, server.args, { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -204,11 +209,12 @@ async function launch(argv, stdin) {
   if (process.env.WINGFOIL_FAKE_AGENT_CONNECT === '1') {
     const instruction = bootstrap === undefined || bootstrap === null ? null : CONTEXT_INSTRUCTION_RE.exec(bootstrap);
     const configFile = option(argv, '--mcp-config');
+    const configText = option(argv, '--mcp-config-json');
     if (instruction === null) failure = 'the bootstrap names no MCP resource to read (spec-016 §2.4)';
-    else if (configFile === undefined) failure = 'no --mcp-config was given';
+    else if (configFile === undefined && configText === undefined) failure = 'no --mcp-config was given';
     else {
       try {
-        mcp = await fetchResource(configFile, instruction[1]);
+        mcp = await fetchResource(configFile === undefined ? { text: configText } : { file: configFile }, instruction[1]);
       } catch (error) {
         failure = error.message;
       }

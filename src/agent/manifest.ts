@@ -32,7 +32,7 @@ type ManifestInput = z.input<typeof AdapterManifest>;
 
 /**
  * §2.1's basename rule and §2.2's "Req." column where it depends on another value: `mcp.template` with
- * `mcp.via: config-file`; `session.assign_args` with `session.id: assign`; `session.lookup_args` with
+ * `mcp.via: config-file` or `config-arg`; `session.assign_args` with `session.id: assign`; `session.lookup_args` with
  * `lookup` and `session.field` with `output` or `lookup`; the same pair under `usage.from`
  * (`usage.lookup_args`, `usage.fields`); `verified_with` on a built-in. Then §2.2's one exclusion,
  * `prompt.via: stdin` beside an interactive launch.
@@ -57,7 +57,9 @@ function crossFieldIssues(manifest: ManifestInput, source: AdapterSource): Valid
   if (manifest.prompt.via === 'stdin') {
     issue('prompt.via', "'stdin' is legal only for a headless launch: an interactive agent owns stdin, and launch.interactive is declared (spec-016 §2.2)");
   }
-  if (manifest.mcp.via === 'config-file') required(manifest.mcp.template !== undefined, 'mcp.template', 'mcp.via: config-file');
+  if (manifest.mcp.via === 'config-file' || manifest.mcp.via === 'config-arg') {
+    required(manifest.mcp.template !== undefined, 'mcp.template', `mcp.via: ${manifest.mcp.via}`);
+  }
 
   const session = manifest.session;
   if (session.id === 'assign') required(session.assign_args !== undefined, 'session.assign_args', 'session.id: assign');
