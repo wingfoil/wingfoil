@@ -2,7 +2,7 @@
 id: "task-236-ship-verify-hand-builtin-claude-code-adapter-point"
 type: task
 title: "Ship and verify by hand the built-in `claude-code` adapter, and point this repository's agent at it"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "high"
