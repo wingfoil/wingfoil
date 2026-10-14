@@ -249,6 +249,12 @@ Also unreleased (v0.3): the Resources `wingfoil://workflows/-/next` and `wingfoi
 return what `wingfoil workflow next --format json` and `wingfoil workflow status --format json` print, as
 committed at `HEAD`. A workflow named `next` or `status` stays `wingfoil://workflows/<name>`.
 
+Also unreleased (v0.3): the Resource template `wingfoil://session/{role}/{element}/{state}` returns the same
+execution context as `<role>-session` with `element` and `state` (`{element}` is `<type>:<id>`), with the same
+`warnings`, for agents whose client can read Resources but not get Prompts. It is never listed by `resources/list`:
+read it by its full URI, which [`wingfoil agent execute`](#wingfoil-agent-execute) gives the agent. A role not in
+`dna.yaml` is refused with `no session context for undefined role '<role>'`.
+
 ---
 
 ## DNA — the project's structural map
