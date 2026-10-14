@@ -79,6 +79,8 @@ export interface LaunchValues {
   /** Absolute paths of the temporary files the launch declared. */
   readonly files: Partial<Record<'bootstrap_file' | 'mcp_config_file', string>>;
   readonly mcpServer: { readonly command: string; readonly args: readonly string[] };
+  /** The rendered `mcp.template`, passed as one whole argv element; read only under `mcp.via: config-arg`. */
+  readonly mcpConfig?: string;
   /** The assigned session id; read only under `session.id: assign`. */
   readonly sessionId: string;
 }
@@ -89,6 +91,7 @@ function renderArgv(template: readonly string[], values: LaunchValues): string[]
     '{bootstrap}': values.bootstrap,
     '{bootstrap_file}': values.files.bootstrap_file,
     '{mcp_config_file}': values.files.mcp_config_file,
+    '{mcp_config}': values.mcpConfig,
     '{mcp_command}': values.mcpServer.command,
     '{session_id}': values.sessionId,
   };
@@ -351,6 +354,8 @@ export interface LaunchInput {
   readonly bootstrap: string;
   readonly mcpServer: { readonly command: string; readonly args: readonly string[] };
   readonly files: Partial<Record<'bootstrap_file' | 'mcp_config_file', string>>;
+  /** The rendered `mcp.template` under `mcp.via: config-arg` (§2.3 `{mcp_config}`); absent otherwise. */
+  readonly mcpConfig?: string;
 }
 
 /** A launched run, recorded: what `agent execute` reports (§3.4's `{ "run": <record> }`). */
@@ -383,7 +388,13 @@ export function launchBanner(input: LaunchInput): string {
 export async function launchAgent(root: string, input: LaunchInput, host: LaunchHost, releaseSignals: () => void): Promise<CoreResult<RecordedLaunch>> {
   const { manifest } = input.adapter;
   const assigned = manifest.session.id === 'assign' ? assignedSessionId(root, input.runId) : undefined;
-  const values: LaunchValues = { bootstrap: input.bootstrap, files: input.files, mcpServer: input.mcpServer, sessionId: assigned ?? '' };
+  const values: LaunchValues = {
+    bootstrap: input.bootstrap,
+    files: input.files,
+    mcpServer: input.mcpServer,
+    ...(input.mcpConfig === undefined ? {} : { mcpConfig: input.mcpConfig }),
+    sessionId: assigned ?? '',
+  };
   const argv = renderLaunchArgv(manifest, values);
 
   // Step 13 — the banner; step 14 — the spawn; step 15 — the wait, with the signals taken over.

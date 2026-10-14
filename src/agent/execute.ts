@@ -621,6 +621,8 @@ async function runPipeline<T>(
     ...(manifest.prompt.via === 'file' ? { bootstrap_file: bootstrap } : {}),
     ...(manifest.mcp.via === 'config-file' ? { mcp_config_file: renderMcpTemplate(manifest.mcp.template!, mcpServer) } : {}),
   };
+  // Under `config-arg` the rendered template is not a file but one whole argv element (§2.3 `{mcp_config}`).
+  const mcpConfig = manifest.mcp.via === 'config-arg' ? renderMcpTemplate(manifest.mcp.template!, mcpServer) : undefined;
 
   return withRunFiles(files, async (paths, releaseSignals) => {
     // Step 11 — the MCP pre-flight.
@@ -657,6 +659,7 @@ async function runPipeline<T>(
       bootstrap,
       mcpServer,
       files: paths,
+      ...(mcpConfig === undefined ? {} : { mcpConfig }),
     }, releaseSignals);
   });
 }
