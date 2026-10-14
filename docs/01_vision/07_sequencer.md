@@ -1,7 +1,7 @@
 # Sequencer — WingFoil MVP (v0.1 → v1.0)
 
-**Version:** 1.8
-**Date:** 2026-10-01
+**Version:** 1.9
+**Date:** 2026-10-14
 **Status:** Approved
 
 ---
@@ -375,7 +375,7 @@ Workflow, Interaction) are integrated progressively across 5 weeks, with weekly 
 - ✓ DNA YAML schema defined and validated
 - ✓ CLI commands tested locally (`init`, `dna set/show`, `memory add/search`, `paths`)
 - ✓ MCP Resources endpoint (DNA + Memory) functional
-- ✓ >80% test coverage on core modules (storage, validation)
+- ✓ >80% test coverage on core modules (storage, validation) (no published summary: before dl-136)
 - ✓ README + quickstart guide documented
 - ✓ npm package published with v0.1.0 tag
 - ✓ Journey 0a (new project) and Journey 1 (Alex) manually tested end-to-end
@@ -388,7 +388,7 @@ Workflow, Interaction) are integrated progressively across 5 weeks, with weekly 
 - ✓ Built-in directive templates (6 types: Code Quality, Testing, Code Review, Architecture, Security, Documentation)
 - ✓ Role-based directive auto-loading functional
 - ✓ MCP Prompts endpoint functional
-- ✓ >80% test coverage on directive module
+- ✓ >80% test coverage on directive module (no published summary: before dl-136)
 - ✓ Directive documentation + examples included
 - ✓ npm package v0.2.0 published
 - ✓ Journey 2 (Sam - review) and Journey 3 (Jordan - team dev) manually tested
@@ -403,7 +403,8 @@ Workflow, Interaction) are integrated progressively across 5 weeks, with weekly 
 - ✓ Approval routing by role functional
 - ✓ Notification system (basic CLI output + git hooks) functional
 - ✓ Agent execute wrapper (<30 sec context load) working
-- ✓ >80% test coverage on workflow module
+- ✓ >80% test coverage on workflow module, read from the tag run's published summary
+  `docs/07_gates/rl-v1/rel-v0.3-test-results.md` (`dl-136`)
 - ✓ npm package v0.3.0 published
 - ✓ Journey 4 (Morgan - enforce) manually tested end-to-end
 
@@ -417,7 +418,8 @@ Workflow, Interaction) are integrated progressively across 5 weeks, with weekly 
 - ✓ MCP server stable (Resources + Tools + Prompts all working)
 - ✓ Reference workflow templates (Scrum, Kanban, Lean, Trunk-Based) functional
 - ✓ CLI help + error messages polished
-- ✓ >80% test coverage on all modules
+- ✓ >80% test coverage on all modules, read from the tag run's published summary
+  `docs/07_gates/rl-v1/rel-v0.4-test-results.md` (`dl-136`)
 - ✓ npm package v0.4.0 published
 - ✓ Journey 5 (Casey - PM) and Journey 6 (Morgan - evolution) manually tested
 

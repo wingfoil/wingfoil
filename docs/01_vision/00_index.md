@@ -1,6 +1,6 @@
 # WingFoil — Product Vision (docs/vision)
 
-**Last indexed:** 2026-10-12
+**Last indexed:** 2026-10-14
 
 This folder holds the **product-vision specification** for WingFoil, produced through a Lean Inception workshop (see
 [`X_lean-inception-plan.md`](X_lean-inception-plan.md)). This README is a **navigation index**: it tells you which
@@ -43,7 +43,7 @@ line count (`awk 'END{print NR}'`).
 | [`04_personas.md`](04_personas.md)                     | 1.2 | 2026-10-07 | Approved | 149   | The primary persona (Morgan) and the 7 personas (Alex, Sam, Jordan, Morgan, Casey, Taylor, the maintainer)              |
 | [`05_journeys.md`](05_journeys.md)                     | 1.6 | 2026-10-10 | Approved | 287   | 8 end-to-end user journeys (0a, 0b, 1–6): steps, obstacles, success                                                     |
 | [`06_features.md`](06_features.md)                     | 1.14 | 2026-10-12 | Approved | 522   | 65 features (by pillar + by release) and the data-model / implementation notes                                          |
-| [`07_sequencer.md`](07_sequencer.md)                   | 1.8 | 2026-10-01 | Approved | 471   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
+| [`07_sequencer.md`](07_sequencer.md)                   | 1.9 | 2026-10-14 | Approved | 473   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
 | [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.11 | 2026-10-11 | Approved | 220   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
 | [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.6 | 2026-10-06 | Approved | 408   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
 | [`X_lean-inception-plan.md`](X_lean-inception-plan.md) | —   | 2026-06-11 | —        | 42    | Workshop plan: sessions, key decisions, output list                                                                     |
@@ -67,7 +67,7 @@ line count (`awk 'END{print NR}'`).
 | Data model: `memory.yaml`, state machines, workflow kinds, fallback | `06_features` L359–522 · `02_product-vision` Main/Sub L62–69                                           |
 | Reference workflow templates (Scrum/Kanban/Lean/Trunk-Based)        | `02_product-vision` L31–103 · `06_features` P4.18–P4.20 (L102–104)                                     |
 | Schedule: active-day budgets, actuals, forecast                     | `07_sequencer` L9–133 · original plan L134–145 · `01_product-brief` L249–265                           |
-| Definition of Done per release                                      | `07_sequencer` L369–438                                                                                |
+| Definition of Done per release                                      | `07_sequencer` L369–440                                                                                |
 | Success metrics & criteria                                          | `01_product-brief` L161–196 & L266–312 · `08_mvp-canvas` L105–130 & L161–200                           |
 | The Determinism Index (I, P, O) and who controls each component     | `01_product-brief` North Star L163–183 and Solution L39–79 · `08_mvp-canvas` L107–117 · `03_is-isnot`  |
 | Competitive differentiators (Replaces / Works with)                 | `01_product-brief` L80–105 · `08_mvp-canvas` L131–149                                                  |
@@ -153,9 +153,9 @@ line count (`awk 'END{print NR}'`).
 - Week-by-Week Breakdown (Week 1 L148, Week 2 L182, Week 3 L215, Week 4 L265, Week 5 L301) — L146–334
 - Critical Path — L335–353
 - Risk Mitigation — L354–368
-- Definition of Done per release (v0.1 L371, v0.2 L383, v0.3 L396, v0.4 L410, v1.0 L424) — L369–438
-- Success Criteria (v1.0 MVP) — L439–462
-- Capacity & Assignments — L463–471
+- Definition of Done per release (v0.1 L371, v0.2 L383, v0.3 L396, v0.4 L411, v1.0 L426) — L369–440
+- Success Criteria (v1.0 MVP) — L441–464
+- Capacity & Assignments — L465–473
 
 ### `08_mvp-canvas.md`
 
