@@ -326,6 +326,12 @@ test/cli/test-report.test.ts --maxWorkers=2` → 5 failed, 40 passed (45).
 gate's `timeout-minutes` at 45 (was 30); the header check is unchanged (it reads `gate 45` once the header says so).
 Run: `npx jest test/cli/publish-pipeline.test.ts --maxWorkers=2` → 1 failed (`Expected: 45, Received: 30`), 65 passed.
 
+**Re-review send-back R1 (2026-10-14), red commit `b3fad6fe`**: `test/cli/test-report.test.ts` row `a header naming
+only a *.feature.test.ts test file (no .feature file) is not BDD` (expects `unit`; the header names
+`mcp-prompts.feature.test.ts`, as `test/mcp/role-prompt-context.test.ts`'s does). The bare-name, relative and
+full-path BDD rows stay green. Run: `npx jest test/cli/test-report.test.ts --maxWorkers=2` → 1 failed
+(`Expected: "unit", Received: "BDD"`), 45 passed.
+
 ### green (developer, 2026-10-14)
 
 Approver rulings D1–D8 as recommended (`w3-b7-notes.md`, 2026-10-14). Commits `c73905ba` (the implementation) and
