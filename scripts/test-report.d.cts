@@ -66,7 +66,8 @@ export interface SummaryMeta {
 
 /**
  * The class of one test file, by the first rule that matches: `lint.clean`, `API-docs`, `smoke` by exact path;
- * `BDD` when its leading block comment cites a `.feature` file, in any path spelling;
+ * `BDD` when its leading block comment cites a `.feature` file, in any path spelling (a name ending in
+ * `.feature`, not a `*.feature.test.ts` test file);
  * `integration` for `*.integration.test.ts`; `unit` otherwise.
  */
 export function classifySuite(relPath: string, source: string): SuiteClass;

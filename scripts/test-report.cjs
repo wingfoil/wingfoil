@@ -10,7 +10,7 @@
  * Classification, per test file, the first rule that matches (`SUITE_RULES`; approver ruling D2, 2026-10-14):
  * `lint.clean`, `API-docs` and `smoke` by exact path; `BDD` when the file's leading block comment cites a
  * `.feature` file of `docs/02_requirements/02_bdd/features/`, in any spelling — full path, relative path or bare
- * file name (independent review F2); `integration` by the `.integration.test.ts` name; `unit` for every other
+ * file name, ending in `.feature` (independent review F2, re-review R1); `integration` by the `.integration.test.ts` name; `unit` for every other
  * file. Each class counts its files, its tests (assertions) and how many passed, failed and were skipped
  * (`pending`, `skipped`, `todo`, `disabled`). A suite that failed to run counts as one file with no test, and is
  * listed under the failures; a suite that failed while all its tests passed (an error in a hook such as
@@ -34,8 +34,11 @@ const { isAbsolute, join, relative, resolve, sep } = require('node:path');
 /** The classes, in the order the summary's table lists them. */
 const SUITE_CLASSES = Object.freeze(['unit', 'integration', 'BDD', 'smoke', 'API-docs', 'lint.clean']);
 
-/** A feature file cited in a test's header comment, in any path spelling (ruling D2; independent review F2). */
-const FEATURE_CITATION = /[\w./-]*\w\.feature\b/;
+/**
+ * A feature file cited in a test's header comment, in any path spelling (ruling D2; independent review F2). The
+ * name must END in `.feature`: a test file named `*.feature.test.ts` is not a citation (re-review R1).
+ */
+const FEATURE_CITATION = /[\w./-]*\w\.feature(?![\w-]|\.\w)/;
 
 /** The `test` of a failure raised by a suite whose tests all passed (a hook such as `afterAll` failed). */
 const SUITE_ERROR = 'suite error outside its tests';
@@ -202,7 +205,7 @@ function formatSummary(results, coverage, meta) {
     'One Jest run, classified per test file by the first rule that matches: `lint.clean` is ' +
       '`test/lint/lint-clean.test.ts`; `API-docs` is `test/docs/api-docs.test.ts`; `smoke` is ' +
       '`test/cli/e2e-smoke.test.ts`; `BDD` is a file whose leading block comment cites a `.feature` file of ' +
-      '`docs/02_requirements/02_bdd/features/` (full path, relative path or bare name); `integration` is a `*.integration.test.ts` file; `unit` is every ' +
+      '`docs/02_requirements/02_bdd/features/` (full path, relative path or bare name, ending in `.feature`); `integration` is a `*.integration.test.ts` file; `unit` is every ' +
       'other file. Skipped counts pending, skipped, todo and disabled tests. The result is failed on any failure, ' +
       'and also when Jest reports the run unsuccessful with none (a missed coverage threshold). The latency suites ' +
       '(`test/latency-suites.cjs`) run apart and are not in this run. The staging smoke is the CI run’s `stage` job.',
