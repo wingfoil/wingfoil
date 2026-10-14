@@ -310,7 +310,7 @@ Nothing to restructure beyond green (one const, one list). Gates, heavy ones und
   test/core/init-builtin-adapters.test.ts` → empty (positive case: the same command on
   `test/storage/builtin-template-sources.test.ts` prints `915baaa0`).
 
-### review (reviewer, self, 2026-10-13)
+### self-review (developer, 2026-10-13)
 
 - AC 1 — met: the eight claude-code tests and the four of `init-builtin-adapters` red failed pass (red → green
   above); `init` with no seam installs and commits the manifest, which loads as `built-in`.
@@ -475,13 +475,20 @@ not this entry's.
 
 ### design addendum (developer, 2026-10-13) — session context as a Resource
 
+> **Correction (developer, 2026-10-14), approver's statement:** in run `…/adhoc/1` the approver answered the `.mcp.json`
+> dialog "Use this MCP server" (the pasted transcript showed only the menu). So in both runs the two same-named `wingfoil`
+> servers were enabled, and the adapter's `--mcp-config` server (`…/task-236/dist/cli.js mcp`) was the only `wingfoil`
+> MCP child and served the session: `.mcp.json`'s pinned server was shadowed, not spawned. `/mcp`'s `Config location:
+> …/.mcp.json` is Claude Code's display only. R4's `claude mcp reset-project-choices` (run 2) cleared that pass-1 choice.
+> The agent-written sections (`55cf766a`, `5b7af1be`), which leave the dialog answer open, are left as written.
+
 **What the by-hand pass established** (approver transcript `devloop-kit/task-236-runbook.md`, the launched agent's
 note `55cf766a`, record commit `a19338c5`):
 - argv accepted; the bootstrap arrived as the first user message (`55cf766a`, `ps` of the `claude` process);
 - the connected `wingfoil` server is the adapter's: its only MCP child is `node …/task-236/dist/cli.js mcp`, and it
-  served `wingfoil://workflows/-/next`, which the pinned 0.2.2 does not have (`55cf766a`). The approver had
-  answered the `.mcp.json` dialog "Continue without using this MCP server", so which server wins with BOTH enabled
-  is still untested; `/mcp` showed `Config location: …/task-236/.mcp.json` for the server it called `wingfoil`
+  served `wingfoil://workflows/-/next`, which the pinned 0.2.2 does not have (`55cf766a`). [Corrected 2026-10-14,
+  see the note above: the approver had answered the dialog "Use this MCP server", so both servers were enabled and
+  the adapter's won; this line first said "Continue without" and "untested".] `/mcp` showed `Config location: …/task-236/.mcp.json` for the server it called `wingfoil`
   (`⚠ connected · no tools`, `Capabilities: resources · prompts`) although the process was the adapter's — Claude
   Code's display, not evidence of precedence;
 - R4: `agent: record …/adhoc/1` at `a19338c5`, only the run log; `session` `f4458e8b-b6a3-5453-8221-90a33bb558bb`
@@ -716,7 +723,7 @@ Heavy gates under `waitslot.sh`, `--maxWorkers=2`, with both spec amendments in 
   test/cli/agent-execute-launch.integration.test.ts test/fixtures/agents/fake-agent.cjs` → `f2e3318f`, the qa
   agent's send-back.
 
-### review 2 (reviewer, self, 2026-10-14)
+### self-review 2 (developer, 2026-10-14)
 
 - S1–S5 met (the red 2 tests pass, above); S6 met with the spec-004 amendment.
 - AC 1, the BDD handover and AC 4's static half: still met (the full run).
@@ -876,6 +883,13 @@ transcript, not to this entry.
 
 ### by-hand runbook 2 — approver's transcript (2026-10-14)
 
+> **Correction (developer, 2026-10-14, after the independent review), approver's statement:** in run `…/adhoc/1` the approver answered the `.mcp.json`
+> dialog "Use this MCP server" (the pasted transcript showed only the menu). So in both runs the two same-named `wingfoil`
+> servers were enabled, and the adapter's `--mcp-config` server (`…/task-236/dist/cli.js mcp`) was the only `wingfoil`
+> MCP child and served the session: `.mcp.json`'s pinned server was shadowed, not spawned. `/mcp`'s `Config location:
+> …/.mcp.json` is Claude Code's display only. R4's `claude mcp reset-project-choices` (run 2) cleared that pass-1 choice.
+> The agent-written sections (`55cf766a`, `5b7af1be`), which leave the dialog answer open, are left as written.
+
 Run by the approver in a real terminal from this worktree (transcript `devloop-kit/task-236-runbook-2-transcript.md`,
 with the coordinator's observations); the launched agent's own note is `5b7af1be`, the record `94377e43`.
 - **R0:** `claude --version` → `2.1.296 (Claude Code)`; `node dist/cli.js --version` → `0.2.2 (7a04ad33…)`; HEAD
@@ -889,10 +903,11 @@ with the coordinator's observations); the launched agent's own note is `5b7af1be
   Memory). The only `wingfoil` MCP child of the session was `…/task-236/dist/cli.js mcp` (`5b7af1be`). The agent then
   ran shell commands and committed its observation note (`5b7af1be`) before the stop line reached it: the Esc step
   of the runbook did not stop it in time, as in run `…/adhoc/1`.
-- **D-H not observed.** No `.mcp.json` dialog appeared: the "Continue without using this MCP server" choice stored in
-  run `…/adhoc/1` was still in force (the reset ran only at the end of R4). So §2.5's outcome is: with `.mcp.json`'s
-  server not enabled, the adapter's server served; which server wins with both enabled is untested (the coordinator
-  filed the follow-up).
+- **D-H observed (corrected 2026-10-14).** No `.mcp.json` dialog appeared because the approver's run-1 answer, "Use
+  this MCP server", was stored: both same-named `wingfoil` servers were enabled. The adapter's `--mcp-config` server was
+  the only `wingfoil` child and served the session Resource; `.mcp.json`'s pinned server was shadowed, not spawned.
+  That is §2.5's outcome. (This item first read "D-H not observed … untested", from a transcript that showed only the
+  dialog's menu.) R4's `claude mcp reset-project-choices` cleared the run-1 choice.
 - **R3:** `/mcp` → `Wingfoil MCP Server`, `⚠ connected · no tools`, `Capabilities: resources · prompts`, `Config
   location: …/task-236/.mcp.json` (Claude Code's display, as in `…/adhoc/1`); `/status` → `Version: 2.1.296`, Session
   ID `b0fc53be-b276-5117-95e6-2e983cf4e5e9`, model `opus[1m] (claude-opus-5-5[1m])`. `/exit` → `run …/adhoc/2: agent
@@ -921,8 +936,10 @@ with the coordinator's observations); the launched agent's own note is `5b7af1be
   served as the read-only Resource wingfoil://session/{role}/{element}/{state}, byte-equal to the Prompt, and section
   2.4's context instruction names that Resource alone; the pre-flight of section 3.3 reads it, Q2 records the revisit
   and Q7 the one exception to R5. Section 2.8 fills the claude-code row from claude --help of 2.1.296 (Claude Code),
-  checked by hand on 2026-10-14; the revision note records that section 2.5's precedence with both servers enabled
-  was not observed and that Claude Code updated itself to 2.1.299 during the checked session."
+  its launch, MCP and session-id declarations checked by hand on 2026-10-14 with 2.1.296 and resume from --help only;
+  the revision note records section 2.5's outcome, both same-named servers enabled and the adapter's --mcp-config
+  server used with the project's .mcp.json one shadowed, and that Claude Code updated itself to 2.1.299 during the
+  checked session."
 - `spec-004-mcp-surface-contract` — proposed `--reason` as in "Pending amendments 2" above, unchanged.
 
 ### Retrospective
@@ -932,12 +949,42 @@ with the coordinator's observations); the launched agent's own note is `5b7af1be
   L (a new MCP Resource, two spec amendments). spec-016 §2.8 had named this exact risk ("Nothing in this repository
   establishes this capability for any agent CLI"); a cheap probe of how a real client exposes Prompts to its model,
   at planning time, would have moved the decision before the build.
-- **By-hand passes need their preconditions reset first.** Runbook 2's D-H step relied on a dialog a stored choice
-  from run 1 suppressed; the reset was placed at the end instead of the start. Likewise the agent ran in auto mode
-  and acted before Esc could stop it, twice. A runbook should reset client-side state before, and launch a role or
-  element where acting unasked is harmless.
+- **A transcript must carry the answers, not only the menus.** Run 1's pasted transcript showed the `.mcp.json`
+  dialog's menu but not the choice, and I read the menu's highlighted line as the answer; the outcome of D-H was then
+  stated backwards in these notes and the spec draft until the approver corrected it. A runbook step that asks for a
+  dialog answer should ask for it in words. Separately, the agent ran in auto mode and acted before Esc could stop
+  it, twice: a by-hand launch should use an element where acting unasked is harmless.
 - **The agent CLI is not pinned by the manifest.** Claude Code updated itself mid-session; `verified_with` records
   what was checked, not what runs. Reading `agent_version` before the launch (follow-up filed) would make the
   record name what actually started.
 - **The red split worked.** The one wrong red assertion (red 2's wire message, which could not hold together with
   its own S3 tests) was found by the first green run and fixed by the qa agent in one commit (`f2e3318f`), T4 intact.
+
+### independent review (2026-10-14) and fixes (developer)
+
+Verdict APPROVE WITH FIXES (code, manifest and tests hold; full run 7451/7451 reconfirmed by the reviewer). Text-only
+fixes, task stays `in-review`:
+- **F1** (D-H stated backwards; approver's correction): run 1's dialog answer was "Use this MCP server", so both runs had
+  both same-named servers enabled and the adapter's `--mcp-config` server won, `.mcp.json`'s shadowed. Corrected by
+  dated notes in my own sections (design addendum, runbook 2 transcript), the transcript summary's D-H item, the final
+  spec-016 `--reason`, and the Retrospective's lesson; the agent-written sections (`55cf766a`, `5b7af1be`) are left as
+  written. spec-016 (uncommitted): the Revision note states the outcome, and §2.5 gains one sentence recording it.
+- **F2**: spec-016 §2.7, "performs `initialize` and reads the session Resource".
+- **F3**: `docs/cli-reference.md` `wingfoil mcp` entry gains the "Also unreleased (v0.3)" paragraph for the session
+  Resource template (same context and `warnings` as the Prompt, never listed, the undefined-role refusal).
+  `npx jest test/docs/cli-reference.test.ts test/docs/mcp-surface-parity.test.ts --maxWorkers=2` → 7 passed;
+  `npm run lint` → exit 0. **Handover to `align-user-docs`:** `README.md:112` lists the MCP surface and does not name
+  the session Resource; README is that phase's (dl-013), so it is not edited here.
+- **F4**: the Revision note and the §2.8 `claude-code` row now say the launch, MCP and session-id declarations were
+  checked by hand on 2026-10-14 with 2.1.296 and resume is from `--help` only (`session.resume` is read from v0.4).
+- **F6**: the "no output" claim at red 2's run line is the qa agent's section; left as written.
+- Headings `### review (reviewer, self, …)` renamed `### self-review (developer, …)` (brief corrected 2026-10-14).
+- Final spec-016 `--reason` (replaces the one in "Pending amendments (approver) — final"): "task-236: approver ruling
+  (a) of 2026-10-13 after the by-hand pass found that Claude Code 2.1.296 gives the model no way to get an MCP Prompt:
+  the execution context is also served as the read-only Resource wingfoil://session/{role}/{element}/{state},
+  byte-equal to the Prompt, and section 2.4's context instruction names that Resource alone; the pre-flight of section
+  3.3 reads it, Q2 records the revisit and Q7 the one exception to R5. Section 2.8 fills the claude-code row from
+  claude --help of 2.1.296 (Claude Code), its launch, MCP and session-id declarations checked by hand on 2026-10-14
+  and resume from --help only; section 2.5 and the revision note record that with both same-named servers enabled the
+  adapter's --mcp-config server was used and the project's .mcp.json one shadowed, and that Claude Code updated itself
+  to 2.1.299 during the checked session." spec-004's `--reason` is unchanged.
