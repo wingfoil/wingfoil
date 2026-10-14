@@ -1,0 +1,270 @@
+{
+  "numFailedTestSuites": 3,
+  "numFailedTests": 3,
+  "numPassedTestSuites": 4,
+  "numPassedTests": 7,
+  "numPendingTestSuites": 0,
+  "numPendingTests": 2,
+  "numRuntimeErrorTestSuites": 1,
+  "numTodoTests": 1,
+  "numTotalTestSuites": 7,
+  "numTotalTests": 14,
+  "openHandles": [],
+  "snapshot": {
+    "added": 0,
+    "didUpdate": false,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0
+  },
+  "startTime": 1760400000000,
+  "success": false,
+  "testResults": [
+    {
+      "name": "/fixture-root/test/memory/add.test.ts",
+      "status": "passed",
+      "message": "",
+      "summary": "",
+      "startTime": 1760400000010,
+      "endTime": 1760400000510,
+      "coverage": null,
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "memory add"
+          ],
+          "fullName": "memory add writes the file",
+          "location": null,
+          "status": "passed",
+          "title": "writes the file",
+          "duration": 3,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": [
+            "memory add"
+          ],
+          "fullName": "memory add commits once",
+          "location": null,
+          "status": "passed",
+          "title": "commits once",
+          "duration": 3,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": [
+            "memory add"
+          ],
+          "fullName": "memory add later",
+          "location": null,
+          "status": "pending",
+          "title": "later",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "/fixture-root/test/core/a.test.ts",
+      "status": "failed",
+      "message": "",
+      "summary": "",
+      "startTime": 1760400000020,
+      "endTime": 1760400000520,
+      "coverage": null,
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "core a"
+          ],
+          "fullName": "core a fails",
+          "location": null,
+          "status": "failed",
+          "title": "fails",
+          "duration": 3,
+          "failureMessages": [
+            "Error: expect(received).toBe(expected)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "/fixture-root/test/cli/program.integration.test.ts",
+      "status": "passed",
+      "message": "",
+      "summary": "",
+      "startTime": 1760400000030,
+      "endTime": 1760400000530,
+      "coverage": null,
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "program"
+          ],
+          "fullName": "program spawns",
+          "location": null,
+          "status": "passed",
+          "title": "spawns",
+          "duration": 3,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": [
+            "program"
+          ],
+          "fullName": "program exits 0",
+          "location": null,
+          "status": "passed",
+          "title": "exits 0",
+          "duration": 3,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": [
+            "program"
+          ],
+          "fullName": "program to do",
+          "location": null,
+          "status": "todo",
+          "title": "to do",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "/fixture-root/test/memory/add-bdd.test.ts",
+      "status": "failed",
+      "message": "",
+      "summary": "",
+      "startTime": 1760400000040,
+      "endTime": 1760400000540,
+      "coverage": null,
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "Feature add"
+          ],
+          "fullName": "Feature add z last",
+          "location": null,
+          "status": "failed",
+          "title": "z last",
+          "duration": 3,
+          "failureMessages": [
+            "Error: expect(received).toBe(expected)"
+          ]
+        },
+        {
+          "ancestorTitles": [
+            "Feature add"
+          ],
+          "fullName": "Feature add b first",
+          "location": null,
+          "status": "failed",
+          "title": "b first",
+          "duration": 3,
+          "failureMessages": [
+            "Error: expect(received).toBe(expected)"
+          ]
+        },
+        {
+          "ancestorTitles": [
+            "Feature add"
+          ],
+          "fullName": "Feature add passes",
+          "location": null,
+          "status": "passed",
+          "title": "passes",
+          "duration": 3,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "/fixture-root/test/cli/e2e-smoke.test.ts",
+      "status": "failed",
+      "message": "  ● Test suite failed to run\n\n    Cannot find module",
+      "summary": "",
+      "startTime": 1760400000050,
+      "endTime": 1760400000550,
+      "coverage": null,
+      "assertionResults": []
+    },
+    {
+      "name": "/fixture-root/test/docs/api-docs.test.ts",
+      "status": "passed",
+      "message": "",
+      "summary": "",
+      "startTime": 1760400000060,
+      "endTime": 1760400000560,
+      "coverage": null,
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "api docs"
+          ],
+          "fullName": "api docs generates",
+          "location": null,
+          "status": "passed",
+          "title": "generates",
+          "duration": 3,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": [
+            "api docs"
+          ],
+          "fullName": "api docs disabled one",
+          "location": null,
+          "status": "disabled",
+          "title": "disabled one",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "/fixture-root/test/lint/lint-clean.test.ts",
+      "status": "passed",
+      "message": "",
+      "summary": "",
+      "startTime": 1760400000070,
+      "endTime": 1760400000570,
+      "coverage": null,
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "lint"
+          ],
+          "fullName": "lint is clean",
+          "location": null,
+          "status": "passed",
+          "title": "is clean",
+          "duration": 3,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": [
+            "lint"
+          ],
+          "fullName": "lint skipped one",
+          "location": null,
+          "status": "skipped",
+          "title": "skipped one",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    }
+  ],
+  "wasInterrupted": false
+}

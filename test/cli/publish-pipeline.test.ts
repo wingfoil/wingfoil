@@ -142,14 +142,19 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
     expect(parsed.jobs['mcp-registry']?.needs).toBe('promote');
   });
 
-  it('gate asserts tag-on-main + tag↔version, then prepublishOnly, the dry-run manifest, and packs once', () => {
+  // task-244 (ruling D1 (a)): prepublishOnly's three commands run as three gate steps, the test one as
+  // `test:report` (one suite run, with coverage and Jest JSON), then the classifier writes the summary.
+  it('gate asserts tag-on-main + tag↔version, then build, test:report, lint, the summary, the dry-run manifest, and packs once', () => {
     const script = runs(readWorkflow().parsed.jobs.gate);
     const order = [
       'git merge-base --is-ancestor "$GITHUB_SHA" origin/main',
       'node scripts/check-release-tag.cjs "$GITHUB_REF_NAME"',
       'node scripts/check-release-tag.cjs --annotated "$GITHUB_REF_NAME"',
       'npm ci',
-      'npm run prepublishOnly',
+      'npm run build',
+      'npm run test:report',
+      'npm run lint',
+      'node scripts/test-report.cjs',
       'npm publish --dry-run --ignore-scripts',
       'npm pack --ignore-scripts --pack-destination',
     ].map((cmd) => script.indexOf(cmd));
@@ -617,5 +622,240 @@ describe('action pins (task-113) — full SHA, node24 release, tag in the traili
     const lines = usesLines.filter((l) => l.includes(`uses: ${name}@`));
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) expect(line.trim()).toBe(`- uses: ${name}@${sha} # ${tag}`);
+  });
+});
+
+/**
+ * task-244 AC 2 (`dl-136` Q1 (c), Q3 (a); spec-015 §3) — the tag's run keeps its test results and coverage.
+ * The gate runs prepublishOnly's three commands as three steps (approver ruling D1 (a), 2026-10-14), the test
+ * one as `npm run test:report` (one suite run, with coverage and Jest JSON into `coverage/`, ruling D8), then
+ * `scripts/test-report.cjs` writes the Markdown summary; the four reports are the gate's LAST upload, and the
+ * `release` job downloads them and attaches them to the GitHub Release. The tarball stays the gate's first
+ * upload, the one stage and promote download.
+ */
+describe('test reports (task-244) — the gate keeps them, the release attaches them', () => {
+  const REPORT_FILES = ['coverage/jest-results.json', 'coverage/coverage-summary.json', 'coverage/lcov.info', 'coverage/test-results.md'];
+  const uploads = (job: WorkflowJob | undefined): WorkflowStep[] =>
+    (job?.steps ?? []).filter((s) => s.uses?.startsWith('actions/upload-artifact@'));
+  const downloads = (job: WorkflowJob | undefined): WorkflowStep[] =>
+    (job?.steps ?? []).filter((s) => s.uses?.startsWith('actions/download-artifact@'));
+  /** A `run:` with its line continuations and runs of whitespace collapsed to single spaces. */
+  const flat = (run: string | undefined): string => (run ?? '').replace(/\\\n/g, ' ').replace(/\s+/g, ' ').trim();
+
+  it('names the reports artifact once, beside the tarball’s', () => {
+    const { parsed } = readWorkflow();
+    expect(parsed.env?.REPORTS_ARTIFACT).toBe('wingfoil-test-reports');
+    expect(parsed.env?.TARBALL_ARTIFACT).toBe('wingfoil-tarball');
+  });
+
+  it('runs build, test:report and lint as three consecutive steps: prepublishOnly’s commands, the test one with coverage and JSON', () => {
+    const steps = (readWorkflow().parsed.jobs.gate?.steps ?? []).filter((s) => s.run !== undefined).map((s) => s.run?.trim());
+    const expected = (pkg.scripts?.prepublishOnly ?? '').split(' && ').map((cmd) => (cmd === 'npm test' ? 'npm run test:report' : cmd));
+    expect(expected).toEqual(['npm run build', 'npm run test:report', 'npm run lint']);
+    const start = steps.indexOf('npm run build');
+    expect(start).toBeGreaterThan(steps.indexOf('npm ci'));
+    expect(steps.slice(start, start + 3)).toEqual(expected);
+    expect(steps).not.toContain('npm run prepublishOnly');
+  });
+
+  it('classifies the results with every argument of the tag’s run', () => {
+    const step = readWorkflow().parsed.jobs.gate?.steps.find((s) => s.run?.includes('node scripts/test-report.cjs'));
+    const run = flat(step?.run);
+    for (const arg of [
+      '--results coverage/jest-results.json',
+      '--coverage-summary coverage/coverage-summary.json',
+      '--build-info dist/build-info.json',
+      '--commit "$GITHUB_SHA"',
+      '--tag "$GITHUB_REF_NAME"',
+      '--run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"',
+      '--out coverage/test-results.md',
+    ]) {
+      expect([arg, run.includes(arg)]).toEqual([arg, true]);
+    }
+  });
+
+  it('uploads twice: the tarball first, the four reports last, failing on a missing file', () => {
+    const gate = readWorkflow().parsed.jobs.gate;
+    const [tarball, reports, ...rest] = uploads(gate);
+    expect(rest).toEqual([]);
+    expect(tarball?.with?.name).toBe('${{ env.TARBALL_ARTIFACT }}');
+    expect(reports?.with?.name).toBe('${{ env.REPORTS_ARTIFACT }}');
+    expect(gate?.steps[gate.steps.length - 1]).toBe(reports);
+    const paths = String(reports?.with?.path ?? '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '');
+    expect([...paths].sort()).toEqual([...REPORT_FILES].sort());
+    expect(reports?.with?.['if-no-files-found']).toBe('error');
+  });
+
+  it('stage and promote download the tarball only', () => {
+    const { parsed } = readWorkflow();
+    for (const name of ['stage', 'promote']) {
+      expect([name, downloads(parsed.jobs[name]).map((s) => s.with?.name)]).toEqual([name, ['${{ env.TARBALL_ARTIFACT }}']]);
+    }
+  });
+
+  it('release: notes → reports download (no `if:`) → wait → create, in that order', () => {
+    const steps = readWorkflow().parsed.jobs.release?.steps ?? [];
+    const download = downloads({ steps }).find((s) => s.with?.name === '${{ env.REPORTS_ARTIFACT }}');
+    expect(download?.with?.path).toBe('test-reports');
+    expect(download?.if).toBeUndefined();
+    const order = [
+      steps.findIndex((s) => s.run?.includes('node scripts/changelog-section.cjs')),
+      download === undefined ? -1 : steps.indexOf(download),
+      steps.findIndex((s) => s.run?.includes('node scripts/wait-npm-version.cjs')),
+      steps.findIndex((s) => s.run?.includes('gh release create')),
+    ];
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('release: `gh release create` attaches the four reports by name', () => {
+    const create = readWorkflow().parsed.jobs.release?.steps.find((s) => s.run?.includes('gh release create'));
+    for (const file of ['jest-results.json', 'coverage-summary.json', 'lcov.info', 'test-results.md']) {
+      expect([file, (create?.run ?? '').includes(`test-reports/${file}`)]).toEqual([file, true]);
+    }
+  });
+
+  it('the header names dl-136 and task-244', () => {
+    const { raw } = readWorkflow();
+    const header = raw.slice(0, raw.indexOf('\nname: publish'));
+    expect(header).toContain('dl-136');
+    expect(header).toContain('task-244');
+  });
+
+  it('runbook step 8: a succeeded mcp-registry job is never re-run — the registry accepts each version once (task-238 handover)', () => {
+    const { raw } = readWorkflow();
+    const header = raw.slice(0, raw.indexOf('\nname: publish'));
+    const eight = header.slice(header.search(/\n#\s+8\. /), header.indexOf('Rollback posture'));
+    expect(eight).toMatch(/succeeded/);
+    expect(eight).toMatch(/always refused/);
+    expect(eight).toMatch(/accepts each version once/);
+  });
+});
+
+/**
+ * task-244 AC 3 (`dl-136`; approver rulings D3, D6, D7, 2026-10-14) — the release workflows declare the reports.
+ * `release-submit`'s `pre-release-checks` runs the candidate's `test:report` and commits its summary (D3);
+ * `release-publishing`'s `publish` declares the tag run's summary and coverage JSON it commits, fetched from the
+ * Release's assets, on whatever branch the release is integrated on (`dl-159`: keyed by version, no branch);
+ * `release-commit`'s CHANGELOG section links the summary (D7). Versions are "at least", with their history
+ * entry (bug-314). `07_sequencer.md`'s coverage criteria point to the summary (D6).
+ */
+describe('release workflows declare the test reports (task-244)', () => {
+  interface Phase {
+    readonly name: string;
+    readonly description?: string;
+    readonly actions?: readonly string[];
+    readonly produces?: readonly unknown[];
+    readonly checks?: { readonly pre?: readonly string[]; readonly post?: readonly string[] };
+  }
+  const read = (file: string): { readonly raw: string; readonly phases: readonly Phase[] } => {
+    const raw = readFileSync(join(REPO_ROOT, '.wingfoil', 'workflows', 'custom', file), 'utf-8');
+    return { raw, phases: (yamlLoad(raw) as { phases: readonly Phase[] }).phases };
+  };
+  /** `major.minor` as one comparable number (`1.10` > `1.9`). */
+  const versionNumber = (raw: string): number => {
+    const [major, minor] = raw.split('.').map(Number);
+    return (major ?? 0) * 1000 + (minor ?? 0);
+  };
+  const versionLine = (raw: string): { readonly version: number; readonly history: string } => {
+    const match = /^version: (\d+\.\d+)(.*)$/m.exec(raw);
+    return { version: versionNumber(match?.[1] ?? '0.0'), history: match?.[2] ?? '' };
+  };
+  const SUMMARY = 'docs/07_gates/rl-{release.release-line}/rel-{release.version}-test-results.md';
+  const COVERAGE = 'docs/07_gates/rl-{release.release-line}/rel-{release.version}-coverage-summary.json';
+  const CANDIDATE = 'docs/07_gates/rl-{release.release-line}/rel-{release.version}-test-results-candidate.md';
+
+  it('release-submit is at 1.3 or later, its version line naming 1.3 and task-244', () => {
+    const { version, history } = versionLine(read('release-submit.yaml').raw);
+    expect(version).toBeGreaterThanOrEqual(versionNumber('1.3'));
+    expect(history).toContain('1.3');
+    expect(history).toContain('task-244');
+  });
+
+  it('release-submit `pre-release-checks` runs test:report, writes the candidate’s summary, and produces it (ruling D3)', () => {
+    const phase = read('release-submit.yaml').phases.find((p) => p.name === 'pre-release-checks');
+    expect(phase?.actions).toEqual([
+      'cli.run(command: "npm run test:report")',
+      'cli.run(command: "node scripts/test-report.cjs --results coverage/jest-results.json --coverage-summary coverage/coverage-summary.json --build-info dist/build-info.json --commit <candidate sha> --out <the produces path>")',
+    ]);
+    expect(phase?.produces).toEqual([CANDIDATE]);
+  });
+
+  it('release-submit `pre-release-checks` keeps its six pre checks unchanged', () => {
+    const phase = read('release-submit.yaml').phases.find((p) => p.name === 'pre-release-checks');
+    expect(phase?.checks?.pre).toEqual([
+      'all tasks where tags=[{release.version}] are status: done',
+      'all bugs where tags=[{release.version}] are status: [resolved, closed]',
+      'tests.passing',
+      'tests.coverage(min: 80)',
+      'typecheck.clean',
+      'tests.no-identity',
+    ]);
+  });
+
+  it('release-publishing is at 1.7 or later, its version line naming 1.7 and task-244', () => {
+    const { version, history } = versionLine(read('release-publishing.yaml').raw);
+    expect(version).toBeGreaterThanOrEqual(versionNumber('1.7'));
+    expect(history).toContain('1.7');
+    expect(history).toContain('task-244');
+  });
+
+  it('release-publishing `publish` produces the tag run’s summary and coverage JSON', () => {
+    const phase = read('release-publishing.yaml').phases.find((p) => p.name === 'publish');
+    expect(phase?.produces).toEqual([SUMMARY, COVERAGE]);
+  });
+
+  it('release-publishing `publish` names the four assets and how they are fetched, and no branch', () => {
+    const description = read('release-publishing.yaml').phases.find((p) => p.name === 'publish')?.description ?? '';
+    for (const needle of ['jest-results.json', 'coverage-summary.json', 'lcov.info', 'test-results.md', 'gh release download']) {
+      expect([needle, description.includes(needle)]).toEqual([needle, true]);
+    }
+    expect(description).not.toMatch(/\bmain\b/);
+  });
+
+  it('release-publishing `publish` post check names the test reports on the GitHub Release', () => {
+    const phase = read('release-publishing.yaml').phases.find((p) => p.name === 'publish');
+    expect(phase?.checks?.post).toEqual([
+      'staged version approved on npm, live on the npm registry, its GitHub Release created with the test reports attached and its MCP Registry listing published',
+    ]);
+  });
+
+  it('release-publishing `release-commit`: the CHANGELOG section links the summary (ruling D7)', () => {
+    const description = read('release-publishing.yaml').phases.find((p) => p.name === 'release-commit')?.description ?? '';
+    expect(description).toContain('CHANGELOG');
+    expect(description).toContain('rel-{release.version}-test-results.md');
+  });
+
+  it('every new produces path is keyed by {release.version} and names no branch (dl-159 handover)', () => {
+    const declared = ['release-submit.yaml', 'release-publishing.yaml']
+      .flatMap((file) => read(file).phases.flatMap((p) => p.produces ?? []))
+      .filter((entry): entry is string => typeof entry === 'string' && /test-results|coverage-summary/.test(entry));
+    expect([...declared].sort()).toEqual([SUMMARY, COVERAGE, CANDIDATE].sort());
+    for (const path of declared) {
+      expect(path).toContain('{release.version}');
+      expect(path).not.toMatch(/\bmain\b/);
+      expect(path).not.toContain('release/');
+    }
+  });
+
+  it('07_sequencer.md is at 1.9 or later; its v0.3 and v0.4 coverage criteria point to the summary, v0.1/v0.2 say they predate it (ruling D6)', () => {
+    const text = readFileSync(join(REPO_ROOT, 'docs', '01_vision', '07_sequencer.md'), 'utf-8');
+    const version = /^\*\*Version:\*\* (\d+\.\d+)$/m.exec(text);
+    expect(versionNumber(version?.[1] ?? '0.0')).toBeGreaterThanOrEqual(versionNumber('1.9'));
+    const dod = (release: string): string => {
+      const start = text.indexOf(`### ${release} Definition of Done`);
+      const end = text.indexOf('\n### ', start + 1);
+      return start === -1 ? '' : text.slice(start, end === -1 ? undefined : end);
+    };
+    const coverageLine = (release: string): string => dod(release).split('\n').find((l) => /test coverage/.test(l)) ?? '';
+    for (const release of ['v0.3', 'v0.4']) {
+      expect([release, /rel-(\{version\}|\{release\.version\}|v\d+\.\d+)-test-results\.md/.test(coverageLine(release))]).toEqual([release, true]);
+    }
+    for (const release of ['v0.1', 'v0.2']) {
+      expect([release, coverageLine(release).includes('(no published summary: before dl-136)')]).toEqual([release, true]);
+    }
   });
 });

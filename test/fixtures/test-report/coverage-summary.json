@@ -1,0 +1,54 @@
+{
+  "total": {
+    "lines": {
+      "total": 1000,
+      "covered": 912,
+      "skipped": 0,
+      "pct": 91.2
+    },
+    "statements": {
+      "total": 1100,
+      "covered": 990,
+      "skipped": 0,
+      "pct": 90
+    },
+    "functions": {
+      "total": 300,
+      "covered": 261,
+      "skipped": 0,
+      "pct": 87
+    },
+    "branches": {
+      "total": 700,
+      "covered": 581,
+      "skipped": 0,
+      "pct": 83
+    }
+  },
+  "/fixture-root/src/a.ts": {
+    "lines": {
+      "total": 10,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 90
+    },
+    "statements": {
+      "total": 10,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 90
+    },
+    "functions": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 2,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 50
+    }
+  }
+}
