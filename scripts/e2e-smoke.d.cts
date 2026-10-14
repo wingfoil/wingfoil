@@ -127,11 +127,13 @@ export function agentRunSteps(template: string): readonly SmokeAgentStep[];
 /**
  * task-243: run `steps` (default: {@link agentRunSteps}) in its own fresh throwaway git repository; every
  * check labelled `[<template>/agent] …`, the working tree required clean after each step, stops at the
- * first failure. The env given to every step is `env` without any `WINGFOIL_FAKE_AGENT_*` variable.
+ * first failure. Each step's environment is passed to `invoke` as its third argument: `env` without any
+ * `WINGFOIL_FAKE_AGENT_*` variable, plus `WINGFOIL_FAKE_AGENT_CONNECT=1` and
+ * `WINGFOIL_FAKE_AGENT_RECORD=<a file outside the project>` on a `fakeAgent` step.
  */
 export function smokeAgentRun(
   template: string,
-  invoke: (args: readonly string[], cwd: string) => { status: number | null; stdout: string; stderr: string },
+  invoke: (args: readonly string[], cwd: string, env?: NodeJS.ProcessEnv) => { status: number | null; stdout: string; stderr: string },
   env: NodeJS.ProcessEnv,
   steps?: readonly SmokeAgentStep[],
   fixtures?: string,

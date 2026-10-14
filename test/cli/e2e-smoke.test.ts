@@ -385,8 +385,8 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
     type Check = ReturnType<typeof smokeAgentRun>[number];
 
     /** `dist/cli.js` driven directly, the shape `smokeAgentRun`'s `invoke` takes. */
-    const invoke = (args: readonly string[], cwd: string) => {
-      const r = spawnSync(process.execPath, [DIST_CLI, ...args], { cwd, env: process.env, encoding: 'utf-8' });
+    const invoke = (args: readonly string[], cwd: string, env: NodeJS.ProcessEnv = process.env) => {
+      const r = spawnSync(process.execPath, [DIST_CLI, ...args], { cwd, env, encoding: 'utf-8' });
       return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
     };
     const argsOf = (step: AgentStep): readonly string[] | undefined => ('args' in step ? step.args : undefined);
