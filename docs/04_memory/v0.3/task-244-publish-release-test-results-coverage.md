@@ -72,7 +72,7 @@ Branch `task/task-244-publish-release-test-results-coverage`, worktree `../.wf2-
   `writeFileSync`, no `mkdir`: the JSON must go to a directory that already exists → `coverage/` (D8), which the
   coverage run creates and `.gitignore` already ignores. Classification counts on this tree (`find test -name
   "*.test.ts"` → 411; 2 latency suites run apart): `*.integration.test.ts` → 43; files citing
-  `docs/02_requirements/02_bdd/features/….feature` anywhere → 34, in the header comment → 31 (D2; superseded by review F2: a `.feature` cited in any spelling → 59, see the independent review section); BDD ∩
+  `docs/02_requirements/02_bdd/features/….feature` anywhere → 34, in the header comment → 31 (D2; superseded by review F2: a `.feature` cited in any spelling → 59, then 58 after re-review R1, see the independent review section); BDD ∩
   integration → 0; the three exact-path files cite no feature.
 
 **Design.**
@@ -363,7 +363,7 @@ both rewritten, no red file touched).
 | Command | Result |
 |---|---|
 | `bash ../devloop-kit/waitslot.sh && npm run test:report -- --maxWorkers=2` at `ac25373a` (07:59–08:23Z, load 6.9 at start; log `devloop-kit/task-244-test-report.log`) — the full suite with coverage AND this task's own reports | 410 suites, 7467 tests, 1 failed: `test/docs/name-resolvability.test.ts` on `spec-015…\|path\|test-results.md`, a backticked bare file name in my uncommitted spec-015 amendment; unbackticked → `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` 11/11. Coverage **99.32 / 97.23 / 97.98 / 99.71**, equal to the B6 baseline in every column. `coverage/jest-results.json` written (6,163,869 bytes), `coverage-summary.json` 38,673, `lcov.info` 302,439 |
-| `node scripts/test-report.cjs --results coverage/jest-results.json --coverage-summary coverage/coverage-summary.json --build-info dist/build-info.json --commit "$(git rev-parse HEAD)" --out coverage/test-results.md` on that real run | exit 0; unit 333 files / 6343 tests (1 failed, the one above), integration 43 / 542, BDD 31 / 545, smoke 1 / 35, API-docs 1 / 1, lint.clean 1 / 1, total 410 / 7467; coverage rows equal the console table; Build `0.2.2 (ac25373a…)`; `## Failures` lists the one failure. The counts match the design's (43 integration, 31 BDD); review F2 changes them to 37 integration, 59 BDD (independent review section) |
+| `node scripts/test-report.cjs --results coverage/jest-results.json --coverage-summary coverage/coverage-summary.json --build-info dist/build-info.json --commit "$(git rev-parse HEAD)" --out coverage/test-results.md` on that real run | exit 0; unit 333 files / 6343 tests (1 failed, the one above), integration 43 / 542, BDD 31 / 545, smoke 1 / 35, API-docs 1 / 1, lint.clean 1 / 1, total 410 / 7467; coverage rows equal the console table; Build `0.2.2 (ac25373a…)`; `## Failures` lists the one failure. The counts match the design's (43 integration, 31 BDD); review F2 and re-review R1 change them to 37 integration, 58 BDD (independent review section) |
 | `npm run lint` | exit 0 |
 | `bash ../devloop-kit/waitslot.sh && npm run docs:api && npm run typecheck` | exit 0, exit 0 |
 | `node scripts/check-governance.cjs --base db0e2752` | 0 findings |
@@ -456,3 +456,16 @@ in `w3-b7-notes.md`).** qa send-back red `b6002ee3` (`test/cli/publish-pipeline.
   153/153; after the commit, the conformance suite at HEAD → 15/15; `npm run lint` → exit 0.
 - **T4.** `git log --first-parent --no-merges --format=%h b6002ee3..HEAD -- test/cli/publish-pipeline.test.ts` →
   empty; from `2d6f836a` over red's six files it lists only `b6002ee3` and `38580877`, the qa agent's send-backs.
+
+**Re-review R1 (2026-10-14).** `FEATURE_CITATION` `/[\w./-]*\w\.feature\b/` matched a test-file name such as
+`mcp-prompts.feature.test.ts` (`\b` holds before the `.`), so `test/mcp/role-prompt-context.test.ts` was BDD. qa
+send-back red `b3fad6fe` (a header naming only a `*.feature.test.ts` file → unit; notes `e4d4854e`). Fix `6411c411`: the
+name must end in `.feature`, `/[\w./-]*\w\.feature(?![\w-]|\.\w)/` — no word character, `-` or `.`+word after
+it, so a sentence's closing period still ends a citation. The script header, the `.d.cts` and the rule paragraph
+the summary prints say "ending in `.feature`".
+- **Live counts, recomputed** (same command as for F2, 410 files): unit 312, integration 37, BDD 58, smoke 1,
+  API-docs 1, lint.clean 1; `classifySuite` on `test/mcp/role-prompt-context.test.ts` → `unit`. The F2 entry above
+  ("BDD 59, unit 311") is superseded by these.
+- **Runs.** `npx jest test/cli/test-report.test.ts --maxWorkers=2` → 46/46; `npm run lint` → exit 0.
+- **T4.** `git log --first-parent --no-merges --format=%h b3fad6fe..HEAD -- test/cli/test-report.test.ts` → empty;
+  from `2d6f836a` over red's six files it lists only the qa send-backs `b3fad6fe`, `b6002ee3`, `38580877`.
