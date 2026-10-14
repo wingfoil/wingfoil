@@ -71,6 +71,17 @@ dist-tag explicit and correct in both directions, and checks that the MCP Regist
   "latest only for the highest version" logic of its own when a `0.3.x` patch is published after a higher minor;
   extending the job's single `if:` (the `dl-159` handover) for `release/X.Y` tags is enough. No criterion changes.
 
+- **Handover from wave 3 B7 (2026-10-13, `task-234`, approver ruling 1 on its design).** `.github/workflows/pages.yml`
+  (`task-234`) deploys the documentation site on every `vX.Y.Z` tag push, the same filter as `publish.yml`. Once a
+  `release/X.Y` line publishes a patch below the highest published version (a `0.3.1` after `0.4.0`), that tag would
+  redeploy the older line's documents over the newest ones, and `package.json` `homepage` points at the site. The
+  rule this task builds (`latest` only for the highest published version, else `latest-X.Y`) is the one the site
+  needs: `pages.yml`'s `deploy` job runs only when the tag's version would get `latest`, pinned in
+  `test/cli/pages-workflow.test.ts` (a test `task-234` owns: extend it, keeping its existing cases). If design
+  prefers another owner, record it in this task's Execution Notes. Also, `pages.yml` deploys on the tag even when
+  `publish.yml`'s run for that tag fails, so the site can document a version npm does not serve. Whether it becomes
+  an acceptance criterion of this task is the approver's call at its design.
+
 ## Execution Notes
 
 <!-- Running log of what actually happened while working this task through dev-loop — filled in
