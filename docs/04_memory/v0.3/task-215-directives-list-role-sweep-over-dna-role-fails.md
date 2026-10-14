@@ -2,7 +2,7 @@
 id: "task-215-directives-list-role-sweep-over-dna-role-fails"
 type: task
 title: "A `directives list --role` sweep over every DNA role fails on any resolution warning (dl-050 option 1)"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "low"
