@@ -610,3 +610,49 @@ and type the stop line (the session ran in auto mode last time and acted unasked
 - D-F URI `wingfoil://session/{role}/{element}/{state}` (recommended) — or under `dl-040`'s pending `wingfoil://agent/…`.
 - D-G undefined-role message `no session context for undefined role '<R>'` (new spec-004 §3.4 row).
 - D-H the re-run answers the `.mcp.json` dialog "Use this MCP server", to test precedence with both servers enabled.
+
+### red 2 (qa, 2026-10-14) — session Resource
+
+- **Red commit `508f26ea`** (T4 for these files is measured from it; the first red `ad0d8c8d` is unchanged, the
+  addendum touches none of its files). Files: NEW `test/mcp/session-context-resource.test.ts`;
+  `test/agent/execute.test.ts`, `test/agent/fake-agent.test.ts`, `test/cli/agent-execute.integration.test.ts`,
+  `test/cli/agent-execute-launch.integration.test.ts` (S4 literal); the fixture `test/fixtures/agents/fake-agent.cjs`
+  (S5, red's: the developer does not edit it). The uncommitted spec-016 amendment in the worktree was left unstaged.
+- **S1 surface** (new file): `resources/templates/list declares wingfoil://session/{role}/{element}/{state}` fails
+  `Expected value: "wingfoil://session/{role}/{element}/{state}"` / `Received array: ["wingfoil://memory/{type}", …]`.
+  `resources/list names no wingfoil://session/ URI` and `tools/list stays empty` pass on first run (guards, as
+  characterization: green must keep them).
+- **S2 content** (new file, 6 tests: byte-equal to the builder payload and the Prompt text; the reviewer URI; pinned at
+  state after a later commit + uncommitted edit; `task%3A…` reads the same; no `warnings` when none; `warnings` equal to
+  the Prompt's for a bound directive with no file): all fail on the server's answer `MCP error -32602: Resource
+  wingfoil://session/developer/task:task-001-active/<sha> not found` (the SDK's no-match refusal: nothing registers the
+  template).
+- **S3 refusals** (new file, 6 tests): malformed element-ref `notaref`, malformed revision `..x`, a revision naming no
+  commit, an element absent at the sha, role `ghost` (D-G), each `toBe` the exact `MCP error -32602: <spec-004 §3.4
+  message>`; received `… Resource wingfoil://session/… not found`. Write intent in `_meta` on a URI naming an absent
+  element: `Expected substring: "resources are read-only"`, received the not-found message (so "before any read" is
+  pinned by the absent element). Note for green: the client sees one `MCP error -32602:` prefix only when the handler
+  throws a plain `Error` with a `code`, as `src/mcp/prompt.ts:79-87` does; an `McpError` would arrive with two.
+- **S4 bootstrap**: `renderBootstrap (§2.4) … is the fixed template` (execute.test.ts), `task-218 AC 5 — the bootstrap
+  bytes` ×2 (agent-execute.integration), `the fake receives exactly the argv its manifest renders` and `--agent selects
+  another entry` (agent-execute-launch) fail on the diff line `- … Read the MCP resource
+  "wingfoil://session/developer/task:…/<sha>".` / `+ … Get the MCP prompt "developer-session" with arguments …`.
+- **S5 fake agent**: the fixture now matches `Read the MCP resource "(wingfoil://session/[^"]+)".` and sends
+  `resources/read { uri }`, recording `{ server, resource: { uri }, text, warnings? }` (was `prompt: { name, arguments }`);
+  failure text "the bootstrap names no MCP resource to read (spec-016 §2.4)". In fake-agent.test.ts: `AC 2 … completes
+  initialize and the resources/read …` fails `Received: {"code": -32602, "message": "MCP error -32602: Resource
+  wingfoil://session/… not found"}` at `mcp?.error toBeUndefined`; `records the server's refusal …` now pins the exact
+  `element 'task:task-999-absent' not found at <sha>` and fails on the SDK's not-found message. The "names no MCP
+  resource" tests and F2 (the split-chunk stub now answers `resources/read`) pass on first run: they exercise only the
+  fixture.
+- **S6**: no test, as designed.
+- **Run:** `npx jest test/mcp/session-context-resource.test.ts test/agent/fake-agent.test.ts test/agent/execute.test.ts
+  test/cli/agent-execute.integration.test.ts test/cli/agent-execute-launch.integration.test.ts --maxWorkers=2` → 20
+  failed, 122 passed, 142 total (session-context-resource 13 failed / 2 passed; fake-agent 2 / 52; execute 1 / 26;
+  agent-execute.integration 2 / 29; agent-execute-launch 2 / 13). `npx eslint` on the six files and `npx tsc --noEmit -p
+  tsconfig.json` filtered to them: no output.
+- **Not pinned:** the repository refusals as failed reads (archived subject, newer `format:`), which the addendum's
+  Resource section lists but its qa row S3 does not; the `mcpPreflight` stubs in `execute.test.ts` still answer
+  `prompts/get` (the addendum does not change the pre-flight). Contrary to the design's S5 sentence, no CLI
+  integration test sets `WINGFOIL_FAKE_AGENT_CONNECT` (`grep -rn FAKE_AGENT_CONNECT test --include=*.ts` → only
+  fake-agent.test.ts), so they pin the literal (S4) but not the Resource's text.
