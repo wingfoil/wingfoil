@@ -201,6 +201,12 @@ describe('AC 1 — classifySuite: first rule that matches', () => {
     expect(load().classifySuite('test/cli/cli-ux.test.ts', source)).toBe('BDD');
   });
 
+  // Re-review send-back R1 (2026-10-14): a test file named `….feature.test.ts` is not a feature file.
+  it('a header naming only a `*.feature.test.ts` test file (no `.feature` file) is not BDD', () => {
+    const source = "/**\n * Pairs with `test/mcp/mcp-prompts.feature.test.ts` and `role-prompt.feature.test.ts`.\n */\nimport { x } from 'y';\n";
+    expect(load().classifySuite('test/mcp/role-prompt-context.test.ts', source)).toBe('unit');
+  });
+
   it('a bare feature file name cited only after the header is not BDD', () => {
     const source = "/** A unit suite. */\nimport { x } from 'y';\n\n// See P5.1.4-cli-ux.feature.\nconst NAME = 'P5.1.4-cli-ux.feature';\n";
     expect(load().classifySuite('test/cli/names.test.ts', source)).toBe('unit');
