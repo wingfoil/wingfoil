@@ -41,7 +41,7 @@
 #
 # ── Job timeouts (dl-057 (b) option 1, task-238) ──
 #
-#   Every job declares `timeout-minutes`:  gate 30 · stage 20 · promote 30 · release 345 · mcp-registry 345.
+#   Every job declares `timeout-minutes`:  gate 45 · stage 20 · promote 30 · release 345 · mcp-registry 345.
 #   stage and promote are task-077's measured table ("Suggested `timeout-minutes`", sized from the first
 #   real `act` run, generous enough not to flake); the v0.2.2 run took stage 42s and promote 16s. gate
 #   is raised from that table's 15: it runs `prepublishOnly`, whose suite has grown since — the same step
@@ -52,8 +52,10 @@
 #   bounds only its work. release and mcp-registry carry their 330-minute npm poll plus a margin, under the
 #   hosted runner's 6-hour job limit.
 #   Since task-244 gate runs that suite once with coverage (`npm run test:report`), which adds the
-#   instrumentation's cost to those 7 minutes; 30 is kept, and the v0.3.0 tag run's gate duration is checked
-#   against it at v0.3 release-publishing (approver ruling D5, 2026-10-12).
+#   instrumentation's cost to those 7 minutes, and gate is raised from 30 to 45 (approver ruling F4,
+#   2026-10-14): no CI run has timed the suite under coverage yet, and a gate that times out on the tag can
+#   only be fixed by a new commit and a new tag. The v0.3.0 tag run's gate duration is read at v0.3
+#   release-publishing (approver ruling D5, 2026-10-12).
 #
 # Trigger: a `vX.Y.Z` tag push. The tag is created on `main` after the release branch merges (dl-024);
 # the gate refuses a tag whose commit is not on `main`.
@@ -215,7 +217,7 @@ env:
 jobs:
   gate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

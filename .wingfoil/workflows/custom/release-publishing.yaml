@@ -7,7 +7,7 @@ description: >-
   local staging registry, tag the candidate, publish it to the npm registry, and mark the release
   element as released. A candidate that has not passed both the e2e-smoke gate and the staging
   rehearsal is not tagged (dl-099 §1).
-version: 1.7                     # 1.2 spec-003 alignment (task-199): the two agent.execute steps are one (the instructions are the description, dl-090 Q6 (b)), git and approver tokens take key: value arguments (spec-003 open question 6); 1.3 task-214: the tag phase names the release bump commit's files, SECURITY.md among them (its supported row follows package.json's minor, dl-127); 1.4 dl-099 §1–§2 (task-219): the release commit is its own phase, `release-commit`, so the `staging-rehearsal` phase (qa) runs on the candidate it cuts, and `tag` tags the candidate the rehearsal's transcript names; 1.5 dl-130 steps 1 and 4 (task-229): `publish` declares the service verify sweep as a `checks.pre` (warn), and its description names publish.yml's `release` job, which creates the GitHub Release once npm serves the version; 1.6 dl-130 step 2, bug-173, bug-174 (task-238): `publish` names publish.yml's `mcp-registry` job (the MCP Registry listing over GitHub OIDC), where npm's Staged Packages tab is, the automated review before Approve and the npx form of npm ≥ 11.15.0, and its post check names the listing; 1.7 dl-136 (task-244, approver rulings D3, D7): publish.yml's `release` job attaches the tag run's four test reports to the GitHub Release, `publish` produces the summary and coverage-summary.json committed under docs/07_gates/ keyed by version, its post check names the attached reports, and `release-commit`'s CHANGELOG section links the summary
+version: 1.7                     # 1.2 spec-003 alignment (task-199): the two agent.execute steps are one (the instructions are the description, dl-090 Q6 (b)), git and approver tokens take key: value arguments (spec-003 open question 6); 1.3 task-214: the tag phase names the release bump commit's files, SECURITY.md among them (its supported row follows package.json's minor, dl-127); 1.4 dl-099 §1–§2 (task-219): the release commit is its own phase, `release-commit`, so the `staging-rehearsal` phase (qa) runs on the candidate it cuts, and `tag` tags the candidate the rehearsal's transcript names; 1.5 dl-130 steps 1 and 4 (task-229): `publish` declares the service verify sweep as a `checks.pre` (warn), and its description names publish.yml's `release` job, which creates the GitHub Release once npm serves the version; 1.6 dl-130 step 2, bug-173, bug-174 (task-238): `publish` names publish.yml's `mcp-registry` job (the MCP Registry listing over GitHub OIDC), where npm's Staged Packages tab is, the automated review before Approve and the npx form of npm ≥ 11.15.0, and its post check names the listing; 1.7 dl-136 (task-244, approver rulings D3, D7): publish.yml's `release` job attaches the tag run's four test reports to the GitHub Release, `publish` produces the summary and coverage-summary.json committed under docs/07_gates/ keyed by version, its post check names the attached reports, and `release-commit`'s CHANGELOG section links the summary as the Release asset's absolute URL (review F5)
 element: release
 
 phases:
@@ -19,9 +19,13 @@ phases:
       test/docs/community-health.test.ts fails on a minor bump that leaves it behind). Once it is
       merged into the release's integration branch, the integration-branch commit that carries it is
       the release candidate (dl-099 §1): the commit proposed for the tag. The version's CHANGELOG
-      section links its test-results summary,
-      docs/07_gates/rl-{release.release-line}/rel-{release.version}-test-results.md, which `publish`
-      commits once the tag's run has produced it (dl-136).
+      section links its test-results summary by the absolute URL of the GitHub Release asset,
+      https://github.com/wingfoil/wingfoil/releases/download/v{X.Y.Z}/test-results.md (v{X.Y.Z} the tag
+      the release creates), since the section becomes the Release notes, where a relative link breaks
+      (approver ruling F5). It is the same file `publish` later commits at
+      docs/07_gates/rl-{release.release-line}/rel-{release.version}-test-results.md (dl-136). Not a blob
+      URL at the tag: the tag names the candidate, and the summary is committed after it, so a blob there
+      never resolves; the asset exists as soon as the Release does and names no branch (dl-159).
     role: tech-lead
     actions:
       - 'git.commit(message: "release {release.version}")'
