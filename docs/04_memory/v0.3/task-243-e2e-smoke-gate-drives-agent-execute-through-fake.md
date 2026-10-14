@@ -46,7 +46,7 @@ The smoke gate exercises the packaged tarball. With `agent execute` shipped it a
   terminal through `fake.yaml`'s `terminal: optional`, one `agent: record <run-id>` commit holding only the run log,
   empty stdout); task-220 (`agent show <run-id>`); task-240 (`agent list --past`); task-236 (bootstrap names ONLY the
   session Resource `wingfoil://session/{role}/{element}/{state}`, D-E/D-F); task-237 (the fake gains
-  `--mcp-config-json`; its handover: "task-243's smoke uses the fake", existing behaviour unchanged).
+  `--mcp-config-json`; its handover: "task-243's smoke uses the fake", existing behaviour unchanged — `npx jest test/agent/fake-agent.test.ts` passes, per task-237's red notes).
 - **Cited elements.** spec-016 `approved`; dl-023 and dl-099 `ready` (`grep -m1 '^status'`). spec-016 §2.7's last
   bullet already says the smoke uses the same fake from a fresh `init` project; spec-015 §3 says a change to the smoke
   "propagates here" (`grep -n "propagates here" spec-015-*.md` → line 273). **No spec amendment expected.** No
@@ -128,7 +128,7 @@ them — run in its OWN fresh throwaway `init` project per template, right after
 - **Config/docs.** `.wingfoil/workflows/custom/e2e-smoke.yaml` 1.5 → 1.6 (history in the `version:` comment, `1.6
   task-243 …`): `drive-cli` gains the actions `'cli.run(command: "agent execute --element <type:id> --role developer")'`,
   `'cli.run(command: "agent show <run-id>")'`, `'cli.run(command: "agent list --past")'` and a description sentence
-  (the agent run, fake adapter `custom/fake`, fresh project per template); its three `checks.post` unchanged (the
+  (the agent run, fake adapter `custom/fake`, fresh project per template); its three `checks.post` unchanged (`git diff -- .wingfoil/workflows/custom/e2e-smoke.yaml` touches no `checks:` line; the
   conformance rows of `test/core/workflow-repository-conformance.test.ts` stay as they are). `.wingfoil/WORKFLOW.md`:
   the E2E Smoke paragraph and the `drive-cli` box name the agent run (its own paragraph; no other B7 writer of it).
   The e2e-smoke **plan** of a release is written from this YAML (CLAUDE.md §6), so the YAML is "the smoke plan"; the
@@ -235,3 +235,82 @@ D6 the run id is derived (`{agent.id}/adhoc/1`, spec-016 §4.3), not parsed from
   `invoke = (args, cwd, env = process.env) => spawnSync(…, { cwd, env, … })`. No assertion changed. `npx tsc --noEmit -p
   tsconfig.test.json` and `npx eslint` on both files → exit 0. The suite was not re-run, since nothing was implemented
   in between and the red stands as recorded above.
+
+### green (developer, 2026-10-14)
+
+- Read `### red (qa)` and its send-back: red `38465ffe`, send-back `8f228e74` (qa, option (a): `smokeAgentRun`'s
+  `invoke` takes each step's environment as its third argument). Session 3 first stopped on the original declaration
+  (`invoke(args, cwd)` gave no way to switch the fake on for one step without mutating `process.env`); the coordinator
+  sent it back to qa.
+- `scripts/e2e-smoke.cjs` (`0177697a`): `AGENT_FIXTURES`, `agentRunSteps(template)` (the nine steps of the design),
+  `smokeAgentRun(template, invoke, env, steps, fixtures)` telling steps apart by key (`'args' in step` CLI, `copy`,
+  `probe`), the `record-commit` and `fake-read` probes, the environment stripped of `WINGFOIL_FAKE_AGENT_*` with the two
+  fake variables added on a `fakeAgent` step only; `smokeTemplate` refactored onto the shared helpers `setUpRepo`,
+  `requireCleanTree`, `runCliStep` (same labels and details: the 34 pre-existing tests pass, `npx jest test/cli/e2e-smoke.test.ts` below); `runSmoke`'s
+  `invoke` takes an optional per-step environment and calls `smokeAgentRun` after each template; `formatReport`'s
+  `- Agent run:` line. Probe details carry no sha (a commit name depends on the clock; bug-134's "same run, same bytes").
+- `e2e-smoke.yaml` 1.5 → 1.6 (history: `1.6 spec-016 §2.7, dl-023, dl-099 (task-243)`), `drive-cli` description and the
+  three `cli.run(agent …)` actions; `WORKFLOW.md` E2E Smoke paragraph and `drive-cli` box.
+- **red → green:** `npx jest test/cli/e2e-smoke.test.ts --maxWorkers=2` → 51 passed, 0 failed (214 s; red: 17 failed,
+  34 passed). `node dist/cli.js workflow show e2e-smoke --format json` → 0 errors (95 warnings: 87 unbound tokens, 6
+  unreadable grandfathered plans, 2 `W_UNCOMMITTED_INPUTS` from the then-uncommitted edits; 93 before them).
+
+### refactor (developer, 2026-10-14)
+
+- **Full suite + coverage** (`waitslot.sh && npx jest --coverage --maxWorkers=2`, slot 21:39, load 9.8) → 416 suites,
+  7499 passed, **2 failed, both in `test/lint/git-log-readers.test.ts`**: the agent run's `git log` lacked
+  `--no-show-signature` and `git show --name-only <sha>` showed a commit (bug-291's class). Fixed in `233f0f39`: the flag,
+  `git diff-tree --no-commit-id --name-only -r <sha>` for the changed paths, and the gate's reader list gains
+  `scripts/e2e-smoke.cjs` (a file red did not touch). Re-run `npx jest test/lint/git-log-readers.test.ts
+  test/cli/e2e-smoke.test.ts --maxWorkers=2` → 2 suites, 54 passed (291 s). The fix touches no `src/`, so the coverage
+  of that run stands: All files **99.32 / 97.23 / 97.99 / 99.71** vs baseline 99.32 / 97.23 / 97.98 / 99.71 (no column
+  below; `scripts/` is outside `collectCoverageFrom`, `jest.config.js:73-74`).
+- `npm run lint` → exit 0; `npm run docs:api` → exit 0; `npm run typecheck` (both tsc configs, under the slot 22:33) →
+  exit 0. No CLI or help change, so `docs/cli-reference.md` is untouched. BDD: `grep -rln "e2e-smoke"
+  docs/02_requirements/02_bdd/features/ | wc -l` → 0, as task-207 found; none added.
+- **Smoke, dev build** (under the slot): `node scripts/e2e-smoke.cjs --report <scratch>/smoke-dev.md -- node
+  "$PWD/dist/cli.js"` → exit 0, `Result: **PASS** (71/71 checks ok)`, `[Scrum/agent]` checks 28–36 and
+  `[Kanban/agent]` 63–71 ok.
+- **Smoke, packed tarball** (same slot): `node scripts/e2e-smoke.cjs --candidate --report <scratch>/smoke-candidate.md`
+  at `233f0f39` → exit 0, `Result: **PASS** (72/72 checks ok)`, expected version `0.2.2`, expected commit
+  `233f0f39d0e85e7d61b1d46f2910bbf62d16f4fd`; the nine `[T/agent]` checks per template ok, among them `one agent: record
+  commit for task-001-agent-run/adhoc/1 — the only one, changing only docs/runs/task-001-agent-run.jsonl` and `the fake
+  agent read the session Resource … from the wingfoil server` — the installed package's server, the
+  `runningBuildMcpServer()` of the installed bin. `git status --porcelain | wc -l` → 0 before and after.
+- `node scripts/check-governance.cjs --base db0e2752` → `gated: 0 findings`, `history: 0 findings`;
+  `node scripts/lint-claims.cjs --base db0e2752` → warn-only; this task's two design-section warnings fixed (the commands
+  added), the two left are in `### red (qa)` (lines naming "nothing else", "unchanged"), not mine to edit.
+
+### self-review (developer, 2026-10-14)
+
+- **AC 1** met: `agentRunSteps` installs nothing beyond `init`, the copied fake adapter under `agents/custom/` and the
+  agent entry, then `agent execute --element task:{agent.id} --role developer` → exit 0; `record-commit` probe asserts
+  exactly one `agent: record` commit (`found 2` / `found 0` cases pinned); `agent show` exit 0; on the packed tarball
+  by `--candidate` (above) and in CI by `ci.yml`'s `e2e-smoke` job, which runs the same script.
+- **AC 2** met: `run.adapter` `custom/fake` in `agent show`'s expect; `agent list --past --format json` → `past.length`
+  1, `past.0.id` the run; the re-load fails a corrupted run log (`corrupt@agent execute` test); the fake-read probe
+  proves the Resource read (positive case on the compiled CLI and the tarball; negative: `the fake agent recorded no
+  launch`).
+- **AC 3** met: `e2e-smoke.yaml` 1.6 with its history entry and the three actions; the report's `- Agent run:` line
+  (in both smoke reports above); `WORKFLOW.md`'s E2E Smoke section.
+- **T4:** `git log --first-parent --no-merges --format=%h 38465ffe..HEAD -- test/cli/e2e-smoke.test.ts
+  scripts/e2e-smoke.d.cts` → `8f228e74` only, the qa agent's send-back commit.
+- Same class in touched files: every `git log` in `scripts/e2e-smoke.cjs` carries `--no-show-signature` and no `'show'`
+  of a commit remains (`grep -n "'log'\|'show'" scripts/e2e-smoke.cjs` → the one log reader at its flag, and CLI
+  `dna show`/`agent show` argument lists). Neither report carries a sha in a detail (`grep -h "/agent]" <both reports> | grep -c "[0-9a-f]\{12\}"`
+  → 0); the header's `Expected commit` is the declared stamp, as before.
+- Not changed, on purpose: `prepareCandidate`, `realCandidateEffects`, `parseSmokeArgs` (task-282's ground), `ci.yml`,
+  `test/fixtures/agents/*` (copied verbatim), `src/`.
+
+### Pending amendments (approver)
+
+None: spec-016 §2.7's last bullet already states the smoke uses the fake from a fresh `init` project, and spec-015 §3
+says a change to the smoke propagates (line 273).
+
+### Retrospective
+
+- A red declaration fixed the shape of a callback (`invoke(args, cwd)`) that the design needed to vary per step; the
+  design named the per-step environment but not where it enters. Designs that add a per-step input to an injected
+  callback should give the callback's new signature, not only the behaviour.
+- The full run's lint gate (`git-log-readers`) caught a `git log` reader in `scripts/` that targeted runs never touch:
+  the same class as bug-291, found only because the full suite ran before submit.
