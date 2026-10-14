@@ -57,4 +57,7 @@ follow-ups (`dev-loop-rel-v0.3-plan`), re-checked on `main` at `0da232cb`.
 
 ### Retrospective
 
-None.
+- The binding was written (task-222) before `measure.cjs` had a toolchain half, so its vector could not know the
+  flags that half needed; task-232 added `--any-node` and `--max-workers` without a test that the bound vector uses
+  them. task-241's `test/release-health/bindings-and-deps.test.ts` pins the bound vectors, so a change to either
+  binding now fails a test until it is deliberate; a new flag of a script still meets no test.
