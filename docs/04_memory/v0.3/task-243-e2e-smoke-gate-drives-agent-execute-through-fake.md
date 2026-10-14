@@ -2,7 +2,7 @@
 id: "task-243-e2e-smoke-gate-drives-agent-execute-through-fake"
 type: task
 title: "The `e2e-smoke` gate drives `agent execute` through the fake adapter in a fresh `init` project from the packed tarball"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "medium"
