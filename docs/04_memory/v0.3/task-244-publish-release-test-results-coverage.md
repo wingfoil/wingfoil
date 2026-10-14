@@ -309,6 +309,18 @@ passed (e.g. `Expected: "wingfoil-test-reports" Received: undefined`, `Expected:
 passed (checkpoints `+ Received + 2`; the unbound row `- Expected - 1 + Received + 1`); `vision-index.test.ts` 13
 passed. `npx eslint` on the four test files → clean.
 
+**Review send-back (2026-10-14), red commit `38580877`** (T4 for these rows is measured from it), in
+`test/cli/test-report.test.ts` only. F1, describe `the verdict: Jest success and suite-level failures (review F1)`:
+`success: false` with no failed assertion is not passed (`Expected: false, Received: true`); the summary's Result
+reads failed for it (`Expected: "failed", Received: "passed"`); a failed suite whose assertions all passed is listed
+and not as "suite failed to run" (`expect(…test).not.toBeNull()`, `Received: null`; the design names no other
+label, so only "listed, not that label" is pinned); `success: true` with no failure is passed (characterization,
+green). The two existing green-run rows now set `success: true`. F2 (ruling D2's wording, a `.feature` named
+anywhere in the header comment): a bare `P5.1.4-cli-ux.feature` header citation and a relative
+`p5-interaction/P5.1.4-cli-ux.feature` one are BDD (`Expected: "BDD", Received: "unit"`); a bare name after the
+header stays unit (characterization, green). No live-repo count is pinned. Run: `npx jest
+test/cli/test-report.test.ts --maxWorkers=2` → 5 failed, 40 passed (45).
+
 ### green (developer, 2026-10-14)
 
 Approver rulings D1–D8 as recommended (`w3-b7-notes.md`, 2026-10-14). Commits `c73905ba` (the implementation) and
