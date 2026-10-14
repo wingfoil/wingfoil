@@ -244,3 +244,67 @@ under coverage against `timeout-minutes: 30`; the release job's same-run artifac
 only; the four assets on the Release; the artifact retention against the 30-day re-run window. Local runs of the
 classifier on a real Jest JSON (session 3): `bash ../devloop-kit/waitslot.sh && npm run test:report -- --maxWorkers=2`
 (dl-170), then the script on its output.
+
+### red (qa)
+
+Red commit `2d6f836a` (T4 is measured from it). Test files and fixtures only; nothing under `scripts/`,
+`.github/`, `jest.config.js`, `package.json` or `.wingfoil/`.
+
+**Files.** New: `test/cli/test-report.test.ts`, `test/fixtures/test-report/jest-results.json` (synthetic Jest 30
+`--json`, `FormattedTestResults` field names: seven files, one per class plus a second unit file; a failed, a
+pending, a todo, a skipped and a disabled assertion; `test/cli/e2e-smoke.test.ts` failed to run),
+`test/fixtures/test-report/coverage-summary.json`. Edited: `test/cli/publish-pipeline.test.ts` (the gate-order
+test, plus two new describes), `test/cli/ci-workflow.test.ts` (the `publishGate` pin at :111),
+`test/core/workflow-repository-conformance.test.ts` (checkpoint list 30 → 28 and its title; the
+`release-publishing` `phases[3].checks.post[0]` unbound row).
+
+**Interface without the `.d.cts`.** The design has red add `scripts/test-report.d.cts`; this red's scope excludes
+`scripts/`, so the test declares the design's interface locally (`TestReportModule`) and `require`s the script
+inside each test: a missing script fails each test on `Cannot find module`, never the file, and the CLI cases fail
+on their exit-code / `^test-report: ` assertions. The `.d.cts` stays for green (it is not a test file).
+
+**Per AC.**
+- **AC 1 (red-first)** — `test-report.test.ts`: `jest.config.js coverageReporters are exactly json-summary, lcov
+  and text (ruling D5)`; `package.json declares test:report …`; `classifySuite` (SUITE_CLASSES order; the three
+  exact paths, also with a feature header; BDD by leading block comment; `.integration.test.ts` with a feature
+  header → BDD; without → integration; a feature cited after the header → unit; in a fixture string → unit;
+  else unit); `summarizeResults` (per-class and total counts with the four skipped statuses; failures incl. the
+  suite that failed to run as `test: null`; a green run; throws on an unknown status, a file outside the root,
+  no `testResults`); `coverageTotals` (the `total` entry's covered/total/pct; throws without `total`);
+  `formatSummary` (title by tag / by commit; Commit, Tag, CI run, Build, Result rows in order, `n/a`; the Suites
+  table header and row order with counts; the rule paragraph names each rule's path, `test/latency-suites.cjs`
+  and the `` `stage` `` job; the Coverage table; `## Failures` sorted, absent on green; determinism:
+  shuffled `testResults`/assertions and changed timings → byte-identical, no date); the CLI (writes `--out`, exit
+  0 on a red results file; exit 2 + `test-report:` for an unknown option, missing `--results`/`--commit`/`--out`,
+  a short `--commit`; exit 1 + `test-report:` for an unreadable results file and one with no `testResults`).
+- **AC 2 (red-first)** — `publish-pipeline.test.ts`: `gate asserts tag-on-main + tag↔version, then build,
+  test:report, lint, the summary, …` (updated) and describe `test reports (task-244)`: `REPORTS_ARTIFACT`; the
+  three steps equal prepublishOnly's split with `npm test` → `npm run test:report`; the classify step's seven
+  arguments; two uploads, tarball first, reports last with the four files and `if-no-files-found: error`;
+  stage/promote download the tarball only; release order notes → download (`path: test-reports`, no `if:`) →
+  wait → create; create names the four `test-reports/` files; header names `dl-136`, `task-244`; runbook step 8
+  `succeeded` / `always refused` / `accepts each version once`. `ci-workflow.test.ts`: the publish gate contains
+  `npm ci`, `npm run build`, `npm run test:report`, `npm run lint`. The tag-on-main and promote pins are untouched.
+- **AC 3 (red-first for the YAMLs and the sequencer; characterization for `00_index` ↔ `07_sequencer`)** —
+  describe `release workflows declare the test reports (task-244)`: release-submit ≥ 1.3 with `1.3` and
+  `task-244` on its version line (bug-314); `pre-release-checks` actions `toEqual` the design's two `cli.run`
+  strings and `produces` the candidate path; its six pre checks unchanged (passes now: characterization);
+  release-publishing ≥ 1.7 + history; `publish.produces` the two paths; its description names the four assets
+  and `gh release download`, no `\bmain\b`; its post check is the new prose; `release-commit` names `CHANGELOG`
+  and `rel-{release.version}-test-results.md` (D7); every declared test-results/coverage produces path holds
+  `{release.version}` and no branch; `07_sequencer.md` ≥ 1.9, v0.3/v0.4 coverage criteria name a
+  `rel-…-test-results.md` summary, v0.1/v0.2 carry `(no published summary: before dl-136)` (D6).
+  Conformance (reads HEAD): checkpoint list without `release-submit.pre-release-checks` and
+  `release-publishing.publish`; the post-check row's new prose. `test/docs/vision-index.test.ts`: existing,
+  unchanged, green now (characterization; it fails if the sequencer moves without `00_index.md`).
+
+**Run.** `npx jest test/cli/test-report.test.ts test/cli/publish-pipeline.test.ts test/cli/ci-workflow.test.ts
+test/core/workflow-repository-conformance.test.ts test/docs/vision-index.test.ts --maxWorkers=2` → 4 suites
+failed, 1 passed; 59 failed, 88 passed (147 tests). Per file: `test-report.test.ts` 38 failed / 0 passed (the two config
+tests on `Received: undefined`; the module tests on `Cannot find module …/scripts/test-report.cjs`; the CLI tests on
+`Expected: 0|2, Received: 1` or `Expected pattern: /^test-report: /m`); `publish-pipeline.test.ts` 18 failed / 48
+passed (e.g. `Expected: "wingfoil-test-reports" Received: undefined`, `Expected: >= 1003 Received: 1002`,
+`Expected: >= 1009 Received: 1008`); `ci-workflow.test.ts` 1 failed / 14 passed (`ArrayContaining ["npm ci",
+"npm run build", "npm run test:report", "npm run lint"]`); `workflow-repository-conformance.test.ts` 2 failed / 13
+passed (checkpoints `+ Received + 2`; the unbound row `- Expected - 1 + Received + 1`); `vision-index.test.ts` 13
+passed. `npx eslint` on the four test files → clean.
