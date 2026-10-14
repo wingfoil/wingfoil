@@ -29,7 +29,12 @@
 # `reviewer` also loads `code-quality`, `testing` and `determinism` (dl-134 §3, task-205): it judges
 # both the tests `qa` writes in `dev-loop`'s `red` and the code the developer writes in `green` and
 # `refactor`, so it reviews under the directives of the roles it checks, beside its own.
-version: 1.7
+#
+# `approver` loads `code-review` and `facilitator` loads `traceability` (dl-050 option 1, task-215, approver ruling
+# 2026-10-13 D-A (a)): `npm run check:role-directives` fails on any `directives list --role` warning, and a role with
+# no assignments of its own warns (dl-029). code-review already applies to the approver gate; inception, which the
+# facilitator drives, produces the feature ids the traceability chain starts from.
+version: 1.8                      # 1.8 approver: [code-review], facilitator: [traceability] (task-215)
 
 assignments:
   developer:
@@ -57,6 +62,10 @@ assignments:
     - architecture
     - code-review
     - traceability
+  facilitator:
+    - traceability
+  approver:
+    - code-review
 
 # Global directives apply to every role.
 global:

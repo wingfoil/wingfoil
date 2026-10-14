@@ -2,7 +2,7 @@
 id: "task-215-directives-list-role-sweep-over-dna-role-fails"
 type: task
 title: "A `directives list --role` sweep over every DNA role fails on any resolution warning (dl-050 option 1)"
-status: backlog
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "low"
@@ -32,9 +32,285 @@ tmpl_version: 260703
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+### design (developer, 2026-10-13)
+
+- **Start.** Branch cut from `main` `db0e2752`; started `2d272b5a`; `git merge --no-ff task/task-279-…` (`235234b0`)
+  before this design, because both tasks edit `release-planning.yaml` (now 2.1, task-279's) and `WORKFLOW.md`'s
+  release-planning paragraph (`w3-b7-notes.md` round 3).
+- **depends_on read (dl-015).** `task-199` (`done`): `workflows/bindings.yaml` is spec-003 Layer 3, `format: 1`;
+  every check token resolves through a binding or stays a `W_WORKFLOW_UNBOUND_TOKEN` warning;
+  `test/core/workflow-repository-conformance.test.ts` pins the remaining unbound warnings by path
+  (`release-planning` `phases[3].checks.post[0]` is `ready-decision-logs.covered`). `task-218` (`done`): dl-050
+  option 4, `agent execute` prints `spec-012` §5.1's warnings on stderr; the loaders' unknown-field warning goes
+  through a warning sink (dev build). `task-279` (`done`): release-planning 2.1, its history line kept here.
+- **Decisions cited are ratified:** `grep -m1 '^status' docs/04_memory/design/dls/dl-0{29,50,90}-*.md` → all
+  `ready`; `grep -m1 '^status' docs/04_memory/design/specs/spec-003-*.md` → `approved`. dl-050 option 1's text:
+  "run `directives list --role <r>` for every DNA role and fail on any warning". Batch ruling D1: an npm script bound
+  to a token in `release-planning` `reconcile-governance` only, not `dev-loop.yaml`.
+- **Measured today (contradiction for the approver, D-A below).** With the pinned build
+  (`node node_modules/wingfoil-released/dist/cli.js`, 0.2.2) from this worktree: `dna show --format json` →
+  `team.roles` = developer, reviewer, qa, architect, product-owner, tech-lead, facilitator, approver; `directives list
+  --role <r> --format json` → `warnings` `[]` for the first six, and `["no directives assigned to role
+  'facilitator'"]`, `["no directives assigned to role 'approver'"]` for the last two (`roles.yaml` 1.7 has no
+  `assignments` entry for either; dl-029's ratified hybrid: globals only, plus that warning). So "fail on any warning"
+  and "exits 0 on this repository today" (AC 1) cannot both hold on the current `roles.yaml`. Positive case of the
+  dangling path, on a scratch fixture (minimal `dna.yaml` with `modules`/`stacks`/`team.members`/`paths`, a
+  `roles.yaml` binding `reviewer` to `testing` and `ghost`, `testing.md` and `doc-versioning.md` only): both the
+  pinned build and the main tree's `dist/cli.js` answer `["directive 'ghost' bound to role 'reviewer' has no
+  directive file"]`, exit 0.
+
+**Choice the task left open: an npm script, not a declared `checks:` expression.** The script is the command; the
+token in `reconcile-governance` is the declaration; `bindings.yaml` joins them (spec-003 Layer 3), as `lockfile.pinned`
+→ `check:lockfile` and `mcp.registered` → `check:mcp` already do in `advance-pinned-build`. A prose `checks:` entry
+would be one more `W_WORKFLOW_UNBOUND_TOKEN` that nothing runs; a bound token is executable today by hand and by
+P4.12 in v1.0.
+
+**Names.**
+- Script `scripts/check-role-directives.cjs` (+ `scripts/check-role-directives.d.cts` only if it exports anything; no
+  export is required by the tests below). npm script `"check:role-directives": "node scripts/check-role-directives.cjs"`,
+  its own line in `package.json` `scripts`, after `"check:governance"` (241 and 234 also edit `package.json`).
+- Token `role-directives.clean` (the `lint.clean`/`typecheck.clean` family). Binding
+  `role-directives.clean: { run: [npm, run, "check:role-directives"] }` in `bindings.yaml` `checks:` (severity
+  default `reject`), under a comment naming `release-planning.reconcile-governance`, dl-050 option 1 and task-215.
+- Declared as `checks.pre: ["role-directives.clean"]` of `reconcile-governance` — **pre**, not post: it is a property
+  of the configuration, not of the decision-logs/ADRs the phase approves; a failure blocks the sweep before any approval
+  rather than describing the selected elements, and `post[0]` (`ready-decision-logs.covered`) keeps its index, which the
+  conformance test pins. Comment: `# dl-050 option 1 (task-215): \`npm run check:role-directives\` exit 0 (bound in workflows/bindings.yaml)`.
+
+**Script contract** (read-only; reads the working tree of `--root`, as `directives list` does; offline; deterministic).
+- Usage: `node scripts/check-role-directives.cjs [--root <dir>]` (default: the current directory).
+- The CLI it runs: the **pinned build**, `node <repo>/node_modules/wingfoil-released/dist/cli.js`, resolved from the
+  script's own location (`__dirname/..`), spawned with `cwd = <root>` and no shell. Why the pinned build: it is the build
+  that manages this repository (dl-095) and the one whose `{role}-session` Prompts agents receive through `.mcp.json`,
+  so its resolver is the one whose warnings matter; it needs no `npm run build` (unlike `dist/`), and
+  `advance-pinned-build` runs before `reconcile-governance`, so the check uses the newest published build.
+- Roles: `dna show --format json` from the same build → `team.roles[].name` (the CLI's own validated DNA, no second
+  YAML parser), visited in **ascending name order** (REQ-SYS-07), each with `directives list --role <name> --format json`,
+  reading the stdout payload's `warnings` array. The CLI's stderr is not relayed on success (the pinned build prints
+  `Warning: … unknown field(s) ignored` lines for fields newer than itself — today `scope`, `paths.runs`, `paths.health`);
+  it is quoted in an exit-2 error.
+- Exit **0**: every role's `warnings` is empty. stdout: one line per role `<role>: ok`, then
+  `role-directives: <N> roles checked, 0 with warnings`; stderr empty.
+- Exit **1**: at least one non-empty `warnings`. stdout: `<role>: ok` or `<role>: <k> warning(s)` per role (ascending),
+  then `role-directives: <N> roles checked, <M> with warnings`; stderr: one line per warning,
+  `error: role '<role>': <warning text verbatim>`, roles ascending, each role's warnings in the CLI's order.
+- Exit **2** (binding misconfiguration, spec-003): stdout empty, one `error: …` line on stderr — an unknown argument or
+  `--root` with no value; the pinned CLI file absent (message names `node_modules/wingfoil-released/dist/cli.js` and
+  `npm ci`); a CLI call that exits non-zero or prints no JSON object with an array `warnings` (message names the command,
+  e.g. `directives list --role reviewer`, and the first line of its stderr); `team.roles` absent or empty
+  (`dna.yaml declares no team.roles`).
+
+**AC classification (T1) and what the qa agent pins.**
+
+| AC | Class | Why |
+|----|-------|-----|
+| 1 — the script's exit 1 / exit 0, fixture with a dangling binding, exit 0 on this repository | red-first | no script exists: `ls scripts/check-role-directives.cjs` → absent |
+| 2 — `reconcile-governance` declares the check in the dl-090/spec-003 token grammar, with a version bump | **red-first (corrected from characterization)** | the declaration does not exist yet (`grep -c role-directives .wingfoil/workflows/custom/release-planning.yaml` → 0), so a test pinning it fails first; characterization is for behaviour that already exists |
+
+AC 1 — new file `test/cli/check-role-directives.test.ts` (beside `test/cli/service-verify-sweep.test.ts`, the model).
+Spawn `spawnSync(process.execPath, [join(REPO_ROOT, 'scripts', 'check-role-directives.cjs'), '--root', repo])`.
+Fixture: `makeTempGitRepo()` + `writeFixtureFile()` (`test/storage/helpers/git-fixture.ts`), `removeTempDir` in
+`afterEach`; `directiveMd(id)` from `test/agent/helpers/agent-execute-fixture.ts` for the directive files. `dna.yaml`
+as the fixture measured above (`version: 1`, `project.name`, one `modules` entry, `stacks.technologies`,
+`team.members` one member, `team.roles` declared **reviewer before developer**, `paths.sources`) — the 0.2.2 schema
+refuses a `dna.yaml` without `modules`/`stacks`/`team.members`/`paths`. `roles.yaml`: `developer: [testing]`,
+`reviewer: [testing]`, `global: [doc-versioning]`; files `testing.md`, `doc-versioning.md`. No commit needed (working tree).
+1. clean fixture → exit 0; stdout exactly `developer: ok\nreviewer: ok\nrole-directives: 2 roles checked, 0 with warnings\n`
+   (ascending, although `dna.yaml` lists reviewer first); stderr `''`.
+2. same fixture with `ghost` added to `reviewer` → exit 1; stderr exactly
+   `error: role 'reviewer': directive 'ghost' bound to role 'reviewer' has no directive file\n`; stdout contains
+   `developer: ok`, `reviewer: 1 warning(s)` and ends `role-directives: 2 roles checked, 1 with warnings\n`.
+3. roles come from `dna.yaml`, not `roles.yaml`: add `qa` to `team.roles` only → `qa` appears in stdout and fails with
+   `error: role 'qa': no directives assigned to role 'qa'` (exit 1) — under ruling D-A (a); under (b) see below.
+4. exit 2: `--bogus` → exit 2, stdout `''`, stderr one line starting `error:`; `team.roles: []` → exit 2, stderr names
+   `team.roles`.
+5. this repository: `--root REPO_ROOT` → exit 0 and stdout's last line `role-directives: 8 roles checked, 0 with
+   warnings` — red today twice over (no script; facilitator/approver unbound), green after D-A (a).
+The pinned build is installed by `npm ci` (offline); no test needs `dist/` or the network.
+
+AC 2 — new file `test/core/reconcile-governance-role-directives.test.ts` (not the shared conformance test, which
+several B7 tasks edit). Reads the working tree with `js-yaml` (`load`), like `test/core/define-scope-sweep.test.ts`:
+- `release-planning.yaml` phase `reconcile-governance`: `checks.pre` equals `['role-directives.clean']`;
+  `checks.post[0]` still starts `ready-decision-logs.covered`;
+- `bindings.yaml` `checks['role-directives.clean']` deep-equals `{ run: ['npm', 'run', 'check:role-directives'] }`
+  (no `severity`: reject);
+- `package.json` `scripts['check:role-directives']` === `'node scripts/check-role-directives.cjs'`;
+- versions by the bug-314 rule: `release-planning.yaml` `version` ≥ 2.2 and its history line matches
+  `/2\.2 [^;]*task-215/`; `bindings.yaml` `version` ≥ 1.9 and its line matches `/(?:1\.9|2\.0) [^;]*task-215/`
+  (task-241 takes 1.9 first; the gate re-bumps this task's entry to 2.0); the 2.1 task-279 entry is still present;
+- `loadWorkflowRegistryAtHead(REPO_ROOT)` (`src/core`, as the conformance test calls it): no diagnostic's message
+  names `role-directives.clean` (bound, so not `W_WORKFLOW_UNBOUND_TOKEN`), zero errors;
+- `.wingfoil/WORKFLOW.md`'s `### Release Planning` section contains `role-directives.clean` and `check:role-directives`.
+
+**Files expected (session 3).** `scripts/check-role-directives.cjs` (new); `package.json` (one `scripts` line);
+`.wingfoil/workflows/bindings.yaml` (1.8 → 1.9, one binding + comment); `.wingfoil/workflows/custom/release-planning.yaml`
+(2.1 → 2.2: `2.2 dl-050 option 1 (task-215, batch ruling D1): reconcile-governance declares the pre-check
+role-directives.clean, \`directives list --role\` over every dna.yaml team.roles name, failing on any warning`, the 2.1
+entry kept); `.wingfoil/WORKFLOW.md` (one sentence in the release-planning paragraph after the `reconcile-governance`
+`ready` coverage sentence, plus `✔ pre: role-directives.clean` in the `RG` mermaid node); under D-A (a) also
+`.wingfoil/roles.yaml` (1.7 → 1.8) and the "Applies to" sentences of the directives it binds (`traceability.md` 1.2 → 1.3;
+`code-review.md` bumped if its sentence changes). No `src/` change; `dev-loop.yaml` untouched (D1).
+
+**Decisions for the approver.**
+- **D-A — the two unbound roles (blocks AC 1's "exits 0 today").** (a) **recommended:** give `facilitator` and
+  `approver` own assignments in `roles.yaml` (1.7 → 1.8): `approver: [code-review]` (its file already says it applies
+  "to the approver gate", so `roles.yaml` would agree with the directive's own text) and `facilitator: [traceability]`
+  (inception produces the P* feature ids the traceability chain starts from); the check stays dl-050's "any warning",
+  explicit declared configuration over an exception (determinism). (b) the script fails on every warning except dl-029's
+  `no directives assigned to role '<r>'`, which it prints on stdout but does not count; AC 1 is amended in-task to say so
+  (dl-029 ratified globals-only as legitimate). Smaller, but departs from dl-050 option 1's ratified text and lets a
+  role silently lose its bindings. (c) keep both texts and let the check fail until someone binds the roles: rejected,
+  the check would be red at its first run.
+- **D-B — the pinned build, not `dist/`.** Recommended as above; the alternative (`node dist/cli.js`) needs
+  `npm run build` before the check and checks a resolver no agent session in this repository uses until the pin
+  advances.
+
+**Risks for the batch.** `bindings.yaml`: task-241 bumps 1.8 → 1.9 and merges first; this task's 1.9 becomes 2.0 at the
+gate (the AC 2 test accepts both). `package.json`: own line only. `release-planning.yaml`: no other B7 writer after 279.
+`WORKFLOW.md`: the release-planning paragraph's `reconcile-governance` sentence only. Under D-A (a): `roles.yaml` has
+no other B7 writer; `CLAUDE.md` §7's role table would no longer list the two new bindings — owned by
+`align-agent-docs` (dl-025), a handover rather than an edit here. `test/directives/dev-loop-practice.test.ts` reads
+`roles.yaml` (≥ 1.7 and the tech-lead header line): unaffected by a ≥ bump.
+
+### red (qa, 2026-10-13)
+
+- **Red commit:** `e243e387` (T4 is measured from it: `git log --first-parent --no-merges --format=%h e243e387..HEAD --
+  test/cli/check-role-directives.test.ts test/core/reconcile-governance-role-directives.test.ts`).
+- **Files:** `test/cli/check-role-directives.test.ts` (AC 1), `test/core/reconcile-governance-role-directives.test.ts`
+  (AC 2). Test files only; no `scripts/`, config or `.wingfoil/` change.
+- **Fixture checked against the pinned build first** (`node node_modules/wingfoil-released/dist/cli.js`, 0.2.2, on a
+  scratch working tree): `dna show` refuses a technology without `category` and a member without a `roles` array, so the
+  fixture declares both (`category: language`, member `roles: []`); `team.roles: []` with member `roles: []` validates
+  (exit 0), so case 4b reaches the script's own `team.roles` check; `directives list --role reviewer` with `ghost` bound
+  → `warnings: ["directive 'ghost' bound to role 'reviewer' has no directive file"]`; an unassigned `qa` →
+  `["no directives assigned to role 'qa'"]`; the clean fixture → `[]` for both roles.
+- **Per AC (both red-first, as classified at design):**
+  - AC 1, cases 1–5 of the design: `AC 1 (exit 0)` (exact stdout `developer: ok\nreviewer: ok\nrole-directives: 2 roles
+    checked, 0 with warnings\n`, `dna.yaml` lists reviewer first; empty stderr); `AC 1 (exit 1)` (exact stderr line for
+    `ghost`, `reviewer: 1 warning(s)`, summary `1 with warnings`); `AC 1 (roles from dna.yaml)` (`qa` in `team.roles`
+    only: exact stdout over three roles, stderr `error: role 'qa': no directives assigned to role 'qa'`, exit 1 —
+    assumes D-A (a)); `AC 1 (exit 2)` ×2 (`--bogus`; `team.roles: []` naming `team.roles`; stdout empty, one `error:`
+    line); `AC 1 (exit 0 on this repository)` (`--root REPO_ROOT`: exit 0, empty stderr, last stdout line
+    `role-directives: 8 roles checked, 0 with warnings` — green only after the D-A (a) `roles.yaml` change).
+  - AC 2: `checks.pre` equals `['role-directives.clean']` and `post[0]` still `ready-decision-logs.covered`; the binding
+    deep-equals `{ run: ['npm', 'run', 'check:role-directives'] }`; the `package.json` script; `release-planning.yaml`
+    ≥ 2.2 with `/2\.2 [^;]*task-215/` and the `2.1 … task-279` entry kept; `bindings.yaml` ≥ 1.9 with
+    `/(?:1\.9|2\.0) [^;]*task-215/`; at `HEAD` (`loadWorkflowRegistryAtHead`) zero errors, no diagnostic naming the
+    token, `reconcile-governance` `checks.pre` equal to the token; `WORKFLOW.md`'s `### Release Planning` section
+    contains `role-directives.clean` and `check:role-directives`.
+- **Run:** `npx jest test/cli/check-role-directives.test.ts test/core/reconcile-governance-role-directives.test.ts
+  --maxWorkers=2` → 2 suites failed; `check-role-directives.test.ts` 6 failed / 0 passed,
+  `reconcile-governance-role-directives.test.ts` 7 failed / 0 passed (13/13). Every failure is an assertion on the
+  behaviour: AC 1 — the absent script makes node exit 1 with empty stdout (`Expected: 0 / Received: 1`,
+  `Expected: 2 / Received: 1`, `Expected: "developer: ok… / Received: ""`); AC 2 — `Expected: ["role-directives.clean"]
+  / Received: undefined` (pre-check, and again at `HEAD` after the zero-errors assertion passed), binding and script
+  `Received: undefined`, versions `Received: 2.1` / `Received: 1.8`, `WORKFLOW.md` substring absent.
+- **For session 3:** the `HEAD` test reads the committed configuration, so it goes green only once the config change is
+  committed, not on a dirty tree.
+- **Send-back (coordinator, 2026-10-14, merge-order change):** `bindings.yaml` has three B7 writers in gate order
+  task-241 (→ 1.9) → task-234 (→ 2.0) → task-215, so this task's entry is re-bumped to 2.1 at the gate. `ef4332c0`
+  changes only `test/core/reconcile-governance-role-directives.test.ts`: the task-215 history entry's number is read
+  from its `;`-separated segment and compared numerically (bug-314) — `bindings.yaml` ≥ 1.9 (the file-version ≥ 1.9
+  assertion kept), `release-planning.yaml` task-215 ≥ 2.2 and task-279 ≥ 2.1 (were exact `2.2`/`2.1` patterns).
+  `npx jest test/core/reconcile-governance-role-directives.test.ts --maxWorkers=2` → 7 passed / 7. T4 from `e243e387`
+  now lists `ef4332c0`, a qa-agent commit.
+
+### green (developer, 2026-10-13)
+
+- **Approver rulings applied (2026-10-13):** D-A (a) `roles.yaml` 1.7 → 1.8 binds `approver: [code-review]` and
+  `facilitator: [traceability]`; D-B the script spawns the pinned build; D1 `reconcile-governance` only
+  (`git diff db0e2752 -- .wingfoil/workflows/custom/dev-loop.yaml` → empty).
+- **Commit `ec54b4cd`** `feat(directives): task-215 — …`: `scripts/check-role-directives.cjs` (new, the design's
+  contract); `package.json` one `scripts` line (`check:role-directives`, after `check:governance`);
+  `bindings.yaml` 1.8 → 1.9 (`role-directives.clean: { run: [npm, run, "check:role-directives"] }`, comment);
+  `release-planning.yaml` 2.1 → 2.2 (`reconcile-governance` `checks.pre: ["role-directives.clean"]`, task-279's 2.1
+  entry kept); `WORKFLOW.md` the reconcile-governance sentence and the `RG` node; `roles.yaml` 1.8 (header paragraph +
+  the two assignments); `traceability.md` 1.2 → 1.3 (Date 2026-10-13, the roles.yaml sentence names the facilitator);
+  `code-review.md` its "Applies to" sentence names the approver binding. `code-review.md` declares no `version:`, so it
+  is not given one (doc-versioning § "Scope of the bump rule": "A document that declares no version is not given one");
+  the ruling's "with a bump" applies only where a version exists. The existing intro pins
+  (`test/directives/dev-loop-practice.test.ts:178–179`) still hold: both sentences keep their prefix.
+- **red → green:** `npx jest test/cli/check-role-directives.test.ts test/core/reconcile-governance-role-directives.test.ts
+  --maxWorkers=2` → 2 suites, **13 passed / 13** (red: 13 failed / 0 passed). The HEAD test reads the committed config,
+  so config and script went in one commit.
+- **By hand:** `npm run -s check:role-directives` on this repository → 8 lines `<role>: ok` (approver … tech-lead) and
+  `role-directives: 8 roles checked, 0 with warnings`, exit 0. Exit-2 paths not pinned by red:
+  `--root <scratch dir outside git>` → ``error: `dna show` exited 1: {"error":"E_NO_GIT_ROOT: not inside a git
+  repository"}``, exit 2; `--root` with no value → `error: --root needs a directory`, exit 2.
+
+### refactor (developer, 2026-10-14)
+
+- No refactor beyond green; the script is one file with no exports (spawned by its tests, like the design said).
+- `npm run test:coverage -- --maxWorkers=2` (slot) → 412 suites, **7453 passed / 7453**; All files **99.32 / 97.22 /
+  97.98 / 99.71** against the B6 baseline 99.32 / 97.23 / 97.98 / 99.71: branches −0.01, and the run lists
+  `memory-transition.ts … | 468` uncovered — the run-dependent line the batch notes name (no `src/` change here:
+  `git diff 235234b0..HEAD --stat -- src` → empty; 235234b0 is the task-279 merge, whose `src/` changes are 279's), so the accepted −0.01 rule applies.
+- `npm test -- --maxWorkers=2` (slot) → 412 suites, **7453 passed / 7453**, exit 0.
+- `npm run lint` → exit 0, no output. `npm run docs:api` → exit 0. `npm run typecheck` (slot, both tsc configs) → exit 0.
+- Targeted re-run of the suites reading the touched config: `npx jest test/cli/check-role-directives.test.ts
+  test/core/reconcile-governance-role-directives.test.ts test/directives test/core/workflow-repository-conformance.test.ts
+  test/lint/version-bump.test.ts test/docs/workflow-md.test.ts --maxWorkers=2` → 214 passed / 214.
+- `node scripts/check-governance.cjs --base db0e2752` → 12 `wf()` commits checked, 0 findings.
+  `node scripts/lint-claims.cjs --base db0e2752` → 4 warnings, all in task-279's and dl-132's files, none in this one.
+- No CLI command or help changed (`git diff 235234b0..HEAD --stat -- src docs/cli-reference.md` → empty); no BDD
+  scenario covers dl-050 option 1 (`grep -rln "dl-050" docs/02_requirements/02_bdd/features` → none).
+
+### self-review (developer, 2026-10-14)
+
+- **AC 1** met: exit 1 on the dangling fixture with the warning verbatim, exit 0 on the clean fixture and on this
+  repository, roles enumerated from `dna.yaml` (`qa` case), exit 2 on misconfiguration — the 6 tests of
+  `test/cli/check-role-directives.test.ts` pass. **AC 2** met: declared as `reconcile-governance` `checks.pre`, bound
+  in `bindings.yaml`, versions bumped with history entries — the 7 tests of
+  `test/core/reconcile-governance-role-directives.test.ts` pass, the HEAD one included.
+- **T4:** `git log --first-parent --no-merges --format=%h e243e387..HEAD -- test/cli/check-role-directives.test.ts
+  test/core/reconcile-governance-role-directives.test.ts` → `ef4332c0`, the qa agent's send-back commit (AC 2's version
+  rows compare the task-215 entry numerically, for the three-writer `bindings.yaml` re-bump); no developer commit
+  touches the red files. (Corrected at the independent review, F1: this bullet first said "empty", which was true at
+  `1ac8b278`, before the send-back.)
+- Same-class instances in touched files: every directive whose "Applies to"/roles.yaml sentence names its roles and
+  gained a binding was updated (traceability, code-review); the other directives' role lists are unchanged by this task
+  (`git diff db0e2752..HEAD --stat -- .wingfoil/directives` → those two files only). Absence claim with its positive
+  case: the role tables outside `roles.yaml` — `grep -rn "| tech-lead" --include=*.md .` outside Memory and plans →
+  only `CLAUDE.md:415` (positive case: the grep finds that table).
+- Determinism: roles sorted ascending, a `Set` dedupes repeated names, no clock or randomness; read-only (no write
+  call in the script: `grep -n "writeFile\|git commit" scripts/check-role-directives.cjs` → none).
+
+### Pending amendments (approver)
+
+None. No Memory element besides this task is edited.
+
+**Handover to `align-agent-docs` (dl-025):** `CLAUDE.md` §7's role → directives table does not list
+`approver → code-review` or `facilitator → traceability` (`roles.yaml` 1.8, task-215). It already lagged
+`roles.yaml` 1.7: `tech-lead` without `traceability` (task-276) and `reviewer` without `code-quality`, `testing` and
+`determinism` (task-205).
+
+### Retrospective
+
+- Session 1 ran the sweep by hand before writing the AC tests, and that exposed the contradiction in the ACs
+  (two roles with no bindings would fail "any warning" today), so the approver ruled before red, not after.
+- A check reading the committed config (`loadWorkflowRegistryAtHead`) forces the config and the code into the same
+  green commit. The red notes said so, and that saved a round trip.
+
+### independent review (2026-10-14) and fixes (developer)
+
+Verdict: APPROVE WITH FIXES (script, config and tests correct; full suite 7453/7453 reconfirmed by the reviewer).
+- **F1 (notes)**: corrected the self-review's T4 bullet. `git log --first-parent --no-merges --format=%h
+  e243e387..HEAD -- <the two red files>` → `ef4332c0` (qa send-back), no developer commit.
+- **F2 (notes)**: heading renamed to `### self-review (developer, 2026-10-14)`, as the corrected brief asks.
+- **F3 (`code-review.md`)**: "Approval binds to the `reviewer`/`approver` role" became "binds to the `approver` role
+  only — a role, not a person (REQ-SYS-08). Reviewers review and recommend; an agent never approves (`dna.yaml`
+  `team.agents[].approval_authority: false`)". Same class in the other directive this task touched:
+  `grep -n -i "approv" .wingfoil/directives/custom/traceability.md` → lines 46, 50, 53, 54, 56 and 102 only. All of
+  them are about approved documents or an approver's choice or ruling, and none binds approval to a role, so there is
+  nothing to change there. No version added (`code-review.md` declares none, as before).
+- **F4 (script)**: `runJson` reports a spawn error (`result.error`) as ``error: `<command>` could not run:
+  <message>``, exit 2. Before the fix, `node <ec54b4cd's script> --root /nonexistent/x` printed ``error: `dna show`
+  exited null``. The `--format json` pair is appended inside `runJson` and is never part of the label, so a role
+  named `json` stays in the message. Neither changes a behaviour the red suite pins (its exit-2 cases are
+  `--bogus` and `team.roles: []`). Own test file `test/cli/check-role-directives-errors.test.ts` (2 tests: the
+  ENOENT spawn error; ``directives list --role json` exited 1`` on a `roles.yaml` the schema refuses).
+- **Re-run:** `npx jest test/cli/check-role-directives.test.ts test/core/reconcile-governance-role-directives.test.ts
+  test/cli/check-role-directives-errors.test.ts test/directives --maxWorkers=2` → 10 suites, 174 passed / 174;
+  `npm run lint` → exit 0; `npm run typecheck` (slot) → exit 0. No full run: `src/` is untouched and coverage
+  collects from `src/**/*.ts` only (`jest.config.js` `collectCoverageFrom`), so F4 cannot move it.
+- Fix commit `6994ae00` (code); this notes commit separately. The task stays `in-review`, not re-submitted.

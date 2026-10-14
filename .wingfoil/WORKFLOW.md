@@ -303,7 +303,10 @@ pin (dl-163 S3e); `triage-bugs` and `reconcile-governance` sweep in-scope
 `open` bugs and not-ready decision-logs/ADRs into their gated states (dl-016), selecting only
 elements whose `release` is empty or this release; `reconcile-governance` also selects `ready`
 decision-logs, for a coverage check only: each one of this release must be named by a task's `ref:`
-(approver ruling 2026-10-12). `define-scope` states the 20 % reserved for fixes and governance debt
+(approver ruling 2026-10-12). Before it approves anything, `reconcile-governance`'s pre-check
+`role-directives.clean` (`npm run check:role-directives`, `dl-050` option 1, `task-215`) runs `directives list
+--role` for every `dna.yaml` role and fails on any warning: a role with no directives, a dangling binding, a
+shadowed id. `define-scope` states the 20 % reserved for fixes and governance debt
 (`dl-100` §4 (b)) and sweeps the `scheduled` change-proposals whose `release` is this release into the
 release's `features:` (`dl-132` element 4, `task-277`): a `memory amend` by the approver of a release already past `draft`,
 one predating dl-092 with no `kind:` included (bug-342, `task-279`); `build-backlog` checks every criterion against the bound directives and ratified
@@ -319,7 +322,7 @@ flowchart TD
     AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only\n✔ check:lockfile · check:mcp · wingfoil-cli re-check"]
     DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n20 % reserved for fixes and debt (dl-100 §4 (b))\nsweeps the scheduled change-proposals of the release\ninto its features: (dl-132 element 4; ✔ change-proposals.swept)\npast draft: memory amend by the approver\n(no kind: too, bug-342)"]
     TB["**triage-bugs** *(tech-lead)*\nmemory.approve: bug open → triaged\n🔑 Approval gate — *approver*\n↩ REJECT → closed"]
-    RG["**reconcile-governance** *(product-owner)*\nmemory.approve: decision-log in-discussion → ready\nadr pending → accepted\nready decision-logs: coverage check only (a task ref: names each)\n🔑 Approval gate — *approver*\n↩ REJECT → draft"]
+    RG["**reconcile-governance** *(product-owner)*\nmemory.approve: decision-log in-discussion → ready\nadr pending → accepted\nready decision-logs: coverage check only (a task ref: names each)\n✔ pre: role-directives.clean (check:role-directives)\n🔑 Approval gate — *approver*\n↩ REJECT → draft"]
     RA["**record-adrs** *(architect)* · **OPTIONAL**\nmemory.add(type: adr) → memory.submit → memory.approve\n✔ spec-review.passed · P4.12: [title, sard_ref]\n🔑 Approval gate — *approver*\n`{ type: adr, path: docs/04_memory/design/adrs/{adr.id}.md }`"]
     IS["**identify-specs** *(architect)*\nagent.execute: survey → memory.add(type: tech-spec) → memory.submit\n✔ P4.12: [title, scope]\n🔑 Approval gate — *approver*\n`{ type: tech-spec, path: docs/04_memory/design/specs/{tech-spec.id}.md }`"]
     BB["**build-backlog** *(product-owner)*\nselection: in-scope ready decision-logs + triaged bugs\nmemory.add(type: task) → memory.submit\nper selected DL / bug: memory.add(type: task, dl: {decision-log.id} / bug: {bug.id}) → memory.submit\n→ bug.set_state(planned) · element.set_release · wave:\n✔ P4.12: [title, release, kind] · acceptance-criteria.consistent (dl-102)\n✔ each task's wave is one of the release's waves\n`{ type: task, path: docs/04_memory/{task.release}/{task.id}.md }`"]

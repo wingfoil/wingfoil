@@ -10,7 +10,8 @@ ref: [P3.8]
 
 # Directive — Code Review
 
-Custom stand-in directive. Applies to reviewers and tech leads (`roles.yaml`), and to the approver gate.
+Custom stand-in directive. Applies to reviewers and tech leads (`roles.yaml`), and to the approver gate: `roles.yaml` binds it to the
+`approver` role too (task-215).
 
 > **Stand-in custom directive.** WingFoil ships its official built-in P3.8 templates, and
 > `wingfoil init` installs them under `.wingfoil/directives/built-in/` (task-057). This repository's
@@ -26,7 +27,8 @@ Custom stand-in directive. Applies to reviewers and tech leads (`roles.yaml`), a
   `architecture` directive (`dl-022`): internal + cross-spec + BDD/vision + traceability consistency.
 - Approve via `wingfoil memory approve` (records reason); reject via `wingfoil memory reject`
   (returns to the workflow `fallback` step with feedback).
-- Approval binds to the `reviewer`/`approver` role, not a person.
+- Approval binds to the `approver` role only — a role, not a person (REQ-SYS-08). Reviewers review and
+  recommend; an agent never approves (`dna.yaml` `team.agents[].approval_authority: false`).
 - **No gated transition by an unattended run** (`dl-103` §2 (i)): every `approve` and `reject` is a
   human-authored commit; a process without a human present may `add`, `submit`, `start`, `sync` and
   write content, never approve or reject. The governance check's authority rule does not enforce this:
