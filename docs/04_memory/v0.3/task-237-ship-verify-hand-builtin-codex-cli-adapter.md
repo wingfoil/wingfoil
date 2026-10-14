@@ -557,3 +557,90 @@ the choice returns to the approver if:
   project `.codex/config.toml` server won over the `-c` override (§2.5);
 - R2: the result is truncated or is not the element's context;
 - R3: the adapter's `wingfoil` server is not the one connected.
+
+### by-hand pass — approver's transcript (2026-10-14)
+
+Run by the approver in a real terminal from this worktree at `f7bddb03` (transcript and the coordinator's reading:
+`devloop-kit/task-237-runbook-transcript.md`). Ruling D-5 revised by the approver: the scratch agent email is
+`codex@openai.com` (the schema refuses `codex@example.invalid`, bug-261, as the rehearsal found).
+- **Dialog answers (in words, the approver's):** Codex asked to log in inside `agent execute`: signed in with ChatGPT
+  (Plus, activated for this pass). Directory trust for `task-237-scratch`: accepted. The update notice
+  (0.145.0 → 0.162.1): not applied. During the session Codex asked to run `wingfoil memory submit`, `find`, `git log`,
+  `nl`, `git apply`, `git diff`: all approved (command approvals, not help with the context fetch).
+- **R0:** worktree HEAD `f7bddb03`, only spec-016 dirty; `wingfoil 0.2.2 (f7bddb03)`; `codex` →
+  `~/.npm-global/lib/node_modules/@openai/codex/bin/codex.js`, `codex-cli 0.145.0`. Scratch: `init --template Scrum`
+  installed `claude-code.yaml` and `codex-cli.yaml`; `task-001-codex-smoke`; agent `Codex` (`codex@openai.com`,
+  `adapter: codex-cli`); `.codex/config.toml` with a same-named `wingfoil` server naming the pinned 0.2.2; scratch
+  HEAD `49113c6`.
+- **R1:** exit 0; `task-001-codex-smoke/adhoc/1`, `built-in/codex-cli`, `Codex`, `state_ref` `49113c6`; the bootstrap
+  names `wingfoil://session/developer/task:task-001-codex-smoke/49113c6…`.
+- **Run `…/adhoc/1`** (93.9 s): a first attempt that stopped for lack of credits before the session could run; its
+  record is `d73292c`, which moved the scratch HEAD. The checked run is `…/adhoc/2`, `state_ref` `d73292c6…`.
+- **R2 (`…/adhoc/2`) — AC 3 (as amended) passes.** Argv accepted: the `-c` value and the bootstrap were taken, the
+  bootstrap shown as the first message and submitted on its own. With nothing typed, the model called
+  `wingfoil.list_mcp_resources` (dna, workflows, `workflows/-/next`, `-/status`), then `wingfoil.read_mcp_resource`
+  on **exactly** `wingfoil://session/developer/task:task-001-codex-smoke/d73292c6…`; the unlisted template URI was
+  accepted, and the answer was the element's context (`# WingFoil Agent Context`, `<!-- format: 1 | role: developer
+  | element: task:task-001-codex-smoke | state: d73292c6… -->`, `## 1. Task` …), not truncated.
+- **§2.5 — the `-c` override wins.** The read returned the session Resource, which only the build under test serves
+  (the project `.codex/config.toml` server, the pinned 0.2.2, has no `wingfoil://session/` template: `grep -rln
+  "wingfoil://session/" /home/robypomper/Workspaces/WingFoil2/node_modules/wingfoil-released/dist` → nothing;
+  positive case: `grep -rl "wingfoil://session/" dist/mcp/*.js` in this worktree lists `index.js` and `session-resource.js`). So the adapter's
+  `-c mcp_servers.wingfoil=…` override won over the same-named project server.
+- **Not stopped in time (recorded as it happened).** Esc did not reach the agent before it acted. It explored, edited
+  the scratch task's body (`git apply`), ran `wingfoil memory submit task-001-codex-smoke` with the GLOBAL `wingfoil`
+  on `PATH` (the published 0.2.2, which warned `HEAD:.wingfoil/memory.yaml: unknown field(s) ignored: format`), and
+  amended that commit (`13605ed`, no `WingFoil-Version:` trailer, the global build's submit) with `Co-Authored-By:
+  Codex <codex@openai.com>` and `AI-Model: GPT-5`, while the model it ran as was `gpt-5.6-terra`. The scratch
+  worktree was clean at the end. Only the scratch project changed; nothing in this repository.
+- **R3:** `/mcp` shows `wingfoil` with `Auth: Unsupported, Tools: (none), Resources: (none), Resource templates:
+  (none)` although `list_mcp_resources` returned four resources and the template read succeeded (Codex's display),
+  beside the account's `codex_apps` connector. `/status`: Codex v0.145.0, model `gpt-5.6-terra` (reasoning xhigh),
+  Permissions Workspace (Ask for approval), Session `01a13aef-8d19-72d3-a7b3-6b7f53a61e6d`, context 43.6K/258K. Codex
+  printed a bubblewrap warning ("Codex's Linux sandbox uses bubblewrap and needs access to create user namespaces").
+  `/exit`: `Token usage: total=64,110 input=56,406 (+ 756,480 cached) output=7,704 (reasoning 2,982)` and `codex resume
+  01a13aef-…`.
+- **R4:** record commit `1a035118` `agent: record task-001-codex-smoke/adhoc/2`, `WingFoil-Version: 0.2.2 (f7bddb03)`,
+  only `docs/runs/task-001-codex-smoke.jsonl`. Record: `adapter` `built-in/codex-cli`, `agent` `Codex`,
+  `agent_version` `codex-cli 0.145.0`, `model`/`session`/every `tokens` count `not-reported` (D-3), `state_ref`
+  `d73292c6…`, `exit_status` 0, `notes` `none` (the Scrum task template has no `## Execution Notes`). `git status`
+  clean; `agent list --past` → `adhoc/1` 93.9 s, `adhoc/2` 6258.5 s; `codex --version` still `codex-cli 0.145.0` (no
+  auto-update); the rollout `~/.codex/sessions/2026/10/14/rollout-…-01a13aef-….jsonl` exists.
+- **Findings for the coordinator to file (not fixed here):** (a) the launched agent ran the global `wingfoil` for its
+  CLI work, not the build under test: nothing in the bootstrap names which CLI to run; (b) `/mcp` displays
+  `Resources: (none)` for a server whose resources are read; (c) the agent's `AI-Model:` trailer named a model other
+  than the one it ran as; (d) Codex's session id is visible (`/status`, exit line, rollout file) but recorded
+  `not-reported`, by ruling D-3 (resume is v0.4); (e) the bubblewrap warning on this host. **None contradicts the
+  manifest:** (a) and (c) are the agent's behaviour under §2.4's bootstrap; (b) and (e) are Codex's display and host
+  sandbox; (d) is what D-3 declares (no option or command gives the id to a `command` + argv lookup).
+- **ACs:** AC 1 met (tests, above). AC 2 met: MCP registration (the adapter's server answered and won, §2.5), the
+  session-Resource read, the lookups (`agent_version` read, the rest `not-reported` as declared) and the record commit
+  `1a035118`, with the commands, the CLI version and the record line in this entry. AC 3 met: the scratch agent entry
+  `adapter: codex-cli` ran `agent execute` end to end, recorded `adapter: "built-in/codex-cli"` (`1a035118`).
+
+### Pending amendments (approver) — final, uncommitted in the worktree
+
+- `spec-016-agent-execution`: §2.2, §2.3, §2.5 (the `codex-cli` outcome), §2.8 (`codex-cli` row, checked by hand on
+  2026-10-14 with codex-cli 0.145.0 (ChatGPT sign-in)), Revision note. Proposed `--reason` (replaces the one above):
+  "task-237: approver ruling D-1 (a) of 2026-10-14. Codex CLI 0.145.0 registers MCP servers only through TOML
+  configuration layers and -c key=value overrides, so a third mcp.via value, config-arg, passes the rendered
+  mcp.template as the one whole argument {mcp_config}, which keeps placeholders filling whole arguments; the manifest
+  format stays 1 because no released build reads adapter manifests. Section 2.8 fills the codex-cli row from codex
+  --help of codex-cli 0.145.0, with session, model and usage not reported and resume not supported, checked by hand
+  on 2026-10-14 with codex-cli 0.145.0 (ChatGPT sign-in): the model read the unlisted session Resource the bootstrap
+  names with no help. Section 2.5 records that the adapter's -c override won over a same-named server in the
+  project's .codex/config.toml."
+
+### Retrospective
+
+- **What the design caught before the build.** The help output alone showed Codex could not take the running build's
+  server under the format-1 rules (no config-file option, only one-argument `-c` overrides); raising it as D-1 before
+  red, rather than after a failed by-hand pass as in task-236, kept the change to one red/green cycle. Reading the
+  binary's tool definitions settled question 3 (resources readable by the model) before the run; the run confirmed it.
+- **Rehearse the runbook's setup without the agent.** The dry rehearsal in a throwaway directory found that ruling
+  D-5's address is refused by the schema before the approver spent a Codex session on it.
+- **The stop line still does not stop the agent in time** (as in both task-236 runs): the launched agent worked on
+  the scratch task, with the global `wingfoil`. A harmless scratch element made that cost nothing; finding (a) is the
+  real lesson (the bootstrap does not say which `wingfoil` to run).
+- **Coverage of child-process paths.** Red's end-to-end test ran the compiled CLI, so its branches did not count; one
+  in-process test of the same hand-over restored the column. Worth a qa-brief note for future integration-only reds.
