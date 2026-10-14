@@ -2,7 +2,7 @@
 id: "task-234-publish-documentation-site-api-reference-llms-txt-index"
 type: task
 title: "Publish a documentation site with the API reference and an llms.txt index"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "low"
