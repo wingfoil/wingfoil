@@ -2,7 +2,7 @@
 id: "task-244-publish-release-test-results-coverage"
 type: task
 title: "Publish each release's test results and coverage"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "medium"
