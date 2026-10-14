@@ -54,7 +54,7 @@ import { readGitIdentity } from './git-identity';
 import { loadDirectivesAtRev, loadRolesYamlAtRev, type DirectiveFile } from './loaders';
 import { coreErr, coreOk, type CoreResult } from './types';
 import { unknownWorkflowMessage } from './workflow-list-show';
-import { readDeductionSnapshotAtHead } from './workflow-deduction';
+import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
 
 /** `NextResult.message` when no instance is open (`spec-017` §7.3). */
 export const NO_OPEN_WORKFLOWS = 'no open workflows';
@@ -183,6 +183,11 @@ export interface NextInputs {
   readonly bindings: BindingsYaml | null;
   readonly rolesYaml: RolesYaml | null;
   readonly directiveFiles: readonly DirectiveFile[];
+  /**
+   * The ids of the instance plans at the snapshot's commit, in any status (`spec-017` §3.1, §10): a `<ref>`
+   * naming one that is not open is `workflow is not open` (task-281, `bug-326`). Absent: none.
+   */
+  readonly plans?: readonly string[];
 }
 
 /** Options of {@link nextWorkflow}. */
@@ -516,13 +521,23 @@ function warnUnknownAssignee(dnaYaml: DnaYaml | null, who: string, identityEmail
   if (!known) reportWarning(`--assigned-to '${who}' names no team.members[] entry (name or email) and no team.roles role in dna.yaml`);
 }
 
+/** What a `<ref>` may name besides an open instance (`spec-017` §10): a loaded workflow, or an instance plan's id. */
+export interface KnownRefs {
+  readonly workflows: readonly Workflow[];
+  /** The instance plans' ids at `HEAD`, any status (§3.1: type `plan`, `parent` empty). */
+  readonly plans?: readonly string[];
+}
+
 /**
- * The refusal of a `<ref>` that selects no open instance (`spec-017` §10, task-216 review fix 1): a loaded
- * workflow with no open instance is `workflow is not open: <ref>`; any other `<ref>` names nothing,
- * `unknown workflow: <ref>`. Both `NOT_FOUND`. Shared by `next` and `finalize` (task-226).
+ * The refusal of a `<ref>` that selects no open instance (`spec-017` §10, task-216 review fix 1, task-281
+ * `bug-326`): a loaded workflow with no open instance, or an instance plan that is not open, is
+ * `workflow is not open: <ref>`; any other `<ref>` — a phase plan's id included (approver ruling D4) — names
+ * nothing, `unknown workflow: <ref>`. Both `NOT_FOUND`. The one answer of `next`, `status`, `finalize`, `end`
+ * and `memory add --workflow`.
  */
-export function unresolvedRef<T>(workflows: readonly Workflow[], ref: string): CoreResult<T> {
-  if (workflows.some((workflow) => workflow.name === ref)) return coreErr({ code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } });
+export function unresolvedRef<T>(known: KnownRefs, ref: string): CoreResult<T> {
+  const named = known.workflows.some((workflow) => workflow.name === ref) || (known.plans ?? []).includes(ref);
+  if (named) return coreErr({ code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } });
   return coreErr({ code: 'NOT_FOUND', message: unknownWorkflowMessage(ref), details: { ref } });
 }
 
@@ -540,14 +555,15 @@ export function emptyFrontierMessage(selected: InstanceDeduction): string {
 /**
  * `workflow next`'s answer from one deduction (`spec-017` §7.3, §10). Pure. Exit `0` in every deduced
  * case — `no open workflows`; `no next step: workflow '<name>' is complete`; a filter that keeps nothing — and
- * `NOT_FOUND` `workflow is not open: <ref>` for a `ref` naming no open instance.
+ * `NOT_FOUND` for a `ref` naming no open instance — `workflow is not open: <ref>` or `unknown workflow: <ref>`
+ * ({@link unresolvedRef}).
  */
 export function nextWorkflow(inputs: NextInputs, deduction: Deduction, options: NextOptions): CoreResult<NextResult> {
   const { ref, assignedTo } = options;
   const base = { baseline: deduction.baseline, diagnostics: deduction.diagnostics };
   const selected = resolveInstanceRef(deduction, ref);
   if (selected === null) {
-    if (ref !== undefined) return unresolvedRef(inputs.workflows, ref);
+    if (ref !== undefined) return unresolvedRef(inputs, ref);
     return coreOk({ ...base, instance: null, complete: false, next: null, more: [], message: NO_OPEN_WORKFLOWS });
   }
   const { instance, complete, frontier } = selected;
@@ -579,6 +595,7 @@ export function readNextInputs(root: string, snapshot: DeductionSnapshot, deduct
     bindings: snapshot.bindings ?? null,
     rolesYaml: hasSteps ? loadRolesYamlAtRev(root, snapshot.commit) : null,
     directiveFiles: hasSteps ? loadDirectivesAtRev(root, snapshot.commit) : [],
+    plans: instancePlanIds(snapshot.documents),
   };
 }
 

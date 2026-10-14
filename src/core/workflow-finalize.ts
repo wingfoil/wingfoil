@@ -40,7 +40,7 @@ import { APPROVER_ROLE, requireApprovalAuthority } from './approval-authority';
 import { requireGitIdentity } from './git-identity';
 import { optionalReason, requireReason } from './require-reason';
 import { coreErr, coreOk, type CoreResult } from './types';
-import { readDeductionSnapshotAtHead } from './workflow-deduction';
+import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
 import { buildStep, emptyFrontierMessage, readNextInputs, stepLines, unresolvedRef, type Step } from './workflow-next';
 import { requireCleanIndex } from './write-guard';
 
@@ -118,7 +118,7 @@ export function workflowFinalizeAtHead(root: string, request: FinalizeRequest): 
   const deduction = deduceWorkflowState(snapshot);
   const selected = resolveInstanceRef(deduction, request.ref);
   if (selected === null) {
-    if (request.ref !== undefined) return unresolvedRef(snapshot.workflows, request.ref);
+    if (request.ref !== undefined) return unresolvedRef({ workflows: snapshot.workflows, plans: instancePlanIds(snapshot.documents) }, request.ref);
     return coreErr({ code: 'NOT_FOUND', message: NO_ACTIVE_WORKFLOW_TO_FINALIZE });
   }
   const { instance, frontier } = selected;

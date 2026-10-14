@@ -15,8 +15,8 @@ import { memoryAddType, tokenName } from '../workflow/bindings';
 import { deduceWorkflowState, resolveInstanceRef, type DeducedStep } from '../workflow/deduce';
 
 import { coreErr, coreOk, type CoreResult } from './types';
-import { unknownWorkflowMessage } from './workflow-list-show';
-import { readDeductionSnapshotAtHead } from './workflow-deduction';
+import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
+import { unresolvedRef } from './workflow-next';
 
 /** The step an added element is linked to: the values of its two trailers. */
 export interface AddLink {
@@ -40,8 +40,9 @@ function addsType(step: DeducedStep, type: string): boolean {
  * Resolve `--workflow <ref> [--step <key>]` for an element of `type` (`spec-017` §7.10). Refusals, each
  * exit `1` (`spec-017` §10):
  *
- * - `<ref>` names no open instance: `workflow is not open: <ref>` when it is a loaded workflow's name, else
- *   `unknown workflow: <ref>` (`NOT_FOUND`) — `workflow next`'s wording for the same `<ref>`;
+ * - `<ref>` names no open instance: `workflow is not open: <ref>` when it is a loaded workflow's name or an
+ *   instance plan's id, else `unknown workflow: <ref>` (`NOT_FOUND`) — `unresolvedRef`, the one answer `workflow
+ *   next`, `status`, `finalize` and `end` give for the same `<ref>` (task-281, `bug-326`);
  * - `--step <key>` is not on the instance's frontier: `step '<key>' is not on the frontier of <instance>`
  *   (`CONFLICT`), as `workflow finalize` refuses it;
  * - no frontier step (or the `--step` one) adds a `type`: `no step of <instance> adds a <type>` (`CONFLICT`);
@@ -55,8 +56,7 @@ export function resolveAddLink(root: string, ref: string, stepKey: string | unde
   const snapshot = readDeductionSnapshotAtHead(root);
   const selected = resolveInstanceRef(deduceWorkflowState(snapshot), ref);
   if (selected === null) {
-    const loaded = snapshot.workflows.some((workflow) => workflow.name === ref);
-    return coreErr({ code: 'NOT_FOUND', message: loaded ? `workflow is not open: ${ref}` : unknownWorkflowMessage(ref), details: { ref } });
+    return unresolvedRef({ workflows: snapshot.workflows, plans: instancePlanIds(snapshot.documents) }, ref);
   }
   const instance = selected.instance.id;
   if (stepKey !== undefined && !selected.frontier.some((step) => step.key === stepKey)) {

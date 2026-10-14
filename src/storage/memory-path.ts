@@ -10,10 +10,10 @@
  * (`src/validation/id.ts`, task-002-validation-id-engine); callers pass the already-generated id in
  * `values` like any other placeholder.
  */
-import { join, resolve } from 'path';
+import { join, posix, resolve } from 'path';
 
 import { escapesRoot, resolveRealPathInRoot, symlinkTargetRefusal, targetIsSymlink } from './confinement';
-import { E_MISSING_PATH_VALUE, E_PATH_ESCAPES_ROOT, E_TARGET_IS_SYMLINK, StorageError } from './errors';
+import { E_MISSING_PATH_VALUE, E_PATH_ESCAPES_ROOT, E_PATH_OUTSIDE_TYPE_FOLDER, E_TARGET_IS_SYMLINK, StorageError } from './errors';
 
 /** Exact confinement-violation message required by REQ-SEC-06's fit criterion — do not reword. */
 const CONFINEMENT_MESSAGE = 'Memory entries must reside within the project root';
@@ -44,6 +44,31 @@ export function renderMemoryPath(pattern: string, values: Record<string, string>
     );
   }
   return rendered;
+}
+
+/**
+ * The folder a type's `path` pattern confines its documents to — its **static prefix** (task-281, `bug-325`):
+ * the pattern up to and including the last `/` before its first `{`; the directory part of the pattern when
+ * it holds no `{`; `''` when the first `{` lies in the first segment (no folder narrower than the root).
+ *
+ * `docs/05_plans/{scope}/{id}.md` → `docs/05_plans/`; `docs/04_memory/planning/rl-{release-line}/{id}.md` →
+ * `docs/04_memory/planning/`; `{scope}/{id}.md` → `''`; `docs/fixed.md` → `docs/`.
+ */
+export function pathPatternFolder(pattern: string): string {
+  const brace = pattern.indexOf('{');
+  const end = brace === -1 ? pattern.length : brace;
+  return pattern.slice(0, pattern.lastIndexOf('/', end - 1) + 1);
+}
+
+/**
+ * Whether the normalized root-relative `path` lies strictly under `folder`. An empty folder confines nothing
+ * beyond the root: a path that climbs out of it or is absolute was already refused by the root checks, which
+ * run first.
+ */
+function liesUnder(path: string, folder: string): boolean {
+  if (folder === '') return true;
+  const prefix = posix.normalize(folder);
+  return path.startsWith(prefix) && path.length > prefix.length;
 }
 
 /** Render `pattern` (see {@link renderMemoryPath}) and resolve it to an absolute path under `root`. */
@@ -111,6 +136,10 @@ export function resolveMemoryPath(
  * @throws {@link StorageError} `E_PATH_ESCAPES_ROOT` (message: {@link CONFINEMENT_MESSAGE} plus the
  *   two spellings of the path, since the two differing is the finding) when the resolved path is the
  *   root itself, escapes it textually, or lands outside it on the filesystem.
+ * @throws {@link StorageError} `E_PATH_OUTSIDE_TYPE_FOLDER` when the path, normalized, stays inside the root but
+ *   not under {@link pathPatternFolder} of `pattern` — the type's folder (task-281, `bug-325`). Checked after
+ *   the two root checks, so a root escape keeps `E_PATH_ESCAPES_ROOT`; the message names every token of the
+ *   pattern with its value.
  * @throws {@link StorageError} `E_TARGET_IS_SYMLINK` (message: `symlinkTargetRefusal`, shared with
  *   the transition verbs' `CoreResult` refusal) when the target itself is a symbolic link —
  *   including a **dangling** one, which `existsSync` cannot see.
@@ -135,6 +164,16 @@ export function resolveConfinedMemoryPath(
       E_PATH_ESCAPES_ROOT,
       `${CONFINEMENT_MESSAGE}: '${rendered}' resolves to '${onDisk.real}', outside the project root — ` +
         'a directory on the way to it is a symlink leaving the project.',
+    );
+  }
+  const normalized = posix.normalize(rendered);
+  const folder = pathPatternFolder(pattern);
+  if (!liesUnder(normalized, folder)) {
+    const tokens = [...new Set([...pattern.matchAll(PLACEHOLDER_RE)].map((match) => match[1]!))];
+    const listed = tokens.map((token) => `{${token}}=${JSON.stringify(values[token])}`).join(', ');
+    throw new StorageError(
+      E_PATH_OUTSIDE_TYPE_FOLDER,
+      `Memory entries must reside in their type's folder: '${rendered}' resolves to '${normalized}', outside '${folder}' (path '${pattern}': ${listed})`,
     );
   }
   if (targetIsSymlink(target)) {

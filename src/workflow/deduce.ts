@@ -149,13 +149,17 @@ export interface Reentry extends WalkPosition {
 }
 
 /**
- * A `wf(<type>): <verb> <ids> [… → <to>]` commit naming a re-entered element: the candidates for the
- * commit that put the element in its current status (§4.8, `state` evidence after a re-entry).
+ * A Memory-operation commit naming a re-entered element — a `wf(<type>): <verb> <ids> [… → <to>]` subject, or
+ * a bracketless `wf(<type>): add|submit <ids>` (task-281, `bug-300`): the candidates for the commit that put
+ * the element in its current status (§4.8, `state` evidence after a re-entry).
  */
 export interface TransitionCommit extends WalkPosition {
   readonly type: string;
   readonly id: string;
-  /** The bracket's last state. */
+  /**
+   * The status the commit left: its bracket's last state, or — for a bracketless `add` / `submit` — the
+   * status the element's file holds at that commit (task-281, `bug-300`).
+   */
   readonly to: string;
 }
 
@@ -852,8 +856,9 @@ class Deducer {
 
   /**
    * The commit that put `element` in its current status (§4.8, `state` after a re-entry): the latest
-   * transition commit naming it whose bracket ends at that status, else the latest commit in the walk that
-   * changed its file; `null` (older than anything in the walk) when neither.
+   * transition commit naming it that left that status — its bracket's `<to>`, or the file's status at a
+   * bracketless `add` / `submit` (task-281, `bug-300`) — else the latest commit in the walk that changed its
+   * file; `null` (older than anything in the walk) when neither.
    */
   private stateCommit(element: Element): string | null {
     const named = this.snapshot.transitions.find((entry) => entry.type === element.type && entry.id === element.id && entry.to === element.status);

@@ -13,7 +13,8 @@
  * History is read at the cost §4.8 states (REQ-PERF-03): **one** `git log` over the union of the open
  * instances' walks, bounded by the parents of the starts' octopus merge base (one `git merge-base
  * --octopus`), from which each instance's own walk is cut in memory through the parent links; plus one
- * lookup per element a re-entry in the walk names.
+ * lookup per element a re-entry in the walk names, and one batched read (`git cat-file --batch`) of those
+ * elements' files at the bracketless `add` / `submit` commits that name them (task-281, `bug-300`).
  *
  * git is read with `runGitRead` (stderr captured, `bug-093`) and the `git log` walk with
  * `walkGitLogFields` (NUL-framed, `bug-050`); every `git log` passes `--no-show-signature` and checks the
@@ -31,8 +32,8 @@ import { walkGitLogFields } from '../memory/git-log';
 import { computeMemoryContentRoots, loadMemoryDocumentsAtRev, type MemoryDocumentSummary } from '../memory/query';
 import type { MemoryYaml } from '../memory/schema';
 import { resolveStateMachine } from '../memory/state-machine';
-import { requireCommitName, runGitRead } from '../storage';
-import type { Diagnostic } from '../validation';
+import { readRevisionPaths, requireCommitName, runGitRead, splitFrontmatter } from '../storage';
+import { parseYaml, type Diagnostic } from '../validation';
 import {
   deduceWorkflowState,
   OPEN_PLAN_STATUSES,
@@ -52,7 +53,7 @@ import {
 import type { BindingsYaml, CollectionEntry } from '../workflow/bindings';
 import { producesPath, type Workflow } from '../workflow/schema';
 
-import { loadDnaYamlAtRev, loadMemoryYamlAtRev } from './loaders';
+import { DIRECTIVES_DIR_PATH, DNA_YAML_PATH, loadDnaYamlAtRev, loadMemoryYamlAtRev, MEMORY_YAML_PATH, ROLES_YAML_PATH } from './loaders';
 import { atHeadOr, listPathsAtCommit, resolveRevision } from './revision';
 import { coreErr, coreOk, type CoreResult } from './types';
 import { loadWorkflowRegistryAtRev } from './workflow-registry';
@@ -179,12 +180,26 @@ function subjectType(subject: string): string {
   return /^wf\(([^)]*)\)/.exec(subject)![1]!;
 }
 
+/**
+ * A Memory operation with no bracket naming an element — `add` or `submit`, which `memory add` and
+ * `memory submit` write without one (task-281, `bug-300`): the status it left is read from the element's
+ * file at that commit, for a re-entered element only (§4.8).
+ */
+interface BracketlessCommit extends WalkPosition {
+  readonly type: string;
+  readonly id: string;
+}
+
+/** The verbs whose subject carries no bracket (`spec-008` §2): `add` and `submit`. */
+const BRACKETLESS_VERBS: readonly string[] = ['add', 'submit'];
+
 /** What one walk commit says (§4.8): a record, linkages, re-entries and transitions, each possibly empty. */
 interface CommitFacts {
   readonly record: PhaseRecord | null;
   readonly links: StepLink[];
   readonly reentries: Reentry[];
   readonly transitions: TransitionCommit[];
+  readonly bracketless: BracketlessCommit[];
 }
 
 /**
@@ -207,7 +222,7 @@ function readFacts(entry: WalkCommit, memoryYaml: MemoryYaml | null): CommitFact
           item: trailerValue(trailers, 'WingFoil-Item'),
         }
       : null;
-  const facts: CommitFacts = { record, links: [], reentries: [], transitions: [] };
+  const facts: CommitFacts = { record, links: [], reentries: [], transitions: [], bracketless: [] };
   const operation = parseMemoryOperation(subject);
   if (operation === null) return facts;
   const type = subjectType(subject);
@@ -217,7 +232,10 @@ function readFacts(entry: WalkCommit, memoryYaml: MemoryYaml | null): CommitFact
     for (const id of ids) facts.links.push({ commit, position, instance, step, type, id });
   }
   const hops = parseBracketHops(subject);
-  if (hops === null) return facts;
+  if (hops === null) {
+    if (BRACKETLESS_VERBS.includes(operation)) for (const id of ids) facts.bracketless.push({ commit, position, type, id });
+    return facts;
+  }
   const from = hops[0]!.from;
   const to = hops[hops.length - 1]!.to;
   for (const id of ids) facts.transitions.push({ commit, position, type, id, to });
@@ -253,8 +271,9 @@ interface HistoryRead {
 /**
  * Read the history every open instance's deduction needs (§4.8): one walk for the union of the instances'
  * walks, each instance's records, linkages and re-entries cut from it, the transition commits naming a
- * re-entered element, the walk's parent links, and one lookup per re-entered element (its file's latest
- * change in the walk). With no start, nothing is read.
+ * re-entered element (a bracketless `add` / `submit` through the status its file holds there, one batched
+ * read), the walk's parent links, and one lookup per re-entered element (its file's latest change in the
+ * walk). With no start, nothing is read.
  */
 function readHistory(
   root: string,
@@ -285,7 +304,21 @@ function readHistory(
   }
   if (reentered.size === 0) return read;
 
-  read.transitions.push(...facts.flatMap((fact) => fact.transitions).filter((entry) => reentered.has(`${entry.type}:${entry.id}`)));
+  const pathOf = new Map<string, string>();
+  for (const key of [...reentered].sort()) {
+    const document = documents.find(({ frontmatter }) => `${text(frontmatter['type'])}:${text(frontmatter['id'])}` === key);
+    if (document !== undefined) pathOf.set(key, document.path);
+  }
+  const statuses = readBracketlessStatuses(root, facts.flatMap((fact) => fact.bracketless), pathOf);
+  // In walk order (newest first): a bracketed transition as its bracket says, a bracketless `add` / `submit`
+  // as the file it names holds at that commit (task-281, `bug-300`).
+  for (const fact of facts) {
+    read.transitions.push(...fact.transitions.filter((entry) => reentered.has(`${entry.type}:${entry.id}`)));
+    for (const entry of fact.bracketless) {
+      const to = statuses.get(`${entry.commit} ${entry.type}:${entry.id}`);
+      if (to !== undefined) read.transitions.push({ commit: entry.commit, position: entry.position, type: entry.type, id: entry.id, to });
+    }
+  }
   for (const key of [...reentered].sort()) {
     const document = documents.find(({ frontmatter }) => `${text(frontmatter['type'])}:${text(frontmatter['id'])}` === key);
     if (document === undefined) continue;
@@ -293,6 +326,40 @@ function readHistory(
     if (last !== null) read.lastChanges.set(key, last);
   }
   return read;
+}
+
+/**
+ * The `status` each bracketless `add` / `submit` of a re-entered element left in that element's file
+ * (§4.8, task-281, `bug-300`), by `<commit> <type>:<id>`: one `git cat-file --batch` for all of them, the
+ * file read at its path at `HEAD` (`pathOf`). A commit whose tree does not hold that path, or whose
+ * frontmatter does not parse or has no `status`, gives no entry — the subject is then not counted.
+ */
+function readBracketlessStatuses(root: string, entries: readonly BracketlessCommit[], pathOf: ReadonlyMap<string, string>): Map<string, string> {
+  const requests = entries.flatMap((entry) => {
+    const path = pathOf.get(`${entry.type}:${entry.id}`);
+    return path === undefined ? [] : [{ key: `${entry.commit} ${entry.type}:${entry.id}`, rev: entry.commit, path }];
+  });
+  const statuses = new Map<string, string>();
+  if (requests.length === 0) return statuses;
+  const contents = readRevisionPaths(root, requests);
+  requests.forEach((request, index) => {
+    const status = frontmatterStatus(contents[index]!, `${request.rev}:${request.path}`);
+    if (status !== null) statuses.set(request.key, status);
+  });
+  return statuses;
+}
+
+/** The frontmatter `status` of a document's bytes, or `null` (absent, no frontmatter, unparsable, no string status). */
+function frontmatterStatus(raw: string | null, label: string): string | null {
+  if (raw === null) return null;
+  const { frontmatter } = splitFrontmatter(raw);
+  if (frontmatter === null) return null;
+  try {
+    const data = parseYaml(frontmatter, label) as Record<string, unknown> | null;
+    return text(data?.['status']);
+  } catch {
+    return null;
+  }
 }
 
 /** The static directory (or file) a `produces` pattern names before its first token, or `null` for the whole tree. */
@@ -305,11 +372,13 @@ function staticPrefix(pattern: string): string | null {
 
 /**
  * The working-tree paths among the deduction's inputs that differ from `HEAD` (§1.2): the Memory scan
- * roots, `.wingfoil/workflows.yaml` and `.wingfoil/workflows/`, every `produces` pattern's static part and
- * `paths.runs` — modified, staged, deleted or untracked, sorted.
+ * roots, the configuration files §1.1 reads at `HEAD` — `.wingfoil/workflows.yaml` and
+ * `.wingfoil/workflows/`, `memory.yaml`, `dna.yaml`, `roles.yaml` and `.wingfoil/directives/` (task-281,
+ * `bug-301`, approver ruling D2) — every `produces` pattern's static part and `paths.runs`; modified,
+ * staged, deleted or untracked, sorted.
  */
 function readDirty(root: string, memoryYaml: MemoryYaml | null, dnaYaml: DnaYaml | null, workflows: readonly Workflow[]): string[] {
-  const specs = new Set<string>(['.wingfoil/workflows.yaml', '.wingfoil/workflows/']);
+  const specs = new Set<string>(['.wingfoil/workflows.yaml', '.wingfoil/workflows/', MEMORY_YAML_PATH, DNA_YAML_PATH, ROLES_YAML_PATH, `${DIRECTIVES_DIR_PATH}/`]);
   for (const dir of memoryYaml === null ? [] : computeMemoryContentRoots(memoryYaml)) specs.add(`${dir}/`);
   for (const workflow of workflows) {
     for (const phase of workflow.phases) {
@@ -403,6 +472,22 @@ function emptySnapshot(): DeductionSnapshot {
   };
 }
 
+/** Whether a document's frontmatter is a plan of the instance kind (§3.1): type `plan`, `parent` empty. */
+function isInstancePlan(frontmatter: Readonly<Record<string, unknown>>): boolean {
+  return text(frontmatter['type']) === PLAN_TYPE && text(frontmatter['parent']) === null;
+}
+
+/**
+ * The ids of the instance plans among `documents` (§3.1: type `plan`, `parent` empty), in any status, in
+ * document order — what a `<ref>` may name besides a loaded workflow (§10, task-281, `bug-326`).
+ */
+export function instancePlanIds(documents: readonly MemoryDocumentSummary[]): string[] {
+  return documents.flatMap(({ frontmatter }) => {
+    const id = text(frontmatter['id']);
+    return isInstancePlan(frontmatter) && id !== null ? [id] : [];
+  });
+}
+
 /**
  * Read everything workflow state deduction needs, as `HEAD` holds it (`spec-017` §1.1), plus the
  * dirty input paths (§1.2). A repository with no commit gives an empty snapshot.
@@ -423,10 +508,7 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
 
   // The plans that may be open instances (§3.2's status and `parent` rules; the workflow rule is the deduction's).
   const candidates = documents
-    .filter(
-      ({ frontmatter }) =>
-        text(frontmatter['type']) === PLAN_TYPE && OPEN_PLAN_STATUSES.includes(text(frontmatter['status']) ?? '') && text(frontmatter['parent']) === null,
-    )
+    .filter(({ frontmatter }) => isInstancePlan(frontmatter) && OPEN_PLAN_STATUSES.includes(text(frontmatter['status']) ?? ''))
     .map((document) => document.path);
   const starts = readStarts(root, sha, candidates);
   const { history, transitions, lastChanges, parents } = readHistory(root, sha, [...starts.values()], memoryYaml, documents);

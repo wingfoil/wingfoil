@@ -96,8 +96,9 @@ the commit history walk of §4.8. The normative rule is `spec-006` §6 (`dl-080`
 Every payload carries the baseline it answered from (`dl-084` (A)).
 
 **1.2 The working tree explains, never decides.** When the working tree differs from `HEAD` under the
-Memory paths, `.wingfoil/workflows*`, a `produces:` pattern or the run-log files (`dna.yaml`
-`paths.runs`, `<runs>/<element-id>.jsonl`, `spec-016` §4.1), the read-only operations emit the
+Memory paths, `.wingfoil/workflows*`, the other configuration files §1.1 reads (`.wingfoil/memory.yaml`,
+`.wingfoil/dna.yaml`, `.wingfoil/roles.yaml`, `.wingfoil/directives/`), a `produces:` pattern or the run-log
+files (`dna.yaml` `paths.runs`, `<runs>/<element-id>.jsonl`, `spec-016` §4.1), the read-only operations emit the
 diagnostic `W_UNCOMMITTED_INPUTS` naming the paths, and still answer from `HEAD`
 (the `command-baseline` directive's "The working tree may be read to *explain* a refusal, never to decide one"; approver ruling R15, 2026-09-30, `release-planning-rel-v0.3-plan`). `spec-016`'s `agent list` and
 `agent show` reuse this code and rule unchanged (`spec-016` §5, §5.1). The one exception is a guard over a filesystem effect (`dl-086`): `create`
@@ -380,8 +381,11 @@ Three things are found there.
   re-entry of the element a workflow pass runs on, the `record` and `state` evidence of the phases
   from the `fallback.step` of the phase whose gate state was `<from>` onward counts only if its
   commit is newer than the re-entry commit. For `state`, that commit is the latest commit in the walk
-  whose `wf(<type>): <verb> <ids> [<from> → <to>]` subject names the element with `<to>` equal to its
-  current status, or, when no subject does, the latest commit that changed the element's file. Phases
+  whose Memory-operation subject names the element and left it at its current status: a
+  `wf(<type>): <verb> <ids> [<from> → <to>]` subject whose `<to>` is that status, or a subject with no
+  bracket — `add` and `submit`, which `memory add` and `memory submit` write without one — at which the
+  element's file holds that status (read from its frontmatter, as `memory history` reads it). When no
+  subject does, it is the latest commit that changed the element's file. Phases
   before `fallback.step` keep their evidence, and `produces` evidence is not affected. This is how the
   fallback step becomes current after a reject (§5.2): after `dev-loop.review` is rejected, `start`
   and `design` stay complete, `red` needs a new record, and `review`'s `state` needs a new `submit`.
@@ -406,7 +410,8 @@ the instance was started does not count for it.
 Memory frontmatter once. It reads history with one `git merge-base --octopus` over every open instance's
 start commit and one `git log` over the union of the open instances' walks: the commits reachable from
 `HEAD` and not from that merge base's parents. With no common ancestor, the walk is not bounded. It then
-makes one lookup per element that has a re-entry in the walk. The merge base is an ancestor of every
+makes one lookup per element that has a re-entry in the walk, and one batched read of those elements' files at
+the bracketless `add` and `submit` commits that name them. The merge base is an ancestor of every
 start, so no commit any instance's walk holds is cut off. The oldest start alone would cut one off in a
 branching history: a commit on another branch that precedes the oldest start.
 Nothing scales with the full history. The fit criterion is verified by a timing test in the
@@ -853,7 +858,7 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | Case | Message | `CoreError.code` | Exit |
 |---|---|---|---|
 | any `spec-003` error | the first error's message, in `spec-003`'s order; every diagnostic in `details` | `VALIDATION` | 1 |
-| unknown workflow name (`start`, `show`, `remove`, a name `<ref>`) | `unknown workflow: <name>` | `NOT_FOUND` | 1 |
+| unknown workflow name (`start`, `show`, `remove`, a name `<ref>`); a `<ref>` that names neither a loaded workflow nor an instance plan at `HEAD` — a phase plan's id included (§3.1) | `unknown workflow: <name>` | `NOT_FOUND` | 1 |
 | not startable | `cannot start a sub workflow directly: <name>` | `VALIDATION` | 1 |
 | no `plan` type in `memory.yaml` | `memory type 'plan' is not declared in memory.yaml; workflow start records an instance as a plan element` | `VALIDATION` | 1 |
 | element required and absent, or `--element` of another type | `workflow '<name>' needs a <type> element: give --element <type>:<id>` | `VALIDATION` | 1 |
@@ -862,7 +867,7 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | `--set phase=` collides (`start`) | `plan id already exists: <id>` | `CONFLICT` | 1 |
 | second `start` commit failed | `plan <id> was added but not submitted: run wingfoil memory submit <id>` | as the failure | 1 |
 | no open instance (`end`) | `no active workflow to end` | `NOT_FOUND` | 1 |
-| `<ref>` names no open instance (also `memory add --workflow <ref>`) | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
+| `<ref>` names a loaded workflow with no open instance, or an instance plan (`plan`, `parent` empty) at `HEAD` that is not open — `next`, `status`, `finalize`, `end` and `memory add --workflow <ref>` alike | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
 | plan in `draft` at `end` | `workflow '<name>' was not submitted: run wingfoil memory submit <id>` | `INVALID_TRANSITION` | 1 |
 | incomplete at `end` | `workflow '<name>' is not complete: current step <key>` — with an empty frontier, `…: it is abandoned: its element <type>:<id> is <status>` or `…: workflow '<name>' is not loaded`; the hint `wingfoil memory deprecate <id> abandons it` | `CONFLICT` | 1 |
 | step not on the frontier (`finalize`, `memory add --step`) | `step '<key>' is not on the frontier of <instance>` | `CONFLICT` | 1 |
@@ -1391,3 +1396,14 @@ supersede or a state change (`dl-047`), pending the approver's `memory amend` at
 `src/mcp/index.ts:84-90` (`grep -n "^export function registerReadOnlyResources" src/mcp/index.ts` → 84; `dl-075`
 offset class). No rule changes. Edited in place without a supersede or a state change (`dl-047`), pending the
 approver's `memory amend`.
+
+**Revision (2026-10-13, `task-281-fix-workflow-deduction-inputs-not-open-refs-and-the-dev-loop-done-order-and-confine-path-tokens-to-the-type-s-folder`)
+— the state rule after a re-entry, the inputs §1.2 names and the `<ref>` refusals.** §4.8: a bracketless `add` /
+`submit` subject (what `memory add` / `memory submit` write) counts as the commit that set an element's status when
+the element's file holds that status at that commit (`bug-300`: an older hand-written bracketed `submit` hid a later
+CLI one, so `review` stayed `missing=state` after a re-submit); a plain edit of the file after a re-entry still
+counts for nothing. Its *Cost* gains the one batched read this needs. §1.2 lists the configuration files §1.1
+reads (`bug-301`, approver ruling 2026-10-12 D2). §10: a `<ref>` naming an instance plan that is not open is
+`workflow is not open` for every command that takes one, and a `<ref>` naming neither a workflow nor an instance plan
+— a phase plan's id included (ruling D4) — is `unknown workflow` (`bug-326`). No command or diagnostic code
+changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
