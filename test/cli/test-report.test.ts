@@ -189,6 +189,23 @@ describe('AC 1 — classifySuite: first rule that matches', () => {
     expect(load().classifySuite('test/release-health/measure.test.ts', source)).toBe('unit');
   });
 
+  // Review send-back F2 (2026-10-14, ruling D2's wording): a `.feature` file named anywhere in the header comment,
+  // in any path spelling, makes the file BDD — not only the full `docs/02_requirements/02_bdd/features/…` path.
+  it('a header citing a bare feature file name (`P5.1.4-cli-ux.feature`) is BDD', () => {
+    const source = "/**\n * task-1 — error details.\n *\n * BDD: `P5.1.4-cli-ux.feature`, \"Error - a refusal's details follow its error line\".\n */\nimport { x } from 'y';\n";
+    expect(load().classifySuite('test/cli/error-details.test.ts', source)).toBe('BDD');
+  });
+
+  it('a header citing a feature by a relative path (`p5-interaction/P5.1.4-cli-ux.feature`) is BDD', () => {
+    const source = "/** Scenarios of p5-interaction/P5.1.4-cli-ux.feature. */\nimport { x } from 'y';\n";
+    expect(load().classifySuite('test/cli/cli-ux.test.ts', source)).toBe('BDD');
+  });
+
+  it('a bare feature file name cited only after the header is not BDD', () => {
+    const source = "/** A unit suite. */\nimport { x } from 'y';\n\n// See P5.1.4-cli-ux.feature.\nconst NAME = 'P5.1.4-cli-ux.feature';\n";
+    expect(load().classifySuite('test/cli/names.test.ts', source)).toBe('unit');
+  });
+
   it('every other file is unit', () => {
     expect(load().classifySuite('test/memory/add.test.ts', "import { add } from '../../src/memory';\n")).toBe('unit');
   });
@@ -224,6 +241,7 @@ describe('AC 1 — summarizeResults: counts per class, on the JSON fixture', () 
   it('a run with no failure is `passed`, every class with no file at zero', () => {
     const results = fixtureResults();
     results.testResults = results.testResults.filter((r) => r.name === `${FIXTURE_ROOT}/test/memory/add.test.ts`);
+    results.success = true;
     const summary = load().summarizeResults(results, FIXTURE_ROOT, readSource);
     expect(summary.passed).toBe(true);
     expect(summary.failures).toEqual([]);
@@ -249,6 +267,63 @@ describe('AC 1 — summarizeResults: counts per class, on the JSON fixture', () 
   it('throws on results with no `testResults` array', () => {
     const { summarizeResults } = load();
     expect(() => summarizeResults({}, FIXTURE_ROOT, readSource)).toThrow();
+  });
+});
+
+/**
+ * Review send-back F1 (2026-10-14): the verdict also reads Jest's own `success` (Jest 30: false on a failed test,
+ * a snapshot failure or a reporter error — a missed coverage threshold is one), so a threshold-only failure is
+ * never summarised as passed; and a suite that failed with only passing assertions (an `afterAll` error) is a
+ * listed failure, not a suite that failed to run.
+ */
+describe('AC 1 — the verdict: Jest `success` and suite-level failures (review F1)', () => {
+  const oneSuite = (suiteStatus: string, success: boolean): Record<string, unknown> => ({
+    success,
+    testResults: [
+      {
+        name: `${FIXTURE_ROOT}/test/memory/add.test.ts`,
+        status: suiteStatus,
+        message: suiteStatus === 'failed' ? '  ● Test suite failed in afterAll' : '',
+        summary: '',
+        startTime: 1,
+        endTime: 2,
+        coverage: null,
+        assertionResults: [
+          { ancestorTitles: ['memory add'], fullName: 'memory add writes the file', location: null, status: 'passed', title: 'writes the file', duration: 1, failureMessages: [] },
+        ],
+      },
+    ],
+  });
+
+  it('`success: false` with no failed assertion (a coverage-threshold miss) is not passed', () => {
+    expect(load().summarizeResults(oneSuite('passed', false), FIXTURE_ROOT, readSource).passed).toBe(false);
+  });
+
+  it('`success: true` with no failure is passed', () => {
+    expect(load().summarizeResults(oneSuite('passed', true), FIXTURE_ROOT, readSource).passed).toBe(true);
+  });
+
+  it('the summary’s Result reads `failed` for `success: false` with no failed assertion', () => {
+    const mod = load();
+    const md = mod.formatSummary(
+      mod.summarizeResults(oneSuite('passed', false), FIXTURE_ROOT, readSource),
+      mod.coverageTotals(fixtureCoverage()),
+      META,
+    );
+    expect(fieldCell(md, 'Result')?.replace(/`/g, '')).toBe('failed');
+  });
+
+  it('a failed suite whose assertions all passed (an afterAll error) is listed, and not as "suite failed to run"', () => {
+    const mod = load();
+    const summary = mod.summarizeResults(oneSuite('failed', true), FIXTURE_ROOT, readSource);
+    expect(summary.passed).toBe(false);
+    expect(summary.failures.map((f) => f.file)).toEqual(['test/memory/add.test.ts']);
+    expect(summary.failures[0]?.test).not.toBeNull();
+    const md = mod.formatSummary(summary, mod.coverageTotals(fixtureCoverage()), META);
+    const lines = md.slice(md.indexOf('## Failures')).split('\n').filter((l) => l.startsWith('- '));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.startsWith('- `test/memory/add.test.ts` — ')).toBe(true);
+    expect(lines[0]).not.toContain('suite failed to run');
   });
 });
 
@@ -360,6 +435,7 @@ describe('AC 1 — formatSummary: the Markdown summary', () => {
   it('has no `## Failures` section on a green run, and Result `passed`', () => {
     const results = fixtureResults();
     results.testResults = results.testResults.filter((r) => r.name === `${FIXTURE_ROOT}/test/memory/add.test.ts`);
+    results.success = true;
     const md = render(META, results);
     expect(md).not.toContain('## Failures');
     expect(fieldCell(md, 'Result')?.replace(/`/g, '')).toBe('passed');
