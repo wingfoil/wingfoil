@@ -1544,8 +1544,8 @@ temporary directory and are removed whatever happens, an interruption before the
 Then it launches the agent: it prints `run <run-id>: launching <agent> (<adapter>) as <role> on
 <type>:<id>`, starts the adapter's command with the arguments its manifest declares (no shell), and
 hands it the terminal. The agent's first prompt names the run, the role, the element and the commit,
-tells it where to load its context (the `<role>-session` prompt of the `wingfoil` MCP server registered
-for it), and tells it to end every commit it writes, except an approve or reject commit, with
+tells it where to load its context (the Resource `wingfoil://session/<role>/<type>:<id>/<commit>` of the
+`wingfoil` MCP server registered for it), and tells it to end every commit it writes, except an approve or reject commit, with
 `Co-Authored-By: <agent name> <<agent email>>` and `AI-Model: <its model>` — added to a commit `wingfoil`
 writes with `git commit --amend --no-edit --trailer`, never as a paragraph of their own. While the agent runs,
 Ctrl-C and Ctrl-\ reach the agent and do not stop `agent execute`; `SIGTERM` and `SIGHUP` sent to
