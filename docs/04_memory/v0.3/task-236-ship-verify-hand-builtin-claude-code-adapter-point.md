@@ -873,3 +873,71 @@ transcript, not to this entry.
   approver. Their Revision notes may now say the row was checked by hand only after R3/R4 also pass. Still open,
   and the approver's: `/mcp` and `/status` (R3), the `agent: record` commit and record line (R4), and
   `claude mcp reset-project-choices`.
+
+### by-hand runbook 2 — approver's transcript (2026-10-14)
+
+Run by the approver in a real terminal from this worktree (transcript `devloop-kit/task-236-runbook-2-transcript.md`,
+with the coordinator's observations); the launched agent's own note is `5b7af1be`, the record `94377e43`.
+- **R0:** `claude --version` → `2.1.296 (Claude Code)`; `node dist/cli.js --version` → `0.2.2 (7a04ad33…)`; HEAD
+  `7a04ad3303987aeb63a92bfaa1d07fa3b2f0383c`; `git status --short` → only the spec-004 and spec-016 amendments.
+- **R1:** dry run exit 0; run `task-236-…/adhoc/2`, `adapter` `built-in/claude-code`, `state_ref` = R0's HEAD; the
+  bootstrap names `wingfoil://session/developer/task:task-236-…/7a04ad33…`.
+- **R2 — AC 3 (amended) passes.** With nothing typed, the agent's first action, after one `ToolSearch` that loads the
+  deferred MCP tool's schema, was `readMcpResource(Read resource "wingfoil://session/developer/task:task-236-…/7a04ad33…"
+  from server "wingfoil")`: exactly the bootstrap's URI, not refused for being unlisted, no permission prompt, and the
+  answer was the element's context (the task with its ACs, DNA, the developer and global directives, the relevant
+  Memory). The only `wingfoil` MCP child of the session was `…/task-236/dist/cli.js mcp` (`5b7af1be`). The agent then
+  ran shell commands and committed its observation note (`5b7af1be`) before the stop line reached it: the Esc step
+  of the runbook did not stop it in time, as in run `…/adhoc/1`.
+- **D-H not observed.** No `.mcp.json` dialog appeared: the "Continue without using this MCP server" choice stored in
+  run `…/adhoc/1` was still in force (the reset ran only at the end of R4). So §2.5's outcome is: with `.mcp.json`'s
+  server not enabled, the adapter's server served; which server wins with both enabled is untested (the coordinator
+  filed the follow-up).
+- **R3:** `/mcp` → `Wingfoil MCP Server`, `⚠ connected · no tools`, `Capabilities: resources · prompts`, `Config
+  location: …/task-236/.mcp.json` (Claude Code's display, as in `…/adhoc/1`); `/status` → `Version: 2.1.296`, Session
+  ID `b0fc53be-b276-5117-95e6-2e983cf4e5e9`, model `opus[1m] (claude-opus-5-5[1m])`. `/exit` → `run …/adhoc/2: agent
+  exited 0 after 254.9 s (recorded in 94377e4)`.
+- **R4:** `94377e43` `agent: record task-236-…/adhoc/2`, `WingFoil-Version:` trailer only, the run log alone. Record:
+  `session` `b0fc53be-…` = `/status`; `model` and every `tokens` count `not-reported`; `adapter`
+  `built-in/claude-code`; `exit_status` 0. The session file `~/.claude/projects/-home-robypomper-Workspaces--wf2-wt-task-236/b0fc53be-….jsonl`
+  exists. `git status --short` → only the two amendments. `agent list --past` → 2 runs. `claude mcp
+  reset-project-choices` → reset.
+- **Version drift.** Claude Code updated itself during the session: `readlink -f $(which claude)` →
+  `~/.local/share/claude/versions/2.1.299` afterwards. R0, `/status` and the agent's own `claude --version` said
+  `2.1.296`; the record's `agent_version`, read after the run (spec-016 §3.3 step 16), says `2.1.299 (Claude Code)`.
+  `verified_with` stays `2.1.296`, the version the check was made with; the drift is stated in spec-016's Revision
+  note (the coordinator filed the follow-up: read the version before the launch).
+- **Spec-016 amendment completed** (uncommitted): the Revision note now says the row was checked by hand on 2026-10-14
+  with 2.1.296, states §2.5's outcome as above and the drift.
+- **ACs:** AC 1 met (tests); AC 2 met (this transcript and the first pass's above: the commands, the CLI version, the
+  record lines, the record commits `a19338c5`, `94377e43`; every flag backed by the help lines in the design); AC 3
+  (amended) met (R2 above); AC 4 met (`498a33ba`, `11569e02`; `agent execute --element task:task-236-… --role
+  developer` run twice on this repository).
+
+### Pending amendments (approver) — final, uncommitted in the worktree
+
+- `spec-016-agent-execution` — proposed `--reason`: "task-236: approver ruling (a) of 2026-10-13 after the by-hand
+  pass found that Claude Code 2.1.296 gives the model no way to get an MCP Prompt: the execution context is also
+  served as the read-only Resource wingfoil://session/{role}/{element}/{state}, byte-equal to the Prompt, and section
+  2.4's context instruction names that Resource alone; the pre-flight of section 3.3 reads it, Q2 records the revisit
+  and Q7 the one exception to R5. Section 2.8 fills the claude-code row from claude --help of 2.1.296 (Claude Code),
+  checked by hand on 2026-10-14; the revision note records that section 2.5's precedence with both servers enabled
+  was not observed and that Claude Code updated itself to 2.1.299 during the checked session."
+- `spec-004-mcp-surface-contract` — proposed `--reason` as in "Pending amendments 2" above, unchanged.
+
+### Retrospective
+
+- **What the task was sized for and what it became.** M: a manifest from `--help` and a by-hand pass. The pass found
+  that the context primitive R18 chose (a Prompt) cannot be reached by Claude Code's model; ruling (a) made the task
+  L (a new MCP Resource, two spec amendments). spec-016 §2.8 had named this exact risk ("Nothing in this repository
+  establishes this capability for any agent CLI"); a cheap probe of how a real client exposes Prompts to its model,
+  at planning time, would have moved the decision before the build.
+- **By-hand passes need their preconditions reset first.** Runbook 2's D-H step relied on a dialog a stored choice
+  from run 1 suppressed; the reset was placed at the end instead of the start. Likewise the agent ran in auto mode
+  and acted before Esc could stop it, twice. A runbook should reset client-side state before, and launch a role or
+  element where acting unasked is harmless.
+- **The agent CLI is not pinned by the manifest.** Claude Code updated itself mid-session; `verified_with` records
+  what was checked, not what runs. Reading `agent_version` before the launch (follow-up filed) would make the
+  record name what actually started.
+- **The red split worked.** The one wrong red assertion (red 2's wire message, which could not hold together with
+  its own S3 tests) was found by the first green run and fixed by the qa agent in one commit (`f2e3318f`), T4 intact.
