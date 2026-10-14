@@ -314,3 +314,11 @@ says a change to the smoke propagates (line 273).
   callback should give the callback's new signature, not only the behaviour.
 - The full run's lint gate (`git-log-readers`) caught a `git log` reader in `scripts/` that targeted runs never touch:
   the same class as bug-291, found only because the full suite ran before submit.
+- **Send-back (2026-10-14, review F1 via coordinator).** No test covered the per-step env stripping (a mutant
+  `const base = { ...env }` passed the suite). Commit `2fefe7fe` adds `[Scrum] ignores WINGFOIL_FAKE_AGENT_* inherited from
+  the caller's env: every step gets its own (review F1)`: `smokeAgentRun('Scrum', invoke, env)` with
+  `WINGFOIL_FAKE_AGENT_EXIT=3`, `CONNECT=0`, `RECORD=/nonexistent/fake-agent-record.jsonl` in `env` → every check ok, the
+  fake-read label present. **Characterization**: it passes on first run against `191d45a6`'s script
+  (`npx jest test/cli/e2e-smoke.test.ts --maxWorkers=2 -t 'ignores WINGFOIL_FAKE_AGENT_'` → 1 passed, 51 skipped).
+  Mutant evidence is the reviewer's (devloop-kit/task-243-review/mutant-nostrip.cjs): without the strip, `FAIL
+  [Scrum/agent] wingfoil agent execute … — expected exit 0, got exit 1`.
