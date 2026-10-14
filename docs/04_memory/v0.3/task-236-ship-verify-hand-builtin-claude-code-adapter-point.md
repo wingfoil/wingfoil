@@ -21,7 +21,7 @@ This task writes `claude-code.yaml` from the Claude Code CLI's own help output a
 
 - (red-first) The shipped manifest validates under task-177 as a built-in and is installed by `init`. A unit test pins its `name`, `format`, `terminal: required` and a non-empty `verified_with`.
 - (characterization) The by-hand verification transcript goes into Execution Notes: the commands run, the agent CLI version, the observed record line, and the `agent: record` commit sha. It names no flag as a fact without the help output that shows it (`claim-evidence`).
-- (characterization) The Prompt-fetch check passes. **If it or the MCP registration fails, the task stops and returns the choice to the approver** (`spec-016` §2.8; R17 is not narrowed silently).
+- (characterization) The session-context fetch check passes: the launched agent reads, with no user help, the session Resource `wingfoil://session/{role}/{element}/{state}` the bootstrap names (approver ruling (a), 2026-10-13: it replaced the `{role}-session` Prompt fetch, which Claude Code's model cannot do). **If it or the MCP registration fails, the task stops and returns the choice to the approver** (`spec-016` §2.8; R17 is not narrowed silently).
 - (characterization) `.wingfoil/dna.yaml` `team.agents[0]` gains `adapter: claude-code` through `dna update … --entry-adapter` (task-138), with a `doc-versioning` bump. `agent execute --element <real task> --role developer` on this repository is part of the by-hand pass.
 
 ## Implementation Notes
@@ -661,3 +661,174 @@ and type the stop line (the session ran in auto mode last time and acted unasked
   no SDK Client prefixes; it contradicted S3's one-prefix pin. Fixed by the qa agent in `f2e3318f`: `records the
   server's refusal …` expects `element 'task:task-999-absent' not found at <sha>` exactly, code still -32602; nothing
   else changed. `npx jest test/agent/fake-agent.test.ts --maxWorkers=2` → 54 passed, 54 total.
+
+### green 2 (developer, 2026-10-14) — the session Resource
+
+- Read `### red 2 (qa)` (`508f26ea`) and its send-back (`f2e3318f`, notes `9ce38be6`). Approver rulings D-E…D-H
+  (2026-10-14, w3-b7-notes) as in the addendum.
+- `3807dc7c` `feat(mcp): …`:
+  - `src/mcp/prompt.ts`: `buildContextPrompt` split into the exported `buildSessionContext(root, role, element,
+    state) → { text, warnings }`, which the Prompt wraps in `messages`; `promptRequestError` exported (a plain
+    `Error` with `code` -32602, so a client sees one `MCP error -32602:` prefix).
+  - `src/mcp/session-resource.ts` (new): `SESSION_CONTEXT_URI_TEMPLATE`, `registerSessionContextResource`:
+    a template with `{ list: undefined }`; refusal order write intent → undefined role (D-G) → element-ref →
+    the builder's; variables percent-decoded (left as sent when undecodable). Registered in `createMcpServer`,
+    exported from `src/mcp/index.ts`.
+  - `src/agent/execute.ts`: the bootstrap's context instruction is `Read the MCP resource
+    "wingfoil://session/<role>/<type>:<id>/<sha>".` (D-E); `mcpPreflight` gets the Prompt, then reads that
+    Resource, under the one deadline. **Why both, Prompt first** (coordinator accepted, w3-b7-notes): red's stubs
+    in `execute.test.ts` answer only `prompts/get` and pin the Prompt's cause text, so a Resource-only pre-flight
+    would need a red edit (T4); reading the Resource as well checks what the agent will use. Cost: a second context
+    assembly inside REQ-PERF-01's 30 s — `test/agent/agent-execute-latency.test.ts` (p95 over its runs, to the
+    spawn) passed in both full runs below, at load ≈ 20.
+- First targeted run: 175 / 176; the one failure was red 2's wire-message assertion (`fake-agent.test.ts:320`, the
+  fake records the raw JSON-RPC message, which carries no client prefix), sent back and fixed by the qa agent in
+  `f2e3318f`.
+- `fabdd63e` `docs: …`: `docs/user-guide.md` (MCP table row and the `<role>-session` paragraph),
+  `docs/agents.md` §5 (MCP ↔ CLI row), `docs/cli-reference.md` (`agent execute`: the first prompt names the
+  Resource). AC 3's text is amended in this file (approver ruling (a)): "The session-context fetch check passes:
+  the launched agent reads, with no user help, the session Resource … the bootstrap names".
+- `fc1a585b` `test(mcp): …` (my tests, red touched neither file): `test/mcp/session-context-resource-encoding.test.ts`
+  (the barrel exports; an undecodable `task%E0%A4` element refused as a malformed element-ref) and
+  `test/agent/mcp-preflight-resource.test.ts` (a server answering the Prompt but not the Resource — no contents, a
+  blob, empty text — is MCP_UNREACHABLE naming the Resource; with text, the pre-flight passes). `decoded()` lost its
+  unreachable array branch (no exploded variable).
+- **red 2 → green:** `npx jest test/mcp/session-context-resource.test.ts test/agent/fake-agent.test.ts
+  test/agent/execute.test.ts test/cli/agent-execute.integration.test.ts test/cli/agent-execute-launch.integration.test.ts
+  --maxWorkers=2` in the full runs below: all pass (red 2 had 20 failed / 122 passed).
+
+### refactor 2 (developer, 2026-10-14)
+
+Heavy gates under `waitslot.sh`, `--maxWorkers=2`, with both spec amendments in the working tree:
+- `npm run test:coverage -- --maxWorkers=2` at `fc1a585b` → 413 suites, **7451 passed, 7451 total**; coverage
+  **99.32 / 97.22 / 97.99 / 99.71** against the B6 baseline 99.32 / 97.23 / 97.98 / 99.71: branches −0.01, the
+  run-dependent rule — `memory-transition.ts` uncovered `468,560` in this run (only `468` in the previous one, at
+  `915baaa0`), a file this task does not touch. `session-resource.ts` 100 / 100 / 100 / 100. The run before
+  `fc1a585b` gave 99.31 / 97.19 / 97.94 / 99.70 (the barrel's two new re-exports uncovered, the array branch): fixed
+  by `fc1a585b`.
+- `npm run typecheck` → exit 0; `npm run lint` → exit 0; `npm run docs:api` → exit 0.
+- `node scripts/check-governance.cjs --base db0e2752` → `gated: 0 findings`, `history: 0 findings`.
+- `test/docs/mcp-surface-parity.test.ts` passes with the spec-004 §2.1 amendment in the tree (S6).
+- **T4, red 1:** `git log --first-parent --no-merges --format=%h ad0d8c8d..HEAD --
+  test/storage/builtin-adapter-claude-code.test.ts test/core/init-builtin-adapters.test.ts` → empty.
+  **T4, red 2:** `git log --first-parent --no-merges --format=%h 508f26ea..HEAD -- test/mcp/session-context-resource.test.ts
+  test/agent/execute.test.ts test/agent/fake-agent.test.ts test/cli/agent-execute.integration.test.ts
+  test/cli/agent-execute-launch.integration.test.ts test/fixtures/agents/fake-agent.cjs` → `f2e3318f`, the qa
+  agent's send-back.
+
+### review 2 (reviewer, self, 2026-10-14)
+
+- S1–S5 met (the red 2 tests pass, above); S6 met with the spec-004 amendment.
+- AC 1, the BDD handover and AC 4's static half: still met (the full run).
+- AC 2, AC 3 (amended), AC 4's by-hand half: **open** until runbook 2 is run; the task is not submitted.
+- Same-class sweep for the old literal: `grep -rn "Get the MCP prompt" src docs/cli-reference.md docs/user-guide.md
+  docs/agents.md` → nothing (positive case: before `3807dc7c` it hit `src/agent/execute.ts:133`); the same grep on the amended
+  spec-016 → nothing (Q2 records the Prompt as the earlier choice in prose).
+
+### Pending amendments 2 (approver) — uncommitted in the worktree; they replace the first draft above
+
+- `spec-016-agent-execution`: §2.4 (the instruction names the session Resource; the literal), §2.7 (the fake reads
+  it), §2.8 (the check is that the model reads it), §3.3 step 11 (the pre-flight reads it after the Prompt), Q2 (the
+  revisit), Q7 (the one exception to R5), the `claude-code` row, and a dated Revision note that does not say the
+  row was checked by hand (added after the re-run passes). Proposed `--reason`: "task-236: approver ruling (a) of
+  2026-10-13 after the by-hand pass found that Claude Code 2.1.296 gives the model no way to get an MCP Prompt: the
+  execution context is also served as the read-only Resource wingfoil://session/{role}/{element}/{state}, byte-equal
+  to the Prompt, and section 2.4's context instruction names that Resource alone; the pre-flight of section 3.3 reads
+  it, Q2 records the revisit and Q7 the one exception to R5. Section 2.8 fills the claude-code row from claude --help
+  of 2.1.296 (Claude Code)."
+- `spec-004-mcp-surface-contract`: §2.1 gains the template line and its paragraph; §3.4 gains the undefined-role row;
+  a dated Revision note. Proposed `--reason`: "task-236: section 2.1 gains the session Resource
+  wingfoil://session/{role}/{element}/{state} (ruling (a), 2026-10-13), which serves the role-session Prompt's
+  execution context byte for byte to clients whose model can read Resources but not get Prompts; section 3.4 gains
+  its refusal for a role outside the start-time set."
+
+### by-hand runbook 2 (for the approver)
+
+The re-run after ruling (a): the bootstrap now names the session Resource. Run in a real terminal from the worktree
+root, by the approver (ruling D2). Paste the whole transcript back. The previous run is `…/adhoc/1`; this one is
+`…/adhoc/2`.
+
+**R0 — setup and versions** (copy-paste):
+
+```bash
+cd /home/robypomper/Workspaces/.wf2-wt/task-236
+git branch --show-current          # task/task-236-ship-verify-hand-builtin-claude-code-adapter-point
+git status --short                 # only the two pending spec amendments (spec-004, spec-016)
+npm run -s build
+claude --version                   # expect: 2.1.296 (Claude Code)
+node dist/cli.js --version
+git rev-parse HEAD                 # the state_ref the run will pin
+export EL=task:task-236-ship-verify-hand-builtin-claude-code-adapter-point
+```
+
+Record the three versions and the HEAD sha. If `claude --version` is not `2.1.296 (Claude Code)`, stop and report.
+If Claude Code's login has expired, run `claude` once on its own, `/login`, `/exit`, before R2, so the session in R2
+needs no help before its first turn.
+
+**R1 — dry run** (launches nothing):
+
+```bash
+node dist/cli.js agent execute --element "$EL" --role developer --dry-run
+```
+
+Record: exit `0`; `run.id` `task-236-…/adhoc/2`; `run.state_ref` = R0's HEAD; the bootstrap's third line ends
+`Load it before any other action: Read the MCP resource "wingfoil://session/developer/task:task-236-…/<R0 HEAD>".`
+Any `error:` line → stop and report.
+
+**R2 — the real run**:
+
+```bash
+node dist/cli.js agent execute --element "$EL" --role developer
+```
+
+1. Record the `run …/adhoc/2: launching Claude (built-in/claude-code) as developer on task:…` line.
+2. The `.mcp.json` dialog ("New MCP server found in this project: wingfoil"): answer **"Use this MCP server"**
+   (ruling D-H), so both `wingfoil` servers are enabled and precedence is observed. Record any other dialog and
+   its answer.
+3. Type nothing. Watch the agent's first action:
+   - Does it call `ReadMcpResourceTool` (shown as a read of an MCP resource from server `wingfoil`) on exactly the
+     URI the bootstrap names, without you typing anything? Record the call as shown.
+   - Does the result carry the element's execution context (the task's title and ACs, the developer directives)?
+   - **As soon as the read's result is on screen, press Esc** to interrupt, then type
+     `Stop here: make no edits and no commits.` (last time the session ran in auto mode and acted unasked).
+   - If a permission prompt appears for the read, record it and your answer (approving a permission is not
+     user help; typing the URI or the instruction is).
+
+**R3 — inside the session**:
+
+```
+/mcp
+/status
+```
+
+Record from `/mcp` every server named `wingfoil`, its command/args and status; from `/status` the Session ID and the
+model. Then `/exit`.
+
+**R4 — after Claude exits** (copy-paste):
+
+```bash
+git log -1 --format='%H%n%s%n%b'                       # agent: record task-236-…/adhoc/2, WingFoil-Version: trailer only
+git show --stat --format= HEAD                          # only docs/06_runs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl
+tail -1 docs/06_runs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl
+SID=$(tail -1 docs/06_runs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).session')
+echo "$SID"
+ls ~/.claude/projects/*/"$SID".jsonl                   # the assigned id is Claude's own session id
+git status --short                                      # still only the two spec amendments
+node dist/cli.js agent list --past
+claude mcp reset-project-choices                        # undo R2's "Use this MCP server" (ruling D-H)
+```
+
+Record: the `run …: agent exited <status> after <s> s (recorded in <sha7>)` line, the record commit sha, the record
+line (`agent_version` `2.1.296 (Claude Code)`, `session` = R3's Session ID, `model` and every `tokens` count
+`not-reported`, `adapter` `built-in/claude-code`), whether `ls` finds the session file, and the reset's output.
+
+**Stop-and-return (AC 3, spec-016 §2.8; R17 is not narrowed silently).** Stop where it shows, paste the
+transcript; the choice returns to the approver if:
+- R2: the agent does not read the session Resource the bootstrap names without you typing the URI or the
+  instruction, or the read's result is not the element's context;
+- R2: `ReadMcpResourceTool` refuses the URI because the listing does not show it (the template is never listed);
+- R2: the read fails with a "Resource … not found" error: that is the pinned 0.2.2 server's answer (it has no
+  `wingfoil://session/` template), i.e. `.mcp.json`'s server won over the adapter's. The in-task remedy is
+  `--strict-mcp-config` in the manifest (ruling D-A), only on the approver's OK, then R0–R4 again;
+- R3: the adapter's `wingfoil` server is not connected;
+- R2: Claude rejects the argv — a manifest fix in this task, then R0–R4 again.
