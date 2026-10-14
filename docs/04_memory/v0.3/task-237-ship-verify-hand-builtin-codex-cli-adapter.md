@@ -113,8 +113,9 @@ and returns the choice to the approver: **decision D-1, needed before red.**
 **Recommended (D-1 (a)): a third `mcp.via` value, `config-arg`, and a placeholder `{mcp_config}`** = the rendered
 `mcp.template` as ONE whole argv element. It keeps `dl-090` Q3 (a) (a whole argument, no shell), reuses
 `renderMcpTemplate` unchanged (`src/agent/execute.ts:177`: `{mcp_command}` as JSON string content, `{mcp_args}` as a
-JSON array — both valid TOML: JSON's escapes `\" \\ \b \f \n \r \t \uXXXX` are TOML basic-string escapes, and an array
-of JSON strings is a TOML array), and needs no `format` bump: no published build reads adapter manifests (the pinned
+JSON array — valid TOML for any value without U+007F or an unpaired surrogate [corrected at review F1: JSON leaves U+007F
+unescaped, which TOML forbids, and an unpaired `\uD8xx` escape is not a TOML scalar; Codex then uses the raw `-c` text
+as a literal string rather than refusing it]), and needs no `format` bump: no published build reads adapter manifests (the pinned
 `0.2.2`, `node_modules/wingfoil-released/dist/`, has no `agent/` directory). Rules: `mcp.template` required with
 `config-arg`; every declared `launch.*.args` carries `{mcp_config}` when `mcp.via: config-arg`; `{mcp_config}` legal
 only there; the element is the rendered text verbatim (no trailing-newline stripping: the built-in writes a one-line
@@ -376,8 +377,9 @@ command; `ls -l /proc/<pid>/cwd` if needed). Auto-update: three installs on this
   exit 0; `npm run lint` → exit 0; `npm run docs:api` → exit 0. `test/docs/cli-reference.test.ts` passed in the full
   run.
 - `node scripts/check-governance.cjs --base db0e2752` → `gated: 0 findings`, `history: 0 findings`.
-  `node scripts/lint-claims.cjs --base db0e2752` → warn-only; on this file, three "unchanged" in my design (each
-  names the function or test it is about) and one "does not exist" in red's section (qa's, left as written).
+  `node scripts/lint-claims.cjs --base db0e2752` → warn-only; on this file, five warnings: three "unchanged" in my design (each
+  names the function or test it is about), one "unchanged" in green ("the design's manifest unchanged", `:345`) and one
+  "does not exist" in red's section (qa's, left as written) [count corrected at review F3].
 - **T4:** `git log --first-parent --no-merges --format=%h db1e32ab..HEAD -- test/storage/builtin-adapter-codex-cli.test.ts
   test/cli/agent-execute-config-arg.integration.test.ts test/fixtures/agents/config-arg/fake-config-arg.yaml
   test/agent/manifest.test.ts test/agent/launch.test.ts test/fixtures/agents/fake-agent.cjs` → empty (positive case:
@@ -574,19 +576,25 @@ Run by the approver in a real terminal from this worktree at `f7bddb03` (transcr
   HEAD `49113c6`.
 - **R1:** exit 0; `task-001-codex-smoke/adhoc/1`, `built-in/codex-cli`, `Codex`, `state_ref` `49113c6`; the bootstrap
   names `wingfoil://session/developer/task:task-001-codex-smoke/49113c6…`.
-- **Run `…/adhoc/1`** (93.9 s): a first attempt that stopped for lack of credits before the session could run; its
-  record is `d73292c`, which moved the scratch HEAD. The checked run is `…/adhoc/2`, `state_ref` `d73292c6…`.
+- **Run `…/adhoc/1`** (93.9 s): a first attempt: the session started and received the bootstrap, and its first turn failed on the usage limit
+  (rollout `~/.codex/sessions/2026/10/14/rollout-2026-10-14T16-49-16-01a13ae3-….jsonl`: `grep -c "usage limit"` → 2,
+  `grep -c "wingfoil://session/"` → 2); its record (exit_status 0) is `d73292c`, which moved the scratch HEAD. The checked run is `…/adhoc/2`, `state_ref` `d73292c6…`.
 - **R2 (`…/adhoc/2`) — AC 3 (as amended) passes.** Argv accepted: the `-c` value and the bootstrap were taken, the
   bootstrap shown as the first message and submitted on its own. With nothing typed, the model called
   `wingfoil.list_mcp_resources` (dna, workflows, `workflows/-/next`, `-/status`), then `wingfoil.read_mcp_resource`
   on **exactly** `wingfoil://session/developer/task:task-001-codex-smoke/d73292c6…`; the unlisted template URI was
   accepted, and the answer was the element's context (`# WingFoil Agent Context`, `<!-- format: 1 | role: developer
   | element: task:task-001-codex-smoke | state: d73292c6… -->`, `## 1. Task` …), not truncated.
-- **§2.5 — the `-c` override wins.** The read returned the session Resource, which only the build under test serves
+- **§2.5 — the server started has the `-c` override's command and args.** The read returned the session Resource, which only the build under test serves
   (the project `.codex/config.toml` server, the pinned 0.2.2, has no `wingfoil://session/` template: `grep -rln
   "wingfoil://session/" /home/robypomper/Workspaces/WingFoil2/node_modules/wingfoil-released/dist` → nothing;
-  positive case: `grep -rl "wingfoil://session/" dist/mcp/*.js` in this worktree lists `index.js` and `session-resource.js`). So the adapter's
-  `-c mcp_servers.wingfoil=…` override won over the same-named project server.
+  positive case: `grep -rl "wingfoil://session/" dist/mcp/*.js` in this worktree lists `index.js` and `session-resource.js`). So the `wingfoil`
+  server Codex started had the command and args of the adapter's `-c mcp_servers.wingfoil=…` override, beside the
+  same-named project server. The project layer was loaded: the scratch's trust entry (`[projects."…/task-237-scratch"]
+  trust_level = "trusted"`, `grep -n task-237-scratch -A1 ~/.codex/config.toml`) was written during `adhoc/1`
+  (`stat -c %y ~/.codex/config.toml` → `2026-10-14 16:49:15`), before `adhoc/2` started (its rollout
+  `rollout-2026-10-14T17-02-20-01a13aef-….jsonl`). Not observed: whether `-c` replaces the project's table or merges
+  into it (a merge would keep a project's `cwd` or `env`) [narrowed at review F2].
 - **Not stopped in time (recorded as it happened).** Esc did not reach the agent before it acted. It explored, edited
   the scratch task's body (`git apply`), ran `wingfoil memory submit task-001-codex-smoke` with the GLOBAL `wingfoil`
   on `PATH` (the published 0.2.2, which warned `HEAD:.wingfoil/memory.yaml: unknown field(s) ignored: format`), and
@@ -644,3 +652,30 @@ Run by the approver in a real terminal from this worktree at `f7bddb03` (transcr
   real lesson (the bootstrap does not say which `wingfoil` to run).
 - **Coverage of child-process paths.** Red's end-to-end test ran the compiled CLI, so its branches did not count; one
   in-process test of the same hand-over restored the column. Worth a qa-brief note for future integration-only reds.
+
+### independent review (2026-10-14) and fixes (developer)
+
+Verdict APPROVE WITH FIXES (code, manifest and red tests correct; full run 7485/7485 reconfirmed by the reviewer).
+Text-only fixes; the task stays `in-review` and is not re-submitted:
+- **F1** (TOML claim too broad): the design note and spec-016's Revision note now say the rendered template is valid
+  TOML for any value without U+007F or an unpaired surrogate, and that Codex uses an unparsable `-c` value as a literal
+  string. The escape in code is a follow-up (coordinator).
+- **F2** (§2.5 overstated): spec-016 §2.5, its Revision note and the transcript summary above now claim only that the
+  started server had the `-c` override's command and args, state that the project layer was loaded (trust entry
+  written at 16:49:15 by `stat -c %y ~/.codex/config.toml`, before `adhoc/2` began at 17:02:20 per its rollout name),
+  and name replace-vs-merge as not observed (follow-up, coordinator).
+- **F3**: the refactor note's lint-claims count is five on this file, `:345` in green included.
+- **F4**: `adhoc/1` reworded: the session started, got the bootstrap, and its first turn failed on the usage limit
+  (rollout `…01a13ae3…`, `grep -c "usage limit"` → 2); its record has `exit_status` 0.
+- **F6**: spec-016 §2.2's `mcp.template` row: "for an agent CLI that has no option taking a configuration file's path".
+- **F5** (a test refusing `{mcp_config}` inside `mcp.template`): follow-up, coordinator.
+- Final `spec-016-agent-execution` `--reason` (replaces the one in "Pending amendments (approver) — final"):
+  "task-237: approver ruling D-1 (a) of 2026-10-14. Codex CLI 0.145.0 registers MCP servers only through TOML
+  configuration layers and -c key=value overrides and has no option taking a configuration file's path, so a third
+  mcp.via value, config-arg, passes the rendered mcp.template as the one whole argument {mcp_config}, which keeps
+  placeholders filling whole arguments; the manifest format stays 1 because no released build reads adapter
+  manifests. Section 2.8 fills the codex-cli row from codex --help of codex-cli 0.145.0, with session, model and usage
+  not reported and resume not supported, checked by hand on 2026-10-14 with codex-cli 0.145.0 (ChatGPT sign-in): the
+  model read the unlisted session Resource the bootstrap names with no help. Section 2.5 records that, with a
+  same-named server in the trusted project's .codex/config.toml loaded, the server Codex started had the command and
+  args of the adapter's -c override, and that whether the override replaces or merges that table was not observed."
