@@ -832,3 +832,44 @@ transcript; the choice returns to the approver if:
   `--strict-mcp-config` in the manifest (ruling D-A), only on the approver's OK, then R0–R4 again;
 - R3: the adapter's `wingfoil` server is not connected;
 - R2: Claude rejects the argv — a manifest fix in this task, then R0–R4 again.
+
+### by-hand R2 (runbook 2) — observed from inside the launched agent (developer, run `task-236-…/adhoc/2`, 2026-10-14)
+
+Written by the agent that `agent execute --element task:task-236-… --role developer` launched at `state`
+`7a04ad3303987aeb63a92bfaa1d07fa3b2f0383c` (`git rev-parse HEAD` in the session = the bootstrap's state). It covers
+R2 and the server half of R3, seen from inside. R0, R1, R4 and the dialogs before the session belong to the approver's
+transcript, not to this entry.
+
+- **Launch argv accepted.** `ps -eo pid,ppid,lstart,args` → pid `2902530`, started `mer ott 14 09:08:13 2026`,
+  args `claude WingFoil run task-236-…/adhoc/2: act as role "developer" … --mcp-config
+  /tmp/wingfoil-run-LxznSx/mcp-config.json --session-id b0fc53be-b276-5117-95e6-2e983cf4e5e9`. Its parent is
+  `2900838` = `node dist/cli.js agent execute --element task:task-236-… --role developer`. The bootstrap arrived as
+  the first user message verbatim. `claude --version` → `2.1.296 (Claude Code)` = `verified_with`.
+- **Session-context fetch check (AC 3 as amended, spec-016 §2.8): PASSES.** My first action, with nothing typed by
+  the user, was `ReadMcpResourceTool` with server `wingfoil` and exactly the URI the bootstrap names
+  (`wingfoil://session/developer/task:task-236-…/7a04ad33…`). Before it I made one `ToolSearch` call to load that
+  tool's schema, because Claude Code 2.1.296 defers MCP tools. The URI was not refused for being absent from the
+  listing. The result is the element's context, not a role header: 436204 bytes (`wc -c` on the saved tool result).
+  Its header is `<!-- format: 1 | role: developer | element: task:task-236-… | state: 7a04ad33… -->`. The sections
+  are `## 1. Task` (the frontmatter and the body, Acceptance Criteria included), `## 2. Project DNA`,
+  `## 3. Directives (developer + global)` and `## 4. Relevant Memory`. No permission prompt was raised for the read
+  as far as the agent can see. The approver's screen settles that.
+- **§2.5 / R3: the adapter's server is the one that answered.** `ps -eo pid,ppid,args | awk '$2==2902530'` lists
+  exactly one `wingfoil` MCP child of the session: pid `2903704`, `/usr/local/bin/node
+  /home/robypomper/Workspaces/.wf2-wt/task-236/dist/cli.js mcp`. No `node_modules/wingfoil-released/dist/cli.js mcp`
+  process has `2902530` as its parent. The older `wingfoil-released` processes have other parents (`8512`,
+  `565439`, `2476545`), which are other sessions. The served URI scheme is exclusive to the build under test:
+  `grep -rln "wingfoil://session/" node_modules/wingfoil-released/dist` → nothing, and
+  `grep -ln "wingfoil://session/" dist/mcp/*.js` → `dist/mcp/index.js`, `dist/mcp/session-resource.js`. A
+  "Resource … not found" answer (the pinned server's) did not occur. Why `.mcp.json`'s server has no child process
+  here, whether it was not approved or was shadowed by the same name, depends on the dialog answer, which is the
+  approver's to record from R2 step 2 and `/mcp`.
+- **Session id.** `--session-id b0fc53be-b276-5117-95e6-2e983cf4e5e9` in the argv. `ls
+  ~/.claude/projects/*/b0fc53be-b276-5117-95e6-2e983cf4e5e9.jsonl` finds the file under
+  `-home-robypomper-Workspaces--wf2-wt-task-236/`, so the assigned id is Claude's own session id (R4 compares it
+  with the record line and `/status`).
+- **Not done by this agent.** Per runbook 2, I did no developer work beyond this note: no edits to code, specs or
+  config, and no other commits. The two pending spec amendments in the worktree are left untouched for the
+  approver. Their Revision notes may now say the row was checked by hand only after R3/R4 also pass. Still open,
+  and the approver's: `/mcp` and `/status` (R3), the `agent: record` commit and record line (R4), and
+  `claude mcp reset-project-choices`.
