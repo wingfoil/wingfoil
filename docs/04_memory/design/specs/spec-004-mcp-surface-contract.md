@@ -53,6 +53,7 @@ wingfoil://workflows
 wingfoil://workflows/{name}                   # a single workflow definition (main or sub)
 wingfoil://workflows/-/next                   # the active workflow instance's next step (spec-017 §9)
 wingfoil://workflows/-/status                 # every open workflow instance (spec-017 §9)
+wingfoil://session/{role}/{element}/{state}   # a role's execution context on an element at a commit (§3.2)
 ```
 
 - `{type}` is any type key declared in `memory.yaml` `types:` (`release-line, release, task, adr,
@@ -75,6 +76,14 @@ wingfoil://workflows/-/status                 # every open workflow instance (sp
   be (`spec-003` names start with a letter), and they have a third segment, which the single-segment
   `{name}` template never matches. A workflow named `next` or `status` stays `wingfoil://workflows/next` /
   `wingfoil://workflows/status`.
+- `wingfoil://session/{role}/{element}/{state}` (v0.3, `task-236`; approver ruling (a) of 2026-10-13) returns,
+  as its one `contents` entry (`mimeType: text/markdown`), the text the `{role}-session` Prompt returns with
+  `element` and `state` (§3.2), byte for byte, with the same `warnings`. `{element}` is the Prompt's `element`
+  argument, `<type>:<id>` (`spec-008` §7), in one segment; each variable is percent-decoded before it is checked.
+  It exists because an agent client may let its model read Resources but not get Prompts (`spec-016` §2.4). Its
+  `state` is any commit, so it is a template that `resources/list` never lists: a client reads it by the full URI,
+  which `agent execute`'s bootstrap gives. Its refusals are §3.4's, with `role` checked first against the same
+  start-time set.
 
 #### 2.2 Read contract
 
@@ -224,6 +233,7 @@ sends the message exactly as below:
 | `state` malformed as a revision | `malformed revision <state as JSON string>: a revision is a non-empty name with no leading '-', no whitespace or control character, no ':' and no '..'` |
 | `state` naming no commit (an unknown name, a tree or blob sha) | `revision <state as JSON string> does not name a commit` |
 | `element` not held by the commit `state` names | `element '<type>:<id>' not found at <sha>`; the `W_MEMORY_UNREADABLE` lines of the files the scan could not read, when there are any, as `error.data.details` |
+| `resources/read` of `wingfoil://session/{role}/…`, `role` not in the role set (checked before the element and the state, whose refusals are the rows above) | `no session context for undefined role '<role>'` |
 
 The undefined-role and name refusals come first; the argument refusals are checked in the table's
 order.
@@ -580,3 +590,12 @@ gate). §1's channel sketch names the new Resources and Tool families.
 No rule changes, and the shipped server still registers no Tool (`spec-014` §3). Edited in place without a
 supersede or a state change, per `dl-047` (no `version:` field); pending the approver's `memory amend` at
 `task-239`'s review.
+
+**Revision (2026-10-14, `task-236-ship-verify-hand-builtin-claude-code-adapter-point`) — §2.1 gains the session
+Resource `wingfoil://session/{role}/{element}/{state}`; §3.4 its undefined-role refusal.** The by-hand pass of the
+`claude-code` built-in adapter found that Claude Code 2.1.296 gives its model tools to read MCP Resources and none
+to get an MCP Prompt, so `agent execute`'s bootstrap could not be acted on; approver ruling (a) (2026-10-13; D-E to
+D-G, 2026-10-14) serves the same execution context also as a Resource. Its text is the `{role}-session` Prompt's for
+the same `element` and `state`, from one builder; its refusals are §3.4's, plus a role outside the start-time set.
+The Prompt is unchanged, and the server still registers no Tool. Edited in place without a supersede or a state
+change, per `dl-047` (no `version:` field); pending the approver's `memory amend` at `task-236`'s review.
