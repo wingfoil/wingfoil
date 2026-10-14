@@ -108,14 +108,19 @@ export function auditAttribution(root: string, pathspecs: readonly string[]): At
   const sortedPathspecs = [...pathspecs].sort();
   const records = walkGitLogFields(root, AUDIT_LOG_FIELDS, sortedPathspecs);
 
-  return records.map(([sha = '', authorName = '', authorEmail = '', date = '', subject = '']) => ({
-    sha,
-    authorName,
-    authorEmail,
-    date,
-    subject,
-    valid: isValidAttribution(authorName, authorEmail),
-  }));
+  // `walkGitLogFields` returns records of exactly `AUDIT_LOG_FIELDS.length` entries, never fewer.
+  return records.map((record) => {
+    const authorName = record[1]!;
+    const authorEmail = record[2]!;
+    return {
+      sha: record[0]!,
+      authorName,
+      authorEmail,
+      date: record[3]!,
+      subject: record[4]!,
+      valid: isValidAttribution(authorName, authorEmail),
+    };
+  });
 }
 
 // --- Approver/Reason parsing (CLAUDE.md §5.1) ------------------------------------------------
@@ -188,8 +193,13 @@ export function parseApprovalMetadata(body: string): ApprovalMetadata | null {
   const approverMatch = approverLine === null ? null : APPROVER_LINE_RE.exec(approverLine);
   if (!approverMatch) return null;
 
-  const [, approverName = '', approverEmail = '', approverRole = ''] = approverMatch;
-  return { approverName, approverEmail, approverRole, reason: parseCommitReason(body) };
+  // The three groups of APPROVER_LINE_RE are not optional: a match always defines all of them.
+  return {
+    approverName: approverMatch[1]!,
+    approverEmail: approverMatch[2]!,
+    approverRole: approverMatch[3]!,
+    reason: parseCommitReason(body),
+  };
 }
 
 // --- Full transition reconstruction (`memory history`, P1.10) --------------------------------
