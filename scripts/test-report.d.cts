@@ -17,7 +17,10 @@ export interface ClassCounts {
   readonly skipped: number;
 }
 
-/** One failure: a failed test by its full name, or a suite that failed to run (`test: null`). */
+/**
+ * One failure: a failed test by its full name; a suite that failed to run (`test: null`); or a suite that failed
+ * while its tests passed, an error in a hook such as `afterAll` (`test: 'suite error outside its tests'`).
+ */
 export interface Failure {
   /** The test file, relative to the root, with `/`. */
   readonly file: string;
@@ -30,7 +33,7 @@ export interface ResultsSummary {
   readonly total: ClassCounts;
   /** Sorted by file, then test name (code-point order). */
   readonly failures: readonly Failure[];
-  /** `true` when there is no failure. */
+  /** `true` when there is no failure and Jest's `success` is not false (a missed coverage threshold makes it false). */
   readonly passed: boolean;
 }
 
@@ -63,7 +66,7 @@ export interface SummaryMeta {
 
 /**
  * The class of one test file, by the first rule that matches: `lint.clean`, `API-docs`, `smoke` by exact path;
- * `BDD` when its leading block comment cites a `.feature` under `docs/02_requirements/02_bdd/features/`;
+ * `BDD` when its leading block comment cites a `.feature` file, in any path spelling;
  * `integration` for `*.integration.test.ts`; `unit` otherwise.
  */
 export function classifySuite(relPath: string, source: string): SuiteClass;
