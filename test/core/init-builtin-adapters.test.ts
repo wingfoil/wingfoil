@@ -4,9 +4,12 @@
  * integrity pass over the manifests that it runs over the P3.8 directive templates: the REQ-SEC-10 schema
  * check (task-177's manifest schema) and the spec-007 §4 step 5 secret scan.
  *
- * No real built-in adapter ships yet (the two of `spec-016` §2.8 are their own tasks), so the mechanism
- * is driven through the test-only `builtinAdapters` seam with a fixture manifest, as the AC asks. Every
- * "secret" below is an obviously fake value assembled at runtime (`security-secrets` S1, dl-122).
+ * The mechanism is driven through the test-only `builtinAdapters` seam with a fixture manifest, as the
+ * AC asks; the shipped list (`claude-code` since task-236) is pinned per adapter in
+ * `test/storage/builtin-adapter-<name>.test.ts`. The empty-list `.gitkeep` branch stays covered through
+ * the seam (`templateScaffold(SCRUM, [])`). task-236 also pins the P5.1.1 Scenario Outline for the
+ * integrity / secret-scan refusal against the real shipped manifest (the B1 handover). Every "secret"
+ * below is an obviously fake value assembled at runtime (`security-secrets` S1, dl-122).
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -81,12 +84,20 @@ describe('templateScaffold — agents/{built-in,custom}/ (spec-016 §2.1)', () =
     expect(custom).toEqual([{ path: CUSTOM_KEEP, content: '' }]);
   });
 
-  it('by default installs exactly the shipped list, BUILTIN_ADAPTERS, and keeps the directory with a .gitkeep while it is empty', () => {
+  it('by default installs exactly the shipped list, BUILTIN_ADAPTERS, and no .gitkeep (task-236: the list is non-empty)', () => {
     const installed = templateScaffold(SCRUM)
       .filter((file) => file.path.startsWith(`${BUILTIN_ADAPTERS_DIR}/`))
       .map((file) => file.path);
-    const expected = BUILTIN_ADAPTERS.map((adapter) => `${BUILTIN_ADAPTERS_DIR}/${adapter.name}.yaml`);
-    expect(installed).toEqual(BUILTIN_ADAPTERS.length === 0 ? [`${BUILTIN_ADAPTERS_DIR}/.gitkeep`] : expected);
+    expect(BUILTIN_ADAPTERS.length).toBeGreaterThan(0);
+    expect(installed).toEqual(BUILTIN_ADAPTERS.map((adapter) => `${BUILTIN_ADAPTERS_DIR}/${adapter.name}.yaml`));
+    expect(installed).not.toContain(`${BUILTIN_ADAPTERS_DIR}/.gitkeep`);
+  });
+
+  it('with an empty adapter list keeps agents/built-in/ with a .gitkeep and nothing else', () => {
+    const installed = templateScaffold(SCRUM, [])
+      .filter((file) => file.path.startsWith(`${BUILTIN_ADAPTERS_DIR}/`))
+      .map((file) => file.path);
+    expect(installed).toEqual([`${BUILTIN_ADAPTERS_DIR}/.gitkeep`]);
   });
 
   it('keeps the scaffold sorted by path (REQ-SYS-07)', () => {
@@ -177,6 +188,69 @@ describe('initWingfoilProject — the built-in manifests are secret-scanned befo
           message: `built-in adapter template secret scan failed: fixture-agent (private-key-pem, line ${line})`,
         },
       });
+      expect(exitCodeForResult(result)).toBe(1);
+      expect(existsSync(join(repo, '.wingfoil'))).toBe(false);
+      assertPersistenceUnchanged(repo, unchanged);
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+});
+
+/**
+ * task-236 (B1 handover from task-196's review): the P5.1.1 Scenario Outline "Error - a built-in adapter
+ * manifest fails the pre-write check" pins the two refusals against the real shipped `claude-code`
+ * manifest. This test reads the two `message` cells of its Examples table and drives each row.
+ */
+describe('P5.1.1 Scenario Outline — a built-in adapter manifest fails the pre-write check (task-236)', () => {
+  const FEATURE = join(__dirname, '..', '..', 'docs', '02_requirements', '02_bdd', 'features', 'p5-interaction', 'P5.1.1-init.feature');
+  const TITLE = 'Scenario Outline: Error - a built-in adapter manifest fails the pre-write check';
+
+  /** The `message` cells of the outline's Examples table, in row order. */
+  function exampleMessages(): string[] {
+    const lines = readFileSync(FEATURE, 'utf-8').split('\n');
+    const start = lines.findIndex((line) => line.trim() === TITLE);
+    expect({ scenario: TITLE, found: start >= 0 }).toEqual({ scenario: TITLE, found: true });
+    const rows: string[][] = [];
+    let inExamples = false;
+    for (const line of lines.slice(start + 1)) {
+      const text = line.trim();
+      if (/^(Scenario|Scenario Outline):/.test(text)) break;
+      if (text === 'Examples:') inExamples = true;
+      else if (inExamples && text.startsWith('|')) rows.push(text.slice(1, -1).split('|').map((cell) => cell.trim()));
+    }
+    const [header, ...body] = rows;
+    expect(header).toEqual(['defect', 'message']);
+    return body.map((row) => row[1]!);
+  }
+
+  function shippedClaudeCode(): BuiltinAdapterManifest {
+    const entry = BUILTIN_ADAPTERS.find((adapter) => adapter.name === 'claude-code');
+    expect(entry).toBeDefined();
+    return entry!;
+  }
+
+  it('declares exactly the two rows: integrity check and secret scan, both naming claude-code', () => {
+    expect(exampleMessages()).toEqual([
+      'built-in adapter template integrity check failed: claude-code',
+      'built-in adapter template secret scan failed: claude-code (private-key-pem, line',
+    ]);
+  });
+
+  it.each([
+    ['row 1: a key the manifest schema does not declare', 0, 'env: { TOKEN: x }\n'],
+    ['row 2: a private-key header', 1, `# ${FAKE_PEM_RSA_HEADER}\n`],
+  ] as const)('%s → init exits 1 with the row\'s message, nothing written, no commit', (_label, row, extra) => {
+    const message = exampleMessages()[row]!;
+    const shipped = shippedClaudeCode();
+    const content = shipped.content.endsWith('\n') ? `${shipped.content}${extra}` : `${shipped.content}\n${extra}`;
+    const repo = makeTempGitRepo();
+    try {
+      const unchanged = snapshotPersistence(repo);
+      const result = initWingfoilProject(repo, 'Scrum', undefined, [{ name: 'claude-code', content }]);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.message.startsWith(message)).toBe(true);
       expect(exitCodeForResult(result)).toBe(1);
       expect(existsSync(join(repo, '.wingfoil'))).toBe(false);
       assertPersistenceUnchanged(repo, unchanged);

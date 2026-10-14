@@ -7,8 +7,9 @@
  *   walking the schema's keys against the fixture; `custom/fake-terminal.yaml` is the same adapter with
  *   `terminal: required`.
  * - AC 2: driven directly (no `agent execute`) through a rendered MCP config pointing at
- *   `node dist/cli.js mcp`, the fake completes `initialize` and the `{role}-session` Prompt fetch with
- *   `element`/`state`, and the Prompt text it records equals task-176's payload for that triple.
+ *   `node dist/cli.js mcp`, the fake completes `initialize` and reads the session Resource
+ *   `wingfoil://session/{role}/{element}/{state}` the bootstrap names (task-236, ruling (a)), and the
+ *   text it records equals task-176's payload for that triple.
  * - AC 3: the record holds environment variable NAMES, never values (`REQ-SEC-08`); no fixture file
  *   holds a secret-shaped literal (`security-secrets` S1, `dl-122`).
  * - AC 4: no suite needs a pseudo-terminal.
@@ -45,7 +46,7 @@ interface RecordEntry {
   readonly env: string[];
   readonly mcp: {
     readonly server?: { readonly name: string };
-    readonly prompt?: { readonly name: string; readonly arguments: Record<string, string> };
+    readonly resource?: { readonly uri: string };
     readonly text?: string | null;
     readonly warnings?: string[];
     readonly error?: { readonly code: number; readonly message: string };
@@ -166,7 +167,7 @@ describe('AC 1 — custom/fake.yaml declares every §2.2 field and validates', (
 });
 
 // ---------------------------------------------------------------------------------------------
-// AC 2 — the Prompt fetch against the built `wingfoil mcp`
+// AC 2 — the session Resource read against the built `wingfoil mcp` (task-236: was the Prompt fetch)
 // ---------------------------------------------------------------------------------------------
 
 const MEMORY_YAML = `
@@ -243,7 +244,7 @@ function bootstrap(role: string, element: string, runId: string, stateRef: strin
   return [
     `WingFoil run ${runId}: act as role "${role}" on element ${element}.`,
     `Your context is assembled at commit ${stateRef} and served by the "wingfoil" MCP server`,
-    `registered for this session. Load it before any other action: Get the MCP prompt "${role}-session" with arguments element="${element}" and state="${stateRef}".`,
+    `registered for this session. Load it before any other action: Read the MCP resource "wingfoil://session/${role}/${element}/${stateRef}".`,
     'Record your handoff in the element\'s "## Execution Notes" section.',
     '',
   ].join('\n');
@@ -257,14 +258,14 @@ function renderArgv(args: readonly string[], values: Readonly<Record<string, str
   });
 }
 
-describe('AC 2 — driven directly, the fake fetches the {role}-session Prompt from `node dist/cli.js mcp`', () => {
+describe('AC 2 — driven directly, the fake reads the session Resource the bootstrap names from `node dist/cli.js mcp`', () => {
   let root: string;
   beforeAll(() => {
     root = seedProject();
   });
   afterAll(() => removeTempDir(root));
 
-  it('completes initialize and the Prompt fetch with element/state, and records the payload task-176 builds', async () => {
+  it('completes initialize and the resources/read of wingfoil://session/<role>/<element>/<state>, and records the payload task-176 builds', async () => {
     const loaded = loadAdapter(root, 'fake');
     if (!loaded.ok) throw new Error(`fixture: ${loaded.error.message}`);
     const manifest = loaded.value.manifest;
@@ -299,7 +300,7 @@ describe('AC 2 — driven directly, the fake fetches the {role}-session Prompt f
     expect(argv[0]).toBe(FAKE_SCRIPT_REL);
     expect(entry!.argv).toEqual(argv.slice(1));
     expect(entry!.mcp?.server?.name).toBe('wingfoil');
-    expect(entry!.mcp?.prompt).toEqual({ name: 'developer-session', arguments: { element, state: sha } });
+    expect(entry!.mcp?.resource).toEqual({ uri: `wingfoil://session/developer/${element}/${sha}` });
     expect(entry!.mcp?.error).toBeUndefined();
 
     const built = assembleExecutionContext(root, { role: 'developer', element: { type: 'task', id: ELEMENT_ID }, stateRef: sha });
@@ -316,13 +317,13 @@ describe('AC 2 — driven directly, the fake fetches the {role}-session Prompt f
     expect(run.status).toBe(0);
     expect(run.records[0]!.mcp?.text).toBeUndefined();
     expect(run.records[0]!.mcp?.error?.code).toBe(-32602);
-    expect(run.records[0]!.mcp?.error?.message).toMatch(/not found/);
+    expect(run.records[0]!.mcp?.error?.message).toBe(`element 'task:task-999-absent' not found at ${sha}`);
   }, 60000);
 
-  it('exits 1 and records the failure when the bootstrap names no Prompt, or the server cannot be started', () => {
+  it('exits 1 and records the failure when the bootstrap names no session Resource, or the server cannot be started', () => {
     const noInstruction = runFake(['--mcp-config', '/nonexistent.json', '--prompt', 'hello'], { WINGFOIL_FAKE_AGENT_CONNECT: '1' });
     expect(noInstruction.status).toBe(1);
-    expect(noInstruction.records[0]!.failure).toMatch(/names no MCP prompt/);
+    expect(noInstruction.records[0]!.failure).toMatch(/names no MCP resource/);
 
     const dir = scratchDir();
     const config = join(dir, 'mcp.json');
@@ -445,10 +446,10 @@ describe('the fake script (spec-016 §2.7)', () => {
     const promptFile = join(dir, 'bootstrap.txt');
     writeFileSync(promptFile, 'no instruction here\n');
     const fromFile = runFake(['--prompt-file', promptFile, '--mcp-config', '/x.json'], { WINGFOIL_FAKE_AGENT_CONNECT: '1' });
-    expect(fromFile.records[0]!.failure).toMatch(/names no MCP prompt/);
+    expect(fromFile.records[0]!.failure).toMatch(/names no MCP resource/);
     const fromStdin = runFake(['--headless', '--mcp-config', '/x.json'], { WINGFOIL_FAKE_AGENT_CONNECT: '1', WINGFOIL_FAKE_AGENT_STDIN: '1' }, { input: 'none either\n' });
     expect(fromStdin.records[0]!.stdin).toBe('none either\n');
-    expect(fromStdin.records[0]!.failure).toMatch(/names no MCP prompt/);
+    expect(fromStdin.records[0]!.failure).toMatch(/names no MCP resource/);
   });
 
   it('waits until a signal ends it when asked to, after writing its record', async () => {
@@ -495,14 +496,14 @@ function stubServer(source: string): string {
   return config;
 }
 
-/** Answers `initialize`, then `prompts/get` with the text `a—b`, its answer written in two chunks cut inside the em dash. */
+/** Answers `initialize`, then `resources/read` with the text `a—b`, its answer written in two chunks cut inside the em dash. */
 const SPLIT_SERVER = `
 const rl = require('readline').createInterface({ input: process.stdin });
 rl.on('line', (line) => {
   const m = JSON.parse(line);
   if (m.method === 'initialize') process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result: { serverInfo: { name: 'wingfoil', version: 'x' }, protocolVersion: '2025-06-18', capabilities: {} } }) + '\\n');
-  if (m.method === 'prompts/get') {
-    const buf = Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: m.id, result: { messages: [{ role: 'user', content: { type: 'text', text: 'a\u2014b' } }] } }) + '\\n');
+  if (m.method === 'resources/read') {
+    const buf = Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: m.id, result: { contents: [{ uri: m.params.uri, mimeType: 'text/markdown', text: 'a\u2014b' }] } }) + '\\n');
     const cut = buf.indexOf(0xe2) + 1;
     process.stdout.write(buf.subarray(0, cut));
     setTimeout(() => process.stdout.write(buf.subarray(cut)), 200);

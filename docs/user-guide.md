@@ -108,7 +108,7 @@ commits:
 │   ├── built-in/             architecture, code-quality, code-review, documentation, security, testing
 │   └── custom/               determinism, doc-versioning, security-secrets, traceability (yours to edit)
 ├── agents/
-│   ├── built-in/             agent adapters shipped by WingFoil (none yet)
+│   ├── built-in/             agent adapters shipped by WingFoil (unreleased (v0.3): claude-code)
 │   └── custom/               your own agent adapters (empty)
 ├── workflows.yaml            the workflow manifest
 └── workflows/custom/         sw-life-cycle, bug-ingest, decision-log-ingest, adr-ingest, scrum-delivery (or kanban-delivery)
@@ -501,6 +501,7 @@ What the server exposes — all **read-only**:
 | Resource template | `wingfoil://workflows/{name}` | one workflow, full definition |
 | Resource | `wingfoil://workflows/-/next` | Unreleased (v0.3): the next step of the active workflow, as `wingfoil workflow next --format json` prints it |
 | Resource | `wingfoil://workflows/-/status` | Unreleased (v0.3): every open workflow, as `wingfoil workflow status --format json` prints it |
+| Resource template | `wingfoil://session/{role}/{element}/{state}` | Unreleased (v0.3): the agent's execution context for `element` (`<type>:<id>`) at the commit `state`, the same text as `<role>-session` with those two arguments; not listed, read by its full URI |
 | Prompt | `<role>-session` (one per role, e.g. `developer-session`) | session instructions for the role, embedding its directives |
 
 The server has **no Tools**: an agent cannot change anything through MCP. It writes by running the CLI,
@@ -508,8 +509,10 @@ like a person — and never approves. Unreleased (v0.3): `tools/list` answers an
 server reads the role list from `dna.yaml` when it starts — restart it after adding or removing a
 role. Also unreleased (v0.3): `<role>-session` takes two optional arguments, `element="<type>:<id>"`
 and `state="<commit>"` (any name of one commit; a sha is recommended); given together, the Prompt returns the agent's execution context for that
-element as the commit holds it (later commits and uncommitted edits do not change it). A Memory
-Resource read, and such a Prompt, list the documents WingFoil could not read in a `warnings` array next
+element as the commit holds it (later commits and uncommitted edits do not change it). The Resource
+`wingfoil://session/<role>/<type>:<id>/<commit>` returns the same text, for agents whose client lets the model read
+Resources but not get Prompts; it is the one `wingfoil agent execute` tells the agent to read. A Memory
+Resource read, and such a Prompt or session Resource, list the documents WingFoil could not read in a `warnings` array next
 to the content. Full script: [`examples/04-mcp-server`](examples/04-mcp-server/run.sh).
 
 ### 9.2 `agents.md`

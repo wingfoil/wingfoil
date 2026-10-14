@@ -94,6 +94,7 @@ equivalent:
 | `wingfoil://workflows/-/next` — the active workflow's next step, at `HEAD` (Unreleased, v0.3) | `wingfoil workflow next` |
 | `wingfoil://workflows/-/status` — every open workflow, at `HEAD` (Unreleased, v0.3) | `wingfoil workflow status` |
 | Prompt `<role>-session` — role instructions with its directives embedded | `wingfoil directives list --role <role>` → read each entry's `path` under `.wingfoil/` |
+| `wingfoil://session/{role}/{element}/{state}` — your execution context for one element at one commit, the text of `<role>-session` with `element` and `state` (Unreleased, v0.3); not listed: `wingfoil agent execute`'s first prompt gives the full URI | `wingfoil agent execute --element <type>:<id> --role <role> --dry-run` prints the instruction that names it; no CLI command prints the context itself |
 | *(no MCP equivalent)* | `wingfoil paths [<category>]`, `wingfoil memory history <id>`, keyword `wingfoil memory search <keyword>` |
 
 ## 6. Writing: the verbs

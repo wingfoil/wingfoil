@@ -76,14 +76,15 @@ export function roleSessionPromptName(role: string): string {
 }
 
 /**
- * A `prompts/get` refusal whose JSON-RPC error carries `message` **verbatim** with code `InvalidParams`
- * (-32602, the code the MCP SDK itself uses for an unknown prompt name).
+ * A request refusal — of `prompts/get`, or of the session Resource's read (`./session-resource.ts`, task-236) —
+ * whose JSON-RPC error carries `message` **verbatim** with code `InvalidParams` (-32602, the code the MCP SDK
+ * itself uses for an unknown prompt name or resource).
  *
  * Deliberately a plain `Error` with a `code`, not the SDK's `McpError`: `McpError`'s constructor
  * prefixes its own message with `MCP error <code>: `, and the SDK serializes `error.message` as-is, so a
  * client — which adds that prefix again when it rebuilds the error — would read the prefix twice.
  */
-function promptRequestError(message: string): Error {
+export function promptRequestError(message: string): Error {
   return Object.assign(new Error(message), { code: ErrorCode.InvalidParams });
 }
 
@@ -124,23 +125,32 @@ function contextRefusalDetails(error: CoreError): ErrorDetail[] {
   return [...errorDetails(error), ...(typeof cause === 'string' ? [{ detail: cause }] : [])];
 }
 
+/** The execution context for `(role, element, state)`, as text, with the diagnostics that ride beside it. */
+export interface SessionContext {
+  /** `assembleExecutionContext`'s `spec-012` §7 payload, as returned. */
+  readonly text: string;
+  /** The directive-resolution warnings, then the builder's notes, then the `W_MEMORY_UNREADABLE` lines. */
+  readonly warnings: readonly string[];
+}
+
 /**
- * The `prompts/get` result for `role` with `element` and `state` (task-195, spec-004 §3.2): one `user`
- * message whose text is `assembleExecutionContext`'s §7 payload, as returned — never re-serialized, and
- * never indexed by its body markers (`bug-265`). `state` is resolved once, here, and the builder reads
- * everything at that sha, so neither a later commit nor an uncommitted edit changes the answer.
+ * The execution context for `role`, `element` and `state` (task-195, spec-004 §3.2): `assembleExecutionContext`'s
+ * §7 payload, as returned — never re-serialized, and never indexed by its body markers (`bug-265`). `state` is
+ * resolved once, here, and the builder reads everything at that sha, so neither a later commit nor an uncommitted
+ * edit changes the answer. ONE builder for both carriers: the `{role}-session` Prompt wraps it in `messages`
+ * ({@link buildContextPrompt}), the session Resource in `contents` (`./session-resource.ts`, task-236), so the two
+ * answer the same bytes for the same arguments.
  *
- * The context's diagnostics ride beside `messages` as `warnings`, never inside the payload: the
- * directive-resolution warnings (`spec-012` §5.1 order), then the builder's notes (§3 stage order), then
- * the `W_MEMORY_UNREADABLE` lines of the files the scan left out (path order, task-171).
+ * The diagnostics: the directive-resolution warnings (`spec-012` §5.1 order), then the builder's notes (§3 stage
+ * order), then the `W_MEMORY_UNREADABLE` lines of the files the scan left out (path order, task-171).
  *
- * Refusals (spec-004 §3.4): a `state` that is not a commit and an element the commit does not hold are
- * request errors, `-32602` — the latter with the unreadable files as `error.data.details`, so a subject
- * that does not parse is not reported as merely absent. Every other refusal is about the repository (an
- * archived subject, one in a newer `format:`, a missing pillar file) and is a failed read, as a failed
- * Resource read is: the core message with its details.
+ * Refusals (spec-004 §3.4): a `state` that is not a commit and an element the commit does not hold are request
+ * errors, `-32602` — the latter with the unreadable files as `error.data.details`, so a subject that does not parse
+ * is not reported as merely absent. Every other refusal is about the repository (an archived subject, one in a
+ * newer `format:`, a missing pillar file) and is a failed read, as a failed Resource read is: the core message with
+ * its details.
  */
-function buildContextPrompt(root: string, role: string, element: ExecutionContextElement, state: string): GetPromptResult {
+export function buildSessionContext(root: string, role: string, element: ExecutionContextElement, state: string): SessionContext {
   let sha: string;
   try {
     sha = resolveRevision(root, state);
@@ -158,10 +168,13 @@ function buildContextPrompt(root: string, role: string, element: ExecutionContex
     throw readRefusalError(error.message, contextRefusalDetails(error));
   }
   const { payload, context, notes } = result.value;
-  return withWarnings(
-    { messages: [{ role: 'user', content: { type: 'text', text: payload } }] },
-    [...context.warnings, ...notes, ...(result.warnings ?? [])],
-  );
+  return { text: payload, warnings: [...context.warnings, ...notes, ...(result.warnings ?? [])] };
+}
+
+/** The `prompts/get` result for `role` with `element` and `state`: one `user` message, the {@link buildSessionContext} text. */
+function buildContextPrompt(root: string, role: string, element: ExecutionContextElement, state: string): GetPromptResult {
+  const { text, warnings } = buildSessionContext(root, role, element, state);
+  return withWarnings({ messages: [{ role: 'user', content: { type: 'text', text } }] }, warnings);
 }
 
 /**

@@ -170,7 +170,7 @@ function builtinSourceOf(file: ScaffoldFile): BuiltinTemplateSource | null {
  * What it returns is a fact about the scaffold CONTENT, not a property of this function: for
  * {@link templateScaffold} it is the six P3.8 built-in directives `task-057-builtin-directive-templates`
  * ships (`./builtin-directives`, rendered by `builtinDirectiveMd`) plus one `adapter` source per shipped
- * built-in adapter manifest (`./builtin-adapters`, none yet; task-196), for `scaffoldFiles` it is `[]` (a
+ * built-in adapter manifest (`./builtin-adapters`: `claude-code` since task-236), for `scaffoldFiles` it is `[]` (a
  * `.gitkeep` only), and the workflows built-in directory still holds a `.gitkeep` only. Any asset added
  * later is checked with no edit here. Each shipped built-in must satisfy its pillar schema on its own —
  * `test/storage/builtin-directives.test.ts` runs every directive template through the real guard.
@@ -597,7 +597,7 @@ phases:
 /**
  * The `agents/{built-in,custom}/` part of the scaffold (`spec-016` §2.1, task-196): one
  * `built-in/<name>.yaml` per shipped adapter, written verbatim, and `custom/` reserved empty with a
- * `.gitkeep`. While no adapter ships, `built-in/` is reserved with a `.gitkeep` too, as
+ * `.gitkeep`. Given an empty list (a test's seam), `built-in/` is reserved with a `.gitkeep` too, as
  * `workflows/built-in/` is, so both directories exist after `init`.
  */
 function adapterScaffold(adapters: readonly BuiltinAdapterManifest[]): ScaffoldFile[] {

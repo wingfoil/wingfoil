@@ -209,8 +209,8 @@ wingfoil init [--template <Scrum|Kanban>]
 
 Creates `.wingfoil/dna.yaml`, `memory.yaml` (+ `memory/templates/`), `roles.yaml`, the six built-in
 directives in `directives/built-in/` plus four starter custom directives in `directives/custom/`,
-`workflows.yaml` (+ `workflows/custom/`), and `agents/built-in/` (the built-in agent adapters; none ships
-yet) with an empty `agents/custom/`. The two templates differ only in the delivery sub-workflow
+`workflows.yaml` (+ `workflows/custom/`), and `agents/built-in/` (the built-in agent adapters; unreleased
+(v0.3): `claude-code`, for Claude Code) with an empty `agents/custom/`. The two templates differ only in the delivery sub-workflow
 (`scrum-delivery` vs `kanban-delivery`) and in `project.methodology` / `stacks.methodologies`.
 
 - **Output:** `{ root, template, files: [...] }` — the files it created.
@@ -248,6 +248,12 @@ documents that could not be read in a `warnings` array beside the content.
 Also unreleased (v0.3): the Resources `wingfoil://workflows/-/next` and `wingfoil://workflows/-/status`
 return what `wingfoil workflow next --format json` and `wingfoil workflow status --format json` print, as
 committed at `HEAD`. A workflow named `next` or `status` stays `wingfoil://workflows/<name>`.
+
+Also unreleased (v0.3): the Resource template `wingfoil://session/{role}/{element}/{state}` returns the same
+execution context as `<role>-session` with `element` and `state` (`{element}` is `<type>:<id>`), with the same
+`warnings`, for agents whose client can read Resources but not get Prompts. It is never listed by `resources/list`:
+read it by its full URI, which [`wingfoil agent execute`](#wingfoil-agent-execute) gives the agent. A role not in
+`dna.yaml` is refused with `no session context for undefined role '<role>'`.
 
 ---
 
@@ -1544,8 +1550,8 @@ temporary directory and are removed whatever happens, an interruption before the
 Then it launches the agent: it prints `run <run-id>: launching <agent> (<adapter>) as <role> on
 <type>:<id>`, starts the adapter's command with the arguments its manifest declares (no shell), and
 hands it the terminal. The agent's first prompt names the run, the role, the element and the commit,
-tells it where to load its context (the `<role>-session` prompt of the `wingfoil` MCP server registered
-for it), and tells it to end every commit it writes, except an approve or reject commit, with
+tells it where to load its context (the Resource `wingfoil://session/<role>/<type>:<id>/<commit>` of the
+`wingfoil` MCP server registered for it), and tells it to end every commit it writes, except an approve or reject commit, with
 `Co-Authored-By: <agent name> <<agent email>>` and `AI-Model: <its model>` — added to a commit `wingfoil`
 writes with `git commit --amend --no-edit --trailer`, never as a paragraph of their own. While the agent runs,
 Ctrl-C and Ctrl-\ reach the agent and do not stop `agent execute`; `SIGTERM` and `SIGHUP` sent to
