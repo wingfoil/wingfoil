@@ -421,7 +421,8 @@ function runCopyStep(prefix, step, repo, git, fixtures) {
 
 /** The commits whose subject starts with {@link RECORD_SUBJECT}, as `{ sha, subject }`, newest first. */
 function recordCommits(git) {
-  const log = git(['log', '--format=%H%x09%s']);
+  // `--no-show-signature`: with `log.showSignature` set, signature lines would be read as commits (bug-291).
+  const log = git(['log', '--no-show-signature', '--format=%H%x09%s']);
   if (log.status !== 0) return { error: `git log exited ${log.status}: ${log.stderr.trim()}` };
   const commits = log.stdout
     .split('\n')
@@ -445,10 +446,11 @@ function probeRecordCommit(run, git) {
   const [commit] = found.commits;
   if (commit.subject !== `${RECORD_SUBJECT}${run}`) return { ok: false, detail: `expected subject "${RECORD_SUBJECT}${run}", got "${commit.subject}"` };
   const runLog = `${SMOKE_RUNS_DIR}${run.split('/')[0]}.jsonl`;
-  const show = git(['show', '--name-only', '--format=', commit.sha]);
-  const paths = show.stdout.split('\n').filter((line) => line !== '');
-  if (show.status !== 0 || paths.length !== 1 || paths[0] !== runLog) {
-    return { ok: false, detail: `expected the commit to change only ${runLog}, got ${paths.join(', ') || show.stderr.trim()}` };
+  // `diff-tree`, not `show` of a commit: plumbing, which prints no signature (bug-291).
+  const changed = git(['diff-tree', '--no-commit-id', '--name-only', '-r', commit.sha]);
+  const paths = changed.stdout.split('\n').filter((line) => line !== '');
+  if (changed.status !== 0 || paths.length !== 1 || paths[0] !== runLog) {
+    return { ok: false, detail: `expected the commit to change only ${runLog}, got ${paths.join(', ') || changed.stderr.trim()}` };
   }
   // No sha in a passing detail: a commit name depends on the clock, and the report must not (bug-134).
   return { ok: true, detail: `the only one, changing only ${runLog}` };
