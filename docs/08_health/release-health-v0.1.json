@@ -1,0 +1,782 @@
+{
+  "schema_version": 1,
+  "catalogue_version": 2,
+  "release": {
+    "id": "minor-v0.1",
+    "version": "v0.1",
+    "kind": "minor"
+  },
+  "measurement_point": {
+    "ref": "5b16ab619dad08d05d3954b734739a506ac53988",
+    "commit": "5b16ab619dad08d05d3954b734739a506ac53988",
+    "basis": "released-transition"
+  },
+  "previous": null,
+  "toolchain": {
+    "node": "v22.21.0",
+    "npm": "11.6.2",
+    "lockfile_sha256": "0a9658ee25037a5df786d9498f61e8cf7d773aba2516545edd07f6e615b31c46"
+  },
+  "metrics": [
+    {
+      "id": "G01",
+      "status": "measured",
+      "value": 94.99,
+      "raw": {
+        "conforming": 379,
+        "total": 399
+      },
+      "items": 399,
+      "small_sample": false,
+      "failing": [
+        "26bd510b8aeb2538f65256d5cd49aa240ff545d5",
+        "dc623a7719c7763daa557d31c68b1298a320b28a",
+        "e54667e19c03435adc16346bf2b6224cc6f74726",
+        "57e5231c60c23b5b76e57b736b28eff8f5f7a66d",
+        "f339436554bfca634b3467ac1fd67a2a0ac91a0d",
+        "d1ec51122ff827a97f6e03cfef56a72152ffcff8",
+        "a5bbef219793860109c800e559ba92e77a085abd",
+        "d509e0fdb38eeb9446411207277bff9330d1740f",
+        "2394a414edbf8c1d226f93c95608b1a77481bd56",
+        "b7a191802103555ddff19f30a0a96ef6c30b3360",
+        "0927f5df91a5aa3b6583b5993e2f92abe745dd9d",
+        "fe234dd82f81fb3550d923d302fbaa5704816279",
+        "3d73e54e55181915c76a47037d15ab5da4cb7723",
+        "868d8ab485fdbd224e241ccfcb9198dd283b416a",
+        "8245b42dbb41cb9e7f42f00f3649f0a203a12f8d",
+        "855953dcaa563cc33dd0ee5931c953fc2822ef49",
+        "b9c4df0bb278dca03ea5883c8d574e069e615088",
+        "58d1edbd297816e072c31fe64e093940828644e5",
+        "d3f9c2914ed144709cbdc47e8784abd222c5c191",
+        "ed8130c7444e274244da2bb9d729c1ef004f47e4"
+      ]
+    },
+    {
+      "id": "G02",
+      "status": "measured",
+      "value": 43.86,
+      "raw": {
+        "with_body": 175,
+        "total": 399
+      },
+      "items": 399,
+      "small_sample": false
+    },
+    {
+      "id": "G03",
+      "status": "measured",
+      "value": {
+        "median": 25,
+        "p90": 295,
+        "share_over_500": 5.51
+      },
+      "raw": {
+        "commits": 399,
+        "over_500": 22,
+        "lines_total": 57501
+      },
+      "items": 399,
+      "small_sample": false
+    },
+    {
+      "id": "G04",
+      "status": "measured",
+      "value": {
+        "mean": 94.16,
+        "share_over_72": 53.88
+      },
+      "raw": {
+        "over_72": 215,
+        "total": 399,
+        "characters": 37570
+      },
+      "items": 399,
+      "small_sample": false,
+      "failing": [
+        "d1ec51122ff827a97f6e03cfef56a72152ffcff8",
+        "a5bbef219793860109c800e559ba92e77a085abd",
+        "0927f5df91a5aa3b6583b5993e2f92abe745dd9d",
+        "fe234dd82f81fb3550d923d302fbaa5704816279",
+        "3d73e54e55181915c76a47037d15ab5da4cb7723",
+        "868d8ab485fdbd224e241ccfcb9198dd283b416a",
+        "8245b42dbb41cb9e7f42f00f3649f0a203a12f8d",
+        "855953dcaa563cc33dd0ee5931c953fc2822ef49",
+        "d3f9c2914ed144709cbdc47e8784abd222c5c191",
+        "ed8130c7444e274244da2bb9d729c1ef004f47e4",
+        "48ce076fc6be90cdb078face7c50af76389e31d9",
+        "e88de04ff00b360746bee53b52fe41e960d30c37",
+        "f7c73656f45a03891482f6a9a9f5f0dd49880af5",
+        "06caece7d57f8fbea945681e5befafddc5cfc96a",
+        "b280e653b68f94f676c06ab79c5242c88cf5213d",
+        "e9f19dd9b0042b77779fe91fe7098a39f33f68bb",
+        "b1e483b73a97e5a37957039550920b9ec6b3aa6f",
+        "36f6cc101d713ae9b5e3b31670a30514213e1df4",
+        "f94bf602030b81961f6c73387b2209c14b9bf6c7",
+        "abe23cb72d34c70989428610c76206f9f075934d",
+        "ae15c4b914c14b1bc82aff08abe223bb05ecd878",
+        "f910256a678e198a1ffe9dd60776e7e30fb65484",
+        "b4704566d443adde5a71a56e642916046cb47ca6",
+        "ba3d76a99e288b5e149757dbc50d454d0a5e1661",
+        "b77a32eeb773c8303431742114c0468ebea2f094",
+        "2dc7ce026b6c3fb8b8c0d89b5b5d41155609b704",
+        "7d823e3d99182a7624a3f18805444e5a3107a775",
+        "e46214cac870f12acf5e44134e213aa168ac2342",
+        "789d51af9459b6686cb0baded495c616a557c37e",
+        "1ae0d8adb9b4d7c115ebb1d8cc297b7fe715ebfe",
+        "e73812a0d6c9a01792180c60ce623c0f0861fe37",
+        "12843f023cf191fe2d05fb0bfbc1089ed4244f3e",
+        "ba16a3be1c7c20a812c765b4eb76ef9b81451ab6",
+        "7fb1051b8fb4b5430e5f64158e610ef45f91b4b9",
+        "a59aee20fb03e54609949306d713e4f664d81838",
+        "f61fdeb9dead00989ce71bc83fe6ec082653a30d",
+        "71fd3dfcf046880035f92f6bd6096a0265d3efce",
+        "9fc6dc4f96930a4f8d0140451de32fddb46614e4",
+        "a14befc7f49da7b178c0b4fd53a3793b2499704f",
+        "2845e3a98868bd1ff6ee14aadbabdbdc65da34a1",
+        "dc2c5ecdf0319beb16174d2991ab6d3d89e23ba8",
+        "3aec53ee07b441f41fe18d8099cc1a137ea9bb52",
+        "4a6113a5713e6aefbc8cd3472f67a5fd45c7648f",
+        "7dafb9477fbdabc6effe59892a83040040df9093",
+        "a47c9ca3021de266f68a8f6a8d5d02503040ea62",
+        "e67f8afe111ea9190c8f134b81c57c4fe51a4ad4",
+        "9beafa6bc137891678a18b28bf42cd8787460894",
+        "b2dbe6ecff208a0b23ecf7220a185db207ab08b5",
+        "7a5bd0d3a82525184f9592dccc19a65782da54d3",
+        "733e22c0c2db3d7c2252eadee9c5056f084f5c7b",
+        "f940816f2c84822794545cc5c4f361f5535f4119",
+        "059b41ef2976d97b127c8f5e17e2caadd82e6a1d",
+        "1bb859f73d97ac7b83e4f0d826448749390b4c51",
+        "718f00c185b2c6297472fba33ea9050b4518e986",
+        "640b4690367325d54ab6c38dac7470bdfdf9044b",
+        "d65fa91ffd178d2f9cc52515fbc9a28d1ddb38ad",
+        "f04adfeec08321a12eb3681d952f30d0d387263f",
+        "b938cbd9c7ea5d97012a590523c00707818e79de",
+        "16df96e0a9361493394c5fc5f3b602d41fc52cd0",
+        "14880613501450253bf1da1423ce99190910e231",
+        "0f3ba2ee78fcf3519c8a45f309018489535e363b",
+        "9623034c3c72f8e9a7ea1b8cc9e77a0930b880a4",
+        "da56568cea09ab20e2fb22392d640f2a60132c65",
+        "85fbd5b658e0f7c8586b25d1907ab3d258aa38e0",
+        "e85a85655a3f2ba4c9ab06adfbaa071e61256359",
+        "bb162b49d0a1db4743abe067abf627f7215f5335",
+        "9afd3a84222793e3652c962513a536a261a6549f",
+        "09c7ff269a7157a5e1db75175e8dd8e01301fe70",
+        "b3cb6b3fdb4a26f30fb9f39f05b7bdf4ea2a081b",
+        "2e94a28aa06d7260b0029e8363db3e9550f78ee3",
+        "bd45d39bbd97d93b01b69e341873ef4bb97a169b",
+        "56649cacfce0f19ef52a45cb0ee470d15765407f",
+        "238f607dff1c848fb268a1011e20ccbe048239ab",
+        "9c53fc1d3379cd16f258fe4730ea98028359e7a0",
+        "59ca496b1ee2bdf543aef486c5015aff1aa84f0e",
+        "943ddb748e5c4d3026e0a07c4aab667c48a19d98",
+        "6c03a67ebc2fdc9665b0899f97d73cac76b0d84b",
+        "11f8ebc585024c0becb888ddb6e831578add4959",
+        "aecca007fe687abf410cc643a4031978862b6b36",
+        "f59eb44f2c7367ac82457b164ae1f2419d7a5a91",
+        "7b1045757305f99036394cc138299933921bc3d8",
+        "e1ab61bfaaa7918eb00200355385871f67ba84f0",
+        "bd842ede7ded208fc9c2fe8d63ade701f7222425",
+        "05db7ccc7fa5d69f2137be2586eb4bdbe428caeb",
+        "0d471cdd25d2db77ac676d843635bcc6e607d198",
+        "9bc3c4d5cd22134529895a3f1f5dd86ba7f87d25",
+        "d6bf3d4828e2a89370841d2220975b5ef33140c8",
+        "11d9efc7ae44bd45413379cc17ceccd8b4d7c1f0",
+        "59a85a9cf34073e4c8f20279a291ac21cb0ed12b",
+        "0aed9e982519ab041478c33fd6253a6e59095573",
+        "eb852c3ef54a7d79f8ede2372f85d0451707cb96",
+        "1e26691a00b030580748106804b9c9a90ef4e4ab",
+        "cf4be901e9bce60f36c8053b7f86ad5eecabc4b4",
+        "6d43ed281ee52afe2d3450a7a43828f253ac0aff",
+        "f5d39dc3a04299479d2e208491298543e6366d36",
+        "d0378bc54fe6e0a324f7835e914275be74b24688",
+        "b6c02a64888ddd5eaefd1b709160fc403ceb12de",
+        "cbe2a458a544116d8ee764abe284baccce54bd9e",
+        "821e3eaca28cc8c6c8eb37dd373d64fd78ab3afa",
+        "257e6e0ad994f093d7c09a17c8675705a5accb1c",
+        "f0698eb4e9e9c39344585f52f63641cbb2f65b0e",
+        "43a8454e9e4679edfd4448b3d904e2849b2e8ee4",
+        "dd81d05d80e69e53933b55b4d350e2557029af7d",
+        "4e43310cfa898cbba3fe7504e3c935f555f595cd",
+        "f03ff84aaa61dc1d2bbf6d780f5131e0f7a9a2f0",
+        "931b3798989d2bf0abb399e10a97e3634b662cc1",
+        "241200abaa29ec30c31f965f5d64f97ff74d5c1f",
+        "b78dc7764ca9408a8f2905ede1c881d230150f99",
+        "3098a5165e74388ea56383dc7c480ac2de413566",
+        "d8720fec410d86944035c3a89a28372f896e6819",
+        "b0b0c13fb72009995b75158c27a0c5cb000eb429",
+        "c4b742ae4887d37782fbb86b9cc6fad849123951",
+        "615c5daaaf038d323e096aa59a85aae2c7f396b4",
+        "78922823609bcf2792ed5a6e69a09e259ce8f963",
+        "85ec56923feb918e564aaae3cdb377e919c76248",
+        "fff886c7affacbf1e36ee4696897c86737fb5e8f",
+        "d68d85377f32661be2c2733ec301043795f92801",
+        "60aade7239d1622508dc463d001c1bb7b527a084",
+        "c5987b8f975356fe78b27b6f842b1357d809f32b",
+        "2a58e866427edcfc9f128fda90a5afa42d3bd6ad",
+        "1a235db917789d85b5c112efa281ca8298d6a547",
+        "2e34e3f0911da4d42746a5d7ded01e4d2b06703e",
+        "6e0e6d73e0567087dd02893403fdcb1d445be0f8",
+        "c740593a0040c46bf5fd6db3b8cb4c1af5fa3b21",
+        "62e702c9a63f8418be04ac46a43b615df68a2f25",
+        "3d43d81d9535407e06f78383b25aabe7b42a3a80",
+        "c4aafd1fc0ba6d217fe8729dbd18e08c0f3a0c4f",
+        "dfa77ba68fc8025335c1e95362e11106cf73509b",
+        "b56bc985de863b6563268888f3bf59670baeed94",
+        "9cf89968603ac17b5128d2001b62b9fae1a957a1",
+        "e0d87357efc18b91cdf9be1dfecb3e639acfbeef",
+        "77f6b73311688dcca3ee2ea622813568870911db",
+        "65d0f5bb601b6787a9f674a30f3726b20571998b",
+        "9baf344e8ef21903c5a559c33910ba5934029352",
+        "53578d036456e5da7f35246c6d3c99d7620eb0ac",
+        "fbbcfa3e0c3405541920929c5569bdc0f1a1fe15",
+        "4996ba38009b53ce53ae68dcf242c40e1939ce5e",
+        "60bf28c532bdec7ed2a50ea9e4c89a72638e123a",
+        "e3f4e0d16e257d75391208390caad36f703fe0ea",
+        "9906037e9cf33f83d83de65c8a12b6d9ca6c7122",
+        "ad4c1762daa1fc5ca487c3d3fd54f7ac16d906e4",
+        "ae70aebcd3a0dc783c739edad278e4ce91812566",
+        "f078b8d7177bbbef638292eb5ec6c5d70ecba84d",
+        "17ce17d509d6e4091f94ccb11098ad99cb76b81a",
+        "910a8db5fe07d08bd1d17710b47ae8528dc6918d",
+        "4d81aa88b3bbbc92a6bf445e4bbb892f0ddbe264",
+        "988ecde336e90d8550e13b733774823f3b8cb4b5",
+        "54889f9faf706b6fddc6ad5afedc68bbaada4b86",
+        "a68dae40f461ba1b58e578acee9fb01b07850a93",
+        "f61b8af8acf3cfa01f2da48f06bac9fea456c5c2",
+        "ed6c5071b1d03a33e5b20d843f4cf96483f9c2ad",
+        "9b03b67993b8e0335ea42238b24745fbe5ce02c9",
+        "80a86d2f26ba505c730a3e7b551c64a740a3e734",
+        "c5fb33329285785267ccd0b847d1eb62ff0d7bb8",
+        "adee491fa0239838c1c46aa01a846d9f79e38c9c",
+        "0a995594755ffa24bd2b0490b163ee41b6a84a38",
+        "34131f6261424a97dff350f25be964077a5d50f8",
+        "b13ef554392f9c33bcfed384e1a6e60f69577766",
+        "e552e7fbbf139165ff154b61d176fc28491c6fc1",
+        "a9f534b2569c0af6c4c11d21247575574665866c",
+        "9ccee39740970de097f198a2bac39744ac777b39",
+        "72404991d305e6199199d1bab3c138c159802940",
+        "99681684276907984a92b927f15abdae2d25c256",
+        "69d1a66edca61a7cc6b3923a5c6c48b3a26c53d6",
+        "a4304f298168912f2e8c039e1bf7a84a6b38232e",
+        "5f7ed70417acbc2edf3cb97b85eccc15892cb56f",
+        "2831cc200df8371a6a6016ab37258c047c8c0f62",
+        "8e2d54abc022d7da46c9412f92bd23c17394995e",
+        "27faa38f43451e081bd550f0c2e991c6d861d607",
+        "ae334fb58d6ae35596a207371f25d41597bb39fb",
+        "24b712db309eb40bcbc07a90798a08972cffca35",
+        "ad1c11a043f76b9ebc792f0fc9bb0cd2f9c400dc",
+        "2ac29762a5664fd44be9e202048bf8403c610ad3",
+        "1cd61189081b20e34fa7ce356358925fc6853a33",
+        "486c67b4869e21f57b848f8bf27f31193b7157f5",
+        "ef71aa64316343ef906edfb4ee0360e62fa2b2ed",
+        "2740763804c4b48f8b1b393c695a68360e20de7c",
+        "2e434b1ba8d3ebd0ba2c720663eb635f9362a9fb",
+        "c084fb82d980ab95113e6d6efa0e1a05c1771dc7",
+        "eb5f41d111ae8c1f9c5fe400d8d114829cf5bd5f",
+        "fdbaa18c33c7fd6d94e1bb778c5a85c10eabe118",
+        "2028c7470041aed810f3e4515e199d0ddf7ee661",
+        "844a48402aa5eb816fd4b8bec6d70c14b0061979",
+        "49c91721e9db95e85c5e7bff30976b88bebb562a",
+        "991d70ba6fe04876a35b3ff85e4fc2212a587e57",
+        "0dbea9197a3ac5c2a64d5292da730b19dbf0a3ed",
+        "92643415eb28b5bb1f75d40695bb8a93ea351d6f",
+        "d24bb493b579a8522f134bef0ac9c4ec020e168b",
+        "f154fb6c470f82930a62ca5a3255dba8a28f0eff",
+        "6d249d17e2b922d14f771ebf6df617e53e05feed",
+        "6634c0ff461a08bc20ce4a49df1c91f457a41a73",
+        "fea5ec17f65311ad5ba6b9ccd8ea14452010e224",
+        "2af23c3734d1677c9bb897519dd69e9e691fd2c5",
+        "634f4e61d928e3dedc0a8f9ccd5275e1d7b7d322",
+        "2b9517c01b680d84792f6af60e951a60242190c4",
+        "bbf1b96fb13cda2aa857ab919f1caf30d2ae1a65",
+        "e9e985b4c4df529f0de5256a655e3f03d5ae6dc8",
+        "268eb745026f827e9fc3b6bdd47303f081cb0f5d",
+        "aabba4c2c88c57c1d0656a0344f06f0cc81206d6",
+        "02b7b08d587f05004903987cce24f62f56f655bc",
+        "5218c50fe0704b23c8705094bd988bbdc0dd7106",
+        "f36acaf4da28cabc41c32827c5bfa9c3d9669553",
+        "65a1dbe7a99ec8357b75f0348387010169d6bac4",
+        "cca99f56111befc3aa3d736a4892e7803e8b9a8f",
+        "9fb89ae5c9c911ff3d1533a4a3c4abeab826b232",
+        "e689995c2632b06781e6ba5f314c40e8a0f22a3d",
+        "633bd02428578863e068105c610d3a89832caed1",
+        "288ba3f73215853f16fc52fc7b3450255f2529cc",
+        "e93c898a04389e37a08b111cf2ec5859ef54cc77",
+        "9e5990881b67c031c5f45bf0815b72f3a4d09bb0",
+        "44c2bce42048342a1b1f5f957b682e21de5df9fe",
+        "233d5628e6e39e76dbd5ee183376b112fe3a2b7c",
+        "4b1b21802f48c21f9d74c02d86cc5fa7dbbaca40",
+        "ef4c0fead565d6660278bfaa0b24cc22a57a1506",
+        "d57ebea7e345d88e6c284ca144c224fccf407217"
+      ]
+    },
+    {
+      "id": "G05",
+      "status": "not-measurable",
+      "reason": "no relevant commit in the window (total: 0)"
+    },
+    {
+      "id": "G06",
+      "status": "measured",
+      "value": 100,
+      "raw": {
+        "conforming": 53,
+        "total": 53
+      },
+      "items": 53,
+      "small_sample": false,
+      "failing": []
+    },
+    {
+      "id": "G07",
+      "status": "not-measurable",
+      "reason": "no team.members at the measurement point (no .wingfoil/dna.yaml there, or it declares no team.members): no identity can be judged"
+    },
+    {
+      "id": "G08",
+      "status": "measured",
+      "value": {
+        "conforming_share": null,
+        "approve_reject_with_ai": 0,
+        "distinct_trailers": [
+          "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>",
+          "Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>",
+          "Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+        ]
+      },
+      "raw": {
+        "judged": 0,
+        "conforming": 0,
+        "before_rule": 65,
+        "approve_reject_with_ai": 0,
+        "ratified_at": null
+      },
+      "items": 0,
+      "small_sample": true,
+      "failing": []
+    },
+    {
+      "id": "G09",
+      "status": "measured",
+      "value": 16.5,
+      "raw": {
+        "outside": 34,
+        "total": 206,
+        "verbs_from": "the measuring build"
+      },
+      "items": 206,
+      "small_sample": false,
+      "failing": [
+        "7b33bb83c536325e80f6505575f65b137d073bdf",
+        "faa8cea6787525e3e9c61dbd36027e8cc29739f5",
+        "f87b6b63b07b6aac97d63fe636475dc79daa7e63",
+        "1c7e863669109688675c3359ad73ae4d7eec81db",
+        "0ca9c201fea8bb931c4799c1761bca1315196231",
+        "9218affbacbd1fce4d256db0bda19ff960df81d3",
+        "d81354cc33c8bbd70451b4d0ea984c9ca120e264",
+        "44585ceff92d11e05aabf54a4ef081eb2d243af4",
+        "6582e68461ed90edf17a1914a6625df18e767a98",
+        "b64d728a459bf1b1dddbe10b357799e527e74a8e",
+        "03e03fc35554ee22048eabeffb2759830b7e37b2",
+        "c4140946ab1b4852e5047c2aa712e965373ef222",
+        "1e6be765c2c93e7e3e4a46e5c45310b321c8c1be",
+        "7c8fcb6e088ca39a0eb57f79f08dc1db44360c5c",
+        "3ac6fa6921154cb511956cb7a3ebccace8601691",
+        "59d722761d87e3dd0fffe167ca165c3bcfe567e4",
+        "72e8c68c316e962811328939fc6e148bda54b849",
+        "eeff5d995cd058dc76624301c26e69103c33b1f4",
+        "209a5cbd0ed0195fe6e7d92e5d4b4229bee1f01d",
+        "10d7b20bcb0d563b1a7a0a51e4f9a0255bf97ee3",
+        "0dc371743b1e0a33ae698f85acb5290720a062ae",
+        "59ce17f6f7996de4f85812da0084b854d7212eb5",
+        "05db7ccc7fa5d69f2137be2586eb4bdbe428caeb",
+        "d6aeff47ae7de24dd27b06eb279efecca80557fc",
+        "ff158e37761f9c55183e3f884f5f654468e52c0c",
+        "1c03344d5c23886063461c1dceae70d5d1a320cc",
+        "b32e6a7235b2d1a0aa1c2db201ccfe775cb0abf1",
+        "8ce81c84e87b3e4853634fe931c111a57893d85c",
+        "109f397db5e912591ce7074bca97e37ae03c7eff",
+        "79d20e970a37f4dbc9cc4dda10cc27b509846f1c",
+        "2be5de8681d90362de6a671784ec48c88638b931",
+        "c4b742ae4887d37782fbb86b9cc6fad849123951",
+        "c5fb33329285785267ccd0b847d1eb62ff0d7bb8",
+        "b3046277f7f294ed6eb4554b359d625c73a2cdd3"
+      ]
+    },
+    {
+      "id": "G10",
+      "status": "measured",
+      "value": 100,
+      "raw": {
+        "canonical": 153,
+        "total": 153
+      },
+      "items": 153,
+      "small_sample": false,
+      "failing": []
+    },
+    {
+      "id": "G11",
+      "status": "measured",
+      "value": 0,
+      "raw": {
+        "back_merges": 0,
+        "task_branches_merged": 33
+      },
+      "items": 33,
+      "small_sample": false
+    },
+    {
+      "id": "G12",
+      "status": "not-measurable",
+      "reason": "no relevant commit in the window (total: 0)"
+    },
+    {
+      "id": "G13",
+      "status": "measured",
+      "value": {
+        "wf_share": 51.63,
+        "per_active_day": 30.69
+      },
+      "raw": {
+        "wf": 206,
+        "total": 399,
+        "active_days": 13
+      },
+      "items": 399,
+      "small_sample": false
+    },
+    {
+      "id": "G14",
+      "status": "measured",
+      "value": 0,
+      "raw": {
+        "blocking": 0,
+        "warnings": 0
+      },
+      "failing": []
+    },
+    {
+      "id": "G15",
+      "status": "measured",
+      "value": {
+        "stale_branches": 0,
+        "duplicate_ids": 0
+      },
+      "raw": {
+        "refs_read": 31,
+        "refs_from": "live refs at run time",
+        "stale_branches": 0,
+        "duplicate_ids": 0
+      },
+      "failing": []
+    },
+    {
+      "id": "G16",
+      "status": "measured",
+      "value": 0,
+      "raw": {
+        "signed": 0,
+        "total": 206
+      },
+      "items": 206,
+      "small_sample": false
+    },
+    {
+      "id": "Q01",
+      "status": "not-measurable",
+      "reason": "npm ci failed (exit 1): npm error code EUSAGE",
+      "raw": {
+        "node": "v22.21.0",
+        "node_pinned": null
+      }
+    },
+    {
+      "id": "Q02",
+      "status": "not-measurable",
+      "reason": "npm ci failed (exit 1): npm error code EUSAGE",
+      "raw": {
+        "node": "v22.21.0",
+        "node_pinned": null
+      }
+    },
+    {
+      "id": "Q03",
+      "status": "not-measurable",
+      "reason": "npm ci failed (exit 1): npm error code EUSAGE",
+      "raw": {
+        "node": "v22.21.0",
+        "node_pinned": null
+      }
+    },
+    {
+      "id": "Q04",
+      "status": "not-measurable",
+      "reason": "npm ci failed (exit 1): npm error code EUSAGE",
+      "raw": {
+        "node": "v22.21.0",
+        "node_pinned": null
+      }
+    },
+    {
+      "id": "Q05",
+      "status": "not-measurable",
+      "reason": "dna.yaml at the measurement point declares no paths.sources (no .wingfoil/dna.yaml there: measure at a commit that has one, with --at)"
+    },
+    {
+      "id": "Q06",
+      "status": "not-measurable",
+      "reason": "no code line under paths.sources or paths.tests at the measurement point"
+    },
+    {
+      "id": "Q07",
+      "status": "not-measurable",
+      "reason": "dna.yaml at the measurement point declares no paths.sources (no .wingfoil/dna.yaml there: measure at a commit that has one, with --at)"
+    },
+    {
+      "id": "Q08",
+      "status": "not-measurable",
+      "reason": "dna.yaml at the measurement point declares no paths.sources (no .wingfoil/dna.yaml there: measure at a commit that has one, with --at)"
+    },
+    {
+      "id": "Q09",
+      "status": "not-measurable",
+      "reason": "dna.yaml at the measurement point declares no paths.sources (no .wingfoil/dna.yaml there: measure at a commit that has one, with --at)"
+    },
+    {
+      "id": "Q10",
+      "status": "not-measurable",
+      "reason": "dna.yaml at the measurement point declares no paths.tests (no .wingfoil/dna.yaml there: measure at a commit that has one, with --at)"
+    },
+    {
+      "id": "Q11",
+      "status": "not-measurable",
+      "reason": "npm ci failed (exit 1): npm error code EUSAGE",
+      "raw": {
+        "node": "v22.21.0",
+        "node_pinned": null
+      }
+    },
+    {
+      "id": "Q12",
+      "status": "not-measurable",
+      "reason": "npm ci failed (exit 1): npm error code EUSAGE",
+      "raw": {
+        "node": "v22.21.0",
+        "node_pinned": null
+      }
+    },
+    {
+      "id": "Q13",
+      "status": "not-measurable",
+      "reason": "memory.yaml at the point declares no bug type"
+    },
+    {
+      "id": "Q14",
+      "status": "not-measurable",
+      "reason": "memory.yaml at the point declares no decision-log type"
+    },
+    {
+      "id": "Q15",
+      "status": "not-measurable",
+      "reason": "memory.yaml at the point declares no bug type"
+    },
+    {
+      "id": "Q16",
+      "status": "not-measurable",
+      "reason": "no .wingfoil/memory.yaml at the measurement point; dna.yaml at the measurement point declares no paths.sources (no .wingfoil/dna.yaml there: measure at a commit that has one, with --at)"
+    },
+    {
+      "id": "Q17",
+      "status": "not-measurable",
+      "reason": "npm ci failed (exit 1): npm error code EUSAGE",
+      "raw": {
+        "node": "v22.21.0",
+        "node_pinned": null
+      }
+    },
+    {
+      "id": "Q18",
+      "status": "not-measurable",
+      "reason": "memory.yaml at the point declares no task type"
+    },
+    {
+      "id": "Q19",
+      "status": "not-measurable",
+      "reason": "memory.yaml at the point declares no task type"
+    },
+    {
+      "id": "Q20",
+      "status": "not-measurable",
+      "reason": "memory.yaml at the point declares no bug type"
+    },
+    {
+      "id": "D01",
+      "status": "not-measurable",
+      "reason": "needs D01's two benchmark runs with the build just published (dl-089 §2, dl-131); no run of this script performs them"
+    },
+    {
+      "id": "P01",
+      "status": "measured",
+      "value": 61,
+      "raw": {
+        "checked": 206,
+        "failing": 61,
+        "unchecked": 0
+      },
+      "items": 206,
+      "failing": [
+        "7b33bb83c536325e80f6505575f65b137d073bdf wf(task): task-001-nodejs-typescript-scaffold [backlog → in-progress]: 'task-001-nodejs-typescript-scaffold' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "faa8cea6787525e3e9c61dbd36027e8cc29739f5 wf(task): task-001-nodejs-typescript-scaffold [approved → done]: 'task-001-nodejs-typescript-scaffold' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "f87b6b63b07b6aac97d63fe636475dc79daa7e63 wf(task): task-002-validation-id-engine [backlog → in-progress]: 'task-002-validation-id-engine' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "1c7e863669109688675c3359ad73ae4d7eec81db wf(task): task-002-validation-id-engine [approved → done]: 'task-002-validation-id-engine' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "0ca9c201fea8bb931c4799c1761bca1315196231 wf(task): task-003-git-backed-sot [backlog → in-progress]: 'task-003-git-backed-sot' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "9218affbacbd1fce4d256db0bda19ff960df81d3 wf(task): task-003-git-backed-sot [approved → done]: 'task-003-git-backed-sot' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "d81354cc33c8bbd70451b4d0ea984c9ca120e264 wf(task): task-004-decoupled-pillars [backlog → in-progress]: 'task-004-decoupled-pillars' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "44585ceff92d11e05aabf54a4ef081eb2d243af4 wf(task): task-005-per-type-state-machines [backlog → in-progress]: 'task-005-per-type-state-machines' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "6582e68461ed90edf17a1914a6625df18e767a98 wf(task): task-005-per-type-state-machines [approved → done]: 'task-005-per-type-state-machines' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "b64d728a459bf1b1dddbe10b357799e527e74a8e wf(task): task-006-dual-interface-shared-core [backlog → in-progress]: 'task-006-dual-interface-shared-core' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "03e03fc35554ee22048eabeffb2759830b7e37b2 wf(task): task-006-dual-interface-shared-core [approved → done]: 'task-006-dual-interface-shared-core' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "c4140946ab1b4852e5047c2aa712e965373ef222 wf(task): task-007-npm-distribution [backlog → in-progress]: 'task-007-npm-distribution' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "1e6be765c2c93e7e3e4a46e5c45310b321c8c1be wf(task): task-007-npm-distribution [approved → done]: 'task-007-npm-distribution' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "7c8fcb6e088ca39a0eb57f79f08dc1db44360c5c wf(task): task-004-decoupled-pillars [approved → done]: 'task-004-decoupled-pillars' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "3ac6fa6921154cb511956cb7a3ebccace8601691 wf(task): task-008-dna-memory-query-latency [backlog → in-progress]: 'task-008-dna-memory-query-latency' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "59d722761d87e3dd0fffe167ca165c3bcfe567e4 wf(bug): schedule bug-002 [triaged → planned]: 'schedule' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "72e8c68c316e962811328939fc6e148bda54b849 wf(bug): start-fix bug-002 [planned → in-progress]: 'start-fix' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "f5462e783add923bfaf1013bd0b993a52b9064cf wf(bug): submit bug-002 [in-progress → in-review]: 'submit' carries no bracket",
+        "eeff5d995cd058dc76624301c26e69103c33b1f4 wf(task): task-008-dna-memory-query-latency [approved → done]: 'task-008-dna-memory-query-latency' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "209a5cbd0ed0195fe6e7d92e5d4b4229bee1f01d wf(task): task-009-mcp-resource-fetch-latency [backlog → in-progress]: 'task-009-mcp-resource-fetch-latency' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "10d7b20bcb0d563b1a7a0a51e4f9a0255bf97ee3 wf(bug): schedule bug-001 [triaged → planned]: 'schedule' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "0dc371743b1e0a33ae698f85acb5290720a062ae wf(bug): start-fix bug-001 [planned → in-progress]: 'start-fix' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "8456567e84e2b5d81a1ec2f0bc20016c034dea23 wf(bug): submit bug-001 [in-progress → in-review]: 'submit' carries no bracket",
+        "59ce17f6f7996de4f85812da0084b854d7212eb5 wf(task): task-009-mcp-resource-fetch-latency [approved → done]: 'task-009-mcp-resource-fetch-latency' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "05db7ccc7fa5d69f2137be2586eb4bdbe428caeb wf(task): task-010-default-state-machine-fallback [backlog → in-progress]: 'task-010-default-state-machine-fallback' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "d6aeff47ae7de24dd27b06eb279efecca80557fc wf(bug): schedule bug-003 [triaged → planned]: 'schedule' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "ff158e37761f9c55183e3f884f5f654468e52c0c wf(bug): start-fix bug-003 [planned → in-progress]: 'start-fix' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "7da07bfa2770f0ef14caf08f3928ba51b8c4d000 wf(bug): submit bug-003 [in-progress → in-review]: 'submit' carries no bracket",
+        "1c03344d5c23886063461c1dceae70d5d1a320cc wf(task): task-010-default-state-machine-fallback [approved → done]: 'task-010-default-state-machine-fallback' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "b32e6a7235b2d1a0aa1c2db201ccfe775cb0abf1 wf(task): task-011-mcp-resources-read-only [backlog → in-progress]: 'task-011-mcp-resources-read-only' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "ddff2051fb4bea6559fecba6c08fcd6ef32a8850 wf(task): submit task-012 [in-progress → in-review]: 'submit' carries no bracket",
+        "8ce81c84e87b3e4853634fe931c111a57893d85c wf(task): task-011-mcp-resources-read-only [approved → done]: 'task-011-mcp-resources-read-only' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "d8a6e83863da91345d59732eb8c56843e90d420c wf(task): submit task-013 [in-progress → in-review]: 'submit' carries no bracket",
+        "109f397db5e912591ce7074bca97e37ae03c7eff wf(task): task-013-machine-readable-formats [approved → done]: 'task-013-machine-readable-formats' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "dd6857cbb8842516dc7973ecf7e3fbe405d5106d wf(task): submit task-014 [in-progress → in-review]: 'submit' carries no bracket",
+        "79d20e970a37f4dbc9cc4dda10cc27b509846f1c wf(task): task-015-complete-audit-trail [backlog → in-progress]: 'task-015-complete-audit-trail' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "3b213b3b440e4d4f1e8cb7f7992908f0a4c11929 wf(task): submit task-016 [in-progress → in-review]: 'submit' carries no bracket",
+        "2be5de8681d90362de6a671784ec48c88638b931 wf(task): task-015-complete-audit-trail [approved → done]: 'task-015-complete-audit-trail' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "e0c6d2611d39a4c8fdbe41ce3b9bc84da658a6bf wf(task): submit task-017 [in-progress → in-review]: 'submit' carries no bracket",
+        "c4b742ae4887d37782fbb86b9cc6fad849123951 wf(task): task-024 design — no spec gap; AC(a)/(b) pre-satisfied, AC(c) needs type-aware message: 'task-024' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "c5987b8f975356fe78b27b6f842b1357d809f32b wf(task): submit task-027-implement-project-dna [in-progress → in-review]: 'submit' carries no bracket",
+        "2a58e866427edcfc9f128fda90a5afa42d3bd6ad wf(task): submit task-024-implement-memory-element-schema [in-progress → in-review]: 'submit' carries no bracket",
+        "1a235db917789d85b5c112efa281ca8298d6a547 wf(task): submit task-018-implement-git-backed-storage [in-progress → in-review]: 'submit' carries no bracket",
+        "e0d87357efc18b91cdf9be1dfecb3e639acfbeef wf(task): submit task-019-implement-versioning-audit-trail [in-progress → in-review]: 'submit' carries no bracket",
+        "9a58c3f4b86d01bc55f874c83b3589ce58bbbcb3 wf(task): submit task-026-implement-dna-show [in-progress → in-review]: 'submit' carries no bracket",
+        "ad4c1762daa1fc5ca487c3d3fd54f7ac16d906e4 wf(task): submit task-022-implement-memory-entries [in-progress → in-review]: 'submit' carries no bracket",
+        "f61b8af8acf3cfa01f2da48f06bac9fea456c5c2 wf(task): submit task-028-implement-paths-category [in-progress → in-review]: 'submit' carries no bracket",
+        "c5fb33329285785267ccd0b847d1eb62ff0d7bb8 wf(task): task-029 design gate — verified vs spec-011/008/005, no spec gap: 'task-029' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "9ccee39740970de097f198a2bac39744ac777b39 wf(task): submit task-029-implement-wingfoil-init [in-progress → in-review]: 'submit' carries no bracket",
+        "8e2d54abc022d7da46c9412f92bd23c17394995e wf(task): submit task-023-implement-keyword-search [in-progress → in-review]: 'submit' carries no bracket",
+        "9c4e2d1e38ed46bd5658fac190bf92aad181a387 wf(task): submit task-025-implement-dna-set [in-progress → in-review]: 'submit' carries no bracket",
+        "ef71aa64316343ef906edfb4ee0360e62fa2b2ed wf(task): submit task-030-implement-mcp-resources [in-progress → in-review]: 'submit' carries no bracket",
+        "e6ddfffdbf157a694cacbf7c9491e3488cb356aa wf(task): submit task-020-implement-memory-add [in-progress → in-review]: 'submit' carries no bracket",
+        "fea5ec17f65311ad5ba6b9ccd8ea14452010e224 wf(task): submit task-021-implement-memory-search [in-progress → in-review]: 'submit' carries no bracket",
+        "268eb745026f827e9fc3b6bdd47303f081cb0f5d wf(task): submit task-031-post-v01-dna-config-sync [in-progress → in-review]: 'submit' carries no bracket",
+        "02b7b08d587f05004903987cce24f62f56f655bc wf(bug): submit bug-005-init-scaffold-fails-schema-validation [draft → open]: 'submit' carries no bracket",
+        "633bd02428578863e068105c610d3a89832caed1 wf(task): submit task-032-readme-cli-quickstart [in-progress → in-review]: 'submit' carries no bracket",
+        "288ba3f73215853f16fc52fc7b3450255f2529cc wf(bug): submit bug-005-init-scaffold-fails-schema-validation [in-progress → in-review]: 'submit' carries no bracket",
+        "233d5628e6e39e76dbd5ee183376b112fe3a2b7c wf(task): submit task-033-manual-e2e-journey-validation [in-progress → in-review]: 'submit' carries no bracket",
+        "b3046277f7f294ed6eb4554b359d625c73a2cdd3 wf(bug): deferred bug-004 and bug-006: 'deferred' is not one of the declared verbs (add, submit, approve, reject, deprecate, start, finalize, sync, amend, park, assign)",
+        "5b16ab619dad08d05d3954b734739a506ac53988 wf(release): approve minor-v0.1 [releasing → released]: 'approve' records the approver's decision and carries no AI co-author trailer (git-conventions §7), yet it has a Co-Authored-By: line"
+      ]
+    },
+    {
+      "id": "P02",
+      "status": "measured",
+      "value": 0,
+      "raw": {
+        "checked": 399,
+        "failing": 0,
+        "unchecked": 206
+      },
+      "items": 399,
+      "failing": []
+    },
+    {
+      "id": "P03",
+      "status": "measured",
+      "value": 0,
+      "raw": {
+        "checked": 0,
+        "failing": 0,
+        "unresolved": 0
+      },
+      "items": 0,
+      "failing": []
+    },
+    {
+      "id": "P04",
+      "status": "measured",
+      "value": 0,
+      "raw": {
+        "checked": 0,
+        "failing": 0
+      },
+      "items": 0,
+      "failing": []
+    },
+    {
+      "id": "P05",
+      "status": "measured",
+      "value": 0,
+      "raw": {
+        "checked": 53,
+        "failing": 0,
+        "approvals": 53,
+        "run_records": 0,
+        "unchecked": 53
+      },
+      "items": 53,
+      "failing": []
+    },
+    {
+      "id": "P06",
+      "status": "not-measurable",
+      "reason": "needs D01's two benchmark runs with the build just published (dl-089 §2, dl-131); no run of this script performs them"
+    },
+    {
+      "id": "P07",
+      "status": "measured",
+      "value": true,
+      "raw": {
+        "runs": 2,
+        "identical": true
+      },
+      "failing": []
+    },
+    {
+      "id": "E01",
+      "status": "not-measurable",
+      "reason": "offline run (--offline): the external snapshot was not read"
+    },
+    {
+      "id": "E02",
+      "status": "not-measurable",
+      "reason": "offline run (--offline): the external snapshot was not read"
+    },
+    {
+      "id": "E03",
+      "status": "not-measurable",
+      "reason": "offline run (--offline): the external snapshot was not read"
+    },
+    {
+      "id": "E04",
+      "status": "not-measurable",
+      "reason": "offline run (--offline): the external snapshot was not read"
+    },
+    {
+      "id": "E05",
+      "status": "not-measurable",
+      "reason": "offline run (--offline): the external snapshot was not read"
+    }
+  ]
+}

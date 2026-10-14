@@ -16,8 +16,11 @@
  * `--release` is read at `HEAD`, and the point is the highest tag named `<version>` or `<version>.<n>` (a patch:
  * `<version>` exactly) that is not another release element's version — the version actually published, since a
  * tag whose publish failed (`v0.2.0`, `bug-135`) is followed by a higher one — else the commit carrying the
- * release's `[… → released]` transition. **The window** is `<previous point>..<point>`: `--previous <rev>`, else
- * the most recent earlier report under `paths.health`, else the whole history (`previous: null`).
+ * release's `[… → released]` transition. The report's `measurement_point.basis` is `published-tag` for a tag,
+ * `released-transition` for that commit, and `revision` for any other commit `--at` names (task-241, F8). **The
+ * window** is `<previous point>..<point>`: `--previous <rev>` (`previous.basis: '--previous'`, `report: null`), else
+ * the most recent earlier report under `paths.health` (`basis: 'report'`, its path), else the whole history
+ * (`previous: null`).
  *
  * **Read-only** (`dl-089` §6): every read is `git log`, `git show <rev>:<path>`, `git ls-tree` or
  * `git for-each-ref` at the point; the commit-dependent checks run in a throw-away worktree (`git worktree add
@@ -122,7 +125,8 @@
  * - G05 an id: `task-<n>` or `bug-<n>`;
  * - G07 a commit fails when its author or committer email is not a `team.members` email (case-insensitive), or
  *   `isValidAttribution` refuses the identity (RFC 2606 reserved top-level domains, git's `.(none)`), merges
- *   included;
+ *   included; with no `team.members` at the point (no `.wingfoil/dna.yaml` there, e.g. `5b16ab61`, `v0.2.1`) G07
+ *   is `not-measurable` (task-241, approver ruling A);
  * - G08 the rule's ratification: the `wf(decision-log): approve dl-117…` commit; commits at or before it are
  *   counted apart (`before_rule`); a conforming commit has a `Co-Authored-By:` naming a `team.agents` entry (its
  *   email too, when the entry has one) and a non-blank `AI-Model:`;
@@ -140,7 +144,8 @@
  * - P02, P05: a governance finding saying no `memory.yaml`/`dna.yaml` was committed at the commit (history
  *   before the configuration existed) is counted `unchecked`, not failing;
  * - P04 the tasks touched in the window; each link must resolve at the point: `ref`, `bug`, `depends_on`,
- *   `supersedes` values (a `REQ-*` or feature id as such, else a Memory element id), feature ids in
+ *   `supersedes` values (a `REQ-*` or feature id as such, else a Memory element id: its exact id, or a short id
+ *   `<prefix>-<n>` exactly one element carries, task-241 F8), feature ids in
  *   `docs/01_vision/06_features.md`, `REQ-*` headings under `docs/02_requirements/03_sard/`, `US-*` ids in
  *   `docs/02_requirements/01_user_story_map/`, cited `.feature` paths (from the root or the BDD folder);
  * - P05 the approval authority of the governance check, plus the run records the window adds under `paths.runs`:
@@ -187,6 +192,7 @@ const BRACKET_RE = /\[[^\]]*(?:->|→)[^\]]*\]/;
 const BACK_MERGE_RE = /^merge (?:remote-tracking )?(?:branch )?'?(?:origin\/)?main'? into '?task\//i;
 const TASK_MERGE_RE = /^merge (?:remote-tracking )?branch '(?:origin\/)?task\//i;
 const NUMBERED_ID_RE = /^([a-z][a-z-]*?)-(\d+)(?:-|$)/;
+const SHORT_ID_RE = /^[a-z][a-z-]*?-\d+$/;
 const FEATURE_ID_RE = /(?<![\w/.-])P\d+(?:\.\d+)+(?![\w-])/g;
 const REQ_ID_RE = /\bREQ-[A-Z]+-\d+\b/g;
 const US_ID_RE = /\bUS-[0-9A-Z]+-\d+\b/g;
@@ -617,16 +623,21 @@ function measureHistory(ctx) {
   out.push(share('G06', approvals.length - unevidenced.length, approvals.length, ['conforming', 'total'], approvals.length, unevidenced.map((c) => c.sha), smallSample));
 
   // G07
-  const members = new Set(((dna && dna.team && dna.team.members) || []).map((m) => String(m.email).toLowerCase()));
+  const declaredMembers = dna && dna.team && Array.isArray(dna.team.members) ? dna.team.members : [];
+  const members = new Set(declaredMembers.map((m) => String(m.email).toLowerCase()));
   const known = (name, email) => members.has(String(email).toLowerCase()) && dist.memory.isValidAttribution(name, email);
   const unknown = commits.filter((c) => !known(c.authorName, c.authorEmail) || !known(c.committerName, c.committerEmail));
-  out.push(entry('G07', {
-    value: unknown.length,
-    raw: { failing: unknown.length, total: commits.length },
-    items: commits.length,
-    small_sample: commits.length < smallSample,
-    failing: unknown.map((c) => c.sha),
-  }));
+  // task-241 (approver ruling A): with no team.members at the point there is no identity to judge against, so no
+  // reading — never every commit counted unknown (the same rule as the static half's, task-233 F1).
+  out.push(declaredMembers.length === 0
+    ? notMeasurable('G07', 'no team.members at the measurement point (no .wingfoil/dna.yaml there, or it declares no team.members): no identity can be judged')
+    : entry('G07', {
+      value: unknown.length,
+      raw: { failing: unknown.length, total: commits.length },
+      items: commits.length,
+      small_sample: commits.length < smallSample,
+      failing: unknown.map((c) => c.sha),
+    }));
 
   out.push(measureAttribution(ctx, nonMerge));
 
@@ -897,7 +908,13 @@ function traceability(root, point, commits, memoryYaml) {
   const touched = unique(commits.filter((c) => !c.merge).flatMap((c) => c.files).filter((f) => f.startsWith(roots['task']) && f.endsWith('.md'))).sort();
   const word = (text, id) => new RegExp(`(^|[^\\w.])${id.replace(/\./g, '\\.')}(?![\\w.]*\\d)`, 'm').test(text);
   const resolves = {
-    element: (v) => index.has(v) || [...index.keys()].some((id) => id.startsWith(`${v}-`)),
+    // task-241 (F8 item 4): an exact id, or a short id `<prefix>-<n>` exactly one element carries.
+    element: (v) => {
+      if (index.has(v)) return true;
+      if (!SHORT_ID_RE.test(v)) return false;
+      const carriers = [...index.keys()].filter((id) => id.startsWith(`${v}-`)).sort();
+      return carriers.length === 1 ? true : carriers.length === 0 ? false : `ambiguous: ${carriers.join(', ')}`;
+    },
     feature: (v) => word(features, v),
     req: (v) => new RegExp(`^#+\\s+${v}\\b`, 'm').test(sard),
     story: (v) => storyMap.includes(v),
@@ -921,7 +938,8 @@ function traceability(root, point, commits, memoryYaml) {
     for (const v of unique(body.match(FEATURE_FILE_RE) ?? [])) links.push(['bdd', v, 'bdd']);
     for (const [label, value, kind] of links) {
       checked += 1;
-      if (!resolves[kind](value)) failing.push(`${id}: ${label} ${value}`);
+      const resolved = resolves[kind](value);
+      if (resolved !== true) failing.push(`${id}: ${label} ${value}${typeof resolved === 'string' ? ` (${resolved})` : ''}`);
     }
   }
   return countEntry('P04', checked, failing.sort());
@@ -2232,11 +2250,24 @@ function findRelease(root, version) {
   return { id: String(release.id), version, kind, others: releases.filter((fm) => fm !== release).map((fm) => String(fm.version)) };
 }
 
+/** The commit on HEAD carrying the release's `[… → released]` transition, or `null`. */
+function releasedTransition(root, release) {
+  for (const line of git(root, ['log', '--no-show-signature', '--format=%H%x00%s', 'HEAD']).split('\n')) {
+    const [sha, subject] = line.split('\0');
+    if (subject && subject.startsWith('wf(release):') && subject.endsWith('→ released]') && subject.split(/[\s,[\]]+/).includes(release.id)) {
+      return requireCommitName(sha, 'git log');
+    }
+  }
+  return null;
+}
+
 function measurementPoint(root, release, at) {
   if (at !== undefined) {
     const commit = resolveCommit(root, at, '--at');
     const tagged = gitOr(root, ['rev-parse', '--verify', '--quiet', `refs/tags/${at}`]) !== null;
-    return { ref: at, commit, basis: tagged ? 'published-tag' : 'released-transition' };
+    // task-241 (F8 item 1): an untagged commit is the released transition only when it is that commit.
+    const basis = tagged ? 'published-tag' : commit === releasedTransition(root, release) ? 'released-transition' : 'revision';
+    return { ref: at, commit, basis };
   }
   const own = (tag) => (release.kind === 'patch' ? tag === release.version : tag === release.version || new RegExp(`^${release.version.replace(/\./g, '\\.')}\\.\\d+$`).test(tag));
   const tags = git(root, ['tag', '--list']).split('\n').filter((t) => VERSION_RE.test(t) && own(t) && !release.others.includes(t)).sort(compareVersions);
@@ -2244,13 +2275,8 @@ function measurementPoint(root, release, at) {
     const tag = tags[tags.length - 1];
     return { ref: tag, commit: resolveCommit(root, tag, 'tag'), basis: 'published-tag' };
   }
-  for (const line of git(root, ['log', '--no-show-signature', '--format=%H%x00%s', 'HEAD']).split('\n')) {
-    const [sha, subject] = line.split('\0');
-    if (subject && subject.startsWith('wf(release):') && subject.endsWith('→ released]') && subject.split(/[\s,[\]]+/).includes(release.id)) {
-      const commit = requireCommitName(sha, 'git log');
-      return { ref: commit, commit, basis: 'released-transition' };
-    }
-  }
+  const commit = releasedTransition(root, release);
+  if (commit !== null) return { ref: commit, commit, basis: 'released-transition' };
   throw new UsageError(`--release ${release.version}: no published tag and no released transition of ${release.id} on HEAD`);
 }
 
@@ -2261,7 +2287,8 @@ function resolveMeasurementPoint(root, version, at) {
 }
 
 function previousRun(root, healthDir, release, previous) {
-  if (previous !== undefined) return { release: `--previous ${previous}`, commit: resolveCommit(root, previous, '--previous'), report: '(none: named by --previous)' };
+  // task-241 (F7): a window named by --previous has no previous report; `basis` says how the window was chosen.
+  if (previous !== undefined) return { release: previous, commit: resolveCommit(root, previous, '--previous'), report: null, basis: '--previous' };
   const dir = join(root, healthDir);
   if (!existsSync(dir)) return null;
   const runs = readdirSync(dir)
@@ -2271,7 +2298,7 @@ function previousRun(root, healthDir, release, previous) {
   if (runs.length === 0) return null;
   const [name, version] = runs[runs.length - 1];
   const report = JSON.parse(readFileSync(join(dir, name), 'utf-8'));
-  return { release: version, commit: resolveCommit(root, report.measurement_point.commit, 'previous report'), report: `${healthDir}${name}` };
+  return { release: version, commit: resolveCommit(root, report.measurement_point.commit, 'previous report'), report: `${healthDir}${name}`, basis: 'report' };
 }
 
 function toolchain(root, point) {

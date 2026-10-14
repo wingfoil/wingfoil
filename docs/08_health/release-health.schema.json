@@ -26,7 +26,7 @@
       "properties": {
         "ref": { "type": "string", "description": "The published tag (e.g. v0.2.1), or the released transition commit when publishing did not run." },
         "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-        "basis": { "enum": ["published-tag", "released-transition"], "description": "dl-089 §1: a tag whose publish failed is never a measurement point." }
+        "basis": { "enum": ["published-tag", "released-transition", "revision"], "description": "dl-089 §1: a tag whose publish failed is never a measurement point. `revision`: a commit named by --at that is neither a tag nor the release's released transition (task-241, F8)." }
       }
     },
     "previous": {
@@ -36,12 +36,16 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["release", "commit", "report"],
+          "required": ["release", "commit", "report", "basis"],
           "properties": {
-            "release": { "type": "string" },
+            "release": { "type": "string", "description": "The previous report's release version, or the revision as --previous named it." },
             "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-            "report": { "type": "string", "description": "Repository-relative path of the previous JSON report." }
-          }
+            "report": { "type": ["string", "null"], "description": "Repository-relative path of the previous JSON report; null when the window was named by --previous." },
+            "basis": { "enum": ["report", "--previous"], "description": "How the window was chosen (task-241, F7): the most recent earlier report under paths.health, or --previous <rev>." }
+          },
+          "if": { "properties": { "basis": { "const": "report" } } },
+          "then": { "properties": { "report": { "type": "string" } } },
+          "else": { "properties": { "report": { "type": "null" } } }
         }
       ]
     },
