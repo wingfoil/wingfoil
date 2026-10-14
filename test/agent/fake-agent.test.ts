@@ -317,7 +317,7 @@ describe('AC 2 — driven directly, the fake reads the session Resource the boot
     expect(run.status).toBe(0);
     expect(run.records[0]!.mcp?.text).toBeUndefined();
     expect(run.records[0]!.mcp?.error?.code).toBe(-32602);
-    expect(run.records[0]!.mcp?.error?.message).toBe(`MCP error -32602: element 'task:task-999-absent' not found at ${sha}`);
+    expect(run.records[0]!.mcp?.error?.message).toBe(`element 'task:task-999-absent' not found at ${sha}`);
   }, 60000);
 
   it('exits 1 and records the failure when the bootstrap names no session Resource, or the server cannot be started', () => {
