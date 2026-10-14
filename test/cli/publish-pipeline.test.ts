@@ -543,7 +543,9 @@ describe('job timeouts (task-238) — dl-057 (b)', () => {
     for (const [name, job] of Object.entries(parsed.jobs)) {
       expect(header).toContain(`${name} ${String(job['timeout-minutes'])}`);
     }
-    expect(parsed.jobs.gate?.['timeout-minutes']).toBe(30);
+    // task-244, approver ruling F4 (2026-10-14): 30 → 45 — the gate now runs the suite under coverage, with no CI
+    // timing yet, and a timeout on the tag's run can only be fixed by a new commit.
+    expect(parsed.jobs.gate?.['timeout-minutes']).toBe(45);
     expect(parsed.jobs.stage?.['timeout-minutes']).toBe(20);
     expect(parsed.jobs.promote?.['timeout-minutes']).toBe(30);
   });
