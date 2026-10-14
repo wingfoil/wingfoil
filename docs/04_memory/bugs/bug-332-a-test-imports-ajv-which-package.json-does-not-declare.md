@@ -49,4 +49,7 @@ Captured on 2026-10-11 by `bug-ingest-rel-v0.3-w3b5-review-findings-plan` (item 
 
 ### Retrospective
 
-None.
+- The import resolved by hoisting, so no run failed and nothing pointed at `package.json`: a dependency used only
+  through another package's tree is invisible until that tree changes. task-241 declares `ajv` (`^8.20.0`, the
+  lockfile changing only its root entry) and pins the declaration and the installed major in
+  `test/release-health/bindings-and-deps.test.ts`.
