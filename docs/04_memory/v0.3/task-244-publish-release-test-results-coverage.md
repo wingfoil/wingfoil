@@ -321,6 +321,11 @@ anywhere in the header comment): a bare `P5.1.4-cli-ux.feature` header citation 
 header stays unit (characterization, green). No live-repo count is pinned. Run: `npx jest
 test/cli/test-report.test.ts --maxWorkers=2` → 5 failed, 40 passed (45).
 
+**Send-back F4 (approver ruling, 2026-10-14), red commit `b6002ee3`**: `test/cli/publish-pipeline.test.ts` row
+`states each value and its sources … in the header` (describe `job timeouts (task-238) — dl-057 (b)`) pins the
+gate's `timeout-minutes` at 45 (was 30); the header check is unchanged (it reads `gate 45` once the header says so).
+Run: `npx jest test/cli/publish-pipeline.test.ts --maxWorkers=2` → 1 failed (`Expected: 45, Received: 30`), 65 passed.
+
 ### green (developer, 2026-10-14)
 
 Approver rulings D1–D8 as recommended (`w3-b7-notes.md`, 2026-10-14). Commits `c73905ba` (the implementation) and
