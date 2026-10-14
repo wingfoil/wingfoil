@@ -47,9 +47,200 @@ A release keeps no test results or coverage, so its quality claims cannot be che
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+Branch `task/task-244-publish-release-test-results-coverage`, worktree `../.wf2-wt/task-244`, cut from `main`
+`32d8871b` (main past the pre-batch `db0e2752` only by the Templates DL ingest). Start `dfc6932e`. `bug: []`.
+
+### design (developer, 2026-10-14)
+
+- **depends_on read (dl-015).** `grep -m1 '^status'` → all four `done`. `task-134`: `jest.config.js` `roots`
+  includes `src/`, so `coverage-summary.json` lists every source file (`test/lint/coverage-parity.test.ts` holds it):
+  the published denominator is honest (`bug-141`, dl-136 Action 2). `task-146`: the dry-run case passed three
+  `npx jest --coverage` runs; `bug-167` "not reproduced; hypothesis guarded" — the gate can run the suite under
+  coverage. `task-207`: gate reports live at `docs/07_gates/rl-{release.release-line}/rel-{release.version}-<name>.md`
+  (e2e-smoke report, staging-rehearsal transcript); this task follows that layout. `task-238`: last `publish.yml`
+  writer before me; runbook step 8; gate `timeout-minutes: 30` sized from CI run `38166281488` (prepublishOnly 7m22s);
+  the conformance suite reads workflows at HEAD; its AC 3 was deferred to release-publishing (R3), as mine is (D5).
+- **Decisions and specs.** `dl-136` `ready` (Q1 (c), Q2 (a), Q3 (a), Q4 (a)); `spec-015` `approved` (§3 amended in
+  session 3 as a pending amendment, no "tag on main" restated); `dl-159` `in-discussion` (handover honoured);
+  `dl-010` `ready`: **no new dependency** — Jest's `--json --outputFile` and its istanbul reporters only.
+  Read against the directives (dl-102 §4): no AC contradicts a ratified spec or DL. Two gaps between dl-136 and the
+  ACs are decisions below (D4 staging smoke, D7 CHANGELOG link).
+- **Facts the design rests on.** `grep -c coverageReporters jest.config.js` → `0`; `ls scripts/test-report.cjs` →
+  absent; `grep -c upload-artifact .github/workflows/publish.yml` → `1`; `grep -c produces
+  .wingfoil/workflows/custom/release-submit.yaml` → `0`; release-publishing `publish.produces` → undefined.
+  Jest 30's `processResults` (`node_modules/@jest/core/build/index.js`) writes `--outputFile` with a bare
+  `writeFileSync`, no `mkdir`: the JSON must go to a directory that already exists → `coverage/` (D8), which the
+  coverage run creates and `.gitignore` already ignores. Classification counts on this tree (`find test -name
+  "*.test.ts"` → 411; 2 latency suites run apart): `*.integration.test.ts` → 43; files citing
+  `docs/02_requirements/02_bdd/features/….feature` anywhere → 34, in the header comment → 31 (D2); BDD ∩
+  integration → 0; the three exact-path files cite no feature.
+
+**Design.**
+- **jest.config.js** — `coverageReporters: ['json-summary', 'lcov', 'text']` (D5): `coverage/coverage-summary.json`,
+  `coverage/lcov.info` (+ `lcov-report/`), and the console table the notes cite. `collectCoverageFrom`, thresholds,
+  roots untouched; the header comment names `test:report`.
+- **package.json** — one new script line, `"test:report": "jest --coverage --json --outputFile=coverage/jest-results.json"`
+  (beside `test:coverage`; own line, merges after 241/234/215). `prepublishOnly` unchanged.
+- **scripts/test-report.cjs** (+ `scripts/test-report.d.cts`) — pure, offline, deterministic (no clock, no host
+  detail; the JSON's `startTime`/`duration` never printed). Usage:
+  `node scripts/test-report.cjs --results <jest.json> --coverage-summary <coverage-summary.json> --build-info <dist/build-info.json> --commit <sha> --out <summary.md> [--tag <tag>] [--run-url <url>] [--root <dir>]`
+  (`--root` defaults to the cwd; absent `--tag`/`--run-url` print `n/a`). Exit `0` summary written, whatever the
+  tests' verdict (the verdict is in the summary; release-submit records a red candidate too); `1` invalid input
+  (unreadable/unparsable file, no `testResults` array, an assertion status outside the known set, a test file outside
+  `--root`, an unreadable test source, a coverage summary without `total`, a build-info without `version`/`commit`);
+  `2` usage (unknown option, missing value, missing required option, `--commit` not 40 or 64 hex digits — the
+  `--expect-commit` rule of `publish-staging.cjs`). Errors on stderr as `test-report: <message>`.
+  - **Classification, per test file, first rule that matches** (exported table, one home): `lint.clean` =
+    `test/lint/lint-clean.test.ts`; `API-docs` = `test/docs/api-docs.test.ts`; `smoke` = `test/cli/e2e-smoke.test.ts`;
+    `BDD` = the file's leading block comment (the first `/* … */` before any code) contains
+    `docs/02_requirements/02_bdd/features/<path>.feature`; `integration` = name ends `.integration.test.ts`;
+    `unit` = every other file. Paths relative to `--root` with `/`.
+  - **Counts per class**: files, tests (assertions), passed (`passed`), failed (`failed`), skipped (`pending`,
+    `skipped`, `todo`, `disabled`); plus a total row. A suite with `status: failed` and no failed assertion (it did
+    not run) is listed as a failure "suite failed to run". Verdict `passed` iff no failure.
+  - **Markdown** (fields per dl-136 / dl-111): `# Test results — <tag, else commit>`; a two-column field table with
+    rows, in order, `Commit` (`` `<sha>` ``), `Tag`, `CI run`, `Build` (`` `<version> (<commit>)` `` from build-info,
+    the `--version` form), `Result` (`passed`/`failed`); `## Suites`: one table, header
+    `| Suite | Files | Tests | Passed | Failed | Skipped |`, rows `unit, integration, BDD, smoke, API-docs,
+    lint.clean, total` in that order; one paragraph stating the rules above, that the latency suites
+    (`test/latency-suites.cjs`) run apart, and that the staging smoke is the CI run's `stage` job (D4);
+    `## Coverage`: header `| Metric | Covered | Total | % |`, rows `statements, branches, functions, lines`, the
+    `total` entry's `covered`/`total`/`pct` as given; `## Failures` only when there is one: `` - `<file>` — <fullName> ``
+    (or `— suite failed to run`), sorted by file then name, code-point order.
+- **publish.yml** (D1 (a)). `env.REPORTS_ARTIFACT: wingfoil-test-reports` beside `TARBALL_ARTIFACT`. **gate**, in order:
+  tag-on-main (untouched, dl-159), the two tag checks, `npm ci`, `npm run build`, `npm run test:report`,
+  `npm run lint` (prepublishOnly's three commands, the test one with coverage + JSON: one suite run), then
+  `node scripts/test-report.cjs --results coverage/jest-results.json --coverage-summary coverage/coverage-summary.json
+  --build-info dist/build-info.json --commit "$GITHUB_SHA" --tag "$GITHUB_REF_NAME"
+  --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --out coverage/test-results.md`,
+  the dry-run, the pack, the tarball upload (still the gate's FIRST `upload-artifact`, so the existing stage/promote
+  `find`s keep their meaning), and LAST the reports upload: `name: ${{ env.REPORTS_ARTIFACT }}`, `path` the four files
+  `coverage/jest-results.json`, `coverage/coverage-summary.json`, `coverage/lcov.info`, `coverage/test-results.md`,
+  `if-no-files-found: error`. The coverage threshold is now enforced at the tag (Q3 (a)). **release**: after the notes
+  step, `actions/download-artifact` (the pinned SHA, no new action) `name: ${{ env.REPORTS_ARTIFACT }}`, `path:
+  test-reports`, no `if:` (act has an artifact server); then the wait; `gh release create` names the four
+  `test-reports/<file>` paths explicitly. Permissions, environments, `RELEASE_MAKE_LATEST`, stage, promote (its
+  `npm stage publish` line, dl-159) and mcp-registry unchanged; `gate` timeout stays 30 (the tag run verifies it, D5).
+  **Header**: gate/release lines name the reports (dl-136, task-244); runbook step 7 says the release carries the
+  four reports; step 8 gains (B6 handover): "Re-running an `mcp-registry` job that succeeded is always refused — the
+  registry accepts each version once — so a re-run after a late approval must not include a succeeded one (Re-run all
+  jobs would)."
+- **release-submit.yaml 1.2 → 1.3** — `pre-release-checks` (qa) gains two actions and a `produces` (checks unchanged):
+  `'cli.run(command: "npm run test:report")'`,
+  `'cli.run(command: "node scripts/test-report.cjs --results coverage/jest-results.json --coverage-summary coverage/coverage-summary.json --build-info dist/build-info.json --commit <candidate sha> --out <the produces path>")'`;
+  `produces: ["docs/07_gates/rl-{release.release-line}/rel-{release.version}-test-results-candidate.md"]` (D3);
+  description: the candidate's summary is the evidence `approve-release` reads.
+- **release-publishing.yaml 1.6 → 1.7** — `publish` gains `produces:`
+  `docs/07_gates/rl-{release.release-line}/rel-{release.version}-test-results.md` and
+  `…/rel-{release.version}-coverage-summary.json`; its description: the `release` job attaches `jest-results.json`,
+  `coverage-summary.json`, `lcov.info`, `test-results.md` (the tag run's, dl-136 Q3 (a)); afterwards they are fetched
+  with `gh release download <tag> --pattern test-results.md --pattern coverage-summary.json` and committed at the
+  produces paths on the branch the release is integrated on, merged forward like the release's other commits — keyed by
+  version, so two release lines never write one path; no branch named (dl-159). `checks.post[0]` prose: "…, its
+  GitHub Release created with the test reports attached and its MCP Registry listing published" (same prose check,
+  task-229/238 precedent). Phase list unchanged (pinned by `staging-rehearsal.test.ts`). D7: `release-commit`'s
+  description adds that the CHANGELOG section links the summary path.
+- **07_sequencer.md 1.8 → 1.9** (date 2026-10-14), D6; **00_index.md** row and ranges follow
+  (`test/docs/vision-index.test.ts`). **WORKFLOW.md**: the release-submit node and the publishing sub-diagram's
+  `publish` node name the reports (own lines). **spec-015** §2 (`test:report`), §3 stage 1 and 5, Revision note:
+  pending amendment (session 3).
+
+**AC classification (T1) and what qa pins.** Corrected from the planning labels where the text is new (the
+task-219/229/238 precedent).
+
+| AC | Class | Why |
+|---|---|---|
+| 1 — `coverageReporters`; classifier script; unit tests on a JSON fixture | **red-first** | no `coverageReporters` (grep → 0), no script |
+| 2 — gate runs coverage + `--json`, uploads; release attaches; pinned | **red-first** | one `upload-artifact`; no `test:report` |
+| 3 — release-submit / release-publishing declare; versions; sequencer; spec-015 | **red-first** for the two YAMLs (no `produces`); **characterization** for `00_index` ↔ `07_sequencer` (`vision-index.test.ts`, existing, stays green); spec-015: pending amendment, read in review | |
+
+qa pins (new file `test/cli/test-report.test.ts`; everything else in `test/cli/publish-pipeline.test.ts`, whose only
+B7 writer is this task; plus the two existing pins named below):
+1. **AC 1, config** — `require('<root>/jest.config.js').coverageReporters` `toEqual(['json-summary', 'lcov', 'text'])`;
+   `package.json` `scripts['test:report']` `toBe('jest --coverage --json --outputFile=coverage/jest-results.json')`.
+2. **AC 1, script API** (`scripts/test-report.d.cts`, added by red so failures are assertions or a missing module,
+   not type errors): `SUITE_CLASSES` = `['unit','integration','BDD','smoke','API-docs','lint.clean']`;
+   `classifySuite(relPath: string, source: string): SuiteClass` — one case per rule, precedence (an exact-path file
+   whose header cites a feature stays its exact class; a `.integration.test.ts` with a feature header is `BDD`), a
+   feature path cited only after the header → not BDD, a fixture string → not BDD;
+   `summarizeResults(results: unknown, root: string, readSource: (relPath: string) => string): ResultsSummary`
+   (`{ classes: Record<SuiteClass, ClassCounts>, total: ClassCounts, failures: readonly { file: string; test: string | null }[], passed: boolean }`,
+   `ClassCounts = { files, tests, passed, failed, skipped }`) — counts per class and total, the four skipped
+   statuses, a suite that failed to run (`test: null`), an unknown status → throws, a path outside root → throws;
+   `coverageTotals(summary: unknown): CoverageTotals` (`{ statements, branches, functions, lines }` each
+   `{ covered, total, pct }`) — throws without `total`;
+   `formatSummary(results, coverage, meta: { commit: string; tag?: string; runUrl?: string; build: string }): string`
+   — the layout above: title, the five field rows in order with `n/a` for an absent tag/run URL, the suites table
+   header and row order, the coverage rows, `## Failures` present only on a failure, sorted; the rule paragraph
+   contains each rule's path; **determinism**: the same results with `testResults` shuffled and every
+   `startTime`/`endTime`/`duration` changed → byte-identical output, and no `\d{4}-\d{2}-\d{2}` date in it.
+   Fixture: a synthetic Jest 30 `--json` file in `test/fixtures/test-report/` (field names of `FormattedTestResults`
+   in `@jest/test-result`'s typings) with one file per class, a failed, a pending and a todo assertion and a suite
+   that failed to run; sources come through `readSource`. **No fixture file may end in `.test.ts`** (testMatch would
+   collect it); CLI cases build their tree in an `mkdtemp` root.
+3. **AC 1, CLI** (spawn `node scripts/test-report.cjs`): writes `--out` and exits 0 (also for a red results file);
+   exit 2 + `test-report:` for an unknown option, a missing `--results`/`--commit`/`--out`, a short `--commit`;
+   exit 1 for an unreadable results file and a results file with no `testResults`.
+4. **AC 2** (`publish-pipeline.test.ts`): the gate order test becomes `git merge-base --is-ancestor "$GITHUB_SHA"
+   origin/main`, the two `check-release-tag.cjs` calls, `npm ci`, `npm run build`, `npm run test:report`,
+   `npm run lint`, `node scripts/test-report.cjs`, `npm publish --dry-run --ignore-scripts`, `npm pack
+   --ignore-scripts --pack-destination`; the three middle commands equal `pkg.scripts.prepublishOnly.split(' && ')`
+   with `npm test` → `npm run test:report` (parity with ci.yml's prepublishOnly stays derived, not restated); the
+   classify step's `run` contains each argument listed in the design; two gate uploads, the tarball first, the
+   reports last with `name: ${{ env.REPORTS_ARTIFACT }}`, `env.REPORTS_ARTIFACT === 'wingfoil-test-reports'`, `path`
+   = the four `coverage/` files, `if-no-files-found: error`; release: order notes → reports download (same name,
+   `path: test-reports`, no `if`) → wait → create, and the create `run` contains the four `test-reports/` files;
+   stage and promote download only `TARBALL_ARTIFACT`; header names `dl-136` and `task-244`; runbook step 8 matches
+   `/succeeded/`, `/always refused/`, `/accepts each version once/`. **Existing pin to update**:
+   `test/cli/ci-workflow.test.ts:111` (`publishGate` contains `npm run prepublishOnly`) → contains `npm ci`,
+   `npm run build`, `npm run test:report`, `npm run lint`. The tag-on-main step and the promote `npm stage publish`
+   line stay covered by their existing tests, unchanged.
+5. **AC 3** (`publish-pipeline.test.ts`, new describe): `release-submit.yaml` `version >= 1.3` and its header
+   history names `1.3` and `task-244` (bug-314 form); `pre-release-checks.actions` `toEqual` the two `cli.run`
+   strings above; `.produces` `toEqual` the candidate path; `checks.pre` unchanged. `release-publishing.yaml`
+   `version >= 1.7` + history; `publish.produces` `toEqual` the two paths; its description contains the four asset
+   names and `gh release download`, and does not match `/\bmain\b/`; `release-commit` description names the summary
+   path (D7). Every new produces path contains `{release.version}` and no branch name (`main`, `release/`).
+   `07_sequencer.md` `**Version:** 1.9` and its v0.3 and v0.4 coverage criteria name
+   `rel-{version}-test-results.md` (D6). **Existing pins to update** in
+   `test/core/workflow-repository-conformance.test.ts`: the checkpoint list drops `release-submit.pre-release-checks`
+   and `release-publishing.publish` (30 → 28; title gains "28 from task-244: …"), and the unbound-check row of
+   `release-publishing` `phases[3].checks.post[0]` takes the new prose.
+
+**Files I expect to touch (session 3).** `jest.config.js`, `package.json` (one line), `scripts/test-report.cjs`
+(new; the `.d.cts` comes from red), `.github/workflows/publish.yml`, `.wingfoil/workflows/custom/release-submit.yaml`
+(1.3), `.wingfoil/workflows/custom/release-publishing.yaml` (1.7), `.wingfoil/WORKFLOW.md`,
+`docs/01_vision/07_sequencer.md` (1.9), `docs/01_vision/00_index.md`; uncommitted: `spec-015` (pending amendment).
+Not touched: `bindings.yaml` (the new actions use the bound `cli.run`), `.gitignore` (`coverage/` already ignored),
+`e2e-smoke.yaml` (its report is task-207's).
+
+**Decisions for the approver** (recommendation first).
+- **D1 gate shape — (a)** split prepublishOnly into `npm run build` / `npm run test:report` / `npm run lint`: one
+  suite run, the same command release-submit's candidate run uses (dl-136 Q3 rationale); costs spec-015 §2/§3 text and
+  two existing pins. (b) keep `npm run prepublishOnly` and add a coverage run: the suite twice (~7 min more on a
+  30-min timeout). (c) an env var read by `scripts/run-tests.cjs`: prepublishOnly stays literal, but the behaviour is
+  implicit and not expressible as a no-shell `cli.run` (dl-090 Q3 (a)) for the candidate.
+- **D2 BDD rule — header comment** (31 files): "citing" read as the file's declared subject; the literal "anywhere"
+  rule (34) adds `test/release-health/measure.test.ts` (a fixture string, false positive) and two files with one BDD
+  block (`test/core/context.test.ts`, `test/core/memory-add-date-author.test.ts`), which stay unit.
+- **D3 candidate evidence — summary only** at `…-test-results-candidate.md`; the tag run's summary and
+  `coverage-summary.json` are the committed record (Q1 (c)). Alternatives: also the candidate's coverage JSON; nothing
+  committed.
+- **D4 staging smoke — a fixed line** pointing to the run's `stage` job (and the committed staging-rehearsal
+  transcript); not in the ACs. Alternative: `--transcript` in the stage step and a fifth asset (changes the pinned
+  stage command).
+- **D5 coverageReporters exactly `['json-summary', 'lcov', 'text']`**: Jest's default `clover` and `json`
+  (`coverage-final.json`, 680K) have no reader (`grep -rn "coverage-final\|clover" scripts test src` → nothing);
+  `text` keeps the console table. Alternative: the AC's two added to the defaults.
+- **D6 07_sequencer** — the v0.3 and v0.4 coverage criteria point to the summary; v0.1/v0.2 (released before
+  dl-136) keep their text with "(no published summary: before dl-136)".
+- **D7 CHANGELOG link** (dl-136 Decision, in no AC) — **in-task**: one sentence in `release-commit`'s description,
+  same file and bump. Alternative: a follow-up element.
+- **D8 report location — `coverage/`** (exists after the coverage run, ignored); `test-reports/` would need a
+  `mkdir` and a `.gitignore` line.
+
+**Deferred (ruling D5, as task-238 R3)** — to v0.3 release-publishing, on the `v0.3.0` tag run: the gate's duration
+under coverage against `timeout-minutes: 30`; the release job's same-run artifact download with `contents: write`
+only; the four assets on the Release; the artifact retention against the 30-day re-run window. Local runs of the
+classifier on a real Jest JSON (session 3): `bash ../devloop-kit/waitslot.sh && npm run test:report -- --maxWorkers=2`
+(dl-170), then the script on its output.
