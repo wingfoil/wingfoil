@@ -20,7 +20,7 @@ The same procedure as task-236 for Codex CLI. This proves the adapter shape agai
 ## Acceptance Criteria
 
 - (red-first) The manifest validates as a built-in and is installed by `init`, pinned as in task-236.
-- (characterization) By-hand verification of MCP registration, the `{role}-session` fetch with `element`/`state`, the lookups, and the record commit, recorded in Execution Notes with evidence. The same stop-and-return-to-approver rule applies.
+- (characterization) By-hand verification of MCP registration, the read of the session Resource `wingfoil://session/{role}/{element}/{state}` the bootstrap names (approver ruling (a), 2026-10-13, task-236: it replaced the `{role}-session` Prompt fetch), the lookups, and the record commit, recorded in Execution Notes with evidence. The same stop-and-return-to-approver rule applies.
 - (characterization) An agent entry naming `adapter: codex-cli` in a scratch project runs one `agent execute` end to end. The run is recorded with `adapter: "built-in/codex-cli"`.
 
 ## Implementation Notes
@@ -328,3 +328,232 @@ command; `ls -l /proc/<pid>/cwd` if needed). Auto-update: three installs on this
   - integration (i): exit 1, `error: adapter 'fake-config-arg': mcp.via: Invalid option: expected one of
     "config-file"|"args"`; hence no launch record, no `agent: record` commit (`rev-list --count` 0).
   `npx eslint` on the six files and `npx tsc --noEmit -p tsconfig.json`: clean.
+
+### green (developer, 2026-10-14)
+
+- Read `### red (qa)`: red commit `db1e32ab`, notes `81b15694`. Approver rulings 2026-10-14: D-1 (a) `mcp.via:
+  config-arg` + `{mcp_config}`, task M → L; D-2 `enabled`/`required` true; D-3 session/model/usage `not-reported`,
+  resume unsupported; D-4 scratch precedence fixture; D-5 scratch email `codex@example.invalid` (see the
+  decision below: the schema refuses it); D-6 nothing installed in this repository.
+- `d80d3976` `feat(agent): …`: `src/agent/schema.ts` (`mcp.via` enum gains `config-arg`), `src/agent/manifest.ts`
+  (`mcp.template` "required with mcp.via: config-arg (spec-016 §2.2)"), `src/agent/placeholders.ts` (`mcp_config` in
+  the closed set; `LEGAL_IN` "launch.*.args, when mcp.via is config-arg"; legal in launches only under `config-arg`,
+  so `{mcp_config_file}`, `{mcp_command}`, `{mcp_args}` there are refused by the existing legality rule; required
+  "{mcp_config} is required with mcp.via: config-arg"), `src/agent/launch.ts` (`LaunchValues.mcpConfig`, rendered by
+  `renderArgv` as one element), `src/agent/execute.ts` (under `config-arg` the template is rendered with
+  `renderMcpTemplate` and handed to the launch, no temporary file), and `src/storage/builtin-adapters.ts`
+  (`CODEX_CLI`, the design's manifest unchanged, after `CLAUDE_CODE`; header line `codex-cli — Codex CLI (task-237)`).
+- `e4104276` `docs: …`: `docs/cli-reference.md` (`init` entry) and `docs/user-guide.md` (§3 tree) name `codex-cli`
+  beside `claude-code`. `docs/agents.md` names no built-in and no `mcp.via` value (`grep -n "claude-code\|config-file"
+  docs/agents.md` → nothing; positive case: the same grep on `docs/cli-reference.md` hits line 213).
+- AC 2's text is amended in this file (approver ruling (a), as task-236 did for its AC 3): "the read of the session
+  Resource `wingfoil://session/{role}/{element}/{state}` the bootstrap names … it replaced the `{role}-session` Prompt
+  fetch".
+- **red → green:** `npx jest test/storage/builtin-adapter-codex-cli.test.ts test/agent/manifest.test.ts
+  test/agent/launch.test.ts test/cli/agent-execute-config-arg.integration.test.ts test/agent/fake-agent.test.ts
+  test/storage/builtin-adapter-claude-code.test.ts test/core/init-builtin-adapters.test.ts
+  test/core/builtin-adapter-writers.test.ts test/storage/builtin-template-sources.test.ts
+  test/core/format-init-scaffold.test.ts --maxWorkers=2` → 10 suites, 278 passed, 278 total (red: 24 failed / 171
+  passed of red's seven).
+
+### refactor (developer, 2026-10-14)
+
+- The first full run (`npm run test:coverage -- --maxWorkers=2`, at `e4104276`) gave 99.32 / **97.18** / 97.99 /
+  99.71: branches −0.05 against the baseline 97.23, beyond the run-dependent −0.01. The new branches the in-process
+  suites did not take (`coverage/coverage-final.json`, branches with 0 hits; line numbers at `e4104276`): `launch.ts:395` and `execute.ts:662`
+  (the conditional spreads of `mcpConfig`) and `execute.ts:625` (the `config-arg` rendering), reached only by red's CLI
+  integration test, which runs the compiled build in a child process.
+- `a639975b` `refactor(agent): …`: `mcpConfig` becomes a declared `string | undefined` field of `PreparedLaunch` and
+  `LaunchInput` (no conditional spread); NEW `test/agent/execute-config-arg.test.ts` (mine; red touched no such file)
+  runs `agentExecutePipeline` in process: under `config-arg` the launch gets `mcpConfig` =
+  `renderMcpTemplate(template, server)` and no temporary file; under `config-file` no `mcpConfig` and exactly
+  `mcp_config_file`.
+- Gates at `a639975b`, under `waitslot.sh`, `--maxWorkers=2`, the spec-016 pending amendment in the working tree:
+  `npm run test:coverage -- --maxWorkers=2` → 416 suites, **7485 passed, 7485 total**; coverage **99.32 / 97.24 /
+  97.99 / 99.71** against the B6 baseline 99.32 / 97.23 / 97.98 / 99.71 — no column below (branches 6322/6501 =
+  97.247 %, from `coverage-final.json`); `memory-transition.ts` uncovered `468` only in this run.
+  `builtin-adapters.ts`, `manifest.ts`, `placeholders.ts`, `schema.ts` 100 / 100 / 100 / 100. `npm run typecheck` →
+  exit 0; `npm run lint` → exit 0; `npm run docs:api` → exit 0. `test/docs/cli-reference.test.ts` passed in the full
+  run.
+- `node scripts/check-governance.cjs --base db0e2752` → `gated: 0 findings`, `history: 0 findings`.
+  `node scripts/lint-claims.cjs --base db0e2752` → warn-only; on this file, three "unchanged" in my design (each
+  names the function or test it is about) and one "does not exist" in red's section (qa's, left as written).
+- **T4:** `git log --first-parent --no-merges --format=%h db1e32ab..HEAD -- test/storage/builtin-adapter-codex-cli.test.ts
+  test/cli/agent-execute-config-arg.integration.test.ts test/fixtures/agents/config-arg/fake-config-arg.yaml
+  test/agent/manifest.test.ts test/agent/launch.test.ts test/fixtures/agents/fake-agent.cjs` → empty (positive case:
+  the same command on `src/storage/builtin-adapters.ts` prints `d80d3976`).
+- **Runbook rehearsal (no agent launched).** R0's scratch steps and R1 were run in a throwaway directory under my
+  scratchpad (deleted afterwards), with the dev build: `init --template Scrum` → exit 0, `agents/built-in/` holds
+  `claude-code.yaml` and `codex-cli.yaml`; `memory add --type task --title "codex smoke"` → `task-001-codex-smoke`;
+  `dna add team.agents … --entry-email codex@example.invalid …` → **exit 1**, `an agent email may not be on a reserved
+  top-level domain (.test, .example, .invalid, .localhost …, bug-261)`; with `noreply@openai.com` → exit 0; the
+  `.codex/config.toml` fixture committed; `script -qec "… agent execute --element task:task-001-codex-smoke --role
+  developer --dry-run" /dev/null` → exit 0, `adapter` `built-in/codex-cli`, `agent` `Codex`, path
+  `docs/runs/task-001-codex-smoke.jsonl`, bootstrap naming `wingfoil://session/developer/task:task-001-codex-smoke/<HEAD>`.
+  The context the Resource serves there, `assembleExecutionContext(…).value.payload` from `dist/core/context.js`, is
+  6189 bytes (no truncation expected).
+
+### self-review (developer, 2026-10-14)
+
+- AC 1 — met: red's six codex-cli tests pass; `init` with no seam installs both built-ins, `claude-code` then
+  `codex-cli`, in the init commit, and `loadAdapter` loads `codex-cli` as built-in.
+- New behaviour (f)–(i) under D-1 (a) — met: red's manifest, launch and CLI integration tests pass; the in-process
+  test covers the same hand-over.
+- AC 2, AC 3 — **open**: they need the approver's real-terminal pass below (ruling D2). The task is not submitted.
+- Every flag of the manifest has its help line in the design notes. Same-class sweep for the shipped-adapter
+  lists: `grep -rn "claude-code" docs/cli-reference.md docs/user-guide.md docs/agents.md README.md` → the two lines
+  updated in `e4104276` and `cli-reference.md:1669` (an `agent show` example output naming one run's adapter, not a
+  list). `grep -rn "config-file" src/agent` → each site that branches on `mcp.via` now handles `config-arg`
+  (`manifest.ts:60`, `placeholders.ts` legal/required, `execute.ts:624-627`).
+
+### Pending amendments (approver)
+
+- `spec-016-agent-execution` (uncommitted in the worktree): §2.2 `mcp.via` row (`config-arg`) and `mcp.template` row;
+  §2.3 the `{mcp_config}` row and its requirement; §2.8 the `codex-cli` row and `verified_with`; a dated Revision
+  note. To be completed after the by-hand pass with §2.5's outcome (which `wingfoil` server Codex used beside the
+  scratch's `.codex/config.toml` one) and §2.8's (whether the model read the session Resource). Proposed `--reason`:
+  "task-237: approver ruling D-1 (a) of 2026-10-14. Codex CLI 0.145.0 registers MCP servers only through TOML
+  configuration layers and -c key=value overrides, so a third mcp.via value, config-arg, passes the rendered
+  mcp.template as the one whole argument {mcp_config}, which keeps placeholders filling whole arguments; the manifest
+  format stays 1 because no released build reads adapter manifests. Section 2.8 fills the codex-cli row from codex
+  --help of codex-cli 0.145.0, with session, model and usage not reported and resume not supported."
+
+### by-hand runbook (for the approver)
+
+Run in a real terminal (a TTY on stdin and stdout) by the approver (ruling D2): Codex sends the session to
+OpenAI, so only the approver starts it. Paste the whole terminal transcript back, and **write every dialog
+answer in words** (a pasted menu does not show which line was chosen; task-236's lesson). Codex uses its own
+login; nothing below asks for a credential. The scratch project is a throwaway git repository outside this
+worktree; nothing in this repository changes.
+
+**R0 — versions, build, scratch project** (copy-paste):
+
+```bash
+WT=/home/robypomper/Workspaces/.wf2-wt/task-237
+S=/home/robypomper/Workspaces/.wf2-wt/task-237-scratch
+cd "$WT"
+git branch --show-current          # task/task-237-ship-verify-hand-builtin-codex-cli-adapter
+git status --short                 # only docs/04_memory/design/specs/spec-016-agent-execution.md (pending amendment)
+git rev-parse HEAD
+npm run -s build
+WF="node $WT/dist/cli.js"
+$WF --version
+which codex                        # expect ~/.npm-global/bin/codex
+readlink -f "$(which codex)"
+codex --version                    # expect: codex-cli 0.145.0 — the manifest's verified_with
+
+rm -rf "$S" && mkdir -p "$S" && cd "$S" && git init -q
+$WF init --template Scrum
+ls .wingfoil/agents/built-in/      # claude-code.yaml  codex-cli.yaml
+$WF memory add --type task --title "codex smoke"      # prints "id": "task-001-codex-smoke"
+CODEX_EMAIL="<the address you choose, see the note>"
+$WF dna add team.agents --value Codex --entry-email "$CODEX_EMAIL" --entry-executes_as developer --entry-approval_authority false --entry-adapter codex-cli
+# D-4: a same-named wingfoil server in the project config, pointing at the pinned 0.2.2,
+# which has no wingfoil://session/ template (so a "not found" read means this one won).
+mkdir -p .codex
+cat > .codex/config.toml <<'TOML'
+[mcp_servers.wingfoil]
+command = "node"
+args = ["/home/robypomper/Workspaces/WingFoil2/node_modules/wingfoil-released/dist/cli.js", "mcp"]
+TOML
+git add .codex/config.toml && git commit -q -m "chore: task-237 precedence fixture (D-4)"
+git log --oneline
+git rev-parse HEAD                 # the state_ref the run will pin
+export EL=task:task-001-codex-smoke
+```
+
+**Email note.** Ruling D-5's `codex@example.invalid` is refused by `dna add` (the schema rejects RFC 2606
+reserved top-level domains for agent emails, bug-261; rehearsed 2026-10-14, exit 1). Use any address on a real
+domain; the rehearsal used `noreply@openai.com`, which is accepted but is not a verified vendor address. The
+address only appears in the bootstrap's attribution line and in the scratch's own commits.
+
+Record: the wingfoil version, `which codex`, the `readlink` target, `codex --version`, the worktree HEAD and the
+scratch HEAD. **If `codex --version` is not `codex-cli 0.145.0`, stop and report** (the manifest is pinned to it).
+If any `$WF` command above exits non-zero, stop and report (no Codex has run yet). If the task id `memory add`
+printed is not `task-001-codex-smoke`, set `EL=task:<that id>`.
+
+**R1 — dry run** (launches nothing):
+
+```bash
+$WF agent execute --element "$EL" --role developer --dry-run
+```
+
+Record: exit `0`; `run.id` `task-001-codex-smoke/adhoc/1`; `run.adapter` `built-in/codex-cli`; `run.agent` `Codex`;
+`run.state_ref` = R0's scratch HEAD; `paths` `docs/runs/task-001-codex-smoke.jsonl`; the bootstrap ends its third line with
+`Read the MCP resource "wingfoil://session/developer/task:task-001-codex-smoke/<scratch HEAD>".` Any `error:` line →
+stop and report.
+
+**R2 — the real run** (the approver starts it; Codex owns the terminal):
+
+```bash
+$WF agent execute --element "$EL" --role developer
+```
+
+1. Record the `run task-001-codex-smoke/adhoc/1: launching Codex (built-in/codex-cli) as developer on task:…` line.
+2. Before the first turn, record **in words** every dialog and your answer:
+   - directory trust ("Do you trust …task-237-scratch?"): answer **trust / yes** (D-4 needs the project config
+     loaded);
+   - an update notice: answer **skip / not now** (the manifest is pinned to 0.145.0);
+   - any MCP server approval or other prompt: record it and your answer.
+   If Codex exits here with a configuration error (anything naming `mcp_servers` or `-c`/`--config`), or with
+   `wingfoil` failing to start as a required server, **stop**: go to R4 for the record, then return.
+3. Then **type nothing**. Watch the first actions (up to ~2 minutes):
+   - Is the bootstrap shown as the first user message and submitted on its own?
+   - Does the model call **`read_mcp_resource`** on server `wingfoil` with **exactly** the URI the bootstrap names,
+     with no help from you (a `list_mcp_resources` or `list_mcp_resource_templates` call before it is fine)? Record
+     each call as shown.
+   - Is the result the element's context (a `<!-- format: 1 | role: developer | element: task:task-001-codex-smoke |
+     state: … -->` header, `## 1. Task` with the task, `## 2. Project DNA`, `## 3. Directives`), complete, not cut
+     off or marked truncated? (In the rehearsal the context was 6189 bytes, so a truncated result is a finding.)
+   - **As soon as the read's result is on screen, press Esc** to interrupt, then type
+     `Stop here: make no edits and no commits.` and Enter.
+   - A permission/approval prompt for the read: record it and your answer (approving is not help; typing the URI
+     or the instruction is).
+
+**R3 — inside the session** (type these yourself, after R2):
+
+```
+/mcp verbose
+/status
+```
+
+Record from `/mcp verbose`: every server named `wingfoil`, its command and args, and its status. The adapter's is
+`<node> /home/robypomper/Workspaces/.wf2-wt/task-237/dist/cli.js mcp`; the project config's is
+`node …/WingFoil2/node_modules/wingfoil-released/dist/cli.js mcp`. Record from `/status`: the session id, the
+model and the token usage. Then `/exit`, and record Codex's exit line (`To continue this session, run codex resume
+<id>`), and the wingfoil line that follows.
+
+**R4 — after Codex exits** (copy-paste, still in the scratch):
+
+```bash
+cd /home/robypomper/Workspaces/.wf2-wt/task-237-scratch
+git log -1 --format='%H%n%s%n%b'      # agent: record task-001-codex-smoke/adhoc/1, WingFoil-Version: trailer only
+git show --stat --format= HEAD         # only docs/runs/task-001-codex-smoke.jsonl
+tail -1 docs/runs/task-001-codex-smoke.jsonl
+git status --short                     # empty: the agent changed nothing
+$WF agent list --past
+codex --version                        # compare with R0: auto-update?
+readlink -f "$(which codex)"
+ls -t ~/.codex/sessions/*/*/*/ | head -3   # the rollout of R3's session id (the id the record cannot hold)
+```
+
+Record: the `run …: agent exited <status> after <s> s (recorded in <sha7>)` line; the record commit sha; the record
+line — expect `adapter` `built-in/codex-cli`, `agent` `Codex`, `agent_version` = the `codex --version` above,
+`session`, `model` and every `tokens` count `not-reported` (D-3), `exit_status` 0; whether a rollout file named
+with R3's session id is listed; whether `codex --version` changed since R0. Optional cleanup (your choice, say
+which): remove the `[projects."/home/robypomper/Workspaces/.wf2-wt/task-237-scratch"]` entry R2's trust answer
+added to `~/.codex/config.toml`; delete the scratch directory only after the transcript is pasted.
+
+**Stop-and-return** (spec-016 §2.8; R17 is not narrowed silently). Stop where it shows, paste the transcript, and
+the choice returns to the approver if:
+- R0: `codex --version` is not `codex-cli 0.145.0`;
+- R2: Codex rejects the argv or the `-c` value (a configuration error), or the session does not start because the
+  required `wingfoil` server cannot initialize;
+- R2: the model does not read the session Resource the bootstrap names without you typing the URI or the
+  instruction;
+- R2: the read is refused because the URI is not among the listed ones (the template is never listed as a
+  resource; `read_mcp_resource`'s description says the URI must be a listed one);
+- R2: the read answers "not found" / "Resource … not found": that is the pinned 0.2.2 server's answer, i.e. the
+  project `.codex/config.toml` server won over the `-c` override (§2.5);
+- R2: the result is truncated or is not the element's context;
+- R3: the adapter's `wingfoil` server is not the one connected.
