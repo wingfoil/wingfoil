@@ -273,3 +273,58 @@ undocumented: if the server starts outside the project root it resolves the wron
 command; `ls -l /proc/<pid>/cwd` if needed). Auto-update: three installs on this host and an update notice at startup;
 `verified_with` pins what was checked, R0/R4 record what ran. task-243 (smoke, merges after this) uses the fake: the new
 `--mcp-config-json` option and fixture (i) must not change the fake's existing behaviour.
+
+### red (qa, 2026-10-14)
+
+- **Red commit `db1e32ab`** (T4 is measured from it). Test files and fixtures only, nothing under `src/` or `.wingfoil/`:
+  NEW `test/storage/builtin-adapter-codex-cli.test.ts`, NEW `test/cli/agent-execute-config-arg.integration.test.ts`,
+  NEW `test/fixtures/agents/config-arg/fake-config-arg.yaml`; EDITED `test/agent/manifest.test.ts`,
+  `test/agent/launch.test.ts`, `test/fixtures/agents/fake-agent.cjs`. `test/core/init-builtin-adapters.test.ts` and
+  task-236's `builtin-adapter-claude-code.test.ts` need no edit (both read `BUILTIN_ADAPTERS` generically; they pass).
+- **Per AC** (all red-first; AC 2/3 are manual, nothing pinned):
+  - (a)–(e) `builtin-adapter-codex-cli.test.ts`: `AC 1 (a)` one `codex-cli` entry, names sorted and unique; `AC 1 (b)`
+    ×2 built-in parse (name, format 1, `terminal` required, `verified_with` `/\S/`) and `terminal: required` in the raw
+    YAML; `AC 1 (c)` `verifyBuiltinTemplates(…)` → `null`; `AC 1 (d)` scaffold holds `codex-cli.yaml` byte-equal;
+    `AC 1 (e)` `initWingfoilProject(repo, 'Scrum')` with no seam: both manifests byte-equal on disk, one commit, the
+    init commit lists `claude-code.yaml` then `codex-cli.yaml`, `loadAdapter(repo, 'codex-cli')` built-in. Flags,
+    argv, template text and the version string are NOT pinned.
+  - (f) `manifest.test.ts` `task-237 (f)`: the `configArg()` manifest (fake moved to `mcp.via: config-arg`, TOML-shaped
+    template, `-c {mcp_config}` in both launches) parses with no issue and `mcp.via` reads `config-arg`; without
+    `mcp.template` → one issue on `mcp.template` matching `/required with mcp\.via: config-arg/`.
+  - (g) `manifest.test.ts` `task-237 (g)`: `ADAPTER_PLACEHOLDERS` contains `mcp_config`; config-arg without
+    `{mcp_config}` → issue on `launch.interactive.args` / `launch.headless.args` matching
+    `/\{mcp_config\} is required with mcp\.via: config-arg/`; `{mcp_config}` under `config-file` and under `args` →
+    `/placeholder \{mcp_config\} is not legal here: it is legal in launch\.\*\.args, when mcp\.via is config-arg/` on
+    the element; `x{mcp_config}`, `mcp_servers.wingfoil={mcp_config}`, `{mcp_config} ` → `/whole argv element/`;
+    `{mcp_config_file}` under config-arg → not legal (`…mcp.via is config-file`); `{mcp_command}`/`{mcp_args}` as
+    launch elements under config-arg → not legal (they belong to its template). The existing closed-set test now
+    compares SORTED (the new name's place in §2.3's table is the spec amendment's, not pinned here).
+  - (h) `launch.test.ts` `task-237 (h)`: `renderLaunchArgv` of `['-c', '{mcp_config}', '{bootstrap}']` with
+    `mcpConfig` = a TOML override holding spaces, `"`, `\`, `=` and `{}` → exactly 3 elements, the 2nd equal to it.
+    `LaunchValues.mcpConfig` does not exist yet: the values object is cast `as LaunchValues` so the file compiles and
+    the test fails on its assertion. `renderMcpTemplate` on a TOML template → `x={command = "/a b/node", args =
+    ["/c\"d/cli.js","mcp"]}`: characterization, passes on first run.
+  - (i) `agent-execute-config-arg.integration.test.ts`: the compiled CLI, `agent execute --element task:… --role
+    developer`, `Fake Agent` pointed at `fake-config-arg` (copied into the project's `agents/custom/`),
+    `WINGFOIL_FAKE_AGENT_CONNECT=1`: exit 0, empty stdout, nothing left in `TMPDIR`; the launch argv is
+    `['--mcp-config-json', <one element>, '--prompt', <bootstrap>]`, the element equal to the template rendered with
+    `process.execPath` and `[dist/cli.js, 'mcp']`; the fake reads `wingfoil://session/developer/<ref>/<HEAD>` from server
+    `wingfoil` with no error and non-empty text; one `agent: record` commit, record `adapter: custom/fake-config-arg`.
+    The fixture sits in `test/fixtures/agents/config-arg/`, outside `custom/` (`grep -rn "fixtures/agents/custom"
+    test` finds no listing of that directory, only the two names `seed()` copies). `fake-agent.cjs` gains
+    `--mcp-config-json <text>` (same handling as `--mcp-config <file>`, the text instead of the file); the file path is
+    read and parsed as before, and `fake-agent.test.ts` passes unchanged (task-243's smoke uses the fake).
+- **Run** `npx jest test/storage/builtin-adapter-codex-cli.test.ts test/agent/manifest.test.ts test/agent/launch.test.ts
+  test/cli/agent-execute-config-arg.integration.test.ts test/agent/fake-agent.test.ts
+  test/storage/builtin-adapter-claude-code.test.ts test/core/init-builtin-adapters.test.ts --maxWorkers=2` → 7 suites,
+  4 failed / 3 passed; 195 tests, 24 failed / 171 passed. Failed per file: codex-cli 6/6; manifest 13 (the 12 new +
+  the edited closed-set test); launch 1 ((h) render; the characterization passes); config-arg integration 4/4.
+  fake-agent, claude-code and init-builtin-adapters all pass. First failing assertion, by reason:
+  - codex-cli: `names.filter(…=== 'codex-cli')` length 0 (a), the `shipped()` guard `{ shipped: false }` (b)–(e);
+  - manifest (f)/(g): the config-arg manifest is refused in Pass 1, `mcp.via: Invalid option: expected one of
+    "config-file"|"args"`, so the expected Pass-2 issue is absent (`Expected length: 1, Received length: 0`);
+    `{mcp_config}` under config-file/args is `unknown placeholder`, not "not legal here"; the set lacks `mcp_config`;
+  - launch (h): the 2nd element is the literal `"{mcp_config}"`;
+  - integration (i): exit 1, `error: adapter 'fake-config-arg': mcp.via: Invalid option: expected one of
+    "config-file"|"args"`; hence no launch record, no `agent: record` commit (`rev-list --count` 0).
+  `npx eslint` on the six files and `npx tsc --noEmit -p tsconfig.json`: clean.
