@@ -106,6 +106,7 @@ describe('every git log reader in src/ and scripts/ passes --no-show-signature (
       'src/memory/git-log.ts',
       'src/memory/history.ts',
       'scripts/check-governance.cjs',
+      'scripts/e2e-smoke.cjs',
       'scripts/release-health/measure.cjs',
     ]);
   });

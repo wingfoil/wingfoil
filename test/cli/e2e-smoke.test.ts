@@ -15,6 +15,10 @@
  *   rejected, one deprecated, `memory history` on each; the tree is clean after every step.
  * - AC 4 (`bug-134`): `e2e-smoke.yaml` declares the report the gate's check writes (`--report`).
  * The faults are injected by `test/fixtures/smoke/wingfoil-proxy.cjs`, which forwards to `dist/cli.js`.
+ *
+ * task-243 (spec-016 §2.7, dl-023, dl-099): after each template's scenario the smoke runs one adhoc
+ * `agent execute` through the fake adapter `custom/fake` in its own fresh `init` project, then re-loads
+ * what it wrote (`agent show`, `agent list --past`) and probes the record commit and the fake's own record.
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -24,10 +28,13 @@ import { join } from 'node:path';
 import { load as yamlLoad } from 'js-yaml';
 
 import {
+  AGENT_FIXTURES,
   SMOKE_TEMPLATES,
+  agentRunSteps,
   formatReport,
   parseSmokeArgs,
   runSmoke,
+  smokeAgentRun,
   smokeSteps,
   smokeTemplate,
 } from '../../scripts/e2e-smoke.cjs';
@@ -82,6 +89,17 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
       // One check per step: the clean-tree assertion is part of each step's check (AC 3).
       expect(labels.filter((l) => l.startsWith(`[${template}] `))).toHaveLength(smokeSteps(template).length);
     }
+    // task-243 AC 1 (c): per template, the agent run's block follows that template's scenario and
+    // precedes the next template's first check (one full run: no second one is added).
+    SMOKE_TEMPLATES.forEach((template, i) => {
+      expect(labels).toContain(`[${template}/agent] wingfoil agent execute --element task:task-001-agent-run --role developer`);
+      const block = labels.flatMap((l, j) => (l.startsWith(`[${template}/agent] `) ? [j] : []));
+      expect(block.length).toBeGreaterThan(0);
+      expect(block[block.length - 1]! - block[0]! + 1).toBe(block.length);
+      expect(block[0]!).toBeGreaterThan(labels.map((l) => l.startsWith(`[${template}] `)).lastIndexOf(true));
+      const next = SMOKE_TEMPLATES[i + 1];
+      if (next !== undefined) expect(block[block.length - 1]!).toBeLessThan(labels.findIndex((l) => l.startsWith(`[${next}] `)));
+    });
   });
 
   it('fails when the command exits non-zero, and stops before the per-template runs', () => {
@@ -346,6 +364,241 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
+    });
+  });
+
+  /**
+   * task-243 — the agent run (spec-016 §2.7 last bullet; dl-023; dl-099). Its scenario is data
+   * (`agentRunSteps`), run by `smokeAgentRun` in its own fresh `init` project per template, after that
+   * template's scenario (approver ruling D1). The run id is derived, `{agent.id}/adhoc/1` (D6).
+   */
+  describe('task-243 — the e2e-smoke gate drives `agent execute` through the fake adapter', () => {
+    const RUN = 'task-001-agent-run/adhoc/1';
+    const EXECUTE_LABEL = '[Scrum/agent] wingfoil agent execute --element task:task-001-agent-run --role developer';
+    const RECORD_LABEL = `[Scrum/agent] one agent: record commit for ${RUN}`;
+    const SHOW_LABEL = `[Scrum/agent] wingfoil agent show ${RUN} --format json`;
+    const LIST_LABEL = '[Scrum/agent] wingfoil agent list --past --format json';
+    const READ_LABEL = `[Scrum/agent] the fake agent read the session Resource for ${RUN}`;
+    const COPY_LABEL = '[Scrum/agent] commit .wingfoil/agents/custom/fake.yaml, test/fixtures/agents/fake-agent.cjs';
+
+    type AgentStep = ReturnType<typeof agentRunSteps>[number];
+    type Check = ReturnType<typeof smokeAgentRun>[number];
+
+    /** `dist/cli.js` driven directly, the shape `smokeAgentRun`'s `invoke` takes. */
+    const invoke = (args: readonly string[], cwd: string, env: NodeJS.ProcessEnv = process.env) => {
+      const r = spawnSync(process.execPath, [DIST_CLI, ...args], { cwd, env, encoding: 'utf-8' });
+      return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+    };
+    const argsOf = (step: AgentStep): readonly string[] | undefined => ('args' in step ? step.args : undefined);
+    const isExecute = (step: AgentStep) => argsOf(step)?.slice(0, 2).join(' ') === 'agent execute';
+    const indexOf = (steps: readonly AgentStep[], match: (s: AgentStep) => boolean) => steps.findIndex(match);
+    const last = (checks: readonly Check[]) => checks[checks.length - 1];
+
+    /** The run on `dist/cli.js`, once for the positive pins; `undefined` while `smokeAgentRun` does not exist. */
+    let scrum: Check[] | undefined;
+    beforeAll(() => {
+      scrum = typeof smokeAgentRun === 'function' ? smokeAgentRun('Scrum', invoke, process.env) : undefined;
+    });
+
+    describe('AC 1 — init, the fake adapter under agents/custom/, the agent entry, `agent execute`: exit 0, one record commit, `agent show` exit 0', () => {
+      it('the fixtures are the checkout\'s test/fixtures/agents', () => {
+        expect(AGENT_FIXTURES).toBe(join(REPO_ROOT, 'test', 'fixtures', 'agents'));
+      });
+
+      it.each(SMOKE_TEMPLATES)('[%s] the scenario as data: init, memory add, the fake adapter, the agent entry, execute, then its probes and readers', (template) => {
+        expect(typeof agentRunSteps).toBe('function');
+        const steps = agentRunSteps(template);
+        expect(argsOf(steps[0]!)).toEqual(['init', '--template', template]);
+        expect(steps).toContainEqual(
+          expect.objectContaining({
+            args: ['memory', 'add', '--type', 'task', '--title', 'Agent run', '--format', 'json'],
+            exit: 0,
+            json: true,
+            capture: 'agent',
+            expect: { path: 'docs/memory/task/{agent.id}.md' },
+          }),
+        );
+        expect(steps).toContainEqual({
+          copy: [
+            ['custom/fake.yaml', '.wingfoil/agents/custom/fake.yaml'],
+            ['fake-agent.cjs', 'test/fixtures/agents/fake-agent.cjs'],
+          ],
+          commit: 'smoke: the fake adapter custom/fake (spec-016 §2.7)',
+        });
+        expect(steps).toContainEqual(
+          expect.objectContaining({
+            args: ['dna', 'add', 'team.agents', '--value', 'Fake Agent', '--entry-email', 'fake-agent@example.com', '--entry-executes_as', 'developer', '--entry-adapter', 'fake'],
+            exit: 0,
+          }),
+        );
+        const execute = indexOf(steps, isExecute);
+        expect(steps[execute]).toMatchObject({
+          args: ['agent', 'execute', '--element', 'task:{agent.id}', '--role', 'developer'],
+          exit: 0,
+          fakeAgent: true,
+        });
+        const record = indexOf(steps, (s) => 'probe' in s && s.probe === 'record-commit');
+        expect(steps[record]).toMatchObject({ probe: 'record-commit', run: '{agent.id}/adhoc/1' });
+        expect(record).toBeGreaterThan(execute);
+        const show = indexOf(steps, (s) => argsOf(s)?.slice(0, 2).join(' ') === 'agent show');
+        expect(show).toBeGreaterThan(record);
+        // `agent execute` is the last writer: every step after it is a reader or a probe (bug-133's rule).
+        const writers = steps.map((s) => 'copy' in s || (argsOf(s) !== undefined && ['init', 'memory add', 'dna add', 'agent execute'].includes(argsOf(s)![0] === 'init' ? 'init' : argsOf(s)!.slice(0, 2).join(' '))));
+        expect(writers.lastIndexOf(true)).toBe(execute);
+      });
+
+      it('[Scrum] passes on the compiled CLI, every check labelled [Scrum/agent], the tree clean after every CLI and copy step', () => {
+        expect(typeof smokeAgentRun).toBe('function');
+        const checks = scrum ?? [];
+        expect(checks.filter((c) => !c.ok)).toEqual([]);
+        const labels = checks.map((c) => c.label);
+        for (const label of labels) expect(label.startsWith('[Scrum/agent] ')).toBe(true);
+        expect(labels).toContain(COPY_LABEL);
+        expect(labels).toContain(EXECUTE_LABEL);
+        expect(labels).toContain(RECORD_LABEL);
+        expect(labels).toContain(SHOW_LABEL);
+        const cliOrCopy = checks.filter((c) => c.label.startsWith('[Scrum/agent] wingfoil ') || c.label.startsWith('[Scrum/agent] commit '));
+        expect(cliOrCopy.length).toBeGreaterThan(0);
+        for (const check of cliOrCopy) expect(check.detail.endsWith('tree clean')).toBe(true);
+      });
+
+      it.each([
+        ['twice', 'found 2'],
+        ['not at all', 'found 0'],
+      ])('[Scrum] fails the record-commit probe when `agent execute` runs %s ("exactly one")', (how, found) => {
+        expect(typeof smokeAgentRun).toBe('function');
+        const steps = agentRunSteps('Scrum');
+        const execute = indexOf(steps, isExecute);
+        const changed = how === 'twice'
+          ? [...steps.slice(0, execute + 1), steps[execute]!, ...steps.slice(execute + 1)]
+          : [...steps.slice(0, execute), ...steps.slice(execute + 1)];
+        const checks = smokeAgentRun('Scrum', invoke, process.env, changed);
+        expect(last(checks)).toMatchObject({ label: RECORD_LABEL, ok: false });
+        expect(last(checks)?.detail).toContain(found);
+      });
+
+      it('[Scrum] fails `agent execute` on a wrong exit, naming both codes, and stops there', () => {
+        const report = smokeWithFault('exit=1@agent execute');
+        expect(report.ok).toBe(false);
+        expect(lastCheck(report)).toMatchObject({ label: EXECUTE_LABEL, ok: false });
+        expect(lastCheck(report).detail).toContain('expected exit 0, got exit 1');
+      });
+    });
+
+    describe('AC 2 — outcomes beyond exit 0: the record\'s adapter, the id in `agent list --past`, the Resource read', () => {
+      it.each(SMOKE_TEMPLATES)('[%s] agent show and agent list --past assert what was recorded', (template) => {
+        expect(typeof agentRunSteps).toBe('function');
+        const steps = agentRunSteps(template);
+        expect(steps).toContainEqual(
+          expect.objectContaining({
+            args: ['agent', 'show', '{agent.id}/adhoc/1', '--format', 'json'],
+            exit: 0,
+            json: true,
+            expect: {
+              'run.id': '{agent.id}/adhoc/1',
+              'run.element': 'task:{agent.id}',
+              'run.role': 'developer',
+              'run.agent': 'Fake Agent',
+              'run.adapter': 'custom/fake',
+              'run.exit_status': 0,
+            },
+          }),
+        );
+        expect(steps).toContainEqual(
+          expect.objectContaining({
+            args: ['agent', 'list', '--past', '--format', 'json'],
+            exit: 0,
+            json: true,
+            expect: { 'past.length': 1, 'past.0.id': '{agent.id}/adhoc/1', 'past.0.adapter': 'custom/fake', 'diagnostics.length': 0 },
+          }),
+        );
+        expect(steps).toContainEqual({ probe: 'fake-read', run: '{agent.id}/adhoc/1', role: 'developer' });
+      });
+
+      it('[Scrum] the run log is re-loaded: a corrupted record passes execute and the probe, and fails at agent show', () => {
+        const report = smokeWithFault('corrupt@agent execute');
+        expect(report.ok).toBe(false);
+        expect(report.checks.find((c) => c.label === EXECUTE_LABEL)?.ok).toBe(true);
+        expect(report.checks.find((c) => c.label === RECORD_LABEL)?.ok).toBe(true);
+        expect(lastCheck(report)).toMatchObject({ label: SHOW_LABEL, ok: false });
+        expect(lastCheck(report).detail).toContain('expected exit 0, got exit 1');
+      });
+
+      it('[Scrum] the fake agent read the session Resource, and agent list --past passed, on the compiled CLI', () => {
+        expect(typeof smokeAgentRun).toBe('function');
+        const checks = scrum ?? [];
+        expect(checks.find((c) => c.label === LIST_LABEL)?.ok).toBe(true);
+        expect(checks.find((c) => c.label === READ_LABEL)?.ok).toBe(true);
+      });
+
+      it('[Scrum] ignores WINGFOIL_FAKE_AGENT_* inherited from the caller\'s env: every step gets its own (review F1)', () => {
+        expect(typeof smokeAgentRun).toBe('function');
+        const env = {
+          ...process.env,
+          WINGFOIL_FAKE_AGENT_EXIT: '3',
+          WINGFOIL_FAKE_AGENT_CONNECT: '0',
+          WINGFOIL_FAKE_AGENT_RECORD: '/nonexistent/fake-agent-record.jsonl',
+        };
+        const checks = smokeAgentRun('Scrum', invoke, env);
+        expect(checks.filter((c) => !c.ok)).toEqual([]);
+        expect(checks.map((c) => c.label)).toContain(READ_LABEL);
+      });
+
+      it('[Scrum] fails the fake-read probe when `agent execute` runs without the fake switched on', () => {
+        expect(typeof smokeAgentRun).toBe('function');
+        const steps = agentRunSteps('Scrum').map((s) => {
+          if (!isExecute(s) || !('args' in s)) return s;
+          const off: { -readonly [K in keyof typeof s]: (typeof s)[K] } = { ...s };
+          delete off.fakeAgent;
+          return off;
+        });
+        const checks = smokeAgentRun('Scrum', invoke, process.env, steps);
+        // Steps 6–8 pass without the fake's record; only the probe can see it was never read.
+        expect(checks.find((c) => c.label === SHOW_LABEL)?.ok).toBe(true);
+        expect(last(checks)).toMatchObject({ label: READ_LABEL, ok: false });
+        expect(last(checks)?.detail).toContain('the fake agent recorded no launch');
+      });
+    });
+
+    describe('AC 3 — the smoke plan and the report template name the new step', () => {
+      const yamlPath = join(REPO_ROOT, '.wingfoil', 'workflows', 'custom', 'e2e-smoke.yaml');
+      const raw = readFileSync(yamlPath, 'utf-8');
+      const workflow = yamlLoad(raw) as {
+        version: number;
+        phases: { name: string; description?: string; actions?: string[]; checks?: { post?: string[] } }[];
+      };
+      const driveCli = workflow.phases.find((p) => p.name === 'drive-cli');
+
+      it('e2e-smoke.yaml is at least 1.6, with a history entry for task-243 (bug-314)', () => {
+        expect(workflow.version).toBeGreaterThanOrEqual(1.6);
+        expect(raw).toMatch(/1\.6 [^;]*task-243/);
+      });
+
+      it('drive-cli declares the three agent actions and describes the agent run; its checks are unchanged', () => {
+        expect(driveCli?.actions).toEqual(
+          expect.arrayContaining([
+            'cli.run(command: "agent execute --element <type:id> --role developer")',
+            'cli.run(command: "agent show <run-id>")',
+            'cli.run(command: "agent list --past")',
+          ]),
+        );
+        expect(driveCli?.description).toContain('agent execute');
+        expect(driveCli?.description).toContain('custom/fake');
+        expect(driveCli?.checks?.post).toHaveLength(3);
+      });
+
+      it('the report names the agent run', () => {
+        const text = formatReport({ ok: true, checks: [{ label: 'wingfoil --help', ok: true, detail: 'exit 0' }] }, { command: ['wingfoil'] });
+        expect(text).toContain('- Agent run: `agent execute` through the fake adapter `custom/fake` in a fresh project per template (spec-016 §2.7)');
+      });
+
+      it('WORKFLOW.md\'s E2E Smoke section names `agent execute`', () => {
+        const text = readFileSync(join(REPO_ROOT, '.wingfoil', 'WORKFLOW.md'), 'utf-8');
+        const start = text.indexOf('### E2E Smoke');
+        expect(start).toBeGreaterThanOrEqual(0);
+        const end = text.indexOf('\n### ', start + 1);
+        expect(text.slice(start, end === -1 ? undefined : end)).toContain('agent execute');
+      });
     });
   });
 

@@ -14,7 +14,40 @@ export interface SmokeStep {
    * does not. A string value may be a `'{<name>.<field>}'` placeholder.
    */
   readonly expect?: Readonly<Record<string, string | number>>;
+  /**
+   * task-243: run this step with the fake agent switched on — `WINGFOIL_FAKE_AGENT_CONNECT=1` and
+   * `WINGFOIL_FAKE_AGENT_RECORD=<a file outside the project>` (spec-016 §2.7). Read by {@link smokeAgentRun} only.
+   */
+  readonly fakeAgent?: boolean;
 }
+
+/**
+ * task-243: copy fixture files into the project and commit them. `from` is relative to the fixtures
+ * directory ({@link AGENT_FIXTURES}), `to` relative to the project; copied byte for byte, then
+ * `git add` of every `to` and `git commit -m <commit>`. Label `[<T>/agent] commit <to1>, <to2>`.
+ */
+export interface SmokeCopyStep {
+  readonly copy: ReadonlyArray<readonly [string, string]>;
+  readonly commit: string;
+}
+
+/**
+ * task-243: a check on what `agent execute` left, not a CLI call. `run` may hold a `{<name>.<field>}`
+ * placeholder.
+ * - `record-commit` — exactly one commit subject starts with `agent: record `, it is `agent: record <run>`,
+ *   and that commit changes only `docs/runs/<element-id>.jsonl`. Label `[<T>/agent] one agent: record commit for <run>`.
+ * - `fake-read` — the fake's record holds exactly one launch line that read the session Resource
+ *   `wingfoil://session/<role>/task:<element-id>/<parent of the record commit>` from the `wingfoil` server.
+ *   Label `[<T>/agent] the fake agent read the session Resource for <run>`.
+ */
+export interface SmokeProbeStep {
+  readonly probe: 'record-commit' | 'fake-read';
+  readonly run: string;
+  readonly role?: string;
+}
+
+/** One step of the task-243 agent run: a CLI step, a copy step, or a probe. */
+export type SmokeAgentStep = SmokeStep | SmokeCopyStep | SmokeProbeStep;
 
 /** One observed smoke check. */
 export interface SmokeCheck {
@@ -83,6 +116,27 @@ export function smokeTemplate(
   invoke: (args: readonly string[], cwd: string) => { status: number | null; stdout: string; stderr: string },
   env: NodeJS.ProcessEnv,
   steps?: readonly SmokeStep[],
+): SmokeCheck[];
+
+/** task-243: the checkout's agent fixtures (`test/fixtures/agents`), the source of every copy step. */
+export const AGENT_FIXTURES: string;
+
+/** task-243: the agent run's scenario for `template`, `init` first (spec-016 §2.7). */
+export function agentRunSteps(template: string): readonly SmokeAgentStep[];
+
+/**
+ * task-243: run `steps` (default: {@link agentRunSteps}) in its own fresh throwaway git repository; every
+ * check labelled `[<template>/agent] …`, the working tree required clean after each step, stops at the
+ * first failure. Each step's environment is passed to `invoke` as its third argument: `env` without any
+ * `WINGFOIL_FAKE_AGENT_*` variable, plus `WINGFOIL_FAKE_AGENT_CONNECT=1` and
+ * `WINGFOIL_FAKE_AGENT_RECORD=<a file outside the project>` on a `fakeAgent` step.
+ */
+export function smokeAgentRun(
+  template: string,
+  invoke: (args: readonly string[], cwd: string, env?: NodeJS.ProcessEnv) => { status: number | null; stdout: string; stderr: string },
+  env: NodeJS.ProcessEnv,
+  steps?: readonly SmokeAgentStep[],
+  fixtures?: string,
 ): SmokeCheck[];
 
 /** The Markdown report `--report` writes (`bug-134`): no clock in it, so the same run gives the same bytes. */
