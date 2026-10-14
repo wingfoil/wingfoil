@@ -531,6 +531,19 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
         expect(checks.find((c) => c.label === READ_LABEL)?.ok).toBe(true);
       });
 
+      it('[Scrum] ignores WINGFOIL_FAKE_AGENT_* inherited from the caller\'s env: every step gets its own (review F1)', () => {
+        expect(typeof smokeAgentRun).toBe('function');
+        const env = {
+          ...process.env,
+          WINGFOIL_FAKE_AGENT_EXIT: '3',
+          WINGFOIL_FAKE_AGENT_CONNECT: '0',
+          WINGFOIL_FAKE_AGENT_RECORD: '/nonexistent/fake-agent-record.jsonl',
+        };
+        const checks = smokeAgentRun('Scrum', invoke, env);
+        expect(checks.filter((c) => !c.ok)).toEqual([]);
+        expect(checks.map((c) => c.label)).toContain(READ_LABEL);
+      });
+
       it('[Scrum] fails the fake-read probe when `agent execute` runs without the fake switched on', () => {
         expect(typeof smokeAgentRun).toBe('function');
         const steps = agentRunSteps('Scrum').map((s) => {
