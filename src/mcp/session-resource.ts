@@ -40,9 +40,13 @@ export interface RegisterSessionContextResourceOptions {
   readonly roles: readonly string[];
 }
 
-/** A URI variable, percent-decoded; left as sent when it is not valid percent-encoding (the check then refuses it). */
+/**
+ * A URI variable, percent-decoded; left as sent when it is not valid percent-encoding (the check then refuses
+ * it). The SDK types a variable `string | string[]`; none of this template's variables has the explode
+ * modifier, so it is always one string (as `memory-resource.ts` notes for its own).
+ */
 function decoded(value: string | string[] | undefined): string {
-  const text = Array.isArray(value) ? value.join(',') : (value ?? '');
+  const text = value as string;
   try {
     return decodeURIComponent(text);
   } catch {

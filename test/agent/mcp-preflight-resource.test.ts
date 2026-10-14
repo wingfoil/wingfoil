@@ -46,8 +46,12 @@ async function preflightAgainst(contents: string): Promise<Awaited<ReturnType<ty
 }
 
 describe('mcpPreflight — the session Resource the bootstrap names must answer with text (task-236)', () => {
-  it('a Resource read with no contents: MCP_UNREACHABLE naming the Resource', async () => {
-    const result = await preflightAgainst('[]');
+  it.each([
+    ['no contents', '[]'],
+    ['a blob, not text', `[{ uri: 'wingfoil://session/x', blob: 'Y29udGV4dA==' }]`],
+    ['empty text', `[{ uri: 'wingfoil://session/x', mimeType: 'text/markdown', text: '' }]`],
+  ])('a Resource read with %s: MCP_UNREACHABLE naming the Resource', async (_label, contents) => {
+    const result = await preflightAgainst(contents);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toBe('context pre-load failed: MCP server unreachable');
