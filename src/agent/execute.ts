@@ -125,12 +125,22 @@ export function attributionLine(agent: { readonly name: string; readonly email: 
 }
 
 /**
+ * The session Resource the bootstrap names (§2.4, task-236): `wingfoil://session/<role>/<type>:<id>/<sha>`, the
+ * concrete form of the MCP server's `wingfoil://session/{role}/{element}/{state}` template (`spec-004` §2.1). A
+ * Resource, not the `{role}-session` Prompt that serves the same text: an agent CLI may give its model a tool to
+ * read Resources and none to get Prompts (Claude Code 2.1.296, the `claude-code` built-in's by-hand pass).
+ */
+function sessionContextUri(role: string, element: string, stateRef: string): string {
+  return `wingfoil://session/${role}/${element}/${stateRef}`;
+}
+
+/**
  * The bootstrap prompt (§2.4): the only text WingFoil puts into the agent's initial prompt. Pure, with
  * no clock and no host data, LF-terminated. Its last line hands the agent the attribution rule and the
  * entry that signs (task-228). A change to any literal here is a revision of `spec-016`.
  */
 export function renderBootstrap(input: BootstrapInput): string {
-  const contextInstruction = `Get the MCP prompt "${input.role}-session" with arguments element="${input.element}" and state="${input.stateRef}".`;
+  const contextInstruction = `Read the MCP resource "${sessionContextUri(input.role, input.element, input.stateRef)}".`;
   return [
     `WingFoil run ${input.runId}: act as role "${input.role}" on element ${input.element}.`,
     `Your context is assembled at commit ${input.stateRef} and served by the "wingfoil" MCP server`,
@@ -296,10 +306,13 @@ export interface McpPreflightInput {
 
 /**
  * §3.3 step 11: start the server, complete MCP `initialize`, get the `{role}-session` Prompt with
- * `element` and `state` (§2.4), and close. The project's own registration (`.mcp.json`) is not read
- * (§2.5). Any failure — the server does not start, exits, refuses the Prompt, returns no text, or
- * exceeds `timeoutMs` — is `IO` with P5.4.3 sc. 3's message verbatim, its cause as a `dl-055` detail
- * line with the project root removed.
+ * `element` and `state`, read the session Resource the bootstrap names (§2.4, task-236), and close. The
+ * project's own registration (`.mcp.json`) is not read (§2.5). Any failure — the server does not start,
+ * exits, refuses the Prompt or the Resource, returns no text, or exceeds `timeoutMs` — is `IO` with
+ * P5.4.3 sc. 3's message verbatim, its cause as a `dl-055` detail line with the project root removed.
+ *
+ * Both carriers are checked, the Prompt first: the agent reads the Resource, and the Prompt serves the same
+ * text to a client that gets Prompts; one deadline covers the whole exchange.
  */
 export async function mcpPreflight(input: McpPreflightInput): Promise<CoreResult<undefined>> {
   const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
@@ -324,6 +337,13 @@ export async function mcpPreflight(input: McpPreflightInput): Promise<CoreResult
     const content = prompt.messages[0]?.content;
     if (content === undefined || content.type !== 'text' || content.text === '') {
       throw new Error(`the ${input.role}-session prompt returned no context text`);
+    }
+    // task-236: the Resource the bootstrap names — what the agent will actually read.
+    const uri = sessionContextUri(input.role, input.element, input.stateRef);
+    const resource = await client.readResource({ uri }, { timeout: input.timeoutMs });
+    const entry = resource.contents[0];
+    if (entry === undefined || !('text' in entry) || entry.text === '') {
+      throw new Error(`the session resource ${uri} returned no context text`);
     }
   };
   try {

@@ -16,6 +16,7 @@
  */
 import { scaffoldFiles, type ScaffoldFile } from '../../src/storage/layout';
 import {
+  BUILTIN_ADAPTERS_DIR,
   BUILTIN_DIRECTIVES_DIR,
   BUILTIN_WORKFLOWS_DIR,
   TEMPLATES,
@@ -23,11 +24,14 @@ import {
   templateScaffold,
 } from '../../src/storage/templates';
 
-/** Every scaffold path that lives under one of the two built-in asset directories. */
+/**
+ * Every scaffold path that lives under one of the three built-in asset directories (task-236: the
+ * adapters' joined the directives' and the workflows' when the first real built-in adapter shipped).
+ */
 function builtinPathsOf(files: readonly ScaffoldFile[]): string[] {
   return files
     .map((f) => f.path)
-    .filter((p) => p.startsWith(`${BUILTIN_DIRECTIVES_DIR}/`) || p.startsWith(`${BUILTIN_WORKFLOWS_DIR}/`));
+    .filter((p) => [BUILTIN_DIRECTIVES_DIR, BUILTIN_WORKFLOWS_DIR, BUILTIN_ADAPTERS_DIR].some((dir) => p.startsWith(`${dir}/`)));
 }
 
 /** `true` for a placeholder like `.gitkeep` — the only thing the derivation is allowed to skip. */

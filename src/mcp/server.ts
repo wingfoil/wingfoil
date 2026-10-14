@@ -31,7 +31,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { registerReadOnlyResources, registerRolePrompts } from './index';
+import { registerReadOnlyResources, registerRolePrompts, registerSessionContextResource } from './index';
 
 /** Construction/connection options for the production MCP server. */
 export interface McpServerOptions {
@@ -94,6 +94,7 @@ export function createMcpServer(options: McpServerOptions): McpServer {
   });
   registerReadOnlyResources(server, { resolveRoot: options.resolveRoot });
   registerRolePrompts(server, { resolveRoot: options.resolveRoot, roles: options.roles });
+  registerSessionContextResource(server, { resolveRoot: options.resolveRoot, roles: options.roles });
   registerEmptyToolsChannel(server);
   return server;
 }

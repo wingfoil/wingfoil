@@ -1,0 +1,26 @@
+# Claude Code, a built-in adapter (spec-016 section 2.8). Every flag below is read from the
+# --help output of the version in verified_with, checked by hand (task-236).
+name: claude-code
+format: 1
+command: claude
+verified_with: "2.1.296 (Claude Code)"
+version_args: [ --version ]
+launch:
+  interactive:
+    # The prompt first: --mcp-config takes several values and would read a following prompt as one.
+    args: [ "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
+    terminal: required
+prompt:
+  via: arg
+mcp:
+  via: config-file
+  template: |
+    {"mcpServers": {"wingfoil": {"command": "{mcp_command}", "args": {mcp_args}}}}
+session:
+  id: assign
+  assign_args: [ --session-id, "{session_id}" ]
+  resume:
+    supported: true
+    args: [ --resume, "{session_id}" ]
+usage:
+  from: none

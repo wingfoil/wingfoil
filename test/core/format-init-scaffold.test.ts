@@ -28,6 +28,7 @@ import {
 import { resolveAddType } from '../../src/core/memory-add-type';
 import { TEMPLATES, extractFrontmatter, templateScaffold } from '../../src/storage';
 import {
+  ADAPTER_MANIFEST_FORMAT,
   DIRECTIVE_FORMAT,
   DNA_YAML_FORMAT,
   MEMORY_TEMPLATE_FORMAT,
@@ -47,6 +48,7 @@ function expectedFormat(path: string): number | undefined {
   if (/^\.wingfoil\/workflows\/.+\.yaml$/.test(path)) return WORKFLOW_FORMAT;
   if (/^\.wingfoil\/directives\/.+\.md$/.test(path)) return DIRECTIVE_FORMAT;
   if (/^\.wingfoil\/memory\/templates\/.+\.md$/.test(path)) return MEMORY_TEMPLATE_FORMAT;
+  if (/^\.wingfoil\/agents\/built-in\/.+\.yaml$/.test(path)) return ADAPTER_MANIFEST_FORMAT; // task-236: claude-code
   return undefined;
 }
 

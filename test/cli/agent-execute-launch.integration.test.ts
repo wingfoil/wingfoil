@@ -146,7 +146,7 @@ function bootstrapOf(runId: string, stateRef: string, agent = 'Fake Agent <fake-
   return [
     `WingFoil run ${runId}: act as role "developer" on element ${TASK_REF}.`,
     `Your context is assembled at commit ${stateRef} and served by the "wingfoil" MCP server`,
-    `registered for this session. Load it before any other action: Get the MCP prompt "developer-session" with arguments element="${TASK_REF}" and state="${stateRef}".`,
+    `registered for this session. Load it before any other action: Read the MCP resource "wingfoil://session/developer/${TASK_REF}/${stateRef}".`,
     'Record your handoff in the element\'s "## Execution Notes" section.',
     `End every commit you write, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: ${agent}" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).`,
     '',
