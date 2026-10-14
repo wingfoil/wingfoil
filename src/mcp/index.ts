@@ -63,6 +63,12 @@ export {
 export { registerRolePrompts, roleSessionPromptName } from './prompt';
 export type { RegisterRolePromptsOptions } from './prompt';
 
+// task-236: the same execution context as the `{role}-session` Prompt with `element` and `state`, served also
+// as the read-only Resource template `wingfoil://session/{role}/{element}/{state}` (spec-004 §2.1), because an
+// agent CLI may let its model read Resources but not get Prompts. See `./session-resource.ts`.
+export { registerSessionContextResource, SESSION_CONTEXT_URI_TEMPLATE } from './session-resource';
+export type { RegisterSessionContextResourceOptions } from './session-resource';
+
 import { registerDnaResources } from './dna-resource';
 import { registerMemoryResources } from './memory-resource';
 import { registerWriteRefusalHandler } from './read-only';

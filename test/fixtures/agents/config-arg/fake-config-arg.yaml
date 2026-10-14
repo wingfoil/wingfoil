@@ -1,0 +1,26 @@
+# The fake adapter under `mcp.via: config-arg` (task-237, approver ruling D-1 (a); spec-016 §2.2/§2.3
+# pending amendment): the rendered `mcp.template` reaches the agent as ONE whole argv element, the
+# `{mcp_config}` placeholder — the shape the built-in `codex-cli` uses with `-c`. The template here is a
+# JSON body so the fake can read it (`--mcp-config-json <text>`, test/fixtures/agents/fake-agent.cjs).
+# Kept OUT of custom/ on purpose: the fixtures under custom/ are the ones every project copy and the
+# e2e-smoke gate take (task-243). `terminal: optional` lets the run complete with no terminal.
+name: fake-config-arg
+format: 1
+command: node
+verified_with: fake-agent 1.0.0
+version_args: [ test/fixtures/agents/fake-agent.cjs, --version ]
+launch:
+  interactive:
+    args: [ test/fixtures/agents/fake-agent.cjs, --mcp-config-json, "{mcp_config}", --prompt, "{bootstrap}" ]
+    terminal: optional
+prompt:
+  via: arg
+mcp:
+  via: config-arg
+  template: '{"mcpServers": {"wingfoil": {"command": "{mcp_command}", "args": {mcp_args}}}}'
+session:
+  id: none
+  resume:
+    supported: false
+usage:
+  from: none

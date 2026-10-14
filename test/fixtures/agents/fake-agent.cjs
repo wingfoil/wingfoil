@@ -14,8 +14,10 @@
  * - `--lookup <session-id>` — prints the declared JSON document for that session (`session.lookup_args`,
  *   `usage.lookup_args`).
  * - `--summary` — prints a one-line summary (`summary.export_args`).
- * - anything else is a launch: `[--headless] --mcp-config <file> (--prompt <text> | --prompt-file <file>)
- *   [--session-id <id>] [--resume <id>]`. A headless launch prints the declared JSON document on stdout
+ * - anything else is a launch: `[--headless] (--mcp-config <file> | --mcp-config-json <text>)
+ *   (--prompt <text> | --prompt-file <file>) [--session-id <id>] [--resume <id>]`. `--mcp-config-json`
+ *   carries the same JSON body as the file, as ONE argument: the shape of `mcp.via: config-arg`'s
+ *   `{mcp_config}` (task-237, approver ruling D-1 (a)), declared by `config-arg/fake-config-arg.yaml`. A headless launch prints the declared JSON document on stdout
  *   when it ends (`launch.headless.output: json`).
  *
  * What it does is declared by the caller through environment variables (names below; their values are
@@ -24,8 +26,9 @@
  *   stdin (or `null` when not read), the NAMES of the environment variables it received, sorted, never
  *   their values (`REQ-SEC-08`), and, on a launch that connected, what the MCP server answered.
  * - `WINGFOIL_FAKE_AGENT_CONNECT=1` — on a launch, connect to the `wingfoil` server named in the MCP
- *   config, complete `initialize`, and get the Prompt the bootstrap's context instruction names, with
- *   its `element` and `state` arguments (§2.4). The Prompt's text is recorded verbatim.
+ *   config, complete `initialize`, and read the session Resource the bootstrap's context instruction
+ *   names, by its full URI (§2.4; task-236, approver ruling (a) 2026-10-13: a real agent's model can read
+ *   Resources but not get Prompts). The Resource's text is recorded verbatim.
  * - `WINGFOIL_FAKE_AGENT_STDIN=1` — read stdin to its end and record it. Off by default: an interactive
  *   agent owns stdin, and an inherited pipe nobody closes would never end.
  * - `WINGFOIL_FAKE_AGENT_DOCUMENT` — the JSON document to print for `--lookup` and a headless launch,
@@ -58,9 +61,9 @@ const MCP_TIMEOUT_MS = 30000;
 
 /**
  * `spec-016` §2.4's context instruction, as the bootstrap carries it. The fake acts on it as a real
- * agent must: it reads the Prompt name and both arguments out of the text it was given.
+ * agent must: it reads the session Resource's URI out of the text it was given, and nothing else.
  */
-const CONTEXT_INSTRUCTION_RE = /Get the MCP prompt "([^"]+)" with arguments element="([^"]+)" and state="([^"]+)"\./;
+const CONTEXT_INSTRUCTION_RE = /Read the MCP resource "(wingfoil:\/\/session\/[^"]+)"\./;
 
 /** The value following `flag` in `argv`, or `undefined`. */
 function option(argv, flag) {
@@ -108,15 +111,18 @@ function record(entry) {
 }
 
 /**
- * Talk to the `wingfoil` server of `configFile` over stdio: `initialize`, the `initialized`
- * notification, then `prompts/get` for `prompt` with `args`. Resolves with what the server answered;
- * a JSON-RPC error is an answer too (recorded, not thrown).
+ * Talk to the `wingfoil` server of the MCP config over stdio: `initialize`, the `initialized`
+ * notification, then `resources/read` of `uri`. The config is `{ file }` (`--mcp-config`) or
+ * `{ text }` (`--mcp-config-json`, task-237). Resolves with what the server answered; a JSON-RPC
+ * error is an answer too (recorded, not thrown).
  */
-function fetchPrompt(configFile, prompt, args) {
-  const config = JSON.parse(readFileSync(configFile, 'utf-8'));
+function fetchResource(source, uri) {
+  // A file is read and parsed exactly as before task-237; only the text form is new.
+  const label = source.file === undefined ? '--mcp-config-json' : source.file;
+  const config = JSON.parse(source.file === undefined ? source.text : readFileSync(source.file, 'utf-8'));
   const server = config.mcpServers && config.mcpServers.wingfoil;
   if (!server || typeof server.command !== 'string' || !Array.isArray(server.args)) {
-    return Promise.reject(new Error(`no "wingfoil" server with a command and args in ${configFile}`));
+    return Promise.reject(new Error(`no "wingfoil" server with a command and args in ${label}`));
   }
   return new Promise((resolve, reject) => {
     const child = spawn(server.command, server.args, { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -180,13 +186,13 @@ function fetchPrompt(configFile, prompt, args) {
       });
       if (initialized.error) return finish(null, { initialize: initialized.error });
       send({ method: 'notifications/initialized' });
-      const answer = await request(2, 'prompts/get', { name: prompt, arguments: args });
-      const result = { server: initialized.result.serverInfo, prompt: { name: prompt, arguments: args } };
+      const answer = await request(2, 'resources/read', { uri });
+      const result = { server: initialized.result.serverInfo, resource: { uri } };
       if (answer.error) return finish(null, { ...result, error: { code: answer.error.code, message: answer.error.message } });
-      const [first] = answer.result.messages;
+      const [first] = answer.result.contents;
       finish(null, {
         ...result,
-        text: first && first.content && first.content.type === 'text' ? first.content.text : null,
+        text: first && typeof first.text === 'string' ? first.text : null,
         ...(answer.result.warnings === undefined ? {} : { warnings: answer.result.warnings }),
       });
     })().catch((error) => finish(error));
@@ -203,11 +209,12 @@ async function launch(argv, stdin) {
   if (process.env.WINGFOIL_FAKE_AGENT_CONNECT === '1') {
     const instruction = bootstrap === undefined || bootstrap === null ? null : CONTEXT_INSTRUCTION_RE.exec(bootstrap);
     const configFile = option(argv, '--mcp-config');
-    if (instruction === null) failure = 'the bootstrap names no MCP prompt to get (spec-016 §2.4)';
-    else if (configFile === undefined) failure = 'no --mcp-config was given';
+    const configText = option(argv, '--mcp-config-json');
+    if (instruction === null) failure = 'the bootstrap names no MCP resource to read (spec-016 §2.4)';
+    else if (configFile === undefined && configText === undefined) failure = 'no --mcp-config was given';
     else {
       try {
-        mcp = await fetchPrompt(configFile, instruction[1], { element: instruction[2], state: instruction[3] });
+        mcp = await fetchResource(configFile === undefined ? { text: configText } : { file: configFile }, instruction[1]);
       } catch (error) {
         failure = error.message;
       }

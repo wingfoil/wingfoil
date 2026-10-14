@@ -71,7 +71,7 @@ export const AdapterManifest = z.strictObject({
   }),
   mcp: z.strictObject({
     // No `none`: an adapter that cannot register the `wingfoil` MCP server is refused (`adr-012`).
-    via: z.enum(['config-file', 'args']),
+    via: z.enum(['config-file', 'config-arg', 'args']),
     template: NonEmpty.optional(),
   }),
   session: z.strictObject({
