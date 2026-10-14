@@ -153,8 +153,8 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       // task-219: release-commit and staging-rehearsal precede tag; the rehearsal's check is bound.
       ["release-publishing", "phases[2].checks.pre[0]", "on-branch-is-main"],
       ["release-publishing", "phases[2].checks.pre[1]", "release-branch-merged-to-main"],
-      // task-229 (dl-130 Action 2): the prose post check also names the GitHub Release; task-238 (dl-130 step 2) the MCP Registry listing.
-      ["release-publishing", "phases[3].checks.post[0]", "staged version approved on npm, live on the npm registry, its GitHub Release created and its MCP Registry listing published"],
+      // task-229 (dl-130 Action 2): the prose post check also names the GitHub Release; task-238 (dl-130 step 2) the MCP Registry listing; task-244 (dl-136) the test reports attached to the Release.
+      ["release-publishing", "phases[3].checks.post[0]", "staged version approved on npm, live on the npm registry, its GitHub Release created with the test reports attached and its MCP Registry listing published"],
       // task-222 (dl-089 §1): the report checks, unbound until scripts/release-health/ ships them (task-231, task-241).
       ["release-health", "phases[0].checks.post[0]", "every catalogue metric has a value or an explicit not-measurable reason"],
       ["release-health", "phases[1].checks.post[0]", "every regressed metric and every breached floor has a finding"],
@@ -288,7 +288,7 @@ function measure(workflows: readonly Workflow[]): { checkpoints: string[]; final
 }
 
 describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => {
-  it('30 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 27 again from task-219: release-publishing.release-commit, while staging-rehearsal produces its transcript; 28 from task-222: release-health.propose writes into the report compare produced; 29 from task-212: vision-change.update-vision; 30 from task-230: wave.re-plan, the re-plan checkpoint of dl-100 §2)', () => {
+  it('28 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 27 again from task-219: release-publishing.release-commit, while staging-rehearsal produces its transcript; 28 from task-222: release-health.propose writes into the report compare produced; 29 from task-212: vision-change.update-vision; 30 from task-230: wave.re-plan, the re-plan checkpoint of dl-100 §2; 28 from task-244: release-submit.pre-release-checks produces the candidate’s test-results summary and release-publishing.publish the tag run’s, dl-136)', () => {
     expect(measure(registry().workflows).checkpoints).toEqual([
       'vision-change.update-vision',
       'user-story-mapping.backbone',
@@ -311,11 +311,9 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'e2e-smoke.fresh-init',
       'e2e-smoke.drive-cli',
       'e2e-smoke.mcp-registration',
-      'release-submit.pre-release-checks',
       'release-submit.approve-release',
       'release-publishing.release-commit',
       'release-publishing.tag',
-      'release-publishing.publish',
       'release-health.propose',
       'retrospective.additional-points',
       'retrospective.approve',

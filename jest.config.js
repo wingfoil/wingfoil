@@ -81,6 +81,12 @@ module.exports = {
     '!src/validation/index.ts',
     '!src/workflow/index.ts',
   ],
+  // The coverage files a release keeps (task-244, dl-136 Q1 (c); approver ruling D5, 2026-10-14):
+  // `coverage/coverage-summary.json` (the totals the summary reads) and `coverage/lcov.info` (a Release asset),
+  // plus the console table. Jest's other defaults, `clover` and `json`, had no reader. `npm run test:report`
+  // runs the suite once with coverage and Jest's `--json` into `coverage/jest-results.json`, which
+  // `scripts/test-report.cjs` classifies (publish.yml's gate, release-submit's pre-release-checks).
+  coverageReporters: ['json-summary', 'lcov', 'text'],
   coverageThreshold: {
     global: {
       branches: 80,

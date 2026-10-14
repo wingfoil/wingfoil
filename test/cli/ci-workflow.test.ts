@@ -98,7 +98,7 @@ describe('ci workflow (task-140) — dl-076 (D): the packaging gate on every pus
     expect(setup?.with?.['package-manager-cache']).toBe(false);
   });
 
-  it('runs exactly `npm ci`, `npm run prepublishOnly`, `npm run typecheck`, then `npm run check:audit` — publish.yml’s two gate steps plus two', () => {
+  it('runs exactly `npm ci`, `npm run prepublishOnly`, `npm run typecheck`, then `npm run check:audit` — publish.yml’s gate commands plus two', () => {
     // task-250 (bug-223) added `check:audit` after the two: it needs the registry's advisory database,
     // so it is a ci.yml step and not part of `prepublishOnly`, which publish.yml's tag gate also runs.
     // It is last so a new advisory never hides the build/test/lint verdict of the push.
@@ -107,8 +107,10 @@ describe('ci workflow (task-140) — dl-076 (D): the packaging gate on every pus
     const job = read(CI_PATH).parsed.jobs['packaging-gate'];
     const runSteps = (job?.steps ?? []).filter((s) => s.run !== undefined).map((s) => s.run?.trim());
     expect(runSteps).toEqual(['npm ci', 'npm run prepublishOnly', 'npm run typecheck', 'npm run check:audit']);
+    // task-244 (ruling D1 (a)): publish.yml's gate runs prepublishOnly's three commands as three steps, the
+    // test one as `test:report` (the same suite, with coverage and Jest JSON for the release's reports).
     const publishGate = (read(PUBLISH_PATH).parsed.jobs.gate?.steps ?? []).map((s) => s.run?.trim());
-    expect(publishGate).toEqual(expect.arrayContaining(['npm ci', 'npm run prepublishOnly']));
+    expect(publishGate).toEqual(expect.arrayContaining(['npm ci', 'npm run build', 'npm run test:report', 'npm run lint']));
   });
 
   it('runs `check:audit` under `!cancelled()`, and `typecheck` only after a successful install (task-173, task-250)', () => {

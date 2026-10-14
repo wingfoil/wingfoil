@@ -127,13 +127,22 @@ scheme (§4), not hand-edited at publish time.
   for — `npm run test:latency`, or `WINGFOIL_LATENCY=1 npm test` — and never from `prepublishOnly`,
   so no publish waits on a wall-clock measurement. See the *Revision (2026-10-03) — §2 `test`* note
   below.
+- `test:report`: `jest --coverage --json --outputFile=coverage/jest-results.json` — the same suite as
+  `test`, once, with coverage (`coverage/coverage-summary.json`, `coverage/lcov.info`: `jest.config.js`
+  `coverageReporters`) and Jest's own JSON results, the inputs of `scripts/test-report.cjs` (§3 stage 1,
+  `dl-136`).
 
 ### 3. Publish pipeline (`.github/workflows/publish.yml` + `scripts/publish-staging.cjs`)
 
 Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a developer runs locally):
 
-1. **build + gate** — `npm ci`, then `prepublishOnly` (build/test/lint) + `npm publish --dry-run`
-   (manifest visibility; must be exactly `dist` + docs per `files`).
+1. **build + gate** — `npm ci`, then `prepublishOnly`'s three commands as three steps, the test one as
+   `npm run test:report` (one suite run, with coverage, so the `jest.config.js` threshold is enforced on the
+   tagged commit), then `scripts/test-report.cjs` writes the Markdown summary — the run classified per test
+   file into unit, integration, BDD, smoke, API-docs and `lint.clean` with their counts, the coverage
+   totals, the commit, tag, CI run URL and build — then `npm publish --dry-run` (manifest visibility; must
+   be exactly `dist` + docs per `files`). The four reports (jest-results.json, coverage-summary.json, lcov.info,
+   test-results.md, all under coverage/) are the gate's second artifact, uploaded after the tarball (`dl-136`).
 2. **stage** — start **Verdaccio** from `scripts/publish-staging.cjs` itself, in CI exactly as locally:
    there is no service container (the workflow's `stage` job runs one staging step,
    `npm run publish:staging -- --tarball <the gate's tarball> --expect-commit "$GITHUB_SHA"`). The script installs a major-pinned
@@ -176,7 +185,8 @@ Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a de
    the version's `## [X.Y.Z]` section of `CHANGELOG.md` (`scripts/changelog-section.cjs`; a missing,
    duplicated or empty section fails) — then polls `npm view wingfoil@<version> version` until npm answers exactly that version
    (`scripts/wait-npm-version.cjs`; npm that cannot be run, or answers E401/E403, fails at once, and each
-   call is bounded), and only then runs `gh release create` on the existing tag. Since
+   call is bounded), and only then runs `gh release create` on the existing tag, attaching stage 1's four
+   test reports as Release assets (`dl-136` Q1 (c)). Since
    stage 4 only stages the version, "promote succeeded" no longer means "npm has it": the poll is what
    makes a Release follow the publish, so an unapproved or rejected stage never gets one. The poll is
    bounded by declared values below the GitHub-hosted runner's 6-hour job limit; when the approval comes
@@ -725,3 +735,17 @@ checkout fetching `+refs/tags/*:refs/tags/*` and checking out `refs/tags/v0.2.2`
 and the gate now refuses a lightweight tag (option 1, not option 2's relaxation). The pins are
 `test/cli/publish-pipeline.test.ts` and `test/cli/check-release-tag.test.ts`. Edited in place: no supersede,
 no state change, no `version:` bump (`dl-047`), as in the revisions above.
+
+**Revision (2026-10-14, `task-244-publish-release-test-results-coverage`) — §2 `test:report`, §3 stages 1
+and 5: the tag's run keeps its test results and coverage, per `dl-136` (`ready`; Q1 (c), Q2 (a), Q3 (a),
+Q4 (a)).** Stage 1 previously ran `prepublishOnly` as one step, which measures no coverage and leaves no
+result behind. It now runs prepublishOnly's three commands as three steps, the test one as `npm run
+test:report` (approver ruling D1 (a), 2026-10-14: one suite run rather than a second, coverage-only run),
+writes the summary with `scripts/test-report.cjs`, and uploads the four reports; stage 5 attaches them to
+the GitHub Release. `prepublishOnly` itself is unchanged and still the gate of a local `npm publish` and of
+`ci.yml`. The summary and `coverage-summary.json` are then committed by `release-publishing`'s `publish`
+phase at paths keyed by the release version (`docs/07_gates/rl-{release.release-line}/rel-{release.version}-…`).
+No new dependency (`dl-010`): Jest's `--json` and its istanbul reporters. The pins are
+`test/cli/publish-pipeline.test.ts` and `test/cli/test-report.test.ts`. The tag run itself is verified at
+v0.3 release-publishing (approver ruling D5, 2026-10-12). Edited in place: no supersede, no state change, no
+`version:` bump (`dl-047`), as in the revisions above.
