@@ -70,7 +70,7 @@ describe('task-277 AC 2 — define-scope sweeps the scheduled change-proposals (
     expect(description).toMatch(/\{release\.version\}/);
     expect(description).toMatch(/`features:`/);
     expect(description).toMatch(/memory amend/);
-    expect(description).toMatch(/kind:/); // the hand amend while memory amend refuses a release with no kind:
+    expect(description).toMatch(/kind:/); // a release with no kind: (predating dl-092) is amended the same way (bug-342, task-279)
     expect(description).toMatch(/20 %/); // task-230's reservation is kept
   });
 

@@ -24,6 +24,15 @@ export const REJECTION_REASON_FIELD = 'rejection_reason';
  * `template.frontmatter.lists`, and there any list is, `[]` included (the author declared "none"); on
  * every other field a list is missing. A date (YAML timestamp) is a value.
  */
+/**
+ * The frontmatter's own value for `field`, or `undefined`: a field named like an `Object.prototype`
+ * member (`constructor`, `toString`) is an ordinary field, never the prototype's function (task-279
+ * review F1).
+ */
+function ownValue(frontmatter: Readonly<Record<string, unknown>>, field: string): unknown {
+  return Object.hasOwn(frontmatter, field) ? frontmatter[field] : undefined;
+}
+
 function isEmptyValue(value: unknown, isListField: boolean): boolean {
   if (value === undefined || value === null) return true;
   if (typeof value === 'string') return value.trim().length === 0;
@@ -82,7 +91,7 @@ export function missingRequiredFields(
   listFields: readonly string[] = [],
 ): string[] {
   const lists = new Set(listFields.filter((field) => field !== 'title'));
-  return requiredFieldOrder(required).filter((field) => isEmptyValue(frontmatter[field], lists.has(field)));
+  return requiredFieldOrder(required).filter((field) => isEmptyValue(ownValue(frontmatter, field), lists.has(field)));
 }
 
 /**
@@ -103,7 +112,7 @@ export function notApplicableRefusals(
   const allowed = new Set(notApplicableAllowed.filter((field) => field !== 'title'));
   const refusals: NotApplicableRefusal[] = [];
   for (const field of requiredFieldOrder(required)) {
-    const value = frontmatter[field];
+    const value = ownValue(frontmatter, field);
     if (!isNotApplicableShaped(value)) continue;
     if (!allowed.has(field)) refusals.push({ field, problem: 'undeclared' });
     else if (NOT_APPLICABLE_WITHOUT_REASON.test(value.trim())) refusals.push({ field, problem: 'no-reason' });
