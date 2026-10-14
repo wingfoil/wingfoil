@@ -24,6 +24,13 @@
  * - the working tree must be clean after EVERY step: each mutation is its own commit, and a refusal
  *   writes nothing.
  *
+ * After each template's scenario, the agent run (task-243, `spec-016` §2.7 last bullet) runs in its own fresh
+ * `init` project: the fake adapter `custom/fake` and its script are copied from the checkout's
+ * `test/fixtures/agents/` and committed, a `team.agents` entry points at it, and one adhoc `agent execute`
+ * runs with the fake switched on. Its outcomes are asserted beyond exit 0: exactly one `agent: record`
+ * commit holding only the run log, `agent show` and `agent list --past` re-loading the record, and the
+ * fake's own record proving it read the session Resource from the `wingfoil` server of the build under test.
+ *
  * `--report <path>` writes the run as Markdown (`bug-134`: the report `e2e-smoke.yaml`'s gate declares
  * under `produces:`), on a failure too.
  *
@@ -46,7 +53,7 @@
 'use strict';
 
 const { spawnSync } = require('node:child_process');
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { dirname, join } = require('node:path');
 
@@ -67,6 +74,22 @@ const SMOKE_EMAIL = 'smoke@wingfoil.invalid';
 
 /** The `--format json` flag pair, appended to every step whose payload is asserted. */
 const JSON_FORMAT = Object.freeze(['--format', 'json']);
+
+/**
+ * The checkout's agent fixtures (task-243), the source of every copy step: the fake adapter
+ * `custom/fake.yaml` and the script it launches, `fake-agent.cjs` (`spec-016` §2.7). The tarball does not
+ * ship `test/`; the smoke always runs from a checkout (the `ci.yml` job, `--candidate`, the staging rehearsal).
+ */
+const AGENT_FIXTURES = join(__dirname, '..', 'test', 'fixtures', 'agents');
+
+/** The prefix of every environment variable the fake agent reads; stripped from what the agent run inherits. */
+const FAKE_AGENT_ENV_PREFIX = 'WINGFOIL_FAKE_AGENT_';
+
+/** The prefix of the commit `agent execute` writes for a run (`spec-016` §4.4). */
+const RECORD_SUBJECT = 'agent: record ';
+
+/** The run log folder `wingfoil init` declares (`paths.runs`), where each run lands in `<element-id>.jsonl`. */
+const SMOKE_RUNS_DIR = 'docs/runs/';
 
 /**
  * The per-template use scenario, `init` first. Every step declares `exit` (0, 1 or 2). `json: true` means
@@ -163,6 +186,63 @@ function smokeSteps(template) {
   ];
 }
 
+/**
+ * The agent run's scenario for `template` (task-243, `spec-016` §2.7), `init` first. Three kinds of step,
+ * told apart by their key: a CLI step (`args`, as in {@link smokeSteps}; `fakeAgent: true` runs it with the
+ * fake switched on), a copy step (`copy` + `commit`: fixture files copied into the project and committed),
+ * and a probe (`probe`: a check on what `agent execute` left, not a CLI call). `agent execute` is the last
+ * writer; the probes and the readers `agent show` and `agent list --past` follow it (`bug-133`). The run id
+ * is derived, `<element-id>/adhoc/1` (`spec-016` §4.3: no step, the first record of a fresh project).
+ * @param {string} template
+ */
+function agentRunSteps(template) {
+  const run = '{agent.id}/adhoc/1';
+  return [
+    { args: ['init', '--template', template], exit: 0 },
+    {
+      args: ['memory', 'add', '--type', 'task', '--title', 'Agent run', ...JSON_FORMAT],
+      exit: 0,
+      json: true,
+      capture: 'agent',
+      expect: { path: 'docs/memory/task/{agent.id}.md' },
+    },
+    {
+      copy: [
+        ['custom/fake.yaml', '.wingfoil/agents/custom/fake.yaml'],
+        ['fake-agent.cjs', 'test/fixtures/agents/fake-agent.cjs'],
+      ],
+      commit: 'smoke: the fake adapter custom/fake (spec-016 §2.7)',
+    },
+    {
+      // `.invalid` is refused for an agent's email (bug-261), so the agent is not the smoke's own identity.
+      args: ['dna', 'add', 'team.agents', '--value', 'Fake Agent', '--entry-email', 'fake-agent@example.com', '--entry-executes_as', 'developer', '--entry-adapter', 'fake'],
+      exit: 0,
+    },
+    { args: ['agent', 'execute', '--element', 'task:{agent.id}', '--role', 'developer'], exit: 0, fakeAgent: true },
+    { probe: 'record-commit', run },
+    {
+      args: ['agent', 'show', run, ...JSON_FORMAT],
+      exit: 0,
+      json: true,
+      expect: {
+        'run.id': run,
+        'run.element': 'task:{agent.id}',
+        'run.role': 'developer',
+        'run.agent': 'Fake Agent',
+        'run.adapter': 'custom/fake',
+        'run.exit_status': 0,
+      },
+    },
+    {
+      args: ['agent', 'list', '--past', ...JSON_FORMAT],
+      exit: 0,
+      json: true,
+      expect: { 'past.length': 1, 'past.0.id': run, 'past.0.adapter': 'custom/fake', 'diagnostics.length': 0 },
+    },
+    { probe: 'fake-read', run, role: 'developer' },
+  ];
+}
+
 /** Spawn a command synchronously and capture its exit code and output. */
 function spawn(command, args, cwd, env) {
   const result = spawnSync(command, args, { cwd, env, encoding: 'utf-8' });
@@ -253,6 +333,50 @@ function stepCheck(label, run, step, captured) {
 }
 
 /**
+ * Make `repo` a git repository with the smoke's identity. `null` when every command passed, else the one
+ * failing check, labelled `<prefix> git <command>`.
+ */
+function setUpRepo(git, prefix) {
+  for (const args of [
+    ['init', '--quiet', '--initial-branch=main'],
+    ['config', 'user.name', SMOKE_NAME],
+    ['config', 'user.email', SMOKE_EMAIL],
+    ['config', 'commit.gpgsign', 'false'],
+  ]) {
+    const run = git(args);
+    if (run.status !== 0) return { label: `${prefix} git ${args[0]}`, ok: false, detail: `exit ${run.status}: ${run.stderr.trim()}` };
+  }
+  return null;
+}
+
+/** Fail a passing `check` when the working tree is not clean after its step; else append `, tree clean`. */
+function requireCleanTree(check, git) {
+  if (!check.ok) return check;
+  const status = git(['status', '--porcelain']);
+  const dirty = status.status === 0 ? status.stdout.trim() : status.stderr.trim();
+  if (status.status !== 0 || dirty !== '') {
+    return { ...check, ok: false, detail: `${check.detail}; working tree not clean after the step: ${dirty.split('\n').join(', ')}` };
+  }
+  return { ...check, detail: `${check.detail}, tree clean` };
+}
+
+/**
+ * Run one CLI step in `repo`: resolve its placeholders, invoke it, judge it ({@link stepCheck}), require
+ * a clean tree. Returns the check and the parsed JSON a `capture` keeps.
+ */
+function runCliStep(prefix, step, captured, invoke, repo, git, env) {
+  const resolved = resolveArgs(step.args, captured);
+  if (resolved.unresolved !== undefined) {
+    const detail = `${resolved.unresolved} not found in an earlier step's JSON output`;
+    return { check: { label: `${prefix} wingfoil ${step.args.join(' ')}`, ok: false, detail } };
+  }
+  const label = `${prefix} wingfoil ${resolved.args.join(' ')}`;
+  const run = env === undefined ? invoke(resolved.args, repo) : invoke(resolved.args, repo, env);
+  const { parsed, ...check } = stepCheck(label, run, step, captured);
+  return { check: requireCleanTree(check, git), parsed };
+}
+
+/**
  * Run `steps` (default: the template's scenario) in a fresh throwaway git repository; returns one check
  * per step, each also requiring a clean working tree after it. Stops at the first failing check.
  */
@@ -261,35 +385,11 @@ function smokeTemplate(template, invoke, env, steps = smokeSteps(template)) {
   const repo = mkdtempSync(join(tmpdir(), 'wingfoil-smoke-'));
   try {
     const git = (args) => spawn('git', args, repo, env);
-    for (const args of [
-      ['init', '--quiet', '--initial-branch=main'],
-      ['config', 'user.name', SMOKE_NAME],
-      ['config', 'user.email', SMOKE_EMAIL],
-      ['config', 'commit.gpgsign', 'false'],
-    ]) {
-      const run = git(args);
-      if (run.status !== 0) return [{ label: `[${template}] git ${args[0]}`, ok: false, detail: `exit ${run.status}: ${run.stderr.trim()}` }];
-    }
+    const failed = setUpRepo(git, `[${template}]`);
+    if (failed !== null) return [failed];
     const captured = new Map();
     for (const step of steps) {
-      const resolved = resolveArgs(step.args, captured);
-      if (resolved.unresolved !== undefined) {
-        const detail = `${resolved.unresolved} not found in an earlier step's JSON output`;
-        checks.push({ label: `[${template}] wingfoil ${step.args.join(' ')}`, ok: false, detail });
-        return checks;
-      }
-      const label = `[${template}] wingfoil ${resolved.args.join(' ')}`;
-      const { parsed, ...check } = stepCheck(label, invoke(resolved.args, repo), step, captured);
-      if (check.ok) {
-        const status = git(['status', '--porcelain']);
-        const dirty = status.status === 0 ? status.stdout.trim() : status.stderr.trim();
-        if (status.status !== 0 || dirty !== '') {
-          check.ok = false;
-          check.detail = `${check.detail}; working tree not clean after the step: ${dirty.split('\n').join(', ')}`;
-        } else {
-          check.detail = `${check.detail}, tree clean`;
-        }
-      }
+      const { check, parsed } = runCliStep(`[${template}]`, step, captured, invoke, repo, git);
       checks.push(check);
       if (!check.ok) return checks;
       if (step.capture !== undefined) captured.set(step.capture, parsed);
@@ -297,6 +397,162 @@ function smokeTemplate(template, invoke, env, steps = smokeSteps(template)) {
     return checks;
   } finally {
     rmSync(repo, { recursive: true, force: true });
+  }
+}
+
+/** A copy step: each `[from, to]` copied byte for byte from `fixtures` into `repo`, then committed. */
+function runCopyStep(prefix, step, repo, git, fixtures) {
+  const targets = step.copy.map(([, to]) => to);
+  const label = `${prefix} commit ${targets.join(', ')}`;
+  try {
+    for (const [from, to] of step.copy) {
+      mkdirSync(dirname(join(repo, to)), { recursive: true });
+      copyFileSync(join(fixtures, from), join(repo, to));
+    }
+  } catch (error) {
+    return { label, ok: false, detail: `copy failed: ${error.message}` };
+  }
+  for (const args of [['add', '--', ...targets], ['commit', '--quiet', '-m', step.commit]]) {
+    const run = git(args);
+    if (run.status !== 0) return { label, ok: false, detail: `git ${args[0]} exited ${run.status}: ${run.stderr.trim()}` };
+  }
+  return requireCleanTree({ label, ok: true, detail: 'commit ok' }, git);
+}
+
+/** The commits whose subject starts with {@link RECORD_SUBJECT}, as `{ sha, subject }`, newest first. */
+function recordCommits(git) {
+  const log = git(['log', '--format=%H%x09%s']);
+  if (log.status !== 0) return { error: `git log exited ${log.status}: ${log.stderr.trim()}` };
+  const commits = log.stdout
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => {
+      const tab = line.indexOf('\t');
+      return { sha: line.slice(0, tab), subject: line.slice(tab + 1) };
+    })
+    .filter((commit) => commit.subject.startsWith(RECORD_SUBJECT));
+  return { commits };
+}
+
+/**
+ * The `record-commit` probe: exactly one `agent: record` commit, `agent: record <run>`, changing only the
+ * run log `docs/runs/<element-id>.jsonl` (`spec-016` §4.4).
+ */
+function probeRecordCommit(run, git) {
+  const found = recordCommits(git);
+  if (found.error !== undefined) return { ok: false, detail: found.error };
+  if (found.commits.length !== 1) return { ok: false, detail: `expected exactly one "agent: record" commit, found ${found.commits.length}` };
+  const [commit] = found.commits;
+  if (commit.subject !== `${RECORD_SUBJECT}${run}`) return { ok: false, detail: `expected subject "${RECORD_SUBJECT}${run}", got "${commit.subject}"` };
+  const runLog = `${SMOKE_RUNS_DIR}${run.split('/')[0]}.jsonl`;
+  const show = git(['show', '--name-only', '--format=', commit.sha]);
+  const paths = show.stdout.split('\n').filter((line) => line !== '');
+  if (show.status !== 0 || paths.length !== 1 || paths[0] !== runLog) {
+    return { ok: false, detail: `expected the commit to change only ${runLog}, got ${paths.join(', ') || show.stderr.trim()}` };
+  }
+  // No sha in a passing detail: a commit name depends on the clock, and the report must not (bug-134).
+  return { ok: true, detail: `the only one, changing only ${runLog}` };
+}
+
+/** The lines the fake agent recorded, parsed; `[]` when it wrote none. */
+function fakeRecord(file) {
+  if (!existsSync(file)) return [];
+  return readFileSync(file, 'utf-8')
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => JSON.parse(line));
+}
+
+/**
+ * The `fake-read` probe: the fake recorded exactly one launch (not its `--version`, `--lookup` or
+ * `--summary` calls), which connected to the `wingfoil` server and read, with no error, the session Resource
+ * the bootstrap names — `wingfoil://session/<role>/task:<element-id>/<state>`, `<state>` being the commit the
+ * run started from, the parent of its record commit — and the text it got is that element's context.
+ */
+function probeFakeRead(run, role, git, recordFile) {
+  let lines;
+  try {
+    lines = fakeRecord(recordFile);
+  } catch (error) {
+    return { ok: false, detail: `the fake agent's record is not JSON lines: ${error.message}` };
+  }
+  const launches = lines.filter((line) => !['--version', '--lookup', '--summary'].some((flag) => line.argv.includes(flag)));
+  if (launches.length === 0) return { ok: false, detail: 'the fake agent recorded no launch' };
+  if (launches.length !== 1) return { ok: false, detail: `expected one launch of the fake agent, found ${launches.length}` };
+  const [launch] = launches;
+  if (launch.failure !== undefined) return { ok: false, detail: `the fake agent failed: ${launch.failure}` };
+  const mcp = launch.mcp;
+  if (mcp === null || mcp === undefined) return { ok: false, detail: 'the fake agent did not connect to an MCP server' };
+  if (mcp.server?.name !== 'wingfoil') return { ok: false, detail: `expected the "wingfoil" server, got "${mcp.server?.name}"` };
+  if (mcp.error !== undefined) return { ok: false, detail: `the server answered an error: ${mcp.error.message}` };
+  const found = recordCommits(git);
+  if (found.error !== undefined) return { ok: false, detail: found.error };
+  const commit = found.commits.find((c) => c.subject === `${RECORD_SUBJECT}${run}`);
+  if (commit === undefined) return { ok: false, detail: `no "${RECORD_SUBJECT}${run}" commit` };
+  const parent = git(['rev-parse', `${commit.sha}^`]);
+  if (parent.status !== 0) return { ok: false, detail: `git rev-parse exited ${parent.status}: ${parent.stderr.trim()}` };
+  const state = parent.stdout.trim();
+  const element = `task:${run.split('/')[0]}`;
+  const uri = `wingfoil://session/${role}/${element}/${state}`;
+  if (mcp.resource?.uri !== uri) return { ok: false, detail: `expected the Resource ${uri}, got ${mcp.resource?.uri}` };
+  const header = `<!-- format: 1 | role: ${role} | element: ${element} | state: ${state} -->`;
+  if (typeof mcp.text !== 'string' || !mcp.text.includes(header)) return { ok: false, detail: `the Resource text lacks "${header}"` };
+  return { ok: true, detail: `read wingfoil://session/${role}/${element}/<the run's state_ref> from the wingfoil server` };
+}
+
+/**
+ * The agent run (task-243, `spec-016` §2.7): run `steps` (default {@link agentRunSteps}) in its own fresh
+ * throwaway git repository; every check is labelled `[<template>/agent] …`, a CLI or copy step requires a
+ * clean tree after it, and the run stops at the first failing check. Each CLI step gets its environment
+ * as `invoke`'s third argument: `env` without any `WINGFOIL_FAKE_AGENT_*` variable, plus
+ * `WINGFOIL_FAKE_AGENT_CONNECT=1` and `WINGFOIL_FAKE_AGENT_RECORD=<a file outside the project>` on a
+ * `fakeAgent` step — so the fake's behaviour is the smoke's, never inherited.
+ * @returns {Array<{ label: string, ok: boolean, detail: string }>}
+ */
+function smokeAgentRun(template, invoke, env, steps = agentRunSteps(template), fixtures = AGENT_FIXTURES) {
+  const prefix = `[${template}/agent]`;
+  const checks = [];
+  const repo = mkdtempSync(join(tmpdir(), 'wingfoil-smoke-agent-'));
+  const outside = mkdtempSync(join(tmpdir(), 'wingfoil-smoke-fake-'));
+  const recordFile = join(outside, 'fake-agent.jsonl');
+  const base = Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith(FAKE_AGENT_ENV_PREFIX)));
+  const fake = { ...base, [`${FAKE_AGENT_ENV_PREFIX}CONNECT`]: '1', [`${FAKE_AGENT_ENV_PREFIX}RECORD`]: recordFile };
+  try {
+    const git = (args) => spawn('git', args, repo, base);
+    const failed = setUpRepo(git, prefix);
+    if (failed !== null) return [failed];
+    const captured = new Map();
+    for (const step of steps) {
+      if ('args' in step) {
+        const { check, parsed } = runCliStep(prefix, step, captured, invoke, repo, git, step.fakeAgent === true ? fake : base);
+        checks.push(check);
+        if (!check.ok) return checks;
+        if (step.capture !== undefined) captured.set(step.capture, parsed);
+      } else if ('copy' in step) {
+        const check = runCopyStep(prefix, step, repo, git, fixtures);
+        checks.push(check);
+        if (!check.ok) return checks;
+      } else {
+        const resolved = resolveValue(step.run, captured);
+        const run = resolved.unresolved === undefined ? resolved.value : step.run;
+        const label =
+          step.probe === 'record-commit'
+            ? `${prefix} one agent: record commit for ${run}`
+            : `${prefix} the fake agent read the session Resource for ${run}`;
+        const result =
+          resolved.unresolved !== undefined
+            ? { ok: false, detail: `${resolved.unresolved} not found in an earlier step's JSON output` }
+            : step.probe === 'record-commit'
+              ? probeRecordCommit(run, git)
+              : probeFakeRead(run, step.role ?? 'developer', git, recordFile);
+        checks.push({ label, ...result });
+        if (!result.ok) return checks;
+      }
+    }
+    return checks;
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   }
 }
 
@@ -331,7 +587,8 @@ function versionCheck(run, expectedVersion, expectedCommit) {
 }
 
 /**
- * Run the whole smoke. Stops at the first failing check.
+ * Run the whole smoke: per template, its scenario ({@link smokeTemplate}) then its agent run
+ * ({@link smokeAgentRun}, task-243). Stops at the first failing check.
  * @param {{ command: string, commandArgs?: readonly string[], env?: NodeJS.ProcessEnv,
  *           expectedVersion?: string, expectedCommit?: string, log?: (line: string) => void }} options
  * @returns {{ ok: boolean, checks: ReadonlyArray<{ label: string, ok: boolean, detail: string }> }}
@@ -344,7 +601,8 @@ function runSmoke(options) {
   const env = options.env ?? process.env;
   const prefix = options.commandArgs ?? [];
   const log = options.log ?? (() => undefined);
-  const invoke = (args, cwd) => spawn(options.command, [...prefix, ...args], cwd, env);
+  // A step may carry its own environment (the agent run's fake switches, task-243); every other step gets `env`.
+  const invoke = (args, cwd, stepEnv = env) => spawn(options.command, [...prefix, ...args], cwd, stepEnv);
   const checks = [];
   const record = (check) => {
     checks.push(check);
@@ -369,6 +627,9 @@ function runSmoke(options) {
 
   for (const template of SMOKE_TEMPLATES) {
     for (const check of smokeTemplate(template, invoke, env)) {
+      if (!record(check)) return done();
+    }
+    for (const check of smokeAgentRun(template, invoke, env)) {
       if (!record(check)) return done();
     }
   }
@@ -403,6 +664,7 @@ function formatReport(report, meta) {
     `- Expected version: ${meta.expectedVersion === undefined ? 'not checked' : `\`${meta.expectedVersion}\``}`,
     `- Expected commit: ${meta.expectedCommit === undefined ? 'not checked' : `\`${meta.expectedCommit}\``}`,
     `- Templates: ${SMOKE_TEMPLATES.join(', ')}`,
+    '- Agent run: `agent execute` through the fake adapter `custom/fake` in a fresh project per template (spec-016 §2.7)',
     '',
     `Result: ${verdict}`,
     '',
@@ -561,4 +823,16 @@ if (require.main === module) {
   }
 }
 
-module.exports = { SMOKE_TEMPLATES, assertCommitName, formatReport, parseSmokeArgs, prepareCandidate, runSmoke, smokeSteps, smokeTemplate };
+module.exports = {
+  AGENT_FIXTURES,
+  SMOKE_TEMPLATES,
+  agentRunSteps,
+  assertCommitName,
+  formatReport,
+  parseSmokeArgs,
+  prepareCandidate,
+  runSmoke,
+  smokeAgentRun,
+  smokeSteps,
+  smokeTemplate,
+};

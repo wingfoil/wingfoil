@@ -9,7 +9,7 @@ description: >-
   per step (0, 1 and 2), every written artifact re-loaded through its own reader, a clean working tree
   after every step. Would have caught bug-005 at release time instead of at the last task. HARD-REJECT
   (dl-023 staging record: v0.2 ran it green, v0.2.2 and later block release-submit on a failure).
-version: 1.5                     # dl-082: `dna set` respelled to `<path> --value <v>` (task-093); 1.2 dl-026: + mcp-registration (task-112); 1.3 spec-003 alignment (task-199): cli.run takes a key: value argument, and the `memory add ...; memory submit ...` step is two tokens (dl-090 Q3 (a): no shell); 1.4 dl-099 §3, dl-023 (task-207; bug-132, bug-133, bug-134): the use scenario with exact exit codes and re-loads, the gate produces its report and hard-rejects; 1.5 bug-292 (task-239): mcp-registration also reads every listed Resource and gets every Prompt, on the pinned build (its known failures declared) and on the build under development
+version: 1.6                     # dl-082: `dna set` respelled to `<path> --value <v>` (task-093); 1.2 dl-026: + mcp-registration (task-112); 1.3 spec-003 alignment (task-199): cli.run takes a key: value argument, and the `memory add ...; memory submit ...` step is two tokens (dl-090 Q3 (a): no shell); 1.4 dl-099 §3, dl-023 (task-207; bug-132, bug-133, bug-134): the use scenario with exact exit codes and re-loads, the gate produces its report and hard-rejects; 1.5 bug-292 (task-239): mcp-registration also reads every listed Resource and gets every Prompt, on the pinned build (its known failures declared) and on the build under development; 1.6 spec-016 §2.7, dl-023, dl-099 (task-243): drive-cli also runs one adhoc `agent execute` through the fake adapter, in its own fresh project per template, and re-loads what it recorded
 element: release
 
 phases:
@@ -29,7 +29,13 @@ phases:
       and a missing operand exit 2; an approve with no approver bound and a submit past the last state
       exit 1); then, after the last writer, every written artifact re-loaded through its own reader
       with its content asserted (dna show, memory search, memory history per task, directives list,
-      paths, workflow list). `scripts/e2e-smoke.cjs` is the executable form of these steps.
+      paths, workflow list). After each template's scenario, the agent run (spec-016 §2.7): in its own
+      fresh `init` project, the fake adapter `custom/fake` and its script are committed, a `team.agents`
+      entry points at it, and one adhoc `agent execute --role developer` runs with no terminal; it must
+      exit 0 and leave exactly one `agent: record` commit holding only the run log, which `agent show`
+      (adapter `custom/fake`) and `agent list --past` re-load, and the fake must have read its session
+      Resource from the `wingfoil` server of the build under test. `scripts/e2e-smoke.cjs` is the
+      executable form of these steps.
     role: qa
     actions:
       - 'cli.run(command: "dna show")'
@@ -45,6 +51,9 @@ phases:
       - 'cli.run(command: "paths <category>")'
       - 'cli.run(command: "directives list")'
       - 'cli.run(command: "workflow list")'
+      - 'cli.run(command: "agent execute --element <type:id> --role developer")'
+      - 'cli.run(command: "agent show <run-id>")'
+      - 'cli.run(command: "agent list --past")'
     checks:
       post:
         - "every step exits with the code it declares, per spec-005-cli-command-contract (0, 1 and 2 each asserted); a non-zero exit carries spec-005 §3's error"
