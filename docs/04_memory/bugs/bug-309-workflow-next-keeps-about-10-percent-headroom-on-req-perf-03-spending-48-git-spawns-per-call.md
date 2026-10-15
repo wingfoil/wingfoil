@@ -81,4 +81,11 @@ holds: the new fix task `task-283-cut-the-git-spawns-of-workflow-next-so-its-p95
 
 ### Retrospective
 
-None.
+Fixed by `task-283` (W3 B8): `workflow next` resolves the snapshot's commit once and every pillar loader reads at that
+sha; `memory.yaml` and `dna.yaml` are read once; the Memory templates and the directives are each read in one batch.
+On the latency fixture (a clone at `b56e8721`) one call went from 47 git processes to 18, and a test pins the count
+on a fixed fixture. Measured idle at the task's head: p95 320 ms in-process and 529 ms as the spawned command, against
+REQ-PERF-03's 1,000 ms. What it teaches: a budget met by a few per-file reads stays met only while nothing adds
+files or loaders, so the number of processes a hot path starts is worth pinning by a test, not just its time; and
+the growth here did not come from the repository's history (the reads at the pinned commit were byte-identical from
+`1c66ef31` to `2de79ef9`), so a latency regression is located by counting and comparing reads before choosing cuts.
