@@ -262,3 +262,46 @@ refactor set.
   - C1/F1: the H2 list is exact (5 in the comparison, 6 in the case study); C4 applies outside *Sources*, F8 to the
     whole case study; C5 also requires at least one table under *What WingFoil replaces* and the
     `### Spec-driven development tools` subsection's first table.
+
+### green (developer, 2026-10-15)
+
+- **Rulings applied** (approver, 2026-10-15, `w3-b8-notes.md`): D1 (a) categories with named products, every product
+  fact sourced and dated; D2 (a) the checks in `test/docs/presentation.test.ts`; D3 (a) two README rows; D4 breaches
+  shown as measured, nothing filed. The README / `docs/site.yaml` `summary` determinism wording is not touched (a
+  user-docs handover): `git diff 2de79ef9 -- README.md` adds only the two table rows; `git diff 2de79ef9 --
+  docs/site.yaml | grep summary` → nothing.
+- **Red's six readings** (`### red (qa)`) are all met as written; none needed a send-back. F2's header is the one the
+  test derives from each report's `measurement_point`; F5's value cells carry only numbers of the metric's
+  `value`/`raw`/`items`, with no thousands separator; F7's prose shares and ratios are cells' figures or catalogue
+  floors; the H2 lists are exact; C5 has a table under *What WingFoil replaces* and under `### Spec-driven
+  development tools`.
+- **Sources** — read 2026-10-15 with read-only `WebFetch`, official pages only, 16 in all (the *Sources* list of
+  `docs/comparison.md`). Three of the planned URLs redirected and the page cites where they now live:
+  `docs.claude.com/en/docs/claude-code/memory` → `code.claude.com/docs/en/memory`, `docs.cursor.com/context/rules` →
+  `cursor.com/docs/context/rules`, the Codex `developers.openai.com` pages → `learn.chatgpt.com`. Added beyond the
+  design's list, each a page of a tool already named: Kiro's feature-specs and steering pages, Claude Code's MCP
+  page, Codex's MCP and AGENTS.md pages. Cells no source settled say `not
+  stated in the sources read` (Kiro: artefact location, licence; Spec Kit and OpenSpec: approval record; Claude
+  Code: licence; and others, see the tables). The quoted phrases were checked against the fetched text where it was
+  returned verbatim (Kiro's Quick Spec sentence was asked for verbatim); WebFetch returns a summary of each page, so a
+  reviewer re-reading a source is the stronger check.
+- **Case study tables** are generated from the JSON and the catalogue by a scratch script (not committed), then pasted:
+  23 rows in *Figures*, 26 in *Not measurable yet* (the split the test computes). The prose cites findings without new
+  numbers beyond the cells, and explains each breach from the report's own `failing` lists (read with a one-off
+  `python3` over `docs/08_health/release-health-v0.2.json`: P01's reasons are mostly non-canonical brackets, missing
+  brackets and AI trailers on approval commits; G14's findings sit mostly in `test/validation/secret-scan.test.ts`).
+- **Config:** `docs/site.yaml` 1.0 → 1.1 (both pages, Optional llms entries), `llms.txt` regenerated (`node
+  scripts/build-site.cjs llms` → `build-site: wrote llms.txt`), `user-docs.yaml` 1.6 → 1.7 (two string `produces:`
+  entries, history `1.7 dl-128 items 3–4 (task-246)`), `WORKFLOW.md` `AU` node one line, README two rows.
+- **red → green:** `npx jest test/docs/presentation.test.ts test/docs/llms-txt.test.ts test/docs/workflow-md.test.ts
+  test/docs/community-health.test.ts test/docs/memory-store-location-text.test.ts test/docs/build-site-extras.test.ts
+  test/docs/build-site-confinement.test.ts --maxWorkers=2` → 7 suites, `Tests: 125 passed, 125 total` (red: 26 failed
+  in presentation). Commit `8af5af64`.
+
+### refactor (developer, 2026-10-15) — gates pending
+
+- The full coverage run, lint, docs:api, typecheck, lint-claims and check-governance wait for the dl-170 slot
+  (`waitslot.sh`, ticket queued 18:25). Not run yet: at 20:27 the slot was still held by task-242's
+  `jest --coverage` (started 18:25), which hangs in `docs/examples/06-workflow-approval/run.sh`: its shim
+  `/tmp/wingfoil-smoke-journey-*/wingfoil` is `exec 'wingfoil' "$@"`, which resolves to itself on `PATH` and spins
+  (`ps -o pid,ppid,etime,args` → 1:59 h, parent `run.sh`, grandparent task-242's jest worker). Load average ~157.
