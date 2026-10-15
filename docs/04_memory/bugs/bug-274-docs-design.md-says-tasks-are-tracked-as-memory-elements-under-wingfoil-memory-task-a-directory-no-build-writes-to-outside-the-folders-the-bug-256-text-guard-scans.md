@@ -53,3 +53,8 @@ The design index points readers to a directory that holds no task and that no bu
 
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b4b-review-findings-plan`, from `task-259`'s review F4 (W2 B4b,
 `dev-loop-rel-v0.3-plan`), checked against `main` at `f15096a2`.
+
+### Retrospective
+
+- Fixed by `task-245`: `docs/design.md` names `docs/04_memory/{release}/{id}.md`, and the `bug-256` guard
+  (`test/docs/memory-store-location-text.test.ts`) also scans `docs/*.md`, so the class cannot return there.
