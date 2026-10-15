@@ -452,3 +452,16 @@ Alternatives considered:
   `dl-088-a-memory-type-for-state-that-lives-outside-the-repository`, which is the id this document
   cites.
 - **Amended by** `dl-133-fix-task-tail` (2026-09-29, v0.3 planning): the catalogue gains the fix-share metrics; and by `dl-131-determinism-index-scope`: D01 is the Index's outcome component, and the process-conformance measures join the catalogue.
+
+**Note (2026-10-15, approver triage of the W3 B7 follow-ups, item E4; `bug-ingest-rel-v0.3-w3b7-review-findings-plan`).**
+§6 says the scripts "run with the pipeline's pinned Node version (`publish.yml` `env.NODE_VERSION`)". The bound
+command lines do not: `release-health.measure` and `release-health.compare` pass `--any-node` (and `--max-workers 2`,
+`dl-170`'s interim rule) since `bindings.yaml` 1.9 (`task-241`, `bug-344`, approver ruling D3 of 2026-10-12; `sed -n
+107,113p .wingfoil/workflows/bindings.yaml`). With it, the toolchain metrics (Q01-Q04, Q11, Q12, Q17) are measured
+under the Node that runs the step, each entry recording `node` and `node_pinned`, instead of `not-measurable`
+(`scripts/release-health/measure.cjs` header, line 39); measuring under the pin means running the same vector under
+`n -d exec <NODE_VERSION>`. This repository's host has only Node v22.21.0 against the pinned 22.12.0, and both
+baselines (`docs/08_health/release-health-v0.1.json`, `-v0.2.json`) were measured that way. The approver asked for
+this note on 2026-10-13 (`task-241`'s rulings, item I). For ratification with the next amendment of this decision:
+§6 keeps the pinned Node as the rule and names `--any-node` as a recorded exception, or the binding runs the step
+under the pin. The Decision above is unchanged.
