@@ -393,6 +393,11 @@ e2e-smoke-fake-read 2/1. Every pre-existing test of those files still passes exc
 the task-060 order row the design (and D1) change. `npx eslint` on the changed files: clean; a `tsc --noEmit`
 over the six test files with `tsconfig.json`'s options: clean.
 
+Send-back (review F1, 2026-10-15): `19bbf5df` pins the reasons of the six AC 4 refusal rows that passed in red
+for the wrong reason: the five `parseArgs` rows (`needs at least one --evidence`, `a relative folder ending in "/"`
+three times, `no other option than --evidence`) and the CLI `exit 2 without --evidence` row (stderr `needs at least
+one --evidence`). `npx jest test/cli/evidence-only-tag.test.ts --maxWorkers=2`: 1 suite, 21 passed / 0 failed.
+
 ### green (developer, 2026-10-15)
 
 Green `f11dc6af`, one commit, `fix(release): task-282 — …`. Red → green: `npx jest test/cli/build-info.test.ts
