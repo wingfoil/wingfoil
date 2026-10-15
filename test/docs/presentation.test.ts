@@ -22,9 +22,17 @@
  *
  * Offline and deterministic: every file is read from the working tree; nothing is fetched from
  * shields.io, npm or GitHub (what a badge displays is the service's view, not the repository's).
+ *
+ * `task-246-write-comparison-page-dogfooding-case-study` (`dl-128` items 3–4, `dl-112`) adds the
+ * `task-246 — AC n` blocks below (approver ruling D2 (a): the checks live in this suite, so
+ * `presentation.current` covers the two new pages with no binding change): `docs/comparison.md`, where every
+ * fact about another tool carries a dated source, and `docs/case-study.md`, whose figures are read back from
+ * the committed release-health reports and the metric catalogue — never typed into this test. The lower
+ * bound for a source's read date is a constant, never the clock. T1: red-first throughout (neither page
+ * exists at `e41ec99b`).
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, normalize, relative, sep } from 'node:path';
 
 import { load } from 'js-yaml';
 
@@ -259,5 +267,431 @@ describe('AC 3 — align-user-docs produces the tape and the GIF, and checks.pos
 
   it('the workflow version moved past 1.4', () => {
     expect(userDocs.version).toBeGreaterThan(1.4);
+  });
+});
+
+// ── task-246 — the comparison page and the dogfooding case study (dl-128 items 3–4) ─────────────────────────
+
+const COMPARISON = 'docs/comparison.md';
+const CASE_STUDY = 'docs/case-study.md';
+const REPORTS = ['docs/08_health/release-health-v0.1.json', 'docs/08_health/release-health-v0.2.json'];
+const CATALOGUE = 'docs/08_health/metrics.yaml';
+/** The earliest date a source may have been read: the day task-246's sources are read (a constant, not the clock). */
+const READ_DATE_FLOOR = '2026-10-15';
+const NOT_STATED = 'not stated in the sources read';
+
+/** The file's text, or '' when it does not exist, so a missing page fails on an assertion, not on ENOENT. */
+function readIfExists(path: string): string {
+  return existsSync(join(repoRoot, path)) ? read(path) : '';
+}
+
+const collapse = (text: string): string => text.replace(/\s+/g, ' ').trim();
+
+/** The text with fenced code blocks blanked out (line count kept). */
+function withoutFences(markdown: string): string {
+  let inFence = false;
+  return markdown
+    .split('\n')
+    .map((line) => {
+      if (/^\s*(```|~~~)/.test(line)) {
+        inFence = !inFence;
+        return '';
+      }
+      return inFence ? '' : line;
+    })
+    .join('\n');
+}
+
+/** The H2 headings, in order (outside fenced code). */
+function h2s(markdown: string): string[] {
+  return [...withoutFences(markdown).matchAll(/^## (.+)$/gm)].map((match) => match[1]!.trim());
+}
+
+/** The body of the H2 section titled `title` (up to the next H2), '' when there is none. */
+function section(markdown: string, title: string): string {
+  const lines = markdown.split('\n');
+  const start = lines.findIndex((line) => line.trim() === `## ${title}`);
+  if (start < 0) return '';
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^## /.test(line));
+  return (end < 0 ? rest : rest.slice(0, end)).join('\n');
+}
+
+/** The body of the H3 subsection titled `title` inside `text` (up to the next H2 or H3). */
+function subsection(text: string, title: string): string {
+  const lines = text.split('\n');
+  const start = lines.findIndex((line) => line.trim() === `### ${title}`);
+  if (start < 0) return '';
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^#{2,3} /.test(line));
+  return (end < 0 ? rest : rest.slice(0, end)).join('\n');
+}
+
+/** The text with every H2 section titled `title` removed. */
+function outside(markdown: string, title: string): string {
+  const body = section(markdown, title);
+  return body === '' ? markdown : markdown.replace(`## ${title}\n${body}`, '');
+}
+
+/** A table row's cells: split on unescaped `|`, `\|` unescaped, trimmed. */
+function cells(row: string): string[] {
+  const inner = row.trim().replace(/^\|/, '').replace(/\|$/, '');
+  return inner.split(/(?<!\\)\|/).map((cell) => cell.replace(/\\\|/g, '|').trim());
+}
+
+interface Table {
+  header: string[];
+  rows: string[][];
+}
+
+/** Every Markdown table in `text` (outside fenced code): a header row, a separator row, the body rows. */
+function tables(text: string): Table[] {
+  const lines = withoutFences(text).split('\n');
+  const found: Table[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*\|/.test(lines[i]!) || !/^\s*\|?\s*:?-{3,}/.test(lines[i + 1] ?? '')) continue;
+    const header = cells(lines[i]!);
+    const rows: string[][] = [];
+    let j = i + 2;
+    for (; j < lines.length && /^\s*\|/.test(lines[j]!); j++) rows.push(cells(lines[j]!));
+    found.push({ header, rows });
+    i = j - 1;
+  }
+  return found;
+}
+
+/** The text without its tables and fenced code. */
+function prose(markdown: string): string {
+  return withoutFences(markdown)
+    .split('\n')
+    .filter((line) => !/^\s*\|/.test(line))
+    .join('\n');
+}
+
+/** List items made of a link and nothing else (`- [text](target)`, optionally followed by a full stop). */
+function linkOnlyListItems(markdown: string): string[] {
+  return withoutFences(markdown)
+    .split('\n')
+    .filter((line) => /^\s*(?:[-*+]|\d+\.)\s+(?:\[[^\]]*\]\([^)]*\)|<[^>]+>)\s*\.?\s*$/.test(line));
+}
+
+/** Relative link targets (`](x)` not starting with `http` or `#`), without their anchor, outside fenced code. */
+function relativeLinks(markdown: string): string[] {
+  return [...withoutFences(markdown).matchAll(/\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)]
+    .map((match) => match[1]!)
+    .filter((target) => !/^(?:https?:|mailto:|#)/.test(target))
+    .map((target) => target.replace(/#.*$/, ''));
+}
+
+/** Each relative link of the page at `page` that does not resolve to an existing path inside the repository. */
+function unresolvedLinks(page: string, markdown: string): string[] {
+  return relativeLinks(markdown).filter((target) => {
+    const resolved = normalize(join(repoRoot, dirname(page), decodeURIComponent(target)));
+    const inside = relative(repoRoot, resolved);
+    return inside.startsWith('..') || inside.startsWith(sep) || !existsSync(resolved);
+  });
+}
+
+const DETERMINISM_ACHIEVED = /\b(ensures|guarantees) determinism\b|\b(is|makes [^.]{0,40}) deterministic\b/i;
+
+interface Source {
+  id: number;
+  url: string;
+  date: string;
+}
+
+const SOURCE_LINE = /^- \[S(\d+)\] .+ — <?(https:\/\/[^\s>]+)>? — read (\d{4}-\d{2}-\d{2})\.$/;
+
+function isCalendarDate(date: string): boolean {
+  const [year, month, day] = date.split('-').map(Number) as [number, number, number];
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
+
+describe('task-246 — AC 1: docs/comparison.md, every fact about another tool sourced and dated (dl-112, dl-128 item 3)', () => {
+  const page = readIfExists(COMPARISON);
+  const sourcesText = section(page, 'Sources');
+  const body = outside(page, 'Sources');
+  const sourceLines = sourcesText.split('\n').filter((line) => line.trim() !== '');
+  const sources: Source[] = sourceLines
+    .map((line) => SOURCE_LINE.exec(line))
+    .filter((match): match is RegExpExecArray => match !== null)
+    .map((match) => ({ id: Number(match[1]), url: match[2]!, date: match[3]! }));
+
+  it('C1: exists, titled "How WingFoil compares", with its five H2 sections in order', () => {
+    expect(existsSync(join(repoRoot, COMPARISON))).toBe(true);
+    expect(page.split('\n').find((line) => /^# /.test(line))).toBe('# How WingFoil compares');
+    expect(h2s(page)).toEqual([
+      'What WingFoil replaces',
+      'What WingFoil works with',
+      'Ideas seen elsewhere, not adopted',
+      'Determinism, stated as a goal',
+      'Sources',
+    ]);
+  });
+
+  it('C2: every Sources line is "- [S<n>] title — <https://…> — read YYYY-MM-DD.", numbered 1..n, unique URLs, read on or after the floor', () => {
+    expect(sourceLines.length).toBeGreaterThanOrEqual(1);
+    expect(sourceLines.filter((line) => !SOURCE_LINE.test(line))).toEqual([]);
+    expect(sources.map(({ id }) => id)).toEqual(sources.map((_, index) => index + 1));
+    expect(new Set(sources.map(({ url }) => url)).size).toBe(sources.length);
+    for (const { date } of sources) {
+      expect(isCalendarDate(date)).toBe(true);
+      expect(date >= READ_DATE_FLOOR).toBe(true);
+    }
+  });
+
+  it('C3: every [S<n>] cited resolves to a source, and every source is cited outside Sources', () => {
+    const cited = new Set([...body.matchAll(/\[S(\d+)\]/g)].map((match) => Number(match[1])));
+    const declared = new Set(sources.map(({ id }) => id));
+    expect(declared.size).toBeGreaterThanOrEqual(1);
+    expect([...cited].filter((id) => !declared.has(id))).toEqual([]);
+    expect([...declared].filter((id) => !cited.has(id))).toEqual([]);
+  });
+
+  it('C4: integrated, not linked — no URL outside Sources, no list item that is only a link', () => {
+    expect(page).not.toBe('');
+    expect(body.match(/https?:\/\/\S+/g) ?? []).toEqual([]);
+    expect(linkOnlyListItems(body)).toEqual([]);
+  });
+
+  it('C5: every third-party cell carries a source or says it is not stated; the spec-driven table compares at least three tools', () => {
+    const scoped = [...tables(section(page, 'What WingFoil replaces')), ...tables(section(page, 'What WingFoil works with'))];
+    expect(tables(section(page, 'What WingFoil replaces')).length).toBeGreaterThanOrEqual(1);
+    const unsourced: string[] = [];
+    for (const { header, rows } of scoped) {
+      header.forEach((title, column) => {
+        if (column === 0 || title.includes('WingFoil')) return;
+        for (const row of rows) {
+          const cell = row[column] ?? '';
+          if (!/\[S\d+\]/.test(cell) && cell !== NOT_STATED) unsourced.push(`${title}: ${cell}`);
+        }
+      });
+    }
+    expect(unsourced).toEqual([]);
+    const specDriven = tables(subsection(section(page, 'What WingFoil works with'), 'Spec-driven development tools'))[0];
+    expect(specDriven).toBeDefined();
+    expect(specDriven!.header.filter((title, column) => column > 0 && !title.includes('WingFoil')).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('C6: every relative link resolves inside the repository; no source is a private repository of the author', () => {
+    expect(page).not.toBe('');
+    expect(unresolvedLinks(COMPARISON, page)).toEqual([]);
+    expect(sources.filter(({ url }) => /github\.com\/robypomper\//i.test(url))).toEqual([]);
+  });
+
+  it.each([COMPARISON, CASE_STUDY])('C7: %s states determinism as a goal, never as achieved (dl-112 Q3 (i))', (path) => {
+    const text = readIfExists(path);
+    expect(text).not.toBe('');
+    expect(text.match(DETERMINISM_ACHIEVED)).toBeNull();
+  });
+});
+
+interface Metric {
+  id: string;
+  name: string;
+  definition: string;
+  scope: string;
+  kind: string;
+  floor?: string | number;
+}
+
+interface ReportMetric {
+  id: string;
+  status: 'measured' | 'not-measurable';
+  reason?: string;
+  value?: unknown;
+  raw?: unknown;
+  items?: unknown;
+}
+
+interface Report {
+  release: { version: string };
+  measurement_point: { ref: string; commit: string };
+  metrics: ReportMetric[];
+}
+
+/** Every number in a JSON value: its numeric leaves and the numbers inside its keys (`p90`, `over_72`). */
+function jsonNumbers(value: unknown, into: Set<number> = new Set()): Set<number> {
+  if (typeof value === 'number') into.add(Math.abs(value));
+  else if (Array.isArray(value)) value.forEach((item) => jsonNumbers(item, into));
+  else if (value !== null && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      for (const match of key.matchAll(/\d+(?:\.\d+)?/g)) into.add(Number(match[0]));
+      jsonNumbers(item, into);
+    }
+  }
+  return into;
+}
+
+/** The numbers a cell states, skipping digits glued to a word (`p90`, `over_500`, `G01`). */
+function cellNumbers(cell: string): number[] {
+  return [...cell.matchAll(/(?<![A-Za-z_\d.])\d+(?:\.\d+)?(?![A-Za-z_\d])/g)].map((match) => Number(match[0]));
+}
+
+const stripTicks = (cell: string): string => cell.replace(/`/g, '').trim();
+
+describe('task-246 — AC 2: docs/case-study.md, figures read from the committed release-health reports (dl-128 item 4)', () => {
+  const page = readIfExists(CASE_STUDY);
+  const catalogue = (load(read(CATALOGUE)) as { metrics: Metric[] }).metrics;
+  const reports = REPORTS.map((path) => JSON.parse(read(path)) as Report);
+  const byId = (report: Report, id: string): ReportMetric | undefined => report.metrics.find((metric) => metric.id === id);
+  const measuredIds = catalogue
+    .map(({ id }) => id)
+    .filter((id) => reports.some((report) => byId(report, id)?.status === 'measured'));
+  const unmeasuredIds = catalogue.map(({ id }) => id).filter((id) => !measuredIds.includes(id));
+  /** "v0.1 at 5b16ab61" for a point named by its commit, "v0.2 at v0.2.1 (9833e00a)" for one named by a tag. */
+  const pointColumn = ({ release, measurement_point: { ref, commit } }: Report): string =>
+    ref === commit ? `${release.version} at ${commit.slice(0, 8)}` : `${release.version} at ${ref} (${commit.slice(0, 8)})`;
+  const figures = tables(section(page, 'Figures'))[0];
+  const notMeasurable = tables(section(page, 'Not measurable yet'))[0];
+
+  it('F1: exists, titled "Case study: WingFoil develops WingFoil", with the six sections in order', () => {
+    expect(existsSync(join(repoRoot, CASE_STUDY))).toBe(true);
+    expect(page.split('\n').find((line) => /^# /.test(line))).toBe('# Case study: WingFoil develops WingFoil');
+    expect(h2s(page)).toEqual([
+      'How this repository is governed',
+      'How it was measured',
+      'Figures',
+      'What the figures say',
+      'Not measurable yet',
+      'Reproduce',
+    ]);
+  });
+
+  it('F2: the Figures header names each report\'s measurement point', () => {
+    expect(figures?.header).toEqual(['id', 'Metric', 'Definition', 'Scope', 'Kind', ...reports.map(pointColumn)]);
+  });
+
+  it('F3: Figures holds the metrics measured in at least one report, Not measurable yet the rest, each once, in catalogue order', () => {
+    expect(figures?.rows.map((row) => stripTicks(row[0] ?? ''))).toEqual(measuredIds);
+    expect(notMeasurable?.header).toEqual(['id', 'Metric', ...reports.map(({ release }) => release.version)]);
+    expect(notMeasurable?.rows.map((row) => stripTicks(row[0] ?? ''))).toEqual(unmeasuredIds);
+    expect([...measuredIds, ...unmeasuredIds].sort()).toEqual(catalogue.map(({ id }) => id).sort());
+  });
+
+  it('F4: Metric, Definition and Scope are the catalogue\'s; Kind starts with the catalogue kind', () => {
+    expect(figures).toBeDefined();
+    for (const row of figures?.rows ?? []) {
+      const metric = catalogue.find(({ id }) => id === stripTicks(row[0] ?? ''));
+      expect(metric).toBeDefined();
+      expect([metric!.id, row[1]]).toEqual([metric!.id, metric!.name]);
+      expect([metric!.id, collapse(row[2] ?? '')]).toEqual([metric!.id, collapse(metric!.definition)]);
+      expect([metric!.id, row[3]]).toEqual([metric!.id, metric!.scope]);
+      expect([metric!.id, (row[4] ?? '').startsWith(metric!.kind)]).toEqual([metric!.id, true]);
+    }
+  });
+
+  it('F5: a value cell says "not measurable" exactly when the report does, and states only numbers the report holds', () => {
+    expect(figures).toBeDefined();
+    const wrong: string[] = [];
+    for (const row of figures?.rows ?? []) {
+      const id = stripTicks(row[0] ?? '');
+      reports.forEach((report, index) => {
+        const cell = row[5 + index] ?? '';
+        const entry = byId(report, id);
+        const label = `${id} @ ${report.release.version}: ${cell}`;
+        if (entry?.status !== 'measured') {
+          if (!cell.startsWith('not measurable')) wrong.push(`${label} (expected "not measurable…")`);
+          return;
+        }
+        if (cell.startsWith('not measurable')) wrong.push(`${label} (the report measured it)`);
+        const allowed = new Set([...jsonNumbers(entry.value), ...jsonNumbers(entry.raw), ...jsonNumbers(entry.items)]);
+        const stated = cellNumbers(cell);
+        const foreign = stated.filter((number) => !allowed.has(number));
+        if (foreign.length > 0) wrong.push(`${label} (not in the report: ${foreign.join(', ')})`);
+        const exempt =
+          typeof entry.value === 'boolean' ||
+          (entry.value !== null && typeof entry.value === 'object' && Object.values(entry.value).some((item) => item === null));
+        if (stated.length === 0 && !exempt) wrong.push(`${label} (no figure)`);
+      });
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it('F6: a Not measurable yet cell carries the report\'s reason; Metric is the catalogue name', () => {
+    expect(notMeasurable).toBeDefined();
+    const wrong: string[] = [];
+    for (const row of notMeasurable?.rows ?? []) {
+      const id = stripTicks(row[0] ?? '');
+      const metric = catalogue.find((candidate) => candidate.id === id);
+      if (row[1] !== metric?.name) wrong.push(`${id}: Metric "${row[1]}"`);
+      reports.forEach((report, index) => {
+        const reason = collapse(byId(report, id)?.reason ?? '');
+        if (reason === '' || !collapse(row[2 + index] ?? '').includes(reason)) wrong.push(`${id} @ ${report.release.version}`);
+      });
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it('F7: outside the tables and fenced code, every share and every ratio uses a figure of the table or a catalogue floor', () => {
+    expect(page).not.toBe('');
+    const known = new Set<number>();
+    for (const row of figures?.rows ?? []) for (const cell of row.slice(5)) cellNumbers(cell).forEach((number) => known.add(number));
+    for (const { floor } of catalogue) if (floor !== undefined) for (const match of String(floor).matchAll(/\d+(?:\.\d+)?/g)) known.add(Number(match[0]));
+    const text = prose(page);
+    const foreign: string[] = [];
+    for (const match of text.matchAll(/(?<![\w./-])(\d+(?:\.\d+)?)\s?%/g)) if (!known.has(Number(match[1]))) foreign.push(match[0]);
+    for (const match of text.matchAll(/(?<![\w./-])(\d+)\/(\d+)(?![\w/])/g)) {
+      if (!known.has(Number(match[1])) || !known.has(Number(match[2]))) foreign.push(match[0]);
+    }
+    expect(foreign).toEqual([]);
+  });
+
+  it('F8: no list item that is only a link, and every relative link resolves inside the repository', () => {
+    expect(page).not.toBe('');
+    expect(linkOnlyListItems(page)).toEqual([]);
+    expect(unresolvedLinks(CASE_STUDY, page)).toEqual([]);
+  });
+});
+
+describe('task-246 — AC 3: align-user-docs produces both pages, version bumped; the site and llms.txt carry them (ruling D5)', () => {
+  const raw = read('.wingfoil/workflows/custom/user-docs.yaml');
+  const userDocs = load(raw) as {
+    version: number;
+    phases: { name: string; produces?: (string | { type: string; path: string })[]; checks?: { post?: string[] } }[];
+  };
+  const phase = userDocs.phases.find((candidate) => candidate.name === 'align-user-docs')!;
+  const produced = (phase.produces ?? []).map((entry) => (typeof entry === 'string' ? entry : entry.path));
+  const siteRaw = read('docs/site.yaml');
+  const site = load(siteRaw) as {
+    version: number;
+    pages: string[];
+    llms: { section: string; entries: { path?: string }[] }[];
+  };
+
+  it.each([COMPARISON, CASE_STUDY])('U1: align-user-docs produces %s', (path) => {
+    expect(produced).toContain(path);
+  });
+
+  it('U2: user-docs.yaml moved past 1.6, with the 1.7 dl-128 history entry (bug-314: at least, never exact)', () => {
+    expect(userDocs.version).toBeGreaterThan(1.6);
+    expect(raw.split('\n').find((line) => /^version:/.test(line)) ?? '').toContain('1.7 dl-128');
+  });
+
+  it('U3: checks.post still runs presentation.current', () => {
+    expect(phase.checks?.post).toContain('presentation.current');
+  });
+
+  it.each([COMPARISON, CASE_STUDY])('S1: docs/site.yaml lists %s as a page and in the Optional llms section', (path) => {
+    expect(site.pages).toContain(path);
+    const optional = site.llms.find(({ section: title }) => title === 'Optional');
+    expect(optional?.entries.map((entry) => entry.path)).toContain(path);
+  });
+
+  it('S1: docs/site.yaml moved to at least 1.1, with the 1.1 dl-128 history entry', () => {
+    expect(site.version).toBeGreaterThanOrEqual(1.1);
+    expect(siteRaw.split('\n').find((line) => /^version:/.test(line)) ?? '').toContain('1.1 dl-128');
+  });
+
+  it.each([COMPARISON, CASE_STUDY])('S2: llms.txt indexes %s', (path) => {
+    expect(read('llms.txt')).toMatch(new RegExp(`\\]\\(https://[^)\\s]*/${path.replace(/[.]/g, '\\.')}\\)`));
+  });
+
+  it.each([COMPARISON, CASE_STUDY])('R1: the README Documentation table links %s (ruling D3 (a))', (path) => {
+    const readme = read('README.md');
+    const documentation = subsection(readme, 'Documentation');
+    const links = tables(documentation).flatMap(({ rows }) => rows.flatMap((row) => [...row.join('|').matchAll(/\]\(([^)\s]+)\)/g)].map((match) => match[1])));
+    expect(links).toContain(path);
   });
 });
