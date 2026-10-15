@@ -64,9 +64,9 @@
 'use strict';
 
 const { spawnSync } = require('node:child_process');
-const { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { accessSync, chmodSync, constants: fsConstants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
-const { delimiter, dirname, join } = require('node:path');
+const { delimiter, dirname, isAbsolute, join, resolve } = require('node:path');
 
 const { PACK_INPUTS, inputStatus } = require('./write-build-info.cjs');
 
@@ -636,6 +636,38 @@ function missingJourneyCommand(entries) {
   return null;
 }
 
+/**
+ * How long one Journey 4 run may take before its check fails (task-242): about 9 s on an idle machine, so the
+ * bound only stops a run that would otherwise never end, and `bash` is killed with the check failed.
+ */
+const JOURNEY_TIMEOUT_MS = 600_000;
+
+/**
+ * `command` as an absolute path for the journey's shim (task-242 fix): a name with a `/` resolved against the
+ * working directory; a bare name looked up on `pathValue` as a shell would (the first executable regular file),
+ * skipping `exclude` — the shim's own directory, so a shim for `wingfoil` can never exec itself. `null` when no
+ * directory holds it.
+ * @param {string} command
+ * @param {string} pathValue
+ * @param {string} exclude
+ * @returns {string | null}
+ */
+function resolveCommand(command, pathValue, exclude) {
+  if (command.includes('/')) return isAbsolute(command) ? command : resolve(command);
+  for (const dir of pathValue.split(delimiter)) {
+    if (dir === '' || resolve(dir) === resolve(exclude)) continue;
+    const candidate = join(resolve(dir), command);
+    try {
+      if (!statSync(candidate).isFile()) continue;
+      accessSync(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+      // not there, or not executable: the next directory
+    }
+  }
+  return null;
+}
+
 /** `text` quoted for a POSIX shell: single quotes, each embedded one closed, escaped and reopened. */
 function shellQuote(text) {
   return `'${String(text).replace(/'/g, "'\\''")}'`;
@@ -643,22 +675,26 @@ function shellQuote(text) {
 
 /**
  * The Journey 4 run (task-242, `bug-328`): `bash <script>` with a `wingfoil` shim that execs `argv` (the CLI
- * under test, program first) on `PATH`, and `WINGFOIL=wingfoil` and `WINGFOIL_EXAMPLE_TEMPLATE=<template>` set
+ * under test, program first, resolved to an absolute path first: {@link resolveCommand}) on `PATH`, and `WINGFOIL=wingfoil` and `WINGFOIL_EXAMPLE_TEMPLATE=<template>` set
  * over `env`, so neither is ever inherited; the shim on `PATH` keeps a path with spaces out of lib.sh's
- * word-split `$WINGFOIL`. The script makes and deletes its own project. One check, never a throw.
+ * word-split `$WINGFOIL`. The script makes and deletes its own project, and is killed after `timeoutMs`
+ * ({@link JOURNEY_TIMEOUT_MS}). One check, never a throw.
  * @param {string} template
  * @param {readonly string[]} argv
  * @param {NodeJS.ProcessEnv} env
  * @param {string} [script]
+ * @param {number} [timeoutMs]
  * @returns {{ label: string, ok: boolean, detail: string }}
  */
-function smokeJourney(template, argv, env, script = JOURNEY_SCRIPT) {
+function smokeJourney(template, argv, env, script = JOURNEY_SCRIPT, timeoutMs = JOURNEY_TIMEOUT_MS) {
   const label = `[${template}/journey] ${JOURNEY_LABEL}`;
   let shimDir;
   try {
     shimDir = mkdtempSync(join(tmpdir(), 'wingfoil-smoke-journey-'));
+    const program = argv[0] === undefined ? null : resolveCommand(argv[0], env.PATH ?? '', shimDir);
+    if (program === null) return { label, ok: false, detail: `could not find ${argv[0] ?? '(no command)'} on PATH` };
     const shim = join(shimDir, 'wingfoil');
-    writeFileSync(shim, `#!/bin/sh\nexec ${argv.map(shellQuote).join(' ')} "$@"\n`);
+    writeFileSync(shim, `#!/bin/sh\nexec ${[program, ...argv.slice(1)].map(shellQuote).join(' ')} "$@"\n`);
     chmodSync(shim, 0o755);
     const runEnv = {
       ...env,
@@ -666,7 +702,8 @@ function smokeJourney(template, argv, env, script = JOURNEY_SCRIPT) {
       WINGFOIL: 'wingfoil',
       WINGFOIL_EXAMPLE_TEMPLATE: template,
     };
-    const run = spawnSync('bash', [script], { cwd: shimDir, env: runEnv, encoding: 'utf-8' });
+    const run = spawnSync('bash', [script], { cwd: shimDir, env: runEnv, encoding: 'utf-8', timeout: timeoutMs, killSignal: 'SIGKILL' });
+    if (run.error?.code === 'ETIMEDOUT') return { label, ok: false, detail: `timed out after ${timeoutMs / 1000} s` };
     if (run.error) return { label, ok: false, detail: `could not run bash: ${run.error.message}` };
     const stdout = run.stdout ?? '';
     if (run.status !== 0) {
