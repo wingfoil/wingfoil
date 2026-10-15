@@ -414,8 +414,12 @@ makes one lookup per element that has a re-entry in the walk, and one batched re
 the bracketless `add` and `submit` commits that name them. The merge base is an ancestor of every
 start, so no commit any instance's walk holds is cut off. The oldest start alone would cut one off in a
 branching history: a commit on another branch that precedes the oldest start.
-Nothing scales with the full history. The fit criterion is verified by a timing test in the
-implementing task, on this repository's history; it is not measured here.
+Nothing scales with the full history. The configuration is read at that one commit, resolved once: no loader
+resolves the revision again, `memory.yaml` and `dna.yaml` are read once each, and the Memory templates, the
+Memory documents and the directives are each read in one batch, never one read per file. The number of git
+processes one `workflow next` starts is pinned by a test on a fixed fixture, so it cannot creep back. The fit
+criterion is verified by timing tests in the implementing task, on this repository's history, in-process and
+as the spawned command; it is not measured here.
 
 **4.9 The current step and the frontier.** An instance's phases are sequential. The **current phase**
 is the first phase that is neither complete nor skipped. When it is an `include` or `iterate_over`
@@ -1407,3 +1411,13 @@ reads (`bug-301`, approver ruling 2026-10-12 D2). §10: a `<ref>` naming an inst
 `workflow is not open` for every command that takes one, and a `<ref>` naming neither a workflow nor an instance plan
 — a phase plan's id included (ruling D4) — is `unknown workflow` (`bug-326`). No command or diagnostic code
 changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-10-15, `task-283-cut-the-git-spawns-of-workflow-next-so-its-p95-is-back-under-req-perf-03-s-budget-with-margin`)
+— the cost of reading the configuration.** §4.8 *Cost*: the snapshot's commit is resolved once and shared by every
+loader; `memory.yaml` and `dna.yaml` are read once; the Memory templates and the directives are read in one batch
+each, as the workflow files already were (`bug-309`: 47 git processes per `workflow next` on the latency fixture,
+18 after); a test pins the count, and REQ-PERF-03 is timed as the spawned command too (`dl-146` Q3). No command,
+output or diagnostic changes. The core checks read every template `memory.yaml` declares, and a declared path that
+is not a regular file reads as absent at a commit and in the working tree alike (the working-tree registry, which no
+command reads, threw on a directory there). Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.
