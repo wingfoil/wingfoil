@@ -183,7 +183,9 @@ commit carries resolve, the way git itself resolves them:
 A variable that is set but blank does not fall back to the config: git refuses a blank name and
 records a blank email as `<>`; the check refuses both. Git's `EMAIL` variable and its hostname guess are not used. If any of the four values is missing, the command exits `1` with
 `git identity not configured (user.name/user.email)`; if one contains `<`, `>` or a control character,
-it exits `1` with `git identity not usable: …`. Either way nothing is written.
+it exits `1` with `git identity not usable: …`. If git itself cannot be run — it is not on `PATH`, it is
+not executable, or a sandbox forbids starting it — the command exits `1` with `could not run git: <cause>`
+(for example `could not run git: spawnSync git ENOENT`) instead. In every case nothing is written.
 
 `memory approve`, `memory reject` and `memory amend` additionally require the author's email to
 belong to a `team.members` entry holding the `approver` role in the committed `dna.yaml` (see
