@@ -141,14 +141,15 @@ describe('task-282 AC 4 — parseArgs for --check-evidence-only', () => {
     });
   });
 
-  it.each([
-    ['no --evidence', ['--check-evidence-only', 't.md']],
-    ['an absolute prefix', ['--check-evidence-only', 't.md', '--evidence', '/abs/']],
-    ['a prefix without a trailing slash', ['--check-evidence-only', 't.md', '--evidence', 'docs']],
-    ['a prefix with ..', ['--check-evidence-only', 't.md', '--evidence', '../x/']],
-    ['another option beside it', ['--check-evidence-only', 't.md', '--evidence', 'docs/04_memory/', '--expect-commit', 'a'.repeat(40)]],
-  ])('throws on %s', (_case, argv) => {
-    expect(() => parseArgs(argv)).toThrow();
+  const BAD_PATH = /a relative folder ending in "\/"/;
+  it.each<[string, string[], RegExp]>([
+    ['no --evidence', ['--check-evidence-only', 't.md'], /needs at least one --evidence/],
+    ['an absolute prefix', ['--check-evidence-only', 't.md', '--evidence', '/abs/'], BAD_PATH],
+    ['a prefix without a trailing slash', ['--check-evidence-only', 't.md', '--evidence', 'docs'], BAD_PATH],
+    ['a prefix with ..', ['--check-evidence-only', 't.md', '--evidence', '../x/'], BAD_PATH],
+    ['another option beside it', ['--check-evidence-only', 't.md', '--evidence', 'docs/04_memory/', '--expect-commit', 'a'.repeat(40)], /no other option than --evidence/],
+  ])('throws on %s, saying why', (_case, argv, reason) => {
+    expect(() => parseArgs(argv)).toThrow(reason);
   });
 });
 
@@ -188,7 +189,9 @@ describe('task-282 AC 4 — the CLI check, as the binding runs it', () => {
 
   it('exit 2 without --evidence', () => {
     writeFixtureFile(repo, 'docs/07_gates/t.md', transcript(PKG, candidate));
-    expect(run('--check-evidence-only', 'docs/07_gates/t.md').status).toBe(2);
+    const refused = run('--check-evidence-only', 'docs/07_gates/t.md');
+    expect(refused.stderr).toMatch(/needs at least one --evidence/);
+    expect(refused.status).toBe(2);
   });
 });
 
