@@ -324,8 +324,8 @@ deviations (default import of `child_process` for the spies) hold with the desig
 | `npm run lint` | exit 0 |
 | `npm run docs:api` | exit 0 |
 | `npm run typecheck` and `npx tsc --noEmit -p tsconfig.json` (slot 16:00) | both exit 0 |
-| `node scripts/check-governance.cjs --base 2de79ef9` | 2 `wf()` commits checked, 0 findings |
-| `node scripts/lint-claims.cjs --base 2de79ef9` | 2 warnings in this file (warn-only): design line "unchanged", qa's "nothing else" |
+| `node scripts/check-governance.cjs --base 2de79ef9` (run at `e614365f`, before the notes and submit commits) | 2 `wf()` commits checked, 0 findings |
+| `node scripts/lint-claims.cjs --base 2de79ef9` (run at `e614365f`) | 2 warnings in this file (warn-only): design line "unchanged", qa's "nothing else"; at the submitted head see the independent-review subsection |
 | T4: `git log --first-parent --no-merges --format=%h 46e2653c..HEAD -- <red's 7 test files>` | empty |
 
 No CLI or help change (no `docs/cli-reference.md` edit); no BDD change (P4.4's feature file states the 1-second
@@ -368,6 +368,30 @@ Against `code-review`, every AC with the command that shows it:
   `loadWorkflowRegistry` source, which no workflow command reads since task-204) a declared template path that is a
   directory would now be read by `readDocument` and throw, where before it was read only if a check needed it —
   candidate finding, not fixed here (no caller on this path).
+
+### independent review (2026-10-15) and fixes (developer)
+
+Verdict APPROVE WITH FIXES: behaviour preserved on every command path; the reviewer's own idle `npm run test:latency`
+measured `workflow next` p95 **303 ms in-process** and **598 ms spawned total** (load 1.6 → 1.8), both under the 800 ms
+margin. At the submitted head `c0461dd9` the reviewer counted governance 4 `wf()` commits, 0 findings, and claims lint 4
+warn-only warnings (two new, at lines 305 and 332 of this file).
+
+- **F1** (doc nit) — `once()` sat between `emptySnapshot`'s TSDoc and its function: moved, so each has its own doc
+  comment directly above it (`src/core/workflow-deduction.ts`).
+- **F2** (same-class stale text) — the module header of `src/core/workflow-deduction.ts` named
+  `loadWorkflowRegistryAtRev`; it now names `loadWorkflowRegistryAtCommit`, which the snapshot calls.
+  `src/core/workflow-registry.ts`'s header, which lists one function per baseline, now names
+  `loadWorkflowRegistryAtCommit` too. A grep of the touched files' comments for `AtRev` (`grep -n "AtRev"` over
+  `workflow-deduction.ts`, `workflow-next.ts`, `workflow-list-show.ts`, `workflow-registry.ts`, `loaders.ts`,
+  `src/memory/query.ts`, comment lines only) leaves only mentions that are still true: the `…AtRev` functions that
+  still exist, `context.ts`'s `loadRolesYamlAtRev` (unchanged), and historical notes.
+- Fix commit `704fc277`. Re-run: `npm run lint` exit 0; `npx tsc --noEmit -p tsconfig.json` exit 0; `npm run docs:api`
+  exit 0; `npx jest test/core/workflow-next-spawn-count.test.ts test/core/workflow-deduction
+  test/core/workflow-core-checks.test.ts test/core/workflow-next.test.ts test/core/workflow-status.test.ts
+  --maxWorkers=2` → 10 suites, 156 passed.
+- **F3** (the working-tree `loadWorkflowRegistry` throws `EISDIR` for a declared template path that is a directory,
+  reproduced by the reviewer; the self-review's second candidate finding) — **pending the approver's ruling**: in-task
+  with a qa red row, or a follow-up bug. Not started.
 
 ### Pending amendments (approver)
 
