@@ -255,3 +255,64 @@ copies `docs/examples/` recursively, `docs/site.yaml:32`, and `llms.txt:10` link
 **Risks.** The smoke's full run grows ~18 s (the jest full-run test and CI's `e2e-smoke` job). The smoke now
 needs `bash` (CI and staging run on Ubuntu). task-246 touches no file here. If 282's 1.7 is re-bumped at the
 gate, 1.8 here follows it.
+
+### red (qa, 2026-10-15)
+
+Red commit: `8ebe99cd` (T4 is measured from it). Files: `test/cli/e2e-smoke.test.ts` (new `describe('task-242 —
+the Journey 4 example …')` + the per-template journey assertions added to the existing full-run test),
+`test/core/workflow-finalize-bdd.test.ts` (new), `test/fixtures/smoke/wingfoil-proxy.cjs` (fault kind `noop`: exit 0,
+no forwarding), `scripts/e2e-smoke.d.cts` (`JOURNEY_SCRIPT`, `JOURNEY_COMMANDS`, `smokeJourney(template, argv, env,
+script?): SmokeCheck`, one check, never throws).
+
+**Per AC.**
+- AC 1 (red-first for the script) — Q1: `JOURNEY_SCRIPT` = `<checkout>/docs/examples/06-workflow-approval/run.sh`
+  and exists; `bash` of it with `WINGFOIL="node <dist/cli.js>"`: exit 0, last non-empty stdout line `OK: …`; the
+  `$ wingfoil` entries hold, in order, the nine commands each with `[exit 0]` (`memory add` with `--workflow
+  deliver-1-plan`; refusals skipped); the human-needed line verbatim; `workflow end` and `workflow finalize --step
+  deliver.write@task:task-001-login-form` each with `[exit 1]`; a README table row linking
+  `06-workflow-approval/run.sh`; user-guide §7 links `examples/06-workflow-approval`.
+- AC 5 (red-first) — Q2: `JOURNEY_COMMANDS` (nine, journey order, the third holds `--workflow`); `smokeJourney` on
+  stub scripts: `no "OK: " line`; detail exactly `exit 1: FAIL: x` (the last of two FAIL lines); `the transcript
+  lacks: workflow finalize`; a missing script is a failed check, no throw; with `WINGFOIL=false` and
+  `WINGFOIL_EXAMPLE_TEMPLATE=Scrum` inherited and template `Kanban`, ok, label `[Kanban/journey] bash
+  docs/examples/06-workflow-approval/run.sh`, detail `^exit 0, 9 wingfoil commands, OK: Kanban <version>` (both
+  `$WINGFOIL` and the PATH shim answer `--version`); the `formatReport` Journey 4 line verbatim. Full runs: per
+  template the `[<T>/journey]` check after the last `[<T>/agent]` label and before the next template, ok, detail
+  `exit 0, …` holding `OK: Journey 4`; `noop@workflow finalize` → last check `[Scrum/journey]`, not ok, `FAIL:` and
+  `/workflow:? finalize/`; `exit=1@workflow start` → `expected exit 0, got 1`. Q3: `e2e-smoke.yaml` ≥ 1.8 with
+  `/1\.8 [^;]*task-242/`; drive-cli description names `docs/examples/06-workflow-approval/run.sh` and `workflow
+  finalize`; actions start `cli.run(command: "<t>` for `workflow create`, `workflow start <name>`, `workflow next`,
+  `workflow status`, `workflow finalize`, `workflow end`, `memory add ... --workflow <ref>`; three post checks; the
+  WORKFLOW.md E2E Smoke section names `workflow finalize` and `docs/examples/06-workflow-approval/run.sh`.
+- AC 4 (red-first text, characterization behaviour) — Q4: P4.13's titles become the three existing + `A step
+  completed only by a record is complete after workflow finalize`, `Error - finalize a step that is not on the
+  frontier`, and the line `    And the message is "step '<key>' is not on the frontier of <instance>"`; P4.14's
+  fourth (and last) title `An approval no element carries is routed, then recorded by workflow finalize` (D2 (a)).
+  Q5, in-process on a fixture (`workflowStart` of element-less `checklist` / `signoff`): sc. 4 — `next` evidence
+  `{ missing: ['record'], finalizable: true }`, after finalize `HEAD~1` = before, no file, subject `workflow:
+  finalize <instance> checklist.tick`, `WingFoil-Phase`/`WingFoil-Instance` trailers, phase `tick` `complete` in
+  status, next `checklist.tock`; sc. 5 — `--step checklist.tock`: `CONFLICT`, exact message, exit 1, persistence
+  unchanged; P4.14 sc. 4 — one pending approval on `signoff.review`, `recordNeeded: true`, no element, routed to
+  Morgan, console `human needed: finalize signoff.review — routed to Morgan <morgan@example.invalid>`; the
+  non-approver refused (`VALIDATION`, `/^user not authorized to approve/`, exit 1, nothing written); Morgan's
+  record carries `Approver: Morgan <morgan@example.invalid> (approver)` / `Reason: Signed off.`, next
+  `signoff.close`.
+- AC 2, AC 3: no red row (design table).
+
+**Runs (targeted, `--maxWorkers=2`).**
+- `npx jest test/core/workflow-finalize-bdd.test.ts --maxWorkers=2` → 4 failed, 3 passed. The three Q5 bindings
+  pass on first run (characterization); the four Q4 rows fail on the missing text (`Expected substring: "  Scenario:
+  A step completed only by a record …"`; titles array lacks the two; P4.14 `titles[3]` `undefined`).
+- `npx jest test/cli/e2e-smoke.test.ts --maxWorkers=2 -t 'task-242 — the Journey 4 example(?!.*\[Scrum\] a workflow
+  (finalize|start))'` → 16 failed, 54 skipped. First assertion per row: `JOURNEY_SCRIPT` `undefined`; the example
+  exits `127` (no file), empty transcript, no human-needed line, no refusals; README has no row; `JOURNEY_COMMANDS`
+  `undefined`; `typeof smokeJourney` `"undefined"` (5 stub rows); report lacks the Journey 4 line; yaml version
+  `1.7`; drive-cli description lacks the example path; WORKFLOW.md section lacks `workflow finalize`.
+- **Not run (full smoke runs, per the batch rule):** the extended full-run test (`passes against the compiled CLI
+  …`) and the two proxy rows (`noop@workflow finalize`, `exit=1@workflow start`). Expected red today: no
+  `[<T>/journey]` label (`indexOf` −1, so `toBeGreaterThan` fails) and `report.ok` true for both faults.
+
+**Deviation from the design, for the reviewer.** The `noop@workflow finalize` row pins `/workflow:? finalize/`, not
+`workflow: finalize`: the proxy matches argv by prefix, and the design's step 12 (`workflow finalize --step …`,
+exit 1 expected) runs before step 13, so a correct script fails first at step 12 with `expected exit 1, got 0:
+wingfoil workflow finalize --step …`.
