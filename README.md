@@ -209,6 +209,8 @@ Reason: Scope is clear.
 | **[CLI reference](docs/cli-reference.md)** | Every command: arguments, output, exit codes, the commit it writes |
 | **[Examples](docs/examples/)** | Runnable, self-checking scripts for the main scenarios |
 | **[Guide for AI agents](docs/agents.md)** | What an agent needs to operate in a WingFoil project |
+| **[Comparison](docs/comparison.md)** | WingFoil beside agent-rule files, spec-driven development tools, coding agents and IDEs |
+| **[Case study](docs/case-study.md)** | How WingFoil develops WingFoil, with the release-health figures of v0.1 and v0.2 |
 | **[Changelog](CHANGELOG.md)** | What changed in each release |
 
 ---
