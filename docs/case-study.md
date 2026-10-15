@@ -97,10 +97,10 @@ must always hold, a **trend** is compared with the previous run in its direction
 - **Process conformance (P).** P01 counts malformed flow commits, and its causes differ by release (each commit's
   reasons are in the report's `failing` list):
   - at v0.1, 61 failing: 34 use a verb the grammar does not declare (in 27 of them an element id sits where the verb
-    should be, as in `wf(task): task-024 design …`), 26 carry no transition bracket, and 1 approval carries an AI
+    should be, as in `wf(task): task-024 design …`), 26 are `submit` subjects carrying a transition bracket, which `submit` must not have, and 1 approval carries an AI
     co-author trailer; none uses the ASCII arrow, which G10's full share at v0.1 agrees with;
   - at v0.2, 297 failing: 165 write the bracket with the ASCII `->`, 92 are approvals or rejections carrying an AI
-    co-author trailer (21 of them also with the ASCII bracket), 57 are `submit` subjects with no bracket, and 4
+    co-author trailer (21 of them also with the ASCII bracket), 57 are `submit` subjects carrying a bracket, and 4
     have another defect.
   P02 finds 15 status changes at v0.2 that the commit subject does not name, such as a task's start moving its bug.
   P05 finds 137 approve, reject and finalize commits at v0.2 whose `Approver:` line names the approver but whose author is the
