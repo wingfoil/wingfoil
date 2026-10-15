@@ -317,6 +317,8 @@ script?): SmokeCheck`, one check, never throws).
 exit 1 expected) runs before step 13, so a correct script fails first at step 12 with `expected exit 1, got 0:
 wingfoil workflow finalize --step …`.
 
+**Send-back (qa, 2026-10-15, approver ruling).** `69995088` declares `smokeJourney`'s fifth, optional parameter `timeoutMs?: number` in `scripts/e2e-smoke.d.cts` (default 600 s, `SIGKILL` on expiry, detail `timed out after <s> s`), matching `scripts/e2e-smoke.cjs`; no test row added (`test/cli/e2e-smoke-journey-shim.test.ts` pins the behaviour). `npx tsc --noEmit -p tsconfig.json` exit 0; `npx jest test/cli/e2e-smoke-journey-shim.test.ts --maxWorkers=2` 3 passed.
+
 ### green (developer, 2026-10-15)
 
 The red rows were read against the design, and none is wrong. The `noop` row's `/workflow:? finalize/` holds: under
