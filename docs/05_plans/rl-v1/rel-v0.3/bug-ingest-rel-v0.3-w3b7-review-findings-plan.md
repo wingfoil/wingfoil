@@ -108,8 +108,78 @@ Not filed, by the ruling:
 
 ## Execution Notes
 
-Filled as the phase runs.
+- **capture and triage (2026-10-15)** on `ingest/w3b7-review-findings`. Each tool-written commit was checked for exit
+  code 0 and exactly one file (`git show --format= --name-only HEAD | grep -c .` → `1` after every commit), every
+  element body for control, format and separator code points other than tab and newline before its submit (0 found).
+  Severities are the agent's call at capture (the proposal names none), stated in each approve's `Reason:`.
+
+  | Element | Status | Release | Item; source | add / submit / approve / assign |
+  |---|---|---|---|---|
+  | `task-283` cut `workflow next`'s git spawns, p95 back under REQ-PERF-03 with margin (`kind: fix`, `priority: high`, `bug: [bug-309]`) | `pending` | v0.3, W3 B8 | A1; the B7 gate's latency runs | `400d87c2` / `576408dc` / — / — |
+  | `bug-309` `workflow next`'s headroom on REQ-PERF-03 | `planned` | v0.3 | A1 | assign `03597ce4`, amend `aea3cda0`, sync `26e8d10e` |
+  | `bug-358` `selectWorkflowInstance`: no production caller, `workflow is not open` for an unknown ref (low) | `triaged` | v0.4 | C1; items 1, 11 (12 noted) | `40e15bd1` / `22b1b071` / `e67f5684` / `70efc01a` |
+  | `bug-359` `workflow show <instance plan id>` → `unknown workflow`, `next` → `not open` (low) | `triaged` | v0.4 | C2; item 2 | `1a6039e8` / `d1024720` / `817adb54` / `34116ea3` |
+  | `bug-360` `memory.yaml` path patterns accept `..`; `memory add` writes where it leads (medium) | `triaged` | v0.4 | C3; item 3 | `657b9df1` / `3b7faea6` / `eac87543` / `0fbfe045` |
+  | `bug-361` run-dependent branch hits at `memory-transition.ts:560` (WIP cross-ref merge) (medium) | `triaged` | v0.4 | C4; item 10 | `87389219` / `c24fd28f` / `921c5007` / `e65b849b` |
+  | `bug-362` retrospective `capture`: no disposition row format, `dl-<n>` id vs `retro-<version>` (medium) | `triaged` | v0.4 | C5; item 14 | `e5815012` / `334f6e72` / `043cd0de` / `9948a0a7` |
+  | `bug-363` G14 counts the secret scanner's own fixtures (low) | `triaged` | v0.4 | C6; item 18 | `4ae8104a` / `ce238368` / `4378e934` / `cc190788` |
+  | `bug-364` `measure.cjs`: host npm (EUSAGE at `5b16ab61`); G05/G12 misleading reason (low) | `triaged` | v0.4 | C7; items 19, 20 | `18cd70dd` / `8bdc5bcb` / `18a0327c` / `5b389a7f` |
+  | `bug-365` `jekyll-build-pages` runs a mutable image tag (low) | `triaged` | v0.4 | C8; item 22 | `058658cd` / `645ba304` / `9bdefaa6` / `a72c42ce` |
+  | `bug-366` `agent_version` read after the run (low) | `triaged` | v0.4 | C9; item 25 | `7fe19bc4` / `f6254fd1` / `647959da` / `7b5583b4` |
+  | `bug-367` `release-submit` runs the full suite three times (low) | `triaged` | v0.4 | C10; item 28 | `78b4259e` / `b872bbdf` / `d18634a1` / `92b88d22` |
+  | `bug-368` Release `jest-results.json`: duplicate `coverageMap`, absolute paths (low) | `triaged` | v0.4 | C11; item 31 | `edf82820` / `f2960948` / `8794d0bf` / `342ac4eb` |
+  | `bug-369` the bootstrap names no CLI (global `wingfoil` used) (medium) | `triaged` | v0.4 | C12; item 36 | `2365178b` / `37e6c4ee` / `92468a9b` / `3c1a2174` |
+  | `bug-370` `AI-Model:` placeholder not honoured (low) | `triaged` | v0.4 | C13; item 38 | `f7b0e3cf` / `43e93282` / `f269e8c6` / `446f1204` |
+  | `bug-371` `renderMcpTemplate`: U+007F and lone surrogates under `config-arg` (low) | `triaged` | v0.4 | C14; item 41 | `c22b0004` / `e1282371` / `1eb37632` / `ac752215` |
+  | `bug-372` Codex `-c` table replace-or-merge unobserved (medium) | `triaged` | v0.4 | C15; item 42 | `0b0960d2` / `c46b8256` / `10082680` / `9aea11fd` |
+  | `bug-373` no test pins `{mcp_config}` refused in `mcp.template` (low) | `triaged` | v0.4 | C16; item 43 | `7e78b16e` / `58500ded` / `f976d846` / `5552be09` |
+  | `bug-374` session Resource vs Codex's per-tool output limit (medium) | `triaged` | v0.4 | C17; item 33 | `3480e16c` / `97563ffa` / `11353cb2` / `af726b5a` |
+  | `bug-375` `codex-cli`: session id not recorded, no resume (low) | `triaged` | v0.4 | C18; items 35, 39 | `9e97e9af` / `f2c1c85d` / `2f2a733f` / `543423d0` |
+  | `bug-376` pre-flight reads the Prompt and the Resource (low) | `triaged` | v0.4 | C19; item 29 | `4a5ad4b7` / `bdeb2866` / `a55586b4` / `e66d613f` |
+  | `dl-179` a declared BDD marker for the test-report classification | `in-discussion` | v0.4 | D1; item 32 | `66bc6220` / `9e94ae4b` / — / — |
+  | `dl-180` what the bootstrap pins about the CLI (invocation, version before launch); candidate actions `bug-369`, `bug-366` | `in-discussion` | v0.4 | D2; items 25, 36 | `86e4f169` / `efa03777` / — / — |
+
+  Plan add `3e7ddec7`, submit `9dc46645`. The approve commits carry no AI trailer; every other commit carries both.
+- **Amendments (approver ruling 2026-10-15), one `memory amend` each:** `task-282` (`0dc7edb4`, A2: items 46, 47, 48
+  as a dated handover in Implementation Notes, no criterion changes); `dl-138` (`c34aeb01`, E1: item 7 for F-030,
+  `reported_by:` += `svc-018-…/F-030@52f822141b20eb2956a36667fc77818239a09607`, an "Added 2026-10-15" paragraph with
+  the note's permalink, the form F-027 and F-029 took at `ce8ad4ce`); `dl-053` (`8a6a95d6`, E2; the document is
+  `deprecated`, `memory amend --dry-run` accepted it as `[deprecated → deprecated]`); `dl-173` (`370ddde6`, E3, item
+  12); `dl-089` (`7d7af7ea`, E4); `bug-309` (`aea3cda0`, the reason of the move, as the W3 B6 ingest did for its
+  moves).
+- **Corrections against the follow-up list, each re-measured on `main` `bd55f70e`:**
+  - **C3 is worse than listed.** The list says a `..` path pattern is caught at write time; in a scratch repository a
+    pattern that stays inside the root is written where it leads (`docs/04_memory/bugs/../../outside/{id}.md` →
+    `docs/outside/bug-001-probe.md`, exit 0), and one that leaves it fails with a raw `E_GIT_READ_FAILED`.
+  - **C4 reproduced:** three identical coverage runs of `test/core/memory-wip-limits.test.ts` gave line 560's `if`
+    `[7, 1]`, `[7, 1]`, `[8, 0]` (78, 78, 77 of 128 branches).
+  - **C6:** of G14's 29 findings at `v0.2.1`, 25 are in `test/validation/secret-scan.test.ts`, not 29; the other four
+    are a quoted fixture literal (`bug-055`'s pre-`task-111` copy, two), a directive test and a plan.
+  - **C7:** the EUSAGE reproduced (`npm ci --ignore-scripts` on `5b16ab61`'s `package.json` and lock under npm
+    11.6.2).
+  - **A1:** the "148 commits" of the gate note are `1c66ef31..32d8871b` (`main` before B7's merges); 379 to the gate
+    `6e454f40`. The latency suite's fixture is a clone pinned at `b56e8721`, recorded in `task-283`'s design step.
+  - **E4:** `bindings.yaml` records ruling D3 on `2026-10-12` (`sed -n 19p .wingfoil/workflows/bindings.yaml`); the
+    request for the `dl-089` note is the approver's ruling I of 2026-10-13.
+- **Stop-the-line share after filing:** 9 open v0.3 tasks, 3 of them `kind: fix` (`task-245`, `task-282`, `task-283`)
+  = 33.3 % (> 30 %). Command: `for f in docs/04_memory/v0.3/task-*.md; do s=$(grep -m1 '^status:' $f | awk '{print
+  $2}'); case $s in done|deprecated) ;; *) grep -m1 '^kind:' $f | awk '{print $2}';; esac; done | sort | uniq -c` →
+  `6 "feature"`, `3 "fix"`. `task-283` counts as open at `pending`.
+- **Checks (2026-10-15).** `node scripts/check-governance.cjs --base bd55f70e` at `7d7af7ea` (the last amend): 92
+  `wf()` commits and 0 other commits, gated 0 findings, history 0 findings, 0 entries not checked. `npx jest
+  test/docs/reported-by.test.ts --maxWorkers=2` → `Tests: 56 passed`; `npx jest test/docs --maxWorkers=2` → `Test
+  Suites: 23 passed`, `Tests: 229 passed`. `node scripts/lint-claims.cjs --base bd55f70e` → `3 warnings in 3 files
+  (warn-only), 29 files read`: the closing sentences of the notes on `dl-053` and `dl-173` ("unchanged", the form of
+  the earlier notes), and `bug-358`'s Expected Behavior ("no caller needs it", whose command is its step 1).
+- **Finalized by hand**, as the W3 B6 plan was (`workflow end` reports a `bug-ingest` instance incomplete at
+  `capture`, the `bug-324` class): `active → done` with a hand `wf(plan): finalize … [active → done]` commit that
+  changes only `status:`.
+- **Ids not pushed.** `git-conventions` §6 asks for the `add` commits to be pushed at once; this branch is not pushed by
+  instruction, so `bug-358`…`bug-376`, `task-283`, `dl-179` and `dl-180` are local until the coordinator merges and
+  pushes it.
 
 ### Retrospective
 
-None yet.
+- One finding of the list (C3) understated its own defect: the design read the type-folder check as catching a `..`
+  path pattern at write time, and a scratch run showed it does not. Evidence: the C3 correction above. Proposal:
+  reproduce a "caught later" claim before filing it, as this ingest did.
