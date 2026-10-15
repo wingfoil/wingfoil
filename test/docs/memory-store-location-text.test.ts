@@ -10,6 +10,9 @@
  * scenarios whose text names the location (P1.3 sc.1, P1.11 sc.1), plus bug-257's one stale
  * `dna show --section team` in the vision's CLI table (`dl-082`: the section is a positional).
  *
+ * Since task-245 (`bug-274`) the grep also reads the Markdown files directly under `docs/`
+ * (non-recursive: `docs/*.md`), where `docs/design.md` placed tasks under `.wingfoil/memory/task/`.
+ *
  * The P1.11 scenario-1 behaviour itself is exercised in `test/memory/entry.test.ts`; P1.3 scenario 1's
  * in `test/core/memory-add.test.ts` (AC(a)).
  */
@@ -18,6 +21,12 @@ import { join, posix, relative } from 'node:path';
 
 const repoRoot = join(__dirname, '..', '..');
 const SCANNED = ['docs/01_vision', 'docs/02_requirements'];
+/** The regular `.md` files directly under `docs/` (bug-274; not recursive), sorted. */
+const TOP_LEVEL_DOCS = (): string[] =>
+  readdirSync(join(repoRoot, 'docs'))
+    .sort()
+    .filter((name) => name.endsWith('.md') && statSync(join(repoRoot, 'docs', name)).isFile())
+    .map((name) => `docs/${name}`);
 const featureDir = join(repoRoot, 'docs', '02_requirements', '02_bdd', 'features', 'p1-memory');
 
 /** Every regular file under `dir`, sorted, as repository-relative POSIX paths. */
@@ -39,12 +48,13 @@ function scenario(feature: string, title: string): string {
   return feature.slice(start, next < 0 ? undefined : next);
 }
 
-describe('no vision or requirements passage places Memory documents in .wingfoil/memory/ (bug-256)', () => {
-  it("bug-256's step-1 grep returns nothing", () => {
-    // `grep -rn '\.wingfoil/memory' docs/01_vision docs/02_requirements | grep -v 'memory\.yaml\|memory/templates'`
+describe('no vision, requirements or top-level docs passage places Memory documents in .wingfoil/memory/ (bug-256, bug-274)', () => {
+  it("bug-256's step-1 grep, widened to docs/*.md, returns nothing", () => {
+    // `grep -rn '\.wingfoil/memory' docs/01_vision docs/02_requirements | grep -v 'memory\.yaml\|memory/templates'`,
+    // plus `grep -n '\.wingfoil/memory' docs/*.md` under the same filter (bug-274).
     const hits: string[] = [];
-    for (const dir of SCANNED) {
-      for (const file of filesUnder(join(repoRoot, dir))) {
+    for (const files of [...SCANNED.map((dir) => filesUnder(join(repoRoot, dir))), TOP_LEVEL_DOCS()]) {
+      for (const file of files) {
         readFileSync(join(repoRoot, file), 'utf8')
           .split('\n')
           .forEach((line, index) => {
