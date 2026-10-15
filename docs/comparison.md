@@ -38,7 +38,7 @@ The other things WingFoil replaces are not products but habits:
 |---|---|
 | A README and scattered documents | One versioned, indexed Memory: each element is a Markdown file with YAML frontmatter at the path its type declares in `.wingfoil/memory.yaml`, and its state is read from that frontmatter. |
 | Brute-force context (a large window, or the whole codebase) | Context selected by role and task; the same inputs assemble the same context (the Input component of the Determinism Index, below). |
-| Manual governance | Approval gates in each type's state machine: `wingfoil memory approve` and `reject` are the only verbs that cross a gate, and each writes the approver and the reason into its commit. |
+| Manual governance | Approval gates in each type's state machine: `wingfoil memory approve` crosses a gate and `wingfoil memory reject` sends the element back, each writing the approver and the reason into its commit. |
 | Implicit workflow state | Workflows declared in YAML (`.wingfoil/workflows.yaml`); which phase a workflow is in is deduced from Memory and the committed files, and shared by every actor (`wingfoil workflow status`, 0.3). |
 
 ## What WingFoil works with
