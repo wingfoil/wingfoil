@@ -57,15 +57,13 @@ describe('task-242 — the journey shim never execs itself, and a run is bounded
   });
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  it('a bare-name argv resolves on the caller\'s PATH: the shim runs that wingfoil, once, and the check passes', () => {
-    const started = Date.now();
+  it('a bare-name argv resolves on the caller\'s PATH: the shim runs that wingfoil, once, and the check passes (a loop would end at the 30 s bound, failed)', () => {
     const check = smokeJourney('Scrum', ['wingfoil'], { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` }, script, 30_000);
     expect(check).toEqual({
       label: '[Scrum/journey] bash docs/examples/06-workflow-approval/run.sh',
       ok: true,
       detail: 'exit 0, 9 wingfoil commands, OK: stub 9.9.9',
     });
-    expect(Date.now() - started).toBeLessThan(30_000);
   });
 
   it('a bare name found on no PATH directory fails the check with a reason, without running the script', () => {
