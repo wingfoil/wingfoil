@@ -67,4 +67,9 @@ worktree of `main` at `02800955` (the probe file removed after).
 
 ### Retrospective
 
-None.
+- The candidate check and the build stamp answered "is this tree the commit?" with two different lists; the fix
+  makes `PACK_INPUTS` derive from `BUILD_INPUTS` in one file, and a test compares it with what `npm pack
+  --dry-run` actually packs, so a third list cannot appear unnoticed.
+- The same stale-`dist/` defect sat in the staging rehearsal's own pack (`publish-staging.cjs` without
+  `--tarball`); it was found at `task-282`'s design by reading the second caller of `npm pack`, and fixed in the
+  same task (approver ruling D1 (a)).
