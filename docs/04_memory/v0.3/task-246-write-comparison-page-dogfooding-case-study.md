@@ -228,3 +228,37 @@ refactor set.
   "A structured harness for deterministic AI-assisted software development"), against dl-112 Q3 (i) / dl-131
   (task-141's follow-up). Owner `align-user-docs`; in scope here only if the approver rules it, since the comparison
   page states the opposite.
+
+### red (qa, 2026-10-15)
+
+- **Red commit `52c75032`** (T4 is measured from it). File: `test/docs/presentation.test.ts` only (D2 (a)), three new
+  `describe` blocks `task-246 — AC 1/2/3`; the existing task-224 blocks are untouched. Pages are read with a
+  `readIfExists` helper, so a missing page fails on an assertion, not on `ENOENT`. No clock: the read-date bound is
+  the constant `READ_DATE_FLOOR = '2026-10-15'`. No value the reports hold is typed in the test: the Figures header,
+  the measured / not-measurable split, names, definitions, scopes, kinds, reasons and allowed numbers are all read
+  from `docs/08_health/release-health-v0.1.json`, `-v0.2.json` and `metrics.yaml`.
+- **T1: red-first for all three ACs** (design's reclassification, approver ruling 2026-10-15). `llms-txt.test.ts`'s
+  render parity stays characterization (passes now; must pass after the regeneration).
+- **Per-AC mapping.** AC 1 → `C1`–`C6`, `C7` (×2, one per page). AC 2 → `F1`–`F8`. AC 3 → `U1` (×2), `U2`, `U3`,
+  `S1` (×2 + version), `S2` (×2), `R1` (×2).
+- **Run.** `npx jest test/docs/presentation.test.ts test/docs/llms-txt.test.ts --maxWorkers=2` → presentation
+  26 failed / 23 passed; llms-txt 22 passed (0 failed). Totals 26 failed, 45 passed, 71. Failing: every C*, F*, U1,
+  U2, S1, S2, R1 — each on its first assertion (`existsSync(...)` false; `figures` undefined; `produced` lacks
+  the path; `version` 1.6 / 1 below the bound; README table links lack the two pages). `U3` passes today (by design:
+  it guards that `presentation.current` stays).
+- **Positive check (not committed).** Two throw-away pages generated from the JSON and the catalogue in the
+  worktree, then deleted: every C* and F* passed except F7, which correctly flagged a `210/211` in prose that the
+  fixture's value cells did not carry — so the pins are satisfiable as written.
+- **Readings the design left open (for the developer and reviewer):**
+  - F2: the column for a point whose `ref` equals its commit is `v<version> at <commit 8>`, otherwise
+    `v<version> at <ref> (<commit 8>)` — reproducing the design's literal header.
+  - F3/F6: id cells are compared with backticks stripped; the *Not measurable yet* header is `id | Metric | v0.1 |
+    v0.2` (from `release.version`) and its Metric cell must equal the catalogue `name` (F6).
+  - F5: a number glued to a word (`p90`, `over_500`, `G01`) is not a stated figure, and numbers inside the JSON's
+    own keys count as the report's (`share_over_72`); a value written with a thousands separator (`1,453`) fails.
+    Exempt from "≥ 1 number": a boolean `value` or an object `value` with a `null` member (P07, G08).
+  - F7: shares (`n %`) and ratios (`a/b`) preceded by a word character, `.`, `/` or `-` are not checked (so
+    `dl-089/099` is prose, not a ratio); inline code is still prose.
+  - C1/F1: the H2 list is exact (5 in the comparison, 6 in the case study); C4 applies outside *Sources*, F8 to the
+    whole case study; C5 also requires at least one table under *What WingFoil replaces* and the
+    `### Spec-driven development tools` subsection's first table.
