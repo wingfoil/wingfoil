@@ -143,7 +143,7 @@ is non-numeric and names the file or command that settles it (claim-evidence). S
   align-user-docs produces the comparison page and the case study, checked by presentation.current`; the
   `presentation.current` comment widened. `checks.post` keeps its three entries (D2).
 - `.wingfoil/WORKFLOW.md`: the `AU` node gains one line `docs/comparison.md · docs/case-study.md (dl-128)`.
-- `README.md` *Documentation* table: two rows (Comparison, Case study) — D3. `docs/user-guide.md`: unchanged.
+- `README.md` *Documentation* table: two rows (Comparison, Case study) — D3. `docs/user-guide.md` is left as it is (verified at refactor: `git diff --stat 2de79ef9 -- docs/user-guide.md README.md` lists `README.md` alone).
 - Neither page says Memory documents live under `.wingfoil/memory/` (task-245 widens
   `test/docs/memory-store-location-text.test.ts` to `docs/*.md`), and neither holds `{{` or `{%`.
 
@@ -211,7 +211,7 @@ refactor set.
   them); (b) a new `test/docs/comparison-case-study.test.ts` added to `presentation.current`'s run vector
   (`bindings.yaml` 2.1 → 2.2, re-bumped at the gate after task-282 — a writer the B8 notes do not list). **Recommended
   (a).**
-- **D3 — README / user guide.** (a) two rows in README's *Documentation* table, user guide unchanged; (b) none.
+- **D3 — README / user guide.** (a) two rows in README's *Documentation* table and no edit to the user guide; (b) none.
   **Recommended (a)** (README is `align-user-docs`' own product; no B8 task writes it).
 - **D4 — breaches shown as they are.** The case study shows the v0.2 floor breaches (G06, G10, G14, Q04, P01, P02,
   P05) and v0.1's (G01, P01) with their explanation, and nothing is filed from them here (task-241: "Nothing is filed
@@ -298,10 +298,60 @@ refactor set.
   test/docs/build-site-confinement.test.ts --maxWorkers=2` → 7 suites, `Tests: 125 passed, 125 total` (red: 26 failed
   in presentation). Commit `8af5af64`.
 
-### refactor (developer, 2026-10-15) — gates pending
+### refactor (developer, 2026-10-15)
 
-- The full coverage run, lint, docs:api, typecheck, lint-claims and check-governance wait for the dl-170 slot
-  (`waitslot.sh`, ticket queued 18:25). Not run yet: at 20:27 the slot was still held by task-242's
-  `jest --coverage` (started 18:25), which hangs in `docs/examples/06-workflow-approval/run.sh`: its shim
-  `/tmp/wingfoil-smoke-journey-*/wingfoil` is `exec 'wingfoil' "$@"`, which resolves to itself on `PATH` and spins
-  (`ps -o pid,ppid,etime,args` → 1:59 h, parent `run.sh`, grandparent task-242's jest worker). Load average ~157.
+- The first gate run (queued 18:25) never got the slot: task-242's coverage run held it, hung in its example 06 shim,
+  until the coordinator stopped it; the machine then rebooted. Re-run after the reboot, from `e2f3cfee`, one script
+  under the slot (`waitslot.sh` → slot 20:58:17, load 7.16; coverage done 21:29:33, load 25.12, from other
+  processes):
+  - `npx jest --coverage --maxWorkers=2` → `Test Suites: 443 passed, 443 total`, `Tests: 7960 passed, 7960 total`,
+    jest exit 0; `All files | 99.33 | 97.38 | 98 | 99.71` — every column equal to the batch baseline
+    (99.33 / 97.38 / 98.00 / 99.71). `src/` is unchanged (`git diff 2de79ef9 -- src | wc -l` → 0), so no column can
+    move but for bug-361's run-dependent lines, and none did.
+  - `npm run lint` → exit 0; `npm run docs:api` → exit 0; `npm run typecheck` (both configs) → exit 0.
+  - `node scripts/lint-claims.cjs --base 2de79ef9` → 2 warnings, both on this file's design subsection ("unchanged"
+    with no command): reworded above, with the command for the user guide.
+  - `node scripts/check-governance.cjs --base 2de79ef9` → first line `governance check: 1 wf() commits in
+    2de79ef9…..HEAD …, and 5 other commits`; `gated: 0 findings`, `history: 0 findings`; exit 0.
+- After the gates, one sentence of `docs/comparison.md` was corrected at self-review (below; documentation only);
+  `npx jest test/docs/presentation.test.ts test/docs/llms-txt.test.ts --maxWorkers=2` on it → 2 suites,
+  `Tests: 71 passed, 71 total`.
+
+### self-review (developer, 2026-10-15)
+
+- **AC 1.** Every third-party cell carries `[S<n>]` or `not stated in the sources read` (C5); 16 sources, each URL
+  once, read 2026-10-15 (C2, C3); no URL outside *Sources* (C4). Caveat: WebFetch returns a model-made summary of
+  each page, not its text; the quoted phrases ("without approval gates between them", "30+ tools", "human and AI
+  align on specs before code gets written", "lightweight coding agent that runs in your terminal", "Phase -1
+  gates", "Correctness (property-based testing)") are as the summary returned them, and only Kiro's Quick Spec
+  sentence was asked for verbatim. A reviewer re-reading the sources is the stronger check; a phrase that does not
+  match becomes a paraphrase without quotes, not a new fact.
+- **WingFoil's own cells**, each against the repository: the MCP server registers an empty Tools channel
+  (`src/mcp/server.ts`: `grep -n "Tools channel" src/mcp/server.ts` → the module TSDoc's "an **empty Tools channel**"
+  and `registerEmptyToolsChannel`'s "answer it with no Tools"); the adapters `claude-code` and
+  `codex-cli` are what `wingfoil init` writes (`src/storage/builtin-adapters.ts` header); `memory amend`,
+  `workflow status` and the session Resource are marked 0.3 (`docs/cli-reference.md`: "Unreleased (v0.3)" under each).
+  Fixed here: the *Manual governance* row said `approve` and `reject` were "the only verbs that cross a gate";
+  `reject` sends an element back, it crosses nothing, so the row now says `approve` crosses and `reject` sends back.
+- **AC 2.** Every figure is read from the two reports (F5, F7); the prose explanations of the breaches were read from
+  the reports' `failing` lists (green); `svc-020` is the only reference to the benchmark, and no benchmark repository
+  is named (`grep -n -i benchmark docs/case-study.md` → the D01/P06 lines only).
+- **Hard rules.** `grep -c -i -E 'github\.com/robypomper|wingfoil-market|hold-?out' docs/comparison.md
+  docs/case-study.md` → 0 and 0; the same pattern finds files elsewhere in the repository (`git grep -l` → e.g.
+  `docs/04_memory/design/dls/dl-068-publishing-requires-public-repository.md`), so it can match. Neither page mentions
+  `.wingfoil/memory/` (`grep -c '\.wingfoil/memory/'` → 0 each; → 1 on `CLAUDE.md`).
+- **T4:** `git log --first-parent --no-merges --format=%h 52c75032..HEAD -- test/docs/presentation.test.ts` → empty.
+- **Same class:** the README and `docs/site.yaml` `summary` still present determinism as achieved; out of scope by the
+  coordinator's ruling (user-docs handover), left as they are.
+
+### Pending amendments (approver)
+
+None.
+
+### Retrospective
+
+- A third-party fact read through a summarizing fetch is one step removed from its source: the page states it with
+  the source and the date, but an exact quotation needs the source's text, so ask for the sentence verbatim when the
+  page quotes it.
+- A shared slot held by a hung run blocks every waiter behind it: a gate with no per-run timeout turns one task's
+  looping shim into hours lost for the batch.
