@@ -116,7 +116,9 @@ failure, before resolving any identity. No `hint`, no `details`.
 3. **`readGitIdentity` (read-only reader): signature and behaviour unchanged** — on a spawn failure it
    returns `{ name: '', email: '' }`, as today. Its one caller, `workflow next --assigned-to me`
    (`src/core/workflow-next.ts:615`), is a read command that already needs git for its `HEAD` reads, and
-   an unresolved email there is a warning, not a write. Pinned as a characterization row (AC 1 table).
+   an unresolved email there is a warning, not a write. Pinned as a characterization row (AC 1 table);
+   at green the signature line is context only in
+   `git diff 2de79ef9 -- src/core/git-identity.ts | grep -n "export function readGitIdentity"`.
 4. **Doc comments.** `readIdentityConfig`'s (lines 23-30) is rewritten to state the three outcomes: a spawn
    that never ran git is reported as such (the cause carried); any exit other than `0` — `1` for no
    matching key, `128` for a root git cannot enter or a config git cannot parse, a signal — yields no
@@ -131,7 +133,8 @@ failure, before resolving any identity. No `hint`, no `details`.
    <cause>`, since the string is now fixed word for word and that table is where such strings live.
    `spec-006` §7 step 2 is not false after the change (it describes the identity outcome only), so no
    amendment there unless the approver wants it. No BDD scenario is required by an AC; P1.2's
-   "no configured git identity" scenario keeps passing unchanged. No config `version:` bump; CHANGELOG
+   "no configured git identity" scenario keeps passing unchanged (at green
+   `git diff --stat 2de79ef9 -- docs/02_requirements/02_bdd/features/p1-memory/` → empty). No config `version:` bump; CHANGELOG
    is `user-docs`'.
 
 **AC classification and what the qa agent pins.**
@@ -188,6 +191,76 @@ is set only around the call under test and restored before any fixture git call 
 - AC 3, both: `expect(run.stderr.split('\n')).toContain(errorLine)` — received
   `["error: git identity not configured (user.name/user.email)", ""]` (exit status already 1 on the current code).
 
+### green (developer, 2026-10-15)
+
+- Commit `07dfb86f` — `fix(core): task-284 — report a git that cannot be spawned as could not run git: <cause> (bug-377)`.
+  `src/core/git-identity.ts` only: `readIdentityConfig` uses `spawnSync` and returns `{ ran: false, cause }` when
+  `run.error` is set (the spawn never ran git), an empty map for any other non-zero status (`1`, `128`, a signal:
+  D2), the parsed map on exit `0`; `requireGitIdentity` refuses `{ code: 'IO', message: 'could not run git: ' +
+  cause }` before resolving any identity (D1); `readGitIdentity` keeps its signature and returns `''`/`''` on a
+  spawn failure (D3). Doc comments of `readIdentityConfig`, `readGitIdentity` and `requireGitIdentity` (three
+  refusals, codes named) rewritten (D4).
+- Red → green: `npx jest test/cli/git-unrunnable-refusal.integration.test.ts test/core/git-identity-spawn-failure.test.ts
+  --maxWorkers=2` after `npm run build` → `Tests: 10 passed, 10 total` (red at `1541f47f`: 6 failed, 4 passed).
+  With AC 2's files: `npx jest test/core/git-identity-spawn-failure.test.ts test/core/git-identity.test.ts
+  test/core/identity-preflight-committer.test.ts --maxWorkers=2` → `3 passed`, `37 passed`.
+- Commit `5e501820` — `docs/cli-reference.md` § Git identity: one sentence for `could not run git: <cause>` (D4).
+
+### refactor (developer, 2026-10-15)
+
+Heavy gates each after `bash ../devloop-kit/waitslot.sh`.
+- `npm run -s test:coverage -- --maxWorkers=2 --silent` (load before 6.28; the full parallel suite, the same suites
+  `npm test` runs without latency) → `Test Suites: 445 passed, 445 total`, `Tests: 7947 passed, 7947 total`,
+  1126.5 s. The wrapping shell's own exit status was lost (it was moved to the background by the tool's 600 s
+  timeout and reported 144 after jest had printed its summary); the jest summary above is the evidence.
+- Coverage (`coverage/coverage-summary.json`): Statements 99.33 % (10367/10436), Branches 97.35 % (6378/6551),
+  Functions 98.00 % (1967/2007), Lines 99.71 % (8715/8740). Batch baseline 99.33 / 97.38 / 98.00 / 99.71.
+  **Branches −0.03, declared (bug-361):** the uncovered branches of the touched area are `src/core/git-identity.ts`
+  `BRDA:126` (the `?? 0` of `codePointAt`, unreachable, unchanged since `2de79ef9`) and
+  `src/core/memory-transition.ts` `BRDA:468` and `BRDA:560` (`awk` over `coverage/lcov.info`), the two bug-361
+  lines covered only in some runs; with those two covered the column is 6380/6551 = 97.39 % ≥ 97.38. Every branch
+  task-284 added is covered (git-identity.ts 33/34, the one miss being line 126). To verify on the integrated head
+  at the gate.
+- `npm run lint` → clean. `npm run docs:api` → exit 0, no warning (`grep -ci warn` → 0). `npx tsc --noEmit -p
+  tsconfig.json && npx tsc --noEmit -p tsconfig.build.json` → clean. `npm run build` → clean.
+  `test/docs/cli-reference.test.ts` passed in the full run.
+- `npm run -s test:no-identity -- test/core/git-identity-spawn-failure.test.ts test/cli/git-unrunnable-refusal.integration.test.ts --maxWorkers=2`
+  → `Tests: 10 passed`.
+- BDD: P1.2's no-identity scenario is unchanged (`git diff --stat 2de79ef9 -- docs/02_requirements/02_bdd/features/p1-memory/` → empty)
+  and green in the full run; no AC asks for a scenario.
+
+### self-review (developer, 2026-10-15)
+
+- AC 1 met: (i)-(iii) green, (iv)/(v) characterization green (`git-identity-spawn-failure.test.ts`, 7 tests).
+- AC 2 met: `git diff --stat 2de79ef9 -- test/core/git-identity.test.ts test/core/identity-preflight-committer.test.ts`
+  → empty; both pass (37-test run above).
+- AC 3 met: `git-unrunnable-refusal.integration.test.ts` 3/3 (ENOENT, EACCES, positive).
+- AC 4 met: refactor gates above, Branches −0.03 declared as bug-361's.
+- T4: `git log --first-parent --no-merges --format=%h 1541f47f..HEAD -- test/core/git-identity-spawn-failure.test.ts
+  test/cli/git-unrunnable-refusal.integration.test.ts` → empty.
+- Same class in touched files: `grep -rn "requireGitIdentity.*VALIDATION\|VALIDATION.*requireGitIdentity" src` →
+  nothing. The comments in `src/core/approval-authority.ts:84` and `src/core/builtin-asset.ts:129-132` that compare
+  their shape to `requireGitIdentity`'s are still true for its identity refusals; left as they are.
+- Spawn errors other than ENOENT/EACCES/EPERM (an `ENOBUFS` past the 1 MiB default buffer) take the same branch and
+  read `could not run git: spawnSync git ENOBUFS`; git did run there, but the message names the cause and no
+  identity claim is made. Not pinned by any AC.
+
+### Pending amendments (approver)
+
+- `spec-008-cli-grammar` — §6 "Pinned refusal strings": one row, `every command that writes (§2 --dry-run's list,
+  and init) | 1 | could not run git: <cause>`, and a Revision note (2026-10-15); uncommitted in the worktree.
+  Proposed `--reason`: "task-284: adds the pinned refusal could not run git followed by the spawn error's message,
+  exit 1 and code IO, for a git the identity check cannot start (bug-377), and states that a git which runs and
+  finds no identity keeps REQ-SEC-01's message whatever its non-zero exit, per the approver's rulings D1 and D2 of
+  2026-10-15."
+- `bug-377` — none: its `### Retrospective` ("None.") stands.
+
 ### Retrospective
 
-None yet.
+- The design's measurements (spawn error shapes, git's exit 128 for a corrupt `.git/config`) made the qa rows and
+  the code exact on the first pass; red → green needed no send-back.
+- Follow-up candidate (approver ruling D2, not filed): a `.git/config` git cannot parse makes every mutating
+  command say `git identity not configured (user.name/user.email)` (exit 128 path), for v0.4.
+- Process: a full `--coverage` run took 1126 s at load ~12-17; the 600 s tool limit moved it to the background
+  and lost the wrapping shell's exit status. Future sessions should capture jest's exit into the log file
+  (`…; echo "exit=$?" >> log`) inside the same command.
