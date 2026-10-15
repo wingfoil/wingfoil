@@ -135,8 +135,9 @@ Therefore the following transition applies:
    tasks defined in the backlog** under [`docs/03_backlog/`](03_backlog/) — i.e.
    `04_backlog/backlog.json` and its `by-release/` slices are the working task list.
 2. **Switch-over (as soon as WingFoil is self-hostable):** task management **moves into
-   WingFoil**, with tasks tracked as project Memory elements (`.wingfoil/memory/task/…`)
-   under WingFoil's own workflow — the product starts managing its own development.
+   WingFoil**, with tasks tracked as project Memory elements (`docs/04_memory/{release}/{id}.md`,
+   the path `memory.yaml` declares for `task`) under WingFoil's own workflow — the product starts
+   managing its own development.
 3. **Migration of the remainder (if needed):** any tasks still open in the original backlog
    at switch-over time can then be **transcribed as WingFoil Memory tasks**, preserving
    their traceability (`ref` → feature/`REQ-*`, acceptance criteria) defined in Phase 4.

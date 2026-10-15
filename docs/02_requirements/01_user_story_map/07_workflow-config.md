@@ -13,13 +13,13 @@
 ### Step 1 — Review current workflow and identify gaps
 
 * **[MVP · v0.3]** US-6-01: As Morgan, I want to see current workflow structure and gaps with
-  `wingfoil workflow show [workflow]` so that I understand what's missing (e.g., an approval gate for architecture
+  `wingfoil workflow show <ref>` so that I understand what's missing (e.g., an approval gate for architecture
   decisions). _(ref: P4.7 — home in Journey 0a)_
 
 ### Step 2 — Define new workflow phase/step
 
-* **[MVP · v0.3]** US-6-02: As Morgan, I want to create a custom workflow with `wingfoil workflow create` (interactive
-  or flag-based) so that I define new phase without manual YAML editing. _(feat: P4.8)_
+* **[MVP · v0.3]** US-6-02: As Morgan, I want to create a custom workflow with `wingfoil workflow create <name>` (flag-based;
+  interactive post-v0.3) so that I define new phase without manual YAML editing. _(feat: P4.8)_
 * **[MVP · v1.0]** US-6-03: As Morgan, I want to define pre/post step validation rules (file.exists,
   frontmatter.required, git.commits, tests.coverage) so that I enforce quality gates on new steps. _(feat: P4.12)_
 * **[MVP · v0.3]** US-6-04: As Morgan, I want to compose sub-workflows via `include()`, executable once or

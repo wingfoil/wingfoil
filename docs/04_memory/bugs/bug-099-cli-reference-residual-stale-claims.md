@@ -2,7 +2,7 @@
 id: "bug-099-cli-reference-residual-stale-claims"
 type: bug
 title: "`X_cli-cmds.md` still declares a `--dry-run` that does not exist, describes sync processes against a retired schema key, and repeats the `interactive or flag-based` claim in two more pillars"
-status: planned
+status: closed
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
@@ -73,3 +73,12 @@ second is what the implementation already does, and `spec-008` §2 already rules
   the reference becomes the thing a new user reads first, which is an argument for scheduling it into
   the `user-docs` phase rather than deferring it to v0.3.
 - Found by `task-098` while executing every command in the rows it corrected.
+
+### Retrospective
+
+- Fixed by `task-245`: `X_cli-cmds.md` 1.7 states the shipped surface. Items 1–3 are gone (`--dry-run` described as
+  the option of the twenty writing commands, the sync passages marked *Not built* without the retired key, no
+  "interactive or flag-based" claim); item 4 was settled the way its Notes suggested, `--format` stated once in Global
+  Options. `test/docs/x-cli-cmds.test.ts` pins it.
+- Filed in v0.2 with a suggestion to fix it in that release's `user-docs` phase; it waited for `task-245`, which was
+  scheduled late on purpose so the v0.3 rows could be written once.

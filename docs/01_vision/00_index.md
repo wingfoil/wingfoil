@@ -1,6 +1,6 @@
 # WingFoil — Product Vision (docs/vision)
 
-**Last indexed:** 2026-10-14
+**Last indexed:** 2026-10-15
 
 This folder holds the **product-vision specification** for WingFoil, produced through a Lean Inception workshop (see
 [`X_lean-inception-plan.md`](X_lean-inception-plan.md)). This README is a **navigation index**: it tells you which
@@ -42,10 +42,10 @@ line count (`awk 'END{print NR}'`).
 | [`03_is-isnot.md`](03_is-isnot.md)                     | 1.4 | 2026-10-06 | Approved | 59    | Scope boundaries: what WingFoil IS / IS NOT / DOES / DOES NOT                                                           |
 | [`04_personas.md`](04_personas.md)                     | 1.2 | 2026-10-07 | Approved | 149   | The primary persona (Morgan) and the 7 personas (Alex, Sam, Jordan, Morgan, Casey, Taylor, the maintainer)              |
 | [`05_journeys.md`](05_journeys.md)                     | 1.6 | 2026-10-10 | Approved | 287   | 8 end-to-end user journeys (0a, 0b, 1–6): steps, obstacles, success                                                     |
-| [`06_features.md`](06_features.md)                     | 1.14 | 2026-10-12 | Approved | 522   | 65 features (by pillar + by release) and the data-model / implementation notes                                          |
-| [`07_sequencer.md`](07_sequencer.md)                   | 1.9 | 2026-10-14 | Approved | 471   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
-| [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.11 | 2026-10-11 | Approved | 220   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
-| [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.6 | 2026-10-06 | Approved | 408   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
+| [`06_features.md`](06_features.md)                     | 1.15 | 2026-10-15 | Approved | 522   | 65 features (by pillar + by release) and the data-model / implementation notes                                          |
+| [`07_sequencer.md`](07_sequencer.md)                   | 2.0 | 2026-10-15 | Approved | 471   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
+| [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.12 | 2026-10-15 | Approved | 220   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
+| [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.7 | 2026-10-15 | Approved | 486   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
 | [`X_lean-inception-plan.md`](X_lean-inception-plan.md) | —   | 2026-06-11 | —        | 42    | Workshop plan: sessions, key decisions, output list                                                                     |
 
 ---
@@ -172,17 +172,17 @@ line count (`awk 'END{print NR}'`).
 
 ### `X_cli-cmds.md`
 
-- Pillar 1 — Memory commands + parameters (params L34) — L14–51
-- Pillar 2 — DNA commands + parameters (params L83) — L52–96
-- Pillar 3 — Directives commands + parameters (params L119) — L97–133
-- Pillar 4 — Workflow commands + parameters (params L172) — L134–183
-- Pillar 5 — Initialization commands + parameters (params L200) — L184–212
-- Agent Execution commands + parameters (params L219) — L213–228
-- Global Options — L229–241
-- Command-Line Syntax Conventions — L242–277
-- Release Timeline by Command — L278–313
-- Command Reference by Persona (Alex L316, Morgan L325, Casey L335, Jordan L344, Sam L353) — L314–362
-- Revision history — L363–408
+- Pillar 1 — Memory commands + parameters (params L40) — L17–58
+- Pillar 2 — DNA commands + parameters (params L91) — L59–105
+- Pillar 3 — Directives commands + parameters (params L129) — L106–139
+- Pillar 4 — Workflow commands + parameters (params L182) — L140–196
+- Pillar 5 — Initialization commands + parameters (params L214) — L197–223
+- Agent Execution commands + parameters (params L232) — L224–245
+- Global Options — L246–261
+- Command-Line Syntax Conventions — L262–301
+- Release Timeline by Command — L302–339
+- Command Reference by Persona (Alex L342, Morgan L351, Casey L361, Jordan L370, Sam L379) — L340–388
+- Revision history — L389–486
 
 ### `X_lean-inception-plan.md`
 

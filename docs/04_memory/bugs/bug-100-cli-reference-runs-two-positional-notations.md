@@ -2,7 +2,7 @@
 id: "bug-100-cli-reference-runs-two-positional-notations"
 type: bug
 title: "`X_cli-cmds.md` now writes required positionals as `<ANGLE>` in Pillar 2 and `[BRACKETS]` everywhere else, and nothing schedules the conversion"
-status: planned
+status: closed
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
@@ -69,3 +69,11 @@ new user reads, and doing them together means reading each row once.
   aid that currently means two things in one document. Filed because a done task's Execution Notes
   reschedule nothing, and this was recorded only there.
 - Introduced by `task-098` knowingly, as the cheaper of two honest options. Not a defect in that work.
+
+### Retrospective
+
+- Fixed by `task-245`: one notation, `--help`'s, in every command row (`<id>`, `[<ref>]`, `<path>`), Pillar 2 included, and
+  in the parameter tables' positionals (Pillar 2's `category` and Pillar 3's `ROLE` rows keep the names two guards pin); the
+  rows of unbuilt commands are marked *Not built* rather than given an invented grammar, as the Notes proposed.
+  `test/docs/x-cli-cmds.test.ts` derives the expected spelling from the program, so the next shipped command cannot
+  drift unnoticed.
