@@ -26,8 +26,10 @@ they were measured.
 - **The approver is a human.** The AI agents work as `developer`, `qa`, `reviewer` and `architect`, and never hold
   approval authority: every gate is crossed by the `approver` role.
 - **Separate sessions for separate duties.** In the [`dev-loop`](../.wingfoil/workflows/custom/dev-loop.yaml)
-  workflow a task's design, its failing tests (`red`, by a separate `qa` agent), its implementation and its review
-  run in distinct sessions; the workflow declares this with `distinct_from` (`dl-134`).
+  workflow the failing tests are written in `red` by a separate `qa` agent, and the review is independent of the work
+  it judges. The workflow declares this with `distinct_from` on two phases (`dl-134`): `green` is `distinct_from:
+  [red]`, and `review` is `distinct_from: [red, green, refactor]`. That the design also runs in a session of its own
+  is how this repository practises it, not something the workflow declares.
 - **At v0.1 and v0.2, the configuration lived elsewhere.** Until `task-111` moved it to the root, during the development of 0.2.2,
   it was kept under `docs/self/`, where the release-health script, which reads `.wingfoil/` at the root, does not look. That is
   why most of the static and Memory metrics below are not measurable at either point.
@@ -92,10 +94,17 @@ must always hold, a **trend** is compared with the previous run in its direction
 - **Secrets in diffs.** G14 finds 29 blocking findings at v0.2. They are not leaked secrets: the scanner reads test
   diffs, and most are the fake keys in its own test file, `test/validation/secret-scan.test.ts`; the rest are in a bug
   report about that fixture, another test and a phase plan. The report lists each with its commit and pattern.
-- **Process conformance (P).** P01 counts malformed flow commits (61 failing at v0.1, 297 at v0.2), mostly brackets
-  written with the ASCII arrow, `submit` subjects with no bracket, and approval commits with an AI co-author trailer.
+- **Process conformance (P).** P01 counts malformed flow commits, and its causes differ by release (each commit's
+  reasons are in the report's `failing` list):
+  - at v0.1, 61 failing: 34 use a verb the grammar does not declare (in 27 of them an element id sits where the verb
+    should be, as in `wf(task): task-024 design …`), 26 carry no transition bracket, and 1 approval carries an AI
+    co-author trailer; none uses the ASCII arrow, which G10's full share at v0.1 agrees with;
+  - at v0.2, 297 failing: 165 write the bracket with the ASCII `->`, 92 are approvals or rejections carrying an AI
+    co-author trailer (21 of them also with the ASCII bracket), 57 are `submit` subjects with no bracket, and 4
+    have another defect.
   P02 finds 15 status changes at v0.2 that the commit subject does not name, such as a task's start moving its bug.
-  P05 finds 137 approvals at v0.2 whose author is not the approver the `Approver:` line names. P03 and P04 checked
+  P05 finds 137 approve, reject and finalize commits at v0.2 whose `Approver:` line names the approver but whose author is the
+  placeholder identity `<probe@example.invalid>` (`Probe` in `git log`), the same one in all of them (`dl-094`). P03 and P04 checked
   no item at either point, so they say nothing yet. P07 passes at both: computing
   the P metrics twice gives byte-identical results.
 - **Quality at v0.2.** The 2418 tests pass with none disabled (Q02), coverage is high (Q03), all the runnable
