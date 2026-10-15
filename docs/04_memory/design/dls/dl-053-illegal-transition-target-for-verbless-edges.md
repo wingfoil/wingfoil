@@ -95,3 +95,16 @@ Related: `dl-032`, `bug-032`, REQ-STATE-01, BDD `P1.6` / `P5.2.3`, `task-045-mem
 `task-046`, `task-047`, `spec-001`.
 
 **Replaced on 2026-10-06 by `dl-154-an-illegal-transition-prints-none-as-its-target-replacing-dl-053-s-canonical-edge` (option A, `(none)`); this decision-log is deprecated.**
+
+**Note (2026-10-15, approver triage of the W3 B7 follow-ups, item E2; `bug-ingest-rel-v0.3-w3b7-review-findings-plan`).**
+`dev-loop.yaml` 2.0 (`task-281`, `bug-313`, approver ruling D6 of 2026-10-12) declares practice's order for `done`:
+`memory.approve`, `element.set_state(done)` and the bugs' `bug.sync_state` on the task branch, then `git.merge`, then
+`git.remove_worktree` (`grep -n "^version" .wingfoil/workflows/custom/dev-loop.yaml` → line 94). So `done`'s fallback
+after a failed merge (`dl-014` G4: abort clean, mark failed, re-enter at `red` with `set_state: in-progress`, line
+203) now starts from `done`: the task edge it takes is `done → in-progress`, an edge no verb drives and the `task`
+machine does not declare (`sequence: [draft, pending, backlog, in-progress, in-review, approved, done]`,
+`.wingfoil/memory.yaml` line 166). The YAML's header (lines 50-54) and line 203 leave whether that edge is legal to
+"dl-053's question" (`dl-061`'s ratification names this decision-log as adjacent to the `done` fallback's legality).
+This decision-log is deprecated (replaced by `dl-154` for the message's `<to>`), so the question has no open owner;
+it is recorded here for whoever decides it, with the `done` fallback of `dev-loop.yaml` 2.0 as its case. The
+deprecation and `dl-154`'s decision are unchanged.
