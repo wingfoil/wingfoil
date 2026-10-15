@@ -393,6 +393,88 @@ e2e-smoke-fake-read 2/1. Every pre-existing test of those files still passes exc
 the task-060 order row the design (and D1) change. `npx eslint` on the changed files: clean; a `tsc --noEmit`
 over the six test files with `tsconfig.json`'s options: clean.
 
+### green (developer, 2026-10-15)
+
+Green `f11dc6af`, one commit, `fix(release): task-282 — …`. Red → green: `npx jest test/cli/build-info.test.ts
+test/cli/e2e-smoke-candidate.test.ts test/cli/staging-rehearsal.test.ts test/cli/evidence-only-tag.test.ts
+test/cli/e2e-smoke-fake-read.test.ts test/cli/publish-staging.test.ts --maxWorkers=2` → 6 suites, **125 passed / 125**
+(red: 46 failed / 79 passed). The six AC 4 rows that passed in red for the wrong reason (unknown flag) now pass
+on the new refusals: `--evidence` missing, absolute, without a trailing `/`, with `..`, another option beside it
+(each a `parseArgs` throw), and the CLI's exit 2.
+- `scripts/write-build-info.cjs`: `PACK_INPUTS` derived from `BUILD_INPUTS` plus `LICENSE`, `README.md`, sorted;
+  `inputStatus(root, inputs, env)`; `computeBuildInfo` reads its status through it.
+- `scripts/e2e-smoke.cjs`: `candidateStatus`, `removeBuildOutput`; `prepareCandidate` calls `removeBuild`
+  inside its `try` before `pack`; the refusal reads `a pack input has uncommitted changes`;
+  `realCandidateEffects` wires both; `probeFakeRead` guards a record line without an `argv` array
+  (`line <n> of the fake agent's record has no argv`, physical line numbers) and is exported. `runSmoke`,
+  `smokeSteps`, `agentRunSteps`, `smokeAgentRun` and `invoke` are unchanged: `git diff 2de79ef9 f11dc6af --
+  scripts/e2e-smoke.cjs | grep -c "^[-+].*function \(runSmoke\|smokeAgentRun\|agentRunSteps\|smokeSteps\)"` → 0.
+- `scripts/publish-staging.cjs`: strict `checkTranscript` (rules (a)–(e) of the design); `outsideEvidence`,
+  `checkEvidenceOnly` and the `--check-evidence-only … --evidence …` mode (git in `process.cwd()`); `runStaging`
+  calls the required `prepareTree` effect before `packTarball` only when no `--tarball` is given (D1 (a), the
+  coordinator's ruling); the real `prepareTree` refuses a changed pack input and removes `dist/`.
+- Config: `bindings.yaml` 2.2 (`evidence-only-since-candidate`, the evidence paths only in its `--evidence`
+  arguments, D2 (a)), `release-publishing.yaml` 1.8 (`tag.checks.pre[3]`, the `tag` and `staging-rehearsal`
+  descriptions), `e2e-smoke.yaml` 1.7 (the `gate` description), `.wingfoil/WORKFLOW.md` (the *Release
+  candidate* paragraph, the *Release Publishing* paragraph and its `TG` node; the *E2E Smoke* paragraph untouched,
+  `git diff 2de79ef9 f11dc6af -- .wingfoil/WORKFLOW.md | grep -c "agent execute"` → 0).
+
+### refactor (developer, 2026-10-15)
+
+No refactor commit: the green diff needed none. Gates on `f11dc6af`, each heavy one after `waitslot.sh`:
+
+| Command | Result |
+|---|---|
+| `npx jest --coverage --maxWorkers=2` (load 13.0 before, 11.8 after) | **445 suites / 7988 tests, all passed**; coverage **99.33 / 97.37 / 98 / 99.71**. Branches −0.01 against the B7 baseline (97.38): `git diff --stat 2de79ef9 HEAD -- src` is empty and the only uncovered lines of `src/core/memory-transition.ts` are `468,560` (the bug-361 lines, declared); `scripts/` is outside `collectCoverageFrom` (`jest.config.js:73-74`) |
+| `npm run lint`; `npm run typecheck` (both tsc configs); `npm run docs:api`; `npm run build` | exit 0 each |
+| `node dist/cli.js workflow show release-publishing --format json` / `workflow show e2e-smoke --format json` | exit 0, **0 errors** each; release-publishing's warnings are the three pre-existing unbound tokens (`phases[2].checks.pre[0]`, `pre[1]`, `phases[3].checks.post[0]`), none for the new bound check |
+| `node scripts/e2e-smoke.cjs --candidate --report <scratch>/e2e-smoke-282.md` on the committed branch, with an untracked `zz-untracked-note-282.txt` at the root, uncommitted Memory edits (the pending amendments) and a planted `dist/zz-stale.js` (load 5.4 before, 7.2 after) | exit 0 in 52 s, **PASS 72/72**, `ok wingfoil --version = 0.2.2 (f11dc6af…) — match`; `ls dist/zz-stale.js` → No such file (removed before the pack); no `wingfoil-candidate-*` left in `/tmp` (`ls /tmp \| grep -c wingfoil-candidate` → 0) |
+| `node scripts/check-governance.cjs --base 2de79ef9` | 4 wf() commits checked, 0 findings |
+| `node scripts/lint-claims.cjs --base 2de79ef9` | 1 warning (warn-only) on the design section's "unchanged" (the build-info tests), settled by the run above: they pass unchanged in the full suite |
+
+Not run: `npm run publish:staging` (it starts Verdaccio and publishes to it, reserved for the approver). Its
+new `prepareTree` is pinned on a temp checkout in-process (`test/cli/publish-staging.test.ts`, the real
+effect, both cases).
+
+### self-review (developer, 2026-10-15)
+
+- AC 1: `candidateStatus` reads `PACK_INPUTS` from `write-build-info.cjs` (one list, `grep -n "PACK_INPUTS ="
+  scripts/*.cjs` → one line); the real candidate run passed with an untracked note outside the pack inputs and
+  removed the stale module; the refusal on a modified pack input is the CLI test's exit 1.
+- AC 2: the `gate` description names `--candidate`; "not in CI"/"never in CI" gone from `release-publishing.yaml`
+  and `WORKFLOW.md` (`grep -rn "never in CI\|not in CI" .wingfoil` → nothing); spec-015 §3 is a pending
+  amendment; each config file raised once (`git diff 2de79ef9 f11dc6af | grep -c "^+version:"` → 3).
+- AC 3, AC 4: as pinned; the evidence check reads the candidate from the transcript, refuses a non-ancestor,
+  uses `--no-renames -z`.
+- AC 5: gates above.
+- Handover points: (1) bug-321's class, untouched (candidate note below); (2) fixtures resolve from the
+  checkout, characterization passes; (3) the guard, pinned.
+- Same-class sweep in touched files: the second `npm pack` caller (`publish-staging.cjs`'s `packTarball`)
+  got the same tree check (D1 (a)); `grep -n "'pack'" scripts/*.cjs` → the two `npm pack` callers
+  (`e2e-smoke.cjs:814`, `publish-staging.cjs:559`), both now preceded by the check. No other "never in CI" wording about the rehearsal (`grep -rn` above; the
+  remaining hits in Memory are about the latency suite and dl-076's history, a different subject).
+- T4: `git log --first-parent --no-merges --format=%h 4928d234..HEAD -- <the nine files of 4928d234>` → empty.
+
+### Pending amendments (approver)
+
+- `spec-015-packaging-publishing` (§3's rehearsal paragraph + Revision 2026-10-15):
+  `--reason "task-282 (bug-310, bug-311, bug-312; dl-099 §1 and §4, task-219 D2 and D4 (c)): §3 says what CI does - the rehearsal of the candidate is a gate run once per candidate, and publish.yml's stage job runs the same script in CI on the tagged build; the script's own pack refuses a change under the pack inputs and packs from a removed dist/; --check-transcript is strict; and the tag's evidence-only-since-candidate pre-check is stated. Revision note added."`
+- `bug-310-…` (`### Retrospective`):
+  `--reason "task-282: the bug's retrospective, required before the bug closes (dl-115 Q2 (a)) - two lists answered the same question, and the stale-dist defect had a second caller fixed in the same task."`
+- `bug-311-…` (`### Retrospective`):
+  `--reason "task-282: the bug's retrospective, required before the bug closes (dl-115 Q2 (a)) - a check over committed evidence reads every line."`
+- `bug-312-…` (`### Retrospective`):
+  `--reason "task-282: the bug's retrospective, required before the bug closes (dl-115 Q2 (a)) - the tag's rule is now bound, with the ancestry refusal and --no-renames."`
+
+Candidate finding, not filed (for `bug-321`, on the approver's instruction): a SIGINT between the removal of
+`dist/` and the end of `npm pack` (`--candidate`, and the rehearsal without `--tarball`) leaves the checkout
+without `dist/`; `npm run build` restores it.
+
 ### Retrospective
 
-None yet.
+- The design's "no package ships `scripts/`" answered the fixtures question by evidence (`npm pack
+  --dry-run`) rather than by a guard nobody would reach.
+- Reading the second caller of `npm pack` at design found the rehearsal's same-class defect before red, so
+  the qa agent could pin it (D1 (a)) instead of a reviewer finding it after submit.
+- A session crash between green and the gates cost only the gate runs: green was committed, so nothing was
+  lost (`git log --oneline -1` → `f11dc6af` on resume).
