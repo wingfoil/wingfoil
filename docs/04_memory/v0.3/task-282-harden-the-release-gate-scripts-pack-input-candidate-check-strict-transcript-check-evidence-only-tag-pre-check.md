@@ -83,6 +83,256 @@ Fix three inherited v0.3 bugs that were `triaged` with no task, all in the relea
 
 ## Execution Notes
 
+Branch `task/task-282-harden-the-release-gate-scripts-pack-input-candidate-check-strict-transcript-check-evidence-only-tag-pre-check`,
+worktree `../.wf2-wt/task-282`, cut from `main` `2de79ef9` (W3 B8); start `e57e4284`, bug syncs `2b4f6e54`
+(310), `d764210e` (311), `f2862c8e` (312).
+
+### design (developer, 2026-10-15)
+
+**depends_on / handovers read (dl-015).** `task-219` (`done`): `--candidate` = `prepareCandidate` over injected
+effects (clean tree or exit 1, pack, install into a throwaway prefix, smoke with version + `HEAD`);
+`realCandidateEffects` is `istanbul ignore`d and tested only through fakes; `checkTranscript` reads the last
+line and the FIRST `VERSION_CHECK_RE` match of `pkg.version`. D2: evidence-only commits do not re-cut, and `tag`
+tags the commit `staging-rehearsal-passed` prints (the dated note on `dl-099`, `sed -n 145,152p
+docs/04_memory/design/dls/dl-099-*.md`). D4 (c): restrict the check to the pack inputs, as
+`write-build-info.cjs` does. Its dl-159 rule still holds: the staging-rehearsal text never names `main`
+(`test/cli/staging-rehearsal.test.ts:138`). `task-243`: the agent-run step is its own functions
+(`agentRunSteps`, `smokeAgentRun`, `probeFakeRead`), `AGENT_FIXTURES` comes from the checkout, and `invoke` is
+`(args, cwd, stepEnv = env)`. None of these move.
+
+**Cited elements.** `spec-015` is `approved`; `dl-099` and `dl-023` are `ready` (`grep -m1 '^status'`).
+`tech-spec` is `amendable: true` (`.wingfoil/memory.yaml:221`). No AC contradicts them: dl-099 §4 chose cadence
+(a) for the rehearsal, "because it starts a local registry" (`sed -n 93,105p dl-099-*.md`). Saying that
+`publish.yml`'s `stage` job also stages the tagged build in CI states a fact (`.github/workflows/publish.yml:14`);
+it does not change the cadence.
+
+**Bugs reproduced on this branch.**
+- bug-311: `node -e` with `checkTranscript` → `{"ok":true,"commit":"aaaa…"}` for both the FAIL-then-success
+  transcript and the two-sha transcript.
+- bug-310: `realCandidateEffects.status` is `git status --porcelain` with no pathspec (`sed -n 770p
+  scripts/e2e-smoke.cjs`). `grep -rn PACK_INPUTS scripts/` → 0. `grep -n "'dist'" scripts/e2e-smoke.cjs
+  scripts/publish-staging.cjs` → 0, so nothing removes `dist/` before a pack. `tsconfig.build.json` has no
+  `incremental`, so a removed `dist/` is re-emitted in full.
+- bug-312: `grep -n "evidence-only\|name-only" .wingfoil/workflows/bindings.yaml scripts/publish-staging.cjs` → 0.
+- Wording: `grep -n "not in CI\|never in CI"` → `release-publishing.yaml:43`, `WORKFLOW.md:393`;
+  `spec-015` line 232 says "not part of `publish.yml` or CI". The `e2e-smoke.yaml` `gate` description holds no
+  `candidate` (`sed -n '/name: gate/,/produces/p' … | grep -c candidate` → 0).
+
+**What the pack inputs are.** `npm pack --dry-run --json --ignore-scripts` lists exactly `LICENSE`,
+`README.md` and `package.json` outside `dist/`: npm always packs `LICENSE`, and `files` is `["dist", "README.md"]`.
+So the pack inputs are `BUILD_INPUTS` (what `dist/` is built from) ∪ `LICENSE`, `README.md`.
+
+**Coverage note.** `collectCoverageFrom` is `src/**/*.ts` (`jest.config.js:73-74`). Nothing under `scripts/`
+is measured, so this task cannot move the four columns. The new branches are still pinned in-process (the
+brief's rule); CLI child tests are used only for the exit-code contract.
+
+**Design.**
+
+1. *ONE pack-inputs list* (`scripts/write-build-info.cjs`): keep `BUILD_INPUTS` and add
+   `PACK_INPUTS = Object.freeze([...BUILD_INPUTS, 'LICENSE', 'README.md'].sort())`, declared once and derived
+   from the one build list. Also add `inputStatus(root, inputs, env = process.env) → string | null`: the existing
+   `git status --porcelain --untracked-files=all -- <inputs>` with `GIT_LITERAL_PATHSPECS=0`, or `null` when git
+   cannot answer. `computeBuildInfo` calls `inputStatus(root, BUILD_INPUTS, …)`; its behaviour does not change.
+2. *`--candidate`* (`scripts/e2e-smoke.cjs`): two new exports. `candidateStatus(root)` calls `inputStatus(root,
+   PACK_INPUTS)` and throws `--candidate: git could not report the status of the pack inputs` on `null`.
+   `removeBuildOutput(root)` runs `rmSync(join(root, 'dist'), { recursive: true, force: true })`. Effects gain
+   `removeBuild: () => void`. `prepareCandidate` runs in this order: `status` → refuse → `head` → `version` →
+   `makeDir` → then, inside the `try`, `removeBuild` → `pack` → `install`. The refusal message is
+   `--candidate: a pack input has uncommitted changes, so the packed build would not be the candidate commit:
+   <porcelain lines, ", ">`. `realCandidateEffects` wires `status: () => candidateStatus(repoRoot)` and
+   `removeBuild: () => removeBuildOutput(repoRoot)`. The header comment's `--candidate` sentence is updated to
+   match.
+3. *`checkTranscript`* (`scripts/publish-staging.cjs`) applies these rules in order; each failure returns
+   `{ ok: false, reason }`:
+   (a) closing line ≠ the success line → the existing reason (`the closing line is not "<expected>": got
+   "<closing>"`);
+   (b) a line matching `/\bFAIL(?:ED)?\b/` → `line <n> records a failure: "<line>"`, where `<n>` is the 1-based
+   physical line number;
+   (c) a version-check line (`/^\[publish:staging\] +ok +wingfoil --version = /`) that does not match
+   `VERSION_CHECK_RE` with `pkg.version` → `line <n> checks another stamp than <version> (<full sha>): "<line>"`;
+   (d) no version-check line → the existing `--expect-commit` reason;
+   (e) more than one distinct sha → `the smoke checked <k> distinct commits: <sha1>, <sha2>` (first-appearance
+   order).
+   Otherwise it returns `{ ok: true, commit }`. Running (a) first keeps task-219's pins (`closing line` for a
+   FAILED closing line).
+4. *Evidence-only tag pre-check* (`scripts/publish-staging.cjs`): a new mode, `--check-evidence-only
+   <transcript> --evidence <prefix/> [--evidence …]`. Like `--check-transcript` it runs alone. `parseArgs`
+   throws (exit 2) when `--evidence` is missing, when a prefix is absolute, contains `..` or does not end in `/`,
+   or when any other option is given. Two new exports:
+   - `outsideEvidence(paths, evidence) → string[]`: the paths that start with none of the prefixes, sorted.
+   - `checkEvidenceOnly(text, pkg, git, evidence) → { ok: true, commit, tip, paths } | { ok: false, reason }`,
+     with `git(args) → { status, stdout, stderr }`. Steps, in order:
+     1. `checkTranscript`; on failure, its reason.
+     2. `git rev-parse HEAD`, the tip.
+     3. (D3) `git merge-base --is-ancestor <c> HEAD`; exit 1 → `the candidate <c> is not an ancestor of the
+        tip <t>`.
+     4. `git diff --name-only --no-renames -z <c>..HEAD`; a non-zero exit → `git diff exited <n>: <stderr
+        first line>`. `--no-renames` makes a move out of `src/` list its source path; `-z` keeps paths unquoted.
+     5. `outsideEvidence` non-empty → `the commits after the candidate <c> change paths outside the evidence
+        paths (<prefixes, ", ">), so the candidate must be re-cut: <paths, ", ">`.
+   In `main`, git runs in `process.cwd()`, which is where the binding runs (`--check-transcript` reads its path
+   from there too). Pass → stdout `only evidence paths changed between the candidate <c> and the tip <t>: <n>
+   paths`, exit 0. A missing transcript → `error: no rehearsal transcript at <path>`, exit 1. Any `{ ok: false }`
+   → `error: <reason>`, exit 1.
+5. *Config.*
+   - `bindings.yaml` 2.1 → 2.2: `evidence-only-since-candidate: { run: [node, scripts/publish-staging.cjs,
+     --check-evidence-only, "{transcript}", --evidence, docs/04_memory/, --evidence, docs/05_plans/, --evidence,
+     docs/07_gates/], severity: reject, args: { transcript: <staging-rehearsal-passed's regex> } }`. The evidence
+     paths are listed here and nowhere else (D2).
+   - `release-publishing.yaml` 1.7 → 1.8: `tag.checks.pre` APPENDS
+     `evidence-only-since-candidate(transcript: docs/07_gates/rl-{release.release-line}/rel-{release.version}-staging-rehearsal.md)`
+     at index 3, so the conformance rows `phases[2].checks.pre[0]`/`[1]` do not move. The `tag` description
+     gains a sentence: the check runs `git diff --name-only <candidate>..<tip>` and passes only on the evidence
+     paths its binding declares; otherwise it names the paths and the candidate is re-cut (dl-099 §1, task-219
+     D2). In `staging-rehearsal`, "not in CI" is replaced by: the rehearsal of the candidate is a gate run per
+     candidate (dl-099 §4 (a)), and `publish.yml`'s `stage` job also stages the tagged build in CI. That text
+     does not name `main`.
+   - `e2e-smoke.yaml` 1.6 → 1.7: the `gate` description names `node scripts/e2e-smoke.cjs --candidate` (pack
+     inputs refused, `dist/` removed, then packed, installed and smoked with its stamp).
+   - Each `version:` comment gains `<n> task-282 (…)`.
+   - `.wingfoil/WORKFLOW.md`: line 393's sentence (worded as in the yaml); the `TG` node and the `tag` prose
+     name the new pre-check; the *Release candidate* paragraph's `--candidate` clause (line 214) mentions the
+     pack inputs and the removed `dist/`. The *E2E Smoke* paragraph is NOT edited (it belongs to task-242).
+6. *Handover points.*
+   - (1) The SIGINT leak of the per-template `wingfoil-smoke-agent-`/`-fake-` tmpdirs is `bug-321`'s class
+     (v0.4). It is out of scope and left untouched. One new case of the same class: a SIGINT between
+     `removeBuild` and the end of `npm pack` leaves the checkout without `dist/` (gitignored, `.gitignore:3`;
+     `npm run build` restores it). That is a candidate note for bug-321, not filed here.
+   - (2) `--candidate` never runs from a path without `test/`. It packs `dirname(__dirname)`, the repository
+     that holds the script (`sed -n 798p scripts/e2e-smoke.cjs`), and no package ships `scripts/` (`npm pack
+     --dry-run` above), so no installed copy of the script exists. `publish-staging.cjs` requires
+     `./e2e-smoke.cjs` from the same checkout, which in CI comes from `actions/checkout`. `AGENT_FIXTURES`
+     stays as is: a missing fixture already fails the copy step with a reason (`copy failed: …`, `runCopyStep`)
+     rather than throwing. This is pinned as characterization.
+   - (3) `probeFakeRead`: before the launch filter, a record line that is not an object with an array `argv`
+     fails the probe with `line <n> of the fake agent's record has no argv` (1-based), before any git call.
+     `probeFakeRead` becomes an export.
+
+**AC classification (T1) and what the qa agent pins.** The red commit declares every new export in
+`scripts/e2e-smoke.d.cts`, `scripts/publish-staging.d.cts` and `scripts/write-build-info.d.cts`, as task-207's
+did. Temp repositories use `mkdtempSync` plus local `user.name`/`user.email`/`commit.gpgsign false`, as
+`test/cli/build-info.test.ts` does. This task does NOT touch `test/cli/e2e-smoke.test.ts` (task-242's).
+
+| AC | Class | Evidence of absence |
+|---|---|---|
+| 1 pack-input check + removed `dist/` (bug-310) | red-first | `grep -rn PACK_INPUTS scripts/` → 0; `git status --porcelain` with no pathspec |
+| 2 gate description + the CI texts (bug-310) | **red-first for the yaml/WORKFLOW.md pins** (planned: characterization); spec-015 is a pending amendment, not pinned | `grep -c candidate` on the gate description → 0; "not in CI" is present. Precedent from task-219 and task-243: a text that does not exist yet is red-first |
+| 3 strict `checkTranscript` (bug-311) | red-first | the `node -e` reproduction above |
+| 4 evidence-only tag pre-check (bug-312) | red-first | `grep … name-only` → 0 |
+| 5 gates, `workflow show` zero errors | characterization | session 3 |
+| handover 3 `probeFakeRead` guard | red-first | `line.argv.includes` runs with no guard and throws a TypeError |
+| handover 2 fixtures resolve | characterization | — |
+
+- **AC 1**
+  - `test/cli/build-info.test.ts`, a new `describe('task-282 …')`:
+    - `PACK_INPUTS` equals `['LICENSE', 'README.md', 'package-lock.json', 'package.json',
+      'scripts/write-build-info.cjs', 'src', 'tsconfig*.json']` and contains every `BUILD_INPUTS` entry.
+    - Every non-`dist/` path of `npm pack --dry-run --json --ignore-scripts` (run in REPO_ROOT) matches a
+      `PACK_INPUTS` entry.
+    - `inputStatus(repo, PACK_INPUTS)` in a seeded repo: `''` with an untracked `note.txt` and a modified
+      `docs/x.md`; contains `src/a.ts` when tracked `src/a.ts` is modified; contains `src/new.ts` for an
+      untracked one; contains `README.md` when the README is modified; `null` outside a repository.
+    - The existing build-info tests stay green, unchanged.
+  - `test/cli/e2e-smoke-candidate.test.ts`:
+    - `candidateStatus(repo)` → `''` or non-empty for the same two cases; in a non-repo dir it throws `git
+      could not report the status of the pack inputs`.
+    - `removeBuildOutput(dir)` removes `dir/dist/stale.js` and its folder, and does not throw when `dist/` is
+      absent.
+    - `prepareCandidate` with fakes (add a `removeBuild` that records `'removeBuild'`):
+      - the calls are `['makeDir', 'removeBuild', 'pack /tmp/wf-candidate/pack', 'install …']`;
+      - status `' M src/x.ts'` → throws `a pack input has uncommitted changes`, calls `[]`. This replaces the
+        task-219 test's `'working tree is not clean'` expectation;
+      - a throwing `removeBuild` → rethrown, and the last call is `removeDir /tmp/wf-candidate`.
+    - CLI: copy `scripts/e2e-smoke.cjs` and `scripts/write-build-info.cjs` into a temp repo's `scripts/`, with
+      a `package.json` (`version` set), `src/a.ts` and a gitignored `dist/stale.js`; commit, then modify
+      `src/a.ts`. `node scripts/e2e-smoke.cjs --candidate` exits 1; stderr starts `error: --candidate: a pack
+      input has uncommitted changes` and names `src/a.ts`; `dist/stale.js` still exists (a refusal removes
+      nothing). The positive CLI run (a real pack) is session 3's heavy gate, not red.
+- **AC 2**
+  - `test/cli/e2e-smoke-candidate.test.ts`: `e2e-smoke.yaml` `version` ≥ 1.7 and its raw text matches
+    `/1\.7 [^;]*task-282/`; the `gate` description contains `--candidate` and `dist/`.
+  - `test/cli/staging-rehearsal.test.ts`, for `release-publishing.yaml`: the `staging-rehearsal` description does
+    not match `/not in CI/`, contains `publish.yml`, and still does not match `/\bmain\b/`.
+  - `.wingfoil/WORKFLOW.md`: no `never in CI`; the *Release candidate* paragraph contains `pack input`.
+- **AC 3** — `test/cli/staging-rehearsal.test.ts`, in-process `checkTranscript` with the file's `transcript()`
+  helper:
+  - a FAIL line, then the success line → `ok: false`, reason contains `records a failure`;
+  - `staging smoke FAILED` mid-transcript, then the success line → the same;
+  - two version lines with `a×40` and `b×40` → reason contains `2 distinct commits`;
+  - a version line for `0.2.2` beside one for `0.3.0` → `checks another stamp`;
+  - two version lines with the same sha → `ok: true`, that commit;
+  - every task-219 case keeps its reason;
+  - CLI: the FAIL-then-success transcript → exit 1, stderr `^error: line \d+ records a failure`.
+- **AC 4** — new `test/cli/evidence-only-tag.test.ts`:
+  - `outsideEvidence(['docs/04_memory/a.md', 'src/b.ts', 'docs/07_gates/c.md'], EVIDENCE)` → `['src/b.ts']`.
+  - `checkEvidenceOnly` against a temp repo (candidate C committed, a transcript naming C with `PKG.version`):
+    - only `docs/07_gates/t.md` and `docs/04_memory/x.md` committed after C → `ok: true`, `commit` C, `tip`
+      HEAD;
+    - plus `src/a.ts` → `ok: false`, reason contains `must be re-cut` and `src/a.ts`;
+    - `git mv src/a.ts docs/04_memory/a.ts` committed after C → refused, naming `src/a.ts`;
+    - a path `docs/04_memory/é note.md` → passes;
+    - tip == C → `ok: true`, `paths: []`;
+    - a C that is not an ancestor (a sibling branch) → `not an ancestor`;
+    - a failing transcript → its reason.
+  - `parseArgs`: `--check-evidence-only t.md --evidence docs/04_memory/` → `{ checkEvidenceOnly: 't.md',
+    evidence: ['docs/04_memory/'] }`. No `--evidence`, `--evidence /abs/`, `--evidence docs`,
+    `--evidence ../x/`, or an extra `--expect-commit` → throws.
+  - CLI, with cwd = the temp repo: pass → exit 0, stdout contains `only evidence paths changed`; a `src/`
+    change → exit 1, stderr `^error: .*must be re-cut`; a missing transcript → exit 1; no `--evidence` → exit 2.
+  - Config:
+    - `bindings.yaml` `version` ≥ 2.2 and `/2\.2 [^;]*task-282/`; `checks['evidence-only-since-candidate']`
+      exactly as in item 5, with the same `args.transcript` as `staging-rehearsal-passed`;
+    - `release-publishing.yaml` ≥ 1.8 and `/1\.8 [^;]*task-282/`; `tag.checks.pre` is the three existing entries,
+      then the new one; the `tag` description contains `evidence-only-since-candidate` and `git diff --name-only`;
+    - WORKFLOW.md's `### Release Publishing` section contains `evidence-only-since-candidate`.
+- **AC 5** — no red. Session 3 runs the gates and `node dist/cli.js workflow show release-publishing` /
+  `workflow show e2e-smoke`. `test/core/workflow-repository-conformance.test.ts` stays as is: the new check is
+  bound, so no unbound-warning row moves, and the 28 checkpoints do not change.
+- **Handover 3** — new `test/cli/e2e-smoke-fake-read.test.ts`:
+  - a record file `{"mcp":null}\n` → `probeFakeRead('task-001-x/adhoc/1', 'developer', git, file)` →
+    `{ ok: false, detail: "line 1 of the fake agent's record has no argv" }`, with a `git` that throws when
+    called (this proves no git call is made);
+  - a file whose second line is `null` → `line 2 …`.
+- **Handover 2** — in the same file: `existsSync(join(AGENT_FIXTURES, 'custom', 'fake.yaml'))` and
+  `fake-agent.cjs` (characterization).
+
+**Files (session 3).**
+- `scripts/write-build-info.cjs`.
+- `scripts/e2e-smoke.cjs`: only `prepareCandidate`, `realCandidateEffects`, the two new functions,
+  `probeFakeRead`'s guard, the header comment and `module.exports`.
+- `scripts/publish-staging.cjs`: `checkTranscript`, `parseArgs`, the new functions, `main` and the header comment.
+- `.wingfoil/workflows/bindings.yaml` (2.2), `.wingfoil/workflows/custom/release-publishing.yaml` (1.8),
+  `.wingfoil/workflows/custom/e2e-smoke.yaml` (1.7), `.wingfoil/WORKFLOW.md`.
+- Pending amendments: `spec-015` §3 (line 232) plus a Revision note (2026-10-15), and each bug's
+  `### Retrospective`.
+
+Not touched: `runSmoke`, `smokeSteps`, `agentRunSteps`, `smokeAgentRun`, `invoke`, `publish.yml`, `ci.yml`,
+`src/`, `test/cli/e2e-smoke.test.ts`.
+
+**Where task-242 hooks.** As its own function, in `runSmoke`'s per-template loop after the
+`smokeAgentRun(template, invoke, env)` loop (or after the template loop). This task edits nothing in `runSmoke`.
+Lines shared at the gate:
+- `module.exports` and the `.d.cts` files (both tasks add names alphabetically);
+- `e2e-smoke.yaml`'s `version:` (1.7 here, 1.8 for 242);
+- WORKFLOW.md, where 242 owns the E2E Smoke paragraph and this task the release paragraphs.
+
+**Decisions for the approver.**
+- **D1 — the rehearsal's own pack (same class).** Without `--tarball`, `publish-staging.cjs`'s `packTarball`
+  also runs `npm pack` on the checkout. It packs stale `dist/` modules too, and checks no pack input beyond the
+  stamp's `-dirty` (which covers only `BUILD_INPUTS`). The `staging-rehearsal` phase packs this way. Options:
+  (a) apply the same two steps there: a `prepareTree` effect before `packTarball` when no tarball is given,
+  pinned with fakes in `runStaging`; (b) only remove `dist/`; (c) leave it and file a bug. **Recommend (a)**:
+  it is the same candidate under the same rule, in a file this task owns.
+- **D2 — where the evidence paths live.** (a) Only in the binding's arguments: the script refuses to run without
+  `--evidence`, and the `tag` description cites the binding. (b) A constant in `publish-staging.cjs`.
+  **Recommend (a)**, per bug-312's note and the preference for declared config over code.
+- **D3 — ancestry.** Also refuse a candidate that is not an ancestor of the tip (`git merge-base
+  --is-ancestor`): a tree diff alone would pass a candidate from an unmerged branch. **Recommend yes.**
+- **D4 — `LICENSE` in the pack inputs.** npm packs it whatever `files` says. **Recommend yes.**
+- **D5 — remove `dist/` in the checkout itself.** `prepack` rebuilds it, so after the run it holds the
+  candidate's build. The alternative, packing an exported tree, needs its own `npm ci`. **Recommend in place.**
+  Consequence: never run `--candidate` while jest is building `dist/` in the same worktree (bug-095).
+
 ### Retrospective
 
 None yet.
