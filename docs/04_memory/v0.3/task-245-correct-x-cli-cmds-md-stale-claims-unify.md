@@ -307,3 +307,78 @@ untouched memory-store cases pass.
   Every failure is an `expect(…)` on document text (first assertion of each: `toEqual([])` on the hit/finding
   list, `toBe(true)` on the header version, `toContain` on the US bullets and the `directive assign` row); no
   crash, no missing file. `npx eslint` on the three files → clean.
+
+### green (developer, 2026-10-15)
+
+- **Commit `bdba24e0`** (`fix(docs): task-245 — …`): docs only, `git diff --stat 2de79ef9 -- src` → empty.
+  - `docs/01_vision/X_cli-cmds.md` 1.6 → 1.7: every command row rewritten from `node dist/cli.js <command> --help`
+    in the design's notation (D2); new rows `memory park`, `memory amend`, `workflow finalize`, `agent list`,
+    `agent show`; the dropped and *Not built* flags of D4; the four sync passages marked *Not built* (D5); Global
+    Options complete, `--dry-run` naming the twenty writers as code spans and init, mcp and the read commands in plain
+    words (coordinator ruling); the 1.7 entry and the missing 1.5 entry; 1.3's entry untouched (D1). 36 command rows
+    (`grep -c '^| \`wingfoil' docs/01_vision/X_cli-cmds.md`): 33 shipped + 3 *Not built*.
+  - `06_features.md` 1.15, `07_sequencer.md` **2.0** (after x.9 comes (x+1).0, coordinator ruling; said in the 1.7
+    entry of `X_cli-cmds.md` and in `00_index.md`'s document-map paragraph — `07_sequencer.md` keeps no revision
+    history of its own, `grep -l '^## Revision history' docs/01_vision/*.md` → `X_cli-cmds.md` only),
+    `08_mvp-canvas.md` 1.12: the nine `rejected` lines; the three files keep their line counts (522, 471, 220).
+  - `00_index.md`: four rows, the eleven `X_cli-cmds` ranges, *Last indexed* 2026-10-15.
+  - `docs/design.md:138` (bug-274); `07_workflow-config.md` US-6-01 and US-6-02 (no version line, D8).
+- **red → green:** `npx jest test/docs/x-cli-cmds.test.ts test/docs/vision-default-machine-text.test.ts
+  test/docs/memory-store-location-text.test.ts test/docs/vision-index.test.ts test/docs/cli-reference.test.ts
+  --maxWorkers=2` → red (qa): 22 failed, 22 passed; green: 5 suites passed, 44 passed, 0 failed.
+- **After green:** `grep -n "tech-stack\|interactive or flag-based" docs/01_vision/X_cli-cmds.md` → L462, L465,
+  L473 only, all inside 1.3's entry (D1); `grep -c "\[[a-z-]*-id\]" docs/01_vision/X_cli-cmds.md` → 0;
+  `grep -nE "approved/rejected|approved, rejected" docs/01_vision/*.md` → nothing;
+  `grep -n '\.wingfoil/memory' docs/*.md | grep -v 'memory\.yaml\|memory/templates'` → nothing.
+
+### refactor (developer, 2026-10-15)
+
+Every gate run with the four pending bug amendments in the working tree, heavy ones under the dl-170 slot,
+`--maxWorkers=2`:
+
+- `npm run test:coverage -- --maxWorkers=2` → `JEST_EXIT=0`, 445 suites, 7958 tests passed; All files
+  **99.33 / 97.38 / 98.00 / 99.71** — equal to the B7 baseline in every column (`src/` unchanged).
+- `npm test -- --maxWorkers=2` (slot 18:13, load 1.96) → `TEST_EXIT=0`, 445 suites, 7958 tests passed.
+- `npm run typecheck` (both tsc configs) → exit 0; `npm run lint` → exit 0; `npm run docs:api` → exit 0.
+- `test/docs/cli-reference.test.ts` passes unchanged (`docs/cli-reference.md` not edited: no command, flag or help
+  text changed, `git diff --stat 2de79ef9 -- docs/cli-reference.md` → empty).
+- Nothing to refactor: the change is prose.
+
+### self-review (developer, 2026-10-15)
+
+- **T4:** `git log --first-parent --no-merges --format=%h 98f06f0c..HEAD -- test/docs/x-cli-cmds.test.ts
+  test/docs/vision-default-machine-text.test.ts test/docs/memory-store-location-text.test.ts` → empty.
+- **ACs.** AC 1 (stale claims, `--dry-run` row), AC 2 (one notation), AC 3 (rows, *Not built*, 1.7/1.5 entries),
+  AC 4 (`runs`/`health`, `--entry-adapter`, `--force`, amend/park), H1 (bug-275), H2 (bug-274), H3 (US-6-01/02):
+  each pinned by the red cases above, all passing.
+- **Claims checked against the CLI:** `directive remove`'s refusal of an assigned directive and `directives list
+  --role`'s globals (`docs/cli-reference.md` entries, help-pinned by `cli-reference.test.ts`); `memory submit` has no
+  `--notes` and `dna show` lists five sections (`node dist/cli.js memory submit --help`, `… dna show --help`); the
+  missing-positional shape (`node dist/cli.js memory approve` in a scratch repository → `error: missing required
+  argument: <id>`, `hint: usage: …`, exit 2).
+- **Same class in the files touched:** `awk '/^## Revision history/{exit} {print}' docs/01_vision/X_cli-cmds.md |
+  grep -E -- "--filter|--verify|--notes|UUID|--section"` → nothing; the remaining `--name` hits are `directive
+  create`'s real option.
+- **Out of scope, left (D9):** `bug-302`'s P4.13 row; the v0.4 timeline's `init --template`.
+
+### Pending amendments (approver)
+
+Uncommitted in this worktree; each adds the `### Retrospective` subsection the `done` gate requires (dl-115 Q2 (a)).
+
+- `bug-099-cli-reference-residual-stale-claims` — `--reason "Add the Retrospective subsection the done gate requires: task-245 fixed all four items, item 4 by stating --format once in Global Options."`
+- `bug-100-cli-reference-runs-two-positional-notations` — `--reason "Add the Retrospective subsection the done gate requires: task-245 put every row of X_cli-cmds.md in one notation, pinned against the program."`
+- `bug-274-…-outside-the-folders-the-bug-256-text-guard-scans` — `--reason "Add the Retrospective subsection the done gate requires: task-245 fixed docs/design.md and widened the bug-256 guard to docs/*.md."`
+- `bug-275-…-went-from-1.4-to-1.5-with-no-revision-entry` — `--reason "Add the Retrospective subsection the done gate requires: task-245 fixed the nine lines and wrote the 1.5 entry."`
+
+No spec amendment: the rows follow spec-008, spec-016 and spec-017 as approved.
+
+### Retrospective
+
+- The red caught a design gap before green: Commander's `registeredArguments` are optional variadic in the shipped
+  program, so the qa agent read required-ness from `usage()`. A design that names an interface for a test should
+  check what it returns (`node -e` on `buildProgram`) rather than assume it.
+- The coverage log's first line (the slot timestamp) did not survive (`grep -n '^slot' cov.log` → nothing) while the
+  exit-code line did; the gate result is unaffected, but the second run wrote its slot line to a separate `.meta`
+  file, which is the safer pattern.
+- Candidate (not filed): spec-016 and spec-017 cite `X_cli-cmds.md` by line (`:216,223`, `:163-170`); 1.7 moved
+  those lines (the dl-075 class).
