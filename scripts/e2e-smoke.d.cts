@@ -161,12 +161,16 @@ export const JOURNEY_COMMANDS: readonly string[];
  * `exit 0, <n> wingfoil commands, <the OK line>`; failing details `exit <n>: <the last "FAIL: " line of stderr,
  * else its last line>`, `no "OK: " line`, `the transcript lacks: <command>`, `could not run bash: <message>`.
  * Never throws.
+ *
+ * `timeoutMs` (default `600000`, 600 s) bounds the run: on expiry `bash` is killed with `SIGKILL` and the check
+ * fails with detail `timed out after <timeoutMs / 1000> s`.
  */
 export function smokeJourney(
   template: string,
   argv: readonly string[],
   env: NodeJS.ProcessEnv,
   script?: string,
+  timeoutMs?: number,
 ): SmokeCheck;
 
 /** The Markdown report `--report` writes (`bug-134`): no clock in it, so the same run gives the same bytes. */
