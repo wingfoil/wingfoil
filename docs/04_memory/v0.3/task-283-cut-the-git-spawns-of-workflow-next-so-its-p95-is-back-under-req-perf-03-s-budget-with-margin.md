@@ -76,6 +76,164 @@ back under the budget with margin, without touching the budget.
 
 ## Execution Notes
 
+### design (developer, 2026-10-15)
+
+Role architect. Read: the B8 notes (task-283 hazard entry, ruling D3), `bug-309`, `task-216`'s and `task-281`'s
+Execution Notes (`dl-015`). `spec-017` is `approved`, `dl-146` is `ready` (`grep -m1 '^status'`). `bug-301` is
+`closed` (`task-281` added `memory.yaml`, `dna.yaml`, `roles.yaml` and `directives/` to `readDirty`): this task leaves
+`readDirty` alone. No AC contradicts a ratified spec or DL. Every timing below was taken **under load** (1-minute
+load average 14.8 to 23.7 on 12 cores, `/proc/loadavg`, from other projects). They are no REQ-PERF evidence. Only
+the spawn counts and their arguments are evidence.
+
+**Step 1: locating the growth.** Probe: the `src/` of each commit (`git archive <c> src package.json | tar -x`,
+transpiled per file with `typescript.transpileModule`), one in-process `workflowNext` call on a clone made as
+`cloneTempRepo` makes it (`git clone <worktree> .`, then `checkout --detach b56e8721`), with a `git` wrapper first on
+`PATH` that logs argv and elapsed time.
+
+| Commit | git spawns per `workflow next` on the pinned clone | by subcommand |
+|---|---|---|
+| `1c66ef31` (B6 gate, p95 476 ms) | 47 | rev-parse 10, show 25, cat-file 3, ls-tree 4, log 2, merge-base 1, status 2 |
+| `bd55f70e` | 47 | same |
+| `2de79ef9` (pre-batch main) | 47 | same |
+
+The argv lists of `1c66ef31` and `2de79ef9` are **byte-identical** (`diff` of the two logs: no output).
+`git diff --stat 1c66ef31 32d8871b -- src` is empty: `856f3489` (1,005 ms) runs the B6 gate's `src/` on the same
+pinned commit. So the code and the reads did not grow. The 476 → 900-1,005 ms jump happened with the same
+code, the same fixture commit and the same 47 spawns.
+
+- **Refs: refuted.** The clone holds 25 remote-tracking refs (`git -C <clone> for-each-ref`, plus `HEAD` and 3
+  tags). But no read of `workflow next` enumerates refs: every logged argv names only `b56e8721`'s sha, two start
+  commits and path specs. `grep -rn "for-each-ref\|show-ref\|refs/" src` finds one site only, `src/memory/add.ts:191`
+  (`memory add`'s id allocation), which `workflow next` does not reach. The holders `task-274` added are a role's
+  members from `dna.yaml`, not refs. The history walk is bounded by `b56e8721`'s ancestry, which is fixed.
+- **What does grow with the source repository** is the clone's object store. A local clone hardlinks the
+  source's `objects/` as it is: today 11 packs, 5,992 loose objects, and a `commit-graph` written by the source's gc
+  of 2026-10-12 19:30 (`git count-objects -v`, `ls -la .git/objects/info`). Under load, an A/B against a
+  `git clone --no-local` copy (1 pack, 0 loose, no commit-graph) did not separate the two layouts (spawn sums
+  963/981/862 ms vs 1,197/925/918 ms over three interleaved rounds of three calls).
+- **What else changed between the fast and the slow runs:** the machine was rebooted at 2026-10-12 19:03:43
+  (`uptime -s`). That is after the B6 measurement (13:47) and before every slow one (B7, 2026-10-13/14). Every fast
+  run (B4 468 ms, B5 567 ms, B6 476 ms) is from the previous boot. The CPU is an i7-1355U (2 performance + 8
+  efficiency cores). At load 2.18 on 2026-10-10, `bug-309`'s profile measured about 3 ms per spawn. Since then
+  spawns and JS have both slowed by about 2x. That points to the environment, not to the history, but this design
+  cannot prove it under load.
+- **Discriminating probe**, owed by session 3 under the slot at load < 6 (D3), before green's timing: build
+  `1c66ef31`'s `src/` and time it on the hardlinked clone and on a `--no-local` clone, with `WINGFOIL_LATENCY_REPORT=1`
+  for the `--version` floor (idle reference 194-203 ms, `IDLE_FLOOR_P95_BOUND_MS`). A floor near 400 ms means
+  the machine. A gap between the two clones means the store, and then decision D3 applies.
+- Either way the lever is the same. Each call makes 47 spawns, 29 of which are redundant: 9 re-resolutions of a sha
+  already resolved, 2 re-reads of `memory.yaml`/`dna.yaml`, 7 templates and 13 directives read one `git show` at a
+  time. Under load, the in-process split put 70-85 % of a call in the spawns. Over six calls: total
+  1,170-1,762 ms, spawns 692-1,348 ms, rev-parse 71-182 ms, show 165-418 ms.
+
+**Cuts** (all at the snapshot's one resolved sha; the `…AtRev` signatures and behaviour stay as they are for
+their other callers, `context.ts`, `agent`, `memory-transition`, `workflow create/remove`):
+
+1. **Resolve once.** `src/core/loaders.ts` gains `…AtCommit(root, sha)` siblings of `loadMemoryYamlAtRev`,
+   `loadDnaYamlAtRev`, `loadRolesYamlAtRev`, `loadDirectivesAtRev` and `loadWorkflowsYamlAtRev`, for a sha that
+   `resolveRevision` has already resolved (the naming of `listPathsAtCommit`, `src/core/revision.ts`). Each `…AtRev`
+   becomes `resolveRevision` followed by its `…AtCommit`. `src/core/workflow-registry.ts` gains
+   `loadWorkflowRegistryAtCommit` and `src/memory/query.ts` gains `loadMemoryDocumentsAtCommit`, both under the same
+   rule. `readDeductionSnapshotAtHead`, `workflow next`'s `readNextInputs` and `workflow-list-show.ts:375` (the
+   same class: `status`/`show` read the directives at `snapshot.commit`) call the `…AtCommit` forms. 10 → 1
+   `rev-parse`. Rejected: letting `resolveRevision` skip git for a 40-hex string. That would accept a tree or blob
+   sha that `^{commit}` refuses today.
+2. **`memory.yaml` and `dna.yaml` read once.** The snapshot holds one memoised thunk for each and passes both to
+   the registry's core checks (`PillarSource`). The registry calls them first, when the manifest exists, so the
+   order of reads and errors is unchanged. 4 → 2 `show`, and each file is parsed once.
+3. **Templates in one batch.** `withCoreChecks` prefetches every `template.file` that `memory.yaml` declares
+   through an optional `PillarSource.prefetch`, as `loadWorkflowsYamlAtRev` already does for the workflow files
+   (`0fa5c0f1`). The working-tree source has no prefetch. 7 `show` → 1 `cat-file`.
+4. **Directives in one batch.** `loadDirectivesAtCommit` lists them as today, then reads every `.md` with one
+   `readPathsAtRev`, called through the `../storage` barrel as `readPathAtRev` is today, so a spy on the barrel
+   still intercepts. A listed blob read back as `null` is still skipped. 13 `show` → 1 `cat-file`.
+
+**Expected count**, pinned clone at `b56e8721`: **47 → 18**. rev-parse 1, show 3 (`memory.yaml`, `dna.yaml`,
+`roles.yaml`), cat-file 5 (manifest, included files + bindings, templates, Memory documents, directives), ls-tree 4,
+log 2, merge-base 1, status 2. Session 3 re-runs the wrapper probe at the branch head and records the count.
+**Reserve cuts**, only if the idle run misses the margin, each by a qa send-back because each changes the
+pinned counts: `roles.yaml` into the directive batch (−1); the directive listing taken from the snapshot's
+full tree (−1); `memory.yaml` + `dna.yaml` in one batch (−1). The two `status` calls stay: merging them would
+change `readDirty`'s semantics, which `task-281` just settled.
+
+**Margin (for the approver): p95 ≤ 800 ms**, both in-process (`test/core/workflow-next-latency.test.ts`) and
+spawned total, at the branch head, idle. That leaves 20 % of REQ-PERF-03's 1,000 ms free. Projection: the cut
+spawns are about 22 % of a call by the loaded split, so 911 ms → about 710 ms in-process. `bug-309` measured the
+spawned total about 45 ms above the in-process one (944 vs 901 ms), so about 760 ms spawned. The 800 ms is
+recorded in these notes. It is not a new suite threshold: the suites keep asserting `< P95_BUDGET_MS` (1,000 ms),
+which is not raised.
+
+**AC classification and what the qa agent pins** (T1):
+
+| AC | Class | Why |
+|---|---|---|
+| 1 — spawn count | red-first | 10 `rev-parse` and one `show` per directive/template today |
+| 2 — spawned-total timing | **characterization** (proposed, D2) | test-only: no production code is needed to spawn `workflow next` (`test/cli/fixtures/cli-harness.cjs` runs any command), and the pre-fix spawned p95 (944 ms idle, `bug-309`) is under 1,000 ms, so no genuine red exists |
+| 3 — idle p95 with margin | characterization | a measurement in session 3 |
+| 4 — gates; `readPathAtRev` pin | characterization; the one changed case is red-first | the pin change fails on the pre-fix tree |
+
+- **AC 1** — new file `test/core/workflow-next-spawn-count.test.ts`. It does not time, so it does not import
+  `test/core/helpers/latency.ts`: placement rule 2 holds. Observable: the git processes one call of the
+  registered `workflowNext` `CoreFn` starts (`CORE_MODULES` → `workflow` → `operations.workflowNext.fn`, as
+  `test/core/workflow-next.test.ts` calls it). Count them with `jest.spyOn(childProcess, 'spawnSync')` and
+  `jest.spyOn(childProcess, 'execFileSync')` on `import * as childProcess from 'child_process'`, calling through.
+  Keep the calls whose file is `'git'` and drop the leading `-C <root>`. Fixture: built in the file with
+  `makeTempGitRepo` / `writeFixtureFile` / `commitAll`, as `writeProject` in `test/core/workflow-next.test.ts` is.
+  It needs a `memory.yaml` declaring ≥ 2 types with committed `template:` files, `dna.yaml`, `roles.yaml`, ≥ 3
+  directives under `.wingfoil/directives/custom/`, a `workflows.yaml` including ≥ 2 files, `bindings.yaml`, and one
+  open instance plan whose next step has a role. That last part makes `hasSteps` true, so roles and directives are
+  read. Pins, per call:
+  (a) exactly **1** `rev-parse`, and every other argv names that sha, never `HEAD`;
+  (b) exactly **3** `show`: `<sha>:.wingfoil/memory.yaml`, `…/dna.yaml`, `…/roles.yaml`. No `show` of a directive or
+  template path;
+  (c) exactly **5** `cat-file --batch`, on a fixture whose walk re-enters no element (a re-entry adds one `log -1`
+  per element and one bracketless `cat-file`, §4.8);
+  (d) **invariance:** the same fixture plus 3 more directives and 1 more template type gives the same total;
+  (e) the exact total on the base fixture: the pins above plus ls-tree (Memory content roots + 2), log 2, merge-base 1
+  and status 2 (one per `paths.runs` directory, plus one). The qa computes it from the fixture, states it in a
+  comment and records the red count. At `2de79ef9` (a)-(d) fail.
+  The pinned clone's 47 → 18 is recorded by the wrapper probe in these notes, not asserted: a `b56e8721` clone
+  inside `npm test` would need full history in every contributor's checkout.
+- **AC 2** — new file `test/cli/workflow-next-command-latency.test.ts`, listed in `test/latency-suites.cjs`
+  `LATENCY_SUITES` (the spawned kind) and in `EXEMPTIONS` of `test/core/latency-budget-placement.test.ts` with its
+  reason. Fixture: the in-process suite's pinned clone. Move `PINNED` and the clone setup into a new
+  `test/core/helpers/workflow-next-fixture.ts` that both suites import; `workflow-next-latency.test.ts` changes only
+  that import. Measurement: `sampleMarginalLatency(RUNS, floor, [next])`, where the floor is
+  `runCliHarness(clone, ['--version'])` and `next` is `runCliHarness(clone, ['workflow', 'next'])`, with
+  `readLoadAverage()` before and after. Verdicts:
+  - `idleMachineVerdict(floor, load)` (rule 4) **and** `inProcessIdleVerdict(load, cpus().length)` (the AC), each
+    `'otherwise idle'` or refused;
+  - `processLevelVerdict(measured, 0, q)` for `q` of `PROCESS_LEVEL_QUANTITIES`, total and marginal (rule 3,
+    `dl-146` Q3), each `'within budget'`;
+  - a case that the spawned call exits 0 and answers from the pinned commit.
+  It prints **one** line beginning `workflow next (spawned): ` with the total, marginal and floor distributions
+  (`describeSamples`) and `describeLoad`. Do **not** call `latencyReport`: release-health's `parseLatencyReport`
+  (`scripts/release-health/measure.cjs:1277`) reads the first `machine:` line, `floor (--version):` line and
+  `(one window:` header, and every `<cmd>: marginal … total` line, so a second report would corrupt REQ-PERF-02's
+  measurement.
+- **AC 4** — `test/core/directive-inventory-baseline.test.ts` ("a listed blob that cannot be read back is skipped",
+  about line 550): spy `storage.readPathsAtRev` with
+  `mockImplementation((_root, _rev, paths) => paths.map(() => null))` in place of `readPathAtRev`. It is red on the
+  pre-fix tree, where the directives load. Its comment says the change is deliberate (`bug-309`).
+- **Coverage:** the spawned suite counts for nothing. New branches (`…AtCommit`, the template prefetch with no
+  templates or no manifest, the batched directive read) are reached in-process by AC 1's test and the existing
+  suites. Session 3 adds its own unit tests for any branch left uncovered.
+
+**Files (session 3):** `src/core/loaders.ts`, `src/core/workflow-registry.ts`, `src/memory/query.ts` (+
+`src/memory/index.ts` and `src/core/index.ts` exports with TSDoc, `docs:api`), `src/core/workflow-deduction.ts`,
+`src/core/workflow-next.ts`, `src/core/workflow-list-show.ts`. No config `version:` bump; no CLI or help change. Pending
+amendment: `spec-017` §4.8 *Cost* (commit resolved once, configuration files and directives read in batches, the spawn
+count pinned by a test).
+
+**Decisions for the approver.**
+- **D1:** the margin is **800 ms p95**, in-process and spawned. It is recorded in these notes, not asserted.
+  *Recommended.*
+- **D2:** AC 2 is reclassified as characterization (test-only; no genuine red). *Recommended.*
+- **D3:** only if the idle probe shows the store matters, the pinned clone becomes a `git clone --no-local` (one
+  pack, independent of the source's gc state) through a `git-fixture.ts` option. *Recommended conditionally;
+  otherwise unchanged.*
+- **D4:** the pinned-clone count (18) goes in the notes; AC 1's exact pins are on a synthetic fixture. *Recommended.*
+
 ### Retrospective
 
 None yet.
