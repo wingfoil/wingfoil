@@ -2,7 +2,7 @@
 id: "task-242-verify-journey-4-workflow-success-criteria-end-end"
 type: task
 title: "Verify Journey 4 and the workflow success criteria end to end on a fresh project and on this repository"
-status: approved
+status: done
 release: "v0.3"
 kind: "feature"
 priority: "medium"
