@@ -44,7 +44,7 @@ Sources: `task-235`'s independent review, finding F4, and `task-225`'s independe
   approve or reject <ids>`; for a record, `run wingfoil workflow finalize --step <key>`; for a party, the party and
   its evidence check. `--element` keeps its meaning (an explicit target is launched).
 
-**Recommendation: (c).** An agent launched on a step only a human or a record can complete produces nothing that
+**Ruling (approver, 2026-10-15): (c), implemented in v0.4.** **Recommendation: (c).** An agent launched on a step only a human or a record can complete produces nothing that
 moves the instance, and a loop that calls `--next` relaunches it indefinitely. (a) hides the wait from whoever runs
 the loop; (b) keeps the loop.
 
