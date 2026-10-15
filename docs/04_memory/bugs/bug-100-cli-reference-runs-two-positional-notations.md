@@ -2,7 +2,7 @@
 id: "bug-100-cli-reference-runs-two-positional-notations"
 type: bug
 title: "`X_cli-cmds.md` now writes required positionals as `<ANGLE>` in Pillar 2 and `[BRACKETS]` everywhere else, and nothing schedules the conversion"
-status: planned
+status: in-progress
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
