@@ -382,3 +382,29 @@ No spec amendment: the rows follow spec-008, spec-016 and spec-017 as approved.
   file, which is the safer pattern.
 - Candidate (not filed): spec-016 and spec-017 cite `X_cli-cmds.md` by line (`:216,223`, `:163-170`); 1.7 moved
   those lines (the dl-075 class).
+
+### independent review (2026-10-15) and fixes (developer)
+
+Verdict APPROVE WITH FIXES; fixed in `3c2d04d2`, status left `in-review`, no re-submit.
+
+- **F1** `workflow status` defaults to every open instance (`node dist/cli.js workflow status --help` → "default:
+  every open instance", spec-017 §7.4): taken out of the active-context list, said so in that paragraph and in the
+  `<ref>` parameter row.
+- **F2** `00_index.md` no longer states a general version rule (its own rows show 1.15 and 1.12); the 1.7 entry of
+  `X_cli-cmds.md` and bug-275's Retrospective (working tree) call 1.9 → 2.0 the batch rule of 2026-10-15.
+- **F3** respelled in the shipped notation: `memory import [<path>] [--action copy\|move\|link]`, `audit
+  [--output-type full\|summary]`, the `[<path>]`, `[<keyword>]`, `[<section>]` and `--role` (agent) parameter rows,
+  `wingfoil <noun> [<verb>] [<target>] [<options>]`, `--format <console|json|yaml>`, Sam's `memory approve` /
+  `memory reject`. **Two names cannot change without editing a test T4 forbids:** Pillar 2's `category` row
+  (`test/docs/x-cli-cmds.test.ts` reads `line.startsWith('| \`category\`')`: renaming it failed that case, `npx jest
+  test/docs` → 1 failed, so it was reverted and the cell says `Positional [<category>]`) and Pillar 3's `ROLE` row
+  (`test/docs/memory-store-location-text.test.ts:112`, the bug-257 guard). The conventions bullet and bug-100's
+  Retrospective (working tree) name both exceptions, so "one notation" is stated as true. Re-grep:
+  `awk '/^## Revision history/{exit} {print}' docs/01_vision/X_cli-cmds.md | grep -E "approve/reject|full/summary|copy/move"` → nothing.
+- **F4** the 1.7 entry names the three Notes claims dropped (`memory reject`'s fallback, `memory submit`'s
+  pending-approval note, `workflow end`'s "completed").
+- **F5** (spec citations) left to the coordinator.
+- **Checks:** `npx jest test/docs --maxWorkers=2` → 25 suites, 250 tests passed (vision-index included, index
+  line count 486 and the four moved ranges updated); `node scripts/lint-claims.cjs --base 2de79ef9` → 0 warnings;
+  T4 `git log --first-parent --no-merges --format=%h 98f06f0c..HEAD -- <red's three files>` → empty.
+- Pending amendments: still the four bug files (`git status --short` → 4 modified), and the four `--reason` texts above still hold.
