@@ -20,7 +20,7 @@ import { join, posix } from 'path';
 
 import type { DnaYaml } from '../dna/schema';
 import type { MemoryYaml } from '../memory/schema';
-import { extractFrontmatter, readDocument, readPathAtRev, readPathsAtRev } from '../storage';
+import { extractFrontmatter, readDocument, readPathsAtRev } from '../storage';
 import { DiagnosticsError, parseYaml } from '../validation';
 
 import {
@@ -43,14 +43,12 @@ const EMPTY_REGISTRY: WorkflowsLoadResult = { manifest: null, workflows: [], bin
 interface PillarSource {
   memoryYaml(): MemoryYaml | null;
   dnaYaml(): DnaYaml | null;
-  /** A file under `.wingfoil/`, by its path relative to it, or `null` when absent. */
-  configFile(relative: string): string | null;
   /**
-   * Read `relatives` ahead, in one batch, for the {@link configFile} calls that follow (task-283,
-   * `bug-309`: the Memory templates, one `git cat-file --batch` instead of one `git show` each). Absent:
-   * each `configFile` reads on its own (the working tree).
+   * Files under `.wingfoil/`, by their paths relative to it, each `null` when absent, in input order. A
+   * commit reads them in one batch (task-283, `bug-309`: the Memory templates, one `git cat-file --batch`
+   * instead of one `git show` each).
    */
-  prefetchConfigFiles?(relatives: readonly string[]): void;
+  configFiles(relatives: readonly string[]): (string | null)[];
 }
 
 /**
@@ -95,12 +93,14 @@ function withCoreChecks(load: WorkflowsLoadResult, source: PillarSource): Workfl
   if (load.manifest === null) return load;
   const memoryYaml = source.memoryYaml();
   const dnaYaml = source.dnaYaml();
-  source.prefetchConfigFiles?.(declaredTemplateFiles(memoryYaml));
+  // Every template `memory.yaml` declares, read up front in one call (one batch at a commit).
+  const files = declaredTemplateFiles(memoryYaml);
+  const templates = new Map(source.configFiles(files).map((raw, index) => [files[index]!, raw]));
   const fieldsByType = new Map<string, ReadonlySet<string> | null>();
   const templateFields = (type: string): ReadonlySet<string> | null => {
     if (!fieldsByType.has(type)) {
       const file = memoryYaml?.types[type]?.template?.file;
-      const raw = file === undefined ? null : source.configFile(file);
+      const raw = file === undefined ? null : templates.get(file)!;
       fieldsByType.set(type, raw === null ? null : frontmatterKeys(raw, `.wingfoil/${file}`));
     }
     return fieldsByType.get(type)!;
@@ -134,12 +134,13 @@ export function loadWorkflowRegistry(root: string): WorkflowsLoadResult {
   return withCoreChecks(loadWorkflowsYaml(root), {
     memoryYaml: () => absentAsNull(() => loadMemoryYaml(root)),
     dnaYaml: () => absentAsNull(() => loadDnaYaml(root)),
-    configFile: (relative) => {
-      const path = configPath(relative);
-      if (path === null) return null;
-      const full = join(root, path);
-      return existsSync(full) ? readDocument(full) : null;
-    },
+    configFiles: (relatives) =>
+      relatives.map((relative) => {
+        const path = configPath(relative);
+        if (path === null) return null;
+        const full = join(root, path);
+        return existsSync(full) ? readDocument(full) : null;
+      }),
   });
 }
 
@@ -175,22 +176,14 @@ export function loadWorkflowRegistryAtCommit(
   overlay?: ReadonlyMap<string, string | null>,
   pillars?: RegistryPillars,
 ): WorkflowsLoadResult {
-  const fetched = new Map<string, string | null>();
   return withCoreChecks(loadWorkflowsYamlAtCommit(root, sha, overlay), {
     memoryYaml: pillars?.memoryYaml ?? (() => loadMemoryYamlAtCommit(root, sha)),
     dnaYaml: pillars?.dnaYaml ?? (() => loadDnaYamlAtCommit(root, sha)),
-    configFile: (relative) => {
-      const path = configPath(relative);
-      if (path === null) return null;
-      return fetched.has(path) ? fetched.get(path)! : readPathAtRev(root, sha, path);
-    },
-    prefetchConfigFiles: (relatives) => {
-      const paths = relatives.flatMap((relative) => {
-        const path = configPath(relative);
-        return path === null ? [] : [path];
-      });
-      if (paths.length === 0) return;
-      readPathsAtRev(root, sha, paths).forEach((raw, index) => fetched.set(paths[index]!, raw as string | null));
+    configFiles: (relatives) => {
+      const paths = relatives.map(configPath);
+      const inside = paths.filter((path): path is string => path !== null);
+      const answers = new Map(readPathsAtRev(root, sha, inside).map((raw, index) => [inside[index]!, raw as string | null]));
+      return paths.map((path) => (path === null ? null : answers.get(path)!));
     },
   });
 }

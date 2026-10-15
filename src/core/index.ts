@@ -142,29 +142,23 @@ export {
   loadDirectivesAtHead,
   // The same readers at any commit (task-137, `spec-012` §2 `stateRef`); each `…AtHead` is its
   // `…AtRev` at `'HEAD'`.
-  loadDirectivesAtCommit,
   loadDirectivesAtRev,
   loadDnaYaml,
   loadDnaYamlAtHead,
-  loadDnaYamlAtCommit,
   loadDnaYamlAtRev,
   loadMemoryYaml,
   loadMemoryYamlAtHead,
-  loadMemoryYamlAtCommit,
   loadMemoryYamlAtRev,
   loadRolesYaml,
   loadRolesYamlAtHead,
-  loadRolesYamlAtCommit,
   loadRolesYamlAtRev,
   loadWorkflowsYaml,
-  loadWorkflowsYamlAtCommit,
   loadWorkflowsYamlAtRev,
 } from './loaders';
 export { isWellFormedRevision, resolveRevision, RevisionError } from './revision';
 // task-194: the workflow registry with spec-003's core checks, and the exit-state computation
 // (spec-017 §4.4) task-198's deduction reuses.
-export { loadWorkflowRegistry, loadWorkflowRegistryAtCommit, loadWorkflowRegistryAtHead, loadWorkflowRegistryAtRev } from './workflow-registry';
-export type { RegistryPillars } from './workflow-registry';
+export { loadWorkflowRegistry, loadWorkflowRegistryAtHead, loadWorkflowRegistryAtRev } from './workflow-registry';
 // task-204: `workflow list` / `workflow show` at `HEAD` (`spec-017` §7.5–§7.6, §8).
 // The functions stay module-internal until a consumer needs them (task-216's `next` may import
 // `declaredEvidenceKinds`); the operations are `CORE_MODULES`' `workflowList` / `workflowShow`.

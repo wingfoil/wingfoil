@@ -501,7 +501,7 @@ export function loadMemoryDocumentsAtCommit(
   root: string,
   sha: string,
   memoryYaml: MemoryYaml,
-  options: MemoryScanOptions = {},
+  options: MemoryScanOptions,
 ): MemoryDocumentSummary[] {
   return [...readableDocuments(parseMemoryDocumentsAtSha(root, sha, sha, scanCommit(root, sha, memoryYaml), options), options)];
 }
