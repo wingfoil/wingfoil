@@ -57,4 +57,7 @@ Captured on 2026-10-10 by `bug-ingest-rel-v0.3-w3b4-review-findings-plan` (item 
 
 ### Retrospective
 
-None.
+- The `tag` phase stated a rule (evidence-only commits do not re-cut) that nothing checked. `task-282` bound it
+  as `evidence-only-since-candidate`, with the evidence paths declared once in the binding; it also refuses a
+  candidate that is not an ancestor of the tip, which a plain tree diff would have passed (approver ruling D3).
+  `--no-renames` was needed so that a move out of `src/` cannot hide behind its evidence-path destination.
