@@ -19,9 +19,9 @@ Places WingFoil beside the tools dl-112 names and shows how WingFoil develops it
 
 ## Acceptance Criteria
 
-- (characterization) `docs/comparison.md` from dl-112's ratified position; every fact about another tool carries its source and date read; content integrated, not linked (D2).
-- (characterization) `docs/case-study.md` with figures from the committed release-health reports (task-241), each with its definition and measurement point.
-- (characterization) both in `user-docs.yaml` `produces:`; version bumped.
+- (red-first, reclassified at design 2026-10-15, approver ruling) `docs/comparison.md` from dl-112's ratified position; every fact about another tool carries its source and date read; content integrated, not linked (D2).
+- (red-first, reclassified at design 2026-10-15, approver ruling) `docs/case-study.md` with figures from the committed release-health reports (task-241), each with its definition and measurement point.
+- (red-first, reclassified at design 2026-10-15, approver ruling) both in `user-docs.yaml` `produces:`; version bumped.
 
 ## Implementation Notes
 
@@ -343,6 +343,53 @@ refactor set.
 - **T4:** `git log --first-parent --no-merges --format=%h 52c75032..HEAD -- test/docs/presentation.test.ts` → empty.
 - **Same class:** the README and `docs/site.yaml` `summary` still present determinism as achieved; out of scope by the
   coordinator's ruling (user-docs handover), left as they are.
+
+### independent review (2026-10-15) and fixes (developer)
+
+Verdict APPROVE WITH FIXES. The reviewer re-read the 16 sources from their raw text (copies in the devloop kit's
+`task-246-review/src/`); every fix below was checked against those copies, and the three moved URLs were resolved with
+`curl -sL -o /dev/null -w "%{url_effective}"`. Docs text only: `git diff --stat 2547fdd9 -- test src` is empty, and
+`docs/comparison.md` and `docs/case-study.md` are the only pages changed besides this file.
+- **F1** (case study, P01): causes now given per release, recounted from each report's `failing` list with a one-off
+  `python3` over `docs/08_health/release-health-v0.{1,2}.json`, matching each commit's reasons by substring (a commit
+  can carry two): v0.1, 61 = 34 undeclared verbs (27 with an element id in the verb slot) + 26 no bracket + 1 AI
+  trailer, 0 ASCII brackets; v0.2, 297 = 165 ASCII brackets + 92 AI-trailer approvals (21 with both) + 57 `submit`
+  with no bracket + 4 other. The reviewer's 163 / 71 counted each commit's first reason only; the page says "21 of
+  them also", so both readings are visible.
+- **F2** Kiro artefacts: "Under `.kiro/specs/<name>/` [S3]" (S3's Feature Specs steps: "artifacts are generated in
+  `.kiro/specs/<name>/`").
+- **F3** Codex: the README's first sentence, verbatim: "Codex CLI is a coding agent from OpenAI that runs locally on
+  your computer." The old quote was the repository's About text.
+- **F4** Spec Kit's interface: `/speckit-*` skills in the agent's chat, "agent skills, not terminal commands", plus
+  the `specify` CLI; the produces cell quotes the flow with `converge` ("Constitution once per project; specify → plan →
+  tasks → implement → converge per feature").
+- **F5** Phase -1: the heading "Phase -1: Pre-Implementation Gates", the gate names as the source writes them, and the
+  sentence "The LLM cannot proceed without either passing the gates or documenting justified exceptions in the
+  "Complexity Tracking" section." (S2); the *Ideas* bullet uses the same heading.
+- **F6** Kiro's surfaces: "An IDE, a CLI, Web and, in preview, Mobile [S3]" (S3's capability table columns and its
+  "Mobile - Preview" entry).
+- **F7** Claude Code: "agentic" dropped; S11 says "In a terminal, start Claude Code by running `claude`" and names
+  the VS Code extension and the desktop app.
+- **F8** VS Code: `.mcp.json` at the workspace root, `.vscode/mcp.json` listed as deprecated (S16: "The flow also lists
+  the deprecated .vscode/mcp.json … for compatibility"); "agent mode" removed. URLs moved to their targets: S9
+  `https://cursor.com/docs/rules`, S10 `…/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions`,
+  S16 `https://code.visualstudio.com/docs/agent-customization/mcp-servers`, with the pages' titles ("Add and manage MCP
+  servers in VS Code"); S4, S7, S13, S14 titles also set to the pages' own.
+- **F9** dev-loop: `distinct_from` is declared on `green` (`[red]`) and `review` (`[red, green, refactor]`) only
+  (`grep -n distinct_from .wingfoil/workflows/custom/dev-loop.yaml` → lines 154, 178); `red` is the `qa` role's; a
+  separate design session is stated as this repository's practice.
+- **F10** P05: the 137 are 116 approve, 16 reject and 5 finalize commits, all authored by `<probe@example.invalid>`
+  (the JSON names the address in each entry; `git log --format='%an <%ae>' -1 546b76e4` → `Probe
+  <probe@example.invalid>`).
+- **F13** the three ACs now read "(red-first, reclassified at design 2026-10-15, approver ruling)".
+- **F11, F12**: coordinator follow-ups, not touched (no test, no binding edited).
+- **Same-class sweep:** every remaining quoted phrase of `docs/comparison.md` ("30+ tools", "human and AI align on specs
+  before code gets written", "without approval gates between them", "Correctness (property-based testing)") was found
+  verbatim in its raw copy (`grep -n` on `s6.md`, `s4.txt`, `s3.txt`); every third-party cell was re-read against its
+  source. OpenSpec's tool list: S6 names Cursor, GitHub Copilot, Amazon Q and Codex.
+- **Re-run:** `npx jest test/docs --maxWorkers=2` → 23 suites, `Tests: 256 passed, 256 total`; `node
+  scripts/build-site.cjs llms --check` → `build-site: llms.txt is current` (no llms entry changed); `node
+  scripts/lint-claims.cjs --base 2de79ef9` after the commit, below. Status stays `in-review`.
 
 ### Pending amendments (approver)
 
