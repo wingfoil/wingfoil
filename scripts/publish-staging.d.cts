@@ -34,6 +34,12 @@ export interface StagingEffects {
    * when the file is not there (teardown runs on paths where no token was ever written).
    */
   removeToken(dir: string): void;
+  /**
+   * task-282 (D1 (a), `bug-310`): before packing the checkout — only when no `--tarball` is given — refuse
+   * a change under the pack inputs (`PACK_INPUTS`: throws `… a pack input has uncommitted changes …`
+   * naming the paths) and remove `dist/`, so the pack rebuilds it from the commit alone.
+   */
+  prepareTree(): void;
   /** Pack the package into `paths.pack`; returns the tarball path. */
   packTarball(paths: StagingPaths, env: NodeJS.ProcessEnv): string;
   /**
@@ -137,8 +143,50 @@ export function stagingEnv(base: NodeJS.ProcessEnv, paths: StagingPaths): NodeJS
 export function publishArgs(tarball: string): string[];
 /** argv globally installing the exact staged version from staging. */
 export function installArgs(name: string, version: string): string[];
-/** Parse `[--tarball <path>] [--expect-commit <sha>]`; throws on a bad argument or commit name. */
-export function parseArgs(argv: readonly string[]): { tarball?: string; expectCommit?: string };
+/** The parsed command line of `publish-staging.cjs`. */
+export interface StagingArgs {
+  tarball?: string;
+  expectCommit?: string;
+  transcript?: string;
+  checkTranscript?: string;
+  /** task-282 (`bug-312`): `--check-evidence-only <transcript>`, run alone with its `--evidence` prefixes. */
+  checkEvidenceOnly?: string;
+  /** task-282: the `--evidence <prefix/>` values, in the order given. */
+  evidence?: string[];
+}
+/**
+ * Parse `[--tarball <path>] [--expect-commit <sha>] [--transcript <path>]`, `--check-transcript <path>` alone,
+ * or `--check-evidence-only <path> --evidence <prefix/> [--evidence …]` alone; throws on a bad argument or commit name.
+ */
+export function parseArgs(argv: readonly string[]): StagingArgs;
+
+/** The prefix of every line the script logs, and so of every line of its `--transcript`. */
+export const LOG_PREFIX: string;
+/** The line a passing rehearsal logs last, without {@link LOG_PREFIX}. */
+export function stagingPassedLine(name: string, version: string): string;
+/** `--check-transcript` (task-219; strict since task-282, `bug-311`): whether a transcript proves the candidate. */
+export function checkTranscript(
+  text: string,
+  pkg: { name: string; version: string },
+): { ok: true; commit: string } | { ok: false; reason: string };
+
+/** A git runner in the checkout (task-282): never throws on a non-zero exit. */
+export type StagingGit = (args: readonly string[]) => { status: number | null; stdout: string; stderr: string };
+
+/** task-282 (`bug-312`): the paths that start with none of the `evidence` prefixes, sorted. */
+export function outsideEvidence(paths: readonly string[], evidence: readonly string[]): string[];
+
+/**
+ * task-282 (`bug-312`, `dl-099` §1, task-219 D2): `release-publishing.tag`'s evidence-only pre-check — the
+ * transcript passes {@link checkTranscript}, its candidate is an ancestor of `HEAD`, and every path
+ * `git diff --name-only --no-renames -z <candidate>..HEAD` lists starts with an `evidence` prefix.
+ */
+export function checkEvidenceOnly(
+  text: string,
+  pkg: { name: string; version: string },
+  git: StagingGit,
+  evidence: readonly string[],
+): { ok: true; commit: string; tip: string; paths: string[] } | { ok: false; reason: string };
 /** The real effects: a filesystem work dir, a Verdaccio child process, npm subprocesses, the smoke. */
 export function realEffects(repoRoot: string, log: (line: string) => void): StagingEffects;
 /** Run the staging flow; resolves to the exit code. Teardown runs on every path. */

@@ -179,3 +179,87 @@ describe('task-219 AC 2 — release-cycle states the candidate and the re-cut re
     expect(text).not.toMatch(/Both checks run on it/);
   });
 });
+
+/**
+ * task-282 AC 3 (`bug-311`): `checkTranscript` passes only when no line records a failure (`FAIL`, `FAILED`),
+ * the closing line is the success line, and every version-check line names the same full sha, which it
+ * returns. Each other shape fails with its reason (the CLI: exit 1, `error: <reason>`).
+ */
+describe('task-282 AC 3 — checkTranscript is strict', () => {
+  const pkg = { name: 'wingfoil', version: '0.3.0' };
+  const passed = staging.stagingPassedLine('wingfoil', '0.3.0');
+  const versionLine = (version: string, sha: string): string => `  ok   wingfoil --version = ${version} (${sha}) — match`;
+  /** Lines as the script logs them, each with its prefix; one trailing newline. */
+  const lines = (...body: string[]): string => body.map((line) => `${staging.LOG_PREFIX}${line}`).join('\n').concat('\n');
+
+  it('a FAIL line before the success line fails, naming the 1-based line', () => {
+    const text = lines('Verdaccio up on http://localhost:4873/', versionLine('0.3.0', SHA), 'FAIL [Scrum] wingfoil init --template Scrum — exit 1', passed);
+    expect(staging.checkTranscript(text, pkg)).toEqual({ ok: false, reason: expect.stringContaining('line 3 records a failure') });
+  });
+
+  it('a "staging smoke FAILED" line mid-transcript, then the success line, fails the same way', () => {
+    const text = lines(versionLine('0.3.0', SHA), 'staging smoke FAILED — the build must not be promoted', passed);
+    expect(staging.checkTranscript(text, pkg)).toEqual({ ok: false, reason: expect.stringContaining('records a failure') });
+  });
+
+  it('two version-check lines naming distinct shas fail: the smoke checked two commits', () => {
+    const text = lines(versionLine('0.3.0', 'a'.repeat(40)), versionLine('0.3.0', 'b'.repeat(40)), passed);
+    expect(staging.checkTranscript(text, pkg)).toEqual({ ok: false, reason: expect.stringContaining('2 distinct commits') });
+  });
+
+  it('a version-check line for another version beside one for this version fails: it checks another stamp', () => {
+    const text = lines(versionLine('0.2.2', SHA), versionLine('0.3.0', SHA), passed);
+    expect(staging.checkTranscript(text, pkg)).toEqual({ ok: false, reason: expect.stringContaining('checks another stamp') });
+  });
+
+  it('two version-check lines naming the same sha pass, returning that commit', () => {
+    const text = lines(versionLine('0.3.0', SHA), versionLine('0.3.0', SHA), passed);
+    expect(staging.checkTranscript(text, pkg)).toEqual({ ok: true, commit: SHA });
+  });
+
+  describe('the CLI check', () => {
+    let dir: string;
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'wf-staging-strict-'));
+    });
+    afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+    it('a FAIL line before the success line exits 1 with `error: line <n> records a failure`', () => {
+      writeFileSync(
+        join(dir, 't.md'),
+        lines(versionLine(PKG.version, SHA), 'FAIL [Scrum] wingfoil init --template Scrum — exit 1', staging.stagingPassedLine(PKG.name, PKG.version)),
+      );
+      const run = spawnSync(process.execPath, [SCRIPT, '--check-transcript', 't.md'], { cwd: dir, encoding: 'utf-8' });
+      expect(run.stderr).toMatch(/^error: line \d+ records a failure/);
+      expect(run.status).toBe(1);
+    });
+  });
+});
+
+/**
+ * task-282 AC 2 (`bug-310`; red-first by the approver's ruling at design): the texts that said the rehearsal
+ * is "not in CI" / "never in CI" say what CI does — the rehearsal is a gate run per candidate (dl-099 §4 (a)),
+ * and `publish.yml`'s `stage` job stages the tagged build in CI — and the release-candidate paragraph of
+ * `.wingfoil/WORKFLOW.md` names the pack-input check.
+ */
+describe('task-282 AC 2 — the CI wording of the rehearsal', () => {
+  const workflow = yamlLoad(readFileSync(join(REPO_ROOT, '.wingfoil', 'workflows', 'custom', 'release-publishing.yaml'), 'utf-8')) as {
+    phases: { name: string; description?: string }[];
+  };
+  const guide = readFileSync(join(REPO_ROOT, '.wingfoil', 'WORKFLOW.md'), 'utf-8');
+
+  it('the staging-rehearsal description no longer says "not in CI", names publish.yml, and still not main', () => {
+    const description = workflow.phases.find((phase) => phase.name === 'staging-rehearsal')?.description ?? '';
+    expect(description).not.toMatch(/not in CI/);
+    expect(description).toContain('publish.yml');
+    expect(description).not.toMatch(/\bmain\b/);
+  });
+
+  it('WORKFLOW.md no longer says "never in CI", and its Release candidate paragraph names the pack inputs', () => {
+    expect(guide).not.toContain('never in CI');
+    const start = guide.indexOf('**Release candidate**');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const end = guide.indexOf('\n\n', start);
+    expect(guide.slice(start, end === -1 ? undefined : end)).toContain('pack input');
+  });
+});
