@@ -29,8 +29,8 @@ Applied by hand in the web interface by the approver, 2026-09-29 (§B.3):
 
 - **description:** "The repo-native intent layer for AI-native software engineering — keeps intent and
   engineering state in git, turns them into workflows, verifies what agents deliver. CLI + MCP."
-- **homepage:** `https://www.npmjs.com/package/wingfoil`, until a domain exists (domains wait until
-  after v0.3, `dl-091` addendum D7).
+- **homepage:** `https://wingfoil.github.io/wingfoil/`, the documentation site (dl-129 Decision 2), set on
+  2026-10-15; before it, `https://www.npmjs.com/package/wingfoil`.
 - **topics (14):** `ai-agents`, `ai-assisted-development`, `claude-code`, `cli`, `context-engineering`,
   `determinism`, `developer-tools`, `git`, `intent-engineering`, `mcp`, `mcp-server`,
   `model-context-protocol`, `spec-driven-development`, `typescript`.
@@ -57,6 +57,8 @@ above through the GitHub MCP on 2026-09-29 and all matched (§B.3). The social p
 → `usesCustomOpenGraphImage: true`. The image at `openGraphImageUrl`, downloaded on 2026-09-29, is
 identical to `docs/assets/wingfoil-social-preview-dark.png`
 (`compare -metric RMSE <downloaded> docs/assets/wingfoil-social-preview-dark.png null:` → `0 (0)`).
+On 2026-10-15, after dl-129 Decision 2, `gh api repos/wingfoil/wingfoil --jq .homepage` →
+`https://wingfoil.github.io/wingfoil/`.
 
 ## Management
 
