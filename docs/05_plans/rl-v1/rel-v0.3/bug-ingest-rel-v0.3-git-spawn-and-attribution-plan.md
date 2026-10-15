@@ -71,6 +71,12 @@ commit; before filing, a scan of the Memory folders of every local and remote-tr
 - **Completion criteria:** the new bug `planned` with release v0.3; the fix task `pending`; the two amendments
   committed; governance 0 findings; this plan `done`.
 
+- **Added 2026-10-15 (after finalize):** `bug-372` amended (`163a82e5`) with the by-hand Codex observation that `-c`
+  merges a same-named project MCP table, and the approver's v0.3 mitigation: a documentation warning for the
+  `user-docs` phase (`align-user-docs`; `docs/agents.md` and/or the user guide, beside the `codex-cli` adapter) —
+  do not declare an MCP server named `wingfoil` in a trusted project's `.codex/config.toml`; Codex merges its extra
+  keys (`env`, `cwd`, …) into WingFoil's server. The code fix stays in v0.4 with `bug-372`.
+
 ## Execution Notes
 
 - **capture, triage and amendments (2026-10-15)** on `ingest/wfcoord-launch-and-git-identity`. Each tool-written
