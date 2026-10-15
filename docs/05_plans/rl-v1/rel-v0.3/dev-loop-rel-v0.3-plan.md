@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.28"
+version: "1.29"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -1077,3 +1077,45 @@ commit, right after the task's transition and on the task branch:
     the `svc-004` amendment); `task-244`'s tag-run verification (v0.3 release-publishing).
   - **Follow-ups:** to be filed through a `bug-ingest` plan after the approver's triage (latency first: `bug-309`).
   - W3: 68 of 76 tasks `done`.
+- **2026-10-16 — batch B8 `done`** (fix `task-284`, `283`, `282`, `245`; `task-242`, `246`).
+  - **Process.** As B7 (`dl-134`): per task a developer `design`, a separate `qa` agent's `red`, the developer's
+    `green`, `refactor` and `submit`, then an independent review. Stop-the-line fired at the opening (4 open fix tasks of
+    10, 40 %): the four fixes started first and the two features were started only once two fixes were `done` (2 of 8,
+    25 %). `task-242` merged `task-282`'s approved branch before its design. Red-test findings went back to the `qa`
+    agent (`task-282` review F1, `task-283` review F3 as a new red row, `task-242` two `.d.cts` send-backs). A green defect
+    of `task-242` (the smoke journey's PATH shim re-exec'd itself) hung a coverage run for two hours while holding the
+    heavy-gate slot; the coordinator stopped that process and the task fixed it with a bounded run. Two unexpected
+    interruptions of the coordinator's environment (an application exit and a machine restart) cost no committed work.
+  - **By-hand pass (approver, real terminal).** `task-242` AC 3, Journey 4 with the Claude Code adapter (2.1.301): PASS.
+    The launched agent ran the step's actions itself (wrote and submitted the task), so the runbook's manual submit was
+    correctly refused; `api-style` was respected; approval routed to the approver, checkpoint finalized, instance ended.
+  - **Review.** Every task had an independent review (all APPROVE WITH FIXES); `task-246` also had a re-review that
+    re-read every third-party source from its raw text. Defects found and fixed in-task include: `284`'s refusal row
+    claimed every writing command, while `agent execute` reads `HEAD` first; `282`'s refusal tests asserted no reason;
+    `283`'s working-tree registry threw on a template path that is a directory; `245`'s `workflow status` default and
+    version-rule sentence; `246`'s quotations taken from page summaries rather than the pages, and a governance reason
+    read backwards; `242`'s example helper that did not count the commits it claimed to.
+  - **Approver rulings (2026-10-15/16):** order, rounds and notes at start (D1–D6); per task: `284` D1–D5 (`IO`, exit 128
+    keeps REQ-SEC-01's message); `282` D1–D5 (the rehearsal's own pack fixed too, evidence paths in the binding, ancestry
+    refusal); `283` D1–D4 (margin p95 ≤ 800 ms recorded, not asserted), review F3 (a) in-task; `245` D1–D9; `242` D1–D4 and
+    the `.d.cts` send-back; `246` D1–D4 (the README and `docs/site.yaml` determinism wording handed to `user-docs`).
+  - **Amendments: 11** — `284`: spec-008; `283`: spec-017, bug-309; `282`: spec-015, bug-310, bug-311, bug-312; `245`:
+    bug-099, bug-100, bug-274, bug-275 (`git log --oneline 2de79ef9..e9c71f1a | grep -cE "wf\([a-z-]+\): amend"` → 11).
+    `242` and `246` had none.
+  - **Bugs closed:** bug-099, bug-100, bug-274, bug-275, bug-309, bug-310, bug-311, bug-312, bug-327, bug-328, bug-377.
+  - **Merges** on `gate/w3-b8`, in order 284 → 283 → 282 → 245 → 242 → 246 (last `e9c71f1a`), then `main`
+    fast-forwarded. No conflict and no `fix(gate)` commit.
+  - **Gates on `e9c71f1a`:** `test:coverage` 453 suites, 8106 tests, coverage 99.34 / 97.39 / 98.03 / 99.71; build,
+    lint, `docs:api`, typecheck, `check:audit` exit 0; e2e smoke 73 ok (the journey per template added by `242`);
+    examples 01–06 exit 0; `check:mcp` 0; `workflow list --all` 27 workflows, 0 errors; `workflow show` on each 0 errors;
+    `workflow status` 9 open hand-started instances; `lint:claims` advisory (13 warnings). Governance `--base 2de79ef9`:
+    68 `wf()` commits, 0 findings; no AI trailer on any of the 6 approves. `test:latency` (load 3.24 → 2.90): `workflow
+    next` p95 449 ms in-process and 735 ms spawned (n = 25 each), under the accepted 800 ms margin and the 1000 ms budget
+    (911 ms at B7); a first run was refused by the suite's own idle check while another project loaded the machine.
+  - **Config versions:** `bindings.yaml` 2.2, `release-publishing.yaml` 1.8, `e2e-smoke.yaml` 1.8, `user-docs.yaml` 1.7,
+    `docs/site.yaml` 1.1; vision `X_cli-cmds.md` 1.7, `06_features.md` 1.15, `07_sequencer.md` 2.0, `08_mvp-canvas.md` 1.12.
+  - **Open:** the release-candidate re-run of `task-242` AC 2 (e2e-smoke phase); `service-ingest-rel-v0.3-listings-plan`
+    closes once `svc-012` is decided; the eight `decision-log-ingest` instances close at their ratification; batch B9
+    (`task-265`, `266`, `267`) waits for `dl-159`.
+  - **Follow-ups:** to be filed through a `bug-ingest` plan after the approver's triage.
+  - W3: 74 of 78 tasks `done`.
