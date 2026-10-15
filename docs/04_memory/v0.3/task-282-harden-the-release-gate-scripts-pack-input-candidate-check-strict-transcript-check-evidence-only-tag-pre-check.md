@@ -65,6 +65,21 @@ Fix three inherited v0.3 bugs that were `triaged` with no task, all in the relea
 - **Related:** `bug-321` (`triaged`, v0.4: `--candidate` leaks its temporary directory on SIGINT and writes no report
   when preparing fails) is the same script; not in scope, but whoever touches the candidate path reads it.
 - **Notes:** read `task-219`'s Execution Notes first (`dl-015`): D2 and D4 are its rulings.
+- **Handover from wave 3 B7 (2026-10-15, W3 B7 follow-ups, `bug-ingest-rel-v0.3-w3b7-review-findings-plan` item A2;
+  `task-243`'s independent review).** Three points on the agent-run step `task-243` added to `scripts/e2e-smoke.cjs`,
+  which this task's edit of the same script meets (`main` at `bd55f70e`):
+  1. `smokeAgentRun` (line 514) makes two temporary directories per template, `wingfoil-smoke-agent-` and
+     `wingfoil-smoke-fake-` (`mkdtempSync`, lines 517-518), removed only in its `finally` (lines 555-557): on SIGINT
+     they leak, one more pair per template, the class of `bug-321` (not a new mechanism). Whoever fixes `bug-321`'s
+     SIGINT leak covers these two as well.
+  2. `AGENT_FIXTURES` (line 83) resolves `test/fixtures/agents` from the checkout (`join(__dirname, '..', 'test',
+     'fixtures', 'agents')`); a run from an installed copy or a staging path without `test/` fails the copy step
+     (`runCopyStep`, line 534). The `--candidate` path this task hardens runs from such a path or not: say which, and
+     resolve the fixtures accordingly.
+  3. `probeFakeRead` (line 474) calls `line.argv.includes(...)` (line 481) without checking that a record line has
+     `argv`; a line without it throws out of `runSmoke` instead of failing the check with a reason. The fake always
+     writes `argv`, so the risk is low; a guard and a failing check cost one line.
+  No criterion changes.
 
 ## Execution Notes
 
