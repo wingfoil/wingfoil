@@ -189,7 +189,8 @@ export function initWingfoilStorage(
     return coreErr({ code: 'VALIDATION', message: NOT_A_GIT_REPO });
   }
 
-  // Guard 2 — refuse an unattributable commit (REQ-SEC-01). Returns its VALIDATION error unchanged.
+  // Guard 2 — refuse an unattributable commit (REQ-SEC-01). Returns its error unchanged (VALIDATION, or IO
+  // for a git that cannot be run, task-284).
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity as CoreResult<InitStorageValue>;
 
