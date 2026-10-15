@@ -28,7 +28,7 @@ level.
 |---------|-------------|--------|----------|-------|
 | `wingfoil memory add --type <type> --title <title> [--tags <t1,t2>] [--set <name>=<value> ...] [--workflow <ref> [--step <key>]]` | Create new Memory document (draft state) with specified type | Morgan, Alex, Casey | 0a, 0b, 5 | Creates the document from its type's template at the path the type declares in `.wingfoil/memory.yaml`, inside the project root, with frontmatter state. The id comes from the type's `id_pattern`; `--set` fills an `id_pattern`/`path` token. `--workflow` (and `--step`) links the document to a step of an open workflow instance (`spec-017` §7.10) |
 | `wingfoil memory search [<keyword>] [--type <type>] [--status <status>] [--tag <tag>]` | Query Memory by keyword, type, status and tag | Casey, Alex, Jordan | 1, 3, 5 | Keyword search only. Filters by type (adr, task, etc.) and status (states are type-dependent — see `.wingfoil/memory.yaml`; e.g. draft, pending, approved, deprecated) |
-| `wingfoil memory import [path] [--action copy/move/link]` | Scan existing docs and import into Memory | Morgan, Alex | 0b | *Not built* (v0.4). Interactive if `--action` not specified. Prevents duplicates by checking filename hash. Supports: copy (new file), move (original deleted), link (symlink, avoids duplication) |
+| `wingfoil memory import [<path>] [--action copy\|move\|link]` | Scan existing docs and import into Memory | Morgan, Alex | 0b | *Not built* (v0.4). Interactive if `--action` not specified. Prevents duplicates by checking filename hash. Supports: copy (new file), move (original deleted), link (symlink, avoids duplication) |
 | `wingfoil memory submit <id>` | Submit Memory document for approval (advances per the type's "submit" edge) | Morgan, Alex | 2, 4, 5 | Performs the type's legal submit transition (e.g. task draft → pending). Recorded in frontmatter + git commit |
 | `wingfoil memory approve <id> --reason <text>` | Approve Memory document (advances per the type's "accept" edge) | Morgan, Casey, Sam | 2, 4, 5 | Destination state depends on type + current state (e.g. task: pending → backlog, in-review → approved). Needs the approver role. Records approver, timestamp, reason. Creates git commit |
 | `wingfoil memory reject <id> --reason <text>` | Reject Memory document (advances per the type's "reject" edge) | Morgan, Casey, Sam | 2, 4, 5 | Moves the document to its gate's reject target (default machine: pending → draft). Needs the approver role. Reason stored in frontmatter (`rejection_reason`) and in the commit |
@@ -47,9 +47,9 @@ level.
 | `--tags` | string (csv) | Comma-separated tags for new Memory document (on `memory add`) | User input (flag) | Parsed into list of tags | Frontmatter `tags:` field |
 | `--set` | `<name>=<value>` | Fills the `id_pattern`/`path` token `{name}` on `memory add`; repeatable | User input (flag) | `spec-008` §10 | The id, the path, and the frontmatter field of that name |
 | `--workflow`, `--step` | string | On `memory add`: the open workflow instance (a name or an instance id) and the frontier step the document is linked to | `workflow next` / `workflow status` output | `--step` needs `--workflow` (`spec-008` §12) | The add commit's `WingFoil-Instance:` / `WingFoil-Step:` trailers |
-| `<keyword>` | string | Positional search term on `memory search` | Provided in command | Case-insensitive substring of title, id, tags and body | N/A (query parameter only) |
+| `[<keyword>]` | string | Positional search term on `memory search` | Provided in command | Case-insensitive substring of title, id, tags and body | N/A (query parameter only) |
 | `--status`, `--tag` | string | Filters on `memory search` | User input (flag) | Query parameters | N/A (query parameter only) |
-| `path` | string (path) | Positional source path on `memory import` (*Not built*) | Provided in command | Path to existing doc(s) to scan/import | N/A (input to import; imported doc saved at its type's `path` in `.wingfoil/memory.yaml`) |
+| `[<path>]` | string (path) | Positional source path on `memory import` (*Not built*) | Provided in command | Path to existing doc(s) to scan/import | N/A (input to import; imported doc saved at its type's `path` in `.wingfoil/memory.yaml`) |
 | `--action` | enum | Import action on `memory import` (*Not built*): copy, move, link | User input (flag or interactive prompt) | copy (new file), move (original deleted), link (symlink) | N/A (affects how imported file is placed) |
 | `--reason` | string | Reason on `memory approve`/`reject`/`deprecate`/`park`/`amend` (required except on `deprecate`) | User input (flag) | Recorded with the transition as the commit's `Reason:` block (`dl-067`) | Git commit message (and `rejection_reason` on reject) |
 | `status` | enum | Document state (type-dependent per `.wingfoil/memory.yaml`; default: draft, pending, approved, plus `deprecated` from any state) — type-specific states (e.g., `backlog`, `in-review`) also exist per `.wingfoil/memory.yaml` | Auto-tracked in frontmatter | Per-type state machine transitions (submit, approve, reject, deprecate, park) | Frontmatter `status:` field, tracked via git commits |
@@ -96,8 +96,8 @@ decomposition, and `dl-082` fixed the spelling.
 | `--value` | string/array | The new entry's **identity** when `<path>` ends at a collection; the new **value** when it ends at a leaf. Comma-separated where the field is a list of values | User input (flag) | Validated against DNA schema | `.wingfoil/dna.yaml` |
 | `--entry-<field>` | string/array | One option per field the entry schema declares — `--entry-description`, `--entry-path`, `--entry-category`, `--entry-version`, `--entry-notes`, `--entry-phase`, `--entry-email`, `--entry-roles`, `--entry-executes_as`, `--entry-approval_authority`, `--entry-adapter`. Accepted by `add` and `update` | User input (flag) | The `entry-` prefix is required; it keeps this derived namespace disjoint from the global flags (`spec-008` §9). `--entry-adapter` names a `team.agents` entry's adapter (`task-138`) | `.wingfoil/dna.yaml` entry fields |
 | `--force` | flag | On `set`, `add`, `update`, `remove`: authorizes rewriting the whole `dna.yaml` when the in-place edit cannot express the change | User specifies via flag | Without it that case is refused; with it the success carries a warning (`spec-008` §12) | `.wingfoil/dna.yaml` |
-| `<section>` | enum | **Positional** on `dna show`: one top-level DNA key — `project`, `modules`, `stacks`, `team`, `paths` | User specifies, or omits to show all | Matches top-level keys in YAML; a dotted path is refused | `.wingfoil/dna.yaml` |
-| `category` | enum | Resource path category on `paths`: sources, tests, docs, config, governance, runs, health | User specifies, or omits for the whole map | Defined in DNA `paths:` section; `runs` holds exactly one directory | `.wingfoil/dna.yaml` under `paths:` |
+| `[<section>]` | enum | **Positional** on `dna show`: one top-level DNA key — `project`, `modules`, `stacks`, `team`, `paths` | User specifies, or omits to show all | Matches top-level keys in YAML; a dotted path is refused | `.wingfoil/dna.yaml` |
+| `category` | enum | Positional `[<category>]`: resource path category on `paths`: sources, tests, docs, config, governance, runs, health | User specifies, or omits for the whole map | Defined in DNA `paths:` section; `runs` holds exactly one directory | `.wingfoil/dna.yaml` under `paths:` |
 | `--confirm` | flag | On `dna infer` (*Not built*); skip confirmation and accept proposed DNA | User specifies via flag | If set, auto-confirms inferred values without prompting | N/A (affects execution flow) |
 | `--list` | flag | Drill-down on `paths` (e.g., `paths sources --list`) | User specifies via flag | Accepted; the expanded view is planned and does not change the output yet | N/A (affects query output only) |
 
@@ -155,8 +155,8 @@ inline — it references the built-in and custom workflow files via `include()`.
 `include()`s it, optionally per element via `iterate_over: <type>` with `where` filters.
 
 **Active workflow context:** `wingfoil workflow start <name>` opens an instance and makes it **active**; `end`, `next`,
-`status`, `finalize` and `agent execute --next` take the active instance unless a `<ref>` (a workflow name or an open
-instance id; `agent execute --workflow <ref>`) selects another. Multiple instances may be open at once (e.g. `start
+`finalize` and `agent execute --next` take the active instance unless a `<ref>` (a workflow name or an open instance
+id; `agent execute --workflow <ref>`) selects another; `status` reports every open instance unless a `<ref>` selects one. Multiple instances may be open at once (e.g. `start
 report-bug` during a `release-cycle` phase); the last started is active. `workflow end` closes the active (or selected)
 instance and makes the previous one active. The Memory verbs take a document `<id>`, not a workflow.
 
@@ -184,7 +184,7 @@ instance and makes the previous one active. The Memory verbs take a document `<i
 | Parameter | Type | Description | Where Found | How Managed | Where Saved |
 |-----------|------|-------------|-------------|-------------|-------------|
 | `<name>` | string | Positional on `start` and `create`: workflow name | Listed via `workflow list` or defined in YAML | Matches `[a-z][a-z0-9-]*` | Filename `.wingfoil/workflows/[built-in or custom]/<name>.yaml` |
-| `<ref>` | string | Positional on `end`, `next`, `status`, `finalize`, `show`, `remove`: a workflow name (its most recently started open instance) or an open instance id (`spec-017` §3.3) | `workflow status` output | Required on `show` and `remove`; elsewhere the default is the active instance | N/A (selector) |
+| `<ref>` | string | Positional on `end`, `next`, `status`, `finalize`, `show`, `remove`: a workflow name (its most recently started open instance) or an open instance id (`spec-017` §3.3) | `workflow status` output | Required on `show` and `remove`; on `status` the default is every open instance, elsewhere the active instance | N/A (selector) |
 | `--assigned-to` | string | On `workflow next`: `me`, a member name or email, or a role name | User specifies via flag | Matched against DNA team members and roles | N/A (query parameter only) |
 | `--element` | `<type>:<id>` / `<type>` | On `start`: the element the workflow runs on; on `create`: the Memory type it runs on | User specifies via flag | `spec-008` §7 element-ref | The plan's `element`; the workflow's `element:` |
 | `--title`, `--set` | string | On `start`: the plan's title, and `phase=<v>` / `scope=<v>` overriding a derived plan token | User specifies via flag | `spec-017` §7.1 | The plan element |
@@ -208,7 +208,7 @@ needs; `--template` names the methodology without a prompt; the mode inferred fr
 | Command | Description | Actors | Journeys | Notes |
 |---------|-------------|--------|----------|-------|
 | `wingfoil init [--template <Scrum\|Kanban>]` | Initialize WingFoil on new or existing project | Alex, Morgan | 0a, 0b | Prompts for the template in a terminal; `--template` is required without one or with `--no-interactive`. Generates DNA, installs built-in directives/workflows, creates Memory structure. *Not built*: `--mode infer` (deduce from repo, P5.1.2, v0.4) |
-| `wingfoil audit [--output-type full/summary]` | Scan project and summarize current state (languages, frameworks, structure) | Morgan, Alex | 0b | *Not built* (P5.1.3, v0.4). Pre-requisite to `init --mode infer`. Shows: repo size, languages, frameworks, module structure, team members (from git history). Helps inform DNA inference |
+| `wingfoil audit [--output-type full\|summary]` | Scan project and summarize current state (languages, frameworks, structure) | Morgan, Alex | 0b | *Not built* (P5.1.3, v0.4). Pre-requisite to `init --mode infer`. Shows: repo size, languages, frameworks, module structure, team members (from git history). Helps inform DNA inference |
 | `wingfoil mcp` | Start the WingFoil MCP server over stdio, for an MCP client to launch | Alex | 1 | Bootstrap command, like `init`: not a core operation and not exposed on MCP itself (REQ-SYS-05's exemption, `dl-046-bootstrap-commands-in-spec-006-section-3`). Contract in `spec-014-mcp-server-entry-point` §1 |
 
 ### Parameters for Pillar 5 Commands
@@ -235,7 +235,7 @@ needs; `--template` names the methodology without a prompt; the mode inferred fr
 |-----------|------|-------------|-------------|-------------|-------------|
 | `--next` | flag | Resolve workflow, phase, element and role from the next step | Active workflow's next step | If set, queries the active instance and loads the step's role + element automatically | N/A (affects behavior, not stored) |
 | `--workflow`, `--step` | string | The instance (a workflow name or an instance id) and the frontier step to take; each implies `--next` | `workflow next` / `agent list --waiting` output | `spec-016` §3.1 | N/A (selector) |
-| `ROLE` | string | Agent role (developer, reviewer, qa, architect, etc.), the value of `--role` | Step definition, or DNA, or flag | Normally taken from the step; flag overrides. If neither, defaults to `developer` with a warning | N/A (used for context filtering) |
+| `--role` | string | Agent role (developer, reviewer, qa, architect, etc.) | Step definition, or DNA, or flag | Normally taken from the step; flag overrides. If neither, defaults to `developer` with a warning | N/A (used for context filtering) |
 | `--agent` | string | The `team.agents` entry to launch | `dna show team` | Default: the first entry with an adapter that executes the role | The run record |
 | `--element` | string | Target element as `type:id` (e.g. `task:task-101`, `release:rel-...`) | `workflow next` output, or user flag | Resolved from the step with `--next`; override for ad-hoc runs. Must exist in Memory. A filter on `agent list` | N/A (query parameter) |
 | `--past`, `--waiting`, `--phase` | flag / string | On `agent list`: the sections shown and the phase filter | User specifies via flag | `spec-016` §5 | N/A (query parameter only) |
@@ -261,7 +261,7 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 
 ## Command-Line Syntax Conventions
 
-- **Subcommand structure:** `wingfoil [pillar] [verb] [object] [options]`
+- **Subcommand structure:** `wingfoil <noun> [<verb>] [<target>] [<options>]`
     - Example: `wingfoil memory add --type adr --title "Async Design"`
     - Example: `wingfoil workflow status --format json`
 
@@ -269,7 +269,10 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
   **option** when it names an attribute of the action (`dl-082-cli-parameter-shape`)
     - Notation: a required positional is written `<angle>` and an optional one `[<brackets>]`, with the names
       `--help` uses — `memory approve <id>`, `workflow end [<ref>]`, `dna show [<section>]` — as
-      `spec-008-cli-grammar`, `spec-016` and `spec-017` write them. Every row above follows it
+      `spec-008-cli-grammar`, `spec-016` and `spec-017` write them. Every command row above follows it, and the
+      parameter tables name positionals the same way (two rows keep
+      the name a guard pins: Pillar 2's `category`, which `test/docs/x-cli-cmds.test.ts` reads, and Pillar 3's `ROLE`,
+      which the `bug-257` guard reads)
     - If a required argument is missing, the command exits `2` with an `error: missing required argument: …`
       message that names what is missing: a missing **option** by its flag (`wingfoil memory add` → `--type`;
       `wingfoil dna set project.license` → `--value`), a missing **positional** by its name, followed by the
@@ -283,7 +286,7 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
     - Shipped: `wingfoil memory add` → `error: missing required argument: --type`, exit `2`
     - Shipped and specified agree here: `wingfoil memory add --type adr --title "title"` runs without prompts
 
-- **Output formats:** All output commands support `--format json/yaml/console` (Global Options)
+- **Output formats:** All output commands support `--format <console|json|yaml>` (Global Options)
     - Console (default): indented JSON today, or the command's own text where its spec defines one
     - JSON/YAML: machine-parseable for scripting and CI/CD
 
@@ -375,11 +378,11 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 
 ### Sam (Code Reviewer)
 
-**Primary commands:** `workflow status`, `agent execute --role reviewer`, `memory approve/reject`
+**Primary commands:** `workflow status`, `agent execute --role reviewer`, `memory approve`, `memory reject`
 
 - Checks pending reviews via `workflow status`
 - Launches review agent with review role
-- Submits review decisions via `memory approve/reject`
+- Submits review decisions via `memory approve` or `memory reject`
 
 ---
 
@@ -419,11 +422,15 @@ What changed:
 - **The default state machine** is described as `memory.yaml` and REQ-STATE-08 describe it — draft → pending →
   approved, `reject` back to draft, `deprecated` from any state — in the Pillar 1 philosophy, the `memory search` row
   and the `status` parameter (`bug-275`, which fixed the same line in `06_features.md`, `07_sequencer.md` and
-  `08_mvp-canvas.md`; `07_sequencer.md` goes 1.9 → 2.0, since after x.9 comes (x+1).0).
+  `08_mvp-canvas.md`; `07_sequencer.md` goes 1.9 → 2.0, by the batch rule of 2026-10-15 that a bump past x.9 is
+  (x+1).0 — earlier bumps of `06_features.md` and `08_mvp-canvas.md` went past x.9).
 - **Same-class corrections** in the sections rewritten: the missing-argument convention takes `task-179`'s shape;
   `dna show`'s sections are the five `--help` lists; the id comes from the type's `id_pattern`; the active-context
   paragraph selects by `<ref>`; workflows are startable or includable (`dl-109`); the v0.3 release list, the *State and
-  commits* list and Sam's `workflow status` line follow the shipped commands.
+  commits* list and Sam's `workflow status` line follow the shipped commands. Three Notes cells lost a claim no build
+  makes: `memory reject` no longer says it follows a workflow step's fallback, `memory submit` no longer says
+  gate-only types just record a pending approval, and `workflow end` no longer says it marks the workflow
+  "completed" (it moves the plan to `done`).
 
 No other row changed meaning. Version 1.3's entry below keeps the words it was written with.
 

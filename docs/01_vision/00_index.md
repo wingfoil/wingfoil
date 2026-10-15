@@ -33,8 +33,7 @@ ranges in the same commit (`dl-132-vision-change-and-feature-ingest`, element 5)
 ## Document map (versions & last-modified dates)
 
 Versions/dates/status are taken from each file's own header (the source of truth for freshness). *Lines* is the file's
-line count (`awk 'END{print NR}'`). A version is a number: after x.9 comes (x+1).0, never x.10 (`07_sequencer.md`
-went 1.9 → 2.0).
+line count (`awk 'END{print NR}'`).
 
 | Document                                               | Ver | Date       | Status   | Lines | What it contains                                                                                                        |
 |--------------------------------------------------------|-----|------------|----------|-------|-------------------------------------------------------------------------------------------------------------------------|
@@ -46,7 +45,7 @@ went 1.9 → 2.0).
 | [`06_features.md`](06_features.md)                     | 1.15 | 2026-10-15 | Approved | 522   | 65 features (by pillar + by release) and the data-model / implementation notes                                          |
 | [`07_sequencer.md`](07_sequencer.md)                   | 2.0 | 2026-10-15 | Approved | 471   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
 | [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.12 | 2026-10-15 | Approved | 220   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
-| [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.7 | 2026-10-15 | Approved | 479   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
+| [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.7 | 2026-10-15 | Approved | 486   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
 | [`X_lean-inception-plan.md`](X_lean-inception-plan.md) | —   | 2026-06-11 | —        | 42    | Workshop plan: sessions, key decisions, output list                                                                     |
 
 ---
@@ -180,10 +179,10 @@ went 1.9 → 2.0).
 - Pillar 5 — Initialization commands + parameters (params L214) — L197–223
 - Agent Execution commands + parameters (params L232) — L224–245
 - Global Options — L246–261
-- Command-Line Syntax Conventions — L262–298
-- Release Timeline by Command — L299–336
-- Command Reference by Persona (Alex L339, Morgan L348, Casey L358, Jordan L367, Sam L376) — L337–385
-- Revision history — L386–479
+- Command-Line Syntax Conventions — L262–301
+- Release Timeline by Command — L302–339
+- Command Reference by Persona (Alex L342, Morgan L351, Casey L361, Jordan L370, Sam L379) — L340–388
+- Revision history — L389–486
 
 ### `X_lean-inception-plan.md`
 
