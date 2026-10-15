@@ -158,9 +158,11 @@ export const JOURNEY_COMMANDS: readonly string[];
  * over `env` (an inherited `WINGFOIL` never applies). One check, labelled
  * `[<template>/journey] bash docs/examples/06-workflow-approval/run.sh`: ok iff exit 0, the last non-empty
  * stdout line starts `OK: `, and the transcript holds {@link JOURNEY_COMMANDS} in order. Passing detail
- * `exit 0, <n> wingfoil commands, <the OK line>`; failing details `exit <n>: <the last "FAIL: " line of stderr,
- * else its last line>`, `no "OK: " line`, `the transcript lacks: <command>`, `could not run bash: <message>`.
- * Never throws.
+ * `exit 0, <n> wingfoil commands, <the OK line>`; failing details `could not find <cmd> on PATH` (the program
+ * `argv[0]` resolves to no executable), `exit <n>: <the last "FAIL: " line of stderr, else its last line, else
+ * "no output on stderr">` (`<n>` the signal when bash died of one), `exit 0, but no "OK: " line ends its
+ * output`, `the transcript lacks: <command>`, `could not run bash: <message>`, and `could not run the journey:
+ * <message>` (any other error, caught). Never throws.
  *
  * `timeoutMs` (default `600000`, 600 s) bounds the run: on expiry `bash` is killed with `SIGKILL` and the check
  * fails with detail `timed out after <timeoutMs / 1000> s`.
