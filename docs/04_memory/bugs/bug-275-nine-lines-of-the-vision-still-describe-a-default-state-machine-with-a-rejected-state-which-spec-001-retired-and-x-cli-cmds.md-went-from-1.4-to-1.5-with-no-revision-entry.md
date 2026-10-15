@@ -66,3 +66,12 @@ Four vision files describe a state no machine has, and one version bump has no r
 
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b4b-review-findings-plan`, from `task-259`'s developer notes and
 review F4 and F5 (W2 B4b, `dev-loop-rel-v0.3-plan`), checked against `main` at `f15096a2`.
+
+### Retrospective
+
+- Fixed by `task-245`: the nine lines give the default machine no `rejected` state, and `X_cli-cmds.md` has a 1.5
+  entry for `task-179`. `test/docs/vision-default-machine-text.test.ts` pins the grep. `07_sequencer.md` went
+  1.9 → 2.0, by the batch rule of 2026-10-15 for a bump past x.9 (earlier bumps of
+  `06_features.md` and `08_mvp-canvas.md` went past x.9).
+- The missing 1.5 entry is the kind of gap a check could catch: nothing tests that a vision file's header version has
+  a revision entry, and only `X_cli-cmds.md` keeps a revision history at all.
