@@ -402,7 +402,8 @@ approver's. The approver's record goes here as `### AC 3 — by hand (approver)`
 - T4: `git log --first-parent --no-merges --format=%h 8ebe99cd..HEAD -- scripts/e2e-smoke.d.cts
   test/cli/e2e-smoke.test.ts test/core/workflow-finalize-bdd.test.ts test/fixtures/smoke/wingfoil-proxy.cjs` →
   `69995088` only. That commit is the qa agent's send-back: it declares `smokeJourney`'s fifth parameter,
-  `timeoutMs`, in `scripts/e2e-smoke.d.cts` (notes `8435192d`). No developer commit touches a red file.
+  `timeoutMs`, in `scripts/e2e-smoke.d.cts` (notes `8435192d`). No developer commit touches a red file. After the
+  review: `8ca8ba06` (qa send-back 2) and `69995088`, both the qa agent's; still no developer commit.
 - Same class as the shim defect: no other smoke step writes a shim. `grep -n "writeFileSync" scripts/e2e-smoke.cjs`
   → the report and the shim only.
 
@@ -435,6 +436,35 @@ The coordinator's follow-ups 20–22 (not filed here):
   `WingFoil-Version` stamp;
 - after its own submit, it edited the pending task with a plain `docs(task)` commit;
 - its commits' `AI-Model` trailer reads `claude-opus-5-5[1m]`.
+
+### independent review (2026-10-15) and fixes (developer)
+
+Verdict: APPROVE WITH FIXES.
+- **F1** — the failure details listed in `scripts/e2e-smoke.d.cts` were incomplete. That file is red's, so the qa
+  agent fixed it (send-back 2: `8ca8ba06`, notes `e80c9d55`).
+- **F2 (fixed)** — `expect_head`'s comment in `docs/examples/lib.sh` claimed "exactly one commit", but the helper
+  checked only HEAD's subject and a clean tree.
+  - It now counts: a new `mark_head` records HEAD before each writer, and `expect_head <subject> [<count>]` asserts
+    `git rev-list --count <mark>..HEAD` (default 1).
+  - In `run.sh`, every writer gets a `mark_head` before it; `workflow start` expects 2 (its add and its submit).
+  - Positive case: a scratch repo with `mark_head`, then two commits, then `expect_head c` →
+    `FAIL: commits written: expected '1', got '2'`, exit 1.
+- **F3 (fixed)** — the refused `workflow end` now also checks its message, `workflow 'deliver' is not complete:
+  current step deliver.write@task:task-001-login-form`, as the off-frontier refusal does.
+- **F4** — the journey timeout kills only `bash`; a grandchild can survive. This is a coordinator follow-up for
+  bug-321's class and not changed here (with the shim resolved, no loop remains).
+- **F5** — nit, as the review lists it; no change.
+
+Re-runs on the fix commit's tree:
+- `WINGFOIL="node $PWD/dist/cli.js" WINGFOIL_EXAMPLE_TEMPLATE=<T> bash docs/examples/06-workflow-approval/run.sh` →
+  exit 0 for Scrum and for Kanban.
+- Examples 01–05, which share `lib.sh` → exit 0 each.
+- `npx jest test/cli/e2e-smoke.test.ts test/cli/e2e-smoke-journey-shim.test.ts --maxWorkers=2 -t 'task-242|journey
+  shim'`, after `waitslot.sh` → `JEST_EXIT=0`, 21 passed, 52 skipped. The task-242 describe includes its two proxy
+  full-smoke rows.
+- `node scripts/lint-claims.cjs --base 2de79ef9` → 9 warn-only warnings now: 2 in task-282's notes and 7 in this file
+  (lines 101, 107, 155, 187, 295, 335, 358), all expected-outcome or red/send-back wording.
+- dist/ was not rebuilt: no `src/` change since the submit build (`git diff --stat d81a836b HEAD -- src` is empty).
 
 ### Handovers
 
