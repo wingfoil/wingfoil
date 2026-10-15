@@ -211,14 +211,19 @@ flowchart TD
 
 **Release candidate** (`dl-099` §1): the commit of the release's integration branch proposed for the
 version tag, cut by `release-publishing`'s `release-commit`. The two checks are the `e2e-smoke` gate,
-which packs and smokes the candidate with its build stamp bound (`e2e-smoke-passed`, `--candidate`), and
+which packs and smokes the candidate with its build stamp bound (`e2e-smoke-passed`, `--candidate`: it
+refuses only a pack input with uncommitted changes, `PACK_INPUTS` in `scripts/write-build-info.cjs`, and
+packs from a removed `dist/`), and
 `staging-rehearsal`. The release commit does not re-cut the candidate: `e2e-smoke` runs before it, so on
 the first candidate the rehearsal's smoke (the same scenario of `scripts/e2e-smoke.cjs`, against the staged
 tarball, with `--expect-commit`) stands as its e2e-smoke run. A commit that must ship and lands
 after the checks ran **re-cuts** the candidate: the release re-enters `e2e-smoke` (and `submit`'s checks),
 then `staging-rehearsal`. Only a candidate that passed both is tagged; a commit that only records evidence
 (a gate report, a transcript, a Memory transition) does not re-cut, because `tag` tags the candidate the
-rehearsal transcript names.
+rehearsal transcript names; `tag`'s pre-check `evidence-only-since-candidate` verifies that every path
+changed between that candidate and the tip is an evidence path (the gate reports, the transcript, the
+Memory and the plans, as its binding in `bindings.yaml` declares them), and names the paths that require a
+re-cut otherwise.
 
 ### Wave — `wave`
 
@@ -390,13 +395,17 @@ flowchart TD
 ### Release Publishing — `release-publishing`
 
 The release commit is its own phase, so the staging rehearsal runs on the candidate it cuts (`dl-099`
-§2, task-219). The rehearsal starts a local Verdaccio registry, so it runs per candidate and never in CI.
+§2, task-219). The rehearsal starts a local Verdaccio registry: the rehearsal of the candidate is a gate run
+once per candidate (`dl-099` §4 (a)), and `publish.yml`'s `stage` job runs the same script again in CI on
+the tagged build. Before the tag, `evidence-only-since-candidate` (task-282) runs `git diff --name-only
+<candidate>..<tip>` and passes only when the candidate is an ancestor of the tip and every changed path is
+an evidence path its binding declares; otherwise the candidate is re-cut.
 
 ```mermaid
 flowchart TD
     RC["**release-commit** *(tech-lead)*\ngit.commit: the version bump (package.json, package-lock.json,\nserver.json, CHANGELOG.md, SECURITY.md) → merged: the candidate"]
     SR["**staging-rehearsal** *(qa)*\nnpm run publish:staging -- --expect-commit <candidate> --transcript …\n✔ staging-rehearsal-passed: closing line + the stamp's commit\n`docs/07_gates/rl-{release-line}/rel-{version}-staging-rehearsal.md`"]
-    TG["**tag** *(tech-lead)*\n✔ pre: staging-rehearsal-passed (again)\ngit.tag on the candidate the transcript names"]
+    TG["**tag** *(tech-lead)*\n✔ pre: staging-rehearsal-passed (again)\n✔ pre: evidence-only-since-candidate: only evidence paths changed since the candidate\ngit.tag on the candidate the transcript names"]
     PB["**publish** *(tech-lead)*\n✔ pre: services.verify-sweep (warn) — the approver runs each service's verify\npush the tag → publish.yml: gate → stage → promote (npm stage publish) → release + mcp-registry\n🔑 Approval gate — *approver* (npm stage approve, 2FA)\nrelease: GitHub Release + the tag run's four test reports · mcp-registry: MCP Registry listing (GitHub OIDC) — once npm serves the version\nthe summary + coverage-summary.json committed under `docs/07_gates/rl-{release-line}/rel-{version}-…` (dl-136)"]
     MR["**mark-released** *(tech-lead)*\nrelease: releasing → released"]
 

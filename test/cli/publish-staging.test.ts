@@ -12,7 +12,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -32,6 +32,7 @@ import {
   verdaccioConfig,
 } from '../../scripts/publish-staging.cjs';
 import type { SignalTarget, StagingEffects } from '../../scripts/publish-staging.cjs';
+import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const WORK = '/tmp/wf-staging-test';
 
@@ -51,6 +52,10 @@ function fakeEffects(failAt?: string): { readonly effects: StagingEffects; reado
     },
     removeToken: (dir) => {
       calls.push(`removeToken ${dir}`);
+    },
+    prepareTree: () => {
+      calls.push('prepareTree');
+      maybeFail('prepareTree');
     },
     packTarball: () => {
       calls.push('packTarball');
@@ -256,6 +261,8 @@ describe('publish:staging (task-060) — orchestration', () => {
     await expect(run(effects)).resolves.toBe(0);
     expect(calls).toEqual([
       'makeWorkDir',
+      // task-282 (D1 (a), `bug-310`): the checkout's pack inputs are checked and its dist/ removed first.
+      'prepareTree',
       'packTarball',
       'startRegistry',
       'createToken',
@@ -274,6 +281,8 @@ describe('publish:staging (task-060) — orchestration', () => {
     const { effects, calls } = fakeEffects();
     await expect(run(effects, 'dist-pack/wingfoil-0.2.0.tgz')).resolves.toBe(0);
     expect(calls).not.toContain('packTarball');
+    // task-282 (D1 (a)): a given tarball is not the checkout, so the checkout is neither checked nor touched.
+    expect(calls).not.toContain('prepareTree');
   });
 
   it.each([
@@ -283,6 +292,7 @@ describe('publish:staging (task-060) — orchestration', () => {
     ['createToken', true],
     ['startRegistry', false],
     ['packTarball', false],
+    ['prepareTree', false],
   ])('fails (exit 1) when %s fails, and still tears down', async (failAt, registryStarted) => {
     const { effects, calls } = fakeEffects(failAt);
     await expect(run(effects)).resolves.toBe(1);
@@ -673,6 +683,51 @@ describe('publish:staging (task-083) — teardown on SIGINT/SIGTERM/SIGHUP', () 
       expect(said).toContain('no registry to stop');
       expect(said).not.toContain('registry stopped');
       expect(said).toContain('work dir removed');
+    });
+  });
+});
+
+/**
+ * task-282 (approver ruling D1 (a), `bug-310`): the rehearsal's own pack — `packTarball` on the checkout, when
+ * no `--tarball` is given — gets the same two steps as `e2e-smoke.cjs --candidate`: a change under the pack
+ * inputs (`PACK_INPUTS`, `scripts/write-build-info.cjs`) is refused, and `dist/` is removed before packing,
+ * so a module of a deleted source is not staged. The `prepareTree` effect runs between the work dir and the pack.
+ */
+describe('publish:staging (task-282) — the rehearsal packs a checked tree from a removed dist/', () => {
+  it('a refused tree fails the stage (exit 1) before packing, says why, and still tears down', async () => {
+    const { effects, calls } = fakeEffects('prepareTree');
+    const lines: string[] = [];
+    await expect(runStaging({ name: 'wingfoil', version: '0.3.0', effects: { ...effects, log: (l) => lines.push(l) } })).resolves.toBe(1);
+    expect(calls).not.toContain('packTarball');
+    expect(calls[calls.length - 1]).toBe(`removeWorkDir ${WORK}`);
+    expect(lines).toContain('staging FAILED: prepareTree failed');
+  });
+
+  describe('the real prepareTree effect, on a temp checkout', () => {
+    let repo: string;
+    beforeEach(() => {
+      repo = makeTempGitRepo();
+      writeFixtureFile(repo, 'package.json', JSON.stringify({ name: 'fixture', version: '4.5.6' }, null, 2));
+      writeFixtureFile(repo, '.gitignore', 'dist/\n');
+      writeFixtureFile(repo, 'src/a.ts', 'export const a = 1;\n');
+      git(repo, ['add', '-A']);
+      git(repo, ['commit', '--quiet', '-m', 'seed']);
+      writeFixtureFile(repo, 'dist/stale.js', 'module.exports = {};\n');
+    });
+    afterEach(() => removeTempDir(repo));
+
+    it('refuses a modified pack input, naming it, and leaves dist/ alone', () => {
+      writeFixtureFile(repo, 'src/a.ts', 'export const a = 2;\n');
+      const effects = realEffects(repo, () => undefined);
+      expect(() => effects.prepareTree()).toThrow(/a pack input has uncommitted changes.*src\/a\.ts/);
+      expect(existsSync(join(repo, 'dist', 'stale.js'))).toBe(true);
+    });
+
+    it('accepts an untracked file outside the pack inputs, and removes dist/', () => {
+      writeFixtureFile(repo, 'note.txt', 'later\n');
+      const effects = realEffects(repo, () => undefined);
+      expect(() => effects.prepareTree()).not.toThrow();
+      expect(existsSync(join(repo, 'dist'))).toBe(false);
     });
   });
 });

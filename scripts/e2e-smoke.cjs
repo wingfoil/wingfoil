@@ -45,9 +45,12 @@
  * `--expect-version` alone pins the semver of the build stamp and accepts any commit in it;
  * `--expect-commit` (task-254, `bug-235`) requires the whole stamp, `X.Y.Z (SHA)`, which is how the
  * staging stage proves the tarball was built from the released commit (`dl-111`). `--candidate` (task-219,
- * the `e2e-smoke-passed` binding) packs the clean checked-out commit, installs it into a throwaway prefix
- * and smokes that bin with `--expect-version` = `package.json`'s version and `--expect-commit` = `HEAD`
- * (`dl-099` §1: the candidate's packed tarball, not the working tree).
+ * the `e2e-smoke-passed` binding) packs the checked-out commit, installs it into a throwaway prefix and
+ * smokes that bin with `--expect-version` = `package.json`'s version and `--expect-commit` = `HEAD`
+ * (`dl-099` §1: the candidate's packed tarball, not the working tree). It refuses only a change under the
+ * pack inputs (`PACK_INPUTS`, `scripts/write-build-info.cjs`: an untracked note elsewhere is no reason), and
+ * removes the checkout's `dist/` before packing, so `prepack` rebuilds it whole and no module of a deleted
+ * source is packed (task-282, `bug-310`). Do not run it while another build or jest uses this checkout's `dist/`.
  * Exit codes: 0 every check passed, 1 a check failed, 2 a bad argument.
  */
 'use strict';
@@ -56,6 +59,8 @@ const { spawnSync } = require('node:child_process');
 const { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { dirname, join } = require('node:path');
+
+const { PACK_INPUTS, inputStatus } = require('./write-build-info.cjs');
 
 /**
  * A commit an expected stamp may name: a full hex object name, SHA-1 (40) or SHA-256 (64) — the shape
@@ -456,13 +461,14 @@ function probeRecordCommit(run, git) {
   return { ok: true, detail: `the only one, changing only ${runLog}` };
 }
 
-/** The lines the fake agent recorded, parsed; `[]` when it wrote none. */
+/** The lines the fake agent recorded, parsed, each with its 1-based line number; `[]` when it wrote none. */
 function fakeRecord(file) {
   if (!existsSync(file)) return [];
   return readFileSync(file, 'utf-8')
     .split('\n')
-    .filter((line) => line !== '')
-    .map((line) => JSON.parse(line));
+    .map((line, index) => ({ number: index + 1, line }))
+    .filter(({ line }) => line !== '')
+    .map(({ number, line }) => ({ number, record: JSON.parse(line) }));
 }
 
 /**
@@ -472,12 +478,17 @@ function fakeRecord(file) {
  * run started from, the parent of its record commit — and the text it got is that element's context.
  */
 function probeFakeRead(run, role, git, recordFile) {
-  let lines;
+  let numbered;
   try {
-    lines = fakeRecord(recordFile);
+    numbered = fakeRecord(recordFile);
   } catch (error) {
     return { ok: false, detail: `the fake agent's record is not JSON lines: ${error.message}` };
   }
+  // task-282 (task-243 review, handover 3): a line without an `argv` array fails the probe with a reason
+  // instead of throwing out of `runSmoke`.
+  const malformed = numbered.find(({ record }) => record === null || typeof record !== 'object' || !Array.isArray(record.argv));
+  if (malformed !== undefined) return { ok: false, detail: `line ${malformed.number} of the fake agent's record has no argv` };
+  const lines = numbered.map(({ record }) => record);
   const launches = lines.filter((line) => !['--version', '--lookup', '--summary'].some((flag) => line.argv.includes(flag)));
   if (launches.length === 0) return { ok: false, detail: 'the fake agent recorded no launch' };
   if (launches.length !== 1) return { ok: false, detail: `expected one launch of the fake agent, found ${launches.length}` };
@@ -722,22 +733,24 @@ function parseSmokeArgs(argv) {
 
 /**
  * `--candidate` (task-219, `dl-099` §1; the `task-207` review handover): smoke the release candidate — the
- * checked-out commit — as a user installs it, with its build stamp bound. On a clean working tree (a dirty
- * one would stamp `<sha>-dirty`), pack the commit (`npm pack`: its `prepack` builds `dist/` and the stamp)
- * into a throwaway directory, install that tarball into a throwaway prefix there, and return the smoke's
- * options: the installed bin — an absolute path, as the throwaway step directories need — and the stamp it
- * must print, `package.json`'s version and `HEAD`. `cleanup` removes the directory; a failed pack or
- * install removes it before rethrowing.
+ * checked-out commit — as a user installs it, with its build stamp bound. When no pack input has a change
+ * (`status`, {@link candidateStatus}: a change there would make the tarball differ from the commit; task-282,
+ * `bug-310`), remove the checkout's `dist/` (`removeBuild`, so the pack rebuilds it from the commit alone),
+ * pack the commit (`npm pack`: its `prepack` builds `dist/` and the stamp) into a throwaway directory,
+ * install that tarball into a throwaway prefix there, and return the smoke's options: the installed bin — an
+ * absolute path, as the throwaway step directories need — and the stamp it must print, `package.json`'s
+ * version and `HEAD`. `cleanup` removes the directory; a failed removal, pack or install removes it before
+ * rethrowing.
  *
  * @param {{ status: () => string, head: () => string, version: () => string, makeDir: () => string,
- *           pack: (destination: string) => string, install: (tarball: string, prefix: string) => void,
- *           removeDir: (dir: string) => void }} effects
+ *           removeBuild: () => void, pack: (destination: string) => string,
+ *           install: (tarball: string, prefix: string) => void, removeDir: (dir: string) => void }} effects
  * @returns {{ command: string, commandArgs: string[], expectedVersion: string, expectedCommit: string, cleanup: () => void }}
  */
 function prepareCandidate(effects) {
   const dirty = effects.status().trim();
   if (dirty !== '') {
-    throw new Error(`--candidate: the working tree is not clean, so the build would not be the candidate commit: ${dirty.split('\n').join(', ')}`);
+    throw new Error(`--candidate: a pack input has uncommitted changes, so the packed build would not be the candidate commit: ${dirty.split('\n').join(', ')}`);
   }
   const expectedCommit = effects.head();
   assertCommitName(expectedCommit);
@@ -746,12 +759,36 @@ function prepareCandidate(effects) {
   const cleanup = () => effects.removeDir(dir);
   try {
     const prefix = join(dir, 'prefix');
+    effects.removeBuild();
     effects.install(effects.pack(join(dir, 'pack')), prefix);
     return { command: join(prefix, 'bin', 'wingfoil'), commandArgs: [], expectedVersion, expectedCommit, cleanup };
   } catch (error) {
     cleanup();
     throw error;
   }
+}
+
+/**
+ * The porcelain status of the pack inputs ({@link PACK_INPUTS}) in `root` — `''` when none has a change,
+ * tracked or untracked (task-282, `bug-310`, task-219 D4 (c)). Throws when git cannot answer.
+ *
+ * @param {string} root
+ * @returns {string}
+ */
+function candidateStatus(root) {
+  const status = inputStatus(root, PACK_INPUTS);
+  if (status === null) throw new Error('--candidate: git could not report the status of the pack inputs');
+  return status;
+}
+
+/**
+ * Remove `<root>/dist` (task-282, `bug-310`): `tsc` never deletes the module of a removed source, so a pack
+ * that starts from an existing `dist/` would ship it. A no-op when there is none.
+ *
+ * @param {string} root
+ */
+function removeBuildOutput(root) {
+  rmSync(join(root, 'dist'), { recursive: true, force: true });
 }
 
 /* istanbul ignore next -- the real git/npm effects of `--candidate`; prepareCandidate is tested with fakes. */
@@ -767,10 +804,11 @@ function realCandidateEffects(repoRoot) {
     return run.stdout;
   };
   return {
-    status: () => must('git', ['status', '--porcelain'], repoRoot),
+    status: () => candidateStatus(repoRoot),
     head: () => must('git', ['rev-parse', 'HEAD'], repoRoot).trim(),
     version: () => JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf-8')).version,
     makeDir: () => mkdtempSync(join(tmpdir(), 'wingfoil-candidate-')),
+    removeBuild: () => removeBuildOutput(repoRoot),
     pack: (destination) => {
       mkdirSync(destination, { recursive: true });
       const name = must('npm', ['pack', '--silent', '--pack-destination', destination], repoRoot).trim().split('\n').pop();
@@ -830,9 +868,12 @@ module.exports = {
   SMOKE_TEMPLATES,
   agentRunSteps,
   assertCommitName,
+  candidateStatus,
   formatReport,
   parseSmokeArgs,
   prepareCandidate,
+  probeFakeRead,
+  removeBuildOutput,
   runSmoke,
   smokeAgentRun,
   smokeSteps,

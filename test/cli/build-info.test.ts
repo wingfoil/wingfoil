@@ -182,3 +182,75 @@ describe('the compiled CLI stamps the record it was built with', () => {
     }
   });
 });
+
+/**
+ * task-282 AC 1 (`bug-310`, task-219 D4 (c), approver ruling D4): the ONE pack-inputs list — the build
+ * inputs plus the two files npm packs outside `dist/` (`LICENSE`, `README.md`) — and the status query
+ * `--candidate` and the staging rehearsal's own pack read through it.
+ */
+describe('task-282 AC 1 — PACK_INPUTS and inputStatus (write-build-info.cjs)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const writer = require('../../scripts/write-build-info.cjs') as typeof import('../../scripts/write-build-info.cjs');
+
+  /** Whether a packed path falls under a git pathspec of the list: a file, a folder prefix, or a `*` glob. */
+  const covers = (entry: string, path: string): boolean =>
+    entry.includes('*')
+      ? new RegExp(`^${entry.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')}$`).test(path)
+      : path === entry || path.startsWith(`${entry}/`);
+
+  it('PACK_INPUTS is BUILD_INPUTS plus LICENSE and README.md, sorted', () => {
+    expect(writer.PACK_INPUTS).toEqual(['LICENSE', 'README.md', 'package-lock.json', 'package.json', 'scripts/write-build-info.cjs', 'src', 'tsconfig*.json']);
+    for (const input of writer.BUILD_INPUTS) expect(writer.PACK_INPUTS).toContain(input);
+  });
+
+  it('every file npm packs outside dist/ falls under a PACK_INPUTS entry', () => {
+    const out = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: REPO_ROOT, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const [packed] = JSON.parse(out.slice(Math.max(0, out.search(/^\[/m)))) as { files: { path: string }[] }[];
+    const outside = packed!.files.map((file) => file.path).filter((path) => !path.startsWith('dist/'));
+    expect(outside.length).toBeGreaterThan(0);
+    expect(outside.filter((path) => !(writer.PACK_INPUTS ?? []).some((entry) => covers(entry, path)))).toEqual([]);
+  });
+
+  describe('inputStatus(repo, PACK_INPUTS)', () => {
+    let repo: string;
+    beforeEach(() => {
+      repo = makePackageRepo();
+      writeFixtureFile(repo, 'README.md', '# Fixture\n');
+      writeFixtureFile(repo, 'src/a.ts', 'export const a = 1;\n');
+      writeFixtureFile(repo, 'docs/x.md', '# X\n');
+      git(repo, ['add', '-A']);
+      git(repo, ['commit', '--quiet', '-m', 'more']);
+    });
+    afterEach(() => removeTempDir(repo));
+
+    it("is '' with an untracked note and a modified doc: neither is a pack input", () => {
+      writeFixtureFile(repo, 'note.txt', 'later\n');
+      writeFixtureFile(repo, 'docs/x.md', '# X, revised\n');
+      expect(writer.inputStatus(repo, writer.PACK_INPUTS)).toBe('');
+    });
+
+    it('names a modified tracked src/a.ts', () => {
+      writeFixtureFile(repo, 'src/a.ts', 'export const a = 2;\n');
+      expect(writer.inputStatus(repo, writer.PACK_INPUTS)).toContain('src/a.ts');
+    });
+
+    it('names an untracked src/new.ts', () => {
+      writeFixtureFile(repo, 'src/new.ts', 'export {};\n');
+      expect(writer.inputStatus(repo, writer.PACK_INPUTS)).toContain('src/new.ts');
+    });
+
+    it('names a modified README.md, which the build inputs do not cover', () => {
+      writeFixtureFile(repo, 'README.md', '# Fixture, revised\n');
+      expect(writer.inputStatus(repo, writer.PACK_INPUTS)).toContain('README.md');
+    });
+  });
+
+  it('is null outside a git repository', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wf-pack-inputs-nogit-'));
+    try {
+      expect(writer.inputStatus(dir, writer.PACK_INPUTS)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

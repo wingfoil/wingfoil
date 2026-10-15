@@ -33,10 +33,23 @@
  * `--check-transcript <path>` runs none of the above: it is that phase's `checks.post`
  * (`staging-rehearsal-passed`, `.wingfoil/workflows/bindings.yaml`). Exit 0 when the transcript's closing
  * line is the success line for `package.json`'s `name@version` and its smoke checked the stamp's commit
- * (`--expect-commit`), printing that commit — the candidate; exit 1 otherwise, the reason on stderr.
+ * (`--expect-commit`), printing that commit — the candidate; exit 1 otherwise, the reason on stderr. It is
+ * strict (task-282, `bug-311`): a line recording a failure (`FAIL`, `FAILED`), a `--version` line for another
+ * stamp, or two distinct commits fail it.
+ *
+ * `--check-evidence-only <path> --evidence <prefix/> […]` (task-282, `bug-312`) is `release-publishing.tag`'s
+ * `evidence-only-since-candidate` pre-check: the transcript must pass as above, the commit it names must be
+ * an ancestor of `HEAD`, and every path `git diff --name-only <candidate>..HEAD` lists (run in the current
+ * directory) must start with an `--evidence` prefix — the binding declares them; exit 1 naming the paths
+ * that require a re-cut, 2 on a bad argument.
+ *
+ * Without `--tarball`, step 1 packs the checkout: a change under the pack inputs (`PACK_INPUTS`,
+ * `scripts/write-build-info.cjs`) is refused and `dist/` is removed first, so the pack rebuilds it from the
+ * commit alone (task-282, `bug-310`).
  *
  * Usage: npm run publish:staging [-- [--tarball path/to/wingfoil-X.Y.Z.tgz] [--expect-commit <sha>] [--transcript <path>]]
  *        node scripts/publish-staging.cjs --check-transcript <path>
+ *        node scripts/publish-staging.cjs --check-evidence-only <path> --evidence <prefix/> [--evidence <prefix/> ...]
  */
 'use strict';
 
@@ -46,7 +59,8 @@ const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require(
 const { tmpdir } = require('node:os');
 const { delimiter, dirname, join, resolve } = require('node:path');
 
-const { assertCommitName, runSmoke } = require('./e2e-smoke.cjs');
+const { assertCommitName, removeBuildOutput, runSmoke } = require('./e2e-smoke.cjs');
+const { PACK_INPUTS, inputStatus } = require('./write-build-info.cjs');
 
 /** The transient staging registry address (spec-015 §1/§5) — passed as `--registry`, stored nowhere. */
 const STAGING_REGISTRY = 'http://localhost:4873/';
@@ -156,9 +170,16 @@ function installArgs(name, version) {
 }
 
 /**
- * Parse `[--tarball <path>] [--expect-commit <sha>] [--transcript <path>]`, or `--check-transcript <path>`
- * alone (task-219). An empty or malformed commit throws before anything starts: an unset
- * `"$GITHUB_SHA"` must stop the stage, never run it unchecked.
+ * An `--evidence` prefix (task-282): a relative folder path ending in `/`, never absolute and never
+ * climbing out with `..`, so it can only name a folder of the checkout.
+ */
+const EVIDENCE_PREFIX_RE = /^(?![/.])(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._/-]*\/$/;
+
+/**
+ * Parse `[--tarball <path>] [--expect-commit <sha>] [--transcript <path>]`, `--check-transcript <path>`
+ * alone (task-219), or `--check-evidence-only <path> --evidence <prefix/> [--evidence …]` alone
+ * (task-282). An empty or malformed commit throws before anything starts: an unset `"$GITHUB_SHA"` must
+ * stop the stage, never run it unchecked.
  */
 function parseArgs(argv) {
   const options = {};
@@ -176,12 +197,28 @@ function parseArgs(argv) {
     } else if (argv[i] === '--check-transcript' && argv[i + 1]) {
       options.checkTranscript = argv[i + 1];
       i += 1;
+    } else if (argv[i] === '--check-evidence-only' && argv[i + 1]) {
+      options.checkEvidenceOnly = argv[i + 1];
+      i += 1;
+    } else if (argv[i] === '--evidence' && argv[i + 1]) {
+      if (!EVIDENCE_PREFIX_RE.test(argv[i + 1])) {
+        throw new Error(`--evidence ${argv[i + 1]}: an evidence path is a relative folder ending in "/", without ".."`);
+      }
+      options.evidence = [...(options.evidence ?? []), argv[i + 1]];
+      i += 1;
     } else {
       throw new Error(`unknown or incomplete argument: ${argv[i]}`);
     }
   }
   if (options.checkTranscript !== undefined && Object.keys(options).length > 1) {
     throw new Error('--check-transcript takes no other option: it only reads a transcript');
+  }
+  if (options.evidence !== undefined && options.checkEvidenceOnly === undefined) {
+    throw new Error('--evidence belongs to --check-evidence-only');
+  }
+  if (options.checkEvidenceOnly !== undefined) {
+    if (options.evidence === undefined) throw new Error('--check-evidence-only needs at least one --evidence <path/>');
+    if (Object.keys(options).length > 2) throw new Error('--check-evidence-only takes no other option than --evidence: it only reads');
   }
   return options;
 }
@@ -202,28 +239,101 @@ function stagingPassedLine(name, version) {
 /** The smoke's `--version` check line with a commit, as this script logs it (indented, `runSmoke`'s format). */
 const VERSION_CHECK_RE = /^\[publish:staging\] +ok +wingfoil --version = (\S+) \(([0-9a-f]{40}|[0-9a-f]{64})\) — match$/;
 
+/** Any passing `--version` check line of the smoke, whatever stamp it names (task-282). */
+const VERSION_LINE_RE = /^\[publish:staging\] +ok +wingfoil --version = /;
+
+/** A line that records a failure: the smoke's `FAIL <label>` and this script's `… FAILED …` (task-282). */
+const FAILURE_RE = /\bFAIL(?:ED)?\b/;
+
 /**
- * `--check-transcript` (task-219, `dl-099` §1–§2): whether a rehearsal transcript proves the candidate.
- * It passes only when its closing line is {@link stagingPassedLine} for `name@version` — the run staged
- * and smoked this package's version — and the smoke's `--version` check named a commit, that is, the run
- * had `--expect-commit`. That commit is the candidate the rehearsal proved, and the one `tag` tags.
+ * `--check-transcript` (task-219, `dl-099` §1–§2; strict since task-282, `bug-311`): whether a rehearsal
+ * transcript proves the candidate. It passes only when its closing line is {@link stagingPassedLine} for
+ * `name@version`, no line records a failure (`FAIL`, `FAILED`), every `--version` check line names this
+ * version and a full sha, and all of them name the same sha — the run had `--expect-commit`, and smoked one
+ * commit. That commit is the candidate the rehearsal proved, and the one `tag` tags. A line number in a
+ * reason is the 1-based line of the transcript.
  *
  * @param {string} text
  * @param {{ name: string, version: string }} pkg
  * @returns {{ ok: true, commit: string } | { ok: false, reason: string }}
  */
 function checkTranscript(text, pkg) {
-  const lines = text.split('\n').map((line) => line.trimEnd()).filter((line) => line !== '');
+  const lines = text
+    .split('\n')
+    .map((line, index) => ({ number: index + 1, line: line.trimEnd() }))
+    .filter(({ line }) => line !== '');
   const expected = `${LOG_PREFIX}${stagingPassedLine(pkg.name, pkg.version)}`;
-  const closing = lines[lines.length - 1] ?? '';
+  const closing = lines[lines.length - 1]?.line ?? '';
   if (closing !== expected) {
     return { ok: false, reason: `the closing line is not "${expected}": got "${closing}"` };
   }
-  const checked = lines.map((line) => VERSION_CHECK_RE.exec(line)).find((match) => match !== null && match[1] === pkg.version);
-  if (!checked) {
+  const failure = lines.find(({ line }) => FAILURE_RE.test(line));
+  if (failure !== undefined) return { ok: false, reason: `line ${failure.number} records a failure: "${failure.line}"` };
+  const commits = [];
+  for (const { number, line } of lines.filter(({ line: l }) => VERSION_LINE_RE.test(l))) {
+    const match = VERSION_CHECK_RE.exec(line);
+    if (match === null || match[1] !== pkg.version) {
+      return { ok: false, reason: `line ${number} checks another stamp than ${pkg.version} (<full sha>): "${line}"` };
+    }
+    if (!commits.includes(match[2])) commits.push(match[2]);
+  }
+  if (commits.length === 0) {
     return { ok: false, reason: `no smoke line checked the build stamp ${pkg.version} (<sha>): the rehearsal ran without --expect-commit <candidate sha>` };
   }
-  return { ok: true, commit: checked[2] };
+  if (commits.length > 1) return { ok: false, reason: `the smoke checked ${commits.length} distinct commits: ${commits.join(', ')}` };
+  return { ok: true, commit: commits[0] };
+}
+
+/**
+ * The paths that start with none of the `evidence` prefixes, sorted (task-282, `bug-312`).
+ *
+ * @param {readonly string[]} paths
+ * @param {readonly string[]} evidence
+ * @returns {string[]}
+ */
+function outsideEvidence(paths, evidence) {
+  return paths.filter((path) => !evidence.some((prefix) => path.startsWith(prefix))).sort();
+}
+
+/**
+ * `--check-evidence-only` (task-282, `bug-312`; `dl-099` §1, task-219 D2): `release-publishing.tag`'s
+ * pre-check that the commits between the rehearsed candidate and the tip only record evidence, so tagging
+ * the candidate leaves nothing out. The candidate is the commit {@link checkTranscript} returns; it must be
+ * an ancestor of `HEAD`; and every path `git diff --name-only --no-renames -z <candidate>..HEAD` lists must
+ * start with one of the `evidence` prefixes (the binding declares them). `--no-renames`, so a move out of
+ * `src/` lists its source; `-z`, so no path comes back quoted. `paths` is the whole diff list.
+ *
+ * @param {string} text
+ * @param {{ name: string, version: string }} pkg
+ * @param {(args: readonly string[]) => { status: number | null, stdout: string, stderr: string }} git
+ * @param {readonly string[]} evidence
+ * @returns {{ ok: true, commit: string, tip: string, paths: string[] } | { ok: false, reason: string }}
+ */
+function checkEvidenceOnly(text, pkg, git, evidence) {
+  const verdict = checkTranscript(text, pkg);
+  if (!verdict.ok) return verdict;
+  const candidate = verdict.commit;
+  const failed = (args, run) => ({ ok: false, reason: `git ${args[0]} exited ${run.status}: ${run.stderr.trim().split('\n')[0] ?? ''}` });
+  const headArgs = ['rev-parse', '--verify', 'HEAD^{commit}'];
+  const head = git(headArgs);
+  if (head.status !== 0) return failed(headArgs, head);
+  const tip = head.stdout.trim();
+  const ancestorArgs = ['merge-base', '--is-ancestor', candidate, 'HEAD'];
+  const ancestor = git(ancestorArgs);
+  if (ancestor.status === 1) return { ok: false, reason: `the candidate ${candidate} is not an ancestor of the tip ${tip}` };
+  if (ancestor.status !== 0) return failed(ancestorArgs, ancestor);
+  const diffArgs = ['diff', '--name-only', '--no-renames', '-z', `${candidate}..HEAD`];
+  const diff = git(diffArgs);
+  if (diff.status !== 0) return failed(diffArgs, diff);
+  const paths = diff.stdout.split('\0').filter((path) => path !== '').sort();
+  const outside = outsideEvidence(paths, evidence);
+  if (outside.length > 0) {
+    return {
+      ok: false,
+      reason: `the commits after the candidate ${candidate} change paths outside the evidence paths (${evidence.join(', ')}), so the candidate must be re-cut: ${outside.join(', ')}`,
+    };
+  }
+  return { ok: true, commit: candidate, tip, paths };
 }
 
 /**
@@ -343,7 +453,13 @@ async function runStaging({ name, version, tarball, commit, effects, baseEnv = p
   try {
     const paths = stagingPaths(workDir);
     const env = stagingEnv(baseEnv, paths);
-    const file = tarball ?? effects.packTarball(paths, env);
+    let file = tarball;
+    if (file === undefined) {
+      // task-282 (D1 (a), `bug-310`): the checkout is what gets packed — refuse a pack input with changes and
+      // remove `dist/` first, so the pack rebuilds it from the commit alone. A given tarball is not touched.
+      effects.prepareTree();
+      file = effects.packTarball(paths, env);
+    }
     // `onSpawn` — not the resolved value alone — is what makes teardown able to stop a registry that
     // is still coming up (reject 8937a51). The child exists from the moment it is spawned, but
     // `startRegistry` resolves only after a readiness poll that sleeps 500 ms between probes; a signal
@@ -429,6 +545,15 @@ function realEffects(repoRoot, log) {
     removeWorkDir: (dir) => rmSync(dir, { recursive: true, force: true }),
     // `force` so this is a no-op before `createToken` has run, or after a partial teardown.
     removeToken: (dir) => rmSync(stagingPaths(dir).userconfig, { force: true }),
+    prepareTree: () => {
+      const status = inputStatus(repoRoot, PACK_INPUTS);
+      if (status === null) throw new Error('git could not report the status of the pack inputs');
+      const changed = status.trim();
+      if (changed !== '') {
+        throw new Error(`a pack input has uncommitted changes, so the staged build would not be the checked-out commit: ${changed.split('\n').join(', ')}`);
+      }
+      removeBuildOutput(repoRoot);
+    },
     packTarball: (paths, env) => {
       mkdirSync(paths.pack, { recursive: true });
       const out = spawnSync('npm', ['pack', '--json', '--pack-destination', paths.pack], {
@@ -492,7 +617,29 @@ function realEffects(repoRoot, log) {
 async function main() {
   const repoRoot = dirname(__dirname);
   const { name, version } = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf-8'));
-  const { tarball, expectCommit, transcript, checkTranscript: checked } = parseArgs(process.argv.slice(2));
+  const { tarball, expectCommit, transcript, checkTranscript: checked, checkEvidenceOnly: evidenceOf, evidence } = parseArgs(process.argv.slice(2));
+  if (evidenceOf !== undefined) {
+    // task-282: the `evidence-only-since-candidate` check — reads the transcript and git, starts nothing. Git
+    // runs where the binding runs (the checkout), as the transcript path is read from there.
+    let text;
+    try {
+      text = readFileSync(evidenceOf, 'utf-8');
+    } catch {
+      process.stderr.write(`error: no rehearsal transcript at ${evidenceOf}\n`);
+      return 1;
+    }
+    const git = (args) => {
+      const run = spawnSync('git', args, { cwd: process.cwd(), encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+      return { status: run.error ? null : run.status, stdout: run.stdout ?? '', stderr: run.error ? run.error.message : (run.stderr ?? '') };
+    };
+    const verdict = checkEvidenceOnly(text, { name, version }, git, evidence);
+    if (!verdict.ok) {
+      process.stderr.write(`error: ${verdict.reason}\n`);
+      return 1;
+    }
+    process.stdout.write(`only evidence paths changed between the candidate ${verdict.commit} and the tip ${verdict.tip}: ${verdict.paths.length} paths\n`);
+    return 0;
+  }
   if (checked !== undefined) {
     // task-219: the `staging-rehearsal-passed` check — reads a transcript, starts nothing.
     let text;
@@ -551,7 +698,9 @@ if (require.main === module) {
 
 module.exports = {
   LOG_PREFIX,
+  checkEvidenceOnly,
   checkTranscript,
+  outsideEvidence,
   stagingPassedLine,
   REGISTRY_STOP_TIMEOUT_MS,
   SIGKILL_GRACE_MS,
