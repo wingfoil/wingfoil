@@ -339,7 +339,7 @@ deviations (default import of `child_process` for the spies) hold with the desig
 | `npm run typecheck` and `npx tsc --noEmit -p tsconfig.json` (slot 16:00) | both exit 0 |
 | `node scripts/check-governance.cjs --base 2de79ef9` (run at `e614365f`, before the notes and submit commits) | 2 `wf()` commits checked, 0 findings |
 | `node scripts/lint-claims.cjs --base 2de79ef9` (run at `e614365f`) | 2 warnings in this file (warn-only): design line "unchanged", qa's "nothing else"; at the submitted head see the independent-review subsection |
-| T4: `git log --first-parent --no-merges --format=%h 46e2653c..HEAD -- <red's 7 test files>` | empty |
+| T4: `git log --first-parent --no-merges --format=%h 46e2653c..HEAD -- <red's 7 test files>` | empty (re-run at `714c693f`: empty); `e4f6e724` is the qa agent's review-F3 red row (a new file), and `git log --first-parent --no-merges --format=%h e4f6e724..HEAD -- test/core/workflow-registry-template-not-file.test.ts` is empty |
 
 No CLI or help change (no `docs/cli-reference.md` edit); no BDD change (P4.4's feature file states the 1-second
 response, unchanged by a faster read); no config `version:` bump.
@@ -403,13 +403,28 @@ warn-only warnings (two new, at lines 305 and 332 of this file).
   test/core/workflow-core-checks.test.ts test/core/workflow-next.test.ts test/core/workflow-status.test.ts
   --maxWorkers=2` → 10 suites, 156 passed.
 - **F3** (the working-tree `loadWorkflowRegistry` throws `EISDIR` for a declared template path that is a directory,
-  reproduced by the reviewer; the self-review's second candidate finding) — **pending the approver's ruling**: in-task
-  with a qa red row, or a follow-up bug. Not started.
+  reproduced by the reviewer; the self-review's second candidate finding) — the approver ruled (a), **in-task**.
+  - Red row: `e4f6e724` (qa agent; notes `a1e3ac97`), new `test/core/workflow-registry-template-not-file.test.ts`: 2
+    failing (`EISDIR`), 1 passing control.
+  - Green: `714c693f` — the working-tree `configFiles` of `loadWorkflowRegistry` reads a declared template only when
+    `statSync(full, { throwIfNoEntry: false })?.isFile()`; an absent path or a directory reads as absent, as
+    `readPathsAtRev` answers at a commit (`cat-file` reports a tree, read as `null`).
+  - Gates at `714c693f`: `npx jest test/core/workflow-registry-template-not-file.test.ts` → 3 passed;
+    `npx jest test/core/workflow-registry-template-not-file.test.ts test/core/workflow-registry
+    test/core/workflow-core-checks.test.ts test/core/workflow-next.test.ts test/core/workflow-status.test.ts
+    --maxWorkers=2` → 4 suites, 93 passed; `npm run lint`, `npx tsc --noEmit -p tsconfig.json`, `npm run docs:api` exit
+    0; `npm run test:coverage -- --maxWorkers=2` (slot 17:54, load 2.88 → 3.68, jest exit 0): 445 suites, 7,953
+    passed, **99.34 / 97.37 / 98.03 / 99.71**. Branches are 0.01 under the baseline 97.38, due only to
+    `src/core/memory-transition.ts:468` and `:560` both unreached in this run (bug-361, declared by the batch notes):
+    `coverage/lcov.info` gives BRH 6,380 / BRF 6,552 = 97.375 %, and with those two branches hit 6,382 / 6,552 =
+    97.405 %. `workflow-registry.ts` branches 100 %.
+  - `spec-017`'s pending Revision note gains one sentence for it (the templates are all read, and a path that is not a
+    regular file reads as absent at a commit and in the working tree), and its proposed `--reason` below follows.
 
 ### Pending amendments (approver)
 
 - `spec-017-workflow-commands-and-state-deduction` — §4.8 *Cost* and a Revision note (2026-10-15) in the working
-  tree: `--reason "task-283 fixes bug-309. Section 4.8's Cost now states that the snapshot's commit is resolved once and shared by every loader, that memory.yaml and dna.yaml are read once, that the Memory templates and the directives are read in one batch each, and that a test pins the number of git processes one workflow next starts; REQ-PERF-03 is timed in-process and as the spawned command. No command, output or diagnostic changes."`
+  tree: `--reason "task-283 fixes bug-309. Section 4.8's Cost now states that the snapshot's commit is resolved once and shared by every loader, that memory.yaml and dna.yaml are read once, that the Memory templates and the directives are read in one batch each, and that a test pins the number of git processes one workflow next starts; REQ-PERF-03 is timed in-process and as the spawned command. No command, output or diagnostic changes; the core checks read every declared template, and a declared template path that is not a regular file reads as absent at a commit and in the working tree alike."`
 - `bug-309-workflow-next-keeps-about-10-percent-headroom-on-req-perf-03-spending-48-git-spawns-per-call` —
   `### Retrospective` filled: `--reason "task-283 closes it: its Retrospective records the fix, the measured result and what the defect teaches, as dl-115 Q2 (a) asks of every closed bug."`
 
