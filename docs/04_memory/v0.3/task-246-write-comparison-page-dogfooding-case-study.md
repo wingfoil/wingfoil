@@ -288,8 +288,8 @@ refactor set.
 - **Case study tables** are generated from the JSON and the catalogue by a scratch script (not committed), then pasted:
   23 rows in *Figures*, 26 in *Not measurable yet* (the split the test computes). The prose cites findings without new
   numbers beyond the cells, and explains each breach from the report's own `failing` lists (read with a one-off
-  `python3` over `docs/08_health/release-health-v0.2.json`: P01's reasons are mostly non-canonical brackets, missing
-  brackets and AI trailers on approval commits; G14's findings sit mostly in `test/validation/secret-scan.test.ts`).
+  `python3` over `docs/08_health/release-health-v0.2.json`: P01's reasons are mostly non-canonical brackets, `submit`
+  subjects carrying a bracket (read backwards here at first, corrected under N1 below) and AI trailers on approval commits; G14's findings sit mostly in `test/validation/secret-scan.test.ts`).
 - **Config:** `docs/site.yaml` 1.0 → 1.1 (both pages, Optional llms entries), `llms.txt` regenerated (`node
   scripts/build-site.cjs llms` → `build-site: wrote llms.txt`), `user-docs.yaml` 1.6 → 1.7 (two string `produces:`
   entries, history `1.7 dl-128 items 3–4 (task-246)`), `WORKFLOW.md` `AU` node one line, README two rows.
@@ -352,9 +352,9 @@ Verdict APPROVE WITH FIXES. The reviewer re-read the 16 sources from their raw t
 `docs/comparison.md` and `docs/case-study.md` are the only pages changed besides this file.
 - **F1** (case study, P01): causes now given per release, recounted from each report's `failing` list with a one-off
   `python3` over `docs/08_health/release-health-v0.{1,2}.json`, matching each commit's reasons by substring (a commit
-  can carry two): v0.1, 61 = 34 undeclared verbs (27 with an element id in the verb slot) + 26 no bracket + 1 AI
+  can carry two): v0.1, 61 = 34 undeclared verbs (27 with an element id in the verb slot) + 26 `submit` subjects carrying a bracket + 1 AI
   trailer, 0 ASCII brackets; v0.2, 297 = 165 ASCII brackets + 92 AI-trailer approvals (21 with both) + 57 `submit`
-  with no bracket + 4 other. The reviewer's 163 / 71 counted each commit's first reason only; the page says "21 of
+  subjects carrying a bracket + 4 other. The reviewer's 163 / 71 counted each commit's first reason only; the page says "21 of
   them also", so both readings are visible.
 - **F2** Kiro artefacts: "Under `.kiro/specs/<name>/` [S3]" (S3's Feature Specs steps: "artifacts are generated in
   `.kiro/specs/<name>/`").
@@ -387,6 +387,11 @@ Verdict APPROVE WITH FIXES. The reviewer re-read the 16 sources from their raw t
   before code gets written", "without approval gates between them", "Correctness (property-based testing)") was found
   verbatim in its raw copy (`grep -n` on `s6.md`, `s4.txt`, `s3.txt`); every third-party cell was re-read against its
   source. OpenSpec's tool list: S6 names Cursor, GitHub Copilot, Amazon Q and Codex.
+- **N1 (re-review, should-fix):** the reason `'submit' carries no bracket` states the rule (`submit` takes no
+  bracket); `scripts/check-governance.cjs` adds it when a `submit` subject HAS one (the `BRACKETLESS_VERBS` branch adds the
+  finding when `ANY_BRACKET_RE` matches the rest of the subject). All 26 (v0.1) and 57 (v0.2) entries are
+  `submit` subjects containing a bracket (`python3` over each report's P01 `failing`: 26/26 and 57/57 contain `[`,
+  e.g. `wf(bug): submit bug-002 [in-progress → in-review]`). The case study and F1's note above now say so.
 - **Re-run:** `npx jest test/docs --maxWorkers=2` → 23 suites, `Tests: 256 passed, 256 total`; `node
   scripts/build-site.cjs llms --check` → `build-site: llms.txt is current` (no llms entry changed); `node
   scripts/lint-claims.cjs --base 2de79ef9` after the commit, below. Status stays `in-review`.
