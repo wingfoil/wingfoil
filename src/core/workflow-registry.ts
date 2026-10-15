@@ -17,7 +17,7 @@
  * (`VALIDATION`, exit `1`) carrying the whole ordered array, exactly as a loader error does; the first
  * error is the reason. The core checks run only on a registry the loader accepted.
  */
-import { existsSync } from 'fs';
+import { statSync } from 'fs';
 import { join, posix } from 'path';
 
 import type { DnaYaml } from '../dna/schema';
@@ -141,7 +141,9 @@ export function loadWorkflowRegistry(root: string): WorkflowsLoadResult {
         const path = configPath(relative);
         if (path === null) return null;
         const full = join(root, path);
-        return existsSync(full) ? readDocument(full) : null;
+        // Only a regular file is a template: an absent path, or one that is a directory, reads as absent,
+        // as `readPathsAtRev` answers at a commit (task-283 review F3).
+        return statSync(full, { throwIfNoEntry: false })?.isFile() === true ? readDocument(full) : null;
       }),
   });
 }
