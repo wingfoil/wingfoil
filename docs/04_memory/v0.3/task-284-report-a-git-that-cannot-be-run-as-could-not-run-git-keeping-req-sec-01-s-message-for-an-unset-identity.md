@@ -66,6 +66,93 @@ identity git reports as unset.
 
 ## Execution Notes
 
+### design (developer, 2026-10-15)
+
+Role architect. Branch head before this note: `b3f12ea0` (start + `bug-377` sync on pre-batch main `2de79ef9`).
+
+**Inputs read (dl-015).** `task-014` (`done`): the check, `VALIDATION` → exit `1`, and the lesson that
+`env: process.env` must be passed explicitly so a Jest test's `process.env` reaches the child.
+`task-132` (`done`): the single `git config -z --get-regexp` spawn, the committer check, the
+`git identity not usable: …` refusal, and the `spec-006` §7 text. Specs: `spec-005`, `spec-006`,
+`spec-008` all `status: approved` (`grep -n '^status' docs/04_memory/design/specs/spec-00{5,6,8}-*.md`).
+REQ-SEC-01's fit criterion fixes only the unset-identity message
+(`sed -n 10,16p docs/02_requirements/03_sard/05_security-compliance.md`); no AC contradicts it.
+
+**Facts measured (node v22.21.0, git 2.43.0).**
+- With `env.PATH` an empty directory, both `execFileSync('git', …)` and `spawnSync('git', …)` fail with
+  `code: 'ENOENT'`, `status: null`, message `spawnSync git ENOENT`; with a mode-`0644` file named `git`
+  first on `PATH`: `EACCES`, `spawnSync git EACCES`. The message already carries the code, so `<cause>`
+  is the error's `message`.
+- `git -C /nonexistent config -z --get-regexp '^user\.'` → `fatal: cannot change to '/nonexistent'`, exit `128`.
+- A repository whose `.git/config` ends with the line `[user` → `fatal: bad config line 6 in file
+  .git/config`, exit `128` (candidate finding, below).
+- `memory add` runs usage checks then `requireGitIdentity` before reading any config (`sed -n 900,910p
+  src/core/index.ts`), and root resolution does not spawn git (`grep -n existsSync src/storage/git-root.ts`),
+  so in a CLI run with an unrunnable git the identity check is the first git spawn.
+
+**Design.** `readIdentityConfig` switches from `execFileSync` + bare `catch` to `spawnSync` (the shape
+`src/storage/git-read.ts` uses: no try/catch, `run.error` vs `run.status`), keeping
+`env: process.env`, `encoding: 'utf-8'` and `stdio: ['ignore', 'pipe', 'ignore']`. It returns either the
+map or a spawn failure (internal discriminated value, not exported):
+- `run.error !== undefined` → spawn failure, cause `run.error.message` (`spawnSync git ENOENT|EACCES|EPERM`);
+- otherwise `run.status !== 0` (exit `1`, `128`, or a signal: `status === null`) → empty map, as today;
+- exit `0` → parsed map, as today.
+`requireGitIdentity` returns `coreErr({ code: 'IO', message: 'could not run git: ' + cause })` on a spawn
+failure, before resolving any identity. No `hint`, no `details`.
+
+**Design questions — answers (approver to confirm).**
+1. **`CoreError.code`: `IO`.** `spec-005` §3.2 ("One rule, one code") reserves `IO` for "a failure of the
+   storage itself"; git is WingFoil's storage, and a git that cannot run is exactly that. `VALIDATION`
+   would claim the request or the configuration is at fault, which is the defect `bug-377` reports. The
+   refusal has one raiser (`requireGitIdentity`), so one code per rule holds by construction. Exit `1`
+   either way (`EXIT_CODE_BY_ERROR`, `src/core/exit-code.ts`); `spec-006` §7's "every `CoreErrorCode`
+   maps to `1`" clause is unaffected.
+2. **Other non-zero exits (`128`, a signal) keep REQ-SEC-01's message — option (a), recommended.** The bug's
+   Expected Behavior and the ACs scope the change to a spawn that never ran git; `128` comes from a git
+   that ran and refused, and distinguishing it needs git's stderr (today `'ignore'`) and a third message
+   no AC or spec pins. Option (b), a `git config failed (exit <n>): <git's first stderr line>` refusal,
+   is the better behaviour for a corrupt `.git/config` (measured above: today it reads as "identity not
+   configured") but is new scope: proposed as a candidate bug for the approver, not done here.
+3. **`readGitIdentity` (read-only reader): signature and behaviour unchanged** — on a spawn failure it
+   returns `{ name: '', email: '' }`, as today. Its one caller, `workflow next --assigned-to me`
+   (`src/core/workflow-next.ts:615`), is a read command that already needs git for its `HEAD` reads, and
+   an unresolved email there is a warning, not a write. Pinned as a characterization row (AC 1 table).
+4. **Doc comments.** `readIdentityConfig`'s (lines 23-30) is rewritten to state the three outcomes: a spawn
+   that never ran git is reported as such (the cause carried); any exit other than `0` — `1` for no
+   matching key, `128` for a root git cannot enter or a config git cannot parse, a signal — yields no
+   keys, the "empty means unconfigured" contract kept on purpose for those (task-284, option (a));
+   exit `0` yields the map. `requireGitIdentity`'s "Two refusals, both `VALIDATION`" becomes three, the
+   new one first and `IO`.
+5. **Docs/specs.** `docs/cli-reference.md` § Git identity gets one sentence (non-Memory doc, committed in
+   session 3): if git itself cannot be run — not on `PATH`, not executable, blocked by a sandbox — the
+   command exits `1` with `could not run git: <cause>` (e.g. `spawnSync git ENOENT`) and writes nothing.
+   `spec-008` §6 "Pinned refusal strings": **recommend one row** (pending amendment, uncommitted, with a
+   Revision note), `every command that writes (§2 --dry-run's list, and init) | 1 | could not run git:
+   <cause>`, since the string is now fixed word for word and that table is where such strings live.
+   `spec-006` §7 step 2 is not false after the change (it describes the identity outcome only), so no
+   amendment there unless the approver wants it. No BDD scenario is required by an AC; P1.2's
+   "no configured git identity" scenario keeps passing unchanged. No config `version:` bump; CHANGELOG
+   is `user-docs`'.
+
+**AC classification and what the qa agent pins.**
+
+| AC | Class | qa pins |
+|----|-------|---------|
+| 1 | red-first | New file `test/core/git-identity-spawn-failure.test.ts` (in-process — the coverage of the new branch). Setup as `test/core/git-identity.test.ts`: a `mkdtempSync` repo, `git init`, global/system config isolated to an empty file, `GIT_AUTHOR_*`/`GIT_COMMITTER_*` deleted, and a CONFIGURED local `user.name`/`user.email` (so the only fault is the spawn). Save and restore `process.env.PATH` in `afterEach`. Rows: (i) `process.env.PATH = <empty tmp dir>` → `requireGitIdentity(dir)` deep-equals `{ ok: false, error: { code: 'IO', message: 'could not run git: spawnSync git ENOENT' } }` and `exitCodeForResult(...)` (`src/core/exit-code`) is `1`; (ii) `PATH = <tmp dir holding a mode-0644 file named git>` → same with `EACCES`; (iii) the registered `memory.memoryAdd` (`CORE_MODULES`, as `identity-preflight-committer.test.ts` calls it) with `{ root: dir, options: { type: 'note', title: 'x' } }` under (i) returns the same error, and `snapshotPersistence`/`assertPersistenceUnchanged` (`test/storage/helpers/persistence-snapshot`) hold. Characterization rows in the same file (pass on `main`, say so): (iv) `readGitIdentity(dir)` under (i) → `{ name: '', email: '' }` (decision 3); (v) `requireGitIdentity('/nonexistent-<tmp>')` with git on `PATH` → `VALIDATION`, `git identity not configured (user.name/user.email)` (decision 2, exit `128`). Red on `main`: (i)-(iii) receive `VALIDATION` / REQ-SEC-01's message. |
+| 2 | characterization | No new test: `npx jest test/core/git-identity.test.ts test/core/identity-preflight-committer.test.ts` passes before and after, both files unchanged (`git diff --stat 2de79ef9 -- <both>` empty at submit). qa records the run. |
+| 3 | red-first | New file `test/cli/git-unrunnable-refusal.integration.test.ts`. Repo from `makeTempGitRepo()` (local identity configured) with a minimal committed config: `.wingfoil/memory.yaml` and `.wingfoil/memory/templates/note.md` shaped as `identity-preflight-committer.test.ts`'s `MEMORY_YAML`/`NOTE_TEMPLATE` (copied inline, not imported), `commitAll`. Run `spawnCapture(process.execPath, [CLI_ENTRY, 'memory', 'add', '--type', 'note', '--title', 'x'], { cwd: repo, env: { ...process.env, PATH: <dir> } })` (`test/cli/helpers/spawn-cli`; `process.execPath`, because `node` cannot be looked up with that `PATH`). Rows: empty dir → `status` 1, stderr's line `error: could not run git: spawnSync git ENOENT`, `assertPersistenceUnchanged` (HEAD unmoved, `git status --porcelain` empty); non-executable `git` → same with `EACCES`; positive: the same command with the inherited `PATH` → `status` 0 and `git log -1 --format=%s` starts `wf(note): add note-`. Red on `main`: the error line is REQ-SEC-01's. Not counted for coverage (child process): AC 1 carries the branch. |
+| 4 | characterization | Gates in session 3 (`npm test`, coverage ≥ batch baseline 99.33 / 97.38 / 98.00 / 99.71, `npm run lint`, both `tsc`, `npm run docs:api`). The new tests must also pass under `npm run test:no-identity` (they configure a local identity themselves). |
+
+**Files expected to touch.** `src/core/git-identity.ts`; `docs/cli-reference.md` (§ Git identity);
+`spec-008-cli-grammar` (pending amendment, uncommitted, if ruled); this task file. qa adds
+`test/core/git-identity-spawn-failure.test.ts` and `test/cli/git-unrunnable-refusal.integration.test.ts`.
+`bug-377`'s `### Retrospective` ("None.") is revisited at close as a pending amendment if it needs content.
+
+**Candidate finding (not filed).** A `.git/config` git cannot parse makes `git config` exit `128`, and
+every mutating command then says `git identity not configured (user.name/user.email)` (measured above) —
+the same class as `bug-377`, outside its ask. Proposed as a new bug for v0.4 (option (b) above), unless
+the approver widens this task.
+
 ### Retrospective
 
 None yet.
