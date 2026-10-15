@@ -30,7 +30,7 @@ not configured (user.name/user.email)`, and sends the user to fix a configuratio
    The catch dates from `task-014` (`git show cbe2a458 -- src/core/git-identity.ts`: `catch { return ''; }`) and was
    kept by `task-132`'s single-spawn rewrite (`56f08b2a`: `return new Map();`).
 2. With the code build of `b8dcb2df` (`npm run build`), in this repository, whose identity is configured:
-   - `node dist/cli.js memory add --type bug --title x --dry-run` → refused only by the dry run's own checks (the
+   - `node dist/cli.js memory add --type bug --title x --dry-run` → exit `0`, the dry-run plan on stdout (the
      identity resolves; `node -e "…requireGitIdentity(process.cwd())"` → `{"ok":true,…}`).
    - The same with an empty directory as `PATH` (`PATH=<empty dir> "$(command -v node)" dist/cli.js memory add
      --type bug --title x --dry-run`): `error: git identity not configured (user.name/user.email)`, exit `1`. The
