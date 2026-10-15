@@ -412,8 +412,14 @@ on the new refusals: `--evidence` missing, absolute, without a trailing `/`, wit
   inside its `try` before `pack`; the refusal reads `a pack input has uncommitted changes`;
   `realCandidateEffects` wires both; `probeFakeRead` guards a record line without an `argv` array
   (`line <n> of the fake agent's record has no argv`, physical line numbers) and is exported. `runSmoke`,
-  `smokeSteps`, `agentRunSteps`, `smokeAgentRun` and `invoke` are unchanged: `git diff 2de79ef9 f11dc6af --
-  scripts/e2e-smoke.cjs | grep -c "^[-+].*function \(runSmoke\|smokeAgentRun\|agentRunSteps\|smokeSteps\)"` → 0.
+  `smokeSteps`, `agentRunSteps`, `smokeAgentRun` and `invoke` are unchanged (review F2):
+  - the four function bodies, compared whole between `2de79ef9` and `HEAD` by `node -e` over `git show
+    <rev>:scripts/e2e-smoke.cjs` (each from `\nfunction <name>(` to the next `\n}\n`): `runSmoke`, `smokeSteps`,
+    `agentRunSteps`, `smokeAgentRun` → `same`; positive case, the same comparison for `prepareCandidate` and
+    `probeFakeRead` → `CHANGED`;
+  - `invoke` and its third argument: `git diff 2de79ef9 HEAD -- scripts/e2e-smoke.cjs | grep -cE
+    "^[-+].*(const invoke =|stepEnv)"` → 0; positive case, `grep -nE "const invoke =|stepEnv"
+    scripts/e2e-smoke.cjs` → line 618, `const invoke = (args, cwd, stepEnv = env) => …`.
 - `scripts/publish-staging.cjs`: strict `checkTranscript` (rules (a)–(e) of the design); `outsideEvidence`,
   `checkEvidenceOnly` and the `--check-evidence-only … --evidence …` mode (git in `process.cwd()`); `runStaging`
   calls the required `prepareTree` effect before `packTarball` only when no `--tarball` is given (D1 (a), the
@@ -434,8 +440,8 @@ No refactor commit: the green diff needed none. Gates on `f11dc6af`, each heavy 
 | `npm run lint`; `npm run typecheck` (both tsc configs); `npm run docs:api`; `npm run build` | exit 0 each |
 | `node dist/cli.js workflow show release-publishing --format json` / `workflow show e2e-smoke --format json` | exit 0, **0 errors** each; release-publishing's warnings are the three pre-existing unbound tokens (`phases[2].checks.pre[0]`, `pre[1]`, `phases[3].checks.post[0]`), none for the new bound check |
 | `node scripts/e2e-smoke.cjs --candidate --report <scratch>/e2e-smoke-282.md` on the committed branch, with an untracked `zz-untracked-note-282.txt` at the root, uncommitted Memory edits (the pending amendments) and a planted `dist/zz-stale.js` (load 5.4 before, 7.2 after) | exit 0 in 52 s, **PASS 72/72**, `ok wingfoil --version = 0.2.2 (f11dc6af…) — match`; `ls dist/zz-stale.js` → No such file (removed before the pack); no `wingfoil-candidate-*` left in `/tmp` (`ls /tmp \| grep -c wingfoil-candidate` → 0) |
-| `node scripts/check-governance.cjs --base 2de79ef9` | 4 wf() commits checked, 0 findings |
-| `node scripts/lint-claims.cjs --base 2de79ef9` | 1 warning (warn-only) on the design section's "unchanged" (the build-info tests), settled by the run above: they pass unchanged in the full suite |
+| `node scripts/check-governance.cjs --base 2de79ef9` | at `f11dc6af`: 4 wf() commits, 0 findings; re-run at `e000c8ce` (after submit, the three syncs and the qa send-back): **8 wf() commits, 0 findings** |
+| `node scripts/lint-claims.cjs --base 2de79ef9` | re-run at `e000c8ce` (review F2): **2 warnings** (warn-only), both `state-claim: "unchanged"` — line 235 (the design's "the existing build-info tests stay green, unchanged", settled by the full suite above: `test/cli/build-info.test.ts`'s pre-existing tests pass with no edit outside its new `task-282` describe, `git diff 2de79ef9 4928d234 -- test/cli/build-info.test.ts \| grep -c "^-[^-]"` → 0) and line 415, the green bullet on `runSmoke` … `invoke` (the lint reads the bullet's first line; the claim is settled by the two commands in its sub-bullets) |
 
 Not run: `npm run publish:staging` (it starts Verdaccio and publishes to it, reserved for the approver). Its
 new `prepareTree` is pinned on a temp checkout in-process (`test/cli/publish-staging.test.ts`, the real
@@ -458,7 +464,24 @@ effect, both cases).
   got the same tree check (D1 (a)); `grep -n "'pack'" scripts/*.cjs` → the two `npm pack` callers
   (`e2e-smoke.cjs:814`, `publish-staging.cjs:559`), both now preceded by the check. No other "never in CI" wording about the rehearsal (`grep -rn` above; the
   remaining hits in Memory are about the latency suite and dl-076's history, a different subject).
-- T4: `git log --first-parent --no-merges --format=%h 4928d234..HEAD -- <the nine files of 4928d234>` → empty.
+- T4: `git log --first-parent --no-merges --format=%h 4928d234..HEAD -- <the nine files of 4928d234>` → empty at
+  submit; at `e000c8ce` → `19bbf5df` only, the qa agent's send-back for review F1 (not a developer commit).
+
+### independent review (2026-10-15) and fixes (developer)
+
+Verdict: approve with fixes.
+- **F1** (the evidence-only refusal tests asserted only a throw, not the reason): a red-file finding, fixed by
+  the qa agent as a send-back — `19bbf5df` (`test/cli/evidence-only-tag.test.ts` pins the six refusal reasons)
+  and `e000c8ce` (its line in `### red (qa)`). No developer change to red's files (T4 above).
+- **F2** (claim-evidence): fixed in these notes — the lint-claims count re-run and recorded with its lines,
+  the `runSmoke` … `invoke` claim now carries a command covering `invoke`/`stepEnv` with a positive case, the
+  governance count updated to 8 wf() commits, the T4 line names the send-back.
+- **F3** (lines of a transcript without the `[publish:staging] ` prefix are not refused) and **F4** (the
+  pre-check also refuses a non-evidence commit that reaches the branch between the candidate and the tag —
+  by design: such a commit must ship, so the candidate is re-cut, `dl-099` §1): coordinator follow-ups, no
+  change in this task.
+- **F5** (nit): accepted.
+Status stays `in-review`; no re-submit. The four pending amendments below are still uncommitted.
 
 ### Pending amendments (approver)
 
