@@ -391,6 +391,9 @@ the same one, and you follow it by hand. In practice:
 2. Do that phase's work in the role it names, with that role's directives loaded.
 3. Record the outcome as Memory documents and move them through their states with the verbs in §8.
 
+Unreleased (v0.3): a workflow run from `workflow start` to `workflow end`, with a routed approval and a
+checkpoint recorded by `workflow finalize`. Full script: [`examples/06-workflow-approval`](examples/06-workflow-approval/run.sh).
+
 ## 8. Daily use: the life of a Memory document
 
 ### 8.1 Create

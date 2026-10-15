@@ -378,14 +378,18 @@ flowchart TD
 The end-to-end gate before `submit` (dl-023): a fresh `wingfoil init` per template, driven through a
 use scenario (dl-099 §3) by `scripts/e2e-smoke.cjs`, then, per template, one adhoc `agent execute` through
 the fake adapter `custom/fake` in a fresh project (spec-016 §2.7, task-243), its record re-loaded by `agent show`
-and `agent list --past`, and the repository's MCP registration checked. The
+and `agent list --past`, then, per template, Journey 4 (task-242): the self-checking example
+`docs/examples/06-workflow-approval/run.sh` creates and starts a workflow, adds a task with `memory add
+--workflow`, routes its approval (the "human needed" line of `workflow status`), records a checkpoint with
+`workflow finalize` and ends the instance with `workflow end`, each checked for its exit code and its commit; and
+the repository's MCP registration checked. The
 gate hard-rejects, and its report is the phase's evidence (`produces:`, bug-134). The same smoke runs
 on every push in `ci.yml`'s `e2e-smoke` job, against the packed tarball.
 
 ```mermaid
 flowchart TD
     FI["**fresh-init** *(qa)*\nwingfoil init on a scratch project\n✔ exit 0 · scaffold round-trips its own loaders"]
-    DC["**drive-cli** *(qa)*\none task each: add → submit → approve · reject · deprecate · history\nrefusals at exit 1 and 2 · dna set/add · paths · directives/workflow list\nagent run: agent execute through the fake adapter custom/fake → agent show · agent list --past\n✔ each step's declared exit (spec-005) · every write re-loaded after the last writer\n✔ tree clean after every step"]
+    DC["**drive-cli** *(qa)*\none task each: add → submit → approve · reject · deprecate · history\nrefusals at exit 1 and 2 · dna set/add · paths · directives/workflow list\nagent run: agent execute through the fake adapter custom/fake → agent show · agent list --past\nJourney 4: docs/examples/06-workflow-approval/run.sh — workflow start → next → memory add --workflow → submit → status → approve → finalize → end\n✔ each step's declared exit (spec-005) · every write re-loaded after the last writer\n✔ tree clean after every step"]
     MR["**mcp-registration** *(qa)*\nnpm run check:mcp\n✔ exit 0 · registered server version == package.json pin\n✔ advertised channels == EXPECTED_CHANNELS\n✔ every Resource reads, every Prompt gets (pin + dev build; KNOWN_READ_FAILURES)"]
     GA["**gate** *(qa)*\n✔ e2e-smoke-passed — hard-reject (dl-023)\n`docs/07_gates/rl-{release-line}/rel-{version}-e2e-smoke.md`\n🔑 Approval gate — *approver*"]
 

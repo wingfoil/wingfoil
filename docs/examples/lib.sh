@@ -47,4 +47,10 @@ new_repo() {
 # The working tree must be clean: every WingFoil write is exactly one commit.
 assert_clean() { [ -z "$(git status --porcelain)" ] || fail "working tree not clean: $(git status --porcelain)"; }
 
+# expect_head <subject> — the last command wrote exactly one commit with this subject, and nothing else is left.
+expect_head() {
+  assert_eq "$(git log -1 --format=%s)" "$1" "HEAD commit"
+  assert_clean
+}
+
 done_ok() { printf '\nOK: %s\n' "$1"; }
