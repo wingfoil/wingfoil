@@ -145,6 +145,32 @@ export function formatReport(report: SmokeReport, meta: SmokeReportMeta): string
 /** Run the dl-023 smoke; stops at the first failing check. Throws on an invalid `expectedCommit`. */
 export function runSmoke(options: SmokeOptions): SmokeReport;
 
+/**
+ * task-282 (`bug-310`): the porcelain status of the pack inputs (`PACK_INPUTS`, `write-build-info.cjs`) in
+ * `root` — `''` when none has a change. Throws `--candidate: git could not report the status of the pack
+ * inputs` when git cannot answer.
+ */
+export function candidateStatus(root: string): string;
+
+/** task-282 (`bug-310`): remove `<root>/dist` recursively; a no-op when it is absent. */
+export function removeBuildOutput(root: string): void;
+
+/** The result of one agent-run probe. */
+export interface SmokeProbeResult {
+  readonly ok: boolean;
+  readonly detail: string;
+}
+
+/** task-243's git runner for the probes, in the agent run's project. */
+export type SmokeGit = (args: readonly string[]) => { status: number | null; stdout: string; stderr: string };
+
+/**
+ * task-243's `fake-read` probe, exported by task-282 (handover 3): a record line that is not an object
+ * with an array `argv` fails it with `line <n> of the fake agent's record has no argv` (1-based), before
+ * any git call.
+ */
+export function probeFakeRead(run: string, role: string, git: SmokeGit, recordFile: string): SmokeProbeResult;
+
 /** Throw unless `commit` is a full sha, 40 or 64 lowercase hex digits (no `-dirty`, not `unknown`). */
 export function assertCommitName(commit: string): void;
 

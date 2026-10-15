@@ -46,6 +46,15 @@ const UNKNOWN_COMMIT = 'unknown';
 const BUILD_INPUTS = Object.freeze(['package-lock.json', 'package.json', 'scripts/write-build-info.cjs', 'src', 'tsconfig*.json']);
 
 /**
+ * The pack inputs (task-282, `bug-310`, task-219 D4 (c)): the paths whose content decides what `npm pack`
+ * puts in the tarball — {@link BUILD_INPUTS} (what `dist/` is built from) plus the two files npm packs
+ * outside `dist/`, `README.md` (`package.json` `files`) and `LICENSE` (which npm always packs). The ONE list
+ * `scripts/e2e-smoke.cjs --candidate` and the staging rehearsal's own pack (`scripts/publish-staging.cjs`)
+ * refuse a change under. Sorted (REQ-SYS-07).
+ */
+const PACK_INPUTS = Object.freeze([...BUILD_INPUTS, 'LICENSE', 'README.md'].sort());
+
+/**
  * Run git in `root` and return its stdout, or `null` when it cannot answer (not spawnable, non-zero
  * exit). stderr is captured, never inherited: "not a git repository" is an answer here, not noise.
  *
@@ -53,15 +62,29 @@ const BUILD_INPUTS = Object.freeze(['package-lock.json', 'package.json', 'script
  * @param {readonly string[]} args
  * @returns {string | null}
  */
-function gitAnswer(root, args) {
+function gitAnswer(root, args, env = process.env) {
   // `GIT_LITERAL_PATHSPECS=0`: an operator's `GIT_LITERAL_PATHSPECS=1` would turn `tsconfig*.json`
   // into a literal name that matches nothing (task-192 re-review).
   const run = spawnSync('git', ['-C', root, ...args], {
     encoding: 'utf-8',
-    env: { ...process.env, GIT_LITERAL_PATHSPECS: '0' },
+    env: { ...env, GIT_LITERAL_PATHSPECS: '0' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return run.error === undefined && run.status === 0 ? run.stdout : null;
+}
+
+/**
+ * The porcelain status of `inputs` (git pathspecs) in `root`, tracked and untracked changes alike
+ * (`--untracked-files=all`, so `status.showUntrackedFiles=no` cannot hide one): `''` when none has a
+ * change, `null` when git cannot answer (no repository, not spawnable).
+ *
+ * @param {string} root
+ * @param {readonly string[]} inputs
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string | null}
+ */
+function inputStatus(root, inputs, env = process.env) {
+  return gitAnswer(root, ['status', '--porcelain', '--untracked-files=all', '--', ...inputs], env);
 }
 
 /**
@@ -73,7 +96,7 @@ function gitAnswer(root, args) {
 function computeBuildInfo(root) {
   const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
   const head = gitAnswer(root, ['rev-parse', '--verify', '--quiet', 'HEAD^{commit}']);
-  const status = head === null ? null : gitAnswer(root, ['status', '--porcelain', '--untracked-files=all', '--', ...BUILD_INPUTS]);
+  const status = head === null ? null : inputStatus(root, BUILD_INPUTS);
   if (head === null || status === null) return { version, commit: UNKNOWN_COMMIT };
   const sha = head.trim();
   return { version, commit: status.trim().length > 0 ? `${sha}-dirty` : sha };
@@ -111,4 +134,4 @@ if (require.main === module) {
   writeBuildInfo(root);
 }
 
-module.exports = { BUILD_INPUTS, UNKNOWN_COMMIT, computeBuildInfo, serializeBuildInfo, writeBuildInfo };
+module.exports = { BUILD_INPUTS, PACK_INPUTS, UNKNOWN_COMMIT, inputStatus, computeBuildInfo, serializeBuildInfo, writeBuildInfo };

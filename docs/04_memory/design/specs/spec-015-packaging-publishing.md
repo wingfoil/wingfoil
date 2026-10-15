@@ -228,8 +228,16 @@ smoke checked the stamp's commit, which it prints: the tag goes on that commit. 
 not re-cut the candidate: the `e2e-smoke` gate runs before it, so on the first candidate the rehearsal's
 stage 3 smoke (the same scenario of `scripts/e2e-smoke.cjs`, against the staged tarball, with
 `--expect-commit`) stands as its e2e-smoke run. A candidate re-cut after the rehearsal re-enters the
-`e2e-smoke` gate and the rehearsal (`release-cycle.yaml`). The rehearsal is
-not part of `publish.yml` or CI: it starts a local registry, so it runs once per candidate (`dl-099` §4).
+`e2e-smoke` gate and the rehearsal (`release-cycle.yaml`). The rehearsal of the candidate starts a local
+registry, so it is a gate run once per candidate (`dl-099` §4 (a)); `publish.yml`'s `stage` job runs the same
+script again in CI on the tagged build. Without `--tarball` the script packs the checkout: it refuses a change
+under the pack inputs (`PACK_INPUTS`, `scripts/write-build-info.cjs`) and removes `dist/` first, so the pack
+rebuilds it from the commit alone. `--check-transcript` also fails a transcript with a line recording a failure
+(`FAIL`, `FAILED`), a `--version` line for another stamp, or two distinct commits. Before the tag,
+`evidence-only-since-candidate` (`node scripts/publish-staging.cjs --check-evidence-only <transcript> --evidence
+<prefix/> …`) passes only when the candidate is an ancestor of the tip and every path `git diff --name-only
+<candidate>..<tip>` lists is an evidence path its binding declares; otherwise it names the paths, and the
+candidate is re-cut (`dl-099` §1).
 
 ### 4. Version / tag scheme
 
@@ -749,3 +757,21 @@ No new dependency (`dl-010`): Jest's `--json` and its istanbul reporters. The pi
 `test/cli/publish-pipeline.test.ts` and `test/cli/test-report.test.ts`. The tag run itself is verified at
 v0.3 release-publishing (approver ruling D5, 2026-10-12). Edited in place: no supersede, no state change, no
 `version:` bump (`dl-047`), as in the revisions above.
+
+**Revision (2026-10-15,
+`task-282-harden-the-release-gate-scripts-pack-input-candidate-check-strict-transcript-check-evidence-only-tag-pre-check`)
+— §3: the rehearsal's place in CI, its own pack, its check, and the tag's evidence-only pre-check (`bug-310`,
+`bug-311`, `bug-312`; `dl-099` §1, §4; `task-219` D2, D4 (c)).** §3 said the rehearsal is "not part of
+`publish.yml` or CI", while `publish.yml`'s `stage` job runs the same script in CI on the tagged build: the
+paragraph now says that the rehearsal of the candidate is a gate run once per candidate (`dl-099` §4 (a)) and
+that `publish.yml`'s `stage` job stages the tagged build in CI. Without `--tarball` the script packs the
+checkout: it now refuses a change under the pack inputs (`PACK_INPUTS` in `scripts/write-build-info.cjs`, the
+one list `e2e-smoke.cjs --candidate` reads too) and removes `dist/` first, so no module of a deleted source is
+staged. `--check-transcript` is strict: a line recording a failure, a `--version` line for another stamp, or
+two distinct commits fail it. `release-publishing`'s `tag` gains the bound pre-check
+`evidence-only-since-candidate` (`--check-evidence-only`): the candidate the transcript names must be an
+ancestor of the tip, and every path `git diff --name-only <candidate>..<tip>` lists must be an evidence path
+its binding declares; otherwise the candidate is re-cut. The pipeline's stages and the publish workflow are
+unchanged. The pins are `test/cli/staging-rehearsal.test.ts`, `test/cli/publish-staging.test.ts` and
+`test/cli/evidence-only-tag.test.ts`. Edited in place: no supersede, no state change, no `version:` bump
+(`dl-047`), as in the revisions above.

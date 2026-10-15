@@ -9,6 +9,19 @@ export interface BuildInfo {
 /** The build inputs, as git pathspecs: a change under one of them makes the build `-dirty` (D4 (c)). */
 export const BUILD_INPUTS: readonly string[];
 
+/**
+ * task-282 (`bug-310`, task-219 D4 (c)): the pack inputs, as git pathspecs — {@link BUILD_INPUTS} plus
+ * `LICENSE` and `README.md`, the two files npm packs outside `dist/`. Sorted; the ONE list
+ * `e2e-smoke.cjs --candidate` and the staging rehearsal's own pack refuse a change under.
+ */
+export const PACK_INPUTS: readonly string[];
+
+/**
+ * task-282: `git status --porcelain --untracked-files=all -- <inputs>` in `root`, with
+ * `GIT_LITERAL_PATHSPECS=0` set over `env`; `null` when git cannot answer (no repository, not spawnable).
+ */
+export function inputStatus(root: string, inputs: readonly string[], env?: NodeJS.ProcessEnv): string | null;
+
 /** The commit value of a build git could not describe. */
 export const UNKNOWN_COMMIT: 'unknown';
 
