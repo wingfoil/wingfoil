@@ -2,7 +2,7 @@
 id: "bug-099-cli-reference-residual-stale-claims"
 type: bug
 title: "`X_cli-cmds.md` still declares a `--dry-run` that does not exist, describes sync processes against a retired schema key, and repeats the `interactive or flag-based` claim in two more pillars"
-status: in-review
+status: closed
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3"
