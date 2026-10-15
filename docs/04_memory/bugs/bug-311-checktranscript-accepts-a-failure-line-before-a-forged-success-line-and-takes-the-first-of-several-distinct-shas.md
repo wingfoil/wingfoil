@@ -56,4 +56,6 @@ build of `main` at `02800955`.
 
 ### Retrospective
 
-None.
+- `checkTranscript` checked only the last line and the first match: a check over committed evidence has to read
+  every line, because a hand-edited or concatenated file is the case it exists for. Fixed in `task-282`, with one
+  test per shape the bug listed.
