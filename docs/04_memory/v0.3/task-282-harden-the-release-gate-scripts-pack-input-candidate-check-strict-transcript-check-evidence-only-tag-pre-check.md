@@ -333,6 +333,66 @@ Lines shared at the gate:
   candidate's build. The alternative, packing an exported tree, needs its own `npm ci`. **Recommend in place.**
   Consequence: never run `--candidate` while jest is building `dist/` in the same worktree (bug-095).
 
+### red (qa, 2026-10-15)
+
+Red commit `4928d234` (T4 is measured from it). Test files, fixtures-in-test and `.d.cts` declarations only;
+no `scripts/*.cjs`, `src/`, config or docs touched. `npm ci` was run in the worktree (no `node_modules`).
+
+**Files.** `test/cli/build-info.test.ts` (new describe), `test/cli/e2e-smoke-candidate.test.ts` (fakes gain
+`removeBuild`; task-219's call-order and `'working tree is not clean'` expectations updated as the design
+says; new describes), `test/cli/staging-rehearsal.test.ts` (new describes), `test/cli/publish-staging.test.ts`
+(D1 (a): the shared fakes gain `prepareTree`, the task-060 order list gains it after `makeWorkDir`, the failure
+table gains a `prepareTree` row, the given-tarball case asserts no `prepareTree`, plus a new describe), new
+`test/cli/evidence-only-tag.test.ts`, new `test/cli/e2e-smoke-fake-read.test.ts`; declarations in
+`scripts/write-build-info.d.cts` (`PACK_INPUTS`, `inputStatus(root, inputs, env?)`), `scripts/e2e-smoke.d.cts`
+(`candidateStatus`, `removeBuildOutput`, `probeFakeRead`, `SmokeGit`, `SmokeProbeResult`),
+`scripts/publish-staging.d.cts` (`StagingEffects.prepareTree(): void`, `StagingArgs` with `checkEvidenceOnly`
+/ `evidence`, `LOG_PREFIX`, `stagingPassedLine`, `checkTranscript`, `StagingGit`, `outsideEvidence`,
+`checkEvidenceOnly`). `publish-staging.test.ts` is not in the design's file list: D1 (a) makes `prepareTree` a
+required effect of `runStaging`, so its shared fakes and exact order list must carry it or they break at green.
+
+**Per AC.**
+- AC 1 (red-first): build-info `PACK_INPUTS is BUILD_INPUTS plus LICENSE and README.md, sorted` (received
+  `undefined`), `every file npm packs outside dist/ falls under a PACK_INPUTS entry` (LICENSE, README.md,
+  package.json uncovered), four `inputStatus(repo, PACK_INPUTS)` cases + `is null outside a git repository`
+  (`inputStatus is not a function`, a missing export). e2e-smoke-candidate: task-219's `packs HEAD…` (calls lack
+  `removeBuild`), `refuses a change to a pack input before packing` (received `the working tree is not clean`),
+  `candidateStatus` ×2 and `removeBuildOutput` (not a function), `throws when git cannot report the status`,
+  `a removeBuild that throws is rethrown` (did not throw), CLI `refuses a modified pack input with exit 1`
+  (stderr `error: --candidate: the working tree is not clean…`; runs a COPY of the scripts in a temp checkout,
+  never this worktree).
+- D1 (a) (red-first): publish-staging task-060 order list (no `prepareTree`), `fails (exit 1) when prepareTree
+  fails` and `a refused tree fails the stage (exit 1) before packing` (resolved 0), real `prepareTree` ×2 on a
+  temp checkout (`effects.prepareTree is not a function`).
+- AC 2 (red-first, approver ruling): e2e-smoke.yaml `version` ≥ 1.7 with `/1\.7 [^;]*task-282/` (received 1.6),
+  gate description names `--candidate` and `dist/`; staging-rehearsal description not `/not in CI/` (matches
+  today), names `publish.yml`, no `main`; WORKFLOW.md without `never in CI` (present) and its *Release candidate*
+  paragraph names `pack input`. spec-015 is not pinned (pending amendment).
+- AC 3 (red-first): FAIL line → `line 3 records a failure`, `staging smoke FAILED` mid-transcript, two distinct
+  shas → `2 distinct commits`, another version → `checks another stamp` (each received `{ ok: true, commit:
+  "aaaa…" }`), CLI → `^error: line \d+ records a failure` (received exit 0, empty stderr). Characterization:
+  `two version-check lines naming the same sha pass` (passes today).
+- AC 4 (red-first): `outsideEvidence`, seven `checkEvidenceOnly` cases (not a function), `parseArgs` positive
+  (`unknown or incomplete argument: --check-evidence-only`), CLI pass / `must be re-cut` / missing transcript
+  (stderr `unknown or incomplete argument`), config pins: bindings ≥ 2.2 (received 2.1) with the exact
+  `evidence-only-since-candidate` entry, release-publishing ≥ 1.8 (received 1.7) with `tag.checks.pre` = the three
+  existing entries then the new one and the description naming it and `git diff --name-only`, WORKFLOW.md's
+  *Release Publishing* section naming it. Pass in red for a different reason (today any `--check-evidence-only`
+  is an unknown argument): the five `parseArgs` throw rows and CLI `exit 2 without --evidence`; they pin the
+  refusals at green.
+- AC 5 (characterization): no test; session 3's gates.
+- Handover 3 (red-first): `probeFakeRead` line 1 / line 2 (not a function: the export is new; the guard is
+  then pinned by the exact detail and a git runner that throws if called). Handover 2 (characterization):
+  `AGENT_FIXTURES holds the fake adapter and the script it launches` (passes).
+
+**Run.** `npx jest test/cli/build-info.test.ts test/cli/e2e-smoke-candidate.test.ts test/cli/staging-rehearsal.test.ts
+test/cli/evidence-only-tag.test.ts test/cli/e2e-smoke-fake-read.test.ts test/cli/publish-staging.test.ts
+--maxWorkers=2` at `4928d234`: 6 suites failed, 46 failed / 79 passed. Per file (failed/passed): build-info 7/17,
+e2e-smoke-candidate 10/4, staging-rehearsal 7/13, publish-staging 5/38, evidence-only-tag 15/6,
+e2e-smoke-fake-read 2/1. Every pre-existing test of those files still passes except the two task-219 rows and
+the task-060 order row the design (and D1) change. `npx eslint` on the changed files: clean; a `tsc --noEmit`
+over the six test files with `tsconfig.json`'s options: clean.
+
 ### Retrospective
 
 None yet.
