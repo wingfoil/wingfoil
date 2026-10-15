@@ -2,7 +2,7 @@
 id: "task-246-write-comparison-page-dogfooding-case-study"
 type: task
 title: "Write the comparison page and the dogfooding case study"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "feature"
 priority: "low"
