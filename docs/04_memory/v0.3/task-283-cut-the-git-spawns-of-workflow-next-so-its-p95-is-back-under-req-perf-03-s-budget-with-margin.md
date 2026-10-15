@@ -282,6 +282,19 @@ read, since no workflow check asks for it).
 which `parseLatencyReport`'s command pattern (`: marginal p95`) does not match, and no `latencyReport`. Like
 `command-latency.test.ts`, a loaded run fails its idle cases and still runs the budget cases.
 
+**Red row (review F3, 2026-10-15).** Approver ruling (a), in-task: the working-tree `loadWorkflowRegistry` reads a
+declared template path that is not a regular file as absent (`null`, as `readPathsAtRev` does at a commit). Red
+commit **`e4f6e724`** (test file only), new file `test/core/workflow-registry-template-not-file.test.ts`, in-process.
+Compared: the whole `WorkflowsLoadResult` of a fixture whose `task` template path (`memory/templates/task.md`) is a
+directory, against the same fixture with the path absent. (i) No check needs the template → no throw, equal results.
+(ii) A check needs it (action token `{task.nofield}`) → equal to the absent case, which today gives `templateFields`
+`null` and so no "template declares no field" warning (`tokenDiagnostics`, `src/core/workflow-core-checks.ts`). A
+control (a regular template without the field) pins that the warning does fire when the template is a file.
+`npx jest test/core/workflow-registry-template-not-file.test.ts --maxWorkers=2` → 2 failed, 1 passed (the control).
+First failing assertion: (i) `expect(…).not.toThrow()`, thrown "EISDIR: illegal operation on a directory, read"
+(`readFileSync` in `readDocument`); (ii) the same `EISDIR` thrown by `loadWorkflowRegistry`. `npx eslint` and `tsc
+--noEmit` on the file → exit 0.
+
 ### green (developer, 2026-10-15)
 
 Red `46e2653c` read first (`### red (qa)`); its counts on the synthetic fixture (exact total 20, 34 before) and its
