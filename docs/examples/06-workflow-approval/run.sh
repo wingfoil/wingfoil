@@ -42,8 +42,9 @@ YAML
 git commit --quiet -am "chore(wingfoil): the deliver workflow's phases"
 
 # Start it: the workflow is recorded as a plan document (two commits) and becomes the active one.
+mark_head
 expect_exit 0 workflow start deliver
-expect_head "wf(plan): submit deliver-1-plan"
+expect_head "wf(plan): submit deliver-1-plan" 2
 assert_eq "$(git log -1 --skip=1 --format=%s)" "wf(plan): add deliver-1-plan" "the plan's add commit"
 
 # The next step names its role, the role's directives (api-style included) and the commands of its actions.
@@ -54,12 +55,14 @@ assert_eq "$(last_json 'd.next.directives.some(x => x.id === "api-style")')" "tr
 assert_eq "$(last_json 'd.next.actions[0].token')" "memory.add(type: task)" "its first action"
 
 # Journey 4, step 3: the deliverable, linked to the step it belongs to.
+mark_head
 expect_exit 0 memory add --type task --title "Login form" --workflow deliver-1-plan --format json
 expect_head "wf(task): add task-001-login-form"
 assert_eq "$(git log -1 --format='%(trailers:key=WingFoil-Instance,valueonly)' | head -1)" "deliver-1-plan" "instance trailer"
 assert_eq "$(git log -1 --format='%(trailers:key=WingFoil-Step,valueonly)' | head -1)" "deliver.write" "step trailer"
 
 # Journey 4, step 4: submitted for approval — the approver is told by the "human needed" line.
+mark_head
 expect_exit 0 memory submit task-001-login-form
 expect_head "wf(task): submit task-001-login-form"
 expect_exit 0 workflow status
@@ -72,8 +75,13 @@ esac
 HEAD_BEFORE=$(git rev-parse HEAD)
 expect_exit 1 workflow end
 assert_eq "$(git rev-parse HEAD)" "$HEAD_BEFORE" "HEAD after a refused end"
+case "$LAST_OUTPUT" in
+  *"workflow 'deliver' is not complete: current step deliver.write@task:task-001-login-form"*) ;;
+  *) fail "workflow end gave no is-not-complete refusal" ;;
+esac
 
 # Journey 4, step 5: the approver approves, with a reason.
+mark_head
 expect_exit 0 memory approve task-001-login-form --reason "Follows api-style"
 expect_head "wf(task): approve task-001-login-form [pending → approved]"
 
@@ -95,12 +103,14 @@ assert_eq "$(last_json 'd.next.evidence.finalizable')" "true" "finalizable"
 # terminal, so this script does not run it.
 
 # The record: an empty commit, outside the wf() grammar, carrying the phase-record trailers.
+mark_head
 expect_exit 0 workflow finalize
 expect_head "workflow: finalize deliver-1-plan deliver.retrospective@task:task-001-login-form"
 assert_eq "$(git show --name-only --format= HEAD)" "" "files changed by the record"
 assert_eq "$(git log -1 --format='%(trailers:key=WingFoil-Phase,valueonly)' | head -1)" "deliver.retrospective completed" "phase trailer"
 
 # Every step is complete: the workflow ends, its plan moving to done.
+mark_head
 expect_exit 0 workflow end
 expect_head "wf(plan): finalize deliver-1-plan [active → done]"
 expect_exit 0 workflow status

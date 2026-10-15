@@ -47,8 +47,13 @@ new_repo() {
 # The working tree must be clean: every WingFoil write is exactly one commit.
 assert_clean() { [ -z "$(git status --porcelain)" ] || fail "working tree not clean: $(git status --porcelain)"; }
 
-# expect_head <subject> — the last command wrote exactly one commit with this subject, and nothing else is left.
+# mark_head — remember HEAD, so a later expect_head can count the commits written since.
+mark_head() { HEAD_MARK=$(git rev-parse HEAD); }
+
+# expect_head <subject> [<count>] — since the last mark_head exactly <count> commits were written (default 1),
+# the newest with this subject, and nothing is left uncommitted.
 expect_head() {
+  assert_eq "$(git rev-list --count "${HEAD_MARK:?call mark_head first}..HEAD")" "${2:-1}" "commits written"
   assert_eq "$(git log -1 --format=%s)" "$1" "HEAD commit"
   assert_clean
 }
