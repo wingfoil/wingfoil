@@ -490,6 +490,23 @@ export function loadMemoryDocumentsAtRev(
 }
 
 /**
+ * {@link loadMemoryDocumentsAtRev} for a `sha` already resolved to a commit (`resolveRevision`,
+ * `src/core/revision.ts`): the same scan and parse, without resolving the revision again. A reader that
+ * resolves its commit once and reads several pillars at it (the workflow deduction's snapshot, task-283,
+ * `bug-309`) uses this, so one call spends one `git rev-parse`, not one per loader.
+ *
+ * @param sha - The full sha of a commit, as `resolveRevision` returned it; labels name it.
+ */
+export function loadMemoryDocumentsAtCommit(
+  root: string,
+  sha: string,
+  memoryYaml: MemoryYaml,
+  options: MemoryScanOptions,
+): MemoryDocumentSummary[] {
+  return [...readableDocuments(parseMemoryDocumentsAtSha(root, sha, sha, scanCommit(root, sha, memoryYaml), options), options)];
+}
+
+/**
  * One Memory document **as commit `rev` holds it** — {@link loadMemoryDocumentSummary} at a commit.
  * `null` when that commit does not hold `relativePath` as a file. Like its working-tree counterpart,
  * this single-file read throws when the frontmatter does not parse.

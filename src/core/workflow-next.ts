@@ -51,7 +51,7 @@ import type { Phase, PhaseMode, Workflow } from '../workflow/schema';
 import { APPROVER_ROLE } from './approval-authority';
 import { resolveRoleDirectives } from './context';
 import { readGitIdentity } from './git-identity';
-import { loadDirectivesAtRev, loadRolesYamlAtRev, type DirectiveFile } from './loaders';
+import { loadDirectivesAtCommit, loadRolesYamlAtCommit, type DirectiveFile } from './loaders';
 import { coreErr, coreOk, type CoreResult } from './types';
 import { unknownWorkflowMessage } from './workflow-list-show';
 import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
@@ -593,8 +593,8 @@ export function readNextInputs(root: string, snapshot: DeductionSnapshot, deduct
     memoryYaml: snapshot.memoryYaml,
     dnaYaml: snapshot.dnaYaml ?? null,
     bindings: snapshot.bindings ?? null,
-    rolesYaml: hasSteps ? loadRolesYamlAtRev(root, snapshot.commit) : null,
-    directiveFiles: hasSteps ? loadDirectivesAtRev(root, snapshot.commit) : [],
+    rolesYaml: hasSteps ? loadRolesYamlAtCommit(root, snapshot.commit) : null,
+    directiveFiles: hasSteps ? loadDirectivesAtCommit(root, snapshot.commit) : [],
     plans: instancePlanIds(snapshot.documents),
   };
 }

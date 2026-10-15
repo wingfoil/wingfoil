@@ -3,7 +3,7 @@
  * §4.8), and the deduction at `HEAD` every workflow consumer calls.
  *
  * {@link readDeductionSnapshotAtHead} is the one impure step: it resolves `HEAD` once and reads every
- * input at that sha — the workflow registry with its core checks (`loadWorkflowRegistryAtRev`),
+ * input at that sha — the workflow registry with its core checks (`loadWorkflowRegistryAtCommit`),
  * `memory.yaml`, `dna.yaml`, every Memory document in sorted path order (tolerant, task-171), the file
  * list, each open plan's start commit and what each instance's walk holds (phase records, step linkages,
  * re-entries) — plus, to **explain** and never to decide, the working-tree paths among the inputs that
@@ -29,7 +29,7 @@ import { resolveDnaPath } from '../dna/path';
 import type { DnaYaml } from '../dna/schema';
 import { parseBracketHops, parseMemoryOperation } from '../memory/audit';
 import { walkGitLogFields } from '../memory/git-log';
-import { computeMemoryContentRoots, loadMemoryDocumentsAtRev, type MemoryDocumentSummary } from '../memory/query';
+import { computeMemoryContentRoots, loadMemoryDocumentsAtCommit, type MemoryDocumentSummary } from '../memory/query';
 import type { MemoryYaml } from '../memory/schema';
 import { resolveStateMachine } from '../memory/state-machine';
 import { readRevisionPaths, requireCommitName, runGitRead, splitFrontmatter } from '../storage';
@@ -53,10 +53,10 @@ import {
 import type { BindingsYaml, CollectionEntry } from '../workflow/bindings';
 import { producesPath, type Workflow } from '../workflow/schema';
 
-import { DIRECTIVES_DIR_PATH, DNA_YAML_PATH, loadDnaYamlAtRev, loadMemoryYamlAtRev, MEMORY_YAML_PATH, ROLES_YAML_PATH } from './loaders';
+import { DIRECTIVES_DIR_PATH, DNA_YAML_PATH, loadDnaYamlAtCommit, loadMemoryYamlAtCommit, MEMORY_YAML_PATH, ROLES_YAML_PATH } from './loaders';
 import { atHeadOr, listPathsAtCommit, resolveRevision } from './revision';
 import { coreErr, coreOk, type CoreResult } from './types';
-import { loadWorkflowRegistryAtRev } from './workflow-registry';
+import { loadWorkflowRegistryAtCommit } from './workflow-registry';
 
 /** The trailer that marks a phase record (`spec-003` § "Evidence"). */
 const PHASE_TRAILER = 'WingFoil-Phase';
@@ -449,6 +449,19 @@ function readCollections(workflows: readonly Workflow[], dnaYaml: DnaYaml | null
   return collections;
 }
 
+/** `read`, called at most once: later calls answer the first call's value. */
+function once<T>(read: () => T): () => T {
+  let done = false;
+  let value: T;
+  return () => {
+    if (!done) {
+      value = read();
+      done = true;
+    }
+    return value;
+  };
+}
+
 /** The snapshot of a repository with nothing committed: no instance can be open. */
 function emptySnapshot(): DeductionSnapshot {
   return {
@@ -498,13 +511,18 @@ export function instancePlanIds(documents: readonly MemoryDocumentSummary[]): st
 export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
   const sha = atHeadOr(root, () => resolveRevision(root, 'HEAD'), null);
   if (sha === null) return emptySnapshot();
-  const registry = loadWorkflowRegistryAtRev(root, sha);
-  const memoryYaml = loadMemoryYamlAtRev(root, sha);
-  const dnaYaml = loadDnaYamlAtRev(root, sha);
+  // `HEAD` is resolved once, above, and every pillar is read at that sha (task-283, `bug-309`): no loader
+  // resolves it again, and `memory.yaml` / `dna.yaml` are read and parsed once, for the registry's core
+  // checks and for the snapshot alike, in the order the registry reads them.
+  const memoryYamlOnce = once(() => loadMemoryYamlAtCommit(root, sha));
+  const dnaYamlOnce = once(() => loadDnaYamlAtCommit(root, sha));
+  const registry = loadWorkflowRegistryAtCommit(root, sha, undefined, { memoryYaml: memoryYamlOnce, dnaYaml: dnaYamlOnce });
+  const memoryYaml = memoryYamlOnce();
+  const dnaYaml = dnaYamlOnce();
   const scanDiagnostics: Diagnostic[] = [];
   // The whole scan keeps archived documents: an archived bound element abandons its instance (§4.11), and
   // the deduction keeps them out of every selection and iteration itself.
-  const documents = memoryYaml === null ? [] : loadMemoryDocumentsAtRev(root, sha, memoryYaml, { onDiagnostic: (diagnostic) => scanDiagnostics.push(diagnostic) });
+  const documents = memoryYaml === null ? [] : loadMemoryDocumentsAtCommit(root, sha, memoryYaml, { onDiagnostic: (diagnostic) => scanDiagnostics.push(diagnostic) });
 
   // The plans that may be open instances (§3.2's status and `parent` rules; the workflow rule is the deduction's).
   const candidates = documents

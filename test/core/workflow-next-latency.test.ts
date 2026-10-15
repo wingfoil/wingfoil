@@ -3,7 +3,8 @@
  * in under 1,000 ms at p95 over >= 20 runs, on this repository's own history (BDD P4.4 sc. 1, "the response is
  * produced in under 1 second"; `spec-017` §4.8 "Cost").
  *
- * **Fixture.** A clone of this repository checked out at {@link PINNED} (`b56e8721`, the W3 B4 pre-batch main):
+ * **Fixture.** A clone of this repository checked out at {@link PINNED} (`b56e8721`, the W3 B4 pre-batch main;
+ * `test/core/helpers/workflow-next-fixture.ts`, shared with the spawned-total suite since task-283):
  * 870 Memory documents, about 5,900 commits, and eight open instances (seven `decision-log-ingest`, one
  * `service-ingest`), so the history walk of §4.8 runs over real open instances, not an empty history (the
  * `task-204` / `task-202` handover). The checkout runs in this file's `beforeAll`, outside the timed region,
@@ -20,21 +21,14 @@
  * the parallel `npm test` (the approver's ruling of 2026-10-03, which the spawned-command suite already
  * follows). It needs the full history: CI's checkouts use `fetch-depth: 0`.
  */
-import { join } from 'path';
-
 import { CORE_MODULES } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import type { NextResult } from '../../src/core';
-import { cloneTempRepo, git, removeTempDir } from '../storage/helpers/git-fixture';
+import { removeTempDir } from '../storage/helpers/git-fixture';
 import { cpus } from 'os';
 
+import { clonePinnedRepository, PINNED } from './helpers/workflow-next-fixture';
 import { describeLoad, describeSamples, inProcessIdleVerdict, P95_BUDGET_MS, p95, readLoadAverage, RUNS, sampleLatency, type LoadWindow } from './helpers/latency';
-
-/** The commit the clone is checked out at: the W3 B4 pre-batch main, with eight open instances. */
-const PINNED = 'b56e8721';
-
-/** The repository this suite runs in. */
-const REPOSITORY_ROOT = join(__dirname, '..', '..');
 
 function workflowNextFn(): CoreFn<unknown, NextResult> {
   const operation = CORE_MODULES.find((module) => module.name === 'workflow')?.operations['workflowNext'];
@@ -48,8 +42,7 @@ describe('REQ-PERF-03 — workflow next on this repository at a pinned commit, i
   let clone: string;
 
   beforeAll(() => {
-    clone = cloneTempRepo(REPOSITORY_ROOT);
-    git(clone, ['checkout', '--quiet', '--detach', PINNED]);
+    clone = clonePinnedRepository();
   });
 
   afterAll(() => removeTempDir(clone));
