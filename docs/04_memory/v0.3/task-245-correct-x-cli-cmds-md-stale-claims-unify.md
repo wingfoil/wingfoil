@@ -257,3 +257,53 @@ untouched memory-store cases pass.
 - spec-016 cites `X_cli-cmds.md:216,223` (§3.1 table, L364, L376, L418) and spec-017 `:163-170`: those line
   citations go stale with the edit (the dl-075 class). Candidate finding, no amendment proposed: they cite
   the text the spec was written against.
+
+### red (qa, 2026-10-15)
+
+- **Red commit `98f06f0c`** (test files only: `git show --stat 98f06f0c`). Base: head `ff141954`, docs
+  byte-identical to `main` `2de79ef9`; dist/ = `main`'s code.
+- **Files.** New `test/docs/x-cli-cmds.test.ts` (AC 1–4, H3; 16 cases), new
+  `test/docs/vision-default-machine-text.test.ts` (H1; 5 cases), widened
+  `test/docs/memory-store-location-text.test.ts` (H2: `docs/*.md`, regular files, non-recursive, same filter;
+  describe/it titles and header comment updated, the other five cases untouched).
+- **One deviation from the design's wording.** Commander's `registeredArguments` are all optional variadic
+  (`[x...]`) in the shipped program, so a positional's required-ness is read from the command's `usage()` (the
+  line `--help` prints, built by `program.ts` from the operation's declared positional: `<id>`, `[ref]`).
+  Options are `command.options[].long`; root options `program.options` plus `--help`.
+- **Per AC** (all red-first, approver ruling 2026-10-15):
+  - AC 1 → `no body line names tech-stack or says "interactive or flag-based"` (base 8 lines: 57, 101, 106,
+    114, 169, 190, 196, 206 — the design's positive control); `every **Sync Process:** paragraph is marked
+    *Not built* (D5)` (2 unmarked; asserts ≥ 1 paragraph); `the --dry-run row names exactly the commands that
+    register --dry-run, after the verb, exit 2 for the rest` (code spans naming a shipped command must equal
+    the 20 takers; base names none); `every root-program long option has a Global Options row` (missing
+    `--version`, `--no-color`, `--no-interactive`); `no command row carries a per-row --format` (base 10 rows).
+  - AC 2 → `no [<word>-id] bracketed positional is left anywhere in the file` (base 6 `[document-id]`);
+    `the pillar note that some rows "predate the convention" is removed` (base 1, L251); `every shipped
+    command's row spells its positional and its options as the CLI registers them` (required `<x>` and not
+    `[<x>]`, optional `[<x>]`; every registered long option but `--dry-run`/`--help` named; every `--x` token
+    registered; `--entry-<field>` covers the `--entry-*` family; base 96 findings across Pillars 1–5 and agent).
+  - AC 3 → `every shipped leaf command has exactly one command row` (base: `agent list`, `agent show`,
+    `memory amend`, `memory park`, `workflow finalize` at 0); `every row of a command no build ships is marked
+    *Not built*` (base: `memory import`, `audit` unmarked); `the header is at version 1.7 or later, with a
+    dated 1.7 entry (task-245) and the missing 1.5 entry (task-179)` ("≥", bug-314; history versions strictly
+    descending; base header 1.6).
+  - AC 4 → `the --entry-<field> parameter row names every --entry-* option dna add registers` (base: missing
+    `--entry-adapter`); `the paths row and the category parameter row name every category paths' --help lists`
+    (categories parsed from `paths`' argument description; base: both miss `runs`, `health`); `directive assign
+    --force, memory amend and memory park have rows in the shipped notation` (synopsis starts `wingfoil memory
+    amend <id> --reason <text>` / `… park …`; base: no `--force`).
+  - H1 (bug-275) → the `approved/rejected|approved, rejected` grep over `docs/01_vision/*.md`, X_cli-cmds'
+    history excluded (base the 9 hits: 06:90, 379; 07:248, 401, 450; 08:88; X:18, 26, 48); four "≥" version
+    pins (X 1.7, 06 1.15, 07 1.10, 08 1.12; base 1.6, 1.14, 1.9, 1.11). Comparison is numeric `major.minor`, so
+    07's pin passes at 1.10 or at 2.0.
+  - H2 (bug-274) → `bug-256's step-1 grep, widened to docs/*.md, returns nothing` (base 1:
+    `docs/design.md:138`).
+  - H3 → `US-6-02 names wingfoil workflow create <name> and no "interactive or flag-based" form`, `US-6-01
+    names wingfoil workflow show <ref>` (bullet lines joined, whitespace collapsed; base: neither).
+- **Run.** `npx jest test/docs/x-cli-cmds.test.ts test/docs/vision-default-machine-text.test.ts
+  test/docs/memory-store-location-text.test.ts test/docs/vision-index.test.ts test/docs/cli-reference.test.ts
+  --maxWorkers=2` → 3 suites failed, 2 passed; 22 failed, 22 passed: x-cli-cmds 16 failed / 0 passed,
+  vision-default-machine-text 5 / 0, memory-store-location-text 1 / 5, vision-index 0 / 13, cli-reference 0 / 4.
+  Every failure is an `expect(…)` on document text (first assertion of each: `toEqual([])` on the hit/finding
+  list, `toBe(true)` on the header version, `toContain` on the US bullets and the `directive assign` row); no
+  crash, no missing file. `npx eslint` on the three files → clean.
