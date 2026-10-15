@@ -282,6 +282,105 @@ read, since no workflow check asks for it).
 which `parseLatencyReport`'s command pattern (`: marginal p95`) does not match, and no `latencyReport`. Like
 `command-latency.test.ts`, a loaded run fails its idle cases and still runs the budget cases.
 
+### green (developer, 2026-10-15)
+
+Red `46e2653c` read first (`### red (qa)`); its counts on the synthetic fixture (exact total 20, 34 before) and its
+deviations (default import of `child_process` for the spies) hold with the design; nothing in red needed a send-back.
+
+- `cd4285e9` — `fix(core): task-283 — resolve the snapshot's commit once and batch its directive and template reads
+  (bug-309)`: `src/core/loaders.ts` gains `loadMemoryYamlAtCommit`, `loadDnaYamlAtCommit`, `loadRolesYamlAtCommit`,
+  `loadDirectivesAtCommit`, `loadWorkflowsYamlAtCommit` (each `…AtRev` is now `resolveRevision` + the shared body,
+  its labels still naming `rev`); the directives are read with one `readPathsAtRev` through the `../storage` barrel;
+  `src/core/workflow-registry.ts` gains `loadWorkflowRegistryAtCommit(root, sha, overlay?, pillars?)` and
+  `RegistryPillars`; `src/memory/query.ts` gains `loadMemoryDocumentsAtCommit`; `readDeductionSnapshotAtHead` holds one
+  memoised `memory.yaml` / `dna.yaml` read each and hands them to the registry's core checks (the order of reads and
+  errors is the registry's, as before); `workflow-next.ts` and `workflow-list-show.ts` read roles and directives at
+  `snapshot.commit` through the `…AtCommit` forms.
+- Red → green: `npx jest test/core/workflow-next-spawn-count.test.ts test/core/directive-inventory-baseline.test.ts
+  test/core/latency-budget-placement.test.ts --maxWorkers=2` → red: 6 failed, 1,007 passed (qa's run); green: **3
+  suites, 1,013 passed**.
+- Pinned clone (the latency fixture, `b56e8721`), the design's wrapper probe on a `typescript.transpileModule` copy of
+  the head's `src/`: **18 git processes per `workflow next`** (rev-parse 1, show 3, cat-file 5, ls-tree 4, log 2,
+  merge-base 1, status 2), from 47 — the design's expected count.
+- Behaviour unchanged: the JSON of `workflowNext` and `workflowStatus` on the pinned clone, from `2de79ef9`'s `src/`
+  and from the head's, compared with `cmp` → identical (61,215 bytes).
+
+### refactor (developer, 2026-10-15)
+
+- `97f3b25b` — TSDoc for `RegistryPillars`' two members (`npm run docs:api` had 2 warnings, exit 4) and two
+  unreachable `?? null` fallbacks dropped.
+- `e614365f` — the coverage run on `97f3b25b` gave 99.34 / **97.34** / **97.74** / 99.71, under the batch baseline in
+  two columns: (1) the template prefetch left a per-file fallback (`fetched.has(path) ? … : readPathAtRev(…)`,
+  `workflow-registry.ts:185`) no path reaches, so `PillarSource.configFile` became `configFiles(relatives)`: the core
+  checks read every declared template in one call, one batch at a commit, a map over disk reads in the working tree;
+  (2) the new `…AtCommit` re-exports in `src/core/index.ts` / `src/memory/index.ts` were uncalled barrel getters
+  (core `index.ts` functions 88.33 %), so the `…AtCommit` loaders stay module-internal: their only callers import
+  them from `./loaders`, `./workflow-registry` and `../memory/query`; (3) `loadMemoryDocumentsAtCommit`'s `options`
+  default was unreached (every caller passes it) and is now required.
+
+| Gate (at `e614365f`) | Result |
+|---|---|
+| `npm run test:coverage -- --maxWorkers=2` (slot 15:07, load 12.68 → 35.67 at the end, other projects) | 444 suites, **7,948 passed**; **99.34 / 97.39 / 98.03 / 99.71** vs baseline 99.33 / 97.38 / 98.00 / 99.71: no column drops (`memory-transition.ts:468` unreached this run, `:560` reached) |
+| `npm run lint` | exit 0 |
+| `npm run docs:api` | exit 0 |
+| `npm run typecheck` and `npx tsc --noEmit -p tsconfig.json` (slot 16:00) | both exit 0 |
+| `node scripts/check-governance.cjs --base 2de79ef9` | 2 `wf()` commits checked, 0 findings |
+| `node scripts/lint-claims.cjs --base 2de79ef9` | 2 warnings in this file (warn-only): design line "unchanged", qa's "nothing else" |
+| T4: `git log --first-parent --no-merges --format=%h 46e2653c..HEAD -- <red's 7 test files>` | empty |
+
+No CLI or help change (no `docs/cli-reference.md` edit); no BDD change (P4.4's feature file states the 1-second
+response, unchanged by a faster read); no config `version:` bump.
+
+**D3 idle probe** (`node` over 10 in-process calls after one warm-up, per code × fixture, two rounds; slot 15:05, load
+5.56 at the start, 7.23 at the end — round 2 is loaded): round 1 `1c66ef31` 585 ms p95 on the hardlinked clone vs
+669 ms on a `--no-local` clone; head 371 vs 451 ms. The single-pack clone is not faster, so the object store is not
+the growth and **the fixture stays as it is (D3)**. The `--version` floor in the latency pass below measured p95 182
+ms, the reference machine's idle value (194–203 ms): the B6 → B7 jump (476 → 900+ ms) is not reproduced by the
+B6 code here either (585 ms at load 5.6); its cause stays unlocated (candidate finding below).
+
+**AC 3 — `npm run test:latency`, idle** (slot 16:00:58, load 5.12 just before; `WINGFOIL_LATENCY_REPORT=1`), at
+`e614365f` (`npm run build` under the slot at 15:02, exit 0), exit 0, 3 suites, 18 tests passed:
+
+| Suite | p95 | n | min | max | load (1-min) before → after |
+|---|---|---|---|---|---|
+| `workflow next` in-process (`test/core/workflow-next-latency.test.ts`) | **320 ms** | 25 | 280 ms | 374 ms | 3.85 → 3.49 |
+| `workflow next` spawned total (`test/cli/workflow-next-command-latency.test.ts`) | **529 ms** | 25 | 471 ms | 577 ms | 4.77 → 3.85 |
+| — its marginal over the floor | 362 ms | 25 | 305 ms | 411 ms | same window |
+| — the floor (`--version`) | 182 ms | 25 | 158 ms | 188 ms | same window |
+
+Both under the 800 ms margin (D1) and REQ-PERF-03's 1,000 ms, which no file raised.
+
+### self-review (developer, 2026-10-15)
+
+Against `code-review`, every AC with the command that shows it:
+- AC 1 met — the spawn-count suite passes (green run above); 18 on the pinned clone (wrapper probe).
+- AC 2 met — `workflow-next-command-latency.test.ts` runs in the opt-in pass beside the in-process suite, judged by
+  `idleMachineVerdict`, `inProcessIdleVerdict` and both process-level quantities (latency pass above, 18 passed).
+- AC 3 met — 320 / 529 ms p95 at load < 6, with n, min, max and the load window recorded.
+- AC 4 met — the gate table; `directive-inventory-baseline`'s pin now spies `readPathsAtRev` (red's change, `bug-309`).
+- Same class in files touched: `workflow-list-show.ts` reads at `snapshot.commit` through the `…AtCommit` forms like
+  `workflow-next.ts`. The other `…AtRev` callers (`context.ts`'s execution context: 12 references, `grep -c AtRev
+  src/core/context.ts`) re-resolve per loader too; they are not this command's path and not in the files touched —
+  candidate finding.
+- One behaviour moved, stated: the core checks now read **every** template `memory.yaml` declares, not only those a
+  check asks for. At a commit a declared path that is a directory now reads as `null` (`cat-file` answers `tree`)
+  where `git show` printed its listing (which parsed as no frontmatter, also no fields). In the working tree (the
+  `loadWorkflowRegistry` source, which no workflow command reads since task-204) a declared template path that is a
+  directory would now be read by `readDocument` and throw, where before it was read only if a check needed it —
+  candidate finding, not fixed here (no caller on this path).
+
+### Pending amendments (approver)
+
+- `spec-017-workflow-commands-and-state-deduction` — §4.8 *Cost* and a Revision note (2026-10-15) in the working
+  tree: `--reason "task-283 fixes bug-309. Section 4.8's Cost now states that the snapshot's commit is resolved once and shared by every loader, that memory.yaml and dna.yaml are read once, that the Memory templates and the directives are read in one batch each, and that a test pins the number of git processes one workflow next starts; REQ-PERF-03 is timed in-process and as the spawned command. No command, output or diagnostic changes."`
+- `bug-309-workflow-next-keeps-about-10-percent-headroom-on-req-perf-03-spending-48-git-spawns-per-call` —
+  `### Retrospective` filled: `--reason "task-283 closes it: its Retrospective records the fix, the measured result and what the defect teaches, as dl-115 Q2 (a) asks of every closed bug."`
+
 ### Retrospective
 
-None yet.
+- Count before you cut: the wrapper probe settled in minutes that the reads were byte-identical across the "growth",
+  which no timing under load could have shown; the cut set followed from the argv list, not from the hypothesis in
+  the Implementation Notes (refs read across branches), which the count refuted.
+- Coverage is a design input for small API additions: re-exporting new functions through a barrel cost 0.26 points of
+  function coverage by uncalled getters, and an optional prefetch left a fallback no path reaches; folding the
+  prefetch into one batch call removed both.
