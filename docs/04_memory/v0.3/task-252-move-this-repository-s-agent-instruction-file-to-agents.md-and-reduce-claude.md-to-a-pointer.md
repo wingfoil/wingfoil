@@ -133,6 +133,19 @@ Part (b), the generated export, is v0.4 (`dl-137` Q3) and is not in scope.
   `workflow list` the only workflow command; P4.13's narrative omits the commit history). Both are agent-facing
   documents this task rewrites; their Steps to Reproduce give the lines and commands.
 
+- **Handover from the approver's ruling of 2026-10-15 (`bug-ingest-rel-v0.3-git-spawn-and-attribution-plan`; the
+  maintainer's by-hand test of Codex CLI 0.145.0 on the published 0.2.2).** No criterion changes.
+  - The `AGENTS.md` this task writes carries the attribution rule of `git-conventions` §7: every commit an agent
+    writes, except an `approve` or `reject` commit, ends with the trailer paragraph `Co-Authored-By: <team.agents
+    name> <<team.agents email>>` and `AI-Model: <the model identifier the agent runs as>`, the values read from
+    `dna.yaml`; on a commit `wingfoil` writes, the two are added with `git commit --amend --no-edit --trailer`, in
+    the paragraph of `WingFoil-Version:` (§8).
+  - Why: `agent execute` hands this rule to the agents it launches (its bootstrap's attribution line,
+    `src/agent/execute.ts` lines 119-125, `dl-117`), but an agent started from its own CLI reads only the project's
+    instruction file. In the 2026-10-15 test the commit WingFoil wrote for the agent's `memory add` carried only the
+    human identity. The same rule for user projects (the `AGENTS.md` that `init` generates, `dl-137` part (b), v0.4)
+    is noted on `dl-180`.
+
 ## Execution Notes
 
 <!-- Running log of what actually happened while working this task through dev-loop — filled in

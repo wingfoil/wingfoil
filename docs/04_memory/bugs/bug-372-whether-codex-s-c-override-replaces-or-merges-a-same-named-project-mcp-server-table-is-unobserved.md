@@ -32,15 +32,42 @@ and the manifest's deliberate absence of an `env:` field.
 3. `sed -n 148,150p docs/04_memory/design/specs/spec-016-*.md` → "There is deliberately no `env:` field. Credentials
    stay inside the agent CLI (`adr-012` point 1)."
 
+4. **Observed (2026-10-15, approver's ingest; `bug-ingest-rel-v0.3-git-spawn-and-attribution-plan`).** A by-hand
+   Codex CLI 0.145.0 test in a scratch project settles the question: **`-c` merges.** The project's
+   `.codex/config.toml` declares `[mcp_servers.probe] command="codex" args=["mcp-server"] env={PROBE_FROM="project"}`.
+   `codex mcp get probe` shows the project's table, `env` included. `codex -c
+   'mcp_servers.probe={command="codex",args=["mcp-server"]}' mcp get probe`, whose override sets no `env` key, still
+   shows `env` `PROBE_FROM`: the keys the override leaves out keep the project's values, the keys it sets win.
+   Caveat: the project's `.codex/` layer loads only once the directory is trusted; before trust, `codex mcp get
+   probe` → `No MCP server named 'probe' found`. The test used a server named `probe` and `codex mcp get`, not a
+   session; the adapter's override (`-c mcp_servers.wingfoil=…`, `mcp.via: config-arg`, `task-237`) is the same
+   mechanism on the name `wingfoil`.
+
 ## Expected Behavior
 
 The behaviour is established (an observation recorded in §2.5 with the version, or a vendor statement), and if Codex
 merges, the adapter's override sets every key WingFoil relies on (for example an explicit `cwd` and `env`) or
 `agent execute` refuses to launch when the project declares a same-named server.
 
+**Note (2026-10-15, after the observation of step 4).** Under `mcp.via: config-arg` a trusted project's table named
+`wingfoil` with extra keys (`env`, `cwd`, …) leaks into the WingFoil server's definition: `spec-016` §2.5's "A
+project's own registration … is not read" does not hold for `codex-cli`, and a `cwd` can make `wingfoil mcp` serve
+another repository's context. The expected behaviour above stands, now as a fix rather than an observation: the
+override sets every key WingFoil relies on, or `agent execute` refuses when the trusted project declares a server
+named `wingfoil`; §2.5 records the merge for `codex-cli 0.145.0`.
+
+- **v0.3 mitigation (approver ruling, 2026-10-15).** Codex stays usable as an agent in v0.3. The mitigation is a
+  documentation warning only, written in v0.3's `user-docs` phase (`align-user-docs`; `docs/agents.md` and/or the
+  user guide, beside the `codex-cli` adapter): do not declare an MCP server named `wingfoil` in a trusted project's
+  `.codex/config.toml`; Codex merges its extra keys (`env`, `cwd`, …) into WingFoil's server, and a `cwd` can make
+  `wingfoil mcp` serve another repository's context. The code fix stays in v0.4 with this bug.
+
 ## Actual Behavior
 
 Unknown; a project's `cwd` or `env` may reach WingFoil's MCP server under `codex-cli`.
+
+Since 2026-10-15 (step 4): Codex merges, so the keys a trusted project's `wingfoil` table sets and the override does
+not (`env`, `cwd`, …) do reach WingFoil's MCP server under `codex-cli`.
 
 ## Notes
 
@@ -52,6 +79,11 @@ Unknown; a project's `cwd` or `env` may reach WingFoil's MCP server under `codex
 Captured on 2026-10-15 by `bug-ingest-rel-v0.3-w3b7-review-findings-plan` (item C15), from the wave 3 batch
 B7 follow-ups (`dev-loop-rel-v0.3-plan`), re-checked on `main` at `bd55f70e` with the code build of that commit
 (`npm run build`, then `node dist/cli.js`).
+
+Amended on 2026-10-15 (`bug-ingest-rel-v0.3-git-spawn-and-attribution-plan`): the observation of step 4 and the
+v0.3 mitigation ruling. Release (v0.4) and severity (medium) are kept: the leak needs a trusted project that declares
+a server named `wingfoil`, the approver keeps the code fix in v0.4, and v0.3 carries the warning. The title still
+says "unobserved"; it is left as filed, since the id is derived from it.
 
 ### Retrospective
 

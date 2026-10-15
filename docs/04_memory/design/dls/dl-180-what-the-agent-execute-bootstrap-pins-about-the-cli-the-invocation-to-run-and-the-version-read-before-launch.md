@@ -58,3 +58,18 @@ version (b), since a self-updating CLI makes `verified_with` a moving target and
 - **Related:** `spec-016` (agent execution), `adr-012`, `task-236` and `task-237` (the by-hand passes), `bug-366`,
   `bug-369`, `bug-370` (the `AI-Model:` placeholder), `bug-ingest-rel-v0.3-w3b7-review-findings-plan` (item D2,
   follow-up items 25 and 36).
+
+**Note (2026-10-15, approver ruling; `bug-ingest-rel-v0.3-git-spawn-and-attribution-plan`).** One more thing an
+agent is told only through the bootstrap: the attribution rule. It extends the Context above; the Decision is
+unchanged.
+
+- **Finding.** In the maintainer's by-hand test of 2026-10-15 (Codex CLI 0.145.0 launched directly from its own CLI,
+  not through `agent execute`, on the published 0.2.2 in a scratch project), the commit WingFoil wrote for the
+  agent's `memory add` carried only the human identity: no `Co-Authored-By:` and no `AI-Model:` trailer. A directly
+  launched agent today leaves no attribution, because the rule of `git-conventions` §7 reaches an agent only through
+  `agent execute`'s bootstrap (its attribution line, `src/agent/execute.ts` lines 119-125, `dl-117`).
+- **For user projects.** The `AGENTS.md` that `wingfoil init` generates (`dl-137` part (b), v0.4) should carry the
+  same rule: every commit an agent writes, except an `approve` or `reject` commit, ends with `Co-Authored-By:` (the
+  signing `team.agents` entry's `name` and `email`) and `AI-Model:`, added to a commit `wingfoil` writes with `git
+  commit --amend --no-edit --trailer`. For this repository the rule goes into the `AGENTS.md` `task-252` writes (v0.3,
+  same ruling).
