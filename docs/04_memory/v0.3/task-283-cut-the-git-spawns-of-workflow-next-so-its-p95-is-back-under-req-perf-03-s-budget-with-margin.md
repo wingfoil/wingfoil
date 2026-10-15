@@ -234,6 +234,54 @@ count pinned by a test).
   otherwise unchanged.*
 - **D4:** the pinned-clone count (18) goes in the notes; AC 1's exact pins are on a synthetic fixture. *Recommended.*
 
+### red (qa, 2026-10-15)
+
+Role qa (dl-134), separate from the developer. Red commit **`46e2653c`** (T4 is measured from it). Test files only;
+`git diff --stat d679b824 46e2653c -- src` is empty.
+
+**Files.** New: `test/core/workflow-next-spawn-count.test.ts`, `test/cli/workflow-next-command-latency.test.ts`,
+`test/core/helpers/workflow-next-fixture.ts` (`PINNED` and the clone setup, moved from the in-process suite).
+Changed: `test/core/workflow-next-latency.test.ts` (imports the shared fixture, nothing else), `test/latency-suites.cjs`
+(`LATENCY_SUITES` gains the spawned suite), `test/core/latency-budget-placement.test.ts` (`EXEMPTIONS` entry with its
+reason), `test/core/directive-inventory-baseline.test.ts` (AC 4's pin).
+
+| AC | Class | Test(s) | State at `46e2653c` |
+|---|---|---|---|
+| 1 | red-first | `workflow-next-spawn-count.test.ts`: "(a) … exactly 1 rev-parse …", "(b) exactly 3 git show …", "(c) exactly 5 git cat-file --batch …", "(d) invariance …", "(e) exactly 20 git processes …"; plus two passing pins: "the fixture answers …" and "(a) every revision-reading call names the resolved sha" | 5 red, 2 green |
+| 2 | characterization (D2) | `workflow-next-command-latency.test.ts`: exits 0 from the pinned commit with a next step; `idleMachineVerdict`; `inProcessIdleVerdict`; `processLevelVerdict` for each of `PROCESS_LEVEL_QUANTITIES` | not run (opt-in latency pass; session 3 under the slot, load < 6) |
+| 3 | characterization | none (session 3's measurement; margin 800 ms recorded, D1) | n/a |
+| 4 | characterization; the pin red-first | `directive-inventory-baseline.test.ts` "a listed blob that cannot be read back is skipped, not parsed as empty": spies `storage.readPathsAtRev` returning `null` per path; comment cites `bug-309` | red |
+
+**AC 1 fixture and count.** Built in the file: `memory.yaml` (release, task, bug, plan; `release` and `task` carry
+`template:` files), `dna.yaml` with one `paths.runs` directory, `roles.yaml`, 3 directives, `workflows.yaml` including
+2 files, `bindings.yaml`, one open `release-cycle` plan whose next step (`dev-loop.start`, role developer) makes
+`hasSteps` true; three commits, no element re-entered. The extended fixture adds 3 directives and a `bug` template.
+Counting: spies on the `child_process` module object (`import childProcess from 'child_process'`; a namespace import is
+not spyable, "Cannot redefine property"), calling through; `-C <root>` dropped; the subcommand found past a leading
+`-c <k>=<v>`. Expected total, stated in the file: rev-parse 1 + show 3 + cat-file 5 + ls-tree (4 Memory roots + 2) +
+log 2 + merge-base 1 + status (1 runs dir + 1) = **20**. Observed today: **34** (rev-parse 10, show 10, cat-file 3,
+ls-tree 6, log 2, merge-base 1, status 2); extended fixture 37 (+3 directive `show`s; today the `bug` template is not
+read, since no workflow check asks for it).
+
+**Runs** (load 3.4-6.5, `/proc/loadavg`; nothing timed):
+- `npx jest test/core/workflow-next-spawn-count.test.ts test/core/directive-inventory-baseline.test.ts test/core/latency-budget-placement.test.ts --maxWorkers=2`
+  → 2 suites failed, 1 passed; 6 failed, 1,007 passed. `latency-budget-placement` green with the new exemption (rules
+  2-4 hold for the spawned suite).
+- First failing assertion per red test: (a) `expect({ count, calls }).toEqual({ count: 1, … })`, received
+  `count: 10` (one `HEAD^{commit}`, nine `<sha>^{commit}`); (b) `toEqual([memory.yaml, dna.yaml, roles.yaml])`,
+  received 10 entries, the 2 templates, `memory.yaml`/`dna.yaml` twice and 3 directives; (c) `count: 5`, received 3;
+  (d) `total: 34`, received 37; (e) `total: 20`, received 34 with the counts above; AC 4 `toEqual([])`, received the
+  seeded directives (read through `readPathAtRev`, which is not spied any more).
+- `npx jest test/cli/run-tests.test.ts test/release-health/latency-report.test.ts test/core/workflow-next.test.ts --maxWorkers=2`
+  → 30 passed. `npx eslint` on the 7 files → exit 0. `tsc --noEmit` on the 5 changed test files (scratch tsconfig
+  extending `tsconfig.json`) → exit 0.
+- Selection: `npx jest --listTests` (default config) does not list either latency suite; `npx jest -c
+  jest.latency.config.js --listTests` lists `command-latency`, `workflow-next-command-latency`, `workflow-next-latency`.
+
+**For session 3.** The spawned suite prints one line, `workflow next (spawned): total …; marginal …; floor …; load …`,
+which `parseLatencyReport`'s command pattern (`: marginal p95`) does not match, and no `latencyReport`. Like
+`command-latency.test.ts`, a loaded run fails its idle cases and still runs the budget cases.
+
 ### Retrospective
 
 None yet.
