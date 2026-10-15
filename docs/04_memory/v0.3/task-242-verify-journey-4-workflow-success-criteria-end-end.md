@@ -316,3 +316,106 @@ script?): SmokeCheck`, one check, never throws).
 `workflow: finalize`: the proxy matches argv by prefix, and the design's step 12 (`workflow finalize --step …`,
 exit 1 expected) runs before step 13, so a correct script fails first at step 12 with `expected exit 1, got 0:
 wingfoil workflow finalize --step …`.
+
+### green (developer, 2026-10-15)
+
+The red rows were read against the design, and none is wrong. The `noop` row's `/workflow:? finalize/` holds: under
+the proxy, step 12's off-frontier `finalize --step` exits 0 and the script fails there first. `JOURNEY_COMMANDS` is
+pinned by prefix. Commits:
+- `3351db7c feat(e2e-smoke): …`. The example `docs/examples/06-workflow-approval/run.sh` (15 steps as designed; every
+  writer is followed by `expect_head <subject>`, a new `lib.sh` helper: HEAD subject + clean tree). Also:
+  `smokeJourney`, `JOURNEY_SCRIPT`, `JOURNEY_COMMANDS` and the `runSmoke` hook after the `smokeAgentRun` loop (no
+  other `runSmoke` line, `smokeAgentRun`, `agentRunSteps` or `invoke` changed: `git diff 1e3a5c64 3351db7c --
+  scripts/e2e-smoke.cjs`); the report's Journey 4 line; P4.13 sc. 4–5 and P4.14 sc. 4 (with `# Revised 2026-10-15`
+  headers; feature files carry no version); `e2e-smoke.yaml` 1.7 → 1.8 (drive-cli description, seven `cli.run`
+  actions, checks unchanged); WORKFLOW.md's E2E Smoke paragraph and drive-cli node; the examples README row ("All
+  five" → "All of them"); user-guide §7's "Full script:" line.
+- **Defect found by the coordinator in my first coverage run, fixed in `bec8ad48 fix(e2e-smoke): …`.**
+  `test/cli/publish-staging.test.ts` runs the smoke with the bare command `wingfoil` (the staging stage smokes the
+  `wingfoil` on `PATH`). The shim wrote `exec 'wingfoil' "$@"` with its own directory first on `PATH`, so it re-exec'd
+  itself forever. That jest run hung for about 2 h holding the slot until the coordinator killed the looping process,
+  and its result is not evidence. Not a red row's argv: the looping caller is publish-staging's pre-existing test (and
+  production staging). Fix: `resolveCommand` resolves a bare `argv[0]` on the caller's `PATH`, skipping the shim's
+  directory (a name with `/` resolved to an absolute path). A name found nowhere fails the check (`could not find <cmd>
+  on PATH`). `spawnSync` gets `timeout: JOURNEY_TIMEOUT_MS` (600 000 ms, `killSignal: 'SIGKILL'`), so a run that never
+  ends fails `timed out after <s> s`.
+  - My own test `test/cli/e2e-smoke-journey-shim.test.ts` (not a red file) pins three things: the bare-name argv
+    resolving to a stub on `PATH` (detail `exit 0, 9 wingfoil commands, OK: stub 9.9.9`), the not-found refusal, and
+    the timeout (`timed out after 1.5 s`).
+  - The timeout is `smokeJourney`'s fifth parameter, which the red commit's `scripts/e2e-smoke.d.cts` does not declare
+    (T4: not edited), so the test loads the script through `require` with its own signature.
+  - `03245b68` removes that test's `Date.now()` assertion, which `test/core/latency-budget-placement.test.ts` rule 1
+    refuses (the only failure of the second coverage run).
+- Red → green: `npx jest test/core/workflow-finalize-bdd.test.ts test/cli/e2e-smoke.test.ts --maxWorkers=2 -t 'task-242
+  Q4|task-242 — the Journey 4 example(?!.*\[Scrum\] a workflow (finalize|start))'` → 20 passed, 57 skipped (red: 4 + 16
+  failed). The full-run rows pass in the full jest run below.
+- Example runs at `3351db7c`: `WINGFOIL="node $PWD/dist/cli.js" WINGFOIL_EXAMPLE_TEMPLATE=<T> bash
+  docs/examples/06-workflow-approval/run.sh` → exit 0 for Scrum and for Kanban; examples 01–05 → exit 0 each.
+- AC classification unchanged from design. No `src/` change: `git diff --stat 1e3a5c64 HEAD -- src` prints nothing.
+
+### refactor (developer, 2026-10-15)
+
+Gates, heavy ones after `waitslot.sh`, `--maxWorkers=2`, logs under `devloop-kit/task-242-scratch/`:
+- Full smoke `node scripts/e2e-smoke.cjs --report … -- node "$PWD/dist/cli.js"` at `bec8ad48` (load 6.1 → 9.4) →
+  `SMOKE_EXIT=0`, `Result: **PASS** (73/73 checks ok)`. Both `[Scrum/journey]` and `[Kanban/journey]` are ok:
+  `exit 0, 17 wingfoil commands, OK: Journey 4: …`. `git diff --stat bec8ad48 03245b68` touches only the shim test.
+- `npx jest --coverage --maxWorkers=2` at `03245b68` (load 3.9 → 3.7) → `JEST_EXIT=0`: 447 suites, 8020 tests passed.
+  Coverage 99.33 / 97.40 / 98.00 / 99.71, none below the B7 baseline 99.33 / 97.38 / 98.00 / 99.71
+  (`memory-transition.ts` 468, 560 uncovered in this run, bug-361's run-dependent lines). This run is the full
+  `npm test` evidence as well: the same jest config, latency suites excluded either way.
+- `npm run lint` exit 0; `npm run typecheck` exit 0; `npm run docs:api` exit 0.
+- `node scripts/lint-claims.cjs --base 2de79ef9` → 7 warn-only warnings. Two are in task-282's notes. In this file
+  there are four on the design's step list (expected outcomes such as "HEAD unchanged", which the script asserts) and
+  one in red's notes.
+- `node dist/cli.js workflow show e2e-smoke --format json` → 0 errors, 4 phases (baseline `03245b68`).
+
+**AC 2 (preview at the branch head `03245b68`; per ruling D4 the gate re-runs it on the integrated head).**
+- `workflow list --all --format json` → exit 0, 27 workflows, 0 errors. Its warnings: 87 `W_WORKFLOW_UNBOUND_TOKEN`
+  and 6 `W_MEMORY_UNREADABLE`, the latter the frontmatter-less pre-dl-019 plans under `docs/05_plans/rl-v1/`
+  (bug-315's class).
+- `workflow show <name> --format json` on each of the 27 → exit 0, 0 errors each.
+- `workflow status` → exit 0, recorded in `devloop-kit/task-242-scratch/ac2-status-03245b68.txt`. It shows:
+  - 9 open instances, all hand-started and at `capture` with no element: the 8 `decision-log-ingest-rel-v0.3-*-plan`
+    instances (gate-concurrency, active; consumer-feedback-loop, parallel-release-lines, file-format-key,
+    docs-showcase, benchmark-cost-finding, market-decisions, agents-md) and `service-ingest-rel-v0.3-listings-plan`;
+  - 0 pending approvals, 52 ungated elements, 93 diagnostics.
+  - The 8 decision-log-ingest instances stay open and are recorded here (ruling D3). spec-017 §12's one-instance list
+    is a note for bug-315's class, not an amendment.
+
+**AC 3.** The runbook is `/home/robypomper/Workspaces/.wf2-wt/devloop-kit/task-242-runbook.md` (blocks 0–7, the
+record template). Blocks 1–3, 4a and 5–7 were probed on this dev build in a scratch project with another identity,
+every exit and line as the runbook expects (`probe.log`). Block 4b, the Claude Code launch, was not probed and is the
+approver's. The approver's record goes here as `### AC 3 — by hand (approver)` before submit.
+
+### self-review (developer, 2026-10-15)
+
+- AC 1 met: the example passes on a fresh project for both templates (above).
+- AC 2 previewed: zero errors on list and on all 27 shows; the integrated-head run is the gate's.
+- AC 3: runbook ready, run pending (approver).
+- AC 4 met: P4.13 sc. 4–5 and P4.14 sc. 4 written and bound in `test/core/workflow-finalize-bdd.test.ts`.
+- AC 5 met: the smoke runs the journey per template after the agent run, and fails on a wrong exit or a missing
+  record (the proxy rows).
+- T4: `git log --first-parent --no-merges --format=%h 8ebe99cd..HEAD -- scripts/e2e-smoke.d.cts
+  test/cli/e2e-smoke.test.ts test/core/workflow-finalize-bdd.test.ts test/fixtures/smoke/wingfoil-proxy.cjs` → empty.
+- Same class as the shim defect: no other smoke step writes a shim. `grep -n "writeFileSync" scripts/e2e-smoke.cjs`
+  → the report and the shim only.
+
+### Handovers
+
+- **e2e-smoke phase (v0.3):** re-run AC 2's three commands on the release candidate (D4), with `node
+  scripts/e2e-smoke.cjs --candidate` covering the journey.
+- **service-ingest-rel-v0.3-listings-plan:** close it by hand (`wf(plan): finalize … [active → done]`, spec-017 §12)
+  once svc-012 is decided. svc-012 is still `pending` (`grep -m1 '^status' docs/04_memory/services/svc-012-*.md`), so
+  this is the e2e-smoke / release-submit phase's (D4).
+- The 8 hand-started decision-log-ingest instances close by hand with their decision-logs' ratification (D3).
+
+### Pending amendments (approver)
+
+None. bug-327 and bug-328 already carry `### Retrospective` with "None." (`grep -A2 "### Retrospective"
+docs/04_memory/bugs/bug-32[78]-*.md`), and nothing more needs saying there.
+
+### Retrospective
+
+- A test harness that runs the CLI by a bare name (`wingfoil` on `PATH`) is a real caller of every smoke step. A shim
+  that prepends itself to `PATH` must never exec a bare name. The bound on the run turned a hang into a failed check.
+- The full-suite gate at load ~150 ran 7322 s. The slot rule (load ≤ 14) is what made the later runs meaningful.
