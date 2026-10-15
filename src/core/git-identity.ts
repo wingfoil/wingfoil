@@ -10,7 +10,7 @@
  * it identically by construction (REQ-SYS-05) — a mutation calls it first and returns its
  * `CoreResult.error` unchanged, so the surface renders the exact message and writes nothing.
  */
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 import { coreErr, coreOk, type CoreResult } from './types';
 
@@ -21,34 +21,49 @@ const IDENTITY_ERROR = 'git identity not configured (user.name/user.email)';
 const IDENTITY_KEYS = /^(author|committer|user)\.(name|email)$/;
 
 /**
+ * What {@link readIdentityConfig} found: the effective config values, or the reason git could not be
+ * run at all (task-284, `bug-377`).
+ */
+type IdentityConfig =
+  | { readonly ran: true; readonly values: ReadonlyMap<string, string> }
+  | { readonly ran: false; readonly cause: string };
+
+/**
  * The effective values of `author.*`, `committer.*` and `user.*` (`name`, `email`) at `root`, in ONE
  * `git config` subprocess. `--get-regexp` lists every scope's entry, lowest precedence first
  * (system, global, local), so the last value seen for a key is the effective one, exactly as
- * `git config <key>` would answer. `-z` keeps a value with unusual bytes intact. A key that is unset
- * is simply absent, and so is every key when git exits non-zero (no match, or not a repository) —
- * the same "empty means unconfigured" contract the check relies on.
+ * `git config <key>` would answer. `-z` keeps a value with unusual bytes intact.
+ *
+ * Three outcomes (task-284, `bug-377`):
+ *
+ * - **git could not be run** — the spawn itself failed (`ENOENT`: no `git` on `PATH`; `EACCES`: not
+ *   executable; `EPERM`: a sandbox forbids it), so git never answered: `ran: false`, with the spawn
+ *   error's message (`spawnSync git ENOENT`) as the cause. Before task-284 this read as "no value", and
+ *   the check sent the user to configure an identity that may have been right.
+ * - **git ran and exited non-zero** — `1` when no key matches, `128` for a root git cannot enter or a
+ *   config file it cannot parse, or a signal: every key is absent, the "empty means unconfigured"
+ *   contract the check relies on, kept on purpose for these exits (the approver's ruling on task-284,
+ *   D2).
+ * - **exit `0`** — the values git printed. A key that is unset is simply absent.
  */
-function readIdentityConfig(root: string): ReadonlyMap<string, string> {
-  let output: string;
-  try {
-    // `env: process.env` is passed explicitly (identical to the default in production): it makes git's
-    // config resolution follow the current environment by design, so a caller/test can scope it via
-    // `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`/`GIT_CONFIG_NOSYSTEM` deterministically.
-    output = execFileSync('git', ['-C', root, 'config', '-z', '--get-regexp', IDENTITY_KEYS.source], {
-      encoding: 'utf-8',
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-  } catch {
-    return new Map();
-  }
+function readIdentityConfig(root: string): IdentityConfig {
+  // `env: process.env` is passed explicitly (identical to the default in production): it makes git's
+  // config resolution follow the current environment by design, so a caller/test can scope it via
+  // `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`/`GIT_CONFIG_NOSYSTEM` deterministically.
+  const run = spawnSync('git', ['-C', root, 'config', '-z', '--get-regexp', IDENTITY_KEYS.source], {
+    encoding: 'utf-8',
+    env: process.env,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (run.error !== undefined) return { ran: false, cause: run.error.message };
   const values = new Map<string, string>();
-  for (const record of output.split('\0')) {
+  if (run.status !== 0) return { ran: true, values };
+  for (const record of run.stdout.split('\0')) {
     const newline = record.indexOf('\n');
     if (newline < 0) continue;
     values.set(record.slice(0, newline), record.slice(newline + 1).trim());
   }
-  return values;
+  return { ran: true, values };
 }
 
 /**
@@ -130,9 +145,14 @@ function hasUnsafeIdentityCharacter(value: string): boolean {
  * One `git config` subprocess (it used to be two per read, and an approval read three times — six
  * subprocesses, `dl-064` Context (ii)). Called once per operation, by {@link requireGitIdentity}; the
  * result is passed on, never re-read (`dl-064` B.1).
+ *
+ * A git that cannot be run resolves nothing here: both fields are `''`, as before task-284. Only
+ * {@link requireGitIdentity} turns that case into its own refusal; this reader has no error channel
+ * and its read-only caller (`workflow next --assigned-to me`) treats an unresolved email as no member.
  */
 export function readGitIdentity(root: string): GitIdentity {
-  return resolveIdentity(readIdentityConfig(root), 'author');
+  const config = readIdentityConfig(root);
+  return resolveIdentity(config.ran ? config.values : new Map(), 'author');
 }
 
 /**
@@ -140,14 +160,18 @@ export function readGitIdentity(root: string): GitIdentity {
  * mutating operation runs this before it reads or writes anything else (REQ-SEC-01), so a refusal
  * leaves the repository exactly as it was.
  *
- * Two refusals, both `CoreResult.error` code `VALIDATION` (exit `1` by `exitCodeForError`):
+ * Three refusals, all exit `1` by `exitCodeForError`:
  *
- * - **Unresolved** — the author's or the committer's name or email does not resolve
+ * - **git could not be run** (`IO`, task-284, `bug-377`) — the `git config` spawn itself failed
+ *   ({@link readIdentityConfig}): `could not run git: <cause>`, the cause being the spawn error's
+ *   message (`spawnSync git ENOENT`). git is the storage, so this is a failure of the storage, not of
+ *   the identity, and REQ-SEC-01's message would point the user at the wrong thing.
+ * - **Unresolved** (`VALIDATION`) — the author's or the committer's name or email does not resolve
  *   ({@link resolveField}): REQ-SEC-01's exact message. The committer is checked too because
  *   `git commit` refuses without one: an author supplied by `GIT_AUTHOR_*` or `author.*` alone passed
  *   this check after task-132's first pass, and `git commit` then died on "Committer identity
  *   unknown" AFTER the document had been written and staged (task-132 review, finding 1).
- * - **Unusable** — one of the four values holds `<`, `>` or a control character
+ * - **Unusable** (`VALIDATION`) — one of the four values holds `<`, `>` or a control character
  *   ({@link hasUnsafeIdentityCharacter}): `git identity not usable: the <role> <field> contains '<',
  *   '>' or a control character`.
  *
@@ -155,7 +179,9 @@ export function readGitIdentity(root: string): GitIdentity {
  * the `Approver:` line and the commit author (`dl-064` B.1, task-132) — never read again.
  */
 export function requireGitIdentity(root: string): CoreResult<GitIdentity> {
-  const config = readIdentityConfig(root);
+  const read = readIdentityConfig(root);
+  if (!read.ran) return coreErr({ code: 'IO', message: `could not run git: ${read.cause}` });
+  const config = read.values;
   const author = resolveIdentity(config, 'author');
   const committer = resolveIdentity(config, 'committer');
   if (!isConfiguredIdentity(author.name, author.email) || !isConfiguredIdentity(committer.name, committer.email)) {
