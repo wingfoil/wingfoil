@@ -108,3 +108,17 @@ ratified per item with the five.
     to the root) leaves the static metrics `not-measurable`; v0.1 and v0.2 are measurable only with `--at` a later
     commit (`sed -n 64,66p scripts/release-health/measure.cjs`), which measures a different tree. State whether the
     backfill uses `--at` and how the report marks it.
+
+**Note (2026-10-15, approver triage of the W3 B7 follow-ups, item E3; `bug-ingest-rel-v0.3-w3b7-review-findings-plan`).**
+One more definition a choice fixes, from `task-241`'s independent review (`compare.cjs`). It extends the list above,
+to be ratified per item with the others; the Decision above is unchanged.
+
+12. **Q08 (dependency footprint), the install-size half.** The catalogue gives Q08 `kind: floor` (`floor: 0 unused
+    runtime dependencies`) and `direction: down` "for the install size half" ("consumer install size of the packed
+    tarball (trend down)", `grep -n -A8 "id: Q08" docs/08_health/metrics.yaml`). Under the approver's ruling H of
+    2026-10-13 (`task-241`), floors get a trend verdict but yield a finding only from a breach (`sed -n 26,31p
+    scripts/release-health/compare.cjs`: findings are "every breached floor, and every regressed `kind: trend`
+    metric"); `compare.cjs` compares both halves (line 117) and evaluates the floor on the unused dependencies alone
+    (line 164). So a 50 % larger install with no unused dependency is `regressed` and gives no finding. Choose: (a)
+    intended, the catalogue's "trend down" is a verdict only and says so; (b) the install size becomes its own `kind:
+    trend` metric (a catalogue bump), so a regression is a finding.
