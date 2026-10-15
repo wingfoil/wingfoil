@@ -7,6 +7,8 @@
  * - {@link loadWorkflowRegistryAtRev} / {@link loadWorkflowRegistryAtHead} — the committed baseline
  *   `spec-017` §1.1 gives every workflow operation (`HEAD`): the workflow files, `bindings.yaml`,
  *   `memory.yaml`, `dna.yaml` and the Memory templates are all read at one commit, resolved once;
+ *   {@link loadWorkflowRegistryAtCommit} is the same read for a commit the caller has already resolved
+ *   (the workflow deduction's snapshot, task-283);
  * - {@link loadWorkflowRegistry} — the working tree. No workflow command reads it since task-204 moved
  *   `workflow list` to `HEAD` (ruling R15); it stays for callers that read the working tree on purpose.
  *

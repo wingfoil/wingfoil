@@ -3,7 +3,7 @@
  * §4.8), and the deduction at `HEAD` every workflow consumer calls.
  *
  * {@link readDeductionSnapshotAtHead} is the one impure step: it resolves `HEAD` once and reads every
- * input at that sha — the workflow registry with its core checks (`loadWorkflowRegistryAtRev`),
+ * input at that sha — the workflow registry with its core checks (`loadWorkflowRegistryAtCommit`),
  * `memory.yaml`, `dna.yaml`, every Memory document in sorted path order (tolerant, task-171), the file
  * list, each open plan's start commit and what each instance's walk holds (phase records, step linkages,
  * re-entries) — plus, to **explain** and never to decide, the working-tree paths among the inputs that
@@ -449,7 +449,6 @@ function readCollections(workflows: readonly Workflow[], dnaYaml: DnaYaml | null
   return collections;
 }
 
-/** The snapshot of a repository with nothing committed: no instance can be open. */
 /** `read`, called at most once: later calls answer the first call's value. */
 function once<T>(read: () => T): () => T {
   let done = false;
@@ -463,6 +462,7 @@ function once<T>(read: () => T): () => T {
   };
 }
 
+/** The snapshot of a repository with nothing committed: no instance can be open. */
 function emptySnapshot(): DeductionSnapshot {
   return {
     commit: '',
