@@ -68,6 +68,17 @@ above) that the in-process REQ-PERF-03 check is enough for v0.3; the spawned-tot
 a refactor of the deduction's snapshot loading, which belongs with v0.4's planning, not a v0.3 batch. The `release`
 field was reassigned by a hand `wf(bug): assign release v0.4` commit, since `memory amend` does not own `release`.
 
+**Note (2026-10-15, moved from v0.4 back to v0.3 at the approver's triage of the W3 B7 follow-ups, item A1;
+`bug-ingest-rel-v0.3-w3b7-review-findings-plan`).** The headroom is gone: the opt-in latency pass (`npm run
+test:latency`, idle, n = 25) measured `workflow next`'s p95 at 476 ms at the B6 gate `1c66ef31`, 1,005 ms at
+`856f3489` (`task-280`'s head, `main` `32d8871b` plus tests only: over the 1,000 ms budget), 968 ms at `507848a5`
+and 911 ms at the B7 gate `6e454f40` (load about 2). `main` without B7's code is as slow, so the cost grows with the
+repository rather than with one batch. The ruling of 2026-10-10 that left the spawn reduction to v0.4 no longer
+holds: the new fix task `task-283-cut-the-git-spawns-of-workflow-next-so-its-p95-is-back-under-req-perf-03-s-budget-with-margin`
+(wave 3, batch B8, `kind: fix`, `priority: high`) names this bug and cuts the spawns per call, never the budget. The
+`release` field was reassigned by a hand `wf(bug): assign release v0.3` commit, since `memory amend` does not own
+`release`.
+
 ### Retrospective
 
 None.
