@@ -2,7 +2,7 @@
 id: "task-245-correct-x-cli-cmds-md-stale-claims-unify"
 type: task
 title: "Correct `X_cli-cmds.md`'s stale claims, unify positional notation and add every v0.3 command row"
-status: in-review
+status: approved
 release: "v0.3"
 kind: "fix"
 priority: "medium"
