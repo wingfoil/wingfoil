@@ -56,6 +56,21 @@ read-only, on 2026-10-15:
 
 ## Execution Notes
 
+- **2026-10-15 — capture and approve done.** Before writing, the `verify` read was re-run and printed the same six
+  values; so did the four-key read the approver ran. `svc-022-branch-protection-of-main-on-wingfoil-wingfoil-required-governance-check`
+  added (`814b7bac`), filled and submitted (`ff0f8a0d`, `draft → pending`; the spec-007 `scanText` on the file → no
+  blocking finding, no warning), then approved on the approver's instruction (`548d041b`, `pending → active`, the
+  `verify` output as the `Reason:`, no AI trailer). The six-key read is the element's `verify`, so `strict` and
+  `reviews` are checked too. `task-208`'s AC 5 is met by it.
+- **Checks:** `node scripts/check-governance.cjs --base ffa9bf6b` → `gated: 0 findings`, `history: 0 findings`,
+  exit 0 (13 `wf()` commits before this amendment); `npx jest test/docs --maxWorkers=2` → 23 suites, 229 / 229 passed.
+- Not pushed; the merge into `main` is the approver's.
+
 ### Retrospective
 
-- None yet.
+- An addition to an ingest arrived after its plan was finalized (`747e918f`), so it took a second plan on the same
+  branch rather than reopening the first: `done` has no edge back to `active`. Proposal: none; the two-plan shape
+  costs two commits and keeps each plan's record closed.
+- With `enforce_admins` off, a direct push to `main` is checked only after the fact by `governance.yml`'s `push` run
+  (`svc-022` Configuration); the pre-push hook (`git config core.hooksPath .githooks`, git-conventions §9) is the
+  only check before such a push.
