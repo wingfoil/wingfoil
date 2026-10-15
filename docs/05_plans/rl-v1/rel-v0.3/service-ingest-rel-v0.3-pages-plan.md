@@ -69,6 +69,23 @@ No branch protection is recorded here: it is not set up yet.
 
 ## Execution Notes
 
+- **2026-10-15 — capture, approve and amendment done.** The three read-only reads in Context were re-run before
+  writing and printed the same values. `svc-021-github-pages-site-of-wingfoil-wingfoil` added (`a573137c`), filled
+  and submitted (`6c374089`, `draft → pending`; the spec-007 `scanText` on the file → no blocking finding, no
+  warning), then approved on the approver's instruction (`44e0a0ce`, `pending → active`, the `verify` output as
+  the `Reason:`, no AI trailer). `svc-004-github-repository-settings` amended (`469cb837`, `active → active`):
+  the homepage line names the documentation site and the npm URL before it, the 2026-09-29 Verification readings
+  are kept and one dated sentence is added, `decision:` unchanged; the `Reason:` is task-234's proposed one.
+- **Deviation recorded, not corrected:** Pages `status` read `null`, not the handover's expected `built`; the site
+  itself answered `HTTP/2 200` on all four paths. `svc-021` records the value as observed.
+- **Trigger wording:** `pages.yml`'s `on.push.tags` is `v[0-9]+.[0-9]+.[0-9]+`; the environment rule `v*` is wider
+  and admits those tags. `svc-021` cites both as they are.
+- **Checks:** `node scripts/check-governance.cjs --base ffa9bf6b` → `gated: 0 findings`, `history: 0 findings`,
+  exit 0 (6 `wf()` commits before this amendment); `npx jest test/docs --maxWorkers=2` → 23 suites, 229 / 229 passed.
+- Not pushed; the merge into `main` is the approver's.
+
 ### Retrospective
 
-- None yet.
+- Pages `status` reads `null` on a site that serves 200 (`gh api repos/wingfoil/wingfoil/pages --jq .status` →
+  `null`, 2026-10-15): `status` is not a reliable `verify` signal for a workflow-source site. Proposal: a later
+  `verify` of `svc-021` also reads the latest `pages.yml` run (`gh run list --workflow pages.yml --limit 1`).
