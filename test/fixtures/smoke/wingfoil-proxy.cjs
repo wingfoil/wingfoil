@@ -15,7 +15,8 @@
  *   - `mute` — forward, but drop the CLI's stderr (a non-zero exit with no spec-005 §3 error);
  *   - `dirty` — forward, then leave an untracked file in the working directory (an uncommitted write);
  *   - `corrupt` — forward, then overwrite the file the new HEAD commit touched with unparseable
- *     frontmatter and commit that, so the tree stays clean (a schema-invalid artifact a writer left).
+ *     frontmatter and commit that, so the tree stays clean (a schema-invalid artifact a writer left);
+ *   - `noop` — task-242: do not forward; exit 0 with no output (a command that claims success and writes nothing).
  */
 'use strict';
 
@@ -34,6 +35,8 @@ if (args[0] === '--version' && process.env.SMOKE_STAMP !== undefined) {
 const fault = /^([a-z]+)(?:=(\d+))?@(.+)$/.exec(process.env.SMOKE_FAULT ?? '');
 const hit = fault !== null && args.join(' ').startsWith(fault[3]);
 const kind = hit ? fault[1] : 'none';
+
+if (kind === 'noop') process.exit(0);
 
 const run = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf-8' });
 process.stdout.write(run.stdout ?? '');
