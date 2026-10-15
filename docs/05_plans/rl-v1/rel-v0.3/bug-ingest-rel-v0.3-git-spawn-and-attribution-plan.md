@@ -73,6 +73,34 @@ commit; before filing, a scan of the Memory folders of every local and remote-tr
 
 ## Execution Notes
 
+- **capture, triage and amendments (2026-10-15)** on `ingest/wfcoord-launch-and-git-identity`. Each tool-written
+  commit was checked for exit code 0 and exactly one file (`git show --format= --name-only HEAD | grep -c .` → `1`
+  after every commit), and every body for control, format and separator code points other than tab and newline
+  before its submit (0 found). The approve commit carries no AI trailer; every other commit carries both
+  (`git-conventions` §7).
+
+  | Element | Status | Release | add / submit / approve / assign / sync |
+  |---|---|---|---|
+  | `bug-377` a git that cannot be run is reported as `git identity not configured` (`readIdentityConfig` swallows every spawn failure) (medium) | `planned` | v0.3 | `23b3df27` / `12a7f3ac` / `b60e8598` / `866841f9` / `81519624` |
+  | `task-284` report `could not run git: <cause>`, keep REQ-SEC-01's message for an unset identity (`kind: fix`, `priority: high`, size S, W3 B8, `bug: [bug-377]`, `depends_on: [task-014, task-132]`) | `pending` | v0.3 | `fe406032` / `bb7ef053` / — / — / — |
+
+  Amendments: `task-252` (`55d06680`, the `AGENTS.md` it writes carries the `git-conventions` §7 attribution rule;
+  a dated handover in Implementation Notes, no criterion changes); `dl-180` (`12b6db18`, a dated note: the
+  `AGENTS.md` that `init` generates for user projects should carry the same rule). Plan add `2c98bf38`, submit
+  `648702be`.
+- **Deviation: one extra amend of `bug-377` before triage** (`62860a01`). Its first submit stated that the positive
+  case of Steps to Reproduce (git runnable) was refused by the dry run's own checks; re-run, `node dist/cli.js memory
+  add --type bug --title x --dry-run` exits `0` and prints its plan. Corrected by `memory amend` while `open`, before
+  the approve.
+- **Reproduction** on the code build of `b8dcb2df`: with an empty directory as `PATH`, and with a non-executable
+  file named `git` first on `PATH` (the spawn fails with `EACCES`), `memory add … --dry-run` → `error: git identity
+  not configured (user.name/user.email)`, exit `1`; with git on `PATH` → exit `0`. `git config --get-regexp` with no
+  match exits `1` (fresh repository, `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1`); for a root git cannot
+  enter it exits `128`.
+- **Checks:** `node scripts/check-governance.cjs --base b8dcb2df` → `gated: 0 findings`, `history: 0 findings`;
+  `npx jest test/docs --maxWorkers=2` → 23 suites, 229 tests passed.
+
 ### Retrospective
 
-None yet.
+- A sandboxed agent CLI blocked Node's spawn of git, and the only message WingFoil gave named the wrong cause:
+  `bug-377`. Evidence: the reproduction above. Proposal: none beyond `task-284`.
