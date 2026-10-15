@@ -68,6 +68,7 @@ export {
   listMemoryDocumentPathsAtRev,
   listMemoryDocumentsByType,
   loadMemoryDocuments,
+  loadMemoryDocumentsAtCommit,
   loadMemoryDocumentsAtRev,
   loadTypeDocumentCopiesAtRevs,
   loadMemoryDocumentSummary,

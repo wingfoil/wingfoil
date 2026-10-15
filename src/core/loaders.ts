@@ -253,9 +253,24 @@ export function loadMemoryYamlAtHead(root: string): MemoryYaml | null {
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty answer.
  */
 export function loadMemoryYamlAtRev(root: string, rev: string): MemoryYaml | null {
-  const raw = readPathAtRev(root, resolveRevision(root, rev), MEMORY_YAML_PATH);
+  return memoryYamlAt(root, resolveRevision(root, rev), rev);
+}
+
+/**
+ * {@link loadMemoryYamlAtRev} for a `sha` already resolved to a commit (`resolveRevision`, `./revision.ts`),
+ * read without resolving it again: a reader that reads several pillars at one commit resolves it once
+ * (task-283, `bug-309`: the workflow deduction's snapshot).
+ *
+ * @param sha - The full sha of a commit, as `resolveRevision` returned it; parse errors name it.
+ */
+export function loadMemoryYamlAtCommit(root: string, sha: string): MemoryYaml | null {
+  return memoryYamlAt(root, sha, sha);
+}
+
+function memoryYamlAt(root: string, sha: string, label: string): MemoryYaml | null {
+  const raw = readPathAtRev(root, sha, MEMORY_YAML_PATH);
   if (raw === null) return null;
-  return parseMemoryYaml(raw, `${rev}:${MEMORY_YAML_PATH}`);
+  return parseMemoryYaml(raw, `${label}:${MEMORY_YAML_PATH}`);
 }
 
 /**
@@ -353,9 +368,23 @@ export function loadDnaYamlAtHead(root: string): DnaYaml | null {
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty answer.
  */
 export function loadDnaYamlAtRev(root: string, rev: string): DnaYaml | null {
-  const raw = readPathAtRev(root, resolveRevision(root, rev), DNA_YAML_PATH);
+  return dnaYamlAt(root, resolveRevision(root, rev), rev);
+}
+
+/**
+ * {@link loadDnaYamlAtRev} for a `sha` already resolved to a commit, read without resolving it again
+ * (task-283, `bug-309`).
+ *
+ * @param sha - The full sha of a commit, as `resolveRevision` returned it; parse errors name it.
+ */
+export function loadDnaYamlAtCommit(root: string, sha: string): DnaYaml | null {
+  return dnaYamlAt(root, sha, sha);
+}
+
+function dnaYamlAt(root: string, sha: string, label: string): DnaYaml | null {
+  const raw = readPathAtRev(root, sha, DNA_YAML_PATH);
   if (raw === null) return null;
-  return parseDnaYaml(raw, `${rev}:${DNA_YAML_PATH}`);
+  return parseDnaYaml(raw, `${label}:${DNA_YAML_PATH}`);
 }
 
 /** The result of loading the Workflow pillar: the Layer-1 manifest plus every Layer-2 file it includes. */
@@ -479,7 +508,21 @@ export function loadWorkflowsYaml(root: string): WorkflowsLoadResult {
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty registry.
  */
 export function loadWorkflowsYamlAtRev(root: string, rev: string, overlay: ReadonlyMap<string, string | null> = new Map()): WorkflowsLoadResult {
-  const sha = resolveRevision(root, rev);
+  return workflowsYamlAt(root, resolveRevision(root, rev), rev, overlay);
+}
+
+/**
+ * {@link loadWorkflowsYamlAtRev} for a `sha` already resolved to a commit, read without resolving it
+ * again (task-283, `bug-309`).
+ *
+ * @param sha - The full sha of a commit, as `resolveRevision` returned it; labels name it.
+ * @param overlay - As {@link loadWorkflowsYamlAtRev}'s.
+ */
+export function loadWorkflowsYamlAtCommit(root: string, sha: string, overlay: ReadonlyMap<string, string | null> = new Map()): WorkflowsLoadResult {
+  return workflowsYamlAt(root, sha, sha, overlay);
+}
+
+function workflowsYamlAt(root: string, sha: string, rev: string, overlay: ReadonlyMap<string, string | null>): WorkflowsLoadResult {
   const committedPath = (file: string): string => posix.normalize(`.wingfoil/${file}`);
   // The included files and `bindings.yaml`, read in one `cat-file --batch` once the manifest names them
   // (task-216, REQ-PERF-03: one spawn instead of one per workflow file).
@@ -783,26 +826,41 @@ export function loadDirectivesAtHead(root: string): DirectiveFile[] {
  * Load and validate every Directives file **as commit `rev` holds it** (task-137, `spec-012` §2
  * `stateRef`) — the general form of {@link loadDirectivesAtHead}, which is this at `'HEAD'`: the
  * `.md` files `storage.listPathsAtRev` lists under `.wingfoil/directives/` at that commit, in its
- * sorted order, each read with `storage.readPathAtRev` at the resolved sha. An empty array when the commit holds no
+ * sorted order, all read in one batch with `storage.readPathsAtRev` at the resolved sha (task-283). An empty array when the commit holds no
  * directive file; a later commit and the working tree are never read.
  *
  * @param rev - A revision naming one commit, resolved once (`resolveRevision`, `./revision.ts`).
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty array.
  */
 export function loadDirectivesAtRev(root: string, rev: string): DirectiveFile[] {
-  const sha = resolveRevision(root, rev);
+  return directivesAt(root, resolveRevision(root, rev), rev);
+}
+
+/**
+ * {@link loadDirectivesAtRev} for a `sha` already resolved to a commit, read without resolving it again
+ * (task-283, `bug-309`: `workflow next`, `status` and `show` read the directives at their snapshot's commit).
+ *
+ * @param sha - The full sha of a commit, as `resolveRevision` returned it; parse errors name it.
+ */
+export function loadDirectivesAtCommit(root: string, sha: string): DirectiveFile[] {
+  return directivesAt(root, sha, sha);
+}
+
+function directivesAt(root: string, sha: string, label: string): DirectiveFile[] {
+  const paths = listPathsAtCommit(root, sha, DIRECTIVES_DIR_PATH).filter((path) => path.endsWith('.md'));
+  // One batched read (`readPathsAtRev`, one `git cat-file --batch`) for every directive, not one `git show`
+  // each (task-283, `bug-309`: 13 spawns per `workflow next` on this repository). `task-096`'s suite pins
+  // this read by name, through the `../storage` barrel.
+  const raws = readPathsAtRev(root, sha, paths);
   const files: DirectiveFile[] = [];
-  for (const path of listPathsAtCommit(root, sha, DIRECTIVES_DIR_PATH)) {
-    if (!path.endsWith('.md')) continue;
-    // One read per file, not the batched `readPathsAtRev`: a project holds a handful of directives,
-    // and task-096's suite pins this read (`readPathAtRev`) by name.
-    const raw = readPathAtRev(root, sha, path);
+  paths.forEach((path, index) => {
+    const raw = raws[index] ?? null;
     // Unreachable by construction — git has just listed this blob at the same sha. Skipping is still
     // the fail-closed answer: a directive nobody can read is a directive that does not exist, so a
     // binding to it is refused rather than committed.
-    if (raw === null) continue;
-    files.push(parseDirectiveFile(raw, `${rev}:${path}`, path.slice(DIRECTIVES_DIR_PATH.length + 1)));
-  }
+    if (raw === null) return;
+    files.push(parseDirectiveFile(raw, `${label}:${path}`, path.slice(DIRECTIVES_DIR_PATH.length + 1)));
+  });
   return files;
 }
 
@@ -860,7 +918,21 @@ export function loadRolesYamlAtHead(root: string): RolesYaml | null {
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty answer.
  */
 export function loadRolesYamlAtRev(root: string, rev: string): RolesYaml | null {
-  const raw = readPathAtRev(root, resolveRevision(root, rev), ROLES_YAML_PATH);
+  return rolesYamlAt(root, resolveRevision(root, rev), rev);
+}
+
+/**
+ * {@link loadRolesYamlAtRev} for a `sha` already resolved to a commit, read without resolving it again
+ * (task-283, `bug-309`).
+ *
+ * @param sha - The full sha of a commit, as `resolveRevision` returned it; parse errors name it.
+ */
+export function loadRolesYamlAtCommit(root: string, sha: string): RolesYaml | null {
+  return rolesYamlAt(root, sha, sha);
+}
+
+function rolesYamlAt(root: string, sha: string, rev: string): RolesYaml | null {
+  const raw = readPathAtRev(root, sha, ROLES_YAML_PATH);
   if (raw === null) return null;
   const label = `${rev}:${ROLES_YAML_PATH}`;
   const data = parseYaml(raw, label);

@@ -20,17 +20,17 @@ import { join, posix } from 'path';
 
 import type { DnaYaml } from '../dna/schema';
 import type { MemoryYaml } from '../memory/schema';
-import { extractFrontmatter, readDocument, readPathAtRev } from '../storage';
+import { extractFrontmatter, readDocument, readPathAtRev, readPathsAtRev } from '../storage';
 import { DiagnosticsError, parseYaml } from '../validation';
 
 import {
   ConfigFileMissingError,
   loadDnaYaml,
-  loadDnaYamlAtRev,
+  loadDnaYamlAtCommit,
   loadMemoryYaml,
-  loadMemoryYamlAtRev,
+  loadMemoryYamlAtCommit,
   loadWorkflowsYaml,
-  loadWorkflowsYamlAtRev,
+  loadWorkflowsYamlAtCommit,
   type WorkflowsLoadResult,
 } from './loaders';
 import { atHeadOr, resolveRevision } from './revision';
@@ -45,6 +45,29 @@ interface PillarSource {
   dnaYaml(): DnaYaml | null;
   /** A file under `.wingfoil/`, by its path relative to it, or `null` when absent. */
   configFile(relative: string): string | null;
+  /**
+   * Read `relatives` ahead, in one batch, for the {@link configFile} calls that follow (task-283,
+   * `bug-309`: the Memory templates, one `git cat-file --batch` instead of one `git show` each). Absent:
+   * each `configFile` reads on its own (the working tree).
+   */
+  prefetchConfigFiles?(relatives: readonly string[]): void;
+}
+
+/**
+ * The `memory.yaml` and `dna.yaml` a caller has already loaded at the registry's commit, handed to the
+ * core checks so that one snapshot reads and parses each once (task-283, `bug-309`). Each is called at
+ * most once, at the point the checks would have read the file, so the order of reads and errors is the
+ * one {@link loadWorkflowRegistryAtRev} has.
+ */
+export interface RegistryPillars {
+  readonly memoryYaml: () => MemoryYaml | null;
+  readonly dnaYaml: () => DnaYaml | null;
+}
+
+/** The template files `memoryYaml` declares, as paths relative to `.wingfoil/`, sorted, each once. */
+function declaredTemplateFiles(memoryYaml: MemoryYaml | null): string[] {
+  const files = Object.values(memoryYaml?.types ?? {}).flatMap((type) => (type.template?.file === undefined ? [] : [type.template.file]));
+  return [...new Set(files)].sort();
 }
 
 /** `.wingfoil/<relative>` as a repository-relative POSIX path, or `null` when it leaves `.wingfoil/`. */
@@ -70,6 +93,7 @@ function withCoreChecks(load: WorkflowsLoadResult, source: PillarSource): Workfl
   if (load.manifest === null) return load;
   const memoryYaml = source.memoryYaml();
   const dnaYaml = source.dnaYaml();
+  source.prefetchConfigFiles?.(declaredTemplateFiles(memoryYaml));
   const fieldsByType = new Map<string, ReadonlySet<string> | null>();
   const templateFields = (type: string): ReadonlySet<string> | null => {
     if (!fieldsByType.has(type)) {
@@ -129,13 +153,42 @@ export function loadWorkflowRegistry(root: string): WorkflowsLoadResult {
  *   (`VALIDATION`) when the loader or a core check reports an error.
  */
 export function loadWorkflowRegistryAtRev(root: string, rev: string, overlay?: ReadonlyMap<string, string | null>): WorkflowsLoadResult {
-  const sha = resolveRevision(root, rev);
-  return withCoreChecks(loadWorkflowsYamlAtRev(root, sha, overlay), {
-    memoryYaml: () => loadMemoryYamlAtRev(root, sha),
-    dnaYaml: () => loadDnaYamlAtRev(root, sha),
+  return loadWorkflowRegistryAtCommit(root, resolveRevision(root, rev), overlay);
+}
+
+/**
+ * {@link loadWorkflowRegistryAtRev} for a `sha` already resolved to a commit, read without resolving it
+ * again (task-283, `bug-309`): the workflow deduction's snapshot resolves `HEAD` once and reads every
+ * pillar at that sha. The Memory templates the core checks read are fetched in one batch.
+ *
+ * @param sha - The full sha of a commit, as `resolveRevision` returned it.
+ * @param overlay - As {@link loadWorkflowRegistryAtRev}'s.
+ * @param pillars - `memory.yaml` and `dna.yaml` as the caller already loads them at `sha`
+ *   ({@link RegistryPillars}); absent, the checks load them at `sha` themselves.
+ * @throws `DiagnosticsError` (`VALIDATION`) when the loader or a core check reports an error.
+ */
+export function loadWorkflowRegistryAtCommit(
+  root: string,
+  sha: string,
+  overlay?: ReadonlyMap<string, string | null>,
+  pillars?: RegistryPillars,
+): WorkflowsLoadResult {
+  const fetched = new Map<string, string | null>();
+  return withCoreChecks(loadWorkflowsYamlAtCommit(root, sha, overlay), {
+    memoryYaml: pillars?.memoryYaml ?? (() => loadMemoryYamlAtCommit(root, sha)),
+    dnaYaml: pillars?.dnaYaml ?? (() => loadDnaYamlAtCommit(root, sha)),
     configFile: (relative) => {
       const path = configPath(relative);
-      return path === null ? null : readPathAtRev(root, sha, path);
+      if (path === null) return null;
+      return fetched.has(path) ? fetched.get(path)! : readPathAtRev(root, sha, path);
+    },
+    prefetchConfigFiles: (relatives) => {
+      const paths = relatives.flatMap((relative) => {
+        const path = configPath(relative);
+        return path === null ? [] : [path];
+      });
+      if (paths.length === 0) return;
+      readPathsAtRev(root, sha, paths).forEach((raw, index) => fetched.set(paths[index]!, raw ?? null));
     },
   });
 }

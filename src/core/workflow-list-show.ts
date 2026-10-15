@@ -25,7 +25,7 @@ import { declaresState, deduceWorkflowState, type Baseline, type Deduction, type
 import { workflowFacts, type Cadence, type Phase, type PhaseMode, type Workflow } from '../workflow/schema';
 
 import { resolveRoleDirectives } from './context';
-import { loadDirectivesAtRev, loadRolesYamlAtRev, type DirectiveFile } from './loaders';
+import { loadDirectivesAtCommit, loadRolesYamlAtCommit, type DirectiveFile } from './loaders';
 import { coreErr, coreOk, type CoreResult } from './types';
 import { isImplicitOwnerProduces } from './workflow-diagnostics';
 import { readDeductionSnapshotAtHead } from './workflow-deduction';
@@ -371,8 +371,8 @@ export function workflowShowAtHead(root: string, ref: string): CoreResult<ShowRe
     memoryYaml: snapshot.memoryYaml,
     // The registry the snapshot loaded carries `bindings.yaml`: one registry load per call (task-216).
     bindings: snapshot.bindings ?? null,
-    rolesYaml: committed ? loadRolesYamlAtRev(root, snapshot.commit) : null,
-    directiveFiles: committed ? loadDirectivesAtRev(root, snapshot.commit) : [],
+    rolesYaml: committed ? loadRolesYamlAtCommit(root, snapshot.commit) : null,
+    directiveFiles: committed ? loadDirectivesAtCommit(root, snapshot.commit) : [],
   };
   return showWorkflow(inputs, deduction, ref);
 }
