@@ -39,7 +39,9 @@ type IdentityConfig =
  * - **git could not be run** — the spawn itself failed (`ENOENT`: no `git` on `PATH`; `EACCES`: not
  *   executable; `EPERM`: a sandbox forbids it), so git never answered: `ran: false`, with the spawn
  *   error's message (`spawnSync git ENOENT`) as the cause. Before task-284 this read as "no value", and
- *   the check sent the user to configure an identity that may have been right.
+ *   the check sent the user to configure an identity that may have been right. An output past
+ *   `spawnSync`'s default `maxBuffer` also sets the spawn error (`ENOBUFS`) and takes this branch, read
+ *   as `could not run git: spawnSync git ENOBUFS`.
  * - **git ran and exited non-zero** — `1` when no key matches, `128` for a root git cannot enter or a
  *   config file it cannot parse, or a signal: every key is absent, the "empty means unconfigured"
  *   contract the check relies on, kept on purpose for these exits (the approver's ruling on task-284,
