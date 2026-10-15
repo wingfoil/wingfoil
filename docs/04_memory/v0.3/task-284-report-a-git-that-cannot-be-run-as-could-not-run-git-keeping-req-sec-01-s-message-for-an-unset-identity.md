@@ -245,14 +245,63 @@ Heavy gates each after `bash ../devloop-kit/waitslot.sh`.
   read `could not run git: spawnSync git ENOBUFS`; git did run there, but the message names the cause and no
   identity claim is made. Not pinned by any AC.
 
+### independent review (2026-10-15) and fixes (developer)
+
+Verdict: APPROVE WITH FIXES. T4 holds: the red files are untouched (command in the line below the table).
+
+| # | Finding | Fix |
+|---|---------|-----|
+| F1 | `docs/cli-reference.md` and the pending spec-008 row said every writing command gives `could not run git: <cause>`; `agent execute` reads `HEAD` first (`spec-016` §3.3 step 2, identity at step 5) and gives `E_GIT_READ_FAILED: git rev-parse HEAD failed in <root>: spawnSync git ENOENT`. The older sentence "Before it reads or writes anything else, it checks…" was already false for it. | cli-reference § Git identity: the check runs before any write, and before any other read except in `agent execute`; the new sentence names its `E_GIT_READ_FAILED` form. spec-008 row: an exception clause; Revision note and proposed `--reason` revised (Pending amendments). |
+| F2 | The Branches −0.03 explanation omitted a third run-dependent branch. | Corrected below. |
+| F3 | Two absence claims lacked a positive case. | Re-run with commands that can match, below. |
+| opt. | `ENOBUFS` takes the could-not-run branch. | One clause in `readIdentityConfig`'s doc comment. |
+
+- **F1, every command class measured** with the code build of this branch, in a scratch repository initialized with
+  `node dist/cli.js init --template Scrum` and one `memory add --type task --title x`, each command run with `PATH`
+  an empty directory and `--dry-run` where the command takes it (`node dist/cli.js <cmd> … 2>err; echo $?`):
+  `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`; `dna set`, `add`, `update`, `remove`;
+  `directive create --name foo`, `directive assign --directive foo --role developer`, `directive remove foo`;
+  `workflow start`, `end`, `finalize`, `create foo --kind main`, `remove foo` → each `error: could not run git:
+  spawnSync git ENOENT`, exit 1. `init --template Scrum` in a fresh repository → the same, and `git status
+  --porcelain` → empty. `agent execute --element task:task-001-x` with and without `--dry-run` → `error:
+  E_GIT_READ_FAILED: git rev-parse HEAD failed in <root>: spawnSync git ENOENT`, exit 1, `git status --porcelain` →
+  empty (no file written).
+- **F1, same class in files the change made stale:** `src/core/init.ts:192` said guard 2 "Returns its VALIDATION
+  error unchanged"; now "VALIDATION, or IO for a git that cannot be run" (`git diff 2de79ef9 -- src/core/init.ts`).
+- **F2, Branches −0.03, corrected.** Three branches are covered only in some runs, not two: `src/core/memory-transition.ts`
+  `BRDA:468` and `BRDA:560` (bug-361) and `src/storage/commit.ts:740` (`BRDA:740,61,1,0` in this run, the
+  `run.stderr` arm: covered when `test/storage/read-paths-at-rev.test.ts` runs alone, an `EPIPE` race of
+  `cat-file --batch` input against a git that exits 128). The column is 2 branches short of the baseline
+  (6378/6551; 6380/6551 = 97.39 %); which two of the three account for them cannot be proven without the
+  baseline's `lcov.info`. To be re-checked on the integrated head at the gate. Follow-up filed by the coordinator.
+- **F3, positive cases.** (a) The single-line grep could not match a doc comment that spans lines; re-run with a
+  multi-line proximity search, `requireGitIdentity` and `VALIDATION` within 300 characters in either order across
+  newlines, run as `perl -0777 -ne 'while(/(?=requireGitIdentity[\s\S]{0,300}?VALIDATION|VALIDATION[\s\S]{0,300}?requireGitIdentity)/g){$l=1+(()=substr($_,0,pos)=~/\n/g);print "$ARGV:$l\n";pos()++}' $(git ls-files 'src/*.ts')`
+  after the fix: hits at `approval-authority.ts:82` and
+  `builtin-asset.ts:129`/`:131` (the two comparisons of shape, still true for the identity refusals),
+  `init.ts:192` (the comment fixed above, which now names both codes), and `init.ts:8`, `:189`, `:294`, `workflow-create-remove.ts:165`,
+  `workflow-start-end.ts:223` (neighbouring but unrelated `VALIDATION` refusals, read and left). (b) `docs:api`:
+  `typedoc.json` sets `treatWarningsAsErrors: true`; with a probe `src/zz-probe.ts` exporting an undocumented
+  function, `npm run -s docs:api` exits 4 and `grep -ci warn` → 2 (`[warning] zz-probe.zzProbe (CallSignature) …
+  does not have any documentation`); the probe removed, `npm run -s docs:api` → exit 0, `grep -ci warn` → 0.
+- Checks after the fixes (both `tsc` and the build after `waitslot.sh`, load 7.9): `npx tsc --noEmit -p tsconfig.json`
+  and `npx tsc --noEmit -p tsconfig.build.json` → clean; `npm run -s build` → clean;
+  `npx jest test/docs/cli-reference.test.ts test/core/git-identity-spawn-failure.test.ts test/cli/git-unrunnable-refusal.integration.test.ts test/core/git-identity.test.ts test/core/identity-preflight-committer.test.ts test/core/init.test.ts --maxWorkers=2`
+  → `Test Suites: 6 passed`, `Tests: 56 passed`; `npm run -s lint` → clean; `npm run -s docs:api` → exit 0 (F3 (b)).
+  Comment and documentation changes only, so the full suite and coverage of the refactor run stand.
+- T4: `git log --first-parent --no-merges --format=%h 1541f47f..HEAD -- test/core/git-identity-spawn-failure.test.ts test/cli/git-unrunnable-refusal.integration.test.ts` → empty.
+
 ### Pending amendments (approver)
 
 - `spec-008-cli-grammar` — §6 "Pinned refusal strings": one row, `every command that writes (§2 --dry-run's list,
-  and init) | 1 | could not run git: <cause>`, and a Revision note (2026-10-15); uncommitted in the worktree.
-  Proposed `--reason`: "task-284: adds the pinned refusal could not run git followed by the spawn error's message,
-  exit 1 and code IO, for a git the identity check cannot start (bug-377), and states that a git which runs and
-  finds no identity keeps REQ-SEC-01's message whatever its non-zero exit, per the approver's rulings D1 and D2 of
-  2026-10-15."
+  and init) | 1 | could not run git: <cause>`, with `agent execute` named as the one exception (independent
+  review F1), and a Revision note (2026-10-15); uncommitted in the worktree.
+  Proposed `--reason` (revised at F1; it opens with a verb, not `task-284:`, so its one paragraph cannot read as a
+  `Key: value` trailer line): "Adds the pinned refusal could not run git followed by the spawn error's message,
+  exit 1 and code IO, for a git the identity check cannot start (task-284, bug-377). It names agent execute as the
+  one exception, since that command reads HEAD before its identity check and so reports the same cause as
+  E_GIT_READ_FAILED, and it states that a git which runs and finds no identity keeps REQ-SEC-01's message whatever
+  its non-zero exit, per the approver's rulings D1 and D2 of 2026-10-15."
 - `bug-377` — none: its `### Retrospective` ("None.") stands.
 
 ### Retrospective
