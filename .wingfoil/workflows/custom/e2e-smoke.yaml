@@ -9,7 +9,7 @@ description: >-
   per step (0, 1 and 2), every written artifact re-loaded through its own reader, a clean working tree
   after every step. Would have caught bug-005 at release time instead of at the last task. HARD-REJECT
   (dl-023 staging record: v0.2 ran it green, v0.2.2 and later block release-submit on a failure).
-version: 1.6                     # dl-082: `dna set` respelled to `<path> --value <v>` (task-093); 1.2 dl-026: + mcp-registration (task-112); 1.3 spec-003 alignment (task-199): cli.run takes a key: value argument, and the `memory add ...; memory submit ...` step is two tokens (dl-090 Q3 (a): no shell); 1.4 dl-099 §3, dl-023 (task-207; bug-132, bug-133, bug-134): the use scenario with exact exit codes and re-loads, the gate produces its report and hard-rejects; 1.5 bug-292 (task-239): mcp-registration also reads every listed Resource and gets every Prompt, on the pinned build (its known failures declared) and on the build under development; 1.6 spec-016 §2.7, dl-023, dl-099 (task-243): drive-cli also runs one adhoc `agent execute` through the fake adapter, in its own fresh project per template, and re-loads what it recorded
+version: 1.7                     # dl-082: `dna set` respelled to `<path> --value <v>` (task-093); 1.2 dl-026: + mcp-registration (task-112); 1.3 spec-003 alignment (task-199): cli.run takes a key: value argument, and the `memory add ...; memory submit ...` step is two tokens (dl-090 Q3 (a): no shell); 1.4 dl-099 §3, dl-023 (task-207; bug-132, bug-133, bug-134): the use scenario with exact exit codes and re-loads, the gate produces its report and hard-rejects; 1.5 bug-292 (task-239): mcp-registration also reads every listed Resource and gets every Prompt, on the pinned build (its known failures declared) and on the build under development; 1.6 spec-016 §2.7, dl-023, dl-099 (task-243): drive-cli also runs one adhoc `agent execute` through the fake adapter, in its own fresh project per template, and re-loads what it recorded; 1.7 task-282 (bug-310): the gate description names what its check runs, `scripts/e2e-smoke.cjs --candidate` on the packed candidate, refusing only a pack input with changes and packing from a removed dist/
 element: release
 
 phases:
@@ -79,7 +79,12 @@ phases:
 
   - name: gate
     description: >-
-      Run the smoke and record its report (bug-134: dl-023 asked for a smoke-test report). Hard-reject
+      Run the smoke on the release candidate and record its report (bug-134: dl-023 asked for a
+      smoke-test report). Its check runs `node scripts/e2e-smoke.cjs --candidate`: it refuses a change
+      under the pack inputs (PACK_INPUTS, scripts/write-build-info.cjs; an untracked note elsewhere is no
+      reason), removes dist/ so the pack rebuilds it from the commit alone, packs the checked-out commit,
+      installs the tarball into a throwaway prefix and smokes that bin with its stamp bound
+      (package.json's version and HEAD). Hard-reject
       (dl-023 staging record, 2026-09-28/29): a failing smoke blocks release-submit, so the check is bound
       at severity reject in workflows/bindings.yaml. The report is written on a failure too.
     role: qa
