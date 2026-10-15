@@ -153,6 +153,41 @@ every mutating command then says `git identity not configured (user.name/user.em
 the same class as `bug-377`, outside its ask. Proposed as a new bug for v0.4 (option (b) above), unless
 the approver widens this task.
 
+### red (qa, 2026-10-15)
+
+Role qa. Branch head before the red commit: `4c9afc1d`. **Red commit: `1541f47f`** (T4 is measured from it).
+Test files only; `src/` and AC 2's two files untouched (`git diff --stat 2de79ef9 -- src/ test/core/git-identity.test.ts
+test/core/identity-preflight-committer.test.ts` empty).
+
+**Files.** `test/core/git-identity-spawn-failure.test.ts` (in-process, carries the coverage of the new branch);
+`test/cli/git-unrunnable-refusal.integration.test.ts` (compiled CLI in a child process). Unrunnable git: `PATH` = an
+empty `mkdtemp` dir (ENOENT) or a dir holding a mode-`0644` file named `git` (EACCES). In-process, `process.env.PATH`
+is set only around the call under test and restored before any fixture git call (snapshot/assert) and in `afterEach`.
+
+**Per-AC mapping.**
+
+| AC | Class | Test(s) | Result on `1541f47f` |
+|----|-------|---------|----------------------|
+| 1 (i), (ii) | red-first | `AC 1 (red-first): requireGitIdentity with an empty directory as PATH (ENOENT) …`, `… a non-executable git first on PATH (EACCES) …` — `toEqual({ ok: false, error: { code: 'IO', message: 'could not run git: spawnSync git ENOENT\|EACCES' } })`, `exitCodeForResult` 1 | fail |
+| 1 (iii) | red-first | `AC 1 (red-first): memory add with … returns the same refusal and writes nothing` (both causes; registered `memory.memoryAdd`, `snapshotPersistence`/`assertPersistenceUnchanged`) | fail |
+| 1 (iv) | characterization | `AC 1 (characterization, D3): readGitIdentity with an unrunnable git still returns an empty identity` | pass (first run) |
+| 1 (v) | characterization | `AC 1 (characterization, D2): a git that runs and exits 128 …` — root = a never-created child of a fresh `mkdtemp` dir → `VALIDATION`, REQ-SEC-01's message, exit 1 | pass (first run) |
+| 1 (control) | — | `control: with git on PATH the configured identity passes the check` (fixture sanity: the only fault in (i)-(iii) is the spawn) | pass |
+| 2 | characterization | no new test; `npx jest test/core/git-identity.test.ts test/core/identity-preflight-committer.test.ts --maxWorkers=2` | 2 suites, 30/30 pass |
+| 3 | red-first | `AC 3 (red-first): with an empty directory as PATH (ENOENT) …`, `… (EACCES) …` — `memory add --type note --title x` via `process.execPath dist/cli.js`, stderr lines contain `error: could not run git: spawnSync git <code>`, status 1, `assertPersistenceUnchanged`, `git status --porcelain` empty | fail |
+| 3 (positive) | characterization | `AC 3 (positive): with git on PATH and an identity configured, the same command passes the check and commits` — status 0, `git log -1 --format=%s` matches `^wf\(note\): add note-` | pass |
+| 4 | characterization | gates, session 3 | — |
+
+**Run.** `npx jest test/core/git-identity-spawn-failure.test.ts test/cli/git-unrunnable-refusal.integration.test.ts
+--maxWorkers=2` (load 4.74 at start): 2 suites failed; 6 failed, 4 passed, 10 total. Same counts under
+`npm run -s test:no-identity -- <both files> --maxWorkers=2`. `npx eslint <both files>`: clean.
+
+**First failing assertion per red test** (all fail for the right reason — the current refusal is REQ-SEC-01's):
+- AC 1 (i)/(ii)/(iii), all four: `expect(result).toEqual({ ok: false, error: { code: 'IO', message } })` — received
+  `code: "VALIDATION"`, `message: "git identity not configured (user.name/user.email)"`.
+- AC 3, both: `expect(run.stderr.split('\n')).toContain(errorLine)` — received
+  `["error: git identity not configured (user.name/user.email)", ""]` (exit status already 1 on the current code).
+
 ### Retrospective
 
 None yet.
