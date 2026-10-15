@@ -854,7 +854,7 @@ function directivesAt(root: string, sha: string, label: string): DirectiveFile[]
   const raws = readPathsAtRev(root, sha, paths);
   const files: DirectiveFile[] = [];
   paths.forEach((path, index) => {
-    const raw = raws[index] ?? null;
+    const raw = raws[index] as string | null;
     // Unreachable by construction — git has just listed this blob at the same sha. Skipping is still
     // the fail-closed answer: a directive nobody can read is a directive that does not exist, so a
     // binding to it is refused rather than committed.

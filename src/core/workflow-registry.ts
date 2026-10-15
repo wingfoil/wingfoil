@@ -60,7 +60,9 @@ interface PillarSource {
  * one {@link loadWorkflowRegistryAtRev} has.
  */
 export interface RegistryPillars {
+  /** `memory.yaml` at the registry's commit, `null` when that commit does not hold it. */
   readonly memoryYaml: () => MemoryYaml | null;
+  /** `dna.yaml` at the registry's commit, `null` when that commit does not hold it. */
   readonly dnaYaml: () => DnaYaml | null;
 }
 
@@ -188,7 +190,7 @@ export function loadWorkflowRegistryAtCommit(
         return path === null ? [] : [path];
       });
       if (paths.length === 0) return;
-      readPathsAtRev(root, sha, paths).forEach((raw, index) => fetched.set(paths[index]!, raw ?? null));
+      readPathsAtRev(root, sha, paths).forEach((raw, index) => fetched.set(paths[index]!, raw as string | null));
     },
   });
 }
