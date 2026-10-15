@@ -139,6 +139,42 @@ export function smokeAgentRun(
   fixtures?: string,
 ): SmokeCheck[];
 
+/**
+ * task-242 (`bug-328`): the Journey 4 example the smoke runs per template, from the checkout:
+ * `<checkout>/docs/examples/06-workflow-approval/run.sh`.
+ */
+export const JOURNEY_SCRIPT: string;
+
+/**
+ * task-242: the `wingfoil` commands the journey's transcript (`$ wingfoil …` lines) must hold, in order:
+ * `workflow start`, `workflow next`, `memory add … --workflow`, `memory submit`, `workflow status`,
+ * `memory approve`, `workflow next`, `workflow finalize`, `workflow end`.
+ */
+export const JOURNEY_COMMANDS: readonly string[];
+
+/**
+ * task-242 (`bug-328`): run `bash <script>` (default {@link JOURNEY_SCRIPT}) with a `wingfoil` shim that
+ * execs `argv` (program first) on `PATH`, `WINGFOIL=wingfoil` and `WINGFOIL_EXAMPLE_TEMPLATE=<template>` set
+ * over `env` (an inherited `WINGFOIL` never applies). One check, labelled
+ * `[<template>/journey] bash docs/examples/06-workflow-approval/run.sh`: ok iff exit 0, the last non-empty
+ * stdout line starts `OK: `, and the transcript holds {@link JOURNEY_COMMANDS} in order. Passing detail
+ * `exit 0, <n> wingfoil commands, <the OK line>`; failing details `could not find <cmd> on PATH` (the program
+ * `argv[0]` resolves to no executable), `exit <n>: <the last "FAIL: " line of stderr, else its last line, else
+ * "no output on stderr">` (`<n>` the signal when bash died of one), `exit 0, but no "OK: " line ends its
+ * output`, `the transcript lacks: <command>`, `could not run bash: <message>`, and `could not run the journey:
+ * <message>` (any other error, caught). Never throws.
+ *
+ * `timeoutMs` (default `600000`, 600 s) bounds the run: on expiry `bash` is killed with `SIGKILL` and the check
+ * fails with detail `timed out after <timeoutMs / 1000> s`.
+ */
+export function smokeJourney(
+  template: string,
+  argv: readonly string[],
+  env: NodeJS.ProcessEnv,
+  script?: string,
+  timeoutMs?: number,
+): SmokeCheck;
+
 /** The Markdown report `--report` writes (`bug-134`): no clock in it, so the same run gives the same bytes. */
 export function formatReport(report: SmokeReport, meta: SmokeReportMeta): string;
 

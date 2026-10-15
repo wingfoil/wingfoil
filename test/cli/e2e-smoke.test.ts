@@ -19,9 +19,13 @@
  * task-243 (spec-016 §2.7, dl-023, dl-099): after each template's scenario the smoke runs one adhoc
  * `agent execute` through the fake adapter `custom/fake` in its own fresh `init` project, then re-loads
  * what it wrote (`agent show`, `agent list --past`) and probes the record commit and the fake's own record.
+ *
+ * task-242 (`bug-328`, Journey 4; approver rulings D1, D4): after each template's agent run the smoke runs
+ * the self-checking example `docs/examples/06-workflow-approval/run.sh` (`smokeJourney`), which drives
+ * `workflow start → next → memory add --workflow → submit → status → approve → next → finalize → end`.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -29,12 +33,15 @@ import { load as yamlLoad } from 'js-yaml';
 
 import {
   AGENT_FIXTURES,
+  JOURNEY_COMMANDS,
+  JOURNEY_SCRIPT,
   SMOKE_TEMPLATES,
   agentRunSteps,
   formatReport,
   parseSmokeArgs,
   runSmoke,
   smokeAgentRun,
+  smokeJourney,
   smokeSteps,
   smokeTemplate,
 } from '../../scripts/e2e-smoke.cjs';
@@ -99,6 +106,18 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
       expect(block[0]!).toBeGreaterThan(labels.map((l) => l.startsWith(`[${template}] `)).lastIndexOf(true));
       const next = SMOKE_TEMPLATES[i + 1];
       if (next !== undefined) expect(block[block.length - 1]!).toBeLessThan(labels.findIndex((l) => l.startsWith(`[${next}] `)));
+    });
+    // task-242 Q2 (bug-328, ruling D1): per template, the Journey 4 check follows that template's agent block
+    // and precedes the next template's first check; it passed, on the example's own OK line.
+    SMOKE_TEMPLATES.forEach((template, i) => {
+      const journey = labels.indexOf(`[${template}/journey] bash docs/examples/06-workflow-approval/run.sh`);
+      expect(journey).toBeGreaterThan(labels.map((l) => l.startsWith(`[${template}/agent] `)).lastIndexOf(true));
+      const check = report.checks[journey]!;
+      expect(check.ok).toBe(true);
+      expect(check.detail.startsWith('exit 0, ')).toBe(true);
+      expect(check.detail).toContain('OK: Journey 4');
+      const next = SMOKE_TEMPLATES[i + 1];
+      if (next !== undefined) expect(journey).toBeLessThan(labels.findIndex((l) => l.startsWith(`[${next}] `)));
     });
   });
 
@@ -697,6 +716,234 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
       const abbreviated = cli(['--expect-version', '0.3.0', '--expect-commit', SHA.slice(0, 12)]);
       expect(abbreviated.status).toBe(2);
       expect(abbreviated.stderr).toContain('not a commit name');
+    });
+  });
+
+  /**
+   * task-242 (`bug-328`; Journey 4, `docs/01_vision/05_journeys.md`; spec-017 §7, §12; approver rulings D1, D4) —
+   * the self-checking example `docs/examples/06-workflow-approval/run.sh` and the smoke's `smokeJourney`, which
+   * runs it per template after the agent run (`[<T>/journey]`).
+   */
+  describe('task-242 — the Journey 4 example, hooked into the smoke after the agent run', () => {
+    const EXAMPLE = join(REPO_ROOT, 'docs', 'examples', '06-workflow-approval', 'run.sh');
+    const LABEL_PATH = 'bash docs/examples/06-workflow-approval/run.sh';
+    const HUMAN_NEEDED = 'human needed: approve or reject task-001-login-form — routed to Ada Lovelace <ada@example.com>';
+    const OFF_FRONTIER = 'workflow finalize --step deliver.write@task:task-001-login-form';
+
+    /** The `$ wingfoil …` lines of a transcript, each with the `[exit N]` that follows it (lib.sh's `expect_exit`). */
+    function transcript(stdout: string): { command: string; exit: number | null }[] {
+      const entries: { command: string; exit: number | null }[] = [];
+      for (const line of stdout.split('\n')) {
+        if (line.startsWith('$ wingfoil ')) entries.push({ command: line.slice('$ wingfoil '.length), exit: null });
+        const exit = /^\[exit (\d+)\]$/.exec(line);
+        const last = entries[entries.length - 1];
+        if (exit !== null && last !== undefined && last.exit === null) last.exit = Number(exit[1]);
+      }
+      return entries;
+    }
+
+    /** The journey's nine commands, each matched on a transcript entry that exited 0 (the refusals are skipped). */
+    const NINE: readonly [string, (command: string) => boolean][] = [
+      ['workflow start', (c) => c.startsWith('workflow start')],
+      ['workflow next', (c) => c.startsWith('workflow next')],
+      ['memory add --workflow deliver-1-plan', (c) => c.startsWith('memory add') && c.includes('--workflow deliver-1-plan')],
+      ['memory submit', (c) => c.startsWith('memory submit')],
+      ['workflow status', (c) => c.startsWith('workflow status')],
+      ['memory approve', (c) => c.startsWith('memory approve')],
+      ['workflow next', (c) => c.startsWith('workflow next')],
+      ['workflow finalize', (c) => c.startsWith('workflow finalize')],
+      ['workflow end', (c) => c.startsWith('workflow end')],
+    ];
+
+    /** The names in {@link NINE} not found, in order, among the transcript's exit-0 entries. */
+    function missingInOrder(stdout: string): string[] {
+      const entries = transcript(stdout);
+      const missing: string[] = [];
+      let at = 0;
+      for (const [name, match] of NINE) {
+        const found = entries.findIndex((entry, j) => j >= at && entry.exit === 0 && match(entry.command));
+        if (found === -1) missing.push(name);
+        else at = found + 1;
+      }
+      return missing;
+    }
+
+    describe('Q1 — the example runs on the compiled CLI and checks itself', () => {
+      let run: { status: number | null; stdout: string; stderr: string };
+      beforeAll(() => {
+        const r = spawnSync('bash', [EXAMPLE], { encoding: 'utf-8', env: { ...process.env, WINGFOIL: `node ${DIST_CLI}` } });
+        run = { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+      });
+
+      it('JOURNEY_SCRIPT is the checkout\'s docs/examples/06-workflow-approval/run.sh, and it exists', () => {
+        expect(JOURNEY_SCRIPT).toBe(EXAMPLE);
+        expect(existsSync(EXAMPLE)).toBe(true);
+      });
+
+      it('exits 0 and ends with an OK: line', () => {
+        expect(run.stderr.split('\n').filter((l) => l.startsWith('FAIL: '))).toEqual([]);
+        expect(run.status).toBe(0);
+        const lines = run.stdout.split('\n').filter((l) => l.trim() !== '');
+        expect(lines[lines.length - 1]?.startsWith('OK: ')).toBe(true);
+      });
+
+      it('the transcript holds the nine journey commands in order, each followed by [exit 0]', () => {
+        expect(transcript(run.stdout).length).toBeGreaterThan(0);
+        expect(missingInOrder(run.stdout)).toEqual([]);
+      });
+
+      it('workflow status after submit prints the human-needed line, routed to the approver', () => {
+        expect(run.stdout).toContain(HUMAN_NEEDED);
+      });
+
+      it('the two refusals run and exit 1: workflow end before completion, workflow finalize --step off the frontier', () => {
+        const entries = transcript(run.stdout);
+        expect(entries.some((e) => e.command.startsWith('workflow end') && e.exit === 1)).toBe(true);
+        expect(entries.some((e) => e.command.startsWith(OFF_FRONTIER) && e.exit === 1)).toBe(true);
+      });
+
+      it('docs/examples/README.md has a row for it, and user-guide §7 links it', () => {
+        const readme = readFileSync(join(REPO_ROOT, 'docs', 'examples', 'README.md'), 'utf-8');
+        expect(readme.split('\n').some((l) => l.startsWith('|') && l.includes('](06-workflow-approval/run.sh)'))).toBe(true);
+        const guide = readFileSync(join(REPO_ROOT, 'docs', 'user-guide.md'), 'utf-8');
+        const start = guide.indexOf('\n## 7. ');
+        expect(start).toBeGreaterThanOrEqual(0);
+        const section = guide.slice(start, guide.indexOf('\n## 8. ', start));
+        expect(section).toMatch(/\]\(examples\/06-workflow-approval[/)]/);
+      });
+    });
+
+    describe('Q2 — smokeJourney: one check per template, against stub scripts and through the fault proxy', () => {
+      let dir: string;
+      beforeAll(() => {
+        dir = mkdtempSync(join(tmpdir(), 'wf-task242-journey-'));
+      });
+      afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+      /** A stub journey script under `dir`, its body run by bash. */
+      function stub(name: string, body: string): string {
+        const path = join(dir, `${name}.sh`);
+        writeFileSync(path, `${body}\n`);
+        chmodSync(path, 0o755);
+        return path;
+      }
+      /** `$ wingfoil <c>` + `[exit 0]` for each command, as lib.sh's `expect_exit` prints them. */
+      const lines = (commands: readonly string[]) => commands.map((c) => `echo '$ wingfoil ${c}'; echo '[exit 0]'`).join('\n');
+      const ALL = [
+        'workflow start deliver',
+        'workflow next --format json',
+        'memory add --type task --title Login --workflow deliver-1-plan --format json',
+        'memory submit task-001-login-form',
+        'workflow status',
+        'memory approve task-001-login-form --reason ok',
+        'workflow next --format json',
+        'workflow finalize',
+        'workflow end',
+      ];
+      const ARGV = [process.execPath, DIST_CLI];
+      const journey = (script: string, template = 'Scrum', env: NodeJS.ProcessEnv = process.env) => {
+        expect(typeof smokeJourney).toBe('function');
+        return smokeJourney(template, ARGV, env, script);
+      };
+
+      it('JOURNEY_COMMANDS names the nine commands in journey order', () => {
+        expect(JOURNEY_COMMANDS).toHaveLength(9);
+        ['workflow start', 'workflow next', 'memory add', 'memory submit', 'workflow status', 'memory approve', 'workflow next', 'workflow finalize', 'workflow end'].forEach((prefix, i) => {
+          expect(JOURNEY_COMMANDS[i]!.startsWith(prefix)).toBe(true);
+        });
+        expect(JOURNEY_COMMANDS[2]).toContain('--workflow');
+      });
+
+      it('a script that exits 0 without an OK: line fails: no "OK: " line', () => {
+        const check = journey(stub('no-ok', `${lines(ALL)}\necho done`));
+        expect(check).toMatchObject({ label: `[Scrum/journey] ${LABEL_PATH}`, ok: false });
+        expect(check.detail).toContain('no "OK: " line');
+      });
+
+      it('a script that exits 1 fails, with the last FAIL: line of its stderr', () => {
+        const check = journey(stub('fail', "echo 'FAIL: w' >&2; echo 'FAIL: x' >&2; exit 1"));
+        expect(check.ok).toBe(false);
+        expect(check.detail).toBe('exit 1: FAIL: x');
+      });
+
+      it('a script that prints OK: but never runs workflow finalize fails: the transcript lacks it', () => {
+        const check = journey(stub('no-finalize', `${lines(ALL.filter((c) => c !== 'workflow finalize'))}\necho 'OK: Journey 4'`));
+        expect(check.ok).toBe(false);
+        expect(check.detail).toContain('the transcript lacks: workflow finalize');
+      });
+
+      it('a script path that does not exist is a failed check, never a throw', () => {
+        let check: ReturnType<typeof smokeJourney> | undefined;
+        expect(() => {
+          check = journey(join(dir, 'does-not-exist.sh'));
+        }).not.toThrow();
+        expect(check?.ok).toBe(false);
+      });
+
+      it('the shim and the template are the smoke\'s: an inherited WINGFOIL / WINGFOIL_EXAMPLE_TEMPLATE never applies', () => {
+        const script = stub('env', `${lines(ALL)}\necho "OK: $WINGFOIL_EXAMPLE_TEMPLATE $($WINGFOIL --version) $(wingfoil --version)"`);
+        const check = journey(script, 'Kanban', { ...process.env, WINGFOIL: 'false', WINGFOIL_EXAMPLE_TEMPLATE: 'Scrum' });
+        expect(check).toMatchObject({ label: `[Kanban/journey] ${LABEL_PATH}`, ok: true });
+        expect(check.detail).toMatch(new RegExp(`^exit 0, 9 wingfoil commands, OK: Kanban ${version.replace(/\./g, '\\.')}`));
+        expect(check.detail).toMatch(new RegExp(`OK: Kanban ${version.replace(/\./g, '\\.')}.* ${version.replace(/\./g, '\\.')}`));
+      });
+
+      // Full smoke runs (each drives every template's scenario and agent run before the journey).
+      it('[Scrum] a workflow finalize that claims success and records nothing fails the journey check (proxy noop)', () => {
+        const report = smokeWithFault('noop@workflow finalize');
+        expect(report.ok).toBe(false);
+        expect(lastCheck(report)).toMatchObject({ label: `[Scrum/journey] ${LABEL_PATH}`, ok: false });
+        expect(lastCheck(report).detail).toContain('FAIL:');
+        // The example's first finalize is the off-frontier refusal (expected exit 1): either it or the
+        // record's HEAD check (`workflow: finalize …`) is the FAIL line.
+        expect(lastCheck(report).detail).toMatch(/workflow:? finalize/);
+      });
+
+      it('[Scrum] a workflow start that exits 1 fails the journey check, naming both codes', () => {
+        const report = smokeWithFault('exit=1@workflow start');
+        expect(report.ok).toBe(false);
+        expect(lastCheck(report)).toMatchObject({ label: `[Scrum/journey] ${LABEL_PATH}`, ok: false });
+        expect(lastCheck(report).detail).toContain('expected exit 0, got 1');
+      });
+
+      it('the report names the journey', () => {
+        const text = formatReport({ ok: true, checks: [{ label: 'wingfoil --help', ok: true, detail: 'exit 0' }] }, { command: ['wingfoil'] });
+        expect(text).toContain('- Journey 4: `docs/examples/06-workflow-approval/run.sh` in a fresh project per template (task-242)');
+      });
+    });
+
+    describe('Q3 — the smoke plan and WORKFLOW.md name the journey', () => {
+      const raw = readFileSync(join(REPO_ROOT, '.wingfoil', 'workflows', 'custom', 'e2e-smoke.yaml'), 'utf-8');
+      const workflow = yamlLoad(raw) as {
+        version: number;
+        phases: { name: string; description?: string; actions?: string[]; checks?: { post?: string[] } }[];
+      };
+      const driveCli = workflow.phases.find((p) => p.name === 'drive-cli');
+
+      it('e2e-smoke.yaml is at least 1.8, with a history entry for task-242 (bug-314)', () => {
+        expect(workflow.version).toBeGreaterThanOrEqual(1.8);
+        expect(raw).toMatch(/1\.8 [^;]*task-242/);
+      });
+
+      it('drive-cli describes the journey and declares its workflow and memory add --workflow actions; its checks are unchanged', () => {
+        expect(driveCli?.description).toContain('docs/examples/06-workflow-approval/run.sh');
+        expect(driveCli?.description).toContain('workflow finalize');
+        const actions = driveCli?.actions ?? [];
+        for (const token of ['workflow create', 'workflow start <name>', 'workflow next', 'workflow status', 'workflow finalize', 'workflow end', 'memory add ... --workflow <ref>']) {
+          expect(actions.some((a) => a.startsWith(`cli.run(command: "${token}`))).toBe(true);
+        }
+        expect(driveCli?.checks?.post).toHaveLength(3);
+      });
+
+      it('WORKFLOW.md\'s E2E Smoke section names `workflow finalize` and the example', () => {
+        const text = readFileSync(join(REPO_ROOT, '.wingfoil', 'WORKFLOW.md'), 'utf-8');
+        const start = text.indexOf('### E2E Smoke');
+        expect(start).toBeGreaterThanOrEqual(0);
+        const end = text.indexOf('\n### ', start + 1);
+        const section = text.slice(start, end === -1 ? undefined : end);
+        expect(section).toContain('workflow finalize');
+        expect(section).toContain('docs/examples/06-workflow-approval/run.sh');
+      });
     });
   });
 });

@@ -31,6 +31,14 @@
  * commit holding only the run log, `agent show` and `agent list --past` re-loading the record, and the
  * fake's own record proving it read the session Resource from the `wingfoil` server of the build under test.
  *
+ * After each template's agent run, the Journey 4 run (task-242, `bug-328`): the self-checking example
+ * `docs/examples/06-workflow-approval/run.sh`, run by `bash` from the checkout with a `wingfoil` shim of the build
+ * under test on `PATH`, in its own fresh `init` project. It creates and starts a workflow, reads `workflow next`
+ * and `workflow status` (the "human needed" line), adds a task with `memory add --workflow`, submits and approves
+ * it, records a checkpoint with `workflow finalize` and ends the instance with `workflow end`, checking each
+ * command's exit code and the commit it writes; the smoke requires its exit 0, its `OK:` line, and those commands
+ * in its transcript ({@link JOURNEY_COMMANDS}).
+ *
  * `--report <path>` writes the run as Markdown (`bug-134`: the report `e2e-smoke.yaml`'s gate declares
  * under `produces:`), on a failure too.
  *
@@ -56,9 +64,9 @@
 'use strict';
 
 const { spawnSync } = require('node:child_process');
-const { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { accessSync, chmodSync, constants: fsConstants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
-const { dirname, join } = require('node:path');
+const { delimiter, dirname, isAbsolute, join, resolve } = require('node:path');
 
 const { PACK_INPUTS, inputStatus } = require('./write-build-info.cjs');
 
@@ -86,6 +94,31 @@ const JSON_FORMAT = Object.freeze(['--format', 'json']);
  * ship `test/`; the smoke always runs from a checkout (the `ci.yml` job, `--candidate`, the staging rehearsal).
  */
 const AGENT_FIXTURES = join(__dirname, '..', 'test', 'fixtures', 'agents');
+
+/**
+ * The Journey 4 example (task-242, `bug-328`), run per template after the agent run. Resolved from the checkout,
+ * as {@link AGENT_FIXTURES} is: the tarball does not ship `docs/examples/`.
+ */
+const JOURNEY_SCRIPT = join(__dirname, '..', 'docs', 'examples', '06-workflow-approval', 'run.sh');
+
+/** The journey check's label path: fixed, so the report never depends on where the checkout lies. */
+const JOURNEY_LABEL = 'bash docs/examples/06-workflow-approval/run.sh';
+
+/**
+ * The `wingfoil` commands the journey's transcript must hold, in this order, each followed by `[exit 0]`
+ * (lib.sh's `expect_exit`). An entry `<a> … <b>` matches a command that starts with `<a>` and contains `<b>`.
+ */
+const JOURNEY_COMMANDS = Object.freeze([
+  'workflow start',
+  'workflow next',
+  'memory add … --workflow',
+  'memory submit',
+  'workflow status',
+  'memory approve',
+  'workflow next',
+  'workflow finalize',
+  'workflow end',
+]);
 
 /** The prefix of every environment variable the fake agent reads; stripped from what the agent run inherits. */
 const FAKE_AGENT_ENV_PREFIX = 'WINGFOIL_FAKE_AGENT_';
@@ -570,6 +603,130 @@ function smokeAgentRun(template, invoke, env, steps = agentRunSteps(template), f
 }
 
 /**
+ * The `$ wingfoil …` commands of a journey transcript, each with the `[exit N]` lib.sh printed after it
+ * (`null` when none followed).
+ * @param {string} stdout
+ * @returns {Array<{ command: string, exit: number | null }>}
+ */
+function journeyTranscript(stdout) {
+  const entries = [];
+  for (const line of stdout.split('\n')) {
+    if (line.startsWith('$ wingfoil ')) {
+      entries.push({ command: line.slice('$ wingfoil '.length), exit: null });
+      continue;
+    }
+    const exit = /^\[exit (\d+)\]$/.exec(line);
+    const last = entries[entries.length - 1];
+    if (exit !== null && last !== undefined && last.exit === null) last.exit = Number(exit[1]);
+  }
+  return entries;
+}
+
+/** The first of {@link JOURNEY_COMMANDS} not found, in order, among the transcript's exit-0 commands; else `null`. */
+function missingJourneyCommand(entries) {
+  let at = 0;
+  for (const expected of JOURNEY_COMMANDS) {
+    const [head, tail] = expected.split(' … ');
+    const found = entries.findIndex(
+      (entry, i) => i >= at && entry.exit === 0 && entry.command.startsWith(head) && (tail === undefined || entry.command.includes(tail)),
+    );
+    if (found === -1) return expected;
+    at = found + 1;
+  }
+  return null;
+}
+
+/**
+ * How long one Journey 4 run may take before its check fails (task-242): about 9 s on an idle machine, so the
+ * bound only stops a run that would otherwise never end, and `bash` is killed with the check failed.
+ */
+const JOURNEY_TIMEOUT_MS = 600_000;
+
+/**
+ * `command` as an absolute path for the journey's shim (task-242 fix): a name with a `/` resolved against the
+ * working directory; a bare name looked up on `pathValue` as a shell would (the first executable regular file),
+ * skipping `exclude` — the shim's own directory, so a shim for `wingfoil` can never exec itself. `null` when no
+ * directory holds it.
+ * @param {string} command
+ * @param {string} pathValue
+ * @param {string} exclude
+ * @returns {string | null}
+ */
+function resolveCommand(command, pathValue, exclude) {
+  if (command.includes('/')) return isAbsolute(command) ? command : resolve(command);
+  for (const dir of pathValue.split(delimiter)) {
+    if (dir === '' || resolve(dir) === resolve(exclude)) continue;
+    const candidate = join(resolve(dir), command);
+    try {
+      if (!statSync(candidate).isFile()) continue;
+      accessSync(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+      // not there, or not executable: the next directory
+    }
+  }
+  return null;
+}
+
+/** `text` quoted for a POSIX shell: single quotes, each embedded one closed, escaped and reopened. */
+function shellQuote(text) {
+  return `'${String(text).replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * The Journey 4 run (task-242, `bug-328`): `bash <script>` with a `wingfoil` shim that execs `argv` (the CLI
+ * under test, program first, resolved to an absolute path first: {@link resolveCommand}) on `PATH`, and `WINGFOIL=wingfoil` and `WINGFOIL_EXAMPLE_TEMPLATE=<template>` set
+ * over `env`, so neither is ever inherited; the shim on `PATH` keeps a path with spaces out of lib.sh's
+ * word-split `$WINGFOIL`. The script makes and deletes its own project, and is killed after `timeoutMs`
+ * ({@link JOURNEY_TIMEOUT_MS}). One check, never a throw.
+ * @param {string} template
+ * @param {readonly string[]} argv
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string} [script]
+ * @param {number} [timeoutMs]
+ * @returns {{ label: string, ok: boolean, detail: string }}
+ */
+function smokeJourney(template, argv, env, script = JOURNEY_SCRIPT, timeoutMs = JOURNEY_TIMEOUT_MS) {
+  const label = `[${template}/journey] ${JOURNEY_LABEL}`;
+  let shimDir;
+  try {
+    shimDir = mkdtempSync(join(tmpdir(), 'wingfoil-smoke-journey-'));
+    const program = argv[0] === undefined ? null : resolveCommand(argv[0], env.PATH ?? '', shimDir);
+    if (program === null) return { label, ok: false, detail: `could not find ${argv[0] ?? '(no command)'} on PATH` };
+    const shim = join(shimDir, 'wingfoil');
+    writeFileSync(shim, `#!/bin/sh\nexec ${[program, ...argv.slice(1)].map(shellQuote).join(' ')} "$@"\n`);
+    chmodSync(shim, 0o755);
+    const runEnv = {
+      ...env,
+      PATH: `${shimDir}${delimiter}${env.PATH ?? ''}`,
+      WINGFOIL: 'wingfoil',
+      WINGFOIL_EXAMPLE_TEMPLATE: template,
+    };
+    const run = spawnSync('bash', [script], { cwd: shimDir, env: runEnv, encoding: 'utf-8', timeout: timeoutMs, killSignal: 'SIGKILL' });
+    if (run.error?.code === 'ETIMEDOUT') return { label, ok: false, detail: `timed out after ${timeoutMs / 1000} s` };
+    if (run.error) return { label, ok: false, detail: `could not run bash: ${run.error.message}` };
+    const stdout = run.stdout ?? '';
+    if (run.status !== 0) {
+      const errLines = (run.stderr ?? '').split('\n').map((line) => line.trim()).filter((line) => line !== '');
+      const failLines = errLines.filter((line) => line.startsWith('FAIL: '));
+      const reason = failLines[failLines.length - 1] ?? errLines[errLines.length - 1] ?? 'no output on stderr';
+      return { label, ok: false, detail: `exit ${run.status ?? run.signal}: ${reason}` };
+    }
+    const lines = stdout.split('\n').map((line) => line.trim()).filter((line) => line !== '');
+    const okLine = lines[lines.length - 1];
+    if (okLine === undefined || !okLine.startsWith('OK: ')) return { label, ok: false, detail: 'exit 0, but no "OK: " line ends its output' };
+    const entries = journeyTranscript(stdout);
+    const missing = missingJourneyCommand(entries);
+    if (missing !== null) return { label, ok: false, detail: `the transcript lacks: ${missing}` };
+    return { label, ok: true, detail: `exit 0, ${entries.length} wingfoil commands, ${okLine}` };
+  } catch (error) {
+    return { label, ok: false, detail: `could not run the journey: ${error.message}` };
+  } finally {
+    if (shimDir !== undefined) rmSync(shimDir, { recursive: true, force: true });
+  }
+}
+
+/**
  * Throw unless `commit` is a commit name an expected stamp may carry ({@link COMMIT_NAME_RE}).
  * @param {string} commit
  */
@@ -600,8 +757,9 @@ function versionCheck(run, expectedVersion, expectedCommit) {
 }
 
 /**
- * Run the whole smoke: per template, its scenario ({@link smokeTemplate}) then its agent run
- * ({@link smokeAgentRun}, task-243). Stops at the first failing check.
+ * Run the whole smoke: per template, its scenario ({@link smokeTemplate}), its agent run
+ * ({@link smokeAgentRun}, task-243), then its Journey 4 run ({@link smokeJourney}, task-242). Stops at the
+ * first failing check.
  * @param {{ command: string, commandArgs?: readonly string[], env?: NodeJS.ProcessEnv,
  *           expectedVersion?: string, expectedCommit?: string, log?: (line: string) => void }} options
  * @returns {{ ok: boolean, checks: ReadonlyArray<{ label: string, ok: boolean, detail: string }> }}
@@ -645,6 +803,7 @@ function runSmoke(options) {
     for (const check of smokeAgentRun(template, invoke, env)) {
       if (!record(check)) return done();
     }
+    if (!record(smokeJourney(template, [options.command, ...prefix], env))) return done();
   }
   return done();
 }
@@ -678,6 +837,7 @@ function formatReport(report, meta) {
     `- Expected commit: ${meta.expectedCommit === undefined ? 'not checked' : `\`${meta.expectedCommit}\``}`,
     `- Templates: ${SMOKE_TEMPLATES.join(', ')}`,
     '- Agent run: `agent execute` through the fake adapter `custom/fake` in a fresh project per template (spec-016 §2.7)',
+    '- Journey 4: `docs/examples/06-workflow-approval/run.sh` in a fresh project per template (task-242)',
     '',
     `Result: ${verdict}`,
     '',
@@ -865,6 +1025,8 @@ if (require.main === module) {
 
 module.exports = {
   AGENT_FIXTURES,
+  JOURNEY_COMMANDS,
+  JOURNEY_SCRIPT,
   SMOKE_TEMPLATES,
   agentRunSteps,
   assertCommitName,
@@ -876,6 +1038,7 @@ module.exports = {
   removeBuildOutput,
   runSmoke,
   smokeAgentRun,
+  smokeJourney,
   smokeSteps,
   smokeTemplate,
 };
