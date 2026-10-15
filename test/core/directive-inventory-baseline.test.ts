@@ -546,8 +546,11 @@ describe('loadDirectivesAtHead / loadRolesYamlAtHead (task-096)', () => {
     // Unreachable through any argument — git has just listed the blob — so it is reachable only by
     // making the second read fail, which is what a ref moving between the two calls would do.
     // Skipping is the fail-closed answer: a directive nobody can read is one that does not exist.
+    // task-283 changed this pin deliberately (bug-309): the directives are read back in ONE batched
+    // `readPathsAtRev` (one `git cat-file --batch`) instead of one `readPathAtRev` (`git show`) each, so the
+    // failing second read is the batch answering `null` for every listed path.
     repo = seedRepo();
-    const spy = jest.spyOn(storage, 'readPathAtRev').mockReturnValue(null);
+    const spy = jest.spyOn(storage, 'readPathsAtRev').mockImplementation((_root, _rev, paths) => paths.map(() => null));
     try {
       expect(loadDirectivesAtHead(repo)).toEqual([]);
     } finally {

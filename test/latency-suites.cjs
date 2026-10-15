@@ -6,7 +6,8 @@
  * list as an argument). Paths are relative to the repository root.
  *
  * Two kinds, both presupposing an otherwise idle machine:
- * - suites that time **spawned processes** (`test/cli/command-latency.test.ts`): exactly the `EXEMPTIONS`
+ * - suites that time **spawned processes** (`test/cli/command-latency.test.ts`, REQ-PERF-02; and
+ *   `test/cli/workflow-next-command-latency.test.ts`, REQ-PERF-03's spawned total, task-283): exactly the `EXEMPTIONS`
  *   of `test/core/latency-budget-placement.test.ts`, which holds them to its rules 3 and 4;
  * - suites that time an operation **in-process** on a fixture too large to measure inside the parallel run
  *   ({@link IN_PROCESS_LATENCY_SUITES}; task-216, REQ-PERF-03 on this repository's own history): they spawn
@@ -14,4 +15,7 @@
  */
 const IN_PROCESS_LATENCY_SUITES = ['test/core/workflow-next-latency.test.ts'];
 
-module.exports = { LATENCY_SUITES: ['test/cli/command-latency.test.ts', ...IN_PROCESS_LATENCY_SUITES], IN_PROCESS_LATENCY_SUITES };
+module.exports = {
+  LATENCY_SUITES: ['test/cli/command-latency.test.ts', 'test/cli/workflow-next-command-latency.test.ts', ...IN_PROCESS_LATENCY_SUITES],
+  IN_PROCESS_LATENCY_SUITES,
+};

@@ -104,6 +104,13 @@ const EXEMPTIONS: Readonly<Record<string, string>> = {
     'marginal separates the query cost from start-up; it runs alone and only when asked for ' +
     "(test/latency-suites.cjs), because both budgets presuppose an idle machine, where bug-011's spawn ran " +
     "inside jest's parallel run.",
+  'cli/workflow-next-command-latency.test.ts':
+    "REQ-PERF-03 budgets workflow next's total and its marginal cost over process start alike (dl-146 Q3; " +
+    'task-283, bug-309). The file spawns the same process-start floor and the compiled workflow next on the ' +
+    'pinned clone of test/core/helpers/workflow-next-fixture.ts, and judges each total and each total minus the ' +
+    'median floor (sampleMarginalLatency, rule 3), beside the in-process timing of ' +
+    'test/core/workflow-next-latency.test.ts; it runs alone and only when asked for (test/latency-suites.cjs), ' +
+    'because both budgets presuppose an idle machine.',
 };
 
 /** What to do instead, named in every failure so a hit costs no lookup. */
