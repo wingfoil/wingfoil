@@ -1,7 +1,7 @@
 # Features — WingFoil
 
-**Version:** 1.14
-**Date:** 2026-10-12  
+**Version:** 1.15
+**Date:** 2026-10-15  
 **Status:** Approved
 
 ---
@@ -87,7 +87,7 @@ the Memory documents, at the paths `.wingfoil/memory.yaml` declares).
 | P4.8  | `wingfoil workflow create`                  | 0a, 0b, 2, 4, 6    | Morgan, Alex  | Create new custom workflow file (flag-based; interactive post-v0.3)                                                                                                                                                                  | Command        |
 | P4.9  | `wingfoil workflow remove`                  | 2, 4, 6            | Morgan, Alex  | Remove custom workflow after verifying it's not included elsewhere                                                                                                                                                                  | Command        |
 | P4.10 | Workflow Steps (atomic actions)             | 0a, 0b, 1, 2, 4    | All           | Steps execute: memory.add, memory.submit, agent.execute, git operations (branch, worktree, merge)                                                                                                                                   | Feature        |
-| P4.11 | Deliverables (Memory + State)               | 0a, 0b, 2, 4       | All           | Memory files with frontmatter state tracking; states follow the element's **per-type** state machine in `.wingfoil/memory.yaml` (default: draft → pending → approved/rejected → deprecated)                                         | Feature        |
+| P4.11 | Deliverables (Memory + State)               | 0a, 0b, 2, 4       | All           | Memory files with frontmatter state tracking; states follow the element's **per-type** state machine in `.wingfoil/memory.yaml` (default: draft → pending → approved, reject → draft, deprecated from any state)                                         | Feature        |
 | P4.12 | Workflow Checks (pre/post execution)        | 0a, 0b, 1, 2, 4, 6 | All           | Validation rules for steps (file.exists, frontmatter.required, git.commits, tests.coverage). *Also called:* gates; what evaluates one is its *verifier* (command, script, CI or agent)                                                                                                                                         | Feature        |
 | P4.13 | Workflow State Deduction (from Memory)      | 0a, 0b, 1, 2, 3, 4 | All           | State deduced from Memory file existence and frontmatter, validated against the element type's allowed states (P1.13); no separate state index file needed                                                                          | Infrastructure |
 | P4.14 | Approval Routing (role-based from DNA)      | 0a, 0b, 2, 4       | Morgan, Casey | Define approvers by role (team members defined in `.wingfoil/dna.yaml`) or person. *Also called:* human + agent verification, when an automated or agent check precedes the human decision                                                                                                                                                   | Feature        |
@@ -376,7 +376,7 @@ Memory element types are **not hardcoded**: they are configured in `.wingfoil/me
 pattern, name, description, tags, and — crucially — **its own state machine** (allowed states + transitions). There is
 no single global state machine: a `release` and a `task` move through different lifecycles. The CLI verbs
 (`submit`/`approve`/`reject`/`deprecate`) and workflow `element.set_state` actions are both validated against the type's
-graph. A `defaults` block (`draft → pending → approved/rejected → deprecated`) is used by any type that does not
+graph. A `defaults` block (`draft → pending → approved`, `reject` → `draft`, `deprecated` from any state) is used by any type that does not
 override
 `states`.
 

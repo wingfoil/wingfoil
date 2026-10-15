@@ -1,7 +1,7 @@
 # Sequencer — WingFoil MVP (v0.1 → v1.0)
 
-**Version:** 1.9
-**Date:** 2026-10-14
+**Version:** 2.0
+**Date:** 2026-10-15
 **Status:** Approved
 
 ---
@@ -245,8 +245,8 @@ cycle.
 
 - v0.3 released: Project Workflow fully functional
 - Agents can be launched with full workflow context
-- Workflow approval cycle complete (per-type state machines; default draft → pending → approved/rejected; reject →
-  fallback step)
+- Workflow approval cycle complete (per-type state machines; default draft → pending → approved; reject → draft and
+  the fallback step)
 - Journey 1 (Alex) fully functional with workflow integration
 - Journey 2 (Sam - reviewer) approval workflow functional
 - Journey 3 (Jordan) task execution with auto-loaded directives functional
@@ -398,8 +398,8 @@ Workflow, Interaction) are integrated progressively across 5 weeks, with weekly 
 - ✓ All v0.2 features stable (no regressions)
 - ✓ Workflow commands functional (start, end, list, show, create, remove, next, status); Memory lifecycle verbs (
   submit/approve/reject) integrated into workflow steps
-- ✓ State transitions working (per-type state machines; default draft → pending → approved/rejected; reject → fallback
-  step)
+- ✓ State transitions working (per-type state machines; default draft → pending → approved; reject → draft and the
+  fallback step)
 - ✓ Approval routing by role functional
 - ✓ Notification system (basic CLI output + git hooks) functional
 - ✓ Agent execute wrapper (<30 sec context load) working
@@ -447,8 +447,8 @@ Workflow, Interaction) are integrated progressively across 5 weeks, with weekly 
     - ✓ Journey 4: Morgan (tech lead) with governance
     - ✓ Journey 5: Casey (PM) with decision visibility
     - ✓ Journey 6: Morgan (tech lead) with workflow evolution
-- ✓ Workflow state transitions work correctly (per-type state machines; default draft → pending → approved/rejected;
-  reject → fallback step)
+- ✓ Workflow state transitions work correctly (per-type state machines; default draft → pending → approved;
+  reject → draft and the fallback step)
 - ✓ Agent wrapper loads directives + context correctly in <30 seconds
 - ✓ No data loss or corruption from git integration
 - ✓ CLI is intuitive and self-documenting (`--help` works)
