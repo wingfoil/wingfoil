@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.27"
+version: "1.28"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -1029,3 +1029,51 @@ commit, right after the task's transition and on the task branch:
     `wave.yaml` 1.0.
   - **Follow-ups:** to be filed through a `bug-ingest` plan after the approver's triage.
   - W3: 58 of 72 tasks `done`.
+- **2026-10-15 — batch B7 `done`** (fix `task-279`, `280`, `281`; `task-241`, `234`, `236`, `237`, `215`, `243`, `244`).
+  - **Process.** The first batch under `dl-134`'s separation of duties as ruled on 2026-10-12: per task a developer
+    agent ran `design` and stopped, a separate `qa` agent ran `red` (test files only) and stopped, the developer ran
+    `green`, `refactor` and `submit`, then an independent review; a red test found wrong went back to the `qa` agent
+    (T4 measured from each red commit, the `qa` agent's later commits named as send-backs). The fix tasks started
+    first (stop-the-line batch rule) and closed before any feature. `task-215` merged `task-279`'s approved branch,
+    `task-237` merged `task-236`'s and `task-243` merged `task-237`'s before their design. The single heavy-gate slot
+    (`dl-170`) became a FIFO queue in the coordinator's kit after a waiter starved for about eight hours.
+  - **By-hand passes (approver, real terminal).** `task-236` (Claude Code 2.1.296): the first pass found that the
+    model cannot get an MCP Prompt, so under ruling (a) the execution context is also served as the read-only
+    session Resource `wingfoil://session/{role}/{element}/{state}`, which the bootstrap names; the second pass read it
+    unaided, with the adapter's `--mcp-config` server used and the project's same-named one shadowed. `task-237`
+    (Codex CLI 0.145.0, ChatGPT sign-in): the model read the unlisted session Resource with no help, through the new
+    `mcp.via: config-arg`.
+  - **Review.** Every task had an independent review (all APPROVE WITH FIXES or APPROVE); defects fixed in-task
+    include: `279` read required fields and exempt ids through the prototype (a `constructor` field crashed or passed);
+    `281`'s doc comment on the wrong interface and a stale `dev-loop.yaml` header; `241`'s Memory search counted any
+    mention as a tracker, so an immediate finding could be silenced; `234` followed `..` entries and symlinks out of the
+    repository; `244` ignored Jest's own `success` and misclassified BDD suites; `236`/`237` text that overstated what the
+    passes showed (the D-H precedence was first written backwards, then corrected by the approver).
+  - **Approver rulings (2026-10-12/15):** order, rounds and notes at start; D1–D7 (215 reconcile-governance only, the
+    by-hand passes run by the approver, 241's two baselines, Pages in its own workflow, 244's tag-run check deferred
+    to release-publishing, 281's `done` order follows practice, the stop-the-line close rule); per task: 280 (b) the
+    dead defaults removed in-task; 279 D1 (a) `template.frontmatter.exempt` in `memory.yaml`; 281 D1 (a)–D4; 236 D-A–D-H
+    and (a); 241 A (a) and B–I, the partial v0.1 baseline (a); 215 D-A (a), D-B; 234 points 1–5; 237 D-1 (a)–D-6 (D-5
+    revised to `codex@openai.com`); 244 D1–D8, F4 (gate timeout 45 min), F5 resolved as the Release-asset link;
+    243 D1–D6; the per-task branch-coverage −0.01 from the run-dependent `memory-transition.ts` lines accepted.
+  - **Amendments: 19** — `279`: spec-001, spec-010, dl-132, bug-342; `280`: bug-343; `281`: spec-017, spec-008,
+    bug-300, bug-301, bug-313, bug-325, bug-326; `241`: bug-344, bug-332; `234`: task-266 (handover); `236`: spec-016,
+    spec-004; `237`: spec-016; `244`: spec-015 (`git log --oneline 32d8871b..6e454f40 | grep -cE "wf\([a-z-]+\):
+    amend"` → 19). `215` and `243` had none.
+  - **Bugs closed:** bug-300, bug-301, bug-313, bug-325, bug-326, bug-332, bug-342, bug-343, bug-344.
+  - **Merges** on `gate/w3-b7`, in order 279 → 280 → 281 → 241 → 234 → 236 → 237 → 215 → 243 → 244 (last
+    `6e454f40`), then `main` fast-forwarded. Conflicts: only `bindings.yaml`'s version line, re-bumped 1.9 → 2.0
+    (`094a901c`, 234) → 2.1 (`6882ee94`, 215); every other shared file merged clean.
+  - **Gates on `6e454f40`:** `test:coverage` 443 suites, 7933 tests, coverage 99.33 / 97.38 / 98.00 / 99.71; build,
+    lint, `docs:api`, typecheck, `check:audit` exit 0; e2e smoke 71 ok (the agent step added by `243`); `check:mcp` 0;
+    `workflow list` 27 workflows, 0 errors; `lint:claims` advisory (39 warnings). Governance `--base db0e2752`: 98
+    `wf()` commits, 0 findings; no AI trailer on any of the 10 approves. `test:latency` (load 1.9): 13 tests passed,
+    `workflow next` p95 911 ms against a 1000 ms budget (476 ms at B6) — not caused by B7: `main` without B7's code
+    measured 1005 ms; the cost grows with the repository's history (`bug-309`, coordinator's re-measure in the gate log).
+  - **Config versions:** `memory.yaml` 3.5, `dna.yaml` 2.0, `roles.yaml` 1.8, `bindings.yaml` 2.1, `dev-loop.yaml` 2.0,
+    `release-planning.yaml` 2.2, `release-publishing.yaml` 1.7, `release-submit.yaml` 1.3, `release-health.yaml` 1.1,
+    `user-docs.yaml` 1.6, `e2e-smoke.yaml` 1.6, `git-conventions.md` 1.6.
+  - **Open, the approver's:** `task-234`'s post-merge steps (Pages, the repository homepage, the Pages `service` and
+    the `svc-004` amendment); `task-244`'s tag-run verification (v0.3 release-publishing).
+  - **Follow-ups:** to be filed through a `bug-ingest` plan after the approver's triage (latency first: `bug-309`).
+  - W3: 68 of 76 tasks `done`.
