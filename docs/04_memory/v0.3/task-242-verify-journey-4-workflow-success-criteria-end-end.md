@@ -393,14 +393,46 @@ approver's. The approver's record goes here as `### AC 3 — by hand (approver)`
 
 - AC 1 met: the example passes on a fresh project for both templates (above).
 - AC 2 previewed: zero errors on list and on all 27 shows; the integrated-head run is the gate's.
-- AC 3: runbook ready, run pending (approver).
+- AC 3 met: the approver ran the runbook with Claude Code and ruled it PASS (record below).
 - AC 4 met: P4.13 sc. 4–5 and P4.14 sc. 4 written and bound in `test/core/workflow-finalize-bdd.test.ts`.
 - AC 5 met: the smoke runs the journey per template after the agent run, and fails on a wrong exit or a missing
   record (the proxy rows).
 - T4: `git log --first-parent --no-merges --format=%h 8ebe99cd..HEAD -- scripts/e2e-smoke.d.cts
-  test/cli/e2e-smoke.test.ts test/core/workflow-finalize-bdd.test.ts test/fixtures/smoke/wingfoil-proxy.cjs` → empty.
+  test/cli/e2e-smoke.test.ts test/core/workflow-finalize-bdd.test.ts test/fixtures/smoke/wingfoil-proxy.cjs` →
+  `69995088` only. That commit is the qa agent's send-back: it declares `smokeJourney`'s fifth parameter,
+  `timeoutMs`, in `scripts/e2e-smoke.d.cts` (notes `8435192d`). No developer commit touches a red file.
 - Same class as the shim defect: no other smoke step writes a shim. `grep -n "writeFileSync" scripts/e2e-smoke.cjs`
   → the report and the shim only.
+
+### AC 3 — by hand (approver, 2026-10-15)
+
+The approver ran `devloop-kit/task-242-runbook.md` with Claude Code (the R17 built-in adapter `claude-code`) and
+ruled it PASS. Record, verbatim:
+
+```
+AC 3 — Journey 4 by hand, 2026-10-15, approver: Roberto Pompermaier
+head: fda8c565   claude: 2.1.301 (Claude Code)   wingfoil: 0.2.2 (fda8c565…)
+block 1: all exits 0; adr-001 approved, api-style directive written; tree clean
+block 2: assign 0; developer directives include api-style
+block 3: show errors 0; start 0; next: deliver.write / developer / api-style listed
+block 4a: add 0; WingFoil-Instance deliver-1-plan, WingFoil-Step deliver.write
+block 4b: execute 0 (90.5 s); the agent wrote AND submitted the task from the bootstrap alone, then restructured it on the prompt (docs(task) commit while pending); record commit `agent: record task-001-login-form-endpoint/write/1`; agent show built-in/claude-code / developer / task:task-001-login-form-endpoint; api-style respected (POST /v1/auth/login, cites adr-001 and api-style)
+block 5: manual submit refused, exit 1 (already pending: the agent submitted); human-needed line "human needed: approve or reject task-001-login-form-endpoint — routed to Roberto Pompermaier <robypomper@gmail.com>"; end-before-approval exit 1
+block 6: approve 0; history add/submit/(edit)/approve, approver + reason recorded; next deliver.retrospective@task:… (record, finalizable)
+block 7: finalize 0 `workflow: finalize deliver-1-plan deliver.retrospective@task:task-001-login-form-endpoint` + WingFoil-Phase completed; end 0 `wf(plan): finalize deliver-1-plan [active → done]`; status "no open workflows"
+verdict: PASS (runbook expectation for 4b/5 corrected: the agent executes the step's actions itself; coordinator follow-ups 20–22)
+```
+
+The runbook's expectation for blocks 4b and 5 was wrong. It assumed the agent would only fill the task and leave
+submitting to the approver. In fact `agent execute --next` hands the agent the step's actions in its bootstrap, and
+those actions include `memory.submit`. The agent submitted the task itself, so the approver's block-5 `memory submit`
+was correctly refused (exit 1, already `pending`). The kit runbook (not committed) was corrected to that behaviour.
+
+The coordinator's follow-ups 20–22 (not filed here):
+- the agent ran the bare `wingfoil` on `PATH` (the global npm 0.2.2), so its submit commit carries no
+  `WingFoil-Version` stamp;
+- after its own submit, it edited the pending task with a plain `docs(task)` commit;
+- its commits' `AI-Model` trailer reads `claude-opus-5-5[1m]`.
 
 ### Handovers
 
@@ -414,10 +446,13 @@ approver's. The approver's record goes here as `### AC 3 — by hand (approver)`
 ### Pending amendments (approver)
 
 None. bug-327 and bug-328 already carry `### Retrospective` with "None." (`grep -A2 "### Retrospective"
-docs/04_memory/bugs/bug-32[78]-*.md`), and nothing more needs saying there.
+docs/04_memory/bugs/bug-32[78]-*.md` → 2 matches). They need no content: the shim defect and the runbook correction
+belong to this task's retrospective, not to the two bugs.
 
 ### Retrospective
 
 - A test harness that runs the CLI by a bare name (`wingfoil` on `PATH`) is a real caller of every smoke step. A shim
   that prepends itself to `PATH` must never exec a bare name. The bound on the run turned a hang into a failed check.
+- The by-hand runbook under-predicted the agent: the bootstrap's actions make it execute the step (add/submit), not
+  just draft content. A runbook for an agent step should expect the step's actions done by the agent.
 - The full-suite gate at load ~150 ran 7322 s. The slot rule (load ≤ 14) is what made the later runs meaningful.
