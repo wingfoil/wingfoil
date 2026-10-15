@@ -80,6 +80,25 @@ with `bug-ingest-rel-v0.3-git-spawn-and-attribution-plan`). Memory operations ru
 
 ## Execution Notes
 
+- **capture (2026-10-15)** on `ingest/wfcoord-launch-and-git-identity`, every citation re-read on `main` at
+  `b8dcb2df`. Each commit holds exactly one file and carries both AI trailers (`git-conventions` §7).
+
+  | Element | Status | Release | add / submit |
+  |---|---|---|---|
+  | `dl-181` a headless work run beside the v1.0 verification run (Q1 `result`, recommended `n/a`; Q2 permission posture, recommended per adapter; Q3 `prompt.via`, recommended per adapter; Q4 `--timeout`, recommended, the run still recorded) | `in-discussion` | v0.4 | `cc43782c` / `2bc74f37` |
+  | `dl-182` where a launched agent's output goes (Q1 caller's stderr; Q2 `--log` a copy; Q3 no WingFoil-kept log in v0.4; Q4 interactive unchanged, `--log` refused; Q5 never committed, not redacted) | `in-discussion` | v0.4 | `fdb7f4b5` / `9deeb217` |
+  | `dl-183` who chooses the launch kind (Q1 `launch: interactive \| headless \| any`, default `interactive`; Q2 option > field, with a warning; Q3 refuse when the adapter lacks the kind; Q4 `--next` resolves and applies `dl-171` (c) first) | `in-discussion` | v0.4 | `8872bdea` / `6fec418d` |
+
+  Plan add `e72873c1`, submit `48c61522`.
+- **Correction to the request:** the errors of `spec-016` are its §3.7 (the refusal table, lines 566-604); the
+  specification has no §12. The decision-logs cite §3.7.
+- **Facts the decision-logs rest on** (each re-run at `b8dcb2df`): `grep -c headless src/storage/builtin-adapters.ts`
+  → `0` (neither built-in declares `launch.headless`; both `terminal: required`, lines 52 and 91); `spec-016` has no
+  time bound beyond step 11's 30 s pre-flight and no permission or sandbox field (`grep -n -i
+  "timeout\|permission\|sandbox"` → nothing; the one bound is line 472's pre-flight deadline).
+- **Checks:** `node scripts/check-governance.cjs --base b8dcb2df` → `gated: 0 findings`, `history: 0 findings`;
+  `npx jest test/docs --maxWorkers=2` → 23 suites, 229 tests passed.
+
 ### Retrospective
 
-None yet.
+None.
