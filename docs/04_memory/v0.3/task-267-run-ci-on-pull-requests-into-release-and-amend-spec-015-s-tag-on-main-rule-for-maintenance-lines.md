@@ -238,3 +238,121 @@ Markers the developer keeps (the red pins them): the header paragraphs start `# 
 (ci.yml), `# The range` and `# Kept equal to ci.yml` (governance.yml); the range paragraph uses the words
 `all-zero` and `whole history` (both already there today); `the one branch releases are cut from` leaves the
 ci.yml *Trigger* paragraph. The trigger tests fix the branch order as `['main', 'release/**']`.
+
+### green (developer, 2026-10-16)
+
+Green commit **`7a55dd02`** `feat(ci): task-267 — run ci and governance on release/** lines, never cancelling a run
+there (dl-159 A1.3)`; files `.github/workflows/ci.yml`, `.github/workflows/governance.yml` only.
+- `ci.yml`: `on.pull_request.branches: [main, 'release/**']` (`on.push` unchanged, `['**']`); concurrency group
+  per design D1 (approver ruling 2026-10-16); header *Trigger.* paragraph names `main` and `release/X.Y`, cites
+  `dl-159`, drops "the one branch releases are cut from"; *Concurrency:* paragraph names `release/X.Y`, says why
+  the expression is parenthesised and that a pull request keeps its per-ref group; the "runs twice per push"
+  sentence names both lines. The `e2e-smoke` job is untouched (`git diff 92bec996 HEAD -- .github/workflows/ci.yml
+  | grep -c '^[-+] *- name\|^[-+] *run:'` → `0`).
+- `governance.yml`: `on.push` and `on.pull_request` both `[main, 'release/**']`; the same group body as `ci.yml`;
+  header line 1, *The range* paragraph (design D2: the all-zero `before` of a new `release/X.Y`'s first push → the
+  whole history; a `release/X.Y` cut from `main` has `main`'s first-parent line), *Kept equal to ci.yml* (no run
+  on `main` or a `release/X.Y` line is cancelled), and one sentence in *Binding* (a `release/X.Y` line has no
+  branch-protection rule until the approver adds one, design D4). The range step is unchanged (ruling D2 (a)).
+- red → green: `npx jest test/cli/ci-workflow.test.ts test/cli/governance-workflow.test.ts
+  test/cli/workflow-action-pins.test.ts --maxWorkers=2` → red: 6 failed (3 + 3, `### red (qa)`); green: 3 suites,
+  41 passed, 0 failed. The other readers of the two files (`grep -rln "workflows/ci.yml\|'ci.yml'\|governance.yml"
+  test`): `npx jest test/cli/dependency-check-workflow.test.ts test/cli/dev-advisories.test.ts
+  test/cli/git-hooks.test.ts test/cli/production-advisories.test.ts test/cli/run-tests.test.ts --maxWorkers=2` →
+  5 suites, 38 passed.
+- Same-class sweep: `grep -n "branches:" .github/workflows/ci.yml .github/workflows/governance.yml` → `ci.yml:75`
+  `['**']`, `ci.yml:77`, `governance.yml:50,52` `[main, 'release/**']`; `grep -c "release/" .github/workflows/ci.yml
+  .github/workflows/governance.yml` → `7`, `11` (both `0` at `92bec996`). Other workflows (`publish.yml`,
+  `pages.yml`, tag-triggered) belong to `task-265`/`task-266`; `dependency-check.yml` has no branch trigger
+  (`schedule`, `workflow_dispatch`); `scorecard.yml` runs on push to `main` only by design ("Scorecard scores
+  the default branch", its header line 8, `dl-129` Decision 1), so it is not the same class.
+
+### refactor (developer, 2026-10-16)
+
+No code refactor needed (two YAML files). Gates, heavy ones each after `waitslot.sh`, `--maxWorkers=2`, run with
+the uncommitted spec-015 amendment in the working tree:
+- `npm run test:coverage -- --maxWorkers=2` at `7a55dd02` → `Test Suites: 453 passed, 453 total`, `Tests: 8108
+  passed, 8108 total`, exit 0; `All files | 99.34 | 97.39 | 98.03 | 99.71` = the B8 baseline in every column.
+  Load 2.87 → 8.03 (19:28 → 19:49).
+- `npm test -- --maxWorkers=2` at `7a55dd02` → `Test Suites: 453 passed, 453 total`, `Tests: 8108 passed, 8108
+  total`, exit 0; load 3.07 → 3.22 (20:44 → 20:52).
+- `npm run -s lint` → exit 0, no output. `npm run -s docs:api` → exit 0. `npm run -s typecheck` (both tsc
+  configs) → exit 0, no output.
+- `node scripts/check-governance.cjs --base 92bec996` → `governance check: 1 wf() commits in 92bec996…..HEAD`,
+  `gated: 0 findings on 0 commits`, exit 0.
+- `node scripts/lint-claims.cjs --base 92bec996` → `claim lint: 6 warnings in 1 file (warn-only)`, exit 0; all six
+  on this file, all read as false positives: three on qa's quoted test titles ("nothing else", red table), one on
+  the quoted spec text ("does not exist on `origin`"), one on "unchanged" (3b row, a pin, with its test named) and
+  one on "already covered" (D2, the merge-forward PR, a reasoning line).
+- **Ruling D2 (a) evidence — the whole-history run CI makes on the first push of a `release/X.Y` cut from this
+  head:** `node scripts/check-governance.cjs` (no `--base`) at `7a55dd02`, under the slot → first line
+  `governance check: 4755 wf() commits in HEAD (2729 after the introduction commit fcd43569…), and 2368 other
+  commits`; `gated: 0 findings on 0 commits`; `history: 1037 findings on 643 commits` (reported, not failing);
+  exit 0; `real 997.18s` at load 9.5 → 4.1 (task-167's ~6 min was measured idle).
+- No BDD scenario names `ci.yml` or `governance.yml` (`grep -rln "ci.yml\|governance.yml"
+  docs/02_requirements/02_bdd/features` → nothing); no CLI/help change, so `docs/cli-reference.md` is untouched.
+
+### self-review (developer, 2026-10-16)
+
+- AC 1 — met: ci-workflow › "triggers on a push to any branch and on a pull request to main or to a release/**
+  line…" passes; `ci.yml:77`.
+- AC 2 — met: ci-workflow › "cancels superseded runs … release/* line" passes; group string equal to ruling D1.
+- AC 3 — met: header case passes (3a); e2e-smoke case with `not.toMatch(/release/)` passes (3b); the job's steps
+  are unchanged (the `git diff … | grep -c` above → 0).
+- AC 4 — prepared as a pending amendment (below), uncommitted: `git status --short` lists
+  `docs/04_memory/design/specs/spec-015-packaging-publishing.md` as ` M`. `grep -c 'release/X.Y'` on that file →
+  the §3 stage 4 sentence, the §4 bullet and the Revision note carry it.
+- AC 5 — the runbook stays in `### design` (read-only `gh api` commands with the expected outputs, the npm form,
+  the end-to-end proof at `v0.3.1`); no setting changed by the agent.
+- AC 6 — met: the three governance cases pass; `governance.yml:50,52`.
+- T4: `git log --first-parent --no-merges --format=%h d0791c66..HEAD -- test/cli/ci-workflow.test.ts
+  test/cli/governance-workflow.test.ts` → empty.
+- Headings name their agents: design (developer), red (qa), green / refactor / self-review (developer).
+- No config `version:` to bump (neither workflow carries one). No Memory element created.
+
+### Pending amendments (approver)
+
+- `spec-015-packaging-publishing` — §3 stage 4 last sentence, §4 first bullet, and a dated Revision note appended
+  last, in the working tree, uncommitted. Per ruling R5 the coordinator stashes it, merges `task/266`, re-applies
+  it after `task-266`'s note, then runs the amend. Proposed `--reason`: "Amend §3 stage 4 and §4 so a patch tag
+  vX.Y.Z goes on the pushed release/X.Y and a minor tag on the pushed main, as the publish gate of task-265
+  accepts, per dl-159 Decision 4 (task-267)."
+  - §3 stage 4: "Triggered on a `vX.Y.Z` tag on `main`." becomes "Triggered on a `vX.Y.Z` tag: a minor tag
+    `vX.Y.0` on the pushed `main`, a patch tag `vX.Y.Z` (Z ≥ 1) on the pushed `release/X.Y` (§4, `dl-159`)."
+  - §4 first bullet: exactly the text quoted in `### design` (*The spec-015 amendment*), whose closing reference
+    now names this Revision note.
+  - The Revision note, in full:
+
+  > **Revision (2026-10-16, `task-267-run-ci-on-pull-requests-into-release-and-amend-spec-015-s-tag-on-main-rule-for-maintenance-lines`) — §3 stage 4 and §4: a patch tag goes on the pushed `release/X.Y`, a minor tag
+  > on the pushed `main`, per `dl-159` (`ready`) Decision 4 and Actions A1.1 and A1.3.** `dl-159` opens a
+  > maintenance line `release/X.Y` beside `main` for the patches of a released minor. Stage 4 ended "Triggered on a
+  > `vX.Y.Z` tag on `main`." and now names both lines. The §4 tag bullet previously read, in full:
+  >
+  > > - The publish trigger is an annotated git tag `vX.Y.Z` created **on `main`** after the release branch
+  > >   merges (`dl-024`; never on a `design/*` branch). **`main` must be pushed to `origin` before the tag
+  > >   is pushed:** CI asserts that the tagged commit is an ancestor of `origin/main`, not of anyone's
+  > >   local `main` (`dl-074`). Tag ↔ `package.json` `version` must match (CI asserts this before
+  > >   promote). The gate also refuses a lightweight tag: `refs/tags/<tag>` must name a tag object
+  > >   (`check-release-tag.cjs --annotated`, `dl-057` (d) option 1). See the *Revision (2026-09-28) — §4*
+  > >   note below.
+  >
+  > The publish gate's step "Tag commit is on main (dl-024)" (`git fetch --no-tags origin main`, then `git merge-base
+  > --is-ancestor "$GITHUB_SHA" origin/main`) is replaced by `task-265`'s step "Tag commit is on main or on
+  > release/X.Y of its own X.Y (dl-024, dl-159)", which runs `node scripts/check-release-tag.cjs --on-line
+  > "$GITHUB_REF_NAME" "$GITHUB_SHA"`: it reads which of `main` and `release/X.Y` exist on `origin`, fetches only
+  > those with `--no-tags`, and passes when the tagged commit is an ancestor of at least one of them (approver
+  > ruling on `task-265` D4 (a): one rule for every `vX.Y.Z`, `vX.Y.0` included). `dl-074`'s pushed-ref
+  > precondition thus extends to the maintenance line. Beside the gate, `ci.yml` now runs on pull requests into
+  > `release/**` as well as into `main`, `governance.yml` on pushes and pull requests to either, and in both a
+  > push to `main` or to a `release/X.Y` line has a concurrency group of its own commit, so no run there is
+  > cancelled (`task-267`). The pins are `test/cli/check-release-tag.test.ts`, `test/cli/publish-pipeline.test.ts`,
+  > `test/cli/ci-workflow.test.ts` and `test/cli/governance-workflow.test.ts`. Edited in place: no supersede, no
+  > state change, no `version:` bump (`dl-047`), as in the revisions above.
+
+### Retrospective
+
+- The design read `task-265`'s design notes in its worktree before they were merged; the spec-015 text quotes
+  that design, so a change to `task-265`'s step name or rule at its review would have to reach this amendment
+  before it is run (evidence: the step name appears in both `### design` sections).
+- A whole-history governance run took 997 s at load ~9, against ~6 min idle: the first push of each
+  `release/X.Y` pays that once (D2 (a)).
