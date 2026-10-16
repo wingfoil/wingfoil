@@ -208,6 +208,68 @@ edit on `main` (the existing "on main itself" case); its red in the committed fi
 | 4 — *Gate* paragraph | characterization (doc) | no test (developer's file) |
 | 5 — governance unchanged | characterization | no test (developer's evidence) |
 
+### green (developer, 2026-10-16)
+
+`e206a4ad` `feat(lint): task-287 — …`. `test/lint/helpers/version-bump.ts`: `RELEASE_LINE_PATTERN`,
+`IntegrationBranch`, `integrationBranchOf(root)` as designed (candidates from `git for-each-ref
+--format=%(refname:strip=2) refs/heads/main refs/heads/release`, filtered by the pattern, sorted in code by
+`compareCandidates`: `main`, then major/minor numerically; `merge-base HEAD refs/heads/<name>` per candidate; first
+candidate whose fork point descends from every other's, `--is-ancestor` exit 0/1, anything else throws);
+`TRUNK_BRANCH` kept with a new doc comment; `trunkForkPoint` removed. In `checkPendingVersionBumps` the one changed
+line is the fork-point read: `git diff 81927e0e e206a4ad -- test/lint/helpers/version-bump.ts` shows `-
+trunkForkPoint(root)` / `+ integrationBranchOf(root)?.forkPoint ?? null` and no other line of that function. Helper
+header rewritten (`dl-159`, sorted candidates, no clock/randomness). `doc-versioning.md`: *Gate* bullet only (local
+integration branch, nearest fork point, `main` on a tie, a line itself strict, stale-ref and missing-line caveats,
+`task-287`); *The bump rule* untouched, no `version:` (the file declares none).
+
+Red → green: `npx jest test/lint/version-bump.test.ts --maxWorkers=2` → red (`e1371f9e`, qa) 12 failed / 19 passed;
+green 31 passed / 31. As qa recorded, (4) and (8)-on-`main` pass on today's verdict and were red only through the
+missing export.
+
+### refactor (developer, 2026-10-16)
+
+No refactor beyond green. Gates on `e206a4ad`, each heavy one after `waitslot.sh`, `--maxWorkers=2`:
+- `npm run test:coverage -- --maxWorkers=2` (load at start 12.71) → EXIT=0, 454 suites / 8133 tests passed; All
+  files 99.34 / 97.4 / 98.03 / 99.71 — no column below the B8 baseline 99.34 / 97.39 / 98.03 / 99.71 (the helper is
+  under `test/`, outside the coverage scope).
+- `npm test -- --maxWorkers=2` (load at start 3.51) → EXIT=0, 454 suites / 8133 tests passed.
+- `npm run typecheck` (both tsc configs) → exit 0; `npm run lint` → exit 0; `npm run docs:api` → exit 0.
+- `npx jest test/directives test/lint/version-bump.test.ts --maxWorkers=2` → 10 suites, 209 passed (task-286's
+  `integration-branch-baseline.test.ts` still green with the new *Gate* text).
+- `node scripts/check-governance.cjs --base 92bec996` → exit 0, "gated: 0 findings on 0 commits".
+  `node scripts/lint-claims.cjs --base 92bec996` → 5 warnings (warn-only), exit 0: four on this file's design/red
+  lines ("nothing else", "unchanged" — each settled by the command named in the same subsection: the TS2305 tsc run,
+  `git diff --stat`, the `git diff` above) and one in task-286's notes.
+
+**Today's verdict unchanged (the guarantee of the design).** `git for-each-ref refs/heads/release` → empty (exit 0)
+in this clone, whose refs every worktree shares, so the candidate list is `[main]` and
+`integrationBranchOf(root)?.forkPoint` is today's `git merge-base HEAD main`; every pre-existing fixture case passes
+unchanged and the repository case "passes on this repository's pending change" is green in the full `npm test` above.
+
+**AC 5.** `git diff --stat 92bec996 HEAD -- scripts/check-governance.cjs` → empty. `grep -n "main"
+scripts/check-governance.cjs` → 70, 554 (comments), 994, 1012, 1013 (the `main()` function and `require.main`);
+`grep -nE "merge-base|refs/heads|'main'" scripts/check-governance.cjs` → 58 (comment), 888 (`merge-base <--base>
+HEAD`, a range): it reads no branch name. The AC's "comment lines only at `38172fcb`" is corrected to this reading.
+
+### self-review (developer, 2026-10-16)
+
+- AC 1: met — the rule, tie → `main`, incomparable/no candidate → `null`; red cases (7)–(10) and the line-61 case
+  green (31/31 above).
+- AC 2: met — (1)–(6) green; existing cases unchanged (`git log --first-parent --no-merges --format=%h
+  e1371f9e..HEAD -- test/lint/version-bump.test.ts` → empty: T4 holds, no commit after red on the red file).
+- AC 3: met — `grep -c dl-159` → 3 in the helper, 3 in the test file; both headers state the sorted candidate order,
+  no clock, no randomness; `grep -nE "Date|Math.random|performance" test/lint/helpers/version-bump.ts` → none.
+- AC 4: met — `grep -n "refs/heads/main" .wingfoil/directives/custom/doc-versioning.md` → none; the *Gate* bullet
+  names the local integration branch and the stale-ref caveat.
+- AC 5: met — above.
+- Same class in touched files: none left (`grep -n "TRUNK_BRANCH\|trunkForkPoint" test/lint/helpers/version-bump.ts`
+  → the constant, its use in `compareCandidates` and the `for-each-ref` call; no `trunkForkPoint`).
+- Headings name their agents: design (developer), red (qa), green/refactor/self-review (developer).
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -215,3 +277,8 @@ edit on `main` (the existing "on main itself" case); its red in the committed fi
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- Design D1 assumed the new exports would stop the suite at compile time; jest does not (`tsconfig.json`
+  `isolatedModules: true`, so ts-jest skips type diagnostics) and they failed at runtime as TypeErrors — qa's red notes,
+  run 2 (`npx tsc --noEmit -p tsconfig.json` → the three TS2305; jest → 12 TypeErrors). Proposal: a design that adds an
+  export states both reds, tsc and jest.
