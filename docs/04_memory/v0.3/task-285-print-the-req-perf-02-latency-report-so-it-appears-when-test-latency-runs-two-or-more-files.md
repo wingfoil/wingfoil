@@ -267,6 +267,22 @@ test/release-health/measure.test.ts` → empty. Same class: no other `console.lo
 "console\." test/cli/command-latency.test.ts test/cli/workflow-next-command-latency.test.ts
 test/core/workflow-next-latency.test.ts` → only the comment lines of `command-latency.test.ts`).
 
+### independent review (2026-10-16) and fixes (developer)
+
+- **Verdict: approve.** The reviewer re-ran the discrimination probe (12 failed / 5 passed on a `console.log` body)
+  and a real `WINGFOIL_LATENCY_REPORT=1 npm run test:latency` (1-min load 2.21 → 2.75): the REQ-PERF-02 block printed
+  once. Coverage on the reviewer's run: 99.34 / 97.39 / 98.03 / 99.71, branches 0.01 under this session's 97.40 and
+  equal to the B8 baseline (no column under it). D1 and D2 judged sound.
+- **One nit, in a red file:** the docstring at `test/release-health/measure.test.ts:760` (the console-block fixture).
+  Sent back to the qa agent (T4): fixed in `7d4667bc`, notes `c5de7e09`. No developer change.
+- **T4 now:** `git log --first-parent --no-merges --format=%h 6f467575..HEAD -- test/cli/latency-report-pass.test.ts
+  test/cli/fixtures/latency-report-pass test/core/latency-report-writer.test.ts
+  test/release-health/latency-report.test.ts test/release-health/measure.test.ts` → `7d4667bc` only, the qa
+  send-back commit.
+- **`workflow next (spawned)` 865 ms** (this session's Retrospective, candidate finding): the reviewer reads it as
+  noise, out of scope — the marginal stays near 530 ms and the total follows the spawn floor (723 ms at a floor of
+  229 ms in the reviewer's run). Not to be filed from this task.
+
 ### Pending amendments (approver)
 
 - `bug-378-the-req-perf-02-latency-report-never-prints-when-test-latency-runs-two-or-more-files` — `### Retrospective`
