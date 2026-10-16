@@ -289,7 +289,8 @@ describe('newest line only (task-266) — dl-159 A1.4', () => {
     const step = distTagStep();
     expect(step).toBeDefined();
     expect(step?.if).toBe("${{ github.event_name == 'push' }}");
-    const at = step === undefined ? -1 : steps.indexOf(step);
+    // Positions from ONE parse: `distTagStep()` re-reads the file, so object identity never holds across parses.
+    const at = stepIndex(steps, (s) => s.id === 'dist-tag');
     expect(at).toBeGreaterThan(stepIndex(steps, uses('actions/setup-node')));
     const run = step?.run ?? '';
     const order = [
@@ -313,10 +314,10 @@ describe('newest line only (task-266) — dl-159 A1.4', () => {
     const step = waitStep();
     expect(step?.run).toBe('node scripts/wait-npm-version.cjs "$GITHUB_REF_NAME" --timeout-minutes 330 --interval-seconds 60');
     expect(step?.if).toBe("${{ github.event_name == 'push' && steps.dist-tag.outputs.dist_tag == 'latest' }}");
-    const distTag = distTagStep();
+    // Positions from ONE parse (`steps`), never by identity with a step from another parse.
     const order = [
-      distTag === undefined ? -1 : steps.indexOf(distTag),
-      step === undefined ? -1 : steps.indexOf(step),
+      stepIndex(steps, (s) => s.id === 'dist-tag'),
+      stepIndex(steps, runs('node scripts/wait-npm-version.cjs')),
       stepIndex(steps, uses('actions/upload-pages-artifact')),
     ];
     expect(order.every((i) => i >= 0)).toBe(true);
