@@ -204,6 +204,7 @@ describe('git-conventions §1–§3, §6 — dl-159 (task-286)', () => {
     expect(version![3]).toContain('dl-159');
     const date = /\*\*Date:\*\* (\d{4}-\d\d-\d\d)/.exec(TEXT);
     expect(date).not.toBeNull();
-    expect(date![1] >= '2026-10-16').toBe(true);
+    expect(date?.[1]).toBeDefined();
+    expect((date?.[1] ?? '') >= '2026-10-16').toBe(true);
   });
 });
