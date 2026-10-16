@@ -61,7 +61,7 @@ describe('tag scheme (task-060) — spec-015 §4', () => {
  * The check is meaningful in CI: the v0.2.2 gate log shows `actions/checkout` fetching
  * `+refs/tags/*:refs/tags/*`, so `refs/tags/<tag>` on the runner is the pushed ref itself, and its object type
  * is the pushed tag's (task-238 Execution Notes, D6). The refusal is its own exported function, and its own
- * CLI mode (`--annotated`), separate from the version check and from "Tag commit is on main" (task-265).
+ * CLI mode (`--annotated`), separate from the version check and from the release-line check (`--on-line`, task-265).
  */
 describe('annotated release tag (task-238) — dl-057 (d)', () => {
   it('accepts a tag whose object is a tag object', () => {
