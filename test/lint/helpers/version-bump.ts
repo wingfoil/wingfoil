@@ -6,17 +6,20 @@
  * from `HEAD` must declare a top-level `version:` numerically greater, as YAML reads it, than the one
  * at `HEAD` (`isVersionIncrease`, `src/validation`, shared with `scripts/check-governance.cjs`'s range
  * rule; task-208, `bug-249`: a downgrade or a re-quoting is no bump) — unless `HEAD` already carries a
- * bump over the file's version at its fork point from {@link TRUNK_BRANCH}: the bump baseline is
- * `main`, so a branch bumps a file once (doc-versioning).
+ * bump over the file's version at its fork point from its integration branch: the bump baseline is
+ * the integration branch, `main` or `release/<major>.<minor>` (doc-versioning, `git-conventions` §1,
+ * `dl-159` A1 item 7, task-287), so a branch bumps a file once.
  *
  * This judges the PENDING change only; what was committed is judged over a pushed range by the
  * governance check's `config` rule (`--base`, task-208), which `governance.yml` runs in CI.
  *
- * "Differs" is git's verdict (`git diff HEAD`), so eol conversion is honoured. The relaxation trusts
- * the LOCAL `refs/heads/main`: a stale local `main` (one that predates the file's last bump on the
- * real trunk) can credit a bump the branch did not make; with no local `main` the check is strict,
- * against `HEAD` alone. The verdict therefore depends on git objects, file bytes, the eol settings and
- * where the local `main` points.
+ * "Differs" is git's verdict (`git diff HEAD`), so eol conversion is honoured. The integration branch
+ * is chosen by {@link integrationBranchOf} among LOCAL branches only: a stale local branch can credit
+ * a bump the branch did not make, a line with no local branch is not seen, and with no candidate the
+ * check is strict, against `HEAD` alone. Deterministic: candidates are read in a sorted order
+ * (`main`, then the release lines by major and minor, numerically), no clock, no randomness; the
+ * verdict depends only on git objects, file bytes, the eol settings and where the local candidate
+ * branches point.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -34,8 +37,26 @@ export const VERSIONED_CONFIG_FILES: readonly string[] = [
   '.wingfoil/roles.yaml',
 ];
 
-/** The trunk every task branch is cut from (`git-conventions` §2): the doc-versioning bump baseline. */
+/**
+ * The trunk (`git-conventions` §1): an integration-branch candidate, and the one chosen on a tie with a
+ * release line (the same fork-point commit, e.g. a `release/X.Y` just cut).
+ */
 export const TRUNK_BRANCH = 'main';
+
+/**
+ * The name of a maintenance line, `release/<major>.<minor>` (`git-conventions` §1, `dl-159`): numbers
+ * without leading zeros, so `release/foo`, `release/0.3.1`, `release/v0.3` or `release/0.03` is no
+ * integration-branch candidate.
+ */
+export const RELEASE_LINE_PATTERN: RegExp = /^release\/(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
+
+/** The integration branch of `HEAD` and the commit where `HEAD` left it. */
+export interface IntegrationBranch {
+  /** Local branch name: `main` or `release/<major>.<minor>`. */
+  readonly name: string;
+  /** Full sha of `git merge-base HEAD <name>`. */
+  readonly forkPoint: string;
+}
 
 /** One versioned config file whose pending edit does not bump `version:`. */
 export interface VersionBumpFinding {
@@ -108,11 +129,55 @@ function versionValueOrNull(text: string | null): unknown {
   return 'version' in read ? read.value : null;
 }
 
-/** The commit where `HEAD` left {@link TRUNK_BRANCH}, or `null` when there is no such branch. */
-function trunkForkPoint(root: string): string | null {
-  if (gitOrNull(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${TRUNK_BRANCH}`]) === null) return null;
-  const base = gitOrNull(root, ['merge-base', 'HEAD', TRUNK_BRANCH]);
-  return base === null ? null : base.trim();
+/** The (major, minor) of a release-line name {@link RELEASE_LINE_PATTERN} accepts. */
+function lineNumbers(name: string): [number, number] {
+  const match = RELEASE_LINE_PATTERN.exec(name) as RegExpExecArray;
+  return [Number(match[1]), Number(match[2])];
+}
+
+/** Candidate order: {@link TRUNK_BRANCH} first, then the release lines by major and minor, numerically. */
+function compareCandidates(a: string, b: string): number {
+  if (a === TRUNK_BRANCH) return -1;
+  if (b === TRUNK_BRANCH) return 1;
+  const [aMajor, aMinor] = lineNumbers(a);
+  const [bMajor, bMinor] = lineNumbers(b);
+  return aMajor - bMajor || aMinor - bMinor;
+}
+
+/** True when `ancestor` is `descendant` or one of its ancestors. `--is-ancestor` exits 1 on "no". */
+function isAncestor(root: string, ancestor: string, descendant: string): boolean {
+  const result = spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd: root, stdio: 'ignore' });
+  if (result.status === 0) return true;
+  if (result.status === 1) return false;
+  throw new Error(`git merge-base --is-ancestor ${ancestor} ${descendant} failed in ${root} (exit ${String(result.status)})`);
+}
+
+/**
+ * The integration branch of `HEAD` (`git-conventions` §1, `dl-159`), read offline from local branches:
+ * among the local {@link TRUNK_BRANCH} and every local `release/<major>.<minor>`
+ * ({@link RELEASE_LINE_PATTERN}), the one whose fork point with `HEAD` (`git merge-base HEAD <name>`)
+ * descends from every other candidate's — the line `HEAD` left most recently. Candidates sharing that
+ * commit are a tie, won by the first in candidate order ({@link TRUNK_BRANCH}, then the release lines
+ * numerically), so the name never changes the commit. On a line itself the fork point is `HEAD`. A
+ * candidate with no common history is dropped; with no candidate, or when no fork point descends from
+ * all the others (a branch that merged the other line), `null`.
+ */
+export function integrationBranchOf(root: string): IntegrationBranch | null {
+  const listed = gitOrNull(root, ['for-each-ref', '--format=%(refname:strip=2)', `refs/heads/${TRUNK_BRANCH}`, 'refs/heads/release']) ?? '';
+  const names = listed
+    .split('\n')
+    .filter((name) => name === TRUNK_BRANCH || RELEASE_LINE_PATTERN.test(name))
+    .sort(compareCandidates);
+  const candidates: IntegrationBranch[] = [];
+  for (const name of names) {
+    const base = gitOrNull(root, ['merge-base', 'HEAD', `refs/heads/${name}`]);
+    if (base !== null) candidates.push({ name, forkPoint: base.trim() });
+  }
+  return (
+    candidates.find((candidate) =>
+      candidates.every((other) => other.forkPoint === candidate.forkPoint || isAncestor(root, other.forkPoint, candidate.forkPoint)),
+    ) ?? null
+  );
 }
 
 /** Every versioned config file whose pending edit leaves `version:` unbumped, in declared order. */
@@ -144,7 +209,7 @@ export function checkPendingVersionBumps(root: string): VersionBumpFinding[] {
       continue;
     }
 
-    if (forkPoint === undefined) forkPoint = trunkForkPoint(root);
+    if (forkPoint === undefined) forkPoint = integrationBranchOf(root)?.forkPoint ?? null;
     if (forkPoint !== null && isVersionIncrease(versionValueOrNull(textAt(root, forkPoint, path)), headValue)) continue;
 
     findings.push({
