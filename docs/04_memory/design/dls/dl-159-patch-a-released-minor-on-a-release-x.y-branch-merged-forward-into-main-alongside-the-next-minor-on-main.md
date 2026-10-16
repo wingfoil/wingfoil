@@ -2,7 +2,7 @@
 id: dl-159-patch-a-released-minor-on-a-release-x.y-branch-merged-forward-into-main-alongside-the-next-minor-on-main
 type: decision-log
 title: "Patch a released minor on a release/X.Y branch merged forward into main, alongside the next minor on main"
-status: in-discussion
+status: ready
 context: "release-planning"
 release: "v0.3"
 contributor: ""
