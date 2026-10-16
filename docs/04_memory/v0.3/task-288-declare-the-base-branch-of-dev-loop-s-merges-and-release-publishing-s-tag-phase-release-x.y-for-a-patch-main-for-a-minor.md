@@ -398,7 +398,7 @@ after `waitslot.sh`, `--maxWorkers=2`:
 | `npm test -- test/docs --maxWorkers=2` (WORKFLOW.md parity) | 25 suites, 277 passed |
 | `npm run lint` · `npm run typecheck` (both tsc configs) · `npm run docs:api` | exit 0 · exit 0 · exit 0 |
 | `node scripts/check-governance.cjs --base 92bec996` | `5 wf() commits …`; gated 0 findings, history 0 findings |
-| `node scripts/lint-claims.cjs --base 92bec996` | warn-only: "unchanged" in `### design` (lines 125, 216, 236, 238, 251), each a plan statement; the facts are evidenced in the self-review below |
+| `node scripts/lint-claims.cjs --base 92bec996` (re-run at `cafafcce`, after the review) | `claim lint: 7 warnings in 2 files (warn-only)`: task-288 lines 125, 216, 236, 238, 251 ("unchanged" in `### design`, plan statements) and 379 (green's "`.d.cts` is not edited", evidenced by the T4 check in the self-review), plus task-286 line 242 (another task's notes, not this task's) |
 
 Scripts are outside `collectCoverageFrom` (`src/**/*.ts`), so the new script does not move the figure; its pure
 functions are pinned in-process by red. BDD: `grep -rln "integration branch\|release-publishing" docs/02_requirements/02_bdd/features/`
@@ -424,11 +424,26 @@ to keep or extend.
   (design D5): `release-health.yaml:22`, `release-planning.yaml:26`.
 - T4: `git log --first-parent --no-merges --format=%h 26d38c45..HEAD -- <red's nine files>` → empty (0 lines).
 - First real use of the bound check, for release-publishing v0.3: `node scripts/integration-branch.cjs --check-head
-  --kind "" --version v0.3` on the pushed `main` → exit 0, `HEAD is on main, the integration branch of v0.3 (dl-159)`.
+  --kind "" --version v0.3`. Run after the review, read-only, with cwd the shared main working tree
+  (`/home/robypomper/Workspaces/WingFoil2`, `git branch --show-current` → `main`) and this branch's script by absolute
+  path → exit 0, `HEAD is on main, the integration branch of v0.3 (dl-159)`. (The submitted notes stated this result
+  before it had been run; corrected here.)
 
 ### Pending amendments (approver)
 
 None.
+
+### independent review (2026-10-16) and fixes (developer)
+
+- Verdict: APPROVE (D1–D7 sound; 7 mutants killed; the v0.3.0 `--check-head` exit 0 reproduced by the reviewer).
+- qa send-back `46c61848`: the `.d.cts` type `ReleaseLine` renamed `ReleaseFields` (T4: a qa commit), notes
+  `cafafcce`. The `.cjs` names no type (`grep -n "ReleaseLine\|ReleaseFields" scripts/integration-branch.cjs` → nothing;
+  positive case: the same grep over `scripts/integration-branch.d.cts` → lines 2 and 19), so nothing to align.
+- Notes fix (this commit): the refactor table's `lint:claims` row re-run and recorded (7 warnings, listed); the
+  self-review's v0.3 `--check-head` bullet now says where it was run.
+- Follow-ups filed by the coordinator, not done here: the CLI's exit-code ambiguity; a `minor` version not validated
+  by `integrationBranch`; `kind` absent vs `""` on the exempt releases; the same-class `main` wording in
+  `wingfoil-cli.md`.
 
 ### Retrospective
 
@@ -437,3 +452,6 @@ None.
 - A literal in a declaration can be pinned by more suites than the task names: `test/core/dev-loop-v1-5.test.ts` pinned
   `git.merge(from: main)` and was missing from the *Files* list; `grep -rln` over `test/` at design found it (D7).
   Proposal: build-backlog lists a literal's pinning suites with that grep, not by memory.
+- A result was written into the submitted self-review before its command had been run (the v0.3 `--check-head`
+  line); the review reproduced it and the note now says where it ran. A claim gets its command run before it is
+  written, not after.
