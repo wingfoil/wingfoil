@@ -142,7 +142,7 @@ the registry parses the version as semver "for sorting purposes, and will mark t
 appropriate"; `internal/service/registry_service.go` — `isNewLatest = CompareVersions(serverJSON.Version,
 currentLatest.Server.Version, …) > 0`, and the old latest is unmarked only when `isNewLatest`;
 `internal/service/versioning.go` `CompareVersions` — semver comparison when both versions are semver. So a `0.3.1`
-listed after `0.4.0` is listed, not latest. The B6 handover holds; the job keeps its `if:` unchanged (the
+listed after `0.4.0` is listed, not latest. The B6 handover holds; the job keeps its `if:` as it is (`git diff 92bec996 HEAD -- .github/workflows/publish.yml | grep -n "needs.promote.result"` → nothing) (the
 "release/X.Y" extension it mentioned has nothing to add: the `if:` names no branch). Listing the patch is wanted
 (a user on `0.3.x` finds it).
 
@@ -332,3 +332,85 @@ developer's new prose is pinned beyond `semver`, `registry_service.go`, `RELEASE
 entries are prereleases` case and the message for it are not pinned (the design states `latest` but no message).
 
 qa send-back (T4, coordinator) `781872bd`: two pages pins (dist-tag after setup-node; dist-tag → wait → upload order) took positions with `steps.indexOf(step)` across two parses of `pages.yml`, so they could never pass; now `stepIndex` on one parse. No other new case compares objects across parses (the rest compare strings). Against green `37cc7c03`: `npx jest test/cli/pages-workflow.test.ts test/cli/publish-pipeline.test.ts test/cli/publish-secrets.test.ts test/cli/npm-dist-tag.test.ts --maxWorkers=2` → 4 suites, 175 passed / 175. Not vacuous: the fixed file run in a scratch worktree at `37cc7c03` with `pages.yml` from `51408e04` → 9 failed, 14 passed / 23 (all nine `newest line only` cases, the two fixed ones included).
+
+### green (developer, 2026-10-16)
+
+Commit `37cc7c03` `feat(publish): task-266 — …`, on red `e7771f82`. Files: `scripts/npm-dist-tag.cjs` (new, no
+`require`), `.github/workflows/publish.yml` (promote: checkout into `tree/`, `outputs.dist_tag`, stage step `id: stage`
+with `npm view` → script → `$GITHUB_OUTPUT` → `npm stage publish … --tag "$dist_tag"`; release:
+`RELEASE_MAKE_LATEST` from promote's dist-tag; header: a line after the opening list, the `promote →`, `release →` and
+`mcp-registry →` entries, runbook step 6), `.github/workflows/pages.yml` (build: `dist-tag` step, npm wait step,
+`outputs.dist_tag`, timeout 345; `deploy.if`; header rule), and my own `test/cli/npm-dist-tag-edges.test.ts` (3 cases:
+only prereleases published → `latest` with "(only prereleases published)", the message red left unpinned; build
+metadata; a prerelease of the same version not counted as published). task-265's lines: `git diff e30a654b HEAD --
+.github/workflows/publish.yml | grep -nE "^[-+].*(--on-line|Trigger:|^[-+]#   5\. |gate    →)"` → nothing; their
+positive case: `grep -c -- "--on-line" .github/workflows/publish.yml` → 3.
+
+Red → green: `npx jest test/cli/npm-dist-tag.test.ts test/cli/npm-dist-tag-edges.test.ts test/cli/publish-pipeline.test.ts
+test/cli/publish-secrets.test.ts test/cli/pages-workflow.test.ts --maxWorkers=2` → red 23 failed; on `37cc7c03` 176
+passed, 2 failed / 178 — the two pages pins compared step objects across two parses (`steps.indexOf`), so no
+implementation could pass them. Stopped and reported (T4); qa send-back `781872bd` fixed both; the coordinator's run on
+the fixed file → the four red suites 175/175. The full suite below runs them all.
+
+### refactor (developer, 2026-10-16)
+
+Load before the first gate: 5.18 (19:44); every heavy gate after `waitslot.sh`, `--maxWorkers=2`, with the spec-015
+pending amendment in the working tree.
+
+| Command | Result |
+|---------|--------|
+| `npm run test:coverage -- --maxWorkers=2` (slot, background, exit in log) | exit 1: 454/455 suites, 8210/8211 — `test/docs/name-resolvability.test.ts`: my first draft of the spec-015 note named the full task id (read as a dotted config key, it ends `x.y`) and npm's `docs/content/commands/npm-stage.md` (a path not in this repository). Note reworded (`task-266`; "npm's own `npm-stage` command document"); `npx jest test/docs/name-resolvability.test.ts` → 11/11. Coverage of that run: **99.34 / 97.39 / 98.03 / 99.71** = the B8 baseline in every column (the script is outside `collectCoverageFrom`, `src/` only) |
+| `npm test -- --maxWorkers=2` (slot, after the fix) | exit 0: 455/455 suites, 8211/8211 tests |
+| `npm run build` (slot) | exit 0 |
+| `npm run typecheck` (slot; both tsconfigs) | exit 0 |
+| `npm run docs:api` | exit 0 |
+| `npm run lint` | exit 0 |
+| `node scripts/lint-claims.cjs --base 92bec996` | warn-only, exit 0; it still lists line 145 of my design, which now carries its command beside the claim, and lines in the design table and red notes (plan statements), plus one in task-265's notes |
+| `node scripts/check-governance.cjs --base 92bec996` | first line: `governance check: 5 wf() commits in 92bec996…..HEAD …`; `gated: 0 findings on 0 commits`, exit 0 |
+
+No refactor of the code was needed: `npm-dist-tag.cjs` is one pure function, one parser and a CLI wrapper.
+`docs/cli-reference.md`: no CLI command changed. BDD: `grep -rln "dist-tag\|npm stage" docs/02_requirements/02_bdd/features/` →
+nothing, so no scenario to extend.
+
+### self-review (developer, 2026-10-16)
+
+- **AC 1** — `distTagFor` / `parsePublishedVersions` / CLI as designed; `npm-dist-tag.test.ts` and my edge suite pass
+  in the full run above.
+- **AC 2** — promote reads `npm view wingfoil versions --json`, runs the script from `tree/`, stages with `--tag
+  "$dist_tag"`; `set +x` first, `if: ${{ !env.ACT }}`; executed with a fake npm in `publish-secrets.test.ts` (latest,
+  latest-0.2, already published and `npm view` failing → nothing staged). `grep -nE "\blatest\b" <<<"$(sed -n
+  '/id: stage/,/--tag/p' .github/workflows/publish.yml)"` → nothing; positive case: `grep -cF -- '--tag "$dist_tag"'
+  .github/workflows/publish.yml` → 1.
+- **AC 3** — A1.5 settled in the design from npm 11.19.0's source and document; the spec-015 note records it.
+- **AC 4** — `mcp-registry` `if:` as it was (design's command; `grep -n "needs.promote.result"
+  .github/workflows/publish.yml` → 393); header cites registry v1.8.1 `registry_service.go`.
+- **AC 5** — runbook step 6: `npm stage list` (no other pending stage), `npm stage view` (its `tag`), approve, `npm view
+  wingfoil dist-tags`; R1's repair `npm dist-tag add wingfoil@<highest version> latest`. spec-015 note: pending below.
+- **AC 6 (D3)** — `RELEASE_MAKE_LATEST: ${{ needs.promote.outputs.dist_tag == 'latest' && 'true' || 'false' }}`.
+- **A1.4 / D2 (b)** — pages computes the dist-tag on a push (`--allow-published`), waits for npm only for `latest`,
+  deploys only for `latest` or `workflow_dispatch`; every task-234 case still passes (full run).
+- Same class in files I touched: the publish.yml header's `act` note still holds (promote's stage step is the one
+  skipped under act; the new checkout runs, harmlessly); `Node versions` paragraph "Promote builds and tests nothing"
+  still true. No other `latest` hard-coded: `grep -nE "make_latest|--latest\b" .github/workflows/*.yml` → the
+  `${RELEASE_MAKE_LATEST:+--latest=…}` expansion (publish.yml:389) and the header's prose on `make_latest` (line 37).
+- T4: `git log --first-parent --no-merges --format=%h e7771f82..HEAD -- scripts/npm-dist-tag.d.cts
+  test/cli/npm-dist-tag.test.ts test/cli/publish-pipeline.test.ts test/cli/publish-secrets.test.ts
+  test/cli/pages-workflow.test.ts` → `781872bd` only, the qa send-back commit.
+- Headings name their agent: design (developer), red (qa), green / refactor / self-review (developer).
+
+### Pending amendments (approver)
+
+- `spec-015-packaging-publishing` — dated Revision note *(2026-10-16, `task-266`) — §3 stages 4, 5 and 6*, appended
+  at the end of *Process Notes*, uncommitted in this worktree (R5: `task-267` merges this branch before its own
+  spec-015 amend). Proposed `--reason`: `Record that promote stages with an explicit npm dist-tag, latest only for
+  the highest published version and latest-X.Y otherwise, that the staged tag is the one npm stage approve publishes
+  (npm 11.19.0 source and npm-stage document), and that the Release Latest flag and the Pages deployment follow the
+  same rule (dl-159 Decision 6, task-266).`
+
+### Retrospective
+
+- A red pin compared YAML step objects from two parses (`indexOf` across `job()` calls); `publish-pipeline.test.ts`
+  had already written the warning down. One send-back, minutes lost; candidate for the qa brief: "positions and
+  identities from one parse".
+- The name-resolvability gate reads Revision notes too: a full task id ending `x.y` and a path inside a third-party
+  package both count as unresolved names. Short ids (`task-266`) in spec prose avoid it.
