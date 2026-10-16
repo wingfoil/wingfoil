@@ -186,7 +186,8 @@ Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a de
    bundles npm 11 (`adr-011` point 4, Node dist index read 2026-09-29); `gate` and `stage` stay on
    `env.NODE_VERSION`, the `adr-010` floor. Whether `--access public` is passed as a flag or only through
    `publishConfig` is settled by the implementing task (`adr-011`, *Consequences*). Triggered on a
-   `vX.Y.Z` tag on `main`.
+   `vX.Y.Z` tag: a minor tag `vX.Y.0` on the pushed `main`, a patch tag `vX.Y.Z` (Z ≥ 1) on the pushed
+   `release/X.Y` (§4, `dl-159`).
 5. **release** — after promote, a GitHub Release for the version (`dl-130` step 1, Q1 (a)). The job's
    ephemeral `GITHUB_TOKEN` holds `contents: write`, and no other job's does; it extracts the notes first —
    the version's `## [X.Y.Z]` section of `CHANGELOG.md` (`scripts/changelog-section.cjs`; a missing,
@@ -255,13 +256,20 @@ candidate is re-cut (`dl-099` §1).
 ### 4. Version / tag scheme
 
 - `package.json` `version` is semver (`MAJOR.MINOR.PATCH`); v0.2 publishes `0.2.z`.
-- The publish trigger is an annotated git tag `vX.Y.Z` created **on `main`** after the release branch
-  merges (`dl-024`; never on a `design/*` branch). **`main` must be pushed to `origin` before the tag
-  is pushed:** CI asserts that the tagged commit is an ancestor of `origin/main`, not of anyone's
-  local `main` (`dl-074`). Tag ↔ `package.json` `version` must match (CI asserts this before
-  promote). The gate also refuses a lightweight tag: `refs/tags/<tag>` must name a tag object
-  (`check-release-tag.cjs --annotated`, `dl-057` (d) option 1). See the *Revision (2026-09-28) — §4*
-  note below.
+- The publish trigger is an annotated git tag `vX.Y.Z`. A minor tag `vX.Y.0` is created **on `main`**
+  after the release's last phase branch merges; a patch tag `vX.Y.Z` (Z ≥ 1) is created **on
+  `release/X.Y`**, the maintenance line of the released minor `X.Y`, after the patch's last phase branch
+  merges into it (`dl-024`, `dl-159` Decision 4; never on a `design/*` or other phase branch). **The line
+  must be pushed to `origin` before the tag is pushed:** CI asserts that the tagged commit is an ancestor
+  of `origin/main` or of `origin/release/X.Y`, `X.Y` being the tag's own major.minor, as the two branches
+  are on `origin` when the gate runs, not of anyone's local branch (`dl-074`, extended to the maintenance
+  line by `dl-159`). The gate applies that one rule to every `vX.Y.Z`, `vX.Y.0` included, and skips a
+  `release/X.Y` that does not exist on `origin`, so a minor tag stands on `origin/main` alone (step "Tag
+  commit is on main or on release/X.Y of its own X.Y (dl-024, dl-159)", `check-release-tag.cjs --on-line`,
+  `task-265`). Tag ↔ `package.json` `version` must match (CI asserts this before promote). The gate also
+  refuses a lightweight tag: `refs/tags/<tag>` must name a tag object (`check-release-tag.cjs
+  --annotated`, `dl-057` (d) option 1). See the *Revision (2026-09-28) — §4* note and the *Revision
+  (2026-10-16, `task-267-run-ci-on-pull-requests-into-release-and-amend-spec-015-s-tag-on-main-rule-for-maintenance-lines`) — §3 stage 4 and §4* note below.
 - The same gate step (`checkReleaseTag`) asserts that `server.json` `version` and every
   `packages[].version` equal `package.json` `version`, so the MCP listing can never name a version
   other than the one published (`dl-093` point 5, ratified option (a)). The cases are pinned in
@@ -811,3 +819,29 @@ workflow, `pages.yml` deploys the site only for a tag whose version gets `latest
 it. The pins are `test/cli/npm-dist-tag.test.ts`, `test/cli/publish-pipeline.test.ts`,
 `test/cli/publish-secrets.test.ts` and `test/cli/pages-workflow.test.ts`. §3 stages 4, 5 and 6 are edited in place to say so; no supersede, no state change, no `version:` bump
 (`dl-047`), as in the revisions above.
+
+**Revision (2026-10-16, `task-267-run-ci-on-pull-requests-into-release-and-amend-spec-015-s-tag-on-main-rule-for-maintenance-lines`) — §3 stage 4 and §4: a patch tag goes on the pushed `release/X.Y`, a minor tag
+on the pushed `main`, per `dl-159` (`ready`) Decision 4 and Actions A1.1 and A1.3.** `dl-159` opens a
+maintenance line `release/X.Y` beside `main` for the patches of a released minor. Stage 4 ended "Triggered on a
+`vX.Y.Z` tag on `main`." and now names both lines. The §4 tag bullet previously read, in full:
+
+> - The publish trigger is an annotated git tag `vX.Y.Z` created **on `main`** after the release branch
+>   merges (`dl-024`; never on a `design/*` branch). **`main` must be pushed to `origin` before the tag
+>   is pushed:** CI asserts that the tagged commit is an ancestor of `origin/main`, not of anyone's
+>   local `main` (`dl-074`). Tag ↔ `package.json` `version` must match (CI asserts this before
+>   promote). The gate also refuses a lightweight tag: `refs/tags/<tag>` must name a tag object
+>   (`check-release-tag.cjs --annotated`, `dl-057` (d) option 1). See the *Revision (2026-09-28) — §4*
+>   note below.
+
+The publish gate's step "Tag commit is on main (dl-024)" (`git fetch --no-tags origin main`, then `git merge-base
+--is-ancestor "$GITHUB_SHA" origin/main`) is replaced by `task-265`'s step "Tag commit is on main or on
+release/X.Y of its own X.Y (dl-024, dl-159)", which runs `node scripts/check-release-tag.cjs --on-line
+"$GITHUB_REF_NAME" "$GITHUB_SHA"`: it reads which of `main` and `release/X.Y` exist on `origin`, fetches only
+those with `--no-tags`, and passes when the tagged commit is an ancestor of at least one of them (approver
+ruling on `task-265` D4 (a): one rule for every `vX.Y.Z`, `vX.Y.0` included). `dl-074`'s pushed-ref
+precondition thus extends to the maintenance line. Beside the gate, `ci.yml` now runs on pull requests into
+`release/**` as well as into `main`, `governance.yml` on pushes and pull requests to either, and in both a
+push to `main` or to a `release/X.Y` line has a concurrency group of its own commit, so no run there is
+cancelled (`task-267`). The pins are `test/cli/check-release-tag.test.ts`, `test/cli/publish-pipeline.test.ts`,
+`test/cli/ci-workflow.test.ts` and `test/cli/governance-workflow.test.ts`. Edited in place: no supersede, no
+state change, no `version:` bump (`dl-047`), as in the revisions above.
