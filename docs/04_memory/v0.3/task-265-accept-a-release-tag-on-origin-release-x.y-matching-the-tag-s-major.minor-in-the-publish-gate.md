@@ -63,11 +63,129 @@ clause 1 rely on.
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-16)
+
+Role architect. Worktree `.wf2-wt/task-265`, branch cut at `92bec996`, start commit `5242d319`.
+
+**Inputs read (dl-015 hard gate, dl-102 §4).**
+- `depends_on` Execution Notes: `task-229` (`done`; handover: the poll reads the exact version, the CHANGELOG
+  extraction works on a `release/X.Y` tree, the spec-015 note does not restate "tag on `main`"), `task-238`
+  (`done`; handover: extend `check-release-tag.cjs` or a sibling, keep `checkAnnotatedTag` its own export and
+  "Tag commit is on main" one step for this task to replace — D6), `task-244` (`done`; handover: leave the gate
+  step as it is apart from what this task needs; summary paths keyed by version). Each says the step was left
+  untouched (`task-238`: `git diff 0671d035 HEAD -- .github/workflows/publish.yml | grep -nE
+  "^[-+].*(merge-base|Tag commit is on main)"` → nothing; `task-244` the same over `32d8871b`).
+- `dl-159` `ready` (Decision 4: patch tag on the pushed `release/X.Y`, minor tag on the pushed `main`; A1.1);
+  `dl-024` `ready` (decision 2: tag reachable from permanent history, never on a phase branch); `dl-074` `ready`
+  ("pushed" main); `adr-009` `accepted`; `spec-015` `approved` — §4 says "created **on `main`**" and "an ancestor
+  of `origin/main`" (`grep -n "origin/main" docs/04_memory/design/specs/spec-015-*.md` → 247). That text is
+  amended by `task-267` (this batch, ruling R5), not here: no contradiction to route, the ACs and `dl-159`
+  agree.
+- Today: `grep -n "merge-base --is-ancestor" .github/workflows/publish.yml` → 233; `grep -c "release/X.Y"
+  .github/workflows/publish.yml` → 0; readers of the script: `grep -rln check-release-tag test scripts .github`
+  → `publish.yml`, `check-release-tag.test.ts`, `publish-metadata.test.ts`, `publish-pipeline.test.ts`,
+  `publish-release-scripts-edges.test.ts`.
+
+**D1 — where the rule lives: a third mode of `scripts/check-release-tag.cjs`, which does its own fetch.**
+The gate step becomes one command, so the fixture test (AC 2) runs exactly what CI runs, and the decision is a
+pure, exported function (AC 1). The two existing modes and their exports are unchanged (`checkReleaseTag`,
+`checkAnnotatedTag`, `tagObjectType`), so `publish-metadata.test.ts` and `publish-release-scripts-edges.test.ts`
+stay green untouched.
+
+New exports (CommonJS, declared with TSDoc in `scripts/check-release-tag.d.cts`):
+
+```ts
+/** AC 1 — pure: the remote-tracking refs a release tag may sit on, in this order. */
+export function releaseLineRefs(tag: string | undefined): { readonly ok: boolean; readonly message: string; readonly refs: readonly string[] };
+/** One ref as probed in the checkout. */
+export interface LineProbe { readonly ref: string; readonly onRemote: boolean; readonly ancestor: boolean }
+/** Pure verdict over the probes (order kept). */
+export function checkTagOnLine(tag: string, commit: string, probes: readonly LineProbe[]): ReleaseTagCheck;
+/** I/O: ls-remote, fetch --no-tags, merge-base, in the repository at `root`; `{ ok: false, message }` on a git failure. */
+export function probeReleaseLines(root: string, commit: string, refs: readonly string[]):
+  { readonly ok: true; readonly probes: readonly LineProbe[] } | { readonly ok: false; readonly message: string };
+```
+
+**The rule (for `task-267` to cite in spec-015 §3 stage 4 / §4).** A tag `vX.Y.Z` (`RELEASE_TAG`) may sit on
+`origin/main` or on `origin/release/X.Y`, `X.Y` being the tag's own major.minor; the gate passes when the tagged
+commit is an ancestor of at least one of them **as they are on `origin` at run time**, and refuses otherwise.
+`releaseLineRefs('v0.3.1')` → `refs: ['origin/main', 'origin/release/0.3']`; `v1.0.0` → `release/1.0`. A tag that
+is not `vX.Y.Z` → `ok: false`, `refs: []`, the existing message `tag <tag> is not of the form vX.Y.Z (spec-015
+§4)`; no tag → `no release tag given`. Same rule for `Z = 0` and `Z ≥ 1` (D4).
+
+**The refs it fetches, and how** (`probeReleaseLines`, run in the gate's checkout, remote name `origin`, every git
+call through `execFileSync` with an argument array, never a shell):
+1. `git ls-remote --heads origin refs/heads/main refs/heads/release/X.Y` — which of the two exist on the remote
+   (read from the remote, never from a local tracking ref that may be stale);
+2. `git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main [+refs/heads/release/X.Y:refs/remotes/origin/release/X.Y]`
+   — one fetch, only the refspecs step 1 listed;
+3. `git merge-base --is-ancestor <commit> refs/remotes/origin/<branch>` for each listed ref, all of them, in
+   order (no short-circuit, so the message is complete): exit 0 ancestor, 1 not; any other exit is a git failure.
+A ref step 1 does not list is probed as `onRemote: false` (the AC 2 fallback: no `release/0.3` on `origin` → the
+check stands on `origin/main` alone). A failure of step 1 or 2, or an exit other than 0/1 in step 3, refuses
+(fail closed).
+
+**Step (publish.yml `gate`, replacing "Tag commit is on main (dl-024)", same position — after `setup-node`,
+before the version check, the annotated check, `npm ci` and prepublishOnly's steps):**
+
+```yaml
+      - name: Tag commit is on main or on release/X.Y of its own X.Y (dl-024, dl-159)
+        run: node scripts/check-release-tag.cjs --on-line "$GITHUB_REF_NAME" "$GITHUB_SHA"
+```
+
+CLI: `node scripts/check-release-tag.cjs --on-line <tag> <commit>`, cwd = the repository to probe. Exit 0 pass
+(stdout), 1 every refusal (stderr), one line each — as the other two modes. `<commit>` must match
+`^[0-9a-f]{40}$|^[0-9a-f]{64}$`, checked before any git call.
+
+**Messages (exact; `<sha>` = the commit argument, states in ref order, separated by `, `):**
+- pass: `commit <sha> of tag <tag> is on <first ref it is an ancestor of>; checked <ref> (<state>), <ref> (<state>) (dl-024, dl-159)`
+- refusal: `commit <sha> of tag <tag> is on none of the lines it may be released from; checked <ref> (<state>), <ref> (<state>) (dl-024, dl-159)`
+- `<state>` ∈ `ancestor` · `not an ancestor` · `no such branch on origin`
+- bad commit: `<commit> is not a full commit id` (`no commit given` when absent)
+- git failure: `could not read the release lines from origin: <git's first stderr line>` (step 1 or 2),
+  `could not test <ref>: <git's first stderr line>` (step 3, e.g. a commit the checkout does not have).
+
+**D2 — fixture helper (git-conventions §5).** Reuse `test/storage/helpers/git-fixture.ts`: `git`,
+`fixtureDirPrefix`, `cloneTempRepo`, `writeFixtureFile`, `commitAllAs` (identity through `GIT_AUTHOR_*` /
+`GIT_COMMITTER_*` for that one command), `removeTempDir`. Not `makeTempGitRepo` / `commitAll`: they write
+`user.name`/`user.email` with `git config` into the fixture, and the AC asks for identity per command. No
+bare-origin helper exists (`grep -rn "'--bare'" test` → nothing): the bare origin is `git(mkdtempSync(fixtureDirPrefix()), ['init', '--bare', '--quiet', '--initial-branch=main'])`,
+under the run-tagged prefix so `test/global-teardown.cjs` counts it; the working clone and the "gate checkout"
+are two `cloneTempRepo(origin)`.
+
+**D3 — header passages (AC 4) and the same-class line.** Rewritten: the *Trigger* paragraph (line 60–61), runbook
+step 5 (line 98), the `act` note "The gate's "tag is on main" check …" (line 195–197), **and** the `gate →` line of
+the stage list (line 7, "assert the tag is on main") — same class, not named by the AC. Each states both lines
+(`main`, `release/X.Y` of the tag's own X.Y) and cites `dl-159`. The header names `task-265` in its opening list.
+
+**D4 — `vX.Y.0` on `release/X.Y` (for the approver; recommendation (a)).** `dl-159` Decision 4 puts a minor
+tag on `main`; A1.1, the Description and the ACs state one rule for every tag. (a) one rule for all tags — the
+recommendation: it is the AC and A1.1 text, a `release/X.Y` is cut only from a commit that already holds
+`vX.Y.0` (Decision 1), so the extra latitude is never reached, and spec-015 gets one sentence; (b) `Z = 0` →
+`origin/main` only, which enforces Decision 4 literally at the cost of a second rule and a case the ACs do not
+name.
+
+**AC classification and what qa must pin** (all in the files named; existing cases kept):
+
+| AC | Class | Test file | Pin |
+|----|-------|-----------|-----|
+| 1 | red-first | `test/cli/check-release-tag.test.ts`, new `describe('release lines (task-265) — dl-159')` | `releaseLineRefs`: `v0.3.1` → `{ ok: true, refs: ['origin/main', 'origin/release/0.3'] }` (order); `v1.0.0` → `release/1.0`; `v10.20.3` → `release/10.20`; `v0.3.0` → `release/0.3` (D4 (a)); refused with `refs: []` and the exact message `tag <t> is not of the form vX.Y.Z (spec-015 §4)` for `v0.3`, `0.3.1`, `v0.3.1-rc.1`, `v01.3.1`, `v0.3.1;echo x`; `''`/`undefined` → `no release tag given`. `checkTagOnLine` exact strings: one pass (second ref ancestor, first `not an ancestor`), one refusal with both states, one with `no such branch on origin`. |
+| 2 | red-first | same file, nested `describe` on a fixture | Bare origin; working clone W; commit A on `main` pushed; `release/0.3` from A + commit B pushed; `design/x` from A + commit C pushed; gate checkout G = `cloneTempRepo(origin)` taken after those pushes. Run `spawnSync(process.execPath, [SCRIPT, '--on-line', tag, sha], { cwd: G })`. Exit/stream: (a) `v0.3.1` A → 0, stdout `is on origin/main`; (b) `v0.3.1` B → 0, stdout `is on origin/release/0.3`; (c) `v0.4.1` B → 1, stderr names `origin/main (not an ancestor)` and `origin/release/0.4 (no such branch on origin)`; (d) `v0.3.1` C → 1, stderr names `origin/main (not an ancestor)`, `origin/release/0.3 (not an ancestor)`; (e) second origin with no `release/0.3`: `v0.3.1` on its main commit → 0, on a commit off main → 1 with `origin/release/0.3 (no such branch on origin)`; (f) fetch: a commit D pushed to origin `main` after G was cloned → 0 (G's tracking ref was stale); (g) remote-not-local: in the second origin's checkout, `git update-ref refs/remotes/origin/release/0.3 <off-main commit>` → `v0.3.1` on it → 1, `no such branch on origin`; (h) `--no-tags`: a tag pushed to origin after G was cloned is absent from `git -C G tag -l` after a run; (i) `--on-line v0.3.1 HEAD` and a 40-hex sha G lacks → 1, `is not a full commit id` / `could not test origin/main`. Identity per command only (D2). |
+| 3 | red-first | `test/cli/publish-pipeline.test.ts` | In "gate asserts tag-on-main + tag↔version, …" replace the first entry with `node scripts/check-release-tag.cjs --on-line "$GITHUB_REF_NAME" "$GITHUB_SHA"` (ordering kept: before the version check, `--annotated`, `npm ci`, build/test:report/lint). New case: exactly one gate step whose `run` contains `--on-line`, its `name` equal to `Tag commit is on main or on release/X.Y of its own X.Y (dl-024, dl-159)`; `runs(gate)` contains neither `merge-base --is-ancestor` nor `git fetch` (positive case: the step found). |
+| 4 | red-first (task says characterization; corrected — `grep -c "release/X.Y" publish.yml` → 0 today, so the text is new) | `test/cli/publish-pipeline.test.ts`, header = text before `\nname: publish` | The *Trigger* paragraph, runbook step 5 (between `/\n#\s+5\. /` and `/\n#\s+6\. /`), the `act` section and the `gate    →` stage-list entry each contain `release/X.Y` and `main`; Trigger and step 5 contain `dl-159`; the header no longer contains `"tag is on main"`. |
+| 5 | handover (post-merge; no test) | — | Recorded at v0.3 release-publishing: `gh run list --workflow publish.yml --branch v0.3.0 --json databaseId,url,conclusion`, then `gh run view <id> --log | grep "of tag v0.3.0 is on"` → expected `… is on origin/main; checked origin/main (ancestor), origin/release/0.3 (no such branch on origin) (dl-024, dl-159)`. The task is `done` by then, so the run URL and that line enter these notes through `memory amend task-265` triggered by the approver (proposed `--reason`: "Record the v0.3.0 publish run whose gate passed on the main path (AC 5)."). |
+
+**Files.** `scripts/check-release-tag.cjs` (mode `--on-line`, three exports, usage/header comment),
+`scripts/check-release-tag.d.cts`, `.github/workflows/publish.yml` (gate step, header lines 7, 60–61, 98,
+195–197), tests by qa: `test/cli/check-release-tag.test.ts`, `test/cli/publish-pipeline.test.ts`. No
+config `version:` to bump (none of these files carries one). spec-015 untouched (`task-267`).
+
+**For `task-266` (second writer of the same two files).** Avoid in `publish.yml`: the gate's first check step,
+the header's stage-list `gate    →` entry (lines 7–8), *Trigger* (60–61), runbook step 5 (98–100), the `act`
+note (195–197); in `publish-pipeline.test.ts`: the gate ordering case and the new task-265 cases. Its own areas
+(promote, mcp-registry, runbook step 6, the `RELEASE_MAKE_LATEST` line) are not touched here.
+
+**Unasserted (testing T1).** That `GITHUB_SHA` on a pushed annotated tag names the tagged commit — the v0.2.2 gate
+passed `merge-base --is-ancestor "$GITHUB_SHA" origin/main` on an annotated tag (`task-238` D6); that anonymous
+`ls-remote`/`fetch` works with `persist-credentials: false` — the current step's `git fetch` already does.
+Both are read again by AC 5's run.
