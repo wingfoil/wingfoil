@@ -176,6 +176,41 @@ heading exists; filling it with the mechanism above is a pending amendment in se
 real `WINGFOIL_LATENCY_REPORT=1 npm run test:latency` under the slot at load < 6, showing the block once, is session
 3's (or the gate's) evidence.
 
+### red (qa, 2026-10-16)
+
+**Red commit `6f467575`**, which T4 is measured from. Files: `test/cli/latency-report-pass.test.ts`,
+`test/cli/fixtures/latency-report-pass/{jest.config.cjs,report.fixture.ts,sibling.fixture.ts}`,
+`test/core/latency-report-writer.test.ts`, `test/release-health/latency-report.test.ts` (one case added),
+`test/release-health/measure.test.ts` (one case added). No production file was changed. Red did not touch
+`test/core/helpers/latency.ts` or `test/cli/command-latency.test.ts`.
+
+Run: `npm ci` first (the worktree had no `node_modules`), then `npx jest test/cli/latency-report-pass.test.ts
+test/core/latency-report-writer.test.ts test/release-health/latency-report.test.ts test/release-health/measure.test.ts
+test/core/latency-budget-placement.test.ts test/lint/no-fabricated-stderr.test.ts --maxWorkers=2` → exit 1. Test
+Suites: 2 failed, 4 passed. Tests: 26 failed, 1083 passed. `npx eslint` on the five files and the fixture directory
+reports nothing. `npx tsc --noEmit -p tsconfig.json` gives exactly two errors, both TS2305 "has no exported member
+'reportLatency'" (`report.fixture.ts:7`, `latency-report-writer.test.ts:16`). That is the interface green adds.
+
+| AC | Class | Tests | State at red, first failing assertion |
+|---|---|---|---|
+| 1 | red-first | `latency-report-pass.test.ts`, `describe.each` over two environments, both with `WINGFOIL_LATENCY_REPORT=1`. Agent: the eleven agent variables removed, then `AI_AGENT=1` and `CLAUDECODE=1` set. No agent: the eleven removed. Each checks: stdout has the `machine:` line; stdout has `floor (--version):`; stdout has exactly one unindented `<cmd>: marginal p95 …; total p95` line per command (3 tests); `machine:` occurs exactly once in stdout + stderr; exit 0 | **fail**, 16 tests (8 per environment, AC 3's reading included). Agent case: `Expected pattern: /^[ \t]*machine: /m`, and stdout holds only the sibling's `workflow next: p95 40 ms …` line. The child's stderr: `FAIL …/report.fixture.ts ● Test suite failed to run TypeError: (0 , latency_1.reportLatency) is not a function` (in `afterAll`); exit 1 |
+| 2 | red-first | The per-command stdout lines above (unindented, so not a console block). An opt-in case: agent env with `WINGFOIL_LATENCY_REPORT` removed must exit 0 and print no `machine:` line anywhere. `latency-report-writer.test.ts`: an injected writer with `'1'` returns `true` and is called once with `latencyReport(...) + '\n'`; unset, `'0'` and `''` return `false` and never call it; the default writer passes exactly that text to `process.stdout.write` and never calls `console.log`; the default env reads `process.env`. A textual pin on `command-latency.test.ts`'s code (imports and comments removed): one `reportLatency(` call, no `console.`, no `WINGFOIL_LATENCY_REPORT` | **fail**, 10 tests (6 writer, 3 textual, 1 opt-in). Writer: `TypeError: (0 , latency_1.reportLatency) is not a function`. Textual: `Expected length: 1, Received length: 0`; `not /\bconsole\./` matched; `not "WINGFOIL_LATENCY_REPORT"` was found. Opt-in: `status` is 1 (the fixture's missing export), not 0 |
+| 3 | characterization | `latency-report.test.ts`: a sibling line, then `latencyReport(...)` and `'\n'` (unindented, which is what AC 2's pin says `reportLatency` writes), is read whole by `toEqual`, with the report's own load window. `measure.test.ts`: a stub `latency` step whose stdout is a sibling line and the plain unindented report, with no console block, gives Q12 `measured`, `value` 330, `failing: []` and the full `raw`. The AC 1 file also checks `parseLatencyReport(stdout + '\n' + stderr)` by `toEqual` in each environment, and that check is red with AC 1 | **pass** on first run for the two characterization cases (both suites PASS). The AC 1 file's reading fails with AC 1 (`null`) |
+| 4 | characterization | Red writes no test. The evidence is session 3's: `git diff 92bec996 -- test/core/helpers/latency.ts` shows no constant changed, and the gates pass | — |
+
+**Deviations from the design.** (1) The AC 3 case in `latency-report.test.ts` is pinned on `latencyReport(...) + '\n'`,
+not on text captured through `reportLatency`. Importing the missing export would make the characterization fail at
+red. The writer test pins `reportLatency`'s output to exactly that text, so together the two cover it. (2) The opt-in
+case also asserts exit 0, because otherwise it would pass vacuously while the fixture cannot run. It is therefore red
+too. (3) The writer test adds the `''` value and a default-`env` case. The textual pin adds "no
+`WINGFOIL_LATENCY_REPORT` in the suite's code", following ruling D2. (4) The fixture's `jest.config.cjs` resolves
+`rootDir` with `path.resolve`.
+
+**Not probed.** Red did not check whether the AC 1 file fails against a `reportLatency` that still prints through
+`console.log`: a temporary edit of `test/core/helpers/latency.ts` was refused because that file is outside red's. The
+evidence for that mechanism is the design's scratch reproduction: with two files and the agent variables set, stdout
+carried only the `process.stdout.write` line.
+
 ### Retrospective
 
 None yet.
