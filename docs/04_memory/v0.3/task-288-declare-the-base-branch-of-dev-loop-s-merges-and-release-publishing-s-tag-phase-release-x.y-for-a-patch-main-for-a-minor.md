@@ -285,6 +285,77 @@ order 287 → 288: 287 writes neither file of this task, so the merge is clean o
 1.8 sits on 286's 1.7. (4) CLAUDE.md §6 ("merges into main") and `.wingfoil/README.md` stay for user-docs'
 align-agent-docs (batch handover list).
 
+### red (qa, 2026-10-16)
+
+Role qa (dl-134). Red commit **`26d38c45`** (T4 is measured from it), on `108ef04f`; approver rulings D1–D7 as the
+design recommends. Test files only, plus the declarations `scripts/integration-branch.d.cts` (red's file, B7/B8
+practice: the developer writes the `.cjs` against it and never edits the `.d.cts`).
+
+**Files.** New: `test/core/workflow-integration-branch.test.ts`, `test/cli/integration-branch.test.ts`,
+`scripts/integration-branch.d.cts`. Updated first (old literals): `test/core/workflow-repository-conformance.test.ts`
+(drops `on-branch-is-main`; `phases[2].checks.pre[1]` → `phase-branch-merged-to-integration-branch` with its reason),
+`test/core/dev-loop-v2-0.test.ts` (`done`'s merge), `test/core/dev-loop-v1-5.test.ts` (D7: the five
+`git.merge(from: main)` → `integration_branch`; task-286's hunk untouched), `test/cli/staging-rehearsal.test.ts` (the
+`tag` action; "`on: integration_branch` names the branch"), `test/cli/evidence-only-tag.test.ts` (the `tag` pre list),
+`test/directives/dev-loop-done-order.test.ts` (§1's quotation + D6 + a 1.8 case; the "1.6 or later … task-281" case
+kept as is).
+
+**Per AC.**
+- AC 1 (red-first) — core file *AC 1*, `it.each` dev-loop / release-publishing: every action and pre/post check token
+  has no `\bmain\b`, and at least one names `integration_branch` / `on-integration-branch` (positive in the same `it`).
+  Fails: `Expected: > 0, Received: 0` (both workflows).
+- AC 2 (red-first) — core file *AC 2*: `red.actions[1]` and `refactor`'s last action (`Received: "git.merge(from:
+  main)"`); `done.actions` + phase order (diff: the merge entry); `start.description` contains `integration branch`
+  (received the current one-liner); raw header contains `integration_branch` and `scripts/integration-branch.cjs`;
+  `version:` ≥ 2.1 (`Received: 2`), its 2.1 entry names task-288 and dl-159, the line keeps `prev 2.0` and `prev 1.9`.
+  "The merge stays a bound manual step" passes today (`git.merge` is bound `manual` whatever its argument). Also
+  `dev-loop-v2-0.test.ts` `done` order (diff on the merge) and `dev-loop-v1-5.test.ts` two cases (`Received:
+  "git.merge(from: main)"`); its resolveToken case passes (same reason).
+- AC 3 (red-first) — core file *AC 3*: phase order + `tag.checks.pre` (diff −2/+2); `tag.actions`; description contains
+  `` pushed `main` `` (received "…ON `main`…"), `` pushed `release/X.Y` ``, `dl-159`, `git-conventions`, `§3`,
+  `task-286`, not `` ON `main` ``; version ≥ 1.9 (`Received: 1.8`) with `/1\.9 [^;]*task-288/` and dl-159 in that
+  entry; `bindings.yaml`: `checks['on-integration-branch']` toEqual the D3 object (`Received: undefined`), the `kind`
+  pattern accepts `''`/`minor`/`patch` and refuses `major`/`-x`/`patch;x`, the `version` pattern accepts `v0.3`/`v0.3.1`
+  and refuses `0.3.1`/`v0.3.1;x`/`-v0.3`, the pre-check token resolves to `run` with the script (`Received:
+  "unbound"`), version ≥ 2.3 (`Received: 2.2`) with a 2.3 entry naming task-288 and dl-159. Conformance list: diff
+  `+ on-branch-is-main`, `- phase-branch-merged-to-integration-branch`, `+ release-branch-merged-to-main`.
+  `evidence-only-tag.test.ts` pre list: diff −2/+2. `staging-rehearsal.test.ts`: action diff, and
+  `` Expected pattern: /`on: integration_branch` names the branch/ ``.
+- AC 4 (red-first) — `test/cli/integration-branch.test.ts`: pure `integrationBranch` (5 mappings, minor without
+  version, 3 no-kind cases, 5 refused patch versions incl. `v0.3.0` (D4), patch without version → `got ""`, 3 refused
+  kinds; exact messages, `toEqual`), pure `checkHead` (pass, refusal, detached; exact strings), in-process
+  `readHeadBranch` on a fixture (main, detached → `null`, outside a repository → `could not read HEAD: …`), CLI print
+  mode (patch → `release/0.3\n`; minor / no `--kind` / `--kind ""` → `main\n`; bad patch → exit 2 + message; no
+  `--version`, unknown option, value-less flag → exit 2 + `usage:`), `--check-head` (minor on main, patch on
+  `release/0.3` → exit 0 + pass line; patch on main, detached, outside a repository → exit 1; `--kind major` → exit 2 +
+  message). Fixture: `git init --initial-branch=main` in `mkdtempSync(fixtureDirPrefix())`, one commit by
+  `commitAllAs` (identity per command, git-conventions §5; only `commit.gpgsign false` is set in the fixture's
+  config). Fails: `Test suite failed to run — Cannot find module '../../scripts/integration-branch.cjs'` (the module
+  the design names; nothing else is missing).
+- AC 5 (red-first, reclassified at design) — core file *AC 5*: `bindings.yaml`'s comment block from after
+  `tests.bdd.run:` to `git.tag:` (so the comment above `git.create_branch:` counts) contains `integration branch` and
+  `scripts/integration-branch.cjs`, not `on main` (received the current block); `WORKFLOW.md` *Dev Loop — `dev-loop`*
+  and *Release Publishing* sections each contain `` the integration branch (`main`, or `release/X.Y` for a patch) ``;
+  `DONE["` contains `integration branch`, not `merge to main`; `TG["` contains `on-integration-branch`.
+  `dev-loop-done-order.test.ts`: §1 flattened contains ``then `git.merge(to: integration_branch, ff: false)`, then
+  `git.remove_worktree` `` and not `git.merge(to: main`; D6: contains `the merge carries them into its integration
+  branch`, not ``the merge carries them into `main` ``; version ≥ 1.8 (`Expected: >= 1008, Received: 1007`) with
+  `1.8`, task-288 and dl-159 in the newest entry (before the first `(prev `).
+  D5 — core file: `sw-life-cycle.yaml` and `release-cycle.yaml` at HEAD: header contains `integration branch` and
+  `release/X.Y`, not `` merged to `main` `` / `` the release tag on the pushed `main` ``; version ≥ 1.2 / ≥ 1.6 with a
+  history entry (a `;`- or `(prev `-delimited segment naming the version and task-288) that names dl-159.
+  `sw-life-cycle.yaml`'s `version: 1.1` has no comment today: green adds the history comment to that line.
+- AC 6 (characterization) — no new test (the conformance suite and `npm test -- test/docs`, run at refactor).
+
+**Runs.** `npx jest test/core/workflow-integration-branch.test.ts test/cli/integration-branch.test.ts
+test/core/workflow-repository-conformance.test.ts test/core/dev-loop-v2-0.test.ts test/core/dev-loop-v1-5.test.ts
+test/cli/staging-rehearsal.test.ts test/cli/evidence-only-tag.test.ts test/directives/dev-loop-done-order.test.ts
+--maxWorkers=2` → 8 suites failed; Tests 33 failed, 80 passed, 113 total (plus the suite that cannot load). Failed per
+file: workflow-integration-branch 23, dev-loop-done-order 3, staging-rehearsal 2, dev-loop-v1-5 2, conformance 1,
+evidence-only-tag 1, dev-loop-v2-0 1; integration-branch: suite failed to run (module not found). Re-run of the core
+file + done-order after a test-title fix → 26 failed, 4 passed. `npx tsc --noEmit -p tsconfig.json` → exit 0, no
+error (the `.d.cts` declares the module, so the missing `.cjs` is a runtime-only failure).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
