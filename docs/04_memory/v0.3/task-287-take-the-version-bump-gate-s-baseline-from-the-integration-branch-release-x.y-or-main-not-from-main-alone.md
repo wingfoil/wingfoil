@@ -270,6 +270,21 @@ HEAD`, a range): it reads no branch name. The AC's "comment lines only at `38172
 
 None.
 
+### independent review (2026-10-16) and fixes (developer)
+
+Verdict APPROVE; all 7 mutants of `integrationBranchOf` killed by the suite. One doc fix, made in-task: right after
+a merge forward (`release/X.Y` merged into `main`, the line not yet moved) the tie rule reports `main` for `HEAD` on
+`release/X.Y` and for a branch cut from it — the fork point is that line's tip either way, so the verdict is right and
+only the name differs (nothing reads it). The *Gate* bullet said "on a line itself, that line"; it now says `main` on
+a tie (a `release/X.Y` just cut, or `HEAD` at a merge-forward commit both lines contain) and "on a line itself the fork
+point is `HEAD`, so the check there is strict". The helper's JSDoc of `TRUNK_BRANCH` and `integrationBranchOf` states
+the same merge-forward tie. *The bump rule* untouched (`git diff f035023d -- .wingfoil/directives/custom/doc-versioning.md`
+→ one hunk, in the *Gate* bullet).
+Evidence: `npx jest test/lint test/directives --maxWorkers=2` → 20 suites, 280 passed; `npx tsc --noEmit -p
+tsconfig.json` → exit 0; `npx eslint test/lint` → exit 0.
+Follow-ups (filed by the coordinator, not here): the red file's case-title numbering nit (qa); the gate's behaviour on
+a merge-forward branch.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not

@@ -46,7 +46,8 @@ Custom WingFoil rule. Applies to all roles editing versioned docs.
   branch (`task-183`, `bug-143`, `task-287`). "Changes" is `git diff HEAD`'s verdict, so eol conversion
   is honoured. The integration branch it reads is a local branch: of the local `main` and every local
   `release/<major>.<minor>`, the one whose fork point with `HEAD` descends from every other's — the line
-  `HEAD` left most recently (`main` on a tie; on a line itself, that line, so the check there is strict).
+  `HEAD` left most recently (`main` on a tie, e.g. a `release/X.Y` just cut, or `HEAD` at a merge-forward
+  commit both lines contain; on a line itself the fork point is `HEAD`, so the check there is strict).
   A stale local branch can credit a bump the branch did not make, a line with no local branch is not
   seen, and with no candidate, or with fork points that do not order, the check is strict, against
   `HEAD` alone. Committed history is not re-judged.

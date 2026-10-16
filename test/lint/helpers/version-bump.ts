@@ -38,8 +38,10 @@ export const VERSIONED_CONFIG_FILES: readonly string[] = [
 ];
 
 /**
- * The trunk (`git-conventions` §1): an integration-branch candidate, and the one chosen on a tie with a
- * release line (the same fork-point commit, e.g. a `release/X.Y` just cut).
+ * The trunk (`git-conventions` §1): an integration-branch candidate, and the name chosen on a tie with a
+ * release line (the same fork-point commit: a `release/X.Y` just cut, or a merge-forward commit both
+ * lines contain — then `main` is reported even for a branch cut from `release/X.Y`, or for `HEAD` on it;
+ * the fork point, and so the verdict, is the same).
  */
 export const TRUNK_BRANCH = 'main';
 
@@ -158,7 +160,9 @@ function isAncestor(root: string, ancestor: string, descendant: string): boolean
  * ({@link RELEASE_LINE_PATTERN}), the one whose fork point with `HEAD` (`git merge-base HEAD <name>`)
  * descends from every other candidate's — the line `HEAD` left most recently. Candidates sharing that
  * commit are a tie, won by the first in candidate order ({@link TRUNK_BRANCH}, then the release lines
- * numerically), so the name never changes the commit. On a line itself the fork point is `HEAD`. A
+ * numerically), so the name never changes the commit: right after a merge forward, `main` is reported for
+ * `HEAD` on `release/X.Y` or cut from it. On a line itself the fork point is `HEAD`, so nothing is
+ * credited. A
  * candidate with no common history is dropped; with no candidate, or when no fork point descends from
  * all the others (a branch that merged the other line), `null`.
  */
