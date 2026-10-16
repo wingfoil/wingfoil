@@ -95,6 +95,84 @@ Not filed, by the ruling:
 
 ## Execution Notes
 
+- **capture and triage (2026-10-16)** on `ingest/w3b8-review-findings`. Each tool-written commit was checked for exit
+  code 0 and exactly one file (`git show --format= --name-only HEAD | wc -l` → `1` after every commit), every
+  element body for control code points other than tab and newline before its submit (0 found). Severities are the
+  agent's call at capture (the proposal names none), stated in each approve's `Reason:`.
+
+  | Element | Status | Release | Item; source | add / submit / approve / assign |
+  |---|---|---|---|---|
+  | `task-285` print the REQ-PERF-02 latency report so it appears with two or more files (`kind: fix`, size S, `priority: high`, `bug: [bug-378]`) | `pending` | v0.3, wave 3, after B8 (alone or with B9) | A1; item 13, the B8 gate | `8b4c2a34` / `a0dc27d9` / — / — |
+  | `bug-378` the REQ-PERF-02 latency report never prints when `test:latency` runs two or more files (medium) | `planned` | v0.3 | A1; item 13, the B8 gate | `7a2de287` / `3fc11029` / `67d850cc` / `1e22852c`, sync `b2b5d393` |
+  | `bug-379` an unparseable `.git/config` reported as "git identity not configured" (medium) | `triaged` | v0.4 | C1; item 1 | `f3980b50` / `8cf5cbf0` / `05871f4e` / `b80b1d3f` |
+  | `bug-380` `spec-016`/`spec-017` cite `X_cli-cmds.md` by bare line numbers 1.7 moved (low) | `triaged` | v0.4 | C2; item 7 | `f3744999` / `a67f904e` / `4fadc6c5` / `48959521` |
+  | `bug-381` the execution context re-resolves its commit per `…AtRev` loader, one spawn per directive (low) | `triaged` | v0.4 | C3; item 9 | `5a60507a` / `cfa9926f` / `c2448485` / `43f782d5` |
+  | `bug-382` `checkTranscript` ignores unprefixed lines (low) | `triaged` | v0.4 | C4; item 11 | `cee911bc` / `ca232747` / `0d0a6037` / `2c173697` |
+  | `bug-383` no check ties a vision version bump to a revision entry (low) | `triaged` | v0.4 | C5; item 16 | `16abe404` / `c715352a` / `b9ec8e5c` / `9fe28260` |
+  | `bug-384` the presentation test does not pin the case study's prose figures (low) | `triaged` | v0.4 | C6; item 18 | `d87c263a` / `9900f13c` / `a53e3176` / `3e5b247b` |
+  | `dl-184` whether a `pending` element's body is frozen after its submit, or edits are allowed and surfaced | `in-discussion` | v0.4 | D1; item 21 | `18a7d464` / `2e030e3c` / — / — |
+
+  Plan add `855b25b5`, submit `0467f236`. The approve commits carry no AI trailer; every other commit carries both.
+  The tool writes only `WingFoil-Version:`; the two §7 trailers were joined to its paragraph with `git commit --amend
+  --no-edit --trailer` (`git-conventions` §8), before anything else was committed.
+- **Amendments (approver ruling 2026-10-16), one `memory amend` each, a dated note:** `bug-321` (`c9b5af3a`, E1:
+  items 5 and 24), `bug-361` (`86aee8cf`, E2: item 2), `bug-369` (`a0de5a04`, E3: item 20), `bug-370` (`c54032dc`,
+  E4: item 22), `dl-170` (`cabd893b`, E5: item 17). Each note says the finding (or the Decision) is unchanged.
+- **Handovers recorded verbatim from the triage (no element):**
+  - A2 (release-publishing, v0.3): "Item 12: the evidence-only pre-check (task-282) refuses any non-evidence commit
+    that reaches main between the candidate and the tag. Handover to the v0.3 release-publishing phase (runbook:
+    freeze main from release-commit to tag; intake/ingest merges wait) — a dated note in its plan when it starts; no
+    element."
+  - B1: "Item 14: README (lines 12, 52, 219, 352) and docs/site.yaml `summary` (→ llms.txt line 1) present
+    determinism as achieved, against dl-112 Q3 (i) / dl-131 → align-user-docs."
+  - B2: "Item 19: bindings.yaml:72-73 `presentation.current` comment names only dl-128 items 1–2 (now also 3–4) → the
+    next bindings.yaml writer / align-user-docs."
+  - B3: "CLAUDE.md §2 map: docs/comparison.md, docs/case-study.md, docs/examples/06-workflow-approval (with B7's
+    items) → align-agent-docs."
+  - F: "Items 3 (ENOBUFS — unreachable, documented in-task), 4 and 8 (latency fixture's object store / B6→B7 jump:
+    probe showed not the cause; recorded in bug-309's retrospective and task-283's notes), 6 and 15 (kit process:
+    per-task scratch names, jest exit code into the log — already in the kit prompts), 10 (fixed in task-283, F3), 23
+    (runbook corrected in the kit), 25 (nit, absolute-path rule)."
+  The line numbers in B1 and B2 are the triage's words, quoted; the commands that find them are in the Handoff above
+  (`grep -n deterministic README.md`; `presentation.current` in `.wingfoil/workflows/bindings.yaml`).
+- **Corrections against the follow-up list, each re-measured on `main` `327a7b01`:**
+  - **A1 is older than listed.** No `test:latency` log of the coordinator's gates carries the report: `grep -c
+    "^[[:space:]]*machine: " gate-w3b4-latency.log gate-w3b5-latency.log gate-w3b6-latency.log gate-w3b8-latency.log
+    gate-w3b8-latency1.log` → `0` for each (B4 to B8). The word `machine` does occur in `gate-w3b8-latency1.log`, only
+    inside the loaded-run verdict text of the `workflow next` suites, never as the report's line.
+  - **C1 reproduced** in a scratch repository (`echo '[user' >> .git/config`, then `memory add` → "git identity not
+    configured (user.name/user.email)", exit 1, while `git status` exits 128 on "bad config line 9").
+  - **C2 has six citations, not four.** Besides the three `spec-016` lines and `spec-017`'s `:163-170` the triage
+    names, `spec-016` cites `X_cli-cmds.md:216` in its opening paragraph and `:212-224` in a revision note (the
+    command is in `bug-380`).
+  - **C3:** `grep -c "AtRev(root, sha" src/core/context.ts` → `9` calls at one sha; the triage's "about 5 redundant
+    rev-parse" was not re-counted as spawns.
+  - **C4 reproduced** with `node -e`: a transcript with an unprefixed `ok wingfoil --version = 0.0.1 (<other sha>)`
+    line returns `{ ok: true }` (`bug-382` step 3).
+  - **C5 is narrower than listed.** `test/docs/x-cli-cmds.test.ts` does pin `X_cli-cmds.md`'s entries 1.7 and 1.5,
+    by hand (`task-245`); what no check does is tie a later bump to an entry of its version.
+  - **The task's `wave:` stays empty.** The instruction says wave 3, but `minor-v0.3` declares no `waves:` keys
+    (`grep -c "^waves:" docs/04_memory/planning/rl-v1/minor-v0.3.md` → `0`) and every v0.3 task's `wave:` is empty;
+    the wave and the "after B8" placement are in `task-285`'s Implementation Notes, as `task-283`'s were.
+- **Stop-the-line share after filing:** 5 open v0.3 tasks, 1 of them `kind: fix` (`task-285`) = 20 % (≤ 30 %).
+  Command: `for f in docs/04_memory/v0.3/task-*.md; do s=$(grep -m1 '^status:' $f | awk '{print $2}'); case $s in
+  done|deprecated) ;; *) grep -m1 '^kind:' $f | awk '{print $2}';; esac; done | sort | uniq -c` → `4 "feature"`, `1
+  "fix"`. `task-285` counts as open at `pending`.
+- **Checks (2026-10-16)** at `cabd893b` (the last amend). `node scripts/check-governance.cjs --base 327a7b01`: 40
+  `wf()` commits and 0 other commits, gated 0 findings, history 0 findings, 0 entries not checked; the 7 approve
+  commits carry no `Co-Authored-By:` or `AI-Model:` line (`git log -1 --format=%B <sha> | grep -cE
+  "Co-Authored-By|AI-Model"` → `0` each). `node dist/cli.js workflow list --all` → exit 0, 27 workflows, 0 errors, 93
+  warnings (87 `W_WORKFLOW_UNBOUND_TOKEN`, 6 `W_MEMORY_UNREADABLE`, as at the B8 gate). `npx jest test/docs
+  test/core/workflow-repository-conformance.test.ts --maxWorkers=2` under the slot → `Test Suites: 26 passed`,
+  `Tests: 292 passed`. `node scripts/lint-claims.cjs --base 327a7b01` → `5 warnings in 5 files (warn-only), 15 files
+  read`: the closing "unchanged" sentence of each of the five notes, the form the W3 B7 notes took.
+- **Finalized by hand**, as the W3 B7 plan was: `active → done` with a hand `wf(plan): finalize … [active → done]`
+  commit that changes only `status:`.
+- **Ids not pushed.** `git-conventions` §6 asks for the `add` commits to be pushed at once; this branch is not pushed by
+  instruction, so `bug-378`…`bug-384`, `task-285` and `dl-184` are local until the coordinator merges and pushes it.
+
 ### Retrospective
 
-None yet.
+- Two triage items understated their own ground (C2's citation count, A1's age) and one overstated it (C5): a
+  re-run of each "where" before filing caught all three. Evidence: the corrections above. Proposal: none beyond
+  what the W3 B7 retrospective already asked (reproduce before filing).
