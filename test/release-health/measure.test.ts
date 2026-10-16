@@ -757,7 +757,10 @@ const coverageSummary = (tree: string, files: readonly string[] = ['audit', 'com
   return JSON.stringify(out);
 };
 
-/** The latency pass's report as `test/core/helpers/latency.ts` `latencyReport` prints it, inside jest's console block. */
+/**
+ * The latency pass's report (`test/core/helpers/latency.ts` `latencyReport`) as it printed through `console.log` before
+ * task-285 (jest's console block); the plain stdout shape is the task-285 case below.
+ */
 const latencyOutput = (machine: string, history: { marginal: number; total: number } = { marginal: 120, total: 330 }): string => [
   '  console.log',
   '    load average (1-min / 5-min): before 1.50 / 2.00, after 1.75 / 2.10 (one window: the commands are sampled interleaved)',
