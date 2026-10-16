@@ -202,7 +202,7 @@ request into it" → also `release/X.Y`, true once `task-267` (merged before thi
 
 **AC classification and what qa must pin.** All pins over **whitespace-flattened** text (`.replace(/\s+/g, ' ')`),
 by substring, never by line; sections by the existing `section()` helper (`\n## <heading>` to the next `\n## `);
-frontmatter = text before the second `\n---`. Existing cases kept unchanged.
+frontmatter = text before the second `\n---`. Existing cases are kept as they are.
 
 | AC | Class | Test file | Pin | Do NOT pin |
 |----|-------|-----------|-----|------------|
@@ -266,6 +266,46 @@ Run: `npx jest test/directives --maxWorkers=2` → 2 suites failed / 9; 14 tests
 | 6 | red-first (D1) | `AC 6: testing compares coverage non-regression against the integration branch's figures` | missing `against the integration branch's figures`; negative `` against `main`'s figures `` follows |
 | 7 | red-first (D1) | `AC 7: testing is at 1.3 or later and its version line names task-286 and dl-159` | `Expected: >= 1003` (1.2 → 1002) |
 | 7 | characterization | `AC 7: doc-versioning declares no version (its Scope rule)` | passes on first run: an invariant green must keep, not new behaviour |
+
+### green (developer, 2026-10-16)
+
+`b7439117` `feat(directives)`: the text of `### design`, as ruled (D1–D3). `git-conventions.md` 1.6 → 1.7 (version
+line keeps the whole prev chain, parentheses balanced: 8 `(` / 8 `)` in the comment), `**Date:** 2026-10-16`, sources
+list + Source note gain `dl-159`; §1 heading (one line), integration-branch bullet, `release/` row, the merge-forward
+and release-worktree bullets after the on-branch paragraph (lines quoting `done` untouched, `task-288`); §2, §3 (keeps
+the backticked `dl-074-tag-must-be-on-pushed-main` in its heading), §6.2, §9. `doc-versioning.md` *The bump rule*
+first bullet and rationale only (*Gate* untouched, `task-287`); no `version:`. `testing.md` 1.2 → 1.3 with a history
+comment, line 33; no Date line added.
+Red → green: `npx jest test/directives test/lint/version-bump.test.ts --maxWorkers=2` → 10 suites, 199 passed
+(red: 14 failed). Old phrases gone: `grep -c` of "cut from `main`", "merge --no-edit main", "A version tag is created
+on", "baseline is the version on `main`", "against `main`'s figures" on the three files → 0 each; `grep -c
+'release/X.Y' git-conventions.md` → 15.
+
+### refactor (developer, 2026-10-16)
+
+- `npm run test:coverage -- --maxWorkers=2` (under `waitslot.sh`, load 7.2 at start) → 454 suites, 8121 passed,
+  **2 failed**; coverage 99.34 / 97.40 / 98.03 / 99.71 (baseline 99.34 / 97.39 / 98.03 / 99.71: no column drops).
+  1. `test/core/dev-loop-v1-5.test.ts` AC 4 pinned `testing.md`'s version line as `^version: "1\.[1-9]\d*"$`, no
+     comment allowed; AC 7 requires a history comment. Contract change in a file red did not touch: `17a0b4b5`
+     `test(core)` widens it to `(?: +#.*)?$`. `npx jest test/core/dev-loop-v1-5.test.ts test/directives` → 202 passed.
+  2. **BLOCKER (T4, red's file).** `test/lint/typecheck-clean.test.ts` fails: `npx tsc --noEmit -p tsconfig.json` →
+     `test/directives/git-conventions.test.ts(207,12): error TS2532: Object is possibly 'undefined'.` — line 207
+     `expect(date![1] >= '2026-10-16')`: `date![1]` is `string | undefined` under `noUncheckedIndexedAccess`. The file
+     is red's (`adb7e7ad`); sent back to qa (e.g. `(date![1] ?? '') >= …`). Not edited here.
+- `npm run lint` → exit 0; `npm run docs:api` → exit 0; `npx tsc --noEmit -p tsconfig.build.json` → exit 0.
+- `node scripts/lint-claims.cjs --base 92bec996` → 2 warn-only (design line reworded; the other is in `### red`).
+  `node scripts/check-governance.cjs --base 92bec996` → first line "1 wf() commits in 92bec996…..HEAD …", 0 findings,
+  exit 0.
+- T4: `git log --first-parent --no-merges --format=%h adb7e7ad..HEAD -- test/directives/git-conventions.test.ts
+  test/directives/integration-branch-baseline.test.ts` → empty.
+
+**R2 — §3 against `task-267`'s spec-015 §4 amendment.** `git -C ../task-267 status --short` → ` M
+docs/04_memory/design/specs/spec-015-packaging-publishing.md` (head `7a55dd02`; its notes have no `### Pending
+amendments` yet, `grep -n "Pending amendments"` → nothing). `git -C ../task-267 diff -- docs/04_memory/design/specs/`:
+§4 puts a minor tag `vX.Y.0` on `main` after the release's last phase branch merges, a patch tag `vX.Y.Z` (Z ≥ 1) on
+`release/X.Y` after the patch's last phase branch merges into it, never on a `design/*` or other phase branch, the line
+pushed to `origin` first (`dl-074` extended by `dl-159`), one gate rule for every `vX.Y.Z` (`task-265`). §3 here says
+the same on every point. To re-read once 267 writes its final pending-amendment text.
 
 ### Retrospective
 
