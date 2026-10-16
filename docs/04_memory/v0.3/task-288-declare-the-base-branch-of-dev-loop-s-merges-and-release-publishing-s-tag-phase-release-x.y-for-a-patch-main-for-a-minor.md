@@ -356,10 +356,82 @@ evidence-only-tag 1, dev-loop-v2-0 1; integration-branch: suite failed to run (m
 file + done-order after a test-title fix → 26 failed, 4 passed. `npx tsc --noEmit -p tsconfig.json` → exit 0, no
 error (the `.d.cts` declares the module, so the missing `.cjs` is a runtime-only failure).
 
+### green (developer, 2026-10-16)
+
+Commit `c5fc3588` `feat(workflow): task-288 — …`, approver rulings D1–D7 as the design recommends.
+- `scripts/integration-branch.cjs` (new): `integrationBranch`, `checkHead`, `readHeadBranch` and the CLI (print mode,
+  `--check-head`), with the rule, messages and exit codes of `### design`; git through `spawnSync('git', ['-C', root,
+  …])`, never a shell. Red's `scripts/integration-branch.d.cts` is not edited.
+- `dev-loop.yaml` 2.1: `red` and `refactor` `git.merge(from: integration_branch)`, `done`
+  `git.merge(to: integration_branch, ff: false)`; `start`, `refactor`, `review`, `done` descriptions; header: a paragraph
+  declaring `integration_branch` (cites the script, D1), the dl-035 paragraph and the dl-134 handoff lines name the
+  integration branch, keeping the phrases `dev-loop-v1-5.test.ts` pins.
+- `release-publishing.yaml` 1.9: header paragraph citing the script (D1, unpinned, red's note (3)); `tag` pre-checks
+  `on-integration-branch(kind: "{release.kind}", version: "{release.version}")`,
+  `phase-branch-merged-to-integration-branch`, then the two existing ones; action `on: integration_branch`;
+  description: minor on the pushed `main`, patch on the pushed `release/X.Y` (dl-159 point 4; git-conventions §3,
+  task-286).
+- `bindings.yaml` 2.3: `on-integration-branch` bound (D3 object); the `git.create_branch` / `git.merge` / `git.tag`
+  comments name the integration branch and the script.
+- `WORKFLOW.md`: *Dev Loop* paragraph + `ST`/`RED`/`REF`/`DONE` nodes; *Release Publishing* paragraph + `TG` node.
+- `git-conventions.md` 1.8 (R6, whole prev chain on one line, `**Date:**` unchanged): §1 quotation and D6's two
+  sentences. `sw-life-cycle.yaml` 1.2 (the `version:` line gains its first history comment, red's note (1)) and
+  `release-cycle.yaml` 1.6 (D5): header comments only.
+
+Red → green: `npx jest test/core/workflow-integration-branch.test.ts test/cli/integration-branch.test.ts
+test/core/workflow-repository-conformance.test.ts test/core/dev-loop-v2-0.test.ts test/core/dev-loop-v1-5.test.ts
+test/cli/staging-rehearsal.test.ts test/cli/evidence-only-tag.test.ts test/directives/dev-loop-done-order.test.ts
+--maxWorkers=2` → red 33 failed / 80 passed + 1 suite unloadable (qa's run); green 8 suites, 149 passed, 0 failed.
+
+### refactor (developer, 2026-10-16)
+
+No refactor commit (the tag description was rewrapped before the green commit). Gates at `c5fc3588`, each heavy one
+after `waitslot.sh`, `--maxWorkers=2`:
+
+| Command | Result |
+|---------|--------|
+| `npx jest --coverage --maxWorkers=2` (load 11.11 before / 3.65 after) | 456 suites, 8189 tests passed, exit 0; 99.34 / 97.39 / 98.03 / 99.71 — equal to the B8 baseline in all four columns |
+| `npm test -- --maxWorkers=2` | 456 suites, 8189 passed, exit 0 |
+| `npm run build && node dist/cli.js workflow list --all` | exit 0; 0 errors; 86 `W_WORKFLOW_UNBOUND_TOKEN` (baseline 87: `on-branch-is-main` bound as `on-integration-branch`), 6 `W_MEMORY_UNREADABLE` (unchanged) |
+| `npm test -- test/docs --maxWorkers=2` (WORKFLOW.md parity) | 25 suites, 277 passed |
+| `npm run lint` · `npm run typecheck` (both tsc configs) · `npm run docs:api` | exit 0 · exit 0 · exit 0 |
+| `node scripts/check-governance.cjs --base 92bec996` | `5 wf() commits …`; gated 0 findings, history 0 findings |
+| `node scripts/lint-claims.cjs --base 92bec996` | warn-only: "unchanged" in `### design` (lines 125, 216, 236, 238, 251), each a plan statement; the facts are evidenced in the self-review below |
+
+Scripts are outside `collectCoverageFrom` (`src/**/*.ts`), so the new script does not move the figure; its pure
+functions are pinned in-process by red. BDD: `grep -rln "integration branch\|release-publishing" docs/02_requirements/02_bdd/features/`
+→ nothing (positive case: the same grep over `.wingfoil/workflows/custom/` lists 6 files, `dev-loop.yaml` among them), so no scenario
+to keep or extend.
+
+### self-review (developer, 2026-10-16)
+
+- **AC 1** met: no action or check token of either workflow names `main` (core file *AC 1*, green above);
+  `grep -n "\bmain\b" .wingfoil/workflows/custom/dev-loop.yaml` → line 5 (`adr-ingest` main workflow) and the version
+  line's history only. **AC 2** met: merges, `start`, header, 2.1 (core file *AC 2*, `dev-loop-v2-0`, `dev-loop-v1-5`).
+  Phase order and other actions: `git diff 92bec996 HEAD -- .wingfoil/workflows/custom/dev-loop.yaml
+  .wingfoil/workflows/custom/release-publishing.yaml | grep -cE '^[-+] *- name:'` → 0. **AC 3** met: `tag` pre/action/
+  description, 1.9, bindings 2.3, conformance list (core file *AC 3*, `evidence-only-tag`, `staging-rehearsal`,
+  conformance); `evidence-only-since-candidate` keeps its binding (`git diff 92bec996 HEAD -- .wingfoil/workflows/bindings.yaml
+  | grep -c "^[-+].*evidence-only-since-candidate:"` → 0) and its position (last, pinned). **AC 4** met:
+  `test/cli/integration-branch.test.ts` 36 passed. **AC 5** met: bindings comments, WORKFLOW.md, `DONE`/`TG` nodes,
+  git-conventions §1 + D6 + 1.8 (core file *AC 5*, `dev-loop-done-order`); D5 headers (core file *D5*). **AC 6** met:
+  conformance and `test/docs` pass (table above).
+- Same class in touched files: `grep -n "\bmain\b" .wingfoil/WORKFLOW.md` → the `kind: main` lines (482, 527), the
+  retrospective node's consumer `main` (204), and the new integration-branch wording (269, 297 `DONE`, 409–410, 421 `TG`); git-conventions §1's other
+  `main` sentences are task-286's (the two lines, the direct-on-`main` list). Not in scope, recorded as candidates
+  (design D5): `release-health.yaml:22`, `release-planning.yaml:26`.
+- T4: `git log --first-parent --no-merges --format=%h 26d38c45..HEAD -- <red's nine files>` → empty (0 lines).
+- First real use of the bound check, for release-publishing v0.3: `node scripts/integration-branch.cjs --check-head
+  --kind "" --version v0.3` on the pushed `main` → exit 0, `HEAD is on main, the integration branch of v0.3 (dl-159)`.
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
-     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
-     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
-     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
-     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- The design fixed every message, exit code and pin, so red and green met at the first run (33 failed + 1 unloadable
+  → 149 passed in the eight suites, no send-back). Evidence: `### red (qa)` and `### green` runs above.
+- A literal in a declaration can be pinned by more suites than the task names: `test/core/dev-loop-v1-5.test.ts` pinned
+  `git.merge(from: main)` and was missing from the *Files* list; `grep -rln` over `test/` at design found it (D7).
+  Proposal: build-backlog lists a literal's pinning suites with that grep, not by memory.
