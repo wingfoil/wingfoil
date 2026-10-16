@@ -2,7 +2,7 @@
 id: dl-159-patch-a-released-minor-on-a-release-x.y-branch-merged-forward-into-main-alongside-the-next-minor-on-main
 type: decision-log
 title: "Patch a released minor on a release/X.Y branch merged forward into main, alongside the next minor on main"
-status: in-discussion
+status: ready
 context: "release-planning"
 release: "v0.3"
 contributor: ""
@@ -71,6 +71,19 @@ commit):
 - **Today's state:** tags `v0.2.0`, `v0.2.1`, `v0.2.2`; no `release/*` branch (`git branch -a | grep -i release`
   lists only `design/release_*` phase branches).
 
+- **Re-read on `main` at `aa098133` (2026-10-16, after W3 B7 and B8).** Every fact above still holds:
+  `grep -n "merge-base --is-ancestor" .github/workflows/publish.yml` → line 233 (`origin/main`); `grep -n "stage
+  publish" .github/workflows/publish.yml` → line 319, no `--tag`; `ci.yml` `pull_request.branches: [main]`;
+  `spec-015` §4 still says "created **on `main`**"; `TRUNK_BRANCH = 'main'`; `git branch -a | grep -i release/` prints
+  nothing. Two pieces landed since `5017321c` that also assume one line:
+  - **`pages.yml`** (`task-234`, W3 B7) deploys the documentation site on every `v[0-9]+.[0-9]+.[0-9]+` tag
+    (`grep -n "tags:" .github/workflows/pages.yml`), so a `v0.3.1` tag on `release/0.3` would replace the newer line's
+    site; `task-234`'s handover to `task-266` (deploy only from the tag of the newest line) is this decision's.
+  - **`evidence-only-since-candidate`** (`task-282`, W3 B8), the pre-check of `release-publishing`'s `tag`, diffs the
+    rehearsed candidate against the tip of the branch the tag is cut on and refuses a candidate that is not its
+    ancestor; on a maintenance line that branch is `release/X.Y`, which the phase's `on-branch-is-main` pre-check and
+    `git.tag(…, on: main)` do not admit yet (A2.4).
+
 ## Decision
 
 **Two release lines may be open at once: `main` carries the next minor, and a `release/X.Y` branch carries the
@@ -136,6 +149,12 @@ branches") and `dl-092`'s parallel-release rule, option (a) (the partial freeze)
    `latest-X.Y`; the MCP Registry listing checked for the same ordering.
 3. `ci.yml`: `release/**` in `pull_request.branches`; `spec-015` §3/§4 amended ("tag on `main`" → the line's
    branch); the `npm-publish` environment and the OIDC trusted publisher confirmed for a tag from `release/*`.
+
+4. *(Added 2026-10-16, approver.)* `pages.yml`: deploy only from the tag of the newest line, never from a patch tag
+   of an older line (`task-266`, with its `task-234` handover).
+5. *(Added 2026-10-16, approver.)* The open point of the facts above — which dist-tag a staged version receives when
+   it is approved — is settled in `task-266`'s design (npm's documentation or source at the version `promote` pins),
+   or, if it cannot be settled there, recorded as a by-hand check of the first patch's promote.
 
 **A2 — deferred, explicitly out of v0.3.** Owner: the v0.3 retrospective, then `patch-v0.3.1`'s prerequisites
 step, done on `release/0.3` and merged forward:
