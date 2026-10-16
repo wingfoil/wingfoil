@@ -189,3 +189,33 @@ note (195–197); in `publish-pipeline.test.ts`: the gate ordering case and the 
 passed `merge-base --is-ancestor "$GITHUB_SHA" origin/main` on an annotated tag (`task-238` D6); that anonymous
 `ls-remote`/`fetch` works with `persist-credentials: false` — the current step's `git fetch` already does.
 Both are read again by AC 5's run.
+
+### red (qa, 2026-10-16)
+
+Red commit **`4d2ebe4d`** (T4 is measured from it). Files: `test/cli/check-release-tag.test.ts` (new
+`describe('release lines (task-265) — dl-159')`), `test/cli/publish-pipeline.test.ts` (ordering case edited, new
+`describe('release-line gate step and header (task-265) — dl-159')`). No production file, no `.d.cts`: the three
+new exports are imported against the design's interface, and `scripts/check-release-tag.d.cts` (developer's, per
+the batch prompt) must declare `releaseLineRefs`, `checkTagOnLine`, `probeReleaseLines` and `LineProbe` for
+`npm run typecheck` (which includes `test/`) to pass; ts-jest transpiles without type-checking, so the run
+below fails at runtime, not at compile time.
+
+Run: `npx jest test/cli/check-release-tag.test.ts test/cli/publish-pipeline.test.ts --maxWorkers=2` → both
+FAIL, 38 failed / 80 passed / 118 total (every pre-existing case still passes). Approver ruling D4 (a) applied:
+`v0.3.0` → `release/0.3` like any `vX.Y.Z`.
+
+| AC | Class | Tests | Observed failure (first assertion) |
+|----|-------|-------|------------------------------------|
+| 1 | red-first | `releaseLineRefs …` (4 maps, 5 non-`vX.Y.Z` refusals, `''`/`undefined`); `checkTagOnLine …` (pass on the 2nd ref, refusal with both states, `no such branch on origin`) | `TypeError: releaseLineRefs is not a function` / `checkTagOnLine is not a function` — the exports do not exist |
+| 2 | red-first | fixture (bare origin via `mkdtempSync(fixtureDirPrefix())` + `init --bare`; clones by `cloneTempRepo`; commits by `commitAllAs`, identity per command): (a)–(i) as the design's table, plus "refuses a tag that is not vX.Y.Z"; `probeReleaseLines in-process` (ordered probes, `onRemote: false`, fail closed on a missing commit and on a repository with no `origin`) | CLI cases: `--on-line` is read as the tag today, so a pass case gets stdout `""`/exit 1 (e.g. (a) `Received: ""`, (h) `Expected: 0 Received: 1`) and a refusal case gets `tag --on-line is not of the form vX.Y.Z (spec-015 §4)` instead of the exact message; in-process: `probeReleaseLines is not a function` |
+| 3 | red-first | ordering case renamed "gate asserts the tag’s release line + tag↔version, …", first entry `node scripts/check-release-tag.cjs --on-line "$GITHUB_REF_NAME" "$GITHUB_SHA"`; "runs the release-line check as exactly one gate step …" (name `Tag commit is on main or on release/X.Y of its own X.Y (dl-024, dl-159)`, run exact); "leaves no inline merge-base or fetch in the gate" | ordering `expect(order.every(i => i >= 0)) Expected: true Received: false`; one-step `Expected length: 1 Received length: 0`; no-inline `Expected substring: "--on-line"` |
+| 4 | red-first (ruling D4: header text is new) | stage-list `gate →` entry, Trigger paragraph, runbook step 5, `act` section each contain `release/X.Y` and `main` (Trigger and step 5 also `dl-159`); header lacks `tag is on main`; header's opening list names `task-265` (design D3) | each `Expected substring: "release/X.Y"` (stage list, Trigger, step 5, act); `Expected substring: not "tag is on main"`; `Expected substring: "task-265"` |
+| 5 | handover, no test | — | — |
+
+Fixture notes: G (the gate checkout) is cloned after A/B/C are pushed; D on `main` and a lightweight tag
+`v9.9.9` on D are pushed after G, so (f) needs the fetch and (h) needs `--no-tags` (a fetch of `main` would
+otherwise auto-follow the tag onto D). (g) uses a separate clone with `update-ref
+refs/remotes/origin/release/0.3 <X>`. `commit.gpgsign false` is set in each clone (signing config, not
+identity). Section boundaries the header tests read: Trigger = `\n# Trigger:` to the next `\n#\n`; step 5 =
+`/\n#\s+5\. /` to `/\n#\s+6\. /`; act = `/\n# ── [^\n]*`act`/` to the header end; stage list = `/\n#\s+gate\s+→/`
+to `/\n#\s+stage\s+→/`.
