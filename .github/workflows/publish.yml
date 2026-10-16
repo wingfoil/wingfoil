@@ -2,9 +2,10 @@
 # task-060, promotion reworked by task-113, server.json versions added to the tag check by task-115, the
 # GitHub Release job added by task-229, dl-130 step 1; the MCP Registry job, the job timeouts and the
 # annotated-tag check added by task-238, dl-130 step 2 and dl-057 (b), (d); the test reports added by task-244,
-# dl-136).
+# dl-136; the release-line check — main, or release/X.Y of the tag's own X.Y — by task-265, dl-159).
 #
-#   gate    → assert the tag is on main, is an annotated tag (`check-release-tag.cjs --annotated`, dl-057 (d)),
+#   gate    → assert the tag's commit is on main or on release/X.Y of the tag's own X.Y
+#             (`check-release-tag.cjs --on-line`, dl-024, dl-159), is an annotated tag (`check-release-tag.cjs --annotated`, dl-057 (d)),
 #             and equals v<package.json version>, and that server.json's
 #             `version` and every `packages[].version` equal it too (spec-015 §4), `npm ci`,
 #             prepublishOnly's three commands as three steps — `npm run build`, `npm run test:report` (the
@@ -57,8 +58,12 @@
 #   only be fixed by a new commit and a new tag. The v0.3.0 tag run's gate duration is read at v0.3
 #   release-publishing (approver ruling D5, 2026-10-12).
 #
-# Trigger: a `vX.Y.Z` tag push. The tag is created on `main` after the release branch merges (dl-024);
-# the gate refuses a tag whose commit is not on `main`.
+# Trigger: a `vX.Y.Z` tag push. A minor tag `vX.Y.0` is created on the pushed `main` after the release
+# branch merges (dl-024, dl-074); a patch tag `vX.Y.Z` on the pushed maintenance branch `release/X.Y`
+# (dl-159 Decision 4). The gate refuses a tag whose commit is neither on `origin/main` nor on
+# `origin/release/X.Y` of the tag's own X.Y (`check-release-tag.cjs --on-line`, which reads both from
+# `origin` and fetches them with `--no-tags`); a `v0.4.1` on `release/0.3` is refused like a tag on a
+# `design/*` or `task/*` branch.
 #
 # ── Credential, release authorization and rollback (spec-015 §5, adr-011, adr-006; task-113) ──
 #
@@ -95,7 +100,8 @@
 #      npm-publish`). Nothing in this workflow reads it any more.
 #
 #   Every release:
-#   5. The tag `vX.Y.Z` is pushed on `main` (spec-015 §4); gate and stage run unattended; promote waits
+#   5. The tag `vX.Y.Z` is pushed on `main` (spec-015 §4) or, for a patch of a released minor, on the
+#      pushed `release/X.Y` (dl-159); gate and stage run unattended; promote waits
 #      in `npm-publish` until the approver approves the deployment (rejecting it ends the run with
 #      nothing staged). Promote then stages the tarball and prints its stage id.
 #   6. Inspect, then approve on npm:
@@ -192,7 +198,8 @@
 #   path of the main repository's `.git/worktrees/<name>`, which act does not mount into the container, so
 #   every git step fails with `fatal: not a git repository`. Run it from a real clone instead:
 #        git clone <this repository> /tmp/wingfoil-act && cd /tmp/wingfoil-act
-#   The gate's "tag is on main" check needs a local `main` pushed to `origin`; for a dry iteration on a
+#   The gate's release-line check needs the tagged commit pushed to `origin`, on `main` or on the tag's
+#   `release/X.Y` (dl-159), since it reads both branches from `origin`; for a dry iteration on a
 #   branch, run `npm run prepublishOnly` and `npm run publish:staging` directly instead — they are the
 #   same commands the gate and stage jobs run.
 
@@ -227,10 +234,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
-      - name: Tag commit is on main (dl-024)
-        run: |
-          git fetch --no-tags origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      # task-265: the script reads main and release/X.Y (the tag's own X.Y) from origin, fetches the ones that
+      # exist with --no-tags, and names every ref it checked when it refuses.
+      - name: Tag commit is on main or on release/X.Y of its own X.Y (dl-024, dl-159)
+        run: node scripts/check-release-tag.cjs --on-line "$GITHUB_REF_NAME" "$GITHUB_SHA"
       - name: Tag, package.json and server.json versions match (spec-015 §4)
         run: node scripts/check-release-tag.cjs "$GITHUB_REF_NAME"
       - name: Tag is annotated (spec-015 §4, dl-057 (d))
