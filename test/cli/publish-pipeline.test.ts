@@ -144,10 +144,11 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
 
   // task-244 (ruling D1 (a)): prepublishOnly's three commands run as three gate steps, the test one as
   // `test:report` (one suite run, with coverage and Jest JSON), then the classifier writes the summary.
-  it('gate asserts tag-on-main + tag↔version, then build, test:report, lint, the summary, the dry-run manifest, and packs once', () => {
+  // task-265 (dl-159 A1.1): the first check is the release-line check — main, or release/X.Y of the tag's own X.Y.
+  it('gate asserts the tag’s release line + tag↔version, then build, test:report, lint, the summary, the dry-run manifest, and packs once', () => {
     const script = runs(readWorkflow().parsed.jobs.gate);
     const order = [
-      'git merge-base --is-ancestor "$GITHUB_SHA" origin/main',
+      'node scripts/check-release-tag.cjs --on-line "$GITHUB_REF_NAME" "$GITHUB_SHA"',
       'node scripts/check-release-tag.cjs "$GITHUB_REF_NAME"',
       'node scripts/check-release-tag.cjs --annotated "$GITHUB_REF_NAME"',
       'npm ci',
@@ -266,6 +267,85 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
     const { raw } = readWorkflow();
     expect(raw).toContain('act push');
     expect(raw).toContain('--artifact-server-path');
+  });
+});
+
+/**
+ * task-265 (`dl-159` Decision 4, Action A1.1; `dl-024` decision 2 kept) — the gate accepts a release tag whose
+ * commit is on `main` or on `release/X.Y` of the tag's own X.Y, as ONE step running
+ * `scripts/check-release-tag.cjs --on-line`, which does its own `git fetch --no-tags` (pinned on a fixture in
+ * `check-release-tag.test.ts`). Its position before the version check, `npm ci` and prepublishOnly's steps is
+ * pinned by the ordering case above. The header states both lines wherever it stated "the tag is on main".
+ */
+describe('release-line gate step and header (task-265) — dl-159', () => {
+  const STEP_NAME = 'Tag commit is on main or on release/X.Y of its own X.Y (dl-024, dl-159)';
+  const STEP_RUN = 'node scripts/check-release-tag.cjs --on-line "$GITHUB_REF_NAME" "$GITHUB_SHA"';
+  const header = (): string => {
+    const { raw } = readWorkflow();
+    return raw.slice(0, raw.indexOf('\nname: publish'));
+  };
+
+  it('runs the release-line check as exactly one gate step, named for both lines and dl-159', () => {
+    const steps = readWorkflow().parsed.jobs.gate?.steps ?? [];
+    const onLine = steps.filter((s) => s.run?.includes('--on-line'));
+    expect(onLine).toHaveLength(1);
+    expect(onLine[0]?.name).toBe(STEP_NAME);
+    expect(onLine[0]?.run?.trim()).toBe(STEP_RUN);
+  });
+
+  it('leaves no inline merge-base or fetch in the gate: the script does both', () => {
+    const script = runs(readWorkflow().parsed.jobs.gate);
+    expect(script).toContain('--on-line');
+    expect(script).not.toContain('merge-base --is-ancestor');
+    expect(script).not.toContain('git fetch');
+  });
+
+  it('states both lines in the stage list’s gate entry', () => {
+    const text = header();
+    const gate = text.slice(text.search(/\n#\s+gate\s+→/), text.search(/\n#\s+stage\s+→/));
+    expect(gate.length).toBeGreaterThan(0);
+    expect(gate).toContain('release/X.Y');
+    expect(gate).toContain('main');
+  });
+
+  it('states both lines, citing dl-159, in the Trigger paragraph', () => {
+    const text = header();
+    const start = text.indexOf('\n# Trigger:');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const trigger = text.slice(start, text.indexOf('\n#\n', start + 1));
+    expect(trigger).toContain('release/X.Y');
+    expect(trigger).toContain('main');
+    expect(trigger).toContain('dl-159');
+  });
+
+  it('states both lines, citing dl-159, in runbook step 5', () => {
+    const text = header();
+    const five = text.search(/\n#\s+5\. /);
+    const six = text.search(/\n#\s+6\. /);
+    expect(five).toBeGreaterThanOrEqual(0);
+    expect(six).toBeGreaterThan(five);
+    const step = text.slice(five, six);
+    expect(step).toContain('release/X.Y');
+    expect(step).toContain('main');
+    expect(step).toContain('dl-159');
+  });
+
+  it('states both lines in the `act` section', () => {
+    const text = header();
+    const start = text.search(/\n# ── [^\n]*`act`/);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const act = text.slice(start);
+    expect(act).toContain('release/X.Y');
+    expect(act).toContain('main');
+  });
+
+  it('no longer says the tag must be "on main" alone', () => {
+    expect(header()).not.toContain('tag is on main');
+  });
+
+  it('names task-265 in the header’s opening list of builders', () => {
+    const text = header();
+    expect(text.slice(0, text.indexOf('\n#\n'))).toContain('task-265');
   });
 });
 
