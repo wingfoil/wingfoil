@@ -194,18 +194,18 @@ describe('AC 5 — version 1.5 and the WORKFLOW.md diagram', () => {
   });
 });
 
-describe('AC 6 — dl-035: the resume path merges main into the task branch before re-submit', () => {
-  it('`red` (the fallback step) merges main after the bug sync and before any red work', () => {
+describe('AC 6 — dl-035: the resume path merges the integration branch (task-288; was main) into the task branch before re-submit', () => {
+  it('`red` (the fallback step) merges the integration branch after the bug sync and before any red work', () => {
     const actions = (phase('red').actions ?? []).map(tokenName);
     expect(actions).toEqual(['bug.sync_state', 'git.merge', 'agent.execute']);
-    expect(phase('red').actions![1]).toBe('git.merge(from: main)');
-    expect(actionLine('red', 'git.merge(from: main)')).toMatch(/dl-035/);
+    expect(phase('red').actions![1]).toBe('git.merge(from: integration_branch)');
+    expect(actionLine('red', 'git.merge(from: integration_branch)')).toMatch(/dl-035/);
   });
 
-  it('`refactor` merges main as its LAST action, so its post-checks measure the merged tree (approver ruling 2026-10-09, option 2)', () => {
+  it('`refactor` merges the integration branch as its LAST action, so its post-checks measure the merged tree (approver ruling 2026-10-09, option 2)', () => {
     const actions = phase('refactor').actions ?? [];
-    expect(actions[actions.length - 1]).toBe('git.merge(from: main)');
-    expect(actionLine('refactor', 'git.merge(from: main)')).toMatch(/dl-035 \(b\)/);
+    expect(actions[actions.length - 1]).toBe('git.merge(from: integration_branch)');
+    expect(actionLine('refactor', 'git.merge(from: integration_branch)')).toMatch(/dl-035 \(b\)/);
   });
 
   it('`review` does not merge: it stays read-only toward the branch except submit and the bug sync', () => {
@@ -221,7 +221,7 @@ describe('AC 6 — dl-035: the resume path merges main into the task branch befo
   });
 
   it('the merge is a bound manual step (no unbound action token)', () => {
-    expect(resolveToken('git.merge(from: main)', 'action', loadWorkflowRegistryAtHead(ROOT).bindings).kind).toBe('manual');
+    expect(resolveToken('git.merge(from: integration_branch)', 'action', loadWorkflowRegistryAtHead(ROOT).bindings).kind).toBe('manual');
   });
 });
 

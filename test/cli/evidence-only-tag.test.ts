@@ -235,8 +235,9 @@ describe('task-282 AC 4 — the pre-check is bound and declared', () => {
     expect(publishingRaw).toMatch(/1\.8 [^;]*task-282/);
     const tag = publishing.phases.find((phase) => phase.name === 'tag');
     expect(tag?.checks?.pre).toEqual([
-      'on-branch-is-main',
-      'release-branch-merged-to-main',
+      // task-288 (dl-159 A1.8): the branch pre-checks name the release's integration branch.
+      'on-integration-branch(kind: "{release.kind}", version: "{release.version}")',
+      'phase-branch-merged-to-integration-branch',
       `staging-rehearsal-passed(transcript: ${TRANSCRIPT_PATH})`,
       `evidence-only-since-candidate(transcript: ${TRANSCRIPT_PATH})`,
     ]);

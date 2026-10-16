@@ -123,7 +123,8 @@ describe('task-219 AC 1 — release-publishing declares the rehearsal on the can
     expect(workflow.version).toBeGreaterThan(1.3);
     expect(workflow.phases.map((p) => p.name)).toEqual(['release-commit', 'staging-rehearsal', 'tag', 'publish', 'mark-released']);
     expect(phase('release-commit')?.actions).toEqual(['git.commit(message: "release {release.version}")']);
-    expect(phase('tag')?.actions).toEqual(['git.tag(name: "{release.version}", on: main)']);
+    // task-288 (dl-159 A1.8): the tag goes on the release's integration branch, not `main` by name.
+    expect(phase('tag')?.actions).toEqual(['git.tag(name: "{release.version}", on: integration_branch)']);
   });
 
   it('staging-rehearsal: role qa, runs npm run publish:staging, produces the transcript, checks its closing line', () => {
@@ -141,8 +142,9 @@ describe('task-219 AC 1 — release-publishing declares the rehearsal on the can
   it('tag re-checks the transcript first, and tags the candidate commit it names', () => {
     expect(phase('tag')?.checks?.pre).toContain(`staging-rehearsal-passed(transcript: ${TRANSCRIPT_PATH})`);
     expect(phase('tag')?.description).toMatch(/candidate/);
-    // Review fix 2: `on: main` names the branch; the commit tagged is the one the check prints (D2).
-    expect(phase('tag')?.description).toMatch(/`on: main` names the branch/);
+    // Review fix 2: `on: <branch>` names the branch; the commit tagged is the one the check prints (D2);
+    // task-288: the branch is the integration branch.
+    expect(phase('tag')?.description).toMatch(/`on: integration_branch` names the branch/);
   });
 
   it('the check is bound to the transcript check, at severity reject, with a repository-relative path pattern', () => {

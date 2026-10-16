@@ -36,8 +36,14 @@ describe('task-281 AC 5 (bug-313) — git-conventions §1 states the done order 
     expect(flat).toContain("`dev-loop.yaml`'s `done` declares the same order");
   });
 
-  it('§1 names the merge, then the worktree removal, after the on-branch steps', () => {
-    expect(flat).toContain('then `git.merge(to: main, ff: false)`, then `git.remove_worktree`');
+  it('§1 names the merge into the integration branch, then the worktree removal, after the on-branch steps (task-288)', () => {
+    expect(flat).toContain('then `git.merge(to: integration_branch, ff: false)`, then `git.remove_worktree`');
+    expect(flat).not.toContain('git.merge(to: main');
+  });
+
+  it('§1 says the merge carries the on-branch commits into the integration branch, not `main` (task-288 D6)', () => {
+    expect(flat).toContain('the merge carries them into its integration branch');
+    expect(flat).not.toContain('the merge carries them into `main`');
   });
 
   it('§1 no longer says `done` "still declares the merge before" the finalize', () => {
@@ -50,5 +56,20 @@ describe('task-281 AC 5 (bug-313) — git-conventions §1 states the done order 
     expect(version).not.toBeNull();
     expect(versionNumber(version![1] ?? '')).toBeGreaterThanOrEqual(1006);
     expect(version![2]).toContain('task-281');
+  });
+});
+
+describe('task-288 (dl-159 A1.8, approver ruling R6) — git-conventions 1.8 quotes the integration-branch merge', () => {
+  it('git-conventions is at 1.8 or later and its 1.8 entry names task-288 and dl-159', () => {
+    const header = GIT.slice(0, GIT.indexOf('\n---', 4));
+    const version = /^version: "(\d+\.\d+)"(.*)$/m.exec(header);
+    expect(version).not.toBeNull();
+    expect(versionNumber(version![1] ?? '')).toBeGreaterThanOrEqual(1008);
+    // The 1.8 entry: the text before the first `(prev ` (the newest entry leads the line).
+    const rest = version![2] ?? '';
+    const newest = rest.slice(0, rest.indexOf('(prev ') < 0 ? undefined : rest.indexOf('(prev '));
+    expect(newest).toMatch(/(^|\s)1\.8\s/);
+    expect(newest).toContain('task-288');
+    expect(newest).toContain('dl-159');
   });
 });

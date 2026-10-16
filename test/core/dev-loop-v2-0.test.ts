@@ -34,7 +34,8 @@ describe('task-281 AC 5 (bug-313) — dev-loop.yaml `done` declares the practice
       'memory.approve',
       'element.set_state(done)',
       'bug.sync_state(for_each: task.bug)',
-      'git.merge(to: main, ff: false)',
+      // task-288 (dl-159 A1.8): the merge goes into the task's integration branch (`main`, or `release/X.Y` for a patch).
+      'git.merge(to: integration_branch, ff: false)',
       'git.remove_worktree',
     ]);
   });
