@@ -96,14 +96,144 @@ This task writes the rules; `task-287` makes the version-bump gate follow the `d
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-16)
+
+Role architect. Worktree `.wf2-wt/task-286`, branch cut at `92bec996`, start commit `672be1e4`.
+
+**Inputs read (dl-015 hard gate, dl-102 §4).**
+- `task-267` (`depends_on`; design `5b813be1` on `task/267`, ruled 2026-10-16): its proposed `spec-015` §4 first
+  bullet puts a minor tag `vX.Y.0` on `main` and a patch tag `vX.Y.Z` (Z ≥ 1) on `release/X.Y`, each after its
+  line's last phase branch merges, the line pushed before the tag, never on a `design/*` or other phase branch; the
+  gate applies one ancestry rule to every `vX.Y.Z`. §3 below says the same and cites `task-267` and `spec-015` §4.
+  Its pending amend lands at its close (R5), before this branch merges (order 267 → 286); the coordinator re-reads
+  §3 against 267's final amend text before this task's submit (R2).
+- `task-265` (`done`, `5c23e72f` on `task/265`): gate step `Tag commit is on main or on release/X.Y of its own X.Y
+  (dl-024, dl-159)`, `check-release-tag.cjs --on-line`; one rule for every `vX.Y.Z`, `vX.Y.0` included (ruling D4 (a)).
+- `task-276` Retrospective: a phrase pinned across a line break made an absence check pass vacuously → every pin
+  below is over whitespace-flattened text. `task-281`: §1 pins by phrase, not by line; `git-conventions` 1.6.
+- Statuses (`grep -m1 '^status'`): `dl-159`, `dl-092`, `dl-002`, `dl-074`, `dl-101`, `dl-152`, `dl-024`, `dl-035`,
+  `dl-119` → `ready`; `spec-015` → `approved`. No AC contradicts them. `dl-159` Decision 1–5 and A1.6 are the source
+  of every rule below; nothing is added that `dl-159` does not state.
+- Today (`grep -n` on `.wingfoil/directives/custom/*.md`): `git-conventions.md:45` "cut from `main`", `:46` "Both
+  merge into `main`", `:98` "`git merge --no-edit main`", `:101–102` "merges `main` at two points … if `main` has
+  moved", `:114` "A version tag is created on `main`", `:216` "every range pushed to `main`"; `doc-versioning.md:36–37`
+  "last committed to `main`" / "baseline is the version on `main`", `:50` "reaches `main`"; `testing.md:33`
+  "against `main`'s figures". The tests that read these files: `test/directives/git-conventions.test.ts`,
+  `dev-loop-practice.test.ts`, `dev-loop-done-order.test.ts` (`grep -rln "custom.*git-conventions" test`); none
+  reads `doc-versioning.md` or `testing.md` of this repository (the other hits are fixtures).
+
+**D1 — AC 6 and AC 7 reclassified red-first (for the approver; recommendation: accept).** The task marks them
+characterization, but the text is new: "the version on the branch's integration branch" and "the integration
+branch's figures" are absent today (lines above), and `git-conventions`/`testing` are at 1.6/1.2. A characterization
+test would fail on first run, which T3 sends back to design. Same ruling as `task-265` D4 and `task-267` D3.
+
+**D2 — placement (recommendation: as below).** No new `## ` section: renumbering would break every "§2/§3/§6/§9"
+reference and the `section()` helpers of three suites. §1 gets its first bullet rewritten, a `release/` row and two
+new bullets *after* the on-branch paragraph (lines 85–94, `task-288`'s quotation, left untouched); §2, §3 and §6.2
+are edited in place.
+
+**D3 — same-class edits in the files touched (recommendation: in-task).** §2's second bullet ("merges `main` at
+two points", "if `main` has moved") → the integration branch; §9's "every range pushed to `main` and every pull
+request into it" → also `release/X.Y`, true once `task-267` (merged before this task) extends `governance.yml`;
+`doc-versioning`'s rationale "(one bump per revision that reaches `main`)" → "reaches its integration branch". The
+§1 heading and the sources list at the top gain `dl-159`. §9's branch-protection bullet stays (`task-267` D4:
+`release/*` protection is `patch-v0.3.1`'s). `doc-versioning`'s *Gate* paragraph (lines 41–48) is not touched
+(`task-287`).
+
+**The text green writes** (wording of the pinned phrases fixed; the prose around them may vary):
+
+- §1 heading: `## 1. Branches (`dl-024` rule 1, as amended by `dl-119` Q1 (b), `dl-152` and `dl-159`; `dl-014` G2–G3)`.
+- §1 first bullet, replacing lines 45–47: "**The integration branch** (`dl-159` Decision 1). Every branch has one:
+  `release/X.Y` for work on a patch of the released minor `X.Y`, `main` otherwise. A `dev-loop` task runs on
+  `task/<task-id>`, cut from its integration branch; a workflow phase runs on its own branch, cut from its
+  integration branch. Both merge into their integration branch with `git merge --no-ff`, never fast-forward, so
+  every unit of work stays one revertible merge commit. The one exception is `intake/` (below), which reaches `main`
+  by fast-forward."
+- Table row, after `backlog/` and before `intake/`: "| `release/` | the maintenance line of the released minor
+  `X.Y`: `release/X.Y` (e.g. `release/0.3`), cut lazily when its first patch is needed — from the commit on `main`
+  that closes the minor's retrospective, or from the tag `vX.Y.0` for an urgent patch — long-lived, never deleted
+  while the line is supported (`dl-159` Decision 1) |"
+- New §1 bullet: "**Two release lines: merge forward, never back** (`dl-159` Decision 2–3). This is the
+  parallel-release rule `dl-092` Action 3 asked for; `dl-159` supersedes `dl-092`'s option (a), the partial freeze,
+  and `dl-002` point 3, for every patch from 0.3.1 on. While a `release/X.Y` is open, `main` carries the next minor:
+  1. A fix lands on the oldest affected line first; that line is then merged into `main` with `git merge --no-ff`.
+     A fix needed only on the newer line stays on `main`. 2. Never cherry-pick or rebase between lines: a
+  cherry-picked `approve` or `reject` is a second commit for one transition, with an `Approver:` line the approver
+  did not write on that line (§2). 3. `main` is never merged into `release/X.Y`. 4. A Memory element changes state
+  only on the line that owns its fix, and reaches `main` by the merge forward. 5. The merge forward conflicts on the
+  version-bearing files — `package.json` `version`, `server.json`, `CHANGELOG.md`, the `dl-095` pin — and the
+  resolution keeps `main`'s values and is recorded in the merge commit."
+- New §1 bullet: "**One clone, a long-lived worktree for the maintenance line** (`dl-159` Decision 5, `dl-101`
+  §2 (a)). `release/X.Y` is worked in a long-lived worktree of this clone (e.g. `.wf2-wt/release-0.3`), kept while
+  the line is supported — never a second clone. Worktrees of one clone share `refs/heads`, so `memory add`'s
+  allocator sees the other line's `add` commits at once; a second clone sees them only after a push and a fetch."
+- §2 heading `## 2. Staying current (`dl-035`, `dl-159`)`. First bullet: "Bring a branch up to date with
+  `git merge --no-edit <integration branch>` (§1: `main`, or `release/X.Y` on the maintenance line), run from
+  inside its own worktree — never from the other line: a fix reaches `main` only by the merge forward (§1)." The
+  rebase sentence is kept. Second bullet: "A task branch merges its integration branch at two points: … if it has
+  moved since."
+- §3, replacing lines 112–115: heading `## 3. Tags (`dl-024` rule 2, as amended by `dl-074-tag-must-be-on-pushed-main`
+  and `dl-159` Decision 4)`; body: "A minor tag `vX.Y.0` is created on `main`, after the release's last phase branch
+  has merged **and after `main` has been pushed to `origin`**. A patch tag `vX.Y.Z` (Z ≥ 1) is created on
+  `release/X.Y`, after the patch's last phase branch has merged into it **and after `release/X.Y` has been pushed to
+  `origin`** — `dl-074`'s pushed-ref precondition, extended to the maintenance line. A version tag is never created
+  on a phase branch. The publish gate checks it: the tagged commit must be an ancestor of `origin/main` or of
+  `origin/release/X.Y`, `X.Y` being the tag's own major.minor, one rule for every `vX.Y.Z` (`task-265`; `spec-015`
+  §4 as `task-267` amends it)."
+- §6.2, appended: "While a `release/X.Y` is open this is mandatory on both lines, `main` and `release/X.Y`, not a
+  recommendation (`dl-159` Decision 5)."
+- §9 first bullet: "over every range pushed to `main` or to a `release/X.Y` line and every pull request into
+  either (`task-267`)".
+- Sources list (top): a `- `dl-159-patch-a-released-minor-…`` entry "— the maintenance line `release/X.Y`, the
+  integration branch, the merge forward, tags per line, the release worktree (§1, §2, §3, §6);"; the closing
+  *Source* note gains `dl-159` (Action A1.6).
+- `doc-versioning` *The bump rule*, first bullet: "**Bump the version only on the first edit after the file was last
+  committed to the branch's integration branch** (`git-conventions` §1, `dl-159`). The baseline is the version on
+  the branch's integration branch, `release/X.Y` or `main`, not the last commit on the branch you work on: …" (rest
+  kept). Rationale: "(one bump per revision that reaches its integration branch)". No `version:` added (*Scope*).
+- `testing` line 33: "… it is checked by hand at `refactor`, against the integration branch's figures (`release/X.Y`
+  or `main`, `git-conventions` §1; `dl-159`)."
+- Versions: `git-conventions` `version: "1.7"   # 1.7 §1–§3, §6, §9: the release/X.Y maintenance line, the
+  integration branch, the merge forward, a tag per line, push the add on both lines (task-286, dl-159 A1.6, dl-092
+  Action 3) (prev 1.6 …` — the whole existing chain kept on the same line, since `task-276`/`task-281` pins read
+  it), `**Date:** 2026-10-16` (the edit date). `testing` `version: "1.3"   # 1.3: coverage non-regression against
+  the integration branch's figures (task-286, dl-159 A1.6) (prev 1.2)`; `testing` has no `**Date:**` line and gets
+  none ("where the document has one").
+
+**AC classification and what qa must pin.** All pins over **whitespace-flattened** text (`.replace(/\s+/g, ' ')`),
+by substring, never by line; sections by the existing `section()` helper (`\n## <heading>` to the next `\n## `);
+frontmatter = text before the second `\n---`. Existing cases kept unchanged.
+
+| AC | Class | Test file | Pin | Do NOT pin |
+|----|-------|-----------|-----|------------|
+| 1 — `release/` row, integration branch | red-first | `test/directives/git-conventions.test.ts`, new `describe('git-conventions §1–§3, §6 — dl-159 (task-286)')` | §1 contains `` `dl-159` ``; the table row (the §1 line whose first cell is the backticked `release/`) contains `` `release/X.Y` ``, `cut lazily`, `closes the minor's retrospective`, `` `vX.Y.0` ``, `never deleted while the line is supported`; the backticked first cells of all §1 table rows, sorted, equal `backlog/ design/ docs/ fix/ ingest/ intake/ qa/ release/ task/`; flat §1 contains `` `release/X.Y` for work on a patch of the released minor `X.Y`, `main` otherwise ``, `` `task/<task-id>`, cut from its integration branch ``, `` merge into their integration branch with `git merge --no-ff` ``; flat §1 does NOT contain `` `task/<task-id>`, cut from `main` `` nor `` Both merge into `main` with `` | row order, column widths, the e.g. branch name |
+| 2 — merge forward | red-first | same describe | flat §1 contains: `` the parallel-release rule `dl-092` Action 3 asked for ``; `` `dl-159` supersedes `dl-092`'s option (a) ``; `lands on the oldest affected line first`; `` merged into `main` with `git merge --no-ff` ``; the four prohibitions `Never cherry-pick or rebase between lines`, `` `main` is never merged into `release/X.Y` ``, `changes state only on the line that owns its fix`; and the four files `` `package.json` `version` ``, `` `server.json` ``, `` `CHANGELOG.md` ``, `` the `dl-095` pin ``, plus `` keeps `main`'s values `` and `recorded in the merge commit` | item numbering, bold markers (no pinned phrase crosses `**`), the rationale clause after "Never cherry-pick…" |
+| 3 — §2 sync | red-first | same describe | flat §2 (`section('2. Staying current')`) contains `` `git merge --no-edit <integration branch>` ``, `` `release/X.Y` on the maintenance line ``, `never from the other line`, `merges its integration branch at two points`, and still `Never rebase a branch that carries`; does NOT contain `` `git merge --no-edit main` `` | the heading's citation list |
+| 4 — §3 tags | red-first | same describe | flat §3 (`section('3. Tags')`) contains `` A minor tag `vX.Y.0` is created on `main` ``, `` after `main` has been pushed to `origin` ``, `` A patch tag `vX.Y.Z` (Z ≥ 1) is created on `release/X.Y` ``, `` after `release/X.Y` has been pushed to `origin` ``, `never created on a phase branch`, `` `dl-074` ``, `` `dl-159` ``, `` `task-267` ``, `` `spec-015` §4 ``; does NOT contain `` A version tag is created on `main` `` | the gate sentence's wording beyond `task-267` / `spec-015` §4; `spec-015` itself (amended at 267's close, not in this tree at red) |
+| 5 — §6.2 both lines; layout | red-first | same describe | flat §6 (`section('6. ')`) contains `` Push the `add` commit at once `` and `mandatory on both lines` and `` `dl-159` ``; flat §1 contains `long-lived worktree`, `` `.wf2-wt/release-0.3` ``, `never a second clone` | the explanation of shared `refs/heads` |
+| 5b — §9 same class (D3) | red-first | same describe | flat §9 (`section('9. ')`) contains `` `release/X.Y` `` and still `` §4's `wf()` subjects and brackets `` (the `dev-loop-practice` pin) | the rest of §9 |
+| 6 — baseline sentences | red-first (D1) | new `test/directives/integration-branch-baseline.test.ts` | `doc-versioning.md`, flat `section('The bump rule')`: contains `` the version on the branch's integration branch, `release/X.Y` or `main` `` and `` `git-conventions` §1 ``; does NOT contain `` The baseline is the version on `main` ``; frontmatter has no `^version:` line. `testing.md` flat: contains `against the integration branch's figures`; does NOT contain `` against `main`'s figures `` | the *Gate* paragraph (`task-287` rewrites it: no pin on it, present or absent); the rationale wording |
+| 7 — versions | red-first (D1) | `git-conventions.test.ts` (git-conventions) and the new file (testing) | `git-conventions` frontmatter `/^version: "(\d+\.\d+)"(.*)$/m`: number ≥ 1.7 (`major*1000+minor` ≥ 1007), rest contains `task-286` and `dl-159`; `**Date:** (\d{4}-\d\d-\d\d)` string ≥ `2026-10-16`. `testing` same regex: ≥ 1.3 (≥ 1003), rest contains `task-286` and `dl-159`. Existing "1.2 or later", "1.5 or later" (task-276) and "1.6 or later" (task-281) cases must stay green: the version line keeps the whole prev chain | an exact version or exact date (`task-288` bumps to 1.8 and moves the Date, R6; bug-314) |
+
+Red expectation: every new case above fails at `672be1e4` (the phrases are absent: `grep` above), except the
+negative halves; each negative is paired with its positive in the same `it`, so none passes vacuously. Run:
+`npx jest test/directives --maxWorkers=2`.
+
+**Files.** `.wingfoil/directives/custom/git-conventions.md` (1.6 → 1.7: frontmatter, Date, sources list, §1, §2,
+§3, §6.2, §9, Source note), `.wingfoil/directives/custom/doc-versioning.md` (*The bump rule* first bullet and
+rationale only), `.wingfoil/directives/custom/testing.md` (1.2 → 1.3, line 33); tests by qa:
+`test/directives/git-conventions.test.ts`, `test/directives/integration-branch-baseline.test.ts` (new); this file.
+No Memory element is amended; no `.wingfoil/*.yaml` changes (the version-bump gate is not involved).
+
+**Open points recorded, not decided here** (candidate findings for the coordinator; `dl-159` does not state them,
+so the directive does not invent them):
+- F1 — the merge forward will also conflict on every versioned directive/config file both lines bump (`version:`
+  line, `**Date:**`), which `dl-159`'s list of four version-bearing files does not name; nor does it say whether
+  the resolution then bumps again on `main` (doc-versioning). Proposal: a question for the v0.3 retrospective /
+  `patch-v0.3.1` prerequisites (A2 deferred part).
+- F2 — who runs the merge forward, when, and in which worktree is unstated (`dl-159` A2 item 4, `patch-cycle.yaml`,
+  deferred); and `dl-152`'s list of operations committed directly on `main` has no `release/X.Y` counterpart (the
+  approver's triage of a patch bug on the maintenance line).
 
 ### Retrospective
 
