@@ -356,6 +356,8 @@ evidence-only-tag 1, dev-loop-v2-0 1; integration-branch: suite failed to run (m
 file + done-order after a test-title fix → 26 failed, 4 passed. `npx tsc --noEmit -p tsconfig.json` → exit 0, no
 error (the `.d.cts` declares the module, so the missing `.cjs` is a runtime-only failure).
 
+**Send-back (qa, review nit, 2026-10-16):** `46c61848` renames `scripts/integration-branch.d.cts`'s `ReleaseLine` to `ReleaseFields` (release-line is a separate Memory type); types only. `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx jest test/cli/integration-branch.test.ts --maxWorkers=2` → 36 passed, 36 total.
+
 ### green (developer, 2026-10-16)
 
 Commit `c5fc3588` `feat(workflow): task-288 — …`, approver rulings D1–D7 as the design recommends.
