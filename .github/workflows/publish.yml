@@ -5,9 +5,9 @@
 # dl-136; the release-line check — main, or release/X.Y of the tag's own X.Y — by task-265, dl-159).
 #
 #   gate    → assert the tag's commit is on main or on release/X.Y of the tag's own X.Y
-#             (`check-release-tag.cjs --on-line`, dl-024, dl-159), is an annotated tag (`check-release-tag.cjs --annotated`, dl-057 (d)),
-#             and equals v<package.json version>, and that server.json's
-#             `version` and every `packages[].version` equal it too (spec-015 §4), `npm ci`,
+#             (`check-release-tag.cjs --on-line`, dl-024, dl-159), is an annotated tag
+#             (`check-release-tag.cjs --annotated`, dl-057 (d)), and equals v<package.json version>, and that
+#             server.json's `version` and every `packages[].version` equal it too (spec-015 §4), `npm ci`,
 #             prepublishOnly's three commands as three steps — `npm run build`, `npm run test:report` (the
 #             suite once, with coverage and Jest's `--json` into coverage/), `npm run lint` — then
 #             `scripts/test-report.cjs` writes the Markdown summary (dl-136), `npm publish --dry-run` (the
