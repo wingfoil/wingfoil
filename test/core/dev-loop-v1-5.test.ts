@@ -149,8 +149,9 @@ describe('AC 4 — the testing directive and roles.yaml halves of dl-134 (Action
 
   it('testing.md carries the qa black-box rule (§1, Q1 (a)) and the freeze of red\'s files (§2, Q2 (a)), with a version', () => {
     const text = testing();
-    // "1.1" at task-205; task-221 bumps it (the typecheck.clean bullet names `refactor`).
-    expect(text).toMatch(/^version: "1\.[1-9]\d*"$/m);
+    // "1.1" at task-205; task-221 bumps it (the typecheck.clean bullet names `refactor`); from 1.3 (task-286) the line
+    // carries a history comment, as the other versioned directives do.
+    expect(text).toMatch(/^version: "1\.[1-9]\d*"(?: +#.*)?$/m);
     expect(text).toMatch(/\*\*T3 — `red` is `qa`'s, and it is black-box\.\*\*/);
     expect(text).toMatch(/dl-134` §1, Q1 \(a\)/);
     expect(text).toMatch(/\*\*T4 — `red`'s tests are frozen in `green` and `refactor`\.\*\*/);

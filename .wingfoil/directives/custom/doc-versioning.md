@@ -33,10 +33,11 @@ Custom WingFoil rule. Applies to all roles editing versioned docs.
 
 ## The bump rule
 
-- **Bump the version only on the first edit after the file was last committed to `main`.** The
-  baseline is the version on `main`, not the last commit on the branch you work on: a task branch
-  bumps a document once, and further edits on the same branch — review fixes included — do not bump
-  it again, even though each of them is committed (approver ruling 2026-10-01).
+- **Bump the version only on the first edit after the file was last committed to the branch's
+  integration branch** (`git-conventions` §1, `dl-159`). The baseline is the version on the branch's
+  integration branch, `release/X.Y` or `main` (for a commit made on a line itself, that line), not the last
+  commit on the branch you work on: a task branch bumps a document once, and further edits on the same
+  branch — review fixes included — do not bump it again, even though each of them is committed (approver ruling 2026-10-01).
 - Update the `**Date:**` to the edit date when bumping, where the document has one.
 - **Gate (the four versioned config files only).** `test/lint/version-bump.test.ts`, run by `npm test`,
   fails when the pending change (the working tree against `HEAD`) changes `.wingfoil/dna.yaml`,
@@ -47,5 +48,5 @@ Custom WingFoil rule. Applies to all roles editing versioned docs.
   not make, and with no local `main` the check is strict, against `HEAD` alone. Committed history is
   not re-judged.
 
-> Rationale: keeps version numbers meaningful (one bump per revision that reaches `main`) rather than
+> Rationale: keeps version numbers meaningful (one bump per revision that reaches its integration branch) rather than
 > churning on every micro-edit or review fix. Mirrors the standing project convention.

@@ -99,3 +99,112 @@ describe('git-conventions §7 — dl-158 (task-260)', () => {
     expect(Number(version![1]) * 1000 + Number(version![2])).toBeGreaterThanOrEqual(1002);
   });
 });
+
+/**
+ * task-286 — `git-conventions` states `dl-159`'s maintenance line `release/X.Y` (Decision 1–5, Action A1.6):
+ * the `release/` prefix, the integration branch, the merge forward (`dl-092` Action 3's parallel-release rule),
+ * sync and tags per line, push-the-add on both lines, the release worktree; §9's governance range names
+ * `release/X.Y` (approver ruling D3, same class). All red-first (task-286 design D1).
+ *
+ * Every pin is a substring of whitespace-flattened text, never a raw line (task-276: a phrase pinned across a
+ * line break made an absence check pass vacuously); each absence check sits in the same `it` as its positive.
+ * Version pins are "≥" plus the version line naming the task (bug-314: task-288 bumps to 1.8). §1's on-branch
+ * paragraph quoting `dev-loop.yaml`'s `done` is task-288's and is not pinned here.
+ */
+describe('git-conventions §1–§3, §6 — dl-159 (task-286)', () => {
+  const flat = (s: string): string => s.replace(/\s+/g, ' ');
+  const s1 = section('1. Branches');
+  const f1 = flat(s1);
+  const header = TEXT.slice(0, TEXT.indexOf('\n---', 4));
+
+  it('AC 1: §1 cites dl-159 and the closed prefix table gains the `release/` row, cut lazily, long-lived', () => {
+    expect(s1.split('\n')[1]).toContain('`dl-159`');
+    const row = /^\s*\| `release\/` +\|.*$/m.exec(s1);
+    expect(row).not.toBeNull();
+    const fr = flat(row![0]);
+    for (const p of ['`release/X.Y`', 'cut lazily', "closes the minor's retrospective", '`vX.Y.0`', 'never deleted while the line is supported']) {
+      expect(fr).toContain(p);
+    }
+    const prefixes = [...s1.matchAll(/^\s*\| `([^`]+)` +\|/gm)].map((m) => m[1]).sort();
+    expect(prefixes).toEqual(['backlog/', 'design/', 'docs/', 'fix/', 'ingest/', 'intake/', 'qa/', 'release/', 'task/']);
+  });
+
+  it('AC 1: §1 states the integration branch; task and phase branches are cut from and merge --no-ff into it', () => {
+    expect(f1).toContain('`release/X.Y` for work on a patch of the released minor `X.Y`, `main` otherwise');
+    expect(f1).toContain('`task/<task-id>`, cut from its integration branch');
+    expect(f1).toContain('merge into their integration branch with `git merge --no-ff`');
+    expect(f1).not.toContain('`task/<task-id>`, cut from `main`');
+    expect(f1).not.toContain('Both merge into `main` with');
+  });
+
+  it("AC 2: §1 states the merge-forward rule as dl-092 Action 3's parallel-release rule, dl-159 superseding option (a)", () => {
+    expect(f1).toContain('the parallel-release rule `dl-092` Action 3 asked for');
+    expect(f1).toContain("`dl-159` supersedes `dl-092`'s option (a)");
+    expect(f1).toContain('lands on the oldest affected line first');
+    expect(f1).toContain('merged into `main` with `git merge --no-ff`');
+  });
+
+  it('AC 2: §1 states the prohibitions between lines', () => {
+    expect(f1).toContain('Never cherry-pick or rebase between lines');
+    expect(f1).toContain('`main` is never merged into `release/X.Y`');
+    expect(f1).toContain('changes state only on the line that owns its fix');
+  });
+
+  it("AC 2: §1 names the version-bearing files of the merge-forward conflict and keeps main's values", () => {
+    for (const p of ['`package.json` `version`', '`server.json`', '`CHANGELOG.md`', 'the `dl-095` pin']) expect(f1).toContain(p);
+    expect(f1).toContain("keeps `main`'s values");
+    expect(f1).toContain('recorded in the merge commit');
+  });
+
+  it('AC 3: §2 syncs with the integration branch, never with the other line; the rebase ban stays', () => {
+    const f2 = flat(section('2. Staying current'));
+    expect(f2).toContain('`git merge --no-edit <integration branch>`');
+    expect(f2).toContain('`release/X.Y` on the maintenance line');
+    expect(f2).toContain('never from the other line');
+    expect(f2).toContain('merges its integration branch at two points');
+    expect(f2).toContain('Never rebase a branch that carries');
+    expect(f2).not.toContain('`git merge --no-edit main`');
+  });
+
+  it('AC 4: §3 puts a minor tag on pushed main and a patch tag on pushed release/X.Y, never on a phase branch', () => {
+    const f3 = flat(section('3. Tags'));
+    expect(f3).toContain('A minor tag `vX.Y.0` is created on `main`');
+    expect(f3).toContain('after `main` has been pushed to `origin`');
+    expect(f3).toContain('A patch tag `vX.Y.Z` (Z ≥ 1) is created on `release/X.Y`');
+    expect(f3).toContain('after `release/X.Y` has been pushed to `origin`');
+    expect(f3).toContain('never created on a phase branch');
+    for (const c of ['`dl-074', '`dl-159`', '`task-267`', '`spec-015` §4']) expect(f3).toContain(c);
+    expect(f3).not.toContain('A version tag is created on `main`');
+  });
+
+  it('AC 5: §6.2 makes pushing the add commit mandatory on both lines', () => {
+    const f6 = flat(section('6. '));
+    expect(f6).toContain('Push the `add` commit at once');
+    expect(f6).toContain('mandatory on both lines');
+    expect(f6).toContain('`dl-159`');
+  });
+
+  it('AC 5: §1 states the layout — one clone, a long-lived worktree for the maintenance line, never a second clone', () => {
+    expect(f1).toContain('long-lived worktree');
+    expect(f1).toContain('`.wf2-wt/release-0.3`');
+    expect(f1).toContain('never a second clone');
+  });
+
+  it('D3: §9 names release/X.Y in the governance range and keeps its §4 scope', () => {
+    const f9 = flat(section('9. '));
+    expect(f9).toContain('`release/X.Y`');
+    expect(f9).toContain("§4's `wf()` subjects and brackets");
+  });
+
+  it('AC 7: the version is 1.7 or later, its line names task-286 and dl-159, the Date is the edit date or later', () => {
+    const version = /^version: "(\d+)\.(\d+)"(.*)$/m.exec(header);
+    expect(version).not.toBeNull();
+    expect(Number(version![1]) * 1000 + Number(version![2])).toBeGreaterThanOrEqual(1007);
+    expect(version![3]).toContain('task-286');
+    expect(version![3]).toContain('dl-159');
+    const date = /\*\*Date:\*\* (\d{4}-\d\d-\d\d)/.exec(TEXT);
+    expect(date).not.toBeNull();
+    expect(date?.[1]).toBeDefined();
+    expect((date?.[1] ?? '') >= '2026-10-16').toBe(true);
+  });
+});

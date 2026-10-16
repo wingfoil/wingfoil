@@ -6,13 +6,13 @@ kind: custom
 title: "Git conventions: branches, sync, tags, subjects, identity, id allocation, attribution"
 tags: [custom, git, process, security]
 scope: global
-version: "1.6"   # 1.6 §1: `dev-loop.yaml`'s `done` declares the on-branch order, approve, finalize and the bugs' sync before the merge (task-281, bug-313, approver ruling 2026-10-12 D6) (prev 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260))
+version: "1.7"   # 1.7 §1–§3, §6, §9: the release/X.Y maintenance line, the integration branch, the merge forward, a tag per line, push the add on both lines, the release worktree (task-286, dl-159 A1.6, dl-092 Action 3) (prev 1.6 §1: `dev-loop.yaml`'s `done` declares the on-branch order, approve, finalize and the bugs' sync before the merge (task-281, bug-313, approver ruling 2026-10-12 D6) (prev 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260)))
 ref: [P3.5, P3.7, REQ-SEC-01, REQ-SYS-08]
 ---
 
 # Directive — Git conventions
 
-**Date:** 2026-10-10
+**Date:** 2026-10-16
 
 Custom WingFoil rule. Applies to **every role**: whoever writes a commit or names a branch in this
 repository — a `developer` on a task branch, the `approver` whose `approve` commit an agent types, a
@@ -25,6 +25,9 @@ directive is where they are met; each decision-log is where its rule is argued, 
 - `dl-024-git-branch-tag-conventions` — branches and the version tag (§1, §3);
 - `dl-152-ratify-the-intake-branch-prefix-and-the-commits-made-directly-on-main-and-settle-the-design-versus-qa-and-docs-overlap-in-git-conventions-section-1`
   — the `intake/` prefix, the operations made directly on `main`, and which phase prefix wins (§1);
+- `dl-159-patch-a-released-minor-on-a-release-x.y-branch-merged-forward-into-main-alongside-the-next-minor-on-main`
+  — the maintenance line `release/X.Y`, the integration branch, the merge forward, a tag per line and the
+  release worktree (§1, §2, §3, §6);
 - `dl-035-task-branch-sync-with-main` — staying current with `main` (§2);
 - `dl-054-submit-commit-subject-bracket` — the `wf()` subject bracket (§4);
 - `dl-094-one-author-identity-per-act` — whose identity an act carries (§5);
@@ -40,11 +43,17 @@ Do not re-open a choice here — if you believe a rule is wrong for your case, f
 do not deviate. The general commit bullet of `code-quality` (conventional messages, one state change
 per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules on top of it.
 
-## 1. Branches (`dl-024` rule 1, as amended by `dl-119` Q1 (b) and `dl-152`; `dl-014` G2–G3)
+## 1. Branches (`dl-024` rule 1, as amended by `dl-119` Q1 (b), `dl-152` and `dl-159`; `dl-014` G2–G3)
 
-- A `dev-loop` task runs on `task/<task-id>`, cut from `main`. A workflow phase runs on its own branch.
-  Both merge into `main` with `git merge --no-ff`, never fast-forward, so every unit of work stays one
-  revertible merge commit. The one exception is `intake/` (below), which reaches `main` by fast-forward.
+- **The integration branch** (`dl-159` Decision 1). `main` and `release/X.Y` are the two lines: each is
+  the integration branch of the work done for it, and a line is never brought up to date from the other
+  (the merge forward below is the one way between them). Every other branch — `task/`, a phase branch,
+  `ingest/`, `backlog/`, `fix/`, `docs/` — has one integration branch: `release/X.Y` for work on a patch of
+  the released minor `X.Y`, `main` otherwise. A `dev-loop` task runs on `task/<task-id>`, cut
+  from its integration branch; a workflow phase runs on its own branch, cut from its integration branch.
+  Both merge into their integration branch with `git merge --no-ff`, never fast-forward, so every unit of
+  work stays one revertible merge commit. The one exception is `intake/` (below), which reaches `main` by
+  fast-forward.
 - **One worktree per task** (`dl-014` G2; `dev-loop-rel-v0.2-plan` §2 *Branch, worktree & merge*,
   `dev-loop-rel-v0.2.2-plan` §1 *Per-task contract*). A `dev-loop` task runs in its own worktree on
   `task/<task-id>`, created at `start` and removed after the merge, before the branch is deleted.
@@ -64,6 +73,7 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
   | `docs/`    | a documentation-only change                                                      |
   | `qa/`      | a quality gate (e.g. the `e2e-smoke` phase)                                      |
   | `backlog/` | scheduling work (filing or re-planning tasks and bugs)                          |
+  | `release/` | the maintenance line of the released minor `X.Y`: `release/X.Y` (e.g. `release/0.3`), cut lazily when its first patch is needed — from the commit on `main` that closes the minor's retrospective, or from the tag `vX.Y.0` for an urgent patch — long-lived, never deleted while the line is supported (`dl-159` Decision 1) |
   | `intake/`  | a capture-only session that files Memory elements, never code; reaches `main` by **fast-forward**, because each of its commits is already one `wf()` operation and a merge commit adds nothing to them (`dl-152` Q2 (a)) |
 
 - **The specific prefix wins** (`dl-152` Q3 (i)). A quality-gate phase (`e2e-smoke`) runs on `qa/`, a
@@ -93,13 +103,35 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
   `git.merge(to: main, ff: false)`, then `git.remove_worktree`; the linked bugs' `sync` commits of `done` are
   therefore on `task/<task-id>` too.
 
-## 2. Staying current (`dl-035`)
+- **Two release lines: merge forward, never back** (`dl-159` Decision 2–3). This is the parallel-release
+  rule `dl-092` Action 3 asked for; `dl-159` supersedes `dl-092`'s option (a), the partial freeze, and
+  `dl-002` point 3, for every patch from 0.3.1 on. While a `release/X.Y` is open, `main` carries the next
+  minor and `release/X.Y` the patches of `X.Y`:
+  1. A fix lands on the oldest affected line first; that line is then merged into `main` with
+     `git merge --no-ff`. A fix needed only on the newer line stays on `main`.
+  2. Never cherry-pick or rebase between lines: a cherry-picked `approve` or `reject` is a second commit
+     for one transition, with an `Approver:` line the approver did not write on that line (§2).
+  3. `main` is never merged into `release/X.Y`.
+  4. A Memory element changes state only on the line that owns its fix, and reaches `main` by the merge
+     forward, so the merge never reconciles two transitions of one frontmatter.
+  5. The merge forward conflicts on the version-bearing files — `package.json` `version`, `server.json`,
+     `CHANGELOG.md`, the `dl-095` pin — and the resolution keeps `main`'s values and is recorded in the
+     merge commit.
+- **One clone, a long-lived worktree for the maintenance line** (`dl-159` Decision 5, `dl-101` §2 (a)).
+  `release/X.Y` is worked in a long-lived worktree of this clone (e.g. `.wf2-wt/release-0.3`), kept while
+  the line is supported — never a second clone. Worktrees of one clone share `refs/heads`, so
+  `memory add`'s allocator sees the other line's `add` commits at once; a second clone sees them only
+  after a push and a fetch.
 
-- Bring a branch up to date with `git merge --no-edit main`, run from inside its own worktree. **Never
-  rebase a branch that carries `wf()` commits**: a rebase rewrites the approve/reject records the
-  audit trail is made of (P1.2, P1.7, P1.10).
-- A task branch merges `main` at two points: when the task **resumes** — after a reject or a park,
-  and after `dev-loop`'s `done` fallback — before any `red` work; and again **before re-submitting**, if `main` has moved since. In `dev-loop` the first is
+## 2. Staying current (`dl-035`, `dl-159`)
+
+- Bring a branch up to date with `git merge --no-edit <integration branch>` (§1: `main`, or
+  `release/X.Y` on the maintenance line), run from inside its own worktree — never from the other line: a
+  fix reaches `main` only by the merge forward (§1). **Never rebase a branch that carries `wf()`
+  commits**: a rebase rewrites the approve/reject records the audit trail is made of (P1.2, P1.7, P1.10).
+- A task branch merges its integration branch at two points: when the task **resumes** — after a reject
+  or a park, and after `dev-loop`'s `done` fallback — before any `red` work; and again **before
+  re-submitting**, if it has moved since. In `dev-loop` the first is
   run by the developer at the start of `red`, before `qa` writes a test; the second is the last action
   of `refactor`, so `refactor`'s checks and the review gate measure the tree that will exist after
   the merge, and `review` itself never merges.
@@ -109,10 +141,16 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
   merge before `qa` starts; at `refactor`'s merge, when it cannot be resolved there, the task returns
   to `red`, since the conflict may touch `red`'s frozen tests.
 
-## 3. Tags (`dl-024` rule 2, as amended by `dl-074-tag-must-be-on-pushed-main`)
+## 3. Tags (`dl-024` rule 2, as amended by `dl-074-tag-must-be-on-pushed-main` and `dl-159` Decision 4)
 
-A version tag is created on `main`, after the release's last phase branch has merged **and after
-`main` has been pushed to `origin`**. It is never created on a phase branch.
+A minor tag `vX.Y.0` is created on `main`, after the release's last phase branch has merged **and after
+`main` has been pushed to `origin`**. A patch tag `vX.Y.Z` (Z ≥ 1) is created on `release/X.Y`, after the
+patch's last phase branch has merged into it **and after `release/X.Y` has been pushed to `origin`** —
+`dl-074`'s pushed-ref precondition, extended to the maintenance line. A version tag is never created on a
+phase branch. The publish gate checks the pushed-line part of this rule, not which line a tag belongs
+to: the tagged commit must be an ancestor of `origin/main` or of
+`origin/release/X.Y`, `X.Y` being the tag's own major.minor, one rule for every `vX.Y.Z` (`task-265`;
+`spec-015` §4 as `task-267` amends it).
 
 ## 4. Commit subjects (`dl-054`; code commits: `dev-loop-rel-v0.2-plan` §2)
 
@@ -146,7 +184,8 @@ rule; this clause only keeps a test identity from leaking into it.
    remote-tracking refs already fetched. The number is the highest found in the type's directory
    across every ref, plus one.
 2. **Push the `add` commit at once**, on its branch, so the next session's scan sees it. Until it is
-   pushed, the id is only a local proposal.
+   pushed, the id is only a local proposal. While a `release/X.Y` is open this is mandatory on both
+   lines, `main` and `release/X.Y`, not a recommendation (`dl-159` Decision 5).
 3. **Re-scan immediately before merging.** On a collision, the element pushed later yields and is
    renumbered on its own branch, with a commit that names both ids; its `add`/`submit` history is kept.
 4. **Cite no id before its element exists.** A draft, a data file or a plan refers to "the
@@ -213,7 +252,8 @@ be the last one, and a reader of the `Reason:` block (`dl-067-reason-trailer-con
 ## 9. Checks on pushed commits (`dl-103` §1)
 
 - **CI is the enforcement point.** `.github/workflows/governance.yml` runs
-  `scripts/check-governance.cjs` over every range pushed to `main` and every pull request into it. It
+  `scripts/check-governance.cjs` over every range pushed to `main` or to a `release/X.Y` line and every
+  pull request into either (`task-267`). It
   checks §4's `wf()` subjects and brackets (not its code-commit subjects), the `Reason:`/`Approver:`
   shape (`dl-067`), approval authority (§5, `dl-094`), state legality and the verb each transition
   uses, status changes outside a `wf()` operation (`dl-139`), an approve whose `supersedes:` target is
@@ -233,7 +273,7 @@ be the last one, and a reader of the `Reason:` block (`dl-067-reason-trailer-con
   decides whether it is set.
 
 > Source: `dl-119-a-git-conventions-directive` (Actions 2–4), `dl-117-ai-attribution-policy` (Action 2),
-> `dl-158` (Action 2),
+> `dl-158` (Action 2), `dl-159` (Action A1.6, §1–§3, §6),
 > `dl-101-id-allocation-across-refs` (Action 2),
 > `dl-103-governance-enforced-outside-the-agent` §1 (§9). Features P3.5, P3.7; REQ-SEC-01 (every state change
 > carries a git identity), REQ-SYS-08 (bindings by role).
