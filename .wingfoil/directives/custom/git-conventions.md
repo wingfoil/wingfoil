@@ -6,7 +6,7 @@ kind: custom
 title: "Git conventions: branches, sync, tags, subjects, identity, id allocation, attribution"
 tags: [custom, git, process, security]
 scope: global
-version: "1.7"   # 1.7 §1–§3, §6, §9: the release/X.Y maintenance line, the integration branch, the merge forward, a tag per line, push the add on both lines, the release worktree (task-286, dl-159 A1.6, dl-092 Action 3) (prev 1.6 §1: `dev-loop.yaml`'s `done` declares the on-branch order, approve, finalize and the bugs' sync before the merge (task-281, bug-313, approver ruling 2026-10-12 D6) (prev 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260)))
+version: "1.8"   # 1.8 §1: the quotation of `dev-loop.yaml`'s `done` merges into the task's integration branch, `git.merge(to: integration_branch, ff: false)`, which carries the on-branch commits into it (task-288, dl-159 A1.8, approver ruling D6) (prev 1.7 §1–§3, §6, §9: the release/X.Y maintenance line, the integration branch, the merge forward, a tag per line, push the add on both lines, the release worktree (task-286, dl-159 A1.6, dl-092 Action 3) (prev 1.6 §1: `dev-loop.yaml`'s `done` declares the on-branch order, approve, finalize and the bugs' sync before the merge (task-281, bug-313, approver ruling 2026-10-12 D6) (prev 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260))))
 ref: [P3.5, P3.7, REQ-SEC-01, REQ-SYS-08]
 ---
 
@@ -93,14 +93,14 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
   `main` outside this list is a deviation to fix, not a new convention.
 
   A `dev-loop` task's `approve`, `reject` and `finalize` are committed on `task/<task-id>`, before
-  the merge, so the merge carries them into `main` with the rest of the task
+  the merge, so the merge carries them into its integration branch with the rest of the task
   (`dev-loop-rel-v0.2-plan` §2 *Branch, worktree & merge*; the merge itself is `--no-ff`, `dl-014`
-  G3): they are ancestors of `main`, not on its first-parent line. `finalize` is a declared verb
+  G3): they are ancestors of that branch, not on its first-parent line. `finalize` is a declared verb
   (`dl-079-wf-commit-verbs-outside-the-declared-grammar` option (A), `spec-008-cli-grammar` §2).
   `dev-loop.yaml`'s `done` declares the same order
   (`bug-313-dev-loop.yaml-done-orders-approve-merge-then-set-state-done-while-practice-finalizes-the-task-on-its-branch-before-the-merge`):
   `memory.approve`, `element.set_state(done)` and `bug.sync_state(for_each: task.bug)` on the task branch, then
-  `git.merge(to: main, ff: false)`, then `git.remove_worktree`; the linked bugs' `sync` commits of `done` are
+  `git.merge(to: integration_branch, ff: false)`, then `git.remove_worktree`; the linked bugs' `sync` commits of `done` are
   therefore on `task/<task-id>` too.
 
 - **Two release lines: merge forward, never back** (`dl-159` Decision 2–3). This is the parallel-release

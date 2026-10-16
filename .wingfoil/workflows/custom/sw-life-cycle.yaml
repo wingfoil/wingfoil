@@ -7,14 +7,15 @@
 #
 # Git conventions: the `git-conventions` directive (.wingfoil/directives/custom/git-conventions.md,
 # dl-119) — one branch per phase from its closed prefix list (`design/<phase>_<version>` for a lifecycle
-# phase, `task/<task-id>` for a dev-loop task, ...), merged to `main` with `--no-ff`; the version tag
-# on `main`, after `main` is pushed (dl-024, dl-074).
+# phase, `task/<task-id>` for a dev-loop task, ...), merged into its integration branch with `--no-ff`
+# (`main`, or `release/X.Y` for a patch of a released minor); a minor's version tag on `main` after
+# `main` is pushed, a patch's on `release/X.Y` after that branch is pushed (dl-024, dl-074, dl-159).
 name: sw-life-cycle
 kind: main
 description: >-
   Full software life cycle for WingFoil: from product inception, through technical
   specification downcast, iterative per-release delivery, to end-of-life.
-version: 1.1
+version: 1.2                     # 1.2 header comment only (task-288, dl-159 A1.8, approver ruling D5): branches merge into their integration branch, a patch is tagged on release/X.Y; no phase change (prev 1.1)
 
 phases:
   - name: inception

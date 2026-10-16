@@ -1,5 +1,12 @@
 # WingFoil — release-publishing (SUB workflow)
 # Best practice adapted to WingFoil. Include-only.
+#
+# The integration branch (dl-159 point 4, Action A1.8; task-288; git-conventions §1/§3). `tag` tags the
+# release on its integration branch, which the phase names by the one value `integration_branch`. It is
+# derived, never restated here: scripts/integration-branch.cjs computes it from the release's `kind` and
+# `version` — the one declaration of the derivation (approver ruling D1; the release has no `branch` field,
+# dl-159 A2.3, deferred) — and its `--check-head` mode is the pre-check `on-integration-branch`
+# (bindings.yaml).
 name: release-publishing
 kind: sub
 description: >-
@@ -7,7 +14,7 @@ description: >-
   local staging registry, tag the candidate, publish it to the npm registry, and mark the release
   element as released. A candidate that has not passed both the e2e-smoke gate and the staging
   rehearsal is not tagged (dl-099 §1).
-version: 1.8                     # 1.2 spec-003 alignment (task-199): the two agent.execute steps are one (the instructions are the description, dl-090 Q6 (b)), git and approver tokens take key: value arguments (spec-003 open question 6); 1.3 task-214: the tag phase names the release bump commit's files, SECURITY.md among them (its supported row follows package.json's minor, dl-127); 1.4 dl-099 §1–§2 (task-219): the release commit is its own phase, `release-commit`, so the `staging-rehearsal` phase (qa) runs on the candidate it cuts, and `tag` tags the candidate the rehearsal's transcript names; 1.5 dl-130 steps 1 and 4 (task-229): `publish` declares the service verify sweep as a `checks.pre` (warn), and its description names publish.yml's `release` job, which creates the GitHub Release once npm serves the version; 1.6 dl-130 step 2, bug-173, bug-174 (task-238): `publish` names publish.yml's `mcp-registry` job (the MCP Registry listing over GitHub OIDC), where npm's Staged Packages tab is, the automated review before Approve and the npx form of npm ≥ 11.15.0, and its post check names the listing; 1.7 dl-136 (task-244, approver rulings D3, D7): publish.yml's `release` job attaches the tag run's four test reports to the GitHub Release, `publish` produces the summary and coverage-summary.json committed under docs/07_gates/ keyed by version, its post check names the attached reports, and `release-commit`'s CHANGELOG section links the summary as the Release asset's absolute URL (review F5); 1.8 task-282 (bug-312, bug-310; dl-099 §1, task-219 D2): `tag` also pre-checks `evidence-only-since-candidate`, that the commits between the candidate and the tip change only the evidence paths its binding declares, and `staging-rehearsal` says what CI does: a gate run per candidate, while publish.yml's stage job stages the tagged build in CI
+version: 1.9                     # 1.2 spec-003 alignment (task-199): the two agent.execute steps are one (the instructions are the description, dl-090 Q6 (b)), git and approver tokens take key: value arguments (spec-003 open question 6); 1.3 task-214: the tag phase names the release bump commit's files, SECURITY.md among them (its supported row follows package.json's minor, dl-127); 1.4 dl-099 §1–§2 (task-219): the release commit is its own phase, `release-commit`, so the `staging-rehearsal` phase (qa) runs on the candidate it cuts, and `tag` tags the candidate the rehearsal's transcript names; 1.5 dl-130 steps 1 and 4 (task-229): `publish` declares the service verify sweep as a `checks.pre` (warn), and its description names publish.yml's `release` job, which creates the GitHub Release once npm serves the version; 1.6 dl-130 step 2, bug-173, bug-174 (task-238): `publish` names publish.yml's `mcp-registry` job (the MCP Registry listing over GitHub OIDC), where npm's Staged Packages tab is, the automated review before Approve and the npx form of npm ≥ 11.15.0, and its post check names the listing; 1.7 dl-136 (task-244, approver rulings D3, D7): publish.yml's `release` job attaches the tag run's four test reports to the GitHub Release, `publish` produces the summary and coverage-summary.json committed under docs/07_gates/ keyed by version, its post check names the attached reports, and `release-commit`'s CHANGELOG section links the summary as the Release asset's absolute URL (review F5); 1.8 task-282 (bug-312, bug-310; dl-099 §1, task-219 D2): `tag` also pre-checks `evidence-only-since-candidate`, that the commits between the candidate and the tip change only the evidence paths its binding declares, and `staging-rehearsal` says what CI does: a gate run per candidate, while publish.yml's stage job stages the tagged build in CI; 1.9 task-288 (dl-159 A1.8, approver rulings D1–D3): `tag` tags on the release's integration branch, `on: integration_branch`, a minor on the pushed main and a patch on the pushed release/X.Y; its pre-checks on-branch-is-main and release-branch-merged-to-main become on-integration-branch, bound to scripts/integration-branch.cjs --check-head, and phase-branch-merged-to-integration-branch
 element: release
 
 phases:
@@ -54,26 +61,30 @@ phases:
 
   - name: tag
     description: >-
-      Create the semver git tag for the release ON `main`, after the release branch has merged —
-      never on a phase branch (dl-024). The tag must be a stable ref reachable from main's permanent
-      history so it survives phase-branch cleanup. It goes on the release candidate the rehearsal
-      transcript names (`staging-rehearsal-passed` prints that commit), not on a later commit such as
-      the one that records the transcript: a candidate that has not passed both checks is not tagged
-      (dl-099 §1). In the action, `on: main` names the branch the tag must be reachable from; the
-      commit tagged is the candidate `staging-rehearsal-passed` prints. Commits that only record evidence
+      Create the semver git tag for the release on its integration branch, after the release's phase
+      branch has merged into it and the branch has been pushed: a minor is tagged on the pushed `main`,
+      a patch on the pushed `release/X.Y` (dl-159 point 4; git-conventions §3, task-286) — never on a
+      phase branch (dl-024). The tag must be a stable ref reachable from that line's permanent history
+      so it survives phase-branch cleanup. `on-integration-branch` checks that HEAD is on the branch
+      scripts/integration-branch.cjs derives from the release's `kind` and `version`. It goes on the
+      release candidate the rehearsal transcript names (`staging-rehearsal-passed` prints that commit),
+      not on a later commit such as the one that records the transcript: a candidate that has not passed
+      both checks is not tagged (dl-099 §1). In the action, `on: integration_branch` names the branch
+      the tag must be reachable from; the commit tagged is the candidate `staging-rehearsal-passed`
+      prints. Commits that only record evidence
       do not re-cut the candidate (task-219 D2), and `evidence-only-since-candidate` checks it before the
       tag: it runs `git diff --name-only <candidate>..<tip>` and passes only when the candidate is an
       ancestor of the tip and every path is an evidence path, as its binding in bindings.yaml declares
       them; otherwise it names the paths, and the candidate is re-cut (dl-099 §1).
     role: tech-lead
     checks:
-      pre:   # dl-024; dl-099 §1
-        - "on-branch-is-main"
-        - "release-branch-merged-to-main"
+      pre:   # dl-024; dl-159 point 4 (task-288); dl-099 §1
+        - 'on-integration-branch(kind: "{release.kind}", version: "{release.version}")'   # task-288, approver ruling D3: bound to scripts/integration-branch.cjs --check-head
+        - "phase-branch-merged-to-integration-branch"   # unbound: which phase branch has merged is a reading no command asserts
         - "staging-rehearsal-passed(transcript: docs/07_gates/rl-{release.release-line}/rel-{release.version}-staging-rehearsal.md)"
         - "evidence-only-since-candidate(transcript: docs/07_gates/rl-{release.release-line}/rel-{release.version}-staging-rehearsal.md)"   # task-282, bug-312
     actions:
-      - 'git.tag(name: "{release.version}", on: main)'      # dl-024 — tag on main, not on a design/release_* branch; `on:` names the branch, the commit is the candidate staging-rehearsal-passed prints (dl-099 §1)
+      - 'git.tag(name: "{release.version}", on: integration_branch)'   # dl-024, dl-159 point 4 — tag on the integration branch, not on a design/release_* branch; `on:` names the branch, the commit is the candidate staging-rehearsal-passed prints (dl-099 §1)
 
   - name: publish
     description: >-
