@@ -1,5 +1,5 @@
 /** The release fields the derivation reads (`memory.yaml` `release`: `kind`, `dl-092`, and `version`). */
-export interface ReleaseLine {
+export interface ReleaseFields {
   /** `minor` or `patch` (`dl-092`); absent or `""` on a release predating `dl-092` (template `exempt`). */
   readonly kind?: string;
   /** The release version: `vX.Y` for a minor, `vX.Y.Z` (Z ≥ 1) for a patch. */
@@ -16,7 +16,7 @@ export type IntegrationBranch =
  * `patch` of `vX.Y.Z` (Z ≥ 1), `main` for a `minor` or a release with no `kind`. Any other kind, or a patch
  * whose version is not `vX.Y.Z` with Z ≥ 1, is refused with a message naming the value. Pure.
  */
-export function integrationBranch(release: ReleaseLine): IntegrationBranch;
+export function integrationBranch(release: ReleaseFields): IntegrationBranch;
 
 /** Outcome of {@link checkHead}. */
 export interface HeadCheck {
