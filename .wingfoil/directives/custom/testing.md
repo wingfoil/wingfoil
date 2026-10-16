@@ -6,7 +6,7 @@ kind: custom
 title: "Testing"
 tags: [custom, testing, tdd, jest]
 ref: [P3.8]
-version: "1.2"
+version: "1.3"   # 1.3: coverage non-regression against the integration branch's figures, release/X.Y or main (task-286, dl-159 A1.6) (prev 1.2)
 ---
 
 # Directive — Testing
@@ -30,7 +30,8 @@ Custom stand-in directive. Applies to developers, QA and reviewers (`roles.yaml`
 - Maintain >80% coverage (Jest); coverage must not regress on merge. Gate (80% floor only): the
   `dev-loop` `refactor` phase's `checks.post` entry `tests.coverage(min: 80)`, run as
   `npm run test:coverage` against `jest.config.js` `coverageThreshold` (80). Non-regression is not
-  asserted by any gate: it is checked by hand at `refactor`, against `main`'s figures.
+  asserted by any gate: it is checked by hand at `refactor`, against the integration branch's figures
+  (`release/X.Y` or `main`, `git-conventions` §1; `dl-159`).
 - Each behavior has at least one happy-path and one edge/error-path test (mirrors the BDD suite).
 - Tests are deterministic and isolated; no reliance on external services or wall-clock/random.
 - Test sources typecheck as cleanly as production sources (`dl-044`). Gate: `typecheck.clean`, the
@@ -76,8 +77,9 @@ generic rules above.
   Execution Notes for the reviewer; `refactor`'s coverage additions are new files or files `red` did
   not touch. The reviewer checks it with `git log --first-parent --no-merges --format=%h
   <red-commit>..HEAD -- <red's test files>` (empty). It compares only the branch's own non-merge
-  commits since `red`: a change brought in by an inward `Merge branch 'main' into task/…` commit is
-  excluded (`--first-parent` never visits main's side of that merge). From v1.0 the `dev-loop` post-check `tests.unchanged(since: red)` on `green` and `refactor`
+  commits since `red`: a change brought in by an inward `Merge branch '<integration branch>' into task/…`
+  commit (`main`, or `release/X.Y` on the maintenance line, `git-conventions` §1) is excluded
+  (`--first-parent` never visits the integration branch's side of that merge). From v1.0 the `dev-loop` post-check `tests.unchanged(since: red)` on `green` and `refactor`
   evaluates it (P4.12); until then this rule and the reviewer do.
 - **Secret-shaped fixtures** follow `security-secrets` S1: a fixture that must match a secret pattern
   is assembled at runtime, never committed as one literal (`dl-073` Action 3, `dl-122`).
