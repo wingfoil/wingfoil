@@ -70,4 +70,14 @@ with the code build of that commit (`npm run build`, then `node dist/cli.js`).
 
 ### Retrospective
 
-None.
+- Fixed by `task-285`: the REQ-PERF-02 suite prints its report through `reportLatency`
+  (`test/core/helpers/latency.ts`), which writes to `process.stdout.write` when `WINGFOIL_LATENCY_REPORT=1`;
+  `test/cli/latency-report-pass.test.ts` runs a two-file pass configured as `jest.latency.config.js` is, with and
+  without the agent variables, and finds the block once on stdout.
+- The mechanism was not the number of files alone. jest 30.4.1, with no `reporters` configured, picks its
+  `AgentReporter` when a variable such as `AI_AGENT` or `CLAUDECODE` is set, and that reporter prints no console
+  output of a passing suite; with one test file jest runs verbose and the console reaches stdout directly, and with
+  no agent variable the console block goes to stderr. Every gate that showed the defect was run by an agent.
+- Lesson: output a later step parses must not depend on the test runner's reporter, which can change with the
+  environment that runs it. A temporary `console.log` implementation failed the new pass test on the missing stdout
+  block, which is the evidence that the test tells the two mechanisms apart.
