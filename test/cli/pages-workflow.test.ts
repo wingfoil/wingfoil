@@ -19,7 +19,9 @@
  * existence expectation (never a test-file crash). The `publish.yml` case is characterization: it
  * already holds and pins that the Pages grant stays out of the publish pipeline.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { load as yamlLoad } from 'js-yaml';
@@ -29,6 +31,7 @@ const PAGES_PATH = join(REPO_ROOT, '.github', 'workflows', 'pages.yml');
 const PUBLISH_PATH = join(REPO_ROOT, '.github', 'workflows', 'publish.yml');
 const SITE_MANIFEST_PATH = join(REPO_ROOT, 'docs', 'site.yaml');
 const BUILD_SITE_PATH = join(REPO_ROOT, 'scripts', 'build-site.cjs');
+const DIST_TAG_PATH = join(REPO_ROOT, 'scripts', 'npm-dist-tag.cjs');
 
 /** The four Pages actions, frozen to the design's read-only lookup (`gh api …/releases/latest`, then the tag's commit). */
 const PAGES_PINS = [
@@ -41,6 +44,8 @@ const PAGES_PINS = [
 interface WorkflowStep {
   readonly id?: string;
   readonly name?: string;
+  /** task-266: the dist-tag and wait steps run on a tag push only. */
+  readonly if?: string;
   readonly uses?: string;
   readonly run?: string;
   readonly with?: Readonly<Record<string, unknown>>;
@@ -50,6 +55,10 @@ interface WorkflowJob {
   readonly 'runs-on'?: string;
   readonly 'timeout-minutes'?: number;
   readonly needs?: string | readonly string[];
+  /** task-266: deploy runs only for the newest line (or a manual run). */
+  readonly if?: string;
+  /** task-266: build hands the dist-tag on to deploy. */
+  readonly outputs?: Readonly<Record<string, string>>;
   readonly permissions?: Readonly<Record<string, string>>;
   readonly environment?: unknown;
   readonly steps: readonly WorkflowStep[];
@@ -257,5 +266,134 @@ describe('pages workflow (task-234) — AC 1: the site in a new workflow file (D
     const run = job('build').steps.find(runs('npm run docs:api'))?.run ?? '';
     const out = /--out\s+(\S+)/.exec(run)?.[1];
     expect(out).toBe(`_site-src/${(api[0]?.site_path ?? '').replace(/\/$/, '')}`);
+  });
+});
+
+/**
+ * task-266 (`dl-159` A1.4; batch ruling R3; approver ruling D2 (b), 2026-10-16) — the site documents the newest
+ * line only. A patch tag of an older line (a `v0.3.1` after `v0.4.0`) would otherwise redeploy that line's documents
+ * over the newest ones. The build computes the version's npm dist-tag with `scripts/npm-dist-tag.cjs` (the rule
+ * promote uses; `--allow-published`, since a re-run may come after the version went live), waits until npm serves
+ * the version when it gets `latest` (the site follows npm, as release and mcp-registry do: a rejected or failed
+ * publish deploys nothing), and deploy runs only for `latest` — or on `workflow_dispatch`, the approver's deliberate
+ * deployment (task-234 ruling 1). Every case above stays as it was.
+ *
+ * T1 classification: red-first — `grep -c "dist-tag" .github/workflows/pages.yml` → 0 before this task.
+ */
+describe('newest line only (task-266) — dl-159 A1.4', () => {
+  const distTagStep = (): WorkflowStep | undefined => job('build').steps.find((s) => s.id === 'dist-tag');
+  const waitStep = (): WorkflowStep | undefined => job('build').steps.find(runs('node scripts/wait-npm-version.cjs'));
+
+  it('A1.4: build computes the dist-tag on a tag push, after setup-node: npm view → the script → $GITHUB_OUTPUT', () => {
+    const steps = job('build').steps;
+    const step = distTagStep();
+    expect(step).toBeDefined();
+    expect(step?.if).toBe("${{ github.event_name == 'push' }}");
+    const at = step === undefined ? -1 : steps.indexOf(step);
+    expect(at).toBeGreaterThan(stepIndex(steps, uses('actions/setup-node')));
+    const run = step?.run ?? '';
+    const order = [
+      'npm view wingfoil versions --json',
+      'node scripts/npm-dist-tag.cjs "$GITHUB_REF_NAME" --published "$published" --allow-published',
+      '>> "$GITHUB_OUTPUT"',
+    ].map((cmd) => run.indexOf(cmd));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('A1.4: build outputs the dist-tag; deploy runs only for `latest` or a manual run', () => {
+    expect(job('build').outputs).toEqual({ dist_tag: '${{ steps.dist-tag.outputs.dist_tag }}' });
+    expect(job('deploy').if).toBe(
+      "${{ github.event_name == 'workflow_dispatch' || needs.build.outputs.dist_tag == 'latest' }}",
+    );
+  });
+
+  it('D2 (b): for `latest`, build waits until npm serves exactly this version, after the dist-tag and before the upload', () => {
+    const steps = job('build').steps;
+    const step = waitStep();
+    expect(step?.run).toBe('node scripts/wait-npm-version.cjs "$GITHUB_REF_NAME" --timeout-minutes 330 --interval-seconds 60');
+    expect(step?.if).toBe("${{ github.event_name == 'push' && steps.dist-tag.outputs.dist_tag == 'latest' }}");
+    const distTag = distTagStep();
+    const order = [
+      distTag === undefined ? -1 : steps.indexOf(distTag),
+      step === undefined ? -1 : steps.indexOf(step),
+      stepIndex(steps, uses('actions/upload-pages-artifact')),
+    ];
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('D2 (b): the build timeout covers the 330-minute wait, within the hosted 6 h job limit', () => {
+    const timeout = job('build')['timeout-minutes'] ?? 0;
+    expect(timeout).toBeGreaterThan(330);
+    expect(timeout).toBeLessThanOrEqual(360);
+  });
+
+  it('the header states the rule, citing dl-159 and task-266, no longer as a handover', () => {
+    const { raw } = pages();
+    const header = raw.slice(0, raw.indexOf('\nname: pages'));
+    expect(header).toContain('dl-159');
+    expect(header).toContain('task-266');
+    expect(header).not.toContain('is handed to');
+  });
+
+  /** The dist-tag step's script, run as GitHub's bash does, with a fake `npm` first on PATH. */
+  describe('dist-tag step — executed with a fake npm', () => {
+    let work: string;
+
+    beforeEach(() => {
+      work = mkdtempSync(join(tmpdir(), 'wf-pages-dist-tag-'));
+      mkdirSync(join(work, 'bin'));
+      mkdirSync(join(work, 'scripts'));
+      // Copied only when it exists, so before the script is written the step fails on its own, not this hook.
+      if (existsSync(DIST_TAG_PATH)) copyFileSync(DIST_TAG_PATH, join(work, 'scripts', 'npm-dist-tag.cjs'));
+      writeFileSync(
+        join(work, 'bin', 'npm'),
+        [
+          '#!/usr/bin/env bash',
+          'if [ "$1" = view ]; then printf "%s\\n" "$FAKE_NPM_VERSIONS"; exit "${FAKE_NPM_VIEW_EXIT:-0}"; fi',
+          'exit 0',
+        ].join('\n'),
+      );
+      chmodSync(join(work, 'bin', 'npm'), 0o755);
+    });
+
+    afterEach(() => rmSync(work, { recursive: true, force: true }));
+
+    function runStep(env: Record<string, string>): { readonly status: number | null; readonly output: string[] } {
+      // A missing step must fail here, not pass the failure case vacuously with `exit 99`.
+      expect(distTagStep()?.run).toBeDefined();
+      const result = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', distTagStep()?.run ?? 'exit 99'], {
+        cwd: work,
+        encoding: 'utf-8',
+        env: {
+          PATH: `${join(work, 'bin')}:${process.env.PATH ?? ''}`,
+          GITHUB_REF_NAME: 'v0.3.1',
+          GITHUB_OUTPUT: join(work, 'output'),
+          ...env,
+        },
+      });
+      const file = join(work, 'output');
+      const output = existsSync(file) ? readFileSync(file, 'utf-8').split('\n').filter((l) => l !== '') : [];
+      return { status: result.status, output };
+    }
+
+    it('a patch of an older line (0.3.1 after 0.4.0) → dist_tag=latest-0.3: no deployment', () => {
+      expect(runStep({ FAKE_NPM_VERSIONS: '["0.3.0","0.4.0"]' })).toEqual({ status: 0, output: ['dist_tag=latest-0.3'] });
+    });
+
+    it('the newest version, not yet live → dist_tag=latest', () => {
+      expect(runStep({ FAKE_NPM_VERSIONS: '["0.3.0"]' })).toEqual({ status: 0, output: ['dist_tag=latest'] });
+    });
+
+    it('the newest version, already live (a re-run after approval) → dist_tag=latest', () => {
+      expect(runStep({ FAKE_NPM_VERSIONS: '["0.3.0","0.3.1"]' })).toEqual({ status: 0, output: ['dist_tag=latest'] });
+    });
+
+    it('`npm view` failing fails the step, with no dist_tag written', () => {
+      const result = runStep({ FAKE_NPM_VERSIONS: '', FAKE_NPM_VIEW_EXIT: '1' });
+      expect(result.status).not.toBe(0);
+      expect(result.output).toEqual([]);
+    });
   });
 });
