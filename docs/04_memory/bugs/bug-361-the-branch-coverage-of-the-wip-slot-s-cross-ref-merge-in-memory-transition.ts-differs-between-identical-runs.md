@@ -57,6 +57,18 @@ Captured on 2026-10-15 by `bug-ingest-rel-v0.3-w3b7-review-findings-plan` (item 
 B7 follow-ups (`dev-loop-rel-v0.3-plan`), re-checked on `main` at `bd55f70e` with the code build of that commit
 (`npm run build`, then `node dist/cli.js`).
 
+**Note (2026-10-16, a third run-dependent branch, at the approver's triage of the W3 B8 follow-ups, item E2; `bug-ingest-rel-v0.3-w3b8-review-findings-plan`).**
+The finding and its release are unchanged.
+
+- **`readPathsAtRev`'s failure detail (`task-284`'s review, finding F2, follow-up item 2).** In
+  `src/storage/commit.ts`, the `run.stderr` arm of the `detail` expression after the batched `git cat-file --batch`
+  spawn (`grep -n -B1 "cat-file --batch at" src/storage/commit.ts`; `BRDA` block 61, branch 1, in the lcov report) is
+  covered in some runs only. `spawnSync` writes the batch input to a git that exits 128 at once (a `root` that does not
+  exist), and whether the write fails with EPIPE (`run.error` set) or completes before git exits (a non-zero status)
+  is a race. The test that reaches it, `fails loudly, rather than answering null, when git itself cannot run in root`
+  in `test/storage/read-paths-at-rev.test.ts`, passes either way. The B8 gate's coverage run reached it; other runs
+  did not.
+
 ### Retrospective
 
 None.

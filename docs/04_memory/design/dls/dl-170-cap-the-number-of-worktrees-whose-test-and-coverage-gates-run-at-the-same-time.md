@@ -154,3 +154,14 @@ unchanged.
   developer notes).
 - Q2 (A)'s lock taken by `prepareDist` too (today it holds only a per-worktree lock, `bug-095`), or a lighter path
   for targeted runs that reuses a current `dist/`, would cover the case.
+
+**Note (2026-10-16, evidence from wave 3 batch B8; W3 B8 follow-ups, `bug-ingest-rel-v0.3-w3b8-review-findings-plan` item E5).** Recorded as input for Q2;
+the Decision above is unchanged.
+
+- **A hung gate holds the slot indefinitely.** On 2026-10-15 a coverage run in `task-242`'s worktree hung for about
+  2 h while it held the slot: a green-phase defect in `smokeJourney`'s `PATH` shim (`exec 'wingfoil' "$@"` re-executed
+  itself) looped, and the coordinator ended it by killing the looping pid (follow-up item 17). The interim slot
+  (`waitslot.sh`) has no timeout and no liveness check: it waits while any heavy gate's process exists, so one hung
+  gate starves every waiter behind it.
+- Q2's enforcement point (an in-script lock, Q2 (A)) would need a maximum hold time or a liveness probe (progress in
+  the gate's log, for example), and a recorded way to release a lock whose holder is stuck.
