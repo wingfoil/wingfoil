@@ -226,6 +226,8 @@ declarations unchanged), so the paragraph above about the developer writing them
 `scripts/check-release-tag.d.cts` together with the two test files: measure from `4d2ebe4d` over the three
 files, with `9a300d1a` the only qa addition. `npx tsc --noEmit -p tsconfig.json` → exit 0, no output.
 
+Qa send-back **`c4e248c4`** (review nit, T4): comment-only rewording in `check-release-tag.test.ts` (the annotated mode is separate "from the release-line check (`--on-line`, task-265)"); `npx jest test/cli/check-release-tag.test.ts --maxWorkers=2` → 44 passed.
+
 ### green (developer, 2026-10-16)
 
 Commit `ca2ec784` `feat(publish): task-265 — …`. `scripts/check-release-tag.cjs` gains the `--on-line <tag> <commit>`
