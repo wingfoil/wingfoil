@@ -171,6 +171,43 @@ local `release/0.3` exists in this clone (shared by every worktree), a stale one
 every branch — the caveat above, as today with `main`. Cost: at most N `merge-base` + N² `--is-ancestor` calls, only
 when an unbumped edit is pending.
 
+### red (qa, 2026-10-16)
+
+**Red commit:** `e1371f9e` (T4 is measured from it). **File:** `test/lint/version-bump.test.ts` only (header
+rewritten: integration-branch baseline, `dl-159`, sorted candidates, no clock/randomness). Fixtures reuse
+`makeTempGitRepo`/`commitAll`/`git`/`writeFixtureFile`/`removeTempDir` (throw-away repository, its own local identity,
+`git-conventions` §5) and the existing `beforeEach` seed. Expected values are full shas from `git rev-parse` compared
+with `toEqual` (no identity comparison of objects from two reads).
+
+**Run 1 — outcome checks only (approver ruling D1), not committed.** The original file plus the verdict assertions of
+(2), (7), (8), importing nothing new. `npx jest test/lint/version-bump.test.ts --maxWorkers=2` → Tests: 3 failed,
+22 passed, 25 total. Each failure is the assertion `expect(checkPendingVersionBumps(repo)).toEqual([{ path: DNA,
+reason: 'content differs from HEAD but version: is still 1.1' }])` receiving `Array []`:
+(2) task branch from `release/0.3` after the line's bump; (7) incomparable fork points; (8) on `release/0.3` itself.
+The fourth check, (8) on `main` itself with a `release/0.3` present, PASSED: today's gate already fails an unbumped
+edit on `main` (the existing "on main itself" case); its red in the committed file comes only from
+`integrationBranchOf`.
+
+**Run 2 — the full file (committed).**
+- `npx tsc --noEmit -p tsconfig.json` → exit 2, exactly three errors, nothing else:
+  `version-bump.test.ts(37,3)` TS2305 `RELEASE_LINE_PATTERN`; `(42,3)` TS2305 `integrationBranchOf`; `(44,15)` TS2305
+  `IntegrationBranch`. No namespace-import cast.
+- `npx jest test/lint/version-bump.test.ts --maxWorkers=2` → Tests: 12 failed, 19 passed, 31 total. jest does not
+  stop at TS2305: `tsconfig.json` sets `isolatedModules: true`, so ts-jest transpiles without type diagnostics, and the
+  missing exports fail at runtime. Failures: the line-61 case `TypeError: Cannot read properties of undefined (reading
+  'test')` (`RELEASE_LINE_PATTERN`); the other 11 `TypeError: (0 , version_bump_1.integrationBranchOf) is not a
+  function`. The 19 passing are the existing cases, unchanged except (9).
+
+**Per AC.**
+
+| AC | Class | Test(s) |
+|---|---|---|
+| 1 — the rule, line 61 | red-first | renamed line-61 case "judges exactly the four versioned config files; the integration-branch candidates are main and release/<major>.<minor>" (`TRUNK_BRANCH` `'main'`; `RELEASE_LINE_PATTERN` true for `release/0.3`, `release/10.12`; false for `release/foo`, `release/0.3.1`, `release/v0.3`, `release/0.03`, `release/0.3/x`, `main`); (7) "chooses none and judges strictly…" → `null` + finding; (8) ×2 "chooses release/0.3 on release/0.3 itself…" → `{release/0.3, HEAD}` + finding, "chooses main on main itself while a release/0.3 exists…" → `{main, HEAD}` + finding; (9) "judges against HEAD alone when no main branch exists" + `integrationBranchOf` `null`; (10) "orders release lines numerically…" → `{release/0.3, release/0.3}` |
+| 2 — fixtures (1)–(6) | red-first | in the describe "the integration branch is the bump baseline: main or release/<major>.<minor> (task-287, dl-159)": (1) `{main, main}`; (2) `{release/0.3, release/0.3}` + "is still 1.1" finding; (3) `[]` + `{release/0.3, release/0.3}`; (4) merge forward `--no-ff`, `task/y` → `{main, main}` + finding; (5) tie → `{main, <seed>}`; (6) `release/foo` and `release/0.3.1` (both at the bumped commit) → `{main, <seed>}` + `[]`. Existing cases unchanged |
+| 3 — determinism, headers | characterization | (10) pins the sorted order; the test file's header says it, naming `dl-159`. The helper's header is the developer's |
+| 4 — *Gate* paragraph | characterization (doc) | no test (developer's file) |
+| 5 — governance unchanged | characterization | no test (developer's evidence) |
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
