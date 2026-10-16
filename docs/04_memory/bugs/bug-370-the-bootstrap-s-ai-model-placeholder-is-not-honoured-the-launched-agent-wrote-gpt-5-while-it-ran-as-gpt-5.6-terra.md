@@ -46,6 +46,15 @@ Captured on 2026-10-15 by `bug-ingest-rel-v0.3-w3b7-review-findings-plan` (item 
 B7 follow-ups (`dev-loop-rel-v0.3-plan`), re-checked on `main` at `bd55f70e` with the code build of that commit
 (`npm run build`, then `node dist/cli.js`).
 
+**Note (2026-10-16, the same class seen with the `claude-code` adapter, at the approver's triage of the W3 B8
+follow-ups, item E4; `bug-ingest-rel-v0.3-w3b8-review-findings-plan`).** The finding and its release are unchanged.
+
+- **A context-size suffix (`task-242`'s AC 3, follow-up item 22).** In the approver's by-hand Journey 4 run of
+  2026-10-15 with Claude Code 2.1.301 (`task-242`'s Execution Notes, `### AC 3 — by hand (approver, 2026-10-15)`),
+  the launched agent's commits carry `AI-Model: claude-opus-5-5[1m]`: the model id with the context-size suffix the
+  CLI shows, where `git-conventions` §7 asks for the model identifier the running agent reports. As with `gpt-5`
+  against `gpt-5.6-terra`, the value is the agent's own guess rather than one the bootstrap pins.
+
 ### Retrospective
 
 None.
