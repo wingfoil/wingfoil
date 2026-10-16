@@ -211,3 +211,30 @@ push of `release/0.3`. Offline tests pin the strings only, as the existing cases
 `task-286`: §3 must say what the §4 bullet above says (minor tag on pushed `main`, patch tag on pushed
 `release/X.Y`, never on a phase branch). `task-288`: `release-publishing.yaml` phase `tag`'s `on:` follows the
 same split. Nothing here touches 285/287 files.
+
+### red (qa, 2026-10-16)
+
+Role qa. Red commit **`d0791c66`** (T4 is measured from it). Files: `test/cli/ci-workflow.test.ts`,
+`test/cli/governance-workflow.test.ts` — the existing cases kept; two local helpers per file, `headerOf` (the
+comment header, before the `name:` line) and `headerParagraph` (a header paragraph from the line starting with a
+given prefix to the next bare `#` line; fails when no line starts with it).
+
+Run: `npx jest test/cli/ci-workflow.test.ts --maxWorkers=2` → 3 failed, 13 passed, 16 total;
+`npx jest test/cli/governance-workflow.test.ts --maxWorkers=2` → 3 failed, 8 passed, 11 total.
+`npx tsc --noEmit -p tsconfig.json` (under the slot) → no output, exit 0.
+
+| AC | Class | Test (file › case) | Fails today on |
+|----|-------|--------------------|----------------|
+| 1 | red-first | ci-workflow › "triggers on a push to any branch and on a pull request to main or to a release/** line — and on nothing else (task-267 AC 1, dl-159 A1.3)" | `expect(parsed.on.pull_request).toEqual({ branches: ['main', 'release/**'] })` — received `['main']` (Expected −1) |
+| 2 | red-first | ci-workflow › "cancels superseded runs per branch or PR, but never a run on main or on a release/* line (one group per commit there; task-267 AC 2)" | `toEqual` on `concurrency`: the group is today's main-only expression (Expected −1 / Received +1) |
+| 3a | red-first (D3) | ci-workflow › "names both lines, main and release/X.Y, in the header's Trigger and Concurrency paragraphs, citing dl-159 (task-267 AC 3)" | `expect(trigger).toContain('release/X.Y')` on the `# Trigger.` paragraph |
+| 3b | characterization | ci-workflow › e2e-smoke › "declares no trigger, condition or dependency of its own, names no branch, and never stages" + `expect(text).not.toMatch(/release/)` | passes on first run |
+| 6 (i) | red-first | governance-workflow › "triggers on push to main or to a release/** line, and on pull requests into either — and on nothing else (task-267 AC 6, dl-159)" | `toEqual` on `on`: `release/**` missing from both branch lists (Expected −2) |
+| 6 (ii) | red-first | governance-workflow › "never cancels a run on main or on a release/* line — the same group rule as ci.yml (task-267 AC 6, design D1)" | `expect(raw).toContain("group: governance-${{ (github.ref == … startsWith(github.ref, 'refs/heads/release/')) … }}")`; then the body after `governance-` must equal ci.yml's after `ci-` |
+| 6 (iii) | red-first (D3, same class) | governance-workflow › "names release/X.Y in its header — line 1, the range paragraph (all-zero first push → whole history), the ci.yml paragraph — citing dl-159 (task-267 AC 6, design D2/D3)" | `expect(header.split('\n')[0]).toContain('release/X.Y')` |
+| 4, 5 | characterization, no test | — | checked at close / approver's runbook (design) |
+
+Markers the developer keeps (the red pins them): the header paragraphs start `# Trigger.` and `# Concurrency:`
+(ci.yml), `# The range` and `# Kept equal to ci.yml` (governance.yml); the range paragraph uses the words
+`all-zero` and `whole history` (both already there today); `the one branch releases are cut from` leaves the
+ci.yml *Trigger* paragraph. The trigger tests fix the branch order as `['main', 'release/**']`.
