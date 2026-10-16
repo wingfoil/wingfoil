@@ -280,10 +280,12 @@ the uncommitted spec-015 amendment in the working tree:
   configs) → exit 0, no output.
 - `node scripts/check-governance.cjs --base 92bec996` → `governance check: 1 wf() commits in 92bec996…..HEAD`,
   `gated: 0 findings on 0 commits`, exit 0.
-- `node scripts/lint-claims.cjs --base 92bec996` → `claim lint: 6 warnings in 1 file (warn-only)`, exit 0; all six
-  on this file, all read as false positives: three on qa's quoted test titles ("nothing else", red table), one on
-  the quoted spec text ("does not exist on `origin`"), one on "unchanged" (3b row, a pin, with its test named) and
-  one on "already covered" (D2, the merge-forward PR, a reasoning line).
+- `node scripts/lint-claims.cjs --base 92bec996` (re-run at the independent review's F2, after the notes were
+  committed) → `claim lint: 8 warnings in 1 file (warn-only), 1 file read`, exit 0; all eight on this file, all read
+  as false positives: three "nothing else" on qa's quoted test titles (red table, design table), one "does not
+  exist" in the quoted spec-015 §4 text, one "already covered" (design D2, a reasoning line), and three
+  "unchanged" — the 3b row of the design table (a pin, its test named) and two in `### green` (`on.push`
+  unchanged, shown by `grep -n "branches:"` there; the range step unchanged, ruling D2 (a)).
 - **Ruling D2 (a) evidence — the whole-history run CI makes on the first push of a `release/X.Y` cut from this
   head:** `node scripts/check-governance.cjs` (no `--base`) at `7a55dd02`, under the slot → first line
   `governance check: 4755 wf() commits in HEAD (2729 after the introduction commit fcd43569…), and 2368 other
@@ -356,3 +358,20 @@ the uncommitted spec-015 amendment in the working tree:
   before it is run (evidence: the step name appears in both `### design` sections).
 - A whole-history governance run took 997 s at load ~9, against ~6 min idle: the first push of each
   `release/X.Y` pays that once (D2 (a)).
+
+### independent review (2026-10-16) and fixes (developer)
+
+Verdict: approve with fixes (text only).
+- **F1** — `.github/workflows/governance.yml`, *The range* paragraph: "about six minutes (task-167)" replaced by the
+  measured figures, "~6 min idle (task-167), 997 s at load ~9.5 (task-267), up to ~38 min under load
+  (task-208)", and one sentence added: for a new remote ref `.githooks/pre-push` takes `git merge-base HEAD
+  origin/main` as its base (`sed -n 25,26p .githooks/pre-push` shows the zero-sha test and that line), so on the
+  first push of a `release/X.Y` the local twin checks only the commits not on `main` while CI checks the whole
+  history. CI stays as it is (ruling D2 (a)); the follow-up is the coordinator's. The red-pinned opener `# The
+  range` and the tokens `all-zero`, `whole history`, `release/X.Y` are kept: `npx jest
+  test/cli/ci-workflow.test.ts test/cli/governance-workflow.test.ts test/cli/workflow-action-pins.test.ts
+  --maxWorkers=2` → 3 suites, 41 passed.
+- **F2** — the claim-lint line in `### refactor` now records the current output (8 warnings) and what each one is.
+- The spec-015 pending amendment is untouched and still uncommitted (R5). Status stays `in-review`. T4:
+  `git log --first-parent --no-merges --format=%h d0791c66..HEAD -- test/cli/ci-workflow.test.ts
+  test/cli/governance-workflow.test.ts` → empty.
