@@ -330,3 +330,5 @@ Choices made where the design left room: the `parsePublishedVersions` result typ
 shape as the design's inline union); the header pins require only what the design names (no wording of the
 developer's new prose is pinned beyond `semver`, `registry_service.go`, `RELEASE_MAKE_LATEST`); the `all published
 entries are prereleases` case and the message for it are not pinned (the design states `latest` but no message).
+
+qa send-back (T4, coordinator) `781872bd`: two pages pins (dist-tag after setup-node; dist-tag → wait → upload order) took positions with `steps.indexOf(step)` across two parses of `pages.yml`, so they could never pass; now `stepIndex` on one parse. No other new case compares objects across parses (the rest compare strings). Against green `37cc7c03`: `npx jest test/cli/pages-workflow.test.ts test/cli/publish-pipeline.test.ts test/cli/publish-secrets.test.ts test/cli/npm-dist-tag.test.ts --maxWorkers=2` → 4 suites, 175 passed / 175. Not vacuous: the fixed file run in a scratch worktree at `37cc7c03` with `pages.yml` from `51408e04` → 9 failed, 14 passed / 23 (all nine `newest line only` cases, the two fixed ones included).
