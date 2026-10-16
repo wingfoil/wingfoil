@@ -235,6 +235,38 @@ so the directive does not invent them):
   deferred); and `dl-152`'s list of operations committed directly on `main` has no `release/X.Y` counterpart (the
   approver's triage of a patch bug on the maintenance line).
 
+### red (qa, 2026-10-16)
+
+Role qa. Red commit **`adb7e7ad`** (T4 is measured from it). Files: `test/directives/git-conventions.test.ts`
+(new `describe('git-conventions §1–§3, §6 — dl-159 (task-286)')`, 11 cases; the `dl-152`, `bug-240`, `dl-158`
+cases unchanged) and `test/directives/integration-branch-baseline.test.ts` (new, 4 cases). Every pin is a substring
+of whitespace-flattened text (`.replace(/\s+/g, ' ')`), never a raw line (`task-276`); every absence check is in the
+same `it` as its positive; version pins are "≥" plus the version line naming `task-286` and `dl-159` (`bug-314`).
+Not pinned, per design: `doc-versioning`'s *Gate* paragraph (`task-287`), §1's on-branch paragraph quoting
+`dev-loop.yaml`'s `done` (`task-288`), row order, item numbering, the e.g. branch name in the table row.
+
+Run: `npx jest test/directives --maxWorkers=2` → 2 suites failed / 9; 14 tests failed, 164 passed.
+`git-conventions.test.ts` 11 failed / 13 passed (the 13 are the existing cases); `integration-branch-baseline.test.ts`
+3 failed / 1 passed; `dev-loop-done-order.test.ts` 4/4 and `dev-loop-practice.test.ts` 16/16 green.
+
+| AC | Class | Test (`it`) | First failing assertion at `8cb122c6` |
+|----|-------|-------------|----------------------------------------|
+| 1 | red-first | `AC 1: §1 cites dl-159 and the closed prefix table gains the \`release/\` row, cut lazily, long-lived` | §1 heading lacks `` `dl-159` `` (then: no `release/` row; prefix set lacks `release/`) |
+| 1 | red-first | `AC 1: §1 states the integration branch; task and phase branches are cut from and merge --no-ff into it` | missing `` `release/X.Y` for work on a patch of the released minor `X.Y`, `main` otherwise ``; negatives `` cut from `main` ``, `` Both merge into `main` with `` follow |
+| 2 | red-first | `AC 2: §1 states the merge-forward rule as dl-092 Action 3's parallel-release rule, dl-159 superseding option (a)` | missing `` the parallel-release rule `dl-092` Action 3 asked for `` |
+| 2 | red-first | `AC 2: §1 states the prohibitions between lines` | missing `Never cherry-pick or rebase between lines` |
+| 2 | red-first | `AC 2: §1 names the version-bearing files of the merge-forward conflict and keeps main's values` | missing `` `package.json` `version` `` |
+| 3 | red-first | `AC 3: §2 syncs with the integration branch, never with the other line; the rebase ban stays` | missing `` `git merge --no-edit <integration branch>` ``; negative `` `git merge --no-edit main` `` follows |
+| 4 | red-first | `AC 4: §3 puts a minor tag on pushed main and a patch tag on pushed release/X.Y, never on a phase branch` | missing `` A minor tag `vX.Y.0` is created on `main` ``; negative `` A version tag is created on `main` `` follows |
+| 5 | red-first | `AC 5: §6.2 makes pushing the add commit mandatory on both lines` | missing `mandatory on both lines` (`` Push the `add` commit at once `` already present) |
+| 5 | red-first | `AC 5: §1 states the layout — one clone, a long-lived worktree for the maintenance line, never a second clone` | missing `long-lived worktree` |
+| D3 | red-first | `D3: §9 names release/X.Y in the governance range and keeps its §4 scope` | §9 lacks `` `release/X.Y` `` (the `dev-loop-practice` phrase is still checked) |
+| 7 | red-first (D1) | `AC 7: the version is 1.7 or later, its line names task-286 and dl-159, the Date is the edit date or later` | `Expected: >= 1007` (1.6 → 1006); then the line's `task-286`/`dl-159`, `**Date:**` ≥ `2026-10-16` |
+| 6 | red-first (D1) | `AC 6: doc-versioning's bump rule takes the integration branch's version as the baseline` | missing `` the version on the branch's integration branch, `release/X.Y` or `main` ``; negative `` The baseline is the version on `main` `` follows |
+| 6 | red-first (D1) | `AC 6: testing compares coverage non-regression against the integration branch's figures` | missing `against the integration branch's figures`; negative `` against `main`'s figures `` follows |
+| 7 | red-first (D1) | `AC 7: testing is at 1.3 or later and its version line names task-286 and dl-159` | `Expected: >= 1003` (1.2 → 1002) |
+| 7 | characterization | `AC 7: doc-versioning declares no version (its Scope rule)` | passes on first run: an invariant green must keep, not new behaviour |
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
