@@ -155,9 +155,30 @@ branches") and `dl-092`'s parallel-release rule, option (a) (the partial freeze)
 5. *(Added 2026-10-16, approver.)* The open point of the facts above — which dist-tag a staged version receives when
    it is approved — is settled in `task-266`'s design (npm's documentation or source at the version `promote` pins),
    or, if it cannot be settled there, recorded as a by-hand check of the first patch's promote.
+6. *(Added 2026-10-16, approver ruling (b), from A2 item 1.)* `git-conventions` §1–§3: the `release/` prefix, the
+   integration branch, the merge-forward rule, patch tags on the pushed `release/X.Y`, the parallel-release clause
+   `dl-092` Action 3 promised, the long-lived release worktree and "push the `add` commit at once" on both lines;
+   the `doc-versioning` and `testing` baseline (`task-286-state-the-release-x.y-line-in-git-conventions-1-3-and-the-integration-branch-baseline-in-doc-versioning-and-testing`).
+7. *(Added 2026-10-16, approver ruling (b), from A2 item 2.)* `test/lint/helpers/version-bump.ts`: the bump
+   baseline is the integration branch, `release/X.Y` or `main`, not `main` alone (`task-287-take-the-version-bump-gate-s-baseline-from-the-integration-branch-release-x.y-or-main-not-from-main-alone`).
+8. *(Added 2026-10-16, approver ruling (b), from A2 item 4, base-branch part.)* A declared base branch in
+   `dev-loop.yaml` (`git.merge(from: …)`, `git.merge(to: …)`) and in `release-publishing.yaml`'s phase `tag`
+   (pre-checks and `git.tag(…, on: …)`): `release/X.Y` for a patch, `main` for a minor (`task-288-declare-the-base-branch-of-dev-loop-s-merges-and-release-publishing-s-tag-phase-release-x.y-for-a-patch-main-for-a-minor`).
 
-**A2 — deferred, explicitly out of v0.3.** Owner: the v0.3 retrospective, then `patch-v0.3.1`'s prerequisites
-step, done on `release/0.3` and merged forward:
+These three are wave 3, after B9 (order 286 → 287 → 288), and must be in the tree `v0.3.0` is cut from, for the
+same reason as items 1–3.
+
+**A2 — items 0, 3, 5 and the `patch-cycle.yaml` part of item 4 deferred, out of v0.3; items 1, 2 and the
+base-branch part of item 4 moved to v0.3 as A1 items 6–8.** Owner of the deferred part: the v0.3 retrospective,
+then `patch-v0.3.1`'s prerequisites step, done on `release/0.3` and merged forward:
+
+*(Amended 2026-10-16, approver ruling (b).)* The tooling part of A2 moves into v0.3, so that from the day `v0.3.0`
+is released `release/0.3` and `main` (v0.4) can be developed at the same time: item 1 (`git-conventions` §1–§3)
+and item 2 (`doc-versioning`, `testing`, `TRUNK_BRANCH`) in full, and the base-branch part of item 4
+(`dev-loop.yaml`, `release-publishing.yaml` phase `tag`), as A1 items 6–8 (`task-286`, `task-287`, `task-288`).
+Items 0 (patch scope selected by the retrospective), 3 (`memory.yaml`: `release.branch`, patch seeding, one fix
+task per line), the `patch-cycle.yaml` part of item 4, and 5 (the `dl-095` pin per line) stay deferred. Items 1,
+2 and 4 below keep their text as the statement of what moved.
 
 0. *(Added 2026-10-07, approver, with `dl-163`.)* **The retrospective selects the patch scope, by hand, from v0.3
    on.** In `additional-points` the approver rules on three inputs: the consumer notes `dl-163` R6 admits into a
