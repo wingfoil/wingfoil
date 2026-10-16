@@ -924,6 +924,26 @@ describe('the toolchain half — Q01–Q04, Q11, Q12, Q17 from stubbed tool outp
     });
   });
 
+  it('Q12 — task-285 AC 3: the report as the suite now prints it (unindented on stdout, no console block, after a sibling line) is measured', async () => {
+    const { tree, scratch } = toolTree();
+    const plain = [
+      'workflow next: p95 40 ms (n=25, min 30 ms, max 41 ms); load average (1-min / 5-min): before 7.04 / 6.00, after 9.62 / 7.00',
+      ...latencyOutput('otherwise idle').split('\n').filter((line) => line.startsWith('    ') && !line.trimStart().startsWith('at ')).map((line) => line.trimStart()),
+      '',
+    ].join('\n');
+    expect(plain).not.toContain('console.log');
+    const m = byId(await measureToolchain(tree, scratch, { tools: stubTools({ latency: { status: 0, stdout: plain, stderr: 'Test Suites: 3 passed, 3 total\n' } }).tools }));
+    expect(m['Q12']).toMatchObject({
+      status: 'measured',
+      value: 330,
+      raw: {
+        machine: 'otherwise idle', load_1m_before: 1.5, load_1m_after: 1.75, floor_p95_ms: 210,
+        'memory search total_p95_ms': 287, 'memory search marginal_p95_ms': 106, 'dna show total_p95_ms': 250, 'memory history total_p95_ms': 330, 'memory history marginal_p95_ms': 120,
+      },
+      failing: [],
+    });
+  });
+
   it('Q12 — a loaded run is not-measurable, quoting the suite\'s own verdict, and still records the load (R4)', async () => {
     const { tree, scratch } = toolTree();
     const loaded = 'loaded: floor p95 826 ms (n=25, min 700 ms, max 900 ms) >= 500 ms; load average (1-min / 5-min): before 18.00 / 12.00, after 19.00 / 13.00; not a REQ-PERF-02 measurement';
