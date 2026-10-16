@@ -211,6 +211,8 @@ too. (3) The writer test adds the `''` value and a default-`env` case. The textu
 evidence for that mechanism is the design's scratch reproduction: with two files and the agent variables set, stdout
 carried only the `process.stdout.write` line.
 
+**Review send-back (qa, T4): `7d4667bc`.** It changes only the comment above `latencyOutput` in `test/release-health/measure.test.ts`, which now says the console-block shape is how the report printed before task-285. `npx jest test/release-health/measure.test.ts --maxWorkers=2` → 67 passed.
+
 ### green (developer, 2026-10-16)
 
 Read `### red (qa)` first: red `6f467575`, its deviations accepted as recorded (approver rulings D1, D2).
