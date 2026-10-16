@@ -38,6 +38,7 @@ interface PipelineManifest {
 }
 
 interface WorkflowStep {
+  readonly id?: string;
   readonly name?: string;
   readonly uses?: string;
   readonly run?: string;
@@ -54,6 +55,8 @@ interface WorkflowJob {
   readonly environment?: string;
   readonly permissions?: Readonly<Record<string, string>>;
   readonly env?: Readonly<Record<string, string>>;
+  /** task-266: promote hands its dist-tag on to release. */
+  readonly outputs?: Readonly<Record<string, string>>;
   readonly steps: readonly WorkflowStep[];
 }
 
@@ -144,10 +147,11 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
 
   // task-244 (ruling D1 (a)): prepublishOnly's three commands run as three gate steps, the test one as
   // `test:report` (one suite run, with coverage and Jest JSON), then the classifier writes the summary.
-  it('gate asserts tag-on-main + tag↔version, then build, test:report, lint, the summary, the dry-run manifest, and packs once', () => {
+  // task-265 (dl-159 A1.1): the first check is the release-line check — main, or release/X.Y of the tag's own X.Y.
+  it('gate asserts the tag’s release line + tag↔version, then build, test:report, lint, the summary, the dry-run manifest, and packs once', () => {
     const script = runs(readWorkflow().parsed.jobs.gate);
     const order = [
-      'git merge-base --is-ancestor "$GITHUB_SHA" origin/main',
+      'node scripts/check-release-tag.cjs --on-line "$GITHUB_REF_NAME" "$GITHUB_SHA"',
       'node scripts/check-release-tag.cjs "$GITHUB_REF_NAME"',
       'node scripts/check-release-tag.cjs --annotated "$GITHUB_REF_NAME"',
       'npm ci',
@@ -270,6 +274,139 @@ describe('publish workflow (task-060) — spec-015 §3 / adr-009', () => {
 });
 
 /**
+ * task-265 (`dl-159` Decision 4, Action A1.1; `dl-024` decision 2 kept) — the gate accepts a release tag whose
+ * commit is on `main` or on `release/X.Y` of the tag's own X.Y, as ONE step running
+ * `scripts/check-release-tag.cjs --on-line`, which does its own `git fetch --no-tags` (pinned on a fixture in
+ * `check-release-tag.test.ts`). Its position before the version check, `npm ci` and prepublishOnly's steps is
+ * pinned by the ordering case above. The header states both lines wherever it stated "the tag is on main".
+ */
+describe('release-line gate step and header (task-265) — dl-159', () => {
+  const STEP_NAME = 'Tag commit is on main or on release/X.Y of its own X.Y (dl-024, dl-159)';
+  const STEP_RUN = 'node scripts/check-release-tag.cjs --on-line "$GITHUB_REF_NAME" "$GITHUB_SHA"';
+  const header = (): string => {
+    const { raw } = readWorkflow();
+    return raw.slice(0, raw.indexOf('\nname: publish'));
+  };
+
+  it('runs the release-line check as exactly one gate step, named for both lines and dl-159', () => {
+    const steps = readWorkflow().parsed.jobs.gate?.steps ?? [];
+    const onLine = steps.filter((s) => s.run?.includes('--on-line'));
+    expect(onLine).toHaveLength(1);
+    expect(onLine[0]?.name).toBe(STEP_NAME);
+    expect(onLine[0]?.run?.trim()).toBe(STEP_RUN);
+  });
+
+  it('leaves no inline merge-base or fetch in the gate: the script does both', () => {
+    const script = runs(readWorkflow().parsed.jobs.gate);
+    expect(script).toContain('--on-line');
+    expect(script).not.toContain('merge-base --is-ancestor');
+    expect(script).not.toContain('git fetch');
+  });
+
+  it('states both lines in the stage list’s gate entry', () => {
+    const text = header();
+    const gate = text.slice(text.search(/\n#\s+gate\s+→/), text.search(/\n#\s+stage\s+→/));
+    expect(gate.length).toBeGreaterThan(0);
+    expect(gate).toContain('release/X.Y');
+    expect(gate).toContain('main');
+  });
+
+  it('states both lines, citing dl-159, in the Trigger paragraph', () => {
+    const text = header();
+    const start = text.indexOf('\n# Trigger:');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const trigger = text.slice(start, text.indexOf('\n#\n', start + 1));
+    expect(trigger).toContain('release/X.Y');
+    expect(trigger).toContain('main');
+    expect(trigger).toContain('dl-159');
+  });
+
+  it('states both lines, citing dl-159, in runbook step 5', () => {
+    const text = header();
+    const five = text.search(/\n#\s+5\. /);
+    const six = text.search(/\n#\s+6\. /);
+    expect(five).toBeGreaterThanOrEqual(0);
+    expect(six).toBeGreaterThan(five);
+    const step = text.slice(five, six);
+    expect(step).toContain('release/X.Y');
+    expect(step).toContain('main');
+    expect(step).toContain('dl-159');
+  });
+
+  it('states both lines in the `act` section', () => {
+    const text = header();
+    const start = text.search(/\n# ── [^\n]*`act`/);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const act = text.slice(start);
+    expect(act).toContain('release/X.Y');
+    expect(act).toContain('main');
+  });
+
+  it('no longer says the tag must be "on main" alone', () => {
+    expect(header()).not.toContain('tag is on main');
+  });
+
+  it('names task-265 in the header’s opening list of builders', () => {
+    const text = header();
+    expect(text.slice(0, text.indexOf('\n#\n'))).toContain('task-265');
+  });
+});
+
+/**
+ * task-266 AC 2 (`dl-159` Decision 6, Action A1.2; approver ruling D1 (a), 2026-10-16) — promote reads the
+ * published versions, chooses the dist-tag with `scripts/npm-dist-tag.cjs` (from its own checkout in `tree/`,
+ * without credentials) and passes it to `npm stage publish` with an explicit `--tag`; the step hard-codes no
+ * literal `latest` and hands the tag on as a job output (release's `RELEASE_MAKE_LATEST`, AC 6). An explicit
+ * `--tag` switches npm's own "Cannot implicitly apply the latest tag" guard off, so the script is the only guard.
+ * The step itself is executed with a fake npm in `publish-secrets.test.ts`.
+ */
+describe('promote dist-tag (task-266) — latest only for the highest published version, else latest-X.Y', () => {
+  const promote = (): WorkflowJob | undefined => readWorkflow().parsed.jobs.promote;
+  const stageStep = (job: WorkflowJob | undefined): WorkflowStep | undefined =>
+    job?.steps.find((s) => s.run?.includes('npm stage publish'));
+
+  it('AC 2: the stage step has `id: stage`, keeps `if: ${{ !env.ACT }}` and `set +x` first', () => {
+    const step = stageStep(promote());
+    expect(step?.id).toBe('stage');
+    expect(step?.if).toBe('${{ !env.ACT }}');
+    expect((step?.run ?? '').split('\n')[0]?.trim()).toBe('set +x');
+  });
+
+  it('AC 2: reads the published versions, runs the dist-tag script, writes the output, then stages with `--tag` — in that order', () => {
+    const run = stageStep(promote())?.run ?? '';
+    const order = [
+      'npm view wingfoil versions --json',
+      'node tree/scripts/npm-dist-tag.cjs "$GITHUB_REF_NAME" --published "$published"',
+      '>> "$GITHUB_OUTPUT"',
+      'npm stage publish ./dist-pack/*.tgz --provenance --access public --tag "$dist_tag"',
+    ].map((cmd) => run.indexOf(cmd));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('AC 2: the step hard-codes no literal `latest` and never passes --allow-published', () => {
+    const run = stageStep(promote())?.run ?? 'latest';
+    expect(run).not.toMatch(/\blatest\b/);
+    expect(run).not.toContain('--allow-published');
+  });
+
+  it('AC 2: promote outputs the chosen dist-tag for the release job', () => {
+    expect(promote()?.outputs).toEqual({ dist_tag: '${{ steps.stage.outputs.dist_tag }}' });
+  });
+
+  it('AC 2 (D1 (a)): promote has exactly one checkout, into `tree/` without credentials, before the stage step', () => {
+    const steps = promote()?.steps ?? [];
+    const checkouts = steps.filter((s) => s.uses?.startsWith('actions/checkout@'));
+    expect(checkouts).toHaveLength(1);
+    expect(checkouts[0]?.with).toEqual({ path: 'tree', 'persist-credentials': false });
+    const checkoutAt = steps.findIndex((s) => s.uses?.startsWith('actions/checkout@'));
+    const stageAt = steps.findIndex((s) => s.run?.includes('npm stage publish'));
+    expect(checkoutAt).toBeGreaterThanOrEqual(0);
+    expect(stageAt).toBeGreaterThan(checkoutAt);
+  });
+});
+
+/**
  * task-229 (`dl-130` step 1, Q1 (a); spec-015 §3) — a GitHub Release for every version npm serves. Since
  * `adr-011`, `promote` only STAGES the version, so `release` waits until `npm view wingfoil@<version> version`
  * answers that exact version: a bounded poll (planning ruling R20, Q3), capped below the hosted runner's 6-hour
@@ -313,8 +450,12 @@ describe('release job (task-229) — the GitHub Release follows npm', () => {
     expect(create?.run).toContain('--notes-file "$RUNNER_TEMP/release-notes.md"');
   });
 
-  it('never hard-codes `latest`: one job-level value, empty by default, feeds an optional `--latest=`', () => {
-    expect(release()?.env).toEqual({ RELEASE_MAKE_LATEST: '' });
+  // task-266 AC 6 (approver ruling D3): the one job-level value now follows promote's dist-tag, so a `v0.3.1`
+  // Release after `v0.4.0` is never the repository's "Latest" (gh sends `make_latest` only when told).
+  it('never hard-codes `latest`: one job-level value, from promote\'s dist-tag, feeds an optional `--latest=` (task-266 AC 6)', () => {
+    expect(release()?.env).toEqual({
+      RELEASE_MAKE_LATEST: "${{ needs.promote.outputs.dist_tag == 'latest' && 'true' || 'false' }}",
+    });
     const create = step('gh release create');
     expect(create?.run).toContain('${RELEASE_MAKE_LATEST:+--latest="$RELEASE_MAKE_LATEST"}');
     expect(create?.run).not.toMatch(/--latest(?!=")/);
@@ -353,6 +494,18 @@ describe('release job (task-229) — the GitHub Release follows npm', () => {
     expect(header).toContain('npm view wingfoil@<version> version');
     expect(header).toMatch(/Re-run failed jobs/);
     expect(header).toContain('task-229');
+  });
+
+  it('the header\'s `release →` entry still names RELEASE_MAKE_LATEST, no longer "task-266 sets it" (task-266 AC 6)', () => {
+    const { raw } = readWorkflow();
+    const header = raw.slice(0, raw.indexOf('\nname: publish'));
+    const from = header.search(/release\s+→/);
+    const to = header.search(/mcp-registry\s+→/);
+    expect(from).toBeGreaterThan(0);
+    expect(to).toBeGreaterThan(from);
+    const entry = header.slice(from, to);
+    expect(entry).toContain('RELEASE_MAKE_LATEST');
+    expect(entry).not.toContain('task-266 sets it');
   });
 });
 
@@ -432,6 +585,24 @@ describe('mcp-registry job (task-238) — the MCP Registry listing follows npm',
     expect(checkout?.with?.['persist-credentials']).toBe(false);
     const setup = current?.steps.find((s) => s.uses?.startsWith('actions/setup-node@'));
     expect(setup?.with?.['node-version']).toBe('${{ env.NODE_VERSION }}');
+  });
+
+  /*
+   * task-266 AC 4 (characterization of the job, red-first for its header text): the registry marks the semver-highest
+   * version latest by itself (registry v1.8.1 `registry_service.go`), so the `if:` above stays unchanged — the
+   * case "runs after promote, behind one job-level `if:`" is its pin — and the header says why.
+   */
+  it('the header\'s `mcp-registry →` entry cites the registry\'s own semver ordering, no longer "task-266 adds" (task-266 AC 4)', () => {
+    const { raw } = readWorkflow();
+    const header = raw.slice(0, raw.indexOf('\nname: publish'));
+    const from = header.search(/mcp-registry\s+→/);
+    const to = header.indexOf('── Job timeouts');
+    expect(from).toBeGreaterThan(0);
+    expect(to).toBeGreaterThan(from);
+    const entry = header.slice(from, to);
+    expect(entry).toContain('semver');
+    expect(entry).toContain('registry_service.go');
+    expect(entry).not.toContain('task-266 adds');
   });
 
   it('documents the job, the OIDC namespace and the re-run recovery as runbook step 8, after step 7', () => {
@@ -571,6 +742,25 @@ describe('publish runbook (task-238) — bug-174, bug-060', () => {
     expect(six).toMatch(/automated review/i);
     expect(six).toContain('npx -y npm@<version> stage approve <stage-id>');
     expect(six).toContain('11.15.0');
+  });
+
+  /*
+   * task-266 AC 5 (dl-159 Decision 6; risk R1): before approving, the approver reads the staged dist-tag and checks
+   * no other stage is pending (two pending stages across lines would both carry `latest`); after, reads the
+   * registry's dist-tags.
+   */
+  it('step 6 reads the staged dist-tag before approving and `npm view wingfoil dist-tags` after (task-266 AC 5)', () => {
+    const text = header();
+    const six = text.slice(text.search(/\n#\s+6\. /), text.search(/\n#\s+7\. /));
+    expect(six).toContain('npm stage list wingfoil');
+    expect(six).toContain('npm stage view');
+    expect(six).toMatch(/\btag\b/);
+    expect(six).toContain('latest-X.Y');
+    expect(six).toContain('dl-159');
+    const approve = six.indexOf('npm stage approve');
+    const distTags = six.indexOf('npm view wingfoil dist-tags');
+    expect(approve).toBeGreaterThan(0);
+    expect(distTags).toBeGreaterThan(approve);
   });
 
   it('the release-publishing `publish` phase names the same tab, review state and npx form', () => {

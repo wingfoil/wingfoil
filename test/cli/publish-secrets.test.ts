@@ -12,7 +12,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import type { SpawnSyncReturns } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -22,6 +22,8 @@ import { withCallerEnv, withoutCallerNpmConfig } from './helpers/npm-env';
 
 const REPO_ROOT = join(__dirname, '..', '..');
 const WORKFLOW_PATH = join(REPO_ROOT, '.github', 'workflows', 'publish.yml');
+/** task-266: the dist-tag script promote runs from its `tree/` checkout. */
+const DIST_TAG_SCRIPT = join(REPO_ROOT, 'scripts', 'npm-dist-tag.cjs');
 
 /** The environment variable the retired token lived in — split so this suite's own grep stays honest. */
 const RETIRED_TOKEN_VAR = ['NPM', 'TOKEN'].join('_');
@@ -94,8 +96,17 @@ describe('promote credential (task-113) — spec-015 §5: a stage-only OIDC trus
     expect(promote?.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
   });
 
-  it('keeps the promote job checkout-free: it stages the gate tarball, not a tree', () => {
-    expect(promote?.steps.some((s) => s.uses?.startsWith('actions/checkout@'))).toBe(false);
+  /*
+   * task-266 (approver ruling D1 (a), 2026-10-16) replaced task-061's "checkout-free" rule, written when promote
+   * wrote a token into an `.npmrc` (no spec or ADR states it; adr-011 left no credential to protect): promote now
+   * runs `scripts/npm-dist-tag.cjs`, so it checks the tree out into `tree/`, without credentials, and the job's
+   * working directory still holds no `package.json` — what it stages is the downloaded gate tarball.
+   */
+  it('keeps promote\'s one checkout in `tree/`, without credentials; it stages the gate tarball, not the tree (task-266 D1)', () => {
+    const checkouts = (promote?.steps ?? []).filter((s) => s.uses?.startsWith('actions/checkout@'));
+    expect(checkouts).toHaveLength(1);
+    expect(checkouts[0]?.with).toEqual({ path: 'tree', 'persist-credentials': false });
+    expect(stageStep?.run).toContain('npm stage publish ./dist-pack/*.tgz ');
   });
 
   it('git-ignores .npmrc, so a developer-local token file cannot be committed either', () => {
@@ -152,14 +163,23 @@ describe('promote stage step (task-113) — executed with a fake npm', () => {
     mkdirSync(join(work, 'bin'));
     mkdirSync(join(work, 'dist-pack'));
     writeFileSync(join(work, 'dist-pack', 'wingfoil-0.2.0.tgz'), 'not a real tarball');
-    // Records argv, and whether any .npmrc sat in the cwd when npm was called.
+    // task-266 (D1 (a)): promote's checkout lands in `tree/`; the step runs the dist-tag script from there.
+    // Copied only when it exists, so before the script is written the step fails on its own, not this hook.
+    mkdirSync(join(work, 'tree', 'scripts'), { recursive: true });
+    if (existsSync(DIST_TAG_SCRIPT)) copyFileSync(DIST_TAG_SCRIPT, join(work, 'tree', 'scripts', 'npm-dist-tag.cjs'));
+    // Appends every argv line, and records whether any .npmrc sat in the cwd when npm was called. `npm view`
+    // answers $FAKE_NPM_VERSIONS (exit $FAKE_NPM_VIEW_EXIT); `npm stage …` exits $FAKE_NPM_EXIT.
     writeFileSync(
       join(work, 'bin', 'npm'),
       [
         '#!/usr/bin/env bash',
-        'printf "%s\\n" "$*" > "$RECORD_DIR/args"',
+        'printf "%s\\n" "$*" >> "$RECORD_DIR/args"',
         'if [ -e .npmrc ]; then touch "$RECORD_DIR/npmrc-seen"; fi',
-        'exit "${FAKE_NPM_EXIT:-0}"',
+        'case "$1" in',
+        '  view) printf "%s\\n" "${FAKE_NPM_VERSIONS:-[\\"0.1.0\\"]}"; exit "${FAKE_NPM_VIEW_EXIT:-0}" ;;',
+        '  stage) exit "${FAKE_NPM_EXIT:-0}" ;;',
+        'esac',
+        'exit 0',
       ].join('\n'),
     );
     chmodSync(join(work, 'bin', 'npm'), 0o755);
@@ -179,18 +199,65 @@ describe('promote stage step (task-113) — executed with a fake npm', () => {
       env: {
         PATH: `${join(work, 'bin')}:${process.env.PATH ?? ''}`,
         RECORD_DIR: join(work, 'record'),
+        GITHUB_REF_NAME: 'v0.2.0',
+        GITHUB_OUTPUT: join(work, 'output'),
         ...env,
       },
     });
     return result.status;
   }
 
-  it('stages the gate tarball with provenance and public access, with no credential in its environment', () => {
+  /** Every npm call the step made, one argv line each, in order. */
+  function npmCalls(): string[] {
+    const file = join(work, 'record', 'args');
+    return existsSync(file) ? readFileSync(file, 'utf-8').split('\n').filter((l) => l !== '') : [];
+  }
+
+  /** The `npm stage publish` calls alone. */
+  function stageCalls(): string[] {
+    return npmCalls().filter((l) => l.startsWith('stage publish'));
+  }
+
+  /** The step's `$GITHUB_OUTPUT` lines (none when the file was never written). */
+  function outputLines(): string[] {
+    const file = join(work, 'output');
+    return existsSync(file) ? readFileSync(file, 'utf-8').split('\n').filter((l) => l !== '') : [];
+  }
+
+  it('stages the gate tarball with provenance, public access and an explicit `--tag latest`, with no credential in its environment (task-266 AC 2)', () => {
     expect(runStep()).toBe(0);
-    const args = readFileSync(join(work, 'record', 'args'), 'utf-8').trim();
     // task-108 (bug-135): the explicit `./` keeps npm from reading `dist-pack/<file>` as a GitHub
     // `user/repo` shorthand. adr-011 / dl-068 Action 4: `--access` is accepted by `npm stage publish`.
-    expect(args).toBe('stage publish ./dist-pack/wingfoil-0.2.0.tgz --provenance --access public');
+    // task-266 (dl-159 Decision 6): 0.2.0 over the published ["0.1.0"] is the highest → `latest`, explicitly.
+    expect(stageCalls()).toEqual(['stage publish ./dist-pack/wingfoil-0.2.0.tgz --provenance --access public --tag latest']);
+    expect(outputLines()).toEqual(['dist_tag=latest']);
+  });
+
+  it('reads the published versions with `npm view wingfoil versions --json` before staging (task-266 AC 2)', () => {
+    expect(runStep()).toBe(0);
+    const calls = npmCalls();
+    const view = calls.indexOf('view wingfoil versions --json');
+    const stage = calls.findIndex((l) => l.startsWith('stage publish'));
+    expect(view).toBeGreaterThanOrEqual(0);
+    expect(stage).toBeGreaterThan(view);
+  });
+
+  it('stages a version below the highest published one under `latest-X.Y` (task-266 AC 2, dl-159)', () => {
+    expect(runStep({ FAKE_NPM_VERSIONS: '["0.1.0","0.3.0"]' })).toBe(0);
+    expect(stageCalls()).toEqual(['stage publish ./dist-pack/wingfoil-0.2.0.tgz --provenance --access public --tag latest-0.2']);
+    expect(outputLines()).toEqual(['dist_tag=latest-0.2']);
+  });
+
+  it('fails before staging when the version is already published (task-266 AC 2)', () => {
+    expect(runStep({ FAKE_NPM_VERSIONS: '["0.2.0"]' })).not.toBe(0);
+    expect(stageCalls()).toEqual([]);
+    expect(outputLines()).toEqual([]);
+  });
+
+  it('fails before staging when `npm view` fails (task-266 AC 2)', () => {
+    expect(runStep({ FAKE_NPM_VIEW_EXIT: '1' })).not.toBe(0);
+    expect(stageCalls()).toEqual([]);
+    expect(outputLines()).toEqual([]);
   });
 
   it('leaves no .npmrc in the workspace, before or after npm runs', () => {
@@ -201,7 +268,7 @@ describe('promote stage step (task-113) — executed with a fake npm', () => {
 
   it('fails the step when npm stage publish fails', () => {
     expect(runStep({ FAKE_NPM_EXIT: '1' })).not.toBe(0);
-    expect(existsSync(join(work, 'record', 'args'))).toBe(true);
+    expect(stageCalls()).toHaveLength(1);
   });
 });
 

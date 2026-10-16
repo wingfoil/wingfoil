@@ -171,9 +171,16 @@ Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a de
    Verdaccio is torn down after.
 4. **promote** — only if smoke passes, **stage** the **same** tarball on the public npm registry:
    `npm stage publish` with **provenance**, authenticated by the stage-only **trusted publisher**
-   over GitHub OIDC (`id-token: write`; no token, no `.npmrc`; §5). The version is **not live** until
+   over GitHub OIDC (`id-token: write`; no token, no `.npmrc`; §5), with an **explicit dist-tag**
+   (`dl-159` Decision 6): promote reads `npm view wingfoil versions --json` and passes `--tag` the value
+   `scripts/npm-dist-tag.cjs` chooses — `latest` when the version is above every published release
+   (published prereleases ignored), otherwise `latest-X.Y` of its own line; a version already published or a
+   prerelease is refused before anything is staged. The explicit tag switches npm's implicit-`latest` guard
+   off, so the script is the only guard; promote checks the tagged tree out into `tree/`, without
+   credentials, only to run it, and stages the gate's tarball. The staged tag is the dist-tag the version
+   receives on approval. The version is **not live** until
    the maintainer approves it with 2FA (`npm stage approve <stage-id>`, or **Approve** under *Staged
-   Packages* on npmjs.com), after inspecting it with `npm stage view` / `npm stage download`
+   Packages* on npmjs.com), after inspecting it with `npm stage view` (its `tag` included) / `npm stage download`
    (`adr-011` points 1–3). `promote` alone runs **Node ≥ 24.18.0**, the oldest release
    bundling an npm (11.16.0) at or above the 11.15.0 staged publishing requires — no Node 22 release
    bundles npm 11 (`adr-011` point 4, Node dist index read 2026-09-29); `gate` and `stage` stay on
@@ -191,7 +198,8 @@ Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a de
    makes a Release follow the publish, so an unapproved or rejected stage never gets one. The poll is
    bounded by declared values below the GitHub-hosted runner's 6-hour job limit; when the approval comes
    later, the approver re-runs the failed job. Whether the Release is marked latest is one job-level value,
-   left at `gh`'s default.
+   set from promote's dist-tag: `true` for `latest`, `false` otherwise (`gh` sends `make_latest` only when
+   told, and GitHub's default is `true`).
 6. **mcp-registry** — after promote, beside stage 5, the MCP Registry listing of `server.json` (`dl-130`
    step 2). The job alone besides promote holds `id-token: write`. It installs `mcp-publisher` from the
    registry project's release by exact version, checking the archive against a SHA-256 pinned in the
@@ -200,7 +208,12 @@ Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a de
    **published** `package.json` — and only then runs `mcp-publisher login github-oidc` and `mcp-publisher
    publish server.json`. The OIDC token is granted `io.github.<repository owner>/*`, i.e.
    `io.github.wingfoil/*`, with no OAuth app in between (the route `bug-173` proposes). The job has one job-level `if:` for
-   the rule that decides whether a version is listed at all; nothing in it names `latest`.
+   the rule that decides whether a version is listed at all; nothing in it names `latest`: the registry marks
+   the semver-highest version latest by itself (registry v1.8.1 `internal/service/registry_service.go`), so a
+   lower patch is listed without becoming latest.
+
+The documentation site's workflow, `pages.yml`, outside this pipeline, deploys on the same tag only when the
+version gets `latest` from the same script (or on a manual run), after npm serves it (`dl-159` A1.4).
 
 Every job declares `timeout-minutes` (`dl-057` (b), option 1): stage and promote from the first real
 run's measured table (`task-077`), gate from the CI duration of its `prepublishOnly` step, which outgrew
@@ -774,4 +787,27 @@ ancestor of the tip, and every path `git diff --name-only <candidate>..<tip>` li
 its binding declares; otherwise the candidate is re-cut. The pipeline's stages and the publish workflow are
 unchanged. The pins are `test/cli/staging-rehearsal.test.ts`, `test/cli/publish-staging.test.ts` and
 `test/cli/evidence-only-tag.test.ts`. Edited in place: no supersede, no state change, no `version:` bump
+(`dl-047`), as in the revisions above.
+
+**Revision (2026-10-16, `task-266`) — §3 stages 4, 5 and 6: an explicit npm dist-tag, `latest` only for the
+highest published version (`dl-159` Decision 6, Actions A1.2, A1.4, A1.5).** Stage 4 staged the version with no `--tag`, so npm applied `latest`
+implicitly, and npm's client refuses that for a version below the highest published one ("Cannot implicitly apply
+the "latest" tag …", npm 11.19.0 `lib/commands/publish.js`): a `0.3.1` from `release/0.3` after `0.4.0` would have
+failed at promote. Stage 4 now reads the published versions (`npm view wingfoil versions --json`) and stages with
+an explicit `--tag` chosen by `scripts/npm-dist-tag.cjs`: `latest` when the version is above every published
+release, otherwise `latest-X.Y` of its own line (published prereleases ignored; a version already published or a
+prerelease refused). An explicit tag switches npm's own guard off, so the script is the only guard; promote checks
+the tagged tree out into `tree/` to run it, without credentials, and still stages the gate's tarball. The staged
+`--tag` is the dist-tag the version receives on `npm stage approve`: read in npm 11.19.0, the npm Node 24.21.0
+(`PROMOTE_NODE_VERSION`) bundles — `stage/publish.js` extends `Publish`, `libnpmpublish` 11.2.0 writes the tag into
+the staged document, `stage/approve.js` posts no body, and npm's own `npm-stage` command document calls the tag "an
+immutable property of the staged package"; a staged, unapproved version is "not available for public access", so it
+is absent from `npm view … versions` — the runbook (approver step 6) reads the tag with `npm stage view` before
+approving, checks no other stage is pending, and reads `npm view wingfoil dist-tags` after. Stage 5: whether the
+Release is marked latest now follows promote's dist-tag (`--latest=true` for `latest`, `false` otherwise), since gh
+sends `make_latest` only when told and GitHub's default is `true`. Stage 6's job is unchanged, and its text now says why: the MCP Registry marks the
+semver-highest version latest by itself (registry v1.8.1 `internal/service/registry_service.go`). Outside this
+workflow, `pages.yml` deploys the site only for a tag whose version gets `latest` (or a manual run), after npm serves
+it. The pins are `test/cli/npm-dist-tag.test.ts`, `test/cli/publish-pipeline.test.ts`,
+`test/cli/publish-secrets.test.ts` and `test/cli/pages-workflow.test.ts`. §3 stages 4, 5 and 6 are edited in place to say so; no supersede, no state change, no `version:` bump
 (`dl-047`), as in the revisions above.
