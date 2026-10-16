@@ -50,6 +50,17 @@ Captured on 2026-10-15 by `bug-ingest-rel-v0.3-w3b7-review-findings-plan` (item 
 B7 follow-ups (`dev-loop-rel-v0.3-plan`), re-checked on `main` at `bd55f70e` with the code build of that commit
 (`npm run build`, then `node dist/cli.js`).
 
+**Note (2026-10-16, reproduced with the `claude-code` adapter, at the approver's triage of the W3 B8 follow-ups,
+item E3; `bug-ingest-rel-v0.3-w3b8-review-findings-plan`).** The finding and its release are unchanged.
+
+- **The second adapter shows it too (`task-242`'s AC 3, follow-up item 20).** In the approver's by-hand Journey 4 run
+  of 2026-10-15 (Claude Code 2.1.301, recorded under `### AC 3 — by hand (approver, 2026-10-15)` in `task-242`'s
+  Execution Notes), `agent execute --next` was the dev build, and the launched agent ran the step's actions itself
+  with the bare `wingfoil` on `PATH`, the global npm 0.2.2. Its `memory submit` commit carries no `WingFoil-Version:`
+  stamp (`memory history` → `wingfoil: null` for that entry), while the `add` and `approve` written by the dev build
+  carry it. The commands `workflow next` prints are bare `wingfoil …` too. So the version skew between launcher and
+  agent is not specific to `codex-cli`.
+
 ### Retrospective
 
 None.
