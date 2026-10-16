@@ -62,6 +62,18 @@ script's candidate path (`scripts/e2e-smoke.cjs --candidate`: the pack-inputs ch
 `bug-310`). This bug stays v0.4 and out of `task-282`'s scope, but whoever fixes it reads `task-282`'s Execution Notes
 first, and `task-282` is told of it in its Implementation Notes.
 
+**Note (2026-10-16, two more instances of this class from wave 3 batch B8, at the approver's triage of the W3 B8
+follow-ups, item E1; `bug-ingest-rel-v0.3-w3b8-review-findings-plan`).** The finding and its release are unchanged.
+
+- **`--candidate` and `dist/` (`task-282`'s design, follow-up item 5).** `scripts/e2e-smoke.cjs --candidate` removes
+  `dist/` before it packs the candidate; a SIGINT between that removal and the end of `npm pack` leaves the checkout
+  without `dist/` (gitignored, so `git status` shows nothing; `npm run build` restores it).
+- **`smokeJourney`'s timeout (`task-242`'s review, finding F4, follow-up item 24).** The journey step runs `run.sh`
+  through `spawnSync` with a `timeout`, which sends SIGKILL to `bash` only: on a real timeout the hung `node
+  dist/cli.js` child keeps running, and `run.sh`'s project temporary directory stays, since its `EXIT` trap never runs
+  (`grep -n "function smokeJourney" -A40 scripts/e2e-smoke.cjs`). A fix needs an asynchronous detached spawn and a
+  kill of the process group. It is still an improvement on before `task-242`, when such a step hung for ever.
+
 ### Retrospective
 
 None.
