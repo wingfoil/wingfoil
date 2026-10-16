@@ -300,3 +300,33 @@ approve the lower version first; a wrong `latest` is repaired with `npm dist-tag
 wait); a broken promote step there needs a new commit and tag, so session 3's executed fake-npm cases carry the weight.
 R3 (batch): `task-267` merges this branch before its spec-015 amend (R5); `publish-secrets.test.ts` joins the
 `publish.yml` readers `task-267` does not touch.
+
+### red (qa, 2026-10-16)
+
+Red commit **`e7771f82`** (T4 baseline). Files: `scripts/npm-dist-tag.d.cts` (new: `DistTagDecision`,
+`PublishedVersions`, `distTagFor`, `parsePublishedVersions`, with TSDoc), `test/cli/npm-dist-tag.test.ts` (new),
+`test/cli/publish-pipeline.test.ts`, `test/cli/publish-secrets.test.ts`, `test/cli/pages-workflow.test.ts`. No
+production file; task-265's `release-line gate step and header (task-265)` describe and its gate-ordering case are
+untouched.
+
+Run: `npx jest test/cli/npm-dist-tag.test.ts test/cli/publish-pipeline.test.ts test/cli/publish-secrets.test.ts
+test/cli/pages-workflow.test.ts --maxWorkers=2` → **4 suites failed; 23 tests failed, 112 passed / 135** (the new
+suite does not load: `Cannot find module '../../scripts/npm-dist-tag.cjs'`, task-229's precedent for a new script).
+`npx tsc --noEmit -p tsconfig.json` → exit 0; `npx eslint` on the five files → exit 0.
+
+| AC | Class | Tests | Fails today on |
+|----|-------|-------|----------------|
+| 1 | red-first | `npm-dist-tag.test.ts`: `distTagFor` (the three AC cases with exact messages, none published, numeric ordering ×5, order-independence, D4 (a) prerelease ignored, already published, prerelease, five malformed versions, non-semver entry, frozen input); `parsePublishedVersions` (array, lone string, two parse errors quoting `JSON.parse`'s message, three wrong shapes); CLI by `spawnSync(process.execPath, …)` (`node:`-only requires, exit 0 `latest-0.3\n` / `latest\n`, exit 1 already published / no `v` / prerelease / unreadable JSON, `--allow-published` ×2, exit 2 usage ×4) | suite load: `Cannot find module` |
+| 2 | red-first | pipeline `promote dist-tag (task-266)` describe: `id: stage` + `if` + `set +x` first; the four commands in order; no `/\blatest\b/`, no `--allow-published`; `promote.outputs`; exactly one checkout `{ path: 'tree', 'persist-credentials': false }` before the stage step. secrets: checkout case replaced (D1 (a)); fake npm now appends every call, answers `view` with `$FAKE_NPM_VERSIONS` (exit `$FAKE_NPM_VIEW_EXIT`), fails `stage` only on `$FAKE_NPM_EXIT`, env `GITHUB_REF_NAME=v0.2.0`, `GITHUB_OUTPUT`; `tree/scripts/npm-dist-tag.cjs` copied when it exists: `--tag latest` + `dist_tag=latest`; `view` before `stage`; `["0.1.0","0.3.0"]` → `--tag latest-0.2`; already published → fails, nothing staged; `npm view` failing → fails, nothing staged | `Expected: "stage" Received: undefined`; `order.every(…)` false; outputs `undefined`; checkouts length 0; stage call without `--tag`; view index −1; already-published and view-failing steps exit 0 |
+| 3 | characterization (notes only) | — | — (design's A1.5 finding) |
+| 4 | characterization (job) / red-first (header) | existing `if:` case unchanged; new mcp-registry case: `mcp-registry →` entry contains `semver`, `registry_service.go`, not `task-266 adds` | `Expected substring: "semver"` |
+| 5 | red-first | runbook describe: step 6 contains `npm stage list wingfoil`, `npm stage view`, the word `tag`, `latest-X.Y`, `dl-159`, and `npm view wingfoil dist-tags` after `npm stage approve` | `Expected pattern: /\btag\b/` |
+| 6 (D3) | red-first | release case "never hard-codes `latest`" now expects `RELEASE_MAKE_LATEST: "${{ needs.promote.outputs.dist_tag == 'latest' && 'true' \|\| 'false' }}"` (other checks unchanged); new case: `release →` entry names `RELEASE_MAKE_LATEST`, not `task-266 sets it` | env deep-equality (`''`); `not "task-266 sets it"` |
+| A1.4 / D2 (b) | red-first | pages `newest line only (task-266)` describe: `dist-tag` step (`if` push, after setup-node, three commands in order); `build.outputs`; `deploy.if`; wait step exact `run` + `if`, between dist-tag and upload-pages-artifact; build timeout > 330, ≤ 360; header `dl-159`, `task-266`, no `is handed to`; executed with a fake npm (cwd holding `scripts/npm-dist-tag.cjs`): `latest-0.3`, `latest`, `latest` (re-run), `npm view` failing → non-zero, no output | step `undefined`; outputs `undefined`; wait `run` `undefined`; timeout `Received: 15`; `not "is handed to"`; each executed case on `expect(distTagStep()?.run).toBeDefined()` (guard so the failure case cannot pass vacuously) |
+
+Passing on first run, by design (they hold today and must keep holding): "hard-codes no literal `latest`" (today's
+step has none), "fails the step when npm stage publish fails", the `.npmrc` case, and every existing case.
+Choices made where the design left room: the `parsePublishedVersions` result type is named `PublishedVersions` (same
+shape as the design's inline union); the header pins require only what the design names (no wording of the
+developer's new prose is pinned beyond `semver`, `registry_service.go`, `RELEASE_MAKE_LATEST`); the `all published
+entries are prereleases` case and the message for it are not pinned (the design states `latest` but no message).
