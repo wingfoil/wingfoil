@@ -2,7 +2,7 @@
 id: decision-log-ingest-rel-v0.3-parallel-release-lines-plan
 type: plan
 title: "Decision-log-ingest — rel-v0.3 parallel release lines"
-status: active
+status: done
 version: "1.1"
 workflow: "decision-log-ingest"
 phase: "rel-v0.3-parallel-release-lines"

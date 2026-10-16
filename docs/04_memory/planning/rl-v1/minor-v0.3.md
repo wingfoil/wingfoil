@@ -68,6 +68,15 @@ it gated nothing here.
 |---|---|---|---|
 | `task-247` … `task-278` (32 tasks) | the wave 1–3 review findings, out-of-band backlog and ingest plans (each task's Implementation Notes name its source) | outside any checkpoint (before `task-230`) | 153 task files carry `release: "v0.3"`; `task-223` is `deprecated`, so 152 count against 121: +25.6 %, over the limit of 151.25 (`grep -l '^release: "v0.3"' docs/04_memory/v0.3/task-*.md \| wc -l` → 153) |
 
+Recorded by amendment on 2026-10-16 (approver ruling (b) on `dl-159`): ten more tasks carry `release: "v0.3"`
+since the row above. The growth threshold is still not in force (v0.4), so none was admitted at a checkpoint.
+
+| Task | From | Admitted at | Count vs backlog_committed |
+|---|---|---|---|
+| `task-279` … `task-284` (6 tasks, all `done`) | the approver's triage of the W3 B6 and B7 follow-ups and absorption of inherited bugs, 2026-10-12 and 2026-10-15, run in batches B7–B8 (each task's Implementation Notes name its source); not recorded here before | outside any checkpoint | — |
+| `task-285` (1 task, `fix`) | the approver's triage of the W3 B8 follow-ups, 2026-10-16 (`bug-ingest-rel-v0.3-w3b8-review-findings-plan`) | outside any checkpoint | — |
+| `task-286` … `task-288` (3 tasks, `feature`, `pending`) | `dl-159` A2 items 1, 2 and the base-branch part of 4, moved to v0.3 as A1 items 6–8 by the approver's ruling of 2026-10-16 (`decision-log-ingest-rel-v0.3-dl-159-a2-tooling-plan`) | outside any checkpoint | 163 task files carry `release: "v0.3"`; `task-223` is `deprecated`, so 162 count against 121: +33.9 %, over the limit of 151.25 (`grep -l '^release: "v0.3"' docs/04_memory/v0.3/task-*.md \| wc -l` → 163) |
+
 ## Execution Notes
 
 ### Planning (release-planning)
