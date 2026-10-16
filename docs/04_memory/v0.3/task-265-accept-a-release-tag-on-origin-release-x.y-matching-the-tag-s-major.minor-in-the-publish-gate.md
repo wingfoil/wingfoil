@@ -219,3 +219,9 @@ refs/remotes/origin/release/0.3 <X>`. `commit.gpgsign false` is set in each clon
 identity). Section boundaries the header tests read: Trigger = `\n# Trigger:` to the next `\n#\n`; step 5 =
 `/\n#\s+5\. /` to `/\n#\s+6\. /`; act = `/\n# ── [^\n]*`act`/` to the header end; stage list = `/\n#\s+gate\s+→/`
 to `/\n#\s+stage\s+→/`.
+
+Red addition **`9a300d1a`** (coordinator correction, batch practice B7/B8): `scripts/check-release-tag.d.cts`
+now declares `releaseLineRefs`, `checkTagOnLine`, `probeReleaseLines` and `LineProbe` (types only; existing
+declarations unchanged), so the paragraph above about the developer writing them no longer applies. T4 covers
+`scripts/check-release-tag.d.cts` together with the two test files: measure from `4d2ebe4d` over the three
+files, with `9a300d1a` the only qa addition. `npx tsc --noEmit -p tsconfig.json` → exit 0, no output.
