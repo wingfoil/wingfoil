@@ -199,6 +199,11 @@ task per line), the `patch-cycle.yaml` part of item 4, and 5 (the `dl-095` pin p
    branch in `dev-loop.yaml` (`git.merge(to: …)`) and `release-publishing.yaml` (phase `tag`).
 5. `dl-095`: the pinned build per line (each line moves its own pin forward; a merge forward keeps `main`'s).
 
+6. *(Added 2026-10-16, approver.)* Two smaller one-line assumptions, deferred with this part: `.githooks/pre-push`
+   takes a new branch's base from `origin/main` (on a branch cut from `release/X.Y` it checks more commits than needed,
+   never fewer), and `scripts/release-health/measure.cjs` counts only syncs that merge `main` into a task branch (a
+   sync from `release/X.Y` is not counted).
+
 ## Relations
 
 - **Supersedes:** `dl-002-git-branching-trunk-based` point 3; `dl-092-tracking-a-patch-after-its-minor-is-released`
