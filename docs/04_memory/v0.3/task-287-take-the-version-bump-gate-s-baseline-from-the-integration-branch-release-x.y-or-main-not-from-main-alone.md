@@ -81,14 +81,95 @@ point (below).
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-16)
+
+**Inputs read (dl-015).** `depends_on` `task-286` (`done`, finalize `75d3e641`, merged here by `36223a7d`): its
+`git-conventions` §1 *The integration branch* (after review fix F1: `main` and `release/X.Y` are the two lines, each
+the integration branch of its own work; every other branch has one) and `doc-versioning` *The bump rule* ("for a
+commit made on a line itself, that line"). `dl-159` A1 item 7 / A2 item 2 (`ready`). `task-183` (the gate) and
+`bug-249` (a bump is an increase, `isVersionIncrease`) are kept as they are. No spec is cited; no contradiction found
+between the ACs, `dl-159`, `task-286`'s wording and the developer/architect directives.
+
+**Selection rule (AC 1).** New exports in `test/lint/helpers/version-bump.ts`:
+
+```ts
+export const TRUNK_BRANCH = 'main';  // kept: the trunk, and the name that wins a tie
+export const RELEASE_LINE_PATTERN: RegExp = /^release\/(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
+export interface IntegrationBranch { readonly name: string; readonly forkPoint: string } // forkPoint: full sha
+export function integrationBranchOf(root: string): IntegrationBranch | null;
+```
+
+1. Candidates: `git for-each-ref --format=%(refname:strip=2) refs/heads/main refs/heads/release` (local branches
+   only, offline), keeping `main` and the names `RELEASE_LINE_PATTERN` accepts (so not `release/foo`,
+   `release/0.3.1`, `release/v0.3`, `release/0.03`, `release/0.3/x`). Order is fixed in code, not taken from git:
+   `main` first, then `release/<major>.<minor>` by (major, minor) numerically ascending (`release/0.3` before
+   `release/0.10`).
+2. Fork point of each candidate: `git merge-base HEAD <candidate>`; a candidate with none (unrelated history) is
+   dropped.
+3. The chosen candidate is the first, in candidate order, whose fork point is a descendant of (or equal to) every
+   other candidate's fork point (`git merge-base --is-ancestor <other> <mine>`: exit 0 yes, 1 no, anything else
+   throws, as `differsFromHead` does). Several such candidates share the same commit, so the first-in-order rule only
+   picks the name: on a tie `main` wins, as AC 1 says; between two `release/` lines at one commit, the lower one.
+   The verdict depends on the fork-point commit, never on the name.
+4. No candidate, or no candidate whose fork point descends from all the others (incomparable fork points: a branch
+   that merged the other line) → `null`, and the check is strict against `HEAD`, as with no local `main` today.
+
+`checkPendingVersionBumps` replaces `trunkForkPoint(root)` by `integrationBranchOf(root)?.forkPoint ?? null`,
+still computed lazily, once, only when an unbumped edit needs the relaxation. Nothing else in it changes (messages
+included).
+
+**HEAD is a line.** No special case: every fork point is an ancestor of `HEAD`, and a line's fork point with itself
+is `HEAD`, so on `main` or on `release/X.Y` that line is chosen (or, when both point at `HEAD`, `main`, same commit);
+the fork point is `HEAD`, nothing is credited, and an unbumped edit fails — `task-286`'s "for a commit made on a line
+itself, that line", and today's "fails an unbumped edit on main itself" case.
+
+**Why the verdict on every branch stays what it is today.** With no local `release/<major>.<minor>` the candidate
+list is `[main]` (or empty), so `integrationBranchOf(root)?.forkPoint` is exactly today's `trunkForkPoint(root)`:
+`git merge-base HEAD main`, or `null` with no local `main`. Worktrees share `refs/heads`, and
+`git branch --list 'release/*'` in this worktree → empty (2026-10-16), so the repository's own gate case ("passes on
+this repository's pending change") computes what it computes today. The proof at green/refactor: every existing
+fixture case passes unchanged (none of them creates a `release/` branch), the full `npm test` (under the slot) is
+green, and the notes record `git for-each-ref refs/heads/release` → empty next to it. Not pinned by a test: the
+outcome on the real repository depends on which local branches exist where the suite runs.
+
+**Classification and what qa pins** (one file, `test/lint/version-bump.test.ts`, which qa owns from red; fixtures
+reuse `makeTempGitRepo`/`commitAll`/`git`/`writeFixtureFile`/`removeTempDir` from
+`test/storage/helpers/git-fixture.ts` — a throw-away repository outside this one, its identity set there,
+`git-conventions` §5 — and the existing `beforeEach` seed: the four files at `config('1.0', 'a')`, commit `seed` on
+`main`; `X` means `git(repo, ['rev-parse', X]).trim()`):
+
+| AC | Class | Test(s) and exact expectations |
+|---|---|---|
+| 1 — the rule, line 61 | red-first | Rename the line-61 case (e.g. "judges exactly the four versioned config files; the integration-branch candidates are main and release/<major>.<minor>"): `TRUNK_BRANCH` `'main'`; `RELEASE_LINE_PATTERN.test` true for `release/0.3`, `release/10.12`; false for `release/foo`, `release/0.3.1`, `release/v0.3`, `release/0.03`, `release/0.3/x`, `main`. Plus the fixture cases (7), (8), (9), (10) below |
+| 2 — fixtures (1)–(6) | red-first | (1) `checkout -b task/x` → `integrationBranchOf` = `{ name: 'main', forkPoint: main }`; existing cases untouched. (2) `branch release/0.3`, checkout it, DNA `config('1.1','b')`, commit; `checkout -b task/x`; DNA `config('1.1','c')` → `{ name: 'release/0.3', forkPoint: release/0.3 }` and findings `[{ path: DNA, reason: 'content differs from HEAD but version: is still 1.1' }]` (today `[]`). (3) as (2), then DNA `config('1.2','c')` committed on `task/x`, then DNA `config('1.2','d')` → `[]`, still `release/0.3`. (4) `release/0.3` from seed with DNA 1.1 committed; on `main` ROLES `config('1.1','m')` committed; `git merge --no-ff --quiet -m 'merge forward' release/0.3` on `main`; `checkout -b task/y` → `{ name: 'main', forkPoint: main }`; DNA `config('1.1','e')` → the "is still 1.1" finding. (5) `branch release/0.3` at seed, `checkout -b task/x` from `main` → `{ name: 'main', forkPoint: <seed sha> }`. (6) `release/foo` (and `release/0.3.1`) cut from seed, DNA 1.1 committed on it, `task/x` from it → `{ name: 'main', forkPoint: <seed sha> }`; DNA `config('1.1','c')` → `[]` (credited against `main`, as today) |
+| 1 — extra fixtures | red-first | (7) incomparable: `release/0.3` from seed, DNA 1.1 committed; `main` gets ROLES 1.1 committed; `checkout -b task/x` from `main`, `git merge --no-ff --quiet -m m release/0.3` → `integrationBranchOf` `null`; DNA `config('1.1','z')` → the "is still 1.1" finding (today `[]`). (8) HEAD is a line: on `release/0.3` itself after its DNA 1.1 commit, DNA `config('1.1','c')` → `{ name: 'release/0.3', forkPoint: HEAD }` and the finding (today `[]`); on `main` with DNA 1.1 committed and `release/0.3` at seed → `{ name: 'main', forkPoint: HEAD }` and the finding. (9) the existing "no main branch" case gets `expect(integrationBranchOf(repo)).toBeNull()`. (10) order: `release/0.3` from seed, DNA 1.1 committed, `git branch release/0.10 release/0.3`; `main` ROLES 1.1 committed; `task/x` from `release/0.3` → `{ name: 'release/0.3', forkPoint: release/0.3 }` (numeric order; lexical would give `release/0.10`) |
+| 3 — determinism, headers | characterization | The property exists today and is kept: (10) pins the sorted order; no new test pins header prose. Evidence at review: `grep -n "dl-159" test/lint/helpers/version-bump.ts test/lint/version-bump.test.ts` → a hit in each header, which say "no clock, no randomness, candidates read in a sorted order"; `grep -nE "Date|Math.random|performance" test/lint/helpers/version-bump.ts` → none. qa rewrites the test file's header (its file); the developer the helper's |
+| 4 — *Gate* paragraph | characterization (doc) | No test (`task-286`'s `integration-branch-baseline.test.ts` pins the *Gate* paragraph neither present nor absent). Evidence: `grep -n "refs/heads/main" .wingfoil/directives/custom/doc-versioning.md` → none; the new text names the local integration branch and the stale-ref caveat |
+| 5 — governance unchanged | characterization | No test. Evidence: `git diff --stat 92bec996 HEAD -- scripts/check-governance.cjs` → empty; `grep -nE "merge-base\|refs/heads\|'main'" scripts/check-governance.cjs` → line 58 (comment) and 888 (`merge-base <--base> HEAD`, a range); `grep -n "main" …` → 70, 554 (comments), 994/1012/1013 (the `main()` function and `require.main`): no branch name read. The AC's "comment lines only at `38172fcb`" is corrected to this |
+
+**Red shape (decision D1).** The new names are new exports, so with plain named imports the suite does not compile
+at red (TS2305 for `integrationBranchOf`, `RELEASE_LINE_PATTERN`, `IntegrationBranch`), which also hides the
+behavioural red. Recommendation: qa records two runs — first with only the verdict assertions of (2), (7), (8) (they
+need nothing new: `checkPendingVersionBumps` returns `[]` where `[finding]` is expected), then the full file
+(TS2305 naming exactly those three and nothing else) — and commits the full file. Rejected: a namespace import cast
+to dodge the compile error, which T4 would then freeze into the suite.
+
+**Files.** `test/lint/helpers/version-bump.ts` (developer), `test/lint/version-bump.test.ts` (qa, red),
+`.wingfoil/directives/custom/doc-versioning.md` *Gate* bullet only (developer; *The bump rule* untouched; it declares
+no `version:`, `task-286` AC 7, so no bump). No `.wingfoil/*.yaml`, no `src/`, no `scripts/`, no CLI or docs change;
+no Memory amendment expected.
+
+**Draft *Gate* text (green):** "… unless the branch already bumped that file since it left its integration branch
+(`task-183`, `bug-143`, `task-287`). … The integration branch it reads is a local branch: of the local `main` and
+every local `release/<major>.<minor>`, the one whose fork point with `HEAD` descends from every other's — the line
+`HEAD` left most recently (`main` on a tie; on a line itself, that line, so the check there is strict). A stale local
+branch can credit a bump the branch did not make, a line with no local branch is not seen, and with no candidate or
+with fork points that do not order the check is strict, against `HEAD` alone. Committed history is not re-judged."
+
+**Risks.** None across the batch in files (`task-288` writes `git-conventions.md`, not `doc-versioning.md`). Once a
+local `release/0.3` exists in this clone (shared by every worktree), a stale one can over- or under-credit on
+every branch — the caveat above, as today with `main`. Cost: at most N `merge-base` + N² `--is-ancestor` calls, only
+when an unbumped edit is pending.
 
 ### Retrospective
 
