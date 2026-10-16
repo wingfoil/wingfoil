@@ -137,6 +137,9 @@
 #      "… is not live on npm after …": approve on npm, then open the run and use Re-run failed jobs (up to
 #      30 days after the run). Promote succeeded, so it is not re-run; the release job polls again and
 #      creates the Release. A rejected stage leaves the job failed and no Release, which is correct.
+#      The same holds for the tag's `pages` run (pages.yml, task-266): its 330-minute npm wait starts at the tag
+#      push, earlier than the release job's, so after a late approval also open that tag's `pages` run and use
+#      Re-run failed jobs there, or the site keeps the previous version.
 #      The Release carries the gate's four test reports as assets; release-publishing then commits the summary
 #      and coverage-summary.json under docs/07_gates/, at paths keyed by the version (dl-136, task-244).
 #   8. The `mcp-registry` job lists the version in the MCP Registry by itself, in parallel with step 7, once

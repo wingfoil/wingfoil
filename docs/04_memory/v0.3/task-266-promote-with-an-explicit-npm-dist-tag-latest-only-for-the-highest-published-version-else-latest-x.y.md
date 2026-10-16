@@ -400,8 +400,12 @@ nothing, so no scenario to extend.
 
 ### Pending amendments (approver)
 
-- `spec-015-packaging-publishing` — dated Revision note *(2026-10-16, `task-266`) — §3 stages 4, 5 and 6*, appended
-  at the end of *Process Notes*, uncommitted in this worktree (R5: `task-267` merges this branch before its own
+- `spec-015-packaging-publishing` — §3 stage 4 body (explicit dist-tag from `scripts/npm-dist-tag.cjs`, `tree/`
+  checkout, staged tag = approved tag, `npm stage view` shows the `tag`; its closing "Triggered on a `vX.Y.Z` tag on
+  `main`" left to `task-267`), stage 5 body (Release Latest from promote's dist-tag, no longer "left at `gh`'s
+  default"), stage 6 body (why its `if:` names no `latest`), a new paragraph after stage 6 on `pages.yml`, and the
+  dated Revision note *(2026-10-16, `task-266`) — §3 stages 4, 5 and 6* at the end of *Process Notes*; all uncommitted
+  in this worktree (R5: `task-267` merges this branch before its own
   spec-015 amend). Proposed `--reason`: `Record that promote stages with an explicit npm dist-tag, latest only for
   the highest published version and latest-X.Y otherwise, that the staged tag is the one npm stage approve publishes
   (npm 11.19.0 source and npm-stage document), and that the Release Latest flag and the Pages deployment follow the
@@ -414,3 +418,18 @@ nothing, so no scenario to extend.
   identities from one parse".
 - The name-resolvability gate reads Revision notes too: a full task id ending `x.y` and a path inside a third-party
   package both count as unresolved names. Short ids (`task-266`) in spec prose avoid it.
+
+### independent review (2026-10-16) and fixes (developer)
+
+Verdict: approve with fixes (code and YAML correct and safe).
+- **F1** — the pending spec-015 amendment only appended a Revision note, leaving §3's body stale. Done, still
+  uncommitted: stage 4, 5 and 6 bodies and a `pages.yml` paragraph edited in place (list above); stage 4's "Triggered
+  on a `vX.Y.Z` tag on `main`" untouched (`git diff -- docs/04_memory/design/specs/spec-015-packaging-publishing.md |
+  grep -c "Triggered on a"` → 0; the sentence is still there: `grep -c "Triggered on a" <spec>` → 1). The Revision note
+  now says the bodies were edited in place.
+- **F2** — `publish.yml` runbook step 7 gains: after a late approval, also Re-run failed jobs of that tag's `pages`
+  run, whose 330-minute wait starts at the tag push.
+- Check, with the amendment in the tree: `npx jest test/docs/name-resolvability.test.ts test/docs
+  test/cli/publish-pipeline.test.ts test/cli/pages-workflow.test.ts test/cli/publish-secrets.test.ts
+  test/cli/npm-dist-tag.test.ts --maxWorkers=2` → 29 suites, 452 passed / 452.
+- Reviewer follow-ups F3, F4: filed by the coordinator, not in this task.
