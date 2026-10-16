@@ -267,6 +267,12 @@ Run: `npx jest test/directives --maxWorkers=2` → 2 suites failed / 9; 14 tests
 | 7 | red-first (D1) | `AC 7: testing is at 1.3 or later and its version line names task-286 and dl-159` | `Expected: >= 1003` (1.2 → 1002) |
 | 7 | characterization | `AC 7: doc-versioning declares no version (its Scope rule)` | passes on first run: an invariant green must keep, not new behaviour |
 
+qa send-back (T4, coordinator, 2026-10-16): `61d4b963` makes the `**Date:**` pin type-safe under
+`noUncheckedIndexedAccess` (`expect(date?.[1]).toBeDefined()`, then `(date?.[1] ?? '') >= '2026-10-16'`); the pinned
+content is unchanged. Swept both red files for the same class: that line was the only error.
+`npx tsc --noEmit -p tsconfig.json` → exit 0; `npx jest test/directives --maxWorkers=2` → 9/9 suites, 178/178 tests
+passed (on green `541b15b0` + the fix).
+
 ### green (developer, 2026-10-16)
 
 `b7439117` `feat(directives)`: the text of `### design`, as ruled (D1–D3). `git-conventions.md` 1.6 → 1.7 (version
