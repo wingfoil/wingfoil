@@ -221,7 +221,7 @@ describe('version bump of the four versioned config files (bug-143, task-183)', 
       expect(checkPendingVersionBumps(repo).map((finding) => finding.path)).toEqual([DNA]);
     });
 
-    it('judges against HEAD alone when no main branch exists', () => {
+    it('(9) judges against HEAD alone when no main branch exists', () => {
       git(repo, ['branch', '--quiet', '-m', 'main', 'trunk']);
       expect(integrationBranchOf(repo)).toBeNull();
       writeFixtureFile(repo, DNA, config('1.0', 'b'));
@@ -306,7 +306,7 @@ describe('version bump of the four versioned config files (bug-143, task-183)', 
         expect(checkPendingVersionBumps(repo)).toEqual([STILL_1_1]);
       });
 
-      it('(8) chooses release/0.3 on release/0.3 itself, and fails an unbumped edit there', () => {
+      it('(8a) chooses release/0.3 on release/0.3 itself, and fails an unbumped edit there', () => {
         releaseLineWithDnaBump();
         git(repo, ['checkout', '--quiet', 'release/0.3']);
         writeFixtureFile(repo, DNA, config('1.1', 'c'));
@@ -314,7 +314,7 @@ describe('version bump of the four versioned config files (bug-143, task-183)', 
         expect(checkPendingVersionBumps(repo)).toEqual([STILL_1_1]);
       });
 
-      it('(8) chooses main on main itself while a release/0.3 exists, and fails an unbumped edit there', () => {
+      it('(8b) chooses main on main itself while a release/0.3 exists, and fails an unbumped edit there', () => {
         git(repo, ['branch', 'release/0.3']);
         writeFixtureFile(repo, DNA, config('1.1', 'b'));
         commitAll(repo, 'bump on main');
