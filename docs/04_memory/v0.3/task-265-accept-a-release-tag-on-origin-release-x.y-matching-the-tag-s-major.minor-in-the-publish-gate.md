@@ -225,3 +225,81 @@ now declares `releaseLineRefs`, `checkTagOnLine`, `probeReleaseLines` and `LineP
 declarations unchanged), so the paragraph above about the developer writing them no longer applies. T4 covers
 `scripts/check-release-tag.d.cts` together with the two test files: measure from `4d2ebe4d` over the three
 files, with `9a300d1a` the only qa addition. `npx tsc --noEmit -p tsconfig.json` → exit 0, no output.
+
+### green (developer, 2026-10-16)
+
+Commit `ca2ec784` `feat(publish): task-265 — …`. `scripts/check-release-tag.cjs` gains the `--on-line <tag> <commit>`
+mode and the three exports of the design (`releaseLineRefs`, `checkTagOnLine`, `probeReleaseLines`), with the
+rule, refs, flags and messages exactly as `### design` states them; approver ruling D4 (a) applied (one rule for
+every `vX.Y.Z`). Git runs through `spawnSync('git', ['-C', root, …])`, never a shell; the tag (`RELEASE_TAG`) and
+the commit (`^[0-9a-f]{40}$|^[0-9a-f]{64}$`) are checked before any git call. `publish.yml`: the gate step
+"Tag commit is on main (dl-024)" (inline `git fetch` + `merge-base`) is replaced, in the same position, by
+`Tag commit is on main or on release/X.Y of its own X.Y (dl-024, dl-159)` →
+`node scripts/check-release-tag.cjs --on-line "$GITHUB_REF_NAME" "$GITHUB_SHA"`; the header's opening list names
+`task-265`, and the stage-list `gate    →` entry, *Trigger*, runbook step 5 and the `act` note state both lines.
+The `.d.cts` declarations are red's (`9a300d1a`), not edited.
+
+Red → green: `npx jest test/cli/check-release-tag.test.ts test/cli/publish-pipeline.test.ts test/cli/publish-metadata.test.ts
+test/cli/publish-release-scripts-edges.test.ts --maxWorkers=2` → red 38 failed / 80 passed in the first two (qa's
+run); green 4 suites, 224 passed, 0 failed.
+
+### refactor (developer, 2026-10-16)
+
+Commit `47fed2df`: the header's `gate    →` entry rewrapped (two lines had grown past 120 columns); comment only.
+Gates, each heavy one after `waitslot.sh`, `--maxWorkers=2`:
+
+| Command | Result |
+|---------|--------|
+| `npx jest --coverage --maxWorkers=2` (at `ca2ec784`; load 3.4 before / 3.7 after) | 453 suites, 8143 tests passed, exit 0; 99.34 / 97.39 / 98.03 / 99.71 — equal to the B8 baseline in all four columns |
+| `npm test -- --maxWorkers=2` (at `47fed2df`) | 453 suites, 8143 passed, exit 0 |
+| `npx jest test/cli/publish-pipeline.test.ts` (after the rewrap) | 74 passed |
+| `npm run lint` · `npm run typecheck` (both tsc configs) · `npm run docs:api` | exit 0 · exit 0 · exit 0 (re-run at the head below) |
+| `node scripts/check-governance.cjs --base 92bec996` | `1 wf() commits …`; gated 0 findings, history 0 findings |
+| `node scripts/lint-claims.cjs --base 92bec996` | 2 warnings, warn-only: line 91 (design's "unchanged", evidenced below) and line 227 (red's "no output", with its positive case `exit 0` on the same line) |
+
+Scripts are not measured by coverage (`collectCoverageFrom` is `src/**/*.ts`), so the fixture's in-process
+`probeReleaseLines` cases are for behaviour, not the figure. No config `version:` touched (none of the files
+carries one). BDD: `grep -rln "publish" docs/02_requirements/02_bdd/features/` → nothing (positive case: the
+same grep over `test/cli/` lists `publish-pipeline.test.ts`), so no scenario to keep or extend.
+
+### self-review (developer, 2026-10-16)
+
+- **AC 1** met: `releaseLineRefs` / `checkTagOnLine` exported and pinned (`check-release-tag.test.ts`, "releaseLineRefs …",
+  "checkTagOnLine …", green above). **AC 2** met: fixture cases (a)–(i) and the in-process probes pass; the fixture
+  passes identity per command (`commitAllAs`), no `user.*` written. **AC 3** met: one gate step, exact name and run,
+  ordering kept, no inline `merge-base`/`git fetch` (`publish-pipeline.test.ts`, "release-line gate step and header").
+  **AC 4** met, line 7 included (approver ruling): `grep -c "release/X.Y" .github/workflows/publish.yml` → 8 (was 0);
+  `grep -c "tag is on main" .github/workflows/publish.yml` → 0. **AC 5**: handover below.
+- The other readers keep their behaviour: `git diff 92bec996 HEAD -- scripts/check-release-tag.cjs | grep "^-"` lists only
+  the usage comment, the `require` line, the `--annotated` branch head (now `else if`) and `module.exports` (all
+  three old exports still exported); `git diff 92bec996 HEAD -- test/cli/publish-metadata.test.ts
+  test/cli/publish-release-scripts-edges.test.ts | wc -l` → 0, and both suites pass in the green run (224).
+- Same class: `grep -rn "origin/main" .wingfoil docs/user-guide.md docs/cli-reference.md README.md` → nothing (positive
+  case: the same grep over `docs/04_memory/design/specs/spec-015-*.md` → line 247, `task-267`'s amendment). The
+  comment "separate … from "Tag commit is on main" (task-265)" in `check-release-tag.test.ts:47` is a red file (T4),
+  left for qa/the reviewer; it still describes the history correctly.
+- T4: `git log --first-parent --no-merges --format=%h 4d2ebe4d..HEAD -- test/cli/check-release-tag.test.ts
+  test/cli/publish-pipeline.test.ts scripts/check-release-tag.d.cts` → `9a300d1a` only, qa's coordinator-requested
+  `.d.cts` addition (red's own).
+- **For `task-266`** (merges this branch): `publish.yml` lines it should not edit at this head — 4–5 (opening list),
+  7–10 (`gate    →` entry), 61–66 (*Trigger*), 103–106 (step 5), 201–202 (`act` note), 237–240 (the gate step and
+  its comment); `publish-pipeline.test.ts`: the gate ordering case and `describe('release-line gate step and header
+  (task-265)')`.
+- **For `task-267`** (spec-015 §3 stage 4 / §4): cite `### design` — rule, `git ls-remote --heads origin
+  refs/heads/main refs/heads/release/X.Y`, one `git fetch --no-tags origin +refs/heads/<b>:refs/remotes/origin/<b>…`
+  of the listed ones, `git merge-base --is-ancestor` per ref, the step name and the messages — all as implemented.
+
+### Pending amendments (approver)
+
+None now. At v0.3 release-publishing (AC 5): `memory amend task-265` with `--reason "Record the v0.3.0 publish run
+whose gate passed on the main path (AC 5)."`, adding the run URL from `gh run list --workflow publish.yml --branch
+v0.3.0 --json databaseId,url,conclusion` and the gate line from `gh run view <id> --log | grep "of tag v0.3.0 is on"`
+(expected `… is on origin/main; checked origin/main (ancestor), origin/release/0.3 (no such branch on origin)
+(dl-024, dl-159)`).
+
+### Retrospective
+
+- The design fixed the exact messages and fixture cases, so red and green met at the first run (38 → 0 failures, no
+  send-back on behaviour); the one send-back was ownership of the `.d.cts` declarations, a coordinator-prompt
+  issue already recorded in the batch notes.
+- Nothing else to carry forward.
