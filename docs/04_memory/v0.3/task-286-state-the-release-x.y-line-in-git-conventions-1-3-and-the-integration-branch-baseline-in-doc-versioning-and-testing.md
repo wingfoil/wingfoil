@@ -313,6 +313,39 @@ amendments` yet, `grep -n "Pending amendments"` → nothing). `git -C ../task-26
 pushed to `origin` first (`dl-074` extended by `dl-159`), one gate rule for every `vX.Y.Z` (`task-265`). §3 here says
 the same on every point. To re-read once 267 writes its final pending-amendment text.
 
+### refactor, after the red send-back (developer, 2026-10-16)
+
+qa's `61d4b963` (type-safe date pin) and notes `d27cac8d`. Under `waitslot.sh` (load 11.7 at start, 4.6 at end):
+`npm test -- --maxWorkers=2` → 454 suites, **8123 passed**, exit 0; `npm run typecheck` (both tsconfigs) → exit 0.
+Coverage not re-run: nothing under `src/` changed since the run above (`git diff --stat 92bec996..HEAD -- src` →
+empty), whose figures stand (99.34 / 97.40 / 98.03 / 99.71). T4: `git log --first-parent --no-merges --format=%h
+adb7e7ad..HEAD -- test/directives/git-conventions.test.ts test/directives/integration-branch-baseline.test.ts` →
+`61d4b963` only, qa's send-back commit.
+
+### self-review (developer, 2026-10-16)
+
+Against `code-review`, `traceability`, `claim-evidence`, `doc-versioning`:
+- AC 1–5 and D3: each pinned phrase is in the directive (`npx jest test/directives` → green, 15 task-286 cases);
+  every rule traces to `dl-159` Decision 1–5 (cited in the text), the merge-forward bullet to `dl-092` Action 3;
+  nothing added that `dl-159` does not state (F1/F2 left open, below). Met.
+- AC 6: `doc-versioning` bump rule and `testing` line 33 name the integration branch; *Gate* untouched
+  (`git diff 92bec996 -- .wingfoil/directives/custom/doc-versioning.md` touches lines 36–38 and 50 only). Met.
+- AC 7: `git-conventions` 1.7 and `testing` 1.3, each line naming `task-286` and `dl-159`; the earlier pins
+  ("1.2/1.5/1.6 or later", `task-276`, `task-281`) green; `doc-versioning` has no `version:`. Met.
+- **Contract change outside red** (testing T4, listed for the reviewer): `17a0b4b5` widens
+  `test/core/dev-loop-v1-5.test.ts` AC 4 from `^version: "1\.[1-9]\d*"$` to `…"(?: +#.*)?$`. Reason: that case,
+  written when `testing.md`'s version line had no comment, forbade any history comment, while this task's AC 7 requires
+  one naming the task; the case keeps checking a `1.x` version. Same class as `bug-314` (a version pin that breaks on a
+  legitimate later edit).
+- Same class in the files touched: every main-only phrase the task lists is gone (`grep -c` → 0 each, green notes);
+  §9's branch-protection bullet stays `main`-only on purpose (`task-267` D4). R2 comparison recorded above (accepted
+  by the coordinator for submit; re-checked at `task-267`'s close).
+- Claims: `node scripts/lint-claims.cjs --base 92bec996` → warn-only, none in the green/refactor/review sections.
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -320,3 +353,13 @@ the same on every point. To re-read once 267 writes its final pending-amendment 
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- A characterization-era test (`dev-loop-v1-5` AC 4) pinned `testing.md`'s version line with `$` right after the
+  number, so the first version entry with a history comment failed it; found only by the full coverage run, not by
+  the design's `grep -rln` on the directive's readers (which looked for the file path, and that suite names it).
+  Evidence: `17a0b4b5`. Proposal: a design reading a versioned directive greps `test/` for its file name too.
+- The red date pin failed `typecheck.clean` (`noUncheckedIndexedAccess`), not jest: qa's targeted run was green, only
+  the full suite caught it. Evidence: send-back `61d4b963`. Proposal: qa runs `npx tsc --noEmit -p tsconfig.json`
+  before committing red.
+- Open points for the v0.3 retrospective / `patch-v0.3.1` prerequisites (design F1, F2): merge-forward conflicts on
+  versioned directives/config, and who runs the merge forward and where.
