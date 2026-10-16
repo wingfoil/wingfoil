@@ -346,6 +346,25 @@ Against `code-review`, `traceability`, `claim-evidence`, `doc-versioning`:
 
 None.
 
+### independent review (2026-10-16) and fixes (developer)
+
+Review verdict APPROVE, with three wording fixes of the same class, made in-task:
+- F1 — `git-conventions` §1: "Every branch has one" gave the line `release/X.Y` itself the integration branch `main`,
+  so §2 would sync it with `main`, against §1 item 3. Now `main` and `release/X.Y` are the two lines, each the
+  integration branch of its own work and never brought up to date from the other; every other branch (`task/`, a
+  phase branch, `ingest/`, `backlog/`, `fix/`, `docs/`) has one integration branch. `doc-versioning`'s bump rule adds
+  "(for a commit made on a line itself, that line)".
+- F2 — `git-conventions` §3: "The publish gate checks it" overstated the gate (`task-265` D4 (a) checks ancestry of
+  `origin/main` or `origin/release/X.Y`, not minor-on-`main` / patch-on-`release/X.Y`); now "checks the pushed-line
+  part of this rule, not which line a tag belongs to".
+- F3 — `testing` T4: "`Merge branch 'main' into task/…`" widened to `'<integration branch>'` (`main`, or
+  `release/X.Y`); no further version bump (same branch, `doc-versioning`). `grep -rn "Merge branch 'main' into task"
+  test/` → only a comment in `test/release-health/measure.test.ts`, which is not about this file.
+Evidence: `npx jest test/directives test/core/dev-loop-v1-5.test.ts --maxWorkers=2` → 10 suites, 202 passed (every
+red pin still green); `npx tsc --noEmit -p tsconfig.json` → exit 0. The reviewer's F3/F4 (a merge-forward
+decision-log, `sw-life-cycle.yaml`, `wingfoil-cli.md`, `CLAUDE.md`) were filed by the coordinator as follow-ups, not
+done here.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not

@@ -45,8 +45,11 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
 
 ## 1. Branches (`dl-024` rule 1, as amended by `dl-119` Q1 (b), `dl-152` and `dl-159`; `dl-014` G2–G3)
 
-- **The integration branch** (`dl-159` Decision 1). Every branch has one: `release/X.Y` for work on a
-  patch of the released minor `X.Y`, `main` otherwise. A `dev-loop` task runs on `task/<task-id>`, cut
+- **The integration branch** (`dl-159` Decision 1). `main` and `release/X.Y` are the two lines: each is
+  the integration branch of the work done for it, and a line is never brought up to date from the other
+  (the merge forward below is the one way between them). Every other branch — `task/`, a phase branch,
+  `ingest/`, `backlog/`, `fix/`, `docs/` — has one integration branch: `release/X.Y` for work on a patch of
+  the released minor `X.Y`, `main` otherwise. A `dev-loop` task runs on `task/<task-id>`, cut
   from its integration branch; a workflow phase runs on its own branch, cut from its integration branch.
   Both merge into their integration branch with `git merge --no-ff`, never fast-forward, so every unit of
   work stays one revertible merge commit. The one exception is `intake/` (below), which reaches `main` by
@@ -144,7 +147,8 @@ A minor tag `vX.Y.0` is created on `main`, after the release's last phase branch
 `main` has been pushed to `origin`**. A patch tag `vX.Y.Z` (Z ≥ 1) is created on `release/X.Y`, after the
 patch's last phase branch has merged into it **and after `release/X.Y` has been pushed to `origin`** —
 `dl-074`'s pushed-ref precondition, extended to the maintenance line. A version tag is never created on a
-phase branch. The publish gate checks it: the tagged commit must be an ancestor of `origin/main` or of
+phase branch. The publish gate checks the pushed-line part of this rule, not which line a tag belongs
+to: the tagged commit must be an ancestor of `origin/main` or of
 `origin/release/X.Y`, `X.Y` being the tag's own major.minor, one rule for every `vX.Y.Z` (`task-265`;
 `spec-015` §4 as `task-267` amends it).
 

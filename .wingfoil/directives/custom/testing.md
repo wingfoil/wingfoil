@@ -77,8 +77,9 @@ generic rules above.
   Execution Notes for the reviewer; `refactor`'s coverage additions are new files or files `red` did
   not touch. The reviewer checks it with `git log --first-parent --no-merges --format=%h
   <red-commit>..HEAD -- <red's test files>` (empty). It compares only the branch's own non-merge
-  commits since `red`: a change brought in by an inward `Merge branch 'main' into task/…` commit is
-  excluded (`--first-parent` never visits main's side of that merge). From v1.0 the `dev-loop` post-check `tests.unchanged(since: red)` on `green` and `refactor`
+  commits since `red`: a change brought in by an inward `Merge branch '<integration branch>' into task/…`
+  commit (`main`, or `release/X.Y` on the maintenance line, `git-conventions` §1) is excluded
+  (`--first-parent` never visits the integration branch's side of that merge). From v1.0 the `dev-loop` post-check `tests.unchanged(since: red)` on `green` and `refactor`
   evaluates it (P4.12); until then this rule and the reviewer do.
 - **Secret-shaped fixtures** follow `security-secrets` S1: a fixture that must match a secret pattern
   is assembled at runtime, never committed as one literal (`dl-073` Action 3, `dl-122`).
