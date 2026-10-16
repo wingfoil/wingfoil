@@ -88,7 +88,8 @@ Role architect. Worktree `.wf2-wt/task-265`, branch cut at `92bec996`, start com
 
 **D1 — where the rule lives: a third mode of `scripts/check-release-tag.cjs`, which does its own fetch.**
 The gate step becomes one command, so the fixture test (AC 2) runs exactly what CI runs, and the decision is a
-pure, exported function (AC 1). The two existing modes and their exports are unchanged (`checkReleaseTag`,
+pure, exported function (AC 1). The two existing modes and their exports are unchanged (checked after green with
+`git diff 92bec996 HEAD -- scripts/check-release-tag.cjs | grep "^-"`, self-review) (`checkReleaseTag`,
 `checkAnnotatedTag`, `tagObjectType`), so `publish-metadata.test.ts` and `publish-release-scripts-edges.test.ts`
 stay green untouched.
 
@@ -304,4 +305,31 @@ v0.3.0 --json databaseId,url,conclusion` and the gate line from `gh run view <id
 - The design fixed the exact messages and fixture cases, so red and green met at the first run (38 → 0 failures, no
   send-back on behaviour); the one send-back was ownership of the `.d.cts` declarations, a coordinator-prompt
   issue already recorded in the batch notes.
-- Nothing else to carry forward.
+- A doc-comment claim can outlive the scope it was written for: the script header's "Pure and offline" described
+  the one mode the file had in task-115 and became false when `--annotated` and `--on-line` arrived; the independent
+  review caught it (fixed below).
+
+### independent review (2026-10-16) and fixes (developer)
+
+Verdict: **APPROVE**, with three nits fixed in-task; status stays `in-review`.
+
+1. *Red-file comment* (`test/cli/check-release-tag.test.ts`, the "Tag commit is on main" mention) — fixed by qa as a
+   send-back, `c4e248c4`; T4 list now `9a300d1a` + `c4e248c4`, both qa:
+   `git log --first-parent --no-merges --format=%h 4d2ebe4d..HEAD -- test/cli/check-release-tag.test.ts
+   test/cli/publish-pipeline.test.ts scripts/check-release-tag.d.cts` → `c4e248c4`, `9a300d1a`.
+2. *"Pure and offline"* (`scripts/check-release-tag.cjs:9`) — true of the version mode only; reworded to "This mode is
+   pure and offline; the other two read git (`--annotated` the local checkout, `--on-line` also `origin`)". Sweep:
+   `grep -n -i "pure\|offline" scripts/check-release-tag.cjs scripts/check-release-tag.d.cts` → the reworded header,
+   `checkAnnotatedTag` ("Pure: the object type is read by tagObjectType"), and `releaseLineRefs` / `checkTagOnLine`
+   in both files — each a function that calls no git, so accurate; the `.d.cts` (red file) needs no change.
+3. *Stale `lint:claims` count* in the refactor table (2 → 3 warnings at `17a938ed`, the third the Retrospective's
+   "Nothing else" line). That line is replaced by a retrospective point with its evidence. Now:
+   `node scripts/lint-claims.cjs --base 92bec996` → see the line below, which supersedes the refactor table's count.
+
+Re-run on the touched files: `npx jest test/cli/check-release-tag.test.ts test/cli/publish-pipeline.test.ts
+--maxWorkers=2` and `npx eslint scripts/check-release-tag.cjs` — results below. No heavy gate: no `src/` change.
+
+Results: `node scripts/lint-claims.cjs --base 92bec996` → `claim lint: 1 warnings in 1 file (warn-only)` — the one
+left is red's line 228 ("no output", qa's notes; its positive case `exit 0` is on the same line). The design's
+"unchanged" (line 91) now names its command. Jest on the two suites → 2 suites, 118 passed;
+`npx eslint scripts/check-release-tag.cjs` → exit 0.

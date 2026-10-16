@@ -6,7 +6,8 @@
  * than the one published.
  *
  * Run by `.github/workflows/publish.yml`'s gate job before anything is built, so a hand-bumped version,
- * a mistyped tag or a `server.json` left behind stops the pipeline instead of promoting. Pure and offline.
+ * a mistyped tag or a `server.json` left behind stops the pipeline instead of promoting. This mode is pure and
+ * offline; the other two read git (`--annotated` the local checkout, `--on-line` also `origin`).
  *
  * A second mode (task-238, `dl-057` (d) option 1) asserts that the tag is ANNOTATED, as spec-015 §4 requires:
  * `git cat-file -t refs/tags/<tag>` must print `tag`; a lightweight tag names a commit and is refused. It reads
