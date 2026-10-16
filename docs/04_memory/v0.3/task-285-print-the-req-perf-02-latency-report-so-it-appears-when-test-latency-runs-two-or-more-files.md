@@ -62,6 +62,120 @@ carry the two `workflow next` lines (printed with `process.stdout.write`) and no
 
 ## Execution Notes
 
+### design (developer, 2026-10-16)
+
+**Read first (dl-015).** `task-154` (the latency pass, `jest.latency.config.js`, `maxWorkers: 1`; its report runs
+were single-file runs), `task-216` and `task-283` (the two `workflow next` suites print one line each through
+`process.stdout.write` and deliberately no `latencyReport`, B8 ruling 283 D2). They constrain this design to: one
+report block per pass, no budget or threshold touched, no change to `test/latency-suites.cjs` or to the two
+`workflow next` suites. `327a7b01` (the AC's commit) is an ancestor of the pre-batch `92bec996`, and the four files
+of the report path are identical at both (`git diff 327a7b01 92bec996 --stat -- test/cli/command-latency.test.ts
+test/core/helpers/latency.ts jest.latency.config.js jest.config.js` → empty).
+
+**Root cause, located: the reporter jest picks, not the number of files as such.** jest 30.4.1 (`npx jest
+--version`). With no `reporters` configured, `@jest/core`'s `TestScheduler` uses `'agent'` instead of `'default'`
+when any of `AI_AGENT, AUGMENT_AGENT, CLAUDE_CODE, CLAUDECODE, CODEX_SANDBOX, CODEX_THREAD_ID, CURSOR_AGENT,
+GEMINI_CLI, GOOSE_PROVIDER, OPENCODE, REPL_ID` is set and non-empty (`grep -n "AGENT_ENV_VARS\|detectAgent() ?"
+node_modules/@jest/core/build/index.js` → lines 1010 and 1197). The `AgentReporter` prints no buffered console output
+of a passing suite. With ONE test file jest runs verbose and the console writes straight to stdout, which is why the
+report showed in task-154's single-file runs. Scratch reproduction in this session (two plain-JS test files, each
+`console.log` in `afterAll`, one also `process.stdout.write`; `maxWorkers: 1`, no `reporters`; `AI_AGENT` and
+`CLAUDECODE` set here): two files → stdout carries only the `process.stdout.write` line, stderr only the summary; one
+file → the `console.log` block on stdout; two files under `env -i PATH=… HOME=…` → each file's `● Console` block on
+**stderr**, indented. So the report is lost whenever an agent runs the pass (the coordinator's gates; release-health's
+measure run from an agent session, since `TOOL_ENV_DROPPED` in `scripts/release-health/measure.cjs` does not drop
+these variables); in a human terminal it lands on stderr, which Q12 also reads (`parseLatencyReport` on stdout +
+stderr). bug-378's Retrospective (session 3) records this mechanism.
+
+**Decision D1: `process.stdout.write`, not a jest reporter (recommended).** (1) It does not depend on which reporter
+jest picks, in which environment, with how many files; the two sibling suites already print this way and their lines
+reach every gate log. (2) A reporter needs `reporters:` in `jest.latency.config.js`, which switches off jest's own
+default/agent choice (we would have to name `'default'` or `'agent'` ourselves), adds a `.cjs` module under the
+coverage/lint rules, and would read the report back out of the buffered console it is meant to bypass. (3)
+`WINGFOIL_LATENCY=1 npm test` and `npm test -- test/cli/command-latency.test.ts` (`scripts/run-tests.cjs`) run the
+same suite code, so the same line fixes them. The report text is unchanged (`latencyReport`, pinned to
+`parseLatencyReport` by `test/release-health/latency-report.test.ts`); it now arrives unindented on stdout, a shape
+the parser already reads (that file's "loaded run" case).
+
+**Interface (new export of `test/core/helpers/latency.ts`).**
+`reportLatency(measured: MarginalLatencySamples, commands: readonly string[], load: LoadWindow, env: NodeJS.ProcessEnv = process.env, write: (text: string) => unknown = (text) => process.stdout.write(text)): boolean`
+— when `env.WINGFOIL_LATENCY_REPORT === '1'` it calls `write(latencyReport(measured, commands, load) + '\n')` exactly
+once and returns `true`; otherwise it writes nothing and returns `false`. No clock, no console. The opt-in moves into
+the helper so the suite and the test fixture below share the whole report path. `command-latency.test.ts`'s
+`afterAll` becomes `if (measured) reportLatency(measured, COMMANDS, load);` then `removeTempDir(root)`; its header
+sentence on `WINGFOIL_LATENCY_REPORT=1` says the report goes to stdout.
+
+**AC classification and what qa pins.**
+
+| AC | Class | What red pins |
+|---|---|---|
+| 1 — the block found in a ≥ 2-file pass | **red-first** | a spawned jest over a fixture config (below); fails at `327a7b01` / `92bec996`: no `reportLatency`, the suite prints with `console.log` |
+| 2 — printed through `process.stdout.write` | **red-first** | the block on the child's **stdout** in both environment cases; a unit test of `reportLatency`; a textual pin on the suite |
+| 3 — `parseLatencyReport` reads it, Q12 measured | **characterization** | the parser already reads the unindented shape: pinned on the writer's exact output and through `measureToolchain`; the reading of the spawned child's output rides on AC 1's red |
+| 4 — no budget loosened; gates green | **characterization** | `git diff 92bec996 -- test/core/helpers/latency.ts` changes no constant (`RUNS`, `MIN_RUNS`, `P95_BUDGET_MS`, `IDLE_FLOOR_P95_BOUND_MS`); gates in session 3 |
+
+*AC 1 / AC 2 — the spawned pass (new `test/cli/latency-report-pass.test.ts`).* Fixture directory
+`test/cli/fixtures/latency-report-pass/`:
+- `jest.config.cjs` — `require('../../../../jest.latency.config.js')`, spread, then override **only** `rootDir` (the
+  repository root, so `<rootDir>/tsconfig.test.json` resolves) and `testMatch` (the two fixture files, by explicit
+  `<rootDir>/…` path, as `LATENCY_SUITES` are), and delete `globalSetup` / `globalTeardown`: `test/global-setup.cjs`
+  rebuilds `dist/` under `.jest-dist.lock`, which the outer jest run already holds (bug-095), so a nested run would
+  wait or refuse; the fixture needs no `dist/`. `maxWorkers: 1`, `transform`, `testPathIgnorePatterns` and the
+  absence of `reporters` are inherited unchanged: they are the condition of the bug.
+- `report.fixture.ts` — synthetic samples built as `latency-report.test.ts` builds them (`RUNS` flat values, floor
+  200, totals 300 / 250 / 420, the three REQ-PERF-02 command names, a fixed `LoadWindow`), one trivial `it`, and in
+  `afterAll` `reportLatency(samples, COMMANDS, LOAD)`: the suite's call, nothing spawned, nothing timed.
+- `sibling.fixture.ts` — one trivial `it`, and `process.stdout.write` of one sibling-shaped line, `workflow next: p95
+  40 ms (…); load average (1-min / 5-min): before 7.04 / 6.00, after 9.62 / 7.00`, so the pass has two files and the
+  parser must still take the report's own load window.
+- Names end in `.fixture.ts`, so `jest.config.js`'s `**/*.test.ts` never collects them; `tsc` and `eslint` still
+  check them (`tsconfig.json` includes `test`).
+
+The outer test spawns `process.execPath` with `require.resolve('jest/bin/jest')` and `['-c', <fixture config>]`,
+`cwd` the repository root, `encoding: 'utf-8'`, **no extra flags** (no `--verbose`, no `--ci`), with an environment
+built from `process.env` deterministically: (i) **agent** — the eleven variables above deleted, then `AI_AGENT=1` and
+`CLAUDECODE=1`; (ii) **no agent** — the eleven deleted. Both with `WINGFOIL_LATENCY_REPORT=1`. Per case: exit 0;
+**stdout** matches `^[ \t]*machine: ` (multiline), contains `floor (--version):` and one `^<cmd>: marginal p95 …;
+total p95` line per command; the `machine:` line occurs **exactly once in stdout + stderr** (one block, 283 D2). A
+third case, agent environment with `WINGFOIL_LATENCY_REPORT` deleted, finds no `machine:` line anywhere (the opt-in).
+At `92bec996` the child cannot compile `report.fixture.ts` (`reportLatency` not exported) and no block appears: qa
+records the first failing assertion (the stdout block) and the child's stderr line. The outer file **must not**
+import `helpers/latency` nor contain a wall-clock marker: `test/core/latency-budget-placement.test.ts` rule 2 refuses
+a file that both spawns (`spawnSync`) and times. Cost: three jest spawns, each a ts-jest compile of a few small files;
+a plain-JS two-file run took 0.4–0.8 s here, ts-jest is estimated at a few seconds cold, about 1 s warm — give the
+file `jest.setTimeout(120_000)`. It belongs in the ordinary parallel `npm test`: it times nothing and its fixture never
+runs the heavy pass, so it is not a latency suite and not listed in `test/latency-suites.cjs`.
+
+*AC 2 — unit and textual pins* (new `test/core/latency-report-writer.test.ts`): `reportLatency` with an injected
+`write` and `env = { WINGFOIL_LATENCY_REPORT: '1' }` → returns `true`, `write` called once with exactly
+`latencyReport(...) + '\n'`; with `{}` and with `'0'` → `false`, `write` not called; with the default writer, a
+`jest.spyOn(process.stdout, 'write')` (mocked, so nothing prints) receives that text and a `jest.spyOn(console,
+'log')` is never called. A textual pin on `test/cli/command-latency.test.ts` (code only, comments stripped as the
+placement test does): no `console.` call and exactly one `reportLatency(` call, so the suite cannot drift back while
+the fixture stays green.
+
+*AC 3.* In `test/release-health/latency-report.test.ts`: `parseLatencyReport` on the exact text `reportLatency`
+writes (captured through an injected `write`), after a sibling line → non-null, `machine: 'otherwise idle'`,
+`floorP95: 200`, the three commands with their p95s, the report's own load. In `test/release-health/measure.test.ts`:
+a stubbed `latency` step whose **stdout** is the plain report (no console block; the existing console-block cases
+stay) → Q12 is measured (`value` the highest total p95), not `not-measurable` "printed no latency report". In the
+AC 1 file, `parseLatencyReport(stdout + '\n' + stderr)` of case (i) → non-null with every command.
+
+**Files expected.** Mine: `test/core/helpers/latency.ts`, `test/cli/command-latency.test.ts` (afterAll and header
+sentence). Red's: `test/cli/latency-report-pass.test.ts`, `test/cli/fixtures/latency-report-pass/` (`jest.config.cjs`,
+`report.fixture.ts`, `sibling.fixture.ts`), `test/core/latency-report-writer.test.ts`,
+`test/release-health/latency-report.test.ts`, `test/release-health/measure.test.ts`. No `src/`, no config `version:`
+bump, no spec or doc change: `grep -rln WINGFOIL_LATENCY_REPORT --include=*.md --include=*.yaml .` outside Memory,
+plans and `node_modules` → none. `jest.latency.config.js`, `test/latency-suites.cjs` and the two `workflow next` suites
+unchanged.
+
+**bug-378's Retrospective.** `grep -n Retrospective docs/04_memory/bugs/bug-378-*.md` → line 71, body "None.": the
+heading exists; filling it with the mechanism above is a pending amendment in session 3.
+
+**Latency pass not run in design.** 1-minute load 21.05 (`cat /proc/loadavg`, 2026-10-16), above the < 6 rule. A
+real `WINGFOIL_LATENCY_REPORT=1 npm run test:latency` under the slot at load < 6, showing the block once, is session
+3's (or the gate's) evidence.
+
 ### Retrospective
 
 None yet.
