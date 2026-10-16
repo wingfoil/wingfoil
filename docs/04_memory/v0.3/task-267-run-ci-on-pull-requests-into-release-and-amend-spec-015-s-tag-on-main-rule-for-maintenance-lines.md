@@ -41,6 +41,11 @@ The npm side must also accept a tag pushed from `release/*`.
   publishing keys on organisation, repository, workflow `publish.yml` and environment `npm-publish`, not on a
   branch. Expected to hold for both (neither rule names a branch); not verified here.
 
+- (red-first; added 2026-10-16, approver ruling on dl-159 option (b)) `.github/workflows/governance.yml` triggers on
+  `push` and `pull_request` to `release/**` as well as to `main`, so a maintenance line's `wf()` commits, approvals
+  included, are governance-checked before the patch is published; `test/cli/governance-workflow.test.ts` (which pins
+  `branches: [main]`) is updated first. Like the rest of A1 it must be in the tree `v0.3.0` is cut from.
+
 ## Implementation Notes
 
 - **kind:** feature · **wave:** 3, batch B9 (added on 2026-10-07 by `decision-log-ingest-rel-v0.3-parallel-release-lines-plan`).
