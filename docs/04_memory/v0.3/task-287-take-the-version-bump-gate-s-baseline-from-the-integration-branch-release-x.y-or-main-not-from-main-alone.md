@@ -208,6 +208,8 @@ edit on `main` (the existing "on main itself" case); its red in the committed fi
 | 4 — *Gate* paragraph | characterization (doc) | no test (developer's file) |
 | 5 — governance unchanged | characterization | no test (developer's evidence) |
 
+**qa send-back (review, T4, cosmetic):** `675be928` renumbers titles only, no assertion change: the no-main case → "(9) …", the two (8) cases → "(8a)" (on `release/0.3`) and "(8b)" (on `main`). `npx jest test/lint/version-bump.test.ts --maxWorkers=2` → Tests: 31 passed, 31 total.
+
 ### green (developer, 2026-10-16)
 
 `e206a4ad` `feat(lint): task-287 — …`. `test/lint/helpers/version-bump.ts`: `RELEASE_LINE_PATTERN`,
