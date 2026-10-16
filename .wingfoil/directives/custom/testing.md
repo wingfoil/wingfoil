@@ -6,7 +6,7 @@ kind: custom
 title: "Testing"
 tags: [custom, testing, tdd, jest]
 ref: [P3.8]
-version: "1.2"
+version: "1.3"   # 1.3: coverage non-regression against the integration branch's figures, release/X.Y or main (task-286, dl-159 A1.6) (prev 1.2)
 ---
 
 # Directive — Testing
@@ -30,7 +30,8 @@ Custom stand-in directive. Applies to developers, QA and reviewers (`roles.yaml`
 - Maintain >80% coverage (Jest); coverage must not regress on merge. Gate (80% floor only): the
   `dev-loop` `refactor` phase's `checks.post` entry `tests.coverage(min: 80)`, run as
   `npm run test:coverage` against `jest.config.js` `coverageThreshold` (80). Non-regression is not
-  asserted by any gate: it is checked by hand at `refactor`, against `main`'s figures.
+  asserted by any gate: it is checked by hand at `refactor`, against the integration branch's figures
+  (`release/X.Y` or `main`, `git-conventions` §1; `dl-159`).
 - Each behavior has at least one happy-path and one edge/error-path test (mirrors the BDD suite).
 - Tests are deterministic and isolated; no reliance on external services or wall-clock/random.
 - Test sources typecheck as cleanly as production sources (`dl-044`). Gate: `typecheck.clean`, the
