@@ -101,14 +101,189 @@ of `vX.Y.Z` → `release/X.Y`; a `minor` (or a pre-`dl-092` release with no `kin
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-16)
+
+Role architect. Worktree `.wf2-wt/task-288`, branch cut at `92bec996`, start `494151f6`, `task/286` merged in
+`e54c80cc` (git-conventions 1.7: §1 *integration branch*, §3 minor tag on pushed `main`, patch tag on pushed
+`release/X.Y`).
+
+**Inputs read (dl-015 hard gate, dl-102 §4).**
+- `task-286` (`done`): §1 defines "the integration branch" — `main` and `release/X.Y` are the two lines, every other
+  branch has one; §1's on-branch paragraph quoting `done` (lines 95–104) was left to this task; R6 gives this task
+  its own 1.7 → 1.8 bump. `task-265` (`done`): the publish gate accepts a `vX.Y.Z` whose commit is an ancestor of
+  `origin/main` or `origin/release/X.Y` (`releaseLineRefs`, `--on-line`), one rule for every tag (ruling D4 (a)).
+  `task-281` (`done`): `done`'s order approve → finalize → bugs' sync → merge → worktree removal (dev-loop 2.0),
+  kept. `task-282` (`done`): `evidence-only-since-candidate` diffs `<candidate>..HEAD` of the branch it runs on, so
+  it needs no change; it keeps its binding and its position (last).
+- `dl-159` `ready` (A1 item 8; A2 items 3 and the `patch-cycle.yaml` part of 4 deferred: no `release.branch` field,
+  no `patch-cycle.yaml`); `dl-092` `ready` (release `kind`: `minor` | `patch`); `dl-035`, `dl-014` G3, `dl-024`,
+  `dl-074` `ready`. No AC contradicts them or the bound directives.
+- Readers of the literals (`grep -rln "on-branch-is-main\|release-branch-merged-to-main\|on: main\|from: main\|to: main"
+  test src .wingfoil scripts`): the five test files the task lists, **plus `test/core/dev-loop-v1-5.test.ts`** (lines
+  201–202, 207–208, 224: `git.merge(from: main)`), not in the task's *Files* (D7); `test/workflow/bindings.test.ts:107`,
+  `test/core/workflow-evidence.test.ts:160` and `src/core/workflow-next.ts:221` use `main` in synthetic fixtures /
+  a doc example, not this repository's config — unchanged.
+- Baseline (dev build `e54c80cc`, `npm run build` under the slot): `node dist/cli.js workflow list --all` → exit 0,
+  93 diagnostics, 0 errors: 87 `W_WORKFLOW_UNBOUND_TOKEN`, 6 `W_MEMORY_UNREADABLE` (the grandfathered rel-v0.1 plans).
+- Today: `grep -c "release/X.Y"` → 0 in `WORKFLOW.md`, `bindings.yaml`, `dev-loop.yaml`, `release-publishing.yaml`;
+  `grep -ci "integration.branch"` → 1, 0, 0, 1 (the two hits are `release-commit`'s candidate sentence and the
+  *Release candidate* paragraph). So AC 5's texts are new (reclassified below).
+
+**Why a token like `{release.base_branch}` is not possible.** `W_PHASE_TOKEN_OUT_OF_SCOPE` (src/core/workflow-core-checks.ts
+`tokenDiagnostics`) flags every `{<type>.<field>}` in an action argument whose type's template declares no such
+field, and the conformance test asserts that code absent; adding the field is `dl-159` A2.3, deferred. A bare
+`{integration_branch}` would be an unresolved token in `workflow next`'s deduction (`src/workflow/deduce.ts`
+`TOKEN_RE`). So the workflows name it by a **plain argument value**, as `main` was one.
+
+**D1 — where the ONE declaration lives: a script, `scripts/integration-branch.cjs` (recommended).** Options:
+(a) header comments of the two workflows — two homes, prose only, the AC 4 error case ("a patch whose version is
+not vX.Y.Z") has no executable form; (b) a named token in `bindings.yaml` — bindings bind a token to a command or
+`manual`, there is no value kind (`format: 1`), so it would be a comment only, as (a); (c) **a pure function with
+unit tests, bound as the `tag` phase's pre-check** — the derivation has one executable home, the manual `git.*`
+steps get a command that prints their operand, and `tag`'s branch pre-check becomes executable like its two other
+pre-checks (`task-219`, `task-282`), so the unbound count drops 87 → 86. Workflow headers and `bindings.yaml` cite
+the script; `WORKFLOW.md` states the rule in words (AC 5). Determinism: no clock, no network, no unordered
+iteration; one `git symbolic-ref` in the check mode only.
+
+**The derivation** (`integrationBranch`, pure):
+- `kind` absent, `undefined` or `""` (a pre-`dl-092` release, `memory.yaml` `release.template.frontmatter.exempt`) → `main`;
+- `kind: minor` → `main` (version not read);
+- `kind: patch` and `version` matching `^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.([1-9]\d*)$` → `release/X.Y`
+  (`v0.3.1` → `release/0.3`, `v1.0.2` → `release/1.0`, `v10.20.3` → `release/10.20`);
+- `kind: patch`, any other version (`v0.3`, `0.3.1`, `v01.3.1`, `v0.3.1-rc.1`, `v0.3.0` — Z ≥ 1, git-conventions §3, D4 —,
+  `undefined`) → refusal, message exactly `a patch's version must be vX.Y.Z with Z ≥ 1, got "<version>" (dl-092, dl-159)`
+  (`<version>` = the value, `undefined` printed as empty: `got ""`);
+- any other kind (`major`, `Patch`, `fix`) → refusal, exactly `release kind "<kind>" is neither minor nor patch (dl-092)`.
+It applies to releases that run the workflows from now on; `patch-v0.2.2` (released, tagged on `main` before `dl-159`,
+"for every patch from 0.3.1 on") is never run again.
+
+**Interface** (CommonJS; declarations with TSDoc in `scripts/integration-branch.d.cts`, written by qa in red, as B7/B8):
+
+```ts
+/** The release fields the derivation reads (memory.yaml `release`). */
+export interface ReleaseLine { readonly kind?: string; readonly version?: string }
+/** Outcome of {@link integrationBranch}. */
+export type IntegrationBranch = { readonly ok: true; readonly branch: string } | { readonly ok: false; readonly message: string };
+/** dl-159 point 4, git-conventions §1/§3: `release/X.Y` for a patch of vX.Y.Z, `main` for a minor or no kind. Pure. */
+export function integrationBranch(release: ReleaseLine): IntegrationBranch;
+/** Outcome of {@link checkHead}. */
+export interface HeadCheck { readonly ok: boolean; readonly message: string }
+/** Pure verdict: `current` (HEAD's branch, `null` when detached) against the expected integration branch. */
+export function checkHead(expected: string, version: string, current: string | null): HeadCheck;
+/** I/O: `git -C root symbolic-ref --quiet --short HEAD`; `branch: null` when detached (exit 1). */
+export function readHeadBranch(root: string): { readonly ok: true; readonly branch: string | null } | { readonly ok: false; readonly message: string };
+```
+
+`checkHead` messages, exact: pass `HEAD is on <expected>, the integration branch of <version> (dl-159)`; refusal
+`HEAD is on <current>, not on <expected>, the integration branch of <version> (dl-159)`; detached
+`HEAD is detached, not on <expected>, the integration branch of <version> (dl-159)`. `readHeadBranch` failure (not a
+repository, git exit other than 0/1, git not runnable): `could not read HEAD: <git's first stderr line or the spawn error>`.
+
+CLI (cwd = the repository; `spawnSync('git', ['-C', root, …])`, never a shell):
+- `node scripts/integration-branch.cjs --kind <k> --version <v>` → stdout `<branch>` + newline, exit 0;
+  derivation refusal → stderr the message, exit 2;
+- `node scripts/integration-branch.cjs --check-head --kind <k> --version <v>` → pass: stdout the pass line, exit 0;
+  refusal, detached, `could not read HEAD` → stderr, exit 1; derivation refusal → exit 2 (bindings' "2 = misconfiguration");
+- `--kind` may be omitted or `""`; `--version` is required (missing → stderr `usage: …`, exit 2); an unknown option or a
+  value-less flag → `usage: …`, exit 2. One line on every stream.
+
+**D2 — names: `integration_branch`, `on-integration-branch`, `phase-branch-merged-to-integration-branch`
+(recommended).** task-286 made "integration branch" the directive's term; a second term ("base branch") would be a
+synonym to keep in step. `release-branch-merged-to-*` is renamed to `phase-branch-merged-*` because since `dl-159`
+"release branch" reads as `release/X.Y`, while the check means the release's phase branch (`design/…`). WORKFLOW.md's
+wording becomes "the integration branch (`main`, or `release/X.Y` for a patch)". Alternative: the AC's examples
+(`base_branch`, `on-base-branch`, `release-branch-merged-to-base`), pins renamed accordingly.
+
+**D3 — `on-integration-branch` bound (part of D1).** `bindings.yaml` 2.3:
+`on-integration-branch: { run: [node, scripts/integration-branch.cjs, --check-head, --kind, "{kind}", --version,
+"{version}"], severity: reject, args: { kind: '^(minor|patch)?$', version: '^v[0-9]+\.[0-9]+(\.[0-9]+)?$' } }`.
+`phase-branch-merged-to-integration-branch` stays unbound (which phase branch is a reading no command asserts),
+listed with that reason.
+
+**The edits (green).**
+- `dev-loop.yaml` 2.0 → 2.1 (`version:` comment `2.1 task-288 (dl-159 A1.8): …` then `(prev 2.0 …` with the whole
+  chain kept): `red` `'git.merge(from: integration_branch)'`, `refactor` the same (last action), `done`
+  `'git.merge(to: integration_branch, ff: false)'`; `start`'s description: the branch is cut from the task's
+  integration branch (git-conventions §1); same-class text in the file: `refactor`'s and `review`'s descriptions
+  ("merging main", "main moving"), the header's dl-035 paragraph ("merges `main` (`git merge --no-edit main`…)") and
+  line 18 (`main..task/<id>`) → the integration branch, keeping the phrases `dev-loop-v1-5.test.ts` pins ("the
+  developer runs it before `qa` starts", "`qa` never resolves a conflict", "last action of `refactor`"). A header
+  paragraph declares the name: `integration_branch` is the integration branch of the task's release, as
+  `node scripts/integration-branch.cjs --kind <kind> --version <version>` prints it from that release's frontmatter.
+  Phase order and every other action unchanged.
+- `release-publishing.yaml` 1.8 → 1.9 (`; 1.9 task-288 …` appended): `tag.checks.pre` =
+  `on-integration-branch(kind: "{release.kind}", version: "{release.version}")`,
+  `phase-branch-merged-to-integration-branch`, then the two existing checks unchanged (evidence-only last);
+  action `'git.tag(name: "{release.version}", on: integration_branch)'`; description: a minor is tagged on the
+  pushed `main`, a patch on the pushed `release/X.Y` (`dl-159` point 4, `git-conventions` §3, `task-286`), never on a
+  phase branch (`dl-024`), and "`on: integration_branch` names the branch the tag must be reachable from".
+- `bindings.yaml` 2.2 → 2.3: the binding above; the `git.merge` / `git.tag` comments name the integration branch and
+  the command that prints it; the `git.create_branch` comment: cut from it.
+- `WORKFLOW.md`: *Dev Loop* paragraph and the `ST`, `RED`, `REF`, `DONE` nodes; *Release Publishing* paragraph and
+  the `TG` node (`✔ pre: on-integration-branch`).
+- `git-conventions.md` 1.7 → 1.8 (R6; `**Date:**` stays 2026-10-16): §1's quotation → `git.merge(to:
+  integration_branch, ff: false)`; D6 for the two sentences above it.
+- New `scripts/integration-branch.cjs`. D5 for `sw-life-cycle.yaml` / `release-cycle.yaml`.
+
+**AC classification and what qa must pin.** Workflow files read **at `HEAD`** (`loadWorkflowRegistryAtHead`, or
+`git show HEAD:<path>` for raw text) where the existing suite does; directives / `WORKFLOW.md` / `bindings.yaml` from
+the working tree, as their suites do. Prose pins are substrings of whitespace-flattened text (`.replace(/\s+/g, ' ')`),
+never lines (`task-276`); every absence assertion sits in the same `it` as a positive one; version pins are "≥" plus
+the history entry (`bug-314`).
+
+| AC | Class | Test file | Pin |
+|----|-------|-----------|-----|
+| 1 | red-first | new `test/core/workflow-integration-branch.test.ts` | For `dev-loop` and `release-publishing` at HEAD: every `actions` entry and every `checks.pre`/`checks.post` entry of every phase → none matches `/\bmain\b/` (positive in the same `it`: at least one entry of each workflow contains `integration_branch` or `on-integration-branch`). Old literals updated first: `test/core/dev-loop-v2-0.test.ts:37` → `'git.merge(to: integration_branch, ff: false)'` (rest of the order unchanged); `test/cli/staging-rehearsal.test.ts:126` → `['git.tag(name: "{release.version}", on: integration_branch)']`, `:145` → `/`on: integration_branch` names the branch/`; `test/cli/evidence-only-tag.test.ts:238–239` → the two new pre entries (below); `test/core/dev-loop-v1-5.test.ts:201–202, 207–208, 224` → `git.merge(from: integration_branch)` (D7). |
+| 2 | red-first | same new file | `dev-loop` at HEAD: `red.actions[1]` and the last of `refactor.actions` = `'git.merge(from: integration_branch)'`; `done.actions` = `['memory.approve', 'element.set_state(done)', 'bug.sync_state(for_each: task.bug)', 'git.merge(to: integration_branch, ff: false)', 'git.remove_worktree']`; phase names = `['start', 'design', 'red', 'green', 'refactor', 'review', 'done']`; `start.description` flattened contains `integration branch`; raw header (`git show HEAD:`) contains `scripts/integration-branch.cjs` and `integration_branch`; `version:` ≥ 2.1, its comment contains `task-288`, `dl-159` and `prev 2.0` (and still `prev 1.9`). `resolveToken('git.merge(from: integration_branch)', 'action', bindings).kind` = `manual`. |
+| 3 | red-first | same new file + `test/core/workflow-repository-conformance.test.ts` + `test/cli/evidence-only-tag.test.ts` | `release-publishing` at HEAD: phase names unchanged (`release-commit, staging-rehearsal, tag, publish, mark-released`); `tag.checks.pre` = `['on-integration-branch(kind: "{release.kind}", version: "{release.version}")', 'phase-branch-merged-to-integration-branch', 'staging-rehearsal-passed(transcript: <T>)', 'evidence-only-since-candidate(transcript: <T>)']` (evidence-only-tag.test.ts holds the same list); `tag.actions` = `['git.tag(name: "{release.version}", on: integration_branch)']`; `tag.description` flattened contains `` pushed `main` ``, `` pushed `release/X.Y` ``, `dl-159`, `git-conventions`, `§3` and `task-286`, and no longer `` ON `main` ``; `version:` ≥ 1.9, raw text matches `/1\.9 [^;]*task-288/`. `bindings.yaml`: `checks['on-integration-branch']` toEqual the D3 object; version ≥ 2.3, `/2\.3 [^;]*task-288/`; the `kind` pattern accepts `''`, `minor`, `patch` and refuses `major`, `-x`; the `version` pattern accepts `v0.3`, `v0.3.1` and refuses `0.3.1`, `v0.3.1;x`. Conformance list (updated first): drop `["release-publishing", "phases[2].checks.pre[0]", "on-branch-is-main"]`; replace pre[1]'s token with `phase-branch-merged-to-integration-branch` (comment: task-288, which phase branch merged is a reading no command asserts). `workflow list --all` no new error: the conformance zero-error test is the pin. |
+| 4 | red-first | new `test/cli/integration-branch.test.ts` | Pure `integrationBranch`: the mappings and refusals of *The derivation* above, exact messages, `toEqual({ ok: true, branch })` / `toEqual({ ok: false, message })`. Pure `checkHead`: pass, refusal, detached (`null`), exact strings. CLI by `spawnSync(process.execPath, [SCRIPT, …], { cwd })` on a fixture repo (`git init --quiet --initial-branch=main` in `mkdtempSync(fixtureDirPrefix())`, one commit by `commitAllAs` — identity per command, git-conventions §5, never `makeTempGitRepo`): print mode `--kind patch --version v0.3.1` → exit 0, stdout `release/0.3\n`; `--kind minor --version v0.4` and `--version v0.3` with no `--kind` and with `--kind ""` → `main\n`; `--kind patch --version v0.3` → exit 2, stderr the message; no `--version` → exit 2, stderr starts `usage:`. Check mode: on `main` with `--kind minor --version v0.4` → exit 0, pass line; after `git checkout -b release/0.3` with `--kind patch --version v0.3.1` → exit 0; on `main` with that patch → exit 1, stderr `HEAD is on main, not on release/0.3, …`; detached (`git checkout --detach`) → exit 1, `HEAD is detached, …`; outside any repository (a fresh empty temp dir) → exit 1, stderr starts `could not read HEAD:`; `--kind major` → exit 2. In-process `readHeadBranch` on the fixture: `{ ok: true, branch: 'main' }`, detached → `branch: null`. |
+| 5 | red-first (task says characterization; corrected: `grep -c "release/X.Y"` → 0 in all three files today, so the text is new) | `test/directives/dev-loop-done-order.test.ts` + same new core file | `git-conventions` §1 flattened contains ``then `git.merge(to: integration_branch, ff: false)`, then `git.remove_worktree` `` (replaces line 40's pin) and no longer `git.merge(to: main`; version ≥ 1.8 with `task-288` and `dl-159` in the rest of the line, while the existing "1.6 or later … task-281" case stays as is. `bindings.yaml` working tree: the comment block from `git.create_branch:` to `git.tag:` contains `integration branch` and `scripts/integration-branch.cjs`, and no longer `on main`. `WORKFLOW.md`: the `` ### Dev Loop — `dev-loop` `` section (to the next `\n### `) and the `### Release Publishing` section each contain `` the integration branch (`main`, or `release/X.Y` for a patch) ``; the line starting `DONE["` contains `integration branch` and no longer `merge to main`; the `TG["` line contains `on-integration-branch`. |
+| 6 | characterization | `test/core/workflow-repository-conformance.test.ts`, `npm test -- test/docs` | Existing suites; run at refactor. No new test. |
+
+**Files.** Mine (green): `.wingfoil/workflows/custom/dev-loop.yaml`, `.wingfoil/workflows/custom/release-publishing.yaml`,
+`.wingfoil/workflows/bindings.yaml`, `.wingfoil/WORKFLOW.md`, `.wingfoil/directives/custom/git-conventions.md`,
+`scripts/integration-branch.cjs` (new), and, if D5 is ruled in, `sw-life-cycle.yaml`, `release-cycle.yaml`. qa's (red):
+`test/core/workflow-integration-branch.test.ts` (new), `test/cli/integration-branch.test.ts` (new),
+`scripts/integration-branch.d.cts` (new), `test/core/workflow-repository-conformance.test.ts`,
+`test/core/dev-loop-v2-0.test.ts`, `test/core/dev-loop-v1-5.test.ts` (D7), `test/cli/staging-rehearsal.test.ts`,
+`test/cli/evidence-only-tag.test.ts`, `test/directives/dev-loop-done-order.test.ts`. **Versions:** dev-loop 2.0 → 2.1,
+release-publishing 1.8 → 1.9, bindings 2.2 → 2.3, git-conventions 1.7 → 1.8; with D5, sw-life-cycle 1.1 → 1.2,
+release-cycle 1.5 → 1.6. No spec amendment (spec-003/spec-017 unchanged: no new token form, no new field).
+
+**Decisions for the approver** (recommendation first).
+- **D1** (AC 1 / AC 4): the declaration is `scripts/integration-branch.cjs` (pure function + unit tests, bound as
+  `tag`'s pre-check), cited by both workflow headers and `bindings.yaml` — rather than header comments or a
+  comment-only token in `bindings.yaml`. Reasons above.
+- **D2**: the term is task-286's "integration branch": `integration_branch`, `on-integration-branch`,
+  `phase-branch-merged-to-integration-branch`; WORKFLOW.md says "the integration branch (`main`, or `release/X.Y`
+  for a patch)". Alternative: the AC's "base branch" names.
+- **D3**: `on-integration-branch` bound (unbound 87 → 86); `phase-branch-merged-to-integration-branch` stays unbound.
+- **D4**: a `patch` with version `vX.Y.0` is refused (git-conventions §3: a patch tag has Z ≥ 1); the AC names only
+  "not vX.Y.Z".
+- **D5** (the coordinator's proposed same-class extra): include in-task `sw-life-cycle.yaml:8–11` ("merged to `main`
+  with `--no-ff`; the version tag on `main`") **and** `release-cycle.yaml:5–6` ("the release tag on the pushed
+  `main`"), the same sentence in the second workflow header (`grep -n "\bmain\b" .wingfoil/workflows/custom/*.yaml`).
+  Comment-only; each says "merged into its integration branch (`main`, or `release/X.Y` for a patch)" and "a minor
+  tag on the pushed `main`, a patch tag on the pushed `release/X.Y`" citing git-conventions §1/§3; bumps 1.1 → 1.2
+  and 1.5 → 1.6 (`test/core/release-waves-config.test.ts:168` pins "≥ 1.5"). No other B9 branch touches either file
+  (`git diff --name-only 92bec996 <branch> -- .wingfoil/workflows/custom/` → empty for 265–267, 285–287). qa pins
+  (same new core file): each header contains `release/X.Y` and `integration branch`, and no longer `` merged to `main` ``
+  / `` the release tag on the pushed `main` ``. Not included: `release-health.yaml:22` ("the commit on main carrying
+  the release's `released` transition") and `release-planning.yaml:26` (the pin, `dl-095`), which belong to the
+  deferred A2 items (patch-line release health; A2.5) — candidate follow-ups.
+- **D6**: also rewrite the two sentences of the same §1 bullet that lead into the quotation (lines 95–98: "the merge
+  carries them into `main` … they are ancestors of `main`, not on its first-parent line") to the integration branch;
+  pin: the flattened §1 contains `the merge carries them into its integration branch`.
+- **D7**: `test/core/dev-loop-v1-5.test.ts` joins the task's files (it pins `git.merge(from: main)` three times); 286's
+  edit there is in another hunk (lines 149–155) and 287 does not touch it.
+
+**Risks.** (1) The engine renders `{release.kind}` of an exempt release (no `kind:`) as an unresolved token: nothing
+runs a binding in v0.3; when P4.12 does (v1.0) an absent field must render `""`, which the `kind` pattern accepts —
+recorded for the engine, not tested here. (2) First real use: the `v0.3.0` tag — `node scripts/integration-branch.cjs
+--check-head --kind "" --version v0.3` on `main` → exit 0; to be run by release-publishing v0.3 (handover). (3) Gate
+order 287 → 288: 287 writes neither file of this task, so the merge is clean on these paths; `git-conventions`
+1.8 sits on 286's 1.7. (4) CLAUDE.md §6 ("merges into main") and `.wingfoil/README.md` stay for user-docs'
+align-agent-docs (batch handover list).
 
 ### Retrospective
 
