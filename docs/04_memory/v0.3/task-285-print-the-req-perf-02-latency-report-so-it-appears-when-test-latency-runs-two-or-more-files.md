@@ -121,7 +121,7 @@ sentence on `WINGFOIL_LATENCY_REPORT=1` says the report goes to stdout.
   `<rootDir>/…` path, as `LATENCY_SUITES` are), and delete `globalSetup` / `globalTeardown`: `test/global-setup.cjs`
   rebuilds `dist/` under `.jest-dist.lock`, which the outer jest run already holds (bug-095), so a nested run would
   wait or refuse; the fixture needs no `dist/`. `maxWorkers: 1`, `transform`, `testPathIgnorePatterns` and the
-  absence of `reporters` are inherited unchanged: they are the condition of the bug.
+  absence of `reporters` are inherited from it: they are the condition of the bug.
 - `report.fixture.ts` — synthetic samples built as `latency-report.test.ts` builds them (`RUNS` flat values, floor
   200, totals 300 / 250 / 420, the three REQ-PERF-02 command names, a fixed `LoadWindow`), one trivial `it`, and in
   `afterAll` `reportLatency(samples, COMMANDS, LOAD)`: the suite's call, nothing spawned, nothing timed.
@@ -211,6 +211,70 @@ too. (3) The writer test adds the `''` value and a default-`env` case. The textu
 evidence for that mechanism is the design's scratch reproduction: with two files and the agent variables set, stdout
 carried only the `process.stdout.write` line.
 
+### green (developer, 2026-10-16)
+
+Read `### red (qa)` first: red `6f467575`, its deviations accepted as recorded (approver rulings D1, D2).
+
+**Discrimination probe (coordinator's request; not committed).** Before the real implementation, `reportLatency`
+was added to `test/core/helpers/latency.ts` with the opt-in check and a `console.log(latencyReport(...))` body. `npx
+jest test/cli/latency-report-pass.test.ts --maxWorkers=2` → exit 1, 12 failed, 5 passed. Agent environment: all 7
+cases fail, the first on `Expected pattern: /^[ \t]*machine: /m` with stdout holding only the sibling's `workflow
+next: p95 40 ms …` line (the report never reaches the output). No-agent environment: the 5 stdout cases fail (the
+block went to stderr in a console block), while "exactly once in stdout + stderr" and the AC 3 reading pass. So the
+test fails on a `console.log` path for the right reason, in both environments, and not only on the missing export.
+The probe was then removed.
+
+**Green `5787309d`** (`fix(latency): task-285 — …`): `reportLatency(measured, commands, load, env = process.env,
+write = process.stdout.write)` in `test/core/helpers/latency.ts`, as designed; `command-latency.test.ts`'s `afterAll`
+is `if (measured) reportLatency(measured, COMMANDS, load);`, its import of `latencyReport` dropped, its header names
+stdout. Red → green: `npx jest test/cli/latency-report-pass.test.ts test/core/latency-report-writer.test.ts
+test/release-health/latency-report.test.ts test/release-health/measure.test.ts
+test/core/latency-budget-placement.test.ts test/lint/no-fabricated-stderr.test.ts --maxWorkers=2` → red 26 failed /
+1083 passed, green **6 suites, 1109 passed**.
+
+### refactor (developer, 2026-10-16)
+
+Nothing to refactor beyond green. Gates on `5787309d` (+ this file and the bug-378 amendment uncommitted):
+
+| Command | Result |
+|---|---|
+| `npx jest --coverage --maxWorkers=2` (slot 17:15, load 8.13 → 3.70) | exit 0, **455 suites, 8144 tests passed**; **99.34 / 97.40 / 98.03 / 99.71**, no column under the B8 baseline 99.34 / 97.39 / 98.03 / 99.71. It runs `jest.config.js`, the selection of `npm test`'s parallel pass |
+| `WINGFOIL_LATENCY_REPORT=1 npm run -s test:latency` (slot 17:42; 1-min load 3.45 before, 4.33 after) | exit 0, 3 suites, 18 tests. The REQ-PERF-02 block printed **once** (`grep -c '^[[:space:]]*machine: '` on the log → 1): `machine: otherwise idle`, floor p95 241 ms; marginal / total p95 `memory search` 119 / 315 ms, `dna show` 29 / 226 ms, `memory history` 149 / 345 ms. `parseLatencyReport` on the log → non-null, `idle: true`, load 3.65 → 3.43 (the report's own window), all three commands |
+| `npm run typecheck` (both tsc configs), `npm run docs:api` (slot 17:53) | exit 0, exit 0 |
+| `npm run lint` | exit 0 |
+| `node scripts/lint-claims.cjs --base 92bec996` | 0 warnings after rewording one design sentence ("inherited unchanged") |
+| `node scripts/check-governance.cjs --base 92bec996` | 0 findings |
+
+AC 4: `git diff 92bec996 -- test/core/helpers/latency.ts | grep -E "^[-+].*(RUNS|MIN_RUNS|P95_BUDGET_MS|IDLE_FLOOR_P95_BOUND_MS) *="` → no line;
+`git diff --stat 92bec996 -- jest.latency.config.js jest.config.js test/latency-suites.cjs
+test/cli/workflow-next-command-latency.test.ts test/core/workflow-next-latency.test.ts src` → empty. No BDD scenario,
+CLI help or config version is touched.
+
+### self-review (developer, 2026-10-16)
+
+| AC | Status | Evidence |
+|---|---|---|
+| 1 | met | `latency-report-pass.test.ts` green in both environments; the probe shows it red on a `console.log` path; the real pass printed the block once |
+| 2 | met | `latency-report-writer.test.ts` (writer, opt-in, default `process.stdout.write`, no `console.log`; textual pin on the suite) green |
+| 3 | met | `latency-report.test.ts`, `measure.test.ts` (Q12 measured from a plain stdout report) green; `parseLatencyReport` on the real pass's log reads all of it |
+| 4 | met | the constants grep and the diff above; the gates table |
+
+T4: `git log --first-parent --no-merges --format=%h 6f467575..HEAD -- test/cli/latency-report-pass.test.ts
+test/cli/fixtures/latency-report-pass test/core/latency-report-writer.test.ts test/release-health/latency-report.test.ts
+test/release-health/measure.test.ts` → empty. Same class: no other `console.log` in the three latency suites (`grep -n
+"console\." test/cli/command-latency.test.ts test/cli/workflow-next-command-latency.test.ts
+test/core/workflow-next-latency.test.ts` → only the comment lines of `command-latency.test.ts`).
+
+### Pending amendments (approver)
+
+- `bug-378-the-req-perf-02-latency-report-never-prints-when-test-latency-runs-two-or-more-files` — `### Retrospective`
+  filled in the working tree: `--reason "Record the fix and the mechanism in bug-378's Retrospective, as dl-115 Q2 (a) asks of every closed bug: task-285 prints the report to stdout through reportLatency, and the cause was jest 30's AgentReporter, which an agent-run pass of two or more files selects and which prints no console output of a passing suite."`
+
 ### Retrospective
 
-None yet.
+- Locate the mechanism before choosing the fix: "two or more files" was the symptom; the agent-detecting reporter was
+  the cause, and it also explains why only agent-run gates showed it.
+- An output a later tool parses should not go through a channel the test runner may buffer or drop.
+- Candidate finding (not filed): in the same pass, `workflow next (spawned)` measured total p95 865 ms (floor 339 ms) at
+  load ~3.5, above the 800 ms margin task-283 recorded (ruling D1, recorded not asserted) and under REQ-PERF-03's
+  1,000 ms.
