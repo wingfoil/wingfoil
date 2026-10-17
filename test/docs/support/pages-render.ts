@@ -49,19 +49,19 @@ export function htmlBlockStarts(text: string): HtmlBlockStart[] {
   let inIndentedCode = false;
   let previousBlank = true;
   text.split(/\r?\n/).forEach((line, index) => {
-    const fenceMatch = FENCE.exec(line);
+    const marker = FENCE.exec(line)?.[1];
     if (fence !== null) {
       const closes =
-        fenceMatch !== null &&
-        fenceMatch[1][0] === fence[0] &&
-        fenceMatch[1].length >= fence.length &&
+        marker !== undefined &&
+        marker[0] === fence[0] &&
+        marker.length >= fence.length &&
         /^\s*[`~]+\s*$/.test(line);
       if (closes) fence = null;
       previousBlank = false;
       return;
     }
-    if (fenceMatch !== null) {
-      fence = fenceMatch[1];
+    if (marker !== undefined) {
+      fence = marker;
       inHtml = false;
       inIndentedCode = false;
       previousBlank = false;
