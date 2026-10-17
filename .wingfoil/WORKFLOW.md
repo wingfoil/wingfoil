@@ -264,10 +264,15 @@ reject commit.
 Separation of duties (`dl-134`, v1.5): `red` is `qa`'s, black-box, and `green` and `refactor` leave
 the files `red`'s commit touched unchanged (`tests.unchanged(since: red)`, evaluated from v1.0).
 `green` never shares an agent session with `red`, `refactor` may resume `green`'s, and `review`
-shares none with the three; the reviewer loads the developer's and `qa`'s directives too. A task
-resumed after a reject or a park merges `main` at the start of `red`, run by the developer before
-`qa` writes a test, and again as `refactor`'s last action if `main` moved, so the checks and the
-review measure the merged tree (`dl-035`; approver ruling 2026-10-09). `memory park` returns a started
+shares none with the three; the reviewer loads the developer's and `qa`'s directives too.
+
+A task works against the integration branch (`main`, or `release/X.Y` for a patch) of its release
+(`dl-159`, `task-288`; `git-conventions` §1): `start` cuts `task/{task.id}` from it, `done` merges into
+it with `--no-ff`, and the actions name it `integration_branch`, which `node
+scripts/integration-branch.cjs --kind <kind> --version <version>` prints from the release's frontmatter.
+A task resumed after a reject or a park merges its integration branch at the start of `red`, run by the
+developer before `qa` writes a test, and again as `refactor`'s last action if it moved, so the checks
+and the review measure the merged tree (`dl-035`; approver ruling 2026-10-09). `memory park` returns a started
 task to the backlog: its branch is kept, its worktree removed, its bugs synced back to `planned`
 (`dl-110`).
 
@@ -283,13 +288,13 @@ it closes (`dl-115`). No check is evaluated before v1.0 (P4.12); until then the 
 
 ```mermaid
 flowchart TD
-    ST["**start** *(developer)*\n✔ pre: stop-the-line clear (feature tasks only, dl-133)\n✔ pre: growth clear (release.growth_threshold, dl-100 §3; from v0.4)\ngit.create_branch(task: {task.id}) → branch task/{task.id}\ntask: backlog → in-progress\n↳ bug.sync_state: source bug planned → in-progress"]
+    ST["**start** *(developer)*\n✔ pre: stop-the-line clear (feature tasks only, dl-133)\n✔ pre: growth clear (release.growth_threshold, dl-100 §3; from v0.4)\ngit.create_branch(task: {task.id}) → branch task/{task.id}, cut from the integration branch\ntask: backlog → in-progress\n↳ bug.sync_state: source bug planned → in-progress"]
     DES["📐 **design** *(architect)* · safety net\nverify a tech-spec exists + is approved for every\nfile format/schema/constant/API the task implements\n✔ P4.12: [title, scope] (if scaffolded) + tech-spec: approved\n✔ each AC consistent with the directives and specs (dl-102)"]
-    RED["🔴 **red** *(qa)* · fresh\n↳ bug.sync_state: source bug in-review → in-progress (after a reject)\ndeveloper merges main first (on a resume)\nwrite the tests black-box from the ACs\n✔ tests.exist + tests.failing"]
+    RED["🔴 **red** *(qa)* · fresh\n↳ bug.sync_state: source bug in-review → in-progress (after a reject)\ndeveloper merges the integration branch first (on a resume)\nwrite the tests black-box from the ACs\n✔ tests.exist + tests.failing"]
     GREEN["🟢 **green** *(developer)* · distinct from red\nmin code to pass\n✔ tests.passing + tests.unchanged(since: red)"]
-    REF["🔵 **refactor** *(developer)* · may resume green\nclean code, keep tests green\nlast: merge main (if it moved)\n✔ tests.passing + coverage ≥ 80% + lint + typecheck + tests.unchanged(since: red)"]
+    REF["🔵 **refactor** *(developer)* · may resume green\nclean code, keep tests green\nlast: merge the integration branch (if it moved)\n✔ tests.passing + coverage ≥ 80% + lint + typecheck + tests.unchanged(since: red)"]
     REV["📋 **review** *(reviewer)* · distinct from red, green, refactor\n✔ pre: BDD + claims re-run + previous reject re-verified + docs.parity\ntask: in-progress → in-review\n↳ bug.sync_state: source bug → in-review (once ALL its fix tasks are)\n🔑 Approval gate — *approver*"]
-    DONE["✅ **done** *(developer)*\non task/{task.id}: task: in-review → approved → done\n↳ bug.sync_state: source bug → resolved → closed (once ALL its fix tasks are done)\nthen git merge to main (--no-ff), then remove the worktree\n✔ ### Retrospective present (task, closed bugs)"]
+    DONE["✅ **done** *(developer)*\non task/{task.id}: task: in-review → approved → done\n↳ bug.sync_state: source bug → resolved → closed (once ALL its fix tasks are done)\nthen git merge into the integration branch (main, or release/X.Y for a patch; --no-ff), then remove the worktree\n✔ ### Retrospective present (task, closed bugs)"]
 
     ST --> DES --> RED --> GREEN --> REF --> REV
     REV -->|APPROVE| DONE
@@ -401,7 +406,11 @@ flowchart TD
 The release commit is its own phase, so the staging rehearsal runs on the candidate it cuts (`dl-099`
 §2, task-219). The rehearsal starts a local Verdaccio registry: the rehearsal of the candidate is a gate run
 once per candidate (`dl-099` §4 (a)), and `publish.yml`'s `stage` job runs the same script again in CI on
-the tagged build. Before the tag, `evidence-only-since-candidate` (task-282) runs `git diff --name-only
+the tagged build. `tag` tags the candidate on the integration branch (`main`, or `release/X.Y` for a
+patch) of the release once that branch is pushed: a minor on `main`, a patch on `release/X.Y` (`dl-159`
+point 4, `git-conventions` §3); its pre-check `on-integration-branch` (task-288) runs
+`node scripts/integration-branch.cjs --check-head` with the release's `kind` and `version`, and refuses a
+HEAD on any other branch. Before the tag, `evidence-only-since-candidate` (task-282) runs `git diff --name-only
 <candidate>..<tip>` and passes only when the candidate is an ancestor of the tip and every changed path is
 an evidence path its binding declares; otherwise the candidate is re-cut.
 
@@ -409,7 +418,7 @@ an evidence path its binding declares; otherwise the candidate is re-cut.
 flowchart TD
     RC["**release-commit** *(tech-lead)*\ngit.commit: the version bump (package.json, package-lock.json,\nserver.json, CHANGELOG.md, SECURITY.md) → merged: the candidate"]
     SR["**staging-rehearsal** *(qa)*\nnpm run publish:staging -- --expect-commit <candidate> --transcript …\n✔ staging-rehearsal-passed: closing line + the stamp's commit\n`docs/07_gates/rl-{release-line}/rel-{version}-staging-rehearsal.md`"]
-    TG["**tag** *(tech-lead)*\n✔ pre: staging-rehearsal-passed (again)\n✔ pre: evidence-only-since-candidate: only evidence paths changed since the candidate\ngit.tag on the candidate the transcript names"]
+    TG["**tag** *(tech-lead)*\n✔ pre: on-integration-branch: HEAD on main (minor) or release/X.Y (patch)\n✔ pre: staging-rehearsal-passed (again)\n✔ pre: evidence-only-since-candidate: only evidence paths changed since the candidate\ngit.tag on the candidate the transcript names, on the pushed integration branch"]
     PB["**publish** *(tech-lead)*\n✔ pre: services.verify-sweep (warn) — the approver runs each service's verify\npush the tag → publish.yml: gate → stage → promote (npm stage publish) → release + mcp-registry\n🔑 Approval gate — *approver* (npm stage approve, 2FA)\nrelease: GitHub Release + the tag run's four test reports · mcp-registry: MCP Registry listing (GitHub OIDC) — once npm serves the version\nthe summary + coverage-summary.json committed under `docs/07_gates/rl-{release-line}/rel-{version}-…` (dl-136)"]
     MR["**mark-released** *(tech-lead)*\nrelease: releasing → released"]
 

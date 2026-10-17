@@ -15,11 +15,11 @@
 # `refactor` may resume `green`'s, and `review` shares none with `red`, `green` or `refactor` (enforced
 # from v1.0; v0.3 records each run's session id). The reviewer loads the developer's and `qa`'s
 # directives too (`roles.yaml`), and checks the handoff in git (dl-134 §5): `red`'s commit precedes
-# `green`'s on the task branch (`git log --format='%h %s' main..task/<id>`), and
+# `green`'s on the task branch (`git log --format='%h %s' <integration branch>..task/<id>`), and
 # `git log --first-parent --no-merges --format=%h <red-commit>..HEAD -- <red's test files>` is empty.
 # The check compares only the branch's own non-merge commits since `red`: a change brought in by an
-# inward `Merge branch 'main' into task/…` commit is excluded (`--first-parent` never visits main's
-# side of that merge; `--no-merges` drops the merge itself).
+# inward `Merge branch '<integration branch>' into task/…` commit is excluded (`--first-parent` never
+# visits the integration branch's side of that merge; `--no-merges` drops the merge itself).
 #
 # `bug.sync_state` is a no-op unless the task's `bug:` field names at least one bug. Since
 # dl-045-absorbed-bug-back-reference that field is a LIST, and it covers TWO cases: a fix task
@@ -61,12 +61,20 @@
 # planned]`, along the bug `returns` edge, memory.yaml 2.6). A parked task re-enters at `start`, on
 # its kept branch.
 #
-# Main-sync on resume (dl-035; the rule text is git-conventions §2; placement: approver ruling
-# 2026-10-09, option 2). A task branch merges `main` (`git merge --no-edit main`, never a rebase) at
-# two points. (a) When it resumes after a reject or a park, before any `red` work: the
-# `git.merge(from: main)` in `red`, a no-op when `main` has not moved; the developer runs it before
+# The integration branch (dl-159 point 4, Action A1.8; task-288; git-conventions §1). A task is cut
+# from, synced with and merged into its release's integration branch, which the actions below name by
+# the one value `integration_branch`. It is derived, never restated here: `node
+# scripts/integration-branch.cjs --kind <kind> --version <version>`, run with the `kind` and `version`
+# of the task's release (`task.release`), prints it — the one declaration of the derivation (approver
+# ruling D1; the release has no `branch` field, dl-159 A2.3, deferred).
+#
+# Integration-branch sync on resume (dl-035; the rule text is git-conventions §2; placement: approver
+# ruling 2026-10-09, option 2). A task branch merges its integration branch (`git merge --no-edit
+# <integration branch>`, never a rebase) at two points. (a) When it resumes after a reject or a park,
+# before any `red` work: the `git.merge(from: integration_branch)` in `red`, a no-op when the
+# integration branch has not moved; the developer runs it before
 # `qa` starts, and `qa` never resolves a conflict in implementation files. (b) Before re-submitting,
-# if `main` has moved since (a): the last action of `refactor`, so its coverage, API-docs and
+# if the integration branch has moved since (a): the last action of `refactor`, so its coverage, API-docs and
 # `lint.clean` checks measure the merged tree; `review` does not merge. A conflict is never
 # force-resolved (dl-014 G4): a conflict that is not trivially resolvable is aborted clean and recorded
 # in the Execution Notes, and the developer resolves it — at (a) before `qa` starts; at (b) the task
@@ -91,12 +99,12 @@ description: >-
   Test-first development loop for a single task: design -> red -> green -> refactor -> review.
   `red` is qa's, the rest the developer's, the reviewer's and the approver's.
   On review rejection, fall back to `red` and return the task to in-progress.
-version: 2.0                     # 2.0 bug-313 (task-281, approver ruling 2026-10-12 D6): done declares practice's order — memory.approve, element.set_state(done) and bug.sync_state on the task branch, then git.merge(to: main, ff: false), then git.remove_worktree; the header's fallback edge becomes done → in-progress; no other phase changes (prev 1.9 dl-100 §3 (a) (task-230): start.checks.pre gains the growth check, reading memory.yaml release.growth_threshold (in force from v0.4, approver ruling 2026-10-12 D4); the task runs inside a release wave (wave.yaml) (prev 1.8 header comment only: the WIP-limit paragraph says dl-156 is implemented (task-274); no phase or step change (prev 1.7, header comment only (task-275): the header no longer restates which tasks are open — `memory.yaml` `task.stop_the_line.open` is its one home, now excluding `deprecated` (approver ruling 2026-10-10 on task-221 decision 3) (prev 1.6 the v0.3 gates in one revision (task-221): start.checks.pre stop-the-line (dl-133 §3 Q4 (i), threshold read from memory.yaml task.stop_the_line), design.checks.post criteria vs directives/specs (dl-102 §4), refactor.checks.post typecheck.clean (dl-044), review.checks.pre claim re-run (dl-097 (a)) + previous reject re-verified (dl-098) + document-parity suites (dl-116), done.checks.post ### Retrospective present (dl-115 Q2 (a)) (prev 1.5 dl-134 separation of duties (task-205): red by qa, green distinct_from [red], refactor mode: resume, review distinct_from [red, green, refactor], tests.unchanged(since: red) on green and refactor; dl-061 A.1 fourth bug.sync_state as red's first action (B.1/C.1 in the header); dl-110 P2 parking and dl-035 main-sync (red, end of refactor) (prev 1.41 spec-003 alignment (task-199): start's git tokens take a key: value argument with no partial interpolation (spec-003 open question 6), design's three agent.<x> become one agent.execute with the instructions in its description (dl-090 Q6 (b)), design names its produces owner as { type, path } (dl-104 D3); 1.4, header comment only: dl-123 gives `triaged`/`planned` a reject to `closed` — no phase or step change; 1.3: dl-045 `task.bug` is a LIST, so a bug absorbed into an existing task's ACs is sync-able; 1.2: dl-034 lint.clean gate in `refactor`; 1.1: dl-014 git ergonomics (branch/worktree/merge) + docs-api checks; T1 test-strategy classification)))))
+version: 2.1                     # 2.1 task-288 (dl-159 A1.8, approver rulings D1–D7): red, refactor and done merge from / into the task's integration branch, named `integration_branch` and derived by scripts/integration-branch.cjs; start's description cuts the branch from it; the header declares the name; no phase or other action changes (prev 2.0 bug-313 (task-281, approver ruling 2026-10-12 D6): done declares practice's order — memory.approve, element.set_state(done) and bug.sync_state on the task branch, then git.merge(to: main, ff: false), then git.remove_worktree; the header's fallback edge becomes done → in-progress; no other phase changes (prev 1.9 dl-100 §3 (a) (task-230): start.checks.pre gains the growth check, reading memory.yaml release.growth_threshold (in force from v0.4, approver ruling 2026-10-12 D4); the task runs inside a release wave (wave.yaml) (prev 1.8 header comment only: the WIP-limit paragraph says dl-156 is implemented (task-274); no phase or step change (prev 1.7, header comment only (task-275): the header no longer restates which tasks are open — `memory.yaml` `task.stop_the_line.open` is its one home, now excluding `deprecated` (approver ruling 2026-10-10 on task-221 decision 3) (prev 1.6 the v0.3 gates in one revision (task-221): start.checks.pre stop-the-line (dl-133 §3 Q4 (i), threshold read from memory.yaml task.stop_the_line), design.checks.post criteria vs directives/specs (dl-102 §4), refactor.checks.post typecheck.clean (dl-044), review.checks.pre claim re-run (dl-097 (a)) + previous reject re-verified (dl-098) + document-parity suites (dl-116), done.checks.post ### Retrospective present (dl-115 Q2 (a)) (prev 1.5 dl-134 separation of duties (task-205): red by qa, green distinct_from [red], refactor mode: resume, review distinct_from [red, green, refactor], tests.unchanged(since: red) on green and refactor; dl-061 A.1 fourth bug.sync_state as red's first action (B.1/C.1 in the header); dl-110 P2 parking and dl-035 main-sync (red, end of refactor) (prev 1.41 spec-003 alignment (task-199): start's git tokens take a key: value argument with no partial interpolation (spec-003 open question 6), design's three agent.<x> become one agent.execute with the instructions in its description (dl-090 Q6 (b)), design names its produces owner as { type, path } (dl-104 D3); 1.4, header comment only: dl-123 gives `triaged`/`planned` a reject to `closed` — no phase or step change; 1.3: dl-045 `task.bug` is a LIST, so a bug absorbed into an existing task's ACs is sync-able; 1.2: dl-034 lint.clean gate in `refactor`; 1.1: dl-014 git ergonomics (branch/worktree/merge) + docs-api checks; T1 test-strategy classification))))))
 element: task          # the iterated element provided by release-cycle
 
 phases:
   - name: start
-    description: "Pick up the task; create a feature branch (or reuse a parked task's); move it to in-progress."
+    description: "Pick up the task; create a feature branch cut from its integration branch (git-conventions §1), or reuse a parked task's; move it to in-progress."
     role: developer
     actions:
       - 'git.create_branch(task: "{task.id}")'            # dl-014 G1 — the namespaced branch task/<id>; the prefix is git-conventions §1's, kept out of the value (spec-003 open question 6); a parked task's branch is kept and reused (dl-110 P2)
@@ -143,7 +151,7 @@ phases:
     role: qa                                   # dl-134 §1; fresh is mandatory for qa (dl-135 point 3), so no `mode`
     actions:
       - 'bug.sync_state(for_each: task.bug)'   # dl-061 A.1 — after a review reject, every linked bug in-review -> in-progress (cites the reject sha, B.1); a no-op on a first pass
-      - 'git.merge(from: main)'                # dl-035 (a) — on a resume after a reject or a park, the developer merges main into task/<id> and resolves any conflict before qa writes a test; a no-op when main has not moved
+      - 'git.merge(from: integration_branch)'  # dl-035 (a) — on a resume after a reject or a park, the developer merges the integration branch into task/<id> and resolves any conflict before qa writes a test; a no-op when it has not moved
       - agent.execute
     checks:
       post: ["tests.exist", "tests.failing(for: red-first ACs)"]   # red-first ACs: a new test exists and fails; characterization ACs (T1) are exempt — no fabricated red, no dead code to force one
@@ -158,12 +166,12 @@ phases:
       post: ["tests.passing", "tests.unchanged(since: red)"]   # dl-134 §2 — declared now, evaluated from v1.0 (P4.12); a test found wrong goes back to red
 
   - name: refactor
-    description: "Refactor with tests green; keep coverage from regressing; leave red's test files unchanged; end by merging main if it moved."
+    description: "Refactor with tests green; keep coverage from regressing; leave red's test files unchanged; end by merging the integration branch if it moved."
     role: developer
     mode: resume                               # dl-134 §4 (c) — may resume green's session: both are the developer's (from v0.4, dl-135)
     actions:
       - agent.execute
-      - 'git.merge(from: main)'                # dl-035 (b) — the LAST action: merge main if it moved since red's merge, so the checks below measure the merged tree (approver ruling 2026-10-09, option 2)
+      - 'git.merge(from: integration_branch)'  # dl-035 (b) — the LAST action: merge the integration branch if it moved since red's merge, so the checks below measure the merged tree (approver ruling 2026-10-09, option 2)
     checks:
       post: ["tests.passing", "tests.coverage(min: 80)", "docs.api.public-complete", "docs.api.build", "lint.clean", "tests.unchanged(since: red)", "typecheck.clean"]   # typecheck.clean is dl-044 (task-221; the gate, `npm run typecheck`, is task-173's); dl-014 G5 / dl-013 — ACTIVE hard-reject (as of task-062-typedoc-tsdoc-backfill, which closed the B-DECISION Option 2 ramp): docs.api.* enforce via TypeDoc `notDocumented` + `treatWarningsAsErrors` (`typedoc.json`, `npm run docs:api`, asserted by `test/docs/api-docs.test.ts`); an undocumented exported declaration fails `refactor`; tests.unchanged(since: red) is dl-134 §2, evaluated from v1.0 (P4.12)
       # dl-034 (as of task-066-fix-eslint-baseline-and-lint-gate, which cleared the bug-009 baseline) — ACTIVE hard-reject FROM THE START, no warn-only ramp (dl-034 Decision 2: docs.api.* needed a ramp because its backfill spanned every exported declaration in the tree; this backfill was one line): lint.clean enforces via ESLint (`eslint.config.js`, `npm run lint`, asserted by `test/lint/lint-clean.test.ts`); any lint error fails `refactor`. Placed here and not in `review` (dl-034 Decision 3) so the developer clears their own lint before a reviewer is engaged — this is the gate the `code-quality` directive's "Lint clean: no errors" always assumed and never had
@@ -173,7 +181,7 @@ phases:
       Quality gate runs the BDD acceptance tests, then the reviewer approves or rejects. The reviewer
       judges both the tests and the code, under the developer's and qa's directives as well as its own,
       and checks the git handoff: red's commit before green's, red's test files unchanged since. It
-      does not merge: the branch was brought current at refactor's last action (main moving after that is done's fallback).
+      does not merge: the branch was brought current at refactor's last action (the integration branch moving after that is done's fallback).
     role: reviewer
     distinct_from: [red, green, refactor]      # dl-134 §4 (c) — the review shares no session with the work it judges; fresh is mandatory for reviewer
     actions:
@@ -190,13 +198,13 @@ phases:
     fallback: { step: red, set_state: in-progress }   # reject -> back to red (qa confirms or corrects the tests, then green), task -> in-progress; red's first action syncs the bugs back (dl-061 A.1)
 
   - name: done
-    description: "On approval, approve and finalize the task and sync its bugs on the task branch, then merge to main and remove the worktree."
+    description: "On approval, approve and finalize the task and sync its bugs on the task branch, then merge into its integration branch and remove the worktree."
     role: developer
     actions:
       - memory.approve                         # task: in-review -> approved, committed on task/<id> (git-conventions §1)
       - element.set_state(done)                # task: approved -> done (`wf(task): finalize`), on task/<id>
       - 'bug.sync_state(for_each: task.bug)'        # keep every linked bug in sync: in-review -> resolved -> closed (once all ITS tasks are done), on task/<id>
-      - 'git.merge(to: main, ff: false)'       # dl-014 G3 — always a merge commit (a revertible unit per parallel task); it carries the approve, the finalize and the syncs into main
+      - 'git.merge(to: integration_branch, ff: false)'   # dl-014 G3 — always a merge commit (a revertible unit per parallel task); it carries the approve, the finalize and the syncs into the integration branch
       - git.remove_worktree                    # dl-014 G2 — remove the per-task worktree after merge, before branch delete
     checks:
       post: ["retrospective.present(the task's ### Retrospective subsection, and that of each linked bug the sync moves to closed; None is a valid entry)"]   # dl-115 Q2 (a), Action 3 — existence only; the file is the element's path, which no binding placeholder carries yet

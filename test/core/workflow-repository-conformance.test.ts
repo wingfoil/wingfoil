@@ -151,8 +151,9 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-submit", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
       ["release-submit", "phases[0].checks.pre[1]", "all bugs where tags=[{release.version}] are status"],
       // task-219: release-commit and staging-rehearsal precede tag; the rehearsal's check is bound.
-      ["release-publishing", "phases[2].checks.pre[0]", "on-branch-is-main"],
-      ["release-publishing", "phases[2].checks.pre[1]", "release-branch-merged-to-main"],
+      // task-288 (dl-159 A1.8, approver ruling D3): on-integration-branch is bound (scripts/integration-branch.cjs);
+      // which phase branch has merged into the integration branch is a reading no command asserts.
+      ["release-publishing", "phases[2].checks.pre[1]", "phase-branch-merged-to-integration-branch"],
       // task-229 (dl-130 Action 2): the prose post check also names the GitHub Release; task-238 (dl-130 step 2) the MCP Registry listing; task-244 (dl-136) the test reports attached to the Release.
       ["release-publishing", "phases[3].checks.post[0]", "staged version approved on npm, live on the npm registry, its GitHub Release created with the test reports attached and its MCP Registry listing published"],
       // task-222 (dl-089 §1): the report checks, unbound until scripts/release-health/ ships them (task-231, task-241).
