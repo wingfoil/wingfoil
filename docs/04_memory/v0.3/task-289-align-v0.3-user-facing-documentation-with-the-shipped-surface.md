@@ -371,7 +371,7 @@ The six synthetic cases passed on the first run, as designed (they define the ru
     `sort -u | wc -l` → `45`; journeys `8`, journey files `7`, edge stories `14` (unchanged); `backlog.json` → `106`
     items (kept, marked "as imported"). BDD index: the 2026-06-26 block labelled "generation baseline" and a
     "Re-count (2026-10-17)" table with its commands; 57 files open with `Feature:`, 8 with a `# Revised …` comment
-    first, 65/65 have `Feature:` as the first line that is not a comment. Part 3: `test/docs/vision-index.test.ts`
+    first, 65/65 have `Feature:` as the first line that is not a comment, a tag or blank. Part 3: `test/docs/vision-index.test.ts`
     exists (task-212) and passes in `npx jest test/docs`.
   - AC 7: `docs/agents.md` §6 rows for the five `bug-210` refusals, each message reproduced verbatim with the code
     build in a Kanban throwaway project (`refusing to submit … held by HEAD but deleted in the working tree. Restore
@@ -436,16 +436,76 @@ Against `code-review`, `documentation`, `claim-evidence`, `doc-versioning`:
   create`'s and `agent show`'s, which are not commit bodies); the supersede recovery command; COLLABORATION's
   build sentence; README's dogfooding sentence (the 0.3 commands run on the build under development until the
   pin moves, `grep -n wingfoil-released package.json` → `npm:wingfoil@0.2.2`).
-- Never named: the benchmark's hold-out repository, the private market-research repository (`git diff 89c43d36
-  HEAD | grep -i -c 'holdout\|hold-out\|wingfoil-market'` → `0`). Not edited: `CLAUDE.md`, `.wingfoil/README.md`,
+- No repository outside this one is named: the diff since `89c43d36` adds no benchmark or market-research
+  repository name (a case-insensitive `git diff 89c43d36 HEAD | grep -c` for their names → `0`). Not edited: `CLAUDE.md`, `.wingfoil/README.md`,
   `.wingfoil/WORKFLOW.md`, the `wingfoil-cli` directive, `package.json`, `server.json`, `SECURITY.md`,
   `test/validation/secret-scan.test.ts` (`git diff --name-only 89c43d36 HEAD` lists none of them).
 - Stopped before `submit` (ruling D2): the demo GIF waits for the approver's recording.
 
+### independent review (2026-10-17) and fixes (developer)
+
+Verdict APPROVE WITH FIXES. Each finding, the command that settles it and what it printed (both builds:
+`OLD = node node_modules/wingfoil-released/dist/cli.js` (0.2.2), `NEW = node dist/cli.js`, throwaway projects
+from `init --template Scrum --no-interactive`):
+
+1. **CHANGELOG, the task-132 bullet** claimed a reserved-domain identity is refused; it is not (the reviewer's
+   `memory add` / `approve` with `bob@x.invalid` succeed; here `GIT_AUTHOR_EMAIL=bob@x.invalid … memory add`
+   exit `0` on NEW). Re-measured what does change: `GIT_AUTHOR_EMAIL="" memory add` OLD exit `0` (committed) /
+   NEW exit `1` `error: git identity not configured (user.name/user.email)`; `GIT_AUTHOR_NAME="Ada <x>"` OLD
+   committed / NEW `error: git identity not usable: the author name contains '<', '>' or a control character`.
+   A write with no identity at all (no `user.*`, no `GIT_*`) and one with only `GIT_AUTHOR_*` set are refused by
+   both builds (`git identity not configured`), so the suggested "no committer identity is refused" is not new
+   in 0.3 and is not claimed. Reworded: the identity check refuses a set but blank `GIT_AUTHOR_*` /
+   `GIT_COMMITTER_*` variable and `<`, `>` or a control character; the library's attribution audit
+   (`isValidAttribution`, `src/memory/audit.ts:88`) no longer accepts a reserved-domain identity.
+2. **task-247 was a missing breaking change.** A hand-written, uncommitted `task-001-hand`: `memory submit` OLD
+   exit `0` / NEW exit `1` ``error: document not found: task-001-hand — … is not committed at HEAD …; register a
+   new element with `memory add`, then retry.``; after `git add` + `git commit`, NEW submit exit `0`. The bullet
+   moved up with the breaking ones, marked **Breaking**, with an Upgrading item in the CHANGELOG and in user-guide
+   §12. Also added to both Upgrading lists:
+   - task-153: a `memory.yaml` type `workflow`, committed: `memory search x` OLD exit `0` / NEW exit `1`
+     `error: E_VALIDATION types.workflow (.wingfoil/memory.yaml): type name 'workflow' is reserved: wf(workflow)
+     commits record configuration, not Memory`;
+   - task-169: a comment-free `roles.yaml` with `qa: [testing]`, `directive assign --directive code-quality
+     --role qa`: OLD exit `0` (rewrote the list as a block) / NEW exit `1` `error: roles.yaml cannot be updated in
+     place; edit assignments.qa by hand, or pass --force to rewrite the whole file`. With comments in the file both
+     refuse (OLD `… without discarding its comments; edit assignments.qa by hand`), so the item names the
+     comment-free case.
+3. **README dogfooding** said the Memory verbs run on the pinned build until the pin moves. Rewritten after
+   `wingfoil-cli` §1 (`sed -n '/## 1. Two builds/,/## 2/p' .wingfoil/directives/custom/wingfoil-cli.md`): every
+   verb that writes a `wf()` commit on the code build, reads and MCP on the pinned build, as COLLABORATION.md.
+4. **cli-reference `memory history` transcript** had no `wingfoil` key. A run of the 0.3.0-stamped scratch build
+   in the throwaway project prints `"wingfoil": "0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)"` as the last
+   key of every entry; added to both entries. `grep -n '"subject":' README.md docs/user-guide.md docs/agents.md`
+   → none: no other history transcript.
+5. **bug-210's retrospective and `--reason`** said six rows: corrected to five new rows plus the updated
+   `illegal transition` row (`git diff docs/04_memory/bugs/bug-210-*.md` and *Pending amendments* below).
+6. **Guard gaps** (`test/docs/support/pages-render.ts` not edited, T4), each confirmed by calling
+   `htmlBlockStarts` through `typescript.transpileModule` in `node -e`, recorded as accepted gaps beside the
+   list-item one already in the design; none occurs in the eleven pages (`npx jest test/docs` green):
+   - `"Para\n</div>\nmore"` → `[]`: a closing tag continuing a paragraph is not found (`<` followed by `/`, not a
+     letter) — possible false negative;
+   - ``"- item\n\n  <type>:<id>` text"`` → `[]`: a list paragraph that starts after a blank line with
+     `<type>:<id>` is taken for an HTML block opened on purpose — false negative of the same class;
+   - `"Para\n<code>x</code> more"` → one finding: a line opening with an inline span element is flagged although
+     kramdown keeps span elements inside the paragraph — accepted false positive.
+   The coordinator files them as one follow-up.
+7. **Nits.** `workflow list`'s shape names `diagnostics: [...]` in the CHANGELOG (Changed and Upgrading) and in
+   §12 (`node dist/cli.js workflow list --all` in a fresh project prints `"diagnostics": []`); the BDD re-count
+   row reads "first line that is not a comment, a tag or blank", as its command skips `#`, `@` and blank lines;
+   the self-review's repository claim reworded so it names no repository.
+
+Gates re-run after the fixes (this worktree, with the four bug amendments in place): `node
+scripts/changelog-section.cjs 0.3.0` → exit `0`; the CHANGELOG id check → `76 bullets, 0 without a closing id
+list`, `tasks cited: 150, bugs cited: 154`, exit `0`; `node scripts/build-site.cjs llms && git diff --exit-code
+llms.txt` → exit `0`; `npm run lint` → exit `0`; `npx jest test/docs --maxWorkers=2` (behind `waitslot.sh`) →
+`Test Suites: 26 passed`, `Tests: 284 passed`. No `npm run build` and no jest after this commit: the approver
+records the demo GIF in this worktree.
+
 ### Pending amendments (approver)
 
 The four bugs' `### Retrospective` subsections (dl-115 Q2 (a)) are written in this worktree and left uncommitted:
-- `bug-210`: `--reason "Add the bug's retrospective: closed by task-289, six agents.md refusal rows reproduced with the code build."`
+- `bug-210`: `--reason "Add the bug's retrospective: closed by task-289, five agents.md refusal rows added and the illegal-transition row updated."`
 - `bug-227`: `--reason "Add the bug's retrospective: closed by task-289, the 0.3.0 CHANGELOG section checked by command."`
 - `bug-285`: `--reason "Add the bug's retrospective: closed by task-289, agents.md documents the Prompt arguments and warnings."`
 - `bug-298`: `--reason "Add the bug's retrospective: closed by task-289, counts re-measured and the BDD index re-counted."`

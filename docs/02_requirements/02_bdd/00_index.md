@@ -148,4 +148,4 @@ the baseline — one nominal and one error/edge scenario per file, no vague perf
 |------------------------------------------------------|------------------------------------------------|---------------------------------------------------------------------------------------------|
 | `.feature` files per pillar                          | P1=13, P2=5, P3=8, P4=20, P5=17, X1=2 → **65** | `find features/<pillar> -name '*.feature' \| wc -l`, per pillar folder                      |
 | Total scenarios                                      | **255**                                        | `grep -rhE '^\s*Scenario( Outline)?:' features \| wc -l`                                     |
-| Files whose first line other than a comment is `Feature:` | **65/65** (8 open with a `# Revised …` comment) | `grep -m1 -v '^\s*\(#\|@\|$\)' <file>`, per file                                          |
+| Files whose first line that is not a comment, a tag or blank is `Feature:` | **65/65** (8 open with a `# Revised …` comment) | `grep -m1 -v '^\s*\(#\|@\|$\)' <file>`, per file                                          |

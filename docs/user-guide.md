@@ -651,13 +651,26 @@ initialising a project with 0.2.2 and running both versions on it.
   `error: E_WORKFLOW_INCLUDE_UNRESOLVED phases[2].include (workflows/custom/sw-life-cycle.yaml): include 'workflows/custom/scrum-delivery.yaml' names no loaded workflow (a phase include is a workflow name, not a file path)`.
   Write `include: scrum-delivery` (or `kanban-delivery`) and commit.
 - **`wingfoil workflow list` has a new output.** It prints `{baseline, workflows: [{name, startable,
-  includable, description, executableNow}]}` for the workflows you can run now (`--all` for every one)
+  includable, description, executableNow}], diagnostics: [...]}` for the workflows you can run now (`--all` for every one)
   instead of the raw manifest; `wingfoil workflow show <name>` prints one workflow's phases.
 - **To run workflows and agents, add what 0.3's `init` scaffolds.** `workflow start` needs the `plan`
   type (`error: memory type 'plan' is not declared in memory.yaml; workflow start records an instance as a
   plan element`); `agent execute` needs `paths.runs` and an adapter. Copy the `plan` entry of
   `memory.yaml`, `memory/templates/plan.md`, `paths.runs: [docs/runs/]` and `.wingfoil/agents/` from a
   project `wingfoil init` creates in an empty repository, then commit.
+- **Create elements with `memory add`.** A Memory verb acts only on a document committed at `HEAD`. A
+  document written by hand and not committed, which 0.2.2 submitted, is now refused with exit `1`:
+  ``error: document not found: task-001-hand — docs/memory/task/task-001-hand.md is not committed at HEAD, though it carries that id in the working tree. …; register a new element with `memory add`, then retry.``
+  Commit such a document first, or create it with `wingfoil memory add`.
+- **A Memory type may not be named `workflow`, `dna` or `directive`.** Every Memory command then fails
+  with exit `1`:
+  `error: E_VALIDATION types.workflow (.wingfoil/memory.yaml): type name 'workflow' is reserved: wf(workflow) commits record configuration, not Memory`.
+  Rename the type (and move its documents) and commit.
+- **`directive assign` keeps `roles.yaml` as written, or refuses.** Assigning to a role whose list is
+  written inline (`qa: [testing]`) exits `1` with
+  `error: roles.yaml cannot be updated in place; edit assignments.qa by hand, or pass --force to rewrite the whole file`;
+  0.2.2 rewrote a `roles.yaml` without comments silently. Write the list as a block (one `- name` per
+  line), or pass `--force`.
 - **A surplus operand is refused** with exit `2` before anything is read or written:
   `wingfoil memory search a b` exited `0` in 0.2.2 and now prints
   `error: wingfoil memory search takes one positional <keyword> (got 2 positionals)`.

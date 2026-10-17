@@ -918,7 +918,8 @@ $ wingfoil memory history task-001-my-first-task
       "to": "draft",
       "approver": null,
       "reason": null,
-      "subject": "wf(task): add task-001-my-first-task"
+      "subject": "wf(task): add task-001-my-first-task",
+      "wingfoil": "0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)"
     },
     …
     {
@@ -930,7 +931,8 @@ $ wingfoil memory history task-001-my-first-task
       "to": "approved",
       "approver": "Ada Lovelace <ada@example.com> (approver)",
       "reason": "Scope and acceptance criteria are clear.",
-      "subject": "wf(task): approve task-001-my-first-task [pending → approved]"
+      "subject": "wf(task): approve task-001-my-first-task [pending → approved]",
+      "wingfoil": "0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)"
     }
   ]
 }

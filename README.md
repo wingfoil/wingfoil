@@ -278,11 +278,11 @@ WingFoil is built one pillar per release until all five are integrated in 1.0.
 | **1.0** | MVP complete | Planned |
 
 **Dogfooding:** WingFoil's own development is managed with WingFoil — its configuration lives in
-`.wingfoil/` and its Memory in `docs/04_memory/`, at the repository root. From there the Memory verbs
-(`add`, `submit`, `approve`, `reject`, `deprecate`, `history`, `search`) run on WingFoil's own Memory,
-through a published, pinned build of WingFoil (`npm run -s wingfoil -- <command>`), whose MCP server
-is registered in `.mcp.json`; the 0.3 commands (`memory amend` and `park`, the workflow and agent
-commands) run with the build under development until that pin moves to 0.3. See
+`.wingfoil/` and its Memory in `docs/04_memory/`, at the repository root. Every verb that writes a
+`wf()` commit there (`add`, `submit`, `approve`, `reject`, `deprecate`, `amend`, `park`) runs on the
+build compiled from the checkout (`npm run build`, then `node dist/cli.js <command>`); the read commands
+and the MCP server registered in `.mcp.json` run on a published, pinned build of WingFoil
+(`npm run -s wingfoil -- <command>`), so they answer as the version users have. See
 [COLLABORATION.md](COLLABORATION.md).
 
 ---

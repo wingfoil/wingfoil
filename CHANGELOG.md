@@ -134,7 +134,7 @@ from 0.2.x* below.
   `E_WORKFLOW_INCLUDE_UNRESOLVED` (exit `1`) until the path is replaced by `scrum-delivery` (the Kanban
   scaffold likewise). Workflow diagnostics are one ordered array. (task-136, bug-144, bug-145)
 - **Breaking:** `wingfoil workflow list` lists the workflows you can run now (`--all` for every one) as
-  `{baseline, workflows: [...]}` read at `HEAD`, no longer the raw manifest. (task-204, bug-281)
+  `{baseline, workflows: [...], diagnostics: [...]}` read at `HEAD`, no longer the raw manifest. (task-204, bug-281)
 - **Breaking:** every command refuses an operand beyond the one it declares, with exit `2`, before
   reading or writing anything (`dna show project extra` exited `0` in 0.2.2; `init extra` and `mcp
   extra` too). (task-129, bug-131, bug-171, task-165, bug-179)
@@ -144,6 +144,11 @@ from 0.2.x* below.
   or unreadable entry under `.wingfoil/directives/` is skipped with a warning naming it, no longer a raw
   `ENOENT`. `tools/list` answers `[]`. (task-174, bug-035, bug-151, bug-184, bug-237, task-143,
   bug-125, bug-154)
+- **Breaking:** every Memory transition is decided from the element's status and document committed at
+  `HEAD`, not the working tree. A document created by hand and not yet committed can no longer be
+  submitted: 0.2.2 exited `0`, 0.3 exits `1` with ``error: document not found: <id> — <path> is not
+  committed at HEAD, … register a new element with `memory add`, then retry.`` A document deleted in the
+  working tree is refused with a restore hint. (task-247, bug-187)
 - Refusal messages have one shape: a missing operand reads `error: missing required argument: <id>` with
   the usage on a `hint:` line, an unknown command's suggestion is a `hint:` line, a missing configuration
   file reads `.wingfoil/<file> is missing: …`; error `details` (e.g. the offending file) are printed on
@@ -152,15 +157,15 @@ from 0.2.x* below.
 - An illegal transition names the attempted move, with `(none)` as the target when the verb has no edge
   from that state, and a reason line (`illegal transition draft -> (none) for type 'task'`). (task-181,
   bug-165)
-- Every Memory transition is decided from the element's status and document committed at `HEAD`, not the
-  working tree; a document deleted in the working tree is refused with a restore hint, and one that is
-  not committed is refused with a pointer to `memory add`. (task-247, bug-187)
 - `memory submit` still commits your uncommitted edits to the element, and now says so: the commit body
   names the content it carries (`Carries content: …`). The templates' comments describe `add` and
   `submit` as they behave. (task-209, bug-146, bug-219)
 - The approver identity is read once, with git's own precedence (`GIT_AUTHOR_*` first), and used for the
-  authority check, the `Approver:` line and the commit author; an identity on a reserved domain, with
-  unsafe characters or without a committer is refused. (task-132, bug-142, bug-149, bug-153)
+  authority check, the `Approver:` line and the commit author. Before anything is written, the identity
+  check refuses a set but blank `GIT_AUTHOR_*` / `GIT_COMMITTER_*` variable and a name or email containing
+  `<`, `>` or a control character, which 0.2.2 committed. The library's attribution audit
+  (`isValidAttribution`) no longer accepts an identity on a reserved domain (`.invalid`, `.example`,
+  `.test`, `.localhost`). (task-132, bug-142, bug-149, bug-153)
 - A `--reason` containing a control character other than tab or newline is refused with exit `2` naming
   it; a line starting `WingFoil-Version:` is reserved like `Approver:` and `Reason:`. (task-166)
 - `dna set`, `dna add`, `dna update`, `dna remove` and `directive assign` edit `dna.yaml` / `roles.yaml`
@@ -225,8 +230,17 @@ Each item was checked on a project initialised by 0.2.2, with both versions. The
 - Replace the path in `sw-life-cycle.yaml`'s `include: workflows/custom/scrum-delivery.yaml` (or
   `kanban-delivery.yaml`) with the workflow name, `scrum-delivery`, and commit: until then every workflow
   command exits `1` with `E_WORKFLOW_INCLUDE_UNRESOLVED`. (task-136)
-- A script reading `wingfoil workflow list` gets `{baseline, workflows: [...]}`; the phases are in
-  `wingfoil workflow show <name>`. (task-204)
+- A script reading `wingfoil workflow list` gets `{baseline, workflows: [...], diagnostics: [...]}`; the
+  phases are in `wingfoil workflow show <name>`. (task-204)
+- Create Memory elements with `wingfoil memory add`. A document written by hand must be committed before
+  `memory submit` acts on it: an uncommitted one is refused with `document not found: … is not committed
+  at HEAD`. (task-247)
+- A `memory.yaml` type named `workflow`, `dna` or `directive` now fails every Memory command
+  (`E_VALIDATION types.workflow (.wingfoil/memory.yaml): type name 'workflow' is reserved: …`, exit `1`):
+  rename the type. (task-153)
+- `wingfoil directive assign` to a role whose list is written inline (`qa: [testing]`) exits `1` without
+  `--force` (`roles.yaml cannot be updated in place; … or pass --force to rewrite the whole file`); 0.2.2
+  rewrote a comment-free `roles.yaml` silently. Write the list as a block, or pass `--force`. (task-169)
 - To use `workflow start` and `agent execute`, add what 0.3's `init` scaffolds: the `plan` type and
   `memory/templates/plan.md`, `paths.runs`, and `.wingfoil/agents/`. Without the `plan` type,
   `workflow start` exits `1` naming it. (task-217, task-138, task-196)
