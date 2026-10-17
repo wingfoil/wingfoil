@@ -35,8 +35,10 @@ This task carries that work and closes the four `triaged` v0.3 bugs the approver
 user and the agent documents, is closed by `task-252` instead; this task still writes `bug-239`'s user-facing part (the
 trailer in the commit examples).
 
-Every criterion is `characterization`: documentation, examples and two config comments, no product code (approver
-ruling D2: developer → independent review → approver, no separate `qa` red phase).
+Every criterion but one is `characterization`: documentation, examples and two config comments, no product code
+(approver ruling D2: developer → independent review → approver, no separate `qa` red phase). The exception is the
+Pages render guard below (approver ruling of 2026-10-17, option (a)): a red-first test the developer writes and
+commits failing before the three lines it catches are fixed.
 
 ## Acceptance Criteria
 
@@ -91,6 +93,17 @@ ruling D2: developer → independent review → approver, no separate `qa` red p
 - (characterization, `demo.rendered`) `docs/examples/01-first-project/demo.tape` drives example 01 as it is in v0.3;
   the approver re-records `docs/assets/wingfoil-demo-first-project.gif` from a copy-paste runbook (`docs/assets/README.md`
   § "Regenerating the demo GIF") and the GIF is committed on this task's branch.
+- (characterization) The documentation site renders every page as Markdown (found by the v0.3 delivery session on
+  2026-10-17, reproduced on <https://wingfoil.github.io/wingfoil/>): Jekyll's kramdown reads a paragraph line that
+  begins with `<` and a letter as the start of an HTML block, so an inline code span broken across a line before
+  `<name>` or `<type>:<id>` turns the rest of the page into raw Markdown. `docs/user-guide.md` line 381 (§7 to the
+  end) and `docs/cli-reference.md` lines 1577 and 1630 (from `agent execute` to the end) keep each code span on one
+  line (`curl -sL https://wingfoil.github.io/wingfoil/docs/user-guide.html | grep -c '```'` → `16`, the
+  cli-reference page → `8`, the other nine pages → `0`, measured on `main` at `07292cfd`).
+- (red-first) A test under `test/docs/` reads `docs/site.yaml`'s `pages` and fails when a line inside a paragraph of
+  one of them begins with `<` followed by a letter, outside fenced code blocks and outside the HTML blocks a page opens
+  on purpose (the README's centred logo and badge lines, which start a block after a blank line). It fails on `main` at
+  `07292cfd` naming the three lines above, and passes once they are fixed.
 - (characterization) `docs/examples/0*/run.sh` 01–06 exit `0` with the code build; `npm test`, `npm run
   test:coverage` (≥ 99.34 / 97.39 / 98.03 / 99.71, the W3 B9 gate), `npm run lint`, `npm run docs:api`, `npm run
   typecheck`, `npx jest test/docs` (cli-reference, presentation, llms-txt, name-resolvability), the e2e smoke,
