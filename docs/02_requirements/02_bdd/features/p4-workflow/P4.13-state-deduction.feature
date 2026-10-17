@@ -1,7 +1,8 @@
+# Revised 2026-10-17 (task-252, bug-302; REQ-SYS-03, REQ-STATE-02): the narrative names the commit history state is deduced from.
 # Revised 2026-10-15 (task-242, bug-327; spec-017 §7.9, §10): sc. 4 and sc. 5 cover `workflow finalize`, the
 # phase record it writes for a step no Memory or file evidence can complete, and its off-frontier refusal.
 Feature: P4.13 (US-1-02) - Workflow State Deduction (from Memory)
-  As the system, I want workflow state deduced from Memory file existence and frontmatter,
+  As the system, I want workflow state deduced from Memory files and the commit history reachable from the commit,
   validated against the type's allowed states, so no separate state index file is needed.
 
   Background:

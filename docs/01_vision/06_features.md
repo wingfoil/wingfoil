@@ -1,7 +1,7 @@
 # Features — WingFoil
 
-**Version:** 1.15
-**Date:** 2026-10-15  
+**Version:** 1.16
+**Date:** 2026-10-17  
 **Status:** Approved
 
 ---
@@ -89,7 +89,7 @@ the Memory documents, at the paths `.wingfoil/memory.yaml` declares).
 | P4.10 | Workflow Steps (atomic actions)             | 0a, 0b, 1, 2, 4    | All           | Steps execute: memory.add, memory.submit, agent.execute, git operations (branch, worktree, merge)                                                                                                                                   | Feature        |
 | P4.11 | Deliverables (Memory + State)               | 0a, 0b, 2, 4       | All           | Memory files with frontmatter state tracking; states follow the element's **per-type** state machine in `.wingfoil/memory.yaml` (default: draft → pending → approved, reject → draft, deprecated from any state)                                         | Feature        |
 | P4.12 | Workflow Checks (pre/post execution)        | 0a, 0b, 1, 2, 4, 6 | All           | Validation rules for steps (file.exists, frontmatter.required, git.commits, tests.coverage). *Also called:* gates; what evaluates one is its *verifier* (command, script, CI or agent)                                                                                                                                         | Feature        |
-| P4.13 | Workflow State Deduction (from Memory)      | 0a, 0b, 1, 2, 3, 4 | All           | State deduced from Memory file existence and frontmatter, validated against the element type's allowed states (P1.13); no separate state index file needed                                                                          | Infrastructure |
+| P4.13 | Workflow State Deduction (from Memory)      | 0a, 0b, 1, 2, 3, 4 | All           | State deduced from Memory files and the commit history reachable from the commit (REQ-SYS-03, REQ-STATE-02), validated against the element type's allowed states (P1.13); no separate state index file needed | Infrastructure |
 | P4.14 | Approval Routing (role-based from DNA)      | 0a, 0b, 2, 4       | Morgan, Casey | Define approvers by role (team members defined in `.wingfoil/dna.yaml`) or person. *Also called:* human + agent verification, when an automated or agent check precedes the human decision                                                                                                                                                   | Feature        |
 | P4.15 | Fallback on Rejection                       | 2, 4               | Morgan, Casey | On reject, jump to a `fallback.step` within the same workflow; optionally assign a new state (`fallback.set_state`) to the rejected document. *Also called:* remediation loop                                                                                        | Feature        |
 | P4.16 | Workflow include() Composition              | 0a, 0b, 4, 6       | Morgan        | Main `.wingfoil/workflows.yaml` references sub-workflows/steps via `include()`; an include runs once or **once per element** via `iterate_over: <type>` with optional `where` filters (status/tags)                                 | Feature        |
@@ -233,7 +233,7 @@ Notifications and alerts across all features.
 | P4.8       | `wingfoil workflow create`                  | Low        | Workflow config                          | Low      | High     | Create custom workflows               | Flag-based (interactive post-v0.3)                |
 | P4.9       | `wingfoil workflow remove`                  | Low        | Workflow config                          | Low      | Medium   | Remove custom workflows               | Verify not included elsewhere                     |
 | P4.11      | Deliverables (Memory + State)               | Medium     | Memory, git versioning                   | Medium   | Critical | Track work items                      | Frontmatter-based state                           |
-| P4.13      | Workflow State Deduction (from Memory)      | Low        | Git, Memory frontmatter                  | Low      | Critical | Deduce state from Memory files        | No separate `.wingfoil/state/` index needed       |
+| P4.13      | Workflow State Deduction (from Memory)      | Low        | Git, Memory frontmatter                  | Low      | Critical | Deduce state from Memory + git history | No separate `.wingfoil/state/` index needed       |
 | P4.14      | Approval Routing (role-based from DNA)      | Medium     | DNA (roles, team members), Notifications | Medium   | High     | Route approvals correctly             | Team members defined in `.wingfoil/dna.yaml`      |
 | P4.15      | Fallback on Rejection                       | High       | State machine, optional steps            | High     | High     | Handle rejections gracefully          | Return to previous step                           |
 | P4.16      | Workflow include() Composition              | Medium     | Workflow config                          | Medium   | High     | Compose sub-workflows; iterate_over   | include() once or once-per-element                |
@@ -360,7 +360,7 @@ Notifications and alerts across all features.
 
 ### Workflow State Deduction (P4.13)
 
-State is **deduced from Memory files**, not stored in a separate index. The valid states for each file come from its
+State is **deduced from Memory files and the commit history reachable from the commit** (REQ-SYS-03, REQ-STATE-02), not stored in a separate index. The valid states for each file come from its
 element type's state machine in `.wingfoil/memory.yaml` (P1.13):
 
 - A `task` file with frontmatter `status: in-progress` → that task is being implemented
