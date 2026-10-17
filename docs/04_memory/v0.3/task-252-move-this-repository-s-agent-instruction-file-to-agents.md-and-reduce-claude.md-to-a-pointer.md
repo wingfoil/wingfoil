@@ -183,9 +183,152 @@ Part (b), the generated export, is v0.4 (`dl-137` Q3) and is not in scope.
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: rejection reasons and what changed on the next pass. -->
+### design (developer, 2026-10-17)
+
+Process (approver ruling D2, `user-docs-rel-v0.3-plan`): documentation-only, every criterion characterization, no
+separate `qa` red phase. Session 2 (developer, and architect for `align-agent-docs`) implements, runs the gates,
+self-reviews and submits. Base of the branch: `git merge-base HEAD main` → `89c43d36`. Facts below were measured in
+this worktree at `847835d3` unless they cite the phase survey, whose figures session 2 re-measures before writing a
+sentence on them (`claim-evidence`).
+
+**Inputs read.** The Description, every AC and every handover above; `dl-137` (`ready`; R3/R4, Actions 2 and 4);
+`dl-025` (`ready`); the Steps to Reproduce and Expected Behavior of `bug-220`, `bug-236`, `bug-239`, `bug-284`,
+`bug-302`; `.wingfoil/workflows/custom/agent-docs.yaml` (`version: 1.0`); `test/core/workflow-repository-conformance.test.ts`
+lines 139–142; `git-conventions` §7–§8 (`version: "1.8"`); `wingfoil-cli` §1 (`version: "1.0"`); `task-289`'s ACs
+(its *Not in scope* names `CLAUDE.md`, `.wingfoil/README.md`, `.wingfoil/WORKFLOW.md` and `wingfoil-cli`).
+`depends_on: []`. No tech-spec governs the file yet: the marker format belongs to `dl-137` part (b)'s tech-spec (v0.4).
+No test reads the agent file: `grep -rn "CLAUDE\|AGENTS" test/docs/*.ts test/lint/*.ts scripts/*.cjs` → one comment,
+`test/docs/workflow-md.test.ts:6`.
+
+#### Acceptance criteria (all characterization, D2) and the evidence each needs
+
+| AC | What is done | Evidence recorded in session 2 |
+|----|--------------|--------------------------------|
+| 1 — `AGENTS.md` | `git mv CLAUDE.md AGENTS.md` (history kept: `git log --follow AGENTS.md`), then a new `CLAUDE.md`; the content brought up to date by `align-agent-docs` (S9); §3–§7 between `<!-- wingfoil:generated:begin -->` and `<!-- wingfoil:generated:end -->`, recorded as **provisional** until `dl-137` part (b)'s tech-spec fixes the marker format (R3/R4) | `grep -c 'wingfoil:generated:begin' AGENTS.md` → `1`, same for `end`, begin's line before end's; the five `align-agent-docs` checks, each run as a command with its output |
+| 2 — `CLAUDE.md` pointer | `CLAUDE.md` = the import line plus one sentence (text below) | `cat CLAUDE.md`; the source and the runtime check below, with their output |
+| 3 — `agent-docs.yaml` 1.1, `dl-025` | `produces:` lists `AGENTS.md` and keeps `CLAUDE.md` (the pointer); the four checks name `AGENTS.md`; description and header comment; conformance-test rows 139–142; `dl-025`'s revision as a pending amendment | `git diff 89c43d36 -- .wingfoil/workflows/custom/agent-docs.yaml test/core/workflow-repository-conformance.test.ts`; `npx jest test/core/workflow-repository-conformance.test.ts` green; `node dist/cli.js workflow list` exit 0 |
+| 4 — no `CLAUDE.md` as the conventions' home | the 17 lines classified (a) below cite `AGENTS.md`; `.wingfoil/README.md` names `AGENTS.md` as the entry point | `git grep -n "CLAUDE.md" -- src .wingfoil` → only `agent-docs.yaml`'s pointer lines and `user-docs.yaml:4` (`task-289`'s), each named |
+| 5 — gates | none beyond the docs | `npm test`, `npm run lint`, `npm run docs:api`, `npm run typecheck`, `npm run test:coverage` (≥ the W3 B9 baseline 99.34 / 97.39 / 98.03 / 99.71), `npx jest test/docs`, the e2e smoke, `npm run check:governance` — heavy ones under `waitslot.sh`, `--maxWorkers=2`, one at a time |
+
+#### `AGENTS.md` outline (section numbers kept, so the `§5.1`-style citations stay valid)
+
+| § | Content | Owner |
+|---|---------|-------|
+| title + intro | "AGENTS.md — agent entry point for the WingFoil project"; read by every coding agent, imported by `CLAUDE.md`; the marked region is the configuration projection a future `wingfoil` export regenerates (`dl-137` R3) | project |
+| 1 | What the project is; status (`rl-v1` active; `minor-v0.1`, `minor-v0.2`, `patch-v0.2.2` `released`; `minor-v0.3` `in-development`); ten modules incl. `agent` (`bug-239`); the shipped commands by group with their count (33 per the survey, re-measured from `node dist/cli.js --help` and each group's help, matched to `docs/cli-reference.md`, `grep -c '^### \`wingfoil' docs/cli-reference.md` → `33`); what is still missing: step execution and the `checks` runner (`bug-220`, `bug-302`) | project |
+| 2 | Documentation map + the rows of the 2026-10-17 handover (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `docs/site.yaml` + `scripts/build-site.cjs` + `.github/workflows/pages.yml`, `llms.txt`, `docs/comparison.md`, `docs/case-study.md`, `docs/examples/06-workflow-approval`, `scripts/` incl. `integration-branch.cjs` and `npm-dist-tag.cjs`, `.githooks/`, `docs/06_runs/`, `docs/08_health/`, `docs/04_memory/change-proposals/`, `.wingfoil/agents/`); `test/docs/` as the doc-parity gates; the `docs/agents.md` row: not for agents developing WingFoil (that is `AGENTS.md`) | project |
+| `<!-- wingfoil:generated:begin -->` | | |
+| 3 | Self-configuration: the config file table (ten types, six startable mains, `wingfoil-cli` among the custom directives, `.wingfoil/agents/`, `bindings.yaml` with binding kind `run`); which build runs what, as a projection of `wingfoil-cli` §1 (Memory operations on the code build; reads and MCP on the pinned build, read from `package.json`, no version number in the prose; the workflow reads on the code build while the pin refuses object `produces`); `dl-155` (ratified (A)) for the stand-in reconciliation in place of the closed `bug-040` | generated |
+| 4 | DNA: ten modules; the path categories re-read from `dna.yaml` `paths:` (seven per the survey, incl. `runs`, `health`; `bug-284`) | generated |
+| 5 | Memory model: the ten-type table from `memory.yaml` (`change-proposal`, the `returns` edges, `amendable`, the `service` kinds incl. `repository` + `feedback_inbox`) | generated |
+| 5.1 | Commit format: the verbs the tool writes (incl. `amend`, `park`, `start`, `finalize`, `sync`; `dl-079`'s state re-read); the trailer paragraph (`WingFoil-Version:`) and a submit's `Carries content:` line (`bug-284`); the supersede pair as the exception to "exactly one git commit", `superseded` reached only through the trigger (`bug-220`); the two-commit task reject with linked bugs (`task-205` handover); the `Reason:` rules incl. the reserved `WingFoil-Version:` key and the corrected cleanup sentence (`bug-236` step 5); the attribution rule of `git-conventions` §7 and the `--amend --no-edit --trailer` form of §8 (2026-10-15 handover, `bug-236`) | generated |
+| 6 | Workflows: six startable mains incl. `vision-change`; the `release-cycle` chain with the `wave` layer, `check-implementation-complete`, `red` as `qa`'s, tasks cut from and merged into the integration branch (`dl-159`); the workflow verbs that ship (`list`, `show`, `start`, `next`, `status`, `finalize`, `end`, …; steps not executed) and the plan-first rule, reworded (`bug-302`) | generated |
+| 7 | Directives by role from `roles.yaml` (1.8 per the survey; re-read), incl. global `wingfoil-cli` | generated |
+| `<!-- wingfoil:generated:end -->` | | |
+| 8 | Conventions; "sync with the integration branch"; the doc-versioning baseline is the integration branch (`doc-versioning`) | project |
+| 9 | Field provenance | project |
+| 10 | Golden rules; rules 8–9 reworded for any agent that keeps a persistent memory index (ruling Q2), Claude Code's auto-memory named as one example | project |
+
+One contiguous region, as R3 describes ("a region"). §3 is inside because it is a projection of `dna.yaml`,
+`memory.yaml`, `workflows.yaml` and the `wingfoil-cli` directive; §8–§10 are this project's own rules. No sentence
+inside the region cites a source outside the configuration and the specs, so that part (b)'s generator can
+reproduce it.
+
+**`CLAUDE.md`, the whole file:**
+
+```
+@AGENTS.md
+
+The instructions for agents working in this repository are in AGENTS.md, imported above; edit that file, not this one (dl-137).
+```
+
+#### Verifying that Claude Code loads the import (AC 2, `dl-137` Action 4)
+
+- **Source.** <https://code.claude.com/docs/en/memory>, read 2026-10-17: § "Import additional files" (`@path`
+  imports are expanded at launch, a relative path resolves against the importing file, depth ≤ 4 hops; the approval
+  dialog appears only for imports that resolve outside the working directory, which `@AGENTS.md` does not);
+  § "AGENTS.md" (with both files present Claude Code reads the `CLAUDE.md` files only, so the import is what brings
+  `AGENTS.md` in, and an imported `AGENTS.md` is never read twice; reading `AGENTS.md` directly needs v2.1.277 or
+  later). Installed: `claude --version` → `2.1.301 (Claude Code)`.
+- **Runtime check (session 2), with no effect on the repository.** In a scratch git repository outside it, a
+  `CLAUDE.md` holding `@AGENTS.md` and an `AGENTS.md` holding a random sentinel line:
+  `claude -p --no-session-persistence --tools "" "Print the sentinel line from your project instructions, or NONE"`,
+  output recorded (the sentinel → loaded). The same with `CLAUDE.md` removed shows whether 2.1.301 also reads
+  `AGENTS.md` alone: input for a later look at `dl-137` Q1 (a), not a change to the ratified Q1 (b). No interactive
+  session is started.
+
+#### `CLAUDE.md` in `src` and `.wingfoil` at the base (`git grep -n "CLAUDE.md" 89c43d36 -- src .wingfoil` → 26 lines)
+
+- **(a) cites it as the conventions' home → `AGENTS.md`, same section** (17 lines): `src/core/approval-authority.ts:22`
+  (§4/§8), `src/dna/roles.ts:17` (§4/§8), `src/core/index.ts:1146, 1169, 1453, 1597` (§5.1),
+  `src/memory/audit.ts:126, 128, 155, 177` (§5.1), `src/memory/history.ts:11, 123` (§5.1), `src/storage/commit.ts:12`
+  (§5.1), `src/storage/document.ts:5`, `src/storage/frontmatter.ts:3` (§5), `src/storage/snapshot.ts:11` (§5),
+  `.wingfoil/memory/templates/decision-log.md:29` (§5.1).
+- **(b) the phase definition → `AGENTS.md`, `CLAUDE.md` kept only as the pointer** (8 lines):
+  `.wingfoil/workflows/custom/agent-docs.yaml:8, 16, 32, 37–40`; `.wingfoil/WORKFLOW.md:377` (diagram label).
+- **(c) not this task's file:** `.wingfoil/workflows/custom/user-docs.yaml:4` (header comment): `task-289` bumps
+  that file (1.8, ruling D3); handed to the coordinator.
+- **Outside AC 4's grep, changed here:** `docs/02_requirements/03_sard/05_security-compliance.md:55` ("CLAUDE.md
+  §5.1" in a requirement's rationale → `AGENTS.md §5.1`; the file declares no version, `grep -n -i "^\*\*version"` →
+  none). **Left as history:** `docs/01_vision/X_cli-cmds.md:476`, `docs/01_vision/X_lean-inception-plan.md:28`, every
+  Memory element and plan, and the 25 test lines that cite `CLAUDE.md` (`git grep -c "CLAUDE.md" -- test`, summed), mostly "§5.1" titles and comments
+  (decision 4).
+
+#### `agent-docs.yaml` 1.1 and the conformance test
+
+- `version: 1.1`, history "1.1 dl-137 (task-252): the agent file is `AGENTS.md`, `CLAUDE.md` its pointer"; header
+  comment and `description` name `AGENTS.md`; `produces:` `AGENTS.md`, `CLAUDE.md` (comment: the pointer, `dl-137`
+  Q1 (b)), `.wingfoil/README.md`, `.wingfoil/WORKFLOW.md`.
+- The four checks: "AGENTS.md project status matches the shipped command surface (CORE_MODULES)", "AGENTS.md
+  element/state tables match memory.yaml", "AGENTS.md workflow list matches workflows.yaml", "AGENTS.md
+  role-directive bindings match roles.yaml"; conformance-test rows 139–142 take the same tokens, with a
+  `// task-252 (dl-137)` comment. A fifth check is decision 1.
+
+#### Other files and versions (one bump per file on this branch, dates updated)
+
+| File | Change | Version |
+|------|--------|---------|
+| `AGENTS.md` (`git mv` of `CLAUDE.md`) | as above | none declared; none added |
+| `CLAUDE.md` | the pointer | — |
+| `.wingfoil/workflows/custom/agent-docs.yaml` | as above | 1.0 → 1.1 |
+| `.wingfoil/README.md` | `AGENTS.md` as entry point; Memory verbs incl. `add`, `amend`, `park`; the workflow verbs; the pin by reference to `wingfoil-cli` §1; `agents/` row; `dl-155`; `check-implementation-complete`; the workflow keys of `bug-239` (`mode`, `distinct_from`, `cadence`, `awaits`, object `produces`, `bindings.yaml`) | none declared |
+| `.wingfoil/WORKFLOW.md` | line 23 gains `align-agent-docs`; line 377 `AGENTS.md`; the `bug-239` keys | none declared |
+| `.wingfoil/directives/custom/wingfoil-cli.md` | line 41 (decision 2); lines 44 and 78: "merged into its integration branch reaches the code build of that line" | "1.0" → "1.1" |
+| `.wingfoil/memory/templates/decision-log.md` | line 29 | `tmpl_version` 261010 → 261017 (precedent `589689eb`), decision 5 |
+| the 9 `src` files (16 lines) | comments only | — |
+| `test/core/workflow-repository-conformance.test.ts` | rows 139–142 (+ one row if decision 1) | — |
+| `docs/02_requirements/03_sard/05_security-compliance.md` | line 55 | none declared |
+| `docs/02_requirements/02_bdd/features/p4-workflow/P4.13-state-deduction.feature` line 4, `docs/01_vision/06_features.md` lines 92, 236 | `bug-302` step 3: state deduced from Memory files and the commit history reachable from the commit (REQ-SYS-03, REQ-STATE-02), decision 3 | `06_features.md` 1.15 → 1.16; the feature file a `# Revised` line |
+| `docs/04_memory/design/dls/dl-025-agent-facing-docs-ownership.md` | dated revision: the entry point is `AGENTS.md`, `CLAUDE.md` its pointer; the phase is in `agent-docs.yaml` (`task-199`); the ratified shape (B) recorded | **uncommitted**, pending amendment |
+| the five bugs | a `### Retrospective` each (`dl-115` Q2 (a)) | **uncommitted**, pending amendments |
+
+#### Decisions for the approver (recommendation first)
+
+1. **A fifth `align-agent-docs` check, "CLAUDE.md is a pointer that imports AGENTS.md"**: recommend yes — `dl-137`
+   Q1 (b) ratified it ("`align-agent-docs` checks only `AGENTS.md`, plus that the pointer exists"); one more unbound
+   row in the conformance test. Alternative: leave it to part (b)'s drift check.
+2. **`wingfoil-cli` line 41**: recommend moving `workflow list` to the code-build row, with the reason, and having the
+   coordinator file a `pinned-build` bug for the pinned 0.2.2's refusal of object `produces` (the directive's §2 wants
+   one record per surprise; the survey found none).
+3. **`bug-302`'s P4.13 rows** (vision and BDD narrative): recommend correcting them here, citing REQ-SYS-03 and
+   REQ-STATE-02 — the SARD already says it, so this is a downcast correction, not a `vision-change`. The same-class
+   journey rows (`docs/01_vision/05_journeys.md` 119, 152, 224, 256: `workflow show --name`, `workflow status`
+   "planned"; `06_features.md:410`, "unless `--name`") are outside `bug-302`'s steps: recommend a separate bug.
+4. **The test titles and comments that cite "CLAUDE.md §5.1"**: recommend leaving them (outside AC 4; renaming `it()`
+   titles renames tests); a follow-up may sweep them.
+5. **The `decision-log.md` template**: recommend the `tmpl_version` bump (precedent `589689eb`).
+
+#### Files of `task-289` that need a change (handed to the coordinator)
+
+`COLLABORATION.md:162` (`[CLAUDE.md](CLAUDE.md)` → `AGENTS.md`); `docs/agents.md:8` ("read `CLAUDE.md`" →
+`AGENTS.md`); `.wingfoil/workflows/custom/user-docs.yaml:4` (header comment). Optional: `docs/comparison.md:31, 70`
+may add, dated, that Claude Code ≥ 2.1.277 reads `AGENTS.md` itself.
+
+#### Risks
+
+- H2 (`user-docs-rel-v0.3-plan`): the pointer lands with the complete `AGENTS.md` in one merge; the `git mv` and the
+  new `CLAUDE.md` go in one commit.
+- Size: the source page targets under 200 lines per instruction file; `AGENTS.md` stays ≈ 500. Not an AC; an input
+  for part (b)'s tech-spec.
+- `task-289` runs in parallel on disjoint files; its `docs/agents.md` and `COLLABORATION.md` edits should already
+  name `AGENTS.md`, or a later sweep must.
