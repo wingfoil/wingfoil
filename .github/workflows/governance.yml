@@ -1,4 +1,5 @@
-# WingFoil — the governance check on every push and pull request to main (dl-103 §1 (A); built by task-208).
+# WingFoil — the governance check on every push and pull request to main or to a release/X.Y line
+# (dl-103 §1 (A); built by task-208; release/X.Y added by task-267, dl-159).
 #
 #   governance → `npm ci`, `npm run build` (the check reads src's parsers from dist/), then:
 #     - `node scripts/check-governance.cjs --base "$BASE"` (task-167, extended by task-208): every `wf()`
@@ -13,11 +14,17 @@
 #       been measured over one release (dl-097 Action 4). It runs whenever the build succeeded, whatever
 #       the governance check said, so one verdict never hides the other.
 #
-# The range (`BASE`): on a pull request, the base branch's commit (`github.event.pull_request.base.sha`);
-# on a push, the commit `main` pointed at before it (`github.event.before`). A push that created the
-# branch (all-zero `before`), or whose `before` is no longer reachable (a force push), has no range:
-# BASE is then empty and the check runs over the whole history — about six minutes (task-167), and the
-# config-version rule, which needs a range, judges nothing.
+# The range (`BASE`): on a pull request, the base branch's commit (`github.event.pull_request.base.sha`),
+# into `main` or into a `release/X.Y` line alike; on a push, the commit the pushed branch — `main` or a
+# `release/X.Y` line — pointed at before it (`github.event.before`). A push that created the branch
+# (all-zero `before`: the first push of a new `release/X.Y`, dl-159), or whose `before` is no longer
+# reachable (a force push), has no range: BASE is then empty and the check runs over the whole history —
+# ~6 min idle (task-167), 997 s at load ~9.5 (task-267), up to ~38 min under load (task-208) — and the
+# config-version rule, which needs a range, judges nothing. A `release/X.Y` is cut from a commit of `main`,
+# so its first-parent line is `main`'s: the introduction commits are found there, and the commits after
+# them were already gated by `main`'s own runs. The local twin differs here: for a new remote ref
+# `.githooks/pre-push` takes `git merge-base HEAD origin/main` as its base, so on the first push of a
+# `release/X.Y` it checks only the commits not on `main`, while this workflow checks the whole history.
 #
 # Why `fetch-depth: 0`: the check finds its introduction commit, and each later check's, on HEAD's
 # first-parent line; in a shallow clone they are missing and every fetched commit would be gated
@@ -25,13 +32,15 @@
 #
 # Binding: this workflow makes the check EXIST; branch protection on `main` requiring the `governance`
 # status makes it binding (dl-103 §1 (C)) — a repository setting the approver configures, recorded as a
-# `service` element (`kind: setting`) through service-ingest. The local twin is `.githooks/pre-push`
+# `service` element (`kind: setting`) through service-ingest; a `release/X.Y` line has no such rule until
+# the approver adds one when the line is cut (dl-159). The local twin is `.githooks/pre-push`
 # (dl-103 §1 (B), opt-in: `git config core.hooksPath .githooks`; git-conventions §9).
 #
 # Kept equal to ci.yml, and pinned by `test/cli/governance-workflow.test.ts`: `env.NODE_VERSION`, the
 # runner image, every `uses:` line (full commit SHA, release tag in the trailing comment, dl-057; the
 # directory-wide rule is `test/cli/workflow-action-pins.test.ts`), `package-manager-cache: false`,
-# `persist-credentials: false`, and the concurrency rule (no run on `main` is ever cancelled).
+# `persist-credentials: false`, and the concurrency rule (no run on `main` or on a `release/X.Y` line is ever
+# cancelled: one group per pushed commit there, dl-159; the group body is ci.yml's).
 #
 # Read-only: `contents: read` and no job-level `permissions`. No secret, no registry credential, no OIDC.
 #
@@ -41,15 +50,15 @@ name: governance
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
   pull_request:
-    branches: [main]
+    branches: [main, 'release/**']
 
 permissions:
   contents: read
 
 concurrency:
-  group: governance-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  group: governance-${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) && github.sha || github.ref }}
   cancel-in-progress: true
 
 env:

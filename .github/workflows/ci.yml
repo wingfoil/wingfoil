@@ -27,7 +27,9 @@
 # amended (dl-076 Q4); a red run here is a CI failure on the branch (dl-076 Q2), and nothing else.
 #
 # Trigger. `push` filters on `branches` only, so a tag push does NOT run this gate — the tag's gate is
-# publish.yml's. `pull_request` is limited to PRs into `main`, the one branch releases are cut from.
+# publish.yml's. `pull_request` is limited to PRs into the two lines releases are cut from (dl-159): `main`,
+# which carries the next minor, and a maintenance line `release/X.Y` (`release/**`), which carries the
+# patches of the released minor X.Y and is merged forward into `main`.
 #
 # Kept equal to publish.yml, and pinned by `test/cli/ci-workflow.test.ts`:
 #   - `env.NODE_VERSION` — GitHub Actions has no way to share an `env` across workflow files, so the
@@ -40,11 +42,14 @@
 #   - `fetch-depth: 0`, as in publish.yml's gate, so the suite runs on the same full-history checkout.
 #   Also pinned there, though publish.yml has no counterpart: the concurrency group and its cancel rule.
 #
-# Concurrency: off `main`, the group is the ref, so a newer push to the same branch or PR cancels the
-# run still in progress (or pending) for it. On `main` the group is the pushed commit's SHA, unique per
-# push, so no run on `main` is ever cancelled: every push to `main` gets its own run of its tip commit.
-# A push of several commits runs once, on the tip — no workflow tests the intermediate commits.
-# A branch with an open PR into `main` runs twice per push (`push` and `pull_request`): accepted cost.
+# Concurrency: off `main` and the `release/X.Y` lines, the group is the ref, so a newer push to the same
+# branch or PR cancels the run still in progress (or pending) for it. On `main` and on a `release/X.Y` line
+# (`refs/heads/release/…`, dl-159) the group is the pushed commit's SHA, unique per push, so no run there is
+# ever cancelled: every push to a line gets its own run of its tip commit. The expression is parenthesised
+# because `&&` binds tighter than `||` in GitHub expressions. A pull request's ref is `refs/pull/<n>/merge`,
+# so its runs keep the per-ref group. A push of several commits runs once, on the tip — no workflow tests
+# the intermediate commits. A branch with an open PR into `main` or a `release/X.Y` line runs twice per push
+# (`push` and `pull_request`): accepted cost.
 #
 # e2e-smoke (task-207, dl-099 §4 (c), smoke part) — a second job, beside the gate, not after it: `npm ci`,
 #                    `npm pack` (its `prepack` runs the build, so the tarball carries the build stamp of
@@ -69,13 +74,13 @@ on:
   push:
     branches: ['**']
   pull_request:
-    branches: [main]
+    branches: [main, 'release/**']
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  group: ci-${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) && github.sha || github.ref }}
   cancel-in-progress: true
 
 env:

@@ -50,6 +50,26 @@ function read(path: string): { readonly raw: string; readonly parsed: Workflow }
   return { raw, parsed: yamlLoad(raw) as Workflow };
 }
 
+/** The comment header of a workflow file: everything before its `name:` line. */
+function headerOf(raw: string, name: string): string {
+  const at = raw.indexOf(`\nname: ${name}`);
+  expect(at).toBeGreaterThan(0);
+  return raw.slice(0, at);
+}
+
+/**
+ * The header paragraph whose first line starts with `start`, up to (excluding) the next bare `#` line.
+ * Fails the test when no line starts with `start`.
+ */
+function headerParagraph(header: string, start: string): string {
+  const lines = header.split('\n');
+  const first = lines.findIndex((line) => line.startsWith(start));
+  expect({ start, found: first >= 0 }).toEqual({ start, found: true });
+  const rest = lines.slice(first);
+  const end = rest.findIndex((line) => line.trim() === '#');
+  return (end < 0 ? rest : rest.slice(0, end)).join('\n');
+}
+
 /** The `uses:` lines of a workflow, trimmed — the unit the SHA pins are compared on. */
 function usesLines(raw: string): string[] {
   return raw
@@ -64,12 +84,13 @@ describe('ci workflow (task-140) — dl-076 (D): the packaging gate on every pus
     expect(existsSync(PUBLISH_PATH)).toBe(true);
   });
 
-  it('triggers on a push to any branch and on a pull request to main — and on nothing else', () => {
+  it('triggers on a push to any branch and on a pull request to main or to a release/** line — and on nothing else (task-267 AC 1, dl-159 A1.3)', () => {
     const { parsed } = read(CI_PATH);
     expect(Object.keys(parsed.on).sort()).toEqual(['pull_request', 'push']);
     // `branches` alone, no `tags`: a tag push is publish.yml's, and does not run this gate a second time.
     expect(parsed.on.push).toEqual({ branches: ['**'] });
-    expect(parsed.on.pull_request).toEqual({ branches: ['main'] });
+    // dl-159: a maintenance line `release/X.Y` receives pull requests too, and its patches are cut from it.
+    expect(parsed.on.pull_request).toEqual({ branches: ['main', 'release/**'] });
   });
 
   it('is read-only: `permissions: contents: read`, and no job widens it', () => {
@@ -152,12 +173,25 @@ describe('ci workflow (task-140) — dl-076 (D): the packaging gate on every pus
     expect(ci?.with?.['fetch-depth']).toBe(gate?.with?.['fetch-depth']);
   });
 
-  it('cancels superseded runs per branch or PR, but never a run on main (one group per main commit)', () => {
+  it('cancels superseded runs per branch or PR, but never a run on main or on a release/* line (one group per commit there; task-267 AC 2)', () => {
     const { parsed } = read(CI_PATH);
+    // Parenthesised: `&&` binds tighter than `||` in GitHub expressions (task-267 design D1).
     expect(parsed.concurrency).toEqual({
-      group: "ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}",
+      group: "ci-${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) && github.sha || github.ref }}",
       'cancel-in-progress': true,
     });
+  });
+
+  it('names both lines, main and release/X.Y, in the header’s Trigger and Concurrency paragraphs, citing dl-159 (task-267 AC 3)', () => {
+    const header = headerOf(read(CI_PATH).raw, 'ci');
+    const trigger = headerParagraph(header, '# Trigger.');
+    expect(trigger).toContain('release/X.Y');
+    expect(trigger).toContain('main');
+    expect(trigger).toContain('dl-159');
+    expect(trigger).not.toContain('the one branch releases are cut from');
+    const concurrency = headerParagraph(header, '# Concurrency:');
+    expect(concurrency).toContain('release/X.Y');
+    expect(concurrency).toContain('dl-159');
   });
 
   it('checks out without persisting credentials, and carries no registry credential', () => {
@@ -203,6 +237,8 @@ describe('ci workflow (task-140) — dl-076 (D): the packaging gate on every pus
       for (const step of job()?.steps ?? []) expect(step.if).toBeUndefined();
       const text = JSON.stringify(smoke);
       expect(text).not.toMatch(/\bmain\b/);
+      // task-267 AC 3: the job inherits `on:` (now with `release/**`) and names no line of its own.
+      expect(text).not.toMatch(/release/);
       expect(text).not.toContain('publish:staging');
       expect(text).not.toContain('verdaccio');
     });
