@@ -127,14 +127,147 @@ commits failing before the three lines it catches are fixed.
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-17)
+
+Process (approver ruling D2, `user-docs-rel-v0.3-plan`): no separate `qa` agent. Session 1 = this design; session
+2 = the developer writes and commits the one red-first test (`test(docs): task-289 — …`, then `### red
+(developer)` with the sha and the failing output), then all the documentation work, gates, self-review; it stops
+before `submit`, which waits for the approver's re-recorded demo GIF (`demo.rendered`).
+
+**Inputs read.** The task's ACs; `user-docs-rel-v0.3-plan` (phase branch `docs/user-docs-v0.3`, §2–§4); the phase
+survey (command and option diff of `node dist/cli.js` against `node_modules/wingfoil-released`, per-file stale lines,
+classification of the 161 `done` v0.3 tasks), re-measured where this design relies on it (below); `bug-372` (the
+2026-10-15 ruling: a documentation warning only in v0.3). `depends_on: []`, no handover task to read (`dl-015`).
+DLs the ACs cite: `dl-013`, `dl-112`, `dl-128`, `dl-129`, `dl-131`, all `ready`. No spec is edited.
+
+**Re-measured on this branch (HEAD `e4e0a2ac`, content of `main` `89c43d36`).**
+- `git diff --stat 07292cfd HEAD -- README.md docs/*.md docs/examples docs/site.yaml CHANGELOG.md COLLABORATION.md
+  CONTRIBUTING.md SECURITY.md .github .wingfoil/workflows llms.txt` → no change to these files since the survey's
+  base (only Memory and plan files changed): the survey's line numbers hold.
+- `grep -c 'Unreleased (v0.3)'` → README `0`, user-guide `9`, cli-reference `57`, agents.md `0`; `grep -ci
+  unreleased` → `0`, `12`, `61`, `3` (agents.md writes "(Unreleased, v0.3)"). Target: the stricter `grep -ci
+  unreleased` → `0` in all four.
+- README anchors (`grep -n`): `:12`, `:52`, `:221`, `:354` determinism wording; `:82` "status in 0.2.2"; `:91`,
+  `:111` read-only MCP surface; `:96` CLI at a glance; `:195` the approve transcript ends at `Reason:`; `:232-238`
+  "What Comes Later" opens with 0.3; `:255` row `0.3 … Planned`; `:289` "Workflow Synchronization *(0.3)*";
+  `:316-320` counts 63 / 63 / 190 / 43; `:339` contribution artifacts without Change-Proposal.
+- The render guard rule below, prototyped in the session scratchpad over the eleven `docs/site.yaml` pages, flags
+  exactly `docs/user-guide.md:381`, `docs/cli-reference.md:1577`, `docs/cli-reference.md:1630` and nothing else (the
+  README's two `<p align="center">` lines, at line 1 and after a blank line, are skipped).
+- `scripts/changelog-section.cjs`: the heading regex is `^## \[0\.3\.0\](?:\s.*)?$`, so `## [0.3.0] - Unreleased`
+  is accepted; the section ends at the next `## ` line.
+- Versions (`grep -n '^version:\|\*\*Version:\*\*'`): `docs/site.yaml` 1.1, `.wingfoil/workflows/custom/user-docs.yaml`
+  1.7, `.wingfoil/workflows/bindings.yaml` 2.3, `COLLABORATION.md` 1.5 (2026-10-10); no other file this task
+  touches carries a version.
+
+**AC classification and plan.**
+
+| # | AC | Class | Plan (files, lines) | Evidence recorded in session 2 |
+|---|---|---|---|---|
+| 1 | CHANGELOG `## [0.3.0] - Unreleased` (`bug-227`) | char. | `CHANGELOG.md`: new section above `## [0.2.2]` (`:11`): lead paragraph; groups Added / Changed / Removed / Fixed / Security / For contributors (0.2.2's groups; no Deprecated: `grep -i deprecat` over every v0.3 `--help` finds only `memory deprecate`). Entries built from the survey's inventory, each re-checked against `git log 9f95f47e..HEAD` and the task/bug files; `bug-308`'s Fixed entry (`task-278`). Every entry ends with `(task-NNN, bug-NNN; …)`. Not cited: `task-252`, `task-289` and the bugs they close (not `done`/`closed` when the check runs) | `node scripts/changelog-section.cjs 0.3.0; echo $?` → `0`; id check: every `task-NNN` in the section has `^status: done` in `docs/04_memory/v0.3/`, every `bug-NNN` has `^status: closed` and `^release: "v0.3"`; every bullet (continuation lines joined) ends with a parenthesis of task/bug ids |
+| 2 | "Upgrading from 0.2.x" (ruling Q3) | char. | `CHANGELOG.md` `### Upgrading from 0.2.x` inside `[0.3.0]`; `docs/user-guide.md` new `## 12. Upgrading from 0.2.x` (+ Contents, + a pointer line in §2 Install). Items: `include:` path → name (`task-136`); `workflow list` shape + `workflow show` (`task-204`); surplus operands exit 2 (`task-129`, `task-165`); `mcp` / `directives list` exit 1 without `.wingfoil/` (`task-174`, `task-143`); refusal wordings (`task-179`, `task-130`, `task-181`); library exports removed (`prepareMemoryTransition`, `resolveMemoryPath`; `task-132`, `task-131`) | each item run in a throwaway project initialised by the 0.2.2 build (`node node_modules/wingfoil-released/dist/cli.js init`) and exercised with both builds; exit codes and first stderr line pasted |
+| 3 | docs name 0.3 as being released; no Unreleased marker; README CLI / pillars / later / MCP | char. | README `:82` → "status in 0.3"; `:84-94` Memory verbs + `amend`, `park`, Workflow pillar shipped (steps carried out by people and agents, not executed by WingFoil), Interaction Layer + `agent execute` and the adapters; `:96-112` CLI at a glance: Memory row, Workflow row (nine verbs), new Agent row; the MCP line names `wingfoil://workflows/-/next`, `wingfoil://workflows/-/status`, `wingfoil://session/{role}/{element}/{state}` and the Prompt's `element`/`state`; `:232-238` "What Comes Later" starts at 0.4; `:255` row → "🔄 Being released" (precedent `6dea5c03`); `:283-289` Architecture. user-guide `:3`, `:25`, `:551` (+ anchor) → 0.3; cli-reference `:3` → 0.3, `:8-9` reworded; agents.md `:9` → 0.3; `docs/examples/README.md:3` → 0.3. Markers: an entry of a command new in 0.3 loses the marker; a changed behaviour of a 0.2.2 command reads "New in 0.3" | `grep -ci unreleased` → `0` ×4; `npx jest test/docs/cli-reference.test.ts` |
+| 4 | `WingFoil-Version:` trailer in every commit example (`bug-239` user part) | char. | README `:191-196`; user-guide `:440-445`; cli-reference `:652-657` (and `:117-121` re-pasted). From a real run (decision D-3) | the throwaway transcript; `grep -n -A8 'format=%B'` in the three files |
+| 5 | determinism as the goal and measured North Star (`dl-112` Q3 (i), `dl-131` Q1 (b)) | char. | README `:12`, `:52`, `:221-228` (Success Metric: behaviourally equivalent; Input guaranteed by tests, Process measured every run, Outcome measured, never promised), `:354`; `docs/site.yaml:15` `summary`, version 1.1 → 1.2 keeping `1.1 dl-128` on the line; `node scripts/build-site.cjs llms` | `grep -n deterministic README.md docs/site.yaml llms.txt`; `npx jest test/docs/llms-txt.test.ts` |
+| 6 | counts and BDD index (`bug-298`) | char. | README `:316` 63 → 65, `:318` 63 / 190 → 65 / 255, `:319` 43 → 45, `:320` breakdown marked "at import" (`backlog.json` frozen at 106). `docs/02_requirements/02_bdd/00_index.md:118-137`: the 2026-06-26 block labelled as the generation baseline, plus a dated re-count (decision D-5). Part 3 answered by `test/docs/vision-index.test.ts` (`task-212`), recorded in these notes | `grep -n 'Total Features' docs/01_vision/06_features.md`; `find docs/02_requirements/02_bdd/features -name '*.feature' \| wc -l` and per pillar; `grep -rhE '^\s*Scenario( Outline)?:' docs/02_requirements/02_bdd/features \| wc -l`; `grep -hoE 'REQ-[A-Z]+-[0-9]+' ` over the SARD headings `\| sort -u \| wc -l` |
+| 7 | `docs/agents.md` (`bug-210`, `bug-285`, `bug-372`) | char. | `:9` 0.3; `:20-22` `dl-131`'s definition; `:39` seven categories; `:42` `workflow show/next/status`; `:63-64` verb list and the bootstrap's trailer amend; §5 (`:81-97`): `workflows/{name}` ≙ `workflow show <name>`, the Prompt row takes `element` and `state` together and returns the element's context, a `warnings` paragraph; `:97` a dry run needs a terminal for an interactive adapter; §6 `:105-114` rows `amend` (approver only), `park`, `workflow start/next/finalize/end`, `agent execute`; `:116-125` error table: `-> (none)` + reason line, and the `bug-210` rows (not-applicable value; not committed at `HEAD` → `memory add`; deleted in the working tree → `git restore --source=HEAD --staged --worktree -- <path>`; id changed; committed document that does not parse, `W_MEMORY_UNREADABLE`); §7 retitled "Following a workflow" and rewritten (WingFoil records and routes, it does not execute); §9 "Known limits in 0.3"; the Codex warning beside the adapters (no MCP server named `wingfoil` in a trusted project's `.codex/config.toml`). In place, no restructure (D-4). In no `produces:`: aligned with the approver's confirmation at the phase approval | each refusal reproduced in a throwaway project, message pasted |
+| 8 | user-guide surface | char. | `:85-92` init transcript (first file `agents/built-in/claude-code.yaml`); `:210-211` seven categories (`runs` scaffolded as `docs/runs/`, `health` not scaffolded); §7 `:351-395` rewritten for start / next / status / finalize / end / create / remove; new `8.6 Park and amend`; new `9.4 Launch an agent` (`team.agents` `adapter` + `email`, `agent execute --element/--role/--next`, `agent list/show`, the Codex warning); §11 limitations re-checked (`:557-558` first-collection-entry gone, `task-193`; "no workflow engine" → "no step execution"); `:342-343` "in 0.3" | `node dist/cli.js <cmd> --help` per section; `npx jest test/docs/cli-reference.test.ts` |
+| 9 | COLLABORATION, comparison, case study, community files | char. | COLLABORATION `:3` 1.5 → 1.6 (date), `:5`, `:35-37` (bugs/DLs/ADRs → `triage-bugs` + `reconcile-governance`; change-proposals → `vision-change`'s `schedule`, swept by `define-scope`), `:41-42`, `:49-50` (`--version` prints `<version> (<commit>)`), `:69`. comparison `:9-10`, `:89` → `wingfoil memory add --type tech-spec --title "<title>"`, `:122` "Measured on every run"; a dated source changes only if re-read (then its source and the new date). Case study: figures re-read from `docs/08_health/release-health-v0.{1,2}.json`, edited only if one differs. CONTRIBUTING `:12-13` (change-proposal); `.github/ISSUE_TEMPLATE/bug.yml:5,39-42` (`0.3.0 (…)` example); `proposal.yml` one sentence. SECURITY.md and CODE_OF_CONDUCT.md re-read, unchanged (supported line stays `0.2.x`) | `node dist/cli.js memory add --type tech-spec --title X --dry-run` exit 0 in a throwaway project; `npx jest test/docs/presentation.test.ts test/docs/community-health.test.ts test/docs/reported-by.test.ts` |
+| 10 | config comments | char. | `bindings.yaml:84` "dl-128 items 1–4 (task-224, task-246)", version 2.3 → 2.4 with its history entry; `user-docs.yaml:50` Pages publishes for a release tag whose version npm serves as `latest`, once npm serves it (`task-266`), version 1.7 → 1.8 keeping `1.6 dl-129` and `1.7 dl-128`; `checks.post` untouched (three entries) | `npx jest test/docs/presentation.test.ts test/docs/llms-txt.test.ts`; the version-bump gate in `npm test` |
+| 11 | `demo.rendered` | char. (manual) | `demo.tape` re-read against example 01 as it is: its contract (`Output`, `WINGFOIL="node $PWD/dist/cli.js"`, `run.sh \|\| exit 1`, `Wait@120s /^>$/`) still drives it; no edit expected. A copy-paste runbook for the approver goes in the session-2 report; the approver's recording is committed on this branch | `WINGFOIL="node $PWD/dist/cli.js" bash docs/examples/01-first-project/run.sh` → `OK:`; `npx jest test/docs/presentation.test.ts` |
+| 12 | Pages render fix | char. | `docs/user-guide.md:380-381`, `docs/cli-reference.md:1576-1577` and `:1629-1630`: rewrap so `` `wingfoil workflow remove <name>` ``, `` `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>` `` and `` `--element <type>:<id>` `` each sit on one line | the guard test (AC 13) green |
+| 13 | render guard | **red-first** | new `test/docs/pages-render.test.ts` + helper `test/docs/support/pages-render.ts` (rule below) | red commit before AC 12's fix, then green |
+| 14 | examples and gates | char. | no edit expected | `WINGFOIL="node $PWD/dist/cli.js" bash docs/examples/0N-*/run.sh` 01–06 → `OK:`; the plan's S6 gates under `waitslot.sh`, `--maxWorkers=2`; coverage ≥ 99.34 / 97.39 / 98.03 / 99.71; `npm pack --dry-run` file list diffed against `main`'s |
+
+**The guard test (AC 13).** `test/docs/pages-render.test.ts`; helper `htmlBlockStarts(text: string): { line: number;
+text: string }[]` in `test/docs/support/pages-render.ts`. The pages come from `docs/site.yaml` (`js-yaml` `load`, key
+`pages`, as `test/docs/llms-txt.test.ts` reads it), so a page added later is covered. The scanner walks each page
+line by line:
+- **Fenced code:** a line matching `^\s*(`{3,}|~{3,})` opens a fence (any indentation, so fences inside list items
+  count); a line of the same character, at least as long, with only whitespace after, closes it. Lines inside are
+  skipped.
+- **Indented code:** a line indented by four spaces or a tab that follows a blank line opens an indented block; the
+  following lines indented the same way are skipped; the first line indented less closes it.
+- **HTML block opened on purpose:** a line beginning (after optional whitespace) with `<` and a letter that is the
+  first line of the file or follows a blank line opens a block (the README's centred logo and badge lines); its
+  lines are skipped up to the next blank line.
+- **Finding:** any other line beginning (after optional whitespace) with `<` and a letter, that is, a line that
+  continues a paragraph or a list item: kramdown ends the paragraph there and reads an HTML block. `<!--`, `</…` and
+  `<<` lines are not findings (no letter after `<`).
+- Reported as `<page>:<line>: <line text>`, in `pages` order, then line order.
+
+Cases: (a) the repository, `expect(findings).toEqual([])` over every page — the red; (b) the helper on inline
+strings, green from the first run as the rule's own definition: a paragraph continuation `<name>` is found; a fenced
+block (backticks and tildes, one indented inside a list) is skipped; an indented code block is skipped; an HTML block
+at line 1 and after a blank line is skipped up to the blank line; `<!--` and `</p>` lines are not findings. Accepted
+gap: an indented paragraph continuation inside a list item that follows a blank line is read as indented code and
+skipped (a possible false negative, never a false positive). Expected red (`npx jest test/docs/pages-render.test.ts`,
+before AC 12; each received entry is the full line):
+
+```
+expect(received).toEqual(expected)
+- Expected  - 1
++ Received  + 5
+- Array []
++ Array [
++   "docs/user-guide.md:381: <name>` deletes a custom one that no other workflow includes and no open …",
++   "docs/cli-reference.md:1577: <type>:<id>`, starts the adapter's command with the arguments its …",
++   "docs/cli-reference.md:1630: <type>:<id>` keeps the runs and steps of one element (a step's …",
++ ]
+```
+
+The test lives in `test/docs/`, which `docs.parity` and `npx jest test/docs` run; it is not added to
+`scripts/build-site.cjs`'s `checkSiteManifest` (D-6).
+
+**CHANGELOG grouping.** Lead paragraph (the Project Workflow release; no workflow step is executed for you yet).
+**Added** ≈ 28 entries in surface order: workflow verbs (next/status, start/end, finalize, create/remove, `memory add
+--workflow`); agent (execute, list, show, built-in adapters); Memory (amend, park and WIP limits, the `supersedes:`
+trigger, `--dry-run`, history operations, not-applicable values, id tokens, the version trailer, `format:`);
+configuration (`team.agents` adapter/email, `runs`/`health`, workflow-file keys and `bindings.yaml`, workflow checks,
+directive `scope:`); MCP (next/status Resources, session Resource, Prompt arguments, `warnings`); site and `llms.txt`;
+README demo, comparison, case study; community files; GitHub Release notes and test report; MCP Registry, dist-tag,
+Glama. **Changed** ≈ 18, the four breaking ones first and marked **Breaking**. **Removed**: the two library exports.
+**Fixed** 6 (`bug-308` / `task-278` included). **Security** 5. **Upgrading from 0.2.x** (AC 2). **For contributors**
+(D-2). The 11 spec/vision-text tasks get no entry. Coverage: each of the 87 user-visible `done` tasks cited at least
+once, checked by a `comm` of the cited ids against the classification.
+
+**Files and versions.** `CHANGELOG.md`, `README.md`, `docs/user-guide.md`, `docs/cli-reference.md`, `docs/agents.md`,
+`docs/examples/README.md`, `COLLABORATION.md` (1.6), `CONTRIBUTING.md`, `.github/ISSUE_TEMPLATE/bug.yml`,
+`.github/ISSUE_TEMPLATE/proposal.yml`, `docs/comparison.md`, `docs/site.yaml` (1.2), `llms.txt` (generated),
+`docs/02_requirements/02_bdd/00_index.md`, `.wingfoil/workflows/bindings.yaml` (2.4),
+`.wingfoil/workflows/custom/user-docs.yaml` (1.8), new `test/docs/pages-render.test.ts` and
+`test/docs/support/pages-render.ts`; `docs/assets/wingfoil-demo-first-project.gif` (the approver's recording). Only
+if a re-read finds drift: `docs/case-study.md`, `docs/examples/01-first-project/demo.tape`, `docs/assets/README.md`.
+Not touched: `CLAUDE.md`, `.wingfoil/README.md`, `.wingfoil/WORKFLOW.md`, the `wingfoil-cli` directive (`task-252`);
+`package.json`, `server.json`, `SECURITY.md`'s supported line (`release-publishing`); `test/validation/secret-scan.test.ts`.
+Pending amendments: the four bugs' `### Retrospective` subsections, left uncommitted for `memory amend`.
+
+**Decisions for the approver** (recommendation first).
+- **D-1 "Being released".** As `6dea5c03`: the docs name "0.3", the README roadmap row reads "🔄 Being released",
+  `package.json` stays 0.2.2; the row becomes "✓ Released" at `release-publishing`.
+- **D-2 "For contributors" size.** Six grouped bullets (governance check, CI, release process, test suite, own
+  configuration, release health), each ending with all its task/bug ids, as 0.2.2's group did: full traceability in
+  about 30 lines. Alternative: three bullets.
+- **D-3 Trailer in the examples.** The code build stamps `0.2.2 (<sha>)` (`package.json` is not bumped yet). Paste
+  from a real run of a build stamped `0.3.0`: a throwaway clone of this branch with a scratch commit bumping
+  `package.json` to `0.3.0`, built and run in a throwaway project; the sha shown is that scratch commit's (stated in
+  these notes). Alternative: paste the real `0.2.2 (<sha>)` line.
+- **D-4 `docs/agents.md`.** In-place alignment (rows, retitled §7 and §9, new paragraphs), no restructure into
+  v0.3 sections: keeps its anchors and the `bug-210` / `bug-285` scope.
+- **D-5 BDD index.** Keep the 2026-06-26 block as the labelled generation baseline and add a dated 2026-10-17
+  re-count of the mechanical rows (files per pillar, scenarios, `Feature:` first line); the two judgement rows
+  (nominal and error/edge per file, vague adjectives) marked "not re-run".
+- **D-6 Guard location.** Test only, as the AC states; not a `checkSiteManifest` problem, which would also stop
+  `pages.yml` (wider than the AC) and turn the red into a missing-function error.
+- **D-7 README tagline and closing line** (`:12`, `:354`): "A structured harness for AI-assisted software
+  development, built to make it deterministic." and "WingFoil: governing AI-assisted development toward determinism,
+  not chaos." — the approver's wording call.
+
+**Candidate findings (not filed; for the follow-up registry).** `agent execute --dry-run` with an interactive adapter
+refuses without a terminal although it launches nothing (documented as current behaviour); `paths --help` names
+`health` but `init` declares no `health` path; `memory amend` by a non-approver says "not authorized to approve";
+`src/mcp/registrar.ts:18-56`'s docblock describes Resources the server does not list; `package.json`'s `description`
+differs from the governance-layer positioning.
 
 ### Retrospective
 
