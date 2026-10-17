@@ -229,10 +229,11 @@ Configuration changes have their own scopes, not Memory verbs: `wf(dna): set|add
   reject's sha, with no `Approver:` line (`dev-loop`, `task-205`).
 
 **Every commit `wingfoil` writes ends with a trailer paragraph** carrying `WingFoil-Version: <semver> (<sha>)`
-(`dl-111`), plus `WingFoil-Instance:` / `WingFoil-Step:` when a workflow step wrote it. To add a trailer to
-such a commit, amend with `git commit --amend --no-edit --trailer "…"`, which joins that paragraph; never add
-a new paragraph after it, or a reader takes `WingFoil-Version:` into the `Reason:` block (`git-conventions`
-§8, `bug-236`). Only a commit not yet pushed may be amended.
+(`dl-111`), plus `WingFoil-Instance:` / `WingFoil-Step:` on a `memory add --workflow … --step …` and
+`WingFoil-Phase:` / `WingFoil-Instance:` on a `workflow finalize` record. To add a trailer to such a commit,
+amend with `git commit --amend --no-edit --trailer "…"`, which joins that paragraph; never add a new paragraph
+after it, or a reader takes `WingFoil-Version:` into the `Reason:` block and the workflow deduction, which reads
+only the final paragraph, loses the step link or the phase record (`git-conventions` §8, `bug-236`). Only a commit not yet pushed may be amended.
 
 **AI attribution** (`git-conventions` §7, `dl-117`). Every commit an agent writes, **except an `approve` or
 `reject` commit**, ends with the trailer paragraph
