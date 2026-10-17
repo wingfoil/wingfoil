@@ -332,3 +332,151 @@ may add, dated, that Claude Code ≥ 2.1.277 reads `AGENTS.md` itself.
   for part (b)'s tech-spec.
 - `task-289` runs in parallel on disjoint files; its `docs/agents.md` and `COLLABORATION.md` edits should already
   name `AGENTS.md`, or a later sweep must.
+
+**Approver rulings on the design (2026-10-17, through the coordinator).** Decisions 1–5 accepted as recommended: (1) a
+fifth check "CLAUDE.md is a pointer that imports AGENTS.md", with its conformance row; (2) `workflow list` moves to
+the code-build row of `wingfoil-cli`, the coordinator files the `pinned-build` bug; (3) `bug-302`'s P4.13 rows are
+corrected here (`06_features.md` 1.16, REQ-SYS-03, REQ-STATE-02), the journey rows become a bug of their own (the
+coordinator files it); (4) the 25 test lines stay; (5) the decision-log scaffold's `tmpl_version` is bumped. Ruling T6:
+`COLLABORATION.md:162`, `docs/agents.md:8` and `user-docs.yaml:4` are `task-289`'s; this branch does not touch them.
+
+### implementation and align-agent-docs (developer; architect for align-agent-docs, 2026-10-17)
+
+Code build: `npm ci`, then `npm run build` (under `waitslot.sh`) → `node dist/cli.js --version` → `0.2.2 (13e3efec…)`.
+Commits on the branch after the design (`git log --oneline 13e3efec..HEAD`):
+
+| Commit | What |
+|--------|------|
+| `bf730d1b` | `git mv CLAUDE.md AGENTS.md`, nothing else, so `git log --follow AGENTS.md` crosses the rename (it lists `b4e71fe3`, a `CLAUDE.md` commit of `task-222`) |
+| `97d1ac77` | `AGENTS.md` brought up to date, and the new `CLAUDE.md` pointer, in **one** commit (H2: the branch reaches its merge with both) |
+| `58451e5d` | `agent-docs.yaml` 1.0 → 1.1 and `test/core/workflow-repository-conformance.test.ts` (four rows renamed, a fifth added) |
+| `9652a79e` | `.wingfoil/README.md`, `.wingfoil/WORKFLOW.md`, `wingfoil-cli` 1.0 → 1.1 |
+| `b1b6fbd2` | the 16 `src` comment lines, the decision-log scaffold (`tmpl_version` 261010 → 261017), REQ-SEC-04's rationale (`05_security-compliance.md:55`) |
+| `be37ba6b` | P4.13: the feature's narrative (a `# Revised` line), `06_features.md` lines 92, 236 and 363 (1.15 → 1.16), `00_index.md`'s row for it |
+| `0968a405` | `AGENTS.md`: every phase of the `release-cycle` chain named (check 3); the marker strings appear only as markers |
+| `f62aed66` | `git-conventions` 1.8 → 1.9 §8 and `AGENTS.md` §5.1: the `--trailer` rule covers `WingFoil-Instance:`, `WingFoil-Step:`, `WingFoil-Phase:` (`bug-236`'s amendment of 2026-10-11) |
+| `e85e6c64` | `test/directives/dev-loop-done-order.test.ts`: its `git-conventions` 1.8 pin read the newest history entry only, so the 1.9 bump failed it; it now finds the 1.8 entry wherever it sits (bug-314's rule). No assertion is weakened: the version floor, `task-288` and `dl-159` are still required in that entry |
+
+**Deviations from the design**, each recorded here: two commits for the rename instead of one (`--follow` needs a
+pure rename; the pointer and the content still land together in `97d1ac77`); `git-conventions` 1.9 (not in the design;
+`bug-236`'s amendment names the directive); `00_index.md`'s version/date row (`test/docs/vision-index.test.ts` ties it
+to `06_features.md`'s version); the `dev-loop-done-order` pin; `06_features.md:363`, a third P4.13 sentence of the same
+class. One thing the design did not foresee is **not done** (decision D6 below).
+
+**AGENTS.md layout.** `grep -n "wingfoil:generated:\|^## [0-9]" AGENTS.md` → `## 1.` 15, `## 2.` 52, begin marker
+87, `## 3.` 89 … `## 7.` 473, end marker 497, `## 8.` 501, `## 9.` 525, `## 10.` 535 (at `e85e6c64`): one region
+around §3–§7, section numbers unchanged. The pair `<!-- wingfoil:generated:begin -->` / `<!-- wingfoil:generated:end -->`
+is **provisional** until the tech-spec of `dl-137` part (b) fixes the format (R3/R4); the intro names the markers
+without writing them, so each appears once (`grep -c "wingfoil:generated:begin" AGENTS.md` → `1`, `end` → `1`).
+
+**The five `align-agent-docs` checks (+ the pointer), run at `e85e6c64` from the worktree root (`AGENTS.md` and
+`CLAUDE.md` unchanged since `f62aed66`):**
+
+1. *Status vs `CORE_MODULES`.* `{ printf 'top init\ntop mcp\ntop paths\n'; for g in dna memory directive directives
+   workflow agent; do node dist/cli.js $g --help | sed -n '/^Commands:/,$p' | grep -E '^  [a-z]' | grep -v '^  help' |
+   awk -v g=$g '{print g" "$1}'; done; } > cmds.txt; wc -l < cmds.txt` → `33`; `while read g v; do sed -n '/^## 1\./,/^##
+   2\./p' AGENTS.md | grep -q "\`$v\`" || echo "missing $g $v"; done < cmds.txt` → nothing; `grep -c "33 commands"
+   AGENTS.md` → `1`. Release states: `awk '/^status:/{print $2;exit}'` on `docs/04_memory/planning/**/*.md` → `rl-v1
+   active`, `minor-v0.1`/`minor-v0.2`/`patch-v0.2.2` `released`, `minor-v0.3` `in-development` (as §1 says). **Pass.**
+2. *Element/state tables vs `memory.yaml` 3.5.* A js-yaml read of each type, checking its `AGENTS.md` §5 row for the
+   `path`, the `sequence` chain, every `gates` reject target as `state(→target)`, every `returns` edge as `⟲ from→to`,
+   and `not amendable` where `amendable: false` → no mismatch, `10 types`. **Pass.**
+3. *Workflow list vs `workflows.yaml`.* `node dist/cli.js workflow list --format json` → startable `adr-ingest,
+   bug-ingest, decision-log-ingest, service-ingest, sw-life-cycle, vision-change`, each named in §6; every phase of
+   `release-line-cycle, release-cycle, release-planning, wave, dev-loop, user-docs, agent-docs, e2e-smoke,
+   release-submit, release-publishing, release-health, retrospective, vision-change` named in §6 → `6 mains, 63 phases
+   checked`, nothing missing. The first run found the `e2e-smoke`, `release-submit` and `retrospective` phases and
+   `vision-change`'s three downcasts unnamed; `0968a405` names them. **Pass.**
+4. *Role bindings vs `roles.yaml` 1.8.* Each `assignments` role and `global`, compared list-for-list with §7's rows →
+   no mismatch, `9 rows`. **Pass.**
+5. *`workflow-md.complete`.* `npx jest test/docs/workflow-md.test.ts` (with the conformance, vision-index and
+   workflow-status suites) → 4 suites, 65 tests passed (at `be37ba6b`); again inside the coverage run at `e85e6c64`. **Pass.**
+6. *Pointer* (the fifth `agent-docs` check). `head -1 CLAUDE.md` → `@AGENTS.md`; `grep -c . CLAUDE.md` → `2` (the import
+   and one sentence). **Pass.**
+
+**AC 2 — Claude Code loads the import** (`dl-137` Action 4). Source: <https://code.claude.com/docs/en/memory>, read
+2026-10-17 (§ "Import additional files", § "AGENTS.md"; quoted in the design). Runtime check, Claude Code
+`2.1.301`, in a throwaway git repository outside this one, with `AGENTS.md` holding the line "The project sentinel line
+is: sentinel-46ff8a4d" and the prompt "Without using any tool, print the project sentinel line from the project
+instructions loaded in your context, verbatim, or print NONE if there is none." on stdin to
+`claude -p --no-session-persistence --tools ""`:
+
+| `CLAUDE.md` | Output |
+|-------------|--------|
+| `@AGENTS.md` + one sentence (this repository's shape) | `sentinel-46ff8a4d` — loaded through the import |
+| one sentence, no import (control) | `NONE` — with a `CLAUDE.md` present, `AGENTS.md` is not read on its own |
+| absent | `sentinel-46ff8a4d` — 2.1.301 also reads `AGENTS.md` directly, as the page says (≥ 2.1.277) |
+
+So the pointer is what makes Claude Code read the instructions here. The third row is an input for a later look at
+`dl-137` Q1 (a), not a change to the ratified Q1 (b). Nothing was written in the repository; the only trace outside it
+is an empty project directory Claude Code created under `~/.claude/projects/`.
+
+**AC 3.** `git diff 89c43d36 -- .wingfoil/workflows/custom/agent-docs.yaml`: `version: 1.1` with its history,
+`produces:` `AGENTS.md`, `CLAUDE.md` (the pointer), `.wingfoil/README.md`, `.wingfoil/WORKFLOW.md`; checks `post[0..3]`
+name `AGENTS.md`, `post[4]` is still `workflow-md.complete` (bound), `post[5]` is the pointer check, placed last so no
+bound index moves. The conformance test rows 140–144 pin the five unbound tokens. `dl-025`'s revision is a pending
+amendment (below).
+
+**AC 4.** `git grep -n "CLAUDE.md" -- src .wingfoil` → 8 lines: `.wingfoil/README.md:35` and `.wingfoil/WORKFLOW.md:377`
+(the pointer, named as such), `agent-docs.yaml` lines 9, 18, 20, 35, 45 (the pointer in `produces:` and its check), and
+`user-docs.yaml:4` (`task-289`'s, ruling T6). No source comment cites `CLAUDE.md` (`git grep -c "CLAUDE.md" -- src` →
+nothing; at the base it was 16 lines in 9 files).
+
+### gates (developer, 2026-10-17)
+
+Each heavy gate alone under `waitslot.sh`, `--maxWorkers=2`, with the pending amendments in the working tree:
+
+| Gate | Command | Result |
+|------|---------|--------|
+| tests | `npm test -- --maxWorkers=2` | first run 459/460 suites, 8343/8344 tests: `dev-loop-done-order.test.ts` (the 1.8 pin, fixed in `e85e6c64`, then `npx jest test/directives/dev-loop-done-order.test.ts` → 6 passed) |
+| tests + coverage | `npm run test:coverage -- --maxWorkers=2` (after `e85e6c64`) | 460/460 suites, 8344/8344 tests; All files 99.34 / 97.39 / 98.03 / 99.71 — equal to the W3 B9 baseline |
+| lint | `npm run -s lint` | exit 0 |
+| API docs | `npm run -s docs:api` | exit 0 |
+| typecheck | `npm run -s typecheck` | exit 0 |
+| e2e smoke | `node scripts/e2e-smoke.cjs -- node "$PWD/dist/cli.js"` (after `npm run build`) | 73 `ok`, exit 0, incl. the Journey 4 example run |
+| governance | `node scripts/check-governance.cjs --base 89c43d36` | 0 findings, exit 0 |
+| claims | `node scripts/lint-claims.cjs --base 89c43d36` | 0 warnings, exit 0 |
+
+### self-review (developer, 2026-10-17)
+
+Against `code-review`, `claim-evidence`, `doc-versioning`, `git-conventions`:
+- Every AC has its evidence above, each with the command and where it ran. The absence claims show their positive case:
+  AC 4's grep lists what remains, and check 3 first found missing phases, which `0968a405` then named.
+- One bump per file on this branch: `agent-docs.yaml` 1.1, `wingfoil-cli` 1.1, `git-conventions` 1.9 (dates
+  2026-10-17), `06_features.md` 1.16, scaffold `tmpl_version` 261017. `AGENTS.md`, the two `.wingfoil` documents and
+  the SARD file declare no version.
+- Same class: the `CLAUDE.md` citations in `src` (all 16); the P4.13 sentences in `06_features.md` (three, not two); the
+  `--trailer` rule in both `AGENTS.md` and the directive.
+- No sentence in the generated region cites a source outside the configuration and the specs. The handovers are each
+  answered: ten modules, 33 commands, the pin by reference, Memory operations on the code build, `dl-155`, the doc-map
+  rows, the integration branch, `red` is `qa`'s, the reviewer/tech-lead/facilitator/approver rows, `wingfoil-cli`
+  global, binding kind `run`, the attribution rule, `change-proposal`, `returns`, `amendable`, service kinds.
+- `bug-372`: `AGENTS.md` does not point to the Codex warning: `docs/agents.md` does not carry it yet (`task-289`), and
+  this repository registers its MCP server in `.mcp.json` only.
+
+**Decision D6 for the approver.** `bug-236`'s amendment of 2026-10-11 adds a governance rule to the expected behaviour:
+`scripts/check-governance.cjs` reporting `WingFoil-Instance:`/`WingFoil-Step:`/`WingFoil-Phase:` lines outside a
+commit's final paragraph (`grep -n "WingFoil-Instance" scripts/check-governance.cjs` → nothing). That rule is new code
+with a red-first test, outside this documentation-only task (D2). Recommendation: a follow-up task (or a bug of its own)
+carries it, and `bug-236` closes on its documents; its Retrospective says so. Alternative: the task returns for it,
+with a `qa` red.
+
+### Pending amendments (approver)
+
+Left uncommitted in the worktree (`git status --short` lists the six files):
+- `dl-025-agent-facing-docs-ownership` — `--reason "Records the ratified shape (B) and that, since dl-137 and task-252, the agent-facing entry point is AGENTS.md with CLAUDE.md as its pointer and the phase lives in agent-docs.yaml 1.1."`
+- `bug-220-…` — `--reason "Adds the Retrospective of the bug that task-252 closes."`
+- `bug-236-…` — `--reason "Adds the Retrospective of the bug that task-252 closes, with the governance rule left to a follow-up."`
+- `bug-239-…` — `--reason "Adds the Retrospective of the bug that task-252 closes for its agent-facing part."`
+- `bug-284-…` — `--reason "Adds the Retrospective of the bug that task-252 closes."`
+- `bug-302-…` — `--reason "Replaces the empty Retrospective of the bug that task-252 closes."`
+
+### Retrospective
+
+- The design read the phase survey as a list to re-measure, not as facts, and three of its figures changed on
+  re-measurement (`health` as a seventh path category, `06_features.md`'s third P4.13 sentence, the `git-conventions`
+  pin in a test). A survey older than the branch is a list of places to look.
+- The runtime check settled AC 2 with a control: an import-less `CLAUDE.md` printing `NONE` is what shows the import,
+  not the model, loads the file. A sentinel prompt without a control would not have shown it.
+- An exact-version pin (`dev-loop-done-order`) failed on the next bump of a file it does not own, the class bug-314
+  names. Pins of a config's history entry should search the history, not read its newest entry.
