@@ -15,9 +15,15 @@
 #
 # Trigger (approver ruling 2026-10-13): the release tag — the same `vX.Y.Z` filter as publish.yml — so the site
 # documents the released version that package.json `homepage` and npm point at; plus `workflow_dispatch` for a
-# first or repeated deployment. Once dl-159's maintenance lines exist, a patch tag of an OLDER line (a `v0.3.1` after
-# `v0.4.0`) would redeploy that line's docs over the newest ones: deploying only the newest line's tag is handed to
-# task-266 (its "highest published version" rule), recorded in task-234's Execution Notes.
+# first or repeated deployment.
+#
+# Newest line only (dl-159 A1.4, task-266): a patch tag of an OLDER line (a `v0.3.1` after `v0.4.0`) must not redeploy
+# that line's docs over the newest ones. On a tag push, `build` asks `scripts/npm-dist-tag.cjs` — the rule publish.yml's
+# promote stages with — which npm dist-tag the version gets (`--allow-published`: a re-run may come after the version
+# went live), and `deploy` runs only for `latest`, or on `workflow_dispatch` (the approver's deliberate deployment).
+# For `latest`, `build` then waits until npm serves exactly that version (`scripts/wait-npm-version.cjs`, the bounded
+# poll of publish.yml's release and mcp-registry jobs, approver ruling D2 (b)): the site follows npm, so a failed or
+# rejected publish deploys nothing. Recovery after a late approval is publish.yml's: Re-run failed jobs.
 #
 # Permissions: read-only at the top; the deploy job alone holds `pages: write` and `id-token: write`, the set
 # actions/deploy-pages documents. No secret. The `github-pages` environment admits only the default branch until the
@@ -53,7 +59,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 345
+    outputs:
+      dist_tag: ${{ steps.dist-tag.outputs.dist_tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,6 +70,17 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
+      # task-266: each `$(…)` is a plain assignment, so under bash -e a failing `npm view` or a refusal fails the step.
+      - id: dist-tag
+        name: The npm dist-tag of this version — deploy only the newest line (dl-159, task-266)
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          published="$(npm view wingfoil versions --json)"
+          dist_tag="$(node scripts/npm-dist-tag.cjs "$GITHUB_REF_NAME" --published "$published" --allow-published)"
+          echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
+      - name: Wait until npm serves exactly this version — the site follows npm (dl-159, task-266)
+        if: ${{ github.event_name == 'push' && steps.dist-tag.outputs.dist_tag == 'latest' }}
+        run: node scripts/wait-npm-version.cjs "$GITHUB_REF_NAME" --timeout-minutes 330 --interval-seconds 60
       - name: Install
         run: npm ci
       - name: Assemble the user docs and llms.txt from docs/site.yaml
@@ -79,6 +98,7 @@ jobs:
 
   deploy:
     needs: build
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.build.outputs.dist_tag == 'latest' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
