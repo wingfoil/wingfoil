@@ -3,7 +3,7 @@ id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
 status: active
-version: "1.29"
+version: "1.30"
 workflow: "dev-loop"
 phase: "rel-v0.3"
 element: "minor-v0.3"
@@ -215,7 +215,7 @@ and the tasks that unblock the most later work first (`task-194` → 37 later ta
 | **B6** | 211, 240, 239, 238, 232, 233, 230, 277 | `232` → `233` (`scripts/release-health/`); `230` the only writer of `memory.yaml`; `238` after `229`; `277` after `230` (moved from B5) |
 | **B7** | 215, 236, 237, 243, 244, 241, 234 | `236` the only writer of `dna.yaml`; `244` last on `publish.yml` |
 | **B8** | 242, 245, 246 | `245` (`X_cli-cmds.md`) after every command task |
-| **B9** | 265, 266, 267 | `dl-159` (parallel release lines), added 2026-10-07; starts only once `dl-159` is `ready`; `publish.yml` 244 → 265 → 266, `ci.yml` 207 → 267 |
+| **B9** | 285, 265, 266, 267, 286, 287, 288 | `dl-159` (parallel release lines), added 2026-10-07; starts only once `dl-159` is `ready`; `publish.yml` 244 → 265 → 266, `ci.yml` 207 → 267; fix `285` (`bug-378`) added 2026-10-16 by the W3 B8 triage; `286`–`288` (`dl-159` A1 items 6–8) added 2026-10-16 by the approver's option (b); `spec-015` 266 → 267, `git-conventions.md` 286 → 288, `doc-versioning.md` 286 → 287 |
 
 Chains across batches: `dev-loop.yaml` 199 → 205 → 221; `publish.yml` 229 → 238 → 244; `user-docs.yaml` 199 →
 214 → 224 → 234 → 246; `08_mvp-canvas.md` 261 → 245. Latency runs (`263`, `216`, `228`, `232`) are taken at the
@@ -786,7 +786,7 @@ commit, right after the task's transition and on the task branch:
     approver's triages during the wave (`251`, `253`–`259`). **Next:** wave 3 (`task-194` … `task-246`, `task-260`; 54 tasks), in
     a new session; `task-252` stays in the `user-docs` phase.
 - **2026-10-06 — wave 3 opened** (session "DEV v0.3 - D. dev-loop W3", `main` `5d716f28`).
-  - Batches B1–B8 approved by the approver (§3).
+  - Batches B1–B9 approved by the approver (§3).
   - `task-206` and `task-218` repaired before start: the W2 handover amends `a798494e` and `45780905` had
     inserted their bullets before an inline `` `## Execution Notes` `` inside an Acceptance Criterion, splitting it
     and leaving a second Execution Notes heading (`grep -c '^## Execution Notes'` → 2). Two `memory amend` commits
@@ -1119,3 +1119,53 @@ commit, right after the task's transition and on the task branch:
     (`task-265`, `266`, `267`) waits for `dl-159`.
   - **Follow-ups:** to be filed through a `bug-ingest` plan after the approver's triage.
   - W3: 74 of 78 tasks `done`.
+- **2026-10-17 — batch B9 `done`** (fix `task-285`; `task-265`, `266`, `267`, `286`, `287`, `288`), the last batch of
+  wave 3 and of the v0.3 dev-loop.
+  - **Scope.** `dl-159` (`ready`, ratified 2026-10-16) Actions A1 items 1–8: the publish gate accepts a tag on
+    `origin/release/X.Y` (`265`); promote stages with an explicit dist-tag, `latest` only for the highest published
+    version, and the Release "Latest" flag and the Pages deployment follow it (`266`); CI and governance run on
+    `release/**` and never cancel a run on a line (`267`); `git-conventions` states the maintenance line and the
+    merge-forward rule, `doc-versioning` and `testing` take the integration branch as baseline (`286`); the
+    version-bump gate reads that baseline (`287`); `dev-loop` and `release-publishing`'s `tag` phase use a declared
+    integration branch (`288`, `scripts/integration-branch.cjs`). Plus the fix `285` (`bug-378`): the REQ-PERF-02 latency
+    report now reaches the pass's output (jest 30 selects its `AgentReporter` under an agent and drops passing suites'
+    `console.log` when two or more files run).
+  - **Process.** As B7/B8 (`dl-134`). Stop-the-line never fired (1 fix of 8 open tasks at opening, 12.5 %). Rounds by
+    dependency: `285`, `265` first; `267` and `286` started once the design they depend on was ruled; `266` merged
+    `task-265`, and `287` and `288` merged `task-286`, each approved, before their design; `267` merged `task-266` before
+    its `spec-015` amendment, so the two Revision notes landed in order. Red-test defects went back to the `qa` agent:
+    `.d.cts` declarations of `265`'s exports (a coordinator prompt error), two `266` pins comparing step objects from two
+    YAML parses, a `286` type error, plus four review nits in red files.
+  - **Review.** Every task had an independent review: `285`, `265`, `286`, `287`, `288` APPROVE; `266`, `267` APPROVE WITH
+    FIXES (all fixed in-task). Defects fixed include: `266`'s `spec-015` amendment left §3's stage 4/5 body stale;
+    `267`'s governance header understated a whole-history run; `286`'s integration-branch sentence left the line branch
+    `release/X.Y` itself undefined and overstated what the gate checks; `288`'s self-review stated a command result
+    before running it (corrected, with the command and its output).
+  - **Approver rulings (2026-10-16/17):** order, rounds and notes R1–R6 at start; `285` D1–D2; `265` D4 (a); `267`
+    D1–D4; `286` D1–D3; `266` D1 (a)–D4; `287` D1; `288` D1–D7 (the `sw-life-cycle.yaml` and `release-cycle.yaml`
+    headers in-task).
+  - **Amendments: 3** — `285`: bug-378; `266`: spec-015; `267`: spec-015
+    (`git log --oneline 92bec996..424b2049 | grep -cE "wf\([a-z-]+\): amend"` → 3).
+  - **Bugs closed:** bug-378.
+  - **Merges** on `gate/w3-b9`, in order 285 → 265 → 266 → 267 → 286 → 287 → 288 (last `424b2049`), then `main`
+    fast-forwarded. No conflict and no `fix(gate)` commit.
+  - **Gates on `424b2049`:** `test:coverage` 460 suites, 8344 tests, coverage 99.34 / 97.39 / 98.03 / 99.71 (equal to
+    B8); build, lint, `docs:api`, typecheck, `check:audit` exit 0; e2e smoke 73 ok; examples 01–06 exit 0;
+    `check:mcp` 0; `workflow list --all` 27 workflows, 0 errors, 86 unbound tokens (87 at B8). Governance `--base
+    92bec996`: 34 `wf()` commits, 0 findings; no AI trailer on any of the 7 approves. `lint:claims` advisory (27
+    warnings). `integration-branch.cjs --check-head --kind "" --version v0.3`: exit 0 on a clone on `main` at the head.
+    `test:latency` (load 1.67 → 1.75): the REQ-PERF-02 report printed once (`machine: otherwise idle`; floor p95 186 ms;
+    total p95 `memory search` 236, `dna show` 193, `memory history` 233 ms) and `parseLatencyReport` reads it;
+    `workflow next` p95 339 ms in-process and 532 ms spawned, under the 800 ms margin and the 1000 ms budget.
+  - **Config versions:** `git-conventions.md` 1.8, `testing.md` 1.3, `dev-loop.yaml` 2.1, `release-publishing.yaml`
+    1.9, `bindings.yaml` 2.3, `sw-life-cycle.yaml` 1.2, `release-cycle.yaml` 1.6.
+  - **Handovers.** release-publishing v0.3: `265` AC 5 (the `v0.3.0` run's gate passes on the `main` path, run URL by
+    amend), `npm view wingfoil dist-tags` after approving `0.3.0` and Pages deployed only after npm serves it (`266`),
+    the `--check-head` pre-check on `main` (`288`), `task-244`'s checks; the approver's read-only check of the
+    `npm-publish` environment and the trusted publisher (`267` runbook). user-docs: CLAUDE.md §6, §8 and line 422,
+    `.wingfoil/README.md`, `user-docs.yaml` (Pages deploys only for `latest`), with the inherited list.
+  - **Open:** the release-candidate re-run of `task-242` AC 2 (e2e-smoke phase); `service-ingest-rel-v0.3-listings-plan`
+    closes once `svc-012` is decided; the eight `decision-log-ingest` instances close at their ratification.
+  - **Follow-ups:** to be filed through a `bug-ingest` plan after the approver's triage.
+  - W3: 81 of 82 tasks `done`; `task-252` runs in the `user-docs` phase. The dev-loop of v0.3 is complete; this plan
+    closes on the approver's instruction.
