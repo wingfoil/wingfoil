@@ -377,8 +377,8 @@ past (on a phase with `approval:`, only an approver can, with `--reason`). `wing
 lists every open workflow with its phases and ready steps, the approvals waiting for a decision and who they
 are routed to, and the documents sitting at a gate that no open workflow carries, each as a "human needed"
 line. `wingfoil workflow create <name> --kind main|sub` writes a new workflow file under
-`workflows/custom/` with one phase to replace, and adds it to `workflows.yaml`; `wingfoil workflow remove
-<name>` deletes a custom one that no other workflow includes and no open workflow runs (built-in workflows
+`workflows/custom/` with one phase to replace, and adds it to `workflows.yaml`;
+`wingfoil workflow remove <name>` deletes a custom one that no other workflow includes and no open workflow runs (built-in workflows
 cannot be removed). See the
 [CLI reference](cli-reference.md#wingfoil-workflow-list).
 

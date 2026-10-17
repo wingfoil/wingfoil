@@ -1573,8 +1573,8 @@ bound to the role with no file, a Memory document that could not be read) and an
 `[a-z0-9-.]`) are printed as `warning:` lines first, each once. Temporary files go to the system's
 temporary directory and are removed whatever happens, an interruption before the launch included.
 
-Then it launches the agent: it prints `run <run-id>: launching <agent> (<adapter>) as <role> on
-<type>:<id>`, starts the adapter's command with the arguments its manifest declares (no shell), and
+Then it launches the agent: it prints
+`run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`, starts the adapter's command with the arguments its manifest declares (no shell), and
 hands it the terminal. The agent's first prompt names the run, the role, the element and the commit,
 tells it where to load its context (the Resource `wingfoil://session/<role>/<type>:<id>/<commit>` of the
 `wingfoil` MCP server registered for it), and tells it to end every commit it writes, except an approve or reject commit, with
@@ -1626,8 +1626,8 @@ Unreleased (v0.3). Read-only. It has two sections:
   in `executes_as`. Each step names the agents, in `dna.yaml` order, that execute its role and declare an
   `adapter`, so `agent execute` can launch them.
 
-Without `--past` or `--waiting`, or with both, it prints both sections, past first. `--element
-<type>:<id>` keeps the runs and steps of one element (a step's element is the element it works on, else
+Without `--past` or `--waiting`, or with both, it prints both sections, past first.
+`--element <type>:<id>` keeps the runs and steps of one element (a step's element is the element it works on, else
 its workflow's), and `--phase <name>` those of one phase. Nothing tracks running agents yet: a step an
 agent is working on right now is still listed as waiting, and `--active` comes later (v0.4); today it is an
 unknown option, exit `2`.
