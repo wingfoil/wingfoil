@@ -20,7 +20,7 @@ flowchart TD
     S["**specification**\n`specification-downcast`\nUSM → BDD → SARD → Backlog"]
     INIT["**init**\n`wingfoil-init`\nConfig pillars only"]
     SFR["**seed-first-release-line**\nmemory.add(release-line, v1)\ninline phase, no include"]
-    RLC["**release-line-cycle**\niterate_over: release-line\napprove → initial-design → delivery → plan-next-release-line"]
+    RLC["**release-line-cycle**\niterate_over: release-line\napprove → initial-design → delivery → align-agent-docs → plan-next-release-line"]
     SU["**sunset**\n`end-of-life`\nDeprecate + archive"]
 
     I --> S --> INIT --> SFR --> RLC --> SU
@@ -374,7 +374,7 @@ land at release-line boundaries). It declares no `element`, so either caller may
 ```mermaid
 flowchart TD
     subgraph AD["agent-docs"]
-        AGD["**align-agent-docs** *(architect)*\nCLAUDE.md · .wingfoil/README.md · .wingfoil/WORKFLOW.md\n✔ status, element/state tables, workflow list and role bindings\nmatch CORE_MODULES, memory.yaml, workflows.yaml, roles.yaml\n✔ workflow-md.complete: WORKFLOW.md names every workflow and phase\n🔑 Approval gate — *approver*"]
+        AGD["**align-agent-docs** *(architect)*\nAGENTS.md (CLAUDE.md: its @AGENTS.md pointer) · .wingfoil/README.md · .wingfoil/WORKFLOW.md\n✔ AGENTS.md status, element/state tables, workflow list and role bindings\nmatch CORE_MODULES, memory.yaml, workflows.yaml, roles.yaml\n✔ workflow-md.complete: WORKFLOW.md names every workflow and phase\n✔ CLAUDE.md is a pointer that imports AGENTS.md (dl-137)\n🔑 Approval gate — *approver*"]
     end
 ```
 
@@ -560,13 +560,31 @@ scoped to the delta.
 
 ---
 
+## Phase Keys — what a phase may declare
+
+Beyond `name`, `description`, `role`, `actions`, `include`, `checks`, `approval` and `fallback`, the phases
+above use these keys (`spec-003` § Phase; `workflow next` and `workflow show` surface each one read-only,
+`spec-017`; none is executed or enforced in v0.3):
+
+| Key | Meaning | Used here |
+|-----|---------|-----------|
+| `iterate_over` / `where` | Run the included workflow once per matching element of a type, or once per entry of a collection in versioned configuration (`element:waves`, `dl-104` D2 (b)); `where` filters the candidates | `release-line-cycle`, `release-cycle`, `wave` |
+| `produces` | The artifacts that deduce the phase's completion. A string is owned by the workflow's `element`; an object `{ type, path }` is owned by the elements of type `type` the phase creates (`dl-104` D3) | the object form in `release-line-cycle` and `release-planning` |
+| `awaits` | `{ party, evidence }`: the phase waits on an actor outside the project (the npm registry, a GitHub environment reviewer), `evidence` a check token that observes the outcome (`dl-104` D4); distinct from `approval:`, which names a project role. In v0.3 such a phase completes by a `workflow finalize` record | declared by no phase today |
+| `mode` | Which non-fresh execution mode the phase's agent run may use: `fresh` (default), `resume`, `reference` (`dl-134` §4 (a), `dl-135`); every v0.3 run is `fresh` | `dev-loop`'s `refactor` (`resume`) |
+| `distinct_from` | Phases of the same workflow whose runs this phase's run never shares an agent session with, whatever `mode` says (`dl-134` §4 (b)) | `dev-loop`'s `green` (`[red]`) and `review` (`[red, green, refactor]`) |
+| `cadence` | `once` (default) or `{ recurring: { cron } \| { on } }`: whether the phase recurs, and on what trigger (`dl-105`); reported, never fired, until an engine trigger exists | declared by no phase today |
+| `optional` | The phase may be skipped: in v0.3 when a later phase of the same workflow is complete | `initial-design`'s seeds, `release-planning`'s `record-adrs`, `vision-change`'s three downcasts |
+
+---
+
 ## Token Bindings — `workflows/bindings.yaml`
 
 Every `actions:` and `checks:` token resolves through a binding (spec-003 Layer 3, dl-090). The
 `memory.*`, `set_state` / `sync_state`, `element.set_release`, `config.init` and `agent.*` tokens are
 built in (`agent.*` is `wingfoil agent execute` under the phase's role; the instruction is the phase's
 `description`). Every other token is bound in `.wingfoil/workflows/bindings.yaml` (`format: 1`,
-dl-153): a check to an argument vector (`npm test`, `npm run lint`, `npm run docs:api`,
+dl-153): a check to a `run` argument vector (`npm test`, `npm run lint`, `npm run docs:api`,
 `npm run typecheck`, `npm run check:lockfile`, `npm run check:mcp`, `node scripts/e2e-smoke.cjs`, …),
 an action to a command (`release-health.measure` / `.compare`, `node scripts/release-health/… --any-node --max-workers 2`) or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
 `approver.execute`). Token arguments are `key: value` pairs, substituted as whole argv elements, never
