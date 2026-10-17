@@ -10,7 +10,7 @@ In short:
 - **A defect:** open an issue with the **Bug report** form. Its fields are the `bug` element's, so it
   is captured as one without asking you again.
 - **A proposal** about the product or the process: open an issue with the **Proposal** form, which is
-  captured as a `decision-log`.
+  captured as a `decision-log` (a feature request, as a `change-proposal`).
 - **A question:** ask in [Discussions](https://github.com/wingfoil/wingfoil/discussions/categories/q-a),
   not in the issue tracker.
 - **A vulnerability:** never in a public issue. Follow [`SECURITY.md`](SECURITY.md).

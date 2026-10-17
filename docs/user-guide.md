@@ -1,6 +1,6 @@
 # WingFoil user guide
 
-A step-by-step guide to configuring and using WingFoil **0.2.2** in your own project. It starts from an
+A step-by-step guide to configuring and using WingFoil **0.3** in your own project. It starts from an
 empty git repository and ends with an AI agent reading your project through MCP.
 
 - Every command is documented in full in the [CLI reference](cli-reference.md).
@@ -22,7 +22,8 @@ empty git repository and ends with an AI agent reading your project through MCP.
 8. [Daily use: the life of a Memory document](#8-daily-use-the-life-of-a-memory-document)
 9. [Connect an AI agent](#9-connect-an-ai-agent)
 10. [CI and scripting](#10-ci-and-scripting)
-11. [Known limitations in 0.2.2](#11-known-limitations-in-022)
+11. [Known limitations in 0.3](#11-known-limitations-in-03)
+12. [Upgrading from 0.2.x](#12-upgrading-from-02x)
 
 ---
 
@@ -74,7 +75,8 @@ npm install -g wingfoil
 wingfoil --version
 ```
 
-Or run it without installing: `npx wingfoil <command>`.
+Or run it without installing: `npx wingfoil <command>`. Coming from 0.2.x? Read
+[§12](#12-upgrading-from-02x) first.
 
 ## 3. Initialize a project
 
@@ -86,9 +88,9 @@ $ wingfoil init --template Scrum
   "root": "/home/ada/my-project",
   "template": "Scrum",
   "files": [
-    ".wingfoil/directives/built-in/architecture.md",
+    ".wingfoil/agents/built-in/claude-code.yaml",
     …
-    ".wingfoil/workflows.yaml"
+    ".wingfoil/workflows/custom/sw-life-cycle.yaml"
   ]
 }
 ```
@@ -108,7 +110,7 @@ commits:
 │   ├── built-in/             architecture, code-quality, code-review, documentation, security, testing
 │   └── custom/               determinism, doc-versioning, security-secrets, traceability (yours to edit)
 ├── agents/
-│   ├── built-in/             agent adapters shipped by WingFoil (unreleased (v0.3): claude-code, codex-cli)
+│   ├── built-in/             agent adapters shipped by WingFoil: claude-code, codex-cli
 │   └── custom/               your own agent adapters (empty)
 ├── workflows.yaml            the workflow manifest
 └── workflows/custom/         sw-life-cycle, bug-ingest, decision-log-ingest, adr-ingest, scrum-delivery (or kanban-delivery)
@@ -166,7 +168,7 @@ documents that they never approve:
 wingfoil dna add team.agents --value claude --entry-executes_as developer,reviewer --entry-approval_authority false
 ```
 
-**Agent commit identity** (Unreleased (v0.3)). An agent entry may also carry an `email`; with its
+**Agent commit identity.** An agent entry may also carry an `email`; with its
 `name`, it is the identity written in the `Co-Authored-By: <name> <<email>>` trailer of the commits the
 agent co-authors (WingFoil's own `git-conventions` directive adds an `AI-Model:` trailer with the model
 identifier). The field is optional unless the entry declares an `adapter` (below), and there are two
@@ -207,8 +209,11 @@ Each technology is a `{name, category}` entry: `category` is required, `version`
 optional. The `dna.yaml` that `init` writes shows the shape as a commented example above
 `technologies: []`.
 
-`paths` has five categories — `sources`, `tests`, `docs`, `config`, `governance` — and
-`wingfoil paths <category>` answers "where is X?" for people and agents alike.
+`paths` has seven categories — `sources`, `tests`, `docs`, `config`, `governance`, `runs`, `health` —
+and `wingfoil paths <category>` answers "where is X?" for people and agents alike. `runs` is the
+directory of the agent run log (§9.4); `init` declares it as `docs/runs/`. `health` is the directory of
+the release-health catalogue and reports; `init` does not declare it, so `wingfoil paths health` fails
+with `error: no paths mapped for category 'health'` (exit `1`) until you add it.
 
 The fields each collection accepts are listed in the
 [CLI reference](cli-reference.md#wingfoil-dna-add). You can also edit `dna.yaml` by hand — then commit it.
@@ -249,7 +254,8 @@ listed.
 
 From v0.3, the `bug` type in the scaffold carries a commented-out `states:` block of its own. Uncomment
 it to see how a type overrides the default; the states in it are an example, not a recommendation.
-Unreleased (v0.3): the scaffold also declares `plan`, the record of a started workflow, with its own
+It also shows the two optional keys of 0.3: `returns`, the edge `memory park` takes back to an earlier
+state, and `limits`, a work-in-progress cap per state (§8.6). The scaffold also declares `plan`, the record of a started workflow, with its own
 machine `draft → active → done`: `wingfoil workflow start` adds and submits a plan (`draft → active`), and
 `wingfoil workflow end` takes its `waiting` edge (`active → done`), which no `memory` verb drives.
 Commit the edited `memory.yaml` before running Memory commands: they read it as committed, not from
@@ -340,7 +346,7 @@ wingfoil directive assign --directive api-style --role developer
 `--directive` accepts several names: `--directive api-style,architecture`.
 
 To retire a directive, first remove it from `roles.yaml` by hand (there is no unassign command in
-0.2.2), commit, then:
+0.3), commit, then:
 
 ```bash
 wingfoil directive remove api-style
@@ -352,47 +358,51 @@ Full script: [`examples/03-directives-per-role`](examples/03-directives-per-role
 
 `workflows.yaml` includes the workflow files under `workflows/`. `init` gives you:
 
-| Workflow | Kind | Phases |
+| Workflow | Started or included | Phases |
 |---|---|---|
-| `sw-life-cycle` | main | inception → specification → delivery → sunset |
-| `scrum-delivery` / `kanban-delivery` | sub (included by `delivery`) | plan → build → review → deliver |
-| `bug-ingest`, `decision-log-ingest`, `adr-ingest` | main | capture |
+| `sw-life-cycle` | startable | inception → specification → delivery → sunset |
+| `scrum-delivery` / `kanban-delivery` | includable (by `delivery`) | plan → build → review → deliver |
+| `bug-ingest`, `decision-log-ingest`, `adr-ingest` | startable | capture |
+
+A phase includes another workflow by its **name** (`include: scrum-delivery`), not by its file path.
 
 ```bash
-wingfoil workflow list
+wingfoil workflow list                 # the workflows you can run now (--all: every one)
+wingfoil workflow show sw-life-cycle   # one workflow: its phases, roles, directives, actions, checks
 ```
 
-Unreleased (v0.3): `workflow list` lists the workflows you can start, plus an included one an open workflow
-has reached (`--all` lists every workflow), as committed at `HEAD`; `wingfoil workflow show <name>` prints
-one workflow's phases, each with its role, that role's directives, its actions and checks, and the
-workflows it includes nested under it. `wingfoil workflow next` names the next step of an open workflow:
-its role and that role's directives, the element it works on, and for each action the command to run or
-the commit subject it expects (`--assigned-to me` keeps the steps your role holds).
-`wingfoil workflow start <name>` opens a workflow — it records it as a `plan` document and makes it the
-active workflow (`--element <type>:<id>` names the element it runs on) — and `wingfoil workflow end`
-closes the active one once its steps are complete, making the previous one active again. A step that nothing
-in the repository can show as done — a checkpoint, a wait for a third party, an approval no element
-carries — is recorded with `wingfoil workflow finalize`, an empty commit that `workflow next` then moves
-past (on a phase with `approval:`, only an approver can, with `--reason`). `wingfoil workflow status`
-lists every open workflow with its phases and ready steps, the approvals waiting for a decision and who they
-are routed to, and the documents sitting at a gate that no open workflow carries, each as a "human needed"
-line. `wingfoil workflow create <name> --kind main|sub` writes a new workflow file under
-`workflows/custom/` with one phase to replace, and adds it to `workflows.yaml`;
-`wingfoil workflow remove <name>` deletes a custom one that no other workflow includes and no open workflow runs (built-in workflows
-cannot be removed). See the
-[CLI reference](cli-reference.md#wingfoil-workflow-list).
+Both read the workflow files as committed at `HEAD`. A workflow is run in four steps:
 
-**No workflow engine runs your steps**: in 0.2.2 nothing starts a workflow; unreleased (v0.3),
-`workflow start` / `end` record an open workflow and `workflow next` names its next step, but nothing
-executes a step or runs its checks. The workflow files describe your process so that people and agents read
-the same one, and you follow it by hand. In practice:
+1. **Start it.** `wingfoil workflow start <name>` opens a workflow: it records it as a `plan` document
+   (an `add` and a `submit` commit) and makes it the active workflow. `--element <type>:<id>` names the
+   element it runs on.
+2. **Ask what comes next.** `wingfoil workflow next` names the next step of the active workflow: its role
+   and that role's directives, the element it works on, and for each action the command to run or the
+   commit subject it expects (`--assigned-to me` keeps the steps your role holds). `wingfoil workflow
+   status` lists every open workflow with its phases and ready steps, the approvals waiting for a
+   decision and who they are routed to, and the documents sitting at a gate that no open workflow carries,
+   each as a "human needed" line.
+3. **Do the step.** Do that phase's work in the role it names, with that role's directives loaded, and
+   record the outcome as Memory documents moved through their states with the verbs in §8. WingFoil
+   deduces from those documents, as committed, that the step is done. A step that nothing in the
+   repository can show as done — a checkpoint, a wait for a third party, an approval no element carries —
+   is recorded with `wingfoil workflow finalize`, an empty commit that `workflow next` then moves past (on
+   a phase with `approval:`, only an approver can, with `--reason`). An agent can be launched on a step
+   with `wingfoil agent execute --next` (§9.4).
+4. **End it.** `wingfoil workflow end` closes the active workflow once its steps are complete, and makes
+   the previous one active again.
 
-1. Pick the workflow and phase you are in, from `workflow list` and `workflow show <name>` (0.2.x: `workflow list`).
-2. Do that phase's work in the role it names, with that role's directives loaded.
-3. Record the outcome as Memory documents and move them through their states with the verbs in §8.
+**WingFoil records and routes; it does not execute.** Nothing runs a step or its checks for you: the
+workflow files describe your process so that people and agents read the same one, and the commands above
+tell you where you are in it.
 
-Unreleased (v0.3): a workflow run from `workflow start` to `workflow end`, with a routed approval and a
-checkpoint recorded by `workflow finalize`. Full script: [`examples/06-workflow-approval`](examples/06-workflow-approval/run.sh).
+`wingfoil workflow create <name> --kind main|sub` writes a new workflow file under `workflows/custom/`
+with one phase to replace, and adds it to `workflows.yaml`; `wingfoil workflow remove <name>` deletes a
+custom one that no other workflow includes and no open workflow runs (built-in workflows cannot be
+removed). See the [CLI reference](cli-reference.md#wingfoil-workflow-list).
+
+A workflow run from `workflow start` to `workflow end`, with a routed approval and a checkpoint recorded
+by `workflow finalize`: [`examples/06-workflow-approval`](examples/06-workflow-approval/run.sh).
 
 ## 8. Daily use: the life of a Memory document
 
@@ -418,7 +428,7 @@ wingfoil memory submit task-001-my-first-task      # draft → pending
 ```
 
 The submit commit records your content **and** the state change. You do not need to commit the edits
-first. Unreleased (v0.3): the commit body names what it carries besides the state change, e.g.
+first. The commit body names what it carries besides the state change, e.g.
 `Carries content: frontmatter field 'title', the body`. The template's placeholder comments are yours
 to replace: neither `memory add` nor `memory submit` writes the body for you.
 
@@ -442,6 +452,8 @@ wingfoil memory reject  task-001-my-first-task --reason "Add acceptance criteria
 
   Approver: Ada Lovelace <ada@example.com> (approver)
   Reason: Scope is clear.
+
+  WingFoil-Version: 0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)
   ```
 
 - A reject also writes the reason into the document's `rejection_reason` field; the next submit clears
@@ -469,6 +481,42 @@ wingfoil memory history task-001-my-first-task      # every commit: who, when, f
 `memory search` leaves out `deprecated` documents unless you ask for them with `--status deprecated`.
 
 Full script: [`examples/01-first-project`](examples/01-first-project/run.sh).
+
+### 8.6 Park and amend
+
+Two verbs change a document without walking its `sequence` forward.
+
+**Park** returns a started document to an earlier state along a `returns` edge its type declares (§5.1),
+when the work stops for now — which is not a rejection. With the scaffold's commented `bug` machine
+uncommented and committed:
+
+```console
+$ wingfoil memory park bug-001-login-fails --reason "Waiting for the upstream fix."
+{
+  "id": "bug-001-login-fails",
+  "path": "docs/memory/bug/bug-001-login-fails.md",
+  "from": "in-progress",
+  "to": "open",
+  "reason": "Waiting for the upstream fix."
+}
+```
+
+The commit is `wf(bug): park bug-001-login-fails [in-progress → open]` with the reason; no approver role
+is needed. A state may also declare a `limits:` count: entering a full state with `add`, `submit` or
+`approve` is refused, naming the documents that hold it; `reject` and `park` are never refused by a
+limit.
+
+**Amend** records a correction to a document whose state should not change — an `approved` tech-spec,
+for example. Edit the file (not its `status`, `id`, `type`, `release`, `rejection_reason` or
+`supersedes`), then:
+
+```bash
+wingfoil memory amend spec-001-storage-layout --reason "Later measurements corrected the §2 figures."
+```
+
+It commits that edit alone as `wf(tech-spec): amend spec-001-storage-layout [approved → approved]`, with
+the `Approver:` and `Reason:` lines: like `approve`, it needs the `approver` role. The type must declare
+`amendable: true` in `memory.yaml`; `init` declares it for every type except `release-line`.
 
 ## 9. Connect an AI agent
 
@@ -502,15 +550,14 @@ What the server exposes — all **read-only**:
 | Resource template | `wingfoil://memory/{type}/{id}` | one document, full content |
 | Resource | `wingfoil://workflows` | every workflow, summary |
 | Resource template | `wingfoil://workflows/{name}` | one workflow, full definition |
-| Resource | `wingfoil://workflows/-/next` | Unreleased (v0.3): the next step of the active workflow, as `wingfoil workflow next --format json` prints it |
-| Resource | `wingfoil://workflows/-/status` | Unreleased (v0.3): every open workflow, as `wingfoil workflow status --format json` prints it |
-| Resource template | `wingfoil://session/{role}/{element}/{state}` | Unreleased (v0.3): the agent's execution context for `element` (`<type>:<id>`) at the commit `state`, the same text as `<role>-session` with those two arguments; not listed, read by its full URI |
+| Resource | `wingfoil://workflows/-/next` | the next step of the active workflow, as `wingfoil workflow next --format json` prints it |
+| Resource | `wingfoil://workflows/-/status` | every open workflow, as `wingfoil workflow status --format json` prints it |
+| Resource template | `wingfoil://session/{role}/{element}/{state}` | the agent's execution context for `element` (`<type>:<id>`) at the commit `state`, the same text as `<role>-session` with those two arguments; not listed, read by its full URI |
 | Prompt | `<role>-session` (one per role, e.g. `developer-session`) | session instructions for the role, embedding its directives |
 
 The server has **no Tools**: an agent cannot change anything through MCP. It writes by running the CLI,
-like a person — and never approves. Unreleased (v0.3): `tools/list` answers an empty list, and the
-server reads the role list from `dna.yaml` when it starts — restart it after adding or removing a
-role. Also unreleased (v0.3): `<role>-session` takes two optional arguments, `element="<type>:<id>"`
+like a person — and never approves. `tools/list` answers an empty list, and the server reads the role
+list from `dna.yaml` when it starts — restart it after adding or removing a role. `<role>-session` takes two optional arguments, `element="<type>:<id>"`
 and `state="<commit>"` (any name of one commit; a sha is recommended); given together, the Prompt returns the agent's execution context for that
 element as the commit holds it (later commits and uncommitted edits do not change it). The Resource
 `wingfoil://session/<role>/<type>:<id>/<commit>` returns the same text, for agents whose client lets the model read
@@ -530,6 +577,44 @@ reinforce the rules.
 Tell the agent which role it acts in, and have it load that role's rules — through the
 `<role>-session` Prompt, or with `wingfoil directives list --role <role>` and the listed files.
 
+### 9.4 Launch an agent
+
+`wingfoil agent execute` launches an agent CLI on one Memory element, with its context assembled and
+checked first. `init` installs two adapters under `.wingfoil/agents/built-in/`: `claude-code` (Claude
+Code) and `codex-cli` (Codex CLI); `.wingfoil/agents/custom/` takes your own. Declare the agent in
+`dna.yaml` with the adapter it is launched through and the email its commits are co-authored with (§4.2):
+
+```bash
+wingfoil dna add team.agents --value claude --entry-adapter claude-code --entry-email noreply@anthropic.com --entry-executes_as developer,reviewer
+```
+
+Then launch it on an element, or on the next step of the active workflow (§7):
+
+```bash
+wingfoil agent execute --element task:task-001-my-first-task --role developer
+wingfoil agent execute --next
+```
+
+Before anything is spawned it checks the element, the role (never `approver`), the adapter, your git
+identity, `paths.runs` and the context, and refuses with exit `1` on the first failure. The agent is
+handed the terminal; its first prompt tells it to read its context from the MCP Resource
+`wingfoil://session/<role>/<type>:<id>/<commit>`, served by a WingFoil MCP server of the same build that
+`agent execute` registers for it. When the agent exits, the run is recorded as one line of
+`<paths.runs>/<element-id>.jsonl`, committed as `agent: record <run-id>`. `--dry-run` runs every check and
+prints the launch it would make; both built-in adapters need a terminal, so a dry run with stdin or
+stdout redirected fails with `error: interactive launch needs a terminal on stdin and stdout`.
+
+```bash
+wingfoil agent list            # the recorded runs, and the workflow steps waiting for an agent
+wingfoil agent show task-001-my-first-task/adhoc/1
+```
+
+**Codex CLI: do not declare a server named `wingfoil` in a trusted project's `.codex/config.toml`.** The
+`codex-cli` adapter registers WingFoil's MCP server with Codex's `-c mcp_servers.wingfoil=…` override, and
+Codex merges that override with a same-named table of a trusted project's `.codex/config.toml`: the
+keys the project sets and the override does not (`env`, `cwd`, …) reach WingFoil's server, and a `cwd`
+can make it serve another repository's context.
+
 ## 10. CI and scripting
 
 - `--format json` prints compact JSON and nothing else; `--format yaml` prints YAML. Errors become
@@ -548,11 +633,42 @@ PENDING=$(wingfoil memory search --type task --status pending --format json \
 
 Full script: [`examples/05-ci-json-exit-codes`](examples/05-ci-json-exit-codes/run.sh).
 
-## 11. Known limitations in 0.2.2
+## 11. Known limitations in 0.3
 
-- **No workflow engine** — workflows are followed by hand (§7).
+- **No step execution** — WingFoil tracks workflows and routes their approvals, but people and agents
+  carry out the steps and run their checks (§7).
 - **No unassign command for directives** — edit `roles.yaml` and commit (§6.2).
 - **Run from the repository root** — a subdirectory fails with `E_NOT_AT_GIT_ROOT`.
 - **`dna show` takes only a top-level section** (`team`, not `team.members`).
-- **Adding the first entry of a collection `dna.yaml` does not contain yet** (for example the first
-  `team.agents` entry) rewrites `dna.yaml` without its comments. Other DNA writes keep them.
+
+## 12. Upgrading from 0.2.x
+
+A project initialised by 0.2.x keeps working with 0.3 after these changes. Each was checked by
+initialising a project with 0.2.2 and running both versions on it.
+
+- **A phase `include:` is a workflow name.** 0.2.x scaffolded `include: workflows/custom/scrum-delivery.yaml`
+  in `sw-life-cycle.yaml`; 0.3 refuses a path, so every workflow command fails with exit `1`:
+  `error: E_WORKFLOW_INCLUDE_UNRESOLVED phases[2].include (workflows/custom/sw-life-cycle.yaml): include 'workflows/custom/scrum-delivery.yaml' names no loaded workflow (a phase include is a workflow name, not a file path)`.
+  Write `include: scrum-delivery` (or `kanban-delivery`) and commit.
+- **`wingfoil workflow list` has a new output.** It prints `{baseline, workflows: [{name, startable,
+  includable, description, executableNow}]}` for the workflows you can run now (`--all` for every one)
+  instead of the raw manifest; `wingfoil workflow show <name>` prints one workflow's phases.
+- **To run workflows and agents, add what 0.3's `init` scaffolds.** `workflow start` needs the `plan`
+  type (`error: memory type 'plan' is not declared in memory.yaml; workflow start records an instance as a
+  plan element`); `agent execute` needs `paths.runs` and an adapter. Copy the `plan` entry of
+  `memory.yaml`, `memory/templates/plan.md`, `paths.runs: [docs/runs/]` and `.wingfoil/agents/` from a
+  project `wingfoil init` creates in an empty repository, then commit.
+- **A surplus operand is refused** with exit `2` before anything is read or written:
+  `wingfoil memory search a b` exited `0` in 0.2.2 and now prints
+  `error: wingfoil memory search takes one positional <keyword> (got 2 positionals)`.
+- **No `.wingfoil/`, no answer.** In a git repository without `.wingfoil/`, `wingfoil mcp` and
+  `wingfoil directives list` exited `0` in 0.2.2; they now exit `1` with `error: WingFoil not initialized
+  (no .wingfoil/ directory at the project root): run 'wingfoil init' first`.
+- **Refusal wordings changed.** A missing operand reads `error: missing required argument: <id>` with the
+  usage on a `hint:` line; an illegal transition names the attempted move, `(none)` when the verb has no
+  edge from that state, followed by a reason line (`error: illegal transition draft -> (none) for type
+  'task'`, where 0.2.2 printed `draft -> approved`). Scripts matching 0.2.2's stderr text must be updated;
+  exit codes are unchanged.
+- **`wingfoil --version` prints the build's commit too**: `0.3.0 (<sha>)`, where 0.2.2 printed `0.2.2`.
+- **Library users:** the package's main entry no longer exports `prepareMemoryTransition` (use
+  `beginMemoryTransition`), and `dist/storage` no longer exports the unconfined `resolveMemoryPath`.

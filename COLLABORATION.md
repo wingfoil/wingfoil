@@ -1,8 +1,8 @@
 # Contributing to WingFoil — through Memory, not (only) code
 
-**Version:** 1.5 · **Date:** 2026-10-10
+**Version:** 1.6 · **Date:** 2026-10-17
 
-WingFoil is a harness for **AI-assisted, deterministic software development**. It manages its own
+WingFoil is a harness for **AI-assisted software development**, built to make it deterministic. It manages its own
 development the same way it asks other projects to (dogfooding): every change flows through
 **Project Memory** — typed, versioned, git-backed artifacts — under an explicit **Workflow** and
 **Directives**. This document explains how *you* contribute to that flow.
@@ -32,22 +32,31 @@ capture (“ingest”) workflow:
 Each artifact starts at `draft`, then moves to its first working state (`open` / `in-discussion` /
 `pending` / `in-analysis`) so there is content to discuss. A change-proposal names its impact on every
 layer below the vision (features, user stories, BDD, SARD requirements, delivered work), "no impact"
-included, and is done only once a release carries it (`dl-132`). From there it is **triaged, approved, and scheduled** into a
-release during `release-planning` (see `dl-016` — `triage-bugs` + `reconcile-governance`), and an AI
-agent implements it under the `dev-loop` (TDD + BDD, `code-review`/`code-quality` directives).
+included, and its work is finished once a release is scheduled to carry it (`dl-132`). From there:
+
+- a **bug, decision-log or ADR** is **triaged, approved, and scheduled** into a release during
+  `release-planning` (`dl-016` — `triage-bugs` + `reconcile-governance`);
+- a **change-proposal** is accepted at `vision-change`'s impact analysis and **scheduled by its
+  `schedule` step**, which names the release; that release's `release-planning` then sweeps it into the
+  release's features at `define-scope`.
+
+An AI agent then implements the work under the `dev-loop` (TDD + BDD, `code-review`/`code-quality`
+directives).
 
 ## How to contribute (today)
 
-The `wingfoil` CLI ships (npm `wingfoil`), but it cannot run a workflow yet, so the ingest workflows
-are still run by a maintainer or an agent. The current path is:
+The `wingfoil` CLI ships (npm `wingfoil`) and keeps the bookkeeping of a workflow — `wingfoil workflow
+start bug-ingest` records the run and `wingfoil workflow next` names its next step — but it does not
+carry out the steps, so the ingest workflows are run by a maintainer or an agent. The current path is:
 
 1. **Open a GitHub issue** with one of the two issue forms (`.github/ISSUE_TEMPLATE/`):
    - **Bug report**, for a defect. Its fields are the `bug` element's: the issue title is the bug's
      `title`, then `severity`, the WingFoil version (`release-origin`), Summary, Steps to Reproduce,
      Expected Behavior, Actual Behavior and Notes. `bug-ingest`'s `capture` copies every answer
      except two, which it maps: the title loses its `bug: ` prefix, and the installed version you
-     give (`wingfoil --version`, e.g. `0.2.2`) becomes the `release-origin` id of the release that
-     published it (`v0.2` for a minor's build such as `0.2.1`, `v0.2.2` for a patch release).
+     give (`wingfoil --version`, e.g. `0.3.0 (<commit>)`; the commit part is dropped) becomes the
+     `release-origin` id of the release that published it (`v0.3` for a minor's build such as `0.3.0`,
+     `v0.2.2` for a patch release).
    - **Proposal**, for a product or process decision: the context, the options you see and the one you
      prefer, which `decision-log-ingest`'s `capture` records as the `decision-log`'s Context, Decision
      and Rationale (the title loses its `proposal: ` prefix).
@@ -66,13 +75,17 @@ element the change implements, as the `traceability` directive requires. Everyon
 [Code of Conduct](CODE_OF_CONDUCT.md). [`CONTRIBUTING.md`](CONTRIBUTING.md) is the short pointer to
 this document that GitHub shows contributors (`dl-127`).
 
-Once workflow execution ships, you (or an agent on your behalf) will run the ingest workflow directly.
+You (or an agent on your behalf) can start an ingest workflow yourself with
+`wingfoil workflow start <name>` and follow it with `wingfoil workflow next`; its steps are still
+carried out by hand.
 
 ## Contributor setup — the WingFoil build that manages this repository
 
-WingFoil's own Memory, DNA and workflows are read and written by a **published, pinned** WingFoil
-build, never by the code under development
-([`dl-095`](docs/04_memory/design/dls/dl-095-which-wingfoil-build-develops-wingfoil.md)). It is
+WingFoil's own Memory, DNA and workflows are read through a **published, pinned** WingFoil build
+([`dl-095`](docs/04_memory/design/dls/dl-095-which-wingfoil-build-develops-wingfoil.md)); the Memory
+operations that write a commit run on the code build compiled from your checkout (`npm run build`, then
+`node dist/cli.js …`), as the `wingfoil-cli` directive
+([`.wingfoil/directives/custom/wingfoil-cli.md`](.wingfoil/directives/custom/wingfoil-cli.md)) states. It is
 declared in `package.json` as the devDependency `"wingfoil-released": "npm:wingfoil@<version>"`, so a
 clone needs one command and no build step:
 
@@ -159,7 +172,7 @@ truth model — no external contributor database, no commit rewriting.
 
 ## Pointers
 
-- Project overview & how it all fits together: [`CLAUDE.md`](CLAUDE.md) and
+- Project overview & how it all fits together: [`AGENTS.md`](AGENTS.md) and
   [`.wingfoil/README.md`](.wingfoil/README.md).
 - The decision behind this document: `dl-020-contribution-model`.
 - Attribution model: `adr-006-git-identity-role-based-authz`.

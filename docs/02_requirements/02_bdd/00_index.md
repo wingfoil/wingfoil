@@ -119,6 +119,9 @@ and edge cases, expressed in Gherkin (Given-When-Then).
 
 ## Module 2 validation
 
+The checklist and the first table below are the validation run when the suite was generated (2026-06-26), kept as
+that baseline; the suite has grown since. The re-count after it is the current one.
+
 - [x] All 63 MVP features have a `.feature` file — **63/63 ✅**
 - [x] Each file has ≥1 Happy Path scenario and ≥1 Error/Edge scenario — **✅** (190 scenarios total)
 - [x] No vague performance adjectives (quantified criteria only) — **✅** (0 vague
@@ -126,7 +129,7 @@ and edge cases, expressed in Gherkin (Given-When-Then).
   adjective but is defined operationally by the relevance-filtering rule in feature
   **P5.3.3**)
 
-### Verification results (2026-06-26)
+### Verification results (2026-06-26, generation baseline)
 
 | Check                                       | Result                                         |
 |---------------------------------------------|------------------------------------------------|
@@ -135,3 +138,14 @@ and edge cases, expressed in Gherkin (Given-When-Then).
 | Files with ≥1 nominal **and** ≥1 error/edge | **63/63**                                      |
 | Vague performance adjectives in steps       | **0** ("relevant" defined by P5.3.3)           |
 | Files starting with `Feature:`              | **63/63**                                      |
+
+### Re-count (2026-10-17)
+
+The rows that a command can recount, re-run on the suite as it is (task-289, `bug-298`). The two judgement rows of
+the baseline — one nominal and one error/edge scenario per file, no vague performance adjectives — were not re-run.
+
+| Check                                                | Result                                         | Command                                                                                     |
+|------------------------------------------------------|------------------------------------------------|---------------------------------------------------------------------------------------------|
+| `.feature` files per pillar                          | P1=13, P2=5, P3=8, P4=20, P5=17, X1=2 → **65** | `find features/<pillar> -name '*.feature' \| wc -l`, per pillar folder                      |
+| Total scenarios                                      | **255**                                        | `grep -rhE '^\s*Scenario( Outline)?:' features \| wc -l`                                     |
+| Files whose first line other than a comment is `Feature:` | **65/65** (8 open with a `# Revised …` comment) | `grep -m1 -v '^\s*\(#\|@\|$\)' <file>`, per file                                          |

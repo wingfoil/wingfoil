@@ -10,9 +10,9 @@
 # test/docs/llms-txt.test.ts fails when a listed path does not exist, when llms.txt differs from its render, or when
 # an llms entry is not part of the site (dl-116). Owned by user-docs' align-user-docs phase (its `produces:`): after
 # editing this file, regenerate llms.txt with `node scripts/build-site.cjs llms`.
-version: 1.1                     # 1.1 dl-128 items 3–4 (task-246): + docs/comparison.md and docs/case-study.md, as pages and in the Optional llms section
+version: 1.2                     # 1.1 dl-128 items 3–4 (task-246): + docs/comparison.md and docs/case-study.md, as pages and in the Optional llms section; 1.2 dl-112 Q3 (i), dl-131 (task-289): the summary states determinism as the goal the Determinism Index measures
 title: WingFoil
-summary: "A structured harness for deterministic AI-assisted software development: it keeps a project's memory, DNA, directives and workflows in git, and serves them to humans and AI agents through a CLI and an MCP server."
+summary: "A structured harness for AI-assisted software development, built to make it deterministic, a goal it measures: it keeps a project's memory, DNA, directives and workflows in git, and serves them to humans and AI agents through a CLI and an MCP server."
 
 # Markdown pages, rendered by Jekyll; the raw .md is served beside each page. README.md is the site index.
 pages:

@@ -1,6 +1,6 @@
 # WingFoil
 
-> A structured harness for deterministic AI-assisted software development: it keeps a project's memory, DNA, directives and workflows in git, and serves them to humans and AI agents through a CLI and an MCP server.
+> A structured harness for AI-assisted software development, built to make it deterministic, a goal it measures: it keeps a project's memory, DNA, directives and workflows in git, and serves them to humans and AI agents through a CLI and an MCP server.
 
 ## Docs
 

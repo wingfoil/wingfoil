@@ -1,11 +1,11 @@
 # WingFoil CLI reference
 
-Every `wingfoil` command in release **0.2.2**, one entry each. For a guided, step-by-step introduction
+Every `wingfoil` command in release **0.3**, one entry each. For a guided, step-by-step introduction
 read the [user guide](user-guide.md); for runnable scenarios see [`examples/`](examples/).
 
 > This reference is checked against the CLI by `test/docs/cli-reference.test.ts`: every shipped command
 > has exactly one `### wingfoil …` entry below, and no entry documents a command that does not ship.
-> `wingfoil --help` and `wingfoil <noun> --help` list the same surface. New in 0.2.2: each command's
+> `wingfoil --help` and `wingfoil <noun> --help` list the same surface. Since 0.2.2, each command's
 > `--help` opens with the first sentence of its entry, names its argument as the entry does, and shows
 > one example and the exit codes.
 
@@ -19,7 +19,7 @@ Run `wingfoil` from the **root of a git repository** that has been initialized w
 Outside a git repository a command fails with `error: E_NO_GIT_ROOT: not inside a git repository`; in a
 subdirectory it fails with `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project root` (both exit `1`).
 
-Unreleased (v0.3): a command that reads the configuration, run where there is no `.wingfoil/`, exits `1`
+New in 0.3: a command that reads the configuration, run where there is no `.wingfoil/`, exits `1`
 with `error: WingFoil not initialized (no .wingfoil/ directory at the project root): run 'wingfoil init'
 first`. When `.wingfoil/` exists but lacks the file the command needs, the error names that file from
 the project root — `error: .wingfoil/dna.yaml is missing: restore it from git, or re-create it (…)` —
@@ -36,10 +36,10 @@ your machine.
   that declares none — is refused with exit `2` before anything is written:
   `wingfoil memory approve task-001 task-002 --reason ok` →
   `error: wingfoil memory approve takes one positional <id> (got 2 positionals)`.
-  Unreleased (v0.3): the four `dna` path verbs refuse it the same way, from any directory, and add
+  New in 0.3: the four `dna` path verbs refuse it the same way, from any directory, and add
   where the value goes — `error: wingfoil dna set takes one positional <path>; the value travels in
   --value (got 2 positionals)`.
-- Unreleased (v0.3): **a missing positional** is refused with exit `2` in one form for every command,
+- New in 0.3: **a missing positional** is refused with exit `2` in one form for every command,
   the command's usage following on a `hint:` line:
   ```
   $ wingfoil memory approve
@@ -48,7 +48,7 @@ your machine.
   ```
   A missing option keeps its own form, `error: missing required argument: --title`.
 - The global `--format` value is checked first: an invalid one is refused before anything else,
-  whatever command it is given to (Unreleased (v0.3): `init` and `mcp` too).
+  whatever command it is given to (since 0.3, `init` and `mcp` too).
 - **Options are attributes** — the values the command writes or filters by (`--value`, `--reason`,
   `--type`, `--role`, …).
 - A **DNA path** is dotted: `project.name`, `modules.api`, `stacks.technologies.TypeScript`. A segment
@@ -62,13 +62,13 @@ Accepted by every command, except `--dry-run`, which only the commands that chan
 
 | Option | Effect |
 |---|---|
-| `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (Unreleased (v0.3): except the commands whose entry shows their own console text — `agent list`, `agent show`, `workflow next`, `workflow status`, `workflow start`, `workflow end`, `workflow finalize`); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
-| `--dry-run` | Unreleased (v0.3). Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `finalize`, `create`, `remove`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `workflow finalize`'s commit changes no file, so its `paths` is `[]` and its `diff` is empty. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
+| `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (New in 0.3: except the commands whose entry shows their own console text — `agent list`, `agent show`, `workflow next`, `workflow status`, `workflow start`, `workflow end`, `workflow finalize`); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
+| `--dry-run` | New in 0.3. Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `finalize`, `create`, `remove`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `workflow finalize`'s commit changes no file, so its `paths` is `[]` and its `diff` is empty. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
 | `-h`, `--help` | Show help for the command. |
-| `-V`, `--version` | Print the version (top level only). Unreleased (v0.3): prints `<version> (<commit>)`, e.g. `0.3.0 (4f1c2d9b7e3a5c80d61f2a94b7c3e5d08a1f9e9a)` — the commit the build was made from, as every commit it writes records it. |
+| `-V`, `--version` | Print the version (top level only). New in 0.3: prints `<version> (<commit>)`, e.g. `0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)` — the commit the build was made from, as every commit it writes records it. |
 
 ### Exit codes
 
@@ -82,7 +82,7 @@ Every invocation ends with exactly one of three codes:
 
 A non-zero exit always prints one `error: <reason>` line to stderr — or, under `--format json`/`yaml`,
 the object `{"error": "<reason>"}`, whichever part of the CLI refused (an unknown command or option too).
-A suggestion follows on a `hint:` line (the object's `hint` field). Unreleased (v0.3): an unknown command
+A suggestion follows on a `hint:` line (the object's `hint` field). New in 0.3: an unknown command
 within two edits of a known one is answered in that form —
 `error: unknown command 'memroy'` then `hint: did you mean "memory"?` — where it used to print
 `(Did you mean memory?)`.
@@ -90,13 +90,13 @@ When the refusal names a file or explains itself, indented lines follow the `err
 finding (`<file>: <detail>`); under `--format json`/`yaml` they are a `details` array of
 `{"file", "detail"}` entries beside `error`.
 
-Unreleased (v0.3): when a Memory verb cannot move a document from its current state, the line is
+New in 0.3: when a Memory verb cannot move a document from its current state, the line is
 `error: illegal transition <from> -> (none) for type '<type>'` — the verb reaches nothing from
 `<from>` — and the indented line under it says why (a gate that needs `memory approve`, a state only a
 workflow moves on, the last state). 0.2.x printed, in place of `(none)`, a state the verb reaches from
 somewhere else in the machine, which could read as a backward move (`planned -> triaged`).
 
-Unreleased (v0.3): a command that succeeds can also print **warnings** — something it did that you
+New in 0.3: a command that succeeds can also print **warnings** — something it did that you
 should know about, such as `directive assign --force` or `dna add --force` rewriting a whole file. A warning goes to stderr
 only, as a `warning: <text>` line, or under `--format json`/`yaml` as one `{"warning": "<text>"}`
 document per warning (under `yaml`, each closed by `...`, so a following error is a separate
@@ -105,8 +105,8 @@ document). Stdout is the same with or without warnings, so a script parsing it i
 ### Git side effects
 
 Every command that changes the project writes **exactly one git commit**, authored by your git identity
-(unreleased, v0.3: `workflow start` writes two, an `add` and a `submit` of its plan).
-Read-only commands never commit. Unreleased (v0.3): if git refuses that commit — a `pre-commit` hook
+(`workflow start` writes two, an `add` and a `submit` of its plan).
+Read-only commands never commit. New in 0.3: if git refuses that commit — a `pre-commit` hook
 that fails, a full disk, another git command holding the index lock — the command puts back every file
 it wrote (removing the files and folders it created), and the index, as they were, and
 fails (exit `1`) with `error: E_COMMIT_FAILED: git did not commit <paths>: <git's explanation> — nothing
@@ -114,10 +114,10 @@ was committed, and the working tree and the index are as they were`. A `memory a
 same id; 0.2.x left the new file written and staged. The commit subject is listed per command below; `wingfoil memory
 history` reads the Memory ones back.
 
-Unreleased (v0.3): every such commit ends with a paragraph naming the WingFoil build that wrote it,
+New in 0.3: every such commit ends with a paragraph naming the WingFoil build that wrote it,
 
 ```
-WingFoil-Version: 0.3.0 (4f1c2d9b7e3a5c80d61f2a94b7c3e5d08a1f9e9a)
+WingFoil-Version: 0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)
 ```
 
 the same value `wingfoil --version` prints: the package version, then the full commit hash the build
@@ -142,20 +142,20 @@ Which state a command reads depends on whether that state can stop it:
   `memory search` should find. So `memory add --type <t>` can refuse a type your working copy of
   `memory.yaml` declares, while `memory search` searches the documents that same working copy
   declares — the type is on disk and in no commit; commit `memory.yaml` and the two agree.
-- Unreleased (v0.3): **`workflow start` and `workflow end` read `HEAD`** like the other commands that
+- **`workflow start` and `workflow end` read `HEAD`** like the other commands that
   write: the workflow files, `memory.yaml`, the element and the open workflows.
-- Unreleased (v0.3): **`workflow create` and `workflow remove` read `HEAD`** too: the workflow files, and
+- **`workflow create` and `workflow remove` read `HEAD`** too: the workflow files, and
   for `remove` the workflows that include it and its open instances. `create` also looks at the disk for a
   file already at the path it would write.
-- Unreleased (v0.3): **`agent execute` reads `HEAD`** like the other commands that write: the
+- **`agent execute` reads `HEAD`** like the other commands that write: the
   commit it reads becomes the run's `state_ref`.
-- Unreleased (v0.3): **`agent show` reads `HEAD`**, though it changes nothing: it answers from the
+- **`agent show` reads `HEAD`**, though it changes nothing: it answers from the
   same commit as the run ids `agent execute` counts, and when only your working tree holds the run it
   is asked for, it says so on a `hint:` line instead of showing it.
-- Unreleased (v0.3): **`agent list` reads `HEAD`**, though it changes nothing: its past runs and its
+- **`agent list` reads `HEAD`**, though it changes nothing: its past runs and its
   waiting steps come from one commit, the one `agent show` and `workflow status` answer from, and a run
   log changed in your working tree is named on a `W_UNCOMMITTED_INPUTS` `warning:` line, not read.
-- Unreleased (v0.3): **`workflow list` and `workflow show` read `HEAD`**, though they change nothing:
+- **`workflow list` and `workflow show` read `HEAD`**, though they change nothing:
   they answer from the same commit as the other workflow commands, and an uncommitted change to a file
   they read is reported as a `W_UNCOMMITTED_INPUTS` warning instead of being used.
 - **Safety checks on the file about to be written or deleted look at the disk itself** — for
@@ -216,8 +216,8 @@ wingfoil init [--template <Scrum|Kanban>]
 
 Creates `.wingfoil/dna.yaml`, `memory.yaml` (+ `memory/templates/`), `roles.yaml`, the six built-in
 directives in `directives/built-in/` plus four starter custom directives in `directives/custom/`,
-`workflows.yaml` (+ `workflows/custom/`), and `agents/built-in/` (the built-in agent adapters; unreleased
-(v0.3): `claude-code`, for Claude Code, and `codex-cli`, for Codex CLI) with an empty `agents/custom/`. The two templates differ only in the delivery sub-workflow
+`workflows.yaml` (+ `workflows/custom/`), and `agents/built-in/` (the built-in agent adapters, new in
+0.3: `claude-code`, for Claude Code, and `codex-cli`, for Codex CLI) with an empty `agents/custom/`. The two templates differ only in the delivery sub-workflow
 (`scrum-delivery` vs `kanban-delivery`) and in `project.methodology` / `stacks.methodologies`.
 
 - **Output:** `{ root, template, files: [...] }` — the files it created.
@@ -242,7 +242,7 @@ Exposes the project **read-only**: Resources for DNA, Memory and workflows, and 
 CLI. See the [user guide §9](user-guide.md#9-connect-an-ai-agent) for client configuration and the
 full Resource list.
 
-Unreleased (v0.3): `tools/list` answers an empty list instead of a protocol error. Before serving, the
+New in 0.3: `tools/list` answers an empty list instead of a protocol error. Before serving, the
 server checks the project and reads the role set from `dna.yaml`; the role set then holds until the
 server restarts (a change of directive assignments shows on the next Prompt request). With no
 `.wingfoil/` at the project root it exits `1` without starting: `error: WingFoil not initialized (no
@@ -252,11 +252,11 @@ loaded also exits `1`, with the reason. The `<role>-session` Prompts take two op
 execution context for that element at that commit. Memory Resource reads and those Prompts report the
 documents that could not be read in a `warnings` array beside the content.
 
-Also unreleased (v0.3): the Resources `wingfoil://workflows/-/next` and `wingfoil://workflows/-/status`
+Also new in 0.3: the Resources `wingfoil://workflows/-/next` and `wingfoil://workflows/-/status`
 return what `wingfoil workflow next --format json` and `wingfoil workflow status --format json` print, as
 committed at `HEAD`. A workflow named `next` or `status` stays `wingfoil://workflows/<name>`.
 
-Also unreleased (v0.3): the Resource template `wingfoil://session/{role}/{element}/{state}` returns the same
+Also new in 0.3: the Resource template `wingfoil://session/{role}/{element}/{state}` returns the same
 execution context as `<role>-session` with `element` and `state` (`{element}` is `<type>:<id>`), with the same
 `warnings`, for agents whose client can read Resources but not get Prompts. It is never listed by `resources/list`:
 read it by its full URI, which [`wingfoil agent execute`](#wingfoil-agent-execute) gives the agent. A role not in
@@ -270,7 +270,7 @@ read it by its full URI, which [`wingfoil agent execute`](#wingfoil-agent-execut
 `roles`, `agents`) and `paths`. **Scalar** fields are written with `dna set`; **collections and lists**
 with `dna add` / `dna update` / `dna remove`.
 
-**Comments are kept, or the write is refused** (Unreleased (v0.3)). The four write commands edit
+**Comments are kept, or the write is refused** (new in 0.3). The four write commands edit
 `dna.yaml` in place: only the lines of the field or entry they change are written, and every comment
 stays. This now includes the first entry of a collection the file does not list yet (the first
 `team.agents` entry), a field whose value is a `>-` or `|` block, and a file with CRLF line endings,
@@ -467,7 +467,7 @@ A Memory document is a Markdown file with YAML frontmatter. Its **type** (declar
 fixes its path, its id pattern, its template and its state machine; its **state** is the `status:` field
 of its frontmatter. The verbs below are the only supported way to change a state.
 
-Unreleased (v0.3): the transition verbs (`submit`, `approve`, `reject`, `deprecate`, `park`, `amend`) look an
+New in 0.3: the transition verbs (`submit`, `approve`, `reject`, `deprecate`, `park`, `amend`) look an
 id up among the documents committed at `HEAD`. A committed document whose frontmatter is not valid
 YAML, or a symbolic link, no longer stops a verb acting on a different document. It is skipped, and the
 verb still succeeds, printing a `W_MEMORY_UNREADABLE` warning on stderr that names the file. If the id
@@ -479,7 +479,7 @@ them.
 
 Create a document in its type's initial state (the first state of its sequence; `draft` by default) from the type's template.
 
-Unreleased (v0.3): the initial state is the first state of the type's `sequence` in the committed
+New in 0.3: the initial state is the first state of the type's `sequence` in the committed
 `memory.yaml` (or of `defaults.states` for a type with no machine of its own); until then `add` wrote
 `draft` whatever the machine (`bug-214`). When that state declares a WIP limit (`limits:`, see
 [`memory park`](#wingfoil-memory-park)) that its documents have reached, `add` is refused at exit `1`.
@@ -502,8 +502,8 @@ $ wingfoil memory add --type task --title "My first task" --tags demo,quickstart
 | `--title <title>` | The document title; also the source of the `{slug}` token. Required. |
 | `--tags <t1,t2>` | Comma-separated tags, written as the `tags` list. |
 | `--set <name>=<value>` | New in 0.2.2. Repeatable. Gives the `id_pattern` or `path` token `{name}` its value and writes the frontmatter field `name`, so the id and the field agree. |
-| `--workflow <ref>` | Unreleased (v0.3). Links the document to a step of an open workflow instance: `<ref>` is the instance id, or a workflow name (its most recently started open instance). |
-| `--step <key>` | Unreleased (v0.3). The step to link to, by its key, when several ready steps of the instance add this type. Needs `--workflow`. |
+| `--workflow <ref>` | New in 0.3. Links the document to a step of an open workflow instance: `<ref>` is the instance id, or a workflow name (its most recently started open instance). |
+| `--step <key>` | New in 0.3. The step to link to, by its key, when several ready steps of the instance add this type. Needs `--workflow`. |
 
 The id comes from the type's `id_pattern`. For `task-{n}-{slug}` that is a per-type counter plus a
 slug of the title. The slug keeps a `.` between two letters or digits (`v0.2` stays `v0.2`); every
@@ -529,7 +529,7 @@ commit's author date: today (UTC), or the date in `GIT_AUTHOR_DATE` when that is
 recorded with the same date. `{author}` is the git author name, slugged like the title. The counter
 token `{n}` is padded to three digits; `{n:N}` pads to `N` digits instead, and `{n:1}` not at all.
 
-Unreleased (v0.3): with `--workflow`, the document is **created by** a step of that instance, the way
+New in 0.3: with `--workflow`, the document is **created by** a step of that instance, the way
 `workflow next` reads it. The step is one of the instance's ready steps (its frontier)
 whose phase declares `memory.add` of this `--type`: the only one, or the one `--step` names. The add commit
 records the link in its trailers, `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>`, next to
@@ -581,16 +581,16 @@ Before running it, fill the document's body and every frontmatter field its type
 records the document's content **and** its state change together. A submit also clears a previous
 `rejection_reason`.
 
-Unreleased (v0.3): a required field that does not apply to this document can hold
+New in 0.3: a required field that does not apply to this document can hold
 `n/a — <reason>` (`n/a`, an em dash, then the reason; any letter case; quoting the value is
 recommended) — but only if the type lists the field in `template.frontmatter.not_applicable_allowed`
 in `memory.yaml`.
 
-Unreleased (v0.3): a list, an explicit empty list (`features: []`) included, counts as filled only
+New in 0.3: a list, an explicit empty list (`features: []`) included, counts as filled only
 on a field the type declares in `template.frontmatter.lists` in `memory.yaml`. On any other required
 field a list or a mapping counts as missing. An empty value (`features:`) is always missing.
 
-Unreleased (v0.3): a document can be exempt from a required field by id. The type lists the field
+New in 0.3: a document can be exempt from a required field by id. The type lists the field
 and the ids in `template.frontmatter.exempt` in `memory.yaml` (`exempt: { kind: [ minor-v0.1 ] }`):
 that field is not required of those documents, on `submit` and on `amend` alike, and a refusal does
 not name it. Every other field is still required of them, and every other document still needs the
@@ -606,7 +606,7 @@ $ wingfoil memory submit task-001-my-first-task
 }
 ```
 
-- **Commit:** `wf(<type>): submit <id>`, with no `[from → to]` bracket. Unreleased (v0.3): when the
+- **Commit:** `wf(<type>): submit <id>`, with no `[from → to]` bracket. New in 0.3: when the
   document carries edits beyond the state move, the commit body says which, in one line — the
   frontmatter fields that changed, sorted by name, then the body:
 
@@ -614,6 +614,8 @@ $ wingfoil memory submit task-001-my-first-task
   wf(task): submit task-001-my-first-task
 
   Carries content: frontmatter field 'title', the body
+
+  WingFoil-Version: 0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)
   ```
 
   A submit that only moves `status` (and clears `rejection_reason`) has no such line. The edits are
@@ -622,7 +624,7 @@ $ wingfoil memory submit task-001-my-first-task
   is declared as `the line endings`, after any other item.
 - **Errors:** unknown id → exit `1`; the current state is a **gate** (its forward step needs
   `memory approve`) or the end of the sequence → exit `1` (`error: illegal transition …`); a required
-  field is empty → exit `1` (`error: missing required field on submit: <fields>`). Unreleased (v0.3):
+  field is empty → exit `1` (`error: missing required field on submit: <fields>`). New in 0.3:
   a required field holds `n/a` but the type does not list it, holds it with no reason, or separates
   the reason with anything but an em dash → exit `1`, naming the field
   (`error: not-applicable value on submit: <field> …`).
@@ -656,6 +658,8 @@ $ wingfoil memory approve task-001-my-first-task --reason "Scope and acceptance 
 
   Approver: Ada Lovelace <ada@example.com> (approver)
   Reason: Scope and acceptance criteria are clear.
+
+  WingFoil-Version: 0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)
   ```
 
 Unlike `submit`, `approve` (and `reject`, `deprecate`) records the state change **and nothing else**:
@@ -668,7 +672,7 @@ commit or stash them first.
   (`error: illegal transition draft -> (none) for type 'task'`; 0.2.x prints `draft -> backlog`, see
   [Exit codes](#exit-codes)).
 
-Unreleased (v0.3): **`supersedes:`**. When an `adr` is approved into `accepted`, or a `tech-spec`
+New in 0.3: **`supersedes:`**. When an `adr` is approved into `accepted`, or a `tech-spec`
 into `approved`, and its `supersedes:` field names another element of the same type, that element
 moves to `superseded`. The move is a second commit, made right after the approve. It changes only
 that element's `status`:
@@ -677,6 +681,8 @@ that element's `status`:
 wf(adr): finalize adr-1-old [accepted → superseded]
 
 Reason: superseded by adr-2-new (its supersedes: field), approved in <sha of the approve commit>.
+
+WingFoil-Version: 0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)
 ```
 
 The result then has a `superseded` entry (`id`, `path`, `from`, `to`). The approve is refused with
@@ -687,7 +693,7 @@ Leave `supersedes:` empty when nothing is replaced. A `superseded` element can s
 `supersedes:` holds the element's **full id** (`adr-2-git-backed-storage`); a short form such as
 `adr-2` is not resolved, and the approve is refused with `document not found`.
 
-Unreleased (v0.3): a project scaffolded by `wingfoil init` has neither half of the trigger. Its `adr`
+New in 0.3: a project scaffolded by `wingfoil init` has neither half of the trigger. Its `adr`
 and `tech-spec` templates have no `supersedes:` field, and its `memory.yaml` gives every type the
 default machine, which has no `superseded` state; their template comments say so. To use the trigger,
 add `supersedes: ""` to the type's template and give the type its own `states:` whose `sequence` ends
@@ -707,7 +713,7 @@ commit. The superseded element's new `status` is left in the working tree. The e
 command that completes the pair, ready to paste:
 
 ```
-git commit --only -F - -- docs/adrs/adr-1-old.md <<'EOF'
+git commit --only --cleanup=whitespace -F - -- docs/adrs/adr-1-old.md <<'EOF'
 wf(adr): finalize adr-1-old [accepted → superseded]
 
 Reason: superseded by adr-2-new (its supersedes: field), approved in <sha of the approve commit>.
@@ -766,7 +772,7 @@ $ wingfoil memory deprecate dl-001-use-postgresql --reason "Superseded by the ho
 
 Return a started document to an earlier state along its type's declared `returns` edge (for a `task`, `in-progress → backlog`).
 
-**Unreleased (v0.3)** — not in 0.2.2.
+**New in 0.3.**
 
 ```
 wingfoil memory park <id> --reason <text>
@@ -809,7 +815,7 @@ $ wingfoil memory park task-001-my-first-task --reason "Blocked on the schema de
 
 Record an uncommitted correction to a document as an amendment, leaving its state unchanged.
 
-**Unreleased (v0.3)** — not in 0.2.2.
+**New in 0.3.**
 
 ```
 wingfoil memory amend <id> --reason <text>
@@ -822,7 +828,7 @@ correction to an element no other verb can move, such as an `approved` tech-spec
 requirement as `approve`. The type must declare `amendable: true` in the committed `memory.yaml`;
 absent means not amendable. A project created by `wingfoil init` declares it for `tech-spec`,
 `decision-log`, `task`, `bug`, `plan` and `adr` (for a dated correction note: a
-changed decision is a new ADR) and, Unreleased (v0.3), for `release` (dated notes and corrected facts,
+changed decision is a new ADR) and, since 0.3, for `release` (dated notes and corrected facts,
 such as the rows of its `## Scope changes`), and declares `false` for `release-line`.
 `release` is fixed only on a type whose scaffold, as committed, declares a `release` field. On any
 other type an amendment may remove a `release` key, as when a `service`'s set-up release moves to
@@ -845,6 +851,8 @@ $ wingfoil memory amend spec-001-storage-layout --reason "Later measurements cor
 
   Approver: Ada Lovelace <ada@example.com> (approver)
   Reason: Later measurements corrected the §2 figures.
+
+  WingFoil-Version: 0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)
   ```
 
 Other modified or staged files are left as they are and are not committed.
@@ -852,7 +860,7 @@ Other modified or staged files are left as they are and are not committed.
 - **Errors:** missing or blank `--reason` → exit `2`; the document has no uncommitted change, or is not
   committed at all → exit `1`; the edit changes one of those six fields → exit `1`, naming the field;
   past `draft`, the edit empties `title` or a required field → exit `1`
-  (`error: missing required field on amend: <fields>`), or (Unreleased (v0.3)) sets a not-applicable
+  (`error: missing required field on amend: <fields>`), or (new in 0.3) sets a not-applicable
   value the type does not allow on that field → exit `1` (`error: not-applicable value on amend: <field> …`);
   the type is not amendable → exit `1` (`error: type 'release-line' is not amendable: …`); not an approver →
   exit `1` (`error: user not authorized to approve type 'tech-spec'`).
@@ -861,12 +869,12 @@ Other modified or staged files are left as they are and are not committed.
 
 - It may span several lines, but it may not be blank.
 - No line of it may begin with `Approver:` or `Reason:` — those keys are reserved for the commit trailer.
-  Unreleased (v0.3): `WingFoil-Version:` is reserved too, and all three keys are matched in any letter
+  New in 0.3: `WingFoil-Version:` is reserved too, and all three keys are matched in any letter
   case.
 - It may not end with a paragraph made only of `Key: value` lines; end with a sentence instead.
-  Unreleased (v0.3): the refusal says so (`… add a closing sentence after it, or fold those lines into
+  New in 0.3: the refusal says so (`… add a closing sentence after it, or fold those lines into
   prose`).
-- Unreleased (v0.3): it may not contain a control character other than tab and newline. That covers
+- New in 0.3: it may not contain a control character other than tab and newline. That covers
   the C0 controls, DEL (U+007F), the C1 controls (U+0080 to U+009F) and the Unicode line and paragraph
   separators (U+2028, U+2029). The refusal exits `2` and names the first one by code point, e.g.
   `error: invalid flag value: --reason must not contain a control character other than tab or newline
@@ -883,14 +891,14 @@ wingfoil memory history <id>
 ```
 
 Each entry carries `sha`, `author`, `timestamp` (ISO-8601), `operation`, `from`, `to`, `approver`,
-`reason` and the commit `subject`. Unreleased (v0.3): every entry also carries `wingfoil`, the build
+`reason` and the commit `subject`. New in 0.3: every entry also carries `wingfoil`, the build
 that wrote the commit, from its `WingFoil-Version:` line (see [Git side effects](#git-side-effects)):
-`"wingfoil": "0.3.0 (4f1c2d9b7e3a5c80d61f2a94b7c3e5d08a1f9e9a)"`, or `null` for a commit written by
-hand or by an older build. In 0.2.2, `operation` is one of `add`, `submit`, `approve`,
+`"wingfoil": "0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)"`, or `null` for a commit written by
+hand or by an older build. Before 0.3, `operation` was one of `add`, `submit`, `approve`,
 `reject`, `deprecate`. A commit that touched the document without being one of them appears too,
 with `"operation": null` (a hand edit you committed yourself, for example).
 
-Unreleased (v0.3): `operation` is one of eleven declared verbs, the five above plus `start`,
+New in 0.3: `operation` is one of eleven declared verbs, the five above plus `start`,
 `finalize`, `sync`, `amend`, `park` and `assign`. A subject with any other verb reads as `null`, and so does a
 configuration commit such as `wf(dna): …`, `wf(directive): …` or `wf(workflow): …`, whatever its
 verb.
@@ -928,7 +936,7 @@ $ wingfoil memory history task-001-my-first-task
 }
 ```
 
-Unreleased (v0.3): a revision of the document whose frontmatter is not valid YAML no longer fails the
+New in 0.3: a revision of the document whose frontmatter is not valid YAML no longer fails the
 command. Its entry has `"to": null`, an extra `"unreadable"` key giving the parse error, and the next
 entry's `from` is `null`. A `W_MEMORY_UNREADABLE` warning on stderr names the file and the commit. A
 different Memory document whose frontmatter does not parse is skipped with the same warning.
@@ -972,7 +980,7 @@ $ wingfoil memory search --status approved --type task
 No match is still a success (exit `0`), with `"matches": []` and
 `"message": "no documents matched the query"`.
 
-Unreleased (v0.3): every match is a Memory element, with an `id` and a `type`. A Markdown file under a
+New in 0.3: every match is a Memory element, with an `id` and a `type`. A Markdown file under a
 Memory directory with neither, such as an old plan with no frontmatter, is left out. A file whose
 frontmatter is not valid YAML, or a symbolic link, is left out too, and a `W_MEMORY_UNREADABLE` warning
 on stderr names it. One bad file no longer fails the search.
@@ -1060,7 +1068,7 @@ $ wingfoil directive assign --directive api-style --role developer
 
 - **Commit:** `wf(directive): assign <name> to <role>`
 - **Errors:** missing option → exit `2`; role not in the committed `dna.yaml` → exit `1`.
-- **`--force`** — Unreleased (v0.3). `directive assign` edits `roles.yaml` in place, keeping its
+- **`--force`** — New in 0.3. `directive assign` edits `roles.yaml` in place, keeping its
   comments and layout. When it cannot — for example, the role's list is written inline as
   `developer: [code-quality]` — it refuses with exit `1`, writes nothing, and says
   `error: roles.yaml cannot be updated in place; edit assignments.<role> by hand, or pass --force to rewrite the whole file`.
@@ -1081,7 +1089,7 @@ wingfoil directive remove <name>
 
 A directive still assigned to a role is refused
 (`error: cannot remove 'api-style': still assigned to role 'developer'`). There is no unassign command
-in 0.2.2: delete the name from `roles.yaml`, **commit** that change, then run `directive remove`.
+in 0.3: delete the name from `roles.yaml`, **commit** that change, then run `directive remove`.
 Built-in directives are refused (`error: built-in directives cannot be removed`).
 
 - **Commit:** `wf(directive): remove <name>`
@@ -1099,7 +1107,7 @@ End a complete workflow: move its plan element to done; the previous open workfl
 wingfoil workflow end [<ref>]
 ```
 
-Unreleased (v0.3). `<ref>` is a workflow name (its most recently started open instance) or the id of an
+`<ref>` is a workflow name (its most recently started open instance) or the id of an
 open instance; without it, the active instance. It decides at `HEAD`, as `workflow next` does: the plan,
 the workflow files and the deduction of the instance's steps.
 
@@ -1131,7 +1139,7 @@ List the workflows you can run now, as committed at `HEAD`.
 wingfoil workflow list [--all]
 ```
 
-Unreleased (v0.3). Read-only. It reads the workflow files, `memory.yaml`, `dna.yaml` and the Memory
+Read-only. It reads the workflow files, `memory.yaml`, `dna.yaml` and the Memory
 documents **as committed at `HEAD`**, not the working tree (see [Git side effects](#git-side-effects)), so
 it answers from the same state as the other workflow commands. An uncommitted change to one of those inputs
 does not change the answer: it is reported as a `W_UNCOMMITTED_INPUTS` warning naming the file. So is an
@@ -1185,7 +1193,7 @@ wingfoil workflow next [<ref>] [--assigned-to <who>]
 |---|---|
 | `--assigned-to <who>` | Keep only the steps whose role `<who>` holds: `me` (the `team.members[]` entry whose email is your git identity's), a member's name or email, or a role name. |
 
-Unreleased (v0.3). Read-only, and it reads `HEAD` as `workflow list` does: an uncommitted change is
+Read-only, and it reads `HEAD` as `workflow list` does: an uncommitted change is
 reported as `W_UNCOMMITTED_INPUTS`, never read. `<ref>` is a workflow name (its most recently started open
 instance) or the id of an open instance; without it, the active instance (the most recently started one).
 
@@ -1259,7 +1267,7 @@ wingfoil workflow finalize [<ref>] [--step <key>] [--reason <text>]
 | `--step <key>` | The frontier step to record, by the key `workflow next` prints (e.g. `dev-loop.red@task:task-130`). Default: the instance's next step. |
 | `--reason <text>` | Why. Required on a phase that declares `approval:`, where it is recorded with an `Approver:` line as `memory approve` records it; optional elsewhere. Same shape rules as every `--reason`. |
 
-Unreleased (v0.3). Some phases have nothing in the repository to show they are done: a checkpoint (a
+Some phases have nothing in the repository to show they are done: a checkpoint (a
 phase with no state, `produces`, selection or created evidence, such as `dev-loop.red`), a phase that waits
 for a third party (`awaits:`), a step that was to create an element and created none, and an approval
 that no Memory element carries. `workflow finalize` records such a step as complete, and `workflow next`
@@ -1316,7 +1324,7 @@ Print every open workflow, its pending approvals and who they are routed to, and
 wingfoil workflow status [<ref>]
 ```
 
-Unreleased (v0.3). Read-only, and it reads `HEAD` from the same deduction as `workflow next`: an uncommitted
+Read-only, and it reads `HEAD` from the same deduction as `workflow next`: an uncommitted
 change is reported as `W_UNCOMMITTED_INPUTS`, never read. Without `<ref>`, every open instance, the active one
 (the most recently started) first and marked `*`; with `<ref>` (a workflow name or an open instance id), that one.
 
@@ -1376,7 +1384,7 @@ Print one workflow resolved, its included workflows nested under their phases, a
 wingfoil workflow show <ref>
 ```
 
-Unreleased (v0.3). Read-only, and it reads `HEAD` as `workflow list` does. `<ref>` is a workflow name, or
+Read-only, and it reads `HEAD` as `workflow list` does. `<ref>` is a workflow name, or
 the id of an open workflow instance (its `plan` document), which stands for that instance's workflow.
 
 For each phase it prints its `role` and that role's directives (`id` and `title`, the role's own and the
@@ -1408,7 +1416,7 @@ wingfoil workflow start <name> [--element <type>:<id>] [--title <title>] [--set 
 | `--set phase=<v>` | The plan's `phase` token. Default: the element's id, else `1`. |
 | `--set scope=<v>` | The plan's `scope` token, the folder its file goes in. Default: the workflow name. |
 
-Unreleased (v0.3). It decides at `HEAD`: the workflow files, `memory.yaml`, the element and the open
+It decides at `HEAD`: the workflow files, `memory.yaml`, the element and the open
 workflows. A started workflow is an **instance**, recorded as a Memory document of type `plan` whose
 `workflow` names the workflow and whose `element` holds the element it runs on. The new instance becomes
 the active one; the others stay open (`wingfoil workflow end` closes one).
@@ -1463,7 +1471,7 @@ wingfoil workflow create <name> (--kind main|sub | [--startable] [--includable])
 | `--element <type>` | The Memory type the workflow runs on (`element:`); `memory.yaml` must declare it. |
 | `--description <text>` | The workflow's `description:`. |
 
-Unreleased (v0.3). It writes `.wingfoil/workflows/custom/<name>.yaml` — never under `workflows/built-in/` —
+It writes `.wingfoil/workflows/custom/<name>.yaml` — never under `workflows/built-in/` —
 with `name`, the declaration, the description and element you gave, `version: 1.0` and one phase,
 `step-1`, which you then replace with the real phases. It adds `workflows/custom/<name>.yaml` as the last
 entry of `workflows.yaml`'s `include:` list, keeping the file's comments and layout. Before writing, it
@@ -1494,7 +1502,7 @@ Delete a custom workflow and its workflows.yaml entry, unless another workflow i
 wingfoil workflow remove <ref>
 ```
 
-Unreleased (v0.3). `<ref>` is a workflow name, or the id of an open workflow instance, which stands for its
+`<ref>` is a workflow name, or the id of an open workflow instance, which stands for its
 workflow. It decides at `HEAD`, and refuses, in this order:
 
 - a workflow under `workflows/built-in/`: `error: built-in workflows cannot be removed`;
@@ -1516,7 +1524,7 @@ Otherwise it deletes the file and its `include:` entry, keeping the rest of `wor
 
 ## Agent
 
-Unreleased (v0.3). Agent runs are recorded in a run log, one JSON Lines file per element under the
+Agent runs are recorded in a run log, one JSON Lines file per element under the
 directory `dna.yaml` declares in `paths.runs` (`docs/runs/` in a project `wingfoil init` scaffolds),
 each record committed on its own as `agent: record <run-id>`. A run id is
 `<element-id>/<phase>/<n>`: the element's id without its type, the workflow phase (or `adhoc` for a
@@ -1554,7 +1562,7 @@ ready), `error: unknown workflow: <name>`, `error: workflow is not open: <ref>`,
 error (for example a phase whose role `dna.yaml` does not define) refuses every step form, as it refuses
 `wingfoil workflow next`.
 
-Unreleased (v0.3). It reads **as committed at `HEAD`** (see [Git side effects](#git-side-effects)):
+It reads **as committed at `HEAD`** (see [Git side effects](#git-side-effects)):
 `dna.yaml`, `memory.yaml`, the element, the agent's adapter under `.wingfoil/agents/built-in/` or
 `.wingfoil/agents/custom/`, the run log, and, with a step, the workflows and the Memory they deduce from. That commit is the run's `state_ref`. The one read outside
 it: the WingFoil MCP server it starts for the pre-flight reads your working tree's `dna.yaml` when it
@@ -1601,7 +1609,10 @@ summary.
 With `--dry-run` it runs every check above, launches nothing, and prints on stdout the launch it would
 make: `{"dryRun": true, "subject": "agent: record <run-id>", "paths": [<run log>], "run": {id, element,
 workflow, phase, role, mode, agent, adapter, state_ref}, "bootstrap": "<the prompt the agent would
-receive>"}`. With none of `--next`, `--workflow`, `--step` and `--element` it exits `2` with
+receive>"}`. The terminal check is one of them: for an adapter whose launch needs a terminal (both
+built-in adapters), a dry run with stdin or stdout redirected exits `1` with
+`error: interactive launch needs a terminal on stdin and stdout`, although it would launch nothing. With
+none of `--next`, `--workflow`, `--step` and `--element` it exits `2` with
 `error: missing required argument: --next or --element`.
 
 - **Commit:** `agent: record <run-id>`, containing only the element's run log, with the
@@ -1616,7 +1627,7 @@ List the recorded agent runs and the workflow steps waiting for an agent, as com
 wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>]
 ```
 
-Unreleased (v0.3). Read-only. It has two sections:
+Read-only. It has two sections:
 
 - **past** (`--past`) — the runs the run log holds: every `<element-id>.jsonl` file directly in the
   directory `dna.yaml` declares in `paths.runs`, ordered by element id and then in the order the runs
@@ -1675,7 +1686,7 @@ Print one recorded agent run and the commit that added it.
 wingfoil agent show <run-id>
 ```
 
-Unreleased (v0.3). Read-only. It reads the run log, and `dna.yaml`'s `paths.runs`, **as committed at
+Read-only. It reads the run log, and `dna.yaml`'s `paths.runs`, **as committed at
 `HEAD`**, not the working tree (see [Git side effects](#git-side-effects)): the run ids `agent execute`
 counts are counted at `HEAD` too, so the two never disagree about which runs exist.
 
