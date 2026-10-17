@@ -8,7 +8,7 @@ release: ""            # optional — implementation release this DL is assigned
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
 reported_by: []        # optional — LIST of consumer feedback notes this element answers, as provenance only (dl-163 S3c), each "<service id>/F-<nnn>@<sha>": the full id of an active kind: repository service with a feedback_inbox, the note's id in that inbox, and the full sha of the consumer commit read; restate the note in this element, never copy it; a GitHub issue gets contributor + credit instead (COLLABORATION.md)
-tmpl_version: 261010   # Orignal template version
+tmpl_version: 261017   # Orignal template version
 ---
 
 <!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
@@ -26,7 +26,7 @@ tmpl_version: 261010   # Orignal template version
 <!-- What was decided. State it directly, in the present tense.
      Do NOT mark the body as unratified (no "proposed, not yet ratified" preamble): `status:` already
      says whether the decision is `in-discussion` or `ready`, and a body marker cannot be corrected by
-     `memory.approve`, which per CLAUDE.md §5.1 may change only `status`. The result is a `ready`
+     `memory.approve`, which per AGENTS.md §5.1 may change only `status`. The result is a `ready`
      document that goes on declaring itself unratified — this had accumulated across 16 decision-logs
      before the convention was adopted. Where options are still open, present them as options; the
      approver's choice is recorded in the approve commit's `Reason:`. -->

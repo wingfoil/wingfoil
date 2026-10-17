@@ -1143,7 +1143,7 @@ export interface MemoryHistoryParams {
  * Every field is derived, never stored: `author`/`timestamp` come from git's own `%an`/`%ae`/`%aI`
  * (ADR-007 / P1.2 — the commit supplies the date, never file content), `from`/`to` from the
  * document's own frontmatter `status:` at each commit, and `approver`/`reason` from the commit body's
- * CLAUDE.md §5.1 trailers. `author` and `approver` are rendered in that same trailer notation
+ * AGENTS.md §5.1 trailers. `author` and `approver` are rendered in that same trailer notation
  * (`Name <email>`, `Name <email> (role)`) because P1.10 exists to read exactly that convention back.
  *
  * Two independently-nullable fields, and neither is ever filled in by inference:
@@ -1166,7 +1166,7 @@ export interface MemoryHistoryEntryView {
   readonly author: string;
   /** ISO-8601 author date (`%aI`), sourced from git, never from the document. */
   readonly timestamp: string;
-  /** The CLAUDE.md §5.1 verb this commit's subject declares, or `null` if the subject is not in that shape. */
+  /** The AGENTS.md §5.1 verb this commit's subject declares, or `null` if the subject is not in that shape. */
   readonly operation: string | null;
   /** The state before this commit; `null` on the creation entry. */
   readonly from: string | null;
@@ -1450,7 +1450,7 @@ export interface MemoryApproveResult {
  * 7. **Edit + commit** — `status` set to the target and **nothing else** (spec-010 field-write
  *    ownership: approve changes only `status`; approver and reason live in the commit message). One
  *    commit scoped to that file, subject `wf(<type>): approve <id> [<from> → <to>]` with the mandatory
- *    `Approver:` / `Reason:` body (CLAUDE.md §5.1; `dl-054` confines the bracket to the
+ *    `Approver:` / `Reason:` body (AGENTS.md §5.1; `dl-054` confines the bracket to the
  *    approver-gated verbs, which is why `memory submit` has none). `commitMemoryTransition` re-parses
  *    the rendered frontmatter first and refuses (exit 1, nothing written) unless `status` is the
  *    target and no other field's value moved — which is exactly spec-010's "only `status`" rule, so
@@ -1594,7 +1594,7 @@ export interface MemoryRejectResult {
  * `memory reject` `CoreOperation.fn` (P1.8, `mutates: true`; spec-006-core-domain-api §3) — the FIRST
  * approver-gated verb, so the first operation that enforces REQ-SEC-03 (role authority) and REQ-SEC-04
  * (mandatory reason) and the first to emit a commit with a `[from → to]` subject bracket and an
- * `Approver:`/`Reason:` body (`dl-054-submit-commit-subject-bracket`, CLAUDE.md §5.1). Order, every
+ * `Approver:`/`Reason:` body (`dl-054-submit-commit-subject-bracket`, AGENTS.md §5.1). Order, every
  * refusal before the single write:
  *
  * 1. **`<id>`** absent or blank → `UsageError` (exit `2`), as `memory submit`.

@@ -52,7 +52,7 @@
 * **Traceability:** Feature P1.7 (US-2-10, BDD `p1-memory/P1.7-memory-approve.feature`); Feature P1.8 (US-4-11,
   BDD `p1-memory/P1.8-memory-reject.feature`). Narrowed to the approval gates by
   `dl-027-req-sec-04-deprecate-reason-scope`: `memory deprecate` is not an approval gate (no `Approver:` line,
-  no authority check), and `spec-008` §2 / BDD P1.9 / CLAUDE.md §5.1 already treat its `--reason` as
+  no authority check), and `spec-008` §2 / BDD P1.9 / AGENTS.md §5.1 already treat its `--reason` as
   optional-but-encouraged.
 
 ### REQ-SEC-05 — Read-only agent read channel

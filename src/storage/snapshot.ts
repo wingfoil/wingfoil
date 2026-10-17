@@ -8,7 +8,7 @@
  * `computeStateSnapshot` is a pure function of what's on disk under `root`: every file under
  * `.wingfoil/` in full (DNA/Directives/Workflow config, per spec-011-storage-layout's directory
  * layout) plus every `docs/04_memory/**\/*.md` document's frontmatter only (Memory content — state
- * lives in frontmatter, CLAUDE.md §5 / REQ-STATE-01/-02, so the body text isn't part of "state").
+ * lives in frontmatter, AGENTS.md §5 / REQ-STATE-01/-02, so the body text isn't part of "state").
  * It holds no module-level cache and consults nothing outside `root`, so recomputing it — from the
  * original working copy, from a fresh clone, or from a freshly re-imported module — always yields
  * the same result for the same on-disk bytes.

@@ -123,9 +123,9 @@ export function auditAttribution(root: string, pathspecs: readonly string[]): At
   });
 }
 
-// --- Approver/Reason parsing (CLAUDE.md §5.1) ------------------------------------------------
+// --- Approver/Reason parsing (AGENTS.md §5.1) ------------------------------------------------
 
-/** Parsed `Approver:`/`Reason:` lines from an `approve`/`reject` commit body (CLAUDE.md §5.1). */
+/** Parsed `Approver:`/`Reason:` lines from an `approve`/`reject` commit body (AGENTS.md §5.1). */
 export interface ApprovalMetadata {
   readonly approverName: string;
   readonly approverEmail: string;
@@ -152,7 +152,7 @@ const APPROVER_LINE_RE = /^Approver:\s*(.+?)\s*<([^>]+)>\s*\(([^)]+)\)\s*$/;
  * `add`/`submit` body, which carries no trailer by convention), or carries a bare `Reason:` with no
  * value. Split out of {@link parseApprovalMetadata} by `task-049-memory-history` (P1.10) because the
  * two trailers do not always travel together: an APPROVAL-gate commit (`approve`/`reject`) must carry
- * both `Approver:` and `Reason:` (CLAUDE.md §5.1, P1.7), but a `deprecate` commit records a `Reason:`
+ * both `Approver:` and `Reason:` (AGENTS.md §5.1, P1.7), but a `deprecate` commit records a `Reason:`
  * with **no** `Approver:` line at all — deprecate is explicitly not an approval gate. Reading the
  * reason through `parseApprovalMetadata` would therefore drop every deprecate reason from the audit
  * trail it exists to surface.
@@ -174,7 +174,7 @@ export function parseCommitReason(body: string): string | null {
 
 /**
  * Parse a commit body for the `Approver: Name <email> (role)` and `Reason: ...` trailers
- * (CLAUDE.md §5.1; REQ-SEC-02/REQ-SEC-04). Returns `null` when there is no `Approver:` trailer line —
+ * (AGENTS.md §5.1; REQ-SEC-02/REQ-SEC-04). Returns `null` when there is no `Approver:` trailer line —
  * e.g. for a plain `add`/`submit` body, or a `deprecate` one (not an approval gate), neither of which
  * records an approval at all. A caller that wants such a commit's reason wants
  * {@link parseCommitReason} instead.

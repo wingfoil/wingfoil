@@ -19,7 +19,7 @@
  * distinct from whichever human account runs the command, so there is no code-level signal this
  * git-identity-keyed check could use to single an agent out. Structurally preventing agents from
  * holding approval authority is instead a `dna.yaml` fact (`team.agents[].approval_authority: false`)
- * enforced by process/governance (CLAUDE.md §4/§8: "AI agents ... never hold approval authority"), not
+ * enforced by process/governance (AGENTS.md §4/§8: "AI agents ... never hold approval authority"), not
  * by this predicate.
  *
  * **"Who is authorized" is read from the COMMITTED `dna.yaml`, never from the working tree**

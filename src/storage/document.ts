@@ -2,7 +2,7 @@
  * Plain document read/write/remove (task-003-git-backed-sot, REQ-SYS-01). Every Memory/DNA/Directives/
  * Workflow mutation is a regular file write with no side-channel state — no `.wingfoil/state/`
  * index (REQ-SYS-03), no cache file that isn't itself just a copy of what's already on disk.
- * `git add`/`git commit` of the result is the caller's job (dev-loop's commit conventions, CLAUDE.md
+ * `git add`/`git commit` of the result is the caller's job (dev-loop's commit conventions, AGENTS.md
  * §5.1) — this module only owns the bytes at an already-resolved absolute path (see
  * `./memory-path`).
  */
