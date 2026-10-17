@@ -232,7 +232,7 @@ No test reads the agent file: `grep -rn "CLAUDE\|AGENTS" test/docs/*.ts test/lin
 One contiguous region, as R3 describes ("a region"). §3 is inside because it is a projection of `dna.yaml`,
 `memory.yaml`, `workflows.yaml` and the `wingfoil-cli` directive; §8–§10 are this project's own rules. No sentence
 inside the region cites a source outside the configuration and the specs, so that part (b)'s generator can
-reproduce it.
+reproduce it. *(Corrected at the independent review, F2: the region does cite such sources; see that section.)*
 
 **`CLAUDE.md`, the whole file:**
 
@@ -335,7 +335,8 @@ may add, dated, that Claude Code ≥ 2.1.277 reads `AGENTS.md` itself.
 
 **Approver rulings on the design (2026-10-17, through the coordinator).** Decisions 1–5 accepted as recommended: (1) a
 fifth check "CLAUDE.md is a pointer that imports AGENTS.md", with its conformance row; (2) `workflow list` moves to
-the code-build row of `wingfoil-cli`, the coordinator files the `pinned-build` bug; (3) `bug-302`'s P4.13 rows are
+the code-build row of `wingfoil-cli`, the coordinator files the `pinned-build` bug (replaced at the review, F4: `bug-292`
+already records it); (3) `bug-302`'s P4.13 rows are
 corrected here (`06_features.md` 1.16, REQ-SYS-03, REQ-STATE-02), the journey rows become a bug of their own (the
 coordinator files it); (4) the 25 test lines stay; (5) the decision-log scaffold's `tmpl_version` is bumped. Ruling T6:
 `COLLABORATION.md:162`, `docs/agents.md:8` and `user-docs.yaml:4` are `task-289`'s; this branch does not touch them.
@@ -447,7 +448,8 @@ Against `code-review`, `claim-evidence`, `doc-versioning`, `git-conventions`:
   the SARD file declare no version.
 - Same class: the `CLAUDE.md` citations in `src` (all 16); the P4.13 sentences in `06_features.md` (three, not two); the
   `--trailer` rule in both `AGENTS.md` and the directive.
-- No sentence in the generated region cites a source outside the configuration and the specs. The handovers are each
+- ~~No sentence in the generated region cites a source outside the configuration and the specs.~~ False — corrected
+  at the independent review (F2, below). The handovers are each
   answered: ten modules, 33 commands, the pin by reference, Memory operations on the code build, `dl-155`, the doc-map
   rows, the integration branch, `red` is `qa`'s, the reviewer/tech-lead/facilitator/approver rows, `wingfoil-cli`
   global, binding kind `run`, the attribution rule, `change-proposal`, `returns`, `amendable`, service kinds.
@@ -469,7 +471,7 @@ Left uncommitted in the worktree (`git status --short` lists the six files):
 - `bug-236-…` — `--reason "Adds the Retrospective of the bug that task-252 closes, with the governance rule left to a follow-up."`
 - `bug-239-…` — `--reason "Adds the Retrospective of the bug that task-252 closes for its agent-facing part."`
 - `bug-284-…` — `--reason "Adds the Retrospective of the bug that task-252 closes."`
-- `bug-302-…` — `--reason "Replaces the empty Retrospective of the bug that task-252 closes."`
+- `bug-302-…` — `--reason "Replace the placeholder Retrospective (None.) of the bug that task-252 closes."` (reworded at the review, F7)
 
 ### Retrospective
 
@@ -480,3 +482,50 @@ Left uncommitted in the worktree (`git status --short` lists the six files):
   not the model, loads the file. A sentinel prompt without a control would not have shown it.
 - An exact-version pin (`dev-loop-done-order`) failed on the next bump of a file it does not own, the class bug-314
   names. Pins of a config's history entry should search the history, not read its newest entry.
+
+### independent review (2026-10-17) and fixes (developer)
+
+Verdict: APPROVE WITH FIXES. Each finding, the fix and its same-class sweep:
+
+- **F1 — `AGENTS.md` §5.1 named the wrong writers.** `workflow finalize` writes no `wf()` verb: its record is
+  `workflow: finalize <instance-id> <step-key>` (`src/core/workflow-finalize.ts:148`); `workflow end` writes
+  `wf(plan): finalize` (`src/core/workflow-start-end.ts:335`); no command writes `start` or commits `sync`
+  (`src/core/workflow-next.ts:322` only prints it). Fixed: the paragraph says `finalize` is written by `workflow end`
+  and the supersede trigger, `workflow start` writes a plan's `add`/`submit`, `start`/`sync` are written by hand; a new
+  paragraph describes the `workflow finalize` record (subject, `Approver:`/`Reason:`, `WingFoil-*` trailers). Same
+  class: the verb table's column "Written by" became "the operation it records — and what writes it today", and its
+  `start`, `finalize`, `sync`, `assign` rows say so (`grep -rn "'assign'" src/core/*.ts` → nothing writes `assign`).
+- **F2 — the claim "no sentence in the generated region cites a source outside the configuration and the specs" was
+  false.** `b=$(grep -n "wingfoil:generated:begin" AGENTS.md | cut -d: -f1); e=…end…; sed -n "${b},${e}p" AGENTS.md |
+  grep -oE "\b(task|bug)-[0-9]+|src/[a-z/.-]+|test/[a-z/.-]+" | sort -u` → `bug-051 bug-075 bug-138 bug-236
+  src/core/memory-supersede.ts src/core/workflow-finalize.ts src/mcp src/memory/audit.ts src/memory/schema.ts
+  src/memory/state-machine.ts task-057 task-109 task-111 task-117 task-205 task-270
+  test/cli/runtime-dependencies.test.ts` (`src/mcp` is `dna.yaml`'s module path, `task-109` an id example). The
+  sentences stay (ruling); the two notes that made the claim are marked corrected above. **Input for the `dl-137` part
+  (b) tech-spec:** the generated region of a hand-written file cites tasks, bugs, source files and tests as evidence;
+  a generator working from the configuration cannot reproduce those, so the tech-spec decides whether the region
+  carries citations at all, or only the configuration's own `[SPEC]` refs, with the evidence in the project-owned part.
+- **F3 — WORKFLOW.md's `produces` row listed too few users of the object form.** A js-yaml scan of
+  `.wingfoil/workflows/custom/*.yaml` printing each phase with a `{ type, path }` entry → `dev-loop.design`,
+  `initial-design.seed-releases`, `.seed-adrs`, `.seed-dls`, `.seed-specs`, `release-line-cycle.plan-next-release-line`,
+  `release-planning.record-adrs`, `.identify-specs`, `.build-backlog`. The row lists all nine.
+- **F4 — the `pinned-build` bug exists.** `bug-292` (`tags: ["pinned-build"]`, `closed`, v0.3) records the refusal
+  (`grep -n "produces.0" docs/04_memory/bugs/bug-292-*.md` → line 32); no bug is filed. **Not cited by id:**
+  citing `bug-292` in the directive failed `test/directives/wingfoil-cli.test.ts` ("§3: points to the pinned-build tag
+  and lists no bug", `task-270` AC 1 — the directive's own rule that it "points to the tag; it does not list the
+  surprises"). The bullet says instead that the §3 search lists the bug that records it, and that search finds it:
+  `npm run -s wingfoil -- memory search --type bug --tag pinned-build` → `bug-087 bug-162 bug-292 bug-323`. Put to the
+  approver: keep the directive's no-id rule (recommended), or amend it and `task-270`'s pin.
+- **F5 — the `workflow finalize` record also carries `WingFoil-Element:` or `WingFoil-Item:`.** `AGENTS.md` §5.1 and
+  `git-conventions` §8 (and its 1.9 history line; still 1.9) name the `WingFoil-*` trailers and list all five.
+- **F6 — `AGENTS.md` §3 named the pinned version (0.2.2) inside the generated region.** It now says "the version
+  `package.json` pins for `wingfoil-released`". Same class: `grep -n "0\.2\.[0-9]" AGENTS.md` → line 27, the release
+  status of §1 (project-owned), and line 120, `patch-v0.2.2` as an example release id: neither names the pin.
+- **F7 — `bug-302`'s pending `--reason`** reworded (Pending amendments above).
+
+`bug-236`'s Retrospective is unchanged until the approver rules on D6.
+
+Gates after the fixes (only documents and `.wingfoil` Markdown changed, so no full run): `npx jest test/docs
+test/core/workflow-repository-conformance.test.ts test/directives --maxWorkers=2` → 35 suites, 472 tests passed (the
+first run failed `wingfoil-cli.test.ts` on the `bug-292` id, F4 above); `npm run -s lint` → exit 0;
+`node scripts/check-governance.cjs --base 89c43d36` → 0 findings.

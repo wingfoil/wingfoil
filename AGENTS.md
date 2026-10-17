@@ -109,7 +109,7 @@ the move. Start from `.wingfoil/README.md`.
   you meant.
 - The workflow reads (`workflow list`, `workflow show`, the MCP resource `wingfoil://workflows`) run on the
   code build while the pin predates the `{ type, path }` form of a `produces` entry (`dl-104` D3), which the
-  pinned 0.2.2 refuses on this repository.
+  version `package.json` pins for `wingfoil-released` refuses on this repository.
 
 | File                                                       | Pillar                 | What it holds                                                                                                                                                                                        |
 |------------------------------------------------------------|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -201,21 +201,29 @@ wf({type}): {verb} {id1}, {id2}, ... [{from} → {to}]
 The verbs are a closed list (`dl-079` (A), `spec-008-cli-grammar` §2, `MEMORY_OPERATIONS` in
 `src/memory/audit.ts`), each with its bracket rule:
 
-| Verb | Written by | Bracket |
+| Verb | The operation it records (`spec-008` §2) — and what writes it today | Bracket |
 |------|------------|---------|
 | `add` | `memory add` | none |
 | `submit` | `memory submit` | none |
 | `approve` / `reject` | `memory approve` / `memory reject` | `[from → to]` |
 | `deprecate` | `memory deprecate` | `[from → deprecated]` |
-| `start` | a `set_state` that opens work on an element | `[from → to]` |
-| `finalize` | a `set_state` into the last state of a `sequence`; `workflow end` for a plan; the `supersedes:` trigger | `[from → to]` |
-| `sync` | `<type>.sync_state` (`bug.sync_state`, `dl-045`) | `[from → to]` or a chain `[s0 → s1 → … → sN]` |
+| `start` | a `set_state` that opens work on an element — written by hand | `[from → to]` |
+| `finalize` | a `set_state` into the last state of a `sequence` — written by `workflow end` (a plan) and the `supersedes:` trigger, otherwise by hand | `[from → to]` |
+| `sync` | `<type>.sync_state` (`bug.sync_state`, `dl-045`) — written by hand (`workflow next` prints the subject) | `[from → to]` or a chain `[s0 → s1 → … → sN]` |
 | `amend` | `memory amend` (`dl-108`) | `[s → s]` |
 | `park` | `memory park` (`dl-110`) | `[from → to]`, `to` the type's `returns` target |
-| `assign` | `element.set_release` | none |
+| `assign` | `element.set_release` — written by hand | none |
 
 Configuration changes have their own scopes, not Memory verbs: `wf(dna): set|add|update|remove …`,
 `wf(directive): create|assign|remove …`, `wf(workflow): create|remove …`.
+
+**The `workflow finalize` record is not a `wf()` commit.** It records a step no Memory or file evidence can
+complete, as an empty commit with the subject `workflow: finalize <instance-id> <step-key>`, a body with
+`Approver:` (on an `approval:` phase, after the authority check) and `Reason:` (when `--reason` is given), and
+the trailer paragraph `WingFoil-Phase: <workflow>.<phase> completed`, `WingFoil-Instance: <instance-id>`,
+`WingFoil-Element: <type>:<id>` or `WingFoil-Item: <collection>#<key>` (none when unscoped) and
+`WingFoil-Version:` (`src/core/workflow-finalize.ts`, `spec-017` §7.9). `memory history` does not read it as a
+Memory operation; the workflow deduction reads its trailers.
 
 **One operation, one commit — two declared exceptions:**
 - **The supersede pair.** Approving an `adr` or `tech-spec` whose `supersedes:` names an element of its
@@ -229,8 +237,9 @@ Configuration changes have their own scopes, not Memory verbs: `wf(dna): set|add
   reject's sha, with no `Approver:` line (`dev-loop`, `task-205`).
 
 **Every commit `wingfoil` writes ends with a trailer paragraph** carrying `WingFoil-Version: <semver> (<sha>)`
-(`dl-111`), plus `WingFoil-Instance:` / `WingFoil-Step:` on a `memory add --workflow … --step …` and
-`WingFoil-Phase:` / `WingFoil-Instance:` on a `workflow finalize` record. To add a trailer to such a commit,
+(`dl-111`), plus the other `WingFoil-*` trailers a workflow step adds: `WingFoil-Instance:` / `WingFoil-Step:`
+on a `memory add --workflow … --step …`, and `WingFoil-Phase:`, `WingFoil-Instance:` and `WingFoil-Element:` or
+`WingFoil-Item:` on a `workflow finalize` record. To add a trailer to such a commit,
 amend with `git commit --amend --no-edit --trailer "…"`, which joins that paragraph; never add a new paragraph
 after it, or a reader takes `WingFoil-Version:` into the `Reason:` block and the workflow deduction, which reads
 only the final paragraph, loses the step link or the phase record (`git-conventions` §8, `bug-236`). Only a commit not yet pushed may be amended.
@@ -244,9 +253,10 @@ hands this rule to the agents it launches; an agent started from its own CLI has
 
 > **All Memory verbs ship and run on this repository** through the code build (§3): `memory add`, `submit`,
 > `approve`, `reject`, `deprecate`, `amend`, `park` (P1.6–P1.9, `dl-108`, `dl-110`), with the read-only
-> `memory search` and `memory history` (P1.10). `start`, `finalize` and `sync` are written by `wingfoil
-> workflow finalize`, `workflow end` and the engine paths named above, or by hand in the same format where a
-> phase is carried out by hand. Approvals, rejections and amendments run only on the approver's instruction,
+> `memory search` and `memory history` (P1.10). `finalize` is written by `workflow end` (`wf(plan): finalize`,
+> `active → done`) and by the supersede trigger; `workflow start` writes a plan's `add` and `submit`; no command
+> writes `start` or commits `sync` (`workflow next` prints the `sync` subjects a step owes), so those two are
+> written by hand, in the same format. Approvals, rejections and amendments run only on the approver's instruction,
 > whether by verb or by hand (§8). Run `node dist/cli.js memory --help` rather than trusting this paragraph.
 >
 > The commit *format* is the contract either way — it is what the verbs emit and what

@@ -47,7 +47,7 @@ run WingFoil from its own source, so the rule has no meaning in a project scaffo
   worktree.
 - **Why the code build for the workflow commands.** The pinned 0.2.2 cannot load this repository's
   workflow files: it reads a `produces` entry as a string only and refuses the `{ type, path }` entries
-  (`dl-104` D3) with `E_VALIDATION`, exit 1 (a `pinned-build` bug, §3, records it). The workflow commands
+  (`dl-104` D3) with `E_VALIDATION`, exit 1; the `pinned-build` search of §3 lists the bug that records it. The workflow commands
   return to the pinned build when the pin reaches a release that reads them.
 - **Why the pinned build for the reads and MCP.** They answer as the build WingFoil's users have
   (`dl-095` Q1 (a), Q2 (i)), so the pinned build's surprises surface here, where they can be filed.
