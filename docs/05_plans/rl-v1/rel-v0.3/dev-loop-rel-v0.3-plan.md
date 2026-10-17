@@ -2,7 +2,7 @@
 id: dev-loop-rel-v0.3-plan
 type: plan
 title: "Dev-loop — rel-v0.3"
-status: active
+status: done
 version: "1.30"
 workflow: "dev-loop"
 phase: "rel-v0.3"
