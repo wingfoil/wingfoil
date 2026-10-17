@@ -44,7 +44,8 @@
  * **refused**: its own case fails with the floor and the load window (`idleMachineVerdict`), so the
  * pass is red even when every budget case is green — a loaded run is not a REQ-PERF-02 measurement.
  * The load average is recorded as evidence, not judged. `WINGFOIL_LATENCY_REPORT=1` prints the load
- * window, the idle verdict and the three distributions measured.
+ * window, the idle verdict and the three distributions measured, to stdout through `reportLatency`
+ * (task-285, `bug-378`: a `console.log` never reached the log of an agent-run pass of two or more files).
  *
  * This file is the one documented exemption from `test/core/latency-budget-placement.test.ts`'s
  * spawn-plus-timing rule, and the exemption records why.
@@ -52,12 +53,12 @@
 import { runCliHarness, type SpawnedRun } from './helpers/spawn-cli';
 import {
   idleMachineVerdict,
-  latencyReport,
   type LoadWindow,
   type MarginalLatencySamples,
   PROCESS_LEVEL_QUANTITIES,
   processLevelVerdict,
   readLoadAverage,
+  reportLatency,
   RUNS,
   sampleMarginalLatency,
 } from '../core/helpers/latency';
@@ -108,11 +109,10 @@ describe('REQ-PERF-02 — command-level p95 of the total and of the marginal cos
   });
 
   afterAll(() => {
-    // Opt-in: print the load window, the idle verdict and the three distributions, so a run's numbers
-    // can be quoted without the suite failing first. Off by default — output only, no assertion.
-    if (process.env.WINGFOIL_LATENCY_REPORT === '1' && measured) {
-      console.log(latencyReport(measured, COMMANDS, load));
-    }
+    // Opt-in (WINGFOIL_LATENCY_REPORT=1, checked by the helper): print the load window, the idle verdict and the
+    // three distributions to stdout, so a run's numbers can be quoted without the suite failing first, and reach
+    // the output whatever reporter jest runs (task-285). Output only, no assertion.
+    if (measured) reportLatency(measured, COMMANDS, load);
     removeTempDir(root);
   });
 

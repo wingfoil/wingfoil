@@ -757,7 +757,10 @@ const coverageSummary = (tree: string, files: readonly string[] = ['audit', 'com
   return JSON.stringify(out);
 };
 
-/** The latency pass's report as `test/core/helpers/latency.ts` `latencyReport` prints it, inside jest's console block. */
+/**
+ * The latency pass's report (`test/core/helpers/latency.ts` `latencyReport`) as it printed through `console.log` before
+ * task-285 (jest's console block); the plain stdout shape is the task-285 case below.
+ */
 const latencyOutput = (machine: string, history: { marginal: number; total: number } = { marginal: 120, total: 330 }): string => [
   '  console.log',
   '    load average (1-min / 5-min): before 1.50 / 2.00, after 1.75 / 2.10 (one window: the commands are sampled interleaved)',
@@ -921,6 +924,26 @@ describe('the toolchain half — Q01–Q04, Q11, Q12, Q17 from stubbed tool outp
         'memory search total_p95_ms': 287, 'memory search marginal_p95_ms': 106, 'dna show total_p95_ms': 250, 'memory history total_p95_ms': 1200, 'memory history marginal_p95_ms': 1010,
       },
       failing: ['memory history: total p95 1200 ms >= 1000 ms', 'memory history: marginal p95 1010 ms >= 1000 ms'],
+    });
+  });
+
+  it('Q12 — task-285 AC 3: the report as the suite now prints it (unindented on stdout, no console block, after a sibling line) is measured', async () => {
+    const { tree, scratch } = toolTree();
+    const plain = [
+      'workflow next: p95 40 ms (n=25, min 30 ms, max 41 ms); load average (1-min / 5-min): before 7.04 / 6.00, after 9.62 / 7.00',
+      ...latencyOutput('otherwise idle').split('\n').filter((line) => line.startsWith('    ') && !line.trimStart().startsWith('at ')).map((line) => line.trimStart()),
+      '',
+    ].join('\n');
+    expect(plain).not.toContain('console.log');
+    const m = byId(await measureToolchain(tree, scratch, { tools: stubTools({ latency: { status: 0, stdout: plain, stderr: 'Test Suites: 3 passed, 3 total\n' } }).tools }));
+    expect(m['Q12']).toMatchObject({
+      status: 'measured',
+      value: 330,
+      raw: {
+        machine: 'otherwise idle', load_1m_before: 1.5, load_1m_after: 1.75, floor_p95_ms: 210,
+        'memory search total_p95_ms': 287, 'memory search marginal_p95_ms': 106, 'dna show total_p95_ms': 250, 'memory history total_p95_ms': 330, 'memory history marginal_p95_ms': 120,
+      },
+      failing: [],
     });
   });
 

@@ -243,6 +243,28 @@ export function latencyReport(measured: MarginalLatencySamples, commands: readon
 }
 
 /**
+ * Print the latency pass's report ({@link latencyReport}) when asked for: when `env.WINGFOIL_LATENCY_REPORT` is
+ * `'1'`, `write` receives the report and a newline, once, and the call answers `true`; otherwise nothing is written
+ * and it answers `false` (task-285, `bug-378`). The default `write` is `process.stdout.write`, not `console.log`:
+ * jest buffers a suite's console output and its reporter decides whether to print it, and the one jest picks when an
+ * AI agent runs it (`AgentReporter`, chosen from variables such as `AI_AGENT` or `CLAUDECODE`) prints none for a
+ * passing suite once the pass runs two or more files, so release-health's `parseLatencyReport`
+ * (`scripts/release-health/measure.cjs`) found no report. Writing to stdout reaches the output whichever reporter
+ * runs, as the two `workflow next` suites' lines do.
+ */
+export function reportLatency(
+  measured: MarginalLatencySamples,
+  commands: readonly string[],
+  load: LoadWindow,
+  env: NodeJS.ProcessEnv = process.env,
+  write: (text: string) => unknown = (text) => process.stdout.write(text),
+): boolean {
+  if (env['WINGFOIL_LATENCY_REPORT'] !== '1') return false;
+  write(`${latencyReport(measured, commands, load)}\n`);
+  return true;
+}
+
+/**
  * The idle condition of an **in-process** opt-in suite (task-216 review fix 6; `test/latency-suites.cjs`
  * `IN_PROCESS_LATENCY_SUITES`): with no process-start floor to judge, the load window decides. `'otherwise
  * idle'` when the 1-minute load average stays under half of `cores` before and after the measurement,

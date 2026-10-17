@@ -43,6 +43,23 @@ describe('parseLatencyReport reads what latencyReport prints (task-232, Q12)', (
     expect(parseLatencyReport(`${other}${latencyReport(samples(200, [300, 250, 420]), COMMANDS, LOAD)}`)).toMatchObject({ load: { before: 1.5, after: 1.75 } });
   });
 
+  it('task-285 AC 3 — the report as the suite now writes it (reportLatency: unindented on stdout, newline-terminated), after a sibling line, is read whole', () => {
+    // reportLatency writes exactly `latencyReport(...)` and a newline (test/core/latency-report-writer.test.ts); a
+    // `workflow next` suite's line precedes it in the pass's stdout (test/cli/latency-report-pass.test.ts).
+    const sibling = 'workflow next: p95 40 ms (n=25, min 30 ms, max 41 ms); load average (1-min / 5-min): before 7.04 / 6.00, after 9.62 / 7.00\n';
+    expect(parseLatencyReport(`${sibling}${latencyReport(samples(200, [300, 250, 420]), COMMANDS, LOAD)}\n`)).toEqual({
+      machine: 'otherwise idle',
+      idle: true,
+      load: { before: 1.5, after: 1.75 },
+      floorP95: 200,
+      commands: [
+        { command: 'memory search', marginalP95: 100, totalP95: 300 },
+        { command: 'dna show', marginalP95: 50, totalP95: 250 },
+        { command: 'memory history', marginalP95: 220, totalP95: 420 },
+      ],
+    });
+  });
+
   it('an output with no report is null', () => {
     expect(parseLatencyReport('PASS test/cli/command-latency.test.ts\n')).toBeNull();
   });
