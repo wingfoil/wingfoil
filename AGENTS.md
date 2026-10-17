@@ -4,7 +4,7 @@ This file orients any AI coding agent working in this repository: what the proje
 of information lives, and which workflows and directives to respect. Read it first; follow the links
 rather than guessing. `CLAUDE.md` holds only an import of this file, for agents that read that name.
 
-The part between `<!-- wingfoil:generated:begin -->` and `<!-- wingfoil:generated:end -->` (§3–§7) is the
+The part between the `wingfoil:generated` begin and end markers (two HTML comments, around §3–§7) is the
 projection of this repository's WingFoil configuration — `dna.yaml`, `memory.yaml`, `workflows.yaml`,
 `roles.yaml` and the directives. A future `wingfoil` export will own and regenerate that region; the rest of
 the file belongs to the project (`dl-137` R3/R4). Until the export exists the region is written by hand, and
@@ -435,17 +435,20 @@ non-blank (`--reason` itself stays optional, `dl-027`).
             - `user-docs` *(dl-013)*: `check-implementation-complete` (tech-lead) → `align-user-docs` →
               `align-agent-docs` (dl-025: this file, `CLAUDE.md` as its pointer, `.wingfoil/README.md`,
               `.wingfoil/WORKFLOW.md`);
-            - `e2e-smoke` *(dl-023: fresh-init + CLI end-to-end smoke gate + `mcp-registration`)* →
-              `release-submit` → `release-publishing` (`release-commit` → `staging-rehearsal` → `tag` on the
-              integration branch → `publish` → `mark-released`) → `release-health` *(dl-089: measure →
-              compare → propose against `docs/08_health/metrics.yaml`; not a gate)* → `retrospective`.
+            - `e2e-smoke` *(dl-023: `fresh-init` → `drive-cli` → `mcp-registration` → `gate`)* →
+              `release-submit` (`pre-release-checks` → `enter-releasing` → `approve-release`) →
+              `release-publishing` (`release-commit` → `staging-rehearsal` → `tag` on the integration branch →
+              `publish` → `mark-released`) → `release-health` *(dl-089: `measure` → `compare` → `propose`
+              against `docs/08_health/metrics.yaml`; not a gate)* → `retrospective` (`explore` →
+              `collect-feedback` → `additional-points` → `capture` → `approve`, → decision-logs).
     - `sunset` → `end-of-life`.
 - **`bug-ingest`, `decision-log-ingest`, `adr-ingest`, `service-ingest`** — capture a single element on
   demand. If started while another workflow with an active `element` is running, the new file **inherits
   that element** (e.g. a bug raised during `dev-loop` inherits the active `task`).
 - **`vision-change`** — change the vision after inception (`dl-132`): `capture` (a `change-proposal`) →
-  `impact-analysis` (approver accepts) → `update-vision` → the downcasts the analysis names
-  (`user-story-mapping`, `specification-by-examples`, `volere-requirements`) → `schedule` (stamps the
+  `impact-analysis` (approver accepts) → `update-vision` → the downcasts the analysis names, each optional
+  (`downcast-stories` → `user-story-mapping`, `downcast-scenarios` → `specification-by-examples`,
+  `downcast-requirements` → `volere-requirements`) → `schedule` (stamps the
   element's `release`; `release-planning`'s `define-scope` sweeps it into the release's `features:`).
 
 Phase completion is **deduced** (no stored `status:`, `spec-017`): Memory-backed phases from element
