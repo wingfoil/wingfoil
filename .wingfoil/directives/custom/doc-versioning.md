@@ -42,11 +42,15 @@ Custom WingFoil rule. Applies to all roles editing versioned docs.
 - **Gate (the four versioned config files only).** `test/lint/version-bump.test.ts`, run by `npm test`,
   fails when the pending change (the working tree against `HEAD`) changes `.wingfoil/dna.yaml`,
   `memory.yaml`, `workflows.yaml` or `roles.yaml` — comments included — without changing its
-  `version:` as YAML reads it, unless the branch already bumped that file since it left `main`
-  (`task-183`, `bug-143`). "Changes" is `git diff HEAD`'s verdict, so eol conversion is honoured. The
-  `main` it reads is the local `refs/heads/main`: a stale local `main` can credit a bump the branch did
-  not make, and with no local `main` the check is strict, against `HEAD` alone. Committed history is
-  not re-judged.
+  `version:` as YAML reads it, unless the branch already bumped that file since it left its integration
+  branch (`task-183`, `bug-143`, `task-287`). "Changes" is `git diff HEAD`'s verdict, so eol conversion
+  is honoured. The integration branch it reads is a local branch: of the local `main` and every local
+  `release/<major>.<minor>`, the one whose fork point with `HEAD` descends from every other's — the line
+  `HEAD` left most recently (`main` on a tie, e.g. a `release/X.Y` just cut, or `HEAD` at a merge-forward
+  commit both lines contain; on a line itself the fork point is `HEAD`, so the check there is strict).
+  A stale local branch can credit a bump the branch did not make, a line with no local branch is not
+  seen, and with no candidate, or with fork points that do not order, the check is strict, against
+  `HEAD` alone. Committed history is not re-judged.
 
 > Rationale: keeps version numbers meaningful (one bump per revision that reaches its integration branch) rather than
 > churning on every micro-edit or review fix. Mirrors the standing project convention.
