@@ -23,7 +23,11 @@ tags: ["github","docs"]
 The project's documentation site (`dl-129-trust-signals` Decision 2), served by GitHub Pages at
 `https://wingfoil.github.io/wingfoil/`. `.github/workflows/pages.yml` (`task-234`) builds it from the user
 documentation `docs/site.yaml` lists and from the TypeDoc API reference (`docs:api`, under `api/`), renders it with
-`actions/jekyll-build-pages` and deploys it at each release tag (`on.push.tags`: `v[0-9]+.[0-9]+.[0-9]+`) or on a manual dispatch. `llms.txt` sits at
+`actions/jekyll-build-pages` and deploys it on a manual dispatch or on a release tag (`on.push.tags`:
+`v[0-9]+.[0-9]+.[0-9]+`) whose version gets npm's `latest` dist-tag, and then only after npm serves that version: since
+`task-266`, a tag run asks `scripts/npm-dist-tag.cjs` for the version's dist-tag, its `deploy` job runs only for
+`latest`, and its `build` first waits on `scripts/wait-npm-version.cjs` (`grep -n "dist_tag == 'latest'"
+.github/workflows/pages.yml` → lines 82 and 101). A patch tag of an older line deploys nothing. `llms.txt` sits at
 its root, byte-equal to the repository's, as the index for agents (dl-129 Decision 3). It is the repository
 `homepage` (`svc-004-github-repository-settings`) and `package.json`'s `homepage`, which npm shows from the next
 publish on. Without it those links point at a 404 and the agent index is not served.
@@ -54,12 +58,17 @@ The environment rule is read with
 → `[{"name":"main","type":"branch"},{"name":"v*","type":"tag"}]` (2026-10-15). The same day,
 `curl -sI` returned `HTTP/2 200` for `https://wingfoil.github.io/wingfoil/`, `/llms.txt`, `/api/index.html` and
 `/docs/user-guide.md`, and `curl -s https://wingfoil.github.io/wingfoil/llms.txt | diff - llms.txt` printed nothing.
-The latest deployment is read with `gh run list --workflow pages.yml --limit 1`.
+The latest run is read with `gh run list --workflow pages.yml --limit 1`; since `task-266` that run may be one still
+waiting for npm to serve its version (its `build` polls for up to 330 minutes) or one whose `deploy` job was skipped
+(a version that did not get `latest`), so the latest deployment is the newest run whose `deploy` job succeeded:
+`gh run view <run-id> --json jobs --jq '.jobs[] | {name, conclusion}'`.
 
 ## Management
 
 - **Owner:** the `approver` role.
-- **Redeploy:** `gh workflow run pages.yml --ref main`, or push a release tag (`vX.Y.Z`).
+- **Redeploy:** `gh workflow run pages.yml --ref main`. Pushing a release tag (`vX.Y.Z`) redeploys only when the
+  version gets npm's `latest` dist-tag, after npm serves it (`task-266`); a tag of an older line does not. A tag run
+  waiting for npm holds the `pages` concurrency group, so a dispatch made meanwhile stays pending until it ends.
 - **Change:** edit the setting on GitHub, then this element's Configuration, so the two never disagree.
 - **Retire:** `memory deprecate` if the site moves (e.g. to a domain of its own), naming its replacement in the
   `Reason:`; `svc-004`'s homepage line changes with it.
