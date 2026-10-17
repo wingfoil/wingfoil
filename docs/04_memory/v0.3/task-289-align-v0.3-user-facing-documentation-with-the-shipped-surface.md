@@ -152,8 +152,9 @@ DLs the ACs cite: `dl-013`, `dl-112`, `dl-128`, `dl-129`, `dl-131`, all `ready`.
   "What Comes Later" opens with 0.3; `:255` row `0.3 … Planned`; `:289` "Workflow Synchronization *(0.3)*";
   `:316-320` counts 63 / 63 / 190 / 43; `:339` contribution artifacts without Change-Proposal.
 - The render guard rule below, prototyped in the session scratchpad over the eleven `docs/site.yaml` pages, flags
-  exactly `docs/user-guide.md:381`, `docs/cli-reference.md:1577`, `docs/cli-reference.md:1630` and nothing else (the
-  README's two `<p align="center">` lines, at line 1 and after a blank line, are skipped).
+  exactly three lines, `docs/user-guide.md:381`, `docs/cli-reference.md:1577` and `docs/cli-reference.md:1630`;
+  the red run below (`npx jest test/docs/pages-render.test.ts`) received the same three. The README's two
+  `<p align="center">` lines, at line 1 and after a blank line, are skipped.
 - `scripts/changelog-section.cjs`: the heading regex is `^## \[0\.3\.0\](?:\s.*)?$`, so `## [0.3.0] - Unreleased`
   is accepted; the section ends at the next `## ` line.
 - Versions (`grep -n '^version:\|\*\*Version:\*\*'`): `docs/site.yaml` 1.1, `.wingfoil/workflows/custom/user-docs.yaml`
@@ -269,6 +270,186 @@ refuses without a terminal although it launches nothing (documented as current b
 `src/mcp/registrar.ts:18-56`'s docblock describes Resources the server does not list; `package.json`'s `description`
 differs from the governance-layer positioning.
 
+### Approver rulings (2026-10-17, relayed by the coordinator)
+
+- **D-1 to D-7 accepted as recommended**, D-7 with the two README sentences of the design (tagline `:12`, closing
+  line). Applied: D-1 roadmap row "🔄 Being released", the docs name 0.3, `package.json` stays 0.2.2; D-2 six
+  grouped "For contributors" bullets with all ids; D-3 the trailer pasted from a build stamped `0.3.0` (below); D-4
+  `docs/agents.md` aligned in place; D-5 the BDD index baseline labelled plus a dated re-count; D-6 the guard is a
+  test only; D-7 both sentences.
+- **T6 (from `task-252`'s design).** `task-252` moves `CLAUDE.md` to `AGENTS.md`; this task points its own files
+  there: `COLLABORATION.md` (*Pointers*) links `[AGENTS.md](AGENTS.md)`, `docs/agents.md:8` reads `AGENTS.md`, and
+  `.wingfoil/workflows/custom/user-docs.yaml`'s header comment names `AGENTS.md`, inside the one 1.8 bump. Both
+  branches reach `main` together through the phase branch, so `AGENTS.md` exists when these lines land; on this
+  branch alone the link does not resolve yet (`test -e AGENTS.md` → false) and no test reads it (`npx jest
+  test/docs` green, below).
+- Optional comparison item taken: `docs/comparison.md` rows `:31` and `:70` say Claude Code reads `AGENTS.md`
+  directly from v2.1.277. Source [S8] (the same page, <https://code.claude.com/docs/en/memory>) re-read on
+  2026-10-17 with WebFetch; it states "Reading `AGENTS.md` directly requires Claude Code v2.1.277 or later", and
+  still states S8's other facts (context, not enforced configuration; `@path` imports; `.claude/rules/` path
+  scoping), so its date moved to 2026-10-17.
+
+### red (developer, 2026-10-17)
+
+Red commit `6e431c42` (`test(docs): task-289 — red: …`): `test/docs/pages-render.test.ts` and
+`test/docs/support/pages-render.ts`, the rule of the design. `npx jest test/docs/pages-render.test.ts` at `6e431c42`
+→ `Tests: 1 failed, 6 passed, 7 total`; the repository case received exactly:
+
+```
++   "docs/user-guide.md:381: <name>` deletes a custom one that no other workflow includes and no open workflow runs (built-in workflows",
++   "docs/cli-reference.md:1577: <type>:<id>`, starts the adapter's command with the arguments its manifest declares (no shell), and",
++   "docs/cli-reference.md:1630: <type>:<id>` keeps the runs and steps of one element (a step's element is the element it works on, else",
+```
+
+The six synthetic cases passed on the first run, as designed (they define the rule).
+
+### green (developer, 2026-10-17)
+
+- **Render fix** `7552883f`: the three code spans rewrapped onto one line each. `npx jest
+  test/docs/pages-render.test.ts` → `Tests: 7 passed, 7 total`.
+- **The guard caught one more** while the docs were written: the new CHANGELOG entry for `agent execute` broke
+  `` `--step <key>` `` across a line (`CHANGELOG.md:56: <key>` …`), found by `npx jest test/docs` and rewrapped
+  before the docs commit.
+- **T4 deviation, recorded.** `6c208563` changed the red helper after red: `npm run typecheck` failed on it
+  (`test/docs/support/pages-render.ts(57,9): error TS2532`, `(64,7): error TS2322`, `noUncheckedIndexedAccess`). The
+  fix is type-only (`FENCE.exec(line)?.[1]` read once into `marker`); the seven cases pass unchanged. `git log
+  --first-parent --no-merges --format='%h %s' 6e431c42..HEAD -- test/docs/pages-render.test.ts
+  test/docs/support/pages-render.ts` → only `6c208563 test(docs): task-289 — type-only fix of the red helper …`. With
+  no separate qa agent (ruling D2) the developer owns both commits; flagged for the reviewer.
+- **Config** `67f727f1`: `user-docs.yaml` 1.7 → 1.8 (header names `AGENTS.md`, T6; line 50: Pages publishes for a
+  tag whose version npm serves as `latest`, once npm serves it — read in `.github/workflows/pages.yml`, the
+  `dist-tag` step, the `wait-npm-version.cjs` step and `deploy`'s `if:`), keeping `1.6 dl-129` and `1.7 dl-128` on
+  the version line; `checks.post` untouched (three entries). `bindings.yaml` 2.3 → 2.4, the `presentation.current`
+  comment names `dl-128` items 1–4.
+- **Docs** `302dd0ed`, per AC:
+  - AC 1: `node scripts/changelog-section.cjs 0.3.0; echo $?` → `0`. The id check (a shell loop over the
+    section, run from the worktree: every `task-NNN` has `^status: done` under `docs/04_memory/v0.3/`, every
+    `bug-NNN` has `^status: closed` and `^release: "v0.3"`, every bullet with its continuation lines joined ends
+    with `\((?:(?:task|bug)-\d+(?:, )?)+\)`) → `73 bullets, 0 without a closing id list`, `tasks cited: 150, bugs
+    cited: 154`, exit `0`. Coverage: `comm -23` of the `done` v0.3 task ids against the cited ones → `task-137
+    task-141 task-159 task-186 task-188 task-242 task-245 task-258 task-259 task-261 task-273`, exactly the 11
+    spec/vision-text tasks with no entry. `bug-308`'s Fixed entry cites `task-278`. Spot-checks in `src/`:
+    `src/validation/format.ts:50` (the format refusal), `src/dna/mutate.ts:237` (`role already defined`),
+    `src/memory/commit-message.ts:346` (`Carries content:`), `glama.json` present, `scripts/npm-dist-tag.cjs`
+    (`latest-` twice).
+  - AC 2: a project initialised by `node node_modules/wingfoil-released/dist/cli.js init --template Scrum
+    --no-interactive` (0.2.2), then both builds: `workflow list` OLD exit `0` / NEW exit `1`
+    `error: E_WORKFLOW_INCLUDE_UNRESOLVED phases[2].include (workflows/custom/sw-life-cycle.yaml): include
+    'workflows/custom/scrum-delivery.yaml' names no loaded workflow (a phase include is a workflow name, not a file
+    path)`, exit `0` after `include: scrum-delivery`; OLD `workflow list` prints `{"manifest": …}`; `dna show project
+    extra` OLD `0` / NEW `2`; `memory search a b` OLD `0` / NEW `2` (`… takes one positional <keyword> (got 2
+    positionals)`); in a repository with no `.wingfoil/`, `mcp` and `directives list` OLD `0` / NEW `1` (`WingFoil
+    not initialized …`); `memory approve` on a draft OLD `illegal transition draft -> approved` / NEW `draft ->
+    (none)` + reason line, both exit `1`; `memory history` with no id OLD `missing required argument: memory history
+    <id>` / NEW `missing required argument: <id>` + `hint: usage: …`, both exit `2`; NEW `workflow start bug-ingest
+    --dry-run` → exit `1`, `error: memory type 'plan' is not declared in memory.yaml; …`. Library: `node -e` on both
+    builds → `prepareMemoryTransition` old `function` / new `undefined` (`beginMemoryTransition` new `function`);
+    `dist/storage` `resolveMemoryPath` old `function` / new `undefined`, no public replacement export.
+  - AC 3: `grep -ci unreleased` and `grep -c 'Unreleased (v0.3)'` → `0` and `0` in `README.md`,
+    `docs/user-guide.md`, `docs/cli-reference.md`, `docs/agents.md`. cli-reference: entries of commands new in 0.3
+    dropped the marker, changed behaviours of 0.2.2 commands read "New in 0.3" (`grep -c 'New in 0.3\|new in
+    0.3' docs/cli-reference.md` → `38`). README: CLI table rows Memory (+ amend, park),
+    Workflow (nine verbs), Agent; the MCP line names `workflows/-/next`, `workflows/-/status` and
+    `session/{role}/{element}/{state}`; "What Comes Later" opens at 0.4, its content read from
+    `docs/04_memory/planning/rl-v1/minor-v0.4.md` *Scope*; the 0.3 row "🔄 Being released".
+  - AC 4: a scratch clone of this branch at `7552883f` with one scratch commit bumping `package.json` to `0.3.0`
+    (outside the repository; `dist/` copied from this worktree, `node scripts/write-build-info.cjs` re-run) →
+    `--version` `0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)`. With it, in a throwaway project: the README
+    Quick Start, an approve, a submit (`Carries content: the body`), an `amend` of an approved tech-spec, a `park`,
+    and the `supersedes:` pair (an `adr` machine `draft → pending → accepted → superseded`) — every commit body ends
+    with `WingFoil-Version: 0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)`, the line pasted into README (1),
+    user-guide (1) and cli-reference (5: the trailer example, submit, approve, the supersedes finalize, amend). The
+    sha is the scratch commit's and exists in no repository history (ruling D-3). The recovery paste after a failed
+    supersede commit is a hand commit and stays without the trailer; its command now carries `--cleanup=whitespace`,
+    as `src/core/index.ts:1552` prints it (same-class drift found while there).
+  - AC 5: README `:12`, `:52`, the value proposition, the Success Metric (definition + three components from
+    `docs/01_vision/01_product-brief.md` §North Star), the closing line; `docs/site.yaml` summary, version 1.2 with
+    `1.1 dl-128` kept; `node scripts/build-site.cjs llms` then `git diff --exit-code llms.txt` → `0`.
+  - AC 6: `grep -n 'Total Features' docs/01_vision/06_features.md` → `353: … 65 core features`; `find
+    docs/02_requirements/02_bdd/features -name '*.feature' | wc -l` → `65` (P1 13, P2 5, P3 8, P4 20, P5 17, X1 2);
+    `grep -rhE '^\s*Scenario( Outline)?:' docs/02_requirements/02_bdd/features | wc -l` → `255`; SARD heading ids
+    `sort -u | wc -l` → `45`; journeys `8`, journey files `7`, edge stories `14` (unchanged); `backlog.json` → `106`
+    items (kept, marked "as imported"). BDD index: the 2026-06-26 block labelled "generation baseline" and a
+    "Re-count (2026-10-17)" table with its commands; 57 files open with `Feature:`, 8 with a `# Revised …` comment
+    first, 65/65 have `Feature:` as the first line that is not a comment. Part 3: `test/docs/vision-index.test.ts`
+    exists (task-212) and passes in `npx jest test/docs`.
+  - AC 7: `docs/agents.md` §6 rows for the five `bug-210` refusals, each message reproduced verbatim with the code
+    build in a Kanban throwaway project (`refusing to submit … held by HEAD but deleted in the working tree. Restore
+    it (git restore --source=HEAD --staged --worktree -- …)`; `document not found: adr-002-new — … is not committed
+    at HEAD …`; `refusing to submit … the working tree changes frontmatter field 'id' …`; `not-applicable value on
+    submit: title does not accept one …`; `document not found: adr-001-demo — it may be in a Memory document
+    committed at HEAD that could not be read: HEAD:…`, and `memory search` then warns `W_MEMORY_UNREADABLE`), all
+    exit `1`; the `illegal transition` row now `-> (none)` + reason line. §5: the Prompt's `element`/`state`, given
+    together (`src/mcp/prompt.ts:357`, the refusal when one is missing), and the `warnings` paragraph. §7/§9
+    rewritten for 0.3; the `bug-372` Codex warning in §9 and in the user guide §9.4. `docs/agents.md` is in no
+    `produces:` (`grep -n agents.md .wingfoil/workflows/custom/user-docs.yaml` → none): aligned for the approver's
+    confirmation at the phase approval.
+  - AC 8: user guide — init transcript (first file `.wingfoil/agents/built-in/claude-code.yaml`, last
+    `.wingfoil/workflows/custom/sw-life-cycle.yaml`, 31 files, from the real `init` output); seven path categories
+    (`paths health` in a fresh project → `error: no paths mapped for category 'health'`, exit `1`; `paths runs` →
+    `docs/runs/`); §7 rewritten (the workflows table from `workflow list --all` in a fresh Scrum project); new §8.6
+    Park and amend (the park transcript from a real run); new §9.4 Launch an agent (`agent execute --dry-run` without
+    a terminal → `error: interactive launch needs a terminal on stdin and stdout`, exit `1`, both built-in adapters
+    declare `terminal: required`); §11 re-checked (the first-collection-entry limitation removed, `task-193`); new
+    §12 Upgrading from 0.2.x. cli-reference complete: `npx jest test/docs` (cli-reference included) green.
+  - AC 9: COLLABORATION 1.5 → 1.6 (2026-10-17): the five-artifact paragraph split (bugs/DLs/ADRs swept by
+    `triage-bugs` + `reconcile-governance`; change-proposals scheduled by `vision-change`'s `schedule`, swept at
+    `define-scope`), the CLI keeps a workflow's bookkeeping (`workflow start`/`next`), `--version` example `0.3.0
+    (<commit>)` → `v0.3`; the contributor-setup paragraph now agrees with the `wingfoil-cli` directive §1 (writes on
+    the code build; it read "never by the code under development", same-class drift). comparison: `:9-10`, `:89` (→
+    `wingfoil memory add --type tech-spec --title "<title>"`; `--dry-run` of it exit `0`, the old form exit `2`),
+    `:122` "Measured on every run" (brief §North Star table, P row). Case study: figures unchanged, pinned by
+    `presentation.test.ts` F1–F8 (green). CONTRIBUTING (change-proposal), `bug.yml` (`0.3.0 (…)` example and
+    placeholder), `proposal.yml` (one sentence). SECURITY.md, CODE_OF_CONDUCT.md, `config.yml` and the PR template
+    re-read, not edited (`git diff --name-only 89c43d36 HEAD --` on them → empty); SECURITY's supported line stays `0.2.x` (`community-health.test.ts` green).
+  - AC 11: `demo.tape` not edited (`git diff --name-only 89c43d36 HEAD -- docs/examples/01-first-project/demo.tape`
+    → empty; example 01 passes with the code build, and the tape's contract in
+    `presentation.test.ts` AC2 is green); the runbook goes to the approver in the session report.
+
+### refactor (developer, 2026-10-17)
+
+Every gate in this worktree, one at a time behind `devloop-kit/waitslot.sh`, `--maxWorkers=2`:
+
+| Gate | Result |
+|---|---|
+| `npm run typecheck` | exit `0` (after `6c208563`) |
+| `npm test -- --maxWorkers=2` | `Test Suites: 461 passed`, `Tests: 8355 passed` |
+| `npm run test:coverage -- --maxWorkers=2` | All files `99.34 / 97.4 / 98.03 / 99.71` (baseline 99.34 / 97.39 / 98.03 / 99.71) |
+| `npm run lint` | exit `0` |
+| `npm run docs:api` | exit `0` |
+| `npx jest test/docs --maxWorkers=2` | 26 suites, `Tests: 284 passed` after the CHANGELOG rewrap (cli-reference, presentation, llms-txt, name-resolvability, community-health, reported-by, pages-render) |
+| `node scripts/build-site.cjs llms` + `git diff --exit-code llms.txt` | exit `0` |
+| `WINGFOIL="node $PWD/dist/cli.js" bash docs/examples/0N-*/run.sh`, 01–06 | each exit `0`, each ending `OK: …`; `git status --porcelain docs/examples` → only the README this task edits |
+| `node scripts/e2e-smoke.cjs -- node "$PWD/dist/cli.js"` | exit `0` |
+| `npm run check:governance` | exit `0`, `gated: 0 findings on 0 commits` |
+| `npm run lint:claims -- --base 07292cfd` | exit `0`, one warn-only state-claim in this file's design note, answered above |
+| `npm pack --dry-run --json` | 532 files: `dist/` (529), `LICENSE`, `README.md`, `package.json`; of this task's changed files only `README.md` is packed: no new file |
+
+### self-review (developer, 2026-10-17)
+
+Against `code-review`, `documentation`, `claim-evidence`, `doc-versioning`:
+- Every AC is met (above), and every fact the docs add was run here, with the command named in these notes.
+- Versions: one bump per versioned file (`site.yaml` 1.2, `user-docs.yaml` 1.8, `bindings.yaml` 2.4,
+  `COLLABORATION.md` 1.6); every other file touched carries no version (`grep -n '^version:\|\*\*Version:\*\*'`).
+- Same-class instances fixed in the files touched: the fabricated sha `4f1c2d9b…` in cli-reference's commit trailer,
+  `--version` and `memory history` examples replaced by the real-run one (two illustrative outputs keep it: `workflow
+  create`'s and `agent show`'s, which are not commit bodies); the supersede recovery command; COLLABORATION's
+  build sentence; README's dogfooding sentence (the 0.3 commands run on the build under development until the
+  pin moves, `grep -n wingfoil-released package.json` → `npm:wingfoil@0.2.2`).
+- Never named: the benchmark's hold-out repository, the private market-research repository (`git diff 89c43d36
+  HEAD | grep -i -c 'holdout\|hold-out\|wingfoil-market'` → `0`). Not edited: `CLAUDE.md`, `.wingfoil/README.md`,
+  `.wingfoil/WORKFLOW.md`, the `wingfoil-cli` directive, `package.json`, `server.json`, `SECURITY.md`,
+  `test/validation/secret-scan.test.ts` (`git diff --name-only 89c43d36 HEAD` lists none of them).
+- Stopped before `submit` (ruling D2): the demo GIF waits for the approver's recording.
+
+### Pending amendments (approver)
+
+The four bugs' `### Retrospective` subsections (dl-115 Q2 (a)) are written in this worktree and left uncommitted:
+- `bug-210`: `--reason "Add the bug's retrospective: closed by task-289, six agents.md refusal rows reproduced with the code build."`
+- `bug-227`: `--reason "Add the bug's retrospective: closed by task-289, the 0.3.0 CHANGELOG section checked by command."`
+- `bug-285`: `--reason "Add the bug's retrospective: closed by task-289, agents.md documents the Prompt arguments and warnings."`
+- `bug-298`: `--reason "Add the bug's retrospective: closed by task-289, counts re-measured and the BDD index re-counted."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -276,3 +457,14 @@ differs from the governance-layer positioning.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The render guard paid for itself within the task: it caught a fourth broken line, in the CHANGELOG entry
+  written here (`CHANGELOG.md:56`), before it was committed. Any Markdown page added to `docs/site.yaml` is now
+  covered.
+- The red helper needed a type-only fix after red (`6c208563`): `npx jest` does not typecheck, so a red commit can
+  pass jest and fail `npm run typecheck`. Proposal: run `npx tsc --noEmit -p tsconfig.json` before a red commit.
+- Building the 0.3.0 CHANGELOG from 161 done tasks at the gate needed a full survey; a one-line changelog entry
+  written when a task reaches `done` would turn it into a merge.
+- The real-run trailer needed a scratch build stamped 0.3.0, since the version moves only at `release-publishing`.
+- The README banner (`docs/assets/wingfoil-social-preview*.svg/png`) still shows the old tagline as paths; its
+  regeneration and upload are outside this task (candidate finding).
