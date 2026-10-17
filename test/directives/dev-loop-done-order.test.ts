@@ -65,11 +65,15 @@ describe('task-288 (dl-159 A1.8, approver ruling R6) — git-conventions 1.8 quo
     const version = /^version: "(\d+\.\d+)"(.*)$/m.exec(header);
     expect(version).not.toBeNull();
     expect(versionNumber(version![1] ?? '')).toBeGreaterThanOrEqual(1008);
-    // The 1.8 entry: the text before the first `(prev ` (the newest entry leads the line).
+    // The 1.8 entry, wherever it sits in the history (bug-314: a later bump moves it behind `(prev `): the text
+    // from `1.8 ` up to the next `(prev ` (task-252 bumped the directive to 1.9).
     const rest = version![2] ?? '';
-    const newest = rest.slice(0, rest.indexOf('(prev ') < 0 ? undefined : rest.indexOf('(prev '));
-    expect(newest).toMatch(/(^|\s)1\.8\s/);
-    expect(newest).toContain('task-288');
-    expect(newest).toContain('dl-159');
+    const at = rest.search(/(^|\s|\()1\.8\s/);
+    expect(at).toBeGreaterThanOrEqual(0);
+    const next = rest.indexOf('(prev ', at + 1);
+    const entry = rest.slice(at, next < 0 ? undefined : next);
+    expect(entry).toMatch(/(^|\s|\()1\.8\s/);
+    expect(entry).toContain('task-288');
+    expect(entry).toContain('dl-159');
   });
 });
