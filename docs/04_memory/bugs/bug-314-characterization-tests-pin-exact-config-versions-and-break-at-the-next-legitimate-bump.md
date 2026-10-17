@@ -57,6 +57,18 @@ Exact pins written by default and loosened after they break.
 Captured on 2026-10-10 by `bug-ingest-rel-v0.3-w3b4-review-findings-plan` (item C1), the commits read on `main` at
 `02800955`.
 
+**Note (2026-10-17, W3 B9 follow-up item 9; approver triage of the W3 B9 follow-ups, item D4, by
+`bug-ingest-rel-v0.3-w3b9-review-findings-plan`).** A second shape of this class: a pin anchored at the end of the
+version line forbids the history comment that the versioned directives and configuration files carry, so the first
+bump that adds one breaks it. `test/core/dev-loop-v1-5.test.ts` AC 4 pinned `testing.md` with
+`/^version: "1\.[1-9]\d*"$/m` until `task-286` gave that line a history comment and widened the pin in-task to
+`/^version: "1\.[1-9]\d*"(?: +#.*)?$/m` (`17a0b4b5`, `git show 17a0b4b5 -- test/core/dev-loop-v1-5.test.ts`). The
+sweep on `main` at `d46e4132` finds no other: `grep -rn -oE "/\^?version:[^/]*\$/[gm]*" test` lists, besides the
+widened one, only patterns that already admit any tail (`(.*)$` or `.*$`). The opposite shape stays in scope of the
+helper this bug expects: pins that require a history comment with given content — `test/core/dev-loop-v1-5.test.ts`
+line 186, `test/core/dev-loop-v1-6.test.ts` line 184 and `test/core/stop-the-line-open.test.ts` line 97 — break
+when a later bump rewrites the comment's chain. The finding, its severity and its release are unchanged.
+
 ### Retrospective
 
 None.
