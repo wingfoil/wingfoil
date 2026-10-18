@@ -1,6 +1,6 @@
 # WingFoil examples
 
-Runnable scenarios for WingFoil **0.2.2**. Each one is a `run.sh` script that:
+Runnable scenarios for WingFoil **0.3**. Each one is a `run.sh` script that:
 
 - creates a throwaway git repository in a temporary directory, and deletes it on exit;
 - prints every `wingfoil` command it runs, followed by that command's real output;
@@ -17,7 +17,7 @@ longer matches the tool fails loudly instead of going stale.
 | [`03-directives-per-role`](03-directives-per-role/run.sh) | Write a custom directive, assign it to a role, list a role's rules, unassign and remove it |
 | [`04-mcp-server`](04-mcp-server/run.sh) | Speak MCP to `wingfoil mcp` over stdio: Resources, Resource templates, role Prompts, a Memory read, the workflow status |
 | [`05-ci-json-exit-codes`](05-ci-json-exit-codes/run.sh) | `--format json`, the `0`/`1`/`2` exit codes, and a CI gate on pending approvals |
-| [`06-workflow-approval`](06-workflow-approval/run.sh) | Journey 4, on the v0.3 workflow commands: a team rule bound to a role, `workflow create` → `start` → `next` → `memory add --workflow` → `submit` → the "human needed" line of `workflow status` → `approve` → `finalize` a checkpoint → `end` |
+| [`06-workflow-approval`](06-workflow-approval/run.sh) | Journey 4, on the workflow commands: a team rule bound to a role, `workflow create` → `start` → `next` → `memory add --workflow` → `submit` → the "human needed" line of `workflow status` → `approve` → `finalize` a checkpoint → `end` |
 
 ## Running them
 

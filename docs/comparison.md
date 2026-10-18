@@ -6,8 +6,7 @@ not generate specifications, plans or code, and it does not validate a specifica
 do (`dl-112-positioning-as-a-governance-layer`; the scope boundaries are in
 [`03_is-isnot.md`](01_vision/03_is-isnot.md)).
 
-This page describes WingFoil as this repository builds it during the development of 0.3; the latest published version
-is 0.2.2, and a capability that lands in 0.3 says so.
+This page describes WingFoil 0.3, the release being published; a capability new in 0.3 says so.
 
 **How to read this page.**
 
@@ -28,7 +27,7 @@ as **directives**: Markdown files under `.wingfoil/directives/`, each bound to t
 | Approach | How it works | What WingFoil does instead |
 |---|---|---|
 | `AGENTS.md` | Plain Markdown with no required fields; a monorepo places one per package, and the closest file to the edited file wins [S7]. Codex concatenates the files from the git root down to the working directory, so the closer file comes later and overrides [S14]. | Rules are separate directive files, each bound to roles; an agent receives the rules of the role it runs as, not every rule of every directory. |
-| Claude Code `CLAUDE.md` | Loaded at the start of every session, as context rather than enforced configuration; files can import others with `@path`, and `.claude/rules/` holds rules that can be scoped to file paths [S8]. | The rules an agent receives are declared per role; whether a phase ran under its role is measured afterwards from the commits (metric P05 in the [case study](case-study.md)). |
+| Claude Code `CLAUDE.md` | Loaded at the start of every session, as context rather than enforced configuration; files can import others with `@path`, and `.claude/rules/` holds rules that can be scoped to file paths; from Claude Code v2.1.277 it reads a repository's `AGENTS.md` directly when there is no `CLAUDE.md` [S8]. | The rules an agent receives are declared per role; whether a phase ran under its role is measured afterwards from the commits (metric P05 in the [case study](case-study.md)). |
 | Cursor project rules | `.mdc` files under `.cursor/rules`, whose `alwaysApply`, `description` and `globs` fields decide when a rule enters the conversation [S9]. | Selection is by role and task, recorded in configuration that every clone shares. |
 | GitHub Copilot repository instructions | `.github/copilot-instructions.md` for the whole repository, plus `.github/instructions/*.instructions.md` files whose `applyTo` glob scopes them; added to requests automatically [S10]. | The same rules reach every agent through one MCP server and one CLI, whatever the agent. |
 
@@ -67,7 +66,7 @@ and context, and records every state change they make in git.
 | Axis | WingFoil | Claude Code | Codex CLI |
 |---|---|---|---|
 | What it is | A governance layer the agent reads and writes through. | A coding tool started in a terminal by running `claude`, also available in the VS Code extension and the desktop app [S11]. | "Codex CLI is a coding agent from OpenAI that runs locally on your computer." [S12] |
-| Project rules it reads | Directives by role, through MCP or the CLI. | `CLAUDE.md` files, `AGENTS.md`, and `.claude/rules/` [S8]. | `AGENTS.md` files, from the global one down to the working directory [S14]. |
+| Project rules it reads | Directives by role, through MCP or the CLI. | `CLAUDE.md` files, `AGENTS.md` (read directly from v2.1.277, or imported from a `CLAUDE.md`), and `.claude/rules/` [S8]. | `AGENTS.md` files, from the global one down to the working directory [S14]. |
 | How it reaches WingFoil | `wingfoil mcp`, a local stdio MCP server. | Local stdio MCP servers, and project-scoped servers in a `.mcp.json` at the project root [S11]. | MCP servers in `~/.codex/config.toml`, stdio ones included [S13]. |
 | Licence and distribution | MIT, npm. | not stated in the sources read | Apache-2.0; npm `@openai/codex` or Homebrew [S12]. |
 
@@ -86,7 +85,7 @@ the CLI in its terminal.
 Nothing ties WingFoil to a particular specification tool, and no integration with any of them is built. What
 WingFoil offers such a tool's output is the same as it offers any document:
 
-- a specification can be registered as a `tech-spec` element (`wingfoil memory add tech-spec`), so it has an id, a
+- a specification can be registered as a `tech-spec` element (`wingfoil memory add --type tech-spec --title "<title>"`), so it has an id, a
   state, and an approval gate the human approver crosses with `wingfoil memory approve`;
 - the tasks that implement it are `task` elements with their own state machine, and the decisions taken on the way
   are `decision-log` and `adr` elements;
@@ -119,7 +118,7 @@ measurement, not a property already reached, and its three components promise di
 - **Input** — the context WingFoil assembles is identical for identical inputs. WingFoil controls it, and tests
   guarantee it.
 - **Process conformance** — the run followed its workflow: well-formed commits, legal transitions, phase outputs
-  present, roles respected. Measured on every release.
+  present, roles respected. Measured on every run.
 - **Outcome equivalence** — the two runs' software behaves the same. The agents and models the user chooses write
   the code, so this is measured, never promised.
 
@@ -134,7 +133,7 @@ The first process-conformance figures, and what is not measurable yet, are in th
 - [S5] Kiro documentation, "Steering" — <https://kiro.dev/docs/steering/> — read 2026-10-15.
 - [S6] OpenSpec, repository README — <https://github.com/Fission-AI/OpenSpec> — read 2026-10-15.
 - [S7] "AGENTS.md", the format's home page — <https://agents.md/> — read 2026-10-15.
-- [S8] Claude Code documentation, "How Claude remembers your project" — <https://code.claude.com/docs/en/memory> — read 2026-10-15.
+- [S8] Claude Code documentation, "How Claude remembers your project" — <https://code.claude.com/docs/en/memory> — read 2026-10-17.
 - [S9] Cursor Docs, "Rules" — <https://cursor.com/docs/rules> — read 2026-10-15.
 - [S10] GitHub Docs, "Adding repository custom instructions for GitHub Copilot" — <https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions> — read 2026-10-15.
 - [S11] Claude Code documentation, "Connect Claude Code to tools via MCP" — <https://code.claude.com/docs/en/mcp> — read 2026-10-15.
