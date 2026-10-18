@@ -60,3 +60,14 @@ They state that the trigger does not exist, that every operation is one commit, 
 Captured on 2026-10-05 by `bug-ingest-rel-v0.3-w1b5-review-findings-plan`, from the independent reviews of wave 1
 batch B5 (`dev-loop-rel-v0.3-plan`), reproduced against `main` at `1127a0fd` with the code build
 (`npm run -s build && node dist/cli.js`).
+
+### Retrospective
+
+- Fixed by `task-252` (`AGENTS.md`, which replaced `CLAUDE.md` as the agent file, `dl-137`): §1 lists the 33 commands
+  the CLI ships; §5.1 declares the supersede pair (the `approve`, then a `finalize` of the superseded element, with the
+  `git commit --only --cleanup=whitespace …` command the CLI prints to complete a failed pair), `superseded` reached only
+  through that trigger, `memory amend` and the `amendable` types (all but `release-line`); `.wingfoil/README.md` names
+  `amend`, `park` and the workflow commands.
+- Lesson: the agent file had an owner (`align-agent-docs`, `dl-025`), but it runs once per release, so a verb that
+  shipped in wave 2 stayed undescribed for the whole release. A shipping task that changes the agent-facing surface
+  could hand the change to the phase in its notes, as the handovers to `task-252` did.
