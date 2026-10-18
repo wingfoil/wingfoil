@@ -255,6 +255,19 @@ auto-memory. Push only on the approver's instruction.
     plan, reworded in this commit); `check:audit` 0; `build-site.cjs llms` + `git diff --exit-code llms.txt` 0; `npm
     pack --dry-run` 0, **532 files** (= baseline); tree clean afterwards.
   - **Findings: none** so far (`devloop-kit/w3-e2esmoke-followups.md` empty).
+- 2026-10-18 — **S6:** pre-gate notes committed `2153f0f5` (`check-governance.cjs --base 811b02ea` exit 0,
+  `lint-claims.cjs` 0 warnings, tree clean). **The candidate is `2153f0f5ab79d05c07e625c631e96b4d11973b51`**
+  (`git diff --name-only 811b02ea 2153f0f5` → this plan only: the packed tree is `811b02ea`'s).
+- 2026-10-18 — **S7 gate: PASS.** `node scripts/e2e-smoke.cjs --candidate --report
+  docs/07_gates/rl-v1/rel-v0.3-e2e-smoke.md` (under the slot, foreground) exit 0 in 104 s: the packed candidate
+  installed into a throwaway prefix, stamp `0.2.2 (2153f0f5…)` matched, **74/74 checks ok** — both templates, the
+  agent run (`agent execute` through `custom/fake`, one `agent: record` commit, `agent show`, `agent list --past`,
+  the session Resource read) and Journey 4 (`06-workflow-approval/run.sh`, 17 wingfoil commands) per template.
+  `check e2e-smoke-passed`: passed (severity reject).
+- 2026-10-18 — **S8:** the report committed after the run with, appended under the generated part, the
+  hand-written section "Repository checks on the candidate (task-242 AC 2)" (D2). The report and this plan are
+  evidence paths (`docs/07_gates/`, `docs/05_plans/`), so the commit does not re-cut the candidate.
+- 2026-10-18 — **S9 findings: none.** No element to file; the follow-ups registry stays empty.
 
 ### Retrospective
 
