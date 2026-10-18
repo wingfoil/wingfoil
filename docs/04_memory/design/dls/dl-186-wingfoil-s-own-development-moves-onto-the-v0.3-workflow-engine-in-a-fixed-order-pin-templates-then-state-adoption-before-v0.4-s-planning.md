@@ -72,7 +72,8 @@ and restarted `sw-life-cycle` at the fixture's `inception.default`. A pack rewri
 shapes; it adds no linkage to an existing element, so it does not remove E2. Its `dl-015` (`pending`)
 proposes that `base` and `software` keep this repository's Memory states (C1, C2) and make the plan
 id, the agent name and the Memory paths parameters (C7, C9, C10); WingFoil is one of the four
-repositories those packs govern.
+repositories those packs govern. Parameters would let two projects adopting the same packs differ,
+which S2-a asks the packs to avoid.
 
 **E5. Running an ingest through the engine works, with one gap.** The ingests that filed this
 decision-log, `dl-187`, `dl-188`, `bug-388`, `bug-389` and `cp-002` were run with `workflow start`
@@ -93,15 +94,22 @@ before it.
 | S4 | v0.4, first two phases | `advance-pinned-build` moves the pin to `0.3.1`; the state adoption then runs with the pinned build, before `define-scope`, so the rest of v0.4's planning runs on the engine. |
 | S5 | v0.4 scope, then after | Template installation (`dl-138`, P4.18–P4.20), `transfer` (`dl-187`), the run token counts (`dl-188`). Once the pin reaches 0.4, the packs adopted by hand at S3 move to the lock and the `remote` class; their files already match the packs, so the three-way merge has a trivial base. |
 
-- **S2-a, the request to WingFoil-Templates:** keep this repository's Memory states and paths, or make
-  them parameters (its `dl-015` C1, C2, C10); give the release-line → release loop and this repository's
-  own phases (dev-loop, user-docs, e2e-smoke, release-health) a place as an extension of `delivery`;
-  compare its C5 release phases with `release-submit` and `release-publishing`. Sent as a note to its
-  feedback inbox.
+- **S2-a, the request to WingFoil-Templates:** one convention for every WingFoil project, with no
+  per-project parameters for it: Memory types, state names, id patterns, Memory paths and the agent's
+  name are fixed values of the packs, the same for every adopter; the only differences allowed follow
+  from the nature of the project (which packs it adopts: `software` on top of `base` or not, a
+  blueprint), never from a parameter. This repository's values are a candidate, not a requirement;
+  where the charters choose others, this repository migrates at S3, and existing ids keep their form
+  (ids are immutable; a new pattern applies to new elements). Also: give the release-line → release
+  loop and this repository's own phases (dev-loop, user-docs, e2e-smoke, release-health) a place as an
+  extension of `delivery`; compare its C5 release phases with `release-submit` and
+  `release-publishing`; declare `produces` on every phase whose artefact is a file. Sent through the
+  ecosystem's cross-repository request process, not WingFoil-Templates' feedback inbox, which carries
+  notes about WingFoil in the other direction.
 - **S3-b, the Memory to prepare:** close the hand-started instances whose work is done, the way they
   were opened (`spec-017` §12); give the six v0.1 plans their frontmatter (`bug-389`); declare
-  `waves:` on `minor-v0.3` and `wave:` on its tasks (E3); adapt any element whose state or path the
-  packs' rulings change.
+  `waves:` on `minor-v0.3` and `wave:` on its tasks (E3); migrate the elements whose type, state or path
+  the packs fix differently (S2-a), keeping every existing id.
 
 **2. Rename before adopting.** Workflow and phase names may change freely while no linkage, record or
 adoption commit names them (E2: none does today). Once the state is adopted, a rename orphans the
@@ -116,7 +124,8 @@ rewritten by a configuration change, and a closed instance is not deduced again 
   configuration; the merge carries the adaptation (`rekey` or `transfer`), driven by a mapping the
   governance change declares (`dl-164`, `bug-388`);
 - a rename of a Memory type or state in `memory.yaml` invalidates the elements that hold it; it needs
-  an explicit migration (S2-a asks the packs not to require one).
+  an explicit migration, which this repository runs at S3 if the packs' fixed values differ from its own
+  (S2-a).
 
 **4. How sessions work from v0.3.**
 - One session per step: `agent execute --next` (or `--step`, `--element`, `--role`) launches the agent
@@ -183,7 +192,7 @@ counts (`dl-188`).
 
 - At `patch-v0.3.1`'s release-planning: schedule S3 (`dl-187`'s `adopt`, and `rekey` if the packs
   rename; `cp-002`; `bug-389`; the Memory preparation of S3-b; the hand adoption of the packs).
-- Send S2-a to WingFoil-Templates' feedback inbox.
+- Send S2-a to WingFoil-Templates through the ecosystem's cross-repository request process.
 - At v0.4's release-planning: run S4 after `advance-pinned-build`; schedule `dl-187`'s `transfer`,
   `dl-188` and `bug-388`.
 - When the session method of 4 works with the pinned build, move it into `docs/agents.md` and
