@@ -114,6 +114,24 @@ spec. The approver chooses whether either enters v0.3 or v0.4.
 4. **Re-check the fact** that Claude Code reads AGENTS.md, for the version this repository's agents
    use, before choosing Q1 (a).
 
+**Note (2026-10-18, v0.3 user-docs phase)** — input for part (b)'s tech-spec (Action 3), from the first
+hand-written `AGENTS.md` (`task-252`, R4), measured on `main` at `1c4a3a43`:
+
+- **Size.** `wc -l AGENTS.md` → `568`; the generated region alone (`sed -n
+  '/wingfoil:generated:begin/,/wingfoil:generated:end/p' AGENTS.md | wc -l`) → `421`. Claude Code's memory page
+  (<https://code.claude.com/docs/en/memory>, read on 2026-10-17 and again on 2026-10-18) says to "target under 200
+  lines per CLAUDE.md file", and that imports "don't reduce its context cost, because imported files also load at
+  launch" — so `CLAUDE.md`'s import of `AGENTS.md` (Q1 (b)) carries the whole file into every session. The
+  tech-spec decides whether the generated region has a size budget and what moves out of it (for instance into
+  files an agent reads on demand).
+- **Citations in the generated region.** `sed -n '/wingfoil:generated:begin/,/wingfoil:generated:end/p' AGENTS.md |
+  grep -oE '\b(task|bug)-[0-9]+|src/[a-z/.-]+' | sort -u | wc -l` → `16` distinct task, bug and `src/` citations
+  (`bug-051`, `bug-075`, `bug-138`, `bug-236`, six `task-*`, six `src/` paths); the same pattern over the whole file
+  → `17`. A generated region is a projection of the configuration (R2), and these ids come from no configuration
+  file: they are this repository's history. The tech-spec decides whether the generated region carries citations
+  at all, and if so which kinds (a `dl-*`/`spec-*` rationale, which the configuration does cite, versus a task or
+  bug id or a source path, which it does not) and how drift detection treats them.
+
 ## Relations
 
 - **Amends, when ratified:** `dl-025-agent-facing-docs-ownership` (the `align-agent-docs` phase and
