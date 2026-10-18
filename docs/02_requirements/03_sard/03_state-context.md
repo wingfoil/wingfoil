@@ -160,3 +160,24 @@
   `produces:`). User story US-6-12 (`01_user_story_map/07_workflow-config.md`); BDD
   `p1-memory/P1.2-versioning-audit-trail.feature`, the scenarios tagged REQ-STATE-10 (task-222); the measure itself is
   the release-health measure script (`task-231`), P01–P07 of `docs/08_health/metrics.yaml`.
+
+### REQ-STATE-11 — Element provenance recorded, never inferred
+
+* **Description:** An element whose add commit carries no workflow linkage counts as created by a workflow step only
+  through an explicit provenance record (`adopt`), and a record names a step key that a later `rekey` may remap; a
+  provenance record changes neither the element nor history, and is evidence of creation only.
+* **Rationale:** The deduction (`REQ-STATE-02`) can then follow a project whose history predates the engine, or whose
+  workflows were renamed, without guessing which element a step created: guessing would bind the wrong element when two
+  qualify, and would make a second iteration (a second release-line) read as done from the first one's element
+  (`dl-187` D1). An explicit record keeps who adopted what, when and why auditable, like every other WingFoil write.
+* **Fit Criterion:** On a fixture with N elements added without linkage, `workflow adopt --plan` proposes exactly the
+  steps whose declared rules match one candidate, writes 0 commits, and returns a byte-identical output when run twice
+  on the same commit; `--apply` writes exactly one commit per proposed step, each touching no file; re-running
+  `--apply` writes 0 commits; after an adoption every adopted element's file is byte-identical to before; an element
+  already owned, of another type than the step adds, or one of several candidates with none named, is refused with
+  exit `1` and 0 commits; a step held at a gate stays held after its element is adopted (adoption is never `record` or
+  `state` evidence).
+* **Traceability:** Feature P4.21 (US-0B-07, US-6-13, US-6-E3; BDD `p4-workflow/P4.21-element-provenance.feature`);
+  extends P4.13 (state deduction) and P1.10 (`memory history` shows provenance records). Decision `dl-187`; change
+  `cp-002`. Related: `REQ-STATE-01` (a provenance record is not a transition), `REQ-SEC-03` (the bulk operations need the
+  approver), `REQ-PERF-03` (one record per adopted element in the instance's walk), `REQ-SYS-07` (determinism).

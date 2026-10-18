@@ -338,10 +338,10 @@ docs/
 | Layer          | Artifact                                                    | Count    |
 |----------------|-------------------------------------------------------------|----------|
 | Vision         | User journeys                                               | 8        |
-| Vision         | MVP features (5 pillars + notifications)                    | 65       |
-| User Story Map | Journey files · edge-case / interruption stories            | 7 · 14   |
-| BDD            | Gherkin feature files / scenarios                           | 65 / 255 |
-| SARD           | Architecture & NFR requirements (measurable Fit Criteria)   | 45       |
+| Vision         | MVP features (5 pillars + notifications)                    | 66       |
+| User Story Map | Journey files · edge-case / interruption stories            | 7 · 15   |
+| BDD            | Gherkin feature files / scenarios                           | 66 / 267 |
+| SARD           | Architecture & NFR requirements (measurable Fit Criteria)   | 46       |
 | Backlog        | Implementation-ready tasks, as imported (63 stories + 43 technical) | 106      |
 
 All artifacts are scheduled across 5 release waves (v0.1 → v1.0), sequenced by risk in

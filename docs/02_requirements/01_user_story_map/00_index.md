@@ -158,9 +158,10 @@ journeys). Table ordered by pillar.
 | P4.15   | Fallback on Rejection            | v0.3    | MVP | 4            |
 | P4.16   | Workflow include() Composition   | v0.3    | MVP | 6            |
 | P4.17   | Built-in Workflow Templates      | v1.0    | MVP | 0a           |
-| P4.18   | Reference Workflow Templates     | v0.3    | MVP | 0a           |
-| P4.19   | Template Expansion               | v0.3    | MVP | 0a           |
-| P4.20   | Template Customization           | v0.3    | MVP | 0a           |
+| P4.18   | Reference Workflow Templates     | v0.4    | MVP | 0a           |
+| P4.19   | Template Expansion               | v0.4    | MVP | 0a           |
+| P4.20   | Template Customization           | v0.4    | MVP | 0a           |
+| P4.21   | Element Provenance               | v0.3.1  | MVP | 0b           |
 
 ### Pillar 5 — Interaction Layer
 
@@ -220,13 +221,14 @@ enforcement*, the Post-MVP Opportunity column of `05_journeys.md` → Journey 4)
 
 > **Rule:** 100% of features in `08_mvp-canvas.md` must be mapped under **[MVP]**.
 
-- **Total MVP features (`06_features.md` → "Total Features (MVP): 63"):** 63
-- **Features mapped under [MVP] in this story map:** 63 (all 63 rows in Pillar tables 1–5 + X1 above)
-- **Unmapped MVP features:** 0
-- **MVP coverage:** **100% ✅**
+- **Total MVP features (`06_features.md` → "Total Features (MVP): 66"):** 66
+- **Features mapped under [MVP] in this story map:** 64 (the 64 rows in Pillar tables 1–5 + X1 above)
+- **Unmapped MVP features:** 2 — P5.3.4 `agent list` and P5.3.5 `agent show`, added to `06_features.md` without a
+  user story (re-measured 2026-10-18, `cp-002`; `bug-399`)
+- **MVP coverage:** **64/66**
 
-Coverage verification per pillar: P1 = 13/13, P2 = 5/5, P3 = 8/8, P4 = 20/20,
-P5 = 15/15 (5.1×4, 5.2×3, 5.3×3, 5.4×5), X1 = 2/2 → **63/63**.
+Coverage verification per pillar (re-measured 2026-10-18 against `06_features.md`'s pillar tables): P1 = 13/13,
+P2 = 5/5, P3 = 8/8, P4 = 21/21, P5 = 15/17 (5.1×4, 5.2×3, 5.3×3 of 5, 5.4×5), X1 = 2/2 → **64/66**.
 
 ### Edge-case coverage (Stop-Check — second clause)
 
@@ -237,7 +239,7 @@ P5 = 15/15 (5.1×4, 5.2×3, 5.3×3, 5.4×5), X1 = 2/2 → **63/63**.
 Edge-case stories are tagged **[MVP]**, carry an `US-<JOURNEY>-E<N>` id (the `-E`
 suffix keeps them distinct from happy-path story ids and avoids collisions), and
 are annotated `_(edge: …)_` — **not** `_(feat: …)_`, so they add **no** new feature
-and the **63/63** feature coverage above is unchanged. They live under an
+and the feature coverage above is unchanged by them. They live under an
 **"Edge cases (interruption / exception handling)"** block beneath the relevant step
 of each journey.
 
@@ -250,8 +252,8 @@ of each journey.
 | 3       | 04_team-task.md       | US-3-E1, US-3-E2   | 2     |
 | 4       | 05_conventions.md     | US-4-E1            | 1     |
 | 5       | 06_decisions.md       | US-5-E1            | 1     |
-| 6       | 07_workflow-config.md | US-6-E1, US-6-E2   | 2     |
-| **Total** |                     |                    | **14** |
+| 6       | 07_workflow-config.md | US-6-E1, US-6-E2, US-6-E3 | 3 |
+| **Total** |                     |                    | **15** |
 
 - **Journeys with ≥1 edge-case story:** **8 / 8**
 - **Edge-case stories total:** **14** (all **[MVP]**)

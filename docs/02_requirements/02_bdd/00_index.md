@@ -95,6 +95,7 @@ and edge cases, expressed in Gherkin (Given-When-Then).
 | P4.18   | US-0A-10   | `features/p4-workflow/P4.18-reference-workflow-templates.feature`  |
 | P4.19   | US-0A-11   | `features/p4-workflow/P4.19-template-expansion.feature`            |
 | P4.20   | US-0A-12   | `features/p4-workflow/P4.20-template-customization.feature`        |
+| P4.21   | US-0B-07   | `features/p4-workflow/P4.21-element-provenance.feature`            |
 | P5.1.1  | US-0A-06   | `features/p5-interaction/P5.1.1-init.feature`                      |
 | P5.1.2  | US-0B-02   | `features/p5-interaction/P5.1.2-init-infer.feature`                |
 | P5.1.3  | US-0B-01   | `features/p5-interaction/P5.1.3-audit.feature`                     |
@@ -149,3 +150,14 @@ the baseline — one nominal and one error/edge scenario per file, no vague perf
 | `.feature` files per pillar                          | P1=13, P2=5, P3=8, P4=20, P5=17, X1=2 → **65** | `find features/<pillar> -name '*.feature' \| wc -l`, per pillar folder                      |
 | Total scenarios                                      | **255**                                        | `grep -rhE '^\s*Scenario( Outline)?:' features \| wc -l`                                     |
 | Files whose first line that is not a comment, a tag or blank is `Feature:` | **65/65** (8 open with a `# Revised …` comment) | `grep -m1 -v '^\s*\(#\|@\|$\)' <file>`, per file                                          |
+
+### Re-count (2026-10-18)
+
+After `cp-002` added `features/p4-workflow/P4.21-element-provenance.feature` (vision-change downcast-scenarios), the
+same commands as the 2026-10-17 re-count, on the suite as it is. The judgement rows were not re-run.
+
+| Check                                                | Result                                         | Command                                                                                     |
+|------------------------------------------------------|------------------------------------------------|---------------------------------------------------------------------------------------------|
+| `.feature` files per pillar                          | P1=13, P2=5, P3=8, P4=21, P5=17, X1=2 → **66** | `find features/<pillar> -name '*.feature' \| wc -l`, per pillar folder                      |
+| Total scenarios                                      | **267**                                        | `grep -rhE '^\s*Scenario( Outline)?:' features \| wc -l`                                     |
+| Files whose first line that is not a comment, a tag or blank is `Feature:` | **66/66** (8 open with a `# Revised …` comment) | `grep -m1 -v '^\s*\(#\|@\|$\)' <file>`, per file |

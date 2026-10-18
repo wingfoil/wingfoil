@@ -57,6 +57,12 @@
 * **[MVP · v0.3]** US-6-E2: As Morgan, I want in-flight tasks to keep running on their original workflow version when I
   deploy a restructured workflow so that a mid-flight process change never corrupts or blocks active work. _(edge:
   Journey 6 — in-flight migration)_
+* **[MVP · v0.3.1]** US-6-13: As Morgan, I want `wingfoil workflow rekey` to remap the provenance records of a renamed
+  step to its new key, and `wingfoil workflow transfer` (v0.4) to move an element's ownership to another step, each as
+  an audited commit, so that renaming or restructuring a workflow never makes done work look undone. _(feat: P4.21)_
+* **[MVP · v0.3.1]** US-6-E3: As Morgan, I want an adoption refused when the element is already owned by a step, when
+  its type is not the step's, or when several candidates match and none is named, so that provenance never gains two
+  owners or a guessed one. _(edge: Journey 6 — in-flight migration)_
 * **[MVP · v0.3]** US-6-12: As Morgan, I want each run's process conformance computed from git and the configuration
   alone — every check with its items checked and failing, every failing item named — so that I see whether a run
   followed the workflow without trusting the agent's own report. _(req: REQ-STATE-10; ref: P1.2, P4.13 — measured by

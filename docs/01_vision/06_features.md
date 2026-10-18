@@ -1,7 +1,7 @@
 # Features — WingFoil
 
-**Version:** 1.16
-**Date:** 2026-10-17  
+**Version:** 1.17
+**Date:** 2026-10-18  
 **Status:** Approved
 
 ---
@@ -102,6 +102,13 @@ Pre-built methodology templates for fast onboarding.
 | P4.18 | Reference Workflow Templates | 0a, 0b  | All          | Pre-built methodology templates: Scrum, Kanban, Lean Inception, Trunk-Based, Custom | Feature |
 | P4.19 | Template Expansion           | 0a, 0b  | Alex, Morgan | Auto-generate phases, directives, Memory sections from selected template            | Feature |
 | P4.20 | Template Customization       | 0a, 0b  | Morgan       | Override template defaults to match team style                                      | Feature |
+
+Provenance for elements the engine did not see created: a project started before the engine, an imported element,
+a forgotten `--workflow` link, a renamed or restructured workflow (`cp-002`, `dl-187`).
+
+| ID    | Feature             | Journey | User          | Description                                                                                                                                                  | Type    |
+|-------|---------------------|---------|---------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| P4.21 | Element Provenance  | 0b, 6   | Morgan, Alex  | Adopt an existing element into the workflow step that counts as having created it, remap renamed step keys and transfer ownership between steps, each as an audited commit | Command |
 
 ---
 
@@ -251,6 +258,17 @@ Notifications and alerts across all features.
 
 ---
 
+### **v0.3.1 — Patch: Element Provenance**
+
+A patch of v0.3 carrying one feature (`cp-002`; `dl-092` does not limit a patch to fixes). `transfer`, the third
+operation of P4.21, follows in v0.4.
+
+| Feature ID | Feature                                     | Complexity | Dependencies                             | MVP Risk | Priority | Why                                   | Notes                                             |
+|------------|---------------------------------------------|------------|------------------------------------------|----------|----------|---------------------------------------|---------------------------------------------------|
+| P4.21      | Element Provenance (`adopt`, `rekey`)       | Medium     | State deduction (P4.13), commit grammar  | Medium   | Critical | The engine sees work done before it   | `transfer` in v0.4; reused by P1.4, P5.1.2        |
+
+---
+
 ### **v0.4 — Polish & Documentation**
 
 **Target Date:** July 31, 2026
@@ -337,6 +355,7 @@ Notifications and alerts across all features.
 - ✓ Deliverables, Routing, Fallback (step+state), iterate_over (P4.11, P4.13–P4.16) — v0.3
 - ✓ Workflow Checks pre/post (P4.12) and Git operations in workflow steps / atomic actions (P4.10) — hardened in **v1.0** (07_sequencer.md Week 5)
 - ✓ Built-in Workflow Templates (Task, Release) (P4.17) — completed in **v1.0**
+- ✓ Element Provenance (P4.21) — `adopt`, `rekey` in **v0.3.1**, `transfer` in **v0.4**
 
 **Pillar 5 — Interaction Layer:**
 
@@ -350,7 +369,7 @@ Notifications and alerts across all features.
 - ✓ Reference Workflow Templates (P4.18–P4.20) — Scrum, Kanban, Lean, Trunk-Based — **v0.4**
 - ✓ Notification System (X1) — Basic approvals
 
-**Total Features (MVP):** 65 core features across all pillars
+**Total Features (MVP):** 66 core features across all pillars
 **Release Timeline:** 5 weeks (v0.1 → v1.0)
 **Target Adoption:** ≥1 real team by v0.2, ≥3 teams by v1.0
 
@@ -499,6 +518,14 @@ Each role has:
 - **Memory** documents it can access (role-specific context)
 - **Workflow Steps** it can trigger
 - **Approval Authority** (which roles can approve its work)
+
+### Element Provenance (P4.21)
+
+The deduction counts an element for the step that creates it only when its add commit carries that step's linkage
+(`WingFoil-Instance`, `WingFoil-Step`). An element created any other way is given a step by an explicit provenance
+commit, which changes neither the element nor history: `adopt` (no owner → a step), `rekey` (an old step key → a
+new one) and `transfer` (step A → step B). Adoption is `created` evidence only, never `record` or `state`, so it
+cannot pass a gate. The rules, the authority and the constraints on readers are `dl-187`'s.
 
 ### Complexity, Risk, Priority Ratings
 

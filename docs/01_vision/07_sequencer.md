@@ -1,7 +1,7 @@
 # Sequencer — WingFoil MVP (v0.1 → v1.0)
 
-**Version:** 2.0
-**Date:** 2026-10-15
+**Version:** 2.1
+**Date:** 2026-10-18
 **Status:** Approved
 
 ---
@@ -70,6 +70,7 @@ A budget is set by each release's own `release-planning`. Until a release has on
 |---------|----------|------------------------------------------------------------------|--------------------------------------------------------------------------------|
 | v0.2.2  | —        | **≈ 2.2** by task count; ≈ 4 by `dl-096`'s proxy; expect nearer 4 | v0.2.2 `build-backlog`: 14 tasks ÷ 6.5 per active day; see the note below       |
 | v0.3    | 23       | **≈ 18.6** by task count; ≈ 66 by task size                     | v0.3 `build-backlog` (2026-09-30): 121 tasks ÷ 6.5 per active day; see the note below |
+| v0.3.1  | 1        | ≈ 1 for P4.21; the patch's own work is set by its `release-planning` | proxy, 1 ÷ 14 × 12 ≈ 0.9 (`cp-002`); see the note below                        |
 | v0.4    | 11       | ≈ 9                                                              | proxy, 11 ÷ 14 × 12                                                             |
 | v1.0    | 3        | ≈ 5                                                              | the plan's own estimate; the proportional figure is ≈ 3                        |
 
@@ -86,6 +87,10 @@ A budget is set by each release's own `release-planning`. Until a release has on
   the count gives 121 ÷ 6.5 ≈ **18.6 active days**, near the ≈ 20 proxy it replaces. Weighted by task size
   (S 0.25, M 0.75, L 2 active days) the same backlog is ≈ 66 active days. The approver kept the
   whole scope; the gap is recorded so v0.3's retrospective can tell which figure the actuals follow.
+- **v0.3.1 is a patch carrying one feature** (`cp-002`, scheduled 2026-10-18): P4.21 Element provenance
+  (`adopt`, `rekey`; `transfer` in v0.4). The proxy covers the feature alone; the rest of the patch — the pin
+  advance, the hand adoption of the template packs and the Memory preparation (`dl-186` S3) — is budgeted by
+  the patch's own `release-planning`.
 - Features per release: the `features:` list of `minor-v0.3.md`, `minor-v0.4.md`, `minor-v1.0.md`
   → 23, 11, 3 (after the scope change below; 26, 8, 3 before it).
 
@@ -94,12 +99,12 @@ A budget is set by each release's own `release-planning`. Until a release has on
 **Cadence assumption: about 5 active days a week (the rate observed 09-14 → 09-28), with work running
 continuously from October 2026 and no pause.**
 
-- The budgets sum to ≈ 38 active days (4 + 20 + 9 + 5, taking v0.2.2 at the proxy), **≈ 40 with a
-  retrospective per release**. The v0.3 → v0.4 move below shifts two days between releases and leaves
+- The budgets sum to ≈ 39 active days (4 + 20 + 1 + 9 + 5, taking v0.2.2 at the proxy and v0.3.1 at its
+  feature proxy), **≈ 41 with a retrospective per release**. The v0.3 → v0.4 move below shifts two days between releases and leaves
   the sum unchanged.
 - At 5 active days a week that is **about 8 weeks**: **v1.0 (the MVP) around late November 2026**,
   against the original plan's 2026-08-07.
-- This is a **projection, not a commitment**. If the cadence changes, recompute: weeks = 40 ÷ active
+- This is a **projection, not a commitment**. If the cadence changes, recompute: weeks = 41 ÷ active
   days per week. If a release's own `release-planning` sets a different budget, it replaces the proxy
   above.
 - **Refresh rule** (`dl-096` Q2 (i)): each release's retrospective records the release's actual active
@@ -124,6 +129,10 @@ approver during v0.3's `release-planning` (`release-planning-rel-v0.3-plan`, rul
 - **Git-hook notifications move from v0.3 to v0.4** (v1.6, 2026-09-30, ruling R13). v0.3 notifies
   through the CLI output of `workflow status` and `workflow next`; the row *Notification system (basic:
   CLI output + git hooks)* keeps its CLI half in v0.3.
+- **Element provenance (P4.21) is added as patch v0.3.1** (v2.1, 2026-10-18, `cp-002` through `vision-change`,
+  `dl-186`, `dl-187`): `adopt` and `rekey` in v0.3.1, so that this repository's state is adopted into the engine
+  before v0.4's planning; `transfer` in v0.4. A patch may carry a feature (`dl-092`; ruled at `cp-002`'s
+  impact-analysis).
 
 ---
 

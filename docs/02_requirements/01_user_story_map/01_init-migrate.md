@@ -108,6 +108,10 @@
 
 * **[MVP · v0.3]** US-0B-05: As Morgan, I want workflow steps and approval routing already active so that I introduce
   WingFoil gradually without a hard cutover. _(ref: P4.1, P4.14 — home in other journeys)_
+* **[MVP · v0.3.1]** US-0B-07: As Morgan, I want `wingfoil workflow adopt --plan` to propose, for each workflow step
+  blocked on an element created before the engine, the existing element that counts as its creation, and `--apply` to
+  record each with one audited commit, so that a project with history starts on the engine at the step it has really
+  reached instead of from the beginning. _(feat: P4.21)_
 
 ### Step 4 — Workflow and agent usage begins
 
