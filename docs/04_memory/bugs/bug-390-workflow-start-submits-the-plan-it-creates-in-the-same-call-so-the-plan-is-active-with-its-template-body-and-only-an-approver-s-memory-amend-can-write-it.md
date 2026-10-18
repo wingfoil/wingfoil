@@ -26,8 +26,9 @@ approver's amend to get a body.
    `node dist/cli.js workflow start decision-log-ingest --title "…" --set phase=<p> --set scope=<s>`.
 2. Run `git log -2 --format=%B`: `wf(plan): add <id>` and `wf(plan): submit <id>`; the submit carries
    no "Carries content" line, and the plan file still holds the template's placeholder comments.
-3. Write the body and run `node dist/cli.js memory amend <id> --reason "…"` as a non-approver: refused,
-   `--reason` "needs the approver role".
+3. Write the body and run `node dist/cli.js memory amend <id> --reason "…"` with an identity that
+   holds no approver role (checked in a scratch clone with `GIT_AUTHOR_*`/`GIT_COMMITTER_*` set to a
+   non-member): `error: user not authorized to approve type 'plan'`, exit `1`.
 
 ## Expected Behavior
 
