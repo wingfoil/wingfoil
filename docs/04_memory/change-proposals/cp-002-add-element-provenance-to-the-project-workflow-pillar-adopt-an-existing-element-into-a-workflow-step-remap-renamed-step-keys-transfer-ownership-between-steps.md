@@ -33,18 +33,34 @@ repository uses it is `dl-186`.
 
 ### Features (P*)
 
-- **Adds** P4.21 (row above) and its sequencer entry: `adopt` and `rekey` in `patch-v0.3.1`, `transfer`
-  in v0.4.
-- **Extends**, without editing their rows: P4.13 (state deduction gains provenance records as
-  `created` evidence), P1.4 `memory import` and P5.1.2 `init --mode infer` (v0.4; both reuse
-  `adopt --plan` for the elements they bring in), P5.1.3 `audit` (v0.4; reads provenance as declared).
+- **Adds** P4.21 in `docs/01_vision/06_features.md`, in three places: the Pillar 4 table (the row
+  above); "Features by Release", under a new heading for the patch `v0.3.1` (`adopt`, `rekey`), with a
+  note that `transfer` follows in v0.4; and the "MVP Feature Set Summary" (one bullet, the total 65 → 66).
+  A short "Key Implementation Notes" entry points to `dl-187`.
+- **Updates every count of the features** that reads 65: `06_features.md` (summary),
+  `08_mvp-canvas.md` (the `06_features.md` row of its document list, and a ✓ line under Pillar 4),
+  `01_product-brief.md` (its `06_features.md` link line), `00_index.md` (the document-map row: count,
+  version, date, lines; the line ranges that move; the MVP summary pointer), checked by
+  `test/docs/vision-index.test.ts` (vision-change's `vision-index.current`), and `README.md`'s artefact
+  table.
+- **Extends**, without editing their rows: P4.13 (state deduction gains provenance records as `created`
+  evidence), P1.10 `memory history` (it shows an element's provenance records, `dl-187`), P1.4
+  `memory import` and P5.1.2 `init --mode infer` (v0.4; both reuse `adopt --plan`), P5.1.3 `audit`
+  (v0.4; reads provenance as declared).
+- The sequencer entry for v0.3.1 is written by vision-change's `schedule`, not here.
 
 ### User stories (US-*)
 
-- **Adds** in `docs/02_requirements/01_user_story_map/07_workflow-config.md`: a story for adopting the
-  existing elements of a project started before the engine (Morgan, Journey 0b), a story for remapping
-  records after a workflow rename and moving an element's ownership (Morgan, Journey 6), and an edge
-  story for the refusals (an element already owned, an ambiguous candidate).
+- **Adds** in `docs/02_requirements/01_user_story_map/01_init-migrate.md` (Journey 0b): a story for
+  adopting the existing elements of a project started before the engine (Morgan), `_(feat: P4.21)_`.
+- **Adds** in `docs/02_requirements/01_user_story_map/07_workflow-config.md` (Journey 6): a story for
+  remapping records after a workflow rename and moving an element's ownership (Morgan),
+  `_(feat: P4.21)_`, and an edge story `US-6-E3` for the refusals (an element already owned, an
+  ambiguous candidate), `_(edge: Journey 6 — in-flight migration)_`.
+- **Updates** `docs/02_requirements/01_user_story_map/00_index.md`: the Module 1 validation counts
+  (P4 20/20 → 21/21, and the totals, which today still read 63 with P5 = 15 although `06_features.md`
+  has 65 rows and P5 = 17: corrected to the re-measured values in the same pass) and the edge-case table
+  (Journey 6: `US-6-E1, US-6-E2, US-6-E3`, total 14 → 15).
 - **Amends** `US-6-E2` only by reference: `bug-388` covers its missing scenario and its remedy
   (`dl-187` D5); the story text is unchanged.
 
@@ -54,13 +70,17 @@ repository uses it is `dl-186`.
   one element; `--plan` proposes without writing; `--apply` writes one commit per step; refuses an
   element of another type, an element already owned, a step with several candidates and no
   `--element`; re-running is a no-op; a rekey reports orphans; bulk operations need the approver.
-- **Amends** `docs/02_requirements/02_bdd/00_index.md` (the new file).
+- **Updates** `docs/02_requirements/02_bdd/00_index.md`: the feature → story → file table (a P4.21 row)
+  and a new dated re-count after the 2026-10-17 one (P4 = 21 files, total 66, scenarios re-counted with
+  the command the block names); `README.md`'s "65 / 255".
 
 ### SARD requirements (REQ-*)
 
-- **Adds** a requirement in `docs/02_requirements/03_sard/03_state-context.md` (the next free id after
-  `REQ-STATE-10`): a provenance record is the only way an element not linked at its add counts as
-  created by a step; it is deterministic (REQ-SYS-07) and never changes the element.
+- **Adds** `REQ-STATE-11` in `docs/02_requirements/03_sard/03_state-context.md`: a provenance record is
+  the only way an element not linked at its add counts as created by a step; it is deterministic
+  (REQ-SYS-07) and never changes the element; with a measurable Fit Criterion.
+- **Updates** `docs/02_requirements/03_sard/00_index.md` (the file table: STATE 10 → 11, total 45 → 46;
+  the requirement list and the totals block) and `README.md`'s "45".
 - **Touches**, without change: REQ-STATE-01 (a provenance record is not a transition), REQ-SEC-03
   (approval authority for the bulk operations), REQ-PERF-03 (`workflow next` < 1,000 ms p95: the
   records are in the instance's walk, one per adopted element).
@@ -77,6 +97,9 @@ repository uses it is `dl-186`.
 - The `command-baseline` and `git-conventions` directives: the command's baseline and subjects.
 - `docs/cli-reference.md` (kept complete by `test/docs/cli-reference.test.ts`), `docs/agents.md`, and
   the `e2e-smoke` workflow: one entry, one section, one scenario.
+- `src/memory/audit.ts` (`memory history`, P1.10): reads the provenance records of an element.
+- MCP: no Tool in v0.3.1 (the Tools channel is P5.2.3, v0.4); if v0.4 exposes provenance as a Tool,
+  only the single `adopt`, since the bulk operations need the approver.
 - No ADR is contradicted.
 
 ## Target release
@@ -86,6 +109,14 @@ release-planning runs on the engine after this repository's state is adopted (`d
 and the reuse by P1.4/P5.1.2/P5.1.3 in v0.4.
 
 ## Notes
+
+- **Impact-analysis walk, 2026-10-18** (architect, before the approver's gate). The reverse walk found
+  the capture's analysis incomplete and corrected it in place: the Journey 0b story belongs in
+  `01_init-migrate.md`, not `07_workflow-config.md`; the feature layer also touches "Features by
+  Release", the MVP summary and every count of 65 (`08_mvp-canvas.md`, `01_product-brief.md`,
+  `00_index.md`, `README.md`); the story-map index counts are stale (63 against 65 rows) and are
+  corrected with the new one; the BDD and SARD indexes and `README.md` carry counts the change moves;
+  P1.10 is extended (`memory history`), and the MCP layer is stated.
 
 - Alternatives considered and rejected are in `dl-187` (D1–D5) and `dl-186` (Q1–Q3).
 - Open for the impact-analysis step: whether a patch release may carry a new feature. `dl-092` does
