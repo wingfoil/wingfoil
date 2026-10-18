@@ -6,7 +6,7 @@ status: accepted          # auto-set by wingfoil; memory.submit → in-analysis
 kind: "feature"               # REQUIRED — feature | vision (dl-132 Q1 (a)): a new feature, or any other change to docs/01_vision/
 feature: "P4.21"            # optional — the feature id(s) the change adds or edits, e.g. "P4.21" (a new id is proposed here, written by vision-change's update-vision)
 target_release: "v0.3.1"     # optional — the release the proposer asks for, e.g. "v0.4"; vision-change's schedule step stamps it as `release`
-release: ""            # optional — the release the change is assigned to, stamped by vision-change's schedule step (traceability directive), e.g. "v0.4"
+release: "v0.3.1"      # optional — the release the change is assigned to, stamped by vision-change's schedule step (traceability directive), e.g. "v0.4"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
 reported_by: []        # optional — LIST of consumer feedback notes this element answers, as provenance only (dl-163 S3c), each "<service id>/F-<nnn>@<sha>": the full id of an active kind: repository service with a feedback_inbox, the note's id in that inbox, and the full sha of the consumer commit read; restate the note in this element, never copy it; a GitHub issue gets contributor + credit instead (COLLABORATION.md)
