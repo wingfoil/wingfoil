@@ -87,143 +87,74 @@ models for this plan) and the first one after a full minor with 160+ tasks: the 
   it, and the command was run; transcripts are pasted from real runs in a throwaway project.
 - **Never** name the benchmark's hold-out repository or cite the private market-research repository (in
   `docs/comparison.md` and `docs/case-study.md` above all). Never touch `test/validation/secret-scan.test.ts`.
-- **Gate `done`** (`dl-115` Q2 (a)): a `### Retrospective` subsection in each task and in every bug it closes.
-- **Findings** outside `produces:` go to the registry `devloop-kit/w3-userdocs-followups.md` and, at the end of
-  the phase, to a triage proposal and a `bug-ingest` run, as at W3 B7–B9. Same-class drift inside the files this
-  phase owns is fixed in the same pass.
-- **Roles (`roles.yaml` 1.8).** tech-lead → `architecture, code-review, traceability`; developer →
-  `code-quality, testing, determinism, command-baseline`; architect → `architecture, determinism,
-  traceability, command-baseline`; global → `doc-versioning, documentation, security, security-secrets,
-  claim-evidence, git-conventions, wingfoil-cli` (re-read in S2).
+- **Gate `done`** (`dl-115` Q2 (a)): a `**S1 — `check-implementation-complete`** (2026-10-17, at `835de8ea`): P1 `status: in-development`; P2 `161 done`,
+`1 deprecated`, `1 backlog` (`task-252`, the known deviation); P3 exactly `bug-210, 220, 227, 236, 239, 284, 285, 298,
+302`; P4 `0.2.2`; P5 `0.2.2 (07292cfd…)`; P6 clean, on `docs/user-docs-v0.3`, `git rev-list --count origin/main..main`
+→ `0`.
 
----
+**S2 — survey** (2026-10-17): three read-only surveys measured on `main` at `07292cfd` with the code build against the
+published 0.2.2: the command and option diff of both builds (33 commands; `agent`, seven `workflow` subcommands, `memory
+amend`/`park` new), the classification of the 161 `done` v0.3 tasks for the CHANGELOG (87 user-visible, 63
+contributor-only, 11 spec/vision text), the user documents (examples 01–06 exit 0; the README, guide, reference and
+`docs/agents.md` on the 0.2.2 surface; determinism presented as achieved), and the agent documents (four of the five
+`align-agent-docs` checks fail). Each finding was re-measured by the task that used it; the per-AC evidence is in the
+Execution Notes of `task-289` and `task-252`.
 
-## 3. Inputs — handovers to re-measure, never trusted
+**Approver rulings during the phase.** Q1 (2026-10-17): `bug-239` moves to `task-252`. Q2: `CLAUDE.md` §10 rules 8–9
+move to `AGENTS.md`'s project-owned part. Q3: an "Upgrading from 0.2.x" note. Pages render (option (a), 2026-10-17):
+the WingFoil delivery session #10 found that Jekyll's kramdown turns the rest of a page into raw Markdown after a
+paragraph line beginning `<name>` (`docs/user-guide.md:381`, `docs/cli-reference.md:1577`, `:1630`; the live site
+showed 16 and 8 raw fences); fixed in `task-289` with a red-first guard over `docs/site.yaml`'s pages. `task-289`
+D-1…D-7 and T6, `task-252` T1–T5 (2026-10-17): as the developers recommended (D-1: the docs name 0.3 "being released",
+`package.json` stays 0.2.2 until `release-publishing`'s release commit). 2026-10-18: F4 (a), the `wingfoil-cli`
+directive keeps its no-id rule (`bug-292` already records the pinned 0.2.2's refusal); D6 (a), `bug-236`'s
+`check-governance` rule handed to `bug-391` (triaged v0.4, `bug-ingest-rel-v0.3-user-docs-findings-plan`); the
+social-preview banners regenerated with the new lead sentence (`4b51ea45`), uploaded by the approver and read back
+identical to `docs/assets/wingfoil-social-preview-dark.png` (`svc-004` amended `7dad9dcd`). `task-252` ran in parallel
+with `task-289` (approver, 2026-10-17).
 
-**`align-user-docs`** (fix task, D1):
+**S3–S7 — `align-user-docs`.** `task-289` (fix; `bug-210`, `bug-227`, `bug-285`, `bug-298`): added on
+`backlog/user-docs-v0.3`, approved `pending → backlog` `28eaf3ca`, merged into `main` `89c43d36`; design `84ef6714`, red
+`6e431c42` (the guard failing on the three lines), fixes and documents through `1f62b727`, the demo GIF re-recorded by
+the approver `1fb2c457`, banners `4b51ea45`, submit `9964fa56`; independent review APPROVE WITH FIXES (a false identity
+bullet, a missing breaking change, the README dogfooding paragraph, the history transcript), all fixed in-task;
+approve `41b0e38c`, the four bugs `closed`.
 
-- `bug-227`: `CHANGELOG.md` `## [0.3.0]` (the heading `scripts/changelog-section.cjs 0.3.0` extracts for
-  `publish.yml`'s `release` job), built from `git log 4770a52c..main` and the `done` v0.3 tasks and `closed` v0.3
-  bugs, not from memory: Memory `amend`/`park`, `workflow next`/`status`/`show`, `agent execute`, the
-  `claude-code`/`codex-cli` adapters, `release-health`, the test report on the GitHub Release, Pages and
-  `llms.txt`, the `release/X.Y` integration line, the explicit npm dist-tag, the `change-proposal` type, the
-  `WingFoil-Version` trailer, the refusals of B4, and `bug-308`'s "Fixed" entry (`task-278`).
-- `bug-239`: workflow keys (`mode`, `distinct_from`, `cadence`, `awaits`, object `produces`), `bindings.yaml`,
-  the trailer in the README/user-guide/cli-reference commit examples.
-- `bug-298`: README's artifact counts and the BDD index's verification block.
-- `bug-210`, `bug-285`: `docs/agents.md` §5/§6 (in no `produces:`; aligned with the approver's confirmation).
-- `README.md:112` (session Resource `wingfoil://session/{role}/{element}/{state}`); README (≈ lines 12, 52, 219,
-  352) and `docs/site.yaml` `summary` (→ `llms.txt` line 1) present determinism as achieved, against `dl-112`
-  Q3 (i) / `dl-131`: reword as the measured North Star.
-- `bindings.yaml:72-73`: the `presentation.current` comment names `dl-128` items 1–2 only (3–4 since `task-246`).
-- `user-docs.yaml:50` "publishes them … at each release tag": Pages publishes only for a tag whose version
-  receives `latest`, after npm serves it (`task-266`); bump 1.8.
-- `COLLABORATION.md:35-37`: change-proposals are scheduled by `vision-change`'s `schedule` step, swept by
-  `define-scope` (`task-212`/`task-277`).
-- `docs/cli-reference.md` complete (`test/docs/cli-reference.test.ts`), `docs/user-guide.md`, `docs/examples`
-  01–06 runnable; `demo.rendered` by the approver.
+**S8–S9 — `align-agent-docs`.** `task-252` (AC 3 corrected to `agent-docs.yaml` by amend `5abf0864`; `bug-239` joined):
+`git mv CLAUDE.md AGENTS.md` `bf730d1b`, the aligned `AGENTS.md` and the `@AGENTS.md` pointer in one commit `97d1ac77`,
+`agent-docs.yaml` 1.1 with a sixth check (the pointer), `.wingfoil/README.md`, `.wingfoil/WORKFLOW.md`, `wingfoil-cli`
+1.1, `git-conventions` 1.9 (§8: the workflow trailers); the import verified with Claude Code 2.1.301 in a scratch
+repository (`claude -p --no-session-persistence --tools ""`: sentinel with the pointer, `NONE` without); independent
+review APPROVE WITH FIXES (one false sentence on who writes `finalize`/`start`/`sync`, one false self-review claim),
+fixed `0c745a6f`; `dl-025` amended `07ae2ae5`; approve `60600910`, the five bugs `closed`.
 
-**`align-agent-docs`** (`task-252`, D4): every handover in `task-252`'s Implementation Notes (W2 B3, W3 B3–B6,
-the inherited bugs `bug-220`/`bug-302`, the 2026-10-15 attribution rule), plus:
+**S6/S10 — gate on the merged phase branch** (`02befa35`: `main`, `task-289`, `task-252` and the ingest branch merged
+`--no-ff`, no conflict), 2026-10-18, one heavy step at a time behind `waitslot.sh`: `npx jest --coverage
+--maxWorkers=2` → 461 suites, 8355 tests, 99.34 / 97.4 / 98.03 / 99.71 (B9 baseline 99.34 / 97.39 / 98.03 / 99.71);
+`npx jest test/docs test/core/workflow-repository-conformance.test.ts` → 27 suites, 299 tests; typecheck, lint,
+`docs:api`, build, `check:audit` → 0; `node scripts/check-governance.cjs --base 07292cfd` → 110 `wf()` commits, 0
+findings; `node scripts/lint-claims.cjs --base 07292cfd` → 0 (7 warn-only); `node scripts/build-site.cjs llms && git
+diff --exit-code llms.txt` → 0; examples 01–06 → 0; `node scripts/e2e-smoke.cjs -- node "$PWD/dist/cli.js"` → 73 ok,
+0 not ok; `npm run check:mcp` → 0 (the pinned build's known `bug-292` failure); `npm pack --dry-run` → 532 files;
+`package.json`/`package-lock.json` unchanged; tree clean.
 
-- §2's documentation map: `docs/site.yaml`, `llms.txt`, `.github/workflows/pages.yml`, `docs/comparison.md`,
-  `docs/case-study.md`, `docs/examples/06-workflow-approval`, `scripts/integration-branch.cjs`,
-  `scripts/npm-dist-tag.cjs`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`;
-- §7's role table (`roles.yaml` 1.8; `git-conventions`, `testing` current versions);
-- §6 and §8 and the "sync with main" line: `dev-loop` merges into the release's integration branch
-  (`dev-loop.yaml` 2.1, `release-publishing` 1.9 `on-integration-branch`; `task-286`–`288`, `dl-159`);
-  `.wingfoil/README.md` likewise;
-- §1/§3: the command count (`CORE_MODULES`) and the pinned build's version;
-- `.wingfoil/directives/custom/wingfoil-cli.md:44, :78` ("a fix merged into main" reaches the code build: true
-  only on the minor line);
-- `bug-372` (ruling 2026-10-15): a warning not to declare a `wingfoil` MCP server in a trusted project's
-  `.codex/config.toml` (Codex's `-c` merges the project table); the code fix is v0.4;
-- `bug-236`, `bug-284`: §5.1's submit body and the trailer paragraph of a hand-amended WingFoil commit.
-
----
-
-## 4. Steps
-
-### S1 — `check-implementation-complete` · tech-lead
-Run P1–P6 verbatim; record the output. Stop if P2/P3 differ from the expected values.
-
-### S2 — Survey · developer
-Measure the shipped surface: `node dist/cli.js --help` and every group's `--help` against `CORE_MODULES`; re-run
-each §3 item with the command that settles it. **Produces:** the survey in Execution Notes, each row with its
-command and a verdict (aligned / stale at line N / outside `produces:` → follow-up).
-
-### S3 — Fix task for `align-user-docs` · developer → approver
-`node dist/cli.js memory add --type task --set release=v0.3 …` on a `backlog/` branch cut from `main`, body
-from S2 (ACs all characterization), `bug:` the five bugs; submit `draft → pending`. **Approver:** approve
-`pending → backlog`. Then the five bugs sync `[triaged → planned]` and the branch merges into `main` (local).
-
-### S4 — Fix task execution · developer → reviewer
-`start.sh` (branch `task/<id>`, bugs `[planned → in-progress]`). Developer writes `CHANGELOG.md`, README,
-user-guide, cli-reference, `docs/agents.md`, examples, comparison/case-study (sources re-read and dated; figures
-from the committed release-health reports), `docs/site.yaml` + `node scripts/build-site.cjs llms`, community
-health files, the `bindings.yaml`/`user-docs.yaml` comments; runs the examples; prepares the demo runbook; runs
-the gates (S6); submits. Independent reviewer (read-only) re-measures; fixes in-task.
-
-### S5 — `demo.rendered` · approver (manual)
-A copy-paste runbook in blocks (`docs/assets/README.md` § "Regenerating the demo GIF"): the approver re-records
-`docs/examples/01-first-project/demo.tape` with VHS; the GIF is committed on the task branch.
-
-### S6 — Gates · developer (one at a time, `waitslot.sh`)
-`npm run typecheck` · `npm test` · `npm run test:coverage -- --maxWorkers=2` (≥ 99.34 / 97.39 / 98.03 / 99.71,
-the B9 gate) · `npm run lint` · `npm run docs:api` · `npx jest test/docs --maxWorkers=2` (cli-reference,
-presentation, llms-txt, name-resolvability included) · `docs/examples/0*/run.sh` with the code build ·
-`node scripts/build-site.cjs llms` + `git diff --exit-code llms.txt` · the e2e smoke with an absolute path ·
-`npm run check:governance` and `npm run lint:claims -- --base 07292cfd` · `npm pack --dry-run`.
-
-### S7 — `align-user-docs` approval · approver
-Present the survey, the diff, the gate results and the review. **Approver:** approve the fix task (`close3.sh`:
-approve, finalize, bugs `[in-review → resolved → closed]`) and the phase step, recorded in Execution Notes.
-Merge `task/<id>` into the phase branch.
-
-### S8 — `task-252` · developer → reviewer (D2, D3, D4)
-Amend AC 3 (D3) on its branch; `start.sh 252` (bugs 220/236/284/302 `[planned → in-progress]`). Create
-`AGENTS.md` from `CLAUDE.md` with the provisional `<!-- wingfoil:generated:begin -->` … `end` pair around the
-configuration part; reduce `CLAUDE.md` to `@AGENTS.md` plus one sentence (verify Claude Code's import with the
-version in use, command recorded); `agent-docs.yaml` 1.1 and the conformance test; `.wingfoil/README.md`,
-`.wingfoil/WORKFLOW.md`, source comments citing `CLAUDE.md` as the conventions' home; `dl-025` amended.
-
-### S9 — `align-agent-docs` · architect (on `task/252`)
-The five `checks.post`, each run as a command and recorded: (1) status and commands vs `CORE_MODULES`;
-(2) element/state tables vs `memory.yaml` (ten types); (3) workflow list vs `workflows.yaml` (six mains, `wave`,
-integration branch); (4) role bindings vs `roles.yaml` 1.8; (5) `npx jest test/docs/workflow-md.test.ts`. Plus
-the §3 agent handovers and the `git-conventions` §7 attribution rule. Gates as S6; submit; independent review.
-
-### S10 — `align-agent-docs` approval, merge, close · approver
-Approve `task-252` (`close3.sh`) and the phase step. Merge `task/252` into the phase branch; merge the phase
-branch into `main` (`--no-ff`); finalize this plan `[active → done]`. Follow-ups registry → triage proposal →
-`bug-ingest` on the approver's ruling. Notify WFCoord. The push is the approver's. Next phase: `e2e-smoke`.
-
----
-
-## 5. Known hazards
-
-- **H1 — concurrent sessions on `main`.** Ids are allocated at commit time (`memory add`): before each merge into
-  `main`, re-check that no id this phase allocated also exists there.
-- **H2 — `CLAUDE.md` as a pointer.** Every agent session in this repository reads it; the pointer lands only with
-  the content in `AGENTS.md` complete, in one merge.
-- **H3 — load from other projects.** WingFoil-UI's Playwright runs drove the load to 16 at the phase start; gates
-  wait for the slot.
-
-## Handoff
-
-- **Approver:** the fix task's approval to `backlog` (S3); the demo recording (S5); the approvals of both tasks
-  and both phase steps (S7, S10); the follow-up triage; the push.
-- **Agent:** S1–S4, S6, S8–S9, the plan's notes, filing findings; never approving.
-- **Completion:** both tasks `done`, the nine v0.3 bugs `closed`, both approvals recorded here, the phase branch
-  merged into `main`, this plan `done`. Next phase: `e2e-smoke`.
-
-## Execution Notes
-
-**Phase start (2026-10-17).** Worktree `../.wf2-wt/user-docs-v0.3`, branch `docs/user-docs-v0.3` from `07292cfd`
-(`git rev-list --count origin/main..main` → `0`); `npm ci` and `npm run build` (behind `waitslot.sh`) exit 0;
-`node dist/cli.js --version` → `0.2.2 (07292cfd…)`. Plan added `fe03b7cf` (code build, `--set workflow=user-docs
---set phase=rel-v0.3 --set scope=rl-v1/rel-v0.3`). Rulings D1–D4 above.
+**S7 — `align-user-docs` APPROVED** and **S10 — `align-agent-docs` APPROVED** by the approver (Roberto Pompermaier,
+`approver`) in chat on 2026-10-18, at `02befa35`, on the evidence above; the approver also confirmed the alignment of
+`docs/agents.md`, which is in no phase's `produces:`. No Memory element transitions: a phase approval is recorded in
+its plan until `dl-125` gives documents an approval verb. The findings outside the two tasks are in the coordinator's
+follow-up registry (19 items); their triage proposal and filing continue under `bug-ingest-rel-v0.3-user-docs-findings-plan`
+(`active`). Next phase: `e2e-smoke`.
 
 ### Retrospective
 
-None yet.
+- A deployed-site render defect (kramdown, a paragraph line starting `<…>`) was invisible on github.com and in every
+  test until a delivery session read the live Pages site; the guard now covers `docs/site.yaml`'s pages, with
+  accepted gaps (bug-ingest follow-up). Proposal: a kramdown render check in the Pages build.
+- Two reviewer-found false sentences in the agent file (who writes `finalize`/`start`/`sync`) and one false
+  self-review claim: the top v0.2 rejection cause (a claim stated without running its command) recurred in documents
+  too.
+- The survey's breaking-change list missed `task-247` (hand-created elements cannot be submitted); the independent
+  review found it by running both builds on a 0.2.2-initialised project. Proposal: the upgrade notes are drafted from a
+  two-build run over the documented commands, not from task titles.
+- Two waiting shells of a review agent ran ~25 h (`pgrep -f` matching its own command line); lesson added to the kit.
+- Running the two tasks in parallel (approver, 2026-10-17) cost nothing at merge: no file overlapped.
