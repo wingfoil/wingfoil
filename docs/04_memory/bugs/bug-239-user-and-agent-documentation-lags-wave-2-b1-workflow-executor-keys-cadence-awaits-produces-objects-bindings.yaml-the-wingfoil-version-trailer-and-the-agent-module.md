@@ -70,3 +70,12 @@ at `0b297169`.
 **Note (2026-10-12, the approver's absorption of the inherited v0.3 bugs; `bug-ingest-rel-v0.3-w3b6-review-findings-plan`).**
 Owner: the v0.3 `user-docs` phase (`align-user-docs`, `dl-013`, `sed -n 1,20p .wingfoil/workflows/custom/user-docs.yaml`),
 not a `dev-loop` task: the bug stays `triaged` with release v0.3 and is closed by that phase's commits.
+
+### Retrospective
+
+- The agent-facing part was fixed by `task-252`: `AGENTS.md` names ten modules (§1, §2, §4); `.wingfoil/WORKFLOW.md`
+  § "Phase Keys" and `.wingfoil/README.md` § "Workflow file keys" describe `iterate_over`/`where`, object `produces`,
+  `awaits`, `mode`, `distinct_from`, `cadence` and `optional`, and the `run` binding kind of `bindings.yaml`. The
+  user-facing part (the `WingFoil-Version:` trailer in the commit examples) is `task-289`'s (approver ruling Q1).
+- Lesson: a key that `spec-003` declares and no workflow file uses yet (`cadence`, `awaits`) still needs a line in the
+  reference, or the first author to use it learns it from the spec alone.
