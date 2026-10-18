@@ -5,7 +5,9 @@
 #   - user-docs.align-agent-docs, once per release (after align-user-docs, before release-submit);
 #   - release-line-cycle.align-agent-docs, once per release-line, right before plan-next-release-line
 #     closes it, because structural changes (a new Memory type, a changed state machine, a new pillar)
-#     land at release-line boundaries and are exactly what CLAUDE.md's element/state tables stop matching.
+#     land at release-line boundaries and are exactly what AGENTS.md's element/state tables stop matching.
+# The agent file is AGENTS.md; CLAUDE.md holds only its `@AGENTS.md` import, for agents that read that name
+# (dl-137 Q1 (b), task-252), so the checks read AGENTS.md, plus that the pointer exists.
 # A phase cannot include one phase of another workflow (spec-003 Layer 2 `include` names a workflow), so the
 # phase lives here, in a workflow of its own, and both callers include it (task-199). It declares no
 # `element`: its deliverables are the repository's agent-facing files, owned by no Memory element, so either
@@ -13,9 +15,9 @@
 name: agent-docs
 kind: sub
 description: >-
-  Verify and align the agent-facing entry point (CLAUDE.md, .wingfoil/README.md, .wingfoil/WORKFLOW.md)
-  against the configuration it projects, so an agent's first contact describes the tool as it is.
-version: 1.0                     # 1.0 dl-025 (task-199): align-agent-docs moved here from user-docs 1.2, unchanged, so release-line-cycle can include the same phase
+  Verify and align the agent-facing entry point (AGENTS.md, with CLAUDE.md as its pointer, .wingfoil/README.md,
+  .wingfoil/WORKFLOW.md) against the configuration it projects, so an agent's first contact describes the tool as it is.
+version: 1.1                     # 1.0 dl-025 (task-199): align-agent-docs moved here from user-docs 1.2, unchanged, so release-line-cycle can include the same phase; 1.1 dl-137 (task-252): the agent file is AGENTS.md, CLAUDE.md its pointer — produces and the four checks name AGENTS.md, a fifth check reads the pointer
 
 phases:
   - name: align-agent-docs                   # [SPEC] dl-025 — agent-facing docs gate (shape B)
@@ -29,14 +31,16 @@ phases:
     role: architect                          # [SPEC] dl-025 — roles.yaml binds architect to
                                              #   architecture, determinism and traceability
     produces:
-      - "CLAUDE.md"
+      - "AGENTS.md"                        # dl-137 (task-252) — the agent file; its §3–§7 sit between the provisional wingfoil:generated markers (R3/R4)
+      - "CLAUDE.md"                        # dl-137 Q1 (b) — only the pointer: `@AGENTS.md` plus one sentence
       - ".wingfoil/README.md"
       - ".wingfoil/WORKFLOW.md"              # bug-170 — the workflow reference drifted while in no produces:
     checks:
       post:
-        - "CLAUDE.md project status matches the shipped command surface (CORE_MODULES)"
-        - "CLAUDE.md element/state tables match memory.yaml"
-        - "CLAUDE.md workflow list matches workflows.yaml"
-        - "CLAUDE.md role-directive bindings match roles.yaml"
+        - "AGENTS.md project status matches the shipped command surface (CORE_MODULES)"
+        - "AGENTS.md element/state tables match memory.yaml"
+        - "AGENTS.md workflow list matches workflows.yaml"
+        - "AGENTS.md role-directive bindings match roles.yaml"
         - "workflow-md.complete"             # .wingfoil/WORKFLOW.md names every workflow and phase workflows.yaml includes (test/docs/workflow-md.test.ts; bound in workflows/bindings.yaml)
+        - "CLAUDE.md is a pointer that imports AGENTS.md"   # dl-137 Q1 (b): align-agent-docs checks AGENTS.md, plus that the pointer exists
     approval: { by_role: approver }

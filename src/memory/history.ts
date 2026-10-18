@@ -8,7 +8,7 @@
  * Scope (see task-008's Execution Notes): this returns *structured commit records* (sha, author
  * name/email, ISO-8601 author date, subject, body) — the walk itself. Deriving a human-facing
  * "state change" (e.g. "pending -> backlog") from the commit body's `Approver:`/`Reason:` lines
- * (CLAUDE.md §5.1) is not this primitive's concern; the raw `body` field carries that text verbatim
+ * (AGENTS.md §5.1) is not this primitive's concern; the raw `body` field carries that text verbatim
  * for a caller to parse, and `./audit`'s `reconstructMemoryTransitions` is the caller that does — the
  * `memoryHistory` operation projects that reconstruction rather than re-reading this walk itself.
  *
@@ -120,7 +120,7 @@ const CREATION_PROBE_ARGS = ['--follow', '--diff-filter=C', '--format=%H'];
  *    `git log -- <path>` returns a single commit where the followed walk returns seven, so dropping
  *    `--follow` would delete five sixths of that element's recorded history.
  *  - **`C` (copy)** — the element being born out of a file that still exists. `wingfoil memory add`
- *    copies the type's template verbatim (CLAUDE.md §5.1), and `wingfoil init` has already committed
+ *    copies the type's template verbatim (AGENTS.md §5.1), and `wingfoil init` has already committed
  *    that template, so this edge is how every scaffolded element begins. Everything strictly older
  *    than it is the template's history, not the element's.
  *

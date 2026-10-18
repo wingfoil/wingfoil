@@ -137,8 +137,10 @@ for the avatar) so that it names the file and the commit it was uploaded from.
 - The banner shows:
   - the mark;
   - the "WingFoil" wordmark;
-  - the README's lead sentence *"A structured harness for deterministic AI-assisted software
-    development."*;
+  - the README's lead sentence *"A structured harness for AI-assisted software development, built to make it
+    deterministic."* (`dl-112` Q3 (i): determinism is the goal, not a property already reached), on two lines in
+    Inter Medium 28 px, left edge x = 560, baselines y = 322 and 360 (`text49`, `text51`, stored as paths: change
+    them as the wordmark below, through a `<text>` element and `--export-text-to-path`);
   - the five pillar chips: Memory · DNA · Directives · Workflow · CLI + MCP;
   - `$ npm install -g wingfoil`;
   - "Open source · MIT";

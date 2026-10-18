@@ -6,13 +6,13 @@ kind: custom
 title: "Git conventions: branches, sync, tags, subjects, identity, id allocation, attribution"
 tags: [custom, git, process, security]
 scope: global
-version: "1.8"   # 1.8 §1: the quotation of `dev-loop.yaml`'s `done` merges into the task's integration branch, `git.merge(to: integration_branch, ff: false)`, which carries the on-branch commits into it (task-288, dl-159 A1.8, approver ruling D6) (prev 1.7 §1–§3, §6, §9: the release/X.Y maintenance line, the integration branch, the merge forward, a tag per line, push the add on both lines, the release worktree (task-286, dl-159 A1.6, dl-092 Action 3) (prev 1.6 §1: `dev-loop.yaml`'s `done` declares the on-branch order, approve, finalize and the bugs' sync before the merge (task-281, bug-313, approver ruling 2026-10-12 D6) (prev 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260))))
+version: "1.9"   # 1.9 §8: the trailer paragraph also carries the workflow `WingFoil-*` trailers (`-Instance`, `-Step`, `-Phase`, `-Element`, `-Item`), which a separate paragraph would unlink from their step (task-252, bug-236 amendment of 2026-10-11) (prev 1.8 §1: the quotation of `dev-loop.yaml`'s `done` merges into the task's integration branch, `git.merge(to: integration_branch, ff: false)`, which carries the on-branch commits into it (task-288, dl-159 A1.8, approver ruling D6) (prev 1.7 §1–§3, §6, §9: the release/X.Y maintenance line, the integration branch, the merge forward, a tag per line, push the add on both lines, the release worktree (task-286, dl-159 A1.6, dl-092 Action 3) (prev 1.6 §1: `dev-loop.yaml`'s `done` declares the on-branch order, approve, finalize and the bugs' sync before the merge (task-281, bug-313, approver ruling 2026-10-12 D6) (prev 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260)))))
 ref: [P3.5, P3.7, REQ-SEC-01, REQ-SYS-08]
 ---
 
 # Directive — Git conventions
 
-**Date:** 2026-10-16
+**Date:** 2026-10-17
 
 Custom WingFoil rule. Applies to **every role**: whoever writes a commit or names a branch in this
 repository — a `developer` on a task branch, the `approver` whose `approve` commit an agent types, a
@@ -238,11 +238,16 @@ rule; this clause only keeps a test identity from leaking into it.
 ## 8. Amending a tool-written commit (`bug-236-a-wingfoil-commit-amended-by-hand-with-a-separate-co-authored-by-paragraph-loses-its-wingfoil-version-trailer-and-reads-it-into-the-reason-block`)
 
 A commit written by `wingfoil` ends with a `WingFoil-Version: <semver> (<sha>)` trailer paragraph
-(`dl-111-tool-signature-in-commits`). To add a trailer to it (e.g. `Co-Authored-By:`), amend with
-`git commit --amend --no-edit --trailer "Co-Authored-By: …"`, which joins the existing trailer
-paragraph. Never add a new paragraph after `WingFoil-Version:`: the trailer paragraph would no longer
-be the last one, and a reader of the `Reason:` block (`dl-067-reason-trailer-contract`) would take the
-`WingFoil-Version:` line into the reason. Two limits:
+(`dl-111-tool-signature-in-commits`). The same paragraph carries the workflow trailers when a step wrote
+the commit — the other `WingFoil-*` trailers: `WingFoil-Instance:` and `WingFoil-Step:` on a `memory add
+--workflow … --step …`; `WingFoil-Phase:`, `WingFoil-Instance:` and `WingFoil-Element:` or `WingFoil-Item:` on a
+`workflow finalize` record. To add a trailer to such a
+commit (e.g. `Co-Authored-By:`), amend with `git commit --amend --no-edit --trailer "Co-Authored-By: …"`,
+which joins the existing trailer paragraph. Never add a new paragraph after it: the trailer paragraph
+would no longer be the last one, so a reader of the `Reason:` block (`dl-067-reason-trailer-contract`)
+would take the `WingFoil-Version:` line into the reason, and the workflow deduction, which reads only the
+final paragraph (`%(trailers:only)`), would lose the element's link to its step or the phase record. Two
+limits:
 
 - **Only a commit not yet pushed.** Amending a pushed `wf()` commit rewrites an audit record, which §2
   forbids.

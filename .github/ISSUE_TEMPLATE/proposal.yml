@@ -13,7 +13,8 @@ body:
         ([COLLABORATION.md](https://github.com/wingfoil/wingfoil/blob/main/COLLABORATION.md)): a maintainer or an
         agent captures this proposal as a `decision-log`, with your GitHub handle as its `contributor` and this
         issue's URL beside it. The approver then ratifies one option, or declines it, and the decision is
-        delivered by a later release.
+        delivered by a later release. A feature request changes the vision, so it is captured as a
+        `change-proposal` through `vision-change` instead.
 
         The issue title, without its `proposal: ` prefix, is the decision-log's title: the question or the
         change, in one line.

@@ -49,6 +49,16 @@ Concretely, two candidate shapes (choose at ratification):
 
 Either way: bump `user-docs.yaml`'s `version:` and cite this DL, per the field-provenance convention.
 
+**Revision (2026-10-17, `dl-137`, `task-252`).** The ratified shape is **(B)**: the `align-agent-docs` phase,
+role `architect`. Since `task-199` it lives in `.wingfoil/workflows/custom/agent-docs.yaml`, a workflow of its own
+that `user-docs` includes once per release and `release-line-cycle` includes right before
+`plan-next-release-line`, which answers the open question below. Since `dl-137` the agent-facing entry point is
+`AGENTS.md`, and `CLAUDE.md` holds only its `@AGENTS.md` import: `agent-docs.yaml` 1.1 lists `AGENTS.md` and
+`CLAUDE.md` (the pointer) in `produces:`, its four prose checks read `AGENTS.md`, and a fifth checks that
+`CLAUDE.md` is a pointer that imports it. Where this decision names `CLAUDE.md` as the entry point or
+`user-docs.yaml` as the phase's file, read `AGENTS.md` and `agent-docs.yaml`; the Context keeps the names of its
+time.
+
 ## Rationale
 
 - **Determinism (REQ-SYS-07).** A wrong entry point propagates into every session deterministically —

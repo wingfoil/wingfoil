@@ -9,7 +9,7 @@
 [![node](https://img.shields.io/node/v/wingfoil)](https://www.npmjs.com/package/wingfoil)
 [![publish](https://github.com/wingfoil/wingfoil/actions/workflows/publish.yml/badge.svg)](https://github.com/wingfoil/wingfoil/actions/workflows/publish.yml)
 
-**A structured harness for deterministic AI-assisted software development.**
+**A structured harness for AI-assisted software development, built to make it deterministic.**
 
 WingFoil solves a critical problem: as your software project grows, AI agents lose consistency and control. Context gets
 scattered, conventions drift, and decisions made in one session don't carry forward to the next.
@@ -49,7 +49,8 @@ WingFoil provides a **structured, authoritative interface** to your project:
 - **Workflow State Management** — Unified tracking and communication of project flow, progress, and blockers
 - **Interaction Layer** — CLI for humans, MCP for agents
 
-This keeps everything synchronized and deterministic.
+This keeps everything synchronized, so that two runs from the same specs and configuration can produce
+equivalent software: the goal the *Determinism Index* measures (see *Success Metric* below).
 
 ---
 
@@ -79,19 +80,21 @@ real-time tracking of project state.
 
 ## Key Features
 
-### Five Pillars — status in 0.2.2
+### Five Pillars — status in 0.3
 
 - ✓ **Project Memory** — Git-backed documents (tasks, ADRs, decision-logs, bugs, specs…) with per-type
   state machines, approval gates and an audit trail (**shipped**: create, search, submit, approve,
-  reject, deprecate, history)
+  reject, deprecate, history; **new in 0.3**: amend, park, work-in-progress limits)
 - ✓ **Project DNA** — Structured config: modules, tech stack, team & roles, resource paths
   (**shipped**: show, set, add, update, remove)
 - ✓ **Project Directives** — Role-scoped rules: six built-in templates installed by `init`, your own
   custom directives, role assignments (**shipped in 0.2**)
 - ✓ **Interaction Layer** — CLI for humans and agents; MCP server for agents with read-only Resources
-  and one Prompt per role (**shipped**)
-- **Workflow State Management** — workflows are declared and listable today; the engine that starts
-  and tracks them is planned for 0.3
+  and one Prompt per role (**shipped**); `agent execute` launches Claude Code or Codex CLI on a Memory
+  element with its context assembled and checked first, and records the run (**new in 0.3**)
+- ✓ **Workflow State Management** — start, follow and end workflows: the next step and its role,
+  the open workflows, approvals routed to the approver, checkpoints (**new in 0.3**). WingFoil records
+  and routes the steps; people and agents carry them out
 
 ### CLI at a glance
 
@@ -99,17 +102,21 @@ real-time tracking of project state.
 |---|---|
 | Setup | `wingfoil init [--template Scrum\|Kanban]` · `wingfoil mcp` |
 | DNA | `wingfoil dna show [section]` · `dna set <path> --value <v>` · `dna add` · `dna update` · `dna remove` · `wingfoil paths [category]` |
-| Memory | `wingfoil memory add --type <t> --title <t> [--set <name>=<value>]` · `submit <id>` · `approve <id> --reason <r>` · `reject <id> --reason <r>` · `deprecate <id>` · `history <id>` · `search [keyword]` |
+| Memory | `wingfoil memory add --type <t> --title <t> [--set <name>=<value>]` · `submit <id>` · `approve <id> --reason <r>` · `reject <id> --reason <r>` · `amend <id> --reason <r>` · `park <id> --reason <r>` · `deprecate <id>` · `history <id>` · `search [keyword]` |
 | Directives | `wingfoil directive create --name <n>` · `directive assign --directive <n> --role <r>` · `directive remove <n>` · `wingfoil directives list [--role <r>]` |
-| Workflow | `wingfoil workflow list` |
+| Workflow | `wingfoil workflow list` · `show <name>` · `start <name>` · `next` · `status` · `finalize` · `end` · `create <name>` · `remove <name>` |
+| Agent | `wingfoil agent execute --element <type:id> \| --next` · `agent list` · `agent show <run-id>` |
 
 Every command accepts `--format console|json|yaml` and ends with exit code `0` (success), `1` (refused)
-or `2` (bad command line). Full details: **[CLI reference](docs/cli-reference.md)**.
+or `2` (bad command line); every command that commits accepts `--dry-run`, except `init`. Full details: **[CLI reference](docs/cli-reference.md)**.
 
 ### For AI Agents
 
-- ✓ **MCP server** (`wingfoil mcp`, stdio) — DNA, Memory and workflows as read-only Resources, plus a
-  `<role>-session` Prompt per role that embeds the role's directives
+- ✓ **MCP server** (`wingfoil mcp`, stdio) — DNA, Memory and workflows as read-only Resources, the
+  workflow state as `wingfoil://workflows/-/next` and `wingfoil://workflows/-/status`, plus a
+  `<role>-session` Prompt per role that embeds the role's directives; given an `element` and a `state`
+  (a commit), the Prompt — and the Resource `wingfoil://session/{role}/{element}/{state}` — return the
+  agent's execution context for that element
 - ✓ **Read-only by construction** — the MCP surface has no Tools; changes go through the CLI, and
   approvals belong to a human holding the `approver` role
 - ✓ **[`docs/agents.md`](docs/agents.md)** — the same knowledge as a document an agent can read from a
@@ -142,6 +149,8 @@ workflows) and commits it:
 ```bash
 $ wingfoil init --template Scrum
 ```
+
+It also installs the built-in agent adapters (`claude-code`, `codex-cli`) under `.wingfoil/agents/`.
 
 **2. Name the project and register yourself as the approver** — approvals need a team member holding
 the `approver` role, with your git email:
@@ -193,6 +202,8 @@ wf(task): approve task-001-my-first-task [pending → approved]
 
 Approver: Ada Lovelace <ada@example.com> (approver)
 Reason: Scope is clear.
+
+WingFoil-Version: 0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)
 ```
 
 **5. Connect your AI agent** — for Claude Code, add `.mcp.json` at the repository root:
@@ -218,24 +229,34 @@ Reason: Scope is clear.
 ## Value Proposition
 
 **For** developers and teams already using AI agents  
-**WingFoil** makes the development process **deterministic**  
+**WingFoil** is built to make the development process **deterministic**, and measures how far it does  
 **By** centralizing memory, conventions, and directives — keeping them synchronized across all actors
 
 ### Success Metric: Determinism Index
 
 Two independent development runs from the same specs + WingFoil config using different AI agents should produce
 substantially equivalent software, with all team members and agents maintaining shared understanding of project workflow
-state, progress, and alignment.
+state, progress, and alignment. This is the goal WingFoil is measured against, not a property it already has.
+
+*Substantially equivalent* means **behaviourally equivalent**: both codebases pass the same acceptance contracts. The
+Index has three components:
+
+- **Input** — the context WingFoil assembles is identical for identical inputs: guaranteed, by tests.
+- **Process conformance** — the run followed its workflow (well-formed commits, legal transitions, phase outputs
+  present, roles respected): measured on every run.
+- **Outcome equivalence** — the two runs' software behaves the same: the agents and models write the code, so this is
+  measured, never promised.
 
 ---
 
 ## What Comes Later
 
-**0.3 — Project Workflow:** the workflow engine (`workflow start|next|status|show|end`…), approval
-routing by role, agent execution with directives and Memory context auto-loaded, reference workflow
-templates, notifications when an approval is required.
+**0.4 — Interaction Layer + Polish** (planned): adopting WingFoil in a project already
+under way (`init --mode infer`, `dna infer`, `memory import`, `audit`), MCP Tools through which agents
+submit their work, reference workflow templates (Scrum, Kanban, Lean Inception, Trunk-Based), and
+polished CLI help, errors and console output.
 
-**0.4 — Interaction Layer + Polish** · **1.0 — MVP complete**, all five pillars integrated.
+**1.0 — MVP complete**, all five pillars integrated.
 
 Later, based on early adopter feedback: semantic search, IDE integrations beyond MCP, notification
 routing (email, Slack), multi-project management.
@@ -252,15 +273,17 @@ WingFoil is built one pillar per release until all five are integrated in 1.0.
 | **0.1** | Project Memory + DNA | ✓ Released (not published to npm) |
 | **0.2** | + Project Directives, Memory approvals, DNA editing, MCP role Prompts | ✓ Released (`wingfoil@0.2.1` on npm) |
 | **0.2.2** | Patch: configuration at the repository root, staged npm publishing, first-use fixes | ✓ Released (`wingfoil@0.2.2` on npm) |
-| **0.3** | + Project Workflow | Planned |
+| **0.3** | + Project Workflow: workflow state, approval routing, agent execution | 🔄 Being released |
 | **0.4** | + Interaction Layer polish | Planned |
 | **1.0** | MVP complete | Planned |
 
 **Dogfooding:** WingFoil's own development is managed with WingFoil — its configuration lives in
-`.wingfoil/` and its Memory in `docs/04_memory/`, at the repository root. From there the Memory verbs
-(`add`, `submit`, `approve`, `reject`, `deprecate`, `history`, `search`) run on WingFoil's own Memory,
-through a published, pinned build of WingFoil (`npm run -s wingfoil -- <command>`), whose MCP server
-is registered in `.mcp.json`. See [COLLABORATION.md](COLLABORATION.md).
+`.wingfoil/` and its Memory in `docs/04_memory/`, at the repository root. Every verb that writes a
+`wf()` commit there (`add`, `submit`, `approve`, `reject`, `deprecate`, `amend`, `park`) runs on the
+build compiled from the checkout (`npm run build`, then `node dist/cli.js <command>`); the read commands
+and the MCP server registered in `.mcp.json` run on a published, pinned build of WingFoil
+(`npm run -s wingfoil -- <command>`), so they answer as the version users have. See
+[COLLABORATION.md](COLLABORATION.md).
 
 ---
 
@@ -280,13 +303,15 @@ is registered in `.mcp.json`. See [COLLABORATION.md](COLLABORATION.md).
 └─────────────────────────────────────────────────┘
 ```
 
-- **CLI**: Humans (and agents) use `wingfoil` commands to manage Memory, DNA and Directives, and to read Workflows
-- **MCP Server**: Agents connect via Model Context Protocol to query Memory/DNA, receive Directives, and view Workflow
-  definitions
+- **CLI**: Humans (and agents) use `wingfoil` commands to manage Memory, DNA and Directives, to start, follow and end
+  Workflows, and to launch an agent on an element
+- **MCP Server**: Agents connect via Model Context Protocol to query Memory/DNA, receive Directives and their execution
+  context, and read Workflow definitions, the next step and the open workflows
 - **Git Backend**: All changes (memory, decisions, workflow state) are versioned and auditable
 - **Read-Only MCP**: The MCP surface is read-only; state changes go through the CLI, and approvals belong to a
   human holding the `approver` role
-- **Workflow Synchronization** *(0.3)*: All team members and agents stay aligned on current progress and blockers
+- **Workflow Synchronization**: All team members and agents read the same workflow state, deduced from the
+  repository: the next step, its role, and the approvals waiting
 
 ---
 
@@ -313,11 +338,11 @@ docs/
 | Layer          | Artifact                                                    | Count    |
 |----------------|-------------------------------------------------------------|----------|
 | Vision         | User journeys                                               | 8        |
-| Vision         | MVP features (5 pillars + notifications)                    | 63       |
+| Vision         | MVP features (5 pillars + notifications)                    | 65       |
 | User Story Map | Journey files · edge-case / interruption stories            | 7 · 14   |
-| BDD            | Gherkin feature files / scenarios                           | 63 / 190 |
-| SARD           | Architecture & NFR requirements (measurable Fit Criteria)   | 43       |
-| Backlog        | Implementation-ready tasks (63 user stories + 43 technical) | 106      |
+| BDD            | Gherkin feature files / scenarios                           | 65 / 255 |
+| SARD           | Architecture & NFR requirements (measurable Fit Criteria)   | 45       |
+| Backlog        | Implementation-ready tasks, as imported (63 stories + 43 technical) | 106      |
 
 All artifacts are scheduled across 5 release waves (v0.1 → v1.0), sequenced by risk in
 `docs/01_vision/07_sequencer.md`.
@@ -333,10 +358,11 @@ MIT — open source and free to use.
 ## Contributing
 
 Early feedback is welcome. Open a GitHub issue with the **Bug report** or the **Proposal** form: each is
-captured as a Memory element (a `bug` or a `decision-log`) without asking you again.
+captured as a Memory element (a `bug`, a `decision-log`, or a `change-proposal` for a feature request)
+without asking you again.
 
 See **[`COLLABORATION.md`](COLLABORATION.md)** — how to contribute through Memory artifacts
-(Bug / Decision-Log / ADR / Tech-Spec) instead of code, with credit for the AI-generated work
+(Bug / Decision-Log / Change-Proposal / ADR / Tech-Spec) instead of code, with credit for the AI-generated work
 derived from your contribution. Everyone follows the [Code of Conduct](CODE_OF_CONDUCT.md); report a
 vulnerability privately, as [`SECURITY.md`](SECURITY.md) explains, never in a public issue.
 
@@ -351,4 +377,4 @@ vulnerability privately, as [`SECURITY.md`](SECURITY.md) explains, never in a pu
 
 ---
 
-**WingFoil: Making AI-assisted development deterministic, not chaotic.**
+**WingFoil: governing AI-assisted development toward determinism, not chaos.**
