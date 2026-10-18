@@ -115,3 +115,7 @@ batch B6 (`dev-loop-rel-v0.3-plan`), reproduced against `main` at `ccccc227`.
 **Note (2026-10-12, the approver's absorption of the inherited v0.3 bugs; `bug-ingest-rel-v0.3-w3b6-review-findings-plan`).**
 Owner: the v0.3 `user-docs` phase (`align-user-docs`, `dl-013`, `sed -n 1,20p .wingfoil/workflows/custom/user-docs.yaml`),
 not a `dev-loop` task: the bug stays `triaged` with release v0.3 and is closed by that phase's commits.
+
+### Retrospective
+
+Closed by task-289 (`CHANGELOG.md` `## [0.3.0] - Unreleased`, 73 entries, 150 done tasks and 154 closed v0.3 bugs cited, each checked by a command recorded in the task's notes). Lesson: building the section from 161 done tasks at the gate cost a full survey; a per-task "changelog line" written at `done` would make it a merge, not a reconstruction.
