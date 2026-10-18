@@ -8,7 +8,7 @@ kind: "feature"               # REQUIRED — feature | fix (dl-133 Q1 (b)): `fix
 priority: "medium"           # optional — high | medium | low
 tags: ["agents","documentation"]               # optional — additional labels, e.g. [architecture, backend]
 ref: "dl-137"                # optional — backlog item ID, e.g. "TASK-001"
-bug: ["bug-236", "bug-284", "bug-220-claude.md-and-wingfoil-readme.md-predate-memory-amend-and-the-supersedes-trigger", "bug-302-agents.md-claude.md-and-wingfoil-readme.md-still-call-workflow-list-the-only-workflow-command-and-p4.13-omits-commit-history"]                # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
+bug: ["bug-236", "bug-284", "bug-220-claude.md-and-wingfoil-readme.md-predate-memory-amend-and-the-supersedes-trigger", "bug-302-agents.md-claude.md-and-wingfoil-readme.md-still-call-workflow-list-the-only-workflow-command-and-p4.13-omits-commit-history", "bug-239-user-and-agent-documentation-lags-wave-2-b1-workflow-executor-keys-cadence-awaits-produces-objects-bindings.yaml-the-wingfoil-version-trailer-and-the-agent-module"]                # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
                        # by release-planning, and a bug ABSORBED into an existing task's Acceptance Criteria because that
                        # task already owns the ground. `bug.sync_state` iterates this list; a bug with no task naming it
                        # here never advances past `triaged` (only a reject to `closed`, dl-123). A single string is still accepted for documents predating dl-045.
@@ -44,9 +44,12 @@ Part (b), the generated export, is v0.4 (`dl-137` Q3) and is not in scope.
   one sentence), and an agent session in this repository still loads the instructions: verified by
   re-checking that Claude Code reads the pointer for the version this repository's agents use
   (`dl-137` Action 4), with the command or source recorded.
-- (characterization) `dl-025` and `.wingfoil/workflows/custom/user-docs.yaml` name `AGENTS.md`: the
-  `align-agent-docs` phase's `produces:` and checks list `AGENTS.md` (and keep `CLAUDE.md` as the
-  pointer), with a `version:` bump of `user-docs.yaml`; `dl-025` is changed through `memory amend`.
+- (characterization) `dl-025` and `.wingfoil/workflows/custom/agent-docs.yaml` name `AGENTS.md`: the
+  `align-agent-docs` phase's `produces:` and checks list `AGENTS.md` (and keep `CLAUDE.md` as the pointer), with a
+  `version:` bump of `agent-docs.yaml` (1.0 → 1.1) and the four check strings `test/core/workflow-repository-conformance.test.ts`
+  pins updated with them; `dl-025` is changed through `memory amend`. (Corrected on 2026-10-17 by the approver's ruling
+  D3, `user-docs-rel-v0.3-plan`: since `user-docs.yaml` 1.3, `task-199`, the phase's body lives in `agent-docs.yaml`,
+  which `user-docs` and `release-line-cycle` both include.)
 - (characterization) `.wingfoil/README.md`, `.wingfoil/WORKFLOW.md` and the source comments that cite
   `CLAUDE.md` as the conventions' home (`grep -rln "CLAUDE.md" src .wingfoil` at the task's base)
   cite `AGENTS.md`; references to `CLAUDE.md` that remain are the pointer itself or historical
@@ -145,6 +148,38 @@ Part (b), the generated export, is v0.4 (`dl-137` Q3) and is not in scope.
     instruction file. In the 2026-10-15 test the commit WingFoil wrote for the agent's `memory add` carried only the
     human identity. The same rule for user projects (the `AGENTS.md` that `init` generates, `dl-137` part (b), v0.4)
     is noted on `dl-180`.
+
+- **Handover from the start of the v0.3 `user-docs` phase (2026-10-17, `user-docs-rel-v0.3-plan`, approver rulings
+  D3, D4, Q1, Q2).** Measured on `main` at `07292cfd`; AC 3 corrected as above.
+  - `bug-239` joins `bug:` (ruling Q1): it spans the user and the agent documents; `task-289` writes its user-facing
+    part (the `WingFoil-Version:` trailer in the commit examples), this task its agent-facing part (the workflow keys
+    `mode`, `distinct_from`, `cadence`, `awaits`, object `produces` and `bindings.yaml` in `.wingfoil/WORKFLOW.md`
+    and `.wingfoil/README.md`; ten modules) and closes it.
+  - Ruling D4: the `align-agent-docs` content (the agent file brought up to date, `.wingfoil/README.md`,
+    `.wingfoil/WORKFLOW.md`, `.wingfoil/directives/custom/wingfoil-cli.md`) is written on this task's branch.
+  - Ruling Q2: `CLAUDE.md` §10 rules 8–9 (the persistent memory index of Claude Code's auto-memory) move to `AGENTS.md`'s
+    project-owned part, outside the generated markers, worded for any agent that keeps a persistent memory index;
+    `CLAUDE.md` stays the pointer of AC 2.
+  - The phase survey's `align-agent-docs` checks, each to re-run: (1) 33 commands (`node dist/cli.js --help` and each
+    group's), not "20 in all"; §1's status lines (both v0.2 releases `released`, `minor-v0.3` `in-development`); the pin
+    is `npm:wingfoil@0.2.2`; Memory operations run on the code build (`wingfoil-cli` §1), not the pinned one;
+    (2) `memory.yaml` 3.5 has ten types (`change-proposal`), the `returns` edges, `amendable`, the `service` kinds;
+    (3) six startable mains (`vision-change`), the `wave` layer, `user-docs`' `check-implementation-complete`, the
+    integration branch, `red` is `qa`'s, and the workflow verbs that ship (`start`, `next`, `finalize`, `end`,
+    `status`, `show`; steps are not executed); (4) `roles.yaml` 1.8 (reviewer, tech-lead, facilitator, approver rows;
+    global `wingfoil-cli`); (5) `workflow-md.complete` passes, but `.wingfoil/WORKFLOW.md` line 23 omits
+    `align-agent-docs` and line 377 names `CLAUDE.md`.
+  - §2's map lacks `docs/site.yaml`, `llms.txt`, `.github/workflows/pages.yml`, `docs/comparison.md`,
+    `docs/case-study.md`, `docs/examples/06-workflow-approval`, `scripts/integration-branch.cjs`,
+    `scripts/npm-dist-tag.cjs`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `docs/08_health/`,
+    `docs/06_runs/`, `.wingfoil/agents/` and the change-proposal path.
+  - The integration branch (`task-286`–`288`, `dl-159`): the "sync with `main`" line and §8's doc-versioning baseline
+    name `main` only; `.wingfoil/directives/custom/wingfoil-cli.md` lines 44 and 78 ("a fix merged into `main`" reaches
+    the code build) hold on the minor line only, and its line 41 lists `workflow list` among the pinned-build reads,
+    which 0.2.2 refuses (exit 1) on this repository.
+  - `bug-040` is closed: the agent file cites `dl-155` (ratified (A)) for the stand-in reconciliation.
+  - The `bug-372` warning (no `wingfoil` MCP server in a trusted project's `.codex/config.toml`) is written for users
+    by `task-289` (`docs/agents.md`); the agent file may point to it.
 
 ## Execution Notes
 
