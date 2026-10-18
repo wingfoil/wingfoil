@@ -1,7 +1,7 @@
 # MVP Canvas — WingFoil v1.0 (MVP Complete)
 
-**Version:** 1.12
-**Date:** 2026-10-15
+**Version:** 1.13
+**Date:** 2026-10-18
 **Status:** Approved
 
 ---
@@ -87,6 +87,7 @@ in [`04_personas.md`](04_personas.md).
 ✓ Workflow kinds (main/sub), active context, context-aware `list`  
 ✓ Per-type state machines in `.wingfoil/memory.yaml` (default: draft → pending → approved, reject → draft)  
 ✓ Fallback on rejection (target step + state), approval routing, `iterate_over` composition  
+✓ Element provenance: `adopt` and `rekey` an existing element into its workflow step (v0.3.1; `transfer` v0.4)  
 ✓ Built-in workflow templates (Scrum, Kanban, Lean, Trunk-Based)
 
 **Pillar 5: Interaction Layer (v0.4)**
@@ -211,7 +212,7 @@ Each document's version, date and status are listed in one place, the document m
 | `03_is-isnot.md`           | What WingFoil is/isn't, does/doesn't do                                        |
 | `04_personas.md`           | 7 personas: Morgan (primary), Alex, Sam, Jordan, Casey, Taylor, the maintainer |
 | `05_journeys.md`           | 8 user journeys (0a, 0b, 1–6) with scenarios and obstacles                     |
-| `06_features.md`           | 65 features across 5 pillars, organized by release version                     |
+| `06_features.md`           | 66 features across 5 pillars, organized by release version                     |
 | `07_sequencer.md`          | Active-day budgets, actuals, forecast; original plan                           |
 | `08_mvp-canvas.md`         | This file — MVP canvas with success criteria                                   |
 | `X_cli-cmds.md`            | CLI commands reference (all pillars)                                           |
