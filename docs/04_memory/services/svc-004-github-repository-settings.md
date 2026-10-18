@@ -37,8 +37,10 @@ Applied by hand in the web interface by the approver, 2026-09-29 (§B.3):
 - **features:** Discussions on, Issues on, Wiki off, Projects off.
 - **Discussions categories:** Announcements, Q&A, Ideas, Show and tell (General and Polls deleted) — the
   approver's report (§B.3); the `verify` command does not read them.
-- **social preview:** `docs/assets/wingfoil-social-preview-dark.png` at `424f4c93` (1280×640, the
-  dark banner), uploaded by the approver on 2026-09-29 (`user-docs-rel-v0.2.2-plan` S7). Until then
+- **social preview:** `docs/assets/wingfoil-social-preview-dark.png` at `4b51ea45` (1280×640, the
+  dark banner, carrying the README's lead sentence of v0.3, "A structured harness for AI-assisted software
+  development, built to make it deterministic."), uploaded by the approver on 2026-10-18 (`user-docs-rel-v0.3-plan`,
+  `task-289`); it replaced the banner at `424f4c93`, uploaded on 2026-09-29 (`user-docs-rel-v0.2.2-plan` S7). Until then
   there was none; `dl-128` decides the README's badges and demo, not this image. The light variant
   and both SVG sources sit beside it in `docs/assets/`, and `docs/assets/README.md` regenerates them.
 
@@ -56,7 +58,10 @@ above through the GitHub MCP on 2026-09-29 and all matched (§B.3). The social p
 `gh api graphql -f query='{repository(owner:"wingfoil",name:"wingfoil"){usesCustomOpenGraphImage openGraphImageUrl}}'`
 → `usesCustomOpenGraphImage: true`. The image at `openGraphImageUrl`, downloaded on 2026-09-29, is
 identical to `docs/assets/wingfoil-social-preview-dark.png`
-(`compare -metric RMSE <downloaded> docs/assets/wingfoil-social-preview-dark.png null:` → `0 (0)`).
+(`compare -metric RMSE <downloaded> docs/assets/wingfoil-social-preview-dark.png null:` → `0 (0)`). On
+2026-10-18, after the new upload, the same query → `usesCustomOpenGraphImage: true` and a new `openGraphImageUrl`,
+whose image is identical to `docs/assets/wingfoil-social-preview-dark.png` at `4b51ea45` (the same `compare` → `0 (0)`;
+against the light banner → `53653 (0.818693)`).
 On 2026-10-15, after dl-129 Decision 2, `gh api repos/wingfoil/wingfoil --jq .homepage` →
 `https://wingfoil.github.io/wingfoil/`.
 
