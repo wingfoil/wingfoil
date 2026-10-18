@@ -69,6 +69,29 @@ helper this bug expects: pins that require a history comment with given content 
 line 186, `test/core/dev-loop-v1-6.test.ts` line 184 and `test/core/stop-the-line-open.test.ts` line 97 — break
 when a later bump rewrites the comment's chain. The finding, its severity and its release are unchanged.
 
+**Note (2026-10-18, v0.3 user-docs follow-up item 15; approver triage of the v0.3 user-docs follow-ups, item B2,
+by `bug-ingest-rel-v0.3-user-docs-findings-plan`).** A third shape of this class: a test that reads a version line's
+history comment and takes the text before the first `(prev ` as the entry it pins requires that entry to stay the
+newest, so the file's next bump breaks it. `test/directives/dev-loop-done-order.test.ts` pinned `git-conventions`'
+1.8 entry that way and broke when `task-252` bumped the directive to 1.9; `task-252` widened it in-task to find the
+entry anywhere in the history (`e85e6c64`, `git show e85e6c64 -- test/directives/dev-loop-done-order.test.ts`).
+The three candidates named at the phase were read on `main` at `1c4a3a43`, and none pins the newest entry:
+
+- `test/core/workflow-integration-branch.test.ts` line 139 splits the comment with `rest.split(/;|\(prev /)` and
+  accepts any segment naming `2.1` and `task-288` (`historyEntry`, line 72), then asks only that `prev 2.0` and
+  `prev 1.9` occur somewhere;
+- `test/core/dev-loop-v1-5.test.ts` line 186 (`/^version: \d+\.\d+ +# .*\b1\.5 dl-134 .*\(prev 1\.41/m`) and
+  `test/core/dev-loop-v1-6.test.ts` line 184 (`/^version: \d+\.\d+ +# .*\b1\.6 .*task-221.*\(prev 1\.5 dl-134/m`)
+  admit any text before their entry (`# .*`); they pin the chain's content, the shape the note of 2026-10-17
+  already records.
+
+Measured by running each check, transcribed into `node -e`, against `dev-loop.yaml`'s current version line and
+against the same line bumped to `2.2` with a new entry in front (`2.2 task-999 (a later bump) (prev 2.1 …`): all
+three pass on both (as does `test/core/dev-loop-v2-0.test.ts` line 43, which uses `toContain` over the whole line).
+The positive control, `dev-loop-done-order`'s check before `e85e6c64` run on `git-conventions.md` at 1.9 → fails,
+as it did. `grep -rn "indexOf('(prev" test` → only the widened `dev-loop-done-order.test.ts` line 73. The finding,
+its severity and its release are unchanged.
+
 ### Retrospective
 
 None.
