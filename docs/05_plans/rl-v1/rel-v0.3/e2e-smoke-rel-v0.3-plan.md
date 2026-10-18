@@ -268,7 +268,18 @@ auto-memory. Push only on the approver's instruction.
   hand-written section "Repository checks on the candidate (task-242 AC 2)" (D2). The report and this plan are
   evidence paths (`docs/07_gates/`, `docs/05_plans/`), so the commit does not re-cut the candidate.
 - 2026-10-18 — **S9 findings: none.** No element to file; the follow-ups registry stays empty.
+- 2026-10-18 — **`gate` approved** by Roberto Pompermaier (approver), in chat ("gate approvato, procedi con merge e
+  finalize"), on the report `docs/07_gates/rl-v1/rel-v0.3-e2e-smoke.md` (`37150b86`): PASS 74/74 on the candidate
+  `2153f0f5`, in hard-reject. A phase approval has no Memory verb; this note records it. **S10:** `main` had not moved
+  since `811b02ea` (`git rev-list --count 811b02ea..main` → `0`), so no merge forward and no re-cut; this branch is
+  merged into `main` with `--no-ff` after the hand finalize of this plan. Next phase: `release-submit`.
 
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens. -->
+- The first `docs/07_gates/` report: `--candidate --report` wrote it in one 104 s run on the packed commit, with the
+  stamp bound; the plan → candidate → report commit order (S6–S8) kept the tree clean for `--candidate` with no
+  workaround. Evidence: `2153f0f5` (candidate), `37150b86` (report).
+- `task-242` AC 2 has no place in the generated report: its numbers went into a hand-written section (ruling D2).
+  Proposal: let `scripts/e2e-smoke.cjs` (or the gate) record the `workflow list/show/status` counts itself, so the
+  report needs no hand edit.
+- No finding; the full gate (S1–S5 + S7) took ~35 min, 26 of them the coverage run under `--maxWorkers=2`.
