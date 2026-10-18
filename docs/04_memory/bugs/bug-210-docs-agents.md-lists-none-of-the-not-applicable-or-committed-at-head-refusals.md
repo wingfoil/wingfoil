@@ -46,3 +46,7 @@ batch B4 (`dev-loop-rel-v0.3-plan`), against `main` at `243f8f05` (B4 merges up 
 **Note (2026-10-12, the approver's absorption of the inherited v0.3 bugs; `bug-ingest-rel-v0.3-w3b6-review-findings-plan`).**
 Owner: the v0.3 `user-docs` phase (`align-user-docs`, `dl-013`, `sed -n 1,20p .wingfoil/workflows/custom/user-docs.yaml`),
 not a `dev-loop` task: the bug stays `triaged` with release v0.3 and is closed by that phase's commits.
+
+### Retrospective
+
+Closed by task-289 (`docs/agents.md` §6: five new rows for the B4 refusals, each message reproduced verbatim in a throwaway project with the code build, and the `illegal transition` row updated to `-> (none)` with its reason line). Lesson: a refusal added by a task reaches the agent guide only at the next `user-docs` gate, a release later; the task that adds a refusal could name the `docs/agents.md` row it needs in its own notes.
