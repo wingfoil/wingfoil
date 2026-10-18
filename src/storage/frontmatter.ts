@@ -1,6 +1,6 @@
 /**
  * Frontmatter extraction (task-003-git-backed-sot). Memory element state is derived from each
- * document's frontmatter, not any external index (CLAUDE.md §5, REQ-STATE-01/-02): this is the
+ * document's frontmatter, not any external index (AGENTS.md §5, REQ-STATE-01/-02): this is the
  * shared primitive for reading it, as raw YAML text. Parsing that text against a type's schema is
  * the validation module's job (spec-009-validation-strategy, task-002), not this module's — keeping
  * the two concerns separate lets the storage layer stay YAML-schema-agnostic.

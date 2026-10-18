@@ -9,7 +9,7 @@
  * commit, returning its full sha. Every mutating Wave-3 task (task-019 versioning, task-020 memory
  * add, task-025 dna set, task-029 `wingfoil init`) turns its writes into a single attributable
  * commit through this one helper, so the "one operation = one scoped commit" convention
- * (CLAUDE.md §5.1) has a single implementation rather than being re-derived per task.
+ * (AGENTS.md §5.1) has a single implementation rather than being re-derived per task.
  *
  * Mirrors the git-primitive style in `src/memory/git-log.ts`: `execFileSync('git', …)` (never a
  * shell), `-C <root>` to target the repository, and `env: process.env` passed **explicitly** — the

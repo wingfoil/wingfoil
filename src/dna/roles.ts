@@ -14,7 +14,7 @@
  * approver from `team.members` by live git identity and never consults `team.agents` at all. Note
  * that `team.agents[].approval_authority` is **not** what grants or denies authority in code: no code
  * path in this tree reads that field — it is a declarative `dna.yaml` marker, enforced by
- * process/governance (ADR-006, CLAUDE.md §4/§8), as `approval-authority.ts`'s own header states.
+ * process/governance (ADR-006, AGENTS.md §4/§8), as `approval-authority.ts`'s own header states.
  * BDD `p4-workflow/P4.14-approval-routing.feature`'s routing scenarios belong to `task-046-memory-approve`,
  * built on that module. Nothing in this file decides who may approve.
  *

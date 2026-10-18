@@ -136,10 +136,12 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       // task-224 (dl-128 item 2; approver ruling 2026-10-10): re-rendering the demo GIF is a manual step (VHS is a
       // separate binary, and the recording rewrites a tracked file); the steps are in docs/assets/README.md.
       ["user-docs", "phases[1].checks.post[2]", "demo.rendered"],
-      ["agent-docs", "phases[0].checks.post[0]", "CLAUDE.md project status matches the shipped command surface"],
-      ["agent-docs", "phases[0].checks.post[1]", "CLAUDE.md element/state tables match memory.yaml"],
-      ["agent-docs", "phases[0].checks.post[2]", "CLAUDE.md workflow list matches workflows.yaml"],
-      ["agent-docs", "phases[0].checks.post[3]", "CLAUDE.md role-directive bindings match roles.yaml"],
+      // task-252 (dl-137 Q1 (b)): the agent file is AGENTS.md; the fifth check reads CLAUDE.md, its pointer.
+      ["agent-docs", "phases[0].checks.post[0]", "AGENTS.md project status matches the shipped command surface"],
+      ["agent-docs", "phases[0].checks.post[1]", "AGENTS.md element/state tables match memory.yaml"],
+      ["agent-docs", "phases[0].checks.post[2]", "AGENTS.md workflow list matches workflows.yaml"],
+      ["agent-docs", "phases[0].checks.post[3]", "AGENTS.md role-directive bindings match roles.yaml"],
+      ["agent-docs", "phases[0].checks.post[5]", "CLAUDE.md is a pointer that imports AGENTS.md"],
       ["e2e-smoke", "phases[0].checks.post[0]", "exit-code-zero"],
       ["e2e-smoke", "phases[0].checks.post[1]", "scaffolded dna.yaml/memory.yaml/directives round-trip their own loaders"],
       ["e2e-smoke", "phases[1].checks.post[0]", "every step exits with the code it declares, per spec-005-cli-command-contract"],
