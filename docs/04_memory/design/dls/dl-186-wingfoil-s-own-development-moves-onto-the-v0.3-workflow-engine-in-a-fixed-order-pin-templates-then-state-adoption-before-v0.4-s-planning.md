@@ -72,8 +72,7 @@ and restarted `sw-life-cycle` at the fixture's `inception.default`. A pack rewri
 shapes; it adds no linkage to an existing element, so it does not remove E2. Its `dl-015` (`pending`)
 proposes that `base` and `software` keep this repository's Memory states (C1, C2) and make the plan
 id, the agent name and the Memory paths parameters (C7, C9, C10); WingFoil is one of the four
-repositories those packs govern. Parameters would let two projects adopting the same packs differ,
-which S2-a asks the packs to avoid.
+repositories those packs govern; S2-a records how that was settled.
 
 **E5. Running an ingest through the engine works, with one gap.** The ingests that filed this
 decision-log, `dl-187`, `dl-188`, `bug-388`, `bug-389` and `cp-002` were run with `workflow start`
@@ -94,22 +93,23 @@ before it.
 | S4 | v0.4, first two phases | `advance-pinned-build` moves the pin to `0.3.1`; the state adoption then runs with the pinned build, before `define-scope`, so the rest of v0.4's planning runs on the engine. |
 | S5 | v0.4 scope, then after | Template installation (`dl-138`, P4.18–P4.20), `transfer` (`dl-187`), the run token counts (`dl-188`). Once the pin reaches 0.4, the packs adopted by hand at S3 move to the lock and the `remote` class; their files already match the packs, so the three-way merge has a trivial base. |
 
-- **S2-a, the request to WingFoil-Templates:** one convention for every WingFoil project, with no
-  per-project parameters for it: Memory types, state names, id patterns, Memory paths and the agent's
-  name are fixed values of the packs, the same for every adopter; the only differences allowed follow
-  from the nature of the project (which packs it adopts: `software` on top of `base` or not, a
-  blueprint), never from a parameter. This repository's values are a candidate, not a requirement;
-  where the charters choose others, this repository migrates at S3, and existing ids keep their form
-  (ids are immutable; a new pattern applies to new elements). Also: give the release-line → release
-  loop and this repository's own phases (dev-loop, user-docs, e2e-smoke, release-health) a place as an
-  extension of `delivery`; compare its C5 release phases with `release-submit` and
-  `release-publishing`; declare `produces` on every phase whose artefact is a file. Sent through the
-  ecosystem's cross-repository request process, not WingFoil-Templates' feedback inbox, which carries
-  notes about WingFoil in the other direction.
+- **S2-a, the request to WingFoil-Templates, and its outcome** (cross-repository process
+  `2026-10-18-engine-adoption-packs`; WingFoil-Templates' answer of 2026-10-18, which the approver
+  accepted the same day, replacing the first ruling "one convention, no per-project parameters").
+  Memory types, state names, workflow names and phase names are fixed values of the packs, the same for
+  every adopter, and stable: a pack update that renames or restructures one ships an old → new key
+  mapping (`dl-187` D5, `dl-164`). Memory paths, the plan id, the release and release-line id patterns
+  and the agent's name stay pack parameters: their defaults are the convention for new projects, and an
+  existing adopter sets its current values and moves nothing. Ids are immutable: a new id pattern
+  applies to new elements only. Also taken: the release-line → release loop and this repository's own
+  phases fit as the `delivery` slot plus its `custom/` workflows (or a methodology pack); the mapping of
+  `release-submit` and `release-publishing` onto the default `release` workflow; `produces` on every
+  phase whose artefact is a file. WingFoil-Templates writes its foundation charters after the v0.3 tag
+  and publishes the packs once a WingFoil release is out.
 - **S3-b, the Memory to prepare:** close the hand-started instances whose work is done, the way they
   were opened (`spec-017` §12); give the six v0.1 plans their frontmatter (`bug-389`); declare
-  `waves:` on `minor-v0.3` and `wave:` on its tasks (E3); migrate the elements whose type, state or path
-  the packs fix differently (S2-a), keeping every existing id.
+  `waves:` on `minor-v0.3` and `wave:` on its tasks (E3); set this repository's current Memory paths, plan
+  id, release and release-line ids and agent name as the packs' parameters (S2-a), so no element moves.
 
 **2. Rename before adopting.** Workflow and phase names may change freely while no linkage, record or
 adoption commit names them (E2: none does today). Once the state is adopted, a rename orphans the
@@ -124,8 +124,8 @@ rewritten by a configuration change, and a closed instance is not deduced again 
   configuration; the merge carries the adaptation (`rekey` or `transfer`), driven by a mapping the
   governance change declares (`dl-164`, `bug-388`);
 - a rename of a Memory type or state in `memory.yaml` invalidates the elements that hold it; it needs
-  an explicit migration, which this repository runs at S3 if the packs' fixed values differ from its own
-  (S2-a).
+  an explicit migration. The packs fix types and states and keep them stable (S2-a), and this
+  repository's values are already theirs (WingFoil-Templates' `dl-015` C1, C2), so none is expected.
 
 **4. How sessions work from v0.3.**
 - One session per step: `agent execute --next` (or `--step`, `--element`, `--role`) launches the agent
