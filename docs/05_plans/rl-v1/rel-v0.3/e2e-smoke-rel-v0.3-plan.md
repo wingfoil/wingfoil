@@ -162,7 +162,8 @@ bash devloop-kit/waitslot.sh
 node scripts/e2e-smoke.cjs --candidate --report docs/07_gates/rl-v1/rel-v0.3-e2e-smoke.md
 ```
 
-Run in the foreground, with nothing else using this checkout's `dist/` (the run removes it). **Check:** exit 0
+Run in the foreground, after the S1–S5 script has exited, so no build or jest uses this checkout's `dist/` (the run
+removes it). **Check:** exit 0
 (`e2e-smoke-passed`); the report names the candidate `HEAD` and the stamp `0.2.2 (<HEAD>)`. Then `npm run
 build` restores `dist/`. **On a failure:** HARD-REJECT — the report is kept as written, no `release-submit`, the
 failing checks are filed through `bug-ingest` (S9) and the approver decides (fix task and re-cut, or other).
@@ -223,6 +224,37 @@ auto-memory. Push only on the approver's instruction.
 - 2026-10-18 — **plan approved by the approver** (Roberto Pompermaier, in chat: "approvato, D1 e D2 come
   raccomandi, procedi"): **D1** the gate runs on the head of `qa/e2e-smoke-v0.3` after S6; **D2** the `task-242` AC 2
   numbers go into these notes and into a hand-written section appended under the generated report in the S8 commit.
+- 2026-10-18 — **S0:** submit `e80e0373` (`draft → active`, §7 trailers by amend). `git diff --name-only 811b02ea HEAD`
+  → only this plan; `git status --porcelain` empty.
+- 2026-10-18 — **P0–P5 PASS:** `npm run -s wingfoil -- --version` → `0.2.2` (= `npm:wingfoil@0.2.2`); user-docs plan
+  `done`; `minor-v0.3` `in-development`; v0.3 tasks `163 done`, `1 deprecated`; bugs with `release: v0.3` `86
+  closed`; `git rev-list --count origin/main..main` → `0`; `npm ci`, `npm run build` exit 0.
+- 2026-10-18 — **S1–S5** by `devloop-kit/gate-e2esmoke.sh` on `e80e0373` (log `devloop-kit/gate-e2esmoke.log`,
+  21:22–21:56, one heavy step at a time under `waitslot.sh`, load 4–6, no foreign load to report):
+  - **S1–S2 PASS:** `node scripts/e2e-smoke.cjs --expect-version 0.2.2 -- node "$PWD/dist/cli.js"` exit 0, **74 ok / 0
+    not ok** — the user-docs gate's 73 plus `ok wingfoil --version = 0.2.2 — match`, the line `--expect-version`
+    adds (`diff` of the two logs' `ok` lines: that one line only). Both templates, the agent run and Journey 4 ran.
+  - **S2b PASS:** examples 01–06 each exit 0 with its `OK:` line (06: "OK: Journey 4: a rule, a workflow, a submitted
+    deliverable, a routed approval, a checkpoint, the workflow ended").
+  - **S3 PASS:** `npm run -s check:mcp` exit 0 — `.mcp.json "wingfoil" runs the pinned wingfoil 0.2.2, advertising
+    [prompts, resources] (prompts: 8, resources: 2)`, known failure `wingfoil://workflows` (`bug-292`) still applying;
+    the build under development serves `[prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)`, every
+    Resource read and Prompt get answered.
+  - **S4 PASS (`task-242` AC 2):** `node dist/cli.js workflow list --all --format json` exit 0 — **27 workflows, 93
+    diagnostics, 0 errors** (`warning W_WORKFLOW_UNBOUND_TOKEN` 87, `warning W_MEMORY_UNREADABLE` 6: the same counts
+    as the reference at `1e3a5c64`). `workflow show <name> --format json` on each of the 27: all exit 0, 0 errors, 93
+    warnings each (the repository-wide diagnostics). `workflow status` exit 0 and `--format json` exit 0: **open 9**
+    (8 `decision-log-ingest` instances and `service-ingest-rel-v0.3-listings-plan`, the inherited ones), active
+    `decision-log-ingest-rel-v0.3-run-token-counts-plan`, **pending approvals 1** (`dl-188`, routed to the approver),
+    **ungated 53** (routed to 1 person), diagnostics 93. This plan is not listed among the open runs: its `parent` is
+    set, so it is a phase plan, not an instance (spec-017 §3.1).
+  - **S5 PASS:** `npm run -s typecheck` 0; `npm run -s lint` 0; `npm run -s docs:api` 0; `npx jest --coverage
+    --maxWorkers=2` 0 — **461 suites / 8355 tests**, coverage **99.34 / 97.4 / 98.03 / 99.71** (= the user-docs
+    baseline); `npx jest test/docs test/core/workflow-repository-conformance.test.ts --maxWorkers=2` 0 — 27 suites /
+    299 tests; `check-governance.cjs --base 811b02ea` 0; `lint-claims.cjs --base 811b02ea` 0 (1 warn-only line in this
+    plan, reworded in this commit); `check:audit` 0; `build-site.cjs llms` + `git diff --exit-code llms.txt` 0; `npm
+    pack --dry-run` 0, **532 files** (= baseline); tree clean afterwards.
+  - **Findings: none** so far (`devloop-kit/w3-e2esmoke-followups.md` empty).
 
 ### Retrospective
 
