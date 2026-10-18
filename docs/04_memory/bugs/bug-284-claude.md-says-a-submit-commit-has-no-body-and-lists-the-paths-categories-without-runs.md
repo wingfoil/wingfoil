@@ -62,3 +62,9 @@ Both sentences describe the state before `task-209` and `task-206`.
 
 Captured on 2026-10-07 by `bug-ingest-rel-v0.3-w3b1-review-findings-plan`, from `task-206`'s developer notes and
 `task-209`'s review (W3 B1, `dev-loop-rel-v0.3-plan`), checked against `main` at `0962f85f`.
+
+### Retrospective
+
+- Fixed by `task-252`: `AGENTS.md` §5.1 describes the `add` and `submit` commits as the tool writes them (the trailer
+  paragraph; a submit's `Carries content:` line), and §4 lists the seven path categories of `dna.yaml`, `runs` and
+  `health` included (`health` was added after this bug was filed).
