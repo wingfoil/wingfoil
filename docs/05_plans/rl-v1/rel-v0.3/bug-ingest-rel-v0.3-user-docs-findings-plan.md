@@ -51,8 +51,69 @@ plan started.
 
 - **2026-10-18, D6:** `bug-391` added `62e084ee`, submitted `f8453bce` (`open`, low, `release-origin: "v0.3"`);
   evidence re-run on `main` at `39d4a6f6`: `grep -n "WingFoil-Instance\|WingFoil-Step\|WingFoil-Phase"
-  scripts/check-governance.cjs` → no match.
+  scripts/check-governance.cjs` → no match (exit `1`), while the same command's reach is shown by `grep -n
+  "WingFoil-Version" scripts/check-governance.cjs` → line 20, the rule for the tool signature.
+- **2026-10-18, end of phase: capture and triage** (approver ruling of 2026-10-18 on the triage proposal, "come
+  raccomandato", with one change: A2 retitled), on `ingest/user-docs-v0.3-findings` fast-forwarded to `main`
+  `1c4a3a43`, code build `node dist/cli.js` (`--version` → `0.2.2 (1c4a3a431486e61213f6b2bfcdb8f14e54956f64)`).
+  Every finding was re-run first, the scaffold ones in scratch repositories outside this one; each bug's Steps to
+  Reproduce carry the commands, their output and a positive case. All seven reproduced; none was left unfiled. Each
+  tool-written commit was checked to touch exactly one file (`git show --format= --name-only HEAD | wc -l` → `1`
+  after every commit).
+
+  | Element | Severity | Status | Release | Item | add / submit / approve / assign |
+  |---|---|---|---|---|---|
+  | `bug-392` agent execute --dry-run with a built-in adapter refuses without a terminal, although a dry run launches nothing | low | `triaged` | v0.4 | A1 (registry 1) | `a6ec28f6` / `e17e2657` / `df3fae82` / `a7888565` |
+  | `bug-393` The init scaffold maps no `health` path and gives no commented example of the team member and agent entries `approve` and `agent execute` need | low | `triaged` | v0.4 | A2 (registry 2, 5) | `6e0099a1` / `71f24fd9` / `3fe35366` / `5451c814` |
+  | `bug-394` On a project initialised by 0.2.x, E_WORKFLOW_INCLUDE_UNRESOLVED names neither the workflow to include instead nor the upgrade note | medium | `triaged` | v0.4 | A3 (registry 3) | `57b2935c` / `45d29d50` / `75dfaf98` / `567befdd` |
+  | `bug-395` memory amend run by a member without the approver role is refused as not authorized to approve, naming the wrong verb | low | `triaged` | v0.4 | A4 (registry 8) | `a39a4502` / `bf22dc0f` / `c6c814c8` / `0c40cce7` |
+  | `bug-396` The registrar.ts module comment describes MCP Resource URIs the server does not list | low | `triaged` | v0.4 | A5 (registry 9) | `bee1587e` / `52b43e7f` / `ec56b621` / `99ab0c54` |
+  | `bug-397` Vision journeys and features still give workflow show --name and call workflow status planned, though show and status ship | low | `triaged` | v0.4 | A6 (registry 11) | `538f2fc3` / `fc6f5ed9` / `cca453cf` / `0d83a050` |
+  | `bug-398` The pages-render guard misses a paragraph followed by a closing tag and a list paragraph after a blank line, and flags a code-tag continuation | low | `triaged` | v0.4 | A7 (registry 18) | `0ff50fa1` / `c1f6c033` / `c1eabd7d` / `5b2140fb` |
+
+  The approve commits carry no AI trailer; every other commit carries both §7 trailers, joined to the tool's
+  `WingFoil-Version:` paragraph with `git commit --amend --no-edit --trailer` (`git-conventions` §8).
+- **Corrections at capture, each measured.** A1: the refusal is what `spec-016` asks (its `--dry-run` paragraph
+  "runs steps 1–12 — every refusal included"), so `bug-392` puts the defect in the contract and allows a wontfix.
+  A2: `spec-002` decides that `init` does not map `health` ("`wingfoil init` does not scaffold it"); `bug-393` asks
+  for a comment or a hint, not a mapping, and the approval refusal is the same on the pinned 0.2.2, so not a
+  regression. A3: the refusal already carries a generic hint ("a phase include is a workflow name, not a file
+  path"), so `bug-394` asks for the name to write and the pointer to the upgrade note. A4: REQ-SEC-03 makes the one
+  message deliberate for `approve` and `reject` (`dl-063` clause B) and does not name `amend`;
+  `docs/cli-reference.md` lists the message under `memory amend`. A5: `registerCoreModules` is called by tests only
+  (`grep -rn "registerCoreModules(" src test`). A6: `06_features.md:410`'s sentence is "unless `--name` is given",
+  and `workflow next --name` is refused like `show --name` (exit `2`).
+- **Amendments, one `memory amend` each.** `dl-137` (`8a9ce3d0`, B1): a dated note for part (b)'s tech-spec —
+  `wc -l AGENTS.md` → `568` (not about 500 as the proposal said), the generated region `421` lines, 16 distinct
+  task, bug and `src/` citations in it; Claude Code's memory page, re-read on 2026-10-18, says "target under 200
+  lines per CLAUDE.md file" and that imports do not reduce the cost. `bug-314` (`92918bbe`, B2): a dated note on the
+  newest-entry shape; of the three candidates none pins the newest entry (each check run against the current
+  `dev-loop.yaml` version line and against it bumped to 2.2: all pass; the pre-`e85e6c64` check on
+  `git-conventions` 1.9, the positive control, fails). Each `Reason:` says the rest is unchanged.
+- **Handovers, no element.**
+  - **C1 → `release-publishing` v0.3** (a dated note in its plan when it starts): `package.json` `description`
+    (`node -p "require('./package.json').description"` → `WingFoil — the repo-native intent layer for AI-native
+    software engineering`) against the governance-layer wording of `docs/01_vision/01_product-brief.md` (`dl-112`);
+    the release commit touches `package.json` anyway. And check that Pages deploys only for v0.3.0's tag, after npm
+    serves it as `latest` (`.github/workflows/pages.yml` waits on `scripts/wait-npm-version.cjs`): the live site was
+    last deployed by a `workflow_dispatch` on `main` (`gh run list --workflow pages.yml -L 3` → `completed success
+    pages pages main workflow_dispatch 38702556861 … 2026-10-15T08:00:04Z`), so it already carries 0.3 text.
+  - **C2 → `e2e-smoke` v0.3:** nothing new.
+- **Closed already or coordinator kit only (D):** registry items 4 (`bug-292` records the refusal), 6, 7 and 16
+  (delivered in `task-289`), 12 and 14 (`bug-391`, above), 17 and 19 (kit lessons).
+- **Stop-the-line share after filing:** no open v0.3 task (the `for f in docs/04_memory/v0.3/task-*.md …` count of
+  the W3 B9 ingest plan prints nothing); this ingest files no task.
+- **Checks (2026-10-18)** at `92918bbe` (the last amend). `node scripts/check-governance.cjs --base 1c4a3a43`: 30
+  `wf()` commits and 0 other commits, gated 0 findings, history 0 findings, 0 entries not checked.
+  `node scripts/lint-claims.cjs --base 1c4a3a43` → `0 warnings in 0 files (warn-only), 9 files read`. `npx jest
+  test/docs --maxWorkers=2` under the slot → `Test Suites: 26 passed`, `Tests: 284 passed`.
+- **Finalized by hand**, as the W3 B9 plan was: `active → done` with a hand `wf(plan): finalize … [active → done]`
+  commit that changes only `status:`.
+- **Ids not pushed.** This branch is not pushed by instruction, so `bug-392`…`bug-398` are local until the
+  coordinator merges and pushes it.
 
 ### Retrospective
 
-None yet.
+- The proposal measured AGENTS.md at about 500 lines; `wc -l AGENTS.md` at `1c4a3a43` → `568`. Two findings (A1, A2)
+  were behaviour a spec decides, found only by reading the spec at capture. Proposal: a triage proposal names, per
+  finding, the spec clause that governs it, or says none does.
