@@ -97,3 +97,17 @@ amend now loses more. Found by `task-227`'s independent review (W3 B5), checked 
 
 The fix (whoever carries this bug, `task-252` today) states the `--trailer` rule for these trailers as well, and the
 governance rule above is part of the expected behaviour.
+
+**Handover (2026-10-18, approver ruling D6, `user-docs-rel-v0.3-plan`).** The governance rule above moves to
+`bug-391` (`open`, filed by `bug-ingest-rel-v0.3-user-docs-findings-plan`); this bug's expected behaviour is the
+documented `--trailer` rule for `WingFoil-Version:` and the workflow trailers, which `task-252` delivers.
+
+### Retrospective
+
+- Fixed in the documents by `task-252`: `AGENTS.md` §5.1 states the `git commit --amend --no-edit --trailer` rule (no
+  new paragraph after the trailer paragraph) for `WingFoil-Version:` and the workflow trailers, and corrects the cleanup
+  sentence (the tool passes `--cleanup=whitespace` because `git commit -m` follows `commit.cleanup`); `git-conventions`
+  1.9 §8 extends the rule to `WingFoil-Instance:`, `WingFoil-Step:` and `WingFoil-Phase:`.
+- Not built here: the governance rule the 2026-10-11 amendment adds to the expected behaviour (report those trailers
+  outside the final paragraph, `scripts/check-governance.cjs`). It is code with a red-first test, outside a
+  documentation-only task (approver ruling D2); the approver handed it to `bug-391` (ruling D6, 2026-10-18), named in the handover above.
