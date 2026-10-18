@@ -101,8 +101,9 @@ plan started.
   - **C2 → `e2e-smoke` v0.3:** nothing new.
 - **Closed already or coordinator kit only (D):** registry items 4 (`bug-292` records the refusal), 6, 7 and 16
   (delivered in `task-289`), 12 and 14 (`bug-391`, above), 17 and 19 (kit lessons).
-- **Stop-the-line share after filing:** no open v0.3 task (the `for f in docs/04_memory/v0.3/task-*.md …` count of
-  the W3 B9 ingest plan prints nothing); this ingest files no task.
+- **Stop-the-line share after filing:** no open v0.3 task: `grep -h -m1 '^status:' docs/04_memory/v0.3/task-*.md |
+  awk '{print $2}' | sort | uniq -c` → `1 deprecated`, `163 done` over the 164 task files (`ls
+  docs/04_memory/v0.3/task-*.md | wc -l` → `164`); this ingest files no task.
 - **Checks (2026-10-18)** at `92918bbe` (the last amend). `node scripts/check-governance.cjs --base 1c4a3a43`: 30
   `wf()` commits and 0 other commits, gated 0 findings, history 0 findings, 0 entries not checked.
   `node scripts/lint-claims.cjs --base 1c4a3a43` → `0 warnings in 0 files (warn-only), 9 files read`. `npx jest
