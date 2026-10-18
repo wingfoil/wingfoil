@@ -12,37 +12,37 @@ release: ""            # optional — target release, e.g. "v0.1"
 tmpl_version: 261010   # Orignal template version
 ---
 
-<!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
-     `--tags` or `--set` value). Fill the required frontmatter fields and replace these placeholder
-     comments yourself; `wingfoil memory submit` then checks the required fields, moves `status`
-     forward and commits the document as you left it, naming in the commit body the content it
-     carries. -->
-
 ## Context
 
-<!-- Why this phase runs now, its preconditions, and what it produces. Keep coherent with the
-     workflow definition's phases / roles / actions / produces / checks (dl-019).
-     Every plan's preconditions include that the build in use is the pinned one (dl-095):
-     `npm run -s wingfoil -- --version` prints the version package.json pins for
-     `wingfoil-released`. -->
+Started on 2026-10-18 with `wingfoil workflow start bug-ingest` (dev build of `main` at `89c43d36`, run as
+`node dist/cli.js`), the first ingests of this repository run through the v0.3 workflow commands
+rather than by hand (`dl-186` E5). It captures `bug-389`: six v0.1 plans without frontmatter and eleven specification phases without produces. The element was added with
+`memory add --workflow bug-ingest-rel-v0.3-undeducible-config-plan --step bug-ingest.capture`, so its add commit carries the step's linkage
+(`spec-017` §4.8). The build is the dev build, not the pinned one, because the pinned 0.2.2 has no
+workflow commands (`wingfoil-cli` directive).
 
 ## Phases / Steps
 
-<!-- The ordered steps to execute against the workflow phase — actions, roles, gates, models. -->
+1. `bug-ingest.capture` (developer): `memory add` with the linkage, the body written, `memory submit`. Done.
+2. The gate: approver at `triage` (`open → triaged`, or `closed`).
 
 ## Handoff
 
-<!-- What requires the approver vs. the agent; the checkpoint(s) and the completion criteria. -->
+The approver decides the gate. Until then `workflow status` lists this instance among the pending
+approvals. The instance is ended with `workflow end` once its last phase is complete.
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while executing this plan — rulings, deviations from the
-     steps above, blockers — filled in as the phase runs, not written after the fact. -->
+- Branch `intake/engine-adoption`, worktree `../.wf2-wt/engine-adoption`, cut from `main` at
+  `89c43d36`, alongside the other ingests of the same discussion (`dl-186`, `dl-187`, `dl-188`,
+  `bug-388`, `bug-389`, `cp-002`).
+- `workflow start` wrote this plan's `add` and `submit` with the template body; this body was written
+  afterwards and recorded by `memory amend`, which needs the approver role (`dl-186` E5).
+- The AI attribution trailer was added to each commit with `git commit --amend --no-edit --trailer`,
+  in the same paragraph as the `WingFoil-*` trailers (`git-conventions` §8).
+- `node scripts/check-governance.cjs --base 89c43d36`: 24 `wf()` commits, 0 findings.
 
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
-     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
-     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
-     An item met by the phase as a whole goes here; one met on a single task or bug goes in that
-     element's own subsection. The retrospective's `explore` reads this subsection first. -->
+- The first engine-run ingests: capture deduced complete from the linked element, the gate routed to
+  the approver; the plan body could not be written before the plan was `active` (`dl-186` E5).
