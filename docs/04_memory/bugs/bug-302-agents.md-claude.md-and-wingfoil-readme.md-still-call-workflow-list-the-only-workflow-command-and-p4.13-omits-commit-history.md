@@ -81,4 +81,9 @@ item 7).** Two more vision locations of the same class, found by `task-217`'s an
 
 ### Retrospective
 
-None.
+- Fixed by `task-252` in the agent-facing documents: `AGENTS.md` §1 and §6 and `.wingfoil/README.md` name the nine
+  workflow commands and say what they do not do yet (execute a step, evaluate a check); the P4.13 narrative
+  (`P4.13-state-deduction.feature`) and its `06_features.md` rows (1.16) name the commit history state is deduced from,
+  as REQ-SYS-03 and REQ-STATE-02 do. `docs/agents.md`'s passages are `task-289`'s.
+- The same-class journey rows (`05_journeys.md`: `workflow show --name`, `workflow status` "planned") are outside this
+  bug's steps and go to a bug of their own (approver ruling, 2026-10-17).
