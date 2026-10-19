@@ -248,6 +248,13 @@ auto-memory. Findings go to the registry `devloop-kit/w3-releasesubmit-followups
   findings, exit 0; `node dist/cli.js memory history minor-v0.3` reads the commit as a transition
   `in-development → releasing` with no approver. A first attempt stopped before any edit (a `git rev-parse --short` with
   two revisions failed the `&&` chain); nothing was written by it.
+- 2026-10-19 — **S4 — `approve-release` approved** by Roberto Pompermaier (approver), in chat ("approve-release
+  approvato, procedi con finalize e merge"). Per D3 it is recorded by this plan's `finalize [active → done]` carrying
+  `Approver:` and `Reason:`; `minor-v0.3` stays `releasing` (`releasing → released` is `release-publishing`'s
+  `mark-released`). Then S5: merge into `main` `--no-ff`, both worktrees removed, WFCoord notified; push only on the
+  approver's instruction. Findings for the registry `devloop-kit/w3-releasesubmit-followups.md`: the e2e-smoke P3
+  undercount (H1, Retrospective) and the subject handover for `mark-released` (a `finalize`, D1) — neither a defect
+  of the tool, no bug filed.
 
 ### Retrospective
 
