@@ -314,6 +314,30 @@ scenario incl. the fake agent and Journey 4, `docs/examples/06-workflow-approval
   passed, 461 / 8355) and `docs/07_gates/rl-v1/rel-v0.3-coverage-summary.json`.
 - **task-265 AC 5:** the run URL and the line above are prepared for the approver's `memory amend task-265` (S7).
 
+### 2026-10-19 — task-265 amend, S8 (mark-released), close
+
+- **task-265 AC 5:** the approver ran `memory amend task-265 … --reason "Record the v0.3.0 publish run whose gate passed
+  on the main path (AC 5)."` on the prepared edit → `9dd9384e` `[done → done]` (Approver + Reason). Its
+  `WingFoil-Version:` is `0.3.0 (cb20695e…-dirty)`: this worktree's `dist/` had been rebuilt by jest's globalSetup during
+  S2's targeted run with the bump uncommitted (follow-up F3).
+- **S8 — mark-released** on the approver's instruction: `00ec01f0` `wf(release): finalize minor-v0.3 [releasing →
+  released]`, one file, `status:` only (spec-008 §2; release-submit F2). `node scripts/check-governance.cjs --base
+  origin/main` → gated 0 findings over the 2 `wf()` commits since `a4878196`.
+- **Follow-ups:** `devloop-kit/w3-releasepublishing-followups.md` F1–F4; triage proposal: nothing to file.
+- **Pending after this phase:** svc-012 (mcp.so not listing yet) and svc-014 (m8ven claim) stay `pending`; the
+  init-scaffold bug and the merge of `dl-186`'s R1 amend (`4f05e761`), both "after the v0.3.0 tag", await the
+  approver's instruction; next phases release-health (dl-089) and retrospective, then advance-pinned-build to 0.3.0.
+
 ### Retrospective
 
-None yet.
+- The 0.3.0 release commit was checked on the candidate before the tag (ruling D1: `test:no-identity` as
+  `tests.passing`), and the tag run went green at the first attempt — the first minor since v0.2.0 that needed no
+  re-tag. Evidence: run 39318377532 `success`, one tag object `08f3e77e`.
+- The MCP Registry listing worked through the OIDC job at its first run (bug-173's manual 403 avoided): registry
+  search → `io.github.wingfoil/wingfoil 0.3.0 active`.
+- The release-cycle / release-submit wording on re-running submit's checks after the release commit needed a ruling
+  (D1): proposal — `release-cycle.yaml` states that `publish`'s `tests.passing` is the run on the release commit, so the
+  question does not recur.
+- A tool commit was stamped by a dirty-tree build (F3): proposal — a brief line, rebuild on a clean tree before tool
+  commits in a worktree where jest ran.
+- `main` was pushed with the required `governance` check still pending (F2); the check passed before the tag.
