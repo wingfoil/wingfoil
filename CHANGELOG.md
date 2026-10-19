@@ -8,7 +8,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Every entry ends with the WingFoil Memory element(s) it comes from: a `done` task (`task-NNN`) or a
 `closed` bug (`bug-NNN`).
 
-## [0.3.0] - Unreleased
+## [0.3.0] - 2026-10-19
 
 The Project Workflow release. WingFoil now deduces where every started workflow stands from the Memory
 committed at `HEAD`, names the next step and who must take it, routes approvals to the approver, launches
@@ -16,6 +16,10 @@ an AI agent on a Memory element through a declared adapter and records the run. 
 names the build that wrote it. No workflow step is executed for you: people and agents carry out the
 steps. A project initialised by 0.2.x needs one edit before its workflow commands work: see *Upgrading
 from 0.2.x* below.
+
+The test results of the published build — the suites by kind, their counts and the coverage totals — are
+attached to the release as
+[`test-results.md`](https://github.com/wingfoil/wingfoil/releases/download/v0.3.0/test-results.md).
 
 ### Added
 
