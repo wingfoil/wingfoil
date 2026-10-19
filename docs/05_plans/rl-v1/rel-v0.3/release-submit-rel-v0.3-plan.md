@@ -203,6 +203,40 @@ auto-memory. Findings go to the registry `devloop-kit/w3-releasesubmit-followups
   PASS 74/74 on `2153f0f5`. Pre-count (re-measured by S1 on the candidate): tasks `163 done`, `1 deprecated`
   (`task-223`); bugs with frontmatter `release: v0.3` **193, all `closed`** — 86 with a plain `release:` line and 107
   with an inline comment, which the e2e-smoke P3 grep skipped (its "86 closed" is an undercount, H1).
+- 2026-10-19 — **S0 (candidate):** `plan submit` `b3162f25` (`draft → active`, §7 trailers by amend). In the candidate
+  worktree, under the slot, `npm run build` exit 0; `dist/build-info.json` → `{"version":"0.2.2","commit":
+  "2153f0f5ab79d05c07e625c631e96b4d11973b51"}` (no `-dirty`); `git status --porcelain` empty.
+- 2026-10-19 — **S1 — `pre-release-checks`: ALL PASS** — `devloop-kit/gate-releasesubmit.sh` on the candidate
+  worktree, HEAD `2153f0f5` (log `devloop-kit/gate-releasesubmit.log`, 18:51–19:16 +02:00, one heavy step at a time
+  under `waitslot.sh`; load 12.6 at the start, falling, from WingFoil-UI, not touched):
+
+  | Check | Command | Result |
+  |---|---|---|
+  | C1 | frontmatter `status:` of `docs/04_memory/v0.3/*.md` | `163 done`, `1 deprecated` (`task-223`), no other |
+  | C2 | frontmatter `status:` of bugs with frontmatter `release: v0.3` | **193 `closed`**, no other |
+  | C5 `typecheck.clean` | `npm run -s typecheck` | exit 0, no output |
+  | C3+C4 `tests.passing`, `tests.coverage(min: 80)` | `npm run -s test:report -- --maxWorkers=2` | exit 0 (740 s); **461 suites / 8355 tests passed**; statements 99.34, branches 97.39, functions 98.03, lines 99.71 |
+  | produces | `node scripts/test-report.cjs … --build-info dist/build-info.json --commit 2153f0f5 --out …` | exit 0; Commit `2153f0f5…`, Build `0.2.2 (2153f0f5…)`, Result **passed**; unit 358/6711, integration 41/491, BDD 59/1081, smoke 1/70, API-docs 1/1, lint.clean 1/1, total 461/8355, 0 failed, 0 skipped |
+  | C6 `tests.no-identity` | `npm run -s test:no-identity -- --maxWorkers=2` | exit 0 (645 s); **461 suites / 8355 tests passed** — the first run of this check on a candidate (`bug-172`) |
+
+  Against the e2e-smoke baseline (`devloop-kit/gate-e2esmoke-coverage.log`, `npx jest --coverage` on `e80e0373`): the
+  same 461 / 8355; branches 97.39 here (6389 / 6560) vs 97.4 there — at most one branch apart, cause not
+  investigated, far above the 80 floor; recorded, not filed. The summary is committed at `100e6750` as
+  `docs/07_gates/rl-v1/rel-v0.3-test-results-candidate.md`.
+
+  Standing set (informative), same tree: `npm run -s lint` 0; `npm run -s docs:api` 0; `npm run -s check:lockfile` 0;
+  `npm run -s check:mcp` 0 (the pinned 0.2.2, prompts 8 / resources 2, the known `bug-292` read failure of
+  `wingfoil://workflows`; the code build: prompts 8 / resources 4 / tools 0, every read answered);
+  `npm run -s check:audit` 0; `git status --porcelain` empty afterwards. On the phase branch:
+  `node scripts/check-governance.cjs --base 8209a7de` exit 0.
+
+  **C2′ (for the approver; not waived by the agent):** 131 bugs not `closed`, none with `release: v0.3` — 15 `open`
+  with an empty `release:`, 3 `triaged` with an empty `release:`, 113 `triaged` `v0.4`.
+  **C7:** DLs with `release: v0.3`: 84 `ready`, 2 `in-discussion` — `dl-165` (the MCP pre-flight server of
+  `agent execute` and `dna.yaml` at HEAD) and `dl-185` (merge-forward from `release/X.Y`), both among the ratifications
+  deferred to the retrospective. **Carry-over (read, unchanged):** `package.json` `0.2.2`; `server.json` `0.2.2` at
+  lines 10 and 15; CHANGELOG line 11 `## [0.3.0] - Unreleased`; README roadmap row (line 276) `| **0.3** | … | 🔄 Being
+  released |`.
 
 ### Retrospective
 
