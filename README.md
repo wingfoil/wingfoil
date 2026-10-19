@@ -273,7 +273,7 @@ WingFoil is built one pillar per release until all five are integrated in 1.0.
 | **0.1** | Project Memory + DNA | ✓ Released (not published to npm) |
 | **0.2** | + Project Directives, Memory approvals, DNA editing, MCP role Prompts | ✓ Released (`wingfoil@0.2.1` on npm) |
 | **0.2.2** | Patch: configuration at the repository root, staged npm publishing, first-use fixes | ✓ Released (`wingfoil@0.2.2` on npm) |
-| **0.3** | + Project Workflow: workflow state, approval routing, agent execution | 🔄 Being released |
+| **0.3** | + Project Workflow: workflow state, approval routing, agent execution | ✓ Released (`wingfoil@0.3.0` on npm) |
 | **0.4** | + Interaction Layer polish | Planned |
 | **1.0** | MVP complete | Planned |
 
