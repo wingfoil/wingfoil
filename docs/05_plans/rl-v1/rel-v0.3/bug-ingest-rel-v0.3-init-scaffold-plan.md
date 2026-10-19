@@ -42,6 +42,10 @@ finalized after triage and the branch `ingest/bug-init-scaffold-v0.3` merged `--
 
 - Branch `ingest/bug-init-scaffold-v0.3`, worktree `../.wf2-wt/bug-ingest-init-scaffold`, cut from `main` `df89679a`
   (the cherry-pick of `dl-186`'s R1 amend, `4f05e761`, on the approver's instruction — an exception to the merge rule).
+- Capture: `98df6ca6` add (linked to `bug-ingest.capture`), `7622d8b5` submit `[draft → open]`, severity `medium`,
+  feature `P5.1.1`, reproduced on the published `wingfoil@0.3.0`.
+- Triage: the approver's `1cf8dafb` approve `[open → triaged]` (fix in v0.3.1 as a minimal scaffold change), then
+  `353e590c` assign release `v0.3.1`. `workflow status` → `capture complete, triage complete`.
 
 ### Retrospective
 
