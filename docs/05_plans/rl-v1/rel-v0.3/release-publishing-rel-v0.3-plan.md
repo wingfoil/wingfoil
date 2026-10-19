@@ -211,7 +211,7 @@ only on instruction. Reminders to the approver: the init-scaffold bug and the me
 
 ### 2026-10-19 — S0–S2 and the candidate
 
-- **S0.** Plan added `ff09a96e` (code build `0.2.2 (098ae64f…)`, built under the slot), submitted `3dcd1de9`
+- **S0.** Plan added `ff09a96e` (code build `0.2.2 (098ae64f…)`, built under the slot), submitted `cb20695e` (`3dcd1de9` before the trailer amend; the first notes commit cited the pre-amend sha, corrected here)
   `[draft → active]`; both carry the §7 trailers in the `WingFoil-Version:` paragraph.
 - **S1 — secret sweep** (`node ../devloop-kit/secret-sweep.cjs`, the v0.2 plan §2 loop over `git ls-files` with
   `dist/validation/secret-scan.js`, at `3dcd1de9`): **5 blocking findings, all false positives with no secret
@@ -255,6 +255,64 @@ started 21:39:00+02:00 (load 2.21), done 22:05:26 (`devloop-kit/gate-releasepubl
 The candidate tree stayed clean but for the transcript (`?? docs/07_gates/rl-v1/rel-v0.3-staging-rehearsal.md`),
 copied to this branch and committed with these notes. Per `release-cycle.yaml` the rehearsal's smoke (the e2e
 scenario incl. the fake agent and Journey 4, `docs/examples/06-workflow-approval/run.sh`) stands as M's e2e-smoke run.
+
+### 2026-10-19 — tag pre-checks, S5 (handover), S6 (publish), S7 (verify)
+
+- **Merge of the evidence:** `56e62b49` (transcript + notes) merged `--no-ff` → `main` `a4878196`. On `main`:
+  `staging-rehearsal-passed` exit 0 (candidate `cc31d7a8…`); `evidence-only-since-candidate` → `only evidence paths
+  changed between the candidate cc31d7a8… and the tip a4878196…: 2 paths`, exit 0; `phase-branch-merged-to-integration-branch`
+  (`git merge-base --is-ancestor design/release_publishing_v0.3 main`) exit 0. Unpushed diff: governance gated 0
+  findings; secret scan 1 finding, this plan's own quotation of `W_UNRESOLVED_TOKEN = 'W_UNRESOLVED_TOKEN'` (no secret).
+- **S5.1 — push of `main`** on the approver's instruction: `098ae64f..a4878196`; the remote printed `Required status check
+  "governance" is expected` (pushed as admin before the check ran); the push's `ci`, `governance`, `scorecard` all
+  `success` on `a4878196`. After the push `node scripts/integration-branch.cjs --check-head --kind "" --version v0.3` →
+  `HEAD is on main, the integration branch of v0.3 (dl-159)` (A2 item 19); `git merge-base --is-ancestor cc31d7a8
+  origin/main` exit 0.
+- **S5.2 — service verify sweep** (dl-130 step 4, warn), run by the approver on 2026-10-19 22:11 (+02:00) with
+  `devloop-kit/services-verify-v0.3.sh` (each listed `verify`, log `devloop-kit/services-verify-v0.3.log`): all 19
+  command verifies exit 0 (svc-001…006, 008, 010, 012…022); browser checks by the approver: svc-009 (trusted
+  publisher), svc-011, svc-013 OK; **svc-012: mcp.so does not list wingfoil yet** (stays `pending`); **svc-014: the
+  m8ven server must still be claimed** (stays `pending`).
+- **S5.3 — `npm-publish` + trusted publisher, read-only** (runbook, task-267): protection rules `branch_policy` +
+  `required_reviewers` (`robypomper`); deployment branch policy `["v*","tag"]`; environment secrets `0`; repository
+  secrets `[]`; `npm view wingfoil@0.3.0 version` E404 and no remote tag before the tag.
+- **S5.4 — tag** on the approver's instruction: `git tag -a v0.3.0 -m "release v0.3.0" cc31d7a8ca3940c6ec96dca4e0ef77f32f52dfb1`
+  → tag object `08f3e77e`, `v0.3.0^{commit}` = `cc31d7a8…`; `git push origin v0.3.0`. WFCoord told the freeze is over.
+- **S6 — publish.yml run [39318377532](https://github.com/wingfoil/wingfoil/actions/runs/39318377532), `success`:**
+
+  | Job | Result | Time (UTC) |
+  |---|---|---|
+  | gate | success | 20:19:45 → 20:30:57 (**11 min 12 s**, limit 45: publish.yml D5) |
+  | stage | success | 20:31:00 → 20:32:02 |
+  | promote | waited on `npm-publish`; approved by the approver; success | 20:33:44 → 20:34:06 |
+  | release | success | 20:34:09 → 20:36:25 |
+  | mcp-registry | success | 20:34:09 → 20:36:29 |
+
+  Gate log (`gh api repos/wingfoil/wingfoil/actions/jobs/<gate>/logs`): `commit cc31d7a8… of tag v0.3.0 is on
+  origin/main; checked origin/main (ancestor), origin/release/0.3 (no such branch on origin) (dl-024, dl-159)` —
+  **task-265 AC 5's expected line, verbatim**; `tag v0.3.0 is an annotated tag`; `tag v0.3.0 matches package.json
+  version 0.3.0, and so do server.json and its packages`; 461 suites / 8355 tests passed; coverage 99.34 / **97.4** /
+  98.03 / 99.71 — **F3 closed**: branches 6390 / 6560 in CI vs 6389 on the local candidate run, one branch.
+  Promote: `+ wingfoil@0.3.0 (staged with id b98e05e1-b1ee-4f76-8997-26524a436b11)`, `staged with tag latest`,
+  provenance signed (Sigstore log index 3326160522). The approver approved the staged version on npm with 2FA.
+- **S7 — verify (2026-10-19 ~22:38 +02:00):**
+
+  | Check | Command | Result |
+  |---|---|---|
+  | dist-tags | `npm view wingfoil dist-tags --json` | `{"latest": "0.3.0"}` |
+  | metadata | `npm view wingfoil@0.3.0 version mcpName repository.url homepage --json` | `0.3.0`, `io.github.wingfoil/wingfoil`, `git+https://github.com/wingfoil/wingfoil.git`, `https://wingfoil.github.io/wingfoil/` |
+  | provenance | `npm view wingfoil@0.3.0 dist --json` | attestations, `predicateType` `https://slsa.dev/provenance/v1` |
+  | dependencies | `npm view wingfoil@0.3.0 dependencies --json` | zod, js-yaml, commander, @modelcontextprotocol/sdk (no `@anthropic-ai/sdk`, no `chalk`) |
+  | install | isolated `npm install -g --prefix <tmp> --cache <tmp> wingfoil@0.3.0` (empty userconfig); `wingfoil --version`; fresh repo `init --template Scrum`, `memory add --type task`, `memory submit` | exit 0; `0.3.0 (cc31d7a8ca3940c6ec96dca4e0ef77f32f52dfb1)`; init/add/submit exit 0, `draft → pending`, 3 commits, clean tree |
+  | Release | `gh release view v0.3.0 --json …`; `gh api repos/wingfoil/wingfoil/releases/latest --jq .tag_name` | published 20:36:22Z, not draft/prerelease, assets `coverage-summary.json`, `jest-results.json`, `lcov.info`, `test-results.md`; latest `v0.3.0` |
+  | CHANGELOG link (F5) | `curl -sIL -o /dev/null -w '%{http_code}' https://github.com/wingfoil/wingfoil/releases/download/v0.3.0/test-results.md` | `200` |
+  | MCP Registry | `curl -s 'https://registry.modelcontextprotocol.io/v0/servers?search=io.github.wingfoil/wingfoil'` | `io.github.wingfoil/wingfoil 0.3.0`, status `active`, published 20:36:26Z — **the first listing** (bug-173's 403 does not recur through the OIDC job) |
+  | Pages (task-266, C1) | `gh run list --workflow pages.yml -L 3` | run 39318377415 `push` `v0.3.0`: build 20:19:46 → 20:36:51 (waited for npm), deploy 20:37:07 `success`; the live site shows `0.3.0` |
+
+- **`publish` produces:** `gh release download v0.3.0 --pattern test-results.md --pattern coverage-summary.json --dir <tmp>`
+  → `docs/07_gates/rl-v1/rel-v0.3-test-results.md` (commit `cc31d7a8…`, run 39318377532, build `0.3.0 (cc31d7a8…)`,
+  passed, 461 / 8355) and `docs/07_gates/rl-v1/rel-v0.3-coverage-summary.json`.
+- **task-265 AC 5:** the run URL and the line above are prepared for the approver's `memory amend task-265` (S7).
 
 ### Retrospective
 
