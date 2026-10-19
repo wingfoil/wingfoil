@@ -237,6 +237,17 @@ auto-memory. Findings go to the registry `devloop-kit/w3-releasesubmit-followups
   deferred to the retrospective. **Carry-over (read, unchanged):** `package.json` `0.2.2`; `server.json` `0.2.2` at
   lines 10 and 15; CHANGELOG line 11 `## [0.3.0] - Unreleased`; README roadmap row (line 276) `| **0.3** | … | 🔄 Being
   released |`.
+- 2026-10-19 — **The approver accepts the C2′ waiver** (Roberto Pompermaier, in chat: "waiver accettato, procedi con
+  S3 enter-releasing"): the 131 bugs not `closed` and outside v0.3 do not hold the release, following the v0.1, v0.2
+  and v0.2.2 precedent; and **instructs S3**.
+- 2026-10-19 — **S3 — `enter-releasing` performed by the agent on the approver's instruction:** `main` unmoved
+  (`8209a7de` = `origin/main`, ancestor of the branch); commit **`fa777500`**
+  `wf(release): start minor-v0.3 [in-development → releasing]` (§7 trailers, no `Approver:`). `git show --stat` → one
+  file, `docs/04_memory/planning/rl-v1/minor-v0.3.md`, the one line `status: in-development` → `status: releasing`;
+  `awk '/^status:/{print $2; exit}'` → `releasing`; `node scripts/check-governance.cjs --base 8209a7de` → 0 gated
+  findings, exit 0; `node dist/cli.js memory history minor-v0.3` reads the commit as a transition
+  `in-development → releasing` with no approver. A first attempt stopped before any edit (a `git rev-parse --short` with
+  two revisions failed the `&&` chain); nothing was written by it.
 
 ### Retrospective
 
