@@ -2,7 +2,7 @@
 id: "minor-v0.3"
 type: release
 title: "WingFoil v0.3 - Project Workflow"
-status: in-development
+status: releasing
 version: "v0.3"
 pillar: "P4"
 features: [P4.1, P4.2, P4.3, P4.4, P4.5, P4.6, P4.7, P4.8, P4.9, P4.11, P4.13, P4.14, P4.15, P4.16, P5.3.1, P5.3.2, P5.3.3, P5.3.4, P5.3.5, P5.4.1, P5.4.2, P5.4.3, P5.4.4, X1.1, X1.2]
