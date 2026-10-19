@@ -209,6 +209,53 @@ only on instruction. Reminders to the approver: the init-scaffold bug and the me
 - **Service sweep (P-time listing, `node scripts/service-verify-sweep.cjs` at `098ae64f`):** 21 services, 19 `active`
   + `svc-012` and `svc-014` `pending`; 1 deprecated not listed.
 
+### 2026-10-19 — S0–S2 and the candidate
+
+- **S0.** Plan added `ff09a96e` (code build `0.2.2 (098ae64f…)`, built under the slot), submitted `3dcd1de9`
+  `[draft → active]`; both carry the §7 trailers in the `WingFoil-Version:` paragraph.
+- **S1 — secret sweep** (`node ../devloop-kit/secret-sweep.cjs`, the v0.2 plan §2 loop over `git ls-files` with
+  `dist/validation/secret-scan.js`, at `3dcd1de9`): **5 blocking findings, all false positives with no secret
+  material, all already on `origin/main`**: `.github/workflows/scorecard.yml:19` (a comment, `GITHUB_AUTH_TOKEN=$(gh
+  auth token)`), `docs/05_plans/rl-v1/rel-v0.2/release-publishing-rel-v0.2-plan.md:867` (prose naming a PEM header),
+  `src/agent/launch.ts:323` (`tokens = { input: … }`), `src/core/builtin-integrity.ts:246` (`const secret =
+  secretScanFailure(…)`), `src/workflow/deduce.ts:83` (`W_UNRESOLVED_TOKEN = 'W_UNRESOLVED_TOKEN'`). The `bug-055`
+  fixtures of `test/validation/secret-scan.test.ts` no longer appear (built at runtime since v0.3, CHANGELOG *For
+  contributors*). Nothing stops the phase.
+- **S2.** WFCoord told at 2026-10-19 that `main` is frozen until the tag (SendMessage, before the merge). Release
+  commit **`f67826bb`** `chore(release): release v0.3.0 …`, six files: `package.json`, `package-lock.json` (×2),
+  `server.json` (×2), `CHANGELOG.md` (`## [0.3.0] - 2026-10-19` + the asset link, ruling F5), `SECURITY.md`
+  (`0.3.x Yes`, `< 0.3 No`), `README.md` row 0.3 (D3). `npm ci` exit 0; `npm run -s check:lockfile` exit 0;
+  `node scripts/check-release-tag.cjs v0.3.0` → `tag v0.3.0 matches package.json version 0.3.0, and so do server.json
+  and its packages`; `npx jest test/docs/community-health.test.ts test/cli/publish-metadata.test.ts
+  test/lint/version-bump.test.ts test/docs/llms-txt.test.ts` → 4 suites / 179 tests passed;
+  `node scripts/check-governance.cjs --base 098ae64f` → gated 0 findings. `git grep "0\.2\.2"` outside Memory, plans,
+  gates, CHANGELOG and tests names only history (publish.yml notes, issue template examples, directive comments).
+- **The candidate.** `git merge --no-ff design/release_publishing_v0.3` on `main` → **M = `cc31d7a8`**
+  (`cc31d7a8ca3940c6ec96dca4e0ef77f32f52dfb1`), local, not pushed; `git diff --name-only 098ae64f cc31d7a8` → the six
+  release-commit files + this plan. Detached worktree `../.wf2-wt/release-publishing-v0.3-candidate` at M for S3/S4
+  (`devloop-kit/gate-releasepublishing.sh`).
+
+### 2026-10-19 — S3 and S4 on the candidate M = `cc31d7a8`
+
+`devloop-kit/gate-releasepublishing.sh` in the worktree detached at M, one heavy step at a time under `waitslot.sh`,
+started 21:39:00+02:00 (load 2.21), done 22:05:26 (`devloop-kit/gate-releasepublishing.log`):
+
+| Step | Command | Result |
+|---|---|---|
+| tree | `git status --porcelain` | 0 dirty |
+| install | `npm ci` | exit 0 (4 s) |
+| build | `npm run -s build`; `dist/build-info.json` | exit 0; `{"version":"0.3.0","commit":"cc31d7a8ca3940c6ec96dca4e0ef77f32f52dfb1"}` |
+| typecheck | `npm run -s typecheck` | exit 0 (19 s) |
+| lint | `npm run -s lint` | exit 0 (17 s) |
+| tag/version | `node scripts/check-release-tag.cjs v0.3.0` | exit 0 |
+| **`tests.passing`** (D1) | `npm run -s test:no-identity -- --maxWorkers=2` | exit 0, **461 suites / 8355 tests passed** (1373 s, vs 645 s at release-submit: load 4–6 from other processes) |
+| **`staging-rehearsal`** | `npm run publish:staging -- --expect-commit cc31d7a8ca3940c6ec96dca4e0ef77f32f52dfb1 --transcript docs/07_gates/rl-v1/rel-v0.3-staging-rehearsal.md` | exit 0 (114 s); 76 lines, 74 `ok`, 0 `not ok`; `wingfoil --version = 0.3.0 (cc31d7a8…) — match`; closing line `staged wingfoil@0.3.0 and smoke passed`; port 4873 free afterwards |
+| **`staging-rehearsal-passed`** | `node scripts/publish-staging.cjs --check-transcript <transcript>` | exit 0, `staging rehearsal passed for wingfoil@0.3.0 on candidate cc31d7a8ca3940c6ec96dca4e0ef77f32f52dfb1` |
+
+The candidate tree stayed clean but for the transcript (`?? docs/07_gates/rl-v1/rel-v0.3-staging-rehearsal.md`),
+copied to this branch and committed with these notes. Per `release-cycle.yaml` the rehearsal's smoke (the e2e
+scenario incl. the fake agent and Journey 4, `docs/examples/06-workflow-approval/run.sh`) stands as M's e2e-smoke run.
+
 ### Retrospective
 
 None yet.
