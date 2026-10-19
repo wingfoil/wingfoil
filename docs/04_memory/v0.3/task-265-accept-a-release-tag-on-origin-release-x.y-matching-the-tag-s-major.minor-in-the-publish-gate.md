@@ -300,6 +300,14 @@ v0.3.0 --json databaseId,url,conclusion` and the gate line from `gh run view <id
 (expected `… is on origin/main; checked origin/main (ancestor), origin/release/0.3 (no such branch on origin)
 (dl-024, dl-159)`).
 
+**AC 5 recorded (2026-10-19, v0.3 release-publishing, `release-publishing-rel-v0.3-plan` S6).** `gh run list --workflow
+publish.yml --branch v0.3.0 --json databaseId,url,conclusion` → run `39318377532`,
+https://github.com/wingfoil/wingfoil/actions/runs/39318377532, `success`. Its `gate` job log (`gh api
+repos/wingfoil/wingfoil/actions/jobs/<gate job id>/logs | grep "of tag v0.3.0 is on"`) → `commit
+cc31d7a8ca3940c6ec96dca4e0ef77f32f52dfb1 of tag v0.3.0 is on origin/main; checked origin/main (ancestor),
+origin/release/0.3 (no such branch on origin) (dl-024, dl-159)`: the main path of the publish gate passed on the
+v0.3.0 tag, as AC 5 expected.
+
 ### Retrospective
 
 - The design fixed the exact messages and fixture cases, so red and green met at the first run (38 → 0 failures, no
