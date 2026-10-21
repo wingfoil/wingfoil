@@ -226,7 +226,44 @@ to the retrospective follow-up register. Push only on instruction.
 
 - Worktree `../.wf2-wt/retrospective-v0.3` on `design/retrospective_v0.3` from `397cae9a`; `npm ci` (496 packages),
   `npm run build` under the slot (load 8.6 afterwards); `node dist/cli.js --version` → `0.3.0 (397cae9a…)`.
-- `memory add` → `522ded8c`, §7 trailers amended.
+- `memory add` → `522ded8c`, `memory submit` (`draft → active`) → `638a1938`, both with the code build
+  `0.3.0 (397cae9a…)` and the §7 trailers amended.
+
+### 2026-10-21 — S1 `explore` and S2 `collect-feedback`
+
+- **Miners.** Eight read-only sub-agents (M1–M6 as planned, M4 split into M4a/M4b; **M8 added**: the 14 dev-loop batch
+  registers kept outside the repository, which secondary source 3 names but the plan had left to M7), each with a
+  written brief; 917 cited rows in all (M1 85, M2 84, M3 63, M4a 35, M4b 50, M5 100, M6 20, M8 480). M7 (the
+  release-health report, the phase registers, ruling D4, the leads) read by the facilitator. The raw tables stay in the
+  session's working area; the inventory states each figure with the documents or the command behind it.
+- **Inventory** `docs/09_retrospectives/rl-v1/rel-v0.3-friction-inventory.md`: themes T1–T15 with "went well", the
+  release-health measurement, and **156 proposals** each with one proposed outcome (covered 64, element 53, restated
+  27, superseded 12). Every element cited in an outcome had its status and release read from its file by a script at
+  `397cae9a` (47 elements; three wording mismatches corrected before the commit).
+- **Post-check `secondary-sources.listed`: met** — six secondary sources listed with the commit read (the registers
+  outside the repository are not versioned: listed with their read date).
+- **Feedback readers.** Three read-only sub-agents, one per inbox, through `git ls-remote` + `gh api …?ref=<sha>`; no
+  local checkout, fetch or write in a consumer repository. svc-018's `main` had moved since the census
+  (`99ae1503…` → `bede69aa2b0e57a6dc935125b91bac9a01197918`, one commit outside the inbox): the record names the commit
+  actually read. svc-019 and svc-020 unchanged.
+- **Read record** `docs/09_retrospectives/rl-v1/rel-v0.3-feedback-triage.md`: 96 rows (31 + 26 + 39), outcomes proposed
+  covered 25, element 9, restated 28, superseded 24, declined 4, needs-info 6. Cites written in full
+  (`<service id>/F-<nnn>@<sha>`); a scripted pass over the path-like tokens of the record found none of a consumer's.
+- **Post-check `feedback-notes.recorded`: met** (every service listed with the commit read; one row per note with its
+  cite, restated content and one proposed outcome).
+- **Spot-check of the readers' reproductions** on a scratch repository with the code build: `init --template Kanban`'s
+  commit subject names `P5.1.1` (svc-020 F-036); `memory add --type bug --set severity=low` → `error: --set severity:
+  memory type 'bug' has no token {severity} in its id_pattern or path` (svc-018 F-011); `directive assign --directive x
+  --role global` → `error: unknown role 'global'` (svc-020 F-039, also lead LD-K1). All three as the readers report.
+- **Leads (ruling D7)** cross-checked: the consumer project's lead 1 is svc-020 F-039; the coordinator's leads 1/2/4/5
+  and the demo notes F-b/F-d map to `bug-377`, `dl-169`, `bug-400` and the release-publishing register's F5; lead C2 is
+  reproduced here (a `memory add --dry-run` message ends with `WingFoil-Version` only).
+- **Secret scan** (`scanText` of the code build) over the inventory, the read record and this plan: 0 blocking.
+- **D4 pre-check (v0.4 DLs needed by patch-v0.3.1):** candidates `dl-167` (who disposes of a patch's release-health
+  proposals — v0.3.1 is a patch), `dl-172` (manual checks: `dl-186` Q6 leaves the prose-check cleanup at S3 to it),
+  `dl-174` (tool-written config commits and the version rule — the hand adoption of the packs), `dl-175` (iteration
+  order — S3-b declares `waves:`). The other v0.4 DLs touch agent execute, the deduction readers, the catalogue or
+  capabilities, not S3.
 
 ### Retrospective
 
