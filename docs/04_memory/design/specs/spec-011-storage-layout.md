@@ -39,7 +39,7 @@ tool uses.
 ├── dna.yaml                          ← Project DNA (P2.4): modules, stack, team & roles, paths
 ├── memory.yaml                       ← Memory element registry (P1.13): per-type path/state machine/template
 ├── roles.yaml                        ← Directive role assignments (P3.2/P3.7): role → directive list
-├── workflows.yaml                    ← Workflow main config (P4.1): version + includes: [...] list
+├── workflows.yaml                    ← Workflow main config (P4.1): version + include: [...] list
 ├── directives/
 │   ├── built-in/                     ← Official P3.8 templates, which `wingfoil init` installs (task-057);
 │   │                                    EMPTY here (only a .gitkeep): this hand-authored config predates
@@ -112,7 +112,7 @@ resolves via the per-type `path` pattern declared in `memory.yaml` against the r
 | `dna.yaml`       | DNA (P2.4)          | Modules, tech stack, team & roles, resource `paths:` (the six query categories of `spec-002`'s Categories section: `sources, tests, docs, config, governance, runs`) |
 | `memory.yaml`    | Memory (P1.13)      | `types:` map — one entry per element type, each declaring `path` (must contain `{id}`), an optional `states` machine (`sequence`/`gates`/`waiting`), and `template:` (`frontmatter.required` + `file:` pointing into `memory/templates/`); an optional top-level `defaults.states` machine for every type that declares none (REQ-STATE-08). Schema: `spec-001`. The `wingfoil init` scaffold ships `defaults` only, with a commented per-type `states:` example on `bug` (`dl-072`) |
 | `roles.yaml`     | Directives (P3.2/P3.7) | `assignments:` map (role → list of directive **ids**, `frontmatter.id`) + a `global:` list of ids applied to every role; written as the "`roles.yaml` write contract" below states |
-| `workflows.yaml` | Workflow (P4.1)     | `version:` + `includes:` — an ordered list of paths under `workflows/custom/` (and, once populated, `workflows/built-in/`); this file inlines nothing itself, it only composes |
+| `workflows.yaml` | Workflow (P4.1)     | `version:` + `include:` — an ordered list of paths under `workflows/custom/` (and, once populated, `workflows/built-in/`); this file inlines nothing itself, it only composes |
 
 Each of these four files is independently loadable and schema-validated (REQ-SYS-02): editing
 `roles.yaml` must not require touching `workflows.yaml`, and vice versa.
@@ -155,6 +155,8 @@ place and commits only `.wingfoil/roles.yaml` (`wf(directive): assign <ids> to <
    content. The success carries `spec-008` §6's warning naming what the rewrite does not keep. `--force`
    does not force a rewrite: an edit that can be made in place is made in place, with no warning.
 4. **A missing `roles.yaml`** is written whole without the flag, since there is nothing to preserve.
+5. **The version** (`dl-174` (a), from `patch-v0.3.1`). Cases 1 and 3 raise the file's `version:` in the same commit,
+   by the rule `spec-006` §6 item 7 states; case 4 writes `version: 1.0` and raises nothing.
 
 Before any read the writer refuses a `roles.yaml` that is a symbolic link, that resolves outside the
 project root, or that carries uncommitted changes. After the read, and before any write, it refuses
@@ -169,7 +171,7 @@ included.
 - `custom/` — every workflow file that exists today: 6 startable `kind: main` workflows
   (`sw-life-cycle`, `bug-ingest`, `decision-log-ingest`, `adr-ingest`, `service-ingest`, `vision-change` —
   REQ-STATE-03 permits multiple open mains) plus every `kind: sub` workflow they compose via `include()` (REQ-SYS-06). `sub`
-  workflows cannot be started directly; only `workflows.yaml`'s `includes:` list — not the
+  workflows cannot be started directly; only `workflows.yaml`'s `include:` list — not the
   subdirectory a file lives in — determines what is loaded.
 
 ### `agents/{built-in,custom}/` split
@@ -354,3 +356,9 @@ workflow.** `dl-132` adds `vision-change` (`.wingfoil/workflows/custom/vision-ch
 the `workflows/{built-in,custom}/` split lists six startable mains. Nothing about the layout, the
 root-detection algorithm or the init-marker algorithm changes. Edited in place without a supersede or a state
 change (`dl-047`), pending the approver's `memory amend` at `task-212`'s review.
+
+**Revision (2026-10-21, `release-planning-rel-v0.3.1-plan`, identify-specs) — the writer raises `version:`; the
+manifest key.** For `patch-v0.3.1`, the `roles.yaml` write contract gains item 5, `dl-174` (a)'s rule by reference to
+`spec-006` §6 item 7. The `dl-022` cross-spec review of the same date: the manifest's key is `include` (singular),
+as `spec-003` Layer 1 makes it canonical and `.wingfoil/workflows.yaml` writes it; the layout and the table said
+`includes:`. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
