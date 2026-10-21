@@ -267,6 +267,9 @@ A forced rewrite keeps no comment and says so in a warning on the success (`spec
 (`release-planning-rel-v0.3-plan`). A write the schema refuses is reported as that validation failure
 first: `--force` cannot make it valid.
 
+**Every write raises the file's `version:`** (`dl-174` (a), from `patch-v0.3.1`): the four verbs' commit — in place
+or forced — sets `dna.yaml`'s `version:` to its next content revision, by the rule `spec-006` §6 item 7 states once.
+
 ### Categories (P2.5)
 
 `wingfoil paths [category]` queries `paths` by the seven category names **sources, tests, docs, config,
@@ -494,3 +497,8 @@ ignored: paths.health`. Categories gains `health`, holding exactly one directory
 scripts read and write one place. `init` does not scaffold it. A document valid before stays valid unless it declares
 two `health` directories. Edited in place without a supersede or a state change (`dl-047`); pending the approver's
 `memory amend` at `task-222`'s review.
+
+**Revision (2026-10-21, `release-planning-rel-v0.3.1-plan`, identify-specs) — the writers raise `version:`.** For
+`patch-v0.3.1`, § "Writes keep the file's text, or are refused" gains `dl-174` (a)'s rule, by reference to
+`spec-006` §6 item 7. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend`.
