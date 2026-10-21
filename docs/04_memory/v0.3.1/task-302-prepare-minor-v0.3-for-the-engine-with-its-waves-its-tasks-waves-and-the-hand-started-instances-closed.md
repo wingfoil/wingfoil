@@ -14,7 +14,7 @@ bug: []                # optional — LIST of bug ids this task closes (dl-045).
                        # here never advances past `triaged` (only a reject to `closed`, dl-123). A single string is still accepted for documents predating dl-045.
                        # dev-loop keeps the source bug's state in sync with this task via bug.sync_state
 wave: "w2"               # optional — the release wave this task runs in, one of its release's `waves:` keys (dl-100 §1 (a)); set at build-backlog or when the task is admitted
-depends_on: [task-293]         # optional — ids of tasks whose Execution Notes constrain this one (dl-015); authored at planning time, may be appended during design
+depends_on: []         # optional — ids of tasks whose Execution Notes constrain this one (dl-015); authored at planning time, may be appended during design
 tmpl_version: 261012   # Original template version
 ---
 
@@ -29,8 +29,10 @@ task prepares the edits and the batches.
 
 - (characterization) A script or table maps each `minor-v0.3` task to its wave from `dev-loop-rel-v0.3-plan`;
   the approver's `memory amend` per element applies it (one id per amend); `minor-v0.3` declares `waves:`.
-- (red-first) After the amends, `workflow show`/the deduction reads `minor-v0.3`'s implementation as complete for
-  every wave (a test or a recorded command and its output).
+- (red-first) After the amends, the deduction reads `minor-v0.3`'s implementation through its waves: each done task
+  completes its `dev-loop` sub by its `state` evidence (`spec-017` §12, instances started mid-release); a step still
+  missing a record is listed and closed by `workflow finalize` (no adoption: `dl-186` S3 runs no adoption on the
+  0.3.0 pin); a recorded command and its output show it.
 - (characterization) Every open hand-started instance whose work is done is closed by hand
   (`wf(plan): finalize … [active → done]`); `workflow status` lists only instances with work left, each named in the
   task's notes.
