@@ -5,7 +5,7 @@ title: "A root-owned `dist/` left by a container run makes every later host test
 status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: ""
 contributor: ""
 credit: ""
