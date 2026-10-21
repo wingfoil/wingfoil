@@ -5,7 +5,7 @@ title: "`loadDirectivesAtHead` spawns one git process per committed directive fi
 status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: "P3.5"
 contributor: ""
 credit: ""
