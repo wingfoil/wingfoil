@@ -2,7 +2,7 @@
 id: "bug-039-p3-8-scenario-names-unregistered-trunk-based-template"
 type: bug
 title: "BDD P3.8 Scenario 2 selects a \"Trunk-Based\" init template that does not exist (only Scrum and Kanban are registered; Trunk-Based is P4.18)"
-status: open
+status: triaged
 severity: "low"
 release-origin: "v0.2"
 release: ""
