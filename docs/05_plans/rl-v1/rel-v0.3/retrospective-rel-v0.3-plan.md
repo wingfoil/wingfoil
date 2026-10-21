@@ -333,6 +333,38 @@ Raised by the maintainer after the gate; each fact verified by command on the ph
   raised, so its body can change only through `memory amend` (`dl-108`, approver role): the theme row and, if taken, the
   element in its Dispositions go in that way.
 
+### 2026-10-21 — S5 `approve` and the rulings after it
+
+- On the approver's instruction ("il resto come proposto"): `retro-v0.3` `in-discussion → ready`; 17 decision-logs
+  ratified (`dl-185`, `dl-170`, `dl-058`, `dl-071`, `dl-167`, `dl-172`, `dl-174`, `dl-175`, `dl-141`…`dl-145`,
+  `dl-147`, `dl-148`, `dl-161`, `dl-178`); 25 bugs `open → triaged` (the 15 old ones and `bug-403`…`bug-412`), each
+  through `memory approve` with the code build, `Approver:` line, no AI trailers.
+- Releases assigned by hand (`wf(bug): assign release <r> to <id>`, one field each, §7 trailers): the 15 old bugs and
+  `bug-388`, `bug-390` → v0.4; `bug-389` → v0.3.1.
+- Six decision-log-ingest instances closed by a hand `wf(plan): finalize … [active → done]` with the approver's
+  `Approver:`/`Reason:` (gate-concurrency, consumer-feedback-loop, file-format-key, docs-showcase,
+  benchmark-cost-finding, agents-md: their decision-logs are `ready`); `workflow end` refuses them at `capture`
+  (`error: workflow 'decision-log-ingest' is not complete: current step decision-log-ingest.capture`), the hand-capture
+  class of `bug-324`. Their `Reason:` lines show the decision-log id cut to `dl-NNN-` (a `cut -c1-7` of the script):
+  cosmetic, left as committed. Still open: `run-token-counts` (`dl-188`, v0.4), `market-decisions` (`dl-140` deferred),
+  `service-ingest-rel-v0.3-listings-plan` (`svc-012` pending): `workflow status` → 3 open workflows.
+- After the gate the maintainer raised P-02 (S1 addendum) and asked the options of `dl-165` and `dl-077`; ruling
+  "come raccomandato" (2026-10-21): P-02 → `dl-202` filed (`in-discussion`, v0.4; item 3, `facilitator` in the agent's
+  `executes_as`, in patch-v0.3.1); `dl-165` ratified with (c), `dl-077` with (A).
+- `retro-v0.3` was already `ready`, so its body took the P-02 row, the Dispositions entry, the two ratifications and the
+  v0.3.1 item through `memory amend retro-v0.3` on the approver's instruction → `6c21dbcf` (`[ready → ready]`).
+
 ### Retrospective
 
-None yet.
+- The workflow's agentic phases could not run through `agent execute` (no agent executes `facilitator`, no TTY in the
+  session shell, no `agent` command in the pinned build): the mining ran as session sub-agents with written briefs
+  (proposal P-02, `dl-202`).
+- `capture`'s id cannot be followed as written (`dl-<n>` vs `retro-<version>`): `retro-v0.3` created by hand for the
+  third release in a row (`bug-362`, `dl-196`).
+- The richest friction record (480 rows) was in registers outside the repository; restated into the inventory, but no
+  command reproduces it (T14).
+- A point raised after the approve had to go through `memory amend`: put late points before the approve step, or plan
+  for an amend.
+- `workflow end` cannot close a hand-captured ingest instance; six were finalized by hand (`bug-324` class).
+- Went well: the consumer inboxes read for the first time through the services' remotes at a recorded sha, with every
+  note ruled; eleven read-only sub-agents in parallel kept the whole explore under two hours of wall-clock.
