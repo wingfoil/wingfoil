@@ -227,6 +227,12 @@ in-development`.
   one commit each; `dl-043`, `dl-140`, `dl-164`, `dl-188` in-discussion, and 17 `ready` ones), merged into `main` on
   the approver's instruction. On this line they keep `release: ""` and are **not selected by ruling** (R1); no
   decision-log or ADR is moved to a gated state here. Post-check `ready-decision-logs.covered` runs after S7.
+- 2026-10-21 — `backlog/v0.4-release-assign` merged `--no-ff` into `main` on the approver's instruction (`084eafe0`,
+  not pushed); its worktree and branch removed. `check:governance --base 19a66000` → 0 findings on both branches.
+- 2026-10-21 — **S5 `record-adrs`: skipped** (optional). The patch's architectural choices are the ratified
+  decision-logs (`dl-185`, `dl-186`, `dl-187`, `dl-172`, `dl-174`); none calls for an ADR.
+- 2026-10-21 — **S6 `identify-specs` started:** a read-only sub-agent surveys the scope with a written brief
+  (`agent execute` cannot launch here, `dl-202`).
 ### Retrospective
 
 - `scripts/check-mcp-registration.cjs`'s `EXPECTED_CHANNELS` comment asked to change the constant "in the commit that
