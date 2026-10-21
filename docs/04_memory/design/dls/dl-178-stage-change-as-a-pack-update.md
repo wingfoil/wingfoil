@@ -4,7 +4,7 @@ type: decision-log
 title: "Whether a change of a project's lifecycle stage is a governance change applied as an update of stage packs, rather than a dedicated command"              # REQUIRED — e.g. "Retrospective v0.1" or "Use Jest for unit testing"
 status: ready          # auto-set by wingfoil
 context: "feedback"            # optional — short label for the context, e.g. "retrospective", "planning", "ad-hoc"
-release: ""            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
+release: "v0.4"            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
 reported_by: ["svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-008@6b84e18f4195533b329320c08a96f7b2b3151e38", "svc-018-github-repository-wingfoil-templates-a-consumer-project-and-its-feedback-inbox/F-028@a15b053a7174fd5fa87d472cc394c7f8ad40b0ce"]        # optional — LIST of consumer feedback notes this element answers, as provenance only (dl-163 S3c), each "<service id>/F-<nnn>@<sha>": the full id of an active kind: repository service with a feedback_inbox, the note's id in that inbox, and the full sha of the consumer commit read; restate the note in this element, never copy it; a GitHub issue gets contributor + credit instead (COLLABORATION.md)
