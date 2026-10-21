@@ -2,7 +2,7 @@
 id: dl-143-one-generator-turns-dna-and-directives-into-every-agent-s-instruction-formats-agents.md-agent-skills-hooks-and-an-agent-plugins-package
 type: decision-log
 title: "One generator turns DNA and Directives into every agent's instruction formats: AGENTS.md, Agent Skills, hooks and an Agent Plugins package"
-status: in-discussion
+status: ready
 context: "ad-hoc"            # optional — short label for the context, e.g. "retrospective", "planning", "ad-hoc"
 release: ""            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
