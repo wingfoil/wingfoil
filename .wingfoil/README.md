@@ -20,12 +20,13 @@ repository root with `git mv` — this directory to `.wingfoil/`, the Memory to 
 repository; which build runs which is the `wingfoil-cli` directive's rule (§1):
 
 - **Memory operations** — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `amend`, `park` — and
-  the workflow commands (`workflow list`, `show`, `start`, `next`, `status`, `finalize`, `end`, `create`,
-  `remove`) run on the **code build**: `npm run build`, then `node dist/cli.js <command>`.
-- **Read commands** (`dna show`, `paths`, `directives list`, `memory search`, `memory history`) and the MCP
-  server run on the **pinned build**, the published version `package.json` pins as `wingfoil-released`
-  (`dl-095`): `npm run -s wingfoil -- <command>`. The workflow reads stay on the code build while the pin
-  predates the `{ type, path }` form of a `produces` entry (`dl-104` D3), which it refuses here.
+  the workflow commands that write a commit (`workflow start`, `finalize`, `end`, `create`, `remove`) run on
+  the **code build**: `npm run build`, then `node dist/cli.js <command>`.
+- **Read commands** (`dna show`, `paths`, `directives list`, `memory search`, `memory history`, `workflow
+  list`, `show`, `next`, `status`) and the MCP server run on the **pinned build**, the published version
+  `package.json` pins as `wingfoil-released` (`dl-095`): `npm run -s wingfoil -- <command>`. The workflow
+  reads came back to it when the pin reached a build that reads the `{ type, path }` form of a `produces`
+  entry (`dl-104` D3).
 
 The workflow commands track a workflow — they deduce its state, open and close a run as a `plan` element
 (`dl-019`), print the next step and record what nothing else completes — but no step is executed and no

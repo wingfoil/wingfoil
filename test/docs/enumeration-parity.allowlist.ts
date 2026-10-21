@@ -51,6 +51,8 @@ const SPEC_008 = 'docs/04_memory/design/specs/spec-008-cli-grammar.md';
 
 /** Every allowed finding, sorted by `enumeration|document|direction|item`. */
 export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'surplus', item: 'workflow.adopt', reason: PLANNED, plannedBy: ['task-294'] },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'surplus', item: 'workflow.rekey', reason: PLANNED, plannedBy: ['task-295'] },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'agent.execute', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'directive.assign', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'directive.create', reason: TOOLS_V04 },
@@ -66,12 +68,16 @@ export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.park', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.reject', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.submit', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.adopt', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.create', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.end', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.finalize', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.rekey', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.remove', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.start', reason: TOOLS_V04 },
   { enumeration: 'spec-005 Context flat commands', document: SPEC_005, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
   { enumeration: 'spec-008 §1 flat commands', document: SPEC_008, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
+  { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'workflow adopt', reason: PLANNED, plannedBy: ['task-294'] },
+  { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'workflow rekey', reason: PLANNED, plannedBy: ['task-295'] },
 ];
 

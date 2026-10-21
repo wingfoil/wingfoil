@@ -225,7 +225,7 @@ A phase's completion is deduced only from what it declares (P4.13; the deduction
 | Evidence | Declared by | What it observes |
 |---|---|---|
 | state | a state-changing action on the workflow's element (`memory.submit`, `memory.approve`, `element.set_state`, `<type>.set_state` of the element's own type) | the element's `status` |
-| created | a `memory.add(type: T)` followed by state-changing actions on what it added | the elements of type `T` the phase created, their `status` and their `{ type: T, path }` `produces` |
+| created | a `memory.add(type: T)` followed by state-changing actions on what it added | the elements of type `T` the phase created — linked by their add commit, or, from `patch-v0.3.1`, adopted into the step by a provenance record (`spec-017` §4.8, P4.21) — their `status` and their `{ type: T, path }` `produces` |
 | produces | a string `produces` entry, owned by the workflow's `element` (or by no element); an implicit-owner entry (below) is not evidence until rewritten (`spec-017` §4.3) | the path's existence |
 | selection | `where` without `iterate_over` (§ "Selections") | the selected elements' `status` |
 | include | `include:` | the included workflow's completion |
@@ -515,7 +515,8 @@ sed 's/.*: //' | sort | uniq -c`).
 
 Commits that are not Memory operations stay outside the `wf({type})` list: the configuration family
 `wf(directive): create|…` (`src/core/index.ts:1378`) and `wf(workflow): create|remove`
-(`spec-017` §7.7–7.8), the phase record `workflow: finalize …` (`spec-017` §7.9) and the run record
+(`spec-017` §7.7–7.8), the phase record `workflow: finalize …` (`spec-017` §7.9), the provenance records `workflow: adopt …` and
+`workflow: rekey …` (`spec-017` §4.8, §7.11–§7.12, from `patch-v0.3.1`) and the run record
 `agent: record <run-id>` (`spec-016`). `memory history` reads none of them as a Memory operation.
 
 #### Check expressions (`checks.pre` / `checks.post`)
@@ -623,6 +624,7 @@ checks:
   tests.coverage:          { run: [npm, run, coverage, --, --min, "{min}"], args: { min: "^[0-9]{1,3}$" } }
   docs.api.build:          { run: [npm, run, "docs:api"] }
   lint.clean:              { run: [npm, run, lint] }
+  spec-review.passed:      { manual: true }   # a human confirms it (dl-172 (a)); no command asserts it
 actions:
   tests.bdd.run:           { run: [npm, run, "test:bdd"] }
   approver.execute:        { manual: true }   # e.g. the 2FA `npm stage approve` no command can perform (dl-087)
@@ -634,7 +636,8 @@ The commands above are illustrative. This repository's file (`task-199`, `dl-090
 `dev-loop.yaml`'s `refactor.checks.post` — `docs.api.build` and `lint.clean`, which until then were
 bound only in a YAML comment on that key (`npm run docs:api`, `npm run lint`) — and every
 other token a command or a manual step can carry; the prose checks no command asserts stay unbound
-(`W_WORKFLOW_UNBOUND_TOKEN`).
+(`W_WORKFLOW_UNBOUND_TOKEN`) until, from `patch-v0.3.1`, those a human confirms on purpose are bound
+`manual: true` (`dl-172` (a), `dl-186` Q6).
 
 | Field                  | Type                     | Required | Description |
 |------------------------|--------------------------|----------|-------------|
@@ -643,7 +646,8 @@ other token a command or a manual step can carry; the prose checks no command as
 | `checks`               | map<token, CheckBinding> | no       | One entry per check token name. |
 | `actions`              | map<token, ActionBinding>| no       | One entry per action token name. |
 | `collections`          | map<name, (scalar \| map)[]> | no   | Named lists for `iterate_over: bindings:<name>`; entry keys per § "Collections". |
-| `CheckBinding.run`     | string[] (min 1)         | yes      | The argument vector; the first element is the program. Never passed to a shell (`dl-090` Q3 (a)). |
+| `CheckBinding.run`     | string[] (min 1)         | one of   | The argument vector; the first element is the program. Never passed to a shell (`dl-090` Q3 (a)). |
+| `CheckBinding.manual`  | `true`                   | one of   | From `patch-v0.3.1` (`dl-172` (a)): the check is confirmed by a human, on purpose, not by a command. Exactly one of `run` / `manual`, as for actions. It raises no `W_WORKFLOW_UNBOUND_TOKEN`; `workflow next` reports it `manual`, `evaluated: false` (`spec-017` §6.1); from v1.0 the engine waits for the confirmation instead of failing closed. `severity` and `args` do not apply to it. |
 | `CheckBinding.severity`| `warn` \| `reject`       | no       | Default `reject` (`dl-090` Q4). |
 | `ActionBinding.run`    | string[] (min 1)         | one of   | As for checks. |
 | `ActionBinding.manual` | `true`                   | one of   | The step has no command; the engine waits for a human to confirm it (`dl-090` Q2 (c)). Exactly one of `run` / `manual`. |
@@ -765,7 +769,7 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 | `E_WORKFLOW_ELEMENT_TYPE_UNKNOWN` | error | core | `element`, a Memory `iterate_over`, a `memory.add(type: T)`, a `produces` owner type, the `T` of a typed `<T>.set_state(s)` or `<T>.sync_state` action (`element.set_state` / `element.sync_state` name the bound element, not a type), or a value of a selection's `where.type` (§ "Selections"; a value carrying a `{…}` token is not decided) is not a `memory.yaml` type; path `element`, `phases[<i>].iterate_over`, `phases[<i>].where.type` (`phases[<i>].where.type[<k>]` for a list), `phases[<i>].actions[<a>]` or `phases[<i>].produces[<k>].type`, visited in that order within a phase; message `unknown memory type '<T>' (not defined in memory.yaml)` | P1.13; `bug-282` |
 | `E_WORKFLOW_COLLECTION_UNRESOLVED` | error | core | a collection `iterate_over` names no list in `dna.yaml` / `bindings.yaml`, or a `dna.yaml` list it names has an entry with no key, two entries sharing a key, or a key outside the ID characters (a `bindings.yaml` collection's keys are `E_BINDING_COLLECTION_KEY`'s); or an `element:<field>` names no field (`collection '<ref>' names no frontmatter field (expected [a-z][a-z0-9_-]*)`) or sits in a workflow that declares no `element` (`collection '<ref>' reads a field of the bound element, but workflow '<w>' declares no element`) | `dl-104` D2 (b); `task-230` |
 | `E_PHASE_CADENCE_EVENT_UNKNOWN` | error | core | a `cadence: { recurring: { on } }` event splits into no `<memory-type>-<state>` whose type `memory.yaml` registers and whose state an element of that type can enter (a `sequence` state, a reject or return target, or `deprecated`); path `phases[<i>].cadence.recurring.on`, message `cadence event '<on>' names no memory.yaml type and state (<memory-type>-<state>)` | open question 3, settled |
-| `W_WORKFLOW_UNBOUND_TOKEN` | warning | loader | an action or check token has neither a built-in nor a `bindings.yaml` binding | `dl-090` Q2 (c); open question 1, settled |
+| `W_WORKFLOW_UNBOUND_TOKEN` | warning | loader | an action or check token has neither a built-in nor a `bindings.yaml` binding (a `manual: true` binding is a binding, for checks from `patch-v0.3.1`) | `dl-090` Q2 (c); open question 1, settled |
 | `W_PHASE_PRODUCES_OWNER_IMPLICIT` | warning | loader | a string `produces` entry with an `{id}` or `{<field>}` token in a phase that `memory.add`s (not a self-creating workflow's creating phase) | `dl-104` D3 |
 | `W_PHASE_ACTION_UNTARGETED` | warning | loader | an untyped Memory action (`memory.submit\|approve\|reject\|deprecate`, `element.*`) with no element to act on: the workflow binds none, no `memory.add` precedes it in the phase, and the phase has no selection | `spec-017` §4.2 |
 | `W_PHASE_TOKEN_OUT_OF_SCOPE` | warning | core | a `{<type>.<field>}` token in `where`, `produces` or an action argument whose `<type>` is no enclosing scope's element type on some include path from a startable workflow (in an action argument, nor a type the phase's selection selects, § "Selections"), or whose `<field>` the type's template does not declare (a self-creating workflow's `{id}` before its element exists is not reported) | `spec-017` §4.1 |
@@ -778,7 +782,8 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 makes an unbound check fail closed and requires every action to be bound or `manual`; before any
 engine runs a binding, `workflow list` reports each unbound token as `W_WORKFLOW_UNBOUND_TOKEN` in
 `diagnostics` and exits `0`. It becomes an error when P4.10/P4.12 ship in v1.0 and the engine would
-otherwise fail closed at run time.
+otherwise fail closed at run time. A check that is manual on purpose is declared `manual: true` (`dl-172` (a)), so
+the warning keeps naming only the checks not bound yet.
 
 **Measured on this repository** at `997e8998` (branch `design/release_planning_v0.3`), applying the
 table to the committed files (`git show 997e8998:.wingfoil/<path>`; `npm run -s wingfoil -- workflow
@@ -1134,3 +1139,11 @@ bound to it. `E_WORKFLOW_ELEMENT_MISMATCH` and `E_WORKFLOW_COLLECTION_UNRESOLVED
 that validate under the `kind` alias is 27 (`ls .wingfoil/workflows/custom/*.yaml | wc -l` → 27). The
 deduction side is `spec-017` §4.6's revision of the same date. Edited in place without a supersede or a state
 change (`dl-047`), pending the approver's `memory amend` at `task-230`'s review.
+
+**Revision (2026-10-21, `release-planning-rel-v0.3.1-plan`, identify-specs) — manual checks and adopted
+elements.** For `patch-v0.3.1`: a `CheckBinding` takes `manual: true`, exactly one of `run` / `manual` (Layer 3's
+table and example, the unbound-token rule and its diagnostic row; `dl-172` (a)); the `created` evidence counts an
+element adopted into the step, and the provenance records join the commits that are not Memory operations
+(`spec-017` §4.8, §7.11–§7.12; P4.21, `cp-002`, REQ-STATE-11, `dl-187`). A `wingfoil init` scaffold that gains project bindings (`bug-400`)
+would revise § "Format"'s "it scaffolds no `workflows/bindings.yaml`" in its own task. Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend`.

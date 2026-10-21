@@ -98,8 +98,8 @@ the move. Start from `.wingfoil/README.md`.
 
 | Job | Build | How, from the repository root |
 |-----|-------|-------------------------------|
-| **Memory operations** — every verb that writes a `wf()` commit (`memory add`, `submit`, `approve`, `reject`, `deprecate`, `amend`, `park`), and the workflow commands | the **code build**, compiled from your worktree | `npm run build`, then `node dist/cli.js <command>` |
-| **Read commands** — `dna show`, `paths`, `directives list`, `memory search`, `memory history` — and **MCP** | the **pinned build**, the devDependency `wingfoil-released` (`dl-095`) | `npm run -s wingfoil -- <command>`; the MCP server `.mcp.json` registers (`npm run check:mcp`) |
+| **Memory operations** — every verb that writes a `wf()` commit (`memory add`, `submit`, `approve`, `reject`, `deprecate`, `amend`, `park`), and the workflow commands that write a commit (`workflow start`, `finalize`, `end`, `create`, `remove`) | the **code build**, compiled from your worktree | `npm run build`, then `node dist/cli.js <command>` |
+| **Read commands** — `dna show`, `paths`, `directives list`, `memory search`, `memory history`, `workflow list`, `show`, `next`, `status` — and **MCP** | the **pinned build**, the devDependency `wingfoil-released` (`dl-095`) | `npm run -s wingfoil -- <command>`; the MCP server `.mcp.json` registers (`npm run check:mcp`) |
 
 - The pinned version is what `package.json` declares for `wingfoil-released`; `npm run -s wingfoil --
   --version` prints it. It moves forward only, to published builds, through `release-planning`'s
@@ -107,9 +107,9 @@ the move. Start from `.wingfoil/README.md`.
   (`npm run -s wingfoil -- memory search --type bug --tag pinned-build`).
 - Do **not** use `npx wingfoil`: once `dist/` is built it runs this repository's own CLI, whichever build
   you meant.
-- The workflow reads (`workflow list`, `workflow show`, the MCP resource `wingfoil://workflows`) run on the
-  code build while the pin predates the `{ type, path }` form of a `produces` entry (`dl-104` D3), which the
-  version `package.json` pins for `wingfoil-released` refuses on this repository.
+- The workflow reads (`workflow list`, `show`, `next`, `status`, the MCP resource `wingfoil://workflows`) run on
+  the pinned build since the pin reached a build that reads the `{ type, path }` form of a `produces` entry
+  (`dl-104` D3); the workflow commands that write a commit stay on the code build with the Memory operations.
 
 | File                                                       | Pillar                 | What it holds                                                                                                                                                                                        |
 |------------------------------------------------------------|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
