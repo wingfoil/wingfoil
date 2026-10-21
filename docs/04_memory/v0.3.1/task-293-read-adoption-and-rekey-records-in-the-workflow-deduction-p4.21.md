@@ -37,7 +37,7 @@ write the records are `task-294` (`adopt`) and `task-295` (`rekey`).
 - (red-first) One owner: linkage or adoption; of two adoptions, the descendant wins; on unrelated branches neither
   counts and `W_PROVENANCE_CONFLICT` names both. An orphan (a `<workflow>.<phase>` the registry does not declare after
   rekeys) owns nothing and raises `W_PROVENANCE_ORPHAN` (§2).
-- (red-first) REQ-PERF-03 holds: the records are read in the one `git log` of §4.8's *Cost*; the git-process count
+- (characterization) REQ-PERF-03 holds: the records are read in the one `git log` of §4.8's *Cost*; the git-process count
   test is updated only if the count changes, with the reason.
 - (characterization) `workflow next`/`status` output shapes unchanged apart from the two diagnostics.
 
