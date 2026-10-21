@@ -31,8 +31,10 @@ charter renames step keys (`release-planning-rel-v0.3.1-plan` R6), and Q3 adopts
 - (red-first) The refusals of `spec-017` §10 (`--from` still declared, named by no record, `--to` unknown, no
   approver authority) and the usage errors of `spec-008` §12; a mapping already recorded exits `0` with
   `commit: null`, checked before the "named by no record" refusal.
-- (characterization) `docs/cli-reference.md` entry; the parity allowlists' `rekey` entries; the subject in the
-  governance check and in the two directives, with `task-294`.
+- (red-first) `--dry-run` prints `paths: []` and an empty diff (`spec-008` §2), as `adopt`'s does.
+- (characterization) `docs/cli-reference.md` entry; the parity allowlists' `planned` entries citing `task-295`
+  removed when it ships (the `TOOLS_V04` ones stay); the subject in the governance check and in the two directives,
+  and the `WingFoil-Rekey-From` / `WingFoil-Rekey-To` trailers in `git-conventions` §8, with `task-294`.
 
 ## Implementation Notes
 
