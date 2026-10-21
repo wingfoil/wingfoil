@@ -75,9 +75,16 @@ S3-b; the pin to `0.3.0` (`bug-292`); `dl-167`, `dl-172`, `dl-174`, `dl-175`; `d
 - **R4 — `waves:` / `wave:` on `minor-v0.3` (S3-b, E3).** Option (a): a task prepares the edits and the approver runs
   the `memory amend` per element in batches (one id per amend). `dl-175` (a) adds no task; the coverage check is met by
   this task's `ref:`.
-- **R5 — branch order.** Planning commits on this branch; at the end `--no-ff` into `release/0.3`, locally only.
-  Wave `w0` carries `dl-185`'s actions (and the approver's C2 setting); the first push of `release/0.3` follows `w0`,
-  on instruction. The merge forward into `main` follows the patch tag (`dl-185` C1 (b) (i)).
+- **R5 — branch order.** Planning commits on this branch; at the end `--no-ff` into `release/0.3`, pushed only on
+  instruction. `release/0.3` is already on `origin` at `19a66000` (`git ls-remote --heads origin release/0.3`,
+  2026-10-21), pushed before `dl-185`'s actions: wave `w0` carries them (and the approver's C2 setting) after the first
+  push, and they govern every later push of the line. The merge forward into `main` follows the patch tag (`dl-185`
+  C1 (b) (i)). The pin moves on this line only; `main` reaches it through that merge forward, its own
+  `advance-pinned-build` (v0.4) running independently, and a conflict on `package.json` / `package-lock.json` keeps
+  `main`'s values (`git-conventions` §1).
+- **R8 — S1 follow-ups (approver, 2026-10-21).** If `0.3.0` no longer shows `bug-323`'s surprise, the approver closes
+  it (`reject`, `triaged → closed`) with the command in the reason. The `wingfoil-cli` directive and AGENTS.md §3 are
+  changed together on this branch when the workflow commands return to the pinned build.
 - **R6 — S3 or Q3.** **Q3** (`dl-186`): S3 without packs — `adopt` built and released, the Memory prepared (S3-b), the
   packs' parameters declared. `rekey` is a **fixed** task (the charters rename step keys and the names are final). If
   W9 publishes before `w1`'s re-plan, the hand adoption of the packs enters `w2` as a scope change (`dl-100` §2, a row
