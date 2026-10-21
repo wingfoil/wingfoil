@@ -107,7 +107,7 @@ pin reads the Resource (`bug-292`); the `wingfoil-cli` directive re-checked agai
 (one bump per file on this branch against `release/0.3`). Post-checks: `npm view wingfoil versions` lists `0.3.0`;
 `npm run check:lockfile` and `npm run check:mcp` exit 0 (under `waitslot.sh`).
 
-### S2 — `define-scope` · product-owner · approver gate
+### S2 — `define-scope` · product-owner · approver review (no `approval:` declared)
 
 `memory add --type release … --set version=v0.3.1` (code build), then the body and frontmatter by hand: `kind: patch`,
 `patch-of: minor-v0.3`, `pillar: P4`, `features: [P4.21]` (the sweep of `cp-002`), `requirements:
@@ -207,6 +207,15 @@ in-development`.
   `bug-087`, `bug-162`, `bug-292` closed; `bug-323` no longer shows on 0.3.0 (`memory history` of `dl-163` →
   operation `amend` for `d5cc135b`, `ce5faa0b` on both builds) → its closure is proposed to the approver (R8).
   Full suite `npm test -- --maxWorkers=2` → 461 suites, 8355 tests passed.
+- 2026-10-21 — `bug-323` closed by the approver (`19f3eed8`, `triaged → closed`).
+- 2026-10-21 — **S2 `define-scope` done.** `patch-v0.3.1` added (`37133035`, `memory add`) and submitted
+  (`bc8932e5`, `draft → planning`): `kind: patch`, `patch-of: minor-v0.3`, `pillar: P4`, `features: [P4.21]`,
+  `requirements` → `retro-v0.3`; `## Scope` (four parts, waves `w0`–`w2`, the 20 % reservation), `## Pillar Focus`,
+  `## Success Criteria`. Post-checks: `frontmatter.required` — the seven fields present (read back with `grep`);
+  `change-proposals.swept` — the only `scheduled` change-proposal with `release: v0.3.1` is `cp-002`, feature `P4.21`,
+  in `features:` (`cp-001` is `in-analysis`, not swept). `release-planning.yaml` declares no `approval:` on
+  define-scope (the plan's earlier "approver gate" corrected): the approver reviews the scope, and a correction is a
+  `memory amend` of the release.
 
 ### Retrospective
 
