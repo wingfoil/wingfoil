@@ -10,8 +10,8 @@ pillar: "P4"             # REQUIRED — primary feature pillar, e.g. "P1"
 features: [P4.21]              # REQUIRED — feature IDs covered by this release, e.g. [P1.1, P1.2, P1.13]; [] if none. Left empty so an untouched scaffold fails submit (bug-147)
 requirements: "docs/04_memory/design/dls/retro-v0.3.md"       # REQUIRED — path to per-release backlog JSON, e.g. "docs/03_backlog/04_backlog/by-release/v0.1.json"
 release-line: "v1"       # REQUIRED — version of the parent release-line, e.g. "v1"; the file sits under the release-line's id, planning/rl-v1/ (memory.yaml `release` path)
-backlog_committed:     # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
-waves: []              # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
+backlog_committed: 14     # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
+waves: [w0]              # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
 tmpl_version: 261012   # Original template version
 ---
 
@@ -108,6 +108,15 @@ engine (`dl-186` S4).
   (`7a473a45`: the 0.2.2 known read failure removed, the empty `tools` channel expected); `wingfoil-cli`
   1.2 (`d4fef647`): the workflow reads back on the pinned build; `bug-323` closed by the approver
   (`19f3eed8`). Plan: `release-planning-rel-v0.3.1-plan`.
+- **identify-specs (2026-10-21).** No new spec; spec-017, spec-008, spec-003, spec-006, spec-004, spec-002 and
+  spec-011 revised in place for P4.21, `dl-172` (a) and `dl-174` (a), after a `dl-022` review (PASS-with-fixes);
+  the P4.21 BDD's not-found message aligned with spec-017 §10.
+- **build-backlog (2026-10-21): 14 tasks, `task-290` … `task-303`** — w0: `task-290`, `task-291` (`dl-185`),
+  `task-292` (`facilitator`); w1: `task-293`, `task-294`, `task-295` (P4.21), `task-296` (`bug-400`), `task-297`
+  (`bug-408`), `task-298` (`dl-172`), `task-299` (`dl-174`), `task-300` (`dl-167`); w2: `task-301` (`bug-389`),
+  `task-302` (`dl-175`, S3-b), `task-303` (`dl-186` Q6). The acceptance-criteria check failed once (2 blocking) and
+  passed after the fixes. Budget: `14 ÷ 6.5` ≈ 2.2 active days by count, ≈ 16.5 by size.
+- **commit-backlog (2026-10-21).** `backlog_committed: 14`, `waves: [w0]`; `w1` and `w2` are appended at the re-plan.
 
 ### Implementation (dev-loop, per task)
 
