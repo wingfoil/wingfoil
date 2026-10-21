@@ -29,10 +29,10 @@ and two workflow texts name `main` where they mean the integration branch.
 - (red-first) `.githooks/pre-push` takes the base from the line the branch was cut from: `origin/main` for a
   branch of `main`, `origin/release/X.Y` for a branch of a patch line (decided by `scripts/integration-branch.cjs` or
   the merge-base nearest to `HEAD`, recorded in design), and `origin/main` for a new `release/X.Y` itself, as today; a
-  test drives both cases on a scratch repository.
+  test drives all three cases on a scratch repository.
 - (characterization) `git-conventions` §9 says the hook is a local convenience and CI stays the enforcing check
   (C3 (i)), and documents the base rule.
-- (red-first) `release-health.yaml`'s `measure` names the measurement point as the tag, else the commit carrying
+- (characterization) `release-health.yaml`'s `measure` names the measurement point as the tag, else the commit carrying
   `released` on the release's integration branch (`main` for a minor, `release/X.Y` for a patch); `release-planning.yaml`'s
   `advance-pinned-build` says the in-flight release merges its integration branch after a patch tag; each file's
   `version:` bumped once; the conformance and config tests stay green.
@@ -42,8 +42,8 @@ and two workflow texts name `main` where they mean the integration branch.
 - **wave:** w0 · Size: S. **Files:** `.githooks/pre-push`, `.wingfoil/directives/custom/git-conventions.md` §9,
   `.wingfoil/workflows/custom/release-health.yaml`, `.wingfoil/workflows/custom/release-planning.yaml`, tests under
   `test/lint/` or `test/scripts/`.
-- **Coordination:** `task-290` edits `git-conventions` §1 (one bump per branch each; whichever merges second rebases
-  nothing and bumps nothing again if the first already did on the integration branch — `doc-versioning`).
+- **Coordination:** `task-290` edits `git-conventions` §1: each branch bumps the directive once against its
+  integration branch; a branch that merges after the other re-bumps when it syncs (`doc-versioning`).
 
 ## Execution Notes
 
