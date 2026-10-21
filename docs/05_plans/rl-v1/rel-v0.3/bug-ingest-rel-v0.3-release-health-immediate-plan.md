@@ -80,6 +80,14 @@ the filing is part of that run (`dl-089` §5 "in this run"), so it is committed 
   `2636c41a` `[open → open]`. After it: `scanProjectSurface` → 1002 files, 0 blocking; the suite → 85 tests passed;
   `npm run -s check:governance -- --base origin/main` → 0 findings. Nothing was pushed red.
 
+### 2026-10-21 — triage
+
+- Approver's rulings: `bug-401` option (a), accepted as the residue of `dl-094`; `bug-402` as recommended, v0.4.
+- `bug-401`: `b9c1a7a2` `reject [open → closed]` (Approver, Reason: the residue of a practice `dl-094` corrected,
+  pushed history never rewritten under its part (iii), out of the window from v0.4).
+- `bug-402`: `30a9f0d7` `approve [open → triaged]`, then `fa9ac956` assign release `v0.4`.
+- The plan is closed with `workflow end`.
+
 ### Retrospective
 
 - One `bug-ingest` instance binds one bug (`bug-401`); a second bug of the same run cannot be linked to it.
