@@ -233,6 +233,24 @@ in-development`.
   decision-logs (`dl-185`, `dl-186`, `dl-187`, `dl-172`, `dl-174`); none calls for an ADR.
 - 2026-10-21 — **S6 `identify-specs` started:** a read-only sub-agent surveys the scope with a written brief
   (`agent execute` cannot launch here, `dl-202`).
+- 2026-10-21 — **S6 survey result** (read-only sub-agent; claims spot-checked: the 17 specs `approved`, the BDD's
+  "document not found" against spec-017 §10, spec-011's `includes:`, spec-017 §12's counts, no spec citing P4.21 or
+  REQ-STATE-11). No new tech-spec; six approved specs revised in place: spec-017 (adopt/rekey, manual checks,
+  the writers' version rule), spec-008, spec-003, spec-006 (§6 item 7, `dl-174` (a)), spec-004, plus spec-002 and
+  spec-011 by reference. No spec for `dl-185`, `dl-202` item 3, `bug-408`, `dl-167`, S3-b. Approver rulings
+  (2026-10-21) on the six questions: (1) an adoption does not complete `dev-loop`'s record checkpoints; (2) `memory
+  history`'s provenance and the `memory add` warning are v0.4; (3) the BDD's message becomes `element not found:
+  <type>:<id>`; (4) `--plan` proposes, `--plan --apply` writes; (5) the tool's bump adds no history entry; (6) the
+  `dl-022` inconsistencies found are fixed in the same revisions.
+- 2026-10-21 — **S6 `spec-review.passed` (dl-022).** An independent read-only reviewer: PASS-with-fixes, no
+  blocking finding; 7 should-fix (orphan ownership, the conflict reading of `dl-187` rule 3, the rekey no-op order,
+  the single form with neither `--step` nor `--element`, `adopt` in three §10 rows, the literal `memory.add` values
+  among the candidate rules, spec-006's wrong `workflows.yaml` example) and 5 nits, all applied. Docs, validation,
+  lint and conformance suites green after the fixes (49 suites, 621 tests); `npx tsc --noEmit` exit 0. Committed by
+  the agent: the BDD and REQ-STATE-11 lines and the parity allowlists (`6cedee44`: the planned names of `adopt`/
+  `rekey` listed as scheduled by `patch-v0.3.1`'s `features:`, to become `planned` entries at build-backlog). The
+  seven spec edits are left uncommitted for the approver's `memory amend` (dry-run: each commits only its own
+  file, `[approved → approved]`).
 ### Retrospective
 
 - `scripts/check-mcp-registration.cjs`'s `EXPECTED_CHANNELS` comment asked to change the constant "in the commit that
