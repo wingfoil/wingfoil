@@ -269,11 +269,13 @@ wingfoil dna remove             → dna.remove           (v0.4, P5.2.3; dl-081)
 wingfoil directive create       → directive.create     (v0.4, P5.2.3)
 wingfoil directive assign       → directive.assign     (v0.4, P5.2.3)
 wingfoil directive remove       → directive.remove     (v0.4, P5.2.3)
-wingfoil workflow start         → workflow.start
-wingfoil workflow end           → workflow.end
+wingfoil workflow start         → workflow.start       (v0.4, P5.2.3; spec-017 §9)
+wingfoil workflow end           → workflow.end         (v0.4, P5.2.3; spec-017 §9)
 wingfoil workflow finalize      → workflow.finalize    (v0.4, P5.2.3; spec-017 §7.9, §9)
 wingfoil workflow create        → workflow.create      (v0.4, P5.2.3; spec-017 §7.7, §9)
 wingfoil workflow remove        → workflow.remove      (v0.4, P5.2.3; spec-017 §7.8, §9)
+wingfoil workflow adopt         → workflow.adopt       (v0.4, P5.2.3; spec-017 §7.11, §9; command from patch-v0.3.1)
+wingfoil workflow rekey         → workflow.rekey       (v0.4, P5.2.3; spec-017 §7.12, §9; command from patch-v0.3.1)
 wingfoil agent execute          → agent.execute        (v0.4; refuses every call until v1.0, spec-016 §7)
 ```
 
@@ -599,3 +601,9 @@ D-G, 2026-10-14) serves the same execution context also as a Resource. Its text 
 the same `element` and `state`, from one builder; its refusals are §3.4's, plus a role outside the start-time set.
 The Prompt is unchanged, and the server still registers no Tool. Edited in place without a supersede or a state
 change, per `dl-047` (no `version:` field); pending the approver's `memory amend` at `task-236`'s review.
+
+**Revision (2026-10-21, `release-planning-rel-v0.3.1-plan`, identify-specs) — §4.1's workflow Tools.** The Tools
+of `workflow adopt` and `workflow rekey` (P4.21, `dl-187`; the commands ship in `patch-v0.3.1`, their Tools with
+P5.2.3 in v0.4) are added, and `workflow start` / `workflow end` carry the v0.4 mark `spec-006` §3 and `spec-017`
+§9 already give them (the `dl-022` cross-spec review of the same date). Edited in place without a supersede or a
+state change (`dl-047`), pending the approver's `memory amend`.
