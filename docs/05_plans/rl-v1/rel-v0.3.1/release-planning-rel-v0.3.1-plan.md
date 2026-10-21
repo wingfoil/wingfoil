@@ -190,11 +190,29 @@ in-development`.
 
 - 2026-10-21 — worktree and branch cut from `release/0.3` at `19a66000`; code build `0.3.0 (19a66000…)`; plan added
   `6d101f97` (`memory add`, AI trailers amended in); rulings R1–R7 given by the approver on the proposal.
+- 2026-10-21 — plan submitted with the verb (`memory submit`, `e2f87e44`; `bug-390` concerns `workflow start` only).
+  The plan, a phase plan (`parent:` set), is not listed by `workflow status`, which lists instances; no
+  `release-cycle` instance runs on this repository before `dl-186` S4.
+- 2026-10-21 — R5 rewritten (`56487ddf`): `release/0.3` was already on `origin` at `19a66000`; R8 recorded.
+- 2026-10-21 — **S1 `advance-pinned-build` done.** Pre-check `npm run -s wingfoil -- --version` → `0.2.2`. Switch
+  `40ac96c7` (only `package.json`, `package-lock.json`): `0.2.2 → 0.3.0`, `npm view wingfoil versions` → `0.2.1,
+  0.2.2, 0.3.0`; `npm run check:lockfile` exit 0. `npm run check:mcp` then failed on two counts, both fixed in
+  `7a473a45`: the 0.2.2 `KNOWN_READ_FAILURES` entry (removed, `bug-292`) and the `tools` channel 0.3.0 declares empty
+  (`EXPECTED_CHANNELS` gains it, task-174); two tests of `test/cli/mcp-registration.test.ts` followed the pin (the
+  `--version` build stamp of `dl-111`; the disagreement case scaffolds a `.wingfoil/`, since 0.3.0 refuses a
+  repository without one). After: `check:mcp` exit 0 (pinned and `dist/cli.js`: prompts 8, resources 4, tools 0).
+  Directive re-check: `wingfoil-cli` 1.2 `d4fef647` — the workflow reads back on the pinned build (pinned and code
+  build print the same `workflow list/show/status`, `directives list`, `dna show`; `git diff --stat cc31d7a8
+  19a66000 -- src` empty); AGENTS.md §3 and `.wingfoil/README.md` aligned `afbd332d` (R8). `pinned-build` bugs:
+  `bug-087`, `bug-162`, `bug-292` closed; `bug-323` no longer shows on 0.3.0 (`memory history` of `dl-163` →
+  operation `amend` for `d5cc135b`, `ce5faa0b` on both builds) → its closure is proposed to the approver (R8).
+  Full suite `npm test -- --maxWorkers=2` → 461 suites, 8355 tests passed.
 
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
-     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
-     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
-     An item met by the phase as a whole goes here; one met on a single task or bug goes in that
-     element's own subsection. The retrospective's `explore` reads this subsection first. -->
+- `scripts/check-mcp-registration.cjs`'s `EXPECTED_CHANNELS` comment asked to change the constant "in the commit that
+  moves the pin", against `advance-pinned-build`'s rule that the switch commit touches only `package.json` and
+  `package-lock.json`; the constant changed in the next commit and the comment now says so (`7a473a45`).
+- The pin advance broke two pinned-build tests that no phase check names (`test/cli/mcp-registration.test.ts`: the
+  `--version` stamp, the uninitialised scratch repository): `advance-pinned-build`'s post-checks pass only after the
+  suite is run. Proposal: name the suite (or that file) among the phase's post-checks.
