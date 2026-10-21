@@ -28,7 +28,7 @@ the governance check's knowledge of the new subject.
 
 - (red-first) BDD P4.21 scenarios on `adopt` pass: "Adopt one existing element", "Propose the adoptions …",
   "Apply the proposed adoptions …", "Re-running an adoption … is a no-op", "Records naming a step that no longer
-  exists are reported as orphans" (with `task-295`'s rekey fixture where needed), the five error scenarios with their
+  exists are reported as orphans", the five error scenarios with their
   exact messages (`spec-017` §10), and the gate edge case.
 - (red-first) REQ-STATE-11's fit criterion: `--plan` byte-identical on two runs, 0 commits; `--apply` one commit per
   step, no file touched; a re-run writes 0 commits; the adopted file byte-identical.
@@ -37,9 +37,9 @@ the governance check's knowledge of the new subject.
 - (red-first) `scripts/check-governance.cjs` treats `workflow: adopt …` and `workflow: rekey …` as non-Memory records,
   as it does `workflow: finalize …`; `memory history` reads them as `operation: null`.
 - (characterization) `docs/cli-reference.md` gains the entry (`test/docs/cli-reference.test.ts`); the parity
-  allowlists' `scheduled` entries for `adopt` become `planned` here and are removed once it ships; the
-  `command-baseline` and `git-conventions` directives name the command and its subject; `e2e-smoke` gains an
-  `adopt --plan` probe (`dl-187` "What changes elsewhere").
+  allowlists' `planned` entries citing `task-294` are removed when it ships, the `TOOLS_V04` entries stay; the
+  `command-baseline` directive names the command, `git-conventions` its subject and, in §8, the `WingFoil-Adopted`
+  trailer; `e2e-smoke` gains an `adopt --plan` probe (`dl-187` "What changes elsewhere").
 
 ## Implementation Notes
 
@@ -47,7 +47,7 @@ the governance check's knowledge of the new subject.
   `spec-004` §4.1. **Files:** `src/core/`, `src/workflow/`, `src/cli/`, `scripts/check-governance.cjs`,
   `docs/cli-reference.md`, `test/docs/*.allowlist.ts`, the two directives.
 - **Depends on** `task-293`. `memory history` showing provenance and the `memory add` warning are v0.4 (approver
-  ruling 2026-10-21).
+  ruling 2026-10-21). The user guide's mention is the `user-docs` phase's (`documentation` directive), not this task's.
 
 ## Execution Notes
 
