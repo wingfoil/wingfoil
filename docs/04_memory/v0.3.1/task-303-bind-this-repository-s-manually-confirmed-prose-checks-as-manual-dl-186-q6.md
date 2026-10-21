@@ -28,7 +28,9 @@ not bound yet.
 
 - (characterization) Each check bound manual is listed with the reason a human confirms it; the checks a command
   can assert are not bound manual (they stay unbound or get a `run` binding).
-- (red-first) `spec-017` §12's warning count re-measured and the conformance test updated in the same commit.
+- (red-first) `spec-017` §12's warning count re-measured and the conformance test updated in the same commit;
+  `bindings.yaml`'s `version:` bumped once (after `task-298`'s bump, against the integration branch).
+- (characterization) `demo.rendered`, bound by `task-298`, is not rebound here.
 
 ## Implementation Notes
 
