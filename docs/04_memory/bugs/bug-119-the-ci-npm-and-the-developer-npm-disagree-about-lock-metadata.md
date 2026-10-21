@@ -5,7 +5,7 @@ title: "npm 10.9.0 strips `\"peer\": true` from twelve lock entries that npm 11 
 status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: ""
 contributor: ""
 credit: ""
