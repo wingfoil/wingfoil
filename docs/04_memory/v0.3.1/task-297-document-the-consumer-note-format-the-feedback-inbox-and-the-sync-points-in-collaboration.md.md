@@ -28,8 +28,8 @@ written. The consumers need it before their first sync on 0.3.
 
 - (characterization) `COLLABORATION.md` gains sections for the note format (as `dl-163` R4 defines it), the inbox
   (R1), the sync points (R5) and the sync procedure; the cite form matches the `reported_by` form `spec-010` owns.
-- (characterization) `test/docs/community-health.test.ts` (or the doc test that reads `COLLABORATION.md`) still
-  passes; `llms.txt` / `docs/site.yaml` updated if the page list changes.
+- (characterization) `test/docs/community-health.test.ts` asserts the four new headings (note format, inbox, sync
+  points, sync procedure) and passes; `llms.txt` / `docs/site.yaml` updated if the page list changes.
 
 ## Implementation Notes
 
