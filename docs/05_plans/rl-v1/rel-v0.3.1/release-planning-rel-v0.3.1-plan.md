@@ -216,7 +216,17 @@ in-development`.
   in `features:` (`cp-001` is `in-analysis`, not swept). `release-planning.yaml` declares no `approval:` on
   define-scope (the plan's earlier "approver gate" corrected): the approver reviews the scope, and a correction is a
   `memory amend` of the release.
-
+- 2026-10-21 — **S3 `triage-bugs`: nothing selected.** `open` bugs → 0 (frontmatter read over
+  `docs/04_memory/bugs/*.md`; `npm run -s wingfoil -- memory search --type bug --status open` → 0 matches). The
+  three bugs already in scope (`bug-389`, `bug-400`, `bug-408`) are `triaged`, v0.3.1, and go to build-backlog.
+- 2026-10-21 — **S4 `reconcile-governance`.** Pre-check `npm run check:role-directives` exit 0 (8 roles, 0 with
+  warnings). `dl-167`, `dl-172`, `dl-174`, `dl-175` (`ready`, ratified at the v0.3 retrospective) moved
+  `release: v0.4 → v0.3.1` by four hand `assign` commits (`862852bf`, `0a20206f`, `8b5b8b9a`, `76784e3b`), not by an
+  approver's amend as R1's proposal said: `memory amend` refuses a change of `release` ("release is assign's").
+  R1 on `main`: 21 decision-logs assigned `v0.4` on `backlog/v0.4-release-assign` (cut from `main` at `19a66000`,
+  one commit each; `dl-043`, `dl-140`, `dl-164`, `dl-188` in-discussion, and 17 `ready` ones), merged into `main` on
+  the approver's instruction. On this line they keep `release: ""` and are **not selected by ruling** (R1); no
+  decision-log or ADR is moved to a gated state here. Post-check `ready-decision-logs.covered` runs after S7.
 ### Retrospective
 
 - `scripts/check-mcp-registration.cjs`'s `EXPECTED_CHANNELS` comment asked to change the constant "in the commit that
