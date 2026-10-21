@@ -43,7 +43,7 @@ like-for-like re-measurement** is needed (`dl-089` §3). The window `v0.2.1..v0.
 package-lock.json .wingfoil/dna.yaml .wingfoil/memory.yaml` prints nothing: the measuring scripts and the
 catalogue are the same on the tag and on `main`.
 
-**Rulings asked of the approver at the start (proposals; recorded as rulings once given):**
+**Approver rulings at the start (2026-10-20, on the proposal of this plan: D1–D3 approved as proposed):**
 
 - **D1 — Node: measure under the pinned 22.12.0** (`n -d exec 22.12.0`, downloading it once), keeping the bound
   `--any-node` (harmless on the pin). Every toolchain metric is then on the pipeline's Node, not flagged
@@ -174,6 +174,88 @@ Push only on instruction.
   names the Prompt first. Goes to the retrospective (a DL proposal + a doc fix), not to this phase, unless an E0x
   metric touches it (none does: E01–E05 are the external visibility snapshot).
 
+### 2026-10-20 — S0, S1, and the start of S2
+
+- **S0.** `memory add` → `6185ec1b`, `memory submit` `draft → active` → `bd5216e2`, both with the code build
+  `0.3.0 (1b686151…)` (clean stamp) and the §7 trailers amended. The approver approved the plan and D1–D3.
+- **S1.** `git worktree add --detach ../.wf2-wt/release-health-v0.3-point cc31d7a8`; `npm ci` (496 packages),
+  `npm run build` under the slot; `node dist/cli.js --version` → `0.3.0 (cc31d7a8…)`, `git status --porcelain` empty.
+- **D1 in practice.** `n -d exec 22.12.0` failed: `n`'s default prefix `/usr/local/n` is root-owned ("sudo required
+  (or change ownership, or define N_PREFIX)"). Run with `N_PREFIX=../.wf2-wt/devloop-kit/n-prefix` (a user-owned
+  directory outside the repository; nothing system-wide changed): `node --version` → `v22.12.0`, `npm --version` →
+  `10.9.0` (the npm bundled with the pin, as setup-node gives the CI gate).
+- **S2 started** under `waitslot.sh` at load 11.6; stdout/stderr to the kit's `rh-v0.3-measure.out` / `.log`.
+
+- **S2, run 1 (15:57 → 20:21, 4 h 23 min wall, exit 0)** at `v0.3.0` = `cc31d7a8`, Node `v22.12.0`, npm `10.9.0`.
+  Timing from the inner worktree's files: the history, static and Memory halves 15:57 → 18:42 (~2 h 45 min), the
+  toolchain 18:42 → 20:21 (jest 18:46 → 19:31, coverage from 19:31). Every metric measured except Q12 (the latency
+  suite judged the run loaded: floor p95 1109 ms, load 8.24 → 6.12), Q17 (`docs/user-guide.md` states no bold
+  version for its install command), D01 and P06 (D2).
+- **Run 1 is discarded for Q02 (ruling A, 2026-10-20).** Q02 = 8355 tests, **2 failing**, both in
+  `test/storage/git-root.test.ts` (`findGitRoot` returned `/tmp`; `resolveProjectRoot` gave `E_NOT_AT_GIT_ROOT`).
+  Cause: an empty directory `/tmp/.git` (`ls -la --time-style=full-iso /tmp/.git` → created 2026-10-19 22:58:25 by a
+  process outside this project; `git -C /tmp rev-parse --show-toplevel` → "not a git repository"), and measure.cjs
+  builds its tree under `/tmp/wf-release-health-*/tree`; `findGitRoot` tests only that a `.git` entry exists. The tag
+  run in CI was green (8355 tests), so the published tree is not red. The test is not hermetic against a `.git`
+  above `os.tmpdir()`: a mechanical defect for S4 (dl-118). Run 1's report is kept outside the repository as
+  evidence (`devloop-kit/rh-v0.3-measure-run1.json`). On the approver's instruction `rmdir /tmp/.git` (empty: `ls -A`
+  → 0 entries); after it, `findGitRoot(mkdtemp(os.tmpdir()))` from the point's `dist/storage` → `null`. Run 2 waits
+  for the approver's go.
+- **Floors breached in run 1 (history half, deterministic at the point, so run 2 repeats them):** G07 = 22 of 5908
+  commits with an unknown identity; G10 = 99.96 % (2438 / 2439, `9e8011d1`); G14 = 8 blocking secret findings in
+  diffs. All three are `immediate_bug` (dl-089 §5): S5 files them after compare, with the evidence.
+
+- **Run 2, first attempt (2026-10-20 23:25):** queued on the slot at load 26.9 (CPU 76 % idle, swap 38 MB free of
+  2 GB: memory pressure from desktop applications, not this project's), never granted; the machine rebooted
+  overnight and the waiter died with no measurement started. No inner worktree left (`git worktree list`).
+- **S2, run 2 (2026-10-21 07:09 → 08:03, 53 min 22 s wall, exit 0)**, relaunched on the approver's go of the evening
+  before, at load 4.3, same vector, same Node (`v22.12.0` / npm `10.9.0`, lockfile sha256 `79b7c6ad…`), `/tmp/.git`
+  absent. **Post-check passed:** 49 catalogue ids, 49 entries, none missing; every non-measured entry has a reason
+  (D01, P06: D2; Q17: `docs/user-guide.md` states no bold version for its install command); the report validates
+  against `release-health.schema.json` (ajv 2020). Against run 1 only three entries differ: Q02 8355 tests,
+  **0 failing** (run 1: 2, the `/tmp/.git` cause); Q03 99.34 / 97.4 / 98.03 / 99.71, the tag run's CI figures exactly
+  (run 1: 99.32 / 97.37 / 98.03 / 99.7, the two failing tests' uncovered lines); Q12 **measured, 260 ms** (run 1:
+  loaded). Every other value, the run-time readings included, is identical: the measure is reproducible at the
+  point. The 4 h 23 min of run 1 against 53 min here is the load, not the script.
+- **Committed:** the report `1b8fdd4e` (`docs(health): …measured at v0.3.0`).
+
+### 2026-10-21 — S3 (compare), S5 (immediate bugs), S4 (propose)
+
+- **S3.** `node scripts/release-health/compare.cjs --release v0.3 --any-node --max-workers 2` under the slot: 4.7 s,
+  exit 0, no re-measurement (catalogue 2 on both sides). Summary: improved 8, stable 6, regressed 5, new 16,
+  not-comparable 1; floors held 10, breached 14; **16 findings** (the 14 breached floors: G05, G07, G08, G10, G14, G15,
+  Q07, Q09, Q10, Q20, P01, P03, P04, P05; regressed outside small-sample: G02, G04); 3 immediate on stderr (G07, G10,
+  G14). **Post-check passed:** each breached floor and each regressed trend row of `## Comparison` has its line in
+  `## Findings`. Draft committed `a66aac59`.
+- **S5.** `bug-ingest-rel-v0.3-release-health-immediate-plan` opened on this branch (`a5c22257` add, `3a6102e2`
+  submit). **`bug-401`** (G07 + G10, and P05's one failure: the 22 probe commits of 2026-09-28 after the `v0.2.1`
+  tag, residue of `dl-094`): add `6c64c2c5` linked to `bug-ingest.capture`, submit `ca799b96` `[draft → open]`.
+  **`bug-402`** (G14: 6 of the 8 findings are spec-007 patterns matching code; the other 2 are `bug-363`'s fixtures):
+  add `a6089acd` **unlinked**, submit `dffbdba1`. The instance binds one bug: after `bug-401`'s add, a second
+  `--step bug-ingest.capture` is refused ("step … is not on the frontier"), and `--workflow` alone would write
+  `WingFoil-Step: bug-ingest.capture@bug:bug-401-…`, linking the second bug to the first's step (`--dry-run`); so,
+  as bug-391..398's batch ingest did, it is added unlinked. Both `severity: low`, `release-origin: v0.3`; triage
+  asked of the approver. Q01 `true` and Q02 0 failing at the tag: no immediate bug for them.
+- **S4.** Every candidate read (status by `memory search`, then its body): confirmed `dl-173` (G08 item 1, Q09 item 7,
+  P05 item 4), `bug-345` (Q07), `bug-346` (Q10), `bug-363` (G14, 2 of 8); replaced `dl-169`/`dl-181` (G07),
+  `bug-364` (G05, Q07, Q10), `bug-384` (P01), `dl-173` for G15 and P03. **Nine proposals** `RH-v0.3-01…09`: G02, G04,
+  G05, P01+G08 residue, G15, Q20, P03, P04, D01 (ruling D2). Compare's drafted numbering changed (its G10 entry is
+  `bug-401`; Q20 moves from a proposed bug to a decision-log, the evidence being a process signal). **Post-check
+  passed:** each of the 16 findings is tracked by an element or carries an RH proposal. The tests that read the
+  committed reports pass with the new files (`npx jest test/release-health/baselines.test.ts
+  test/docs/presentation.test.ts --maxWorkers=2` → 2 suites, 59 tests).
+
 ### Retrospective
 
-None yet.
+- Run 1 took 4 h 23 min at load 8–11 against 53 min on an idle machine (run 2), the history half alone ~2 h 45 min:
+  the measure is load-bound, so a release-health run needs an idle machine, not only the dl-170 heavy-gate slot
+  (`/usr/bin/time -v` in `devloop-kit/rh-v0.3-measure*.log`).
+- A stray `/tmp/.git` outside the project turned two tests red inside measure's temporary tree (run 1): the
+  `findGitRoot` tests are not hermetic against a `.git` above `os.tmpdir()` — a candidate bug for the retrospective
+  (not filed: Q02 holds at the tag in run 2).
+- `n -d exec` needs a writable `N_PREFIX` on this machine (`/usr/local/n` is root-owned); bindings.yaml's comment and
+  measure.cjs's header name `n -d exec` without it.
+- A `bug-ingest` instance takes one bug; an immediate run with two breaches of different causes needs two instances
+  or an unlinked add.
+- Q17 is `not-measurable` because `docs/user-guide.md` states no bold version for its install command: no finding by
+  the rules, but the metric cannot work until the guide (or the metric) changes.

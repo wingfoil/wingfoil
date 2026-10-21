@@ -60,8 +60,16 @@ the filing is part of that run (`dl-089` §5 "in this run"), so it is committed 
 
 ### 2026-10-21 — capture
 
-- Plan: `memory add` → `bc3e9189` (amended with the §7 trailers).
+- Plan: `memory add` → `a5c22257` (with the §7 trailers amended), `memory submit` → `3a6102e2` `[draft → active]`.
+- `bug-401` (G07, G10, P05's one failure): add `6c64c2c5` with `--workflow bug-ingest-rel-v0.3-release-health-immediate-plan
+  --step bug-ingest.capture` (`--step capture` was refused: the key is `bug-ingest.capture`, as `workflow next`
+  prints it), submit `ca799b96` `[draft → open]`, `severity: low`, `release-origin: v0.3`.
+- `bug-402` (G14, 6 of 8): add `a6089acd` **unlinked**, submit `dffbdba1` `[draft → open]`, `severity: low`. After
+  `bug-401`'s add the instance's frontier is `bug-ingest.capture@bug:bug-401-…`: a second `--step bug-ingest.capture`
+  is refused, and `--workflow` alone would link `bug-402` to `bug-401`'s step (`--dry-run`), so `bug-402` is added
+  unlinked, as the batch ingest of bug-391..398 was.
+- Triage of both asked of the approver.
 
 ### Retrospective
 
-None yet.
+- One `bug-ingest` instance binds one bug (`bug-401`); a second bug of the same run cannot be linked to it.
