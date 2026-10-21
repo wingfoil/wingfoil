@@ -5,7 +5,7 @@ title: "An interrupt delivered only to `publish:staging` waits out the blocking 
 status: triaged
 severity: "medium"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: ""
 contributor: ""
 credit: ""
