@@ -2,7 +2,7 @@
 id: dl-141-wingfoil-builds-no-agent-runtime-of-its-own-after-v1.0-it-grows-into-the-organization-level-record-of-engineering-intent-across-forges-and-agents-plus-project-templates-and-governs-runtimes-it-does-not-own
 type: decision-log
 title: "WingFoil builds no agent runtime of its own; after v1.0 it grows into the organization-level record of engineering intent across forges and agents, plus project templates, and governs runtimes it does not own"
-status: in-discussion
+status: ready
 context: "ad-hoc"            # optional — short label for the context, e.g. "retrospective", "planning", "ad-hoc"
 release: ""            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
