@@ -5,7 +5,7 @@ title: "`directive remove` refuses an assigned directive, but no command unassig
 status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: "P3.2"
 contributor: ""
 credit: ""
