@@ -5,7 +5,7 @@ title: "BDD P3.8 Scenario 2 selects a \"Trunk-Based\" init template that does no
 status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: "P3.8"
 contributor: ""
 credit: ""
