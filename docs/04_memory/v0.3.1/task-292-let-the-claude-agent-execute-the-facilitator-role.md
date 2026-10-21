@@ -27,9 +27,9 @@ for v0.4 (item 3 only is taken here, `release-planning-rel-v0.3.1-plan` R3).
 
 ## Acceptance Criteria
 
-- (red-first) `node dist/cli.js dna …` (the `wf(dna): update` verb, `spec-002`) adds `facilitator` to
-  `team.agents[name=Claude].executes_as`; the commit is the verb's; `dna.yaml`'s `version:` raised (by the verb if
-  `task-299` has merged, otherwise by hand in the same branch).
+- (characterization) `node dist/cli.js dna …` (the `wf(dna): update` verb, `spec-002`) adds `facilitator` to
+  `team.agents[name=Claude].executes_as`; the commit is the verb's; `dna.yaml`'s `version:` raised by hand in the
+  same branch (`task-299`, which makes the verb raise it, runs in w1).
 - (red-first) `agent execute --role facilitator --element <dl> --dry-run` no longer refuses for the role; the tests
   that read `team.agents` (`grep -rln "executes_as" test/`) are updated.
 - (characterization) `check:role-directives` exit 0; `facilitator`'s directives (`traceability` and the globals)
