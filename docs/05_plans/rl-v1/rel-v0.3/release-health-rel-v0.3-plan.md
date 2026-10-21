@@ -245,6 +245,16 @@ Push only on instruction.
   committed reports pass with the new files (`npx jest test/release-health/baselines.test.ts
   test/docs/presentation.test.ts --maxWorkers=2` → 2 suites, 59 tests).
 
+### 2026-10-21 — close (S6)
+
+- `npm run -s check:governance -- --base origin/main` on the branch → 8 `wf()` commits and 4 others, gated 0
+  findings, history 0 findings. (A whole-history run without `--base` was stopped after 13 min: it judges every
+  commit since the introduction and is not the pre-push range.)
+- The approver accepted the proposals as ready for the retrospective and instructed the close on 2026-10-21: this
+  plan's finalize `[active → done]` by hand (the instance was not opened with `workflow start`), then the merge
+  `--no-ff` into `main`. `bug-ingest-rel-v0.3-release-health-immediate-plan` stays `active` until the approver
+  triages `bug-401` and `bug-402`.
+
 ### Retrospective
 
 - Run 1 took 4 h 23 min at load 8–11 against 53 min on an idle machine (run 2), the history half alone ~2 h 45 min:
