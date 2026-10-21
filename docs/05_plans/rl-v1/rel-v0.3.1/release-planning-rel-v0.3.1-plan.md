@@ -295,11 +295,29 @@ in-development`.
   6 nits. All applied: ten task bodies and the release's Scope item 4 edited in the working tree for the approver's
   `memory amend` (each is past its first state); R6 (the parameters go with the packs) and R5 (C2 tracked in `w0`)
   corrected here. `frontmatter.required` and `task.wave.declared` (`w0`–`w2`, declared at commit-backlog) hold.
+- 2026-10-21 — the approver ran the eleven `memory amend`s of the review (`685f1bfa` … `411ef2f7`).
+- 2026-10-21 — **S8 `commit-backlog` done.** Pre-checks: `backlog_committed: 14`, `waves: [w0]` fixed by the
+  approver's amend of the release (`9f55aeef`), with its Planning notes. The approver moved the 14 tasks
+  `pending → backlog` (`0fb36c2f` … `256e4ce3`, the reason stating the acceptance-criteria check) and the release
+  `planning → in-development` by hand (`a56b5aee`): `planning` is a `waiting` state of `release` — `memory approve`
+  and `memory submit` both refuse it (`illegal approve from "planning": not a gates state`), as in v0.3 (`2bc3071e`)
+  and v0.2.2 (`16e12769`). The plan is finalized by hand as the earlier release-planning plans were (`96a5e98e`,
+  `d13c390f`): it is a phase plan, which `workflow end` does not take.
 ### Retrospective
 
 - `scripts/check-mcp-registration.cjs`'s `EXPECTED_CHANNELS` comment asked to change the constant "in the commit that
   moves the pin", against `advance-pinned-build`'s rule that the switch commit touches only `package.json` and
   `package-lock.json`; the constant changed in the next commit and the comment now says so (`7a473a45`).
+- `memory amend` refuses a change of `release:` ("release is assign's"), so moving the four ratified decision-logs to
+  v0.3.1 was four hand `assign` commits, not the approver's amend the proposal named (`862852bf` … `76784e3b`).
+- The gates' task-status reader (`test/docs/support/name-resolvability.ts`) ignored every task whose status line
+  carries the template's trailing comment — 53 of 303 tracked tasks — so a `planned` allowlist entry citing a task
+  written from the current template failed as an unknown task (fixed in `c5992886`).
+- The `acceptance-criteria.consistent` check, run by an independent reviewer, failed the first backlog with two
+  blocking findings (a task contradicting `dl-172` Action 2 and `spec-017` §12; a Scope item with no task): the check
+  earned its place; 11 amends followed.
+- `release`'s `planning` is a `waiting` state with no verb, so commit-backlog's last step is a hand commit by the
+  approver every release (`a56b5aee`); proposal: a `release.set_state` binding or verb, with the engine.
 - The pin advance broke two pinned-build tests that no phase check names (`test/cli/mcp-registration.test.ts`: the
   `--version` stamp, the uninitialised scratch repository): `advance-pinned-build`'s post-checks pass only after the
   suite is run. Proposal: name the suite (or that file) among the phase's post-checks.
