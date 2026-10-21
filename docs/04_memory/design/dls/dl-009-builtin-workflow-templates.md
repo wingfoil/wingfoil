@@ -4,7 +4,7 @@ type: decision-log
 title: "Ship pre-built workflow templates instead of generating on-demand"
 status: ready
 context: scope
-release: ""
+release: "v0.4"
 tmpl_version: 260703
 ---
 
