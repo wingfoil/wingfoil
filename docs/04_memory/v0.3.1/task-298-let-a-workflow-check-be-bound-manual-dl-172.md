@@ -26,11 +26,13 @@ tmpl_version: 261012   # Original template version
 ## Acceptance Criteria
 
 - (red-first) `bindings.yaml` accepts `checks.<token>: { manual: true }`; both or neither of `run`/`manual` is a
-  structural error; `severity`/`args` on a manual check are refused or ignored as `spec-003` states.
+  structural error; `severity` or `args` on a manual check is a structural error too (`spec-003` Layer 3: they "do not
+  apply").
 - (red-first) A manual check raises no `W_WORKFLOW_UNBOUND_TOKEN`; `workflow next`/`show` report its binding kind
   `manual`, `evaluated: false`.
-- (characterization) `spec-017` §12's counts unchanged by this task alone (no check is bound manual yet here);
-  `task-303` binds them.
+- (red-first) `demo.rendered` is bound `manual: true` in `.wingfoil/workflows/bindings.yaml` (`dl-172` Action 2);
+  `spec-017` §12's warning count re-measured and `test/core/workflow-repository-conformance.test.ts` updated in the
+  same commit; `bindings.yaml`'s `version:` bumped once. The other prose checks are `task-303`'s.
 
 ## Implementation Notes
 
