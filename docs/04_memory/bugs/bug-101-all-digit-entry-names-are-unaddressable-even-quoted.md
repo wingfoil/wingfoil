@@ -5,7 +5,7 @@ title: "An entry named with digits alone stays unaddressable even when quoted, b
 status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: "P2.1"
 contributor: ""
 credit: ""
