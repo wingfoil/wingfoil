@@ -305,6 +305,34 @@ to the retrospective follow-up register. Push only on instruction.
   F-011).
 - Secret scan (`scanText`, code build) over every file changed since `397cae9a` under `docs/` (27): 0 blocking.
 
+### 2026-10-21 — S1 addendum: why the mining did not run through `agent execute`
+
+Raised by the maintainer after the gate; each fact verified by command on the phase worktree before writing it.
+
+- `retrospective.yaml` 1.6 declares `agent.execute` as the action of `explore` and of `collect-feedback`, both under
+  role `facilitator` (`grep -n "agent.execute\|role:" .wingfoil/workflows/custom/retrospective.yaml` → lines 32/34 and
+  60/62).
+- The only `team.agents` entry (`Claude`, adapter `claude-code`, `.wingfoil/dna.yaml:142–146`) has `executes_as:
+  [ developer, reviewer, qa, architect ]`: no `facilitator`. `selectAgent` (`src/agent/execute.ts:279–289`) finds no
+  agent with an adapter for the role (line 281–282) and refuses a named agent that does not execute it (line 286):
+  `node dist/cli.js agent execute --element decision-log:retro-v0.3 --role facilitator --dry-run` → `error: no agent in
+  dna.yaml with an adapter executes as role 'facilitator'`.
+- Concurrent causes: the interactive launch needs a terminal on stdin and stdout (`src/agent/execute.ts:643–645`), and so
+  does its `--dry-run` (`bug-392`); this session's shell has none (`--role architect` on the same element → `error:
+  interactive launch needs a terminal on stdin and stdout`). The pinned build 0.2.2 has no `agent` command (`npm run -s
+  wingfoil -- --help | grep -c "^  agent"` → 0).
+- Consequence: as written, the retrospective's two agentic phases cannot be launched with `wingfoil agent execute`;
+  the mining ran as read-only sub-agents of this facilitator session (S1, S2), each with a written brief.
+- Recorded in the friction inventory (T14 and proposal **P-02**, `restated`; the inventory now counts 157 proposals).
+  Options for the maintainer: (a) `facilitator` in the agent's `executes_as` (`wf(dna): update …`), weighing the role's
+  `traceability` directive and the roles kept human-only (`approver`, `product-owner`, `tech-lead`); (b) another role for
+  those phases (`architect`, `reviewer`); (c) a v0.4 decision-log on which workflow roles agents may execute, with a check
+  that flags an `agent.execute` action on a role no agent executes. Facilitator's recommendation: (c), with (a) as the
+  quick fix in v0.3.1. No element is opened without the maintainer's instruction.
+- `retro-v0.3` was already approved `ready` (this session, on the approver's instruction of 2026-10-21) when the point was
+  raised, so its body can change only through `memory amend` (`dl-108`, approver role): the theme row and, if taken, the
+  element in its Dispositions go in that way.
+
 ### Retrospective
 
 None yet.

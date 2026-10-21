@@ -206,6 +206,17 @@ Each theme states what the evidence shows, with counts and where they are writte
 - The richest friction record of the release (480 rows) sits in registers outside the repository.
 - `retrospective.yaml`'s `capture` allocates `dl-<n>-…` while its `produces:` and `compare.cjs` expect `retro-<version>`
   (`bug-362`, `triaged`, v0.4; plan ruling D1).
+- The two agentic phases of this workflow cannot be launched with `wingfoil agent execute` as written (raised by the
+  maintainer at the gate, verified 2026-10-21): `retrospective.yaml` 1.6 gives `explore` and `collect-feedback` the
+  action `agent.execute` under role `facilitator` (lines 32–34, 60–62), but the only `team.agents` entry (`Claude`,
+  adapter `claude-code`, `.wingfoil/dna.yaml:142–146`) has `executes_as: [ developer, reviewer, qa, architect ]`, so
+  `selectAgent` (`src/agent/execute.ts:279–289`) refuses: `node dist/cli.js agent execute --element
+  decision-log:retro-v0.3 --role facilitator --dry-run` → `error: no agent in dna.yaml with an adapter executes as role
+  'facilitator'`. Concurrent causes: an interactive launch, and its `--dry-run`, need a terminal on stdin and stdout
+  (`src/agent/execute.ts:643–645`; `bug-392`), which an agent session's shell lacks (the same command with `--role
+  architect` → `error: interactive launch needs a terminal on stdin and stdout`); and the pinned build 0.2.2 has no
+  `agent` command (`npm run -s wingfoil -- --help`). The phase's mining therefore ran as read-only sub-agents of the
+  facilitator's own session.
 
 ### T15 — Measurement under load
 
@@ -311,6 +322,7 @@ proves it). Statuses read at `397cae9a` with `awk '/^status:/{print $2;exit}'` a
 | LD-Xc | demo-preparation note F-c | `memory history` prints JSON by default; a human-readable default is asked. | element | `dl-043` (in-discussion; plan D4: ruled here) |
 | LD-Xd | demo-preparation note F-d | With the init scaffold, `workflow next` shows nothing until a workflow is started. | element | `bug-400` (triaged, v0.3.1) |
 | P-01 | approver, plan ruling D1 | A dedicated Memory type for retrospectives, whose `id_pattern` yields `retro-{version}`, so `capture`'s `memory add` and `produces:` agree. | restated | decision-log (memory.yaml change, P1.13), v0.4; root of `bug-362` (triaged, v0.4) |
+| P-02 | the maintainer at the gate | No workflow phase should declare `agent.execute` under a role no `team.agents` entry executes: the retrospective's `explore` and `collect-feedback` (role `facilitator`) cannot be launched with `agent execute` today. Options: (a) add `facilitator` to the agent's `executes_as` (`wf(dna): update …`), weighing the role's directives (`traceability`) and the roles kept human-only (`approver`, `product-owner`, `tech-lead`); (b) give those phases a role the agent executes (`architect` or `reviewer`); (c) a decision-log on which workflow roles agents may execute, with a check that flags an `agent.execute` action on a role no agent executes. | restated | (c) a decision-log, v0.4, with (a) as the quick fix in v0.3.1 (facilitator's recommendation); T14 |
 | MN-M2-4 | task-181…235 — task-217-*.md:180-181; task-226-*.md:22 | Apply dl-170 one-gate rule from the start of a batch (task-217); a kit helper that waits for the slot then runs the gate (task-226: chained with `;` not `&&`, tsc ran beside two other heavy gates). | element | `dl-170` (in-discussion) |
 | MN-M2-12 | task-181…235 — task-211-*.md:277-278 | Either state the `errorDetails` limitation in spec-005 section 3, or have `errorDetails` render arbitrary string arrays. | element | `bug-303`, `bug-355` (triaged, v0.4) |
 | MN-M2-14 | task-181…235 — task-222-*.md:150-151 | Decide whether extra `paths` categories are allowed without a warning. | element | `bug-316` (triaged, v0.4) |
@@ -394,11 +406,11 @@ proves it). Statuses read at `397cae9a` with `awk '/^status:/{print $2;exit}'` a
 | MN-M8-467 | batch registers — w3-b9 item 11 | Reviewer: file a DL (or dl-159 A2 amend) now on the merge-forward issues; a patch-bug triage approve/reject on main breaks git-conventions §1 rule 4 and must go via an ingest branch cut from release/X.Y, which no text says. | element | `dl-185` (in-discussion, v0.3; plan D4) |
 | MN-M8-475 | batch registers — w3-b9 item 19 | The future engine must render `{release.kind}` as "" for an exempt (pre-dl-092) release; the arg pattern accepts it, untested; handover to release-publishing v0.3. | covered | T9 (a task-to-task handover inside the release; every v0.3 task is `done` or `deprecated`) |
 
-**Counts:** 156 proposals — covered 64, element 53, restated 27, superseded 12. The `restated` rows are the new proposals the approver takes up or not at `additional-points`; `capture` files the ones taken (ids from the CLI).
+**Counts:** 157 proposals — covered 64, element 53, restated 28, superseded 12 (P-02 added after the gate, 2026-10-21). The `restated` rows are the new proposals the approver takes up or not at `additional-points`; `capture` files the ones taken (ids from the CLI).
 
 Ids: `RH-v0.3-NN` the release-health report; `PP-NN` the phase-plan retrospectives; `KR-<phase>-<item>` the phase
 registers kept outside the repository; `D4-140` release-publishing's ruling D4; `LD-<C|K|X><n>` the leads handed over
-by other sessions (C coordinator, K a consumer project, X a demo preparation); `P-01` the approver; `MN-<slice>-<row>`
+by other sessions (C coordinator, K a consumer project, X a demo preparation); `P-01` the approver; `P-02` the maintainer at the gate; `MN-<slice>-<row>`
 a proposal a miner found written in a source of its slice (the citation names the document, or the register item).
 
 ## Post-check
