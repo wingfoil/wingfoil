@@ -5,7 +5,7 @@ title: "SDK-raised MCP errors carry the `MCP error <code>:` prefix in the wire m
 status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: "P5.2.1"
 contributor: ""
 credit: ""
