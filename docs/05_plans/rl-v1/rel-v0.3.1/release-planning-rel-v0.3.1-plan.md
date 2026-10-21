@@ -78,15 +78,17 @@ S3-b; the pin to `0.3.0` (`bug-292`); `dl-167`, `dl-172`, `dl-174`, `dl-175`; `d
 - **R5 — branch order.** Planning commits on this branch; at the end `--no-ff` into `release/0.3`, pushed only on
   instruction. `release/0.3` is already on `origin` at `19a66000` (`git ls-remote --heads origin release/0.3`,
   2026-10-21), pushed before `dl-185`'s actions: wave `w0` carries them (and the approver's C2 setting) after the first
-  push, and they govern every later push of the line. The merge forward into `main` follows the patch tag (`dl-185`
+  push, and they govern every later push of the line. C2 — `svc-022` amended to cover `release/*` — is a tracked
+  approver step of `w0`, verified by `svc-022`'s `verify` before `w0` closes (a Success Criterion of the release). The merge forward into `main` follows the patch tag (`dl-185`
   C1 (b) (i)). The pin moves on this line only; `main` reaches it through that merge forward, its own
   `advance-pinned-build` (v0.4) running independently, and a conflict on `package.json` / `package-lock.json` keeps
   `main`'s values (`git-conventions` §1).
 - **R8 — S1 follow-ups (approver, 2026-10-21).** If `0.3.0` no longer shows `bug-323`'s surprise, the approver closes
   it (`reject`, `triaged → closed`) with the command in the reason. The `wingfoil-cli` directive and AGENTS.md §3 are
   changed together on this branch when the workflow commands return to the pinned build.
-- **R6 — S3 or Q3.** **Q3** (`dl-186`): S3 without packs — `adopt` built and released, the Memory prepared (S3-b), the
-  packs' parameters declared. `rekey` is a **fixed** task (the charters rename step keys and the names are final). If
+- **R6 — S3 or Q3.** **Q3** (`dl-186`): S3 without packs — `adopt` built and released, the Memory prepared (S3-b);
+  the packs' parameters (S2-a) go with the packs' adoption (corrected at S7's acceptance-criteria check: they have no
+  format of their own before the packs exist). `rekey` is a **fixed** task (the charters rename step keys and the names are final). If
   W9 publishes before `w1`'s re-plan, the hand adoption of the packs enters `w2` as a scope change (`dl-100` §2, a row
   in the release's `## Scope changes`, counted against `backlog_committed`).
 - **R7 — budget.** About 16 tasks: by count `16 ÷ 6.5` ≈ 2.5 active days (`dl-096`); by size ≈ 14 days (S ≈ 0.5,
@@ -251,6 +253,48 @@ in-development`.
   `rekey` listed as scheduled by `patch-v0.3.1`'s `features:`, to become `planned` entries at build-backlog). The
   seven spec edits are left uncommitted for the approver's `memory amend` (dry-run: each commits only its own
   file, `[approved → approved]`).
+- 2026-10-21 — the approver ran the seven `memory amend`s (`152d1370` spec-017 … `36dcb523` spec-011, each
+  `[approved → approved]`): S6 complete. The revised specs keep their `release:` (the revision is the amend);
+  build-backlog does not re-stamp them.
+- 2026-10-21 — **S7 `build-backlog`.** 14 tasks added and submitted with the code build (`task-290` … `task-303`,
+  `docs/04_memory/v0.3.1/`, all `pending`), each with `kind`, `wave`, `ref:`, classified acceptance criteria and
+  `depends_on`:
+
+  | Wave | Task | Ref / bug | Size |
+  |---|---|---|---|
+  | w0 | `task-290` git-conventions §1, the merge forward | `dl-185` C1 | S |
+  | w0 | `task-291` pre-push base, the two workflow texts | `dl-185` C3, C4 | S |
+  | w0 | `task-292` `facilitator` for the Claude agent | `retro-v0.3` (`dl-202` item 3) | S |
+  | w1 | `task-293` provenance records in the deduction | `dl-187` | L |
+  | w1 | `task-294` `workflow adopt` | `dl-187` | M |
+  | w1 | `task-295` `workflow rekey` | `dl-187` | M |
+  | w1 | `task-296` the init scaffold drivable (fix) | `bug-400` | M |
+  | w1 | `task-297` COLLABORATION.md notes, inbox, sync (fix) | `bug-408`, `dl-163` | S |
+  | w1 | `task-298` manual checks | `dl-172` | M |
+  | w1 | `task-299` writers raise `version:` | `dl-174` | M |
+  | w1 | `task-300` explore reads the patches' reports | `dl-167` | S |
+  | w2 | `task-301` v0.1 plans' frontmatter, specification produces (fix) | `bug-389`, `dl-186` | S |
+  | w2 | `task-302` `minor-v0.3` waves, hand-started instances closed | `dl-175`, `dl-186` | M |
+  | w2 | `task-303` prose checks bound manual | `dl-186` Q6 | M |
+
+  `bug-389`, `bug-400`, `bug-408` `triaged → planned` (`566e3f65`, `e16ef9e4`, `48b75f07`); `dl-186`, `dl-187` assigned
+  `v0.3.1` (`4bd8ed25`, `02d28d71`). The parity allowlists cite `task-293`…`295` (`c5992886`), which also fixed the
+  gates' task-status reader (53 of 303 tasks, those with the template's trailing comment, were unknown to it).
+  **Not a task:** the packs' parameters (S2-a) wait for the packs (Q3, R6); `dl-185` C2 (`svc-022` for `release/*`)
+  is the approver's setting. Post-check `ready-decision-logs.covered`: every `ready` decision-log with
+  `release: v0.3.1` is a task's `ref:` — `dl-167` (`task-300`), `dl-172` (`task-298`), `dl-174` (`task-299`),
+  `dl-175` (`task-302`), `dl-186` (`task-301`, `task-303`), `dl-187` (`task-293`…`295`). **Budget (R7):** by count
+  `14 ÷ 6.5` ≈ 2.2 active days (`dl-096`); by size ≈ 16.5 days (6 S, 7 M, 1 L); the 20 % reservation is about 3–4
+  tasks beyond these 14.
+- 2026-10-21 — **S7 post-check `acceptance-criteria.consistent`** (independent read-only reviewer, against the
+  executing roles' directives, the revised specs and the decision-logs): first pass **fails** — 2 blocking (`task-298`
+  left `demo.rendered` unbound against `dl-172` Action 2 and `spec-017` §12; the packs' parameters were in the
+  release's Scope with no task), 8 should-fix (an untestable criterion in `task-298`; classifications in `task-291`,
+  `task-292`, `task-299`; `task-291`'s note against `doc-versioning`; stale allowlist wording in `task-294`/`295`; no
+  `--dry-run` criterion in `task-295`; `git-conventions` §8's trailers; `task-302`'s completion path and dependency),
+  6 nits. All applied: ten task bodies and the release's Scope item 4 edited in the working tree for the approver's
+  `memory amend` (each is past its first state); R6 (the parameters go with the packs) and R5 (C2 tracked in `w0`)
+  corrected here. `frontmatter.required` and `task.wave.declared` (`w0`–`w2`, declared at commit-backlog) hold.
 ### Retrospective
 
 - `scripts/check-mcp-registration.cjs`'s `EXPECTED_CHANNELS` comment asked to change the constant "in the commit that
