@@ -4,7 +4,7 @@ type: decision-log
 title: "May `wingfoil directive create` take the id of a built-in directive? After task-057 it silently creates a shadowing override"
 status: ready
 context: "dev-loop-review"
-release: ""
+release: "v0.4"
 contributor: ""
 credit: ""
 tmpl_version: 260703

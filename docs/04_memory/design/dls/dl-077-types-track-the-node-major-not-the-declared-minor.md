@@ -4,7 +4,7 @@ type: decision-log
 title: "`@types/node` can only track the Node major, never the declared minor, so the type surface necessarily overshoots the `>=22.12.0` floor — and no guard can catch it"
 status: ready
 context: "build-contract"
-release: ""
+release: "v0.4"
 contributor: ""
 credit: ""
 tmpl_version: 260703

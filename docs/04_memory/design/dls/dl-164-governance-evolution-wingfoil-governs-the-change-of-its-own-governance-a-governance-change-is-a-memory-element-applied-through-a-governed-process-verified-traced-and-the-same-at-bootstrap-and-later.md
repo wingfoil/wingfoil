@@ -4,7 +4,7 @@ type: decision-log
 title: "Governance Evolution: WingFoil governs the change of its own governance — a governance change is a Memory element, applied through a governed process, verified, traced, and the same at bootstrap and later"
 status: in-discussion
 context: "vision"
-release: ""
+release: "v0.4"
 contributor: ""
 credit: ""
 tmpl_version: 261006   # Orignal template version

@@ -4,7 +4,7 @@ type: decision-log
 title: "--format console falls back to JSON for every read-only command, against spec-008 §2"
 status: in-discussion
 context: "dev-loop-review"
-release: ""
+release: "v0.4"
 contributor: ""
 credit: ""
 tmpl_version: 260703
