@@ -45,12 +45,18 @@ export const UNTRIAGED =
 export const AUDIT_V04 =
   "scheduled: P5.1.3 (wingfoil audit) is in minor-v0.4's features: list, which has no task for it yet; re-check when minor-v0.4 is planned";
 
+/** `workflow adopt` / `rekey` (P4.21): in `patch-v0.3.1`'s `features:`, specified before its build-backlog creates the tasks. */
+export const PROVENANCE_V031 =
+  "scheduled: P4.21 (workflow adopt, rekey) is in patch-v0.3.1's features: list, which has no task for it yet; re-check at its build-backlog";
+
 const SPEC_004 = 'docs/04_memory/design/specs/spec-004-mcp-surface-contract.md';
 const SPEC_005 = 'docs/04_memory/design/specs/spec-005-cli-command-contract.md';
 const SPEC_008 = 'docs/04_memory/design/specs/spec-008-cli-grammar.md';
 
 /** Every allowed finding, sorted by `enumeration|document|direction|item`. */
 export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'surplus', item: 'workflow.adopt', reason: PROVENANCE_V031 },
+  { enumeration: 'spec-004 §4.1 tools vs CORE_MODULES', document: SPEC_004, direction: 'surplus', item: 'workflow.rekey', reason: PROVENANCE_V031 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'agent.execute', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'directive.assign', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'directive.create', reason: TOOLS_V04 },
@@ -66,12 +72,16 @@ export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.park', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.reject', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'memory.submit', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.adopt', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.create', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.end', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.finalize', reason: TOOLS_V04 },
+  { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.rekey', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.remove', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.start', reason: TOOLS_V04 },
   { enumeration: 'spec-005 Context flat commands', document: SPEC_005, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
   { enumeration: 'spec-008 §1 flat commands', document: SPEC_008, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
+  { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'workflow adopt', reason: PROVENANCE_V031 },
+  { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'workflow rekey', reason: PROVENANCE_V031 },
 ];
 
