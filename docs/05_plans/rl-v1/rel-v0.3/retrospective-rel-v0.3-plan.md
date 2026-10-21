@@ -267,6 +267,44 @@ to the retrospective follow-up register. Push only on instruction.
   order — S3-b declares `waves:`). The other v0.4 DLs touch agent execute, the deduction readers, the catalogue or
   capabilities, not S3.
 
+### 2026-10-21 — S3 `additional-points` (approver gate)
+
+- **Pre-check `proposals.disposed`: met** — 156 proposals (inventory) and 96 notes (read record), one proposed outcome
+  each, presented with the themes, the release-health comparison and RH-v0.3-01…09, and the D4/D5/D6/D8 tables.
+- Points added at the gate: the coordinator's reminder that v0.4's `define-scope` waits for the maintainer's ruling on
+  the agent-integration plugins proposal (a second v0.4 precondition); the coordinator's question on `dl-163` S3f,
+  verified as missed (`grep -n dl-163` on `user-docs-rel-v0.3-plan` → nothing) and added as proposal `LD-C6`.
+- **Approver ruling (2026-10-21):** "come proposto, LD-C6 in v0.3.1; procedi con capture" — every proposal and note as
+  proposed; `LD-C6` → a bug in v0.3.1. Read by the facilitator as: the `restated` proposals of § 3 of the gate filed as
+  decision-logs and bugs (v0.4); the consumer notes `restated` and reproduced filed, those not reproduced (or post-1.0
+  requests) recorded as v0.4 inputs without an element, as the gate proposed; the ratifications carried to the
+  approve step, where `dl-165` (no recommendation), `dl-077` and the intake decision-logs need the approver's explicit
+  choice.
+
+### 2026-10-21 — S4 `capture`
+
+- `retro-v0.3` created by hand (ruling D1): `wf(decision-log): add retro-v0.3` → `99aa6256` (only the new file, §7
+  trailers); body written; `memory submit retro-v0.3` with the code build accepted the id outside `id_pattern`
+  (`draft → in-discussion`) → `d458feed`. **Post-check `frontmatter.required: [title]`: met.**
+- Its `## Release health` holds the comparison copied from the report and the RH dispositions in the
+  `| Proposal | Outcome | Element |` format; a re-implementation of `compare.cjs`'s `dispositions()` reader over the file
+  reads all nine rows (`RH-v0.3-01=element:dl-189…` … `RH-v0.3-09=restated`). `## Consumer feedback` holds the 96 rows.
+- **Elements filed** (code build, ids from the CLI, no workflow instance: the retrospective plan is their record;
+  each `add` and `submit` with the §7 trailers amended): `bug-403`…`bug-412` (10 bugs; `bug-408` release v0.3.1, the
+  others v0.4) and `dl-189`…`dl-201` (13 decision-logs, v0.4). No id collides with another branch
+  (`git log --all --format=%s | grep -c " <id>-"` → 2, the add and the submit, for the first and last of each run).
+  Consumer notes are cited in `reported_by:` (dl-163 S3c) on `bug-409`…`bug-412`, `dl-192`, `dl-197`…`dl-201`.
+- **Corrections at filing** (each on a check run then, recorded in `retro-v0.3` § Dispositions): `KR-RH-F7` covered,
+  `MN-M8-95` and `MN-M8-239` superseded, `MN-M8-317` and `LD-Xa` not filed (v0.4 inputs); svc-019 F-010 / svc-020 F-001
+  → `bug-400`; svc-019 F-015 → covered by `dl-138` (the Kanban scaffold's workflows assign no `facilitator`:
+  `grep -rn facilitator .wingfoil/workflows` on a fresh `init --template Kanban` → nothing).
+- Reproductions for the filed consumer defects on a scratch repository with the code build: `directives list` warns
+  of a dangling binding only with `--role qa` (svc-019 F-016); a duplicated `testing` directive yields two entries with
+  no field telling which applies (svc-019 F-022); `workflow list` from a subdirectory → `E_NOT_AT_GIT_ROOT` (svc-018
+  F-021); `memory submit --help` lists no `--reason` and `memory show` is an unknown command (svc-020 F-038, svc-019
+  F-011).
+- Secret scan (`scanText`, code build) over every file changed since `397cae9a` under `docs/` (27): 0 blocking.
+
 ### Retrospective
 
 None yet.
