@@ -247,7 +247,9 @@ to the retrospective follow-up register. Push only on instruction.
   (`99ae1503…` → `bede69aa2b0e57a6dc935125b91bac9a01197918`, one commit outside the inbox): the record names the commit
   actually read. svc-019 and svc-020 unchanged.
 - **Read record** `docs/09_retrospectives/rl-v1/rel-v0.3-feedback-triage.md`: 96 rows (31 + 26 + 39), outcomes proposed
-  covered 25, element 9, restated 28, superseded 24, declined 4, needs-info 6. Cites written in full
+  covered 25, element 8, restated 28, superseded 25, declined 4, needs-info 6 (svc-018 F-022 moved from element to
+  superseded at the facilitator's own review: a submit carries its body edit by design, named in `Carries content:`).
+  Cites written in full
   (`<service id>/F-<nnn>@<sha>`); a scripted pass over the path-like tokens of the record found none of a consumer's.
 - **Post-check `feedback-notes.recorded`: met** (every service listed with the commit read; one row per note with its
   cite, restated content and one proposed outcome).
