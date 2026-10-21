@@ -44,10 +44,10 @@ the consumers of 0.3.0 met first.
 4. **The Memory and configuration prepared (wave `w2`, `dl-186` S3-b, Q3).** The hand-started
    instances whose work is done are closed; the six v0.1 plans gain their frontmatter (`bug-389`);
    `minor-v0.3` declares `waves:` and its tasks `wave:` (`dl-175` (a)); the prose checks are declared
-   manual (`dl-186` Q6); this repository's paths, ids and agent name are declared as the packs'
-   parameters. The base and software packs are not published at planning (WingFoil-Templates W9):
-   if they are before `w1`'s re-plan, their hand adoption enters `w2` as a scope change; otherwise
-   they are adopted later through `rekey` (`dl-186` Q3).
+   manual (`dl-186` Q6). The base and software packs are not published at planning (WingFoil-Templates W9):
+   if they are before `w1`'s re-plan, their hand adoption — with this repository's paths, ids and agent
+   name declared as the packs' parameters (S2-a) — enters `w2` as a scope change; otherwise both are
+   adopted later through `rekey` (`dl-186` Q3).
 
 Done at planning, with no task: the pin advanced to `0.3.0` (`advance-pinned-build`, `bug-292`,
 `bug-323` closed) and the `wingfoil-cli` directive re-checked.
