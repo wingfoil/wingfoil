@@ -70,6 +70,18 @@ the filing is part of that run (`dl-089` §5 "in this run"), so it is committed 
   unlinked, as the batch ingest of bug-391..398 was.
 - Triage of both asked of the approver.
 
+### 2026-10-21 — bug-402 reproduced on its own document, amended
+
+- After the merge of `design/release_health_v0.3` into `main` (`a26f73dc`, local), the pre-push secret sweep
+  (`devloop-kit/secret-sweep.cjs`) flagged `bug-402` itself: its body quoted the flagged code lines verbatim, and
+  `docs/04_memory` is the scanner's surface, so `test/validation/secret-scan.test.ts` (REQ-SEC-08, "this
+  repository's own indexed … surface") failed with 6 blocking findings, all in `bug-402`. The agent prepared the
+  edit (the lines described, not quoted; the title too, the id unchanged); the approver ran `memory amend` →
+  `2636c41a` `[open → open]`. After it: `scanProjectSurface` → 1002 files, 0 blocking; the suite → 85 tests passed;
+  `npm run -s check:governance -- --base origin/main` → 0 findings. Nothing was pushed red.
+
 ### Retrospective
 
 - One `bug-ingest` instance binds one bug (`bug-401`); a second bug of the same run cannot be linked to it.
+- A bug about the secret scanner's false positives reproduced on its own text: a Memory document cannot quote the
+  lines it reports, and nothing at `memory submit` warned (the scan runs in the test suite, not in the verb).
