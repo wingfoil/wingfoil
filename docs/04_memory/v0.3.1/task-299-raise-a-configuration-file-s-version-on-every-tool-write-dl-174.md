@@ -32,7 +32,9 @@ tool-written config commit passes the governance check's `config-version` rule o
   `version: 1.0`.
 - (red-first) `--dry-run` shows the raised version in its diff.
 - (characterization) `doc-versioning` states that a tool write is a revision of its own and the
-  one-bump-per-branch rule applies to hand edits; `npm run check:governance` passes on a branch with two tool writes.
+  one-bump-per-branch rule applies to hand edits.
+- (red-first) On a scratch branch with two tool writes to one versioned file, `check:governance`'s `config-version`
+  rule passes (it fails before the change).
 
 ## Implementation Notes
 
