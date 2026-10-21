@@ -4,7 +4,7 @@ type: decision-log
 title: "Keep production dependencies minimal (~10)"
 status: ready
 context: scope
-release: ""
+release: "v0.4"
 tmpl_version: 260703
 ---
 
