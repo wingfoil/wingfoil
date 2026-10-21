@@ -19,8 +19,8 @@ at `397cae9a`. Its inputs are committed beside the phase:
 
 - `docs/09_retrospectives/rl-v1/rel-v0.3-friction-inventory.md` (`explore`): eight read-only slices over the 164 task
   documents, the 193 v0.3 bugs, the 59 plans of the release, the commit window `v0.2.1..v0.3.0` and the 14 dev-loop
-  batch registers (917 cited rows), synthesised into themes T1–T15, plus six secondary sources and 156 proposals each
-  with one outcome;
+  batch registers (917 cited rows), synthesised into themes T1–T15, plus six secondary sources and 157 proposals each
+  with one outcome (P-02 added after the gate);
 - `docs/09_retrospectives/rl-v1/rel-v0.3-feedback-triage.md` (`collect-feedback`): the 96 notes of the three
   registered consumer inboxes (svc-018, svc-019, svc-020), read at the commits it records, each restated with one
   outcome;
@@ -64,7 +64,7 @@ The inventory's themes, each with its evidence there:
 | T11 Agent environment | global `wingfoil` on `PATH`, Prompts that do not reach the model | `dl-192`, `dl-193` |
 | T12 Release-line rules | merge-forward unspecified; admin push before the required check | `dl-185` (ratified here), `dl-190` |
 | T13 Rules without a check | `bug-307`, `bug-312`, `bug-313`, `bug-343` | practice |
-| T14 Retrospective sources | uneven `### Retrospective`; the richest record outside the repository; the retro id | `dl-196`, `bug-362` |
+| T14 Retrospective sources | uneven `### Retrospective`; the richest record outside the repository; the retro id; the facilitator phases cannot be launched with `agent execute` | `dl-196`, `bug-362`, `dl-202` |
 | T15 Measurement under load | latency and release-health measured under load | `dl-170`, `bug-406`, `bug-407` |
 
 ### Dispositions
@@ -82,6 +82,7 @@ record propose, ruled "as proposed". The elements this phase filed (ids from the
 | KR-RH-F5 | `dl-194-whether-memory-submit-and-amend-run-the-spec-007-secret-scan-on-the-document-they-commit` | v0.4 |
 | MN-M8-105 | `dl-195-whether-the-persona-casey-approves-or-rejects-in-journey-5` | v0.4 |
 | P-01 | `dl-196-a-retrospective-memory-type-whose-id-is-retro-version` | v0.4 |
+| P-02 (the maintainer at the gate, after the ruling) | `dl-202-which-workflow-roles-agents-may-execute-and-a-check-that-flags-agent.execute-on-a-role-no-agent-executes` | v0.4 (its item 3 in v0.3.1) |
 | svc-018 F-011, svc-020 F-029 | `dl-197-whether-memory-add-fills-declared-frontmatter-fields-at-creation-beyond-the-id-pattern-tokens` | v0.4 |
 | svc-018 F-021 | `dl-198-whether-commands-run-from-a-subdirectory-or-a-project-option-not-only-at-the-git-root` | v0.4 |
 | svc-019 F-024 | `dl-199-the-exit-code-of-a-refused-option-value-a-usage-error-2-or-a-refusal-1` | v0.4 |
@@ -119,10 +120,12 @@ Corrections made at filing, against the proposed outcomes, each on a check run w
 
 Ratified at the approve step on the approver's instruction (each its own commit): `dl-185` and `dl-170`; `dl-058` and
 `dl-071` with their recommended options; `dl-167`, `dl-172`, `dl-174` and `dl-175` (v0.4 decision-logs that
-patch-v0.3.1 needs); the intake decision-logs `dl-141`…`dl-145`, `dl-147`, `dl-148`, `dl-161`, `dl-178` as the
-approver rules them there. Deferred, with the reason: `dl-140` (one tagline) until the positioning review below;
-`dl-165` (no recommendation in the document: the approver chooses its option); `dl-043` to v0.4 planning with the
-output-format notes it answers; `dl-077` to the approver's ruling (deprecate or decide); `dl-164` to v0.4 planning; the
+patch-v0.3.1 needs); the intake decision-logs `dl-141`…`dl-145`, `dl-147`, `dl-148`, `dl-161`, `dl-178` as written or
+with their recommendations; after the gate, on the options laid out for the approver, `dl-165` with option (c) (the
+declared exception stays: `task-228`'s launched agent starts the same server with no commit) and `dl-077` with
+position (A) (the residual is stated; CI on the 22.12.0 floor is the run-time net). Deferred, with the reason:
+`dl-140` (one tagline) until the positioning review below; `dl-043` to v0.4 planning with the output-format notes it
+answers; `dl-164` to v0.4 planning; the
 other v0.4 decision-logs (`dl-040`, `dl-166`, `dl-168`, `dl-169`, `dl-173`, `dl-176`…`dl-184`, `dl-188`) to v0.4
 planning.
 
@@ -323,7 +326,8 @@ for the first time, and each has a recorded outcome its consumer can read.
   `bug-408` (`dl-163` S3f, ruled here); `dl-186` S3 — the hand adoption of the base/software packs if WingFoil-Templates
   W9 is published, otherwise its Q3 (S3 without packs) — and S3-b (close the hand-started instances, `bug-389`,
   `waves:` on `minor-v0.3`, the packs' parameters); the pin to `0.3.0` (`bug-292`); `dl-167`, `dl-172`, `dl-174`,
-  `dl-175` once ratified; `dl-185` as the rule of the first `release/0.3`; RH-v0.3-05 (approver action).
+  `dl-175` (ratified here); `dl-185` as the rule of the first `release/0.3`; RH-v0.3-05 (approver action); `facilitator` in
+  the `Claude` agent's `executes_as` (`dl-202-which-workflow-roles-agents-may-execute-and-a-check-that-flags-agent.execute-on-a-role-no-agent-executes` item 3, the quick fix of P-02).
 - **Preconditions of v0.4 release-planning** (its `define-scope` waits for them): the positioning review of how
   WingFoil is described after 0.3 (vision statement, README tagline, `package.json` description), after which `dl-140`
   is ruled and the banners are regenerated (`KR-UD-16`); the maintainer's ruling on the agent-integration plugins
