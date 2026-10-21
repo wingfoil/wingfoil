@@ -5,7 +5,7 @@ title: "`wingfoil help help` reports `unknown command 'help'` at exit 2 — the 
 status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: "P5.1"
 contributor: ""
 credit: ""
