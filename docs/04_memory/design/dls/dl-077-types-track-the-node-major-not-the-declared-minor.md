@@ -2,7 +2,7 @@
 id: "dl-077-types-track-the-node-major-not-the-declared-minor"
 type: decision-log
 title: "`@types/node` can only track the Node major, never the declared minor, so the type surface necessarily overshoots the `>=22.12.0` floor — and no guard can catch it"
-status: in-discussion
+status: ready
 context: "build-contract"
 release: ""
 contributor: ""

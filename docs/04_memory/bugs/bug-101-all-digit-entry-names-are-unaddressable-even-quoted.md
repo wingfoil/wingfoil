@@ -2,10 +2,10 @@
 id: "bug-101-all-digit-entry-names-are-unaddressable-even-quoted"
 type: bug
 title: "An entry named with digits alone stays unaddressable even when quoted, because the index guard runs after the delimiters are stripped — the same class `bug-091` filed, surviving its own fix"
-status: open
+status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: "P2.1"
 contributor: ""
 credit: ""

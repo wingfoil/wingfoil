@@ -2,10 +2,10 @@
 id: "bug-130-no-verb-unassigns-the-directive-that-remove-requires-unassigned"
 type: bug
 title: "`directive remove` refuses an assigned directive, but no command unassigns one — the only way out is a hand edit of `roles.yaml`"
-status: open
+status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: "P3.2"
 contributor: ""
 credit: ""

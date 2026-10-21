@@ -2,10 +2,10 @@
 id: "bug-110-load-directives-at-head-spawns-one-git-process-per-file"
 type: bug
 title: "`loadDirectivesAtHead` spawns one git process per committed directive file — eleven on a fresh scaffold, and the count is the size of the directory rather than of the request"
-status: open
+status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: "P3.5"
 contributor: ""
 credit: ""

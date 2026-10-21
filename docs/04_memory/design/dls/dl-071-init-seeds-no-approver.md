@@ -2,7 +2,7 @@
 id: "dl-071-init-seeds-no-approver"
 type: decision-log
 title: "Should `wingfoil init` seed the initialising user as `approver`, or ship a project where every approval gate is closed until dna.yaml is hand-edited?"
-status: in-discussion
+status: ready
 context: "dev-loop-review"
 release: ""
 contributor: ""

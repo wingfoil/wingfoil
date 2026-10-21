@@ -2,7 +2,7 @@
 id: dl-145-the-user-guide-gains-an-integrations-section-one-guide-per-tool-each-with-a-runnable-script-that-e2e-smoke-executes
 type: decision-log
 title: "The user guide gains an Integrations section: one guide per tool, each with a runnable script that e2e-smoke executes"
-status: in-discussion
+status: ready
 context: "ad-hoc"            # optional — short label for the context, e.g. "retrospective", "planning", "ad-hoc"
 release: ""            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it

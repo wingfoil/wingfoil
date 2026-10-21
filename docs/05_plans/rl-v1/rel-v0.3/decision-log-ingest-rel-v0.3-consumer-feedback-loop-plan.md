@@ -2,7 +2,7 @@
 id: decision-log-ingest-rel-v0.3-consumer-feedback-loop-plan
 type: plan
 title: "Decision-log-ingest — rel-v0.3 consumer feedback loop"
-status: active
+status: done
 version: "1.1"
 workflow: "decision-log-ingest"
 phase: "rel-v0.3-consumer-feedback-loop"

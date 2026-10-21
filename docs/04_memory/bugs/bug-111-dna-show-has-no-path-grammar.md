@@ -2,10 +2,10 @@
 id: "bug-111-dna-show-has-no-path-grammar"
 type: bug
 title: "`dna show` resolves a single top-level key and never splits on `.`, so nothing below a section is readable — and `dl-083`'s own worked example cannot run"
-status: open
+status: triaged
 severity: "medium"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: "P2.2"
 contributor: ""
 credit: ""

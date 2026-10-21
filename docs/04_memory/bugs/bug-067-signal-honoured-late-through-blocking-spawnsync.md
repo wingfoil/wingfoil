@@ -2,10 +2,10 @@
 id: "bug-067-signal-honoured-late-through-blocking-spawnsync"
 type: bug
 title: "An interrupt delivered only to `publish:staging` waits out the blocking `spawnSync` npm step before teardown runs, so the operator sees nothing for tens of seconds and may escalate to SIGKILL — which does leak"
-status: open
+status: triaged
 severity: "medium"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: ""
 contributor: ""
 credit: ""

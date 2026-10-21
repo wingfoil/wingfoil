@@ -2,10 +2,10 @@
 id: "bug-061-staging-log-noise-obscures-failures"
 type: bug
 title: "Staging run log is drowned in Verdaccio password-verification lines and a benign ConflictError stack"
-status: open
+status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: ""
 contributor: ""
 credit: ""

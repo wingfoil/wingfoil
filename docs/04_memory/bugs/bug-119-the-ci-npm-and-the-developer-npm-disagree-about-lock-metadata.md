@@ -2,10 +2,10 @@
 id: "bug-119-the-ci-npm-and-the-developer-npm-disagree-about-lock-metadata"
 type: bug
 title: "npm 10.9.0 strips `\"peer\": true` from twelve lock entries that npm 11 writes, so the lockfile has two authors who disagree and either one produces a diff nobody asked for"
-status: open
+status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: ""
+release: "v0.4"
 feature: ""
 contributor: ""
 credit: ""

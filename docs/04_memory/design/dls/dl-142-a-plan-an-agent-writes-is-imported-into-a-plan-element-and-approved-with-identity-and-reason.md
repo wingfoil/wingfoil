@@ -2,7 +2,7 @@
 id: dl-142-a-plan-an-agent-writes-is-imported-into-a-plan-element-and-approved-with-identity-and-reason
 type: decision-log
 title: "A plan an agent writes is imported into a plan element and approved with identity and reason"
-status: in-discussion
+status: ready
 context: "ad-hoc"            # optional — short label for the context, e.g. "retrospective", "planning", "ad-hoc"
 release: ""            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it

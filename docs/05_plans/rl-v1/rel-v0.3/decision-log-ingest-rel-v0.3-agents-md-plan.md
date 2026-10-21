@@ -2,7 +2,7 @@
 id: decision-log-ingest-rel-v0.3-agents-md-plan
 type: plan
 title: "Decision-log-ingest — rel-v0.3 AGENTS.md as the agent file"
-status: active
+status: done
 version: "1.0"
 workflow: "decision-log-ingest"
 phase: "rel-v0.3-agents-md"

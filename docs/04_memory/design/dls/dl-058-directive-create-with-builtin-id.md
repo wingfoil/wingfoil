@@ -2,7 +2,7 @@
 id: "dl-058-directive-create-with-builtin-id"
 type: decision-log
 title: "May `wingfoil directive create` take the id of a built-in directive? After task-057 it silently creates a shadowing override"
-status: in-discussion
+status: ready
 context: "dev-loop-review"
 release: ""
 contributor: ""
