@@ -244,7 +244,7 @@ red → green: `npx jest test/directives test/lint/version-bump.test.ts test/cor
 
 - `release/0.3` did not move: `git rev-parse --short release/0.3` → `41f9d079`, the fork point; no sync merge.
 - Under `waitslot.sh`, in this worktree: `npx jest --coverage --maxWorkers=2` → `Test Suites: 461 passed, 461 total`,
-  `Tests: 8360 passed, 8360 total`, All files `99.34 | 97.4 | 98.03 | 99.71` (statements, branches, functions,
+  `Tests: 8360 passed, 8360 total`, All files `99.34 | 97.39 | 98.03 | 99.71` (statements, branches, functions,
   lines; > 80 %; no `src/` change, so no column can move). `npm run -s lint` → exit 0; `npm run -s docs:api` →
   exit 0; `npm run -s typecheck` (both tsc configs) → exit 0.
 - No CLI/help change, no BDD scenario touched (prose directive only); no refactor needed.
@@ -264,6 +264,22 @@ red → green: `npx jest test/directives test/lint/version-bump.test.ts test/cor
 ### Pending amendments (approver)
 
 None.
+
+### independent review (2026-10-22) and fixes (developer)
+
+Verdict APPROVE with one in-task fix and one note correction; F2 (the ACs' "(characterization)" labels) left as
+submitted, per the coordinator.
+- F1 — rule 5's last sentence claimed the governance `config` rule judges strictly against `main`'s `version:`; it
+  compares the file at `git merge-base <--base> HEAD` with `HEAD` (`scripts/check-governance.cjs:886–903`). Now:
+  the pending-change gate (`test/lint/version-bump.test.ts`) "judges the change strictly against `main`'s `version:`
+  at `HEAD`", and the `config` rule, "which compares the pushed range, is satisfied by the same bump in the merge
+  commit"; every pinned phrase kept, no new bump (stays `"2.0"`). `npx jest test/directives/git-conventions.test.ts
+  test/lint/version-bump.test.ts --maxWorkers=2` → `Test Suites: 2 passed`, `Tests: 60 passed, 60 total`.
+- F3 — the refactor figure for branches was the text table's rounding (`97.4`); `coverage/coverage-summary.json`
+  of the same run (`node -e '…require("./coverage/coverage-summary.json").total…'`) → branches `6389/6560 97.39`,
+  as the reviewer's run; corrected above to `97.39`.
+- T4: `git log --first-parent --no-merges --format=%h c0f34665..HEAD -- test/directives/git-conventions.test.ts
+  test/lint/version-bump.test.ts` → empty.
 
 ### Retrospective
 

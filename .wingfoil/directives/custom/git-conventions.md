@@ -128,9 +128,10 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
      document whose `version:` `doc-versioning` governs — the `version:` and `**Date:**` resolve to
      `main`'s, and a file whose merged content differs from `main`'s is bumped once more on `main`, in the
      merge commit itself, by a numeric increase and with the merge's date. Both resolutions are recorded in
-     the merge commit. That bump is what lets the merge forward pass `test/lint/version-bump.test.ts` and
-     the governance check's `config` rule with no change to either (`dl-185` C1 (d) (ii)): on `main` both
-     judge the change strictly against `main`'s `version:`.
+     the merge commit. That bump is what lets the merge forward pass `test/lint/version-bump.test.ts`, with
+     no change to either the test or its helper (`dl-185` C1 (d) (ii)): during the merge, that pending-change
+     gate judges the change strictly against `main`'s `version:` at `HEAD`. The governance check's `config`
+     rule, which compares the pushed range, is satisfied by the same bump in the merge commit.
   6. **Who, when, where** (`dl-185` C1 (b) (i)). The merge forward is run once per patch, by the
      coordinator of the patch's `release-publishing`, as that phase's last step, after the patch tag (§3),
      in a worktree of its own on `main`: a detached worktree at `main`'s head, since `main` is checked out
