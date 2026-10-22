@@ -224,6 +224,59 @@ git-conventions 3 failed, workflow-patch-line-texts 4 failed / 1 passed, wingfoi
 **Note.** The case-2 received sha is identified as `A` by reasoning (the current hook computes
 `git merge-base HEAD origin/main`), not by a printed comparison.
 
+### green (developer, 2026-10-22)
+
+Commit `c4ef391d` `feat(hooks): task-291 — …` (`git log -1 --format=%h` after it). As designed (D1, D-A):
+- `.githooks/pre-push`: for a new remote ref, candidates from `git for-each-ref --format='%(refname:short)'
+  refs/remotes/origin/main 'refs/remotes/origin/release/*'`, kept when `origin/main` or `origin/release/<n>.<n>` (a
+  `case` filter), the pushed ref's own tracking ref skipped, the nearest merge-base winning (`merge-base --is-ancestor`),
+  a tie keeping the earlier; header comment rewritten. `sh -n .githooks/pre-push` → exit 0; mode stays `100755`.
+- `.github/workflows/governance.yml` header: the local twin's base is "the line the branch was cut from" (D-A).
+- `git-conventions` §9 gains the bullet **The hook's base** (`dl-185` C3 (i)), the Source list names `dl-185`;
+  `version: "2.0"`, its entry naming `task-291` before `(prev 1.9 …`.
+- `release-health.yaml` `measure` and `release-planning.yaml` `advance-pinned-build` descriptions as designed;
+  versions 1.2 and 2.3, history entries naming `task-291` (`node -e` with js-yaml printed `release-health 1.2`,
+  `release-planning 2.3`).
+
+Red → green: `npx jest test/cli/git-hooks.test.ts test/directives/git-conventions.test.ts
+test/core/workflow-patch-line-texts.test.ts test/directives/wingfoil-cli.test.ts
+test/release-health/bindings-and-deps.test.ts test/core/reconcile-governance-role-directives.test.ts
+test/core/define-scope-sweep.test.ts test/core/memory-amend-release-kind-exemption.test.ts --maxWorkers=2` →
+`Test Suites: 8 passed, 8 total`, `Tests: 104 passed, 104 total` (red: 9 failed, per the red notes). The last four
+suites are the other version / text pins on the two workflow files, all still green.
+
+### refactor (developer, 2026-10-22)
+
+No refactor of the green code was needed. In this worktree at `c4ef391d`:
+- `npx jest --coverage --maxWorkers=2` (under `waitslot.sh`; the parallel run `npm test` makes) → exit 0, `Test Suites:
+  462 passed, 462 total`, `Tests: 8372 passed, 8372 total`, `All files | 99.34 | 97.39 | 98.03 | 99.71` (statements,
+  branches, functions, lines; ≥ 80 %).
+- `npm run -s lint` → exit 0; `npm run -s typecheck` (both tsc configs) → exit 0; `npm run -s docs:api` → exit 0.
+- No CLI or help change, so `docs/cli-reference.md` is untouched; no BDD scenario covers the hook or the two phase
+  texts (`grep -rln "pre-push\|advance-pinned-build" docs/02_requirements/02_bdd/features` → no output).
+- Same class: `grep -rn "merge-base HEAD origin/main\|commit on main carrying\|merges \`main\` after" .githooks .github
+  .wingfoil scripts test src docs/user-guide.md README.md AGENTS.md` → only the four absence assertions of the red
+  tests. `docs/08_health/metrics.yaml` line 20 left as ruled (D-C).
+- Sync: `release/0.3` is still `41f9d079` (`git log -1 --format=%h release/0.3`), neither `task-292` nor `task-290`
+  merged; the sync (`git merge --no-edit release/0.3`) and the `git-conventions` re-bump to "2.1" wait for `task-290`'s
+  merge, then the gates re-run before submit.
+
+### self-review (developer, 2026-10-22)
+
+- AC 1: the three cases, 2b and 3b pass (`test/cli/git-hooks.test.ts` in the targeted run above); the existing-ref path
+  (`base = <remote sha>`) and the guard on `dist/` are unchanged (`git diff bd4038ad c4ef391d -- .githooks/pre-push`
+  touches only the comment and the new-ref branch). Determinism: the base depends on `HEAD` and the local tracking refs
+  only, in refname order, no fetch.
+- AC 2: §9 states the base rule, the local convenience and CI as the enforcing check; version "2.0" naming `task-291`.
+- AC 3: both texts name the integration branch; versions bumped once each; `bindings.yaml` untouched, its suites green
+  in the full run.
+- T4: `git log --first-parent --no-merges --format=%h bd4038ad..HEAD -- test/cli/git-hooks.test.ts
+  test/directives/git-conventions.test.ts test/core/workflow-patch-line-texts.test.ts` → empty.
+
+### Pending amendments (approver)
+
+None: no Memory element other than this task file is edited.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -231,3 +284,7 @@ git-conventions 3 failed, workflow-patch-line-texts 4 failed / 1 passed, wingfoi
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The targeted green run waited about 30 min in `waitslot.sh` behind another task's coverage gate, though a targeted
+  jest run is not a heavy gate (overrides: full jest, coverage, build, tsc build). Proposal: the kit states that
+  targeted runs do not take the slot.
