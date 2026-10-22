@@ -49,14 +49,140 @@ task writes C1 into the `git-conventions` directive §1, where `dl-159`'s line r
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-22)
+
+Role architect. Worktree `.wf2-wt/task-290`, branch cut from `release/0.3` at `41f9d079`, start commit `93d9d4ee`.
+Integration branch `release/0.3` (patch-v0.3.1 overrides). No `depends_on`; siblings `task-291` (§9, pre-push) and
+`task-292` (`dna.yaml`), merge order 292 → 290 → 291 (`dev-loop-rel-v0.3.1-plan` D1).
+
+**Inputs read (dl-015, dl-102 §4).**
+- `dl-185` → `ready` (`grep -m1 '^status'`), approved at `f6e54041` ("(i) for both questions"), read by
+  `release-planning-rel-v0.3.1-plan` R2 as (i) for C1 (a)–(c), C3, C4 and (ii) for C1 (d), C2. `dl-159`, `dl-152`
+  → `ready`. No spec is cited (R2: "No spec for `dl-185`").
+- `git-conventions` on `release/0.3` and on `main` is `version: "1.9"`, `**Date:** 2026-10-17` (`git show
+  <ref>:.wingfoil/directives/custom/git-conventions.md | grep -m1 '^version:'` → `"1.9"` for both). Rule 5 is
+  `git-conventions.md:117`; the `dl-152` closed list is `:82–90`; the merge-forward bullet `:106–119`. No text today
+  says who runs the merge forward, the second class of colliding files, or a `release/X.Y` counterpart of the list
+  (`grep -n "dl-185\|both lines changed\|once per patch" .wingfoil/directives/custom/git-conventions.md` → nothing).
+- `test/directives/git-conventions.test.ts` (task-286 describe) pins in §1, over whitespace-flattened text:
+  `` `package.json` `version` ``, `` `server.json` ``, `` `CHANGELOG.md` ``, `` the `dl-095` pin ``,
+  `` keeps `main`'s values ``, `recorded in the merge commit`, the heading line containing `` `dl-159` ``, and the
+  dl-152 describe pins `` Commits made directly on `main` `` and the six ops. The new text must keep all of them.
+- Version readers of this directive: `git-conventions.test.ts:99,202`, `dev-loop-done-order.test.ts:57,67`,
+  `dev-loop-practice.test.ts:201,209`, `integration-branch-baseline.test.ts:50` — all `major*1000+minor` with "≥"
+  (bug-314), and `dev-loop-done-order.test.ts:71` finds the `1.8 ` history entry by regex. `src/directives/version.ts`
+  accepts any quoted string. No gate judges a directive's `version:` (`VERSIONED_CONFIG_FILES`,
+  `test/lint/helpers/version-bump.ts:33` and `scripts/check-governance.cjs:126`, lists the four `.wingfoil` YAML only).
+- `isVersionIncrease` (`src/validation/config-version.ts`, shared by the gate and the governance `config` rule) reads
+  a quoted `"1.10"` as the number 1.1: `node -e '…isVersionIncrease("1.9","1.10"), …("1.9","2.0")'` on the main
+  tree's `dist/` (source identical on `release/0.3`: `diff <(git show main:src/validation/config-version.ts) <(git show
+  HEAD:…)` → no output) → `false true`. `memory.yaml:64` states the convention: "1.9 -> 2.0 …, never 1.10".
+
+**C1 (d) (ii) — no tool change, confirmed by reading the code.** During an uncommitted merge forward `HEAD` is `main`;
+`integrationBranchOf` finds `main` with fork point `HEAD` (the check is strict: `doc-versioning` *Gate*, "on a line
+itself the fork point is `HEAD`"), and `checkPendingVersionBumps` (`version-bump.ts:188–221`) fails a changed file
+whose `version:` is not greater than `HEAD`'s. Hence: a versioned file both lines changed, resolved to `main`'s
+`version:` with merged content ≠ `main`'s → finding; bumped once more (C1 (a) (i)) → pass; a file only
+`release/X.Y` changed carries that line's bump, greater than `main`'s (= the fork's) → pass. The governance `config`
+rule (`check-governance.cjs:886–911`) compares `merge-base(base, HEAD)` with `HEAD`, so the same bump satisfies it
+over the pushed range. Neither rule 5's file list in code nor `version-bump.test.ts` needs a change; qa pins the
+behaviour as a characterization case (AC 4b below).
+
+**D1 — classification (recommendation: accept).** AC 1–3 and AC 4's text part are labelled characterization but the
+§1 text does not exist (grep above): red-first, as `task-286` D1. AC 4's gate behaviour exists already:
+characterization (passes on first run; if it fails at red, C1 (d) (ii) is false and the task returns to design, never
+a fabricated red).
+
+**D2 — the two classes of rule 5 (recommendation: as written below).** AC 1's "a file whose merged content differs
+from `main`'s is bumped once more" must not reach the four release-version-bearing files (`package.json` `version`
+is the release number: bumping it on `main` would be wrong) nor a file only one line changed (it merges cleanly with
+its own single bump; a second one breaks `doc-versioning`'s one bump per change). The text scopes the extra bump to
+"every versioned file both lines changed", which is `dl-185` C1 (a)'s own subject ("Collisions on versioned files").
+
+**D3 — "a worktree of its own on `main`" (decision for the approver; recommendation (a)).** `main` is checked out in
+the shared working tree (`git worktree list` → `/home/robypomper/Workspaces/WingFoil2 084eafe0 [main]`) and git
+refuses a second checkout of a branch. (a) The text adds: the worktree is detached at `main`'s head
+(`git worktree add --detach <path> main`), the `--no-ff` merge is made there, and `main` is advanced to that merge
+commit with `git merge --ff-only <sha>`, so its first parent stays `main`'s previous head and no commit is added
+outside the merge. (b) Keep `dl-185`'s wording only and leave the mechanics to the coordinator.
+
+**D4 — capture on the owning line (decision for the approver; recommendation (a)).** C1 (c) (i) puts the triage on a
+branch cut from the owning line, but an element filed on `main` does not exist on `release/X.Y` (rule 3: `main` is
+never merged into it), so it can be triaged there only if it was captured there. (a) One added sentence: an element
+the patch line will own is captured on a branch cut from it (`ingest/` from `release/X.Y`). (b) Text as the AC only;
+the case of a bug already filed on `main` that needs a patch goes to a decision-log (candidate finding F1 below
+either way).
+
+**D5 — version (recommendation `"2.0"`).** `"1.9"` → `"2.0"`, not `"1.10"`: the brief's rule (after x.9, (x+1).0),
+`memory.yaml:64`'s convention, and `isVersionIncrease` would read `"1.10"` as no increase should a gate ever judge
+directives (or C1 (a)'s merge resolution compare them). Every existing reader passes with either (`2.0` → 2000,
+`1.10` → 1010, all ≥ 1008). The line keeps the whole `(prev …` chain (the `1.8 ` entry regex and the task-276/281/286
+pins read it): `version: "2.0"   # 2.0 §1: the merge forward of a release line — rule 5's two classes of colliding
+files and the bump in the merge commit, who runs it, when and where, the release/X.Y counterpart of the direct-commit
+list (task-290, dl-185 C1 (a)–(d)) (prev 1.9 §8: …`, `**Date:** 2026-10-22`. `task-291` then re-bumps to `"2.1"`
+when it merges `release/0.3`.
+
+**D6 — no other file (recommendation: accept).** `doc-versioning`'s bump rule already yields the C1 (a) bump (the
+merge commit is made on `main`, baseline `main`), and its *Gate* paragraph already names "`HEAD` at a merge-forward
+commit"; it is not edited. `release-publishing.yaml` gains no step here (`dev-loop-rel-v0.3.1-plan` D4; F2 below).
+
+**The text green writes** (pinned phrases fixed verbatim; surrounding prose may vary):
+- §1 heading: `## 1. Branches (`dl-024` rule 1, as amended by `dl-119` Q1 (b), `dl-152`, `dl-159` and `dl-185`;
+  `dl-014` G2–G3)`. Sources list: a `dl-185-settle-…` entry "— the merge forward's colliding files, its owner and
+  timing, and the `release/X.Y` counterpart of the direct-commit list (§1)"; closing *Source* note gains `dl-185` (C1).
+- After the dl-152 list's closing paragraph ("… a deviation to fix, not a new convention."), a new paragraph:
+  "**The counterpart on `release/X.Y`** (`dl-185` C1 (c) (i)). The same closed list may be committed directly on
+  `release/X.Y` for the elements that line owns, and those operations are never committed on `main` for them: they
+  reach `main` by the merge forward (rule 4 below). A triage that decides an element's owning line is made on an
+  `ingest/` or `backlog/` branch cut from that line." [+ if D4 (a): "An element that line will own is captured on a
+  branch cut from it too, since `main` is never merged into `release/X.Y`."]
+- Rule 5 replaced: "5. The merge forward conflicts on two kinds of file (`dl-185` C1 (a) (i)). On the version-bearing
+  files — `package.json` `version`, `server.json`, `CHANGELOG.md`, the `dl-095` pin — the resolution keeps `main`'s
+  values. On every versioned file both lines changed — a directive, a `.wingfoil` YAML or any document whose
+  `version:` `doc-versioning` governs — the `version:` and `**Date:**` resolve to `main`'s, and a file whose merged
+  content differs from `main`'s is bumped once more on `main`, in the merge commit itself, by a numeric increase and
+  with the merge's date. Both resolutions are recorded in the merge commit. That bump is what lets the merge forward
+  pass `test/lint/version-bump.test.ts` and the governance check's `config` rule with no change to either
+  (`dl-185` C1 (d) (ii)): on `main` both judge the change strictly against `main`'s `version:`."
+- New rule 6: "6. **Who, when, where** (`dl-185` C1 (b) (i)). The merge forward is run once per patch, by the
+  coordinator of the patch's `release-publishing`, as that phase's last step, after the patch tag (§3), in a worktree
+  of its own on `main` — never the shared working tree or the release worktree. A conflict it cannot resolve trivially
+  is aborted, recorded, and resolved by a developer, as §2 does for syncs. Until a workflow declares the step, it is
+  run by hand." [+ if D3 (a): "The worktree is detached at `main`'s head (`git worktree add --detach`), since `main`
+  is checked out in the shared working tree; the merge is made there and `main` is advanced to it with
+  `git merge --ff-only`."]
+
+**AC classification and what qa must pin.** File `test/directives/git-conventions.test.ts`, new
+`describe('git-conventions §1 — dl-185 C1 (task-290)')` after the task-286 one; `section('1. Branches')` (existing
+helper), a local `flat = s.replace(/\s+/g, ' ')`; pins are substrings of the flattened section, never lines; each
+absence check sits in the same `it` as its positive (task-276). Existing cases stay untouched and green.
+
+| AC | Class | Pins (flat §1 unless said) | Do NOT pin |
+|----|-------|----------------------------|------------|
+| 1 — C1 (a) (i) | red-first | `` `dl-185` C1 (a) ``; `conflicts on two kinds of file`; `every versioned file both lines changed`; `` the `version:` and `**Date:**` resolve to `main`'s ``; `` is bumped once more on `main`, in the merge commit itself ``; still the four files, `` keeps `main`'s values `` and `recorded in the merge commit`; absent: `conflicts on the version-bearing files —` (the old rule 5) | the examples in the class list, "numeric increase", the rule's number |
+| 2 — C1 (b) (i) | red-first | `` `dl-185` C1 (b) ``; `once per patch`; `` by the coordinator of the patch's `release-publishing` ``; `as that phase's last step, after the patch tag`; `` in a worktree of its own on `main` ``; `resolved by a developer, as §2 does for syncs`; if D3 (a): `` `git worktree add --detach` `` and `` `git merge --ff-only` `` | "never the shared working tree…", "Until a workflow declares the step" |
+| 3 — C1 (c) (i) | red-first | `` `dl-185` C1 (c) ``; `` The counterpart on `release/X.Y` ``; `for the elements that line owns`; `` never committed on `main` for them ``; `` triage that decides an element's owning line is made on an `ingest/` or `backlog/` branch cut from that line ``; the dl-152 describe's pins unchanged; if D4 (a): `is captured on a branch cut from it too` | the reference to rule 4 |
+| 4a — C1 (d) (ii) text + version | red-first | flat §1: `` `test/lint/version-bump.test.ts` ``, `with no change to either`, `` `dl-185` C1 (d) (ii) ``; heading line (`s1.split('\n')[1]`) contains `` `dl-185` `` and still `` `dl-159` ``; frontmatter `/^version: "(\d+)\.(\d+)"(.*)$/m`: `major*1000+minor ≥ 1010`, rest contains `task-290` and `dl-185`; `**Date:** (\d{4}-\d\d-\d\d)` ≥ `2026-10-22` | an exact version or date (task-291 re-bumps, bug-314) |
+| 4b — the gate needs no change | characterization | `test/lint/version-bump.test.ts`, inside `describe('the integration branch is the bump baseline …')`, a case `(8) a merge forward on main: a versioned file both lines changed passes only when bumped once more (dl-185 C1 (a)/(d))`: on the fixture, `release/0.3` bumps DNA `1.0 → 1.1` (`'r'`), back on `main` DNA `1.0 → 1.1` (`'m'`) committed; `git merge --no-ff --no-commit release/0.3` (a conflict is expected: tolerate the non-zero exit, e.g. `spawnSync`/try-catch); write `config('1.1', 'rm')` → `checkPendingVersionBumps(repo)` equals `[STILL_1_1]`; write `config('1.2', 'rm')` → `[]`; `integrationBranchOf(repo)` is `main` with fork point `HEAD` | the conflict markers, the merge's exit code value |
+
+Red expectation: every red-first case fails at `93d9d4ee` (phrases absent, version `"1.9"` < 1010); AC 4b passes on
+first run. qa runs `npx tsc --noEmit` (no new export, no TS2305 expected) and the two suites only.
+
+**Files green touches:** `.wingfoil/directives/custom/git-conventions.md` (heading, sources list, the counterpart
+paragraph, rule 5, rule 6, closing Source note, `version:`, `**Date:**`). No `src/`, no script, no config YAML.
+
+**Candidate findings (not filed).** F1: no rule for a bug already filed on `main` whose fix turns out to belong to a
+patch line (it cannot be triaged on `release/X.Y`, where it does not exist) — a decision-log, whatever D4 rules.
+F2: `release-publishing.yaml` declares no merge-forward step (`grep -n "merge forward" .wingfoil/workflows/custom/
+release-publishing.yaml` → nothing); `dl-185` C1 (b) recommends declaring it with `patch-cycle.yaml` (`dl-159` A2
+item 4) — v0.3.1's merge forward is a hand step (D4 of the dev-loop plan).
+
+**Risks for the batch.** `task-291` edits §9 and re-bumps the same `version:` line: it must keep this task's history
+entry inside its `(prev …` chain and bump `"2.0"` → `"2.1"` (if D5 is accepted). `task-292` bumps `dna.yaml` on
+`release/0.3`: if `main` changes `dna.yaml` before the v0.3.1 merge forward, that merge is the first application of
+rule 5's second class (both lines at a numeric version, `main` bumped once more in the merge commit). Numbers on the
+two lines can name different content (e.g. `2.1` on each); after the merge only `main`'s numbering continues — an
+accepted consequence of C1 (a) (i).
 
 ### Retrospective
 
