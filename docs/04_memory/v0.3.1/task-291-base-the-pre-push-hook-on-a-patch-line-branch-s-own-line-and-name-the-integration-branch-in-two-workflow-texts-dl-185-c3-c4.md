@@ -156,6 +156,16 @@ pin (≥ 2.0 + `task-291` in the line) holds before and after.
 **Risks.** `task-290`: the version conflict of D-B, and its §1 wording of "the line the branch was cut from" — §9 refers to
 §1 for it, not quoting it, so a different §1 phrase does not break this task's pins. `task-292`: none (disjoint files).
 
+#### Design gate (approver, 2026-10-22)
+
+Rulings on the design decisions above:
+- D1 accepted: the hook's base is the nearest merge-base over `origin/main` and `origin/release/<n>.<n>`, computed in
+  POSIX sh, as designed.
+- D-A accepted: the header of `.github/workflows/governance.yml` is rewritten in this task, pinned under AC1.
+- D-C accepted: `docs/08_health/metrics.yaml` stays out of scope; recorded as a candidate finding by the coordinator.
+- Versions as designed: `git-conventions` "2.0" on this branch, re-bumped to "2.1" at the sync after `task-290`'s
+  merge; `release-health.yaml` 1.2; `release-planning.yaml` 2.3.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
