@@ -141,7 +141,7 @@ team:
     # attribution audit rejects it (bug-261).
     - name: Claude
       email: noreply@anthropic.com
-      executes_as: [ developer, reviewer, qa, architect ]
+      executes_as: [ developer, reviewer, qa, architect, facilitator ]
       approval_authority: false
       adapter: claude-code     # [SPEC: spec-016 §2.1] the built-in adapter agent execute launches it with (task-236)
   # Available agent roles (P5.4.1); nested under `team` so `dna show team` surfaces them.
