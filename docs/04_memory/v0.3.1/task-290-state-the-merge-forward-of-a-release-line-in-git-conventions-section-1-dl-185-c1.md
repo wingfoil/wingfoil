@@ -184,6 +184,20 @@ rule 5's second class (both lines at a numeric version, `main` bumped once more 
 two lines can name different content (e.g. `2.1` on each); after the merge only `main`'s numbering continues — an
 accepted consequence of C1 (a) (i).
 
+#### Design gate (approver, 2026-10-22)
+
+Rulings on the design decisions above:
+- D1 accepted: AC1–AC3 and AC4's text part are red-first (prose not yet written, task-286 precedent); AC4's bump-rule
+  part is characterization (a new case in `test/lint/version-bump.test.ts`).
+- D2 accepted: the extra bump in the merge commit applies only to versioned files both lines changed; the four
+  version-bearing files keep `main`'s values.
+- D3 option (b): keep `dl-185`'s wording with one precision, "a detached worktree at `main`'s head"; the exact
+  commands are fixed and recorded by the first run in `release-publishing`. qa pins no `--ff-only` / `--detach`
+  command text.
+- D4 not taken: no sentence on capture on the owning line beyond `dl-185`'s ratified text; recorded as a candidate
+  decision-log by the coordinator.
+- D5 accepted: `version: "2.0"`. D6 accepted: no edit to `doc-versioning` or `release-publishing.yaml`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
