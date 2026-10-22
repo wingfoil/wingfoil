@@ -166,6 +166,58 @@ Rulings on the design decisions above:
 - Versions as designed: `git-conventions` "2.0" on this branch, re-bumped to "2.1" at the sync after `task-290`'s
   merge; `release-health.yaml` 1.2; `release-planning.yaml` 2.3.
 
+### red (qa, 2026-10-22)
+
+Red commit `1c2d4a19` (`git log -1 --format=%h` after the commit) — T4 is measured from it. Test files only; no
+production file touched. Classification as the design's D2 (AC 1 case 2, the D-A header pin, AC 2's base-rule pins
+and AC 3 red-first; AC 1 cases 1, 3, 2b and AC 2's two existing §9 sentences characterization).
+
+**Files.** `test/cli/git-hooks.test.ts` (new `describe('task-291 — the base of a new remote ref (dl-185 C3 (i))')`;
+the five task-208 tests unchanged), `test/directives/git-conventions.test.ts` (new `describe('git-conventions §9 —
+dl-185 C3 (task-291)')`), `test/core/workflow-patch-line-texts.test.ts` (new; helpers copied from
+`test/core/workflow-integration-branch.test.ts`, files read as `HEAD` holds them).
+
+**Fixture (AC 1).** A bare `origin` under `fixtureDirPrefix()` and one clone (`cloneTempRepo`, `commit.gpgsign
+false`, identity per command via `commitAllAs`), removed in `afterAll` with `removeTempDir`. History: `A` on `main`
+pushed; `release/0.3` = `A` + `R1` pushed; `main` + `M1` pushed; unpushed `task/main-x` (`M1` + 1), `task/patch-x`
+(`R1` + 1), `release/0.4` (`M1` + 1). Case 2b uses a second origin where `main` merges `release/0.3` forward
+(`--no-ff`, pushed) and `task/patch-y` is cut from `R1`. After the commits, an untracked stub
+`scripts/check-governance.cjs` printing its argv as JSON and an empty `dist/memory/index.js` are planted in the clone.
+The hook (`sh <repo>/.githooks/pre-push origin https://example.invalid/r.git`, cwd = clone, inherited `GIT_*`
+variables removed) receives `refs/heads/<b> <HEAD> refs/heads/<b> <all-zero>` on stdin; the test reads the `--base`
+the stub received and compares it with `git merge-base HEAD <ref>` computed by the test itself (also checked equal to
+the fixture's `M1`/`R1`).
+
+**Per AC.**
+- AC 1 — `case 1 (characterization): a branch of \`main\` takes origin/main` (passes); `case 2 (red-first): a branch
+  of a patch line takes origin/release/X.Y` (fails: `"base"` expected `302157cb…` (= `R1`), received `fbf6aab8…` — the
+  hook's `git merge-base HEAD origin/main`, i.e. `A`; status 0 on both sides); `case 3 (characterization): a new
+  \`release/X.Y\` itself takes origin/main` (passes); `case 2b (characterization): the tie …` (passes); `D-A:
+  governance.yml's header no longer states the old base and names the line the branch was cut from` (fails: expected
+  substring "the line the branch was cut from" not in the flattened header comment).
+- AC 2 — `AC 2 (characterization): the hook is a local convenience and CI is the enforcement point` (passes);
+  `AC 2 (red-first): §9 states the base rule …` (fails: expected substring "`dl-185` C3 (i)"); `AC 2 (red-first): §9
+  says CI stays the enforcing check` (fails: expected substring "CI stays the enforcing check"); `AC 2: the version is
+  2.0 or later and its line names task-291` (fails: expected >= 2000, received 1009, i.e. "1.9").
+- AC 3 — `measure's description: …` (fails: expected substring "the commit carrying the release's \`released\`
+  transition on the release's integration branch (…"); `release-health.yaml is version 1.2 or later …` (fails:
+  expected >= 1.2, received 1.1); `advance-pinned-build's description: …` (fails: expected substring "merges the
+  patch's line forward after the patch's tag"); `advance-pinned-build keeps the wingfoil-cli re-check
+  (characterization)` (passes); `release-planning.yaml is version 2.3 or later …` (fails: expected >= 2.3, received
+  2.2).
+
+**Run.** `npx tsc --noEmit -p tsconfig.json` → exit 0. `npx eslint <the three files>` → exit 0.
+`npx jest test/cli/git-hooks.test.ts test/directives/git-conventions.test.ts test/core/workflow-patch-line-texts.test.ts
+test/directives/wingfoil-cli.test.ts --maxWorkers=2` → `Test Suites: 3 failed, 1 passed, 4 total`, `Tests: 9 failed,
+51 passed, 60 total`: git-hooks 2 failed / 8 passed (`--verbose` run: `Tests: 2 failed, 8 passed, 10 total`),
+git-conventions 3 failed, workflow-patch-line-texts 4 failed / 1 passed, wingfoil-cli all passed (the pin on
+`release-planning.yaml` stays green).
+
+**Not pinned (for the coordinator).** D1 step 1's skip of the pushed ref's own tracking ref (a stale
+`origin/release/0.4` on a new `release/0.4`) has no case: in the fixture `release/0.4` is never pushed, as the design's
+case 3 states. The case-2 received sha is identified as `A` by reasoning (the current hook computes
+`git merge-base HEAD origin/main`), not by a printed comparison.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
