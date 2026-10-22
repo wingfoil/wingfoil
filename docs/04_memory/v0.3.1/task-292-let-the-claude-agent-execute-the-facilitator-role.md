@@ -245,6 +245,14 @@ No production code changed (`git diff --stat 41f9d079..HEAD -- src` → empty), 
   are dated records (spec-003, dl-134, dl-202 Context, rel-v0.2/v0.3 plans, task-186, adr-006, dl-033) or the adopters'
   scaffold (`src/storage/templates.ts:294`), left as they are (design).
 
+### independent review (2026-10-22) and fixes (developer)
+
+- Note correction (review finding; the design section is left as written): "26 files. All but one build their own
+  dna.yaml", naming `test/storage/builtin-adapter-claude-code.test.ts:102` as the one, is false — that file is not
+  among them. `grep -rln executes_as test/ | wc -l` → `27` (the 26 at design + `test/agent/repository-agent-roles.test.ts`),
+  and `grep -rln executes_as test/ | grep -c builtin-adapter-claude-code` → `0`. Correct statement: all 26 build their
+  own dna.yaml; the adapter test reads the repository's `team.agents` (its `adapter`), but not `executes_as`.
+
 ### Pending amendments (approver)
 
 None.
