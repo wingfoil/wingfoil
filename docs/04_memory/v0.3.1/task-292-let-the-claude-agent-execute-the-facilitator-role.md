@@ -42,14 +42,112 @@ for v0.4 (item 3 only is taken here, `release-planning-rel-v0.3.1-plan` R3).
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-22)
+
+Role architect. Worktree `.wf2-wt/task-292`, branch cut from `release/0.3` at `41f9d079`, hand `start` `8dd4df4c`.
+Integration branch `release/0.3` (patch-v0.3.1). Code build: `npm ci`, then `npm run build` under the slot, on the
+clean tree at `8dd4df4c`.
+
+**Inputs read (dl-015, dl-102 §4).** `depends_on: []`. `retro-v0.3` (`ready`) `## Actions`: patch-v0.3.1 scope takes
+"`facilitator` in the `Claude` agent's `executes_as`" (`dl-202` item 3, the quick fix of P-02). `dl-202` (`in-discussion`,
+`release: "v0.4"`): item 3 only is taken here (`release-planning-rel-v0.3.1-plan` R3); items 1–2 (the human-only role
+declaration, the `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` check) stay v0.4. Item 1's human-only list names `approver`,
+`product-owner`, `tech-lead`, not `facilitator`, so item 3 does not contradict it. `spec-002` (`approved`):
+`team.agents[].executes_as` is `z.array(z.string())`, each value must be a `team.roles` name (`src/dna/schema.ts`
+semantic check); `facilitator` is one (`.wingfoil/dna.yaml` `team.roles`). `spec-016` (`approved`) §3.2 step 4 /
+§3.3: without `--agent`, the first `team.agents` entry with an `adapter` whose `executes_as` contains the role, else
+refusal; `approver` is refused before that (`src/agent/execute.ts:572`). `roles.yaml` 1.8: `facilitator: [traceability]`
+(task-215). `retrospective.yaml`: `explore` and `collect-feedback` are `role: facilitator` with `agent.execute`.
+No AC contradicts these or the architect's directives.
+
+**AC 1 — the command of record (characterization).** Three spellings were tried with `--dry-run` (writes nothing;
+`git rev-parse HEAD` unchanged and `git status --short` empty afterwards), all exit 0, path `.wingfoil/dna.yaml` only:
+- `node dist/cli.js dna update team.agents.Claude.executes_as --value developer,reviewer,qa,architect,facilitator --dry-run`
+  → subject `wf(dna): update team.agents.Claude.executes_as developer,reviewer,qa,architect,facilitator`; diff one line,
+  `-      executes_as: [ developer, reviewer, qa, architect ]` / `+      executes_as: [ developer, reviewer, qa, architect, facilitator ]`
+  (flow style and inner spaces kept; edit kind `replace-list`, `src/dna/mutate.ts` `mutateStringList`).
+- `node dist/cli.js dna update team.agents.Claude --entry-executes_as developer,reviewer,qa,architect,facilitator --dry-run`
+  → subject `wf(dna): update team.agents.Claude`; the line is re-rendered `[developer, reviewer, qa, architect, facilitator]`
+  (inner spaces lost) and the subject does not name the field.
+- `node dist/cli.js dna add team.agents.Claude.executes_as --value facilitator --dry-run` → subject
+  `wf(dna): add team.agents.Claude.executes_as facilitator`, the same one-line diff as the first (edit `append-items`).
+**Chosen (D1): the first** — it is the `update` verb the AC names, its subject names the field and the full new list,
+and its diff is the minimal one. Rehearsed for real in a scratch clone of the branch (outside the repository):
+`node <worktree>/dist/cli.js dna update team.agents.Claude.executes_as --value developer,reviewer,qa,architect,facilitator`
+→ exit 0, `{"key": "team.agents.Claude.executes_as", "value": "developer,reviewer,qa,architect,facilitator"}`, one
+commit `wf(dna): update team.agents.Claude.executes_as developer,reviewer,qa,architect,facilitator` with body
+`WingFoil-Version: 0.3.0 (8dd4df4c…)`, `git show --stat HEAD` → `.wingfoil/dna.yaml | 2 +-`. The verb does not raise
+`version:` (task-299, w1).
+
+**Commit order (green).** (1) `npm run build` on a clean tree (else `WingFoil-Version` carries `-dirty`), then the verb
+above on a clean tree; add the §7 trailers with `git commit --amend --no-edit --trailer …` (git-conventions §8). (2) The
+hand bump in its own commit, following the task-236 precedent (`498a33ba` verb, then `11569e02`
+`chore(dna): task-236 — dna.yaml 1.9 → 2.0 (…)`): `version: 2.0` → `2.1`, and **yes**, the annotation is extended like
+every previous bump — append `; 2.0 -> 2.1 at task-292 (team.agents Claude executes_as facilitator, dl-202 item 3,
+retro-v0.3 P-02)` before `. The file's FORMAT …`. Subject `chore(dna): task-292 — dna.yaml 2.0 → 2.1 (team.agents
+Claude executes_as facilitator)`. Verb first, because the verb edits the committed file and must stay the only change
+in its commit; between the two commits `test/lint/version-bump.test.ts` ("passes on this repository's pending change")
+would fail, so no gate runs between them. No test pins dna.yaml `version: 2.0`
+(`grep -rn "1\.9 -> 2\.0\|2\.0 at task-236" test/` → no hit).
+
+**AC 2 — the refusal today (red-first, confirmed).** Code build at `8dd4df4c`:
+- `node dist/cli.js agent execute --role facilitator --element decision-log:dl-202-which-workflow-roles-agents-may-execute-and-a-check-that-flags-agent.execute-on-a-role-no-agent-executes --dry-run`
+  → stderr `error: no agent in dna.yaml with an adapter executes as role 'facilitator'`, exit 1 (`selectAgent`,
+  `src/agent/execute.ts:282`). With `--agent Claude` → `error: agent 'Claude' does not execute as role 'facilitator'`,
+  exit 1 (`:286`).
+- Control, `--role architect`, same element: without a terminal it passes role/agent selection and stops at step 12,
+  `error: interactive launch needs a terminal on stdin and stdout`, exit 1 (`bug-392`: `--dry-run` needs a terminal
+  too); under a pty (`script -qec "node dist/cli.js agent execute --role architect --element <dl-202> --dry-run" /dev/null`)
+  → exit 0, the launch plan JSON (`"dryRun": true`, `"role": "architect"`, `"agent": "Claude"`, `"adapter":
+  "built-in/claude-code"`).
+- After the change (the scratch clone above, its HEAD = the verb commit), the same pty command with `--role facilitator`
+  → exit 0, plan with `"role": "facilitator"`, `"agent": "Claude"`; without a pty → the terminal error, exit 1, no
+  longer the role refusal. So the role was the only blocker; the MCP pre-flight and the bootstrap accept `facilitator`.
+  This launch path needs `claude` on `PATH` (§3.3 step 4) and a terminal: it is green's/review's manual evidence, not
+  a jest test.
+
+**Tests that read `team.agents` (`grep -rln executes_as test/`, 26 files).** All but one build their own dna.yaml
+(fixtures: `test/agent/helpers/agent-execute-fixture.ts`, `test/core/helpers/agent-list-fixture.ts`, inline strings or
+objects in `test/dna/*`, `test/core/*`, `test/cli/*`, `test/release-health/measure.test.ts`); they test the engine,
+which does not change, and stay untouched. The only test reading THIS repository's `team.agents` is
+`test/storage/builtin-adapter-claude-code.test.ts:102` (AC 4 of task-236: `Claude` names `adapter: claude-code`); it
+does not read `executes_as` and stays as is. No test pins the repository's `executes_as` today — the "tests updated"
+of the AC is a new repository-level test.
+
+**What qa pins (red).** New file `test/agent/repository-agent-roles.test.ts` (no fixture; reads the repository):
+- Source: the **committed** dna.yaml, `git show HEAD:.wingfoil/dna.yaml` (`git` from
+  `test/storage/helpers/git-fixture`, cwd `REPO_ROOT = join(__dirname, '..', '..')`), parsed with `load` (js-yaml) and
+  `DnaYaml.parse` (`src/dna/schema`) — `agent execute` reads HEAD's committed configuration (command-baseline), so an
+  uncommitted edit must not satisfy it.
+- T1: `team.agents` entry `name === 'Claude'` → `executes_as` `toEqual(['developer', 'reviewer', 'qa', 'architect', 'facilitator'])`
+  (exact, the order the verb writes) and `approval_authority` `toBe(false)` (unchanged guard).
+- T2: `selectAgent(dna, 'facilitator', undefined)` (exported, `src/agent/execute.ts`) `toMatchObject({ ok: true, value: { name: 'Claude', adapter: 'claude-code' } })`;
+  T3: `selectAgent(dna, 'facilitator', 'Claude')` the same.
+- Expected red: assertion failures only — T1 (`facilitator` missing), T2 `{ ok: false, error: { code: 'VALIDATION',
+  message: "no agent in dna.yaml with an adapter executes as role 'facilitator'" } }`, T3 `… "agent 'Claude' does not
+  execute as role 'facilitator'"`. No `tsc` red (no new export; `npx tsc --noEmit` clean).
+- Not pinned in jest: the CLI dry-run (terminal + `claude` binary dependent, `bug-392`); recorded as manual evidence above.
+
+**AC 3 (characterization).** Now: `npm run -s check:role-directives` → eight lines `<role>: ok` (facilitator included),
+`role-directives: 8 roles checked, 0 with warnings`, exit 0; `npm run -s wingfoil -- directives list --role facilitator`
+(pinned build) → exit 0, `"warnings": []`, eight entries: `traceability` (roles `architect, facilitator, product-owner,
+reviewer, tech-lead`) + the seven globals `claim-evidence, doc-versioning, documentation, git-conventions,
+security-secrets, security, wingfoil-cli`. After (scratch clone): `node scripts/check-role-directives.cjs --root <clone>`
+→ `8 roles checked, 0 with warnings`, exit 0. The check sweeps `team.roles`, not `executes_as`, so the change cannot
+move it; already pinned for this repository by `test/cli/check-role-directives.test.ts:158` — no new test.
+
+**Files.** `.wingfoil/dna.yaml` (verb commit + hand bump 2.0 → 2.1); `test/agent/repository-agent-roles.test.ts` (qa,
+red); `AGENTS.md` §4 line 150 if D2 is accepted; this task file. No `src/` change, so coverage cannot move; no CLI
+or help change (`docs/cli-reference.md` untouched).
+
+**Decisions for the approver.**
+- D1 — command of record: `dna update team.agents.Claude.executes_as --value <full list>` (recommended) vs
+  `dna add team.agents.Claude.executes_as --value facilitator` (same diff, `wf(dna): add` subject, not the AC's verb).
+- D2 — `AGENTS.md:150` says "AI agents execute as `developer/reviewer/qa/architect`", false once this lands. Recommend
+  fixing that one line in this task (`… developer/reviewer/qa/architect/facilitator …`; AGENTS.md has no `version:`),
+  rather than leaving it to user-docs' `align-agent-docs`. Historical citations of the old list (`spec-003:318`,
+  `dl-134:47`, `dl-202` Context, rel-v0.2/v0.3 plans) describe the past and stay; `src/storage/templates.ts:294` is the
+  adopters' scaffold, not this repository, and stays.
 
 ### Retrospective
 
