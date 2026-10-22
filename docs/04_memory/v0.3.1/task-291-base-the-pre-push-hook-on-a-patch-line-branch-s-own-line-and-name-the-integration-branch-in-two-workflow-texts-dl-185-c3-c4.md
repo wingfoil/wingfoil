@@ -168,7 +168,8 @@ Rulings on the design decisions above:
 
 ### red (qa, 2026-10-22)
 
-Red commit `1c2d4a19` (`git log -1 --format=%h` after the commit) — T4 is measured from it. Test files only; no
+Red commits `1c2d4a19` (the tests) and `bd4038ad` (case 3b, coordinator request 2026-10-22); **T4 is measured from
+`bd4038ad`** (`git log -1 --format=%h` after each commit). Test files only; no
 production file touched. Classification as the design's D2 (AC 1 case 2, the D-A header pin, AC 2's base-rule pins
 and AC 3 red-first; AC 1 cases 1, 3, 2b and AC 2's two existing §9 sentences characterization).
 
@@ -192,7 +193,11 @@ the fixture's `M1`/`R1`).
 - AC 1 — `case 1 (characterization): a branch of \`main\` takes origin/main` (passes); `case 2 (red-first): a branch
   of a patch line takes origin/release/X.Y` (fails: `"base"` expected `302157cb…` (= `R1`), received `fbf6aab8…` — the
   hook's `git merge-base HEAD origin/main`, i.e. `A`; status 0 on both sides); `case 3 (characterization): a new
-  \`release/X.Y\` itself takes origin/main` (passes); `case 2b (characterization): the tie …` (passes); `D-A:
+  \`release/X.Y\` itself takes origin/main` (passes); `case 3b (characterization, D1 step 1): a stale tracking ref of
+  the pushed release line is skipped` — `git update-ref refs/remotes/origin/release/0.4` set to `release/0.4`'s own
+  HEAD (off `origin/main`'s line, the nearest possible merge-base), expected `--base` = `git merge-base HEAD
+  origin/main` (= `M1`), the ref deleted again in `finally` (passes on first run against today's hook, which reads
+  only `origin/main`); `case 2b (characterization): the tie …` (passes); `D-A:
   governance.yml's header no longer states the old base and names the line the branch was cut from` (fails: expected
   substring "the line the branch was cut from" not in the flattened header comment).
 - AC 2 — `AC 2 (characterization): the hook is a local convenience and CI is the enforcement point` (passes);
@@ -213,9 +218,10 @@ test/directives/wingfoil-cli.test.ts --maxWorkers=2` → `Test Suites: 3 failed,
 git-conventions 3 failed, workflow-patch-line-texts 4 failed / 1 passed, wingfoil-cli all passed (the pin on
 `release-planning.yaml` stays green).
 
-**Not pinned (for the coordinator).** D1 step 1's skip of the pushed ref's own tracking ref (a stale
-`origin/release/0.4` on a new `release/0.4`) has no case: in the fixture `release/0.4` is never pushed, as the design's
-case 3 states. The case-2 received sha is identified as `A` by reasoning (the current hook computes
+**Case 3b run.** `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx jest test/cli/git-hooks.test.ts --maxWorkers=2
+--verbose` → `Tests: 2 failed, 9 passed, 11 total`, the two failures still case 2 and the D-A header pin.
+
+**Note.** The case-2 received sha is identified as `A` by reasoning (the current hook computes
 `git merge-base HEAD origin/main`), not by a printed comparison.
 
 ### Retrospective
