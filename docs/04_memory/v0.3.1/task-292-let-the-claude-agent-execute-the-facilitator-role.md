@@ -149,6 +149,15 @@ or help change (`docs/cli-reference.md` untouched).
   `dl-134:47`, `dl-202` Context, rel-v0.2/v0.3 plans) describe the past and stay; `src/storage/templates.ts:294` is the
   adopters' scaffold, not this repository, and stays.
 
+#### Design gate (approver, 2026-10-22)
+
+Rulings on the design decisions above:
+- D1 accepted: the commit of record is `dna update team.agents.Claude.executes_as --value
+  developer,reviewer,qa,architect,facilitator` (code build), then a separate hand commit raising `dna.yaml` 2.0 → 2.1
+  with its history annotation.
+- D2 accepted: `AGENTS.md`'s line stating the roles AI agents execute as is corrected in this task.
+- AC2's CLI evidence (`agent execute … --dry-run` under a terminal) stays manual evidence for green/review.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
