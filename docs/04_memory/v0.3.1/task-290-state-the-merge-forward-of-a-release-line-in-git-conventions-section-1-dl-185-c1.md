@@ -198,6 +198,35 @@ Rulings on the design decisions above:
   decision-log by the coordinator.
 - D5 accepted: `version: "2.0"`. D6 accepted: no edit to `doc-versioning` or `release-publishing.yaml`.
 
+### red (qa, 2026-10-22)
+
+Role qa. Red commit `c0f34665` (T4 baseline: `tests.unchanged(since: c0f34665)`), on `8ee9bff4`. Files:
+`test/directives/git-conventions.test.ts` (new `describe('git-conventions §1 — dl-185 C1 (task-290)')`, appended after
+the task-286 describe) and `test/lint/version-bump.test.ts` (one case in the integration-branch describe). No
+production file, no new export.
+
+| AC | Class | Test | Result at red |
+|----|-------|------|---------------|
+| 1 — C1 (a) (i) | red-first | `AC 1: rule 5 states C1 (a) (i) — two kinds of colliding file, …` | fails: first assertion `` Expected substring: "`dl-185` C1 (a)" `` |
+| 2 — C1 (b) (i) | red-first | `AC 2: §1 states C1 (b) (i) — once per patch, by the coordinator …, in a detached worktree at main's head; …` | fails: `` Expected substring: "`dl-185` C1 (b)" `` |
+| 3 — C1 (c) (i) | red-first | `AC 3: §1 states C1 (c) (i) — the release/X.Y counterpart of the direct-commit list, …` | fails: `` Expected substring: "`dl-185` C1 (c)" `` |
+| 4 — C1 (d) (ii), text + version | red-first | `AC 4: §1 states C1 (d) (ii) — the merge commit bump satisfies the version-bump gate …` | fails: `` Expected substring: "`test/lint/version-bump.test.ts`" `` |
+| 4 — C1 (d) (ii), gate | characterization | `(11) a merge forward on main: a versioned file both lines changed passes only when bumped once more (dl-185 C1 (a)/(d), task-290)` | passes on first run |
+
+- Pins follow the design table, with the gate rulings applied: AC 2 pins `` in a worktree of its own on `main` `` and the
+  D3 (b) precision `` a detached worktree at `main`'s head `` (both, as substrings of flattened §1), and no
+  `--detach` / `--ff-only` text; AC 3 pins no capture sentence (D4 not taken). AC 1's absence check
+  (`conflicts on the version-bearing files —`, the old rule 5) sits in the same `it` as its positives. AC 4's version
+  pin is "≥ 1010" plus `task-290` and `dl-185` on the version line, `**Date:**` ≥ `2026-10-22` (bug-314: no exact value).
+- The characterization case is numbered (11), not the design's (8): (8a)/(8b)/(9)/(10) are taken in that file. It
+  builds `release/0.3` DNA `1.0 → 1.1` and `main` DNA `1.0 → 1.1`, runs `git merge --no-ff --no-commit release/0.3`
+  (conflict tolerated, exit code not pinned), and asserts `integrationBranchOf` = `main` at `HEAD`, the unbumped
+  resolution `1.1` → `[STILL_1_1]`, the extra bump `1.2` → `[]`. C1 (d) (ii) holds: no return to design.
+- Runs: `npx tsc --noEmit -p tsconfig.json` → exit 0. `npx jest test/directives/git-conventions.test.ts
+  test/lint/version-bump.test.ts --maxWorkers=2` → `Tests: 4 failed, 56 passed, 60 total` (git-conventions: the 4
+  new cases fail, every existing case passes; version-bump: 32 passed). `npx jest test/lint/version-bump.test.ts
+  --maxWorkers=2 -t "merge forward on main"` → `31 skipped, 1 passed`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
