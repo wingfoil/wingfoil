@@ -158,6 +158,36 @@ Rulings on the design decisions above:
 - D2 accepted: `AGENTS.md`'s line stating the roles AI agents execute as is corrected in this task.
 - AC2's CLI evidence (`agent execute … --dry-run` under a terminal) stays manual evidence for green/review.
 
+### red (qa)
+
+Role qa, worktree `.wf2-wt/task-292`, branch head `cd712f29` before red. **Red commit `90f27087`** (T4 is measured
+from it). Tests only, no production file.
+
+**File.** `test/agent/repository-agent-roles.test.ts` (new) — reads the committed configuration
+(`git show HEAD:.wingfoil/dna.yaml`, `git` from `test/storage/helpers/git-fixture`), parsed with js-yaml `load` and
+`DnaYaml.parse`; calls `selectAgent` from `src/agent` (exported today, so no `.d.cts` and no `tsc` red).
+
+**Per AC.**
+- AC 1 (characterization, the `wf(dna): update` commit and the hand bump): a commit-shape fact of green, no jest test
+  (per design D1); T1 below pins its resulting value.
+- AC 2 (red-first): `AC 2 (T1)` — `team.agents[name=Claude].executes_as` `toEqual` `[developer, reviewer, qa,
+  architect, facilitator]` and `approval_authority` `false`; `AC 2 (T2)` — `selectAgent(dna, 'facilitator',
+  undefined)` returns `Claude` / `claude-code`; `AC 2 (T3)` — the same with `'Claude'`. T2/T3 assert on
+  `ok ? value : error` first so a refusal prints its message. The CLI `--dry-run` stays manual evidence (design gate).
+- AC 3 (characterization): no new test; `test/cli/check-role-directives.test.ts` `AC 1 (exit 0 on this repository)`
+  already pins it and passes (run below).
+
+**Run.** `npx tsc --noEmit -p tsconfig.json` → exit 0, no output.
+`npx jest test/agent/repository-agent-roles.test.ts test/cli/check-role-directives.test.ts --maxWorkers=2` →
+`Test Suites: 1 failed, 1 passed, 2 total`, `Tests: 3 failed, 6 passed, 9 total`: repository-agent-roles 3 failed /
+0 passed, check-role-directives 0 failed / 6 passed. Each failure is an assertion on the behaviour, not a crash:
+- T1: `expect(received).toEqual(expected)`, diff `-   "facilitator",` (HEAD's list ends at `architect`).
+- T2: `toMatchObject` received `"message": "no agent in dna.yaml with an adapter executes as role 'facilitator'"`.
+- T3: `toMatchObject` received `"message": "agent 'Claude' does not execute as role 'facilitator'"`.
+
+Because the source is HEAD, green turns these only once the verb commit is made; an uncommitted `dna.yaml` edit
+leaves them red.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
