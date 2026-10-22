@@ -174,6 +174,23 @@ describe('task-291 — the base of a new remote ref (dl-185 C3 (i))', () => {
       const run = pushNew(work, 'release/0.4');
       expect({ status: run.status, base: run.base }).toEqual({ status: 0, base: expected });
     });
+
+    it('case 3b (characterization, D1 step 1): a stale tracking ref of the pushed release line is skipped', () => {
+      // The stale ref points at release/0.4's own HEAD — off origin/main's line, and the nearest possible merge-base,
+      // so a rule that did not skip the pushed ref's own candidate would take it. Removed again in `finally`, so the
+      // other cases of this fixture never see it.
+      const ownHead = git(work, ['rev-parse', 'release/0.4']).trim();
+      git(work, ['update-ref', 'refs/remotes/origin/release/0.4', ownHead]);
+      try {
+        const expected = mergeBase(work, 'release/0.4', 'origin/main');
+        expect(expected).toBe(shaM1);
+        expect(expected).not.toBe(ownHead);
+        const run = pushNew(work, 'release/0.4');
+        expect({ status: run.status, base: run.base }).toEqual({ status: 0, base: expected });
+      } finally {
+        git(work, ['update-ref', '-d', 'refs/remotes/origin/release/0.4']);
+      }
+    });
   });
 
   describe('after `main` merges release/0.3 forward (--no-ff, pushed)', () => {
