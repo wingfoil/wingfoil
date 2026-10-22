@@ -227,6 +227,44 @@ production file, no new export.
   new cases fail, every existing case passes; version-bump: 32 passed). `npx jest test/lint/version-bump.test.ts
   --maxWorkers=2 -t "merge forward on main"` → `31 skipped, 1 passed`.
 
+### green (developer, 2026-10-22)
+
+Green commit `6e20541e` `feat(directives): task-290 — git-conventions §1 states the merge forward of a release line
+(dl-185 C1)`, on `df98a9c1`; only `.wingfoil/directives/custom/git-conventions.md` (`git show --stat 6e20541e`).
+Written as the design's text with the gate rulings: rule 5 rewritten (two kinds of colliding file, the bump in the
+merge commit, the C1 (d) (ii) sentence), new rule 6 (C1 (b) (i), "in a worktree of its own on `main`: a detached
+worktree at `main`'s head", no command text, D3 (b)), the `release/X.Y` counterpart paragraph after the dl-152 list
+(C1 (c) (i), no capture sentence, D4 not taken), `dl-185` in the §1 heading, the sources list and the closing Source
+note; `version: "1.9"` → `"2.0"` (D5) with the whole `(prev …` chain kept and one closing parenthesis added (18
+opening, 18 closing on the line: `tr -cd '(' | wc -c` / `')'`), `**Date:** 2026-10-22`.
+red → green: `npx jest test/directives test/lint/version-bump.test.ts test/core/workflow-integration-branch.test.ts
+--maxWorkers=2` (under `waitslot.sh`) → `Test Suites: 11 passed`, `Tests: 240 passed, 240 total` (red: 4 failed).
+
+### refactor (developer, 2026-10-22)
+
+- `release/0.3` did not move: `git rev-parse --short release/0.3` → `41f9d079`, the fork point; no sync merge.
+- Under `waitslot.sh`, in this worktree: `npx jest --coverage --maxWorkers=2` → `Test Suites: 461 passed, 461 total`,
+  `Tests: 8360 passed, 8360 total`, All files `99.34 | 97.4 | 98.03 | 99.71` (statements, branches, functions,
+  lines; > 80 %; no `src/` change, so no column can move). `npm run -s lint` → exit 0; `npm run -s docs:api` →
+  exit 0; `npm run -s typecheck` (both tsc configs) → exit 0.
+- No CLI/help change, no BDD scenario touched (prose directive only); no refactor needed.
+
+### self-review (developer, 2026-10-22)
+
+- AC 1–4 against the text (`grep -n "dl-185" .wingfoil/directives/custom/git-conventions.md` → heading, sources
+  entry, counterpart paragraph, rule 5 (C1 (a) (i), C1 (d) (ii)), rule 6 (C1 (b) (i)), Source note). Each AC's
+  pins pass (green run above); the four version-bearing files keep `main`'s values and get no extra bump (D2); the
+  absence pin `conflicts on the version-bearing files —` and its positive sit in one test.
+- T4: `git log --first-parent --no-merges --format=%h c0f34665..HEAD -- test/directives/git-conventions.test.ts
+  test/lint/version-bump.test.ts` → empty.
+- Same-class: no other file in this repository quotes rule 5 outside Memory and plans (`grep -rln
+  "version-bearing\|merge forward"` excluding `docs/04_memory` and `docs/05_plans` → none); `doc-versioning` and
+  `release-publishing.yaml` untouched (D6).
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -234,3 +272,8 @@ production file, no new export.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design's "a worktree of its own on `main`" could not be run as worded while the shared tree holds `main`
+  (`git worktree list`): ruled D3 (b), the precision "a detached worktree at `main`'s head"; the first merge forward
+  in `release-publishing` fixes the commands. Candidate decision-log (D4): a bug filed on `main` whose fix belongs to
+  a patch line cannot be triaged on `release/X.Y`, where it does not exist.
