@@ -47,14 +47,114 @@ and two workflow texts name `main` where they mean the integration branch.
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-22)
+
+Read: `dl-185` (`ready`, approve `f6e54041`: option (i) for C3 and C4, `git show -s f6e54041`), `dl-159` §1–§5 and A2
+items 5–6, `dl-103` §1 (B) (`ready`), `git-conventions` §1, §9, `.githooks/pre-push`, `scripts/integration-branch.cjs`,
+`.github/workflows/governance.yml` header, the two workflow phases, and the tests that pin them. `depends_on: []`. Plan
+`dev-loop-rel-v0.3.1-plan` D1: merge order `task-292` → `task-290` → `task-291`. No contradiction between the ACs and
+the ratified texts. Baseline versions on `release/0.3` (`git show release/0.3:<file> | grep -m1 '^version'`):
+`git-conventions` "1.9", `release-health.yaml` 1.1, `release-planning.yaml` 2.2.
+
+**D1 — how the hook finds the line (AC 1): the nearest merge-base, in the hook, in POSIX sh.**
+`scripts/integration-branch.cjs` is declined: it derives a branch from a release's `--kind` and `--version`
+(`node scripts/integration-branch.cjs` with no `--version` prints its usage, exit 2); a branch alone carries neither, and
+only a `task/` branch leads to a release at all (task file → `release` → release `kind`, a Memory read the hook would have
+to make; `design/`, `ingest/`, `backlog/` branches have none). Rule, for a new remote ref (all-zero or unknown remote sha;
+the existing-ref path, `base = <remote sha>`, is unchanged):
+1. Candidates: `git for-each-ref --format='%(refname:short)' refs/remotes/origin/main 'refs/remotes/origin/release/*'`,
+   in that output order (sorted by refname, so `origin/main` first; in this worktree it prints `origin/main`,
+   `origin/release/0.3`), keeping `origin/main` and the names
+   `origin/release/<digits>.<digits>`; the candidate naming the pushed ref itself (`origin/<remote ref without
+   refs/heads/>`) is skipped, so a new `release/X.Y` never takes its own stale tracking ref.
+2. For each candidate, `mb = git merge-base HEAD <candidate>` (a candidate with none is skipped). The first `mb` is the
+   base; a later `mb` replaces it only when it differs and the current base is its ancestor
+   (`git merge-base --is-ancestor <base> <mb>`): the nearest to `HEAD` wins, a tie or an unrelated pair keeps the earlier
+   (so `origin/main`).
+3. No candidate → empty base → the whole-history run, as today. The hook never fetches: local tracking refs only, as now.
+Determinism (`determinism` directive): the result is a function of `HEAD` and the local tracking refs, in a fixed order
+with a fixed tie rule; no clock, no randomness. The three cases: a branch of `main` → `mb(origin/main)` is a descendant of
+the patch line's fork point → `origin/main`; a branch of `release/X.Y` → its fork point on the line is a descendant of
+`mb(origin/main)` → `origin/release/X.Y` (equal shas after a merge forward give the same base either way); a new
+`release/X.Y` → its own tracking ref is skipped, older lines' merge-bases are ancestors → `origin/main`.
+The hook's header comment (lines 10–12) and `governance.yml`'s header ("The local twin differs here: …", lines 25–27,
+`grep -n "merge-base HEAD origin/main" .github/workflows/governance.yml` → 26) state the old base: same class, rewritten
+in green (D-A below).
+
+**D2 — AC classification (corrected).** AC 1 red-first (case 2 is new behaviour; cases 1 and 3 pass today and are pinned
+in the same test as characterization of the cases kept). AC 2 and AC 3 are reclassified **red-first**, the `task-286` /
+`task-288` precedent the plan's D2 names: the §9 base rule and both workflow sentences are text not yet written, so their
+pins fail at red; the parts that already exist (§9 "local convenience", "CI is the enforcement point") are pinned beside
+them as characterization.
+
+**What qa pins.** Prose as substrings of whitespace-flattened text, never by line (`task-276`); every absence beside its
+positive; version pins "≥" plus the history entry naming `task-291` (`bug-314`).
+- **AC 1 — extend `test/cli/git-hooks.test.ts`** with a `describe('task-291 — the base of a new remote ref (dl-185 C3
+  (i))')`. Fixture as `test/cli/check-release-tag.test.ts` does it: a bare origin (`git init --bare
+  --initial-branch=main` under `fixtureDirPrefix()`), one work clone (`cloneTempRepo`, `commit.gpgsign false`),
+  commits with `commitAllAs` (identity per command), `removeTempDir` in `afterAll`. History: `A` on `main`, pushed;
+  `release/0.3` cut at `A`, `R1` on it, pushed; `main` advances to `M1`, pushed. Branches, not pushed: `task/main-x`
+  from `M1` (+`T1`); `task/patch-x` from `R1` (+`T2`); `release/0.4` cut from `M1` (+ one commit). In the clone, an
+  untracked stub `scripts/check-governance.cjs` that writes `JSON.stringify(process.argv.slice(2))` on stdout and exits
+  0, and an empty `dist/memory/index.js` (the hook's build guard). Run with HEAD on each branch:
+  `spawnSync('sh', [<repo>/.githooks/pre-push, 'origin', 'https://example.invalid/r.git'], { cwd: clone, input:
+  'refs/heads/<b> <HEAD sha> refs/heads/<b> 0000000000000000000000000000000000000000\n' })`. Observable: exit 0 and the
+  stub's argv contains `--base` followed by the expected sha, computed by the test with git (not read from the hook):
+  case 1 `git merge-base HEAD origin/main` (= `M1`); case 2 `git merge-base HEAD origin/release/0.3` (= `R1`); case 3
+  `git merge-base HEAD origin/main` (= `M1`). Optional case 2b (tie): `main` merges `release/0.3` forward (`--no-ff`,
+  pushed), a branch from `R1` → `R1`. **Expected red:** case 2 only, the stub printing `--base <A>` where `<R1>` is
+  expected; cases 1, 3 (and 2b) pass on first run. Same describe: `.github/workflows/governance.yml` no longer contains
+  `merge-base HEAD origin/main` and contains `the line the branch was cut from` (red). The existing five tests stay.
+- **AC 2 — extend `test/directives/git-conventions.test.ts`** with `describe('git-conventions §9 — dl-185 C3 (task-291)')`
+  over `section('9. Checks on pushed commits')`, flattened. Positives: `` `dl-185` C3 (i) ``; `the line the branch was cut
+  from`; `` `origin/main` for a branch of `main`, `origin/release/X.Y` for a branch of a patch line, and `origin/main` for
+  a new `release/X.Y` itself ``; `CI stays the enforcing check` (red); `The pre-push hook is a local convenience` and
+  `CI is the enforcement point` (characterization). Absence: `merge-base HEAD origin/main`. Version: header `version:` ≥
+  2.0 and the version line names `task-291` (robust to the re-bump of D-B).
+- **AC 3 — new file `test/core/workflow-patch-line-texts.test.ts`**, reading both files as `HEAD` holds them
+  (`loadWorkflowRegistryAtHead`, `git show HEAD:<path>` for the version line), the helpers of
+  `test/core/workflow-integration-branch.test.ts` copied, not imported. `release-health` phase `measure` description:
+  `the commit carrying the release's \`released\` transition on the release's integration branch (\`main\` for a minor,
+  \`release/X.Y\` for a patch` and `dl-185 C4 (i)`; absence `the commit on main carrying`; version ≥ 1.2, its 1.2 entry
+  names `task-291` (the existing `test/release-health/bindings-and-deps.test.ts` keeps `task-241`/`bug-344` in the
+  history). `release-planning` phase `advance-pinned-build` description: `merges the patch's line forward after the
+  patch's tag`, `` `release/X.Y` into `main`, never back `` and `dl-185 C4 (i)`; absence `merges \`main\` after the patch's
+  tag`; still contains `` re-checks the `wingfoil-cli` directive (dl-163 S3e) `` (pinned by
+  `test/directives/wingfoil-cli.test.ts`); version ≥ 2.3, its 2.3 entry names `task-291`. All red.
+
+**Text to write in green** (the pins above are its substrings): §9's hook bullet gains "For a new remote ref the hook takes
+its base from the line the branch was cut from (§1): the merge-base of `HEAD` nearest to it among `origin/main` and each
+`origin/release/X.Y` — `origin/main` for a branch of `main`, `origin/release/X.Y` for a branch of a patch line, and
+`origin/main` for a new `release/X.Y` itself (`dl-185` C3 (i)). CI has no range on a branch-creating push and checks the
+whole history; the difference is accepted: CI stays the enforcing check." `measure`: "… else the commit carrying the
+release's `released` transition on the release's integration branch (`main` for a minor, `release/X.Y` for a patch;
+dl-089 §1, dl-185 C4 (i)) …". `advance-pinned-build`: "… after every published patch, when the in-flight release's
+integration branch merges the patch's line forward after the patch's tag — `release/X.Y` into `main`, never back (Q3
+(B), dl-159 Decision 2, dl-185 C4 (i); the pin per line is dl-159 A2 item 5, not ruled) …".
+
+**Files to touch:** `.githooks/pre-push` (rule + header comment), `.github/workflows/governance.yml` (header comment),
+`.wingfoil/directives/custom/git-conventions.md` (§9, version, Source list gains `dl-185`),
+`.wingfoil/workflows/custom/release-health.yaml`, `.wingfoil/workflows/custom/release-planning.yaml`; tests by qa as
+above. Not touched: `scripts/integration-branch.cjs`, `bindings.yaml` (no token changes: `release-health.measure` and
+`npm.pin_advance` bindings read no description), `.wingfoil/WORKFLOW.md` (line 431 names no branch).
+**Version bumps:** `git-conventions` "1.9" → "2.0" on this branch; `release-health.yaml` 1.1 → 1.2; `release-planning.yaml`
+2.2 → 2.3 (numeric YAML). The four `VERSIONED_CONFIG_FILES` of `test/lint/helpers/version-bump.ts` are not touched.
+
+**D-B — the re-bump (plan D1).** `task-290` bumps `git-conventions` "1.9" → "2.0" and merges first. At the sync
+(`git merge --no-edit release/0.3`, end of refactor) the `version:` line conflicts: the resolution keeps `task-290`'s
+"2.0" entry as `prev`, takes "2.1" for this task's §9 entry, and keeps both texts of §1/§9 (disjoint sections). The AC 2
+pin (≥ 2.0 + `task-291` in the line) holds before and after.
+
+**Decisions for the approver.**
+- **D-A** — rewrite the same-class statement of the old base in `governance.yml`'s header (a comment; no version field).
+  Recommendation: yes, in this task (pinned under AC 1).
+- **D-C** — `docs/08_health/metrics.yaml` line 20 also says "the commit on `main` carrying the release's `released`
+  transition". Its `version: 2` is the catalogue's semantic version (`compare.cjs:328` re-measures the previous point
+  when it differs), so a `doc-versioning` bump for a comment would force a needless like-for-like re-measure.
+  Recommendation: out of scope; a candidate finding for the coordinator (fix it with the next catalogue change).
+
+**Risks.** `task-290`: the version conflict of D-B, and its §1 wording of "the line the branch was cut from" — §9 refers to
+§1 for it, not quoting it, so a different §1 phrase does not break this task's pins. `task-292`: none (disjoint files).
 
 ### Retrospective
 
