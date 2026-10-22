@@ -9,8 +9,14 @@
 # the push through rather than block on a missing build.
 #
 # git gives one line per pushed ref on stdin: <local ref> <local sha> <remote ref> <remote sha>. The range
-# checked is <remote sha>..HEAD for the ref whose local sha is HEAD; a new remote ref (all-zero sha) is
-# checked from its merge-base with origin/main. A ref other than HEAD is not checked.
+# checked is <remote sha>..HEAD for the ref whose local sha is HEAD. A new remote ref (all-zero sha, or a
+# remote sha unknown here) is checked from the line the branch was cut from (dl-185 C3 (i), git-conventions §9):
+# the merge-base of HEAD with origin/main and with each origin/release/X.Y, the nearest to HEAD winning —
+# origin/main for a branch of main, origin/release/X.Y for a branch of a patch line, origin/main for a new
+# release/X.Y itself. Candidates come from the local tracking refs (no fetch), in refname order (origin/main
+# first); the tracking ref of the pushed ref itself is skipped; a later merge-base replaces the current one only
+# when it differs and the current one is its ancestor, so a tie keeps the earlier. No candidate → no base, the
+# whole history (as CI does on a branch-creating push). A ref other than HEAD is not checked.
 top=$(git rev-parse --show-toplevel) || exit 1
 script="$top/scripts/check-governance.cjs"
 if [ ! -f "$top/dist/memory/index.js" ]; then
@@ -23,7 +29,27 @@ status=0
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ "$local_sha" = "$head" ] || continue
   if [ "$remote_sha" = "$zero" ] || ! git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
-    base=$(git merge-base HEAD origin/main 2>/dev/null) || base=""
+    pushed="origin/${remote_ref#refs/heads/}"
+    base=""
+    for line in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin/main 'refs/remotes/origin/release/*'); do
+      case "$line" in
+        origin/main) ;;
+        origin/release/*.*)
+          version=${line#origin/release/}
+          case "$version" in
+            *[!0-9.]* | .* | *. | *.*.* | *..*) continue ;;
+          esac
+          ;;
+        *) continue ;;
+      esac
+      [ "$line" = "$pushed" ] && continue
+      mb=$(git merge-base HEAD "$line" 2>/dev/null) || continue
+      if [ -z "$base" ]; then
+        base="$mb"
+      elif [ "$mb" != "$base" ] && git merge-base --is-ancestor "$base" "$mb" 2>/dev/null; then
+        base="$mb"
+      fi
+    done
   else
     base="$remote_sha"
   fi

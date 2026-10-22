@@ -12,14 +12,15 @@ description: >-
   Determinism Index components and the external visibility snapshot — compare every metric with the
   previous release's run, and turn each regression or breached floor into an improvement proposal for the
   retrospective. Not a release gate: the release has already shipped (dl-089 §5).
-version: 1.1                     # 1.0 dl-089 §1 (task-222): measure -> compare -> propose, roles per dl-089 §1; {health-dir} is paths.health (dl-089 (A)), numbered docs/08_health/ by bug-299; 1.1 task-241 (bug-344): the bound measure passes --any-node and --max-workers 2, compare's run-time readings and re-measurement stated, compare drafts the Proposals section the facilitator reviews (approver rulings 2026-10-13 E, I)
+version: 1.2                     # 1.0 dl-089 §1 (task-222): measure -> compare -> propose, roles per dl-089 §1; {health-dir} is paths.health (dl-089 (A)), numbered docs/08_health/ by bug-299; 1.1 task-241 (bug-344): the bound measure passes --any-node and --max-workers 2, compare's run-time readings and re-measurement stated, compare drafts the Proposals section the facilitator reviews (approver rulings 2026-10-13 E, I); 1.2 task-291 (dl-185 C4 (i)): measure's fallback point is the commit carrying `released` on the release's integration branch, `release/X.Y` for a patch
 element: release
 
 phases:
   - name: measure
     description: >-
       Run every catalogue metric at the release's measurement point — the tag of the version actually
-      published, else the commit on main carrying the release's `released` transition (dl-089 §1) — after
+      published, else the commit carrying the release's `released` transition on the release's integration
+      branch (`main` for a minor, `release/X.Y` for a patch; dl-089 §1, dl-185 C4 (i)) — after
       `npm ci`, in a throw-away worktree; never write git configuration (dl-089 §6). The bound step passes
       `--any-node` and `--max-workers 2` (bug-344, dl-170): off the pipeline's pinned Node each toolchain
       metric records `node` and `node_pinned` rather than being not-measurable; run it under the pinned Node
