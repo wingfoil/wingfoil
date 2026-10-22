@@ -188,6 +188,67 @@ from it). Tests only, no production file.
 Because the source is HEAD, green turns these only once the verb commit is made; an uncommitted `dna.yaml` edit
 leaves them red.
 
+### green (developer, 2026-10-22)
+
+Red `90f27087` (`test/agent/repository-agent-roles.test.ts`, 3 failing). Integration branch unchanged:
+`git rev-parse --short release/0.3` → `41f9d079`, `git merge-base --is-ancestor release/0.3 HEAD` → exit 0, so no sync.
+- `3c960411` `wf(dna): update team.agents.Claude.executes_as developer,reviewer,qa,architect,facilitator` — the verb
+  (design gate D1), run as `node dist/cli.js dna update team.agents.Claude.executes_as --value developer,reviewer,qa,architect,facilitator`
+  after `npm run build` on a clean tree (`git status --short` empty) → exit 0, `{"key": "team.agents.Claude.executes_as",
+  "value": "developer,reviewer,qa,architect,facilitator"}`; one commit, `.wingfoil/dna.yaml | 2 +-`, the one-line diff
+  `[ developer, reviewer, qa, architect ]` → `[ developer, reviewer, qa, architect, facilitator ]`, body
+  `WingFoil-Version: 0.3.0 (22e672b9…)` (no `-dirty`); §7 trailers added with `git commit --amend --no-edit --trailer …`
+  in that paragraph (verb's own sha was `6dd3bb64` before the amend, never pushed).
+- `8a6b0c00` `chore(dna): task-292 — dna.yaml 2.0 → 2.1 (…)` — the hand bump, its own commit, with the history
+  annotation `; 2.0 -> 2.1 at task-292 (team.agents Claude executes_as facilitator, dl-202 item 3, retro-v0.3 P-02)`.
+- `ff63e71c` `docs(agents): task-292 — AGENTS.md §4 …` (design gate D2): line 150 now reads "AI agents execute as
+  `developer/reviewer/qa/architect/facilitator`". `grep -rn "reviewer/qa/architect" test/ scripts/` → no hit, so no
+  test pins that line.
+
+Red → green: `npx jest test/agent/repository-agent-roles.test.ts --maxWorkers=2` → `Tests: 3 passed, 3 total`
+(at red: 3 failed). With the neighbours: `npx jest test/agent/repository-agent-roles.test.ts test/cli/check-role-directives.test.ts
+test/lint/version-bump.test.ts test/storage/builtin-adapter-claude-code.test.ts --maxWorkers=2` → `Test Suites: 4 passed`,
+`Tests: 48 passed, 48 total`.
+
+**AC 2 manual CLI evidence (design gate: not a jest test), code build at `ff63e71c`, element
+`decision-log:dl-202-which-workflow-roles-agents-may-execute-and-a-check-that-flags-agent.execute-on-a-role-no-agent-executes`:**
+- `script -qec "node dist/cli.js agent execute --role facilitator --element <dl-202> --dry-run" /dev/null` → exit 0, the
+  launch plan: `"dryRun": true`, subject `agent: record dl-202-…/adhoc/1`, `"role": "facilitator"`, `"agent": "Claude"`,
+  `"adapter": "built-in/claude-code"`, `"state_ref": "ff63e71c…"`.
+- The same with `--agent Claude` → exit 0.
+- Without a terminal (`… --dry-run </dev/null`) → `error: interactive launch needs a terminal on stdin and stdout`,
+  exit 1 — `bug-392`'s step-12 check, no longer the role refusal (before: `error: no agent in dna.yaml with an adapter
+  executes as role 'facilitator'`, exit 1, design above).
+
+### refactor (developer, 2026-10-22)
+
+No production code changed (`git diff --stat 41f9d079..HEAD -- src` → empty), so nothing to refactor. Gates, at
+`ff63e71c` with a clean tree, each heavy one after `waitslot.sh`:
+- `npm run -s test:coverage -- --maxWorkers=2` (the full jest suite, as `npm test`'s parallel run, with coverage) → exit 0,
+  `Test Suites: 462 passed, 462 total`, `Tests: 8360 passed, 8360 total`; `All files` 99.34 % statements, 97.4 % branches,
+  98.03 % functions, 99.71 % lines (> 80 %; no `src/` change, so no column can move from this task).
+- `npm run -s lint` → exit 0; `npm run -s typecheck` (both tsc configs) → exit 0; `npm run -s docs:api` → exit 0.
+- AC 3: `npm run -s check:role-directives` → `role-directives: 8 roles checked, 0 with warnings`, exit 0 (as at design).
+- `node scripts/check-governance.cjs --base release/0.3` → `1 wf() commits in 41f9d079…..HEAD … and 7 other commits`,
+  `gated: 0 findings on 0 commits`, exit 0 (the `config-version` rule included).
+- No CLI or help change: `docs/cli-reference.md` untouched. No BDD scenario covers this repository's own `team.agents`.
+
+### self-review (developer, 2026-10-22)
+
+- AC 1: met — the change is the verb's commit `3c960411` (subject and diff above), `version:` raised by hand in
+  `8a6b0c00`. AC 2: met — `repository-agent-roles` 3/3 green; the CLI dry-run accepts the role (manual evidence above).
+  AC 3: met — `check:role-directives` exit 0; facilitator's directives at design (`traceability` + seven globals) are
+  unchanged (`roles.yaml` not touched: `git diff --stat 41f9d079..HEAD -- .wingfoil/roles.yaml` → empty).
+- T4: `git log --first-parent --no-merges --format=%h 90f27087..HEAD -- test/agent/repository-agent-roles.test.ts` → empty.
+- Same-class drift: the only current-tense statement of the agent's roles outside Memory was `AGENTS.md:150`, fixed
+  (D2); the remaining hits of the four-role list (`grep -rnE "developer, ?reviewer, ?qa, ?architect|developer/reviewer/qa/architect"`)
+  are dated records (spec-003, dl-134, dl-202 Context, rel-v0.2/v0.3 plans, task-186, adr-006, dl-033) or the adopters'
+  scaffold (`src/storage/templates.ts:294`), left as they are (design).
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -195,3 +256,8 @@ leaves them red.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- `agent execute --dry-run` still needs a terminal (`bug-392`), so AC 2's CLI half could only be evidenced by hand under
+  `script -qec …` and no jest test reaches it; the red pins the selection (`selectAgent`) instead.
+- The bump of `dna.yaml` is a second hand commit because the verb does not raise `version:` (task-299, w1); between the
+  two commits `test/lint/version-bump.test.ts` would fail, so the pair must land together.
