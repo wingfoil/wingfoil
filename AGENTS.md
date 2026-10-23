@@ -147,7 +147,7 @@ the move. Start from `.wingfoil/README.md`.
   **Methodologies** (`stacks.methodologies`): Lean Inception · User Story Mapping · Specification by
   Example (BDD) · SARD · TDD.
 - **Roles:** `developer, reviewer, qa, architect, product-owner, tech-lead, facilitator, approver`.
-  AI agents execute as `developer/reviewer/qa/architect` and **never hold approval authority** — all
+  AI agents execute as `developer/reviewer/qa/architect/facilitator` and **never hold approval authority** — all
   approvals route to the `approver` role (the human, Roberto).
 - **Paths:** query categories `sources, tests, docs, config, governance, runs, health` (`dna.yaml`
   `paths:`; `wingfoil paths <category>`).

@@ -330,6 +330,25 @@ describe('version bump of the four versioned config files (bug-143, task-183)', 
         git(repo, ['checkout', '--quiet', '-b', 'task/x', 'release/0.3']);
         expect(integrationBranchOf(repo)).toEqual(line(repo, 'release/0.3', 'release/0.3'));
       });
+
+      it('(11) a merge forward on main: a versioned file both lines changed passes only when bumped once more (dl-185 C1 (a)/(d), task-290)', () => {
+        // Characterization (task-290 AC 4, dl-185 C1 (d) (ii)): no tool change — during the uncommitted merge
+        // forward HEAD is main, the check is strict against main's version:, and the merge commit's extra bump passes.
+        releaseLineWithDnaBump();
+        writeFixtureFile(repo, DNA, config('1.1', 'm'));
+        commitAll(repo, 'bump on main');
+        // Both lines changed the DNA: the merge conflicts, which is expected here (its exit code is not pinned).
+        try {
+          git(repo, ['merge', '--no-ff', '--no-commit', 'release/0.3']);
+        } catch {
+          /* conflict expected */
+        }
+        expect(integrationBranchOf(repo)).toEqual(line(repo, 'main', 'HEAD'));
+        writeFixtureFile(repo, DNA, config('1.1', 'rm'));
+        expect(checkPendingVersionBumps(repo)).toEqual([STILL_1_1]);
+        writeFixtureFile(repo, DNA, config('1.2', 'rm'));
+        expect(checkPendingVersionBumps(repo)).toEqual([]);
+      });
     });
   });
 });
