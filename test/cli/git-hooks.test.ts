@@ -232,6 +232,90 @@ describe('task-291 — the base of a new remote ref (dl-185 C3 (i))', () => {
     });
   });
 
+  /**
+   * Review findings F12, F13 (approver ruling: fixed in the task). One origin with several lines: main (A, M1),
+   * release/0.3 (A + R1), release/0.4 (M1 + R4), and two lines whose names are not `<n>.<n>` — release/0.3.1 and
+   * release/foo, each M1 + a commit of its own — all pushed. One unpushed branch cut from each line's tip.
+   * Expected bases are `git merge-base` against full tracking refnames (`refs/remotes/origin/…`), so the F12
+   * ambiguity cannot reach the test's own computation.
+   */
+  describe('several release lines on origin, and two badly named ones (review F12, F13)', () => {
+    let work: string;
+    let shaR1: string;
+    let shaR4: string;
+    let shaM1: string;
+
+    beforeAll(() => {
+      work = clone(bareOrigin());
+      const shaA = commit(work, 'a.txt');
+      git(work, ['push', '--quiet', 'origin', 'main']);
+      git(work, ['checkout', '--quiet', '-b', 'release/0.3', shaA]);
+      shaR1 = commit(work, 'r1.txt');
+      git(work, ['push', '--quiet', 'origin', 'release/0.3']);
+      git(work, ['checkout', '--quiet', 'main']);
+      shaM1 = commit(work, 'm1.txt');
+      git(work, ['push', '--quiet', 'origin', 'main']);
+      git(work, ['checkout', '--quiet', '-b', 'release/0.4', shaM1]);
+      shaR4 = commit(work, 'r4.txt');
+      git(work, ['push', '--quiet', 'origin', 'release/0.4']);
+      git(work, ['checkout', '--quiet', '-b', 'release/0.3.1', shaM1]);
+      const shaP1 = commit(work, 'p1.txt');
+      git(work, ['push', '--quiet', 'origin', 'release/0.3.1']);
+      git(work, ['checkout', '--quiet', '-b', 'release/foo', shaM1]);
+      const shaF1 = commit(work, 'f1.txt');
+      git(work, ['push', '--quiet', 'origin', 'release/foo']);
+      git(work, ['checkout', '--quiet', '-b', 'task/on-0.4', shaR4]);
+      commit(work, 't4.txt');
+      git(work, ['checkout', '--quiet', '-b', 'task/on-0.3', shaR1]);
+      commit(work, 't5.txt');
+      git(work, ['checkout', '--quiet', '-b', 'task/on-0.3.1', shaP1]);
+      commit(work, 't6.txt');
+      git(work, ['checkout', '--quiet', '-b', 'task/on-foo', shaF1]);
+      commit(work, 't7.txt');
+      plantStub(work);
+    });
+
+    it('F13a (characterization): a branch of release/0.4 takes origin/release/0.4 while release/0.3 also exists', () => {
+      const expected = mergeBase(work, 'task/on-0.4', 'refs/remotes/origin/release/0.4');
+      expect(expected).toBe(shaR4);
+      const run = pushNew(work, 'task/on-0.4');
+      expect({ status: run.status, base: run.base }).toEqual({ status: 0, base: expected });
+    });
+
+    it('F13a (characterization): a branch of release/0.3 takes origin/release/0.3 while release/0.4 also exists', () => {
+      const expected = mergeBase(work, 'task/on-0.3', 'refs/remotes/origin/release/0.3');
+      expect(expected).toBe(shaR1);
+      const run = pushNew(work, 'task/on-0.3');
+      expect({ status: run.status, base: run.base }).toEqual({ status: 0, base: expected });
+    });
+
+    it.each([['release/0.3.1', 'task/on-0.3.1'], ['release/foo', 'task/on-foo']])(
+      'F13b (characterization): %s is not a `<n>.<n>` line — a branch cut from it takes origin/main',
+      (_line, branch) => {
+        const expected = mergeBase(work, branch, 'refs/remotes/origin/main');
+        expect(expected).toBe(shaM1);
+        const run = pushNew(work, branch);
+        expect({ status: run.status, base: run.base }).toEqual({ status: 0, base: expected });
+      },
+    );
+
+    it('F12 (red-first): a local branch named `origin/release/0.3` does not hide the release/0.3 line', () => {
+      // `%(refname:short)` of refs/remotes/origin/release/0.3 becomes `remotes/origin/release/0.3` once a local
+      // branch takes the short name; the line must still be a candidate. Removed again in `finally`.
+      git(work, ['branch', '--quiet', 'origin/release/0.3', shaM1]);
+      try {
+        const short = git(work, ['for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin/release/0.3']).trim();
+        expect(short).toBe('remotes/origin/release/0.3');
+        const expected = mergeBase(work, 'task/on-0.3', 'refs/remotes/origin/release/0.3');
+        expect(expected).toBe(shaR1);
+        const run = pushNew(work, 'task/on-0.3');
+        expect({ status: run.status, base: run.base }).toEqual({ status: 0, base: expected });
+      } finally {
+        git(work, ['branch', '--quiet', '-D', 'origin/release/0.3']);
+      }
+    });
+  });
+
   it("D-A: governance.yml's header no longer states the old base and names the line the branch was cut from", () => {
     const raw = readFileSync(join(REPO_ROOT, '.github', 'workflows', 'governance.yml'), 'utf-8');
     const end = raw.search(/^[^#\s]/m);
