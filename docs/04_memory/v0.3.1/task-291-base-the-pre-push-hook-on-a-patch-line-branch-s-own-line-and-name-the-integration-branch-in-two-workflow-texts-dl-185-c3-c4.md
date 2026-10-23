@@ -328,6 +328,25 @@ Run: `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx eslint test/cli/git-ho
 `npx jest test/cli/git-hooks.test.ts --maxWorkers=2 --verbose` → `Tests: 1 failed, 15 passed, 16 total`, the one
 failure being F12.
 
+### independent review (2026-10-23) and fixes (developer)
+
+Verdict APPROVE; the approver ruled F12 and F13 fixed in the task; qa's tests `d6787989` (new T4 base).
+- **F12 fixed** in `f9fd7447` (`fix(hooks): task-291 — review F12 …`): `.githooks/pre-push` lists candidates with
+  `%(refname)`, matches `refs/remotes/origin/main` and `refs/remotes/origin/release/<n>.<n>` on the full name, passes
+  the full ref to `git merge-base`, and skips `refs/remotes/origin/${remote_ref#refs/heads/}`; order (origin/main
+  first, then refname order), tie rule and no-fetch unchanged; header comment states the full-name match.
+  `sh -n .githooks/pre-push && dash -n .githooks/pre-push` → exit 0. `npx jest test/cli/git-hooks.test.ts
+  --maxWorkers=2` → `Tests: 16 passed, 16 total` (red after review: the F12 case failed at `git-hooks.test.ts:312`).
+- **F13** (several release lines, the name filter): covered by qa's four cases in `d6787989`, passing.
+- **F14–F16**: recorded by the coordinator as follow-ups; nothing changed here.
+- Same class: §9's "The hook's base" bullet speaks of `origin/main` and each `origin/release/X.Y` among the local
+  tracking refs, which stays accurate; no directive or workflow file changed, so no version bump.
+- T4: `git log --first-parent --no-merges --format=%h d6787989..HEAD -- test/cli/git-hooks.test.ts
+  test/directives/git-conventions.test.ts test/core/workflow-patch-line-texts.test.ts` → empty.
+- Gates at `f9fd7447`, under `waitslot.sh`: `npx jest --coverage --maxWorkers=2` → exit 0, `Test Suites: 463 passed,
+  463 total`, `Tests: 8387 passed, 8387 total`, `All files | 99.34 | 97.39 | 98.03 | 99.71`; `npm run -s lint`,
+  `npm run -s typecheck`, `npm run -s docs:api` → exit 0 each. Status stays `in-review`.
+
 ### Pending amendments (approver)
 
 None: no Memory element other than this task file is edited.
