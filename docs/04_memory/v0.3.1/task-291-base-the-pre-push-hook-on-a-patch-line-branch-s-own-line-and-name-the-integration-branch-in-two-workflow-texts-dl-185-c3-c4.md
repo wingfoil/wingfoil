@@ -273,6 +273,29 @@ No refactor of the green code was needed. In this worktree at `c4ef391d`:
 - T4: `git log --first-parent --no-merges --format=%h bd4038ad..HEAD -- test/cli/git-hooks.test.ts
   test/directives/git-conventions.test.ts test/core/workflow-patch-line-texts.test.ts` → empty.
 
+### sync (developer, 2026-10-23)
+
+`git merge --no-edit release/0.3` (`release/0.3` = `c398b663`, after `task-292` and `task-290`) → merge commit `02f41415`
+(parents `8c56c4e9 c398b663`). Two conflicts, resolved as a union:
+- `.wingfoil/directives/custom/git-conventions.md`, the `version:` line: re-bumped to "2.1" with this task's §9 entry,
+  `task-290`'s "2.0" entry kept whole in the `(prev …` chain; `**Date:**` 2026-10-23. `git diff release/0.3 --
+  .wingfoil/directives/custom/git-conventions.md` shows only the version line, the date, the §9 bullet and the Source
+  line: all of `task-290`'s §1 text kept.
+- `test/directives/git-conventions.test.ts`: both appended describes kept. `git diff 8c56c4e9 02f41415 -- <file>` →
+  68 insertions, 0 deletions (`task-290`'s describe); `git diff c398b663 02f41415 -- <file>` → 39 insertions, 0
+  deletions (this task's red describe). The merge adds lines to this red file and changes none of red's lines.
+- `.wingfoil/dna.yaml`, `AGENTS.md` (`task-292`) merged with no conflict: `git diff --stat c398b663 02f41415 --
+  .wingfoil/dna.yaml AGENTS.md` → empty.
+
+T4: `git log --first-parent --no-merges --format=%h bd4038ad..HEAD -- test/cli/git-hooks.test.ts
+test/directives/git-conventions.test.ts test/core/workflow-patch-line-texts.test.ts` → empty.
+
+Gates on the merged tree (`02f41415`): the targeted suites (the three red files, `test/lint/version-bump.test.ts`
+and the five workflow-pin suites) → `Test Suites: 9 passed, 9 total`, `Tests: 140 passed, 140 total`. Under
+`waitslot.sh`: `npx jest --coverage --maxWorkers=2` → exit 0, `Test Suites: 463 passed, 463 total`, `Tests: 8382
+passed, 8382 total`, `All files | 99.34 | 97.4 | 98.03 | 99.71`; `npm run -s lint`, `npm run -s typecheck`,
+`npm run -s docs:api` → exit 0 each.
+
 ### Pending amendments (approver)
 
 None: no Memory element other than this task file is edited.
