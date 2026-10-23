@@ -296,6 +296,38 @@ and the five workflow-pin suites) → `Test Suites: 9 passed, 9 total`, `Tests: 
 passed, 8382 total`, `All files | 99.34 | 97.4 | 98.03 | 99.71`; `npm run -s lint`, `npm run -s typecheck`,
 `npm run -s docs:api` → exit 0 each.
 
+### red after review (qa, 2026-10-23)
+
+Review findings F12 and F13 (independent review: APPROVE; approver ruling: fix them in the task). Red commit `d6787989`
+(`git log -1 --format=%h` after the commit), on top of head `b1bc6edd`. **T4 is measured from `d6787989` from now on.**
+Test file only: `test/cli/git-hooks.test.ts`, new describe `several release lines on origin, and two badly named
+ones (review F12, F13)` inside the AC 1 describe. Same fixture style as the cases above (bare origin, one clone,
+`commitAllAs`, stub `scripts/check-governance.cjs` printing its argv). Origin: `main` (A, M1), `release/0.3` (A + R1),
+`release/0.4` (M1 + R4), `release/0.3.1` (M1 + P1), `release/foo` (M1 + F1), all pushed. One unpushed branch is cut
+from each tip with one commit of its own. The test computes the expected base itself with `git merge-base HEAD
+refs/remotes/origin/<line>`, using full refnames so the F12 ambiguity cannot reach the test's own computation.
+
+Per case, first run against the hook at `b1bc6edd`:
+- `F13a (characterization): a branch of release/0.4 takes origin/release/0.4 while release/0.3 also exists`: passes
+  (base = R4).
+- `F13a (characterization): a branch of release/0.3 takes origin/release/0.3 while release/0.4 also exists`: passes
+  (base = R1).
+- `F13b (characterization): release/0.3.1 is not a \`<n>.<n>\` line — a branch cut from it takes origin/main`: passes
+  (base = M1).
+- `F13b (characterization): release/foo is not a \`<n>.<n>\` line …`: passes (base = M1).
+- `F12 (red-first): a local branch named \`origin/release/0.3\` does not hide the release/0.3 line`. The test creates
+  the local branch `origin/release/0.3` (at M1) and deletes it in `finally`. Its precondition passes:
+  `git for-each-ref --format=%(refname:short) refs/remotes/origin/release/0.3` prints `remotes/origin/release/0.3`.
+  The test then fails at `git-hooks.test.ts:312`
+  (`expect({ status: run.status, base: run.base }).toEqual({ status: 0, base: expected })`). The diff shows
+  `"base"` expected `3995bfec…` (= R1) and received `a2bb5484…`, with status 0 on both sides. The received sha is
+  inferred to be origin/main's merge-base (A): the hook's `case` drops `remotes/origin/release/0.3` (`*) continue`),
+  which leaves only `origin/main`. This identification is reasoned, not printed.
+
+Run: `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx eslint test/cli/git-hooks.test.ts` → exit 0;
+`npx jest test/cli/git-hooks.test.ts --maxWorkers=2 --verbose` → `Tests: 1 failed, 15 passed, 16 total`, the one
+failure being F12.
+
 ### Pending amendments (approver)
 
 None: no Memory element other than this task file is edited.
