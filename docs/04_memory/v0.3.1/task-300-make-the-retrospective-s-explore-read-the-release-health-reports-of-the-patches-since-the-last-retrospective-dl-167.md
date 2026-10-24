@@ -37,14 +37,110 @@ previous retrospective, patches included. This patch's own report is the first.
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-24)
+
+Role architect. Worktree `.wf2-wt/task-300`, branch cut from `release/0.3` at `12147ed5`, start commit `215212a7`.
+Integration branch `release/0.3` (patch-v0.3.1 overrides). No `depends_on` (frontmatter `depends_on: []`); wave `w1`,
+batch A; merge order 297 → **300** → 296 → 293 → 298 (`dev-loop-rel-v0.3.1-plan` W1-2); W1-4: no new
+`actions:`/`checks:` token in `retrospective.yaml`.
+
+**Inputs read (dl-015, dl-102 §4).**
+- `dl-167`, `dl-089`, `dl-092` → `ready` (`grep -m1 '^status' docs/04_memory/design/dls/dl-{167,089,092}-*.md` → three
+  `status: ready`). `dl-167` approved at `94a5a2c3` with option (a) ("Ratify at the v0.3 retrospective … with the
+  recommended option (a)", `git log --format=%b -- <dl-167>`). `decision-log` is `amendable: true` (`memory.yaml`
+  `types.decision-log`), so Action 3's notes go through `memory amend`.
+- No tech-spec covers the change: it is description prose and a `version:` comment of a sub-workflow; no format,
+  schema, constant set or module API (dev-loop `design` safety net: nothing to add).
+- `retrospective.yaml` is `version: 1.6` on this branch and on `release/0.3` (`grep -m1 '^version'` and `git show
+  release/0.3:… | grep -m1 '^version'` → `1.6` both). `explore` names only the release's own report
+  `docs/08_health/release-health-{release.version}.md`; the file's one `patch` (`grep -n -i patch` → line 51) is
+  `collect-feedback`'s dl-163 R6, so the patch-report rule does not exist today.
+- Readers of the file's version: `test/core/retrospective-notes.test.ts:84–85` (≥ 1.4, the `1.4 dl-115 … task-213`
+  entry) and `test/core/retrospective-collect-feedback.test.ts:50–51` (≥ 1.6, the `1.6 dl-163 S3d (task-272)` entry),
+  both over `HEAD`. No test pins explore's release-health sentence or `RH-{release.version}-NN` (`git grep -n
+  "release-health-{release.version}\|RH-{release" test/` → nothing). The sub-workflow files are outside the bump gate
+  (`VERSIONED_CONFIG_FILES`, `test/lint/helpers/version-bump.ts:33`: the four `.wingfoil` YAML only): the bump is the
+  `doc-versioning` convention.
+- The conformance test's unbound table holds four `retrospective` rows (`workflow-repository-conformance.test.ts:165–169`);
+  this task leaves it unchanged, so `task-298`'s re-measure of `spec-017` §12 does not move and the two tasks do not
+  meet in that file.
+- The selection is deducible here: `retro-v0.3` was approved at `6cc6d709` (`git log --grep='^wf(decision-log):
+  approve retro-v0.3'`), an ancestor of `HEAD` (`git merge-base --is-ancestor` → true), and `git ls-tree --name-only
+  6cc6d709 docs/08_health/` lists `release-health-v0.1.json`, `-v0.2.json`, `-v0.3.json`, `-v0.3.md` and no patch
+  report: under D2 (a) `retro-v0.4` reads `release-health-v0.3.1.md`, this patch's report, the first (the task's
+  Description).
+
+**The text green writes (fixed here so qa pins the same words).** In `explore`, the sentence "and always the
+release-health report `docs/08_health/release-health-{release.version}.md` that release-cycle's `release-health`
+phase wrote before this one (dl-089 §1): its comparison is read as measurement, and each of its
+`RH-{release.version}-NN` proposals is carried as a proposal." becomes:
+
+> and always the release-health report `docs/08_health/release-health-{release.version}.md` that release-cycle's
+> `release-health` phase wrote before this one (dl-089 §1), together with the report
+> `docs/08_health/release-health-<patch version>.md` of every patch released since the previous retrospective: a
+> patch skips the retrospective (dl-092 Q2 (ii)), so its proposals are disposed of here (dl-167 (a)). A patch's
+> report is read once, by the first retrospective whose tree holds it: the report of a release of `kind: patch`
+> absent from the tree at the commit that approved the previous `retro-<version>`. Each report's comparison is read
+> as measurement, and each of its `RH-<version>-NN` proposals is carried as a proposal.
+
+The `version:` line becomes `1.7`, the history keeping every entry and appending
+`; 1.7 dl-167 (a) (task-300): explore reads the release-health reports of the patches released since the previous
+retrospective (dl-092 Q2 (ii))`. Under D3 (a), also: `additional-points`' "the release-health report's comparison
+table and its RH proposals (dl-089 §4)" → "the comparison table and the RH proposals of every release-health report
+explore read, the patches' included (dl-089 §4, dl-167)"; `.wingfoil/WORKFLOW.md` line 188 "… its release-health run
+reports D01 as not-comparable." → "… not-comparable, and its proposals are disposed of by the next minor's
+retrospective (dl-167)."; the RT node (line 204) "the release-health report among them" → "the release-health
+report among them, and those of the patches released since the previous retrospective (dl-167)". No `actions:`,
+`checks:` or `produces:` entry changes.
+
+**Per-AC classification and what qa pins** (one new test file, `test/core/retrospective-patch-health.test.ts`, red's
+own; the helpers of `retrospective-collect-feedback.test.ts`: `loadWorkflowRegistryAtHead(ROOT)` from `src/core`,
+`atHead(path)` = `git show HEAD:<path>`, a `text(phase)` collapsing `\s+` to one space, `tokenName` from
+`src/workflow/bindings`; every read at `HEAD`; no fixture repository; deterministic).
+
+| AC | Label in the task | Classification (D1) | qa pins |
+|----|----|----|----|
+| 1a — explore names the patch reports | characterization | **red-first** in fact: the text does not exist (grep above), as `task-286`/`task-290` D1. The test fails at red on missing text, never on a fabricated condition | `text('explore')` contains `` `docs/08_health/release-health-{release.version}.md` `` (kept); contains `` the report `docs/08_health/release-health-<patch version>.md` of every patch released since the previous retrospective ``; matches `/dl-092 Q2 \(ii\)/` and `/dl-167 \(a\)/`; contains `` absent from the tree at the commit that approved the previous `retro-<version>` ``; contains `` each of its `RH-<version>-NN` proposals is carried as a proposal `` |
+| 1b — version bumped once | (same AC) | **red-first** (1.6 at red) | `retrospective().version` ≥ 1.7 (bug-314 "≥"); `atHead('.wingfoil/workflows/custom/retrospective.yaml')` matches `/^version: [0-9.]+ .*1\.6 dl-163 S3d \(task-272\).*; 1\.7 dl-167 \(a\) \(task-300\)/m` (the history kept, the entry appended) |
+| 1c — token-neutral, conformance green | (same AC) | **characterization** (passes at red; pins W1-4) | `phases.map(p => [p.name, (p.actions ?? []).map(tokenName), (p.checks?.pre ?? []).map(tokenName), (p.checks?.post ?? []).map(tokenName)])` toEqual `[['explore',['agent.execute'],[],['secondary-sources.listed']], ['collect-feedback',['agent.execute'],[],['feedback-notes.recorded']], ['additional-points',[],['proposals.disposed'],[]], ['capture',['memory.add','memory.submit'],[],['frontmatter.required']], ['approve',['decision-log.set_state'],[],[]]]`, and explore's `produces` unchanged. "Conformance green" is the existing `workflow-repository-conformance.test.ts` and `workflow-evidence.test.ts`, run, not edited |
+| 1d — under D3 (a) only | — | **red-first** | `text('additional-points')` contains `of every release-health report explore read, the patches' included (dl-089 §4, dl-167)`; the `RT["**retrospective**` line of `atHead('.wingfoil/WORKFLOW.md')` contains `and those of the patches released since the previous retrospective (dl-167)`; the whitespace-collapsed file contains `its proposals are disposed of by the next minor's retrospective (dl-167)` |
+| 2 — dated notes on `dl-089`, `dl-092` | characterization | **no automated test**: the notes stay uncommitted until the approver's `memory amend`, and a test over `HEAD` could not pass inside the task (nor should one read the working tree). Verified at self-review and review on `git diff -- docs/04_memory/design/dls/` | nothing |
+
+Expected red: jest only (assertion failures on 1a, 1b, 1d); no new export, so no `tsc` red.
+
+**Files to touch (green).** `.wingfoil/workflows/custom/retrospective.yaml` (explore; `version:` 1.6 → 1.7 with its
+history; additional-points under D3); `.wingfoil/WORKFLOW.md` (two lines, under D3; no `version:`); this task file.
+Uncommitted, for the approver: `dl-089-…` and `dl-092-…`, one dated `**Note (<date>, dl-167 Action 3; task-300).**`
+paragraph each, after the last existing paragraph (the shape of `dl-089`'s 2026-10-15 note). The `dl-092` note sits
+against Q2 (ii) (the patch's release-health proposals fold forward with its other findings); the `dl-089` note against
+§1/§4 (the retrospective that disposes of a patch's proposals is the next minor's). Proposals take four outcomes
+(`proposals.disposed`), six only for a consumer note: the notes say so rather than repeat `dl-167`'s "six outcomes".
+Not touched: `release-health.yaml`, `release-cycle.yaml` ("the retrospective" stays true: the next minor's),
+`scripts/release-health/`, the conformance test.
+
+**Decisions for the approver.**
+- **D1 — classification (recommendation: accept).** AC 1's text and version parts are red-first in fact (labelled
+  characterization); 1c is characterization; AC 2 has no automated test and is reviewed on the uncommitted diff.
+- **D2 — which patch reports (recommendation (a)).** "Since the previous retrospective" needs a deducible cut.
+  (a) The report of a `kind: patch` release absent from the tree at the commit that approved the previous
+  `retro-<version>`: read once, by the first retrospective whose tree holds it — a patch report reaches `main` only
+  with the merge forward, so a patch whose line is not yet merged forward is read by the next one, never twice.
+  (b) The patch's `released` transition not reachable from that commit: same result normally, but a patch released
+  on an un-merged `release/X.Y` could be selected while its report is not on the retrospective's tree. (c) The
+  patches whose `patch-of` names the previous minor: misses a patch of an older minor released later.
+- **D3 — same-class text (recommendation (a)).** (a) Also make `additional-points` plural and update
+  `.wingfoil/WORKFLOW.md`'s two sentences (no token; the task's "Files" line names only the YAML and the two DLs).
+  (b) Explore only, leaving `additional-points`' singular "the release-health report's" and WORKFLOW.md's "the
+  release-health report among them" to `align-agent-docs`.
+
+**Candidate findings (not filed).**
+- **F1 — a patch's RH proposals are never settled.** `compare.cjs` settles the previous run's proposals against
+  `retro-<previous version>` (`scripts/release-health/compare.cjs:47–50`, `:728`). After a patch, v0.4's `compare`
+  takes `v0.3.1` as previous, finds no `retro-v0.3.1`, and settles every `RH-v0.3.1-NN` as "not adopted" (no
+  retrospective); their dispositions land in `retro-v0.4`, written after v0.4's `compare`, and v0.5's run settles only
+  `RH-v0.4-NN`. Outside this task (no script change); `dl-089` §4 / `report-layout.md` "Previous proposals" own it.
+- **F2** — `dl-167` (a) says "the six outcomes `retrospective.yaml` 1.4 lists"; a proposal takes four
+  (`proposals.disposed`), six being a consumer note's. Wording only; the task's notes on `dl-089`/`dl-092` use four.
 
 ### Retrospective
 
