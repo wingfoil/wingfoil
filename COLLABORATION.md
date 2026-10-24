@@ -166,8 +166,8 @@ truth model — no external contributor database, no commit rewriting.
 A project that uses WingFoil to govern its own development (a *consumer*) meets WingFoil's defects,
 gaps and missing features while it works. It writes them down in its own repository, WingFoil reads
 them at its retrospective, and WingFoil publishes its answer in this repository, where the consumer
-reads it. WingFoil never commits into a consumer's repository, and the consumer never commits into
-this one: each side pulls
+reads it. WingFoil never commits into a consumer's repository, and the consumer's notes stay in its
+own repository
 ([`dl-163`](docs/04_memory/design/dls/dl-163-consumer-projects-feedback-sources-and-the-feedback-loop.md)
 R1–R6).
 
@@ -200,7 +200,7 @@ R4). Its frontmatter has six fields:
 | `title` | one line saying what the note is about |
 | `kind` | `defect` (WingFoil does something wrong), `gap` (it does not cover a case it should) or `request` (a new capability) |
 | `status` | one of the six below |
-| `wingfoil_version` | the WingFoil build the note was observed on, as `wingfoil --version` prints it |
+| `wingfoil_version` | the WingFoil build the note was observed on |
 | `answered_by` | the ids of the WingFoil elements that answer the note; empty until the consumer fills it at a sync |
 
 The body states what was observed and what was expected, with the commands that show it. The statuses:
