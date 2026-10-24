@@ -6,7 +6,7 @@ description: >-
   Close the release loop: EXPLORE the release's Execution Notes for friction, let the approver add
   points, capture what went well / what to improve as Memory, and feed adjustments into the next
   release planning.
-version: 1.6                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175); 1.3 dl-104 Action 2 (task-199): approve declares the Memory transition it stands for, explore's agent.mine_execution_notes becomes agent.execute (dl-090 Q6); 1.4 dl-115 Q1 (A) + Q3 (x), dl-163 (task-213): explore reads the ### Retrospective subsections first and lists every secondary source it was given; additional-points gains a checks.pre that every proposal and every consumer feedback note has one outcome (four, six for a consumer feedback note); 1.5 dl-089 §1 (task-222): explore reads the release-health report, additional-points presents its proposals, capture writes the retro's ## Release health section; the friction inventory moves to docs/09_retrospectives/ (bug-299); 1.6 dl-163 S3d (task-272): a read-only collect-feedback phase between explore and additional-points reads the registered consumer inboxes and writes a read record the approver rules on, capture records the ruling
+version: 1.7                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175); 1.3 dl-104 Action 2 (task-199): approve declares the Memory transition it stands for, explore's agent.mine_execution_notes becomes agent.execute (dl-090 Q6); 1.4 dl-115 Q1 (A) + Q3 (x), dl-163 (task-213): explore reads the ### Retrospective subsections first and lists every secondary source it was given; additional-points gains a checks.pre that every proposal and every consumer feedback note has one outcome (four, six for a consumer feedback note); 1.5 dl-089 §1 (task-222): explore reads the release-health report, additional-points presents its proposals, capture writes the retro's ## Release health section; the friction inventory moves to docs/09_retrospectives/ (bug-299); 1.6 dl-163 S3d (task-272): a read-only collect-feedback phase between explore and additional-points reads the registered consumer inboxes and writes a read record the approver rules on, capture records the ruling; 1.7 dl-167 (a) (task-300): explore reads the release-health reports of the patches released since the previous retrospective (dl-092 Q2 (ii))
 element: release
 
 phases:
@@ -21,8 +21,13 @@ phases:
       release for the next planning, points the approver hands over, a report or record another phase
       produced, and always the release-health report
       `docs/08_health/release-health-{release.version}.md` that release-cycle's `release-health` phase
-      wrote before this one (dl-089 §1): its comparison is read as measurement, and each of its
-      `RH-{release.version}-NN` proposals is carried as a proposal. The inventory lists each secondary source
+      wrote before this one (dl-089 §1), together with the report
+      `docs/08_health/release-health-<patch version>.md` of every patch released since the previous
+      retrospective: a patch skips the retrospective (dl-092 Q2 (ii)), so its proposals are disposed of
+      here (dl-167 (a)). A patch's report is read once, by the first retrospective whose tree holds it:
+      the report of a release of `kind: patch` absent from the tree at the commit that approved the
+      previous `retro-<version>`. Each report's comparison is read as measurement, and each of its
+      `RH-<version>-NN` proposals is carried as a proposal. The inventory lists each secondary source
       it was given, with the commit or sha read, and carries each item of a source that is a proposal
       as a proposal, never as a finding (dl-115 Q3 (x)): a proposal cannot emerge from mining the
       repository. The consumer feedback read record (dl-163) is written after this phase, by
@@ -76,7 +81,8 @@ phases:
   - name: additional-points
     description: >-
       Approver gate: present the friction inventory + the identified improvement themes, the
-      release-health report's comparison table and its RH proposals (dl-089 §4), and the consumer
+      comparison table and the RH proposals of every release-health report explore read, the patches'
+      included (dl-089 §4, dl-167), and the consumer
       feedback read record `collect-feedback` wrote (dl-163 S3d); the approver
       adds any further points to analyze (and, if a point implies a config/process change, a DL is
       spun off in capture). Before the gate, every item that is a proposal, and every consumer
