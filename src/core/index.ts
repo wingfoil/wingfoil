@@ -213,6 +213,23 @@ export type {
   StartCommit,
   TrailEntry,
 } from '../workflow/deduce';
+// task-293: element provenance in the deduction (P4.21, `spec-017` §2, §4.8) — the record constants `workflow adopt` /
+// `workflow rekey` write (task-294, task-295), the two diagnostics and the resolver of ownership and orphans.
+export {
+  ADOPT_SUBJECT_PREFIX,
+  ADOPTED_TRAILER,
+  INSTANCE_TRAILER,
+  readAdoption,
+  readRekey,
+  REKEY_FROM_TRAILER,
+  REKEY_SUBJECT_PREFIX,
+  REKEY_TO_TRAILER,
+  resolveProvenance,
+  STEP_TRAILER,
+  W_PROVENANCE_CONFLICT,
+  W_PROVENANCE_ORPHAN,
+} from '../workflow/provenance';
+export type { AdoptionRecord, ProvenanceClaim, ProvenanceConflict, ProvenanceOrphan, ProvenanceRef, RekeyRecord, ResolvedProvenance } from '../workflow/provenance';
 
 export { malformedElementRefMessage, parseElementRef } from './element-ref';
 export type { DirectiveFile, WorkflowsLoadResult } from './loaders';

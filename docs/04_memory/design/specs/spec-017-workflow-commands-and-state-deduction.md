@@ -168,8 +168,8 @@ message }`, one array named `diagnostics`; for these codes `file` is repository-
 | `W_UNRESOLVED_TOKEN` | warning | a token of a `where`, `produces` or action argument has no value on the element it resolves against (§4.1) — the element lacks the field, or the field is blank |
 | `W_INSTANCE_WORKFLOW_UNKNOWN` | warning | an open plan names a workflow the registry does not load; the instance is listed with an empty frontier |
 | `W_APPROVAL_ROLE_WITHOUT_AUTHORITY` | warning | a member an approval is routed to does not hold the `approver` role (§5.1) |
-| `W_PROVENANCE_ORPHAN` | warning | a linkage, record or adoption in an instance's walk names a `<workflow>.<phase>` the registry does not declare and no `rekey` maps (§4.8); it is evidence of nothing |
-| `W_PROVENANCE_CONFLICT` | warning | two adoptions of one element in the walks, neither descending from the other (§4.8); the element counts as created by neither |
+| `W_PROVENANCE_ORPHAN` | warning | a linkage, record or adoption in an instance's walk names a `<workflow>.<phase>` the registry does not declare and no `rekey` maps (§4.8); it is evidence of nothing. Not raised for an instance whose workflow the registry does not load: `W_INSTANCE_WORKFLOW_UNKNOWN` reports it |
+| `W_PROVENANCE_CONFLICT` | warning | two or more claims on one element in the walks — linkages and adoptions, at least one of them an adoption — none descending from another (§4.8); the element counts as created by none of them |
 
 An error among `spec-003`'s diagnostics makes every workflow operation exit `1` (`VALIDATION`, §10).
 "Startable" and "includable" are `dl-109` K1 (a)'s two booleans; `kind: main` reads as startable-only
@@ -412,7 +412,13 @@ Four things are found there.
   `<workflow>.<phase>` the registry does not declare is evidence of nothing and owns nothing, so its element can be
   adopted again; `W_PROVENANCE_ORPHAN` names it, and `adopt --plan` lists it (§7.11). A later rekey that maps an
   orphaned adoption onto a step that already holds an adoption of the same element resolves the two by the
-  descends-from rule above.
+  descends-from rule above. When an element's claims include an adoption, a linkage and an adoption are claims
+  alike under that rule: the claim that descends from every other claim of the element owns it, and two or more
+  claims none descends from are a conflict (`task-293` design D2 (a)). When an element's claims are all linkages —
+  two add commits naming it, as a cherry-picked add that keeps its trailers gives — every one of them counts and
+  none conflicts, as before provenance records existed (approver ruling (ii), 2026-10-24, `task-293` review). The
+  orphans of an instance whose workflow the registry does not load own nothing and raise no `W_PROVENANCE_ORPHAN`:
+  `W_INSTANCE_WORKFLOW_UNKNOWN` already reports that instance (`task-293` design D3 (a)).
 - **Re-entries.** A commit that moved an element to an earlier position of its `sequence` — a
   `reject` (`wf(<type>): reject <ids> [<from> → <to>]`) or a `park` (`dl-110`) naming it. After a
   re-entry of the element a workflow pass runs on, the `record` and `state` evidence of the phases
@@ -1555,4 +1561,13 @@ found: <type>:<id>`, the message this spec and `src/core/workflow-start-end.ts` 
 `spec-006` §6). §12: the token list names 10 distinct tokens (the text said 13) and 13 of the 17 occurrences, now said so; the "28 above" names
 the list before `task-212`; the pinned build loads the workflows again from 0.3.0; the figures `patch-v0.3.1`'s
 tasks change are named. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend`.
+
+**Revision (2026-10-24, `task-293-read-adoption-and-rekey-records-in-the-workflow-deduction-p4.21`) — §2 and §4.8
+"One owner".** As the approver ruled at `task-293`'s design gate and review (2026-10-24): §4.8 "One owner" gains three
+sentences — a linkage and an adoption are claims under one descends-from rule when the element's claims include an
+adoption (D2 (a)); claims that are all linkages all count and never conflict (ruling (ii)); an instance of a workflow
+the registry does not load raises no `W_PROVENANCE_ORPHAN` (D3 (a)). §2's `W_PROVENANCE_ORPHAN` row gains the D3 (a)
+exception, and its `W_PROVENANCE_CONFLICT` row reads "two or more claims, at least one of them an adoption" instead
+of "two adoptions". Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend`.

@@ -6,7 +6,8 @@
  * input at that sha — the workflow registry with its core checks (`loadWorkflowRegistryAtCommit`),
  * `memory.yaml`, `dna.yaml`, every Memory document in sorted path order (tolerant, task-171), the file
  * list, each open plan's start commit and what each instance's walk holds (phase records, step linkages,
- * re-entries) — plus, to **explain** and never to decide, the working-tree paths among the inputs that
+ * re-entries, and the provenance records `workflow: adopt` / `workflow: rekey`, read from the same subjects and
+ * trailers by `src/workflow/provenance.ts`, task-293) — plus, to **explain** and never to decide, the working-tree paths among the inputs that
  * differ from `HEAD` (`W_UNCOMMITTED_INPUTS`, §1.2; the `command-baseline` directive). The deduction
  * itself is the pure `deduceWorkflowState` (`src/workflow/deduce.ts`).
  *
@@ -51,6 +52,7 @@ import {
   type WalkPosition,
 } from '../workflow/deduce';
 import type { BindingsYaml, CollectionEntry } from '../workflow/bindings';
+import { readAdoption, readRekey, type AdoptionRecord, type RekeyRecord } from '../workflow/provenance';
 import { producesPath, type Workflow } from '../workflow/schema';
 
 import { DIRECTIVES_DIR_PATH, DNA_YAML_PATH, loadDnaYamlAtCommit, loadMemoryYamlAtCommit, MEMORY_YAML_PATH, ROLES_YAML_PATH } from './loaders';
@@ -193,9 +195,13 @@ interface BracketlessCommit extends WalkPosition {
 /** The verbs whose subject carries no bracket (`spec-008` §2): `add` and `submit`. */
 const BRACKETLESS_VERBS: readonly string[] = ['add', 'submit'];
 
-/** What one walk commit says (§4.8): a record, linkages, re-entries and transitions, each possibly empty. */
+/** What one walk commit says (§4.8): a record, linkages, re-entries, transitions and a provenance record, each possibly empty. */
 interface CommitFacts {
   readonly record: PhaseRecord | null;
+  /** An adoption record (`workflow: adopt …`, P4.21), or `null`. */
+  readonly adoption: AdoptionRecord | null;
+  /** A rekey record (`workflow: rekey …`, P4.21), or `null`. */
+  readonly rekey: RekeyRecord | null;
   readonly links: StepLink[];
   readonly reentries: Reentry[];
   readonly transitions: TransitionCommit[];
@@ -222,7 +228,15 @@ function readFacts(entry: WalkCommit, memoryYaml: MemoryYaml | null): CommitFact
           item: trailerValue(trailers, 'WingFoil-Item'),
         }
       : null;
-  const facts: CommitFacts = { record, links: [], reentries: [], transitions: [], bracketless: [] };
+  const facts: CommitFacts = {
+    record,
+    adoption: readAdoption({ commit, position }, subject, trailers),
+    rekey: readRekey({ commit, position }, subject, trailers),
+    links: [],
+    reentries: [],
+    transitions: [],
+    bracketless: [],
+  };
   const operation = parseMemoryOperation(subject);
   if (operation === null) return facts;
   const type = subjectType(subject);
@@ -298,6 +312,8 @@ function readHistory(
       records: inWalk.flatMap((fact) => (fact.record === null ? [] : [fact.record])),
       links: inWalk.flatMap((fact) => fact.links),
       reentries: inWalk.flatMap((fact) => fact.reentries),
+      adoptions: inWalk.flatMap((fact) => (fact.adoption === null ? [] : [fact.adoption])),
+      rekeys: inWalk.flatMap((fact) => (fact.rekey === null ? [] : [fact.rekey])),
     };
     for (const reentry of history.reentries) reentered.add(`${reentry.type}:${reentry.id}`);
     read.history.set(start, history);
