@@ -66,15 +66,16 @@ export const INITIAL_CONFIG_VERSION = '1.0';
 /**
  * `text` with its `version:` raised to the next content revision (`dl-047`), the rule every tool write of a
  * versioned config file applies in its own commit (`spec-006` §6 item 7, `dl-174` (a), task-299): the value
- * on the first top-level `version:` line, plain or quoted, read as digits with at most one dot (`1.10` is
+ * on the first line starting `version:` at column 0, plain or quoted, read as digits with at most one dot (`1.10` is
  * `1.1`, as YAML reads it; a quoted digit string as its number) plus 0.1, rounded at 1e-6 so
  * `1.2 → 1.3` carries no float noise, printed with at least one decimal (`1.9 → 2.0`, `1 → 1.1`), in the
  * value's own quotes. Every other byte — the spacing after the colon, the trailing comment, every other line —
  * is kept, and no history entry is added: the `wf()` commit is the record.
  *
- * A text with no such line, or whose value is not digits with at most one dot, is returned unchanged — so
- * are other spellings YAML reads as numbers (`1e1`, `.5`, `1.`, `+1.2`): a file without `version:` gains none. The four files' schemas declare `version` a number, so the writers
- * never reach the second case. Pure (REQ-SYS-07).
+ * A text with no such line, or whose value is not digits with at most one dot, is returned unchanged: a file
+ * without `version:` gains none, and other spellings YAML reads as numbers (`1e1`, `.5`, `1.`, `+1.2`) are left
+ * as they are. The four files' schemas declare `version` a number, so the writers never reach a non-numeric
+ * value; the other numeric spellings, which those schemas accept, are left unchanged. Pure (REQ-SYS-07).
  */
 export function raiseConfigVersion(text: string): string {
   const match = VERSION_LINE_RE.exec(text);
