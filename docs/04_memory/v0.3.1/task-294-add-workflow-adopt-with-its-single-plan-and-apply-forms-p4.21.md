@@ -60,6 +60,276 @@ the governance check's knowledge of the new subject.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (developer, 2026-10-24)
+
+Session 1 of 4 (role architect), worktree `../.wf2-wt/task-294`, branch cut from `release/0.3` at `59baac94`, hand
+start `315e0640`.
+
+**Inputs checked.** `grep -m1 "^status:"` printed `approved` for `spec-017`, `spec-008`, `spec-006`, `spec-004`,
+`ready` for `dl-187`, `scheduled` for `cp-002`, `done` for `task-293`; `git merge-base --is-ancestor 1fbf5cbc HEAD`
+exited 0 (the spec-017 §2/§4.8 amendment is on the branch); `git rev-parse --short release/0.3` printed `59baac94`
+(the base: no sync owed). **dl-015 gate:** every Execution Note of `task-293` read, incl. `#### Notes for task-294 /
+task-295`; this design follows them (owners lack conflicted elements, so "already owned" also reads `conflicts`;
+`resolveProvenance` is called again from the core, the deduction does not return it; orphans are filtered to the
+instance; `WingFoil-Adopted` follows `parseElementRef`). No AC contradicts a directive; D1–D3 are readings of
+`spec-017` §7.11 the text leaves open, to be recorded as a pending amendment in session 3 once ruled.
+
+**Facts that shape the design** (scratch repositories under the session scratchpad, `npm run build` under the slot
+at 21:31, the code build `node dist/cli.js`):
+- `created` evidence is never *missing* for a step that created nothing: `src/workflow/deduce.ts` pushes `created`
+  to `missing` only when `created.length > 0` (§4.3: an empty step leaves the kind satisfied when the phase declares
+  other evidence, else it needs a `record`). So "its `created` evidence must be missing" (§7.11) cannot be read off
+  `evidence.missing` (D1).
+- On the `init --template scrum` scaffold (task-296), after `workflow start sw-life-cycle` and two `workflow
+  finalize`, `workflow next --format json` printed `scrum-delivery.plan {"kinds":["created","produces"],"missing":
+  ["produces"]}`; after a `memory add --type task` without `--workflow` it printed `scrum-delivery.build
+  {"kinds":["record"],"missing":["record"]}`: the plan step completes from `produces` alone, so no scaffold step is
+  ever blocked on a creation (D9).
+- `--dry-run` needs no new code: `commitEmpty` (`src/storage/commit.ts:200`) already stops with
+  `{dryRun: true, subject, message, paths: [], diff: ''}`.
+- `scripts/check-governance.cjs` already reads both records as non-Memory: on a scratch repo with a `wf(bug): add`,
+  a `workflow: adopt …` carrying `Approver: Nobody <n@example.invalid> (approver)` by a non-approver, and a `workflow:
+  rekey …`, it printed `1 wf() commits … and 2 other commits`, `gated: 0 findings`, exit 0; and
+  `parseMemoryOperation` printed `null null null` for the adopt, rekey and finalize subjects (D4).
+
+#### The command (spec-017 §7.11, spec-008 §12)
+
+`wingfoil workflow adopt <ref> [--step <key>] [--element <type>:<id>] [--plan] [--apply] [--reason <text>]`,
+registered as `CORE_MODULES` `workflow.workflowAdopt`, `mutates: true` (so `--dry-run`, MCP Tool `workflow.adopt`
+through the mechanical registrar; the production server still serves none, the `TOOLS_V04` entry stays). Positional
+`ref` **required** (the registrar refuses `missing required argument: <ref>`, hint `usage: wingfoil workflow adopt
+<ref>`, exit 2, before the fn). Options `step` (`key`), `element` (`type:id`), `reason` (`text`); flags `plan`,
+`apply`. Description (= `--help` and the reference entry's first sentence): `record which step of an open workflow
+an existing element counts as created by, as an empty commit (--plan proposes every adoption, --plan --apply writes
+them)`.
+
+**Refusal order** (each before any write; exit/code from §10):
+1. Usage, exit 2, before any read, thrown as `UsageError`: (U1) `--apply` without `--plan` → `invalid flag
+   combination: --apply needs --plan`; (U2) `--plan` with `--step` or `--element` → `invalid flag combination: --plan
+   proposes every step; drop --step and --element`; (U3) none of `--plan`, `--step`, `--element` → `missing required
+   argument: --step, --element or --plan`; (U4) malformed `--element` → `malformedElementRefMessage` (`malformed
+   element-ref "<v>": expected <type>:<id>`); (U5) single form and `--plan --apply`: `requireReason` (`missing
+   required argument: --reason`, or the `dl-067` refusal); `--plan` alone: `optionalReason` (D6).
+2. Git identity (REQ-SEC-01) — single form and `--plan --apply`; `--plan` alone reads none.
+3. `--plan --apply` only: approver authority, `user not authorized to apply adoptions in bulk` (`VALIDATION`, exit 1,
+   with `requireApprovalAuthority`'s uncommitted-grant suffix when it applies), before the instance is resolved, so
+   the answer does not depend on the state (D8).
+4. Instance: `resolveInstanceRef` → `unresolvedRef` (`unknown workflow: <ref>` / `workflow is not open: <ref>`,
+   `NOT_FOUND`).
+5. Single form — step: with `--step`, on the frontier else `step '<key>' is not on the frontier of <instance>`
+   (`CONFLICT`); without it, the frontier steps whose phase adds `--element`'s type (rule 2: a `memory.add(type: T)`
+   action or a `{ type: T, path }` produces entry): none → `no step of <instance> adds a <type>`, several → `no step
+   of <instance> adds a <type> alone: give --step, one of: <k>, <k>` (`details.steps`, frontier order) — as
+   `resolveAddLink` does.
+6. The step adds a type, else `<key> adds no element to adopt` (`CONFLICT`); `--element`'s type is one of them,
+   else `<key> adds a <T>, not a <type>` (`VALIDATION`; `<T>` the added types joined by `, `) — **before** existence,
+   so the BDD type scenario holds whether or not its task exists (D10); the step lacks its created element (D1),
+   else `<key> already has its created element` (`CONFLICT`).
+7. `--element` exists at `HEAD`, else `element not found: <type>:<id>` (`NOT_FOUND`); it is not owned, else
+   `<type>:<id> is already owned by <instance> <key>; move it with workflow transfer` (`CONFLICT`; the owner is
+   `owners.get('<type>:<id>')`, or for a conflicted element `conflicts[i].claims[0]`; `<key>` remapped).
+8. Without `--element`: the step's candidates — none → `no candidate for <key>; name one with --element`; several →
+   `<n> candidates for <key> (<type>:<id>, …); name one with --element` (`details.candidates`, `(type, id)` order).
+9. `requireCleanIndex` (staged changes refuse the empty commit), then the commit.
+
+**The commit** (`writeProvenanceRecord`, below): subject `workflow: adopt <instance> <key> <type>:<id>`; body
+paragraph `Reason: <normalized>`, preceded on a bulk application by `Approver: <name> <<email>> (approver)` in the
+same paragraph (finalize's shape, `check-governance`'s "first body line"); final paragraph `WingFoil-Instance:
+<instance>`, `WingFoil-Step: <key>`, `WingFoil-Adopted: <type>:<id>`, then `WingFoil-Version:` last (`commitEmpty`
+`trailers`). No file changes. Single form: no authority check (rule 7).
+
+**`--plan`** (pure walk, `planAdoptions`): from the instance's frontier at `HEAD`, list each frontier step *blocked on
+a creation* (D1), with its candidates; for each step with exactly one, count a **simulated adoption** (an
+`AdoptionRecord` prepended to the instance's `InstanceHistory.adoptions` under a synthetic commit whose parent is the
+previous tip, position `-n`) and deduce again; stop when an iteration adds no single-candidate step. Steps are listed
+once, in discovery order (frontier order within an iteration). Steps with zero or several candidates are listed and
+adopt nothing. Recorded adoptions are listed first (D3). Orphans: `resolveProvenance(...).orphans` of this instance,
+in its order, `element` mapped to `ElementRef` from `HEAD` (`null` for a record orphan or an element gone).
+**`--plan --apply`**: authority (step 3), then the plan at `HEAD`, then for each unrecorded entry with one
+candidate, in plan order, the single form's checks 5–9 at the then-current `HEAD` with `--step`/`--element` given and
+the bulk body; nothing to write → no commit, exit 0. A dry run stops at the first commit (spec-008 §2). A refusal
+mid-way returns that refusal with `details.applied` (commits already written stay, D7).
+
+**Output** (spec-017 §8): single → `AdoptResult { baseline, instance, adopted: [{ step, element, commit }], next }`
+(`next` deduced at the new `HEAD`, `buildStep`); plan → `AdoptPlanResult { baseline, instance, steps: [{ step, type,
+candidates, recorded }], orphans: [{ commit, key, element }], applied }` (`applied` = the adoptions written, empty
+without `--apply`). `ElementRef.status` read at `HEAD`. `--plan`'s `W_UNCOMMITTED_INPUTS` diagnostics go out as
+success warnings (D5). Console (`renderAdoptConsole`, one renderer, dispatch on `'steps' in value`):
+
+```
+workflow: <workflow> (<instance>)                      ← both forms, first line
+adopted: <type>:<id> into <key> (<commit>)             ← single, then stepLines(next, 'next step') or 'no next step'
+step <key>: adopted <type>:<id> (recorded)             ← plan, recorded entry
+step <key>: 1 candidate <type>:<id>                    ← plan, one candidate
+step <key>: <n> candidates <type>:<id>, <type>:<id>    ← plan, several
+step <key>: no candidate of type <type>                ← plan, none
+orphan: <key> (<commit>)[ <type>:<id>]                 ← plan, per orphan
+applied: <type>:<id> into <key> (<commit>)             ← plan --apply, per commit
+nothing to adopt                                       ← plan with no step, orphan or application
+```
+
+#### Candidates (rule 5) and "blocked on a creation" — a new field of the deduced step
+
+The step's frames (scope element, bound element, collection item) live inside the `Deducer`, so the rules are
+evaluated there. `src/workflow/deduce.ts` gains
+
+```ts
+export interface StepAddition {
+  readonly type: string;                      // T: memory.add(type: T) actions, then { type: T, path } entries; deduplicated, declared order
+  readonly created: readonly ElementRef[];    // the step's created elements of T
+  readonly candidates: readonly ElementRef[]; // [] unless created is empty: rule-5 candidates, ascending (type, id)
+}
+// DeducedStep gains:  readonly additions: readonly StepAddition[];   ([] when the phase adds nothing)
+```
+
+`buildStep` copies fields explicitly, so `next`/`status` JSON is unchanged. A candidate of `T` is an element at
+`HEAD` of type `T`, not archived (§4.11), neither owned nor in a conflict (the `ResolvedProvenance` the deduction
+already computes is handed to the `Deducer`), matching (D2): each `key: value` argument of the phase's
+`memory.add(type: T, …)` other than `type` and `title` whose value is a scalar, literal or `{…}` tokens all resolving
+in the step's frames (`matches`, the `where` rule); and, per `{ type: T, path }` entry, its path resolved with the
+candidate as the `T` frame equals the candidate's path. An argument whose tokens do not resolve, or whose value is a
+list (`tags: [...]`), is no rule. **Blocked on a creation** (`--plan`, D1): `additions` has an entry with `created`
+empty, and the step's other declared evidence is none — `evidence.kinds` without `record` is `['created']` and
+`evidence.missing` is `['record']`. The single form needs only the first half.
+
+#### Per-AC classification and what qa pins
+
+Test files (all new unless named): **`test/core/workflow-adopt.test.ts`** (single form, fixture repos, through
+`CORE_MODULES` `workflowAdopt`'s `fn` as `test/core/workflow-finalize-bdd.test.ts` drives `workflowFinalize`),
+**`test/core/workflow-adopt-plan.test.ts`** (`--plan`, `--apply`), **`test/core/workflow-adopt-bdd.test.ts`** (the
+P4.21 adopt scenarios bound in-process, feature text pinned as in `workflow-finalize-bdd.test.ts` Q4),
+**`test/workflow/adopt-candidates.test.ts`** (pure: `additions` and `planAdoptions` on hand-built
+`DeductionSnapshot`s, the `deduce.test.ts`/`provenance.test.ts` builders), **`test/core/provenance-record.test.ts`**
+(the shared writer and `requireApproverAuthority`), **`test/core/workflow-adopt-barrel.test.ts`** (every new runtime
+export re-exported unchanged by `src/core`, task-293 retrospective), **`test/cli/workflow-adopt.integration.test.ts`**
+(compiled `dist/cli.js`: usage matrix, `--dry-run`, console, `--help`), **`test/cli/check-governance-provenance.test.ts`**.
+Helpers: `makeTempGitRepo`/`writeFixtureFile`/`git`/`commitAll` (`test/storage/helpers/git-fixture`),
+`snapshotPersistence`/`assertPersistenceUnchanged` for "no commit written", the record helpers of
+`test/core/workflow-deduction-provenance.test.ts` copied in, the `withApprover` env switch of
+`workflow-finalize-bdd.test.ts` (Morgan approver, `WingFoil Test` developer). Fixture workflow for the Background: a
+startable `life` with `seed` (`memory.add(type: release-line, version: "v1")`, `memory.submit`) — a `release-line`
+type `draft → planning → active`, `rl-v1` committed in `planning` before `workflow start`, no linkage.
+**Existing tests red must update** (F23; each enumerates the mutating operations or Tools exactly and fails once
+`workflowAdopt` registers): `test/cli/dry-run.integration.test.ts` (a `workflowAdopt` row, `empty: true`, its
+fixture gains an adoptable step on a type no other row touches), `test/core/parity.test.ts` (`'workflow adopt'`,
+`'workflow.adopt'`), `test/core/production-registry.test.ts` (`'workflow.workflowAdopt'` in both lists),
+`test/mcp/read-only-agent-channel.test.ts` (`'workflowAdopt'`, `'workflow.adopt'`). Gates that fail until green's docs
+(no red edit): `test/docs/cli-reference.test.ts`, `test/docs/x-cli-cmds.test.ts` (needs a `docs/01_vision/X_cli-cmds.md`
+row).
+
+| AC | Class | qa pins |
+|---|---|---|
+| 1 BDD | red-first | `workflow-adopt-bdd.test.ts`, one `it` per scenario: **sc. 1** exit 0, one new commit, subject `workflow: adopt <inst> life.seed release-line:rl-v1`, `git show --stat --format= HEAD` empty, final paragraph `WingFoil-Instance`/`WingFoil-Step`/`WingFoil-Adopted: release-line:rl-v1` then `WingFoil-Version:` last, body `Reason: created by hand before the engine`, `rl-v1`'s blob unchanged, `workflowNext` no longer reports `life.seed`; **sc. 2** `--plan` exit 0, `steps` = `[{step:'life.seed', type:'release-line', candidates:[{type:'release-line',id:'rl-v1',status:'planning'}], recorded:false}]`, 0 commits; **sc. 3** a second phase `adr` (`memory.add(type: adr)`, `adr-1` at its exit state) → `--plan --apply --reason …` as Morgan: 2 commits in order `life.seed`, `life.adr`, each with `Approver: Morgan <morgan@example.invalid> (approver)` then `Reason:`; **sc. 4** after sc. 1, `--plan --apply` as Morgan: 0 commits, exit 0, `steps[0]` recorded (D3), `applied: []`; **sc. 6** rename `seed` → `seed-line` committed, no rekey: `--plan` → `orphans` = `[{commit:<adopt sha>, key:'life.seed', element:{type:'release-line',id:'rl-v1',…}}]` and `steps[0]` = `life.seed-line` with the single candidate `rl-v1`; **errors** (exit 1, 0 commits, exact §10 text): owned (a second instance `life` started with `--set phase=2`, `--step life.seed --element release-line:rl-v1` → `release-line:rl-v1 is already owned by <inst-1> life.seed; move it with workflow transfer`), type (`--element task:task-042-login-form`, no such task committed → `life.seed adds a release-line, not a task`), several (`rl-v2` also `version: v1`, no `--element` → `2 candidates for life.seed (release-line:rl-v1, release-line:rl-v2); name one with --element`, `details.candidates`), not found (`release-line:rl-v9` → `element not found: release-line:rl-v9`), authority (as `WingFoil Test` → `user not authorized to apply adoptions in bulk`); **edge** a later phase `approve` holding `planning` (`approval: {by_role: approver}`, `memory.approve`): with `rl-v1` adopted into `life.seed` while `planning`, `workflowNext` reports `life.approve` awaiting `rl-v1`. Plus in `workflow-adopt.test.ts`: `--step` off the frontier, `adds no element to adopt` (a checkpoint step), `already has its created element` (linked by `memory add --workflow`), `no step of <inst> adds a <type>` / `… alone: give --step, one of: …` (two frontier steps adding one type), `no candidate for <key>; …`, staged index refused, `unknown workflow:` / `workflow is not open:`; the `AdoptResult` keys and `next`; console lines above. Pure (`adopt-candidates.test.ts`): `additions` types from both sources deduplicated; literal `version: "v1"` filters; `title:` literal is no rule (D2); a token argument resolved from the scope (`release-line: "{release-line.version}"` in an iteration over release-lines); unresolved token and list argument are no rule; `{ type, path }` path filters; archived, owned, conflicted excluded; `(type, id)` order. |
+| 2 REQ-STATE-11 | red-first | `workflow-adopt-plan.test.ts` on a fixture of 3 elements added without linkage (2 steps with one candidate, 1 with two): `--plan` output (`JSON.stringify` of the value and the console text) byte-identical on two runs, `git rev-list --count HEAD` unchanged; `--apply` writes exactly 2 commits, each `git show --stat --format=` empty; re-run writes 0; every adopted file's blob (`git rev-parse HEAD:<path>`) identical before/after; the simulated walk lists a step only reachable after the first adoption (the walk deduces again). Pure: `planAdoptions` stops on a step with zero/several candidates and on a gate; it never mutates the snapshot it is given. |
+| 3 dry-run, combos, authority | red-first | `workflow-adopt.integration.test.ts` (dist): `--dry-run` single form → exit 0, JSON `{dryRun:true, subject:'workflow: adopt …', paths:[], diff:''}`, `message` holding `Reason:` and the three trailers before `WingFoil-Version:`, `HEAD` and index unchanged; `--plan --apply --dry-run` → the plan of the **first** adoption only; `--plan --dry-run` → the plan result itself, no commit. Usage, exit 2 with `error: <msg>`, 0 commits: U1, U2 (`--plan --step x` and `--plan --element a:b`), U3, U4, missing `--reason` (single and apply), blank `--reason ' '`, `<ref>` missing; `--plan --apply` as a non-approver with **nothing to write** (after sc. 1's apply) still → exit 1 `user not authorized to apply adoptions in bulk`. `provenance-record.test.ts`: `provenanceMessage` exact text with and without approver; `writeProvenanceRecord` commit shape and its refusal on a staged index; `requireApproverAuthority(root, identity, 'X')` → `X` (plus the uncommitted-grant suffix when the working tree grants it); `requireApprovalAuthority` messages unchanged (characterization). |
+| 4 governance, history | **characterization** (D4) | `check-governance-provenance.test.ts`: a fixture with `workflow: adopt …` (single and bulk, the bulk one authored by a non-approver), and `workflow: rekey …` records → the script exits 0 with no finding on them, counts them under "other commits"; `parseMemoryOperation` returns `null` for both subjects (as for `workflow: finalize …`); `memoryHistory` of an adopted element returns the same entries before and after the adoption. Passes at red. |
+| 5 docs and wiring | characterization | Gated by existing suites: `cli-reference.test.ts`, `x-cli-cmds.test.ts`, `enumeration-parity` / `name-resolvability` (warn mode). New pins: `test/cli/e2e-smoke.test.ts`-style assertion that `smokeSteps(template)` holds the probe (D9: after `workflow list`, `workflow start sw-life-cycle --format json` captured, two `workflow finalize`, `workflow adopt {life.instance.id} --plan --format json` exit 0 with `steps.length` 0, `orphans.length` 0, `applied.length` 0 — red until the script changes); the directives: `git-conventions.md` §4 names `workflow: adopt <instance> <key> <type>:<id>` and §8 `WingFoil-Adopted:`, `command-baseline.md` names `workflow adopt --plan` among the declared `HEAD` reads (red until green edits them). |
+
+**Expected reds.** `tsc`: TS2307 for `src/core/workflow-adopt`, `src/core/provenance-record`, `src/workflow/adopt`
+(import them by module path); TS2305 for `requireApproverAuthority` from `src/core/approval-authority` and the new
+`src/core` re-exports in the barrel test; `additions` read through a local cast (no TS2339). Jest: "Cannot find
+module" for the three files, a runtime `TypeError` for `requireApproverAuthority` (`isolatedModules`), assertion
+failures elsewhere (the CLI says `unknown command 'adopt'`, exit 2 — checked: `node dist/cli.js workflow adopt`
+printed `error: unknown command 'adopt'`, exit 2). `npx tsc --noEmit` before the red commit prints only those codes.
+
+#### Files to touch (green/refactor)
+
+New: `src/core/workflow-adopt.ts` (the operation, refusals, `renderAdoptConsole`, `BULK_ADOPT_UNAUTHORIZED`),
+`src/core/provenance-record.ts` (shared, below), `src/workflow/adopt.ts` (pure `planAdoptions`). Changed:
+`src/workflow/deduce.ts` (`StepAddition`, `DeducedStep.additions`, provenance handed to the `Deducer`),
+`src/core/approval-authority.ts` (`requireApproverAuthority`; `requireApprovalAuthority` delegates),
+`src/core/index.ts` (`workflowAdopt` op + fn, re-exports), `scripts/e2e-smoke.cjs` (probe),
+`scripts/check-governance.cjs` (header comment only: the `workflow:` record families are not Memory operations),
+`src/memory/audit.ts` (comment listing the non-`wf()` subjects), `docs/cli-reference.md` (entry; the `--dry-run` row's
+list and its "`paths` is `[]`" sentence; the `--format` console list), `docs/01_vision/X_cli-cmds.md` (row; **1.7 →
+1.8** + revision entry), `test/docs/enumeration-parity.allowlist.ts` (remove the 2 `planned` entries citing task-294),
+`test/docs/name-resolvability.allowlist.ts` (remove the 7 citing task-294, each checked to resolve, else kept and
+reported), `.wingfoil/directives/custom/git-conventions.md` (**2.1 → 2.2**), `command-baseline.md` (**1.5 → 1.6**).
+Not touched: the BDD feature (scenarios present), `.wingfoil/*.yaml`, `e2e-smoke.yaml`, AGENTS.md (its "33 commands"
+becomes 34: `align-agent-docs`'). Pending amendment (session 3, approver `memory amend`): `spec-017` §7.11 records
+D1–D3, D5 as ruled.
+
+#### Shared module for task-295
+
+`task-295` imports, and adds its rekey builders beside them in `src/core/provenance-record.ts`:
+
+```ts
+// src/core/provenance-record.ts
+export interface ProvenanceRecord {
+  readonly subject: string;                  // 'workflow: adopt …' / 'workflow: rekey …'
+  readonly reason: string;                   // normalized (requireReason's value)
+  readonly approver: GitIdentity | null;     // non-null: the body starts 'Approver: <name> <<email>> (approver)'
+  readonly trailers: readonly string[];      // 'Key: value' lines of the final paragraph, before WingFoil-Version
+}
+export function provenanceMessage(record: Pick<ProvenanceRecord, 'subject' | 'reason' | 'approver'>): string;
+//   `${subject}\n\n` + (approver ? `Approver: ${name} <${email}> (approver)\n` : '') + `Reason: ${reason}`
+export function writeProvenanceRecord(root: string, author: GitIdentity, record: ProvenanceRecord): CoreResult<string>;
+//   requireCleanIndex(root, subject), then commitEmpty(root, provenanceMessage(record), { author, trailers }) → sha.
+//   --dry-run: commitEmpty's plan { dryRun: true, subject, message, paths: [], diff: '' } — nothing else to do.
+export function adoptionSubject(instance: string, step: string, element: { type: string; id: string }): string;
+export function adoptionTrailers(instance: string, step: string, element: { type: string; id: string }): string[];
+//   [`${INSTANCE_TRAILER}: …`, `${STEP_TRAILER}: …`, `${ADOPTED_TRAILER}: <type>:<id>`] — keys from src/workflow/provenance.ts
+
+// src/core/approval-authority.ts
+export function requireApproverAuthority(root: string, identity: GitIdentity, refusal: string): CoreResult<void>;
+//   the check memory approve makes (committed dna.yaml at HEAD, VALIDATION, exit 1), refusing with `refusal`
+//   (+ the uncommitted-grant suffix); rekey passes 'user not authorized to rekey'.
+```
+
+`task-295` adds `rekeySubject` / `rekeyTrailers` (`WingFoil-Instance`, `WingFoil-Rekey-From`, `WingFoil-Rekey-To`),
+its `user not authorized to rekey` constant, and reads `resolveProvenance` as this task does. Its subject is already
+non-Memory for `check-governance` (D4) and `memory history`; its dry run is `commitEmpty`'s. It rebumps
+`git-conventions` 2.2 → 2.3, `command-baseline` 1.6 → 1.7 and `X_cli-cmds.md` 1.8 → 1.9 at its sync, and adds its
+rows to the four registry tests above.
+
+#### Decisions for the approver (recommendation first)
+
+- **D1 — "created evidence missing".** (a) Single form: the step's phase adds `T` and the step created no element of
+  `T`; `--plan`: additionally its only declared evidence is `created` (kinds minus `record` = `['created']`, missing
+  = `['record']`), §4.3's "missing `created`". (b) Read `evidence.missing` literally: never contains `created` for an
+  empty step, so no adoption would ever be accepted.
+- **D2 — the declared rules.** (a) Literal and token-resolved scalar arguments of `memory.add(type: T, …)` except
+  `type` and `title` (rule 5: never by title; `end-of-life.yaml`'s `title: "End-of-life plan"` would otherwise filter); list
+  arguments and unresolved tokens are no rule; the `{ type, path }` resolved path. The enclosing `iterate_over`'s
+  `where` is **not** applied: it describes the iterated type, not `T` (applied to `release-line-cycle.delivery`'s
+  `{release-line: …, status: …}` it would match no task); the iteration scope reaches candidates through the token
+  arguments (`seed-releases`' `release-line: "{release-line.version}"`, `dl-187` rule 5's example). (b) Also apply the
+  `where` when the iterated type is `T`.
+- **D3 — `recorded`.** (a) `steps` first lists the instance's adoptions that own their element (not orphaned or
+  conflicted), oldest first, `recorded: true`, `candidates: [the element]`; then the proposals. Re-running `--apply`
+  lists them and writes nothing. (b) Always `false` (a step whose adoption is recorded is never blocked on a creation).
+- **D4 — AC 4 is characterization, not red-first.** (a) Both subjects already fall outside the `wf()` rules and
+  `parseMemoryOperation` (evidence above); green adds only the header sentence; the hole the scratch run shows — a
+  `workflow:` record's `Approver:` line is checked by no rule, so a forged one passes — becomes a candidate finding
+  for the post-tag ingest (it already holds for `workflow finalize`). (b) Red-first: a new gated check
+  (`governance-check:workflow-record`): a `workflow:` record changes no file, and its `Approver:` line meets the
+  authority rule.
+- **D5 — `W_UNCOMMITTED_INPUTS` on `--plan`** (§11 names the read, §8 gives the result no `diagnostics`). (a) Printed as
+  success warnings on stderr; the payload keeps §8's shape. (b) Not reported.
+- **D6 — `--reason` with `--plan` alone.** (a) Validated when given (an unrecordable one exits 2), recorded nowhere —
+  as `workflow finalize` treats an optional reason. (b) Usage error. (c) Ignored.
+- **D7 — a refusal in the middle of `--apply`.** (a) Earlier commits stay, the refusal carries `details.applied`
+  (not reachable when the walk is right: each step is checked at its own `HEAD`). (b) Pre-check all, then write.
+- **D8 — authority before the instance** on `--plan --apply`: (a) identity → authority → instance; (b) after it.
+- **D9 — the smoke probe.** (a) `--plan` on the scaffold after the two checkpoints, asserting the empty plan
+  (`scrum-delivery.plan` completes from `produces`, evidence above), exit 0 and a clean tree. (b) Also a single-form
+  refusal probe (`--step <slug>-delivery.build` → `adds no element to adopt`, exit 1).
+- **D10 — the type check precedes the existence check** (refusal order step 6): (a) as stated; (b) existence first.
+
+#### Risks for the wave
+
+- `task-298` (`docs/cli-reference.md` one line) and `task-299` (`src/core/index.ts` `runDnaMutation`, seven
+  `cli-reference` verb sentences) merge before this task: `git merge --no-edit release/0.3` at refactor's end, then the
+  docs gates again.
+- `task-295` shares `src/core/index.ts`, the four registry tests, the reference, the allowlists and the two directives;
+  its green after this merge. `src/core/provenance-record.ts` is the only module it extends.
+- The simulated adoption uses a negative walk position and a synthetic sha; green confirms (`grep -n position
+  src/workflow/provenance.ts src/workflow/deduce.ts`) that positions only order, never index.
+- The dry-run integration fixture is shared by all mutating rows: the adoptable step must use a type and an instance
+  no other row reads (explicit `<ref>`s everywhere), checked by running the whole file at red.
+- An element created in a `done` instance is not owned (only open instances' walks count, §4.8) and can be adopted
+  again; as specified.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
