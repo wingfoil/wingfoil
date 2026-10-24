@@ -38,14 +38,115 @@ written. The consumers need it before their first sync on 0.3.
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-24)
+
+Worktree `../.wf2-wt/task-297`, branch `task/task-297-…` at `55bc31f7` (`git log --oneline -1`), cut from `release/0.3`
+`12147ed5`. Every command below ran there.
+
+**Gates of the phase.**
+- `tech-spec.approved`: no tech-spec owns the note format (identify-specs, 2026-10-21); the one spec the criteria cite,
+  `spec-010-memory-frontmatter-schema`, is `approved` (`grep -n "^status" docs/04_memory/design/specs/spec-010*.md` →
+  `5:status: approved`). Its "Optional provenance field: `reported_by`" gives the cite form `<service id>/F-<nnn>@<sha>`
+  (`F-` and three digits or more; the full 40- or 64-hex object name of the consumer commit read). No spec is added.
+- `dl-163` is `ready` (`grep -n "^status" docs/04_memory/design/dls/dl-163-*.md` → `5:status: ready`); the ground is
+  R1 (inbox), R3 (pull, never push), R4 (one file per note, minimal format), R5 (sync points), R6 (patch triage,
+  recorded in the patch's `## Scope changes`), S3b (`service` kind `repository`, `feedback_inbox`, `verify`), S3d
+  (`collect-feedback`, the read record and `retro-<version>`'s `## Consumer feedback`), S3f (this documentation).
+- `depends_on.acknowledged`: `depends_on: []`; nothing to read.
+- `acceptance-criteria.consistent`: no criterion contradicts a bound rule. One addition is not in S3f's text: the
+  *sync procedure* (bug-408 Expected Behavior, AC 1). It is the operational reading of R3 ("each consumer reads them
+  and updates its own notes") and R5, not a new rule, except the outcome → status mapping (D2).
+- What exists today: `grep -n "^## " COLLABORATION.md` → `What you can contribute`, `How to contribute (today)`,
+  `Contributor setup …`, `Credit …` (holds the `reported_by:` split, lines 122–161), `Ground rules`, `Pointers`;
+  `grep -n -i "note format\|sync point\|sync procedure" COLLABORATION.md` → nothing.
+
+**Where the answer is published today** (what the procedure tells a consumer to read):
+`docs/09_retrospectives/rl-v1/rel-v0.3-feedback-triage.md` (the read record; `ls docs/09_retrospectives/rl-v1/`),
+`retro-v0.3`'s `## Consumer feedback` table (`grep -n "^## " docs/04_memory/design/dls/retro-v0.3.md` → line 207:
+note cite, Decision, Element, Target), the patch release's `## Scope changes` (`patch-v0.3.1.md` line 85, whose comment
+names the R6 rows), and the `reported_by:` of the elements: `git grep -c "<svc-018 full id>/F-" HEAD -- docs/04_memory`
+lists dl-138, dl-177, dl-178, dl-197, dl-198, … (one hit each), so `git grep` over a fetched ref is the lookup a
+consumer runs with no WingFoil build. Tags: `git tag` → `v0.2.0 v0.2.1 v0.2.2 v0.3.0` (no patch tag on `release/0.3`
+yet); `latest-X.Y` is the dist-tag only of a patch published below a higher minor (`scripts/npm-dist-tag.cjs` lines
+3–5, 79–82), so the text states when each applies and claims no `latest-0.3`. A patch has no retrospective
+(`dl-092` Q2 (ii), `task-300`'s description): between minors, R6 rows in the patch's `## Scope changes` are the only
+answers.
+
+**Generic naming.** Three consumer repositories are registered (kind `repository`, `feedback_inbox:
+"docs/wingfoil-feedback/"`, `status: active`; `grep -n "^status\|^feedback_inbox"` on each service file). The new
+text names none of them, no service id and no repository: it says "a consumer repository registered here as an
+`active` `service` of kind `repository` with a `feedback_inbox` (`docs/04_memory/services/`)". Examples use
+`svc-<nnn>-<slug>` and `F-001`.
+
+**AC classification (T1).** Corrected per the `task-286` D1 / `task-290` D1 precedent (D1 below):
+
+| AC | Task label | Design | Why |
+|---|---|---|---|
+| 1 — the four sections in `COLLABORATION.md`, cite form = `spec-010`'s | characterization | **red-first** | the sections do not exist (grep above); the red is genuine: the text the test asserts is absent at `55bc31f7`, no code or dead text is added to make it fail |
+| 2a — `community-health.test.ts` asserts the four headings and passes | characterization | **red-first** | the same assertions: they fail at red on text not yet written and pass at green |
+| 2b — `llms.txt` / `docs/site.yaml` updated if the page list changes | characterization | **characterization** | the page list does not change: `grep -n COLLABORATION docs/site.yaml llms.txt` → only `docs/site.yaml:26:  - COLLABORATION.md` (a page, not an `llms` entry); neither file is edited, and the existing suites stay green (`npx jest test/docs/community-health.test.ts test/docs/llms-txt.test.ts test/docs/pages-render.test.ts` → 3 suites, 55 tests passed at `55bc31f7`) |
+
+**What qa must pin.** One file, `test/docs/community-health.test.ts`, a new
+`describe('task-297 — COLLABORATION.md documents the consumer feedback loop (dl-163 R1, R4, R5, S3f; bug-408)')` at its
+end, reusing its `read()` and `load` (js-yaml). Helpers (local to the describe): `section(text, '## …')` = the lines
+from that heading to the next `^## ` line; `subsection(sec, '### …')` = from that heading to the next `^### ` or the
+end; `flat(s)` = `s.replace(/\s+/g, ' ')`. Pins are on flattened text; none crosses a `**` or a line break of prose.
+
+| # | Case | Class | Observable (pinned) | Not pinned |
+|---|---|---|---|---|
+| 1 | the section and its four headings | red-first | exactly one line `## Consumer feedback — notes from projects that use WingFoil`; its index is after the `## Credit` heading line and before `## Ground rules`; the `^### (.+)$` headings inside it equal, in order, `['The feedback inbox', 'The note format', 'The sync points', 'The sync procedure']` | other `###`/`####` inside the subsections, the intro paragraph |
+| 2 | the inbox (R1, S3b) | red-first | flat `### The feedback inbox` contains `` `docs/wingfoil-feedback/` ``, `` `README.md` ``, `` `main` ``, `` `feedback_inbox` ``, `` `repository` ``, `` `service-ingest` `` and `dl-163` | how `verify` is phrased, the registration request channel (D4) |
+| 3 | the note format (R4) and the cite form (spec-010) | red-first | flat `### The note format` contains `` `F-<nnn>-<slug>.md` ``; each of `` `id` ``, `` `title` ``, `` `kind` ``, `` `status` ``, `` `wingfoil_version` ``, `` `answered_by` ``; each kind `` `defect` ``, `` `gap` ``, `` `request` ``; each status `` `open` ``, `` `needs-info` ``, `` `captured` ``, `` `resolved` ``, `` `declined` ``, `` `duplicate` ``; `` `reported_by:` ``; and the cite form **read from spec-010**, not written in the test: the first match of ``/`(<service id>\/F-<nnn>@<sha>)`/`` in `docs/04_memory/design/specs/spec-010-memory-frontmatter-schema.md` (assert the match exists), then the subsection contains it backticked | the order of the fields, an example block, the meaning sentences of each status |
+| 4 | the sync points (R5) | red-first | flat `### The sync points` contains `release-planning`, `pin`, `` `origin/main` ``, `` `vX.Y.Z` ``, `` `release/X.Y` ``, `` `latest` ``, `` `latest-X.Y` `` | dl-159/task-265/266 citations, wording of when each tag applies |
+| 5 | the sync procedure (R3, S3d, R6) | red-first | flat `### The sync procedure` contains `` `## Consumer feedback` ``, `feedback-triage.md`, `` `## Scope changes` ``, `git grep`, `` `answered_by` ``, `never commits into`; if the approver accepts D2 (a): each outcome `` `covered` ``, `` `element` ``, `` `restated` ``, `` `superseded` ``, `` `declined` ``, `` `needs-info` `` | the steps' numbering, the exact git commands beyond `git grep` |
+| 6 | no consumer is named | characterization (passes at red: a guard) | for every `docs/04_memory/services/*.md` whose frontmatter (split at the `---` lines, parsed with `load`) has `kind: repository` and a non-empty `feedback_inbox`: neither its `id` nor the last path segment of its `url` occurs in `COLLABORATION.md`; and at least one such service is found (positive case, dl-097 (a)). Names are derived, never literal in the test | — |
+| 7 | the version moved | red-first | `/^\*\*Version:\*\* (\d+)\.(\d+) · \*\*Date:\*\* (\d{4}-\d\d-\d\d)$/m`: `major*1000+minor ≥ 1007`, date ≥ `2026-10-24` | an exact version or date (bug-314) |
+| 8 | the page list is unchanged (AC 2b) | characterization | `docs/site.yaml` `pages` contains `COLLABORATION.md` | `llms.txt` (its own suite holds the render parity) |
+
+Red expectation at `55bc31f7`: cases 1–5 and 7 fail on their first assertion (heading absent; `1.6` = 1006 < 1007);
+6 and 8 pass. Case 6 was dry-run with node over the real tree: 3 services found, none named in `COLLABORATION.md`
+today. `npx tsc --noEmit` clean before the red commit (no new import beyond `node:fs`'s `readdirSync`).
+
+**Files to touch** (green): `COLLABORATION.md` only — the new `##` section between `## Credit` and `## Ground rules`,
+a one-line pointer from `## Credit`'s registered-inbox bullet to it, and the header `**Version:** 1.6` → `1.7`,
+`**Date:**` → the commit date (`doc-versioning`; baseline `git show release/0.3:COLLABORATION.md | sed -n 3p` →
+`**Version:** 1.6 · **Date:** 2026-10-17`; `COLLABORATION.md` is not one of the four files
+`test/lint/version-bump.test.ts` checks, so the bump is the reviewer's to verify). Not touched: `docs/site.yaml`,
+`llms.txt`, `user-docs.yaml` (already `produces:` `COLLABORATION.md`, community-health AC 3), any config `version:`.
+qa (red): `test/docs/community-health.test.ts`. Pending amendment (session 3, uncommitted): `bug-408`'s
+`### Retrospective`. Refactor gates beside the usual ones: `pages-render.test.ts` (COLLABORATION.md is a site page),
+`llms-txt.test.ts`, `reported-by.test.ts`, `node scripts/lint-claims.cjs` on the diff.
+
+**Decisions for the approver.**
+- **D1 — AC 1 and AC 2a reclassified red-first (recommendation: accept).** The task labels them characterization, but
+  the text does not exist; the test fails at red on text not yet written, as `task-286` D1 and `task-290` D1 ruled. AC
+  2b stays characterization (no page-list change).
+- **D2 — how a consumer turns WingFoil's answer into a note status.** dl-163 fixes the six note statuses (R4) and the
+  six retrospective outcomes (S3d) but no mapping between them. (a) Document the mapping in *The sync procedure*:
+  `needs-info` → `needs-info`; `declined` → `declined`; `covered` / `element` / `restated` with an element named in
+  the Element column → `captured`, its ids into `answered_by`; `restated` with no element → stays `open` (the next
+  `collect-feedback` reads it again, as S3d lists `open` notes); `captured` → `resolved` once every `answered_by`
+  element has shipped in a release tag the consumer reads; `superseded` (the build already changed it) → `resolved`;
+  `duplicate` is the consumer's own status for a note repeating another note of its inbox. (b) Document only each
+  status's meaning and leave the mapping to each consumer. **Recommendation: (a)** — two consumers reading the same
+  table reach the same status (determinism directive), and it is what S3d's lists already assume (`captured` notes
+  whose elements shipped).
+- **D3 — the inbox `README.md`.** dl-163 R1/S3b require it only as what `verify` checks
+  (`gh api …/contents/<feedback_inbox>README.md --jq .sha`: existence). (a) State that it must exist on `main` and
+  that its content is the consumer's (e.g. a pointer to this section); (b) define a content contract. **Recommendation:
+  (a)** — a contract would be a new rule with no ratified ground.
+- **D4 — how a project asks to be registered.** dl-163 S3b says a consumer is registered (by `service-ingest`, owner
+  role `approver`) only after its inbox is committed, but not how it asks. (a) Say that it asks through the Proposal
+  issue form, and that until it is registered its feedback goes through the issue forms (`contributor` + issue URL,
+  never `reported_by:`, as `## Credit` already states); (b) say nothing about the request. **Recommendation: (a)** —
+  it reuses the existing channel and closes the gap a new consumer would otherwise meet.
+- **D5 — heading text** (pinned by case 1): `## Consumer feedback — notes from projects that use WingFoil` with the four
+  `###` above, placed after `## Credit`. **Recommendation: accept**; any other text must be fixed before red.
+
+**Risks for the batch.** None on files: no other `v0.3.1` task names `COLLABORATION.md` or `community-health`
+(`grep -ln "COLLABORATION\|community-health" docs/04_memory/v0.3.1/*.md` → only this task). `task-300` changes
+`retrospective.yaml`'s `explore`, not `collect-feedback`'s read record or outcomes, so the procedure's references hold
+after its merge (297 merges first, W1-2).
 
 ### Retrospective
 
