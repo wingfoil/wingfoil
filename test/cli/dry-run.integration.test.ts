@@ -83,7 +83,8 @@ function buildFixture(): string {
   writeFileSync(memoryPath, memoryYaml.replace(commented, uncommented));
   // `agent execute` (task-218): an agent with the fake adapter (task-200), the script it launches, and
   // the scaffold's `paths.runs`.
-  const dna = readFileSync(dnaPath, 'utf-8');
+  // The scaffold's own `agents: []` (task-296, design D4) is dropped: the fixture declares the key below.
+  const dna = readFileSync(dnaPath, 'utf-8').replace(/^ {2}agents: \[\]\n/m, '');
   if (!dna.includes('    - name: approver\n')) throw new Error('fixture bug: the scaffolded role list moved');
   writeFileSync(
     dnaPath,

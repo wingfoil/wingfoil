@@ -67,7 +67,13 @@ describe('`wingfoil dna` — keep dna.yaml\'s comments, or refuse the rewrite un
 
   // P2.1 "Comments survive adding the first entry of a collection dna.yaml does not declare yet".
   it('bug-126: the first `dna add team.agents` keeps every comment, adding the entry\'s lines and changing none', () => {
-    expect(scaffold).not.toMatch(/^\s*agents:/m); // guard: the scaffold declares no agents
+    // Since task-296 (bug-400, design D4) the scaffold writes an active `agents: []` under a commented
+    // example; bug-126 is the first entry of a collection dna.yaml does NOT declare, so the fixture drops
+    // that line (and commits it) to keep reproducing it.
+    writeFileSync(join(repo, DNA_PATH), scaffold.replace(/^ {2}agents: \[\]\n/m, ''), 'utf-8');
+    git(repo, ['commit', '--quiet', '-am', 'fixture: no team.agents key']);
+    scaffold = dnaText(repo);
+    expect(scaffold).not.toMatch(/^\s*agents:/m); // guard: the fixture declares no agents
     expect(commentLines(scaffold).length).toBeGreaterThan(0);
 
     const run = wingfoil(repo, 'dna', 'add', 'team.agents', '--value', 'claude', '--entry-executes_as', 'developer,reviewer', '--entry-approval_authority', 'false');
