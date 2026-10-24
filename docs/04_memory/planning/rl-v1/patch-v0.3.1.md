@@ -11,7 +11,7 @@ features: [P4.21]              # REQUIRED — feature IDs covered by this releas
 requirements: "docs/04_memory/design/dls/retro-v0.3.md"       # REQUIRED — path to per-release backlog JSON, e.g. "docs/03_backlog/04_backlog/by-release/v0.1.json"
 release-line: "v1"       # REQUIRED — version of the parent release-line, e.g. "v1"; the file sits under the release-line's id, planning/rl-v1/ (memory.yaml `release` path)
 backlog_committed: 14     # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
-waves: [w0]              # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
+waves: [w0, w1]          # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
 tmpl_version: 261012   # Original template version
 ---
 
@@ -91,6 +91,10 @@ engine (`dl-186` S4).
 
 | Task | From | Admitted at | Count vs backlog_committed |
 |---|---|---|---|
+
+Checkpoint `wave.re-plan` of `w0` (2026-10-24): no task admitted since `commit-backlog`; the release counts 14 tasks
+against `backlog_committed: 14` (+0 %), below the growth threshold; `w1` opened by appending it to `waves:`
+(`task-293`…`task-300` already carry `wave: "w1"` from `build-backlog`).
 
 ## Execution Notes
 
