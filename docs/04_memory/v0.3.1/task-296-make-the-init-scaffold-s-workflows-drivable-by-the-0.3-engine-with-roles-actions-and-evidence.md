@@ -202,6 +202,23 @@ added without `--workflow` is a candidate once `produces` is met and only `creat
 still refuses `has no element` (every scaffold step but `<T>-ingest.approve`, whose role `approver` an agent never
 takes). No AC asks for it; `--element` remains the way.
 
+#### Design gate (approver, 2026-10-24)
+
+Rulings on the design decisions above:
+- D1 accepted: no `role` on the `delivery` include phase (`spec-003`'s `role` row); AC1 reads every non-include phase
+  and every phase of the included workflow.
+- D2 accepted: `plan` adds and submits tasks with the constant `produces` entry; `review` selects the `pending` tasks
+  with `memory.approve` and `approval: { by_role: approver }`; the limits stated in the design are accepted.
+- D3 accepted: `fallback` on `adr-ingest` and `decision-log-ingest`, none on `bug-ingest`.
+- D4 accepted: an active `agents: []` under the commented `team.agents` example.
+- D5 accepted: the roles per phase as designed.
+- D6 accepted: one P5.1.1 BDD scenario.
+- D7 accepted: one bullet in user-guide §12 for projects initialised by 0.3.0.
+- D8 accepted: `bug-400`'s `### Retrospective` and `reported_by` (svc-019 F-010, svc-020 F-001) prepared in session 3
+  as a pending amendment.
+- `agent execute --next` refusing an unscoped step (bug-400 step 5, outside its Expected Behavior) is recorded by the
+  coordinator as a candidate finding, not fixed here.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
