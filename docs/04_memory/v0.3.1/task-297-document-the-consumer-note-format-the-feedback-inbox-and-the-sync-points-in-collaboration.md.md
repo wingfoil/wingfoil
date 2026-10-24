@@ -148,6 +148,15 @@ qa (red): `test/docs/community-health.test.ts`. Pending amendment (session 3, un
 `retrospective.yaml`'s `explore`, not `collect-feedback`'s read record or outcomes, so the procedure's references hold
 after its merge (297 merges first, W1-2).
 
+#### Design gate (approver, 2026-10-24)
+
+Rulings on the design decisions above:
+- D1 accepted: AC1 and AC2a are red-first (the text does not exist yet); AC2b characterization.
+- D2 (a) accepted: `COLLABORATION.md` documents the mapping from retrospective outcomes to note statuses.
+- D3 (a) accepted: the inbox `README.md` must exist on `main`; its content is the consumer's.
+- D4 (a) accepted: registration through the Proposal issue form; until then feedback goes through issues.
+- D5 accepted: the section heading as designed.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
