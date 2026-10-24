@@ -43,14 +43,196 @@ tool-written config commit passes the governance check's `config-version` rule o
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-24)
+
+Branch `task/task-299-raise-a-configuration-file-s-version-on-every-tool-write-dl-174`, cut from `release/0.3` at
+`35acda40` (`task-297`, `task-300`, `task-296` merged), hand start `f1928e86`. `depends_on: []`, no handover: no
+`dl-015` read is owed.
+
+**Ratified ground (read, no contradiction with the ACs).** `dl-174` is `ready` with (a)
+(`git log -1 --format=%B e6eb5ca8` → `approve … [in-discussion → ready]`, "with the recommended option (a)").
+`spec-006`, `spec-002`, `spec-011`, `spec-017` are `approved` (`grep ^status: docs/04_memory/design/specs/spec-00{2,6}*.md
+spec-01{1,7}*.md` → `approved` ×4) and already carry the rule: `spec-006` §6 item 7 (the one statement: +0.1 read as a
+number, the file's quoting, the trailing comment kept, no history entry, a file without `version:` gains none, a file
+written whole for the first time is written `version: 1.0`), `spec-002` "Every write raises the file's `version:`",
+`spec-011` `roles.yaml` contract item 5, `spec-017` §7.7–§7.8. No spec edit precedes green.
+
+**Measured before the change** (pinned build `0.3.0 (cc31d7a8…)` = today's behaviour, scratch repo under the
+scratchpad, `init --template scrum`, branch `scratch`, two `dna set project.name`): `.wingfoil/dna.yaml` still
+`version: 1`; `node scripts/check-governance.cjs --base main` → `config: .wingfoil/dna.yaml: changed in …..HEAD, but
+version: 1 → 1 is no numeric increase (bug-249, doc-versioning)`, `gated: 1 findings on 1 commits (config 1)`.
+
+#### D1 — one pure helper, applied where each writer's bytes are final
+
+- **Helper** in `src/validation/config-version.ts`, beside `isVersionIncrease` (the module both version gates already
+  share), exported from `src/validation/index.ts`:
+  `export function raiseConfigVersion(text: string): string` and `export const INITIAL_CONFIG_VERSION = '1.0'`.
+  Pure (REQ-SYS-07). It finds the **first top-level** `version:` line (`^version:` at column 0, multiline), whose value
+  is a plain token, a `"…"` or a `'…'` scalar; reads the value as YAML reads it (`1.10` → `1.1`, a quoted digit string as
+  its number, the `asNumber` rule of `isVersionIncrease`); writes value + 0.1, rounded at 1e-6 so `1.2 → 1.3` carries
+  no float noise, printed with at least one decimal (`1.9 → 2.0`, `1 → 1.1`, `2.0 → 2.1`, `1.10 → 1.2`), inside the
+  same quotes; every other byte — the spacing after the colon, the trailing `# comment`, every other line — is kept.
+  No top-level `version:` line, or a value that does not read as a number → the text is returned unchanged.
+- **Applied in `src/core`**, one call per writer, on the bytes about to be planned/committed:
+  - `runDnaMutation` (`src/core/index.ts`: `dna set|add|update|remove`): on the in-place bytes or the `--force` dump,
+    **only when they differ from the current file** — a no-op write stays no write and no commit — and **before** the
+    `DnaYaml` re-validation, the dry-run plan, the commit and `committedScopeError`, which therefore all see the raised text.
+  - `updateRoleAssignments` (`src/core/directive-assign.ts`: `directive assign`, `--force` included): on an existing
+    `roles.yaml`, after the in-place edit or the forced dump (an unchanged list already returns before any write).
+    A **missing** `roles.yaml` is written whole as `version: 1.0\n` + the dump of `assignments`/`global` (today:
+    `dump({ version: 1, … })` → `version: 1`), and is not raised.
+  - `workflowCreate` / `workflowRemove` (`src/core/workflow-create-remove.ts`): on `withIncludeAdded`/`withIncludeRemoved`'s
+    text when `workflows.yaml` existed, before the prospective load and `commitBoth`. With no `workflows.yaml`,
+    `withIncludeAdded(null, …)` already writes `version: 1.0` (`src/workflow/manifest-edit.ts`), not raised.
+- **Why `src/core` and not the pillars' editors.** The forced dumps (`dump(applied.dna)`, `wholeFile()`) and the missing
+  `roles.yaml` are composed in `src/core`, so an editor-level raise would still need a core call for them; one call per
+  writer covers every path. `setDnaValueInText`/`applyDnaEditInText`, `setRoleAssignmentsInText`, `withIncludeAdded`/
+  `withIncludeRemoved` and `renderCustomWorkflow` stay unchanged, and so do their unit tests. This departs from the
+  Implementation Notes' file list (`src/dna/`, `src/directives/`, `create.ts`, `manifest-edit.ts` are not touched).
+- **Which writers "a file written whole for the first time" covers** (W1-4): exactly two — `directive assign` with no
+  `roles.yaml` (changes: `version: 1` → `version: 1.0`) and `workflow create` with no `workflows.yaml` (already
+  `version: 1.0`: characterization). Not covered: `init` and `src/storage/templates.ts` (W1-4: the scaffold keeps
+  `version: 1`, so a scaffold's first tool write gives `1.1`); `workflow create`'s new `.wingfoil/workflows/custom/<name>.yaml`
+  (not one of the four versioned files; `renderCustomWorkflow` keeps its `version: 1.0`); the `dna` verbs never create
+  `dna.yaml` (missing → `NOT_FOUND`); `directive create|remove` write none of the four files; nothing writes `memory.yaml`.
+- **Quoting is reachable only at the helper.** All four schemas declare `version` a number (`grep -n version
+  src/dna/schema.ts src/directives/schema.ts src/workflow/schema.ts src/memory/schema.ts` → `z.number().positive()`
+  (dna, memory, workflows manifest `.optional()`), `z.number().optional()` (roles)), so a quoted or non-numeric
+  `version:` is refused by the loader before any write: the quoting and non-numeric cases are pinned on the helper, not
+  through the CLI.
+
+**Prototype probe (reverted, nothing committed).** I applied D1 in the worktree (`prototype.diff`, 128 lines, scratchpad),
+ran the existing consumers of every file D1 changes plus the two gates (`git grep -l` over the writers' names, 59 suites,
+under the dl-170 slot, `npx jest --maxWorkers=2 <files>`) → `Test Suites: 6 failed, 53 passed, 59 total`,
+`Tests: 14 failed, 1101 passed, 1115 total`; every failure is the version line (listed under AC1, "collisions"). The
+same AC4 scenario on the prototype build → `version: 1.2`, `gated: 0 findings on 0 commits`. Then `git checkout -- src`;
+`git status --short` → empty. `dist/` still holds the prototype build until the next jest run or `npm run build`.
+
+#### AC classification and what qa pins
+
+| AC | Class | Why |
+|----|-------|-----|
+| 1 — the seven verbs raise `version:` | red-first | measured above: the version does not move today |
+| 2 — `--dry-run` shows the raised version | red-first | the plan's diff carries no version line today |
+| 3 — `doc-versioning` states the tool-write rule | **red-first (corrected from characterization)** | `grep -n -i "tool\|wf(" .wingfoil/directives/custom/doc-versioning.md` → no output: the sentence is new (precedent: `task-286` design D1) |
+| 4 — two tool writes pass `config-version` | red-first | measured above: `config 1` before |
+
+Expected reds for the new export (W3 B9 lesson): `npx tsc --noEmit` → TS2305 (`Module '…/validation' has no exported
+member 'raiseConfigVersion'` / `'INITIAL_CONFIG_VERSION'`); jest → runtime `TypeError: (0 , _validation.raiseConfigVersion)
+is not a function` (`isolatedModules`). The CLI pins fail on assertion (the version line), not on a crash.
+
+**AC1 — unit, new file `test/validation/config-version-raise.test.ts`**, calling `raiseConfigVersion` and
+`INITIAL_CONFIG_VERSION` from `src/validation` (exact in → out):
+`'version: 1.9   # c\n'` → `'version: 2.0   # c\n'`; `'version: 1.2\n'` → `'version: 1.3\n'`; `'version: 1\n'` → `'version: 1.1\n'`;
+`'version: 2.0\n'` → `'version: 2.1\n'`; `'version: 1.10\n'` → `'version: 1.2\n'`; `'version: "1.8" # q\n'` → `'version: "1.9" # q\n'`;
+`"version: '2.0'\n"` → `"version: '2.1'\n"`; `'# h\nversion: 2.1\nversion2: 3\n'` → only the `version:` line changes;
+CRLF text keeps its CRLF; unchanged (`toBe(input)`): `'x: 1\n'`, `'a:\n  version: 1\n'` (nested only), `'# version: 1\n'`,
+`'version: abc\n'`. For each raised case `isVersionIncrease(load(before).version, load(after).version)` is `true`.
+`INITIAL_CONFIG_VERSION` is `'1.0'`.
+
+**AC1 — end to end, new file `test/cli/config-version-raise.integration.test.ts`**, through the real `dist/cli.js`
+(`runCliEntry` of `test/cli/helpers/spawn-cli`, `makeTempGitRepo`/`git`/`removeTempDir` of
+`test/storage/helpers/git-fixture`), in a `wingfoil init --template scrum` repository (the scaffold's four files say
+`version: 1`). Per case: exit `0`; `git show --name-only --format= HEAD` = the one file (both files for `workflow create`/
+`remove`); the `version:` line of `git show HEAD:<file>` is the expected value; `git show HEAD~1:<file>` vs `HEAD:<file>`
+differ on the version line by exactly one `-`/`+` pair, the rest of that line (spacing, comment) identical, and no line
+added elsewhere beyond the edit itself (no history entry). Cases:
+1. `dna set project.name --value X` → `version: 1.1`; then `dna add modules --value api --entry-path src/api` → `1.2`;
+   `dna update modules.api --entry-description d` → `1.3`; `dna remove modules.api` → `1.4` (sequential raises).
+2. `dna add paths.tests --value test/ --force` on a flow-style `paths:` (the fixture of `test/cli/dna-force.integration.test.ts`,
+   committed first) → the version raised, the success carrying the rewrite warning.
+3. The `1.9 → 2.0` rule and the comment: a fixture commit setting `dna.yaml`, `roles.yaml` and `workflows.yaml` to
+   `version: 1.9   # rev note`; then `dna set`, `directive assign --directive traceability --role qa`, `workflow create
+   probe-flow --kind main` → each file says `version: 2.0   # rev note`.
+4. `directive assign` on an existing `roles.yaml` → `1.1`; with `--force` on a flow-style `roles.yaml` (`FLOW_ROLES` of
+   `test/cli/directive-assign-force.integration.test.ts`, committed with `version: 1.0`) → `version: 1.1`.
+5. `workflow create probe-flow --kind main` → `workflows.yaml` `1.1`; `workflow remove probe-flow` → `1.2`.
+6. A file without `version:`: `roles.yaml` and `workflows.yaml` committed with the line deleted (both schemas make it
+   optional; `dna.yaml` requires it) → after `directive assign` / `workflow create`, `HEAD:<file>` has no
+   `/^version:/m` line; the positive case in the same `it`: the same command on the file with the line raises it.
+7. Written whole for the first time: `roles.yaml` removed and committed → `directive assign …` → `HEAD:.wingfoil/roles.yaml`
+   starts `version: 1.0\n`; `workflows.yaml` absent → `workflow create` → starts `version: 1.0\n` (characterization sub-case:
+   `test/core/workflow-create-remove-arms.test.ts:131` already pins it at core level).
+8. No-op (characterization, guards against a raise without a write): `directive assign` of an id already bound and
+   `dna set project.name` to its current value → `git rev-parse HEAD` unchanged and the version line unchanged.
+
+**AC1 — collisions (F23): the 14 existing tests the change breaks, which qa updates in the red commit** to the raised
+expectation, keeping each test's own point. Expectations are written as literal text (the baseline with its version
+line replaced by hand), never computed with `raiseConfigVersion`:
+- `test/core/directive-assign.test.ts` — `:185` (AC4: `before` with the item AND `version:` raised; numstat `1\t0` →
+  `2\t1`), `:257` (AC7), `:426` (numstat `2\t0` → `3\t1`), `:605` (missing file: `'version: 1\n…'` → `'version: 1.0\n…'`),
+  `:661` and `:675` (`--force`: `version: 1` → `version: 1.1`; `:675`'s key order kept, version last), `:684` (in-place under `--force`).
+- `test/core/write-guard-dirty-target.test.ts:266` — `committedAdditions` gains the raised version line.
+- `test/core/workflow-create-remove.test.ts:220` (create) and `:334` (remove) — `MANIFEST` with its `version:` raised.
+- `test/core/dna-set-comment-preservation.test.ts:97` — "exactly one line differs" becomes the target line plus the
+  version line (`REAL_DNA`'s version line replaced by hand in the baseline).
+- `test/cli/dna-force.integration.test.ts:86` (bug-126) and `:96` — the `hunk` baseline is `scaffold` with
+  `version: 1` → `version: 1.1`, so the hunk is again the edited node alone.
+- `test/cli/directive-assign-force.integration.test.ts:105` — `'version: 1\n…'` → `'version: 1.0\n…'`.
+The other 53 suites of the probe (among them `test/cli/dry-run.integration.test.ts`, `test/cli/e2e-smoke.test.ts`,
+`test/lint/version-bump.test.ts`, `test/cli/check-governance-enforcement.test.ts`, `test/workflow/manifest-edit-last-entry.test.ts`)
+pass unchanged.
+
+**AC2 — `--dry-run`**, in the same new integration file: `dna set project.name --value X --dry-run --format json`,
+`directive assign --directive traceability --role qa --dry-run --format json`, `workflow create dry-flow --kind main
+--dry-run --format json`, `workflow remove <a custom workflow> --dry-run --format json` → exit `0`, nothing written
+(`snapshotPersistence`/`assertPersistenceUnchanged` of `test/storage/helpers/persistence-snapshot`), and the plan's
+`diff` holds the lines `-version: 1` and `+version: 1.1` for the versioned file. The existing parity test
+(`test/cli/dry-run.integration.test.ts`, dry hunks = real hunks) is not edited.
+
+**AC3 — `doc-versioning`**, new file `test/directives/doc-versioning-tool-writes.test.ts` (the shape of
+`test/directives/integration-branch-baseline.test.ts`: whitespace-flattened `section(…, 'The bump rule')`). Green adds to
+*The bump rule* the bullet: "**A tool write is a revision of its own** (`dl-174` (a), `spec-006` §6 item 7): a `wingfoil`
+command that writes `.wingfoil/dna.yaml`, `memory.yaml`, `workflows.yaml` or `roles.yaml` raises its `version:` in its own
+commit, so the one-bump-per-branch rule above applies to hand edits." Pins (substrings): `A tool write is a revision of
+its own`, `` `dl-174` (a) ``, `` `spec-006` §6 item 7 ``, `the one-bump-per-branch rule above applies to hand edits`.
+No version pin: the directive declares none (D2).
+
+**AC4 — governance**, in the new integration file: `init --template scrum` on `main` (init commits), `git checkout -b
+scratch`, `dna set project.name --value A`, then `--value B`; `checkGovernance(root, { base: 'main' })` (import of
+`scripts/check-governance.cjs`, as `test/cli/check-governance-enforcement.test.ts` does) → no finding with `rule ===
+'config'`. Positive case in the same `it`: one more commit that edits `memory.yaml`'s comment by hand without a bump →
+exactly one `config` finding naming `.wingfoil/memory.yaml`.
+
+#### Files to touch (green/refactor)
+
+`src/validation/config-version.ts`, `src/validation/index.ts`, `src/core/index.ts` (`runDnaMutation` only),
+`src/core/directive-assign.ts` (`updateRoleAssignments`), `src/core/workflow-create-remove.ts`;
+`.wingfoil/directives/custom/doc-versioning.md`; `docs/cli-reference.md` (one sentence each in the `dna set|add|update|remove`,
+`directive assign` and `workflow create|remove` entries: the commit raises the file's `version:`). The module docs of the
+three core writers state the raise. No BDD scenario names a version (`git grep -n -i version` over the P2 DNA, P3.2,
+P4.8 and P4.9 features → nothing): none added.
+
+#### D2 — version bumps
+
+None. `doc-versioning.md` declares no `version:` (`grep -c "^version:" .wingfoil/directives/custom/doc-versioning.md` → 0;
+on `release/0.3` the same), its own Scope rule says a document without one "is not given one", and
+`test/directives/integration-branch-baseline.test.ts` ("AC 7: doc-versioning declares no version") pins it. Plan ruling
+W1-2's "one bump … for `doc-versioning.md` (299)" cannot apply. None of the four versioned config files is edited by hand.
+
+#### Decisions for the approver
+
+1. **W1-2 bump of `doc-versioning.md`** — recommendation: no bump (D2), and the plan's W1-2 line corrected.
+2. **AC3 relabelled red-first** — recommendation: accept (the sentence is new).
+3. **`spec-006` §6 item 7's parenthetical** names only `spec-011`'s missing `roles.yaml` as "written whole for the
+   first time"; `spec-017` §7.7's missing `workflows.yaml` is the second case. Recommendation: a one-clause pending
+   amendment of `spec-006` in session 3 ("and `workflowCreate`'s missing `workflows.yaml`, `spec-017` §7.7"), or none,
+   since the behaviour already matches.
+4. **Raise placement in `src/core`** instead of the pillar editors (D1) — recommendation: accept.
+
+#### Risks for the batch
+
+- `task-298` (parallel): its design lists `src/workflow/bindings.ts`, `src/core/workflow-diagnostics.ts`,
+  `workflow-next.ts`, `workflow-list-show.ts`, `bindings.yaml` and its tests (`awk '/### design/,0'` of its task file on
+  its branch, head `ef3310ca`) — no file shared with D1. It writes `bindings.yaml`, which is not a versioned config file.
+- `task-294`/`task-295` (merge after this task): they touch `src/core/index.ts` (`CORE_MODULES`) and `docs/cli-reference.md`
+  — different hunks from `runDnaMutation` and the seven entries, a textual merge at worst. `workflow adopt`/`rekey` write
+  no configuration file (`task-294` AC2: "no file touched"), so they owe no raise.
+- Every later branch that runs a `dna`/`directive assign`/`workflow create|remove` command now commits a version change:
+  two branches that both tool-write one file from the same base conflict on its `version:` line when their counts differ;
+  the resolution is the higher value. Tests elsewhere that compare one of the four files' text after a tool write must
+  expect the raised line (the 14 above are all of them on `release/0.3` at `35acda40`, by the probe).
+- The scaffold keeps `version: 1` (W1-4), so a fresh project's first tool write reads `1 → 1.1`.
 
 ### Retrospective
 
