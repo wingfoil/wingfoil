@@ -157,6 +157,31 @@ Rulings on the design decisions above:
 - D4 (a) accepted: registration through the Proposal issue form; until then feedback goes through issues.
 - D5 accepted: the section heading as designed.
 
+### red (qa, 2026-10-24)
+
+Red commit **`777f87b3`** (`git log --oneline -1` → `777f87b3 test(docs): task-297 — failing test: …`), on the task
+branch at `2700ed68`. T4 is measured from it. One file: `test/docs/community-health.test.ts` — a new
+`describe('task-297 — COLLABORATION.md documents the consumer feedback loop (dl-163 R1, R4, R5, S3f; bug-408)')` at
+its end, reusing the file's `read()` and `load`, with the design's local helpers `section`, `subsection`, `flat`; the
+only new import is `readdirSync` from `node:fs`. No production file touched.
+
+| Case | AC | Class | Test name (prefix) | At red |
+|---|---|---|---|---|
+| 1 | AC 1 / AC 2a | red-first | `AC 1 / AC 2a — case 1: one Consumer feedback section …` | fails: `Expected length: 1 / Received length: 0` (heading absent) |
+| 2 | AC 1 | red-first | `AC 1 — case 2: the feedback inbox …` | fails: `Expected substring: "`docs/wingfoil-feedback/`" / Received string: ""` |
+| 3 | AC 1 | red-first | `AC 1 — case 3: the note format … cite form read from spec-010` | fails: `Expected substring: "`F-<nnn>-<slug>.md`" / Received string: ""` |
+| 4 | AC 1 | red-first | `AC 1 — case 4: the sync points (dl-163 R5)` | fails: `Expected substring: "release-planning" / Received string: ""` |
+| 5 | AC 1 | red-first | `AC 1 — case 5: the sync procedure and the outcome → status mapping …` (D2 (a): the six outcomes pinned) | fails: `Expected substring: "`## Consumer feedback`" / Received string: ""` |
+| 6 | — | characterization (guard) | `case 6 (guard): no registered consumer repository is named …` | passes (consumers found and none named; ids and repository names derived from `docs/04_memory/services/*.md`, never literal) |
+| 7 | — | red-first | `case 7: the COLLABORATION.md version moved (≥ 1.7, date ≥ 2026-10-24 …)` | fails: `Expected: >= 1007 / Received: 1006` |
+| 8 | AC 2b | characterization | `AC 2b — case 8: the site page list still carries COLLABORATION.md …` | passes |
+
+- The cite form of case 3 is read from `spec-010` by ``/`(<service id>\/F-<nnn>@<sha>)`/``; the match exists at red
+  (`node -e` over the spec → `<service id>/F-<nnn>@<sha>`), so case 3 at green depends only on `COLLABORATION.md`.
+- Run: `npx jest test/docs/community-health.test.ts --maxWorkers=2` → `Tests: 6 failed, 28 passed, 34 total` (the 26
+  pre-existing tests pass; of the new 8, cases 1–5 and 7 fail, 6 and 8 pass, as the design expected).
+- `npx tsc --noEmit -p tsconfig.json` → exit 0, no output, before the red commit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
