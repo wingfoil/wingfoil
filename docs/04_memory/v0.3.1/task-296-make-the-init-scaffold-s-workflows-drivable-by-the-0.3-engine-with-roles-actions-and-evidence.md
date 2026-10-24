@@ -43,14 +43,164 @@ ingest `actions`/`produces`, a `team.agents` example), not P4.18–P4.20's templ
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-24)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate). `spec-003-workflows-yaml-schema` and
+`spec-017-workflow-commands-and-state-deduction` are `approved` (`grep -m1 "^status:"` on each → `status: approved`).
+Approver rulings for w1 (2026-10-24): the minimal fix (roles, the ingest `actions`/`produces`, a commented
+`team.agents` example), no `workflows/bindings.yaml` in the scaffold, no change to the scaffold's config `version: 1`
+lines, merge order 297 → 300 → 296 → 293 → 298 → 299 → 294 → 295. No AC contradicts a ratified spec or decision-log
+(one reading question, D1).
+
+**bug-400 reproduced on the code build.** In a scratch repository, `node dist/cli.js --version` → `0.3.0 (e5e76ac7…)`;
+`init --template Scrum` → exit 0; `grep -lE '^\s+(role|actions|produces):' .wingfoil/workflows/custom/*.yaml | wc -l`
+→ `0`; `grep -cE '^\s+agents:' .wingfoil/dna.yaml` → `0`; `workflow start sw-life-cycle` → `role: (none)`,
+`evidence missing: record (finalizable)`; `workflow finalize` looped while `workflow next` printed a step →
+`git log --format=%s | grep -c "^workflow: finalize"` → `7`, then `no next step: workflow 'sw-life-cycle' is complete`.
+
+**What makes a step not finalizable** (the lever for AC 2). `workflow finalize` refuses a step whose missing evidence
+is anything but `record` (spec-017 §7.9). A phase whose only evidence is `memory.add` (`created`) and that created
+nothing is finalizable (spec-017 §4.3, the `created` row; §7.9 "or `created` evidence of a step that created
+nothing"). So a phase that adds Memory also needs evidence that a record cannot replace: a string `produces` entry, a
+selection, `state` on a bound element, or an `include`.
+
+**The proposed scaffold** (prototyped by hand in scratch repositories, the code build above, every result below run
+there). `sw-life-cycle.yaml`:
+
+```yaml
+phases:
+  - name: inception       # role: product-owner (checkpoint)
+  - name: specification   # role: product-owner (checkpoint)
+  - name: delivery
+    include: <slug>-delivery   # no role (D1)
+  - name: sunset          # role: tech-lead (checkpoint)
+```
+
+`<slug>-delivery.yaml` (Scrum and Kanban alike; only the header comment, `name` and `description` differ, as today):
+
+```yaml
+phases:
+  - name: plan
+    role: product-owner
+    actions: [ 'memory.add(type: task)', memory.submit ]
+    produces: [ docs/memory/task/ ]          # the scaffold's task path, from the same constant as memory.yaml (D2)
+  - name: build                              # role: developer (checkpoint)
+  - name: review
+    role: reviewer
+    where: { type: task, status: pending }   # a selection: the submitted tasks
+    actions: [ memory.approve ]
+    approval: { by_role: approver }
+  - name: deliver                            # role: developer (checkpoint)
+```
+
+`bug-ingest.yaml`, `decision-log-ingest.yaml`, `adr-ingest.yaml` (self-creating mains, spec-017 §3.4):
+
+```yaml
+phases:
+  - name: capture
+    role: developer | product-owner | architect   # bug | decision-log | adr, as in this repository's ingest files
+    actions: [ 'memory.add(type: <T>)', memory.submit ]
+    produces: [ docs/memory/<T>/{id}.md ]
+  - name: approve
+    role: approver
+    actions: [ memory.approve ]
+    approval: { by_role: approver }
+    fallback: { step: capture }                    # adr and decision-log only (D3)
+```
+
+`dna.yaml`: under `team:`, after `members: []`, a comment block naming the entry shape, then a commented example
+(`name: claude`, `email: noreply@anthropic.com`, `executes_as: [ developer, reviewer, qa, architect ]`,
+`approval_authority: false`, `adapter: claude-code`), the equivalent `dna add team.agents` command, and an active
+`agents: []` line (D4) — the `technologies: []` pattern of `bug-139` / `task-118`.
+
+Results on the prototype:
+- `workflow list --all --format json` → `diagnostics: []`, for Scrum and for Kanban (`kanban-delivery` swapped in).
+- `workflow show <w> --format json`, evidence kinds per phase: `inception`/`specification`/`sunset`/`build`/`deliver`
+  `["record"]`, `delivery` `["include"]`, `plan` `["created","produces"]`, `review` `["selection"]` (`["record"]` with the
+  typed `task.set_state(approved)` alternative, D2 (b)), `capture` `["created","produces"]`, `approve` `["state"]`.
+- `workflow start sw-life-cycle` → `role: product-owner`; `finalize` twice, then the third → exit `1`,
+  `error: phase 'scrum-delivery.plan' completes from its evidence: produces`; `workflow next` → `evidence missing:
+  produces`, the `memory add --type task --title <title> --workflow sw-life-cycle-1-plan --step scrum-delivery.plan`
+  argv. After `memory add … --workflow` and `memory submit`: next `scrum-delivery.build`; after its finalize, next
+  `scrum-delivery.review`, `evidence missing: selection`, the human-needed line for the task, and
+  `workflow finalize --reason ok` → `error: phase 'scrum-delivery.review' completes from its evidence: selection`;
+  after `memory approve`: next `scrum-delivery.deliver`; two more finalizes → `no next step: workflow 'sw-life-cycle'
+  is complete`, `workflow end` → `ended sw-life-cycle`; 5 finalize records in all.
+- `workflow start bug-ingest` → next `bug-ingest.capture`, role `developer`, `evidence missing: produces`; `finalize`
+  → `error: phase 'bug-ingest.capture' completes from its evidence: produces`; after add (`--workflow
+  bug-ingest-1-plan`) and submit: next `bug-ingest.approve@bug:bug-001-crash`, `evidence missing: state`, human
+  needed; `memory reject` → next `bug-ingest.capture@bug:bug-001-crash` (draft); submit + approve → `no next step:
+  workflow 'bug-ingest' is complete`.
+- `dna show team --format json` → `"agents":[]`; `dna add team.agents --value claude --entry-adapter claude-code
+  --entry-email noreply@anthropic.com --entry-executes_as developer,reviewer` → exit 0, the comment block kept above
+  the new `agents:` list. With that agent and `sw-life-cycle` at `build`: `agent list --waiting` → `waiting steps: 1`,
+  `scrum-delivery.build  developer  claude`.
+
+**Per-AC classification and what qa pins.** No new export: the tests use `templateScaffold` and `TEMPLATES`
+(`src/storage/templates.ts`), `initWingfoilProject` (`src/core/init.ts`), `loadWorkflowRegistryAtHead`
+(`src/core/workflow-registry.ts`), `loadDnaYaml` (`src/core/loaders.ts`), and the CLI through `runCliEntry`
+(`test/cli/helpers/spawn-cli`) on `makeTempGitRepo` (`test/storage/helpers/git-fixture`). Every red is an assertion
+failure (no TS2305, no runtime TypeError). Both templates in every case (`for (const def of TEMPLATES)`).
+
+| AC | Class | Observable qa pins | Test file |
+|---|---|---|---|
+| 1 | red-first (today 0 of 5 files carry `role`/`actions`/`produces`, measured above) | Parse each `.wingfoil/workflows/custom/*.yaml` of `templateScaffold(def)` with js-yaml: every phase without `include` has a `role` that is a `name` in the scaffold `dna.yaml` `team.roles`; each `<T>-ingest` (T = bug, decision-log, adr) has phases `capture` and `approve`, `capture.actions` contains `memory.add(type: <T>)`, `approve.actions` contains `memory.approve` and `approve.approval` is `{ by_role: approver }`; bug-400 step 2's regex `^\s+(role|actions|produces):` matches a line in all 5 files | new `test/storage/templates-workflows.test.ts` |
+| 2 | red-first | (a) unit: `<slug>-delivery`'s `plan.actions` contains `memory.add(type: task)` and `plan.produces` contains `docs/memory/task/`; `review.actions` contains `memory.approve` with `approval: { by_role: approver }`. (b) CLI on `init --template <T>`: `workflow start sw-life-cycle` exit 0; `workflow next --format json` → `next.role` = `product-owner`; repeating `workflow finalize` while `next` reports a step ends in exit `1` with stderr containing `phase '<slug>-delivery.plan' completes from its evidence: produces`, `workflow next` does not print `is complete`, and `git log --format=%s` counts exactly `2` `workflow: finalize` subjects | (a) the unit file above; (b) new `test/cli/init-scaffold-workflows.integration.test.ts` |
+| 3 | red-first (example); characterization (zero errors, no bindings file) | (a) the `team:` block carries the commented example; uncommented in place of `agents: []` (the `technologies` test's splice, `test/storage/templates.test.ts` "AC 2" of task-118) it loads through `loadDnaYaml` with one agent whose `executes_as` excludes `approver` and whose `adapter` is `claude-code`, a shipped built-in (`.wingfoil/agents/built-in/claude-code.yaml` in the scaffold); unedited, `team.agents` is `[]`. (b) after `initWingfoilProject(repo, def.name)`, `loadWorkflowRegistryAtHead(repo).diagnostics` is `[]` and nothing throws (the core checks include `E_PHASE_ROLE_UNKNOWN`). (c) no scaffold path equals `.wingfoil/workflows/bindings.yaml`. Optional (d) CLI: with the example uncommented and committed, and `sw-life-cycle` at `build`, `agent list --waiting` lists `<slug>-delivery.build` | (a)(c) unit file; (b)(d) integration file |
+| 4 | characterization | `docs/examples/01-first-project/run.sh` exits 0 on the new scaffold (`WINGFOIL="node dist/cli.js"`; on the current one it prints `OK: first project: init → add → submit → approve`); `docs/user-guide.md` §7's table names the phases the scaffold declares (ingest `capture → approve`, delivery `plan → build → review → deliver`) — a doc-text test reading the guide against `templateScaffold`, which fails today on `capture` alone | the integration file (`spawnSync('bash', [run.sh])` with `WINGFOIL` set to the built CLI, as `scripts/e2e-smoke.cjs` `smokeJourney` runs example 06) and a new `test/docs/user-guide-scaffold.test.ts` |
+
+**Files to touch (green/refactor).** `src/storage/templates.ts` (the `team.agents` block in `dnaYaml`; roles in the
+`sw-life-cycle` phases; `deliveryWorkflowYaml` phases; one ingest generator for the three; a shared Memory-path helper
+so `memory.yaml`'s `path` and the workflows' `produces` cannot diverge; doc comments). `docs/user-guide.md` (§4.2: the
+`agents: []` line and its example; §7: the table and one paragraph on which phases read Memory and which are
+checkpoints; §12: D7). `docs/examples/01-first-project/run.sh`: no change expected (AC 4 pins it).
+`docs/02_requirements/02_bdd/features/p5-interaction/P5.1.1-init.feature` only under D6. Existing tests expected to
+stay green unchanged: `test/cli/journey-0a.integration.test.ts` (`agent execute --next` on `sw-life-cycle.inception`
+still refuses `has no element`, checked on the prototype with `--dry-run`), `test/cli/workflow-start-end.integration.test.ts`
+(start prints nothing on stderr: zero diagnostics), `test/storage/templates.test.ts` (no assertion on phases or
+`team` keys: `grep -n "agents\|phases" test/storage/templates.test.ts` → none on the scaffold's workflows).
+**Version bumps: none.** The repository's `.wingfoil/` is not touched; the scaffold keeps `version: 1` (ruling);
+`docs/user-guide.md` and the feature file carry no `version:` (`grep -c version` on the feature → `0`).
+
+**Smoke.** No adaptation needed: `grep -n "sw-life-cycle\|scrum\|kanban\|bug-ingest" scripts/e2e-smoke.cjs
+docs/examples/*/run.sh` → nothing; the smoke's `dna add team.agents` step works on `agents: []` (shown above);
+example 06 writes its own workflow. For `task-294`: `<slug>-delivery.plan` is a natural `adopt --plan` probe (a task
+added without `--workflow` is a candidate once `produces` is met and only `created` is missing).
+
+**Decisions for the approver** (recommendation first).
+- **D1 — the `delivery` include phase gets no `role`.** spec-003 Layer 2, `role`: "Omitted when the phase only
+  `include:`s another workflow (the included phases carry their own roles)"; this repository: 25 include phases, 0 with
+  a role (counted with a YAML read of `.wingfoil/workflows/custom/*.yaml`). AC 1 is then read as every non-include
+  phase, plus every phase of the included workflow. (Alternative: a role on it too, against the spec's text.)
+- **D2 — delivery evidence: `plan` adds and submits tasks with `produces: [ docs/memory/task/ ]`; `review` approves the
+  submitted tasks through a selection.** The `produces` entry is what keeps `plan` from being finalized with no task
+  (`created` alone is finalizable); its limit: any task file under the path meets it, including one added outside the
+  instance. Alternatives tried: (b) `review` with `task.set_state(approved)` — its evidence is `record`, so it needs a
+  `finalize --reason` by the approver *and* the `memory approve` (observed); (c) `delivery` iterating over `task` with
+  `element: task` — the task-creating phase would then sit in `sw-life-cycle`, which makes it self-creating and binds
+  the instance to its first task, abandoned if that task is deprecated (spec-017 §3.4, §4.11). Known limit of (a):
+  `delivery` runs once per `sw-life-cycle` instance, not once per sprint or per task.
+- **D3 — `bug-ingest.approve` declares no `fallback`; `adr-ingest` and `decision-log-ingest` keep `fallback: { step:
+  capture }`.** With the scaffold's commented `bug` machine uncommented, a `fallback` on `bug-ingest` raises
+  `W_PHASE_FALLBACK_NOT_REENTRANT workflows/custom/bug-ingest.yaml phases[1].fallback.step` (its reject target `closed`
+  lies forward); without it the diagnostics are `[]` under both machines, and a reject still re-enters `capture`
+  (observed). This mirrors this repository's `bug-ingest.yaml` 1.1. (Alternative: no `fallback` on any of the three.)
+- **D4 — `agents: []` stays active under the commented example** rather than no `agents` key: `dna add team.agents`
+  then inserts into the list and keeps the comment block (observed), and the scaffold has one shape for both examples.
+- **D5 — role per phase** as in the YAML above, taken from this repository's own workflows (`end-of-life`,
+  `decision-log-ingest`, `adr-ingest`, `bug-ingest`, `dev-loop`).
+- **D6 — one P5.1.1 scenario** "the scaffold's workflows can be driven by the workflow commands" (role on the first
+  step; `plan` not finalizable without a task), cited by the integration test. Recommended; skip if the approver wants
+  no BDD edit in a patch.
+- **D7 — one bullet in user-guide §12** for projects initialised by 0.3.0: copy the five workflow files from a fresh
+  `init` and commit. Recommended.
+- **D8 — bug-400's pending amendment at session 3**: its `### Retrospective` line (dl-115 Q2 (a)) and `reported_by` set
+  to the two notes `retro-v0.3` maps to it (`docs/04_memory/design/dls/retro-v0.3.md:256` and `:273`, full refs with
+  their shas), the provenance the task's "fold into it" asks for. Recommended.
+
+**Not fixed by this task (stated for the approver).** bug-400 step 5: `agent execute --next` on a step with no scope
+still refuses `has no element` (every scaffold step but `<T>-ingest.approve`, whose role `approver` an agent never
+takes). No AC asks for it; `--element` remains the way.
 
 ### Retrospective
 
