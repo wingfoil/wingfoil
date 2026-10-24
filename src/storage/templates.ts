@@ -225,6 +225,20 @@ const MEMORY_AMENDABLE: Readonly<Record<(typeof MEMORY_TYPES)[number], boolean>>
   'tech-spec': true,
 };
 
+/**
+ * The directory each scaffolded type's documents are written to (task-296): \`memory.yaml\`'s \`path\` and
+ * the scaffolded workflows' \`produces\` entries are both derived from it, so the two cannot diverge.
+ * \`plan\` is nested by scope instead ({@link PLAN_TYPE_YAML}).
+ */
+function memoryDir(type: (typeof MEMORY_TYPES)[number]): string {
+  return `docs/memory/${type}/`;
+}
+
+/** The \`path\` pattern \`memory.yaml\` declares for a scaffolded type other than \`plan\`. */
+function memoryPath(type: (typeof MEMORY_TYPES)[number]): string {
+  return `${memoryDir(type)}{id}.md`;
+}
+
 const MEMORY_ID_PATTERNS: Readonly<Record<(typeof MEMORY_TYPES)[number], string>> = {
   adr: 'adr-{n}-{slug}',
   bug: 'bug-{n}-{slug}',
@@ -294,6 +308,19 @@ ${methodologies}
 # Team & roles — AI agents execute as developer/reviewer/qa/architect and never hold approval authority.
 team:
   members: []
+  # AI agents: the roles each one executes as (never approver: agents hold no approval authority), its
+  # commit identity (\`email\`, written in the Co-Authored-By trailer of the commits it co-authors) and
+  # the adapter under .wingfoil/agents/ that \`wingfoil agent execute\` launches it with (\`email\` is
+  # required with \`adapter\`). To declare one, replace \`agents: []\` with a list like this example,
+  # uncommented:
+  # agents:
+  #   - name: claude
+  #     email: noreply@anthropic.com
+  #     executes_as: [ developer, reviewer, qa, architect ]
+  #     approval_authority: false
+  #     adapter: claude-code
+  # or run: wingfoil dna add team.agents --value claude --entry-adapter claude-code --entry-email noreply@anthropic.com --entry-executes_as developer,reviewer
+  agents: []
   roles:
     - name: developer
     - name: reviewer
@@ -373,7 +400,7 @@ function memoryYaml(): string {
     type === 'plan'
       ? PLAN_TYPE_YAML
       : `  ${type}:
-    path: docs/memory/${type}/{id}.md
+    path: ${memoryPath(type)}
     id_pattern: "${MEMORY_ID_PATTERNS[type]}"
     amendable: ${MEMORY_AMENDABLE[type]}
     template:
@@ -575,6 +602,79 @@ description: "${description}"
 ${phasesYaml}`;
 }
 
+/**
+ * The scaffolded \`sw-life-cycle\` (task-296, \`bug-400\`): every phase names the role that performs it
+ * (\`spec-003\` Layer 2 \`role\`), except \`delivery\`, which only includes the delivery loop whose phases
+ * carry their own. \`inception\`, \`specification\` and \`sunset\` are checkpoints, recorded with
+ * \`wingfoil workflow finalize\`. The workflow adds no element itself, so a started instance is not bound
+ * to the first task the delivery loop creates (\`spec-017\` §3.4).
+ */
+function lifeCycleWorkflowYaml(def: TemplateDefinition): string {
+  return mainWorkflowYaml(
+    'sw-life-cycle',
+    'The end-to-end software life cycle',
+    `phases:
+  - name: inception
+    description: "Agree the product's vision, scope and first features."
+    role: product-owner
+  - name: specification
+    description: "Turn the scope into stories and acceptance criteria."
+    role: product-owner
+  - name: delivery
+    include: ${def.slug}-delivery
+  - name: sunset
+    description: "Retire the product: announce the end of support and archive its Memory."
+    role: tech-lead
+`,
+  );
+}
+
+/**
+ * The role that captures each ingested type, as this repository's own ingest workflows assign it
+ * (task-296 design D5).
+ */
+const INGEST_CAPTURE_ROLES = { bug: 'developer', 'decision-log': 'product-owner', adr: 'architect' } as const;
+
+/**
+ * One scaffolded ingest main (task-296, \`bug-400\`): a self-creating workflow (\`spec-017\` §3.4) whose
+ * \`capture\` adds and submits one element of \`type\`, at the path \`memory.yaml\` declares for it, and whose
+ * \`approve\` is the approver's gate. \`produces\` is what keeps \`capture\` from being recorded by
+ * \`workflow finalize\` while nothing was added. \`bug-ingest\` declares no \`fallback\` (design D3): with the
+ * commented \`bug\` machine of \`memory.yaml\` uncommented, a reject at \`open\` lands forward on \`closed\` and
+ * a fallback would be reported \`W_PHASE_FALLBACK_NOT_REENTRANT\`; a reject back to \`draft\` re-enters
+ * \`capture\` without one.
+ */
+function ingestWorkflowYaml(type: keyof typeof INGEST_CAPTURE_ROLES, label: string): string {
+  const fallback = type === 'bug' ? '' : '\n    fallback: { step: capture }';
+  return mainWorkflowYaml(
+    `${type}-ingest`,
+    `Capture ${label} on demand`,
+    `phases:
+  - name: capture
+    description: "Write the ${type} and submit it for approval."
+    role: ${INGEST_CAPTURE_ROLES[type]}
+    actions:
+      - 'memory.add(type: ${type})'
+      - memory.submit
+    produces:
+      - ${memoryPath(type)}
+  - name: approve
+    description: "Approve the ${type} (approval gate; a reject sends it back to capture)."
+    role: approver
+    actions:
+      - memory.approve
+    approval: { by_role: approver }${fallback}
+`,
+  );
+}
+
+/**
+ * The scaffolded delivery loop (task-296, \`bug-400\`; design D2). \`plan\` adds and submits the tasks of
+ * the slice; its \`produces\` entry, the task directory \`memory.yaml\` declares, is evidence that a
+ * \`workflow finalize\` record cannot replace, so the loop is not passed with no task. \`review\` selects
+ * the submitted (\`pending\`) tasks and holds them for the approver's \`memory approve\`. \`build\` and
+ * \`deliver\` are checkpoints.
+ */
 function deliveryWorkflowYaml(def: TemplateDefinition): string {
   return `# ${def.name} delivery loop (sub-workflow) — scaffolded by \`wingfoil init\`.
 # ${def.cadence}
@@ -584,13 +684,26 @@ format: ${WORKFLOW_FORMAT}
 description: "${def.name} delivery loop"
 phases:
   - name: plan
-    description: "Select the next slice of work to deliver."
+    description: "Select the next slice of work: write each item as a task and submit it."
+    role: product-owner
+    actions:
+      - 'memory.add(type: task)'
+      - memory.submit
+    produces:
+      - ${memoryDir('task')}
   - name: build
     description: "Implement the work test-first (TDD)."
+    role: developer
   - name: review
-    description: "Review against the directives; run unit + acceptance tests."
+    description: "Review against the directives; run unit + acceptance tests; the approver approves each task."
+    role: reviewer
+    where: { type: task, status: pending }
+    actions:
+      - memory.approve
+    approval: { by_role: approver }
   - name: deliver
     description: "Integrate the completed work."
+    role: developer
 `;
 }
 
@@ -635,32 +748,10 @@ export function templateScaffold(
     ...MEMORY_TYPES.map((type) => ({ path: wf(`memory/templates/${type}.md`), content: memoryTemplateMd(type) })),
     // Workflows built-in/custom split (spec-011).
     { path: `${BUILTIN_WORKFLOWS_DIR}/.gitkeep`, content: '' },
-    {
-      path: wf('workflows/custom/sw-life-cycle.yaml'),
-      content: mainWorkflowYaml(
-        'sw-life-cycle',
-        'The end-to-end software life cycle',
-        `phases:
-  - name: inception
-  - name: specification
-  - name: delivery
-    include: ${def.slug}-delivery
-  - name: sunset
-`,
-      ),
-    },
-    {
-      path: wf('workflows/custom/bug-ingest.yaml'),
-      content: mainWorkflowYaml('bug-ingest', 'Capture a bug on demand', 'phases:\n  - name: capture\n'),
-    },
-    {
-      path: wf('workflows/custom/decision-log-ingest.yaml'),
-      content: mainWorkflowYaml('decision-log-ingest', 'Capture a decision-log on demand', 'phases:\n  - name: capture\n'),
-    },
-    {
-      path: wf('workflows/custom/adr-ingest.yaml'),
-      content: mainWorkflowYaml('adr-ingest', 'Capture an ADR on demand', 'phases:\n  - name: capture\n'),
-    },
+    { path: wf('workflows/custom/sw-life-cycle.yaml'), content: lifeCycleWorkflowYaml(def) },
+    { path: wf('workflows/custom/bug-ingest.yaml'), content: ingestWorkflowYaml('bug', 'a bug') },
+    { path: wf('workflows/custom/decision-log-ingest.yaml'), content: ingestWorkflowYaml('decision-log', 'a decision-log') },
+    { path: wf('workflows/custom/adr-ingest.yaml'), content: ingestWorkflowYaml('adr', 'an ADR') },
     { path: wf(`workflows/custom/${def.slug}-delivery.yaml`), content: deliveryWorkflowYaml(def) },
   ];
   return files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
