@@ -15,7 +15,7 @@ import { join, relative, sep } from 'path';
 
 import { dump } from 'js-yaml';
 
-import { type Diagnostic, DiagnosticsError, formatDiagnostic, generateId, isNewerFormatError, parseYaml, patternTokens, toValidationError, ValidationError } from '../validation';
+import { type Diagnostic, DiagnosticsError, formatDiagnostic, generateId, isNewerFormatError, parseYaml, patternTokens, raiseConfigVersion, toValidationError, ValidationError } from '../validation';
 import type { Paths } from '../dna/schema';
 import { DnaYaml } from '../dna/schema';
 import { applyDnaEditInText } from '../dna/edit';
@@ -547,6 +547,9 @@ export const DNA_REWRITE_PLANNED_WARNING = DNA_REWRITE_WARNING.replace('dna.yaml
  *    fresh `init --template scrum` repository, task-184, bug-096). It is also what enforces the
  *    cross-field rules the verbs do not duplicate: a member naming a role absent from `team.roles` fails here (REQ-SYS-08,
  *    `Team.superRefine`), which is why `dl-081` records that referential integrity needs no new check.
+ * 7a. **Raise the content revision** (`dl-174` (a), `spec-006` §6 item 7, task-299): bytes that differ
+ *    from the file get `version:` + 0.1 through `raiseConfigVersion`, in place or forced, before step 7's
+ *    re-validation, so the dry-run plan, the commit and step 9 all see the raised text.
  * 8. **Persist + commit** through the single storage primitives (task-018) — `writeDocument` then
  *    `commitPaths` on the ONE scoped path `.wingfoil/dna.yaml`; the returned sha rides
  *    `CoreResult.commit`. Writing the bytes already on disk is an idempotent no-op: no write, no
@@ -594,7 +597,10 @@ async function runDnaMutation(
   const dnaPath = join(root, DNA_YAML_PATH);
   const current = readDocument(dnaPath);
   const inPlace = applyDnaEditInText(current, applied.edit, applied.dna);
-  const serialized = inPlace ?? dump(applied.dna, { lineWidth: -1 });
+  const produced = inPlace ?? dump(applied.dna, { lineWidth: -1 });
+  // dl-174 (a), spec-006 §6 item 7 (task-299): a write raises dna.yaml's `version:` in its own commit; a write
+  // that changes nothing stays no write, so it is not raised either.
+  const serialized = current === produced ? produced : raiseConfigVersion(produced);
 
   // Labelled repository-relative, as every working-tree loader labels it (task-179, `bug-245`).
   const parsed = DnaYaml.safeParse(parseYaml(serialized, DNA_YAML_PATH));

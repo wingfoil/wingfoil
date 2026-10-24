@@ -39,6 +39,10 @@ Custom WingFoil rule. Applies to all roles editing versioned docs.
   commit on the branch you work on: a task branch bumps a document once, and further edits on the same
   branch — review fixes included — do not bump it again, even though each of them is committed (approver ruling 2026-10-01).
 - Update the `**Date:**` to the edit date when bumping, where the document has one.
+- **A tool write is a revision of its own** (`dl-174` (a), `spec-006` §6 item 7): a `wingfoil` command that
+  writes `.wingfoil/dna.yaml`, `memory.yaml`, `workflows.yaml` or `roles.yaml` raises its `version:` in its own
+  commit, by 0.1 read as a number (`1.9` → `2.0`), so the one-bump-per-branch rule above applies to hand edits.
+  A hand edit on a branch where a tool write already raised the file needs no further bump.
 - **Gate (the four versioned config files only).** `test/lint/version-bump.test.ts`, run by `npm test`,
   fails when the pending change (the working tree against `HEAD`) changes `.wingfoil/dna.yaml`,
   `memory.yaml`, `workflows.yaml` or `roles.yaml` — comments included — without changing its
