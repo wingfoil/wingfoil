@@ -194,6 +194,51 @@ test/docs/presentation.test.ts test/core/workflow-manual-check.test.ts` → `wor
 total 14 failed, 98 passed. Every other test in those files passes unchanged. The AC 3 HEAD test reads
 `loadWorkflowRegistryAtHead`, so it passes only once `bindings.yaml` is committed (green's commit).
 
+### green (developer, 2026-10-24)
+
+**Sync first.** `git merge --no-edit release/0.3` → merge `41415078` (task-293's `59baac94` and the approver's
+`spec-017` amendment `1fbf5cbc`; §7 trailers added by `--amend --trailer`). `git diff --name-only 35acda40 release/0.3`
+names no `.wingfoil/` file, so the baseline stays 87 warnings.
+
+**Green commit `342ba597`** — `src/workflow/bindings.ts`, `.wingfoil/workflows/bindings.yaml` (2.4 → 2.5) and
+`test/core/workflow-repository-conformance.test.ts` (the `demo.rendered` row out) in one commit (D1 (a)):
+- `CheckBinding`: `run?`, `manual?: true`, `severity?`, `args?`, a `superRefine` (exactly one of run / manual at the
+  binding's path; `severity`, then `args`, refused on a manual check), the `reject` default moved into a `.transform`
+  after the refine; `resolveToken` resolves a manual check to `{ kind: 'manual', source: 'project' }`.
+- `bindings.yaml`: `demo.rendered: { manual: true }`; the rules gain the manual-check line, the "Deliberately unbound"
+  paragraph names the manual form and `task-303`, the `presentation.current` comment no longer says a check has no
+  manual form; history segment `2.5 task-298 (dl-172 (a)) …`.
+
+**red → green.** `npx jest --maxWorkers=2 test/core/workflow-evidence.test.ts test/workflow/bindings.test.ts
+test/docs/presentation.test.ts test/core/workflow-manual-check.test.ts test/core/workflow-repository-conformance.test.ts`:
+before the commit (working tree green, `HEAD` not) → `2 failed, 125 passed` (the two `HEAD` readers: AC 3's
+`demo.rendered` at `HEAD` and the conformance row set); after `342ba597` → `Test Suites: 5 passed`, `Tests: 127
+passed` (red had 14 failed / 98 passed on its four files).
+
+**Re-measure** (`loadWorkflowRegistryAtHead` from `dist/core`, at `342ba597`) → `workflows 27 phases 105`,
+`{"warning W_WORKFLOW_UNBOUND_TOKEN":86}`, no `demo.rendered` row: 87 → 86 on the merged base.
+
+### refactor (developer, 2026-10-24) — stopped: the pinned build refuses the new binding
+
+- Docs commit `0e7327b4`: `docs/cli-reference.md` (the `manual` binding kind also covers an action or check bound
+  `manual: true`) and `.wingfoil/WORKFLOW.md` (a check confirmed on purpose is `manual: true`, `demo.rendered`).
+  Same-class stale text: `git grep -n -i "no .manual. form\|check binding has no\|stays unbound"` outside Memory/plans
+  → only the 1.8 history segment of `bindings.yaml` (history, kept) and two unrelated hits.
+- `npm run -s lint` → exit 0; `npx tsc --noEmit -p tsconfig.json` → exit 0; `npm run -s docs:api` → exit 0.
+- Full suite under the dl-170 slot (`waitslot.sh`, then `npm test -- --maxWorkers=2`, run with the `spec-017`
+  amendment in the tree) → **exit 1**: `Test Suites: 1 failed, 472 passed, 473 total`, `Tests: 3 failed, 8529
+  passed, 8532 total`. The three failures are `test/cli/mcp-registration.test.ts`, "against the real pinned
+  build": the `.mcp.json` server (the pinned 0.3.0) answers `wingfoil://workflows`, `-/next` and `-/status` with
+  `E_VALIDATION checks.demo.rendered.run (workflows/bindings.yaml): Invalid input: expected array, received
+  undefined`, so `npm run check:mcp` exits 1. The pinned CLI too: `npm run -s wingfoil -- workflow list` → exit 1,
+  same message; `node dist/cli.js workflow list` → exit 0.
+- Cause: a design gap — the design did not check the pinned build against the new `bindings.yaml` form. 0.3.0's
+  schema requires `run` on every check, the same forward-compatibility case as `dl-104` D3's `{ type, path }`
+  entries on 0.2.2 (spec-017 §12's pinned-build paragraph).
+- Stopped before `test:coverage`, `npm run typecheck` (build config) and `memory submit`: the gate is red, and the fix
+  is an approver decision (the coordinator's report lists the options). The `spec-017` §12 amendment stays
+  uncommitted in the tree.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -201,3 +246,7 @@ total 14 failed, 98 passed. Every other test in those files passes unchanged. Th
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- A new `bindings.yaml` form broke the pinned build (0.3.0) on this repository: `npm run check:mcp` and `npm run -s
+  wingfoil -- workflow list` exit 1 after `342ba597`; the design read the code build only. Proposal: a design that
+  changes the shape of a `.wingfoil/` file loads it with the pinned build (`npm run check:mcp`) before red.
