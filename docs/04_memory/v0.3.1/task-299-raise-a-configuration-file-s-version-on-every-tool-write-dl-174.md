@@ -380,6 +380,28 @@ No refactor commit: the green code is the design's minimum and the gates pass on
   workflows.yaml beside the missing roles.yaml as a file written whole for the first time in §6 item 7, per task-299
   design gate D3; the behaviour is unchanged."`
 
+### independent review (2026-10-24) and fixes (developer)
+
+Verdict APPROVE WITH FIXES; the three findings fixed in `d462f098` (`fix(config): task-299 — … (review F1–F3)`), no test
+file touched:
+- **F1** — `src/core/directive-assign.ts`: the never-read default `{ version: 1, assignments: {}, global: [] }` of `raw`
+  is now `{}` (`wholeFile()` runs only when the file exists, where `raw` is the parsed file; a missing file goes through
+  `firstFile()`).
+- **F2** — `src/validation/config-version.ts`: the docstrings now state what the code reads — the first column-0
+  `version:` line, a plain token or a one-line quoted scalar, read as digits with at most one dot — and that other
+  spellings YAML reads as numbers (`1e1`, `.5`, `1.`, `+1.2`), a quoted `"version"` key or a value on the next line
+  are left unchanged, and that a column-0 `version:` inside a multi-line scalar would match. Behaviour unchanged (the
+  robustness is the coordinator's follow-up).
+- **F3** — `doc-versioning.md`: the hand-edit sentence is scoped to a task branch; a commit made on a line itself
+  (`main`, `release/X.Y`) is judged against `HEAD` (the Gate bullet). The four AC3 substrings are untouched.
+
+Checks, in this worktree: `npx tsc --noEmit -p tsconfig.json` → no output; `npx eslint src/core/directive-assign.ts
+src/validation/config-version.ts` → no output; `npx jest --maxWorkers=2 <the nine red files> <the three
+directive-assign suites> test/directives/` → `Test Suites: 19 passed, 19 total`, `Tests: 344 passed, 344 total`. T4:
+`git log --first-parent --no-merges --format=%h 6e9236c2..HEAD -- <the nine red files>` → empty. No heavy gate: the
+src change is a dead initializer and comments (coverage of `directive-assign.ts` was 100 in all four columns at
+`810cec35`, and the removed default was never read).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
