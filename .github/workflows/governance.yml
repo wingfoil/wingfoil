@@ -23,8 +23,10 @@
 # config-version rule, which needs a range, judges nothing. A `release/X.Y` is cut from a commit of `main`,
 # so its first-parent line is `main`'s: the introduction commits are found there, and the commits after
 # them were already gated by `main`'s own runs. The local twin differs here: for a new remote ref
-# `.githooks/pre-push` takes `git merge-base HEAD origin/main` as its base, so on the first push of a
-# `release/X.Y` it checks only the commits not on `main`, while this workflow checks the whole history.
+# `.githooks/pre-push` takes its base from the line the branch was cut from (dl-185 C3 (i)) — its merge-base
+# with `origin/main` for a branch of `main` and for a new `release/X.Y` itself, with `origin/release/X.Y` for a
+# branch of a patch line — so it checks only the commits not already on that line, while this workflow checks the
+# whole history; CI stays the enforcing check (git-conventions §9).
 #
 # Why `fetch-depth: 0`: the check finds its introduction commit, and each later check's, on HEAD's
 # first-parent line; in a shallow clone they are missing and every fetched commit would be gated

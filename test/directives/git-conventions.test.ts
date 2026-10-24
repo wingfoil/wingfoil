@@ -210,6 +210,45 @@ describe('git-conventions §1–§3, §6 — dl-159 (task-286)', () => {
 });
 
 /**
+ * task-291 (`dl-185` C3 (i)) — §9 documents the pre-push hook's base rule (the line the branch was cut from) and
+ * says the hook is a local convenience while CI stays the enforcing check. Prose pinned as substrings of
+ * whitespace-flattened text (task-276), the absence beside its positive; the version pin is "≥ 2.0" plus the
+ * version line naming task-291 (bug-314), robust to the re-bump after task-290's merge (design D-B).
+ * Red-first: the base rule, the `dl-185` citation and "CI stays the enforcing check"; characterization: the two
+ * sentences §9 already carries ("local convenience", "CI is the enforcement point").
+ */
+describe('git-conventions §9 — dl-185 C3 (task-291)', () => {
+  const flat = (s: string): string => s.replace(/\s+/g, ' ');
+  const f9 = flat(section('9. Checks on pushed commits'));
+  const header = TEXT.slice(0, TEXT.indexOf('\n---', 4));
+
+  it('AC 2 (characterization): the hook is a local convenience and CI is the enforcement point', () => {
+    expect(f9).toContain('The pre-push hook is a local convenience');
+    expect(f9).toContain('CI is the enforcement point');
+  });
+
+  it('AC 2 (red-first): §9 states the base rule — the line the branch was cut from — citing dl-185 C3 (i)', () => {
+    expect(f9).toContain('`dl-185` C3 (i)');
+    expect(f9).toContain('the line the branch was cut from');
+    expect(f9).toContain(
+      '`origin/main` for a branch of `main`, `origin/release/X.Y` for a branch of a patch line, and `origin/main` for a new `release/X.Y` itself',
+    );
+    expect(f9).not.toContain('merge-base HEAD origin/main');
+  });
+
+  it('AC 2 (red-first): §9 says CI stays the enforcing check', () => {
+    expect(f9).toContain('CI stays the enforcing check');
+  });
+
+  it('AC 2: the version is 2.0 or later and its line names task-291', () => {
+    const version = /^version: "(\d+)\.(\d+)"(.*)$/m.exec(header);
+    expect(version).not.toBeNull();
+    expect(Number(version![1]) * 1000 + Number(version![2])).toBeGreaterThanOrEqual(2000);
+    expect(version![3]).toContain('task-291');
+  });
+});
+
+/**
  * task-290 — `git-conventions` §1 states `dl-185` C1 (a)–(d), the merge forward of a release line: rule 5's two
  * classes of colliding file and the bump in the merge commit (C1 (a) (i)); who runs it, when and where (C1 (b) (i),
  * "a detached worktree at `main`'s head" per the approver's design-gate ruling D3 (b), no command text pinned);
