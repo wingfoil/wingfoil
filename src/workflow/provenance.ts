@@ -153,8 +153,14 @@ export function readRekey(position: WalkPosition, subject: string, trailers: str
   return { commit: position.commit, position: position.position, instance, from, to };
 }
 
+/** Byte-wise order of two strings (`spec-017` §1.3). */
 function compareText(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** `<type>:<id>` of a reference, `''` for none. */
+function refText(ref: ProvenanceRef | null): string {
+  return ref === null ? '' : `${ref.type}:${ref.id}`;
 }
 
 /** A step key split into its `<workflow>.<phase>` and its `@<scope>` suffix (`''` when unscoped). */
@@ -216,10 +222,10 @@ export function resolveProvenance(
   for (const workflow of snapshot.workflows) for (const phase of workflow.phases) declared.add(`${workflow.name}.${phase.name}`);
   const ancestry = new Ancestry(snapshot.parents);
 
-  // Every rekey once, oldest first (descending walk position), ties by commit.
+  // Every rekey once, oldest first: descending walk position (one position per commit of the union walk).
   const rekeyByCommit = new Map<string, RekeyRecord>();
   for (const history of snapshot.history.values()) for (const entry of history.rekeys ?? []) rekeyByCommit.set(entry.commit, entry);
-  const rekeys = [...rekeyByCommit.values()].sort((a, b) => b.position - a.position || compareText(a.commit, b.commit));
+  const rekeys = [...rekeyByCommit.values()].sort((a, b) => b.position - a.position);
 
   /** `<workflow>.<phase>` after the rekeys of `instance` that descend from `commit`, applied oldest first. */
   const remap = (instance: string, commit: string, base: string): string => {
@@ -246,7 +252,7 @@ export function resolveProvenance(
       return { record: { ...record, phase }, orphan: !declared.has(phase) };
     });
     const candidates = [...history.links.map((entry) => candidate('linkage', entry)), ...(history.adoptions ?? []).map((entry) => candidate('adoption', entry))].sort(
-      (a, b) => a.position - b.position || compareText(a.kind, b.kind) || compareText(a.type, b.type) || compareText(a.id, b.id),
+      (a, b) => a.position - b.position || compareText(`${a.type}:${a.id}`, `${b.type}:${b.id}`),
     );
     for (const entry of candidates) if (!entry.orphan) claims.set(claimKey(entry), entry);
     perHistory.set(start, { records, candidates });
@@ -267,7 +273,7 @@ export function resolveProvenance(
     if (maximal.length === 1) {
       owners.set(key, plain(maximal[0]!));
     } else {
-      const ordered = maximal.map(plain).sort((a, b) => compareText(a.instance, b.instance) || compareText(a.step, b.step) || compareText(a.commit, b.commit));
+      const ordered = maximal.map(plain).sort((a, b) => compareText(`${a.instance} ${a.step} ${a.commit}`, `${b.instance} ${b.step} ${b.commit}`));
       conflicts.push({ element: { type: ordered[0]!.type, id: ordered[0]!.id }, claims: ordered });
     }
   }
@@ -297,7 +303,8 @@ export function resolveProvenance(
         .filter((entry) => entry.orphan && entry.instance === instance.id)
         .map((entry): ProvenanceOrphan => ({ kind: entry.kind, commit: entry.commit, position: entry.position, instance: entry.instance, key: entry.step, element: { type: entry.type, id: entry.id } })),
     ];
-    found.sort((a, b) => a.position - b.position || compareText(a.kind, b.kind) || compareText(a.element?.type ?? '', b.element?.type ?? '') || compareText(a.element?.id ?? '', b.element?.id ?? ''));
+    // One commit is one record, or one linkage per id its subject names: ties are broken by the element.
+    found.sort((a, b) => a.position - b.position || compareText(refText(a.element), refText(b.element)));
     orphans.push(...found);
   }
 

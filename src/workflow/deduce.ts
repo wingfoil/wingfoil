@@ -26,6 +26,10 @@
  *   evidence. `created` (a `memory.add`) is satisfied when, for each type the phase adds, the step
  *   created an element at or after the state the phase leaves it in, with each `{ type, path }` entry
  *   committed for it; a step that created nothing leaves the kind to its other evidence, or to a record.
+ * - **Provenance** (§4.8, P4.21, task-293): adoption and rekey records are resolved first, over every walk at once
+ *   (`resolveProvenance`, `./provenance`): rekeys remap the records of a renamed step key, an adoption counts as a
+ *   linkage for `created` evidence only, an orphan (a key the registry does not declare) is evidence of nothing,
+ *   and an element has one owner; `W_PROVENANCE_ORPHAN` / `W_PROVENANCE_CONFLICT` report the rest.
  * - **Re-entries** (§4.8, §5.2): after a `reject`/`park` that moved the pass's element back, the
  *   `record` and `state` evidence of the phases from the `fallback.step` of the phase whose gate state
  *   was `<from>` onward counts only if newer than the re-entry; those steps report `reentered: true`.

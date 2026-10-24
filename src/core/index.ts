@@ -218,12 +218,14 @@ export type {
 export {
   ADOPT_SUBJECT_PREFIX,
   ADOPTED_TRAILER,
+  INSTANCE_TRAILER,
   readAdoption,
   readRekey,
   REKEY_FROM_TRAILER,
   REKEY_SUBJECT_PREFIX,
   REKEY_TO_TRAILER,
   resolveProvenance,
+  STEP_TRAILER,
   W_PROVENANCE_CONFLICT,
   W_PROVENANCE_ORPHAN,
 } from '../workflow/provenance';
