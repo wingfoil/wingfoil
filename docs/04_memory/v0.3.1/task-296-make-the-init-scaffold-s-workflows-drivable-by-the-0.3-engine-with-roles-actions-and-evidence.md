@@ -219,6 +219,34 @@ Rulings on the design decisions above:
 - `agent execute --next` refusing an unscoped step (bug-400 step 5, outside its Expected Behavior) is recorded by the
   coordinator as a candidate finding, not fixed here.
 
+### red (qa, 2026-10-24)
+
+**Red commit: `7dd461bb`** (T4 baseline: `tests.unchanged(since: 7dd461bb)`). Test files only, no `src/` change, no
+new export: every red is an assertion failure. `npx tsc --noEmit -p tsconfig.json` → exit 0 before the commit.
+Every test loops `for (const def of TEMPLATES)` (Scrum, Kanban), except example 01 (below).
+
+Files: `test/storage/templates-workflows.test.ts` (in process, `templateScaffold` + `loadDnaYaml`; this is the
+coverage-bearing pin of the scaffold), `test/cli/init-scaffold-workflows.integration.test.ts` (compiled CLI through
+`runCliEntry` on `makeTempGitRepo`, plus `initWingfoilProject` + `loadWorkflowRegistryAtHead` in process),
+`test/docs/user-guide-scaffold.test.ts`.
+
+| AC | Class | Tests (per template unless noted) | Result at red |
+|---|---|---|---|
+| 1 | red-first | unit: "every phase that does not only include another workflow has a role declared in team.roles" (D1: `include:` phases skipped); "bug-400 step 2's grep … matches a line in every workflow file"; per ingest T ∈ bug, decision-log, adr: "T-ingest has a capture phase that adds the T and an approve phase that approves it" (phases exactly `[capture, approve]`, `memory.add(type: T)`, `memory.approve`, `approval: { by_role: approver }`) and "T-ingest's capture produces the T path memory.yaml declares" (`produces` = `[memory.yaml types.T.path]`, the design's ingest YAML and the Description's "ingest `actions`/`produces`"); "the scaffold has the five workflow files bug-400 greps" | fail, except the five-files test (passes: today's file set) |
+| 2 | red-first | unit (a): "`<slug>-delivery.plan` adds tasks and produces the task directory memory.yaml declares" (`memory.add(type: task)`, `docs/memory/task/`, which memory.yaml's task path starts with); "`<slug>-delivery.review` approves through memory.approve, routed to the approver". CLI (b): "workflow start sw-life-cycle, then workflow next names the role product-owner" (`next.role` of `workflow next --format json`); "finalizing every step stops at `<slug>-delivery.plan` …" (loop `next`/`finalize` up to 20 times: the refused finalize exits `1` with stderr containing `phase '<slug>-delivery.plan' completes from its evidence: produces`, `workflow next` exit 0 without `is complete`, exactly `2` `workflow: finalize` subjects in `git log`) | fail |
+| 3 | red-first (a); characterization (b), (c) | unit (a), the task-118 splice shape (`  # agents:` head + `  #   ` lines inside `team:`, active `  agents: []`): "the team block holds the commented example and the active `agents: []` line"; "the example, uncommented in place of `agents: []`, loads as one non-approving claude-code agent" (one agent, `executes_as` non-empty without `approver`, `adapter: claude-code`, the scaffold ships `.wingfoil/agents/built-in/claude-code.yaml`); "the unedited scaffold loads with team.agents = []". (b) integration, in process: "initWingfoilProject, then loadWorkflowRegistryAtHead reports no diagnostic". (c) unit: "no scaffold path is .wingfoil/workflows/bindings.yaml" (ruling W1-4). Optional (d) (`agent list --waiting`) not written | (a) fail; (b), (c) pass |
+| 4 | characterization | integration: "run.sh exits 0 and prints its OK line, with WINGFOIL set to the built CLI" (once: example 01 runs `init --template Scrum` by its own text); docs: "the row naming `<w>` lists its phases as the scaffold declares them", for the five workflows of §7's table against `templateScaffold` | pass (today guide and scaffold agree: ingest `capture`; green changes both) |
+
+**Run:** `npx jest test/storage/templates-workflows.test.ts test/cli/init-scaffold-workflows.integration.test.ts
+test/docs/user-guide-scaffold.test.ts --maxWorkers=2` → `Test Suites: 2 failed, 1 passed, 3 total`, `Tests: 30 failed,
+17 passed, 47 total`. Per file: `templates-workflows` 26 failed / 4 passed; `init-scaffold-workflows.integration` 4
+failed / 3 passed (59 s); `user-guide-scaffold` 0 failed / 10 passed. First failing assertions, all on behaviour:
+roles → `Received` lists 10 phases `role=undefined` (e.g. `sw-life-cycle.inception role=undefined`); grep → all 5
+files unmatched; ingest → phases `["capture"]` vs `["capture","approve"]`, capture `produces` `undefined`; delivery →
+`expect(plan.actions).toContain` on `undefined`; agents → `Expected value: "  # agents:"` not in the team block,
+`team.agents` `undefined` vs `[]`; CLI → `next.role` `null` vs `"product-owner"`, refused finalize `undefined` vs `1`
+(the loop completed the workflow by finalize alone).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
