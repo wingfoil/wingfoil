@@ -142,6 +142,16 @@ Not touched: `release-health.yaml`, `release-cycle.yaml` ("the retrospective" st
 - **F2** — `dl-167` (a) says "the six outcomes `retrospective.yaml` 1.4 lists"; a proposal takes four
   (`proposals.disposed`), six being a consumer note's. Wording only; the task's notes on `dl-089`/`dl-092` use four.
 
+#### Design gate (approver, 2026-10-24)
+
+Rulings on the design decisions above:
+- D1 accepted: the classification as designed (AC1 parts red-first in fact, 1c characterization, AC2 checked at
+  review on the uncommitted amendments).
+- D2 (a) accepted: a `kind: patch` report absent from the tree at the commit approving the previous `retro-<version>`.
+- D3 (a) accepted: `additional-points` made plural and the two `.wingfoil/WORKFLOW.md` sentences updated in this task.
+- The `compare.cjs` settling of a patch's RH proposals (F1 of the design) and the dl-167 "six outcomes" wording (F2)
+  are recorded by the coordinator as candidate findings, not fixed here.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
