@@ -308,6 +308,78 @@ the new export is in `src/validation`, which ships its own types (`.d.cts` files
 - The no-op case uses `dna set project.methodology --value Scrum`: `dna set project.name --value ''` is not a no-op on
   the scaffold (it rewrote `""`, measured: `git rev-parse HEAD` moved).
 
+### green (developer, 2026-10-24)
+
+Commits: `7b4000b4` `feat(config): task-299 — a tool write raises the configuration file's version (dl-174)` (src +
+`doc-versioning.md`), `9677d1c0` `docs(cli): …` (the seven `docs/cli-reference.md` entries), `810cec35` the sync with
+`release/0.3` (`59baac94`, `task-293`; `git merge --no-edit release/0.3`, no conflict). Green is the design's D1 as
+written, re-applied from the reverted prototype:
+- `src/validation/config-version.ts`: `raiseConfigVersion(text)` and `INITIAL_CONFIG_VERSION = '1.0'`, exported from
+  `src/validation/index.ts`.
+- `src/core/index.ts` `runDnaMutation`: `serialized = current === produced ? produced : raiseConfigVersion(produced)` —
+  the raise happens only when the new bytes differ from the file (the design's no-op rule), before the re-validation,
+  the dry-run plan and the commit. The `dna set project.name --value ''` rewrite the qa agent observed (F28) differs in
+  bytes, so it is raised like any other write, as the design says.
+- `src/core/directive-assign.ts` `updateRoleAssignments`: an existing file is raised after the in-place edit or the
+  `--force` dump; a missing one is written `version: 1.0\n` + the dump of `assignments`/`global`.
+- `src/core/workflow-create-remove.ts`: the edited `workflows.yaml` is raised when it existed, before the prospective
+  load and the commit; with no manifest `withIncludeAdded`'s `version: 1.0` is kept.
+- `.wingfoil/directives/custom/doc-versioning.md`, *The bump rule*: the bullet "**A tool write is a revision of its
+  own** (`dl-174` (a), `spec-006` §6 item 7) …"; no `version:` (design gate D1).
+
+Red → green, on the nine files of the red commit (`git show --name-only --format= 6e9236c2`):
+- red (qa's notes): 35 failed / 2 passed in the three new files, 14 failed / 95 passed in the six updated ones.
+- after the src change, `npx jest --maxWorkers=2 <the nine files>` → `Test Suites: 1 failed, 8 passed, 9 total`,
+  `Tests: 1 failed, 145 passed, 146 total` (the one failure: AC3, before the directive edit); after the directive edit,
+  `npx jest --maxWorkers=2 test/directives/` → `Test Suites: 10 passed, 10 total`, `Tests: 189 passed, 189 total`.
+- `npx tsc --noEmit -p tsconfig.json` → no output (the two TS2305 of red gone).
+
+### refactor (developer, 2026-10-24)
+
+All run in this worktree at `810cec35` with the uncommitted `spec-006` amendment in the tree, heavy ones after
+`waitslot.sh` (slot taken 21:47:24 and 22:02:26):
+
+| Gate | Command | Result |
+|------|---------|--------|
+| coverage | `npm run -s test:coverage -- --maxWorkers=2` | `Test Suites: 475 passed, 475 total`, `Tests: 8561 passed, 8561 total`; `All files 99.35 / 97.42 / 98.09 / 99.72`, each column at or above the w0 baseline `99.34 / 97.39 / 98.03 / 99.71`; `config-version.ts 100 / 100 / 100 / 100`, `directive-assign.ts 100 / 100 / 100 / 100`, `workflow-create-remove.ts 99.44 / 98.94 / 96.29 / 100` (uncovered line 141, untouched) |
+| tests | `npm test -- --maxWorkers=2` | `Test Suites: 475 passed, 475 total`, `Tests: 8561 passed, 8561 total` |
+| typecheck | `npm run -s typecheck` (both tsc configs) | exit 0, no output |
+| lint | `npm run -s lint` | exit 0, no output |
+| API docs | `npm run -s docs:api` | exit 0, no output |
+| CLI reference | `npx jest test/docs/cli-reference.test.ts` | `Tests: 4 passed, 4 total` |
+| governance | `node scripts/check-governance.cjs --base release/0.3` | `gated: 0 findings on 0 commits`, `history: 0 findings on 0 commits` |
+
+No refactor commit: the green code is the design's minimum and the gates pass on it. No BDD scenario names a version
+(design), none added.
+
+### self-review (developer, 2026-10-24)
+
+- **AC1** — met: the seven verbs raise by 0.1 read as a number in the file's quoting, the comment kept, no history line,
+  no `version:` gained, first files `1.0`; pinned by `test/validation/config-version-raise.test.ts` and
+  `test/cli/config-version-raise.integration.test.ts` (both green in the suite above). Positive case of "no raise on a
+  no-op": the same integration file's characterization `a write that changes nothing makes no commit …` beside the
+  raising cases.
+- **AC2** — met: the dry-run plan is built from the raised bytes (`writeAndCommit` receives them); the integration file's
+  four `--dry-run` cases pass.
+- **AC3** — met: the bullet in *The bump rule*; `test/directives/doc-versioning-tool-writes.test.ts` passes, and
+  `test/directives/integration-branch-baseline.test.ts` "declares no version" still passes.
+- **AC4** — met: the integration file's governance case passes (two `dna set` → no `config` finding; a hand edit without a
+  bump → one).
+- **Same class.** `git grep -n "DNA_YAML_PATH\|ROLES_YAML_PATH\|WORKFLOWS_MANIFEST_PATH\|MEMORY_YAML_PATH" -- src | grep -i
+  content` → `directive-assign.ts:414`, `index.ts:640`, `workflow-create-remove.ts:205` and `:288`: the three writers
+  changed here, no fourth; `init` is out of scope (W1-4). The MCP Tools call the same core functions.
+- **T4.** `git log --first-parent --no-merges --format=%h 6e9236c2..HEAD -- <the nine red files>` → empty; `git diff
+  6e9236c2 HEAD --stat -- <the nine files>` → empty.
+- **Determinism.** `raiseConfigVersion` is pure: no clock, no randomness, a fixed regex and fixed rounding.
+
+### Pending amendments (approver)
+
+- `spec-006-core-domain-api` (uncommitted in this worktree): §6 item 7's first-time file names `spec-017` §7.7's
+  missing `workflows.yaml` beside `spec-011`'s missing `roles.yaml`, plus a dated Revision note (design gate D3).
+  Proposed: `node dist/cli.js memory amend spec-006-core-domain-api --reason "Name workflowCreate's missing
+  workflows.yaml beside the missing roles.yaml as a file written whole for the first time in §6 item 7, per task-299
+  design gate D3; the behaviour is unchanged."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -315,3 +387,9 @@ the new export is in `src/validation`, which ships its own types (`.d.cts` files
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design's prototype probe (D1 applied uncommitted, the writers' 59 consumer suites run, then reverted) named the
+  14 colliding pins before red; red updated exactly those 14 and green touched no test (`git diff 6e9236c2 HEAD --stat
+  -- <red files>` → empty). Proposal: keep "probe the consumers of every changed file in design" as the F23 practice.
+- Plan ruling W1-2 asked for a `doc-versioning.md` bump on a file that declares no version; caught in design (D1) by
+  `grep -c "^version:"` → 0 and `integration-branch-baseline.test.ts` AC 7.
