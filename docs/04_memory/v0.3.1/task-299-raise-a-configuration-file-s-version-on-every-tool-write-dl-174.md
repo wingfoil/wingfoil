@@ -402,6 +402,11 @@ directive-assign suites> test/directives/` → `Test Suites: 19 passed, 19 total
 src change is a dead initializer and comments (coverage of `directive-assign.ts` was 100 in all four columns at
 `810cec35`, and the removed default was never read).
 
+- **Re-review R1** (`5cf3dd91`, comment only): `raiseConfigVersion`'s docstring says "the first line starting `version:` at
+  column 0" and that the writers never reach a non-numeric value while the other numeric spellings, which the schemas
+  accept, are left unchanged. `npx tsc --noEmit -p tsconfig.json` and `npx eslint src/validation/config-version.ts` → no
+  output; `npx jest test/validation/config-version-raise.test.ts` → `Tests: 22 passed, 22 total`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
