@@ -215,8 +215,6 @@ export const NAME_ALLOWLIST: readonly AllowlistEntry[] = [
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'path', name: '.wingfoil/state/', reason: 'retired on purpose: REQ-SYS-03 forbids a state index, and the document names the path to say there is none' },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'path', name: 'bindings.yaml', reason: PLANNED, plannedBy: ['task-175', 'task-199', 'task-221', 'task-222'] },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'W_MEMORY_UNREADABLE', reason: PLANNED, plannedBy: ['task-171', 'task-198'] },
-  { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'W_PROVENANCE_CONFLICT', reason: PLANNED, plannedBy: ['task-293'] },
-  { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'W_PROVENANCE_ORPHAN', reason: PLANNED, plannedBy: ['task-293'] },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'allowedModes', reason: PLANNED, plannedBy: ['task-216'] },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'workflowAdopt', reason: PLANNED, plannedBy: ['task-294'] },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'workflowCreate', reason: UNTRIAGED },
