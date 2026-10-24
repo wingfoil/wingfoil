@@ -111,10 +111,9 @@ describe('resolveProvenance — orders and instances (spec-017 §4.8, §1.3)', (
   });
 });
 
-describe('W_PROVENANCE_CONFLICT — `file` when the first claim is of an instance that is not open (D4)', () => {
-  const memoryYaml = MemoryYaml.parse(
-    parseYaml(
-      `version: 1.0
+const MEMORY = MemoryYaml.parse(
+  parseYaml(
+    `version: 1.0
 types:
   bug:
     path: "docs/bugs/{id}.md"
@@ -125,40 +124,82 @@ types:
     states:
       sequence: [ draft, active, done ]
 `,
-      'memory.yaml',
-    ),
-  );
-  const doc = (path: string, frontmatter: Record<string, unknown>) => ({ path, frontmatter, body: '' });
+    'memory.yaml',
+  ),
+);
+const doc = (path: string, frontmatter: Record<string, unknown>) => ({ path, frontmatter, body: '' });
+const BUGS = [doc('docs/bugs/bug-1.md', { id: 'bug-1', type: 'bug', status: 'open' }), doc('docs/bugs/bug-2.md', { id: 'bug-2', type: 'bug', status: 'open' })];
+const OPEN_PLAN = doc('docs/plans/i2.md', { id: 'i2', type: 'plan', status: 'active', workflow: 'flow', element: '' });
 
+/** A snapshot of `flow` with the open instance `i2` started at `s0`, whose walk holds `history`. */
+function snapshotOf(documents: ReturnType<typeof doc>[], history: InstanceHistory, parents: ReadonlyMap<string, readonly string[]>): DeductionSnapshot {
+  return {
+    commit: 'm0',
+    workflows: [FLOW],
+    workflowFiles: ['.wingfoil/workflows/custom/flow.yaml'],
+    registryDiagnostics: [],
+    memoryYaml: MEMORY,
+    documents,
+    scanDiagnostics: [],
+    tree: [],
+    starts: new Map([['docs/plans/i2.md', { commit: 's0', position: 3 }]]),
+    history: new Map([['s0', history]]),
+    transitions: [],
+    lastChanges: new Map(),
+    parents,
+    dirty: [],
+  };
+}
+
+const linkage = (commit: string, position: number, instance: string, step: string, id: string) => ({ commit, position, instance, step, type: 'bug', id });
+
+describe('W_PROVENANCE_CONFLICT — `file` when the first claim is of an instance that is not open (D4)', () => {
   function conflictFile(withDonePlan: boolean): string {
-    const documents = [
-      doc('docs/bugs/bug-1.md', { id: 'bug-1', type: 'bug', status: 'open' }),
-      doc('docs/plans/i2.md', { id: 'i2', type: 'plan', status: 'active', workflow: 'flow', element: '' }),
-      ...(withDonePlan ? [doc('docs/plans/i0.md', { id: 'i0', type: 'plan', status: 'done', workflow: 'flow', element: '' })] : []),
-    ];
-    const snapshot: DeductionSnapshot = {
-      commit: 'm0',
-      workflows: [FLOW],
-      workflowFiles: ['.wingfoil/workflows/custom/flow.yaml'],
-      registryDiagnostics: [],
-      memoryYaml,
-      documents,
-      scanDiagnostics: [],
-      tree: [],
-      starts: new Map([['docs/plans/i2.md', { commit: 's0', position: 3 }]]),
-      history: new Map([['s0', hist({ adoptions: [adoption('a', 1, 'i0', 'flow.capture', 'bug-1'), adoption('b', 2, 'i2', 'flow.capture', 'bug-1')] })]]),
-      transitions: [],
-      lastChanges: new Map(),
-      parents: SIBLINGS,
-      dirty: [],
-    };
-    const conflict = deduceWorkflowState(snapshot).diagnostics.find((diagnostic) => diagnostic.code === 'W_PROVENANCE_CONFLICT');
+    const documents = [...BUGS, OPEN_PLAN, ...(withDonePlan ? [doc('docs/plans/i0.md', { id: 'i0', type: 'plan', status: 'done', workflow: 'flow', element: '' })] : [])];
+    const history = hist({ adoptions: [adoption('a', 1, 'i0', 'flow.capture', 'bug-1'), adoption('b', 2, 'i2', 'flow.capture', 'bug-1')] });
+    const conflict = deduceWorkflowState(snapshotOf(documents, history, SIBLINGS)).diagnostics.find((diagnostic) => diagnostic.code === 'W_PROVENANCE_CONFLICT');
     return conflict!.file;
   }
 
   it('the done plan of the first claim when HEAD holds it, else empty', () => {
     expect(conflictFile(true)).toBe('docs/plans/i0.md');
     expect(conflictFile(false)).toBe('');
+  });
+});
+
+describe('review F1, approver ruling (ii) — claims that are all linkages never conflict (spec-017 §4.8)', () => {
+  it('two linkages of one element on sibling branches (a cherry-picked add): no conflict, both count, the instance binds', () => {
+    const history = hist({ links: [linkage('a', 1, 'i2', 'flow.capture', 'bug-1'), linkage('b', 2, 'i2', 'flow.capture', 'bug-1')] });
+    const result = resolveProvenance({ workflows: [FLOW], history: new Map([['s0', history]]), parents: SIBLINGS }, [{ id: 'i2', startCommit: 's0' }]);
+    expect(result.conflicts).toEqual([]);
+    expect(result.history.get('s0')!.links.map((entry) => entry.commit)).toEqual(['a', 'b']);
+    expect(result.owners.get('bug:bug-1')).toMatchObject({ kind: 'linkage', commit: 'a' });
+
+    const deduction = deduceWorkflowState(snapshotOf([...BUGS, OPEN_PLAN], history, SIBLINGS));
+    expect(deduction.instances[0]!.instance).toMatchObject({ element: { type: 'bug', id: 'bug-1' }, created: [{ type: 'bug', id: 'bug-1', status: 'open' }] });
+    expect(deduction.instances[0]!.phases.map((phase) => `${phase.phase}:${phase.state}`)).toEqual(['capture:complete', 'triage:current']);
+    expect(deduction.diagnostics).toEqual([]);
+  });
+
+  it('a linkage and an adoption of one element on sibling branches still conflict', () => {
+    const history = hist({ links: [linkage('a', 1, 'i2', 'flow.capture', 'bug-1')], adoptions: [adoption('b', 2, 'i2', 'flow.triage', 'bug-1')] });
+    const deduction = deduceWorkflowState(snapshotOf([...BUGS, OPEN_PLAN], history, SIBLINGS));
+    expect(deduction.diagnostics.map((diagnostic) => [diagnostic.code, diagnostic.path])).toEqual([['W_PROVENANCE_CONFLICT', 'bug:bug-1']]);
+    expect(deduction.instances[0]!.instance).toMatchObject({ element: null, created: [] });
+  });
+});
+
+describe('a linkage naming a checkpoint step is no record (spec-017 §4.3; the checkpoint fix of task-293 green)', () => {
+  it('the checkpoint stays current, missing its record', () => {
+    const history = hist({ links: [linkage('c0', 0, 'i2', 'flow.triage@bug:bug-1', 'bug-2'), linkage('c1', 1, 'i2', 'flow.capture', 'bug-1')] });
+    const parents = new Map<string, readonly string[]>([
+      ['c0', ['c1']],
+      ['c1', ['s0']],
+      ['s0', []],
+    ]);
+    const step = deduceWorkflowState(snapshotOf([...BUGS, OPEN_PLAN], history, parents)).instances[0]!.frontier[0]!;
+    expect(step.key).toBe('flow.triage@bug:bug-1');
+    expect(step.evidence).toEqual({ kinds: ['record'], missing: ['record'], finalizable: true });
   });
 });
 

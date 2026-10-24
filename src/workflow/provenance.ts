@@ -19,10 +19,14 @@
  *
  * {@link resolveProvenance} applies §4.8's rules, in order: rekeys (oldest first, each applied to what it descends
  * from), orphans (a `<workflow>.<phase>` the registry does not declare, after rekeys: evidence of nothing, owner of
- * nothing), one owner per element (the claim — linkage or adoption — every other claim of the element is an
- * ancestor of; with two or more claims none descends from, none counts: a conflict, design D2 (a)). Pure: no git,
- * no filesystem, every collection in a declared order.
+ * nothing), one owner per element when its claims include an adoption (the claim that descends from every other
+ * claim of the element; with two or more claims none descends from, none counts: a conflict, design D2 (a)), and
+ * every linkage counted when its claims are all linkages (approver ruling (ii), 2026-10-24: a cherry-picked add
+ * keeps its trailers). Pure: no git, no filesystem, every collection in a declared order.
  */
+// The module, not the `../core` barrel: `src/core` imports this one.
+import { parseElementRef } from '../core/element-ref';
+
 import type { InstanceHistory, PhaseRecord, StepLink, WalkPosition } from './deduce';
 import type { Workflow } from './schema';
 
@@ -101,19 +105,20 @@ export interface ProvenanceConflict {
 export interface ResolvedProvenance {
   /**
    * Each instance history of the snapshot, by start commit, as deduction reads it: records remapped, orphans left
-   * out; `links` the winning claims of that walk (linkages and adoptions, in `StepLink` shape, newest first);
+   * out; `links` the counted claims of that walk (linkages and adoptions, in `StepLink` shape, newest first);
    * re-entries unchanged.
    */
   readonly history: ReadonlyMap<string, InstanceHistory>;
-  /** The owning claim of each element, by `<type>:<id>`; an element with no claim, or in conflict, has none. */
+  /**
+   * The owning claim of each element, by `<type>:<id>`; an element with no claim, or in conflict, has none. When an
+   * element's claims are all linkages, every one counts and this is the first in instance-id, step-key, commit order.
+   */
   readonly owners: ReadonlyMap<string, ProvenanceClaim>;
   /** The orphans of the given instances: per instance in the order given, then by walk position (newest first). */
   readonly orphans: readonly ProvenanceOrphan[];
   /** The conflicts, ascending `(type, id)`. */
   readonly conflicts: readonly ProvenanceConflict[];
 }
-
-const ELEMENT_REF_RE = /^([a-z][a-z0-9-]*):(\S+)$/;
 
 /** The value of each `key: value` line of a trailer block, by key (the last one wins), or `null`. */
 function trailer(block: string, key: string): string | null {
@@ -134,9 +139,9 @@ export function readAdoption(position: WalkPosition, subject: string, trailers: 
   if (!subject.startsWith(ADOPT_SUBJECT_PREFIX)) return null;
   const instance = trailer(trailers, INSTANCE_TRAILER);
   const step = trailer(trailers, STEP_TRAILER);
-  const adopted = ELEMENT_REF_RE.exec(trailer(trailers, ADOPTED_TRAILER) ?? '');
-  if (instance === null || step === null || adopted === null) return null;
-  return { commit: position.commit, position: position.position, instance, step, type: adopted[1]!, id: adopted[2]! };
+  const adopted = parseElementRef(trailer(trailers, ADOPTED_TRAILER) ?? '');
+  if (instance === null || step === null || !adopted.ok) return null;
+  return { commit: position.commit, position: position.position, instance, step, type: adopted.value.type, id: adopted.value.id };
 }
 
 /**
@@ -199,11 +204,6 @@ class Ancestry {
   }
 }
 
-/** Whether `owner` is the claim `entry` makes (same kind, same commit). */
-function owns(owner: ProvenanceClaim | undefined, entry: ProvenanceClaim): boolean {
-  return owner !== undefined && owner.kind === entry.kind && owner.commit === entry.commit;
-}
-
 /** A linkage or adoption with its key remapped, before ownership is decided. */
 interface Candidate extends ProvenanceClaim {
   readonly orphan: boolean;
@@ -258,23 +258,35 @@ export function resolveProvenance(
     perHistory.set(start, { records, candidates });
   }
 
-  // One owner per element: the single claim no other claim descends from; several such claims are a conflict.
+  // One owner per element (approver ruling (ii), 2026-10-24): when the element's claims include an adoption, the
+  // single claim that descends from every other owns it and two or more claims none descends from are a conflict;
+  // when they are all linkages (a cherry-picked add keeps its trailers), every one counts, as before provenance,
+  // and `owners` gives the first in instance-id, step-key, commit order.
   const byElement = new Map<string, Candidate[]>();
   for (const claim of claims.values()) {
     const key = `${claim.type}:${claim.id}`;
     byElement.set(key, [...(byElement.get(key) ?? []), claim]);
   }
   const owners = new Map<string, ProvenanceClaim>();
+  const counted = new Set<string>();
   const conflicts: ProvenanceConflict[] = [];
+  const plain = (claim: Candidate): ProvenanceClaim => ({ kind: claim.kind, commit: claim.commit, position: claim.position, instance: claim.instance, step: claim.step, type: claim.type, id: claim.id });
+  const ordered = (list: readonly Candidate[]): ProvenanceClaim[] =>
+    list.map(plain).sort((a, b) => compareText(`${a.instance} ${a.step} ${a.commit}`, `${b.instance} ${b.step} ${b.commit}`));
   for (const key of [...byElement.keys()].sort()) {
     const all = byElement.get(key)!;
+    if (all.every((claim) => claim.kind === 'linkage')) {
+      for (const claim of all) counted.add(claimKey(claim));
+      owners.set(key, ordered(all)[0]!);
+      continue;
+    }
     const maximal = all.filter((claim) => !all.some((other) => other !== claim && ancestry.descends(other.commit, claim.commit)));
-    const plain = (claim: Candidate): ProvenanceClaim => ({ kind: claim.kind, commit: claim.commit, position: claim.position, instance: claim.instance, step: claim.step, type: claim.type, id: claim.id });
     if (maximal.length === 1) {
+      counted.add(claimKey(maximal[0]!));
       owners.set(key, plain(maximal[0]!));
     } else {
-      const ordered = maximal.map(plain).sort((a, b) => compareText(`${a.instance} ${a.step} ${a.commit}`, `${b.instance} ${b.step} ${b.commit}`));
-      conflicts.push({ element: { type: ordered[0]!.type, id: ordered[0]!.id }, claims: ordered });
+      const claimsOf = ordered(maximal);
+      conflicts.push({ element: { type: claimsOf[0]!.type, id: claimsOf[0]!.id }, claims: claimsOf });
     }
   }
 
@@ -282,7 +294,7 @@ export function resolveProvenance(
   for (const [start, original] of snapshot.history) {
     const { records, candidates } = perHistory.get(start)!;
     const links: StepLink[] = candidates
-      .filter((entry) => !entry.orphan && owns(owners.get(`${entry.type}:${entry.id}`), entry))
+      .filter((entry) => !entry.orphan && counted.has(claimKey(entry)))
       .map((entry) => ({ commit: entry.commit, position: entry.position, instance: entry.instance, step: entry.step, type: entry.type, id: entry.id }));
     history.set(start, { records: records.filter((entry) => !entry.orphan).map((entry) => entry.record), links, reentries: original.reentries });
   }
