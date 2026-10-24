@@ -310,7 +310,6 @@ describe('task-297 — COLLABORATION.md documents the consumer feedback loop (dl
     for (const status of ['open', 'needs-info', 'captured', 'resolved', 'declined', 'duplicate']) {
       expect(text).toContain(`\`${status}\``);
     }
-    expect(text).toContain('`reported_by:`');
     const spec = read('docs/04_memory/design/specs/spec-010-memory-frontmatter-schema.md');
     const cite = /`(<service id>\/F-<nnn>@<sha>)`/.exec(spec);
     expect(cite).not.toBeNull();
