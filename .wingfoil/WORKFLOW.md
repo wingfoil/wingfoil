@@ -185,7 +185,8 @@ Eight phases in sequence, each including one sub-workflow: `planning` (`release-
 `implementation` (`wave`, once per entry of the release's `waves:`), `user-docs` (`user-docs`, dl-013/dl-025), `e2e-smoke` (`e2e-smoke`,
 dl-023), `submit` (`release-submit`), `publishing` (`release-publishing`), `release-health`
 (`release-health`, dl-089) and `retrospective` (`retrospective`). A patch runs every phase except
-`retrospective` (dl-092); its release-health run reports D01 as not-comparable.
+`retrospective` (dl-092); its release-health run reports D01 as not-comparable,
+and its proposals are disposed of by the next minor's retrospective (dl-167).
 
 ```mermaid
 flowchart TD
@@ -201,7 +202,7 @@ flowchart TD
 
     RP2["**publishing** → `release-publishing`\nrelease-commit → staging-rehearsal → tag → publish → mark-released\nrelease commit = the candidate · staging rehearsal on it · git tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released\n(see sub-diagram below)"]
 
-    RT["**retrospective** → `retrospective`\nexplore → collect-feedback → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115), the release-health report among them\ncollect-feedback (read-only, dl-163) reads every active repository service's feedback_inbox at its main, one row per note with a proposed outcome: `docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md`\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
+    RT["**retrospective** → `retrospective`\nexplore → collect-feedback → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115), the release-health report among them, and those of the patches released since the previous retrospective (dl-167)\ncollect-feedback (read-only, dl-163) reads every active repository service's feedback_inbox at its main, one row per note with a proposed outcome: `docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md`\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
 
     RH["**release-health** → `release-health`\nmeasure → compare → propose\ncatalogue `docs/08_health/metrics.yaml` · report `docs/08_health/release-health-{version}.md`\nnot a gate (dl-089 §5)"]
 

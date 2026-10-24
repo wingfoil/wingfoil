@@ -162,7 +162,8 @@ wingfoil dna add team.roles --value designer --entry-description "UI design"
 ```
 
 Declare the AI agents that work on the project and the roles they act in. `approval_authority: false`
-documents that they never approve:
+documents that they never approve. `init` writes `agents: []` under `team`, with a commented example
+above it to uncomment in its place, or run:
 
 ```bash
 wingfoil dna add team.agents --value claude --entry-executes_as developer,reviewer --entry-approval_authority false
@@ -362,9 +363,17 @@ Full script: [`examples/03-directives-per-role`](examples/03-directives-per-role
 |---|---|---|
 | `sw-life-cycle` | startable | inception → specification → delivery → sunset |
 | `scrum-delivery` / `kanban-delivery` | includable (by `delivery`) | plan → build → review → deliver |
-| `bug-ingest`, `decision-log-ingest`, `adr-ingest` | startable | capture |
+| `bug-ingest`, `decision-log-ingest`, `adr-ingest` | startable | capture → approve |
 
 A phase includes another workflow by its **name** (`include: scrum-delivery`), not by its file path.
+
+Every phase names the role that performs it (`delivery` only includes the delivery loop, whose phases name
+their own). The phases that write Memory declare it, so WingFoil reads their outcome from your documents:
+the delivery loop's `plan` adds and submits the tasks of the slice (`memory add --type task --workflow …`,
+then `memory submit`) and is not passed until a task exists under `docs/memory/task/`; its `review` waits for
+the approver to approve every submitted task; each ingest workflow's `capture` adds and submits one
+element, and its `approve` is the approver's decision on it. The other phases (`inception`,
+`specification`, `build`, `deliver`, `sunset`) are checkpoints, recorded with `wingfoil workflow finalize`.
 
 ```bash
 wingfoil workflow list                 # the workflows you can run now (--all: every one)
@@ -658,6 +667,11 @@ initialising a project with 0.2.2 and running both versions on it.
   plan element`); `agent execute` needs `paths.runs` and an adapter. Copy the `plan` entry of
   `memory.yaml`, `memory/templates/plan.md`, `paths.runs: [docs/runs/]` and `.wingfoil/agents/` from a
   project `wingfoil init` creates in an empty repository, then commit.
+- **Workflows the engine can drive (a project initialised by 0.3.0 too).** 0.2.x and 0.3.0's `init` scaffolded workflows whose phases named no
+  role and declared no action, so `workflow next` printed `role: (none)` and `workflow finalize` alone
+  completed `sw-life-cycle`. To get the roles, actions and evidence of §7, copy the five files under
+  `.wingfoil/workflows/custom/` from a project `wingfoil init` creates in an empty repository (with the same
+  template), then commit.
 - **Create elements with `memory add`.** A Memory verb acts only on a document committed at `HEAD`. A
   document written by hand and not committed, which 0.2.2 submitted, is now refused with exit `1`:
   ``error: document not found: task-001-hand — docs/memory/task/task-001-hand.md is not committed at HEAD, though it carries that id in the working tree. …; register a new element with `memory add`, then retry.``

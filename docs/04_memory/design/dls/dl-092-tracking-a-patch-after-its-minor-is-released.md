@@ -119,3 +119,10 @@ itself is tracked.
 - **Related:** `dl-089` (D01 `not-comparable` for patches), `dl-108` (amending a terminal element),
   `dl-119` (git conventions), `dl-091` and `dl-093` (the other v0.2.2 gates).
 - **Traceability:** P1.13 (the `release` type and its machine); REQ-STATE-01 (legal transitions).
+
+**Note (2026-10-24, dl-167 Action 3; task-300).** Q2 (ii) folds a patch's findings into the next minor's
+retrospective; `dl-167` (option (a), approve `94a5a2c3`) rules that this includes the improvement proposals of the
+patch's own `release-health` run (`dl-089`). The next minor's retrospective `explore` reads the report
+`docs/08_health/release-health-<patch version>.md` of every patch released since the previous retrospective, and its
+`additional-points` gate disposes of each `RH-<patch version>-NN` proposal with one of the four outcomes of
+`proposals.disposed` (`retrospective.yaml` 1.7, `task-300`). The Decision above is unchanged.
