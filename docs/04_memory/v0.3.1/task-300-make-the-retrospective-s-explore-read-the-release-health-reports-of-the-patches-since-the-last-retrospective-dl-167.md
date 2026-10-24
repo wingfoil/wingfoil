@@ -190,7 +190,9 @@ notes) → with the conformance, evidence, collect-feedback, retrospective-notes
 
 Run in this worktree with the uncommitted `dl-089` / `dl-092` notes in the tree; heavy runs after `waitslot.sh`.
 - `npm run test:coverage -- --maxWorkers=2` → exit 0, `Test Suites: 464 passed, 464 total`, `Tests: 8400 passed,
-  8400 total`; All files 99.34 / 97.4 / 98.03 / 99.71 (statements / branches / functions / lines), none below the
+  8400 total`; All files 99.34 / 97.4 / 98.03 / 99.71 (statements / branches / functions / lines) as the text table printed
+  it (`grep 'All files' coverage.log`, line 59); the reviewer's run prints branches 97.39, and
+  `coverage/coverage-summary.json` `total.branches` reads `pct: 97.39` (6389 of 6560): equal to, not above, the
   batch baseline 99.34 / 97.39 / 98.03 / 99.71 (`dev-loop-rel-v0.3.1-plan` line 244). It includes the `docs.parity`
   suites (`bindings.yaml` `docs.parity`, `test/docs/workflow-md.test.ts` among them).
 - `npm run lint` → exit 0. `npm run docs:api` → exit 0. `npm run typecheck` (both tsc configs) → exit 0.
@@ -212,6 +214,29 @@ Run in this worktree with the uncommitted `dl-089` / `dl-092` notes in the tree;
 - Same class: `release-health.yaml` and `release-cycle.yaml` say "the retrospective", still true (design: not
   touched); `grep -n "release-health report" docs/agents.md README.md` → one hit, `docs/agents.md:42` (where
   `wingfoil paths health` points), none describing explore's sources: nothing to align.
+
+### independent review (2026-10-24) and fixes (developer)
+
+Verdict APPROVE with one low finding; fixed in the task (approver's standing rule), fix commit `8e9bee7d`.
+- **F1 — D3 sweep missed `capture`** (`retrospective.yaml:111–112`, "the release-health comparison table").
+  Now: "Its `## Release health` section holds the comparison table of every release-health report explore read and
+  the disposition of every RH proposal (dl-089 §1, dl-167)"; the 1.7 history entry gains "; additional-points and
+  capture name every report explore read"; no version bump (1.7 is this branch's one bump), no token change.
+  Evidence: `git show 2f66ebff:.wingfoil/workflows/custom/retrospective.yaml | grep -c "release-health comparison
+  table"` → 1; `git grep -c "release-health comparison table\|release-health report's comparison table" HEAD --
+  .wingfoil/` → no output (0 files). Same-class sweep: `grep -n -i "release-health"
+  .wingfoil/workflows/custom/retrospective.yaml .wingfoil/WORKFLOW.md` — the remaining hits name the release's own
+  report beside the patches' (explore), one release-health run's report (the RH node, line 207) or the phase and its
+  scripts; none names a single comparison table the retrospective reads.
+- New test of my own, `test/core/retrospective-patch-health-capture.test.ts` (2 tests: the capture sentence; no
+  phase names a single comparison table), written with the fix, so not red-first (characterization of the fixed
+  text). The red file is untouched: `git log --first-parent --no-merges --format=%h db44d92a..HEAD --
+  test/core/retrospective-patch-health.test.ts` → empty.
+- Runs: `npx jest` on the new test, the red file, the conformance, workflow-evidence, collect-feedback,
+  retrospective-notes and workflow-md suites `--maxWorkers=2` → `Test Suites: 7 passed`, `Tests: 96 passed, 96
+  total`; `npm run lint` → exit 0; `npx tsc --noEmit -p tsconfig.json` → exit 0. No `src/` file changed: no heavy
+  gate re-run.
+- Notes claim (review): the coverage line above now states the figures as each run printed them.
 
 ### Pending amendments (approver)
 
