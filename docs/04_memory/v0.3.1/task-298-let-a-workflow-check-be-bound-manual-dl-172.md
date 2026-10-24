@@ -41,14 +41,117 @@ tmpl_version: 261012   # Original template version
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-24)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. `grep -m1 '^status:'` → `spec-003` `approved`,
+`spec-017` `approved`, `dl-172` `ready`, `dl-186` `ready`, `dl-090` `ready`. `dl-172` was ratified with option (a)
+(`git log -- docs/04_memory/design/dls/dl-172*` → `153c3cb9 … approve … [in-discussion → ready]`, Reason "… with the
+recommended option (a)"). `spec-003` Layer 3 already describes this task: `CheckBinding.manual` "exactly one of `run` /
+`manual` … It raises no `W_WORKFLOW_UNBOUND_TOKEN`; `workflow next` reports it `manual`, `evaluated: false` …
+`severity` and `args` do not apply to it" (`sed -n 650p` of spec-003), amended by `9b700cbe` (2026-10-21,
+`wf(tech-spec): amend spec-003 … [approved → approved]`); `spec-017` §6.1 says the same (`sed -n 567,570p`). No AC
+contradicts a ratified spec or decision-log. No BDD scenario covers bindings (`grep -n -i "unbound\|binding\|evaluated"`
+on P4.1/4/6/7/12 `.feature` → no output), so no `.feature` changes.
+
+**Baseline measured on this base** (`a7a25d1d` = `release/0.3` `35acda40` + the start commit; `task-300` merged):
+`loadWorkflowRegistryAtHead` from `dist/core` (built by the jest run below) → `workflows 27 phases 105`,
+`{"warning W_WORKFLOW_UNBOUND_TOKEN":87}`, no error; the `demo.rendered` row is
+`workflows/custom/user-docs.yaml phases[1].checks.post[2]`. The conformance array holds the same 87 rows
+(`awk 'NR>=62 && NR<=173' test/core/workflow-repository-conformance.test.ts | grep -c '^      \["'` → `87`). After
+this task: **86**, every one a `W_WORKFLOW_UNBOUND_TOKEN` on a check. To re-measure after
+`git merge --no-edit release/0.3` (task-293 merges first).
+
+**Existing tests on every file this task changes** (F23), before any pin: `npx jest --maxWorkers=2
+test/workflow/bindings.test.ts test/core/workflow-evidence.test.ts test/docs/presentation.test.ts
+test/core/workflow-repository-conformance.test.ts test/core/workflow-next-views.test.ts
+test/core/workflow-list-show.test.ts test/core/dev-loop-v1-6.test.ts
+test/core/reconcile-governance-role-directives.test.ts test/core/workflow-diagnostics.test.ts
+test/core/workflow-next.test.ts` → `Test Suites: 10 passed`, `Tests: 233 passed`. Three existing pins collide with the
+ACs and must change in red (qa), or the design is wrong:
+- `test/core/workflow-evidence.test.ts` refusal row `['a check without run', 'checks:\n  x.y: { severity: warn }\n',
+  'checks.x.y.run']`: under "exactly one of run / manual" the issue is the binding's, at `checks.x.y` (as
+  `actions.x.y` for actions, the row above it). Ruling D2.
+- `test/docs/presentation.test.ts:237-240` `expect(bindings.checks['demo.rendered']).toBeUndefined()` and the docblock
+  lines 18-20 ("no binding"): AC 3 binds it.
+- `test/core/workflow-repository-conformance.test.ts:136-138`, the `demo.rendered` row: changed in green, with the
+  binding (D1).
+
+**Design.** Only `src/workflow/bindings.ts` changes in `src/`:
+- `CheckBinding` = `{ run?: Argv, manual?: literal(true), severity?: enum, args?: Args }`, `.passthrough()`, then a
+  `superRefine` in this order: (1) `(run === undefined) === (manual === undefined)` → issue at the binding's path,
+  message `a check binding declares exactly one of run or manual`; (2) when `manual === true`: `severity` present →
+  issue at `['severity']`, message `severity does not apply to a manual check binding`; then `args` present → at
+  `['args']`, `args does not apply to a manual check binding`. The `.default('reject')` moves out of the field into a
+  `.transform` after the refine (a run binding without `severity` gets `severity: 'reject'`), because a default inside
+  the object is applied before the refine and would hide a `severity` written on a manual check: prototyped in zod
+  4.4.3 with a throwaway script, not committed (it printed `refine with default sees severity = reject`; with the transform:
+  `{manual:true}` → `{"manual":true}`, `{run:["a"]}` → `{"run":["a"],"severity":"reject"}`, `{severity:"warn"}` →
+  `checks.x.y` "a check binding declares exactly one of run or manual", `{manual:true,severity,args}` →
+  `checks.x.y.severity`, `checks.x.y.args`, `{manual:false}` → `checks.x.y.manual`).
+- `resolveToken(…, 'check', …)`: a manual check → `{ kind: 'manual', source: 'project' }` (no `argv`, no
+  `severity`), as a manual action; a run check unchanged. `TokenBinding.severity`'s doc says "a run check binding's".
+- No change needed elsewhere, each shown on the code: the loader's unbound rule warns only when
+  `resolveToken(token, role, bindings.bindings).kind` is `'unbound'` (`src/core/workflow-diagnostics.ts:423`, which
+  also covers `awaits.evidence`); `bindingsFileDiagnostics` reads `binding.run ?? []` (`:479`, `:489`); `workflow
+  next`'s `checkView` passes any non-`run` kind through as `{ kind }` (`src/core/workflow-next.ts:366`); `workflow
+  show`'s `check()` returns the whole `TokenBinding` with `evaluated: false` (`src/core/workflow-list-show.ts:280`).
+  So AC 2 is new behaviour only because a manual check cannot load today, not because next/show need code.
+- No `doc:` field (dl-172 (a) "if one is added"): the pointer stays the `user-docs.yaml:62` comment to
+  `docs/assets/README.md` (D4).
+
+**AC classification and what qa must pin.** All three are **red-first**: no manual check loads today
+(a throwaway fixture script on the code build, not committed, printed `E_VALIDATION checks.demo.ok.run (workflows/bindings.yaml):
+Invalid input: expected array, received undefined`). No new export, so no TS2305 red: `npx tsc --noEmit` must pass at
+red; every red is a jest assertion failure.
+
+| AC | Test file | Interface | Observable to pin |
+|----|-----------|-----------|-------------------|
+| 1 | `test/core/workflow-evidence.test.ts`, describe `spec-003 Layer 3 — workflows/bindings.yaml` (helpers `writeBindings`, `errorsOf`, `loadWorkflowsYaml`, const `BINDINGS`) | `loadWorkflowsYaml(repo)` | (a) new `it`: bindings `checks:\n  demo.ok: { manual: true }\n  lint.clean: { run: [npm, run, lint] }\n` → `.bindings.checks` `toEqual({ 'demo.ok': { manual: true }, 'lint.clean': { run: ['npm','run','lint'], severity: 'reject' } })`, `.diagnostics` `[]`. (b) the refusal `it.each`: row `a check without run` becomes `a check with neither run nor manual`, path `checks.x.y`; new rows `a check with both run and manual` (`{ run: [a], manual: true }` → `checks.x.y`), `severity on a manual check` (`{ manual: true, severity: warn }` → `checks.x.y.severity`), `args on a manual check` (`{ manual: true, args: { n: "^a$" } }` → `checks.x.y.args`), `manual: false on a check` (`{ manual: false }` → `checks.x.y.manual`). (c) one `it` pinning messages exactly: `{ manual: true, severity: warn, args: { n: "^a$" } }` → `errorsOf` `toEqual` two `E_VALIDATION` errors on `BINDINGS`, `checks.x.y.severity` / `severity does not apply to a manual check binding`, then `checks.x.y.args` / `args does not apply to a manual check binding`; `{ run: [a], manual: true }` → one, `checks.x.y` / `a check binding declares exactly one of run or manual`. The other existing rows unchanged. |
+| 2 | `test/workflow/bindings.test.ts`: a NEW describe (parse inside the `it`, so a red parse does not break the existing describe) | `BindingsYaml.parse`, `resolveToken` | `checks: { 'demo.ok': { manual: true } }`: `resolveToken('demo.ok', 'check', b)` and `resolveToken('demo.ok(note: x)', 'check', b)` `toEqual({ kind: 'manual', source: 'project' })`; `resolveToken('demo.ok', 'action', b)` `toEqual({ kind: 'unbound', source: 'none' })` (a check binding serves no action). |
+| 2 | `test/core/workflow-evidence.test.ts`, same describe | `loadWorkflowsYaml(repo).diagnostics` | `writeMain(repo, '  - name: go\n    checks:\n      pre: [ demo.ok ]\n      post: [ "demo.ok", "prose nobody binds" ]\n')`, bindings `checks:\n  demo.ok: { manual: true }\n` → diagnostics `toEqual` exactly `[{ code: 'W_WORKFLOW_UNBOUND_TOKEN', severity: 'warning', file: MAIN_FILE, path: 'phases[0].checks.post[1]', message: "check token 'prose nobody binds' has no built-in or bindings.yaml binding" }]` (the positive case: an unbound check still warns). |
+| 2 | NEW `test/core/workflow-manual-check.test.ts`, fixture modelled on `test/core/workflow-next-views.test.ts` (`makeTempGitRepo`, `writeFixtureFile`, `commitAll`, `git`, `removeTempDir` from `test/storage/helpers/git-fixture`; its `MEMORY_YAML` reduced to `plan`, its `DNA_YAML` with one `developer` member; its `plan()` helper; `CORE_MODULES` `workflow` ops `workflowNext` / `workflowShow` called as `op.fn({ root, positional })`) | `workflowNext` on `probe-1`, `workflowShow` on `probe` | Workflow `probe` (`startable: true`; one phase `do`, `role: developer`, `checks: { pre: [ "demo.ok" ], post: [ "demo.ok(note: x)", "report.ok", "prose nobody binds" ] }`, `awaits: { party: "a vendor", evidence: "vendor.ack" }`); bindings `checks: { demo.ok: { manual: true }, vendor.ack: { manual: true }, report.ok: { run: [node, check.cjs] } }`; plan `probe-1` (`workflow: "probe"`, `element: ""`) committed. next: `step.checks` `toEqual({ pre: [{ token: 'demo.ok', binding: { kind: 'manual' }, evaluated: false }], post: [{ token: 'demo.ok(note: x)', binding: { kind: 'manual' }, evaluated: false }, { token: 'report.ok', binding: { kind: 'run', argv: ['node','check.cjs'] }, evaluated: false }, { token: 'prose nobody binds', binding: { kind: 'unbound' }, evaluated: false }] })`; `step.awaiting` `toEqual({ kind: 'party', party: 'a vendor', evidence: { token: 'vendor.ack', binding: { kind: 'manual' }, evaluated: false } })`. show: phase 0 `checks.pre[0]` `toEqual({ token: 'demo.ok', binding: { kind: 'manual', source: 'project' }, evaluated: false })`, `awaits.evidence` the same shape for `vendor.ack`; the result's `diagnostics` mapped to `[code, path]` `toEqual([['W_WORKFLOW_UNBOUND_TOKEN', 'phases[0].checks.post[2]']])`. Fixture verified on the code build with `vendor.ack`/`demo.ok` bound `{ run: [echo] }` (the same throwaway script → exactly those shapes with `kind: run`, and `next.diag`/`show.diag` `[["W_WORKFLOW_UNBOUND_TOKEN","phases[0].checks.post[2]"]]`); with `{ manual: true }` both ops return the `E_VALIDATION` above. |
+| 3 | `test/docs/presentation.test.ts` (working tree) | `load(read('.wingfoil/workflows/bindings.yaml'))` | `:237-240`: title `presentation.current runs this suite; demo.rendered is bound manual: true (dl-172 (a))`, `expect(bindings.checks['demo.rendered']).toEqual({ manual: true })`; docblock lines 18-20 say it is bound `manual: true`. |
+| 3 | NEW `test/core/workflow-manual-check.test.ts`, a second describe on this repository (`ROOT = join(__dirname, '..', '..')`) | `loadWorkflowRegistryAtHead(ROOT)` (as the conformance test), `resolveToken` | `resolveToken('demo.rendered', 'check', loaded.bindings)` `toEqual({ kind: 'manual', source: 'project' })`; no diagnostic whose message contains `'demo.rendered'`. Version, read from the working tree as `test/core/reconcile-governance-role-directives.test.ts` does: `version:` of `.wingfoil/workflows/bindings.yaml` ≥ 2.5, and its history comment has a `;`-segment numbered ≥ 2.5 naming `task-298` (bug-314: "at least" plus the history entry). |
+
+**Files to touch.** Green: `src/workflow/bindings.ts`; `.wingfoil/workflows/bindings.yaml` (2.4 → **2.5**, one bump:
+`demo.rendered: { manual: true }`, the `presentation.current` comment block rewritten — its "A check binding has no
+`manual` form" sentence becomes false —, header rules line "an action with no command is `manual: true`" extended to
+checks, the "Deliberately unbound" paragraph naming the manual form and `task-303`; history segment `2.5 task-298
+(dl-172 (a)): demo.rendered bound manual: true …`); `test/core/workflow-repository-conformance.test.ts` (the
+`demo.rendered` row and its comment removed — 86 rows — and the docblock) **in the same commit as `bindings.yaml`**.
+Refactor: `docs/cli-reference.md` (`workflow next`'s "other binding kinds", `manual` line ~1221: also a check or action
+`workflows/bindings.yaml` binds `manual: true`); `.wingfoil/WORKFLOW.md` (~:592, the prose-checks sentence names the
+manual form, `demo.rendered`). Neither has a `version:` (`head` of each). `user-docs.yaml:62` stays (its comment is
+still true), no bump. Session 3, uncommitted: `spec-017` §12 (below). Not touched: `src/core/workflow-diagnostics.ts`,
+`workflow-next.ts`, `workflow-list-show.ts`, `loaders.ts` (reasons above); nothing of `task-299`'s files.
+
+**Pending amendment planned (session 3).** `spec-017` (`tech-spec`, `amendable: true` per `memory.yaml`) §12: after
+"To re-measure in `patch-v0.3.1`", a dated paragraph "Re-measured at `task-298`": 27 workflows, 105 phases, 0 errors,
+86 warnings, every one a `W_WORKFLOW_UNBOUND_TOKEN` on a check (87 before; `demo.rendered` bound `manual: true`), with
+the command; figures re-taken after merging `release/0.3` with `task-293`. `spec-003`: no edit (Layer 3, the
+unbound-token paragraph and the diagnostic row already say it, `9b700cbe`; its "61 warnings" is labelled as
+`task-199`'s measurement).
+
+**Decisions for the approver.**
+- **D1 — where the conformance-test update lands.** AC 3 wants it in the same commit as the binding; T4 forbids green
+  to edit a red file, and the test reads `HEAD`. (a) red pins AC 3 in `presentation.test.ts` and the new file; green
+  edits the conformance row together with `bindings.yaml` (red never touches that file); (b) red edits the conformance
+  row, green commits only `bindings.yaml` (not "the same commit"). **Recommend (a).**
+- **D2 — the path of "neither run nor manual" on a check.** (a) `checks.<token>`, as for actions (the existing row's
+  `checks.x.y.run` changes in red); (b) keep `checks.<token>.run` for that one case. **Recommend (a)**: one rule, one
+  path, for both binding kinds.
+- **D3 — `spec-017` §12 only, `spec-003` unchanged** (above). **Recommend yes.**
+- **D4 — no `doc:` field on a manual check now** (dl-172 (a) makes it optional). **Recommend no field.**
+
+**Risks for the batch.** `task-293` (merges first): if it edits the conformance test or a workflow file, my row edit
+may conflict and the count may move — re-measure after the merge. It may also leave a pending `spec-017` amendment
+(§7.11–§7.12): two uncommitted edits of one spec, applied by the approver one after the other. `task-303` (w2,
+`depends_on: [task-298]`): needs the manual `CheckBinding`; binds its checks with the same `{ manual: true }` form, one
+conformance row out per check, re-bumps `bindings.yaml` 2.5 → 2.6 against the integration branch, leaves
+`demo.rendered` alone; `workflow next`/`show` need no change for it. `task-299`: no shared file. `task-294`/`task-295`:
+both edit `docs/cli-reference.md` (new command entries); my one-line edit is in `workflow next`'s binding-kinds
+paragraph — a textual conflict is unlikely. Candidate finding, not filed: `ActionBinding` accepts `args` with
+`manual: true`, which `spec-003` does not forbid for actions — out of scope here.
 
 ### Retrospective
 
