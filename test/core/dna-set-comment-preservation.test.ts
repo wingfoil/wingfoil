@@ -89,14 +89,27 @@ describe('dna.dnaSet — bug-004: a comment-rich dna.yaml survives a set (task-0
     expect(provenanceMarkers(after)).toBe(provenanceMarkers(REAL_DNA));
   });
 
-  it('AC(a): ONLY the target value changes — exactly one line differs, and it is the target key line', async () => {
+  // task-299 (dl-174 (a)): the write also raises the file's `version:`, keeping the line's comment. The
+  // fixture's version VALUE is pinned by hand to 1.9 (its comment kept) so the expected raise is a literal
+  // (`1.9 → 2.0`) that a later bump of this repository's own dna.yaml cannot move.
+  it('AC(a): ONLY the target value changes — the target key line and the raised version line, nothing else', async () => {
+    const versionLine = REAL_DNA.split('\n').find((line) => /^version: /.test(line))!;
+    // Everything after the value: the spacing and the trailing comment, kept byte for byte.
+    const tail = versionLine.replace(/^version: \S+/, '');
+    expect(tail).toMatch(/^ +# \[AUTHORING\]/);
+    const seeded = REAL_DNA.replace(versionLine, `version: 1.9${tail}`);
+    writeFixtureFile(repo, '.wingfoil/dna.yaml', seeded);
+    commitAll(repo, 'fixture: dna.yaml at version 1.9');
+
     const result = await dnaSetFn()({ root: repo, positionals: ['project.name'], options: { value: 'WingFoil Renamed' } });
     expect(result.ok).toBe(true);
 
-    const changes = changedLines(REAL_DNA, dnaText(repo));
-    expect(changes).toHaveLength(1);
-    expect(changes[0]!.from).toBe('  name: WingFoil');
-    expect(changes[0]!.to).toBe('  name: WingFoil Renamed');
+    const changes = changedLines(seeded, dnaText(repo));
+    expect(changes).toHaveLength(2);
+    expect(changes[0]!.from).toBe(`version: 1.9${tail}`);
+    expect(changes[0]!.to).toBe(`version: 2.0${tail}`);
+    expect(changes[1]!.from).toBe('  name: WingFoil');
+    expect(changes[1]!.to).toBe('  name: WingFoil Renamed');
   });
 
   it('an inline trailing comment on the edited line is kept (the annotation lives ON the field line)', async () => {

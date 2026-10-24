@@ -263,7 +263,8 @@ describe('directive assign — refuses a roles.yaml carrying modifications it do
 
     expect(result.ok).toBe(true);
     expect(committedPaths(repo)).toEqual([ROLES]);
-    expect(committedAdditions(repo)).toEqual(['    - architecture']);
+    // Beside the binding, the write raises the file's `version:` (task-299, dl-174 (a): 1 → 1.1).
+    expect(committedAdditions(repo)).toEqual(['version: 1.1', '    - architecture']);
   });
 });
 
