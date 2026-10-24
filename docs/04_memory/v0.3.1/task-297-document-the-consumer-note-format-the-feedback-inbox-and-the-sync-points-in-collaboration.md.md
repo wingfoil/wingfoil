@@ -119,7 +119,8 @@ qa (red): `test/docs/community-health.test.ts`. Pending amendment (session 3, un
 
 **Decisions for the approver.**
 - **D1 — AC 1 and AC 2a reclassified red-first (recommendation: accept).** The task labels them characterization, but
-  the text does not exist; the test fails at red on text not yet written, as `task-286` D1 and `task-290` D1 ruled. AC
+  the text is absent (`grep -n -i "note format\|sync point\|sync procedure" COLLABORATION.md` → nothing, while the
+  same grep finds `reported_by` in `## Credit`); the test fails at red on text not yet written, as `task-286` D1 and `task-290` D1 ruled. AC
   2b stays characterization (no page-list change).
 - **D2 — how a consumer turns WingFoil's answer into a note status.** dl-163 fixes the six note statuses (R4) and the
   six retrospective outcomes (S3d) but no mapping between them. (a) Document the mapping in *The sync procedure*:
@@ -191,7 +192,81 @@ only new import is `readdirSync` from `node:fs`. No production file touched.
   test/docs/reported-by.test.ts --maxWorkers=2` → `Test Suites: 2 passed, 2 total`, `Tests: 90 passed, 90 total`
   (34 + 56, each file run alone); `npx tsc --noEmit -p tsconfig.json` → exit 0.
 
+### design correction (2026-10-24)
+
+Case 3 of the design pinned `` `reported_by:` `` in `### The note format`. That collides with
+`test/docs/reported-by.test.ts:333-337` (task-271: no section of `COLLABORATION.md` but `## Credit` names
+`reported_by`), which carries `dl-163` S3c ("This is stated once, in `COLLABORATION.md`", dl-163 line 234). Shown at
+green: with the field named in the new section, `npx jest test/docs/community-health.test.ts
+test/docs/reported-by.test.ts test/docs/llms-txt.test.ts test/docs/pages-render.test.ts --maxWorkers=2` → 1 failed
+(reported-by's "stated once"), 118 passed; reworded, → 1 failed (case 3, `Expected substring: "`reported_by:`"`), 89
+passed. Approver ruling 2026-10-24: the pin is dropped; qa's send-back `bbae3471` deleted that one assertion. The new
+section cites "the provenance field *Credit* describes" and gives the `spec-010` form, which contains no `reported_by`.
+
+### green (developer, 2026-10-24)
+
+Commit `5be28f7d` `docs(collaboration): task-297 — …` (`COLLABORATION.md` only, `git show --stat` → 1 file,
++114/−2):
+- `**Version:** 1.6 · **Date:** 2026-10-17` → `**Version:** 1.7 · **Date:** 2026-10-24` (`grep -n "^\*\*Version"
+  COLLABORATION.md` → line 3); one bump against `release/0.3`'s 1.6.
+- `## Credit`'s registered-inbox bullet ends with a pointer to the new section.
+- New `## Consumer feedback — notes from projects that use WingFoil` between `## Credit` and `## Ground rules`
+  (`grep -n "^## \|^### " COLLABORATION.md` → 164, then `### The feedback inbox` 174, `### The note format` 191,
+  `### The sync points` 224, `### The sync procedure` 243, `## Ground rules` 275): the inbox and its `README.md`
+  (D3 (a)), registration through `service-ingest` and the request through the Proposal form (D4 (a)), the six fields,
+  three kinds and six statuses (R4), the cite form of `spec-010`, the sync points and what is read (R5: `origin/main`,
+  `vX.Y.Z`, `release/X.Y`, `latest`, `latest-X.Y`, the patch's `## Scope changes` between retrospectives, R6), the
+  procedure with the outcome → status table (D2 (a)) and R3. No consumer is named (case 6 passes).
+
+Red → green: `npx jest test/docs/community-health.test.ts --maxWorkers=2` → at red `Tests: 6 failed, 28 passed, 34
+total` (qa, above); at `5be28f7d` → `Tests: 34 passed, 34 total`.
+
+### refactor (developer, 2026-10-24)
+
+Run in this worktree at `5be28f7d`; heavy ones after `waitslot.sh`, `--maxWorkers=2`, foreground or tracked:
+- `npx jest --coverage --maxWorkers=2` (the full suite with coverage) → `Test Suites: 463 passed, 463 total`, `Tests:
+  8395 passed, 8395 total` (the w0 close had 8387: + the 8 new cases); `All files | 99.34 | 97.4 | 98.03 | 99.71`,
+  each column ≥ the w0 baseline 99.34 / 97.39 / 98.03 / 99.71 (`dev-loop-rel-v0.3.1-plan` Execution Notes).
+- `npm run -s lint; echo lint=$?` → `lint=0`.
+- `npm run -s typecheck` (both tsc configs) → exit 0; `npm run -s docs:api` → exit 0.
+- `node scripts/check-governance.cjs --base release/0.3` → `gated: 0 findings on 0 commits`, `history: 0 findings
+  on 0 commits` (2 `wf()` commits and 7 others read).
+- `node scripts/lint-claims.cjs --base release/0.3` (war- `node scripts/lint-claims.cjs --base release/0.3` (warn-only) → 3 warnings, all in this task file and none in a
+  line of mine with a claim left unbacked: case 8's title "the page list is unchanged" in the design table (its grep
+  is in the AC table), the rulings line and qa's red notes (not mine to edit). The design's D1 line was given its
+  grep.
+t.ts` is not affected; no BDD scenario covers
+  `COLLABORATION.md` (`grep -rln COLLABORATION docs/02_requirements/02_bdd/features/` → nothing; the same grep over
+  `test/docs/` finds `community-health.test.ts` and `reported-by.test.ts`).
+
+### self-review (developer, 2026-10-24)
+
+- AC 1 met: the four sections exist (cases 1–5 pass) and the cite form is the one read from `spec-010` (case 3).
+- AC 2a met: `test/docs/community-health.test.ts` asserts the four headings and passes (34/34 above).
+- AC 2b met (characterization): `git diff release/0.3 --stat` lists `COLLABORATION.md`, the task file, the bug file
+  (its sync) and the test file, so neither `docs/site.yaml` nor `llms.txt` changed, and `llms-txt.test.ts` /
+  `pages-render.test.ts` pass (4 suites, 119 tests, with `reported-by.test.ts` and `community-health.test.ts`).
+- T4: `git log --first-parent --no-merges --format='%h %s' 777f87b3..HEAD -- test/docs/community-health.test.ts` →
+  only `bbae3471 test(docs): task-297 — red send-back …`, the qa agent's commit after the approved send-back;
+  `git log … bbae3471..HEAD -- test/docs/community-health.test.ts` → empty.
+- Same class in files I touched: every claim the new section makes about this repository was read from its source
+  in design (dl-163 R1–R6, S3b, S3d; `spec-010`; `retrospective.yaml` `collect-feedback`; `scripts/npm-dist-tag.cjs`;
+  `patch-v0.3.1`'s `## Scope changes`); no other section of `COLLABORATION.md` names `reported_by` outside `## Credit`
+  (`grep -n reported_by COLLABORATION.md` → lines 138–155 only, inside `## Credit`, which starts at 122).
+
+### Pending amendments (approver)
+
+- `bug-408` — `### Retrospective` replaced (uncommitted in this worktree). Proposed `--reason`:
+  "Record bug-408's retrospective line: the S3f gap was closed by task-297, and the miss came from S3f landing in no
+  phase plan of v0.3's user-docs, so nothing tracked it."
+
 ### Retrospective
+
+- The design pinned `` `reported_by:` `` in the new section without reading the existing tests on
+  `COLLABORATION.md`; `test/docs/reported-by.test.ts` forbids it (dl-163 S3c), so red needed a send-back
+  (`bbae3471`) and the approver's ruling. Evidence: *design correction* above. Proposal (coordinator's F23): the
+  design step lists the existing tests that read the files the task changes (`grep -rln <file> test/`) and checks
+  each pin against them.
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
      reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
