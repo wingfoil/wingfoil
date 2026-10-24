@@ -152,6 +152,29 @@ Rulings on the design decisions above:
 - The `compare.cjs` settling of a patch's RH proposals (F1 of the design) and the dl-167 "six outcomes" wording (F2)
   are recorded by the coordinator as candidate findings, not fixed here.
 
+### red (qa)
+
+Role qa (dl-134). Red commit **`db44d92a`** (T4 is measured from it): one new file,
+`test/core/retrospective-patch-health.test.ts`, with the helpers of `retrospective-collect-feedback.test.ts`
+(`loadWorkflowRegistryAtHead`, `atHead`, a whitespace-collapsing `text(phase)`, `tokenName`); every read at `HEAD`,
+no fixture repository, no wall-clock. No production file touched; no new export, so no `.d.cts` and no `tsc` red
+(`npx tsc --noEmit -p tsconfig.json` → exit 0).
+
+| AC | Classification | Test(s) (`describe` › `it`) | At red |
+|----|----|----|----|
+| 1a | red-first (D1) | `AC 1a` › "keeps the release's own report among its sources" | passes (the kept sentence; a guard, not the red) |
+| 1a | red-first (D1) | `AC 1a` › "names the report of every patch …", "cites the rulings …", "selects a patch report by the deducible cut of D2 (a) …", "carries each report's RH-<version>-NN proposals as proposals" | 4 fail: `Expected substring` / `Expected pattern: /dl-092 Q2 \(ii\)/` against today's explore text |
+| 1b | red-first | `AC 1b` › "reads at least 1.7, the history kept and the task-300 entry appended …" | fails: `Expected: >= 1.7` (reads 1.6) |
+| 1c | characterization (W1-4) | `AC 1c` › "every phase keeps its action and check tokens", "explore still produces only the friction inventory" | 2 pass on first run, as designed |
+| 1d | red-first (D3 (a)) | `AC 1d` › additional-points plural; WORKFLOW.md RT node; WORKFLOW.md release-cycle prose | 3 fail: `Expected substring` on each of the three designed sentences |
+| 2 | no automated test (D1) | — | checked at review on the uncommitted `dl-089` / `dl-092` diff |
+
+Run: `npx jest test/core/retrospective-patch-health.test.ts --maxWorkers=2` → `Tests: 8 failed, 3 passed, 11 total`;
+every failure an assertion on missing text or the version, none a crash. "Conformance green" stays the existing
+suites, unedited: `npx jest test/core/workflow-repository-conformance.test.ts test/core/workflow-evidence.test.ts
+test/core/retrospective-collect-feedback.test.ts test/core/retrospective-notes.test.ts --maxWorkers=2` →
+`Test Suites: 4 passed, 4 total`, `Tests: 77 passed, 77 total`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
