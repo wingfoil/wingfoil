@@ -244,6 +244,70 @@ Rulings on the design decisions above:
   missing `roles.yaml`, prepared in session 3.
 - D4 accepted: the raise is called in `src/core` (one call per writer), the pillar editors unchanged.
 
+### red (qa, 2026-10-24)
+
+Red commit **`6e9236c2`** (`test(config): task-299 — failing test: …`), test files only; T4 is measured from it. Run
+after `npm run build` on the clean `src/` (`git status --short src` → empty), so the reds ran against the real code,
+not the design's reverted prototype.
+
+**Files.** New: `test/validation/config-version-raise.test.ts` (AC1 unit), `test/cli/config-version-raise.integration.test.ts`
+(AC1 end to end, AC2, AC4), `test/directives/doc-versioning-tool-writes.test.ts` (AC3). Updated (the design's 14
+collisions, literal expected text): `test/core/directive-assign.test.ts` (7), `test/core/write-guard-dirty-target.test.ts`
+(1), `test/core/workflow-create-remove.test.ts` (2), `test/core/dna-set-comment-preservation.test.ts` (1),
+`test/cli/dna-force.integration.test.ts` (2), `test/cli/directive-assign-force.integration.test.ts` (1). No `.d.cts`:
+the new export is in `src/validation`, which ships its own types (`.d.cts` files exist only under `scripts/`).
+
+**Per AC.**
+- **AC1 (red-first).** Unit: `raises %j to %j` (9 rows of the design's table, CRLF included), `the raise of %j is a bump
+  as isVersionIncrease reads it` (8), `leaves %j unchanged` (4: `x: 1`, nested only, commented, `version: abc`),
+  `a file written whole for the first time carries version 1.0`. End to end: `dna set, add, update and remove each raise
+  … 1.1, 1.2, 1.3, 1.4`; `dna add --force … raises the version of the rewritten file`; `1.9 → 2.0 read as a number, the
+  spacing and the trailing comment kept, in dna.yaml, roles.yaml and workflows.yaml`; `directive assign raises
+  roles.yaml's version, in place and under --force`; `workflow create and workflow remove raise … 1.1, then 1.2`;
+  `a file without version: gains none …` (positive half in the same `it`); `directive assign with no roles.yaml writes
+  it whole for the first time as version: 1.0`. Each raise is checked as one `-`/`+` pair of `version:` lines in
+  `git diff --unified=0 HEAD~1 HEAD`, with no other added line naming a version (no history entry).
+  **Characterization (pass at red):** `workflow create with no workflows.yaml writes it whole for the first time as
+  version: 1.0` and `a write that changes nothing makes no commit and leaves the version line alone` (`directive assign
+  testing → qa`, already bound; `dna set project.methodology --value Scrum`, the scaffold's value).
+- **AC2 (red-first).** `dna set`, `directive assign`, `workflow create`: `the plan's diff replaces version: 1 with
+  version: 1.1`; `workflow remove` on a custom workflow added to the manifest by hand (so it stays at `1`). Each also
+  asserts nothing is written (`snapshotPersistence`/`assertPersistenceUnchanged`).
+- **AC3 (red-first, design gate D2).** `AC3: The bump rule states that a tool write raises the version …` — the four
+  substrings of the design, in the whitespace-flattened *The bump rule*.
+- **AC4 (red-first).** `on a scratch branch two tool writes to dna.yaml pass the governance check's config rule; a hand
+  edit without a bump still fails it` — `checkGovernance(repo, { base: 'main' })`, filtered on `rule === 'config'`.
+
+**Run and counts.**
+- `npx jest test/cli/config-version-raise.integration.test.ts test/validation/config-version-raise.test.ts
+  test/directives/doc-versioning-tool-writes.test.ts --maxWorkers=2` → `Test Suites: 3 failed, 3 total`, `Tests: 35
+  failed, 2 passed, 37 total` (unit 22 failed; AC3 1 failed; integration 12 failed, 2 passed = the two characterizations).
+- `npx jest` over the six updated suites → `Test Suites: 6 failed, 6 total`, `Tests: 14 failed, 95 passed, 109 total`:
+  exactly the 14 the design lists.
+- `npx tsc --noEmit -p tsconfig.json` → only `config-version-raise.test.ts(12,10): error TS2305: … no exported member
+  'INITIAL_CONFIG_VERSION'` and `(12,53): … 'raiseConfigVersion'`. `npx eslint` over the nine files → no output.
+
+**Fails for the right reason (first assertion).**
+- Unit: `TypeError: (0 , validation_1.raiseConfigVersion) is not a function` (the `isolatedModules` face of TS2305).
+- AC3: `Expected substring: "A tool write is a revision of its own"`.
+- Integration AC1: `removed: [] / added: []` against `["version: 1"] / ["version: 1.1"]` (and `"version: 1.9   # rev note"`
+  → `"version: 2.0   # rev note"`); `--force` and the no-`version:` positive half: `Expected: "version: 1.1"`, `Received:
+  "version: 1"`; missing `roles.yaml`: `startsWith('version: 1.0\n')` `false` (today `version: 1`).
+- AC2: `Expected: ArrayContaining ["-version: 1", "+version: 1.1"]`, the received diff holding only the edit.
+- AC4: one finding `.wingfoil/dna.yaml: changed in <base>..HEAD, but version: 1 → 1 is no numeric increase (bug-249,
+  doc-versioning)`, `gated: true`, against `[]`.
+- Updated pins, e.g. `write-guard-dirty-target.test.ts:267` `committedAdditions` missing `'version: 1.1'`;
+  `dna-set-comment-preservation.test.ts:108` `Expected length: 2, Received length: 1`; `dna-force.integration.test.ts:87`
+  and `:100` `Expected pattern: /^version: 1\.1$/m`.
+
+**Departures from the design (for the developer and reviewer).**
+- `dna-set-comment-preservation.test.ts` AC(a): instead of writing this repository's live `dna.yaml` version (`2.1`) by
+  hand into the baseline, the `it` commits the fixture with its version VALUE set to `1.9` (spacing and `# [AUTHORING] …`
+  comment kept) and expects `version: 2.0` + the same tail: a literal that a later bump of our own `dna.yaml` cannot
+  break. The other tests of that file keep the untouched fixture.
+- The no-op case uses `dna set project.methodology --value Scrum`: `dna set project.name --value ''` is not a no-op on
+  the scaffold (it rewrote `""`, measured: `git rev-parse HEAD` moved).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
