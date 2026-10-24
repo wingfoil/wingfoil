@@ -218,6 +218,42 @@ Rulings on the design decisions above:
   `resolveProvenance`); `task-294` imports them and owns the writing side (record writer, `--dry-run` shape, authority
   check); `task-295` reuses both.
 
+### red (qa, 2026-10-24)
+
+Session 2 of 4 (role qa). **Red commit `b083263f`** (T4 is measured from it); test files only, both new:
+`test/workflow/provenance.test.ts` (pure, 16 tests) and `test/core/workflow-deduction-provenance.test.ts` (fixture
+repositories, 14 tests). No existing test file is edited, no `src/` file touched (`git show --stat b083263f` lists
+the two files, 1080 insertions).
+
+**Run.** `npx jest test/workflow/provenance.test.ts test/core/workflow-deduction-provenance.test.ts --maxWorkers=2`
+printed `Test Suites: 2 failed, 2 total` / `Tests: 10 failed, 4 passed, 14 total`:
+- `test/workflow/provenance.test.ts`: the suite fails to run, `Cannot find module '../../src/workflow/provenance'
+  from 'test/workflow/provenance.test.ts'` (its 16 tests are not counted until the module exists).
+- `test/core/workflow-deduction-provenance.test.ts`: 10 failed on assertions, 4 passed (AC 1 (d), AC 4 ×2, AC 5).
+
+`npx tsc --noEmit -p tsconfig.json` printed one error only: `test/workflow/provenance.test.ts(31,8): error TS2307:
+Cannot find module '../../src/workflow/provenance'`. `npx eslint` on both files printed nothing. No `.d.cts` is
+needed: the new module is TypeScript (the repository's `.d.cts` files declare `scripts/*.cjs` only). The pure file
+builds adoption and rekey records with local builders and casts the history to `InstanceHistory`, so it compiles
+against today's types and against the design's optional `adoptions?` / `rekeys?`; it imports no `AdoptionRecord` /
+`RekeyRecord` (no TS2305 beside the TS2307).
+
+**Per AC.**
+
+| AC | Class | Tests (`describe` › `it`) | Fails for the right reason |
+|---|---|---|---|
+| 1 | red-first | core `AC 1` (a) adopted bug binds `ing-1`, `capture` complete, `triage` awaits the approval, complete only after `wf(bug): approve`; (b) adoption into `capture-flow.triage@bug:bug-1` and into checkpoint `loop.red@task:task-1` completes nothing; (c) adoption into `loop.design@task:task-1`: `created`, `{ type, path }` resolved, `design` complete after submit; pure `AC 1`: adopted bug binds `p1`; an orphan linkage is left out of `Instance.created` | (a) `toMatchObject` received `"created": Array []`, `"element": null`; (b) the `triage` and `red` assertions pass, then `loop.instance.created` received `Array []` for `[spec:spec-1]`; (c) `step.created` received `Array []`. Every non-provenance expectation was checked against the linkage-equivalent fixture on today's code (a scratch script: `capture:complete`, `triage:current`, approval `[bug-1 open]`, `complete: true` after the approve) |
+| 1 (guard) | passes at red | core `AC 1` (d): the subject without `WingFoil-Adopted`, a malformed `WingFoil-Adopted`, the three trailers under `workflow: finalize` / `wf(bug): amend`, the trailers in a body paragraph — adopts nothing (D1 (a)) | passes now (nothing is read today) and must keep passing |
+| 2 | red-first | core `AC 2`: before the rename (`created` lists the adopted spec-2), renamed without rekey (three `W_PROVENANCE_ORPHAN`, newest first, texts exact for the linkage and the adoption), with the two rekeys, chain `old → mid → new`, a record after the rekey and a rekey of `ren-9`; pure `AC 2`: remap of linkage/record/adoption with the scope and `WingFoil-Element` kept, chain, sibling rekeys (the older position applies), a record the rekey does not descend from, another instance's rekey | before the rename: `created` misses spec-2; no rekey: `instance.created` received `[spec-1]` for `[]`; with rekeys: states received `new:current`, `build-new:pending`; chain: `new:current`; `ren-9`: diagnostics received `Array []` for `['W_PROVENANCE_ORPHAN']`. The states asserted after the rekeys equal those asserted before the rename, which pass today |
+| 3 | red-first | core `AC 3`: a sibling-branch merge gives one `W_PROVENANCE_CONFLICT` (`file`, `path`, `message` exact) and an unbound instance; a descendant adoption supersedes the older; pure `AC 3`: the descendant owns, siblings conflict (claims in instance-id/step order), D2 linkage vs later adoption, one commit in two walks is one claim, orphan linkage/record/adoption in ascending position, an orphaned adoption is no conflict; diagnostics order `W_INSTANCE_WORKFLOW_UNKNOWN`, orphan, conflict, `W_UNRESOLVED_TOKEN`, none for an unknown workflow's orphan (D3 (a)), the record message without "owns nothing" | conflict: received `Array []` for the diagnostic; supersede: `instance.element` received `null`. Pure: the module is missing; the snapshot frame was checked on today's code (diagnostics `['W_INSTANCE_WORKFLOW_UNKNOWN', 'W_UNRESOLVED_TOKEN']`, instance order `p-ingest, p-gone, p-tok`) |
+| 4 | characterization | core `AC 4`: one `git log` with `%(trailers`, no `rev-list`, the same number and order of git subcommands as the same fixture with plain empty commits for the adoption, the rename and the rekey; `workflow-next-spawn-count.test.ts` not edited | passes at red |
+| 5 | characterization | core `AC 5`: an orphan record changes no `workflowNext` / `workflowStatus` field but `baseline` and `diagnostics`, the non-provenance diagnostics are equal, the `instance` / `next` keys are equal, the console views are equal without the count line | passes at red |
+
+**For green.** Two readings the design leaves open, pinned loosely rather than guessed: the `<key>` of a **record**
+orphan whose `WingFoil-Element` is set (`ren.old` or `ren.old@task:task-1`: the core test accepts both by regex; an
+element-less record is pinned exactly, `ingest.gone`), and the `element` of an orphan or a conflict from the pure
+`resolveProvenance`, which has no documents and so no `status` (pinned with `toMatchObject` on `type`/`id` only).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
