@@ -205,6 +205,19 @@ change; **no `version:` bump**. Not touched: `src/core/workflow-next.ts`, `src/c
   does not); `dl-187`'s "an adopted provenance stays distinguishable" is met by the commit, not by this field — its
   reader (`memory history`) is v0.4 (approver ruling 2026-10-21).
 
+#### Design gate (approver, 2026-10-24)
+
+Rulings on the design decisions above:
+- D1 (a) accepted: a record needs its subject prefix and its trailers; values are read from the trailers.
+- D2 (a) accepted: one descends-from rule for every claim (linkage or adoption); the one-sentence clarification of
+  `spec-017` §4.8 is prepared in session 3 as a pending amendment.
+- D3 (a) accepted: instances of a workflow the registry does not load count as orphans for ownership and raise no
+  `W_PROVENANCE_ORPHAN` (`W_INSTANCE_WORKFLOW_UNKNOWN` already reports them).
+- D4 accepted: the diagnostic texts and locations as designed.
+- Plan ruling W1-3, made precise: this task creates `src/workflow/provenance.ts` (constants, the two codes,
+  `resolveProvenance`); `task-294` imports them and owns the writing side (record writer, `--dry-run` shape, authority
+  check); `task-295` reuses both.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
