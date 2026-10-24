@@ -27,7 +27,7 @@
  *
  * Offline and deterministic: files are read from the working tree, lists compared in a fixed order.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { load } from 'js-yaml';
@@ -232,5 +232,138 @@ describe('AC 3 — align-user-docs produces the community health files (dl-127 Q
 
   it('the workflow version moved past 1.3', () => {
     expect(userDocs.version).toBeGreaterThan(1.3);
+  });
+});
+
+describe('task-297 — COLLABORATION.md documents the consumer feedback loop (dl-163 R1, R4, R5, S3f; bug-408)', () => {
+  const SECTION = '## Consumer feedback — notes from projects that use WingFoil';
+  const collaboration = read('COLLABORATION.md');
+  const lines = collaboration.split('\n');
+
+  /** The lines from `heading` (an exact `## ` line) to the next `## ` line, joined; '' when the heading is absent. */
+  function section(text: string, heading: string): string {
+    const all = text.split('\n');
+    const start = all.indexOf(heading);
+    if (start < 0) return '';
+    const rest = all.slice(start + 1);
+    const end = rest.findIndex((line) => /^## /.test(line));
+    return [heading, ...(end < 0 ? rest : rest.slice(0, end))].join('\n');
+  }
+
+  /** The lines from `heading` (an exact `### ` line) to the next `### ` line or the end; '' when absent. */
+  function subsection(sec: string, heading: string): string {
+    const all = sec.split('\n');
+    const start = all.indexOf(heading);
+    if (start < 0) return '';
+    const rest = all.slice(start + 1);
+    const end = rest.findIndex((line) => /^### /.test(line));
+    return [heading, ...(end < 0 ? rest : rest.slice(0, end))].join('\n');
+  }
+
+  function flat(s: string): string {
+    return s.replace(/\s+/g, ' ');
+  }
+
+  const consumerFeedback = section(collaboration, SECTION);
+  const sub = (heading: string): string => flat(subsection(consumerFeedback, heading));
+
+  it('AC 1 / AC 2a — case 1: one Consumer feedback section between Credit and Ground rules, with the four headings in order (dl-163 S3f, D5)', () => {
+    expect(lines.filter((line) => line === SECTION)).toHaveLength(1);
+    const at = lines.indexOf(SECTION);
+    const credit = lines.findIndex((line) => line.startsWith('## Credit'));
+    const groundRules = lines.indexOf('## Ground rules');
+    expect(credit).toBeGreaterThanOrEqual(0);
+    expect(at).toBeGreaterThan(credit);
+    expect(groundRules).toBeGreaterThan(at);
+    expect([...consumerFeedback.matchAll(/^### (.+)$/gm)].map((match) => match[1]!.trim())).toEqual([
+      'The feedback inbox',
+      'The note format',
+      'The sync points',
+      'The sync procedure',
+    ]);
+  });
+
+  it('AC 1 — case 2: the feedback inbox (dl-163 R1, S3b; D3 (a), D4 (a))', () => {
+    const text = sub('### The feedback inbox');
+    for (const fragment of [
+      '`docs/wingfoil-feedback/`',
+      '`README.md`',
+      '`main`',
+      '`feedback_inbox`',
+      '`repository`',
+      '`service-ingest`',
+      'dl-163',
+    ]) {
+      expect(text).toContain(fragment);
+    }
+  });
+
+  it('AC 1 — case 3: the note format (dl-163 R4) and the reported_by cite form read from spec-010', () => {
+    const text = sub('### The note format');
+    expect(text).toContain('`F-<nnn>-<slug>.md`');
+    for (const field of ['id', 'title', 'kind', 'status', 'wingfoil_version', 'answered_by']) {
+      expect(text).toContain(`\`${field}\``);
+    }
+    for (const kind of ['defect', 'gap', 'request']) {
+      expect(text).toContain(`\`${kind}\``);
+    }
+    for (const status of ['open', 'needs-info', 'captured', 'resolved', 'declined', 'duplicate']) {
+      expect(text).toContain(`\`${status}\``);
+    }
+    const spec = read('docs/04_memory/design/specs/spec-010-memory-frontmatter-schema.md');
+    const cite = /`(<service id>\/F-<nnn>@<sha>)`/.exec(spec);
+    expect(cite).not.toBeNull();
+    expect(text).toContain(`\`${cite![1]}\``);
+  });
+
+  it('AC 1 — case 4: the sync points (dl-163 R5)', () => {
+    const text = sub('### The sync points');
+    for (const fragment of ['release-planning', 'pin', '`origin/main`', '`vX.Y.Z`', '`release/X.Y`', '`latest`', '`latest-X.Y`']) {
+      expect(text).toContain(fragment);
+    }
+  });
+
+  it('AC 1 — case 5: the sync procedure and the outcome → status mapping (dl-163 R3, S3d, R6; D2 (a))', () => {
+    const text = sub('### The sync procedure');
+    for (const fragment of ['`## Consumer feedback`', 'feedback-triage.md', '`## Scope changes`', 'git grep', '`answered_by`', 'never commits into']) {
+      expect(text).toContain(fragment);
+    }
+    for (const outcome of ['covered', 'element', 'restated', 'superseded', 'declined', 'needs-info']) {
+      expect(text).toContain(`\`${outcome}\``);
+    }
+  });
+
+  it('case 6 (guard): no registered consumer repository is named — ids and repository names derived from the service files', () => {
+    const dir = join(repoRoot, 'docs', '04_memory', 'services');
+    const consumers = readdirSync(dir)
+      .filter((name) => name.endsWith('.md'))
+      .sort()
+      .map((name) => {
+        const parts = readFileSync(join(dir, name), 'utf8').split(/^---$/m);
+        return (load(parts[1] ?? '') ?? {}) as { id?: string; kind?: string; url?: string; feedback_inbox?: string };
+      })
+      .filter((front) => front.kind === 'repository' && typeof front.feedback_inbox === 'string' && front.feedback_inbox !== '');
+    expect(consumers.length).toBeGreaterThan(0);
+    for (const consumer of consumers) {
+      expect(typeof consumer.id).toBe('string');
+      expect(collaboration).not.toContain(consumer.id!);
+      if (consumer.url) {
+        const repository = consumer.url.replace(/\/+$/, '').split('/').pop()!;
+        expect(repository).not.toBe('');
+        expect(collaboration).not.toContain(repository);
+      }
+    }
+  });
+
+  it('case 7: the COLLABORATION.md version moved (≥ 1.7, date ≥ 2026-10-24; doc-versioning, bug-314)', () => {
+    const header = /^\*\*Version:\*\* (\d+)\.(\d+) · \*\*Date:\*\* (\d{4}-\d\d-\d\d)$/m.exec(collaboration);
+    expect(header).not.toBeNull();
+    expect(Number(header![1]) * 1000 + Number(header![2])).toBeGreaterThanOrEqual(1007);
+    expect(header![3]! >= '2026-10-24').toBe(true);
+  });
+
+  it('AC 2b — case 8: the site page list still carries COLLABORATION.md (no llms.txt / site.yaml change)', () => {
+    const site = load(read('docs/site.yaml')) as { pages: string[] };
+    expect(site.pages).toContain('COLLABORATION.md');
   });
 });
