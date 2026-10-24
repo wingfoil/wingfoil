@@ -281,6 +281,14 @@ untouched, `git diff --stat 989d3fa3 HEAD -- .github` → nothing).
   test/docs/reported-by.test.ts test/docs/llms-txt.test.ts test/docs/pages-render.test.ts --maxWorkers=2` → 4 suites,
   119 tests passed, with the bug-408 amendment in the tree; `npm run -s lint; echo lint=$?` → `lint=0`; T4:
   `git log --first-parent --no-merges --format=%h bbae3471..HEAD -- test/docs/community-health.test.ts` → empty.
+- **Re-review nit (same class as F2).** The body sentence dropped ", with the commands that show it": it reads "The body
+  states what was observed and what was expected", R4's words. Swept the rest of `### The note format` against R4:
+  "then a short slug" → "then a slug"; `title` "one line saying what the note is about" → "what the note is about";
+  the `kind` glosses removed (`defect`, `gap` or `request`). Kept, each with its ground: "three digits or more"
+  (`spec-010`'s cite form), "unique in that inbox" (R4 "one identifier"), `answered_by` "empty until the consumer fills
+  it at a sync" (R4 "filled by the consumer on sync"), the status meanings (D2 (a), approver 2026-10-24; `needs-info`
+  as S3d lists it), "a defect is reproduced in this repository first" and the cite naming the commit read (R2).
+  Commit `65dda558`, no version bump; the four docs suites → 4 suites, 119 tests passed; `npm run -s lint` → 0.
 
 ### Pending amendments (approver)
 
