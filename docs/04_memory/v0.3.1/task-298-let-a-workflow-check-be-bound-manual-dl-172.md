@@ -153,6 +153,20 @@ both edit `docs/cli-reference.md` (new command entries); my one-line edit is in 
 paragraph — a textual conflict is unlikely. Candidate finding, not filed: `ActionBinding` accepts `args` with
 `manual: true`, which `spec-003` does not forbid for actions — out of scope here.
 
+#### Design gate (approver, 2026-10-24)
+
+Rulings on the design decisions above:
+- D1 (a) accepted: red pins AC3 in `presentation.test.ts` and the new file; green edits the conformance row in the
+  same commit as `bindings.yaml`.
+- D2 (a) accepted: a check binding with neither `run` nor `manual` is refused at `checks.<token>`.
+- D3 accepted: only `spec-017` §12 is amended (re-measure after `task-293`'s merge), prepared in session 3 as a
+  pending amendment; `spec-003` needs no edit.
+- D4 accepted: no `doc:` field on a manual check.
+- Sequence: the approver commits `task-293`'s `spec-017` amendment before its merge; this task syncs after it and
+  prepares its own `spec-017` edit on that text.
+- `ActionBinding` accepting `args` with `manual: true` is recorded by the coordinator as a candidate finding (F27),
+  not changed here.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
