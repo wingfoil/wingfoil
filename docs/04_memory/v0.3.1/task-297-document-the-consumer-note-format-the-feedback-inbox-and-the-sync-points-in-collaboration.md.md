@@ -182,6 +182,15 @@ only new import is `readdirSync` from `node:fs`. No production file touched.
   pre-existing tests pass; of the new 8, cases 1–5 and 7 fail, 6 and 8 pass, as the design expected).
 - `npx tsc --noEmit -p tsconfig.json` → exit 0, no output, before the red commit.
 
+- Send-back (approver ruling 2026-10-24): design correction of case 3 — commit **`bbae3471`** removes only the
+  assertion that `### The note format` contains `` `reported_by:` ``, because `test/docs/reported-by.test.ts`
+  (task-271, "the rule is stated once: no other section of COLLABORATION.md names `reported_by:`") forbids it outside
+  `## Credit`, as `dl-163` S3c (ready) rules; no text could satisfy both. The rest of case 3, including the cite form
+  read from `spec-010`, is unchanged. T4 is measured from `bbae3471` for this line. With the developer's uncommitted
+  green edit of `COLLABORATION.md` in the tree: `npx jest test/docs/community-health.test.ts
+  test/docs/reported-by.test.ts --maxWorkers=2` → `Test Suites: 2 passed, 2 total`, `Tests: 90 passed, 90 total`
+  (34 + 56, each file run alone); `npx tsc --noEmit -p tsconfig.json` → exit 0.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
