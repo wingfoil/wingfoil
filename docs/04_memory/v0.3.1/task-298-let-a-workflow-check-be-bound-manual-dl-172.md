@@ -167,6 +167,33 @@ Rulings on the design decisions above:
 - `ActionBinding` accepting `args` with `manual: true` is recorded by the coordinator as a candidate finding (F27),
   not changed here.
 
+### red (qa, 2026-10-24)
+
+**Red commit `39f31ab0`** (T4 is measured from it). Test files only, as the design and the gate fix them:
+`test/core/workflow-evidence.test.ts`, `test/workflow/bindings.test.ts`, `test/docs/presentation.test.ts` (modified)
+and `test/core/workflow-manual-check.test.ts` (new). `test/core/workflow-repository-conformance.test.ts` not touched
+(D1 (a): green edits its `demo.rendered` row in the commit of `bindings.yaml`). No new export: `npx tsc --noEmit -p
+tsconfig.json` → exit 0; `npx eslint` on the four files → exit 0. All three ACs **red-first**, as classified in
+design; every red is an assertion or validation failure, none a crash on a missing file or export.
+
+| AC | File | Test(s) | Fails today because (first failure line) |
+|----|------|---------|-------------------------------------------|
+| 1 | `workflow-evidence.test.ts` (describe `spec-003 Layer 3 — workflows/bindings.yaml`) | `task-298 AC 1 — a check may be bound manual: true …` | `DiagnosticsError: E_VALIDATION checks.demo.ok.run (workflows/bindings.yaml): Invalid input: expected array, received undefined` |
+| 1 | same | refusal `it.each` rows: `a check with neither run nor manual` (was `a check without run`, path `checks.x.y.run` → `checks.x.y`, D2 (a)), `a check with both run and manual` → `checks.x.y`, `severity on a manual check` → `checks.x.y.severity`, `args on a manual check` → `checks.x.y.args`, `manual: false on a check` → `checks.x.y.manual` | neither / severity / args / manual:false: `Expected value: "checks.x.y…"`, `Received array: ["checks.x.y.run"]`; both: `expected loadWorkflowsYaml to throw` (accepted today) |
+| 1 | same | `task-298 AC 1 — the refusal messages of a manual check binding …` (exact: `severity does not apply to a manual check binding`, `args does not apply to a manual check binding`, `a check binding declares exactly one of run or manual`) | `toEqual` diff: received one `checks.x.y.run` / `Invalid input: expected array, received undefined` |
+| 2 | same | `task-298 AC 2 — a manual check raises no W_WORKFLOW_UNBOUND_TOKEN; an unbound check still does` (exactly one warning, `phases[0].checks.post[1]`, `check token 'prose nobody binds' has no built-in or bindings.yaml binding`) | `DiagnosticsError: E_VALIDATION checks.demo.ok.run …` |
+| 2 | `bindings.test.ts` (new describe) | `a manual check resolves to { kind: manual, source: project }, with or without arguments; it serves no action` | `ZodError` at `BindingsYaml.parse`: path `checks, demo.ok, run`, `Invalid input: expected array, received undefined` |
+| 2 | `workflow-manual-check.test.ts` (fixture `probe` + plan `probe-1` at `HEAD`) | `workflow next: …` (`step.checks`, `step.awaiting` with `vendor.ack` kind `manual`); `workflow show: …` (`checks.pre[0]`, `awaits.evidence` `{ kind: manual, source: project }`, diagnostics `[["W_WORKFLOW_UNBOUND_TOKEN","phases[0].checks.post[2]"]]`) | both: `expected ok, got VALIDATION: E_VALIDATION checks.demo.ok.run (workflows/bindings.yaml): Invalid input: expected array, received undefined` |
+| 3 | `workflow-manual-check.test.ts` (this repository) | `at HEAD demo.rendered resolves to a manual check, and no diagnostic names it` | `toEqual` diff: received `{ kind: "unbound", source: "none" }` |
+| 3 | same | `bindings.yaml is bumped to at least 2.5, with a task-298 history entry numbered at least 2.5 (bug-314)` | `Expected: >= 2.5`, `Received: 2.4` |
+| 3 | `presentation.test.ts` | `presentation.current runs this suite; demo.rendered is bound manual: true (dl-172 (a))` (was `toBeUndefined`; docblock lines 18-20 rewritten) | `Expected: {"manual": true}`, `Received: undefined` |
+
+**Run.** `npx jest --maxWorkers=2 --json test/core/workflow-evidence.test.ts test/workflow/bindings.test.ts
+test/docs/presentation.test.ts test/core/workflow-manual-check.test.ts` → `workflow-evidence` failed 8 / passed 37,
+`bindings` failed 1 / passed 13, `presentation` failed 1 / passed 48, `workflow-manual-check` failed 4 / passed 0;
+total 14 failed, 98 passed. Every other test in those files passes unchanged. The AC 3 HEAD test reads
+`loadWorkflowRegistryAtHead`, so it passes only once `bindings.yaml` is committed (green's commit).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
