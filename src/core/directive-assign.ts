@@ -381,7 +381,7 @@ export function updateRoleAssignments(
   const exists = documentExists(filePath);
   const text = exists ? readDocument(filePath) : '';
 
-  let raw: Record<string, unknown> = { version: 1, assignments: {}, global: [] };
+  let raw: Record<string, unknown> = {};
   let current: readonly string[] = [];
   if (exists) {
     // Labelled repository-relative, never by the host path (task-179 review F5, `bug-245` class).

@@ -42,7 +42,8 @@ Custom WingFoil rule. Applies to all roles editing versioned docs.
 - **A tool write is a revision of its own** (`dl-174` (a), `spec-006` §6 item 7): a `wingfoil` command that
   writes `.wingfoil/dna.yaml`, `memory.yaml`, `workflows.yaml` or `roles.yaml` raises its `version:` in its own
   commit, by 0.1 read as a number (`1.9` → `2.0`), so the one-bump-per-branch rule above applies to hand edits.
-  A hand edit on a branch where a tool write already raised the file needs no further bump.
+  On a task branch, a hand edit after a tool write already raised the file needs no further bump; a commit made
+  on a line itself (`main`, `release/X.Y`) is judged against `HEAD` (the Gate below).
 - **Gate (the four versioned config files only).** `test/lint/version-bump.test.ts`, run by `npm test`,
   fails when the pending change (the working tree against `HEAD`) changes `.wingfoil/dna.yaml`,
   `memory.yaml`, `workflows.yaml` or `roles.yaml` — comments included — without changing its
