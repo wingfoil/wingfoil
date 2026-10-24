@@ -14,7 +14,7 @@ bug: []                # optional — LIST of bug ids this task closes (dl-045).
                        # here never advances past `triaged` (only a reject to `closed`, dl-123). A single string is still accepted for documents predating dl-045.
                        # dev-loop keeps the source bug's state in sync with this task via bug.sync_state
 wave: "w1"               # optional — the release wave this task runs in, one of its release's `waves:` keys (dl-100 §1 (a)); set at build-backlog or when the task is admitted
-depends_on: [task-293]         # optional — ids of tasks whose Execution Notes constrain this one (dl-015); authored at planning time, may be appended during design
+depends_on: [task-293, task-294]         # optional — ids of tasks whose Execution Notes constrain this one (dl-015); authored at planning time, may be appended during design
 tmpl_version: 261012   # Original template version
 ---
 
@@ -50,6 +50,272 @@ charter renames step keys (`release-planning-rel-v0.3.1-plan` R6), and Q3 adopts
      - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
+
+### design (developer, 2026-10-24)
+
+Session 1 of 4 (role architect), worktree `../.wf2-wt/task-295`, branch cut from `release/0.3` at `59baac94`, hand
+start `367a19eb`.
+
+**Inputs checked.** `grep -m1 "^status:"` printed `approved` for `spec-017`, `spec-008` and `spec-006`, `scheduled`
+for `cp-002`, `done` for `task-293`; `dl-186` and `dl-187` are `ready` (task-293's design, unchanged since).
+`git merge-base --is-ancestor 1fbf5cbc HEAD` exited 0, so the spec-017 §2/§4.8 amendment is on this branch, and
+`git rev-parse --short release/0.3` printed `59baac94`, the base, so no sync is owed. **dl-015 gate:** every
+Execution Note of `task-293` has been read, `#### Notes for task-294 / task-295` included, and so has `task-294`'s
+design (read-only, `../.wf2-wt/task-294` at `cb04f84b`, its D1–D10 still at the gate). `task-294` is appended
+to `depends_on` because W1-3 gives it the writing module this task extends. No AC contradicts a directive or a
+ratified element. The rekey section of `spec-017` (§7.12) leaves the refusal order, the key shape, cross-workflow
+targets, the `remapped` count and the console open; D1–D6 below settle them, and they are recorded as a pending
+amendment in session 3 once ruled. No tech-spec is missing.
+
+**Facts measured on this branch** (`npm run -s build` under the slot, 22:01:45–22:01:49):
+- `node dist/cli.js workflow rekey x --from a.b --to a.c --reason r` printed `error: unknown command 'rekey'`,
+  exit 2. A usage pin that checks only the exit code would therefore pass at red, so every exit-2 pin checks
+  the `error:` text too.
+- `npx jest` over the existing suites of the files this task changes (`test/cli/dry-run.integration`,
+  `test/core/parity`, `test/core/production-registry`, `test/mcp/read-only-agent-channel`, `test/docs/cli-reference`,
+  `test/docs/x-cli-cmds`, `test/docs/enumeration-parity.allowlist`, `test/docs/name-resolvability`,
+  `test/docs/commands-parity`, `test/docs/mcp-surface-parity`, `test/cli/operand-error-shape`,
+  `test/cli/help-describes-every-command`, `test/workflow/provenance`, `test/core/workflow-deduction-provenance`,
+  `--maxWorkers=2`) printed `Test Suites: 15 passed, 15 total` / `Tests: 187 passed, 187 total` (F23).
+  Four of them list the mutating operations exactly. `dry-run.integration.test.ts` asserts
+  `toHaveLength(20)`, and its `empty` row asserts finalize's subject literally. `parity.test.ts` and
+  `production-registry.test.ts` use ordered lists, and `read-only-agent-channel.test.ts` lists the
+  operations and the Tools. Once `workflowRekey` registers, all four fail (D7).
+- `src/workflow/provenance.ts` exports `readRekey`, `resolveProvenance` and the trailer constants
+  (`REKEY_SUBJECT_PREFIX`, `REKEY_FROM_TRAILER`, `REKEY_TO_TRAILER`, `INSTANCE_TRAILER`). The returned
+  `ResolvedProvenance.history` holds no `rekeys`, so "already recorded" reads the raw
+  `snapshot.history.get(instance.startCommit)?.rekeys`. `orphans` gives "named by no record (after earlier
+  rekeys)": since `<from>` is undeclared by then (check 6 below), every entry still naming it is an orphan.
+  The key splitter is not exported, so the key is split locally at its first `@`.
+- `commitEmpty` (`src/storage/commit.ts:200`) already returns the dry-run plan
+  `{dryRun: true, subject, message, paths: [], diff: ''}`, so `--dry-run` needs no new code.
+
+#### The command (spec-017 §7.12, §8, §10, §11; spec-008 §2, §12)
+
+`wingfoil workflow rekey <ref> --from <workflow>.<phase> --to <workflow>.<phase> --reason <text>`, registered as
+`CORE_MODULES` `workflow.workflowRekey`, `mutates: true`. Being registered gives it `--dry-run` and an MCP
+Tool `workflow.rekey` through the mechanical registrar; the production server still serves none, so the
+`TOOLS_V04` allowlist entry stays. The positional `ref` is **required** (`missing required argument: <ref>`
+from the registrar, exit 2). Options: `from` (`key`), `to` (`key`), `reason` (`text`), none declared `required`
+(the fn checks them, which keeps the messages its own). Description, which is also the `--help` text and the
+first sentence of the reference entry: `remap the records of an open workflow from a renamed step key to its
+new one, as an empty commit (approver only)`.
+
+**Refusal order (D1).** Each check runs before any write; codes and exits are those of §10 and §12:
+1. Usage, exit 2, before any read, thrown as a `UsageError`. The checks run in this order:
+   - (U1) `--from` absent: `missing required argument: --from`;
+   - (U2) `--to` absent: `missing required argument: --to`;
+   - (U3) `--from` not matching `^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$` (D2): `invalid flag value: --from must be
+     <workflow>.<phase>`;
+   - (U4) `--to` likewise: `invalid flag value: --to must be <workflow>.<phase>`;
+   - (U5) `requireReason`: `missing required argument: --reason`, `invalid flag value: --reason must not be
+     blank`, or the other `dl-067` refusals.
+2. Git identity (REQ-SEC-01, `requireGitIdentity`).
+3. Approver authority: `requireApproverAuthority(root, identity, REKEY_UNAUTHORIZED)` from `task-294`'s
+   `src/core/approval-authority.ts`, with `REKEY_UNAUTHORIZED = 'user not authorized to rekey'` (`VALIDATION`,
+   exit 1). The working-tree-grant suffix is appended as `requireApprovalAuthority` appends it. The check
+   comes before the instance is resolved, so the answer does not depend on the state. That includes a
+   mapping already recorded, as `--plan --apply`'s check does in `task-294` D8.
+4. Instance: `resolveInstanceRef` → `unresolvedRef` (`unknown workflow: <ref>` / `workflow is not open: <ref>`,
+   `NOT_FOUND`).
+5. `--from` still declared, i.e. the registry at `HEAD` declares `<from>`'s workflow with a phase of that name:
+   `cannot rekey <from>: it is still declared` (`CONFLICT`).
+6. `--to` not declared: `unknown step: <to>` (`CONFLICT`). Any declared `<workflow>.<phase>` is accepted, the
+   instance's own workflow or another one (D3).
+7. Already recorded: the instance's walk holds a rekey with `instance` = this instance's id and the same
+   `from` and `to`. The command writes nothing and returns `commit: null`, `remapped: 0`, exit 0 (D5). Per
+   §7.12 this check precedes 8.
+8. Named by no record: no entry of `resolveProvenance(snapshot, [{ id, startCommit }]).orphans` has
+   `instance` = this instance's id and a key whose part before the first `@` is `<from>`. Refusal:
+   `no record of <instance> names <from>` (`CONFLICT`).
+9. `requireCleanIndex(root, subject)` (`VALIDATION`: `refusing to commit '<subject>': the index holds staged
+   changes (…)…`), then the commit.
+
+**The commit**, written with `task-294`'s `writeProvenanceRecord(root, identity, record)`:
+- subject `workflow: rekey <instance-id> <from> <to>`, from the new `rekeySubject(instance, from, to)`;
+- body `Approver: <name> <<email>> (approver)` then `Reason: <normalized>`, in one paragraph;
+- final paragraph `WingFoil-Instance: <instance-id>`, `WingFoil-Rekey-From: <from>`, `WingFoil-Rekey-To: <to>`
+  (the new `rekeyTrailers(instance, from, to)`, keys taken from `src/workflow/provenance.ts`), then
+  `WingFoil-Version:` last (`commitEmpty`'s `trailers`);
+- no file change. `readRekey` (task-293) reads it back, D1 (a).
+
+**Output** (`spec-017` §8 `RekeyResult`): `{ baseline, instance, from, to, remapped, commit, next }`, keys in that
+order. `remapped` is the number of entries counted in check 8 (D4). `next` is the instance's `frontier[0]`
+deduced at the new `HEAD` (at `HEAD` on the no-op), passed through `buildStep`, or `null`. Console, from
+`renderRekeyConsole` (D6):
+
+```
+workflow: <workflow> (<instance>)
+rekeyed: <from> -> <to>, <n> record(s) remapped (<commit>)      ← a commit was written
+already rekeyed: <from> -> <to>, nothing written                ← the no-op
+next step: …  (stepLines(next, 'next step'))  |  no next step
+```
+
+#### Per-AC classification and what qa pins
+
+**Where 294's module comes in.** Behaviour is pinned only through `CORE_MODULES`' `workflowRekey`, looked up
+by name, and through the compiled CLI. Those files compile today and fail on assertions. The pure exports
+are pinned in two small files that import modules by path:
+- `src/core/workflow-rekey.ts`, this task's module;
+- `src/core/provenance-record.ts`, `task-294`'s module.
+
+Behaviour fixtures write the adoption, linkage and record commits **by hand** (D8), so no test of this task
+calls `workflowAdopt`.
+
+Test files (all new; no existing file is edited at red, D7):
+- **`test/core/workflow-rekey.test.ts`** drives the command in-process through `CORE_MODULES`
+  `workflowRekey`'s `fn`, as `test/core/workflow-finalize-bdd.test.ts` drives `workflowFinalize`. Its
+  `operation(name)` helper throws `workflowRekey is not registered` when the lookup fails, so each test
+  fails with that message at red.
+- **`test/core/workflow-rekey-bdd.test.ts`** binds the P4.21 scenario "Rekey the records of a renamed step"
+  in-process and pins the feature text, which is already present, so that pin passes at red.
+- **`test/core/workflow-rekey-render.test.ts`**: `renderRekeyConsole`, `REKEY_UNAUTHORIZED`, imported from
+  `../../src/core/workflow-rekey`.
+- **`test/core/provenance-record-rekey.test.ts`**: `rekeySubject`, `rekeyTrailers` and `provenanceMessage`,
+  imported from `../../src/core/provenance-record`.
+- **`test/core/workflow-rekey-barrel.test.ts`**: `src/core` re-exports `workflowRekeyAtHead`,
+  `renderRekeyConsole`, `REKEY_UNAUTHORIZED`, `rekeySubject` and `rekeyTrailers` unchanged (`toBe` against
+  the module exports; task-293 retrospective).
+- **`test/cli/workflow-rekey.integration.test.ts`** runs the compiled `dist/cli.js`.
+- **`test/docs/workflow-rekey-docs.test.ts`**: the directive text.
+
+Helpers: `makeTempGitRepo`, `writeFixtureFile`, `git` and `commitAll` (`test/storage/helpers/git-fixture`);
+`snapshotPersistence` / `assertPersistenceUnchanged` for "nothing written"; `exitCodeForResult`; the
+`asMorgan` env switch of `workflow-finalize-bdd.test.ts`; the record helpers of
+`test/core/workflow-deduction-provenance.test.ts`, copied in.
+
+**Fixture** (shared by the core, BDD and CLI files):
+- `memory.yaml`: `plan` (as in `workflow-finalize-bdd.test.ts`) and `release-line` (`sequence: [draft,
+  planning, active]`, path `docs/rl/{id}.md`).
+- `dna.yaml`: `WingFoil Test <wf-test@example.invalid>` (the fixture's `user.*`) as `developer`, and
+  `Morgan <morgan@example.invalid>` as `approver`.
+- `rl-v1` committed at `planning` before `workflow start`, with no linkage.
+- A startable workflow `life` with two phases: `seed` (role developer, `actions: [ 'memory.add(type:
+  release-line, version: "v1")' ]`, so `created` is its only evidence) and `close` (role approver, a
+  checkpoint).
+- Start the instance `life-1-plan` with `workflowStart`, then write the adoption by hand with
+  `git commit --allow-empty`:
+  - subject `workflow: adopt life-1-plan life.seed release-line:rl-v1`;
+  - body `Reason: created by hand before the engine`;
+  - final paragraph `WingFoil-Instance: life-1-plan`, `WingFoil-Step: life.seed`,
+    `WingFoil-Adopted: release-line:rl-v1`, `WingFoil-Version: 0.0.0 (test)`.
+- Rename `seed` → `seed-line` in `life.yaml` and commit it.
+
+| AC | Class | qa pins |
+|---|---|---|
+| 1 BDD | red-first | `workflow-rekey-bdd.test.ts`: the scenario text is in the P4.21 feature (characterization; it passes at red). The binding runs `--from life.seed --to life.seed-line --reason 'phase renamed'` as Morgan. Expected: ok and exit 0; exactly one new commit (`git rev-list --count HEAD` +1); `git show --stat --format= HEAD` empty; subject `workflow: rekey life-1-plan life.seed life.seed-line`; `git log -1 --format=%B` ends with `\n\nApprover: Morgan <morgan@example.invalid> (approver)\nReason: phase renamed\n\nWingFoil-Instance: life-1-plan\nWingFoil-Rekey-From: life.seed\nWingFoil-Rekey-To: life.seed-line\nWingFoil-Version: ` followed by one line (the mapping: "the commit records the mapping"); author Morgan. Before the rekey, `workflowNext life-1-plan` reports `life.seed-line` (nothing created, so it needs its record) and the deduction has one `W_PROVENANCE_ORPHAN`, so the after-assertion is meaningful; after it, `workflowNext` does not report `life.seed-line` (it reports `life.close`) and has no `W_PROVENANCE_ORPHAN` (`deduceWorkflowStateAtHead`). |
+| 2 refusals, usage, no-op | red-first | `workflow-rekey.test.ts`, each refusal with `exitCodeForResult` = 1, its `code`, its exact `message` and nothing written: **still declared** `--from life.close --to life.seed-line` → `cannot rekey life.close: it is still declared` (`CONFLICT`). **Unknown to** `--from life.seed --to life.nope` → `unknown step: life.nope` (`CONFLICT`). **Named by no record**: `--from life.gone --to life.seed-line` → `no record of life-1-plan names life.gone`; also on a second instance `life-2-plan` (`--set phase=2`) whose walk holds only `life-1-plan`'s adoption → `no record of life-2-plan names life.seed` (scoped to the instance). **Authority**: as `WingFoil Test` → `user not authorized to rekey` (`VALIDATION`); the same refusal after the mapping is recorded (no-op case), and with an unknown `<ref>` (authority before the instance, D1). **Instance**: `nope` → `unknown workflow: nope`; an ended instance → `workflow is not open: <id>` (`NOT_FOUND`). **Staged index**: a staged file → message starts with `refusing to commit 'workflow: rekey life-1-plan life.seed life.seed-line': the index holds staged changes (` (`VALIDATION`), the staged file still staged. **No identity**: `git identity not configured (user.name/user.email)`. **Order**: `--from life.close --to life.nope` → the still-declared message; `--from life.seed --to life.nope` after the rekey → `unknown step: life.nope`, not the no-op. **No-op**: a second identical call → ok, `commit: null`, `remapped: 0`, commit count unchanged. No record names `life.seed` after the first rekey, so this success shows the no-op check precedes the no-record refusal. **Usage**, thrown `UsageError`, `rejects.toThrow` with the exact text and nothing written. The usage checks run before any read; one case pins that on a `root` that is a plain temp directory, not a git repository: `{}` → `missing required argument: --from`; `{from}` → `missing required argument: --to`; `--from life.seed@task:task-1`, `--from seed` and `--from Life.seed` → `invalid flag value: --from must be <workflow>.<phase>`; `--to life.x.y` → `invalid flag value: --to must be <workflow>.<phase>`; no reason → `missing required argument: --reason`; `' '` → `invalid flag value: --reason must not be blank`; `{}` without reason → the `--from` message (precedence). **Success shape**: `Object.keys(value)` = `['baseline','instance','from','to','remapped','commit','next']`, `commit` = `git rev-parse HEAD`. **Remap scope**: the instance's walk holds three entries naming `life.seed`: the adoption, a phase record (`WingFoil-Phase: life.seed completed`, `WingFoil-Instance: life-1-plan`, written before the rename) and a linkage (`wf(release-line): add rl-v2` with `WingFoil-Step: life.seed`). The rekey returns `remapped: 3`. **Chain**: after `seed → seed-line`, rename `seed-line → seed-final` and commit; `--from life.seed-line --to life.seed-final` succeeds with `remapped: 1`, and `--from life.seed --to life.seed-final` gives `no record of life-1-plan names life.seed`. **Console**: `renderRekeyConsole` of both results through the CLI file. `workflow-rekey-render.test.ts`: `REKEY_UNAUTHORIZED === 'user not authorized to rekey'`; `renderRekeyConsole` on hand-built results gives the D6 lines exactly, `remapped: 1` printed as `1 record(s)`, and `no next step` when `next` is `null`. |
+| 3 `--dry-run` | red-first | `workflow-rekey.integration.test.ts` (dist; the fixture, `GIT_AUTHOR_*`/`GIT_COMMITTER_*` = Morgan). **Dry run**: `workflow rekey life-1-plan --from life.seed --to life.seed-line --reason 'phase renamed' --dry-run --format json` → exit 0, `stderr` `''`, JSON `dryRun: true`, `subject: 'workflow: rekey life-1-plan life.seed life.seed-line'`, `paths: []`, `diff: ''`, `message` containing `Approver: Morgan <morgan@example.invalid> (approver)\nReason: phase renamed\n\nWingFoil-Instance: life-1-plan\nWingFoil-Rekey-From: life.seed\nWingFoil-Rekey-To: life.seed-line\nWingFoil-Version: `; persistence unchanged (HEAD, refs, index, tree). **Refused dry run**: `--to life.nope --dry-run` → exit 1, `error: unknown step: life.nope`. **No-op dry run**: after a real rekey, the same command with `--dry-run --format json` → exit 0, the `RekeyResult` JSON with `commit: null` (spec-008 §2: what the real run prints). **Usage via the CLI**: exit 2, each with its `error:` first line: no `<ref>` → `error: missing required argument: <ref>`; U1, U2, U3 (`@task:task-1`), U4, missing reason. **Help**: `workflow rekey --help` exit 0, lists `--from <key>`, `--to <key>`, `--reason <text>`, `--dry-run`, and the usage line names `<ref>`. **Console**: a real run without `--format` prints the D6 lines (commit sha from `git rev-parse HEAD`). **Governance**: after a real rekey, `checkGovernance(repo, { base: <sha before> })` from `scripts/check-governance.cjs` has no finding and `exitCodeFor(report)` is 0. The real writer's record passes the check (the AC 4 subject clause; characterization, true at green). |
+| 4 docs, allowlists, directives | characterization (gates) + red-first (directive text) | **Gated by existing suites, no red edit:** `test/docs/cli-reference.test.ts` (an entry per command, so it fails at green until `docs/cli-reference.md` has `### \`wingfoil workflow rekey\``), `test/docs/x-cli-cmds.test.ts` (a row), `enumeration-parity.allowlist` and `name-resolvability` (warn mode: the 8 `planned` entries citing task-295 become stale warnings and are removed at green). **New pins** in `workflow-rekey-docs.test.ts`, red until green edits the directives: `git-conventions.md` §4 (the text between `## 4.` and `## 5.`) contains `` `workflow: rekey <instance-id> <from> <to>` ``; §8 (between `## 8.` and `## 9.`) contains `` `WingFoil-Rekey-From:` `` and `` `WingFoil-Rekey-To:` `` with `workflow rekey`; `command-baseline.md` contains `` `workflow rekey` `` (D9). The governance-check clause is covered by `task-294`'s AC 4 test (`workflow: rekey …` among its fixtures) and by the governance pin in AC 3. No version pin in tests: `doc-versioning` is checked at review. |
+
+**Expected reds**, both checked at the red commit (`npx tsc --noEmit` must print only these codes):
+- **`tsc`:**
+  - TS2307 `Cannot find module '../../src/core/workflow-rekey'` in `workflow-rekey-render.test.ts` and
+    `workflow-rekey-barrel.test.ts`.
+  - TS2307 `Cannot find module '../../src/core/provenance-record'` in `provenance-record-rekey.test.ts` and
+    the barrel test. The module is `task-294`'s. Once `release/0.3` carries it and this branch syncs, the
+    error becomes TS2305 (`has no exported member 'rekeySubject'` / `'rekeyTrailers'`) until green.
+  - TS2305 for the new `src/core` names in the barrel test.
+- **jest:**
+  - "Cannot find module" for the files above (then a runtime `TypeError` after the sync);
+  - `workflowRekey is not registered` in `workflow-rekey.test.ts` and the BDD binding;
+  - in the CLI file, assertion failures on `error: unknown command 'rekey'`;
+  - assertion failures in the docs file.
+
+#### Files to touch (green/refactor)
+
+Green starts after `task-294` is merged into `release/0.3` (W1-2), with `git merge --no-edit release/0.3` first.
+- **New:** `src/core/workflow-rekey.ts` holds `workflowRekeyAtHead(root, request)`, `renderRekeyConsole`,
+  `REKEY_UNAUTHORIZED`, `RekeyResult`, `RekeyRequest` and the key-shape check.
+- **Changed, code:**
+  - `src/core/provenance-record.ts` (task-294's): `rekeySubject` and `rekeyTrailers`;
+  - `src/core/index.ts`: the `workflowRekey` operation, its `fn` (as `workflowFinalizeFn`) and the
+    re-exports.
+- **Changed, documentation:**
+  - `docs/cli-reference.md`:
+    - the entry;
+    - the `--dry-run` row's list and its "`paths` is `[]`" sentence;
+    - the `--format` console list;
+    - the build-signature paragraph, line 127.
+  - `docs/01_vision/X_cli-cmds.md`:
+    - the command row, a `--from`/`--to` parameter row, and `<ref>`'s positional list;
+    - the `--dry-run` count and list;
+    - **1.8 → 1.9** at the sync (task-294 brings it 1.7 → 1.8), with a revision entry.
+  - `.wingfoil/directives/custom/git-conventions.md`: §4's subject and §8's trailers on a `workflow rekey`
+    record, **"2.2" → "2.3"**.
+  - `.wingfoil/directives/custom/command-baseline.md`: **"1.6" → "1.7"**, D9.
+- **Changed, tests:**
+  - `test/docs/enumeration-parity.allowlist.ts`: remove the 2 `planned` entries citing `task-295`; the
+    `TOOLS_V04` `workflow.rekey` entry stays.
+  - `test/docs/name-resolvability.allowlist.ts`: remove the 6 citing `task-295`, each checked to resolve,
+    else kept and reported.
+  - The four inventory tests and the `dry-run.integration` row (D7): a `workflowRekey` row that is `empty`,
+    in whatever shape `task-294` gives `empty`. Its fixture gets a workflow with a renamed phase and a
+    hand-written record naming the old key, on an instance no other row reads.
+
+**Not touched:**
+- `scripts/check-governance.cjs` (task-294's; it already reads `workflow: rekey …` as non-Memory, task-294
+  D4) and `src/workflow/provenance.ts`;
+- the BDD feature (the scenario is present) and `.wingfoil/*.yaml`;
+- MCP code (the registrar is mechanical) and `scripts/e2e-smoke.cjs`;
+- AGENTS.md: its "33 commands" becomes 35 with `task-294`, which is `align-agent-docs`' job.
+
+**Pending amendment** (session 3, approver `memory amend`): `spec-017` §7.12 records D1–D6 as ruled. If D2 (a)
+is chosen, `spec-008` §12's rekey row also needs a reading (the name class).
+
+#### Decisions for the approver (recommendation first)
+
+- **D1 — refusal order.** (a, recommended) The order stated above: usage, then identity, then authority, then
+  instance, then still-declared, then unknown-to, then already recorded (exit 0), then named by no record,
+  then a staged index. Authority comes before the instance so the answer does not depend on the state, a
+  recorded mapping included, as `task-294` D8 (a) does; this follows whatever D8 is ruled. The static
+  registry checks come before the walk checks. (b) Authority after the instance.
+- **D2 — the key shape (U3/U4).** (a, recommended) Both segments in `spec-003`'s name class,
+  `[a-z][a-z0-9-]*`, with exactly one `.`. Every recorded key was written from a declared name, so nothing
+  real is excluded. (b) Refuse only an `@<scope>` suffix, as `spec-008` §12's literal words do.
+- **D3 — cross-workflow targets.** (a, recommended) `--to` may name any declared `<workflow>.<phase>`, as §7.12
+  says ("one it declares"). A phase moved into a sub-workflow, or a renamed sub-workflow, is a legitimate C5
+  rename (`dl-187`), and an instance's walk already holds keys of included workflows. (b) Same workflow as
+  `--from` only.
+- **D4 — `remapped`.** (a, recommended) The number of this instance's entries whose key, after earlier rekeys,
+  has `<from>` as its base: one per linked element of a linkage commit, one per record, one per adoption. These
+  are the instance's orphans with that base, which is what the commit will remap. (b) Distinct commits.
+- **D5 — the no-op.** (a, recommended) `commit: null`, `remapped: 0` (this run remapped nothing), and `next` at
+  `HEAD`. The console prints `already rekeyed: …, nothing written`. (b) `remapped` = what the recorded rekey
+  maps.
+- **D6 — console text** as shown above (ASCII `->`, as finalize's console uses no arrow glyph). Confirm, or name
+  the wording.
+- **D7 — who updates the four registry inventories and the dry-run row.** (a, recommended) `task-295`'s qa does
+  not touch `test/cli/dry-run.integration.test.ts`, `test/core/parity.test.ts`,
+  `test/core/production-registry.test.ts` or `test/mcp/read-only-agent-channel.test.ts`. `task-294`'s red
+  edits all four: ordered lists, a count of 20 → 21, and the `empty` row's literal finalize subject, which
+  `adopt` forces it to generalize. The developer adds the `workflowRekey` entries in green, after the sync
+  with `task-294` merged. These are files `task-295`'s red does not touch, so T4 holds and the two reds
+  cannot collide (F23). (b) qa edits them now; the developer resolves the conflicts in the sync merge, which
+  needs a T4 exception for merge resolutions.
+- **D8 — the BDD Background's adoption.** (a, recommended) Written by hand, with the exact commit `task-294`'s
+  writer produces (subject, `Reason:`, the three trailers), so this task's behaviour tests do not depend on
+  `workflowAdopt` and fail at red for this task's reasons alone. (b) Through `workflowAdopt`: red until
+  `task-294` merges, for a reason that is not this task's.
+- **D9 — `command-baseline` text.** (a, recommended) One sentence after the declared-`HEAD`-reads table, as
+  the existing sentence on `workflow next` does: `workflow rekey` is not in the table because it gates
+  (registry, deduction, approver authority in the committed `dna.yaml`, `spec-017` §11) and so reads `HEAD`
+  under the read half; it writes no file, and its only working-tree read is the index (`requireCleanIndex`).
+  (b) No edit and no bump, which contradicts AC 4 and W1-2's re-bump to "1.7".
+
+#### Risks for the wave
+
+- **Green waits on `task-294`'s merge** (W1-2). If its design gate changes a name or signature
+  (`ProvenanceRecord`, `writeProvenanceRecord`, `requireApproverAuthority`), `provenance-record-rekey.test.ts`
+  follows: the coordinator sends it back to qa before green (T4).
+- **Shared files with `task-294`, merge order 294 → 295**: `src/core/index.ts`, `docs/cli-reference.md`,
+  `X_cli-cmds.md`, both allowlists and both directives. Conflicts are resolved at this task's sync; the
+  re-bumps "2.3", "1.7" and "1.9" are made there.
+- **A renamed *workflow* (not a phase)** is only half followed. `rekey` remaps the records, but the plan's
+  `workflow:` frontmatter still names the old workflow, so the instance stays `W_INSTANCE_WORKFLOW_UNKNOWN`
+  with an empty frontier. That is outside §7.12; it is a candidate finding for the post-tag ingest (the
+  Templates charter renames step keys, R6).
+- **This repository:** no `workflow rekey` runs here (approver ruling); scratch and fixture repos only.
 
 ### Retrospective
 
