@@ -226,15 +226,15 @@ const MEMORY_AMENDABLE: Readonly<Record<(typeof MEMORY_TYPES)[number], boolean>>
 };
 
 /**
- * The directory each scaffolded type's documents are written to (task-296): \`memory.yaml\`'s \`path\` and
- * the scaffolded workflows' \`produces\` entries are both derived from it, so the two cannot diverge.
- * \`plan\` is nested by scope instead ({@link PLAN_TYPE_YAML}).
+ * The directory each scaffolded type's documents are written to (task-296): `memory.yaml`'s `path` and
+ * the scaffolded workflows' `produces` entries are both derived from it, so the two cannot diverge.
+ * `plan` is nested by scope instead ({@link PLAN_TYPE_YAML}).
  */
 function memoryDir(type: (typeof MEMORY_TYPES)[number]): string {
   return `docs/memory/${type}/`;
 }
 
-/** The \`path\` pattern \`memory.yaml\` declares for a scaffolded type other than \`plan\`. */
+/** The `path` pattern `memory.yaml` declares for a scaffolded type other than `plan`. */
 function memoryPath(type: (typeof MEMORY_TYPES)[number]): string {
   return `${memoryDir(type)}{id}.md`;
 }
@@ -603,11 +603,11 @@ ${phasesYaml}`;
 }
 
 /**
- * The scaffolded \`sw-life-cycle\` (task-296, \`bug-400\`): every phase names the role that performs it
- * (\`spec-003\` Layer 2 \`role\`), except \`delivery\`, which only includes the delivery loop whose phases
- * carry their own. \`inception\`, \`specification\` and \`sunset\` are checkpoints, recorded with
- * \`wingfoil workflow finalize\`. The workflow adds no element itself, so a started instance is not bound
- * to the first task the delivery loop creates (\`spec-017\` §3.4).
+ * The scaffolded `sw-life-cycle` (task-296, `bug-400`): every phase names the role that performs it
+ * (`spec-003` Layer 2 `role`), except `delivery`, which only includes the delivery loop whose phases
+ * carry their own. `inception`, `specification` and `sunset` are checkpoints, recorded with
+ * `wingfoil workflow finalize`. The workflow adds no element itself, so a started instance is not bound
+ * to the first task the delivery loop creates (`spec-017` §3.4).
  */
 function lifeCycleWorkflowYaml(def: TemplateDefinition): string {
   return mainWorkflowYaml(
@@ -636,13 +636,13 @@ function lifeCycleWorkflowYaml(def: TemplateDefinition): string {
 const INGEST_CAPTURE_ROLES = { bug: 'developer', 'decision-log': 'product-owner', adr: 'architect' } as const;
 
 /**
- * One scaffolded ingest main (task-296, \`bug-400\`): a self-creating workflow (\`spec-017\` §3.4) whose
- * \`capture\` adds and submits one element of \`type\`, at the path \`memory.yaml\` declares for it, and whose
- * \`approve\` is the approver's gate. \`produces\` is what keeps \`capture\` from being recorded by
- * \`workflow finalize\` while nothing was added. \`bug-ingest\` declares no \`fallback\` (design D3): with the
- * commented \`bug\` machine of \`memory.yaml\` uncommented, a reject at \`open\` lands forward on \`closed\` and
- * a fallback would be reported \`W_PHASE_FALLBACK_NOT_REENTRANT\`; a reject back to \`draft\` re-enters
- * \`capture\` without one.
+ * One scaffolded ingest main (task-296, `bug-400`): a self-creating workflow (`spec-017` §3.4) whose
+ * `capture` adds and submits one element of `type`, at the path `memory.yaml` declares for it, and whose
+ * `approve` is the approver's gate. `produces` is what keeps `capture` from being recorded by
+ * `workflow finalize` while nothing was added. `bug-ingest` declares no `fallback` (design D3): with the
+ * commented `bug` machine of `memory.yaml` uncommented, a reject at `open` lands forward on `closed` and
+ * a fallback would be reported `W_PHASE_FALLBACK_NOT_REENTRANT`; a reject back to `draft` re-enters
+ * `capture` without one.
  */
 function ingestWorkflowYaml(type: keyof typeof INGEST_CAPTURE_ROLES, label: string): string {
   const fallback = type === 'bug' ? '' : '\n    fallback: { step: capture }';
@@ -669,11 +669,11 @@ function ingestWorkflowYaml(type: keyof typeof INGEST_CAPTURE_ROLES, label: stri
 }
 
 /**
- * The scaffolded delivery loop (task-296, \`bug-400\`; design D2). \`plan\` adds and submits the tasks of
- * the slice; its \`produces\` entry, the task directory \`memory.yaml\` declares, is evidence that a
- * \`workflow finalize\` record cannot replace, so the loop is not passed with no task. \`review\` selects
- * the submitted (\`pending\`) tasks and holds them for the approver's \`memory approve\`. \`build\` and
- * \`deliver\` are checkpoints.
+ * The scaffolded delivery loop (task-296, `bug-400`; design D2). `plan` adds and submits the tasks of
+ * the slice; its `produces` entry, the task directory `memory.yaml` declares, is evidence that a
+ * `workflow finalize` record cannot replace, so the loop is not passed with no task. `review` selects
+ * the submitted (`pending`) tasks and holds them for the approver's `memory approve`. `build` and
+ * `deliver` are checkpoints.
  */
 function deliveryWorkflowYaml(def: TemplateDefinition): string {
   return `# ${def.name} delivery loop (sub-workflow) — scaffolded by \`wingfoil init\`.
