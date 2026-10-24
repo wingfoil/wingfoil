@@ -58,6 +58,7 @@ import { iterationStartState, workflowExitStates, type ExitStart, type PhaseExit
 import type { DnaYaml } from '../dna/schema';
 
 import { collectionEntryKey, collectionKeyIssues, memoryAddType, tokenName, typedStateType, type BindingsYaml, type CollectionEntry } from './bindings';
+import { resolveProvenance, W_PROVENANCE_CONFLICT, W_PROVENANCE_ORPHAN, type AdoptionRecord, type RekeyRecord } from './provenance';
 import { workflowFacts, type Phase, type Workflow } from './schema';
 
 /** `W_UNCOMMITTED_INPUTS` (`spec-017` §1.2): a deduction input differs from `HEAD`; the answer is `HEAD`'s. */
@@ -171,6 +172,10 @@ export interface InstanceHistory {
   readonly links: readonly StepLink[];
   /** Its re-entries, newest first. */
   readonly reentries: readonly Reentry[];
+  /** Its adoption records (§4.8, P4.21), newest first; absent: none. */
+  readonly adoptions?: readonly AdoptionRecord[];
+  /** Its rekey records (§4.8, P4.21), newest first; absent: none. */
+  readonly rekeys?: readonly RekeyRecord[];
 }
 
 /**
@@ -196,7 +201,7 @@ export interface DeductionSnapshot {
   readonly tree: readonly string[];
   /** The start commit of each candidate plan, by its path. */
   readonly starts: ReadonlyMap<string, StartCommit>;
-  /** What each instance's walk holds (§4.8) — records, linkages, re-entries — by the instance's start commit. */
+  /** What each instance's walk holds (§4.8) — records, linkages, re-entries, adoptions, rekeys — by the instance's start commit. */
   readonly history: ReadonlyMap<string, InstanceHistory>;
   /** The transition commits in the walk that name a re-entered element, newest first. */
   readonly transitions: readonly TransitionCommit[];
@@ -792,6 +797,8 @@ class Deducer {
   constructor(
     private readonly snapshot: DeductionSnapshot,
     elements: readonly Element[],
+    /** Each walk as deduction reads it, provenance resolved (§4.8): records remapped, linkages and adoptions owned. */
+    private readonly histories: ReadonlyMap<string, InstanceHistory>,
   ) {
     // Names are unique: the registry refuses a duplicate at load time (`spec-003`), so no entry is overwritten.
     snapshot.workflows.forEach((workflow, i) => {
@@ -816,10 +823,6 @@ class Deducer {
     return this.elements.find((element) => element.id === id) ?? null;
   }
 
-  plans(): readonly Element[] {
-    return this.elements.filter((element) => element.type === PLAN_TYPE);
-  }
-
   private exists(path: string): boolean {
     if (!path.endsWith('/')) return this.tree.has(path);
     return this.snapshot.tree.some((file) => file.startsWith(path));
@@ -836,13 +839,13 @@ class Deducer {
 
   /** What the walk of the instance started at `startCommit` holds (§4.8). */
   private history(startCommit: string): InstanceHistory {
-    return this.snapshot.history.get(startCommit) ?? EMPTY_HISTORY;
+    return this.histories.get(startCommit) ?? EMPTY_HISTORY;
   }
 
   /**
-   * The elements an instance's steps created (§4.8 linkage): the add commits of its walk whose
-   * `WingFoil-Instance` is the instance and whose `WingFoil-Step` is one of `steps` (every step when
-   * `null`), each element once, ascending `(type, id)`. An element `HEAD` does not hold is left out.
+   * The elements an instance's steps created (§4.8 linkage and adoption): the owning claims of its walk — an add
+   * commit's `WingFoil-Step`, or an adoption — whose instance is the instance and whose step key is one of `steps`
+   * (every step when `null`), each element once, ascending `(type, id)`. An element `HEAD` does not hold is left out.
    */
   createdBy(instanceId: string, startCommit: string, steps: readonly string[] | null): Element[] {
     const found = new Map<string, Element>();
@@ -1335,8 +1338,11 @@ class Deducer {
 
     // record — a checkpoint, an `awaits` (always, §4.3 `awaits` row, §5.4), a `created` step that created nothing
     // and has no other evidence (§4.3), or an approval whose phase holds no gate: `workflow finalize` records it (§5.1).
+    // A checkpoint needs its record whatever its step key owns: a linkage or an adoption naming a step that adds
+    // nothing is never `record` evidence (§4.8, `dl-187` rule 4; task-293).
     const approvalRecord = phase.approval !== undefined && exit.held.length === 0;
-    const recordNeeded = phase.awaits !== undefined || approvalRecord || (created.length === 0 && !kinds.some((kind) => kind !== 'created'));
+    const checkpoint = kinds.length === 0;
+    const recordNeeded = phase.awaits !== undefined || approvalRecord || checkpoint || (created.length === 0 && !kinds.some((kind) => kind !== 'created'));
     if (recordNeeded) {
       kinds.push('record');
       if (!this.hasRecord(instanceId, startCommit, stepName, scope, frame?.selfBound === true, reentries)) missing.push('record');
@@ -1571,20 +1577,27 @@ function progress(phase: string, state: PhaseProgress['state'], vacuous: boolean
  */
 export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
   const { elements, diagnostics: memoryDiagnostics } = readElements(snapshot);
-  const deducer = new Deducer(snapshot, elements);
+  const plans = elements.filter((element) => element.type === PLAN_TYPE);
 
-  const open = deducer
-    .plans()
+  const open = plans
     .filter((plan) => OPEN_PLAN_STATUSES.includes(plan.status) && scalarText(plan.frontmatter['parent']) === null)
     .map((plan) => {
       const start = snapshot.starts.get(plan.path);
       return { plan, workflowName: scalarText(plan.frontmatter['workflow']) ?? '', start, position: start?.position ?? Number.MAX_SAFE_INTEGER };
     })
     .filter(({ workflowName }) => {
-      const workflow = deducer.workflow(workflowName);
+      const workflow = snapshot.workflows.find((candidate) => candidate.name === workflowName);
       return workflow === undefined || workflowFacts(workflow).startable;
     })
     .sort((a, b) => a.position - b.position || compareText(a.plan.id, b.plan.id));
+
+  // Provenance (§4.8, P4.21): rekeys, orphans and one owner per element, over every walk at once.
+  const provenance = resolveProvenance(
+    snapshot,
+    open.flatMap(({ plan, start }) => (start === undefined ? [] : [{ id: plan.id, startCommit: start.commit }])),
+  );
+  const deducer = new Deducer(snapshot, elements, provenance.history);
+  const provenanceDiagnostics = provenanceDiagnosticsOf(provenance, open, (name) => deducer.workflow(name) !== undefined, plans);
 
   const unknownDiagnostics: Diagnostic[] = [];
   const stepDiagnostics: Diagnostic[] = [];
@@ -1646,9 +1659,51 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
     baseline: { rev: 'HEAD', commit: snapshot.commit },
     active: instances[0]?.instance.id ?? null,
     instances,
-    diagnostics: [...snapshot.registryDiagnostics, ...uncommitted, ...memoryDiagnostics, ...unknownDiagnostics, ...stepDiagnostics],
+    diagnostics: [...snapshot.registryDiagnostics, ...uncommitted, ...memoryDiagnostics, ...unknownDiagnostics, ...provenanceDiagnostics, ...stepDiagnostics],
     gated,
   };
+}
+
+/**
+ * The provenance diagnostics (`spec-017` §2, §4.8; design D3 (a), D4): one `W_PROVENANCE_ORPHAN` per orphan of an
+ * open instance whose workflow the registry loads — an instance of an unknown workflow is already reported by
+ * `W_INSTANCE_WORKFLOW_UNKNOWN` — then one `W_PROVENANCE_CONFLICT` per conflict, in the orders
+ * {@link resolveProvenance} gives. `file` is the instance's plan (for a conflict, the first claim's instance; empty
+ * when no plan of that id is at `HEAD`).
+ */
+function provenanceDiagnosticsOf(
+  provenance: ReturnType<typeof resolveProvenance>,
+  open: readonly { readonly plan: Element; readonly workflowName: string }[],
+  loaded: (workflow: string) => boolean,
+  plans: readonly Element[],
+): Diagnostic[] {
+  const planPath = (id: string): string => (open.find(({ plan }) => plan.id === id)?.plan ?? plans.find((plan) => plan.id === id))?.path ?? '';
+  const reported = new Set(open.filter(({ workflowName }) => loaded(workflowName)).map(({ plan }) => plan.id));
+  const orphans = provenance.orphans
+    .filter((orphan) => reported.has(orphan.instance))
+    .map(
+      (orphan): Diagnostic => ({
+        code: W_PROVENANCE_ORPHAN,
+        severity: 'warning',
+        file: planPath(orphan.instance),
+        path: orphan.commit,
+        message:
+          `${orphan.kind} ${orphan.commit} of ${orphan.instance} names ${orphan.key}, which the registry does not declare: it is evidence of nothing` +
+          (orphan.element === null ? '' : ` and owns nothing (${orphan.element.type}:${orphan.element.id})`),
+      }),
+    );
+  const conflicts = provenance.conflicts.map(
+    (conflict): Diagnostic => ({
+      code: W_PROVENANCE_CONFLICT,
+      severity: 'warning',
+      file: planPath(conflict.claims[0]!.instance),
+      path: `${conflict.element.type}:${conflict.element.id}`,
+      message: `${conflict.element.type}:${conflict.element.id} is claimed on unrelated branches by ${conflict.claims
+        .map((claim) => `${claim.instance} ${claim.step} (${claim.commit})`)
+        .join(', ')}: it counts as created by neither`,
+    }),
+  );
+  return [...orphans, ...conflicts];
 }
 
 /**
