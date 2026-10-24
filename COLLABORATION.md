@@ -191,19 +191,19 @@ R1–R6).
 ### The note format
 
 One Markdown file per note, named `F-<nnn>-<slug>.md`: `F-` and a number of three digits or more,
-unique in that inbox, then a short slug. A note has one identifier, one status and one history (`dl-163`
+unique in that inbox, then a slug. A note has one identifier, one status and one history (`dl-163`
 R4). Its frontmatter has six fields:
 
 | Field | Value |
 |---|---|
 | `id` | `F-<nnn>`, the number of the file name, without the slug |
-| `title` | one line saying what the note is about |
-| `kind` | `defect` (WingFoil does something wrong), `gap` (it does not cover a case it should) or `request` (a new capability) |
+| `title` | what the note is about |
+| `kind` | `defect`, `gap` or `request` |
 | `status` | one of the six below |
 | `wingfoil_version` | the WingFoil build the note was observed on |
 | `answered_by` | the ids of the WingFoil elements that answer the note; empty until the consumer fills it at a sync |
 
-The body states what was observed and what was expected, with the commands that show it. The statuses:
+The body states what was observed and what was expected. The statuses:
 
 - `open` — written, not yet answered by WingFoil;
 - `needs-info` — WingFoil asked for what a reproduction needs; the consumer answers in the note;
