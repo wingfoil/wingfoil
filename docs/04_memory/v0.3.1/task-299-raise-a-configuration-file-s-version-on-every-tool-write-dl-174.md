@@ -234,6 +234,16 @@ W1-2's "one bump … for `doc-versioning.md` (299)" cannot apply. None of the fo
   expect the raised line (the 14 above are all of them on `release/0.3` at `35acda40`, by the probe).
 - The scaffold keeps `version: 1` (W1-4), so a fresh project's first tool write reads `1 → 1.1`.
 
+#### Design gate (approver, 2026-10-24)
+
+Rulings on the design decisions above:
+- D1 accepted: no `version:` bump of `doc-versioning.md` (it declares none, its Scope rule and
+  `integration-branch-baseline.test.ts` AC 7 keep it so); the plan's W1-2 line is corrected by the coordinator.
+- D2 accepted: AC3 is red-first.
+- D3 accepted: a one-clause pending amendment of `spec-006` §6 item 7 naming the missing `workflows.yaml` beside the
+  missing `roles.yaml`, prepared in session 3.
+- D4 accepted: the raise is called in `src/core` (one call per writer), the pillar editors unchanged.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
