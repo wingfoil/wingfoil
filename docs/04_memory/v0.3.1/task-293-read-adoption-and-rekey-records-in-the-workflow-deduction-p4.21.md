@@ -49,14 +49,161 @@ write the records are `task-294` (`adopt`) and `task-295` (`rekey`).
 
 ## Execution Notes
 
-<!-- Running log of what actually happened while working this task through dev-loop — filled in
-     incrementally per phase, not written after the fact. Raw material for the release's Execution
-     Notes / the retrospective, not the retrospective itself.
-     - design: tech-specs found missing/needing revision (dev-loop/design safety net).
-     - red/green/refactor: deviations from the plan above, blockers, scope surprises.
-     - review: on a pass after a reject, REQUIRED (dl-098 (b)): one line per item of the previous
-       reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
-       shows it resolved and what that command printed; then what else changed on the next pass. -->
+### design (developer, 2026-10-24)
+
+Session 1 of 4 (role architect), worktree `../.wf2-wt/task-293`, branch cut from `release/0.3` at `12147ed5`, start
+`baafa0e8`.
+
+**Inputs checked.** `grep -m1 "^status:"` printed `approved` for `spec-017` and `spec-003`, `ready` for `dl-187` and
+`dl-186`, `scheduled` for `cp-002`; `git merge-base --is-ancestor 152d1370 HEAD` exited 0, so the spec-017 revision of
+2026-10-21 (§2, §4.3, §4.8, §7.11–§7.12, §10) is on this branch. `depends_on: []`: no dl-015 gate. No tech-spec is
+missing: `spec-017` §4.8 fixes the records, the one-owner and orphan rules and the two diagnostics; this design
+settles what it leaves open (D1–D4 below) and adds no `memory.add(type: tech-spec)`. No AC contradicts a directive or a
+ratified element; D2 and D3 are readings of `spec-017` §4.8 the approver should confirm.
+
+#### The record shapes this task reads (the contract for `task-294` / `task-295`)
+
+Both are read from the walk's one `git log` (`readWalk`, `src/core/workflow-deduction.ts`, format
+`%H %P %s %(trailers:only,unfold)`). Only the final paragraph of the message counts as trailers (git's rule, as for
+linkage and phase records); the order of the trailers in it does not matter; a key given twice takes its last value
+(`trailerValue`); values are trimmed.
+
+| Record | Read as one when | Values read from |
+|---|---|---|
+| adoption | subject starts with `workflow: adopt ` **and** the trailers carry non-blank `WingFoil-Instance`, `WingFoil-Step`, `WingFoil-Adopted`, the last matching `^([a-z][a-z0-9-]*):(\S+)$` | `WingFoil-Instance` = instance id; `WingFoil-Step` = step key `<workflow>.<phase>[@<scope>]`, as `memory add --workflow` writes it; `WingFoil-Adopted` = `<type>:<id>`, split at its first `:` |
+| rekey | subject starts with `workflow: rekey ` **and** the trailers carry non-blank `WingFoil-Instance`, `WingFoil-Rekey-From`, `WingFoil-Rekey-To`, neither key holding `@` | the three trailers; from/to are unscoped `<workflow>.<phase>` keys |
+
+Everything else is ignored: a commit failing a condition is no record (no diagnostic), the rest of the subject
+(`<instance> <key> <type>:<id>`, `<instance> <from> <to>`) is not parsed (D1), a body line (`Reason:`, `Approver:`) is
+never read. The writers therefore produce exactly: subject `workflow: adopt <instance-id> <step key> <type>:<id>` /
+`workflow: rekey <instance-id> <from> <to>`; body paragraph(s) `Approver:` / `Reason:` (`spec-017` §7.11–§7.12); final
+paragraph `WingFoil-Instance: …`, `WingFoil-Step: …`, `WingFoil-Adopted: …` (adopt) or `WingFoil-Instance: …`,
+`WingFoil-Rekey-From: …`, `WingFoil-Rekey-To: …` (rekey; no `WingFoil-Step`), then `WingFoil-Version:` last, as
+`commitEmpty(…, { trailers })` already does for `workflow finalize` (`src/core/workflow-finalize.ts:153`).
+
+**Where it lives.**
+- `src/workflow/provenance.ts` (new, pure, no git/fs): the constants `ADOPT_SUBJECT_PREFIX = 'workflow: adopt '`,
+  `REKEY_SUBJECT_PREFIX = 'workflow: rekey '`, `ADOPTED_TRAILER = 'WingFoil-Adopted'`,
+  `REKEY_FROM_TRAILER = 'WingFoil-Rekey-From'`, `REKEY_TO_TRAILER = 'WingFoil-Rekey-To'`, the codes
+  `W_PROVENANCE_ORPHAN` / `W_PROVENANCE_CONFLICT` (value = name), and
+  `resolveProvenance(snapshot: Pick<DeductionSnapshot, 'workflows' | 'history' | 'parents'>, instances: readonly { id: string; startCommit: string }[]): ResolvedProvenance`.
+  `task-294`'s writer (W1-3) imports the constants from here, so writer and reader share one spelling, and calls
+  `resolveProvenance` for "already owned" and `--plan`'s orphans; `task-295` for "named by no record (after earlier
+  rekeys)" and "already recorded".
+- `src/workflow/deduce.ts`: data types beside `StepLink` — `AdoptionRecord extends WalkPosition { instance; step; type; id }`,
+  `RekeyRecord extends WalkPosition { instance; from; to }`; `InstanceHistory` gains **optional**
+  `adoptions?` and `rekeys?` (newest first; absent = none), so the 7 hand-built histories in `test/workflow/*.test.ts`
+  (`grep -rn "reentries: \[\]" test | wc -l` printed 7) compile unchanged.
+- `src/core/workflow-deduction.ts` `readFacts`: parses the two records before the `parseMemoryOperation(subject) === null`
+  early return (a `workflow:` subject is no Memory operation); `readHistory` cuts `adoptions` and `rekeys` per instance
+  from the walk like `links`.
+
+**`resolveProvenance` (the §4.8 rules, in this order).**
+1. *Rekey.* For each linkage, record and adoption, its key is remapped by the rekeys whose `instance` equals its own and
+   whose commit strictly descends from its commit (through `snapshot.parents`), applied oldest first (descending walk
+   position): a rekey applies when the key's unscoped part equals `from`; the `@<scope>` suffix (linkage, adoption) or
+   the `WingFoil-Element`/`-Item` (record) is kept. A chain `a → b`, `b → c` gives `c`; of two sibling rekeys of one key,
+   the older by walk position applies first and the other no longer matches.
+2. *Orphans.* A remapped linkage, record or adoption whose `<workflow>.<phase>` the registry does not declare
+   (`snapshot.workflows`, workflow name + phase name) is dropped: evidence of nothing, owner of nothing.
+3. *One owner.* The remaining linkages and adoptions are claims on `<type>:<id>`, deduplicated by commit (a commit lies
+   in several instances' walks). Per element: the claim every other claim's commit is a strict ancestor of wins; with
+   two or more maximal claims (none descends from the other) none counts — a conflict (D2).
+4. *Effective history* per start commit: records remapped minus orphans; `links` = the winning claims in that walk
+   (adoptions included, in `StepLink` shape, key remapped); `reentries` unchanged. `Deducer.history()` returns it, so
+   `createdBy`, the self-creating `bind()`, `{ type, path }` produces, `<T>.set_state` `run` targets and
+   `Instance.created` see an adoption exactly as a linkage (§4.8 "exactly as linkage does"), while `hasRecord` and
+   `state` never read adoptions: an adoption is never `record` or `state` evidence and is not cut by a re-entry.
+
+`ResolvedProvenance = { history: ReadonlyMap<string, InstanceHistory>; owners: ReadonlyMap<string, ProvenanceClaim>;
+orphans: readonly ProvenanceOrphan[]; conflicts: readonly ProvenanceConflict[] }`, with
+`ProvenanceClaim = { kind: 'linkage' | 'adoption'; commit; position; instance; step; type; id }`,
+`ProvenanceOrphan = { kind: 'linkage' | 'record' | 'adoption'; commit; position; instance; key; element: ElementRef | null }`
+(`key` with its scope, the shape `AdoptPlanResult.orphans` needs), `ProvenanceConflict = { element: ElementRef; claims: ProvenanceClaim[] }`
+(claims in instance-id, then step-key order). Orphans listed per instance in the instances' order, then ascending walk
+position, then subject id order; conflicts by `(type, id)` ascending.
+
+**Diagnostics** (`spec-017` §2 shape; `deduceWorkflowState` places them after `W_INSTANCE_WORKFLOW_UNKNOWN` and before
+the step-attached ones; orphans, then conflicts, in the orders above):
+- `W_PROVENANCE_ORPHAN` — `file`: the instance's plan path; `path`: the full commit sha; `message`:
+  `<kind> <sha> of <instance> names <key>, which the registry does not declare: it is evidence of nothing`, plus
+  ` and owns nothing (<type>:<id>)` for a linkage or an adoption. One per orphan of an open instance whose workflow the
+  registry loads (D3).
+- `W_PROVENANCE_CONFLICT` — `file`: the plan path of the first claim's instance; `path`: `<type>:<id>`; `message`:
+  `<type>:<id> is claimed on unrelated branches by <instance> <key> (<sha>), <instance> <key> (<sha>): it counts as created by neither`.
+
+**Cost (REQ-PERF-03, §4.8).** The records are two more readings of the subject and trailers the walk already fetches:
+no git process is added. `test/core/workflow-next-spawn-count.test.ts` keeps its pinned values unchanged (expected
+`git diff release/0.3 -- test/core/workflow-next-spawn-count.test.ts` empty at submit); the new characterization below
+pins "same count with the records in the walk".
+
+#### Per-AC classification and what qa pins
+
+Test files (new; existing files untouched): **`test/workflow/provenance.test.ts`** (pure: `resolveProvenance` and
+`deduceWorkflowState` on hand-built `DeductionSnapshot`s, reuse the `snapshot(…)`/document helpers pattern of
+`test/workflow/deduce.test.ts`) and **`test/core/workflow-deduction-provenance.test.ts`** (fixture repos: records
+written by hand with `git commit --allow-empty -m <subject> -m <trailer block>`, the `commit()`/`record()`/`plan()`/
+`element()` helpers and the `CAPTURE`/`LOOP` workflows of `test/core/workflow-deduction-history.test.ts` copied in,
+`makeTempGitRepo`/`writeFixtureFile`/`git` from `test/storage/helpers/git-fixture`; deduction through
+`deduceWorkflowStateAtHead` / `readDeductionSnapshotAtHead` from `src/core`, `next`/`status` through `CORE_MODULES`'
+`workflowNext`/`workflowStatus` as `test/core/workflow-next.test.ts` calls them). The core file uses diagnostic codes as
+string literals and only existing exports, so it compiles and fails on its assertions.
+
+| AC | Class | qa pins |
+|---|---|---|
+| 1 adoption = `created` only | red-first | (a) `CAPTURE` instance `ing-1`, `bug-1` added `open` with **no** linkage, then an adoption commit (`workflow: adopt ing-1 capture-flow.capture bug:bug-1`; `WingFoil-Instance: ing-1`, `WingFoil-Step: capture-flow.capture`, `WingFoil-Adopted: bug:bug-1`): `instance.element` = `bug:bug-1`, `created` = `[bug:bug-1]`, `capture` complete, frontier `[capture-flow.triage@bug:bug-1]` still awaiting the approval of `bug-1` (BDD "Edge — an adoption cannot pass a gate"); (b) an adoption naming `capture-flow.triage` (a step that adds nothing) leaves `triage` current, and one naming a checkpoint step of `LOOP` (`loop.red@task:task-1`, `WingFoil-Adopted: spec:spec-1`) does not complete `red` (never `record`); (c) `LOOP` `design`: `spec-1` added `pending` without linkage + adoption into `loop.design@task:task-1` completes `design` from `created` and the `{ type: spec, path }` entry resolves; (d) a commit with the subject but a missing trailer, or the three trailers under a `wf(bug): add` / `workflow: finalize` subject, adopts nothing. |
+| 2 rekey remaps | red-first | Fixture: config committed with phase `old`, instance started, records written, then the config renamed (`old` → `new`) and committed, then `workflow: rekey <inst> loop.old loop.new` (`WingFoil-Instance`, `WingFoil-Rekey-From: loop.old`, `WingFoil-Rekey-To: loop.new`). Pin: a phase record (`WingFoil-Phase: loop.old completed`, `WingFoil-Element: task:task-1`) completes `loop.new@task:task-1` (scope kept); a linkage `wf(spec): add` with `WingFoil-Step: loop.old@task:task-1` and an adoption naming it give `created` on the new step; chain `a → b`, `b → c` maps to `c`; a record written **after** the rekey (the rekey does not descend from it) is not remapped (`W_PROVENANCE_ORPHAN`); a rekey of another instance id remaps nothing; without the rekey the step is current and the orphan diagnostic is raised. Pure counterparts in `provenance.test.ts` on hand-built parents (incl. sibling rekeys, oldest applies). |
+| 3 one owner, conflict, orphan | red-first | Pure: two adoptions of `bug:bug-1` where one commit descends from the other → `owners` = the descendant, the other step not created; two on sibling commits merged → `owners` has no entry, both steps not created, `conflicts[0].claims` in instance-id/step order, one `W_PROVENANCE_CONFLICT` with the message above; a linkage plus a later adoption of the same element to another step → the adoption owns (D2); an orphan linkage/record/adoption → `orphans` entry `{ kind, commit, instance, key, element }`, dropped from `history`, and an orphan linkage no longer listed in `Instance.created`; an orphaned adoption plus a newer valid adoption → no conflict. Fixture repo: one sibling-branch merge giving the conflict diagnostic through `deduceWorkflowStateAtHead`, `file`/`path`/`message` exact. |
+| 4 REQ-PERF-03 | characterization | In the core file, the `git` shim on `PATH` of `workflow-deduction-history.test.ts` AC 5 (`spawned(repo)`): one deduction over a fixture whose walk holds an adoption, a rekey and a config rename spawns exactly one `log` with `%(trailers` and the same total argv count as the same fixture with those commits replaced by plain empty commits (no re-entry in the fixture). `workflow-next-spawn-count.test.ts` not edited. |
+| 5 output shapes | characterization | On an orphan fixture, `workflowNext` and `workflowStatus` JSON: `Object.keys` of the result, `instance` and `next` equal those of the same fixture without the orphan; `diagnostics` differs only by the `W_PROVENANCE_ORPHAN` entry; console carries `1 diagnostic(s): --format json lists them`. The existing `workflow-next-render`, `workflow-status-render`, `workflow-repository-conformance` suites stay green unedited. |
+
+**Expected reds.** `test/workflow/provenance.test.ts`: `tsc` TS2307 (`Cannot find module '../../src/workflow/provenance'`)
+and jest "Cannot find module"; `test/core/workflow-deduction-provenance.test.ts`: assertion failures only (no tsc error).
+`npx tsc --noEmit` before the red commit must print only TS2307 for the pure file.
+
+#### Files to touch (green/refactor)
+
+`src/workflow/provenance.ts` (new); `src/workflow/deduce.ts` (types, optional `InstanceHistory` fields, `Deducer` reads
+the effective history, diagnostics order, header comment); `src/core/workflow-deduction.ts` (`readFacts`,
+`readHistory`, header comment); `src/core/index.ts` (re-export the two codes and the new types);
+`test/docs/name-resolvability.allowlist.ts`: **remove** the two `planned` entries `W_PROVENANCE_CONFLICT` /
+`W_PROVENANCE_ORPHAN` citing `task-293` (lines 218–219) once the exported constants make the names resolve (in `warn`
+mode a stale entry only warns; `fail` from v0.4). No CLI, help, `docs/cli-reference.md`, BDD or `.wingfoil/*.yaml`
+change; **no `version:` bump**. Not touched: `src/core/workflow-next.ts`, `src/core/workflow-status.ts` (they pass
+`deduction.diagnostics` through: `workflow-next.ts:563,578`, `workflow-status.ts:129`), so no file is shared with
+`task-298`; `src/core/index.ts` is shared with `task-294`/`task-295`, which merge after this task.
+
+**This repository.** Every step key in the history's `WingFoil-Step` / `WingFoil-Phase` trailers (12 distinct, from
+`git log --format='%(trailers:key=WingFoil-Step,valueonly)…'`) is declared in `.wingfoil/workflows/custom/`, and no
+`workflow: adopt|rekey` commit exists (`git log --grep` printed nothing): the change adds no diagnostic to
+`npm run -s wingfoil -- workflow status` (3 open workflows today).
+
+#### Decisions for the approver (recommendation first)
+
+- **D1 — subject or trailers.** (a, recommended) A record needs its subject prefix **and** its trailers; the values come
+  from the trailers, the rest of the subject is not cross-checked (the writers are ours; the trailers are what the walk
+  already parses, as for linkage). (b) Trailers alone, like phase records. (c) Also require the subject tokens to
+  equal the trailers (one more refusal rule to test, for no reader gain).
+- **D2 — a linkage and an adoption of one element.** `spec-017` §4.8 names both as owners but resolves only two
+  adoptions. (a, recommended) One rule for every claim: the claim that descends from all others wins. Since an element
+  must exist at `HEAD` to be adopted, its add commit is an ancestor of every adoption of it, so the adoption wins — the
+  case arises only when a rekey revives an orphaned linkage after the element was adopted again, which is what that
+  adoption was for; no conflict involving a linkage can arise in practice. (b) A live linkage always wins. Either way a
+  one-sentence clarification of §4.8 is proposed as a pending amendment in session 3.
+- **D3 — instances whose workflow the registry does not load.** (a, recommended) Their records still count as orphans
+  for ownership, but no `W_PROVENANCE_ORPHAN` is raised for them: `W_INSTANCE_WORKFLOW_UNKNOWN` already reports the
+  instance, and every one of its records would otherwise repeat it. (b) Raise them all (literal §2). Recorded in the
+  same pending amendment if (a).
+- **D4 — diagnostic texts and locations** as stated above (`spec-017` §2 fixes condition and severity only); confirm, or
+  name the wording to use.
+
+#### Risks for the wave
+
+- `task-294`/`task-295` must write the trailers in the final paragraph (git-conventions §8, `bug-236`); a `Reason:`
+  ending in a `Key: value` paragraph would hide them — `dl-067` already forbids it.
+- `Instance.created` now lists adopted elements and no longer lists orphan-linked ones (the value changes, the shape
+  does not); `dl-187`'s "an adopted provenance stays distinguishable" is met by the commit, not by this field — its
+  reader (`memory history`) is v0.4 (approver ruling 2026-10-21).
 
 ### Retrospective
 
