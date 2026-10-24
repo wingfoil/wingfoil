@@ -231,11 +231,11 @@ Run in this worktree at `5be28f7d`; heavy ones after `waitslot.sh`, `--maxWorker
 - `npm run -s typecheck` (both tsc configs) → exit 0; `npm run -s docs:api` → exit 0.
 - `node scripts/check-governance.cjs --base release/0.3` → `gated: 0 findings on 0 commits`, `history: 0 findings
   on 0 commits` (2 `wf()` commits and 7 others read).
-- `node scripts/lint-claims.cjs --base release/0.3` (war- `node scripts/lint-claims.cjs --base release/0.3` (warn-only) → 3 warnings, all in this task file and none in a
+- `node scripts/lint-claims.cjs --base release/0.3` (warn-only) → 3 warnings, all in this task file and none in a
   line of mine with a claim left unbacked: case 8's title "the page list is unchanged" in the design table (its grep
   is in the AC table), the rulings line and qa's red notes (not mine to edit). The design's D1 line was given its
   grep.
-t.ts` is not affected; no BDD scenario covers
+- No CLI or help change, so `test/docs/cli-reference.test.ts` is not affected; no BDD scenario covers
   `COLLABORATION.md` (`grep -rln COLLABORATION docs/02_requirements/02_bdd/features/` → nothing; the same grep over
   `test/docs/` finds `community-health.test.ts` and `reported-by.test.ts`).
 
@@ -254,11 +254,39 @@ t.ts` is not affected; no BDD scenario covers
   `patch-v0.3.1`'s `## Scope changes`); no other section of `COLLABORATION.md` names `reported_by` outside `## Credit`
   (`grep -n reported_by COLLABORATION.md` → lines 138–155 only, inside `## Credit`, which starts at 122).
 
+### independent review (2026-10-24) and fixes (developer)
+
+Verdict APPROVE WITH FIXES; each finding fixed in the task (F4 is a follow-up the coordinator registers; `.github/`
+untouched, `git diff --stat 989d3fa3 HEAD -- .github` → nothing).
+- **F1 (notes corrupted at lines 234 and 238, commit `989d3fa3`).** Cause: my amend script spliced the refactor list by
+  offsets taken before a shorter replacement. Restored: line 234 is the single `lint-claims` bullet, line 238 the
+  bullet `No CLI or help change, so test/docs/cli-reference.test.ts is not affected …`, re-checked:
+  `git diff --name-only release/0.3 -- src` → nothing (no CLI change), and
+  `grep -rln COLLABORATION docs/02_requirements/02_bdd/features/` → nothing (exit 1). `sed -n 232,240p <task file> |
+  cat -A` shows each bullet once, every line starting at a bullet or its two-space continuation.
+- **F2 (`wingfoil_version` row added "as `wingfoil --version` prints it").** Dropped: the row reads "the WingFoil
+  build the note was observed on", dl-163 R4's words (`grep -n wingfoil_version COLLABORATION.md` → the table row
+  without the clause). Commit `b8d4e6f7`.
+- **F3 (intro said the consumer never commits into this repository).** Reworded to R3's scope: "WingFoil never commits
+  into a consumer's repository, and the consumer's notes stay in its own repository". Same class in the section:
+  `sed -n '/^## Consumer feedback/,/^## Ground rules/p' COLLABORATION.md | grep -n -i "commits into\|pull\|this one"` →
+  line 6 (the reworded intro) and line 109 (the procedure's closing R3 sentence, "only the consumer changes its notes",
+  R3's "each consumer … updates its own notes"). Commit `b8d4e6f7`; no second version bump (`**Version:** 1.7`,
+  line 3).
+- **F5 (bug-408 Retrospective wording).** The uncommitted edit now says "Fixed by `task-297`" and gives the cause with
+  its command: `grep -n S3f docs/05_plans/rl-v1/rel-v0.3/*.md docs/04_memory/v0.3/task-214-*.md` →
+  `dev-loop-rel-v0.3-plan.md:879` ("S3f goes to `align-user-docs`"), `task-214…md:50`, `retrospective-rel-v0.3-plan.md:275`,
+  none in `user-docs-rel-v0.3-plan.md`. The proposed `--reason` below matches.
+- Gates after the fixes (no `src` change, no heavy gate): `npx jest test/docs/community-health.test.ts
+  test/docs/reported-by.test.ts test/docs/llms-txt.test.ts test/docs/pages-render.test.ts --maxWorkers=2` → 4 suites,
+  119 tests passed, with the bug-408 amendment in the tree; `npm run -s lint; echo lint=$?` → `lint=0`; T4:
+  `git log --first-parent --no-merges --format=%h bbae3471..HEAD -- test/docs/community-health.test.ts` → empty.
+
 ### Pending amendments (approver)
 
-- `bug-408` — `### Retrospective` replaced (uncommitted in this worktree). Proposed `--reason`:
-  "Record bug-408's retrospective line: the S3f gap was closed by task-297, and the miss came from S3f landing in no
-  phase plan of v0.3's user-docs, so nothing tracked it."
+- `bug-408` — `### Retrospective` replaced (uncommitted in this worktree; rewritten after the independent review, F5).
+  Proposed `--reason`: "Record bug-408's retrospective line: task-297 fixed it, and the miss came from S3f being handed
+  to align-user-docs by the v0.3 dev-loop plan and task-214's notes but never listed in the v0.3 user-docs plan."
 
 ### Retrospective
 
