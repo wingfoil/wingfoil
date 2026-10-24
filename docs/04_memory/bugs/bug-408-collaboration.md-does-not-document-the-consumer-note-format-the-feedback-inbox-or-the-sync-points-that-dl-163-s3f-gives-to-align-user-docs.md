@@ -42,4 +42,10 @@ Only the provenance split is documented; the rest of S3f was missed by v0.3's `a
 
 ### Retrospective
 
-None.
+- Fixed by `task-297` (`COLLABORATION.md` 1.7, commit `5be28f7d`): the `## Consumer feedback` section documents the
+  inbox, the note format, the sync points and the sync procedure. Cause of the miss: S3f was handed to
+  `align-user-docs` in `dev-loop-rel-v0.3-plan` (line 879: "S3f goes to `align-user-docs`") and named in `task-214`'s
+  notes (line 50), but the v0.3 user-docs plan never listed it (`grep -n S3f docs/05_plans/rl-v1/rel-v0.3/*.md
+  docs/04_memory/v0.3/task-214-*.md` → only those two lines and the retrospective plan's line 275, none in
+  `user-docs-rel-v0.3-plan.md`), so no element tracked it until the retrospective. Proposal: `align-user-docs` lists
+  the documentation actions handed to it by the release's plans and decision-logs, and checks each one off.
