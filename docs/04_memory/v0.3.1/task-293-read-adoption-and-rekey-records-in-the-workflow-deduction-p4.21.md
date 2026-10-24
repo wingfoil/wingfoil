@@ -373,6 +373,68 @@ pinned at the reader by core AC 1 (a). `release/0.3` had not moved (`git rev-par
   worktree. Proposed `--reason`:
   `Record the two readings of §4.8 "One owner" the approver ruled at task-293's design gate on 2026-10-24: a linkage and an adoption are claims under one descends-from rule (D2 (a)), and an instance of a workflow the registry does not load raises no W_PROVENANCE_ORPHAN (D3 (a)); no other section changes.`
 
+### independent review (2026-10-24) and fixes (developer)
+
+Verdict: APPROVE WITH FIXES. Approver rulings of 2026-10-24: finding 1 takes option (ii); finding 3 becomes follow-up F26,
+outside this task. T4 holds: the two red files are not edited.
+
+- **F1, ruling (ii): linkages alone never conflict.** Before the fix, two linkages of one element on sibling branches
+  (a cherry-picked `wf(x): add` keeps its `WingFoil-Step`) were a conflict, and neither counted; the reviewer's
+  scratch case printed `owners [] conflicts 1 links 0`. Fix `c13902bb`, `src/workflow/provenance.ts`:
+  - when an element's claims are all linkages, every one counts (`counted`) and none conflicts, as on `release/0.3`;
+    `owners` gives the first in instance-id, step-key, commit order;
+  - when they include an adoption, D2 (a)'s descends-from rule decides, as before.
+
+  Pinned in `test/workflow/provenance-edges.test.ts`:
+  - sibling linkages give no conflict, both are in `links`, the instance binds `bug-1`, `capture` is complete, and
+    there are no diagnostics;
+  - a linkage plus a sibling adoption still gives one `W_PROVENANCE_CONFLICT`, and the instance stays unbound.
+
+  With `src/workflow/provenance.ts` restored from `HEAD` before the fix, `npx jest test/workflow/provenance-edges`
+  printed `Tests: 1 failed, 9 passed`: the sibling-linkage test fails on the old code.
+- **F2: the spec-017 amendment is completed (uncommitted).**
+  - §2 `W_PROVENANCE_ORPHAN` row: gains the D3 (a) exception.
+  - §2 `W_PROVENANCE_CONFLICT` row: "two or more claims … at least one of them an adoption … none descending from
+    another".
+  - §4.8: states (ii), and drops the false sentence "of a linkage and an adoption the adoption owns; the case arises
+    only when …".
+  - §4.8: "the claim that descends from every other claim of the element".
+  - The Revision note counts three §4.8 sentences and names both §2 rows.
+- **Nit: `ELEMENT_REF_RE` replaced by `parseElementRef`** (`src/core/element-ref.ts`, imported by module path, not
+  through the barrel). `WingFoil-Adopted` now follows the `spec-008` §7 grammar: exactly one `:`, so an id
+  containing `:` is no longer read. The red guard test AC 1 (d) (`bug-1` with no `:`) still passes.
+- **Optional, done:** a linkage naming a checkpoint (`flow.triage@bug:bug-1`) leaves the step current with
+  `missing: ['record']` (`provenance-edges.test.ts`). It passes on the code before the fix too: the checkpoint fix
+  of green already covered it.
+- **Sync:** `git merge --no-edit release/0.3` gave `b7a772c3`, bringing in the merges of `task-297`, `task-300` and
+  `task-296` (22 files). There were no conflicts and `npx tsc --noEmit -p tsconfig.json` was clean.
+
+**Gates after the sync** (spec-017 amendment uncommitted in the tree):
+| Gate | Command | Result |
+|---|---|---|
+| tests and coverage | heavy slot (taken 18:27:43), `npm run -s test:coverage -- --maxWorkers=2` | `Test Suites: 472 passed, 472 total`, `Tests: 8518 passed, 8518 total`; `All files 99.35 / 97.41 / 98.08 / 99.71` (10596/10665, 6480/6652, 2054/2094, 8902/8927), each column at or above the w0 baseline `99.34 / 97.39 / 98.03 / 99.71`; `provenance.ts 100 / 97.4 / 100 / 100` |
+| typecheck | heavy slot, `npm run -s typecheck` | exit 0 (finished 18:53:18) |
+| lint | `npm run -s lint` | exit 0 |
+| API docs | `npm run -s docs:api` | exit 0 |
+| governance | `npm run -s check:governance -- --base release/0.3` | exit 0, `gated: 0 findings`, `history: 0 findings` |
+| T4 | `git log --first-parent --no-merges --format=%h b083263f..HEAD -- test/workflow/provenance.test.ts test/core/workflow-deduction-provenance.test.ts` | empty |
+
+The proposed `--reason` for the spec-017 amendment (it replaces the one under *Pending amendments* above):
+`Record the readings of spec-017 §2 and §4.8 "One owner" the approver ruled for task-293 on 2026-10-24: a linkage and an adoption are claims under one descends-from rule when an element's claims include an adoption (D2 (a)), claims that are all linkages all count and never conflict (ruling (ii)), and an instance of a workflow the registry does not load raises no W_PROVENANCE_ORPHAN (D3 (a)); §2's two provenance rows say the same.`
+
+#### Notes for task-294 / task-295
+
+- `owners` has no entry for an element in conflict; "already owned" must also check `conflicts` (§10's refusal names
+  "the first of its owners in instance-id then step-key order", which is `conflicts[i].claims[0]`).
+- For an element whose claims are all linkages, `owners` is the first linkage; every linkage counts.
+- `deduceWorkflowState` does not return the resolved provenance. Call
+  `resolveProvenance(readDeductionSnapshotAtHead(root), deduction.instances.map(e => ({ id: e.instance.id, startCommit: e.instance.startCommit })))`.
+- `orphans` lists the orphans of every instance passed, including one whose workflow is not loaded (D3 (a) only
+  suppresses the diagnostic); `adopt --plan` filters to its own instance.
+- The step-key splitter (`<workflow>.<phase>` / `@<scope>`) is not exported: split at the first `@`.
+- The readers are exported: `readAdoption(pos, subject, trailers)` and `readRekey(…)`. `WingFoil-Adopted` must
+  follow the element-ref grammar (`parseElementRef`).
+
 ### Retrospective
 
 - A checkpoint read complete when its step key owned an element (`Deducer.leaf`'s record rule). It surfaced only
