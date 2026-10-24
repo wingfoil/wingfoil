@@ -194,63 +194,71 @@ added without `--workflow` is a candidate once `produces` is met and only `creat
   no BDD edit in a patch.
 - **D7 — one bullet in user-guide §12** for projects initialised by 0.3.0: copy the five workflow files from a fresh
   `init` and commit. Recommended.
-- **D8 — bug-400's pending amendment at session 3**: its `### Retrospective` line (dl-115 Q2 (a)) and `reported_by` set
-  to the two notes `retro-v0.3` maps to it (`docs/04_memory/design/dls/retro-v0.3.md:256` and `:273`, full refs with
-  their shas), the provenance the task's "fold into it" asks for. Recommended.
+- **D8 — bug-400's pending amendment at session 3**: its `### green (developer, 2026-10-24)
 
-**Not fixed by this task (stated for the approver).** bug-400 step 5: `agent execute --next` on a step with no scope
-still refuses `has no element` (every scaffold step but `<T>-ingest.approve`, whose role `approver` an agent never
-takes). No AC asks for it; `--element` remains the way.
+Commit `d798546c` (`fix(storage): task-296 — …`, closes `bug-400`): `src/storage/templates.ts` — `sw-life-cycle`
+phases with roles (`lifeCycleWorkflowYaml`), one ingest generator for the three mains (`ingestWorkflowYaml`: `capture`
+adds and submits, `produces` the type's `memory.yaml` path; `approve` with `approval: { by_role: approver }`;
+`fallback` on adr / decision-log only, D3), the delivery loop of design D2, the `team.agents` example over an active
+`agents: []` (D4), and `memoryDir` / `memoryPath`, from which both `memory.yaml`'s `path` and the workflows'
+`produces` are written. `docs/user-guide.md` §4.2, §7 (table: ingest `capture → approve`; a paragraph on roles,
+Memory-reading phases and checkpoints), §12 (D7); `P5.1.1-init.feature`: the scenario outline "The scaffold's
+workflows can be driven by the workflow commands" (D6).
+- Red → green: `npx jest test/storage/templates-workflows.test.ts test/docs/user-guide-scaffold.test.ts
+  --maxWorkers=2` → `Tests: 40 passed, 40 total`; `npx jest test/cli/init-scaffold-workflows.integration.test.ts`
+  → `Tests: 7 passed, 7 total` (red: 30 failed / 17 passed over the three files).
+- Collision with older tests (the coordinator's pre-green sweep): the 63 test files that read the changed files
+  (`git grep -l "storage/templates'\|templateScaffold\|initWingfoilProject\|'init', '--template'\|init
+  --template\|user-guide.md\|P5.1.1-init" -- 'test/*.ts'`, red's three excluded) → `2 failed, 61 passed`; both
+  from D4's `agents: []`: `test/cli/dna-force.integration.test.ts` (bug-126's guard "the scaffold declares no
+  agents") and `test/cli/dry-run.integration.test.ts` (its fixture appends a second `agents:` key → `E_YAML_PARSE_ERROR
+  … line 58`). Neither is a red file; each fixture now drops the scaffold's `agents: []` line first (bug-126 keeps
+  reproducing the first entry of an undeclared collection). Re-run of the two files → `Tests: 41 passed, 41 total`.
 
-#### Design gate (approver, 2026-10-24)
+### refactor (developer, 2026-10-24)
 
-Rulings on the design decisions above:
-- D1 accepted: no `role` on the `delivery` include phase (`spec-003`'s `role` row); AC1 reads every non-include phase
-  and every phase of the included workflow.
-- D2 accepted: `plan` adds and submits tasks with the constant `produces` entry; `review` selects the `pending` tasks
-  with `memory.approve` and `approval: { by_role: approver }`; the limits stated in the design are accepted.
-- D3 accepted: `fallback` on `adr-ingest` and `decision-log-ingest`, none on `bug-ingest`.
-- D4 accepted: an active `agents: []` under the commented `team.agents` example.
-- D5 accepted: the roles per phase as designed.
-- D6 accepted: one P5.1.1 BDD scenario.
-- D7 accepted: one bullet in user-guide §12 for projects initialised by 0.3.0.
-- D8 accepted: `bug-400`'s `### Retrospective` and `reported_by` (svc-019 F-010, svc-020 F-001) prepared in session 3
-  as a pending amendment.
-- `agent execute --next` refusing an unscoped step (bug-400 step 5, outside its Expected Behavior) is recorded by the
-  coordinator as a candidate finding, not fixed here.
+Run in this worktree with the bug-400 pending amendment in the tree:
+- `npx jest --coverage --maxWorkers=2` (the full suite, under the slot) → `Test Suites: 466 passed, 466 total`,
+  `Tests: 8440 passed, 8440 total`; `All files | 99.34 | 97.4 | 98.03 | 99.71` (the w0 baseline in the dev-loop plan:
+  99.34 / 97.39 / 98.03 / 99.71, none below); `templates.ts | 100 | 97.29 | 100 | 100 | 757` (line 757 is the
+  pre-existing sort comparator's equal branch).
+- `npm run -s lint` → exit 0, no output; `npm run -s docs:api` → exit 0; `npm run -s typecheck` (both tsc configs,
+  under the slot) → exit 0; `npx jest test/docs/cli-reference.test.ts` → `Tests: 4 passed` (no CLI or help change).
+- Examples with `WINGFOIL="node $PWD/dist/cli.js"`: `01-first-project/run.sh` → `OK: first project: init → add →
+  submit → approve`; `06-workflow-approval/run.sh` with Scrum and with `WINGFOIL_EXAMPLE_TEMPLATE=Kanban` → `OK:
+  Journey 4: …` (the e2e smoke's journey; no smoke change, design "Smoke").
+- No refactor beyond green: the generators are already one per workflow shape. No `version:` bump (design).
+- `release/0.3` has not moved: `git merge-base --is-ancestor release/0.3 HEAD` → true (`release/0.3` = `12147ed5`).
 
-### red (qa, 2026-10-24)
+### self-review (developer, 2026-10-24)
 
-**Red commit: `7dd461bb`** (T4 baseline: `tests.unchanged(since: 7dd461bb)`). Test files only, no `src/` change, no
-new export: every red is an assertion failure. `npx tsc --noEmit -p tsconfig.json` → exit 0 before the commit.
-Every test loops `for (const def of TEMPLATES)` (Scrum, Kanban), except example 01 (below).
+- AC 1: every non-include phase has a role from `team.roles`, ingest `capture` / `approve` as specified, step 2's
+  grep matches all five files — `templates-workflows` tests pass (above). AC 2: `workflow next` → `product-owner`;
+  the finalize loop stops at `<slug>-delivery.plan` with exit 1 and `completes from its evidence: produces`, 2 records
+  — integration tests pass. AC 3: the example, uncommented, loads as one non-approving claude-code agent; unedited
+  `team.agents` = `[]`; `loadWorkflowRegistryAtHead` diagnostics `[]`; no `workflows/bindings.yaml`, so `spec-003`
+  § "Format" needs no amendment (its "it scaffolds no `workflows/bindings.yaml`" stays true). AC 4: example 01 and
+  the guide's §7 table pinned and passing.
+- T4: `git log --first-parent --no-merges --format=%h 7dd461bb..HEAD -- test/storage/templates-workflows.test.ts
+  test/cli/init-scaffold-workflows.integration.test.ts test/docs/user-guide-scaffold.test.ts` → empty.
+- Same-class check: the scaffold's other Memory paths are `memory.yaml`'s `plan` path (nested by scope, kept) and
+  the two produces entries, both from `memoryDir`: `grep -n "docs/memory" src/storage/templates.ts` → the helper's
+  line and the `plan` path only.
+- Not done, as ruled: bug-400 step 5 (`agent execute --next` on an unscoped step) — a coordinator candidate finding.
 
-Files: `test/storage/templates-workflows.test.ts` (in process, `templateScaffold` + `loadDnaYaml`; this is the
-coverage-bearing pin of the scaffold), `test/cli/init-scaffold-workflows.integration.test.ts` (compiled CLI through
-`runCliEntry` on `makeTempGitRepo`, plus `initWingfoilProject` + `loadWorkflowRegistryAtHead` in process),
-`test/docs/user-guide-scaffold.test.ts`.
+### Pending amendments (approver)
 
-| AC | Class | Tests (per template unless noted) | Result at red |
-|---|---|---|---|
-| 1 | red-first | unit: "every phase that does not only include another workflow has a role declared in team.roles" (D1: `include:` phases skipped); "bug-400 step 2's grep … matches a line in every workflow file"; per ingest T ∈ bug, decision-log, adr: "T-ingest has a capture phase that adds the T and an approve phase that approves it" (phases exactly `[capture, approve]`, `memory.add(type: T)`, `memory.approve`, `approval: { by_role: approver }`) and "T-ingest's capture produces the T path memory.yaml declares" (`produces` = `[memory.yaml types.T.path]`, the design's ingest YAML and the Description's "ingest `actions`/`produces`"); "the scaffold has the five workflow files bug-400 greps" | fail, except the five-files test (passes: today's file set) |
-| 2 | red-first | unit (a): "`<slug>-delivery.plan` adds tasks and produces the task directory memory.yaml declares" (`memory.add(type: task)`, `docs/memory/task/`, which memory.yaml's task path starts with); "`<slug>-delivery.review` approves through memory.approve, routed to the approver". CLI (b): "workflow start sw-life-cycle, then workflow next names the role product-owner" (`next.role` of `workflow next --format json`); "finalizing every step stops at `<slug>-delivery.plan` …" (loop `next`/`finalize` up to 20 times: the refused finalize exits `1` with stderr containing `phase '<slug>-delivery.plan' completes from its evidence: produces`, `workflow next` exit 0 without `is complete`, exactly `2` `workflow: finalize` subjects in `git log`) | fail |
-| 3 | red-first (a); characterization (b), (c) | unit (a), the task-118 splice shape (`  # agents:` head + `  #   ` lines inside `team:`, active `  agents: []`): "the team block holds the commented example and the active `agents: []` line"; "the example, uncommented in place of `agents: []`, loads as one non-approving claude-code agent" (one agent, `executes_as` non-empty without `approver`, `adapter: claude-code`, the scaffold ships `.wingfoil/agents/built-in/claude-code.yaml`); "the unedited scaffold loads with team.agents = []". (b) integration, in process: "initWingfoilProject, then loadWorkflowRegistryAtHead reports no diagnostic". (c) unit: "no scaffold path is .wingfoil/workflows/bindings.yaml" (ruling W1-4). Optional (d) (`agent list --waiting`) not written | (a) fail; (b), (c) pass |
-| 4 | characterization | integration: "run.sh exits 0 and prints its OK line, with WINGFOIL set to the built CLI" (once: example 01 runs `init --template Scrum` by its own text); docs: "the row naming `<w>` lists its phases as the scaffold declares them", for the five workflows of §7's table against `templateScaffold` | pass (today guide and scaffold agree: ingest `capture`; green changes both) |
-
-**Run:** `npx jest test/storage/templates-workflows.test.ts test/cli/init-scaffold-workflows.integration.test.ts
-test/docs/user-guide-scaffold.test.ts --maxWorkers=2` → `Test Suites: 2 failed, 1 passed, 3 total`, `Tests: 30 failed,
-17 passed, 47 total`. Per file: `templates-workflows` 26 failed / 4 passed; `init-scaffold-workflows.integration` 4
-failed / 3 passed (59 s); `user-guide-scaffold` 0 failed / 10 passed. First failing assertions, all on behaviour:
-roles → `Received` lists 10 phases `role=undefined` (e.g. `sw-life-cycle.inception role=undefined`); grep → all 5
-files unmatched; ingest → phases `["capture"]` vs `["capture","approve"]`, capture `produces` `undefined`; delivery →
-`expect(plan.actions).toContain` on `undefined`; agents → `Expected value: "  # agents:"` not in the team block,
-`team.agents` `undefined` vs `[]`; CLI → `next.role` `null` vs `"product-owner"`, refused finalize `undefined` vs `1`
-(the loop completed the workflow by finalize alone).
+- `bug-400-the-init-0.3.0-scaffold-s-workflows-declare-no-role-action-or-evidence-on-any-phase-so-the-engine-guides-nothing-on-a-fresh-project`
+  (uncommitted in this worktree): `reported_by` set to the two consumer notes `retro-v0.3` maps to it (svc-019
+  F-010, svc-020 F-001, full refs with their shas) and one `### Retrospective` line (dl-115 Q2 (a)). Proposed
+  `--reason`: "Record the two consumer notes this bug answers in reported_by (design D8, retro-v0.3 lines 256 and
+  273) and add the Retrospective line of task-296, which fixes it."
 
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
-     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
-     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
-     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
-     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- The coordinator's pre-green sweep of older tests found two collisions red could not see (`dna-force` bug-126,
+  `dry-run`), both from the scaffold's new `agents: []`; caught before the full suite. Evidence: the 63-file run
+  above, `2 failed, 61 passed`. Proposal: keep the sweep in the session-3 prompt.
+- What made a step wait for evidence was not obvious from the ACs: a phase whose only evidence is `memory.add` is
+  finalizable when it created nothing (spec-017 §4.3, §7.9), so `produces` is the lever. Evidence: the design's
+  prototype runs. Proposal: none.
