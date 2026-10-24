@@ -175,10 +175,58 @@ suites, unedited: `npx jest test/core/workflow-repository-conformance.test.ts te
 test/core/retrospective-collect-feedback.test.ts test/core/retrospective-notes.test.ts --maxWorkers=2` →
 `Test Suites: 4 passed, 4 total`, `Tests: 77 passed, 77 total`.
 
+### green (developer, 2026-10-24)
+
+Green commit `e3139377` (`feat(workflow): task-300 — …`): `.wingfoil/workflows/custom/retrospective.yaml` (explore's
+sentence and additional-points' plural exactly as design fixed them, D2 (a), D3 (a); `version: 1.6` → `1.7` with the
+entry `1.7 dl-167 (a) (task-300): …` appended to the full history) and `.wingfoil/WORKFLOW.md` (line 188 and the RT
+node, the two designed sentences; the file has no `version:`). No `actions:`, `checks:` or `produces:` entry changed
+(`git diff 9b2aee45 HEAD -- .wingfoil/workflows/custom/retrospective.yaml`: only description prose and the version
+line). Red → green: `npx jest test/core/retrospective-patch-health.test.ts` 8 failed / 3 passed at `db44d92a` (red
+notes) → with the conformance, evidence, collect-feedback, retrospective-notes and workflow-md suites, `npx jest
+<those six files> --maxWorkers=2` → `Test Suites: 6 passed`, `Tests: 94 passed, 94 total`.
+
+### refactor (developer, 2026-10-24)
+
+Run in this worktree with the uncommitted `dl-089` / `dl-092` notes in the tree; heavy runs after `waitslot.sh`.
+- `npm run test:coverage -- --maxWorkers=2` → exit 0, `Test Suites: 464 passed, 464 total`, `Tests: 8400 passed,
+  8400 total`; All files 99.34 / 97.4 / 98.03 / 99.71 (statements / branches / functions / lines), none below the
+  batch baseline 99.34 / 97.39 / 98.03 / 99.71 (`dev-loop-rel-v0.3.1-plan` line 244). It includes the `docs.parity`
+  suites (`bindings.yaml` `docs.parity`, `test/docs/workflow-md.test.ts` among them).
+- `npm run lint` → exit 0. `npm run docs:api` → exit 0. `npm run typecheck` (both tsc configs) → exit 0.
+- `npm run check:governance -- --base release/0.3` → exit 0, "gated: 0 findings".
+- No BDD scenario covers `retrospective.yaml`'s explore text; none changed. `release/0.3` is still `12147ed5`
+  (`git log -1 --format=%h release/0.3`), the fork point: no sync merge needed.
+
+### self-review (developer, 2026-10-24)
+
+- AC 1: explore names the patch reports with the D2 (a) cut; version 1.7 once (`git show release/0.3:…` → 1.6);
+  token-neutral (1c green; the conformance unbound table untouched, `git diff release/0.3 HEAD --stat` lists no
+  test file but red's); conformance and evidence suites green (above).
+- AC 2: the two dated notes are in the working tree, uncommitted (`git status --short` → ` M` on `dl-089-…` and
+  `dl-092-…`; `git diff -U0 -- docs/04_memory/design/dls | grep -c '^+\*\*Note (2026-10-24, dl-167 Action 3;
+  task-300)'` → 2). Each says a proposal takes four outcomes (design F2); no line starts with `Approver:`, `Reason:`
+  or `WingFoil-Version:`.
+- T4: `git log --first-parent --no-merges --format=%h db44d92a..HEAD -- test/core/retrospective-patch-health.test.ts`
+  → empty.
+- Same class: `release-health.yaml` and `release-cycle.yaml` say "the retrospective", still true (design: not
+  touched); `grep -n "release-health report" docs/agents.md README.md` → one hit, `docs/agents.md:42` (where
+  `wingfoil paths health` points), none describing explore's sources: nothing to align.
+
+### Pending amendments (approver)
+
+- `dl-089-release-health-analyses-before-retrospective` — `memory amend dl-089-release-health-analyses-before-retrospective
+  --reason "Record the dl-167 ruling (94a5a2c3, option (a)): the next minor's retrospective disposes of a patch's RH
+  proposals, with one of the four outcomes of proposals.disposed, its explore reading the patch reports since the
+  previous retrospective (retrospective.yaml 1.7, task-300)."`
+- `dl-092-tracking-a-patch-after-its-minor-is-released` — `memory amend dl-092-tracking-a-patch-after-its-minor-is-released
+  --reason "Record the dl-167 ruling (94a5a2c3, option (a)) under Q2 (ii): a patch's release-health proposals fold
+  into the next minor's retrospective with its other findings, each disposed of with one of the four outcomes of
+  proposals.disposed (retrospective.yaml 1.7, task-300)."`
+
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
-     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
-     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
-     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
-     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- A patch's RH proposals are never settled by the next run: `compare.cjs` settles against `retro-<previous version>`
+  (`scripts/release-health/compare.cjs:47–50`, `:728`), which a patch never has (design F1; not filed by this task).
+- The full coverage run took over 10 minutes under the shared load (`uptime` → load average 10.34 during it); no
+  effect on the result.
