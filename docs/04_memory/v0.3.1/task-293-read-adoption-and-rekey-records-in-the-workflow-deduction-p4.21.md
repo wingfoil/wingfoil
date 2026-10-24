@@ -254,10 +254,134 @@ orphan whose `WingFoil-Element` is set (`ren.old` or `ren.old@task:task-1`: the 
 element-less record is pinned exactly, `ingest.gone`), and the `element` of an orphan or a conflict from the pure
 `resolveProvenance`, which has no documents and so no `status` (pinned with `toMatchObject` on `type`/`id` only).
 
+### green (developer, 2026-10-24)
+
+Session 3 of 4. Before writing code, the existing suites of the modules this task changes ran green on the red
+head: `npx jest test/core/workflow-deduction test/workflow/deduce test/core/workflow-next test/core/workflow-status
+test/docs/name-resolvability test/core/workflow-repository-conformance --maxWorkers=2` printed `Test Suites: 1
+failed, 21 passed, 22 total` / `Tests: 10 failed, 240 passed`; the one failing suite was the red file
+`workflow-deduction-provenance.test.ts`, so no older test collides.
+
+**Green commit `0b5d5150`** (`feat(workflow): task-293 — read adoption and rekey records in the workflow deduction
+(P4.21)`):
+- `src/workflow/provenance.ts` (new, pure): the constants `ADOPT_SUBJECT_PREFIX`, `REKEY_SUBJECT_PREFIX`,
+  `ADOPTED_TRAILER`, `REKEY_FROM_TRAILER`, `REKEY_TO_TRAILER`, `INSTANCE_TRAILER`, `STEP_TRAILER`; the codes
+  `W_PROVENANCE_ORPHAN`, `W_PROVENANCE_CONFLICT`; the readers `readAdoption` / `readRekey` (D1 (a)); the types
+  `AdoptionRecord`, `RekeyRecord`, `ProvenanceRef`, `ProvenanceClaim`, `ProvenanceOrphan`, `ProvenanceConflict`,
+  `ResolvedProvenance`; and `resolveProvenance(snapshot, instances)`, which applies the design's rules 1–4.
+- `src/core/workflow-deduction.ts`: `readFacts` parses both records from the subject and trailers the walk's one
+  `git log` already reads; `readHistory` puts them on `InstanceHistory.adoptions` / `.rekeys`.
+- `src/workflow/deduce.ts`: the two optional `InstanceHistory` fields; `deduceWorkflowState` runs
+  `resolveProvenance` once over every walk and gives the `Deducer` the resolved histories, so `createdBy`, `bind`,
+  the `{ type, path }` produces, the `run` targets and `Instance.created` read adoptions as linkages and `hasRecord`
+  reads remapped records; the diagnostics come after `W_INSTANCE_WORKFLOW_UNKNOWN` and before the step-attached ones
+  (D3 (a), D4). The unused `Deducer.plans()` is gone (the plans are filtered once in `deduceWorkflowState`).
+- `src/core/index.ts`: re-exports the constants, the readers, `resolveProvenance`, the codes and the types.
+- `test/docs/name-resolvability.allowlist.ts`: the two `planned` entries citing `task-293` (`W_PROVENANCE_CONFLICT`,
+  `W_PROVENANCE_ORPHAN`) are removed; the names resolve to the exported constants.
+
+**A finding fixed in green: a checkpoint completed by whatever its key owned.** Test AC 1 (b) failed after the
+first implementation: `keys(loop)` received `["loop.review@task:task-1"]` for `["loop.red@task:task-1"]`. The record
+rule in `Deducer.leaf` (`recordNeeded = … || (created.length === 0 && !kinds.some(kind => kind !== 'created'))`)
+needed a record only when the step owned nothing, so a checkpoint whose key owned an element had no evidence kind
+at all and read complete. This was already true of a linkage naming a checkpoint, though nothing writes one today:
+`memory add --workflow` refuses a step that adds no type. The fix: a phase with no evidence kind (a checkpoint)
+always needs its record (`checkpoint = kinds.length === 0`), which is §4.3 ("its only evidence is `record`") and
+§4.8 / `dl-187` rule 4 (an adoption is never `record`).
+
+**The two points qa left open.**
+1. The `key` of a record orphan with a `WingFoil-Element` (or `WingFoil-Item`) carries it as a scope:
+   `ren.old@task:task-1`. This is the step-key form of §4.9 and the form a linkage or adoption orphan already has,
+   so `adopt --plan`'s `orphans[].key` (§8) is uniform. spec-017 names only `<workflow>.<phase>` as what an orphan
+   names, so this changes nothing it says.
+2. `ProvenanceOrphan.element` / `ProvenanceConflict.element` are typed `ProvenanceRef = { type, id }`, with no
+   `status`: a provenance record carries none, and `resolveProvenance` reads no documents. A record orphan has
+   `element: null`. `task-294` maps it to §8's `ElementRef | null` from the documents at `HEAD`.
+
+**Red → green.** `npx jest test/workflow/provenance.test.ts test/core/workflow-deduction-provenance.test.ts
+--maxWorkers=2`: red `b083263f` printed `Tests: 10 failed, 4 passed, 14 total` (the pure suite did not run); green
+printed `Test Suites: 2 passed, 2 total` / `Tests: 30 passed, 30 total`. The related suites,
+`npx jest test/core/workflow test/workflow test/docs/name-resolvability test/core/memory-add-workflow-link test/mcp
+--maxWorkers=2`, printed `Test Suites: 72 passed, 72 total` / `Tests: 906 passed, 906 total`.
+
+### refactor (developer, 2026-10-24)
+
+**Refactor commit `9112aa13`.** The first full run with coverage (heavy slot taken 15:20, `npm run -s test:coverage --
+--maxWorkers=2`) passed, `Tests: 8422 passed, 8422 total`, but at `99.33 / 97.17 / 97.55 / 99.71` it fell below the w0
+baseline the plan records (`99.34 / 97.39 / 98.03 / 99.71`, dev-loop plan line 244). Per file
+(`coverage/coverage-summary.json`): `src/core/index.ts` had 159 of 184 functions, because the new re-exports compile
+to getters no test read; `src/workflow/provenance.ts` had 82.79 % of branches, from tie-breaks in its comparators.
+The fixes:
+- Orders simplified where a tie cannot happen: rekeys by walk position alone (one position per commit of the union
+  walk); candidates and orphans by position, then `<type>:<id>`; conflict claims by `"<instance> <step> <commit>"`.
+  The space sorts before every id character, so this is still instance-id, then step-key order.
+- `INSTANCE_TRAILER` and `STEP_TRAILER` are re-exported too, so `task-294` reads every key from one place.
+- New developer test `test/workflow/provenance-edges.test.ts` (7 tests). It covers: blank, missing or scoped trailers
+  and another subject read as no record; sibling adoptions into one step ordered by commit; two linkage orphans of one
+  commit ordered by element; a record of another instance being no orphan of this one; a rekey keeping a record's
+  `WingFoil-Item`; the conflict `file` when the first claim's plan is `done` (its path) or absent (`''`); and the
+  barrel re-exporting every runtime export of the module unchanged.
+- The header of `src/workflow/deduce.ts` names the provenance step.
+
+**Gates on `9112aa13`, with the spec-017 amendment uncommitted in the tree.**
+
+| Gate | Command | Result |
+|---|---|---|
+| tests and coverage | heavy slot (taken 15:52), `npm run -s test:coverage -- --maxWorkers=2` | `Test Suites: 466 passed, 466 total`, `Tests: 8431 passed, 8431 total`; `All files 99.35 / 97.41 / 98.08 / 99.71` (statements 10581/10650, branches 6479/6651, functions 2049/2089, lines 8889/8914), each column at or above the baseline; `provenance.ts 100 / 97.43 / 100 / 100` (uncovered: the `>` arm of `compareText`), `deduce.ts 100 / 99.81 / 100 / 100`, `workflow-deduction.ts 100 / 99.18 / 100 / 100` |
+| typecheck | heavy slot, `npm run -s typecheck` (both tsc configs) | exit 0, no output |
+| lint | `npm run -s lint` | exit 0 |
+| API docs | `npm run -s docs:api` | exit 0 |
+| governance | `npm run -s check:governance -- --base release/0.3` | exit 0, `gated: 0 findings`, `history: 0 findings` |
+| spawn count | `git diff release/0.3 --stat -- test/core/workflow-next-spawn-count.test.ts` | empty: not edited; its pinned values hold in the full run |
+
+No CLI, help, `docs/cli-reference.md`, BDD or `.wingfoil/*.yaml` change, and no `version:` bump. The BDD P4.21
+scenarios belong to the writers (`task-294`, `task-295`); the "Edge — an adoption cannot pass a gate" scenario is
+pinned at the reader by core AC 1 (a). `release/0.3` had not moved (`git rev-parse --short release/0.3` printed
+`12147ed5`, this branch's base), so no sync was needed.
+
+### self-review (developer, 2026-10-24)
+
+- AC 1 (red-first): met. Core AC 1 (a)–(d) and the pure AC 1 tests pass. The adoption binds the instance and
+  completes `capture` from `created`, `triage` still awaits `bug-1`'s approval, an adoption into a checkpoint is no
+  record (after the fix above), and a commit missing the prefix or a trailer is read as nothing.
+- AC 2 (red-first): met. Core AC 2 (5 tests) and pure AC 2 (5 tests) pass: remapping keeps the scope or the record's
+  element, the chain gives `old → mid → new`, sibling rekeys apply oldest first, a later record becomes an orphan, and
+  another instance's rekey changes nothing.
+- AC 3 (red-first): met. The descendant owns; sibling claims conflict with the exact `file`, `path` and `message`;
+  D2 (a) holds for a linkage versus an adoption; the orphan texts and the diagnostics order hold; D3 (a) raises no
+  orphan for an unknown workflow.
+- AC 4 (characterization): met. Core AC 4 sees one `log` with `%(trailers`, the same subcommands as the fixture
+  without the records, and `workflow-next-spawn-count.test.ts` unedited (empty diff above).
+- AC 5 (characterization): met. Core AC 5 finds no `next`/`status` field but `baseline` and `diagnostics` changed and
+  no console line but the count. The existing `workflow-next-render`, `workflow-status-render` and
+  `workflow-repository-conformance` suites pass unedited (the 72-suite run and the full run).
+- **T4:** `git log --first-parent --no-merges --format=%h b083263f..HEAD -- test/workflow/provenance.test.ts
+  test/core/workflow-deduction-provenance.test.ts` printed nothing.
+- **Same class as the checkpoint fix:** the only other rule that reads what a step owns is `created` evidence
+  (`createdReachTargets`); it is evaluated only when the phase has a `memory.add`, so it is not affected.
+- **This repository:** no step key in its history's trailers is undeclared (design), and no `workflow: adopt|rekey`
+  commit exists, so `workflow status` gains no diagnostic.
+- **Absence claims, each with its positive case:** "no provenance diagnostic for an unknown workflow" is shown beside
+  the orphan raised for a loaded one (pure AC 3 diagnostics test). "No git process added" is shown with the walk's
+  `log` counted present (core AC 4).
+
+### Pending amendments (approver)
+
+- `spec-017-workflow-commands-and-state-deduction` — §4.8 "One owner" gains two sentences: a linkage and an
+  adoption are claims under one descends-from rule (D2 (a)); the orphans of an instance whose workflow is not loaded
+  raise no `W_PROVENANCE_ORPHAN` (D3 (a)). A Revision note (2026-10-24) is appended. It is uncommitted in this
+  worktree. Proposed `--reason`:
+  `Record the two readings of §4.8 "One owner" the approver ruled at task-293's design gate on 2026-10-24: a linkage and an adoption are claims under one descends-from rule (D2 (a)), and an instance of a workflow the registry does not load raises no W_PROVENANCE_ORPHAN (D3 (a)); no other section changes.`
+
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
-     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
-     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
-     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
-     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- A checkpoint read complete when its step key owned an element (`Deducer.leaf`'s record rule). It surfaced only
+  because the red suite pinned "an adoption is never `record`" on a checkpoint (core AC 1 (b)); it was fixed here in
+  green. Proposal: a characterization test per evidence rule that varies what a step owns.
+- The first full coverage run fell below the batch baseline only through re-export getters in `src/core/index.ts`
+  (function column 98.03 → 97.55). A barrel test covered them. Proposal: a design that adds barrel re-exports also
+  names the test that reads them.
+- Heavy-gate queue: the slot was granted at `15:20:15` and `15:52:26` (the `SLOT` lines of the two background runs),
+  and the typecheck of the second run ended at `16:27:41`. At 16:0x, `ls devloop-kit/slotq/` showed three waiting
+  tickets behind another worktree's coverage run. Two coverage runs were needed only because of the barrel finding
+  above.
