@@ -216,9 +216,13 @@ describe('workflow create and workflow remove (task-211, spec-017 §7.7–§7.8)
       expect(value.baseline).toEqual({ rev: 'HEAD', commit: before });
       expect(existsSync(join(repo, '.wingfoil/workflows/built-in/design-review.yaml'))).toBe(false);
       expect(read(repo, '.wingfoil/workflows/custom/design-review.yaml')).toBe('name: design-review\nstartable: true\nversion: 1.0\nphases:\n  - name: step-1\n');
-      // The manifest keeps every comment and gains one line after the last item, at its indentation.
+      // The manifest keeps every comment and gains one line after the last item, at its indentation; its
+      // `version:` is raised by the write (task-299, dl-174 (a): 1.0 → 1.1).
       expect(read(repo, '.wingfoil/workflows.yaml')).toBe(
-        MANIFEST.replace('  - workflows/custom/shared.yaml\n', '  - workflows/custom/shared.yaml\n  - workflows/custom/design-review.yaml\n'),
+        MANIFEST.replace('\nversion: 1.0\n', '\nversion: 1.1\n').replace(
+          '  - workflows/custom/shared.yaml\n',
+          '  - workflows/custom/shared.yaml\n  - workflows/custom/design-review.yaml\n',
+        ),
       );
       expect(out(repo, ['rev-parse', 'HEAD~1'])).toBe(before);
       expect(value.commit).toBe(head(repo));
@@ -331,7 +335,10 @@ describe('workflow create and workflow remove (task-211, spec-017 §7.7–§7.8)
       expect(value).toMatchObject({ name: 'arch-review', file: '.wingfoil/workflows/custom/arch-review.yaml' });
       expect(value.baseline).toEqual({ rev: 'HEAD', commit: before });
       expect(existsSync(join(repo, '.wingfoil/workflows/custom/arch-review.yaml'))).toBe(false);
-      expect(read(repo, '.wingfoil/workflows.yaml')).toBe(MANIFEST.replace('  - workflows/custom/arch-review.yaml\n', ''));
+      // The include line goes; the `version:` is raised by the write (task-299, dl-174 (a): 1.0 → 1.1).
+      expect(read(repo, '.wingfoil/workflows.yaml')).toBe(
+        MANIFEST.replace('\nversion: 1.0\n', '\nversion: 1.1\n').replace('  - workflows/custom/arch-review.yaml\n', ''),
+      );
       expect(out(repo, ['rev-parse', 'HEAD~1'])).toBe(before);
       expect(value.commit).toBe(head(repo));
       expect(out(repo, ['log', '-1', '--format=%s'])).toBe('wf(workflow): remove arch-review');

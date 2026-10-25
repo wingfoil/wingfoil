@@ -404,7 +404,7 @@ Normatively, for every `CoreOperation`:
    one-bump-per-branch rule applies to hand edits, and the task implementing this item states that in the
    directive. The operations: `dnaSet`, `dnaAdd`, `dnaUpdate`, `dnaRemove` (`spec-002`, `--force` included),
    `directiveAssign` (`spec-011`, the one writer of an existing `roles.yaml`), `workflowCreate` and `workflowRemove` (`workflows.yaml`, `spec-017` §7.7–§7.8). A file the operation writes
-   whole for the first time (`spec-011`'s missing `roles.yaml`) is written
+   whole for the first time (`spec-011`'s missing `roles.yaml`, and `spec-017` §7.7's missing `workflows.yaml`) is written
    with `version: 1.0` and is not raised. No operation writes `memory.yaml`.
 
 Which shipped and v0.3 operation reads which baseline, by the items above (the per-command form for
@@ -919,3 +919,8 @@ and the configuration writers' version rule.** For `patch-v0.3.1`: §3 gains the
 reason (`spec-017` §7.11–§7.12, `dl-187`); §6 gains item 7, the one statement of `dl-174` (a) that `spec-002`,
 `spec-011` and `spec-017` cite. Edited in place without a supersede or a state change (`dl-047`), pending the
 approver's `memory amend`.
+
+**Revision (2026-10-24, `task-299-raise-a-configuration-file-s-version-on-every-tool-write-dl-174`) — §6 item 7's
+first-time file.** A file written whole for the first time also names `workflowCreate`'s missing `workflows.yaml`
+(`spec-017` §7.7), which `withIncludeAdded` already writes as `version: 1.0`; the behaviour is unchanged (design gate
+D3, 2026-10-24).
