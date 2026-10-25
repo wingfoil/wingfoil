@@ -110,6 +110,10 @@ the move. Start from `.wingfoil/README.md`.
 - The workflow reads (`workflow list`, `show`, `next`, `status`, the MCP resource `wingfoil://workflows`) run on
   the pinned build since the pin reached a build that reads the `{ type, path }` form of a `produces` entry
   (`dl-104` D3); the workflow commands that write a commit stay on the code build with the Memory operations.
+  The same holds for the `manual: true` check binding (`dl-172` (a), `task-298`): the pinned 0.3.0 refuses it, so
+  until the pin reaches 0.3.1 the workflow reads run on the code build (`node dist/cli.js workflow …`), and
+  `npm run check:mcp` declares the three `wingfoil://workflows` Resources known failures of 0.3.0 — the
+  `pinned-build` bug `bug-414` records it.
 
 | File                                                       | Pillar                 | What it holds                                                                                                                                                                                        |
 |------------------------------------------------------------|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

@@ -17,8 +17,8 @@
  *
  * `user-docs`' `align-user-docs` phase produces both, and its `checks.post` covers them through two
  * checks: this suite (`presentation.current`, bound) and the recording itself (`demo.rendered`), a manual
- * step by the approver's ruling of 2026-10-10 — no binding, and a note that says how to install the tools,
- * render, and check the result, linked from the check.
+ * step by the approver's ruling of 2026-10-10 — bound `manual: true` since `task-298` (`dl-172` (a)), and a
+ * note that says how to install the tools, render, and check the result, linked from the check.
  *
  * Offline and deterministic: every file is read from the working tree; nothing is fetched from
  * shields.io, npm or GitHub (what a badge displays is the service's view, not the repository's).
@@ -234,9 +234,9 @@ describe('AC 3 — align-user-docs produces the tape and the GIF, and checks.pos
     ]);
   });
 
-  it('presentation.current runs this suite; demo.rendered is manual, so it has no binding', () => {
+  it('presentation.current runs this suite; demo.rendered is bound manual: true (dl-172 (a))', () => {
     expect(bindings.checks['presentation.current']?.run).toEqual(['npm', 'test', '--', 'test/docs/presentation.test.ts']);
-    expect(bindings.checks['demo.rendered']).toBeUndefined();
+    expect(bindings.checks['demo.rendered']).toEqual({ manual: true });
   });
 
   it('the demo.rendered check links the note that says how to render the GIF by hand', () => {

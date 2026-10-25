@@ -1219,7 +1219,9 @@ whole command.
 The other binding kinds:
 
 - `manual`: for a state change WingFoil has no command for yet, the commit subject the step expects, e.g.
-  `wf(task): start task-130 [backlog → in-progress]`, `wf(bug): sync bug-12 [in-review → in-progress]`;
+  `wf(task): start task-130 [backlog → in-progress]`, `wf(bug): sync bug-12 [in-review → in-progress]`; for an
+  action or a check that `workflows/bindings.yaml` binds `manual: true`, nothing more: a person performs or confirms
+  it, and a manual check raises no `W_WORKFLOW_UNBOUND_TOKEN`;
 - `run`: a command bound in `workflows/bindings.yaml`; `unbound`: none.
 
 Checks are listed with their binding and `"evaluated": false`: nothing is run. A step also reports the

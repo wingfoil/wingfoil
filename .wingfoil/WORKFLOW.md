@@ -588,7 +588,8 @@ built in (`agent.*` is `wingfoil agent execute` under the phase's role; the inst
 dl-153): a check to a `run` argument vector (`npm test`, `npm run lint`, `npm run docs:api`,
 `npm run typecheck`, `npm run check:lockfile`, `npm run check:mcp`, `node scripts/e2e-smoke.cjs`, …),
 an action to a command (`release-health.measure` / `.compare`, `node scripts/release-health/… --any-node --max-workers 2`) or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
-`approver.execute`). Token arguments are `key: value` pairs, substituted as whole argv elements, never
+`approver.execute`), and a check a person confirms on purpose is `manual: true` too (`demo.rendered`,
+dl-172 (a)). Token arguments are `key: value` pairs, substituted as whole argv elements, never
 through a shell. The prose checks no command asserts yet (`frontmatter.required: […]`,
 `spec-review.passed`, the specification-phase quality criteria, …) stay unbound: `workflow list` reports
 each as a `W_WORKFLOW_UNBOUND_TOKEN` warning, which fails closed once the engine runs checks (v1.0).

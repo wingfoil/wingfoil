@@ -1158,6 +1158,14 @@ the conformance test in the same commit: the specification sub-workflows gain `p
 phases stop being checkpoints; a check may be bound `manual: true` (`dl-172` (a)), and the prose checks this
 repository confirms by hand are declared so (`dl-186` Q6), which removes their `W_WORKFLOW_UNBOUND_TOKEN`.
 
+**Re-measured at `task-298`** (2026-10-25, on `release/0.3` with `task-293` and `task-299` merged, through
+`loadWorkflowRegistryAtHead`): 27 workflows, 105 phases, **0 errors and 86 warnings**, every one a
+`W_WORKFLOW_UNBOUND_TOKEN` on a check — 87 before `demo.rendered` was bound `manual: true` in
+`workflows/bindings.yaml` 2.5 (`dl-172` (a)). `test/core/workflow-repository-conformance.test.ts` lists the 86.
+The pinned 0.3.0 again does not load the workflow files, because it refuses the `manual: true` check binding: the
+figures are the code build's, and `npm run check:mcp` declares the three `wingfoil://workflows` Resources known
+failures of 0.3.0 until the pin reaches 0.3.1.
+
 ### 13. Open questions
 
 **Settled at this revision** (review recommendation or approver ruling):
@@ -1571,3 +1579,9 @@ the registry does not load raises no `W_PROVENANCE_ORPHAN` (D3 (a)). §2's `W_PR
 exception, and its `W_PROVENANCE_CONFLICT` row reads "two or more claims, at least one of them an adoption" instead
 of "two adoptions". Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend`.
+
+**Revision (2026-10-25, `task-298-let-a-workflow-check-be-bound-manual-dl-172`) — §12 re-measured.** After `task-298`
+binds `demo.rendered` `manual: true` (`dl-172` (a)), §12 records the load-time figures on `release/0.3` with
+`task-293` and `task-299` merged: 27 workflows, 105 phases, 0 errors, 86 warnings (87 before), all `W_WORKFLOW_UNBOUND_TOKEN` on
+checks; the pinned 0.3.0 refuses that binding, so the figures are the code build's and `check:mcp` declares the
+three workflow Resources known failures of 0.3.0 until the pin reaches 0.3.1. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

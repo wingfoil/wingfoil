@@ -41,14 +41,30 @@ const Args = z.record(
   }),
 );
 
-/** A check token's binding: a command and a severity (`dl-090` Q4; default `reject`). */
+/**
+ * A check token's binding: exactly one of `run` (a command, with a severity — `dl-090` Q4, default `reject`)
+ * or `manual: true` (a human confirms it on purpose — `dl-172` (a)), on which `severity` and `args` do not
+ * apply (spec-003 Layer 3). The default severity is filled after these checks, so a `severity` written on a
+ * manual binding is still seen and refused.
+ */
 export const CheckBinding = z
   .object({
-    run: Argv,
-    severity: z.enum(['warn', 'reject']).default('reject'),
+    run: Argv.optional(),
+    manual: z.literal(true).optional(),
+    severity: z.enum(['warn', 'reject']).optional(),
     args: Args.optional(),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((binding, ctx) => {
+    if ((binding.run === undefined) === (binding.manual === undefined)) {
+      ctx.addIssue({ code: 'custom', message: 'a check binding declares exactly one of run or manual' });
+    }
+    if (binding.manual === true) {
+      if (binding.severity !== undefined) ctx.addIssue({ code: 'custom', path: ['severity'], message: 'severity does not apply to a manual check binding' });
+      if (binding.args !== undefined) ctx.addIssue({ code: 'custom', path: ['args'], message: 'args does not apply to a manual check binding' });
+    }
+  })
+  .transform((binding) => (binding.run !== undefined && binding.severity === undefined ? { ...binding, severity: 'reject' as const } : binding));
 export type CheckBinding = z.infer<typeof CheckBinding>;
 
 /** An action token's binding: exactly one of `run` (a command) or `manual: true` (`dl-090` Q2 (c)). */
@@ -173,7 +189,7 @@ export interface TokenBinding {
    * which one applies follows spec-003's rule under the verb table (approval, last state, else start).
    */
   readonly expectedCommit?: { readonly type: string | null; readonly verbs: readonly ActionMemoryVerb[] };
-  /** A check binding's severity (`dl-090` Q4). */
+  /** A `run` check binding's severity (`dl-090` Q4); a manual check (`dl-172` (a)) has none. */
   readonly severity?: 'warn' | 'reject';
 }
 
@@ -254,7 +270,11 @@ export function resolveToken(token: string, role: 'action' | 'check', bindings: 
     if (bound) return bound.manual === true ? { kind: 'manual', source: 'project' } : { kind: 'run', source: 'project', argv: bound.run! };
   } else {
     const bound = bindings?.checks?.[name];
-    if (bound) return { kind: 'run', source: 'project', argv: bound.run, severity: bound.severity };
+    if (bound) {
+      // A manual check (`dl-172` (a)) is a binding, as a manual action is: no command and no severity.
+      if (bound.manual === true) return { kind: 'manual', source: 'project' };
+      return { kind: 'run', source: 'project', argv: bound.run!, severity: bound.severity ?? 'reject' }; // exactly one of run / manual
+    }
   }
   return { kind: 'unbound', source: 'none' };
 }
