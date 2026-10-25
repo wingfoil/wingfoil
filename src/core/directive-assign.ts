@@ -58,7 +58,7 @@ import type { DnaYaml } from '../dna/schema';
 import { setRoleAssignmentsInText } from '../directives/roles-edit';
 import { RolesYaml } from '../directives/schema';
 import { documentExists, readDocument, writeAndCommit } from '../storage';
-import { parseYaml, toValidationError, ValidationError } from '../validation';
+import { INITIAL_CONFIG_VERSION, parseYaml, raiseConfigVersion, toValidationError, ValidationError } from '../validation';
 import { newerFormatIssue, ROLES_YAML_FORMAT } from '../validation/format';
 
 import { requireConfinedWriteTarget } from './confinement';
@@ -332,7 +332,10 @@ function parseRoles(text: string, filePath: string): CoreResult<{ raw: Record<st
  * staging only that file.
  *
  * - A missing `roles.yaml` means "no bindings yet" (task-053's reading) and is created with a
- *   deterministic `dump` — there is nothing to preserve.
+ *   deterministic `dump` — there is nothing to preserve — under `version: 1.0`
+ *   ({@link INITIAL_CONFIG_VERSION}), and is not raised (`spec-011` item 5, task-299).
+ * - An existing `roles.yaml` written in place or under `--force` has its `version:` raised in the same
+ *   commit ({@link raiseConfigVersion}, `spec-006` §6 item 7, `dl-174` (a), task-299).
  * - An unchanged list is an idempotent success: nothing is written and no commit is made.
  * - The edit goes through `setRoleAssignmentsInText`, keeping every comment and unrelated line. When it
  *   cannot apply, the result is `CONFLICT` ({@link rolesRewriteConflict}) and the file is left
@@ -378,7 +381,7 @@ export function updateRoleAssignments(
   const exists = documentExists(filePath);
   const text = exists ? readDocument(filePath) : '';
 
-  let raw: Record<string, unknown> = { version: 1, assignments: {}, global: [] };
+  let raw: Record<string, unknown> = {};
   let current: readonly string[] = [];
   if (exists) {
     // Labelled repository-relative, never by the host path (task-179 review F5, `bug-245` class).
@@ -395,7 +398,8 @@ export function updateRoleAssignments(
 
   const wholeFile = (): string =>
     dump({ ...raw, assignments: { ...(raw.assignments as Record<string, unknown>), [role]: next } }, { lineWidth: -1 });
-  let serialized = exists ? setRoleAssignmentsInText(text, role, next) : wholeFile();
+  const firstFile = (): string => `version: ${INITIAL_CONFIG_VERSION}\n${dump({ assignments: { [role]: next }, global: [] }, { lineWidth: -1 })}`;
+  let serialized = exists ? setRoleAssignmentsInText(text, role, next) : firstFile();
   const warnings: string[] = [];
   const plannedWarnings: string[] = [];
   if (serialized === undefined) {
@@ -405,6 +409,8 @@ export function updateRoleAssignments(
     plannedWarnings.push(ROLES_REWRITE_PLANNED_WARNING);
   }
 
+  // dl-174 (a): the write raises the existing file's content revision; a first file carries 1.0.
+  if (exists) serialized = raiseConfigVersion(serialized);
   const sha = writeAndCommit(root, [{ path: ROLES_YAML_PATH, content: serialized }], message, {
     warnings,
     plannedWarnings,

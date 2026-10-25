@@ -178,12 +178,15 @@ describe('CORE_MODULES directive.directiveAssign — P3.2 scenarios (initialized
     expect(gitOut(repo, ['diff', '--cached', '--name-only'])).toBe('other.txt');
   });
 
-  // AC4 — comment/format preservation: exactly one added line, every other byte intact.
-  it('AC4: preserves every comment and line of roles.yaml — the diff is exactly one added item line', async () => {
+  // AC4 — comment/format preservation: exactly one added line, every other byte intact — beside the
+  // `version:` line the write raises (task-299, dl-174 (a): 1 → 1.1, one line replaced).
+  it('AC4: preserves every comment and line of roles.yaml — the diff is one added item line plus the raised version', async () => {
     const before = readRoles(repo);
     await directiveAssignFn()({ root: repo, options: { directive: 'testing', role: 'developer' } });
-    expect(readRoles(repo)).toBe(before.replace('    - determinism\n', '    - determinism\n    - testing\n'));
-    expect(gitOut(repo, ['diff', '--numstat', 'HEAD~1', 'HEAD'])).toBe(`1\t0\t${ROLES}`);
+    expect(readRoles(repo)).toBe(
+      before.replace('\nversion: 1\n', '\nversion: 1.1\n').replace('    - determinism\n', '    - determinism\n    - testing\n'),
+    );
+    expect(gitOut(repo, ['diff', '--numstat', 'HEAD~1', 'HEAD'])).toBe(`2\t1\t${ROLES}`);
   });
 
   // BDD Scenario 2: "Error - assigning to a role not defined in DNA".
@@ -255,7 +258,9 @@ describe('CORE_MODULES directive.directiveAssign — P3.2 scenarios (initialized
     const result = await directiveAssignFn()({ root: repo, options: { directive: 'security', role: 'approver' } });
     expect(result.ok).toBe(true);
     expect(readRoles(repo)).toBe(
-      before.replace('    - code-review\n\n# Global', '    - code-review\n  approver:\n    - security\n\n# Global'),
+      before
+        .replace('\nversion: 1\n', '\nversion: 1.1\n')
+        .replace('    - code-review\n\n# Global', '    - code-review\n  approver:\n    - security\n\n# Global'),
     );
     expect(loadRolesYaml(repo).assignments.approver).toEqual(['security']);
   });
@@ -422,11 +427,12 @@ describe('CORE_MODULES directive.directiveAssign — P3.7 scenarios (multi-direc
       role: 'developer',
       assignments: ['determinism', 'code-quality', 'security'],
     });
-    // Exactly two added lines, nothing removed or moved.
-    expect(gitOut(repo, ['diff', '--numstat', 'HEAD~1', 'HEAD'])).toBe(`2\t0\t${ROLES}`);
+    // Exactly two added lines, nothing else removed or moved; the `version:` line is raised (task-299:
+    // the seed write took it to 1.1, this one to 1.2), one line replaced.
+    expect(gitOut(repo, ['diff', '--numstat', 'HEAD~1', 'HEAD'])).toBe(`3\t1\t${ROLES}`);
     // Anchored on the `developer:` key — `- determinism` also occurs under `architect:`.
     expect(readRoles(repo)).toBe(
-      before.replace(
+      before.replace('\nversion: 1.1\n', '\nversion: 1.2\n').replace(
         '  developer:\n    - determinism\n',
         '  developer:\n    - determinism\n    - code-quality\n    - security\n',
       ),
@@ -602,7 +608,8 @@ describe('CORE_MODULES directive.directiveAssign — built-in assets, missing an
 
     const result = await directiveAssignFn()({ root: repo, options: { directive: 'testing', role: 'developer' } });
     expect(result.ok).toBe(true);
-    expect(readRoles(repo)).toBe('version: 1\nassignments:\n  developer:\n    - testing\nglobal: []\n');
+    // task-299 (dl-174 (a)): a file written whole for the first time is written `version: 1.0`.
+    expect(readRoles(repo)).toBe('version: 1.0\nassignments:\n  developer:\n    - testing\nglobal: []\n');
     expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD'])).toBe(ROLES);
     // task-169 AC3 / dl-062: "nothing to preserve", so no flag is needed and no warning is emitted.
     if (result.ok) expect(warningsOf(result)).toBeUndefined();
@@ -658,7 +665,8 @@ describe('CORE_MODULES directive.directiveAssign — built-in assets, missing an
     if (!result.ok) return;
     expect(result.value).toEqual({ directives: ['testing'], role: 'developer', assignments: ['code-quality', 'testing'] });
     expect(warningsOf(result)).toEqual([FORCE_REWRITE_WARNING]);
-    expect(readRoles(repo)).toBe('version: 1\nassignments:\n  developer:\n    - code-quality\n    - testing\nglobal:\n  - documentation\n');
+    // The dump normalizes `1.0` to `1`; the write then raises it (task-299, dl-174 (a)): `1.1`.
+    expect(readRoles(repo)).toBe('version: 1.1\nassignments:\n  developer:\n    - code-quality\n    - testing\nglobal:\n  - documentation\n');
     expect(gitOut(repo, ['rev-list', '--count', `${sha}..HEAD`])).toBe('1');
     expect(gitOut(repo, ['log', '-1', '--format=%s'])).toBe('wf(directive): assign testing to developer');
     expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD'])).toBe(ROLES);
@@ -672,7 +680,8 @@ describe('CORE_MODULES directive.directiveAssign — built-in assets, missing an
 
     const result = await directiveAssignFn()({ root: repo, options: { directive: 'testing', role: 'developer' }, force: true });
     expect(result.ok).toBe(true);
-    expect(readRoles(repo)).toBe('global: []\nassignments:\n  developer:\n    - code-quality\n    - testing\nversion: 1\n');
+    // The `version:` line stays last, raised by the write (task-299, dl-174 (a)).
+    expect(readRoles(repo)).toBe('global: []\nassignments:\n  developer:\n    - code-quality\n    - testing\nversion: 1.1\n');
   });
 
   it('--force on a file the editor CAN edit keeps the in-place edit and emits no warning', async () => {
@@ -681,7 +690,9 @@ describe('CORE_MODULES directive.directiveAssign — built-in assets, missing an
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(warningsOf(result)).toBeUndefined();
-    expect(readRoles(repo)).toBe(before.replace('    - determinism\n', '    - determinism\n    - security\n'));
+    expect(readRoles(repo)).toBe(
+      before.replace('\nversion: 1\n', '\nversion: 1.1\n').replace('    - determinism\n', '    - determinism\n    - security\n'),
+    );
   });
 
   it('--force with nothing to change writes nothing, commits nothing and emits no warning', async () => {

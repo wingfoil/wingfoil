@@ -102,7 +102,8 @@ describe('`wingfoil directive assign` — refuse the whole-file rewrite unless -
 
     expect(run.status).toBe(0);
     expect(run.stderr).toBe('');
-    expect(readFileSync(join(repo, ROLES_PATH), 'utf-8')).toBe('version: 1\nassignments:\n  developer:\n    - testing\nglobal: []\n');
+    // task-299 (dl-174 (a)): a file written whole for the first time is written `version: 1.0`.
+    expect(readFileSync(join(repo, ROLES_PATH), 'utf-8')).toBe('version: 1.0\nassignments:\n  developer:\n    - testing\nglobal: []\n');
     expect(gitOut(repo, ['show', '--name-only', '--format=', 'HEAD'])).toBe(ROLES_PATH);
   });
 });
