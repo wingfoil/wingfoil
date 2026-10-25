@@ -736,16 +736,16 @@ function matches(field: unknown, wanted: readonly string[]): boolean {
   return have.some((value) => wanted.includes(value));
 }
 
-/** The `key: value` arguments of a token's parenthesised list, split at top-level commas, in order (quotes and brackets kept). */
+/**
+ * The `key: value` arguments of a token's parenthesised list, split at top-level commas, in order (quotes and brackets
+ * kept). Called on `memory.add(type: T, …)` tokens, which always carry the list; a part with no `:` is no argument.
+ */
 function tokenArguments(token: string): [string, string][] {
-  const open = token.indexOf('(');
-  const close = token.lastIndexOf(')');
-  if (open === -1 || close < open) return [];
   const parts: string[] = [];
   let depth = 0;
   let quote: string | null = null;
   let current = '';
-  for (const char of token.slice(open + 1, close)) {
+  for (const char of token.slice(token.indexOf('(') + 1, token.lastIndexOf(')'))) {
     if (quote !== null) {
       if (char === quote) quote = null;
     } else if (char === '"' || char === "'") quote = char;
@@ -872,7 +872,7 @@ class Deducer {
     /** Each walk as deduction reads it, provenance resolved (§4.8): records remapped, linkages and adoptions owned. */
     private readonly histories: ReadonlyMap<string, InstanceHistory>,
     /** The elements, by `<type>:<id>`, that have an owner or are in a conflict (§4.8): never adoption candidates. */
-    private readonly owned: ReadonlySet<string> = new Set(),
+    private readonly owned: ReadonlySet<string>,
   ) {
     // Names are unique: the registry refuses a duplicate at load time (`spec-003`), so no entry is overwritten.
     snapshot.workflows.forEach((workflow, i) => {

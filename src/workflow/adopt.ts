@@ -96,7 +96,8 @@ export function planAdoptions(snapshot: DeductionSnapshot, instanceId: string): 
       }
     }
     if (!adopted) break;
-    frontier = resolveInstanceRef(deduceWorkflowState(current), instanceId)?.frontier ?? [];
+    // Simulated adoptions add no plan: the instance is still open in the copy.
+    frontier = resolveInstanceRef(deduceWorkflowState(current), instanceId)!.frontier;
   }
   return { instance: instanceId, steps: [...recorded, ...steps] };
 }

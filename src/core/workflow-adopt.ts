@@ -34,6 +34,7 @@ import { resolveProvenance } from '../workflow/provenance';
 import { requireApproverAuthority } from './approval-authority';
 import { parseElementRef } from './element-ref';
 import { requireGitIdentity, type GitIdentity } from './git-identity';
+import { missingOperandReason } from './registry';
 import { adoptionSubject, adoptionTrailers, writeProvenanceRecord } from './provenance-record';
 import { optionalReason, requireReason } from './require-reason';
 import { coreErr, coreOk, type CoreResult } from './types';
@@ -89,15 +90,15 @@ export interface AdoptRequest {
   readonly options?: Readonly<Record<string, string>>;
 }
 
-/** A frontmatter scalar as text (a string or a number), else `null`. */
-function scalarText(value: unknown): string | null {
-  return typeof value === 'string' || typeof value === 'number' ? String(value) : null;
+/** A frontmatter value as text. */
+function fieldText(value: unknown): string {
+  return String(value);
 }
 
 /** The element `<type>:<id>` as `HEAD` holds it, or `null`. */
 function elementAt(documents: readonly MemoryDocumentSummary[], type: string, id: string): ElementRef | null {
-  const found = documents.find((entry) => scalarText(entry.frontmatter['type']) === type && scalarText(entry.frontmatter['id']) === id);
-  return found === undefined ? null : { type, id, status: scalarText(found.frontmatter['status']) ?? '' };
+  const found = documents.find((entry) => fieldText(entry.frontmatter['type']) === type && fieldText(entry.frontmatter['id']) === id);
+  return found === undefined ? null : { type, id, status: fieldText(found.frontmatter['status']) };
 }
 
 /** Ascending `(type, id)`. */
@@ -219,8 +220,10 @@ export function workflowAdoptAtHead(root: string, request: AdoptRequest): CoreRe
     named = parsed.value;
   }
   const reason = plan && !apply ? optionalReason(request.options) : requireReason(request.options);
-  // A required positional: the registrar refuses its absence before the operation runs.
-  const ref = request.ref ?? '';
+  // A required positional: the CLI registrar refuses its absence before the operation runs; an in-process caller
+  // that leaves it out gets the same usage refusal.
+  const ref = request.ref;
+  if (ref === undefined) throw new UsageError(missingOperandReason('ref'));
 
   if (!plan) {
     const identity = requireGitIdentity(root);
