@@ -888,9 +888,12 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
         expect(check.detail).toMatch(new RegExp(`OK: Kanban ${version.replace(/\./g, '\\.')}.* ${version.replace(/\./g, '\\.')}`));
       });
 
-      // Full smoke runs (each drives every template's scenario and agent run before the journey).
+      // Full smoke runs (each drives every template's scenario and agent run before the journey). Since task-294 the
+      // scenario itself runs `workflow start sw-life-cycle` and `workflow finalize <instance>` before its adopt probe,
+      // so each fault names an argv prefix only the journey's invocations carry (`workflow start deliver`, the
+      // journey's `workflow finalize --step …`).
       it('[Scrum] a workflow finalize that claims success and records nothing fails the journey check (proxy noop)', () => {
-        const report = smokeWithFault('noop@workflow finalize');
+        const report = smokeWithFault('noop@workflow finalize --step');
         expect(report.ok).toBe(false);
         expect(lastCheck(report)).toMatchObject({ label: `[Scrum/journey] ${LABEL_PATH}`, ok: false });
         expect(lastCheck(report).detail).toContain('FAIL:');
@@ -900,7 +903,7 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
       });
 
       it('[Scrum] a workflow start that exits 1 fails the journey check, naming both codes', () => {
-        const report = smokeWithFault('exit=1@workflow start');
+        const report = smokeWithFault('exit=1@workflow start deliver');
         expect(report.ok).toBe(false);
         expect(lastCheck(report)).toMatchObject({ label: `[Scrum/journey] ${LABEL_PATH}`, ok: false });
         expect(lastCheck(report).detail).toContain('expected exit 0, got 1');

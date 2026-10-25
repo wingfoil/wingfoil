@@ -325,6 +325,22 @@ export interface DeducedAction {
   };
 }
 
+/**
+ * One type a step's phase adds (`dl-187` rule 2: a `memory.add(type: T)` action or a `{ type: T, path }` produces
+ * entry), with what the step created of it and, when it created none, the elements `workflow adopt` may adopt into
+ * it (`spec-017` §7.11 "Candidates", rule 5; task-294 design D2).
+ */
+export interface StepAddition {
+  readonly type: string;
+  /** The step's created elements of `type` (§4.8 linkage or adoption), ascending `(type, id)`. */
+  readonly created: readonly ElementRef[];
+  /**
+   * `[]` unless `created` is empty: the elements of `type` at `HEAD`, not archived (§4.11), neither owned nor in a
+   * conflict (§4.8), matching the declared rules, ascending `(type, id)`.
+   */
+  readonly candidates: readonly ElementRef[];
+}
+
 /** A leaf step on an instance's frontier (`spec-017` §4.9; the part of §8's `Step` deduction decides). */
 export interface DeducedStep {
   /** `<workflow>.<phase>`, then `@<type>:<id>` or `@<collection>#<key>` when the step runs on a scope. */
@@ -366,6 +382,12 @@ export interface DeducedStep {
   readonly approval: { readonly elements: readonly ElementRef[]; readonly recordNeeded: boolean } | null;
   /** The phase's actions, resolved (§4.1, §4.2), in declared order (task-216). */
   readonly actions: readonly DeducedAction[];
+  /**
+   * The types the phase adds — `memory.add(type: T)` actions, then `{ type: T, path }` entries, deduplicated, in
+   * declared order — each with its created elements and adoption candidates (`spec-017` §7.11, task-294); `[]` when
+   * the phase adds nothing. Internal to `workflow adopt`: `workflow next` does not report it.
+   */
+  readonly additions: readonly StepAddition[];
 }
 
 /** How an `iterate_over` phase's candidates stand (`spec-017` §4.6, §4.7, §8). */
@@ -714,6 +736,52 @@ function matches(field: unknown, wanted: readonly string[]): boolean {
   return have.some((value) => wanted.includes(value));
 }
 
+/** The `key: value` arguments of a token's parenthesised list, split at top-level commas, in order (quotes and brackets kept). */
+function tokenArguments(token: string): [string, string][] {
+  const open = token.indexOf('(');
+  const close = token.lastIndexOf(')');
+  if (open === -1 || close < open) return [];
+  const parts: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let current = '';
+  for (const char of token.slice(open + 1, close)) {
+    if (quote !== null) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") quote = char;
+    else if (char === '[' || char === '{') depth += 1;
+    else if (char === ']' || char === '}') depth -= 1;
+    else if (char === ',' && depth === 0) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  parts.push(current);
+  return parts.flatMap((part): [string, string][] => {
+    const colon = part.indexOf(':');
+    return colon === -1 ? [] : [[part.slice(0, colon).trim(), part.slice(colon + 1).trim()]];
+  });
+}
+
+/** The arguments `workflow adopt` never matches on: the type itself, and the title (`dl-187` rule 5). */
+const UNMATCHED_ARGUMENTS: readonly string[] = ['type', 'title'];
+
+/**
+ * The declared rules of one `memory.add(type: T, …)` action (task-294 design D2): each scalar argument but `type`
+ * and `title`, unquoted, with its tokens resolved in `frames`, as `[field, value]`. A list argument, and one whose
+ * tokens do not all resolve, is no rule.
+ */
+function declaredRules(token: string, frames: readonly Frame[]): [string, string][] {
+  return tokenArguments(token).flatMap(([field, raw]): [string, string][] => {
+    if (UNMATCHED_ARGUMENTS.includes(field) || raw.startsWith('[')) return [];
+    const unquoted = /^(["'])(.*)\1$/s.exec(raw)?.[2] ?? raw;
+    const value = resolveTokens(unquoted, frames).value;
+    return value === null ? [] : [[field, value]];
+  });
+}
+
 // --- The walk ----------------------------------------------------------------------------------------
 
 /** What one evaluation of a workflow on a scope yields. */
@@ -803,6 +871,8 @@ class Deducer {
     elements: readonly Element[],
     /** Each walk as deduction reads it, provenance resolved (§4.8): records remapped, linkages and adoptions owned. */
     private readonly histories: ReadonlyMap<string, InstanceHistory>,
+    /** The elements, by `<type>:<id>`, that have an owner or are in a conflict (§4.8): never adoption candidates. */
+    private readonly owned: ReadonlySet<string> = new Set(),
   ) {
     // Names are unique: the registry refuses a duplicate at load time (`spec-003`), so no entry is overwritten.
     snapshot.workflows.forEach((workflow, i) => {
@@ -1353,6 +1423,7 @@ class Deducer {
     }
 
     const actions = this.actionsOf(instanceId, startCommit, workflow, p, frames, exit, scope, created, selected, report);
+    const additions = this.additionsOf(phase, frames, created);
     const reentry = newest(reentries);
 
     return {
@@ -1373,10 +1444,39 @@ class Deducer {
         reentryFallback: reentry?.fallback ?? null,
         approval: phase.approval === undefined ? null : { elements: awaitingElements(actions, exit), recordNeeded: approvalRecord },
         actions,
+        additions,
       },
       diagnostics,
       selected,
     };
+  }
+
+  /**
+   * The types `phase` adds, each with the step's created elements of it and, when it created none, its adoption
+   * candidates (`spec-017` §7.11 "Candidates", rule 5; task-294 design D2): an element of `T` at `HEAD`, not archived,
+   * not in {@link Deducer.owned}, that meets the rules of at least one `memory.add(type: T, …)` action of the phase
+   * (every scalar argument but `type` and `title`, literal or with every token resolved in `frames`; a list argument
+   * or one whose tokens do not resolve is no rule) and, for each `{ type: T, path }` entry, whose path is the entry's
+   * path resolved with it as the `T` frame. Never by title or similarity.
+   */
+  private additionsOf(phase: Phase, frames: readonly Frame[], created: readonly Element[]): StepAddition[] {
+    const adds = (phase.actions ?? []).filter((action) => tokenName(action) === 'memory.add');
+    const paths = (phase.produces ?? []).filter((entry): entry is { type: string; path: string } => typeof entry !== 'string');
+    const types: string[] = [];
+    for (const type of [...adds.map(memoryAddType), ...paths.map((entry) => entry.type)]) if (type !== null && !types.includes(type)) types.push(type);
+    return types.map((type) => {
+      const own = created.filter((element) => element.type === type).map(refOf);
+      if (own.length > 0) return { type, created: own, candidates: [] };
+      const ruleSets = adds.filter((action) => memoryAddType(action) === type).map((action) => declaredRules(action, frames));
+      const typed = paths.filter((entry) => entry.type === type);
+      const candidates = this.elements
+        .filter((element) => element.type === type && !isArchivedStatus(element.status) && !this.owned.has(keyOf(element)))
+        .filter((element) => ruleSets.length === 0 || ruleSets.some((rules) => rules.every(([field, value]) => matches(element.frontmatter[field], [value]))))
+        .filter((element) => typed.every((entry) => resolveTokens(entry.path, [...frames, { kind: 'element', type, element, pending: false }]).value === element.path))
+        .map(refOf)
+        .sort(compareRefs);
+      return { type, created: [], candidates };
+    });
   }
 
   /**
@@ -1600,7 +1700,8 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
     snapshot,
     open.flatMap(({ plan, start }) => (start === undefined ? [] : [{ id: plan.id, startCommit: start.commit }])),
   );
-  const deducer = new Deducer(snapshot, elements, provenance.history);
+  const owned = new Set([...provenance.owners.keys(), ...provenance.conflicts.map((conflict) => keyOf(conflict.element))]);
+  const deducer = new Deducer(snapshot, elements, provenance.history, owned);
   const provenanceDiagnostics = provenanceDiagnosticsOf(provenance, open, (name) => deducer.workflow(name) !== undefined, plans);
 
   const unknownDiagnostics: Diagnostic[] = [];

@@ -7,7 +7,10 @@
  * - **subject** — `wf({type}): {verb} {id1}, {id2}`, with `{verb}` one of the eleven declared verbs
  *   (`spec-008` §2, `dl-079` (A); `assign` only in its canonical form, approver ruling 2026-10-01) and
  *   `{type}` a type of the `memory.yaml` committed at that commit. Configuration scopes (`wf(dna)`,
- *   `wf(directive)`, `wf(workflow)`) are not Memory operations and are skipped.
+ *   `wf(directive)`, `wf(workflow)`) are not Memory operations and are skipped. So are the records written
+ *   outside the `wf()` grammar — `workflow: finalize …`, `workflow: adopt …`, `workflow: rekey …` and
+ *   `agent: record …` (`spec-017` §4.8, §7.9, §7.11–§7.12; `spec-016` §4.4): they are "other commits", held
+ *   only to the `status-outside-wf` check below (task-294).
  * - **bracket** — none on `add`, `submit` and `assign`; on every other verb the canonical
  *   `[from → to]` (U+2192, single spaces, closing the subject). Only `sync` chains; `deprecate` ends in
  *   `deprecated`; `amend` is the self-loop `[s → s]`; `park` is one hop between two different states (the
