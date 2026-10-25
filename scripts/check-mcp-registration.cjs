@@ -56,9 +56,9 @@ const MCP_CHANNELS = Object.freeze(['prompts', 'resources', 'tools']);
  */
 const EXPECTED_CHANNELS = Object.freeze(['prompts', 'resources', 'tools']);
 
-/** Why 0.3.0 cannot read this repository's workflows (task-298, `dl-172` (a)): one reason for its three Resources. */
+/** Why 0.3.0 cannot read this repository's workflows (`bug-414`; task-298, `dl-172` (a)): one reason for its three Resources. */
 const MANUAL_CHECK_ON_0_3_0 =
-  'task-298: 0.3.0 requires run on every check binding and refuses the { manual: true } check binding dl-172 (a) adds (demo.rendered in workflows/bindings.yaml); it ends when advance-pinned-build moves the pin to 0.3.1';
+  'bug-414 (task-298): 0.3.0 requires run on every check binding and refuses the { manual: true } check binding dl-172 (a) adds (demo.rendered in workflows/bindings.yaml); it ends when advance-pinned-build moves the pin to 0.3.1';
 
 /**
  * The reads the pinned build is known to fail, by its version (task-239, `bug-292`). Each entry applies only

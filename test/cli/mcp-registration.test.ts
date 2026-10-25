@@ -209,7 +209,7 @@ describe('scripts/check-mcp-registration.cjs — every Resource is read, every P
       ['0.3.0', 'wingfoil://workflows/-/next'],
       ['0.3.0', 'wingfoil://workflows/-/status'],
     ]);
-    for (const entry of KNOWN_READ_FAILURES) expect(entry.reason).toMatch(/task-298.*manual: true.*0\.3\.1/);
+    for (const entry of KNOWN_READ_FAILURES) expect(entry.reason).toMatch(/^bug-414 \(task-298\).*manual: true.*0\.3\.1/);
   });
 
   it('observes the build under development as `node dist/cli.js mcp`', () => {

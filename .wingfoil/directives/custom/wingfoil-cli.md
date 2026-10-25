@@ -53,7 +53,7 @@ run WingFoil from its own source, so the rule has no meaning in a project scaffo
   the `pinned-build` search of §3 lists the closed bug that recorded it. The same exception holds again while
   the pin is 0.3.0: it refuses the `manual: true` check binding (`dl-172` (a)), so until the pin reaches 0.3.1
   the reads run on the code build (`node dist/cli.js workflow …`), and `npm run check:mcp` declares the three
-  `wingfoil://workflows` Resources known failures of 0.3.0.
+  `wingfoil://workflows` Resources known failures of 0.3.0. The `pinned-build` bug of §3 records it, as §2 requires.
 - **Why the pinned build for the reads and MCP.** They answer as the build WingFoil's users have
   (`dl-095` Q1 (a), Q2 (i)), so the pinned build's surprises surface here, where they can be filed.
 - **Which version is pinned** is what `package.json` declares for `wingfoil-released`
