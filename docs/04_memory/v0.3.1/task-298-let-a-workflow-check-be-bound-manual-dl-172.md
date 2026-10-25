@@ -239,6 +239,70 @@ passed` (red had 14 failed / 98 passed on its four files).
   is an approver decision (the coordinator's report lists the options). The `spec-017` §12 amendment stays
   uncommitted in the tree.
 
+### refactor (developer, 2026-10-25) — continued after the approver's ruling (a)
+
+**Ruling (2026-10-24, option (a)).** Declare the three pinned-build reads known failures of 0.3.0, as task-239 did for
+0.2.2 (`git show f9226c3b -- scripts/check-mcp-registration.cjs`: the 0.2.2 entry, removed by `7a473a45` at the 0.3.0
+pin advance), and record the code-build rule in AGENTS.md §3.
+
+- Sync: `git merge --no-edit release/0.3` → `1e44ae2d` (task-299 at `8ecd3890`; §7 trailers added). `git diff
+  --name-only 9983a199 1e44ae2d` names no `.wingfoil/workflows/` file; `docs/cli-reference.md` merged without conflict.
+- `dd17ecf7`: `scripts/check-mcp-registration.cjs` `KNOWN_READ_FAILURES` gains `wingfoil://workflows`, `-/next`,
+  `-/status` on `0.3.0`, one reason constant naming task-298 / dl-172 (a) and the 0.3.1 pin as the end;
+  `test/cli/mcp-registration.test.ts` pins the three `[version, uri]` and the reason (was `toEqual([])`; red never
+  touched the file); AGENTS.md §3's workflow-reads bullet extended (one bullet, no new section).
+  `npm run -s check:mcp` → exit 0, three `known failure` lines, and "the build under development (dist/cli.js) …
+  every listed Resource read and Prompt get answered".
+- `8582fd7c`: `test/workflow/bindings-check-severity.test.ts` (mine): a `run` check built without `severity`
+  resolves to `reject` — the `?? 'reject'` branch of `resolveToken` the coverage run reported uncovered
+  (`bindings.ts … 98.87 … 276`); `resolveToken` is total over `BindingsYaml`, whose type keeps `severity` optional.
+- `54d1e9c0` (same class as the AGENTS.md bullet): `.wingfoil/directives/custom/wingfoil-cli.md` 1.2 → 1.3 — §1's
+  "workflow commands split" bullet says the reads run on the code build while the pin is 0.3.0. The directive is the
+  rule AGENTS.md §3 summarizes; leaving it at "reads on the pinned build" would contradict the new bullet.
+  `npx jest test/directives test/lint` → `Tests: 292 passed`.
+
+**Gates** (worktree with the `spec-017` amendment uncommitted):
+- Full suite under the slot (`waitslot.sh`, `npm test -- --maxWorkers=2`, at `dd17ecf7`) → exit 0, `Test Suites: 476
+  passed, 476 total`, `Tests: 8575 passed, 8575 total` (`test/cli/mcp-registration.test.ts` included).
+- Coverage under the slot (`npx jest --coverage --maxWorkers=2`, = `npm run test:coverage` with the worker cap) →
+  exit 0, `All files | 99.35 | 97.45 | 98.09 | 99.72`, each column ≥ the w0 baseline 99.34 / 97.39 / 98.03 / 99.71
+  (plan, w0 gate line); `bindings.ts | 100 | 98.87 | 100 | 100` before `8582fd7c`, line 276 no longer uncovered
+  after it (`npx jest --coverage --collectCoverageFrom=src/workflow/bindings.ts …` lists no 276).
+- `npm run -s lint` → exit 0; `npm run -s docs:api` → exit 0; `npm run -s typecheck` (both configs, under the slot)
+  → exit 0; `node scripts/check-governance.cjs --base release/0.3` → exit 0, "gated: 0 findings", "history: 0
+  findings".
+- After `54d1e9c0`: the `docs.parity` suites, the conformance test, `mcp-registration` and `test/directives` →
+  `Test Suites: 22 passed`, `Tests: 298 passed`.
+- Re-measure after the sync (`loadWorkflowRegistryAtHead`, `dist/core`) → `workflows 27 phases 105`,
+  `{"warning W_WORKFLOW_UNBOUND_TOKEN":86}`, no `demo.rendered` row: the §12 amendment's figures hold.
+
+### self-review (developer, 2026-10-25)
+
+- AC 1: `CheckBinding` refuses both/neither at `checks.<t>`, `severity` and `args` on a manual check, `manual:
+  false` — red's `workflow-evidence` rows and exact messages pass (127-test targeted run, then the full suite).
+- AC 2: a manual check resolves `{ kind: 'manual', source: 'project' }`; no `W_WORKFLOW_UNBOUND_TOKEN`
+  (workflow-diagnostics.ts:423 unchanged, keyed on `'unbound'`); `workflow next` / `show` report `manual`,
+  `evaluated: false`, `awaits.evidence` included (`workflow-manual-check.test.ts` passes).
+- AC 3: `demo.rendered: { manual: true }` in `bindings.yaml` 2.5 (one bump: `git show release/0.3:… | grep -m1
+  ^version` → 2.4); the conformance row removed in the same commit `342ba597`; 86 warnings measured; the
+  `spec-017` §12 re-measure is the pending amendment below.
+- Positive cases: an unbound prose check still warns (red's AC 2 loader test, `phases[0].checks.post[1]`); a run
+  check keeps `severity: 'reject'` (`workflow-evidence` "a valid file …", unchanged, passes).
+- T4: `git log --first-parent --no-merges --format=%h 39f31ab0..HEAD -- test/core/workflow-evidence.test.ts
+  test/workflow/bindings.test.ts test/docs/presentation.test.ts test/core/workflow-manual-check.test.ts` → empty;
+  `git diff --stat 39f31ab0 HEAD` on the four → empty.
+- Same class: "a check binding has no manual form" left only in `bindings.yaml`'s 1.8 history segment (history);
+  the pinned-build rule updated in both its places (AGENTS.md §3, `wingfoil-cli` §1); `docs/assets/README.md:73`
+  ("done by hand") still true.
+- No linked bugs (`bug: []`).
+
+### Pending amendments (approver)
+
+- `spec-017-workflow-commands-and-state-deduction` (§12 "Re-measured at `task-298`" paragraph and a dated Revision
+  note, additions only on top of `1fbf5cbc`): `--reason "Record the re-measure of §12 after task-298 binds
+  demo.rendered manual: true (dl-172 (a)): 27 workflows, 105 phases, 0 errors and 86 W_WORKFLOW_UNBOUND_TOKEN
+  warnings on checks, 87 before, measured on release/0.3 with task-293 and task-299 merged."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -250,3 +314,6 @@ passed` (red had 14 failed / 98 passed on its four files).
 - A new `bindings.yaml` form broke the pinned build (0.3.0) on this repository: `npm run check:mcp` and `npm run -s
   wingfoil -- workflow list` exit 1 after `342ba597`; the design read the code build only. Proposal: a design that
   changes the shape of a `.wingfoil/` file loads it with the pinned build (`npm run check:mcp`) before red.
+- F30 (the pinned-build failure above): resolved by the approver's option (a) on 2026-10-24 — known failures of
+  0.3.0 in `check:mcp` (`dd17ecf7`), the code-build rule in AGENTS.md §3 and `wingfoil-cli` 1.3 (`54d1e9c0`); they
+  end at `advance-pinned-build` to 0.3.1, which the check enforces by failing once a declared read answers.
