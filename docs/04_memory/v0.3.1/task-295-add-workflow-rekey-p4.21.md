@@ -317,6 +317,17 @@ is chosen, `spec-008` §12's rekey row also needs a reading (the name class).
   Templates charter renames step keys, R6).
 - **This repository:** no `workflow rekey` runs here (approver ruling); scratch and fixture repos only.
 
+#### Design gate (approver, 2026-10-24)
+
+Rulings on the design decisions above:
+- D1–D9 accepted as recommended (option (a) each): D1 the refusal order as designed (usage, identity, authority
+  before the instance, still declared, unknown step, no-op, no record names `<from>`); D2 `--from`/`--to` two
+  `[a-z][a-z0-9-]*` segments with one dot; D3 `--to` any declared `<workflow>.<phase>`; D4 `remapped` counts entries;
+  D5 the no-op result `remapped: 0`, `commit: null`, `next` at HEAD; D6 the console text as designed; D7 `task-294`'s
+  red edits the four registry tests, this task's green adds the rekey entries; D8 a hand-written adoption commit in
+  the BDD fixture; D9 one `command-baseline` sentence.
+- Green starts after `task-294` is merged into `release/0.3` (plan ruling W1-3).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
