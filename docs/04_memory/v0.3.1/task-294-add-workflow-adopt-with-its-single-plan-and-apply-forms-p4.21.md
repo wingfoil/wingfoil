@@ -592,6 +592,68 @@ the expected `life.seed` entry (pure and in-process), and `Expected: 4 Received:
 `Expected length: 1 Received length: 2` (`life.seed-a` and `life.seed-b` both list `rl-v1`, pure and in-process), and
 `refused: CONFLICT: step 'life.seed-b' is not on the frontier of life-1-plan` on `--apply`.
 
+### fixes after the review reject (developer, 2026-10-25)
+
+The reject `2f581d78`, read with `node dist/cli.js memory history task-294-… --format json`, printed the entry `reject
+in-review in-progress` and a `Reason:` with four items. The approver's rulings of 2026-10-25 re-rule D1 for `--plan`
+(option (a)) and give findings 2, 4 and 5; finding 3 is the coordinator's F34, outside this task. The qa agent wrote
+the red after review in `bc82e297`. **Fix commit `596b1d89`.**
+
+- **Item 1: a string `produces` path through the created element (D1 re-ruled).** `planAdoptions`
+  (`src/workflow/adopt.ts`) now lists a frontier step as blocked on a creation when simulating the adoption of a
+  candidate (its first, in id order) empties the step's missing evidence other than `record`: the step leaves the
+  frontier, or stays with only `record` missing. A step with no candidate keeps D1 as first ruled.
+  - Evidence: `npx jest test/workflow/adopt-plan test/core/workflow-adopt test/workflow/deduce-additions
+    test/core/provenance-record test/cli/workflow-adopt.integration --maxWorkers=2` printed `Tests: 120 passed, 120
+    total`. This includes the 8 tests of `bc82e297`, which were 6 failed and 2 passed at red: `life.seed` listed with
+    `rl-v1` behind a string `produces: "docs/planning/{id}.md"`, and `--plan --apply` writing one empty commit with the
+    gate after it still held.
+  - The red suites of `f4bc7693` (`adopt-plan`, `workflow-adopt-plan`) still pass in that run: a string `produces`
+    naming a fixed file still stops the step, and several candidates are still listed.
+- **Item 2: one simulated adoption per deduction (finding 2).** The walk deduces again after each simulated adoption
+  (`continue walk`), so two frontier steps sharing one candidate never both get it, and `--plan --apply` writes
+  exactly the proposed keys.
+  - Evidence: the finding-2 tests of `bc82e297`, in the 120-test run above. `life.seed-a` gets `rl-v1` once; the second
+    step is deduced again as `life.seed-b@release-line:rl-1` with `candidates: []`; `--apply` writes one commit,
+    `workflow: adopt life-1-plan life.seed-a release-line:rl-v1`.
+- **Item 3: re-aim the narrowed fault test (finding 4).** The noop fault aims at the record-writing `workflow finalize`
+  (`run.sh`'s `expect_exit 0 workflow finalize`) again, through a new exact-argv form of the smoke proxy's
+  `SMOKE_FAULT`: `<kind>@=<argv>`, in `test/fixtures/smoke/wingfoil-proxy.cjs`, which is no red file. The test now
+  pins the FAIL line that finalize causes: `FAIL: commits written: expected '1', got '0'`.
+  - Evidence: `npx jest test/cli/e2e-smoke.test.ts test/cli/e2e-smoke-adopt-probe.test.ts
+    test/cli/e2e-smoke-journey-shim.test.ts --maxWorkers=2` printed `Tests: 79 passed, 79 total`.
+- **Item 4: wrap the spec-017 §7.11 edit (finding 5).**
+  - The three bullets (single form, candidates, `--plan`) are rewritten at the file's width.
+  - The `--plan` bullet states the re-ruled D1 and the one-adoption-per-deduction rule.
+  - The Revision note names the review ruling.
+  - Evidence: `git diff -U0 <spec> | grep "^+" | awk '{ if (length($0)>121) print }'` printed nothing, and no added
+    line splits a code span (an awk count of backticks printed nothing). The edit is still uncommitted;
+    `name-resolvability` passed on it (11 tests).
+- **Sync.** `release/0.3` moved to `80ea2ddd` (`task-298`, then the approver's spec-017 §12 commit). The spec-017 edit
+  was set aside with `git stash push -- <spec>` and then `git merge --no-edit release/0.3` gave `ff569fc6`. `git stash
+  pop` conflicted only on the appended Revision notes: `task-298`'s §12 note and this task's §7.11 note sit at one
+  spot. Both are kept, the §12 note first. The edit was then unstaged so it stays uncommitted, and the stash dropped.
+
+**T4.** `git log --first-parent --no-merges --format='%h %s' f4bc7693..HEAD -- <the files of f4bc7693 and bc82e297>`
+printed `bc82e297` (red after review) and `68c62492` (red send-back), both the qa agent's, and none of mine.
+
+**Gates after the sync** (the `spec-017` edit uncommitted in the tree):
+
+| Gate | Command | Result |
+|---|---|---|
+| tests and coverage | slot 20:47:37, `npm run -s test:coverage -- --maxWorkers=2` | `Test Suites: 493 passed`, `Tests: 8763 passed, 8763 total`; `All files 99.36 / 97.5 / 98.16 / 99.72`, each at or above the w0 baseline `99.34 / 97.39 / 98.03 / 99.71` |
+| typecheck | same slot, `npm run -s typecheck` | exit 0 |
+| lint | `npm run -s lint` | exit 0 |
+| API docs | `npm run -s docs:api` | exit 0 |
+| governance | `npm run -s check:governance -- --base release/0.3` | exit 0, `gated: 0 findings`, `history: 0 findings` |
+| MCP | `npm run -s check:mcp` | exit 0; the pinned 0.3.0 shows the three known failures (`bug-414`, `task-298`), and the build under development answers every Resource read and Prompt get |
+
+An earlier full run, started before `task-298` merged, was stopped with the task tool and its result was not used.
+
+**Pending amendment (replaces the `--reason` above).** `spec-017-workflow-commands-and-state-deduction`, §7.11 and a
+Revision note dated 2026-10-25, uncommitted. Proposed `--reason`:
+`Record in spec-017 §7.11 the readings the approver ruled for task-294 at its design gate on 2026-10-24 and its review on 2026-10-25: the single form's created evidence is missing when the step created no element of the type (D1); --plan lists a step when adopting a candidate empties its missing evidence other than record, or with no candidate when created is its only declared evidence, and deduces again after each simulated adoption (D1 re-ruled, finding 2); the declared rules are the scalar memory.add arguments other than type and title, literal or token-resolved, and the path of a { type, path } entry, with no iterate_over filter (D2); --plan lists the instance's recorded adoptions first (D3); its W_UNCOMMITTED_INPUTS go out as success warnings (D5).`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -610,4 +672,9 @@ the expected `life.seed` entry (pure and in-process), and `Expected: 4 Received:
 - The first coverage run fell below the w0 baseline (99.3 / 97.25) only through untested branches of the new modules,
   and `vision-index.test.ts` caught the `X_cli-cmds.md` bump the index did not follow. Both needed a second heavy run
   (slots 17:16 and 17:48). Proposal: a design that bumps a vision file names `00_index.md` among the files to touch.
+- Rejected at review on two `--plan` readings: D1 as designed skipped every step whose string `produces` resolves through
+  the created element, which is `sw-life-cycle`'s own shape (`2f581d78`); and one frontier was walked without deducing
+  again. The red suites pinned D1's wording on `memory.add`-only fixtures, so neither gap failed a test. Proposal: a
+  design that interprets a spec sentence ("only missing evidence is created") pins it on the repository's own workflow
+  shapes.
 
