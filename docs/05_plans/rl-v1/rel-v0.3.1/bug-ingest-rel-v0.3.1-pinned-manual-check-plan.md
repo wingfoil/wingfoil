@@ -42,6 +42,12 @@ The approver triages the bug. `task-298`'s developer then makes the `KNOWN_READ_
 ## Execution Notes
 
 - 2026-10-25: plan added `15f1e6a5` on `task/task-298-let-a-workflow-check-be-bound-manual-dl-172`.
+- Capture: `d2f120d8` add of `bug-414` (linked to `bug-ingest.capture`), `93caf8f0` submit `[draft → open]`, severity
+  `low`, tags `pinned-build`, feature `P5.2.1`, reproduced on the task branch with the pinned 0.3.0 and the code build.
+- Triage: the approver's `a2db4016` approve `[open → triaged]`, `release` left empty (the fix is the pin's advance).
+- `task-298`'s `16586bd2` makes the three 0.3.0 `KNOWN_READ_FAILURES` reasons and AGENTS.md §3 cite `bug-414`; the
+  `wingfoil-cli` directive points to it by its tag (its §3 lists no bug ids). Independent re-review of `task-298`:
+  APPROVE. The plan is finalized after this amendment and reaches `release/0.3` with `task-298`'s merge.
 
 ### Retrospective
 
