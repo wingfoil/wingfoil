@@ -6,7 +6,7 @@ kind: custom
 title: "Which WingFoil build runs which command in this repository"
 tags: [custom, process, cli, determinism]
 scope: global
-version: "1.2"   # 1.2 §1: the workflow reads (`workflow list`, `show`, `next`, `status`) return to the pinned build, which reads this repository's `{ type, path }` produces from 0.3.0; the workflow commands that write a commit (`start`, `finalize`, `end`, `create`, `remove`) stay on the code build with the Memory operations (release-planning v0.3.1, advance-pinned-build to 0.3.0) (prev 1.1 §1: the workflow commands, `workflow list` included, run on the code build (the pinned 0.2.2 refuses this repository's `{ type, path }` produces); a fix reaches the code build of its integration branch, `main` or `release/X.Y` (task-252, dl-159; approver ruling 2026-10-17))
+version: "1.3"   # 1.3 §1: while the pin is 0.3.0 the workflow reads run on the code build, because 0.3.0 refuses the `manual: true` check binding (`dl-172` (a), task-298), until the pin reaches 0.3.1 (prev 1.2 §1: the workflow reads (`workflow list`, `show`, `next`, `status`) return to the pinned build, which reads this repository's `{ type, path }` produces from 0.3.0; the workflow commands that write a commit (`start`, `finalize`, `end`, `create`, `remove`) stay on the code build with the Memory operations (release-planning v0.3.1, advance-pinned-build to 0.3.0) (prev 1.1 §1: the workflow commands, `workflow list` included, run on the code build (the pinned 0.2.2 refuses this repository's `{ type, path }` produces); a fix reaches the code build of its integration branch, `main` or `release/X.Y` (task-252, dl-159; approver ruling 2026-10-17)))
 ref: [P3.5, P3.7, REQ-SYS-08]
 ---
 
@@ -50,7 +50,10 @@ run WingFoil from its own source, so the rule has no meaning in a project scaffo
   code build, for the reason above; those that only read (`list`, `show`, `next`, `status`) run on the
   pinned build, for the reason below. Until the pin reached 0.3.0 every workflow command ran on the code
   build, because the pinned build could not load this repository's `{ type, path }` produces (`dl-104` D3);
-  the `pinned-build` search of §3 lists the closed bug that recorded it.
+  the `pinned-build` search of §3 lists the closed bug that recorded it. The same exception holds again while
+  the pin is 0.3.0: it refuses the `manual: true` check binding (`dl-172` (a)), so until the pin reaches 0.3.1
+  the reads run on the code build (`node dist/cli.js workflow …`), and `npm run check:mcp` declares the three
+  `wingfoil://workflows` Resources known failures of 0.3.0.
 - **Why the pinned build for the reads and MCP.** They answer as the build WingFoil's users have
   (`dl-095` Q1 (a), Q2 (i)), so the pinned build's surprises surface here, where they can be filed.
 - **Which version is pinned** is what `package.json` declares for `wingfoil-released`
