@@ -104,7 +104,7 @@ function buildFixture(): string {
   const workflowsPath = join(repo, '.wingfoil', 'workflows.yaml');
   writeFileSync(
     workflowsPath,
-    `${readFileSync(workflowsPath, 'utf-8')}  - workflows/custom/quick.yaml\n  - workflows/custom/finished.yaml\n  - workflows/custom/checkpoint.yaml\n  - workflows/custom/retired.yaml\n  - workflows/custom/adoptable.yaml\n`,
+    `${readFileSync(workflowsPath, 'utf-8')}  - workflows/custom/quick.yaml\n  - workflows/custom/finished.yaml\n  - workflows/custom/checkpoint.yaml\n  - workflows/custom/retired.yaml\n  - workflows/custom/adoptable.yaml\n  - workflows/custom/renamed.yaml\n`,
   );
   // `workflow remove` (task-211): a custom workflow nothing includes and no instance runs.
   writeFileSync(join(repo, '.wingfoil', 'workflows', 'custom', 'retired.yaml'), 'name: retired\nstartable: true\nphases:\n  - name: one\n    role: developer\n');
@@ -133,8 +133,20 @@ function buildFixture(): string {
   );
   mkdirSync(join(repo, 'docs', 'memory', 'adr'), { recursive: true });
   writeFileSync(join(repo, 'docs', 'memory', 'adr', 'adr-001-adopt-me.md'), '---\nid: "adr-001-adopt-me"\ntype: adr\ntitle: "Adopt me"\nstatus: draft\n---\n\n## Body\n');
+  // `workflow rekey` (task-295, `spec-017` §7.12): a workflow whose phase was renamed `old-name` → `new-name`, one open
+  // instance of it, and (below) a phase record of that instance naming the old key — an instance no other row reads.
+  writeFileSync(
+    join(repo, '.wingfoil', 'workflows', 'custom', 'renamed.yaml'),
+    'name: renamed\nstartable: true\nphases:\n  - name: new-name\n    role: approver\n  - name: close\n    role: approver\n',
+  );
+  mkdirSync(join(repo, 'docs', 'memory', 'plan', 'renamed'), { recursive: true });
+  writeFileSync(
+    join(repo, 'docs', 'memory', 'plan', 'renamed', 'renamed-1-plan.md'),
+    '---\nid: "renamed-1-plan"\ntype: plan\ntitle: "renamed — 1"\nstatus: active\nworkflow: "renamed"\nphase: "1"\nelement: ""\nparent: ""\n---\n\n## Body\n',
+  );
   git(repo, ['add', '-A']);
-  git(repo, ['commit', '--quiet', '-am', 'configure approver, the bug machine, the fake agent, two workflows, a checkpoint workflow and an adoptable adr']);
+  git(repo, ['commit', '--quiet', '-am', 'configure approver, the bug machine, the fake agent, two workflows, a checkpoint workflow, an adoptable adr and a renamed workflow']);
+  git(repo, ['commit', '--quiet', '--allow-empty', '-m', 'workflow: finalize renamed-1-plan renamed.old-name', '-m', 'WingFoil-Phase: renamed.old-name completed\nWingFoil-Instance: renamed-1-plan']);
 
   step(repo, 'memory', 'add', '--type', 'task', '--title', 'Submit me');
   step(repo, 'memory', 'add', '--type', 'task', '--title', 'Approve me');
@@ -202,6 +214,10 @@ const ROWS: Readonly<Record<string, Row>> = {
   workflowAdopt: {
     args: ['workflow', 'adopt', 'adoptable-1-plan', '--step', 'adoptable.seed', '--element', 'adr:adr-001-adopt-me', '--reason', 'Created before the engine.'],
     empty: { subject: 'workflow: adopt adoptable-1-plan adoptable.seed adr:adr-001-adopt-me' },
+  },
+  workflowRekey: {
+    args: ['workflow', 'rekey', 'renamed-1-plan', '--from', 'renamed.old-name', '--to', 'renamed.new-name', '--reason', 'Phase renamed.'],
+    empty: { subject: 'workflow: rekey renamed-1-plan renamed.old-name renamed.new-name' },
   },
   workflowCreate: { args: ['workflow', 'create', 'dry-flow', '--kind', 'main'] },
   workflowRemove: { args: ['workflow', 'remove', 'retired'] },

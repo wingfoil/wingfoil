@@ -62,8 +62,8 @@ Accepted by every command, except `--dry-run`, which only the commands that chan
 
 | Option | Effect |
 |---|---|
-| `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (New in 0.3: except the commands whose entry shows their own console text — `agent list`, `agent show`, `workflow next`, `workflow status`, `workflow start`, `workflow end`, `workflow finalize`, `workflow adopt`); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
-| `--dry-run` | New in 0.3. Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `finalize`, `create`, `remove`, `adopt`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `workflow finalize`'s and `workflow adopt`'s commits change no file, so their `paths` is `[]` and their `diff` is empty. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
+| `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (New in 0.3: except the commands whose entry shows their own console text — `agent list`, `agent show`, `workflow next`, `workflow status`, `workflow start`, `workflow end`, `workflow finalize`, `workflow adopt`, `workflow rekey`); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
+| `--dry-run` | New in 0.3. Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `finalize`, `create`, `remove`, `adopt`, `rekey`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `workflow finalize`'s, `workflow adopt`'s and `workflow rekey`'s commits change no file, so their `paths` is `[]` and their `diff` is empty. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
@@ -124,7 +124,7 @@ the same value `wingfoil --version` prints: the package version, then the full c
 was made from (with `-dirty` when the build had uncommitted changes to its own inputs — the sources,
 `package.json`, `package-lock.json`, a `tsconfig` or `scripts/write-build-info.cjs` — and `unknown` when the build recorded none). A commit without that line was not written by WingFoil. Read it with
 `git log --format='%(trailers:key=WingFoil-Version,valueonly)'`. A commit that carries other trailers of
-its own — `workflow finalize`'s phase record — writes them in that same last paragraph, before the
+its own — `workflow finalize`'s phase record, the provenance records of `workflow adopt` and `workflow rekey` — writes them in that same last paragraph, before the
 `WingFoil-Version:` line, since git reads trailers from the last paragraph only. The commit body is also normalized
 the same way whatever your git `commit.cleanup` setting (trailing whitespace removed, runs of blank
 lines collapsed, lines starting with `#` kept).
@@ -1620,6 +1620,72 @@ without `--apply`).
   the three → `missing required argument: --step, --element or --plan`; a malformed `--element`; a missing or blank
   `--reason` where one is required; no `<ref>`.
 - **Commit:** `workflow: adopt <instance> <key> <type>:<id>`, one per adoption, no file changed.
+
+### `wingfoil workflow rekey`
+
+Remap the records of an open workflow from a renamed step key to its new one, as an empty commit (approver only).
+
+```
+wingfoil workflow rekey <ref> --from <workflow>.<phase> --to <workflow>.<phase> --reason <text>
+```
+
+New in 0.3.1. When a phase is renamed in a workflow file (or moved to another workflow), the records an open
+instance already holds — the `WingFoil-Step:` link of each `memory add --workflow`, each `workflow finalize` phase
+record, each adoption — still name the old step key. The workflows no longer declare it, so those records are
+evidence of nothing (`W_PROVENANCE_ORPHAN`) and the renamed step waits again for work already done.
+`workflow rekey` records the mapping: from its commit on, every record of that instance naming `--from` (with any
+`@<scope>` it carries, which is kept) reads as naming `--to`. It rewrites no history and changes no file. `<ref>`
+selects the open instance, as for `workflow next`.
+
+| Option | Description |
+|---|---|
+| `--from <key>` | The old step key, `<workflow>.<phase>` with no `@<scope>`. The workflows must no longer declare it, and a record of the instance must still name it (after the rekeys already recorded). |
+| `--to <key>` | The new step key, `<workflow>.<phase>`: any step the workflows declare, in the same workflow or another one. |
+| `--reason <text>` | Why. Required; recorded with an `Approver:` line. Same shape rules as every `--reason`. |
+
+Only a member with the `approver` role may run it; the check comes first, before the workflow is read. Run again
+with the same `--from` and `--to`, it writes nothing and exits `0` (`commit: null`). Rekeys chain: after
+`a → b`, a later rename `b → c` is rekeyed `--from …b --to …c`.
+
+The record:
+
+```
+workflow: rekey <instance> <from> <to>
+
+Approver: <name> <email> (approver)
+Reason: <text>
+
+WingFoil-Instance: <instance>
+WingFoil-Rekey-From: <from>
+WingFoil-Rekey-To: <to>
+WingFoil-Version: <semver> (<sha>)
+```
+
+As with `workflow adopt`, the subject is not a Memory operation, so `memory history` never lists it, and the
+mapping stays in the commit, so a reader comparing phases across a rename can follow it. `--dry-run` prints the
+commit with `paths: []` and an empty `diff`.
+
+```console
+$ wingfoil workflow rekey sw-life-cycle-1-plan --from sw-life-cycle.seed-first-release-line --to sw-life-cycle.seed-release-line --reason "phase renamed"
+workflow: sw-life-cycle (sw-life-cycle-1-plan)
+rekeyed: sw-life-cycle.seed-first-release-line -> sw-life-cycle.seed-release-line, 1 record(s) remapped (3f1c…)
+next step: …
+```
+
+The same command again prints `already rekeyed: <from> -> <to>, nothing written`. `--format json|yaml` prints
+`{"baseline": {…}, "instance": {…}, "from", "to", "remapped": <n>, "commit": "<sha>" | null, "next": {…} | null}`;
+`remapped` counts the records remapped (one per element a `memory add` link names, one per phase record, one per
+adoption).
+
+- **Errors, exit `1`:** without the `approver` role → `user not authorized to rekey`; a `--from` the workflows
+  still declare → `cannot rekey <from>: it is still declared`; a `--to` they do not declare →
+  `unknown step: <to>`; no record of the instance names `--from` → `no record of <instance> names <from>`; a
+  `<ref>` that selects no open instance → `workflow is not open: <ref>` / `unknown workflow: <ref>`; staged
+  changes in the index; no git identity.
+- **Errors, exit `2`:** no `<ref>`; a missing `--from` or `--to` → `missing required argument: --from` / `--to`;
+  a key that is not `<workflow>.<phase>` → `invalid flag value: --from must be <workflow>.<phase>` (or `--to`);
+  a missing or blank `--reason`.
+- **Commit:** `workflow: rekey <instance> <from> <to>`, no file changed.
 
 ## Agent
 
