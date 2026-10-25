@@ -328,6 +328,101 @@ Rulings on the design decisions above:
   the BDD fixture; D9 one `command-baseline` sentence.
 - Green starts after `task-294` is merged into `release/0.3` (plan ruling W1-3).
 
+### red (qa)
+
+Session 2 of 4 (role qa), worktree `../.wf2-wt/task-295`, branch at `ec47fae8`. **Red commit `ad578d75`**: T4 is
+measured from it. `git show --stat --format= ad578d75` printed 8 files, `891 insertions(+)`, all new. No existing
+file is edited (D7): the four registry inventories and the `dry-run.integration` row are left to `task-294`'s red
+and this task's green.
+
+**Files.**
+- `test/core/helpers/rekey-fixture.ts` is the fixture shared by the core, BDD and CLI suites, as the design lays it
+  out. It is a red file (T4) and has no `.test.ts` suffix. It builds `rl-v1` at `planning`, starts `life-1-plan`
+  through the registered `workflowStart` (optionally `life-2-plan` with `--set phase=2`, before the adoption), then
+  writes the adoption by hand (D8). The adoption's subject, `Reason:` body and three trailers are followed by
+  `WingFoil-Version: 0.0.0 (test)`. Last, it renames `seed` to `seed-line`. Its `operation(name)` throws
+  `<name> is not registered`.
+- `test/core/workflow-rekey.test.ts` (AC 2), `test/core/workflow-rekey-bdd.test.ts` (AC 1),
+  `test/core/workflow-rekey-render.test.ts` (AC 2, D6), `test/core/provenance-record-rekey.test.ts` (AC 1–2, the
+  builders), `test/core/workflow-rekey-barrel.test.ts` (barrel re-exports),
+  `test/cli/workflow-rekey.integration.test.ts` (AC 2–3, the AC 4 governance clause),
+  `test/docs/workflow-rekey-docs.test.ts` (AC 4, directive text).
+
+**Per AC.**
+- **AC 1** (red-first). The BDD file's feature-text pin is characterization and passes at red. The in-process
+  binding is red-first: +1 commit, empty `git show --stat`, author Morgan, and the exact message prefix through
+  `WingFoil-Version: ` followed by one line. It also pins `workflowNext life-1-plan` before (`life.seed-line`) and
+  after (not `life.seed-line`, and matching `^life\.close(@|$)`), and the `W_PROVENANCE_ORPHAN` count (1, then 0).
+  `provenance-record-rekey.test.ts` pins `rekeySubject`, `rekeyTrailers` (keys equal to `src/workflow/provenance.ts`'s
+  constants) and `provenanceMessage` on a rekey.
+- **AC 2** (red-first). `workflow-rekey.test.ts` pins:
+  - every §10 refusal with its code, its exact message, exit 1 and `assertPersistenceUnchanged`: still declared,
+    unknown step, no record (including `life-2-plan`, scoped to the instance), authority (also on an unknown
+    `<ref>` and on a recorded mapping, D1), unknown and ended `<ref>`, a staged index (message prefix, file still
+    staged), and no identity;
+  - the order (still declared before unknown step; unknown step before the no-op);
+  - the no-op: `commit: null`, `remapped: 0`, exit 0, commit count unchanged, ahead of the no-record refusal;
+  - nine usage cases, each `rejects.toThrow(UsageError)` plus the exact text, one of them on a non-git temp
+    directory;
+  - the `RekeyResult` key order and `commit` = `HEAD`;
+  - `remapped: 3` (an adoption, a record and a linkage), and a chain (`remapped: 1`, then the no-record refusal on
+    `life.seed`).
+
+  The render file pins `REKEY_UNAUTHORIZED` and the D6 lines. The CLI file pins usage at exit 2, each case by its
+  `error:` first line, plus `--help`, the real-run console and the no-op console.
+- **AC 3** (red-first). The CLI file pins:
+  - a dry run, which prints `dryRun: true`, the subject, `paths: []`, `diff: ''`, the message tail, and leaves
+    persistence unchanged;
+  - a refused dry run: exit 1, `error: unknown step: life.nope`;
+  - a no-op dry run, which prints the `RekeyResult` with `commit: null`.
+- **AC 4** (characterization by existing gates, plus red-first directive text). The docs file pins:
+  - in `git-conventions` §4, the subject;
+  - in §8, `` `WingFoil-Rekey-From:` ``, `` `WingFoil-Rekey-To:` `` and `` `workflow rekey` ``;
+  - in `command-baseline`, `` `workflow rekey` ``.
+
+  The governance clause is the CLI file's `checkGovernance(repo, { base })` pin: no finding, `exitCodeFor` 0.
+  `cli-reference`, `X_cli-cmds` and the allowlists stay gated by their existing suites, and versions are left to
+  review. Neither has a new pin here (T1: not asserted by this red).
+
+**Run.** `npx jest test/core/workflow-rekey.test.ts test/core/workflow-rekey-bdd.test.ts
+test/core/workflow-rekey-render.test.ts test/core/provenance-record-rekey.test.ts test/core/workflow-rekey-barrel.test.ts
+test/cli/workflow-rekey.integration.test.ts test/docs/workflow-rekey-docs.test.ts --maxWorkers=2 --verbose` printed
+`Test Suites: 7 failed, 7 total` / `Tests: 44 failed, 1 passed, 45 total`. Per file, with the first failure lines:
+- `workflow-rekey.test.ts`: 27 failed. Seventeen fail with `workflowRekey is not registered`. The ten usage cases
+  fail with `Expected constructor: UsageError` / `Received message: "workflowRekey is not registered"`.
+- `workflow-rekey-bdd.test.ts`: 1 failed (`workflowRekey is not registered`), 1 passed (the feature text).
+- `workflow-rekey.integration.test.ts`: 13 failed. Eleven show `error: unknown command 'rekey'` in the received
+  stderr, or the JSON error `{"error":"unknown command 'rekey'"}`; the no-op case fails on its first real run
+  (`Received: 2`). `--help` fails on `Received string: "Usage: wingfoil workflow [options] [command]"`: today it
+  prints the group help with exit 0, so the pin checks the usage line.
+- `workflow-rekey-docs.test.ts`: 3 failed, on `Expected substring` for `` `workflow: rekey <instance-id> <from> <to>` ``,
+  `` `WingFoil-Rekey-From:` `` and `` `workflow rekey` ``.
+- `workflow-rekey-render.test.ts`: suite failed to run, `Cannot find module '../../src/core/workflow-rekey'`.
+- `provenance-record-rekey.test.ts`: suite failed to run, `Cannot find module '../../src/core/provenance-record'`.
+- `workflow-rekey-barrel.test.ts`: suite failed to run, `Cannot find module '../../src/core/provenance-record'`.
+
+**tsc.** `npx tsc --noEmit -p tsconfig.json`, summarised by file and code, printed:
+- TS2307: provenance-record-rekey ×1, barrel ×2, render ×1;
+- TS2305: barrel ×3 (`REKEY_UNAUTHORIZED`, `rekeySubject`, `rekeyTrailers`);
+- TS2724: barrel ×2 (`renderRekeyConsole`, `workflowRekeyAtHead`).
+
+TS2724 is the "did you mean" form of TS2305, which tsc picks when a near name exists (`renderRemoveConsole`,
+`workflowNextAtHead`). Nothing else errored. `npx eslint` on the eight files printed nothing.
+
+**Fixture check (scratch, not committed).** A probe test ran the deduction on the fixture with a hand-written rekey
+commit, as task-293's tests write it. Before the rekey, `workflowNext life-1-plan` printed `"life.seed-line"`
+(evidence `missing: ["record"]`) with one `W_PROVENANCE_ORPHAN`. After it, `workflowNext` printed
+`"life.close@release-line:rl-v1"` and the orphans were `[]`. In the remap fixture, before the rename, three orphans
+were listed (linkage, record, adoption). So every after-state the red asserts is reachable through task-293's
+reader. The adopted release-line binds the element-less instance (task-293 behaviour), so the `close` step carries
+`@release-line:rl-v1`; the pins use `^life\.close(@|$)` rather than a bare `life.close`.
+
+**Not asserted, by choice (for the reviewer).**
+- Whether the console text ends in a newline: D6 does not say, and the render pins strip one trailing `\n`.
+- `stepLines` beyond the `next step:` heading.
+- `baseline`'s value.
+- The `next` key exactly: a regex, as above.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
