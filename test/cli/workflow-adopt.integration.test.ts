@@ -171,10 +171,26 @@ describe('task-294 — workflow adopt through dist/cli.js', () => {
     const run = wingfoil(root, ['workflow', 'adopt', INSTANCE, '--plan', '--format', 'json']);
 
     expect(run.status).toBe(0);
-    expect(run.stderr).toMatch(/^warning: /m);
-    expect(run.stderr).toContain(RL_V1_PATH);
+    // Under --format json a success warning is the spec-008 §6 JSON line `{"warning": "…"}` (src/cli/warning.ts).
+    const warnings = run.stderr
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => {
+        try {
+          return (JSON.parse(line) as { warning?: unknown }).warning;
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((warning): warning is string => typeof warning === 'string');
+    expect(warnings.some((warning) => warning.includes(RL_V1_PATH))).toBe(true);
     const value = JSON.parse(run.stdout) as { steps: readonly { candidates: readonly { status: string }[] }[] };
     expect(value.steps[0]!.candidates[0]!.status).toBe('planning');
+
+    // The console form: a `warning: ` line naming the path.
+    const consoleRun = wingfoil(root, ['workflow', 'adopt', INSTANCE, '--plan']);
+    expect(consoleRun.status).toBe(0);
+    expect(consoleRun.stderr).toMatch(new RegExp(`^warning: .*${RL_V1_PATH.replace(/[.]/g, '\\.')}`, 'm'));
   });
 
   it('--help describes the command and lists its options and --dry-run', () => {
