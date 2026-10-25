@@ -303,6 +303,33 @@ pin advance), and record the code-build rule in AGENTS.md §3.
   demo.rendered manual: true (dl-172 (a)): 27 workflows, 105 phases, 0 errors and 86 W_WORKFLOW_UNBOUND_TOKEN
   warnings on checks, 87 before, measured on release/0.3 with task-293 and task-299 merged."`
 
+### independent review (2026-10-25) and fixes (developer)
+
+Verdict APPROVE WITH FIXES. Finding 1 (no `pinned-build` bug behind the 0.3.0 known failures, which `wingfoil-cli`
+§2/§3 ask for) waits for the approver's ruling: the reason constant and §2 are unchanged here. Fixes 2–5:
+
+- **2–3, the `spec-017` §12 amendment (still uncommitted).** The "Re-measured at `task-298`" paragraph gains one
+  sentence — the pinned 0.3.0 again does not load the workflow files, because it refuses the `manual: true` check
+  binding; the figures are the code build's; `npm run check:mcp` declares the three `wingfoil://workflows`
+  Resources until the pin reaches 0.3.1 — and the Revision note says the same. Both are dated 2026-10-25, the day
+  task-299 came in (merge `1e44ae2d`). The 0.2.2 paragraph above stays as history. `git diff --stat` on the spec →
+  14 insertions, 0 deletions. The proposed `--reason` below is updated.
+- **4, `wingfoil-cli` §1 table** (`a4c48157`): the read-commands row marks `workflow list`, `show`, `next`, `status`
+  and the MCP `wingfoil://workflows` Resources "the code build while the pin is 0.3.0, see below"; no second bump
+  (1.3 is this branch's). `npx jest test/directives` → `Tests: 189 passed`.
+- **5, the suite figures.** My earlier figure, `476` suites / `8575` tests, was measured at `dd17ecf7`, before
+  `8582fd7c`. At HEAD `a4c48157`, under the slot (`npm test -- --maxWorkers=2 --json`) → exit 0, `Test Suites: 477
+  passed, 477 total`, `Tests: 8579 passed, 8579 total`, as the reviewer measured. The four extra tests: a full
+  `npx jest --json` at `dd17ecf7` in a temporary worktree (under the slot) → `476 8575 0`; the per-suite diff against
+  HEAD → `test/workflow/bindings-check-severity.test.ts undefined -> 2` and
+  `test/core/latency-budget-placement.test.ts 1051 -> 1053`. That guard runs its two per-file rules on every file
+  under `test/`, so the new file adds two tests there. Nothing else changed.
+- Gates at `a4c48157`: `npm run -s lint` → exit 0; `npm run -s check:mcp` → exit 0;
+  `node scripts/check-governance.cjs --base release/0.3` → exit 0, "gated: 0 findings", "history: 0 findings".
+
+**Proposed `--reason` for the `spec-017` amendment (replaces the one under Pending amendments):**
+`Record the re-measure of §12 after task-298 binds demo.rendered manual: true (dl-172 (a)): 27 workflows, 105 phases, 0 errors and 86 W_WORKFLOW_UNBOUND_TOKEN warnings on checks, 87 before, measured on release/0.3 with task-293 and task-299 merged; the pinned 0.3.0 refuses that binding, so the figures are the code build's and check:mcp declares the three wingfoil://workflows Resources until the pin reaches 0.3.1.`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
