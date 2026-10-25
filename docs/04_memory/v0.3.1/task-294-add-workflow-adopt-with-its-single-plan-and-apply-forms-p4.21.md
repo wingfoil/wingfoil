@@ -426,6 +426,142 @@ console `warning: ` line under `--format json`, where every success warning is t
 asserting `^warning: .*docs/planning/rl-v1.md`; `npx jest test/cli/workflow-adopt.integration.test.ts --maxWorkers=2` on
 green `5445c37c`: 17 passed, 17 total.
 
+### green (developer, 2026-10-25)
+
+Session 3 of 4. **Green commit `5445c37c`** (`feat(workflow): task-294 — workflow adopt, its single, plan and apply
+forms (P4.21)`):
+- `src/workflow/deduce.ts`: `StepAddition` and `DeducedStep.additions`. For each type the phase adds (its
+  `memory.add(type: T)` actions, then its `{ type: T, path }` entries) the field gives the step's created elements and,
+  when there are none, the rule-5 candidates (design D2). The `Deducer` receives the owned and conflicted elements from
+  the `resolveProvenance` result it already computes. `workflow next`/`status` JSON is unchanged, because `buildStep`
+  copies fields one by one.
+- `src/workflow/adopt.ts` (new, pure): `planAdoptions(snapshot, instanceId)`. It lists the recorded adoptions first
+  (D3), then walks the frontier, listing the steps blocked on a creation (D1). Each step with a single candidate gets a
+  simulated adoption on a copy of the snapshot (a synthetic commit, walk position `-n`), and the instance is deduced
+  again.
+- `src/core/workflow-adopt.ts` (new): `workflowAdoptAtHead`, `renderAdoptConsole`, `BULK_ADOPT_UNAUTHORIZED`, with
+  the design's refusal order. `src/core/provenance-record.ts` (new) and `requireApproverAuthority` in
+  `src/core/approval-authority.ts` form the shared module for `task-295` (below).
+- `src/core/index.ts`: the `workflowAdopt` operation (with `renderConsole: renderAdoptConsole`) and the barrel
+  re-exports. Its function takes `plan`/`apply` spread at the top level (as the CLI passes them) or under `flags` (as
+  the red fixture passes them).
+- `scripts/e2e-smoke.cjs`: the D9 probe (`workflow start sw-life-cycle`, two `workflow finalize`, `workflow adopt
+  <instance> --plan` with an empty plan). The probe pins the placeholder `{life.instance.id}`, which the smoke did not
+  resolve: the first run printed `expected exit 0, got exit 1: {"error":"unknown workflow: {life.instance.id}"}`.
+  `resolveValue` now reads a dotted path after the capture name.
+- Docs and config: `docs/cli-reference.md` (the entry, plus the `--dry-run` and `--format` rows),
+  `docs/01_vision/X_cli-cmds.md` 1.7 → 1.8, `git-conventions.md` "2.1" → "2.2" (§4 record subjects, §8
+  `WingFoil-Adopted:`), `command-baseline.md` "1.5" → "1.6" (the declared-reads row, Revision 1.6). The two + seven
+  `planned` allowlist entries citing `task-294` are removed. `details.candidates` resolves through the
+  `workflow-adopt.ts` doc comment. Comments only in `scripts/check-governance.cjs` and `src/memory/audit.ts` (D4).
+- **An existing test changed (lesson F23, coordinator finding F33): `test/cli/e2e-smoke.test.ts`**, which is not a
+  red file. Its two journey fault cases injected `noop@workflow finalize` and `exit=1@workflow start` as global argv
+  prefixes. The probe's `workflow start` / `workflow finalize` now run earlier in the scenario, so the fault fired
+  there: the label received was `[Scrum] wingfoil workflow finalize sw-life-cycle-1-plan --format json` where
+  `[Scrum/journey] bash docs/examples/06-workflow-approval/run.sh` was expected. The faults now name journey-only
+  prefixes: `noop@workflow finalize --step` and `exit=1@workflow start deliver`. After that, `npx jest
+  test/cli/e2e-smoke.test.ts test/cli/e2e-smoke-adopt-probe.test.ts test/cli/e2e-smoke-journey-shim.test.ts` printed
+  `Tests: 79 passed`.
+
+**Red defect, sent back.** `test/cli/workflow-adopt.integration.test.ts` (D5) expected `/^warning: /m` under
+`--format json`, where every success warning is the spec-008 §6 JSON line. The received text was
+`"{\"warning\":\"uncommitted change to a deduction input, … docs/planning/rl-v1.md\"}"`. The qa agent fixed it in
+`68c62492` (coordinator send-back).
+
+**Red → green.** The red notes record `91 failed, 64 passed` on the 16 red test files. On `5445c37c`, `npx jest <the 16
+red files> --maxWorkers=2` printed `Tests: 1 failed, 181 passed, 182 total` (the D5 defect). After `68c62492` the
+coordinator measured that file at 17/17. The full runs below include all of them.
+
+### refactor (developer, 2026-10-25)
+
+- **Sync:** `git merge --no-edit release/0.3` (`8ecd3890`, holding `task-299`) gave `4490e37d` with no conflict;
+  `npx tsc --noEmit -p tsconfig.json` was clean afterwards. `task-298` had not merged: `git rev-parse --short
+  release/0.3` printed `8ecd3890` at the end.
+- **First full run** (slot 17:16:02, `npm run -s test:coverage -- --maxWorkers=2`): `Tests: 4 failed, 8713 passed`;
+  `All files 99.3 / 97.25 / 98.1 / 99.71`.
+  - The failures were `test/docs/vision-index.test.ts`: `docs/01_vision/00_index.md` still recorded `X_cli-cmds.md`
+    at 1.7, 2026-10-15, 486 lines with the old section ranges. Fixed in the index (1.8, 2026-10-25, 492 lines, ranges
+    from `grep -n "^#"`); the test then printed 13 passed.
+  - Statements and branches were below the w0 baseline `99.34 / 97.39 / 98.03 / 99.71`. The gap was untested
+    branches in the new files: `workflow-adopt.ts` 91.07 % branches, `adopt.ts` 91.3 %.
+- **Refactor commit `f4cdbdff`.**
+  - Unreachable guards removed: `tokenArguments`' missing-paren check, the `owned` default parameter, the
+    vanished-instance fallback in the walk, and `fieldText`'s absent branch.
+  - A missing `<ref>` from an in-process caller is the CLI's `missing required argument: <ref>` (exit 2).
+  - New developer tests:
+    - `test/core/workflow-adopt-edges.test.ts` (10): conflicted element refused as owned, `next: null`, the next-step
+      console, missing `<ref>`, record orphan `element: null`, `--plan --apply` refused at its first commit with
+      `details.applied: []`, REQ-SEC-01 on both writing forms, spec-003 error → `VALIDATION`, `planAdoptions` on an
+      instance that is not open.
+    - `test/workflow/deduce-additions-edges.test.ts` (2): argument shapes.
+  - A targeted coverage run of the adopt suites printed `100 / 100 / 100 / 100` for `workflow-adopt.ts`, `adopt.ts`
+    and `provenance-record.ts`.
+
+**Gates on `f4cdbdff`** (the `spec-017` amendment uncommitted in the tree):
+
+| Gate | Command | Result |
+|---|---|---|
+| tests and coverage | slot 17:48:30, `npm run -s test:coverage -- --maxWorkers=2` | `Test Suites: 489 passed`, `Tests: 8733 passed, 8733 total`; `All files 99.37 / 97.49 / 98.15 / 99.72`, each at or above the baseline |
+| typecheck | same slot, `npm run -s typecheck` | exit 0 |
+| lint | `npm run -s lint` | exit 0 |
+| API docs | `npm run -s docs:api` | exit 0 |
+| governance | `npm run -s check:governance -- --base release/0.3` | exit 0, `gated: 0 findings`, `history: 0 findings` |
+| MCP | `npm run -s check:mcp` | exit 0; the build under development serves `prompts: 8, resources: 4, tools: 0` |
+
+No `workflow adopt` was run on this repository; every probe used fixture or scratch repositories.
+
+### self-review (developer, 2026-10-25)
+
+- AC 1 (red-first): met. `test/core/workflow-adopt-bdd.test.ts` (13: the scenarios, the five errors, the gate edge),
+  `workflow-adopt.test.ts` (29) and `deduce-additions.test.ts` (10) pass in the full run.
+- AC 2 (red-first): met. `workflow-adopt-plan.test.ts` (4: byte-identical `--plan`, 2 empty commits, blobs
+  unchanged, re-run 0 commits) and `adopt-plan.test.ts` (8) pass.
+- AC 3 (red-first): met. `workflow-adopt.integration.test.ts` (17: the three `--dry-run` forms with `paths: []` and
+  an empty diff, the exit-2 matrix, authority with nothing to write), `provenance-record.test.ts` and
+  `approval-authority-approver.test.ts` pass.
+- AC 4 (characterization, D4): met. `check-governance-provenance.test.ts` (7) passes. The governance script and
+  `audit.ts` gained comments only.
+- AC 5 (characterization): met.
+  - `cli-reference.test.ts`, `x-cli-cmds.test.ts`, `vision-index.test.ts`, `enumeration-parity` and
+    `name-resolvability` pass.
+  - `grep -c "task-294" test/docs/*.allowlist.ts` printed 0 for both files; the `TOOLS_V04` entries for
+    `workflow.adopt` / `workflow.rekey` are kept.
+  - The directive pins (3) and the probe pins (6) pass.
+- **T4:** `git log --first-parent --no-merges --format='%h %s' f4bc7693..HEAD -- <the 18 red files>` printed one
+  commit, `68c62492` (the qa agent's send-back), and none of mine.
+- Same class:
+  - Every other git-log-driven gate that lists command or subject families was checked: the dry-run row table, the
+    four inventories, the `--dry-run` rows of both reference documents and the smoke's fault prefixes.
+  - The `git-conventions` §4 record list names `workflow: finalize`, `workflow: adopt` and `agent: record`;
+    `task-295` adds `workflow: rekey`.
+- Absence claims, each with its positive case:
+  - "no governance finding on an adopt record" sits beside the status-outside-wf finding the same script raises
+    elsewhere (characterization suite).
+  - "`next` JSON unchanged" is shown by the existing `workflow-next-render` / `workflow-next-views` suites passing
+    unedited in the full run.
+
+### Pending amendments (approver)
+
+- `spec-017-workflow-commands-and-state-deduction`: §7.11 records the design-gate readings D1 (created missing =
+  created none of `T`; `--plan` lists steps whose only evidence is `created`), D2 (the declared rules: scalar
+  `memory.add` arguments except `type`/`title`, token-resolved, the `{ type, path }` path, no `iterate_over` filter),
+  D3 (recorded adoptions first) and D5 (`--plan`'s `W_UNCOMMITTED_INPUTS` as success warnings), plus a Revision note
+  (2026-10-25). Uncommitted in this worktree. Proposed `--reason`:
+  `Record in spec-017 §7.11 the readings the approver ruled at task-294's design gate on 2026-10-24: created evidence is missing when the step created no element of the type, and --plan lists a step only when created is its only declared evidence (D1); the declared rules are the scalar memory.add arguments other than type and title, literal or token-resolved, and the path of a { type, path } entry, with no iterate_over filter (D2); --plan lists the instance's recorded adoptions first (D3); its W_UNCOMMITTED_INPUTS go out as success warnings (D5).`
+
+#### Exported surface for task-295 (as built)
+
+- `src/core/provenance-record.ts`:
+  - `ProvenanceRecord { subject; reason; approver: GitIdentity | null; trailers }`;
+  - `provenanceMessage(record)`;
+  - `writeProvenanceRecord(root, author, record): CoreResult<string>` (`requireCleanIndex`, then `commitEmpty` with
+    the trailers before `WingFoil-Version:`; the dry-run plan is `paths: []`, `diff: ''`);
+  - `adoptionSubject(instance, step, element)` and `adoptionTrailers(instance, step, element)`.
+  - `task-295` adds `rekeySubject` / `rekeyTrailers` here.
+- `src/core/approval-authority.ts`: `requireApproverAuthority(root, identity, refusal)`. `requireApprovalAuthority`
+  delegates to it, and its messages are unchanged.
+- All of these are re-exported from `src/core`, with `planAdoptions`, `PlannedStep`, `AdoptionPlan` and `StepAddition`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -433,3 +569,15 @@ green `5445c37c`: 17 passed, 17 total.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The red pinned a smoke placeholder form the script did not resolve (`{life.instance.id}`, a dotted path after the
+  capture). The first smoke run printed `unknown workflow: {life.instance.id}`; fixed in green (`resolveValue`). Two
+  journey fault cases of `test/cli/e2e-smoke.test.ts` used global argv prefixes that the new probe now hits first, and
+  were narrowed to journey-only prefixes (coordinator finding F33). Proposal: a fault in that test names the scenario
+  it targets, not only an argv prefix.
+- One red test asserted the console warning shape under `--format json` (`/^warning: /m`); sent back, fixed in
+  `68c62492`. Proposal: the qa brief names spec-008 §6's per-format warning shapes.
+- The first coverage run fell below the w0 baseline (99.3 / 97.25) only through untested branches of the new modules,
+  and `vision-index.test.ts` caught the `X_cli-cmds.md` bump the index did not follow. Both needed a second heavy run
+  (slots 17:16 and 17:48). Proposal: a design that bumps a vision file names `00_index.md` among the files to touch.
+
