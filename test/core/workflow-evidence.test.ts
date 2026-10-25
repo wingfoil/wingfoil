@@ -302,7 +302,11 @@ describe('spec-003 Layer 3 — workflows/bindings.yaml', () => {
     ['an action with both run and manual', 'actions:\n  x.y: { run: [a], manual: true }\n', 'actions.x.y'],
     ['an action with neither run nor manual', 'actions:\n  x.y: { args: {} }\n', 'actions.x.y'],
     ['an empty run', 'checks:\n  x.y: { run: [] }\n', 'checks.x.y.run'],
-    ['a check without run', 'checks:\n  x.y: { severity: warn }\n', 'checks.x.y.run'],
+    ['a check with neither run nor manual (task-298 AC 1, ruling D2 (a))', 'checks:\n  x.y: { severity: warn }\n', 'checks.x.y'],
+    ['a check with both run and manual (task-298 AC 1)', 'checks:\n  x.y: { run: [a], manual: true }\n', 'checks.x.y'],
+    ['severity on a manual check (task-298 AC 1)', 'checks:\n  x.y: { manual: true, severity: warn }\n', 'checks.x.y.severity'],
+    ['args on a manual check (task-298 AC 1)', 'checks:\n  x.y: { manual: true, args: { n: "^a$" } }\n', 'checks.x.y.args'],
+    ['manual: false on a check (task-298 AC 1)', 'checks:\n  x.y: { manual: false }\n', 'checks.x.y.manual'],
     ['a severity outside warn|reject', 'checks:\n  x.y: { run: [a], severity: block }\n', 'checks.x.y.severity'],
     ['manual: false', 'actions:\n  x.y: { manual: false }\n', 'actions.x.y.manual'],
     ['an args pattern that is not a regular expression', 'checks:\n  x.y: { run: [a, "{n}"], args: { n: "([" } }\n', 'checks.x.y.args.n'],
@@ -312,6 +316,42 @@ describe('spec-003 Layer 3 — workflows/bindings.yaml', () => {
     expect(diagnostics.length).toBeGreaterThan(0);
     expect(diagnostics.every((d) => d.file === BINDINGS && d.severity === 'error')).toBe(true);
     expect(diagnostics.map((d) => d.path)).toContain(path);
+  });
+
+  it('task-298 AC 1 — a check may be bound manual: true (dl-172 (a)); a run check keeps its default severity', () => {
+    writeBindings(repo, 'checks:\n  demo.ok: { manual: true }\n  lint.clean: { run: [npm, run, lint] }\n');
+    const result = loadWorkflowsYaml(repo) as unknown as { bindings: { checks: unknown }; diagnostics: unknown };
+    expect(result.bindings.checks).toEqual({
+      'demo.ok': { manual: true },
+      'lint.clean': { run: ['npm', 'run', 'lint'], severity: 'reject' },
+    });
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('task-298 AC 1 — the refusal messages of a manual check binding (spec-003 Layer 3: severity and args do not apply)', () => {
+    writeBindings(repo, 'checks:\n  x.y: { manual: true, severity: warn, args: { n: "^a$" } }\n');
+    expect(errorsOf(repo)).toEqual([
+      { code: 'E_VALIDATION', severity: 'error', file: BINDINGS, path: 'checks.x.y.severity', message: 'severity does not apply to a manual check binding' },
+      { code: 'E_VALIDATION', severity: 'error', file: BINDINGS, path: 'checks.x.y.args', message: 'args does not apply to a manual check binding' },
+    ]);
+    writeBindings(repo, 'checks:\n  x.y: { run: [a], manual: true }\n');
+    expect(errorsOf(repo)).toEqual([
+      { code: 'E_VALIDATION', severity: 'error', file: BINDINGS, path: 'checks.x.y', message: 'a check binding declares exactly one of run or manual' },
+    ]);
+  });
+
+  it('task-298 AC 2 — a manual check raises no W_WORKFLOW_UNBOUND_TOKEN; an unbound check still does', () => {
+    writeMain(repo, '  - name: go\n    checks:\n      pre: [ demo.ok ]\n      post: [ "demo.ok", "prose nobody binds" ]\n');
+    writeBindings(repo, 'checks:\n  demo.ok: { manual: true }\n');
+    expect(loadWorkflowsYaml(repo).diagnostics).toEqual([
+      {
+        code: 'W_WORKFLOW_UNBOUND_TOKEN',
+        severity: 'warning',
+        file: MAIN_FILE,
+        path: 'phases[0].checks.post[1]',
+        message: "check token 'prose nobody binds' has no built-in or bindings.yaml binding",
+      },
+    ]);
   });
 
   it.each([

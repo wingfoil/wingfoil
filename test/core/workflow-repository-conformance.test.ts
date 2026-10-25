@@ -133,9 +133,8 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["dev-loop", "phases[6].checks.post[0]", "retrospective.present"],
       ["user-docs", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
       ["user-docs", "phases[1].checks.post[0]", "user-facing docs aligned with the release's shipped CLI/feature surface"],
-      // task-224 (dl-128 item 2; approver ruling 2026-10-10): re-rendering the demo GIF is a manual step (VHS is a
-      // separate binary, and the recording rewrites a tracked file); the steps are in docs/assets/README.md.
-      ["user-docs", "phases[1].checks.post[2]", "demo.rendered"],
+      // task-298 (dl-172 (a)): demo.rendered (task-224's manual re-render, approver ruling 2026-10-10) is bound
+      // `manual: true` in bindings.yaml 2.5, so it is no longer unbound (86 warnings, spec-017 §12).
       // task-252 (dl-137 Q1 (b)): the agent file is AGENTS.md; the fifth check reads CLAUDE.md, its pointer.
       ["agent-docs", "phases[0].checks.post[0]", "AGENTS.md project status matches the shipped command surface"],
       ["agent-docs", "phases[0].checks.post[1]", "AGENTS.md element/state tables match memory.yaml"],
