@@ -346,6 +346,80 @@ Rulings on the design decisions above:
   `test/core/production-registry.test.ts`, `test/mcp/read-only-agent-channel.test.ts`), so `task-295`'s green adds
   `rekey` without editing a red file of its own.
 
+### red (qa)
+
+Session 2 of 4 (role qa), worktree `../.wf2-wt/task-294`. Red commit **`f4bc7693`** (T4 is measured from it); test
+files and test helpers only, no `src/` change.
+
+**Files** (new unless marked): `test/core/helpers/adopt-fixture.ts` (the `life` fixture: `seed` adds a release-line
+`version: "v1"`, `rl-v1` committed in `planning` before `workflow start`, Morgan approver; the operation reached through
+`CORE_MODULES`, so each test fails with `workflowAdopt is not registered`), `test/core/workflow-adopt-bdd.test.ts`,
+`test/core/workflow-adopt.test.ts`, `test/core/workflow-adopt-plan.test.ts`, `test/core/provenance-record.test.ts`,
+`test/core/approval-authority-approver.test.ts`, `test/core/workflow-adopt-barrel.test.ts`,
+`test/workflow/helpers/adopt-snapshot.ts`, `test/workflow/deduce-additions.test.ts`, `test/workflow/adopt-plan.test.ts`,
+`test/cli/workflow-adopt.integration.test.ts`, `test/cli/check-governance-provenance.test.ts`,
+`test/cli/e2e-smoke-adopt-probe.test.ts`, `test/directives/workflow-adopt-directives.test.ts`; edited (design-gate
+addition): `test/cli/dry-run.integration.test.ts`, `test/core/parity.test.ts`, `test/core/production-registry.test.ts`,
+`test/mcp/read-only-agent-channel.test.ts`.
+
+**Per AC.**
+- AC 1 (red-first): `workflow-adopt-bdd.test.ts`, one `it` per scenario (sc. 1–4, 6, the five errors, the gate edge)
+  plus the feature-text pins (2 tests, pass at red); `workflow-adopt.test.ts` (step / element derivation, `AdoptResult`,
+  every other §10 refusal, the console lines through the registered `renderConsole`); `deduce-additions.test.ts`
+  (`DeducedStep.additions`: types from both sources, D2's rules, archived / owned / conflicted excluded, `(type, id)`
+  order, `created` non-empty → no candidate); `provenance-record.test.ts` (subject, trailers, message, writer, staged
+  index, dry run).
+- AC 2 (red-first): `workflow-adopt-plan.test.ts` (4 elements, not 3: `rl-v1`, `adr-1` one candidate each, `task-1` and
+  `task-2` for the two-candidate step; byte-identical `--plan`, 2 empty commits, blobs unchanged, re-run 0 commits with
+  D3's recorded entries first); `adopt-plan.test.ts` (pure walk: deduces again, stops on 0 / several candidates, on a
+  gate, D1's "only `created`", D3, purity).
+- AC 3 (red-first): `workflow-adopt.integration.test.ts` (dist: three `--dry-run` forms, 8 usage refusals plus
+  missing `<ref>`, each exit 2 with its own `error: <text>`; bulk by a non-approver with nothing to write → exit 1;
+  console; D5 warning on stderr; `--help`); in-process the same usage matrix as thrown `UsageError`s, D6, D8 (authority
+  before the `<ref>` is resolved) and the uncommitted-grant suffix in `workflow-adopt.test.ts`;
+  `approval-authority-approver.test.ts` (`requireApproverAuthority`; its `requireApprovalAuthority` test is
+  characterization, passes at red).
+- AC 4 (**characterization**, D4): `check-governance-provenance.test.ts` — 7/7 **pass at red**.
+- AC 5 (characterization per the design): the existing gates `test/docs/cli-reference.test.ts` and
+  `test/docs/x-cli-cmds.test.ts` **pass at red** (27/27, unchanged; they fail once green registers the operation until the
+  docs land). The new pins are red until green edits them: `e2e-smoke-adopt-probe.test.ts` (D9, 6 tests) and
+  `workflow-adopt-directives.test.ts` (3 tests).
+- Registry inventories: `workflow adopt` / `workflow.adopt` / `workflowAdopt` added to the ordered lists; the dry-run
+  table drops `toHaveLength(20)` for `toHaveLength(Object.keys(ROWS).length)` beside the existing key-for-key `toEqual`,
+  and `empty` becomes `{ subject }` per row, so `task-295` adds a `workflowRekey` row and four list entries, no
+  assertion edit. Its fixture gains `adoptable.yaml`, the plan `adoptable-1-plan` and `adr-001-adopt-me` (a type and an
+  instance no other row reads); the other 32 tests of that file pass at red.
+
+**Run.** `npx tsc --noEmit -p tsconfig.json`: only TS2307 for `src/core/provenance-record` (2 files),
+`src/core/workflow-adopt`, `src/workflow/adopt` (2 files), and TS2724 (TS2305's "did you mean" form) for
+`requireApproverAuthority`. `npx jest <the 16 files> --maxWorkers=2 --json`: 91 failed, 64 passed. Per file
+(failed/passed): bdd 11/2, workflow-adopt 29/0, workflow-adopt-plan 4/0, deduce-additions 10/0, approval-authority-approver
+4/1, workflow-adopt.integration 17/0, e2e-smoke-adopt-probe 6/0, workflow-adopt-directives 3/0, check-governance-provenance
+0/7, dry-run.integration 2/32, parity 2/4, production-registry 2/13, read-only-agent-channel 1/5; provenance-record,
+workflow-adopt-barrel and adopt-plan fail as suites with `Cannot find module`. First failure lines: `workflowAdopt is not
+registered` (35, in-process); `TypeError: (0 , approval_authority_1.requireApproverAuthority) is not a function` (4);
+`the frontier step <key> carries no additions` (10); dist `error: unknown command 'adopt'` (exit 2 — every exit-2 pin
+checks its own text, so `Expected substring: "error: invalid flag combination: --apply needs --plan"` fails); the
+inventories `- "workflow adopt"` / `+ "workflowAdopt"`; the directive pins `Expected substring: "WingFoil-Adopted:"`.
+
+**Interfaces the red fixes** (the design left them open): `planAdoptions(snapshot: DeductionSnapshot, instanceId:
+string)` returns at least `{ steps: { step, type, candidates: ElementRef[], recorded }[] }`; `src/core/workflow-adopt.ts`
+exports `workflowAdoptAtHead`, `renderAdoptConsole` (the registered `renderConsole`) and `BULK_ADOPT_UNAUTHORIZED`; the
+registered operation declares `positional: { name: 'ref', required: true }`, options `step` (`key`), `element`
+(`type:id`), `reason` (`text`), flags `plan`, `apply`; `details.candidates` is read as `<type>:<id>` strings or refs,
+`details.steps` as the keys; `--plan`'s D5 warnings are `CoreResult.warnings` naming the path.
+
+**Measured on the code build, pinned as such:** the steps after `seed` carry the context element (`life.close@release-
+line:rl-v1`, `life.adr@release-line:rl-v1`, `life.approve@release-line:rl-v1`), so sc. 3's second subject is `workflow:
+adopt life-1-plan life.adr@release-line:rl-v1 adr:adr-1`; a step that already has its created element stays on the
+frontier only on other missing evidence, so that refusal uses a `produces` phase (key `doc-first.seed@release-line:rl-v3`);
+an `optional:` first phase puts two steps adding one type on the frontier; on the Scrum and Kanban scaffolds, after
+`workflow start sw-life-cycle` and two `workflow finalize`, `workflow next --format json` printed `scrum-delivery.plan` /
+`kanban-delivery.plan`, kinds `created, produces`, missing `produces` (D9's empty plan holds on both).
+
+**Not pinned:** the single form's REQ-SEC-01 identity refusal (an existing message, not a new branch), and D7's
+part-way refusal (unreachable when the walk is right).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
