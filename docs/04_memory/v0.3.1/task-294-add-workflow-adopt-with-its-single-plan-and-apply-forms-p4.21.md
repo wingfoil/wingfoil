@@ -330,6 +330,22 @@ rows to the four registry tests above.
 - An element created in a `done` instance is not owned (only open instances' walks count, §4.8) and can be adopted
   again; as specified.
 
+#### Design gate (approver, 2026-10-24)
+
+Rulings on the design decisions above:
+- D1–D10 accepted as recommended (option (a) each): D1 the single form needs only "the step created no element of
+  that type", `--plan` also needs `created` to be the step's only evidence; D2 candidate rules on the `memory.add`
+  arguments (except `type`, `title`) and the `{type, path}` path, no `iterate_over` filter; D3 live adoptions listed
+  first with `recorded: true`; D4 AC4 characterization (the governance-check authority gap is the coordinator's
+  candidate finding F29); D5 `W_UNCOMMITTED_INPUTS` from `--plan` as warnings on stderr; D6 a `--reason` with
+  `--plan` alone is validated and recorded nowhere; D7 a part-way refused `--apply` keeps earlier commits and lists
+  them; D8 authority before resolving the instance; D9 the smoke probe asserts the empty plan on the scaffold; D10
+  element type checked before existence.
+- Added at the gate (task-295 D7): this task's red generalises the four tests that list the mutating operations
+  (`test/cli/dry-run.integration.test.ts` incl. its `empty` row, `test/core/parity.test.ts`,
+  `test/core/production-registry.test.ts`, `test/mcp/read-only-agent-channel.test.ts`), so `task-295`'s green adds
+  `rekey` without editing a red file of its own.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
