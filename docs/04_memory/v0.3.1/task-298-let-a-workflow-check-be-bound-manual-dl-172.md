@@ -330,6 +330,17 @@ Verdict APPROVE WITH FIXES. Finding 1 (no `pinned-build` bug behind the 0.3.0 kn
 **Proposed `--reason` for the `spec-017` amendment (replaces the one under Pending amendments):**
 `Record the re-measure of §12 after task-298 binds demo.rendered manual: true (dl-172 (a)): 27 workflows, 105 phases, 0 errors and 86 W_WORKFLOW_UNBOUND_TOKEN warnings on checks, 87 before, measured on release/0.3 with task-293 and task-299 merged; the pinned 0.3.0 refuses that binding, so the figures are the code build's and check:mcp declares the three wingfoil://workflows Resources until the pin reaches 0.3.1.`
 
+- **1, finding 1 — approver ruling 2026-10-25, option (a)** (`16586bd2`): the coordinator filed `bug-414` (tag
+  `pinned-build`, `open`; commits `d2f120d8`, `93caf8f0`). The reason of the three 0.3.0 `KNOWN_READ_FAILURES`
+  entries now starts `bug-414 (task-298): …`, as the 0.2.2 entry cited `bug-292`; `test/cli/mcp-registration.test.ts`
+  pins `/^bug-414 \(task-298\).*manual: true.*0\.3\.1/`; AGENTS.md §3 names `bug-414`. `wingfoil-cli` §1 says "The
+  `pinned-build` bug of §3 records it, as §2 requires" without the id: §3 lists no bug, and
+  `test/directives/wingfoil-cli.test.ts` pins `expect(TEXT).not.toMatch(/\bbug-\d+/)`; no second bump. Checks:
+  `npm run -s check:mcp` → exit 0, known-failure lines starting `bug-414 (task-298)`; `npx jest` on
+  `mcp-registration`, `test/directives`, `test/lint` and the ten `docs.parity` suites → `Test Suites: 32 passed`,
+  `Tests: 386 passed`; `npm run -s lint` → exit 0; `node scripts/check-governance.cjs --base release/0.3` → exit 0,
+  "gated: 0 findings", "history: 0 findings".
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
