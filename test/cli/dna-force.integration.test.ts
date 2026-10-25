@@ -82,7 +82,10 @@ describe('`wingfoil dna` — keep dna.yaml\'s comments, or refuse the rewrite un
     expect(run.stderr).toBe('');
     const after = dnaText(repo);
     expect(commentLines(after)).toEqual(commentLines(scaffold));
-    const { removed, added } = hunk(scaffold, after);
+    // The write raises `version:` (task-299, dl-174 (a): 1 → 1.1): against the scaffold with that one line
+    // raised by hand, the hunk is again the added entry alone.
+    expect(after).toMatch(/^version: 1\.1$/m);
+    const { removed, added } = hunk(scaffold.replace(/^version: 1$/m, 'version: 1.1'), after);
     expect(removed).toEqual([]);
     expect(added).toEqual(['  agents:', '    - name: claude', '      executes_as: [developer, reviewer]', '      approval_authority: false']);
     expect(gitOut(repo, ['log', '-1', '--format=%s'])).toBe('wf(dna): add team.agents claude');
@@ -92,7 +95,10 @@ describe('`wingfoil dna` — keep dna.yaml\'s comments, or refuse the rewrite un
     const run = wingfoil(repo, 'dna', 'set', 'project.name', '--value', 'Demo');
 
     expect(run.status).toBe(0);
-    const { removed, added } = hunk(scaffold, dnaText(repo));
+    // The write raises `version:` (task-299, dl-174 (a): 1 → 1.1); against the scaffold with that line
+    // raised by hand, the hunk is the edited node alone.
+    expect(dnaText(repo)).toMatch(/^version: 1\.1$/m);
+    const { removed, added } = hunk(scaffold.replace(/^version: 1$/m, 'version: 1.1'), dnaText(repo));
     expect(removed).toHaveLength(1);
     expect(removed[0]).toMatch(/^ {2}name: ""/);
     // The one changed line is the edited node: the new value, with the inline comment kept at its column.

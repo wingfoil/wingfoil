@@ -324,7 +324,7 @@ $ wingfoil dna set project.name --value "My Project"
 }
 ```
 
-- **Commit:** `wf(dna): set <path>`
+- **Commit:** `wf(dna): set <path>`. The commit raises `dna.yaml`'s `version:` by 0.1, read as a number (`1.9` → `2.0`; new in 0.3.1); a write that changes nothing makes no commit.
 - **Errors:** `<path>` names a collection or list → exit `1`, pointing you to `dna add|remove|update`;
   a change that cannot be made in place → exit `1` unless `--force` (see above).
 - **`--force`** — allow the whole-file rewrite of `dna.yaml` when the in-place edit cannot apply; the
@@ -366,7 +366,7 @@ $ wingfoil dna add paths.sources --value src
 }
 ```
 
-- **Commit:** `wf(dna): add <path> <value>`
+- **Commit:** `wf(dna): add <path> <value>`. The commit raises `dna.yaml`'s `version:` by 0.1, read as a number (`1.9` → `2.0`; new in 0.3.1); a write that changes nothing makes no commit.
 - **Errors:** a field the collection does not declare → exit `1`
   (`error: '--entry-executes_as' is not a field of 'team.members' entries; they carry --entry-email, --entry-roles`);
   a required field missing → exit `1` (`error: an entry of 'stacks.technologies' requires --entry-category`);
@@ -398,7 +398,7 @@ $ wingfoil dna update modules.api --entry-description "Public HTTP API"
 }
 ```
 
-- **Commit:** `wf(dna): update <path>`
+- **Commit:** `wf(dna): update <path>`. The commit raises `dna.yaml`'s `version:` by 0.1, read as a number (`1.9` → `2.0`; new in 0.3.1); a write that changes nothing makes no commit.
 - **Errors:** no entry with that name → exit `1` (`error: no entry named 'x' in 'modules'`).
 - **`--force`** — allow the whole-file rewrite of `dna.yaml` when the in-place edit cannot apply (see above).
 
@@ -423,7 +423,7 @@ $ wingfoil dna remove paths.docs --value README.md
 }
 ```
 
-- **Commit:** `wf(dna): remove <path>[ <value>]`
+- **Commit:** `wf(dna): remove <path>[ <value>]`. The commit raises `dna.yaml`'s `version:` by 0.1, read as a number (`1.9` → `2.0`; new in 0.3.1); a write that changes nothing makes no commit.
 - **Errors:** no such entry → exit `1`.
 - **`--force`** — allow the whole-file rewrite of `dna.yaml` when the in-place edit cannot apply (see above).
 
@@ -1068,7 +1068,7 @@ $ wingfoil directive assign --directive api-style --role developer
 }
 ```
 
-- **Commit:** `wf(directive): assign <name> to <role>`
+- **Commit:** `wf(directive): assign <name> to <role>`. It raises `roles.yaml`'s `version:` by 0.1, read as a number (`1.9` → `2.0`; new in 0.3.1), in place or under `--force`; a `roles.yaml` written for the first time starts at `version: 1.0`.
 - **Errors:** missing option → exit `2`; role not in the committed `dna.yaml` → exit `1`.
 - **`--force`** — New in 0.3. `directive assign` edits `roles.yaml` in place, keeping its
   comments and layout. When it cannot — for example, the role's list is written inline as
@@ -1494,7 +1494,7 @@ created workflow arch-review (.wingfoil/workflows/custom/arch-review.yaml) in 4f
 - **Errors (exit `2`):** no `<name>`, or more than one positional; a name outside `[a-z][a-z0-9-]*`
   (`invalid workflow name '<name>' (allowed: [a-z][a-z0-9-]*)`); `--kind` other than `main` or `sub`;
   `--kind` together with `--startable` or `--includable`; none of the three.
-- **Commit:** `wf(workflow): create <name>`, holding the new file and `workflows.yaml`.
+- **Commit:** `wf(workflow): create <name>`, holding the new file and `workflows.yaml`, whose `version:` it raises by 0.1, read as a number (`1.9` → `2.0`; new in 0.3.1); a `workflows.yaml` written for the first time starts at `version: 1.0`.
 
 ### `wingfoil workflow remove`
 
@@ -1515,14 +1515,14 @@ workflow. It decides at `HEAD`, and refuses, in this order:
 - a removal after which the workflows would not load, such as removing the last startable workflow or the
   last entry of `workflows.yaml`: `error: cannot remove '<name>': the workflows would not load: …`.
 
-Otherwise it deletes the file and its `include:` entry, keeping the rest of `workflows.yaml` as it is.
+Otherwise it deletes the file and its `include:` entry, keeping the rest of `workflows.yaml` as it is but for its `version:`.
 `--format json|yaml` prints `{"baseline": {…}, "name", "file", "commit"}`.
 
 - **Errors (exit `1`):** the four refusals above; `unknown workflow: <name>`; `workflows.yaml cannot be
   edited in place: …` (an `include:` written inline as `[ … ]`: write it as one `- <file>` per line); an
   uncommitted change to the workflow file or to `workflows.yaml`.
 - **Errors (exit `2`):** no `<ref>`, or more than one positional.
-- **Commit:** `wf(workflow): remove <name>`, holding the deletion and `workflows.yaml`.
+- **Commit:** `wf(workflow): remove <name>`, holding the deletion and `workflows.yaml`, whose `version:` it raises by 0.1, read as a number (`1.9` → `2.0`; new in 0.3.1).
 
 ### `wingfoil workflow adopt`
 
