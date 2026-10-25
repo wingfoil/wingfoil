@@ -420,6 +420,12 @@ an `optional:` first phase puts two steps adding one type on the frontier; on th
 **Not pinned:** the single form's REQ-SEC-01 identity refusal (an existing message, not a new branch), and D7's
 part-way refusal (unreachable when the walk is right).
 
+Send-back (coordinator, 2026-10-24): the D5 test of `test/cli/workflow-adopt.integration.test.ts` expected a
+console `warning: ` line under `--format json`, where every success warning is the spec-008 §6 JSON line `{"warning": …}`
+(`src/cli/warning.ts`); fixed in `68c62492` to parse a stderr JSON line whose `warning` names the path, plus a console run
+asserting `^warning: .*docs/planning/rl-v1.md`; `npx jest test/cli/workflow-adopt.integration.test.ts --maxWorkers=2` on
+green `5445c37c`: 17 passed, 17 total.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
