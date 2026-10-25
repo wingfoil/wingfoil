@@ -563,6 +563,35 @@ No `workflow adopt` was run on this repository; every probe used fixture or scra
   delegates to it, and its messages are unchanged.
 - All of these are re-exported from `src/core`, with `planAdoptions`, `PlannedStep`, `AdoptionPlan` and `StepAddition`.
 
+### red after review (qa, 2026-10-25)
+
+After the reject `2f581d78` (approver rulings 2026-10-25: D1 re-ruled for `--plan`, option (a); finding 2). Red commit
+**`bc82e297`** (T4 for the fix is measured from it), test files only; the uncommitted `spec-017` edit in the worktree was
+left untouched.
+
+**Files** (new): `test/core/workflow-adopt-review.test.ts` (in-process, fixture repositories; `life` replaced through
+`buildLifeRepo`'s `workflows` option, so `test/core/helpers/adopt-fixture.ts` is not edited) and
+`test/workflow/adopt-plan-review.test.ts` (pure `planAdoptions`).
+
+**Per ruling.**
+- D1 re-ruled (red): BDD P4.21 sc. 2 and sc. 3 bound on `sw-life-cycle.seed-first-release-line`'s shape, a string
+  `produces: "docs/planning/{id}.md"` before a gate: `--plan` lists `life.seed` with `rl-v1`; `--plan --apply` writes one
+  empty commit `workflow: adopt life-1-plan life.seed release-line:rl-v1`, the blob of `rl-v1` unchanged, and `workflow
+  next` reports `life.approve@release-line:rl-v1` awaiting `rl-v1` (gate held). Pure counterpart in
+  `adopt-plan-review.test.ts`.
+- D1, the `{ type, path }` form (characterization): listed, in both files — passes at red.
+- Finding 2 (red): two frontier steps (`seed-a` optional, `seed-b`) sharing `rl-v1`: `--plan` proposes it once, to
+  `life.seed-a`, and lists no unscoped `life.seed-b`; `--plan --apply` writes exactly the proposed adoptions, no part-way
+  refusal. The pure test also pins the second step deduced again as `life.seed-b@release-line:rl-1` with no candidate (a
+  zero-candidate step stays listed, as the accepted design and `adopt-plan.test.ts` already pin).
+
+**Run** on the code build `0.3.0 (2bd17839…)` (`node dist/cli.js --version`): `npx tsc --noEmit -p tsconfig.json` exit 0;
+`npx jest test/core/workflow-adopt-review.test.ts test/workflow/adopt-plan-review.test.ts --maxWorkers=2`: 6 failed,
+2 passed (the two `{ type, path }` characterizations). First failing lines: string `produces` — `Received: Array []` for
+the expected `life.seed` entry (pure and in-process), and `Expected: 4 Received: 3` commits on `--apply`; finding 2 —
+`Expected length: 1 Received length: 2` (`life.seed-a` and `life.seed-b` both list `rl-v1`, pure and in-process), and
+`refused: CONFLICT: step 'life.seed-b' is not on the frontier of life-1-plan` on `--apply`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
