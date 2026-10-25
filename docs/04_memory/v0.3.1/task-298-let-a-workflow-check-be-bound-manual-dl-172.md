@@ -298,10 +298,11 @@ pin advance), and record the code-build rule in AGENTS.md §3.
 
 ### Pending amendments (approver)
 
-- `spec-017-workflow-commands-and-state-deduction` (§12 "Re-measured at `task-298`" paragraph and a dated Revision
-  note, additions only on top of `1fbf5cbc`): `--reason "Record the re-measure of §12 after task-298 binds
-  demo.rendered manual: true (dl-172 (a)): 27 workflows, 105 phases, 0 errors and 86 W_WORKFLOW_UNBOUND_TOKEN
-  warnings on checks, 87 before, measured on release/0.3 with task-293 and task-299 merged."`
+- ~~`spec-017-workflow-commands-and-state-deduction`: the `--reason` first proposed here (2026-10-24)~~ — superseded
+  on 2026-10-25 by the line below, after the independent review's fixes 2–3 added the pinned-build sentence.
+- **Final (2026-10-25):** `spec-017-workflow-commands-and-state-deduction` (§12 "Re-measured at `task-298`"
+  paragraph and a dated Revision note, both dated 2026-10-25, additions only on top of `1fbf5cbc`):
+  `--reason "Record the re-measure of §12 after task-298 binds demo.rendered manual: true (dl-172 (a)): 27 workflows, 105 phases, 0 errors and 86 W_WORKFLOW_UNBOUND_TOKEN warnings on checks, 87 before, measured on release/0.3 with task-293 and task-299 merged; the pinned 0.3.0 refuses that binding, so the figures are the code build's and check:mcp declares the three wingfoil://workflows Resources until the pin reaches 0.3.1."`
 
 ### independent review (2026-10-25) and fixes (developer)
 
@@ -331,7 +332,7 @@ Verdict APPROVE WITH FIXES. Finding 1 (no `pinned-build` bug behind the 0.3.0 kn
 `Record the re-measure of §12 after task-298 binds demo.rendered manual: true (dl-172 (a)): 27 workflows, 105 phases, 0 errors and 86 W_WORKFLOW_UNBOUND_TOKEN warnings on checks, 87 before, measured on release/0.3 with task-293 and task-299 merged; the pinned 0.3.0 refuses that binding, so the figures are the code build's and check:mcp declares the three wingfoil://workflows Resources until the pin reaches 0.3.1.`
 
 - **1, finding 1 — approver ruling 2026-10-25, option (a)** (`16586bd2`): the coordinator filed `bug-414` (tag
-  `pinned-build`, `open`; commits `d2f120d8`, `93caf8f0`). The reason of the three 0.3.0 `KNOWN_READ_FAILURES`
+  `pinned-build`; filed `open` in `d2f120d8` / `93caf8f0`, triaged by the approver in `a2db4016`, `open → triaged`). The reason of the three 0.3.0 `KNOWN_READ_FAILURES`
   entries now starts `bug-414 (task-298): …`, as the 0.2.2 entry cited `bug-292`; `test/cli/mcp-registration.test.ts`
   pins `/^bug-414 \(task-298\).*manual: true.*0\.3\.1/`; AGENTS.md §3 names `bug-414`. `wingfoil-cli` §1 says "The
   `pinned-build` bug of §3 records it, as §2 requires" without the id: §3 lists no bug, and
