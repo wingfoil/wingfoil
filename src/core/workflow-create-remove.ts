@@ -21,7 +21,7 @@
 import { join } from 'path';
 
 import { documentExists, readDocument, writeAndCommit } from '../storage';
-import { DiagnosticsError } from '../validation';
+import { DiagnosticsError, raiseConfigVersion } from '../validation';
 import { withWarningSink } from '../validation/warning';
 import { renderCustomWorkflow, type NewWorkflow } from '../workflow/create';
 import { deduceWorkflowState, type Baseline } from '../workflow/deduce';
@@ -187,8 +187,12 @@ export async function workflowCreate(params: WorkflowCreateParams): Promise<Core
   }
 
   const manifestPath = join(root, WORKFLOWS_MANIFEST_PATH);
-  const edit = withIncludeAdded(documentExists(manifestPath) ? readDocument(manifestPath) : null, entry);
-  if (!edit.ok) return notEditable(edit);
+  const manifestExists = documentExists(manifestPath);
+  const added = withIncludeAdded(manifestExists ? readDocument(manifestPath) : null, entry);
+  if (!added.ok) return notEditable(added);
+  // dl-174 (a), spec-006 §6 item 7 (task-299): an existing manifest's `version:` is raised in this commit; a
+  // manifest written whole for the first time already carries `version: 1.0` (`withIncludeAdded`).
+  const edit = { ok: true as const, text: manifestExists ? raiseConfigVersion(added.text) : added.text };
   const content = renderCustomWorkflow(workflow);
   const overlay = new Map<string, string | null>([
     [file, content],
@@ -269,8 +273,10 @@ export async function workflowRemove(params: WorkflowRemoveParams): Promise<Core
     if (!unmodified.ok) return unmodified;
   }
 
-  const edit = withIncludeRemoved(readDocument(join(root, WORKFLOWS_MANIFEST_PATH)), entry);
-  if (!edit.ok) return notEditable(edit);
+  const removed = withIncludeRemoved(readDocument(join(root, WORKFLOWS_MANIFEST_PATH)), entry);
+  if (!removed.ok) return notEditable(removed);
+  // dl-174 (a): the manifest's `version:` is raised in this commit (spec-017 §7.8).
+  const edit = { ok: true as const, text: raiseConfigVersion(removed.text) };
   const overlay = new Map<string, string | null>([
     [file, null],
     [WORKFLOWS_MANIFEST_PATH, edit.text],
