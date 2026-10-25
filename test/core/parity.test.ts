@@ -166,6 +166,8 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       // task-217 (`spec-017` §7.1–§7.2): Tools here; the production server serves none before v0.4.
       // task-226 (`spec-017` §7.9): `workflow finalize`, a Tool here through the mechanical registrar.
       // task-211 (`spec-017` §7.7–§7.8): `workflow create` / `workflow remove`, likewise.
+      // task-294 (`spec-017` §7.11, §9): `workflow adopt`, likewise.
+      'workflow adopt',
       'workflow create',
       'workflow end',
       'workflow finalize',
@@ -233,6 +235,8 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'memory.submit',
       // task-217 (`spec-017` §9): v0.4 Tools of the production server; here through the mechanical registrar.
       // task-211 (`spec-017` §9): `workflow.create` / `workflow.remove`, v0.4 Tools of the production server too.
+      // task-294 (`spec-017` §9): `workflow.adopt`, a v0.4 Tool of the production server too.
+      'workflow.adopt',
       'workflow.create',
       'workflow.end',
       'workflow.finalize',
