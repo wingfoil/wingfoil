@@ -890,16 +890,15 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
 
       // Full smoke runs (each drives every template's scenario and agent run before the journey). Since task-294 the
       // scenario itself runs `workflow start sw-life-cycle` and `workflow finalize <instance>` before its adopt probe,
-      // so each fault names an argv prefix only the journey's invocations carry (`workflow start deliver`, the
-      // journey's `workflow finalize --step …`).
+      // so each fault aims at the journey's own invocation: the bare `workflow finalize` that writes the record
+      // (run.sh's `expect_exit 0 workflow finalize`, an exact-argv fault) and `workflow start deliver`.
       it('[Scrum] a workflow finalize that claims success and records nothing fails the journey check (proxy noop)', () => {
-        const report = smokeWithFault('noop@workflow finalize --step');
+        const report = smokeWithFault('noop@=workflow finalize');
         expect(report.ok).toBe(false);
         expect(lastCheck(report)).toMatchObject({ label: `[Scrum/journey] ${LABEL_PATH}`, ok: false });
         expect(lastCheck(report).detail).toContain('FAIL:');
-        // The example's first finalize is the off-frontier refusal (expected exit 1): either it or the
-        // record's HEAD check (`workflow: finalize …`) is the FAIL line.
-        expect(lastCheck(report).detail).toMatch(/workflow:? finalize/);
+        // The noop finalize exits 0 and writes nothing: the record's commit check after it (`expect_head`) is the FAIL line.
+        expect(lastCheck(report).detail).toContain("FAIL: commits written: expected '1', got '0'");
       });
 
       it('[Scrum] a workflow start that exits 1 fails the journey check, naming both codes', () => {
