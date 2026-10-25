@@ -38,7 +38,7 @@ run WingFoil from its own source, so the rule has no meaning in a project scaffo
 | Job | Build | How it is run, from the repository root |
 |-----|-------|------------------------------------------|
 | **Memory operations** — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `amend`, `park`, and every other verb that writes a `wf()` commit — and the **workflow commands that write a commit** (`workflow start`, `finalize`, `end`, `create`, `remove`) | the **code build**, compiled from this checkout | `npm run build`, then `node dist/cli.js <command>` |
-| **Read commands** — `dna show`, `paths`, `directives list`, `memory search`, `memory history`, `workflow list`, `show`, `next`, `status` — and **MCP** | the **pinned build**, the devDependency `wingfoil-released` | `npm run -s wingfoil -- <command>`; the MCP server `.mcp.json` registers (`npm run check:mcp`) |
+| **Read commands** — `dna show`, `paths`, `directives list`, `memory search`, `memory history`, `workflow list`, `show`, `next`, `status` (the code build while the pin is 0.3.0, see below) — and **MCP** (its `wingfoil://workflows` Resources: the code build while the pin is 0.3.0, see below) | the **pinned build**, the devDependency `wingfoil-released` | `npm run -s wingfoil -- <command>`; the MCP server `.mcp.json` registers (`npm run check:mcp`) |
 
 - **Why the code build for Memory operations.** This repository is the only one that can run WingFoil
   from its own source, so a fix merged into the integration branch (`main`, or `release/X.Y` on a
