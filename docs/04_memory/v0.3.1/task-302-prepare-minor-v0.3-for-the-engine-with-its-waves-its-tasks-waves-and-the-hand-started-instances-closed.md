@@ -54,6 +54,168 @@ task prepares the edits and the batches.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (developer, 2026-10-26)
+
+Branch `task/task-302` at `fd368160` (cut from `release/0.3` `98fccec0`, `task-301` merged). Inputs read: `dl-175` (`ready`,
+(a)), `dl-186` (`ready`; S3, S3-b, E3, S4), `dl-100` (`ready`, §1–§2), `dl-187` (`ready`, informative), `spec-017`
+(`approved`; §3, §4.3–§4.9, §7.9–§7.11, §12), `memory.yaml` (`release` `amendable: true`, `fields.waves`; `task`
+`fields.wave`, `amendable: true`; `plan`), `release-cycle.yaml` 1.6, `wave.yaml` 1.0, `dev-loop.yaml` 2.1, `minor-v0.3`,
+`dev-loop-rel-v0.3-plan` §3 and its Execution Notes, `release-planning-rel-v0.3-plan` Appendix E,
+`release-planning-rel-v0.3.1-plan` R4/R6, and read-only in `../.wf2-wt/dev-loop-v0.3.1` the dev-loop plan's "Rulings
+W2" and "W2". `depends_on: []`, no handover. Every probe below ran in throwaway clones under the agent's scratch folder
+with this worktree's code build (`node dist/cli.js`, `0.3.0 (fd368160…)`); nothing was started, adopted or committed on
+this repository.
+
+**Measured at `fd368160`.**
+- `ls docs/04_memory/v0.3/task-*.md | wc -l` → 164; `grep -h '^status:' … | sort | uniq -c` → 163 `done`, 1 `deprecated`
+  (`task-223`); `grep -L '^wave: "w' docs/04_memory/v0.3/task-*.md | wc -l` → 164 (no task has a wave); 11 files carry
+  `wave: ""` (279–289), 153 none; `grep -L '^kind: *"\?\(feature\|fix\)' … | wc -l` → 0 (every task keeps `kind`,
+  which `memory amend` requires past `draft`). `minor-v0.3`: `status: released`, `backlog_committed: 121`, no `waves:`.
+- `node dist/cli.js workflow status` → 3 open workflows (`decision-log-ingest-rel-v0.3-run-token-counts-plan` active,
+  frontier `decision-log-ingest.approve@…dl-188…` missing `state`; `decision-log-ingest-rel-v0.3-market-decisions-plan`
+  and `service-ingest-rel-v0.3-listings-plan`, element `(none)`, frontier `capture`, missing `produces`), 1 pending
+  approval (`dl-188`), 33 ungated (among them `dl-140` and `svc-012`), 86 diagnostics.
+- Tests on the files this task changes (`git grep -l -E 'minor-v0\.3|docs/04_memory/v0\.3|backlog_committed|…' -- test
+  scripts`): `npx jest test/core/release-waves-config.test.ts test/core/task-kind.test.ts
+  test/core/workflow-repository-conformance.test.ts test/core/define-scope-sweep.test.ts
+  test/workflow/release-kind-rule.test.ts --maxWorkers=2` → 5 suites, 63 tests passed. None pins a v0.3 task's `wave`
+  or `minor-v0.3`'s `waves`; `task-kind.test.ts` reads every real task file (still green after the probe's edits, which
+  keep `kind`).
+
+**AC 1 — the mapping.** Every v0.3 task already declares its wave in its own Implementation Notes (`**wave:** N`), and
+those lines agree with the dev-loop plan: `for f in docs/04_memory/v0.3/task-*.md; do grep -o -i '\*\*wave:\*\* *[^·,(]*' $f | head -1; done`
+grouped →
+
+| Key | Count | Tasks | Plan evidence (`dev-loop-rel-v0.3-plan`) |
+|---|---|---|---|
+| `w0` | 4 | 126–129 | §3 Wave 0 |
+| `w1` | 42 | 130–170, 247 | §3 Wave 1 (247 in B4) |
+| `w2` | 34 | 171–193, 248–251, 253–259 | "Wave 2 totals: 34 tasks … 8 added (`251`, `253`–`259`)" |
+| `w3` | 82 | 194–246 (223 `deprecated`), 260–288 | §3 Wave 3 B1–B9, `task-273`'s notes ("run before batch B3"), B7/B8 fixes 279–284; "W3: 81 of 82 tasks `done`" |
+| none | 2 | 252, 289 | "`task-252` runs in the `user-docs` phase"; both files: "**wave:** none — executed inside the v0.3 `user-docs` phase" |
+
+4 + 42 + 34 + 82 + 2 = 164; no task is unplaceable. Keys `w0`…`w3`, the form `patch-v0.3.1` uses (`waves: [w0, w1,
+w2]`); `minor-v0.3` gets `waves: [w0, w1, w2, w3]`. The two user-docs tasks keep `wave: ""` / no `wave:` (decision D1);
+`task-223` gets `w3` (D2). The mapping is derived at run time from the notes' `**wave:**` lines (one source; no second
+164-row table to drift), cross-checked against the four counts above.
+
+**AC 1 — batch mechanics (probed).** In a clone with all 162 task edits and the `minor-v0.3` edit uncommitted at once:
+- `node dist/cli.js memory amend task-126-… --reason "…"` → exit 0, one commit `wf(task): amend task-126-… [done → done]`,
+  `git show --stat` → 1 file; `git status --short | wc -l` → 162 still dirty. `memory amend` commits its one path with
+  `git commit --only` and its dirty-target guard is per path (`src/core/memory-amend.ts`, `src/core/write-guard.ts`
+  "Why the guard is per-path and never per-tree"), so other dirty files neither block it nor ride along.
+- `memory amend minor-v0.3` → exit 0, `[released → released]`; `memory amend task-223-…` → exit 0,
+  `[deprecated → deprecated]`; `--dry-run` prints subject, path and diff and writes nothing. State never matters to the
+  verb; `amendable: true` and the required fields do.
+- All 160 remaining amends in a loop: 160 commits, 0 failures, 293 s (≈ 1.8 s each), `git status` clean afterwards.
+- The pinned 0.3.0 reads the amended state (`memory search --type release`, `memory history minor-v0.3` → 15 entries,
+  the amend among them), no error.
+
+Design: **one script applies one edit and runs its amend, per id, never leaving 160 files dirty.** Proposed
+`scripts/v0.3-waves.cjs` (with `.d.cts` if its own tests import it):
+- default / `--plan`: reads `HEAD`, prints the mapping table and the batches, writes nothing;
+- `--batch <n> --print`: prints the batch's commands (edit + `node dist/cli.js memory amend <id> --reason "…"`), the
+  form ruling R4 names;
+- `--batch <n> --run`: per id, in order: refuse if the file is dirty; skip if `HEAD` already holds the wave (resumable);
+  set `wave: "wN"` through the shared setter (`setFrontmatterEntry`, `dist/memory/frontmatter-edit.js`, so `npm run build`
+  first); run the amend; verify the new commit touches only that path with the expected subject; stop at the first
+  failure;
+- `--check`: exit 0 only when `HEAD` holds the whole mapping and `minor-v0.3`'s `waves` — the approver's per-batch
+  verification, with `git log --oneline <before>..HEAD | wc -l` = ids in the batch.
+Batches: batch 0 = `minor-v0.3` alone; batches 1–9 = the 162 tasks in id order, 20 each (the last 2). 163 approver
+commits, ≈ 5 minutes of tool time. Reasons (dl-067 shape): task — "Wave wN of minor-v0.3, as this task's Implementation
+Notes and dev-loop-rel-v0.3-plan's wave N record it; release-cycle's implementation selects a wave's tasks by this field
+(dl-186 S3-b, task-302)."; release — "Declares the four waves v0.3 ran in, w0 to w3 (dev-loop-rel-v0.3-plan §3), so
+release-cycle's implementation can iterate them; order is expressed by waves: (dl-175 (a)); dl-186 S3-b and E3,
+task-302." The amends are the approver's (`amend` needs approver authority, `memory-amend.ts` step 4); no AI trailers on
+them.
+
+**AC 2 — what the deduction does, probed.** Clone A: the 163 amends committed (as above), then `workflow start
+sw-life-cycle` (plan named `sw-life-cycle-dl-188-…-plan`: the context element of `bug-413`), one `workflow adopt`
+(`rl-v1` for `seed-first-release-line`, clone only) and the finalizes the rl-v1 level asks:
+- `workflow status sw-life-cycle --format json | grep -c 'minor-v0.3[^.]'` → **0**: no step of `minor-v0.3` is on the
+  frontier, with or without the amends. A trace of the iteration (an instrumented copy of `dist/` in the scratch folder,
+  logging each `iterate_over` candidate's class) gives `delivery rl-v1 release:minor-v0.3 ignored planning=current`, like
+  `minor-v0.1`, `minor-v0.2` and `patch-v0.2.2`: `released` is outside `delivery`'s entry filter `[draft, planning,
+  in-development]`, and no phase of its `release-cycle` is complete (its first step,
+  `release-planning.advance-pinned-build`, is a checkpoint with no record), so it is neither eligible nor entered
+  (`src/workflow/deduce.ts` `iterate`). `dl-186` E3's stop at `implementation@release:minor-v0.3` was measured while
+  `minor-v0.3` was `in-development`; after its release the deduction never reaches its waves.
+- Hypothetical clone B (A + one probe commit setting `minor-v0.3` back to `in-development`, the E3 condition): planning
+  needs 2 finalizes (`advance-pinned-build`, `identify-specs`); then `implementation` expands into `wave.tasks@…/waves#w0`
+  … `#w3` with **161** `dev-loop` iterations (163 done less 252/289; `task-223` archived, not a candidate). **No done
+  task completes its dev-loop by state alone**: `start`, `review` and `done` complete from the task's `done`, but
+  `design` (an approval whose step created no tech-spec, `missing: record`, approver authority), `red`, `green` and
+  `refactor` each need a record: 4 × 161 = **644** `workflow finalize` commits (646 with planning's two; `git log
+  --format=%s | grep -c '^workflow: finalize'` → 646 in clone B). Then the frontier holds
+  `wave.wave-checks@release:minor-v0.3/waves#w0…w3`, `missing: produces`, `finalizable: false`: v0.3 wrote no
+  `docs/07_gates/rl-v1/rel-v0.3-wN-e2e-smoke.md` (`ls docs/07_gates/rl-v1/`), so the waves cannot complete.
+- Control clone C (no amends, same hypothetical): after the same planning finalizes, `release-cycle.implementation@
+  release:minor-v0.3 missing=[include]` and `W_UNRESOLVED_TOKEN phases[1].iterate_over collection 'element:waves' of
+  release:minor-v0.3 has no field 'waves'` — E3 reproduced.
+
+So AC 2 as written ("each done task completes its dev-loop sub by its `state` evidence") is contradicted twice by the
+code: on the real state the deduction ignores `minor-v0.3`, and on the hypothetical one every done task needs four
+records. Decision D3 for the approver.
+
+**AC classification and what `qa` pins** (red file: `test/core/minor-v0.3-waves.test.ts`; every read is of `HEAD`,
+`git show HEAD:<path>` or `readPathAtRev`/`listMemoryDocumentPathsAtRev` from `src/storage`/`src/memory`, never the
+working tree, so uncommitted edits cannot make it pass; real files only, no toy fixture):
+
+| AC | Class | qa pins |
+|---|---|---|
+| 1 (mapping) | characterization | Every `docs/04_memory/v0.3/task-*.md` at `HEAD` has exactly one `**wave:**` line in its Implementation Notes, value `0`–`3` or `none`; counts 4 / 42 / 34 / 82 / 2; `none` exactly `task-252`, `task-289`. Passes now. |
+| 1 + 2 (data the deduction reads) | red-first (D3 (a)) | At `HEAD`: `minor-v0.3`'s frontmatter `waves` equals `['w0','w1','w2','w3']`; every v0.3 task whose notes say `N` has frontmatter `wave` = `wN` (including `task-223`, D2); `task-252` and `task-289` have `wave` absent or `""` (D1); every non-archived task with `release: "v0.3"` and a non-empty `wave` names a key of `minor-v0.3`'s `waves`. Fails at red (no `wave`, no `waves`); passes once the approver's batches are on the branch. |
+| 2 (deduction) | recorded command (D3 (a)) | No jest test: the observable needs a started `sw-life-cycle` plus ≈ 650 records, or a fake `in-development` state. The green notes record the clone-A/B/C commands and outputs above, re-run after the amends land. |
+| 3 | characterization, recorded command | `node dist/cli.js workflow status` lists only instances with work left, each named in the notes (below). No test: which plans are open changes with every approval. |
+| 4 | characterization, recorded command | `grep -n '^ref:' docs/04_memory/v0.3.1/task-302-*.md` → `ref: "dl-175"`; `dl-175` `ready`, `release: "v0.3.1"`; `release-planning-rel-v0.3.1-plan` R4 ("the coverage check is met by this task's `ref:`"). |
+
+The developer adds its own tests for the script (`--plan` output, refusal on a dirty file, skip when already applied,
+one-path commit) on fixtures built from real task shapes.
+
+**Order (T4).** red (qa commits the test, red on the second block) → green (developer: the script and its own tests;
+`--plan` and `--batch n --print` tried in the console; commits; STOP) → the approver runs batches 0–9 on `task/task-302`
+in this worktree, `--check` after each → refactor / self-review / submit (developer; full gates with the amends on the
+branch; the red test then passes without being touched) → review. The amends land before review so `npm test` is green
+at submit.
+
+**AC 3 — the hand-started instances** (`grep -rl '^status: active' docs/05_plans` → 4 files; the fourth,
+`dev-loop-rel-v0.3.1-plan`, runs `dev-loop`, which is not startable, so it is no instance, `spec-017` §3.2):
+- `decision-log-ingest-rel-v0.3-run-token-counts-plan` — started with `workflow start` (dl-186 E5), element `dl-188`
+  linked; work left: the approver's ratification of `dl-188` (`in-discussion`). Stays open.
+- `decision-log-ingest-rel-v0.3-market-decisions-plan` — hand-started; capture done (`dl-140`…`dl-145` exist); its
+  completion criterion is "`dl-140`…`dl-145` `ready`": `dl-141`…`dl-145` `ready`, `dl-140` `in-discussion`
+  (`grep -m1 '^status:'` on each), ratification deferred by the approver to v0.4 planning (plan, 2026-10-02).
+- `service-ingest-rel-v0.3-listings-plan` — hand-started; `svc-010`, `svc-011`, `svc-013` exist; completion criterion
+  "`svc-012` `active`": `svc-012` is `pending` (ungated in `workflow status`) until mcp.so publishes the listing.
+No instance has its work done today, so AC 3 closes nothing unless the approver rules otherwise (D4). The engine's view
+of the two hand-started ones stays wrong (frontier `capture`, "missing: produces", `dl-186` E1) until v0.4's adoption.
+
+**AC 4.** `dl-175` (a) is cited by the task's `ref:` (the `ready-decision-logs.covered` reading of R4) and by
+`minor-v0.3`'s amend reason above.
+
+**Files.** New: `scripts/v0.3-waves.cjs` (+ `.d.cts`), the developer's script test (`test/cli/`), qa's
+`test/core/minor-v0.3-waves.test.ts`; this task file. Approver commits: `minor-v0.3.md` and 162 task files under
+`docs/04_memory/v0.3/` (amends), plus D4's finalizes if ruled. No `.wingfoil/` file, no spec, no version bump. No file of
+`task-303` (`bindings.yaml`, `spec-017` §12, the conformance test).
+
+**Decisions for the approver** (recommendation first):
+- **D1** `task-252`, `task-289` (run inside `user-docs`, notes "wave: none"): (a) no wave — recommended: the `wave` sub
+  iterates implementation tasks, and these were not; (b) `w3`.
+- **D2** `task-223` (`deprecated`, notes "wave: 3"): (a) amend it to `w3` — recommended, uniform data, one command, the
+  probe shows the amend accepted `[deprecated → deprecated]`; (b) leave it (archived, never a candidate, §4.11).
+- **D3** AC 2 contradicts the code (above): (a) — recommended — keep the red-first on the data the deduction reads
+  (the qa table), and record the deduction's behaviour by command: on the real state `minor-v0.3` is ignored (0 frontier
+  steps); on the `in-development` hypothetical it reads through its four waves, its 161 dev-loops need 644 records
+  (`design` included) and its wave-checks cannot complete; no finalize is written on this repository (no instance, S4);
+  (b) rewrite AC 2 by the approver's amend of this task before red; (c) drop AC 2 from v0.3.1.
+- **D4** the two hand-started ingest plans: (a) — recommended — keep both open: their own completion criteria are unmet
+  and the v0.3 dev-loop plan's W3 B9 note says the listings plan "closes once `svc-012` is decided" and the ingest
+  instances "close at their ratification"; (b) close both now by hand (`wf(plan): finalize <id> [active → done]`,
+  status only, `Reason:` naming `dl-140` / `svc-012`, which `workflow status` keeps listing as ungated), removing
+  E1's wrong `capture` instructions before v0.4; committed by the developer on the approver's instruction, or by the
+  approver.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
