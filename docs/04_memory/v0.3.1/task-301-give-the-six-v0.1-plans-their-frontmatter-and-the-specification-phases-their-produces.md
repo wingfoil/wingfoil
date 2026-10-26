@@ -51,6 +51,136 @@ instance passes `specification` only by eleven `finalize` records.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (developer, 2026-10-26)
+
+Branch `task/task-301` at `46c543eb` (cut from `release/0.3` `ae9da384`). Inputs read: `bug-389`, `dl-186` (`ready`,
+S3-b: "give the six v0.1 plans their frontmatter"), `dl-019` (`ready`, "Existing plans: grandfathered … backfilling
+frontmatter … optional"), `dl-139` (`ready`), `dl-132` (`ready`, Q2 (ii)), `spec-017` (`approved`, §1.4, §3.1–§3.2,
+§4.3, §4.5, §4.7, §4.10, §12), `spec-003` (`approved`), `memory.yaml` `plan` (path `docs/05_plans/{scope}/{id}.md`,
+required `[title, workflow, phase]`, `draft → active → done`), the plan template, the four workflow files (all
+`version: 1.0` on `release/0.3`: `git show release/0.3:.wingfoil/workflows/custom/user-story-mapping.yaml | grep ^version`
+→ `version: 1.0`, likewise the other three), the dev-loop plan's "Rulings W2" (W2-1, W2-2) read-only in
+`../.wf2-wt/dev-loop-v0.3.1`. `depends_on: []`, no handover.
+
+**Measured at `46c543eb`** (code build, `npm run build` then, in this worktree):
+- `node dist/cli.js workflow status --format json` → exit 0, 92 diagnostics: `W_WORKFLOW_UNBOUND_TOKEN` × 86,
+  `W_MEMORY_UNREADABLE` × 6 ("no frontmatter": `docs/05_plans/rl-v1/initial-design-rl-v1-plan.md` and
+  `docs/05_plans/rl-v1/rel-v0.1/{dev-loop-rel-v0.1-plan,release-implementation-rel-v0.1-plan,release-planning-rel-v0.1-plan,release-submit-rel-v0.1-plan,retrospective-and-config-bootstrap-plan}.md`);
+  open instances `decision-log-ingest-rel-v0.3-run-token-counts-plan` (active),
+  `decision-log-ingest-rel-v0.3-market-decisions-plan`, `service-ingest-rel-v0.3-listings-plan`; no `sw-life-cycle`
+  instance. `node dist/cli.js workflow list --all --format json` → 27 workflows, the same 92 diagnostics.
+- Baseline tests: `npx jest test/core/workflow-repository-conformance.test.ts test/core/workflow-deduction.test.ts
+  test/docs/workflow-md.test.ts test/core/vision-change-workflow.test.ts test/lint/version-bump.test.ts --maxWorkers=2`
+  → 5 suites, 84 tests passed.
+- Files that read the six plans or the four workflows (`git grep -n "rel-v0.1/\|initial-design-rl-v1-plan\|retrospective-and-config-bootstrap" -- test scripts src`;
+  `git grep -l "user-story-mapping\|specification-by-examples\|volere-requirements\|backlog-export" -- test scripts src`):
+  `test/core/workflow-deduction.test.ts:560-575` (task-198 review F3 pins the six as unreadable),
+  `test/core/workflow-repository-conformance.test.ts` (warning set, `measure().checkpoints`),
+  `test/core/vision-change-workflow.test.ts` and `test/docs/workflow-md.test.ts` (phase names only).
+
+**Probe (scratch clone of this branch, not committed; code build of this worktree).** The four files given
+`produces` (below) and the six plans the frontmatter (below), then:
+- `workflow status --format json` → 86 diagnostics, all `W_WORKFLOW_UNBOUND_TOKEN` (the same 86 rows); the same three
+  open instances; `npx jest` of the five suites above → exactly 2 failures: conformance "28 checkpoint phases …" and
+  deduction "task-198 review F3 … reports exactly the six" — the two pins this task moves; the warning-set `it` passes.
+- `workflow start sw-life-cycle` then `workflow status sw-life-cycle --format json` → phases `inception: complete`,
+  `specification: complete`, `init: complete`, frontier `sw-life-cycle.seed-first-release-line`. Control clone without
+  the change: `specification: current`, frontier `user-story-mapping.backbone` (`bug-389` step 2).
+- `npm run check:mcp` → exit 0, only the three `bug-414` known failures (`wingfoil://workflows`, `…/-/next`,
+  `…/-/status`); `npm run -s wingfoil -- memory search "rel-v0.1" --type plan --format json` (pinned 0.3.0) lists five of
+  the six as `done`, `memory history initial-design-rl-v1-plan` returns 6 entries.
+- Commit forms under `node scripts/check-governance.cjs --base <probe base>`: `wf(plan): add` (status `draft`) →
+  `memory submit` ×6 (code build, `draft → active`) → hand `wf(plan): finalize … [active → done]`: exit 0, "gated: 0
+  findings". A `docs(plans): …` commit adding the frontmatter at `done`: FAIL, "its status went (none) → done in a commit
+  that is not a wf() Memory operation (dl-139)" per plan. A `wf(plan): add` at `done`: FAIL, "'add' leaves it in the
+  initial state 'draft', not 'done'".
+
+**AC 1 — decision: frontmatter, not exclusion.** `dl-186` S3-b (ratified) already says "give the six v0.1 plans their
+frontmatter"; exclusion would need either moving the files out of the `plan` path (breaks `AGENTS.md` §6's model-plan
+citation and the files' history paths) or an exclusion mechanism `memory.yaml` does not have (`spec-017` §1.4 leaves out
+only files on no type's path). `dl-019` makes the backfill optional, so it needs no amendment. Frontmatter per plan
+(template fields; body unchanged; `version` omitted, the `doc-versioning` directive: "A document that declares no version
+is not given one"; `parent` set as every v0.3-era phase plan does, e.g. `release-planning-rel-v0.3.1-plan`
+`parent: "release-cycle.planning"`):
+
+| id (= file stem, unchanged) | workflow | phase | element | parent | release |
+|---|---|---|---|---|---|
+| `initial-design-rl-v1-plan` | `initial-design` | `rl-v1` | `rl-v1` | `release-line-cycle.initial-design` | `""` |
+| `dev-loop-rel-v0.1-plan` | `dev-loop` | `rel-v0.1` | `minor-v0.1` | `release-cycle.implementation` | `v0.1` |
+| `release-implementation-rel-v0.1-plan` | `dev-loop` | `rel-v0.1` | `minor-v0.1` | `release-cycle.implementation` | `v0.1` |
+| `release-planning-rel-v0.1-plan` | `release-planning` | `rel-v0.1` | `minor-v0.1` | `release-cycle.planning` | `v0.1` |
+| `release-submit-rel-v0.1-plan` | `release-submit` | `rel-v0.1` | `minor-v0.1` | `release-cycle.submit` | `v0.1` |
+| `retrospective-and-config-bootstrap-plan` | `retrospective` | `rel-v0.1` | `minor-v0.1` | `release-cycle.retrospective` | `v0.1` |
+
+`status: done`, `type: plan`, `tmpl_version: 261010`, a `title` from each file's H1. What the deduction does with them
+(`src/workflow/deduce.ts` `deduceWorkflowState`: only `draft`/`active` plans with an empty `parent` and a startable
+`workflow` are instances; `src/core/workflow-deduction.ts` `instancePlanIds`: a `<ref>` names only plans with an empty
+`parent`): none becomes an instance or a `<ref>`, at any of the three commits, so `workflow status`/`next` change only by
+the six diagnostics. Two ids do not follow `id_pattern` (`{workflow}-{phase}-plan`): ids are immutable and nothing
+checks the pattern on an existing file (the probe's six `memory submit` succeeded).
+Commit form (a Memory operation, `dl-139` forbids anything else): (1) by hand
+`wf(plan): add initial-design-rl-v1-plan, dev-loop-rel-v0.1-plan, release-implementation-rel-v0.1-plan, release-planning-rel-v0.1-plan, release-submit-rel-v0.1-plan, retrospective-and-config-bootstrap-plan`
+(frontmatter at `draft`, a body sentence naming `bug-389`/`dl-186` S3-b, only the six files); (2)
+`node dist/cli.js memory submit <id>` once per plan (`wf(plan): submit <id>`, `draft → active`); (3) by hand
+`wf(plan): finalize <the six ids> [active → done]`. `memory add` cannot adopt an existing file, hence (1) by hand.
+`spec-017` §1.4's sentence "The six pre-`dl-019` plan files … are reported this way" becomes stale → pending amendment
+(session 3), with §12.
+
+**AC 2 — `produces`.** Eleven phases (3 + 2 + 3 + 3), each one string entry, its module's output directory (the
+"Generated Output" of `docs/02_requirements/X_specs-downcast-plan.md` Modules 1–4; a pattern ending in `/` matches when a
+committed file lies under it, `spec-017` §4.3, as `wingfoil-init.yaml` already declares `.wingfoil/memory/templates/`):
+
+| workflow | phases | `produces` | committed today (`git ls-tree -r --name-only HEAD <dir>`) |
+|---|---|---|---|
+| `user-story-mapping` | `backbone`, `vertical-explosion`, `mvp-cut` | `docs/02_requirements/01_user_story_map/` | 8 files (`00_index.md` … `07_workflow-config.md`) |
+| `specification-by-examples` | `isolate-mvp`, `write-scenarios` | `docs/02_requirements/02_bdd/features/` | 66 `.feature` files in 6 folders |
+| `volere-requirements` | `extract-requirements`, `apply-volere-shell`, `group-by-macro-area` | `docs/02_requirements/03_sard/` | 6 files |
+| `backlog-export` | `generate-records`, `map-dependencies`, `validate` | `docs/03_backlog/04_backlog/` | 8 files |
+
+Each phase completes by `produces` at `HEAD` (probe above: `specification: complete`). One bump per file,
+`version: 1.0` → `1.1`, with the usual trailing comment (`1.1 bug-389 (task-301): every phase produces its module's
+output directory`). No phase index moves, so the warning rows' paths (`phases[i].checks.post[j]`) stay.
+Consequences to record in §12: (a) the `produces` patterns join the `W_UNCOMMITTED_INPUTS` pathspecs (`spec-017` §1.2):
+an uncommitted edit under the four directories shows on every workflow read; (b) `vision-change`'s optional
+`downcast-stories|scenarios|requirements` include the same subs, so once `update-vision` is complete they complete at
+once by existence (the directories exist after inception; `spec-017` §4.3, §4.5, §4.10 — read from the spec, not probed:
+reaching that point needs an approver `approve` of a change-proposal) and the frontier no longer offers the delta
+downcast next to `schedule` → decision D3.
+
+**AC 3 — pins and re-measure.** `measure(...).checkpoints` goes 28 → 17 (the eleven leave; order unchanged):
+`vision-change.update-vision`, `release-planning.advance-pinned-build`, `wave.re-plan`, `dev-loop.red|green|refactor`,
+`user-docs.check-implementation-complete`, `e2e-smoke.fresh-init|drive-cli|mcp-registration`,
+`release-submit.approve-release`, `release-publishing.release-commit|tag`, `release-health.propose`,
+`retrospective.additional-points|approve`, `end-of-life.archive`. Unchanged and must stay: the 86-row warning set
+(incl. the 8 rows of the four files, `task-303`'s), `finalizeApprovals` (7), the nine `{ type, path }` owners.
+`spec-017` §12 gains "Re-measured at `task-301`" (27 workflows, 105 phases, 0 errors, 86 warnings unchanged; 17
+checkpoints; workflow reads 86 diagnostics, no `W_MEMORY_UNREADABLE`), prepared uncommitted in session 3 with §1.4.
+
+**Classification and what qa pins** (real files only — the repository at `HEAD` or the real workflow YAML copied):
+
+| AC | Class | Observable / interface / test file |
+|---|---|---|
+| 1 | red-first | `test/core/workflow-deduction.test.ts`, the "task-198 review F3" `it`: `deduceWorkflowStateAtHead(<repo root>)` → no `W_MEMORY_UNREADABLE` diagnostic at all (`[]`); plus, per the six paths, the frontmatter of the table above (`type: plan`, `status: done`, `workflow`, `phase`, `element`, `parent`, `release`; read with `splitFrontmatter` / `parseYaml` from `src/storage`, `src/validation`), and none of the six ids among `deduction.instances` |
+| 2 | red-first | `test/core/workflow-repository-conformance.test.ts`: (i) a new `it` pinning `[workflow.phase, produces]` for the eleven phases exactly as the AC 2 table (via `loadWorkflowRegistryAtHead`); (ii) the checkpoint `it` → the 17 above (title updated); (iii) the warning-set `it` unchanged. Deduction pin in `test/core/workflow-deduction.test.ts`: a temp repo (`makeTempGitRepo`, `writeFixtureFile`, `commitAll`) holding the REAL `specification-downcast.yaml` and the four sub files read from `.wingfoil/workflows/custom/`, the real `.wingfoil/memory.yaml`, a minimal `kind: main` that includes `specification-downcast`, one committed file under each of the four directories and an instance plan → that main's include phase `complete`, frontier past it; same repo without the files → frontier `user-story-mapping.backbone`, `evidence missing: produces` |
+| 3 | red-first through AC 2 (ii) | the checkpoint list; the four `version: 1.1` and the §12 / §1.4 amendment verified by command at review (`git diff release/0.3 -- .wingfoil/workflows/custom/ \| grep '^[-+]version'`), no test |
+
+`tsc`/runtime reds: none, no new export. Files to touch: the six plans; the four workflow YAML (1.0 → 1.1); the two
+test files (qa, red); `spec-017` (uncommitted amendment, session 3); this task file. Not touched: `workflows.yaml`,
+`bindings.yaml`, `memory.yaml`, `AGENTS.md`, `.wingfoil/README.md`, `WORKFLOW.md` (`git grep` of the four names finds
+only structure lines, which stay true).
+
+**Decisions for the approver.** D1 — the three-operation commit form of AC 1 (`add` of six existing files, six
+`memory submit`, one hand `finalize`), recommended: the only form `check:governance` passes. D2 —
+`release-implementation-rel-v0.1-plan`'s `workflow`: `dev-loop` with `parent: "release-cycle.implementation"`
+(recommended: the phase it orchestrated ran `dev-loop`, as `dev-loop-rel-v0.3.1-plan` records it) or `release-cycle`.
+D3 — accept that `vision-change`'s optional downcasts complete by existence (recommended, with the consequence in §12 and a
+finding for the delta-downcast evidence), or keep the eleven as checkpoints there (not possible per file: the same subs are
+included by both mains).
+
+**Risks.** `task-303`: shares the conformance test (different `it`) and the §12 amendment; it starts after this merge
+(W2-1), so its rows are unaffected. `task-302`: with `parent` set the six never become instances or `<ref>`s, so its
+`workflow status` list is the same three open instances (probe).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
