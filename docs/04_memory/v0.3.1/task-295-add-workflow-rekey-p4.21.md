@@ -620,6 +620,82 @@ uncommitted `spec-017` edit untouched. No file of the red `ad578d75` is edited, 
 **tsc and lint.** `npx tsc --noEmit -p tsconfig.json` exited 0, since the green code is on the branch.
 `npx eslint` on the two files exited 0.
 
+### independent review (2026-10-26) and fixes (developer)
+
+Verdict: APPROVE WITH FIXES. Under the approver's rulings of 2026-10-26 the task stays `in-review`, with no reject.
+The qa agent wrote the red after review in `95e864c9`. T4 holds for the files of `ad578d75` and `95e864c9` (below).
+**Fix commit `e9154ea2`**; developer tests in **`6d6e7eaf`**.
+
+- **Ruling A (a): a console `--dry-run` crashed for `workflow rekey`, `workflow adopt` and `workflow finalize`.**
+  - The cause: each renderer was handed the commit plan instead of a result.
+  - The fix: each renderer gains the `isDryRunPlan` guard of `src/core/workflow-start-end.ts` /
+    `workflow-create-remove.ts`. It prints the plan as `JSON.stringify(plan, null, 2) + '\n'`, as `workflow start`
+    and `workflow create` print one.
+  - In `src/core/workflow-adopt.ts` (task-294's) and `src/core/workflow-finalize.ts` (released in 0.3.0) the change
+    is the guard only: a private `isDryRunPlan` and one line at the top of `renderAdoptConsole` /
+    `renderFinalizeConsole`.
+  - `test/core/workflow-console-dry-run-render.test.ts` (new, developer) reaches the three guards in process.
+- **Ruling B (a): the no-op only when no orphan of the instance still names `<from>`.**
+  - `workflowRekeyAtHead` now counts the remappable orphans before the no-op check, and answers the no-op only when
+    that count is 0 and the mapping is recorded.
+  - Otherwise it writes a new record, as in scratch r3: a linkage merged in after the first rekey, which that rekey
+    does not descend from. The reader counts each commit once.
+- **Ruling C (a): `--to` within the instance's workflows.**
+  - A new refusal sits right after `unknown step: <to>`: CONFLICT
+    `<to> is not a step of <workflow> or of a workflow it includes`, exit 1 (qa's text, the approver confirming).
+  - `reachableWorkflows` walks phase `include:`s from the instance's workflow, directly and indirectly, each workflow
+    once.
+  - `test/core/workflow-rekey-edges.test.ts` gains a case for a workflow included by two phases.
+  - An instance whose workflow the registry does not load reaches no workflow, so every `--to` is refused for it.
+    This is consistent with the candidate finding on renamed workflows (design, Risks).
+- **Docs on the branch:**
+  - `docs/cli-reference.md`: the `--to` row, the no-op sentence with B's condition, and the new exit-1 message.
+  - `docs/01_vision/X_cli-cmds.md`: the rekey row ("while no record still names the old key") and the
+    `--from`/`--to` parameter row. These are one-line edits inside the 1.9 bump this branch already made, with no
+    line-count change (499, `awk 'END{print NR}'`).
+- **Finding 3: an UNCOMMITTED `spec-008` §12 amendment.**
+  - The `workflow rekey` row now states two `spec-003` names (`[a-z][a-z0-9-]*`) joined by one `.`, no `@<scope>`,
+    and that the refusal names `--from` or `--to`.
+  - A Revision note dated 2026-10-26 is added.
+- **The UNCOMMITTED `spec-017` edit is updated.**
+  - §7.12 states B's condition and C's restriction. It drops "or in another one" and lists the new refusal in the
+    order.
+  - §10 gains the row: `--to` not a step of the instance's workflow or of a workflow it includes (`rekey`),
+    `<to> is not a step of <workflow> or of a workflow it includes`, `CONFLICT`, exit 1.
+  - The Revision note replaces D3 with ruling C (a) and adds ruling B (a).
+  - Added prose lines are at most 121 columns; the only longer added lines are the two table rows.
+
+**Red after review → green.** `npx jest test/core/workflow-rekey-review test/cli/workflow-console-dry-run
+--maxWorkers=2` went from `Tests: 5 failed, 4 passed, 9 total` (qa, `95e864c9`) to `Tests: 9 passed, 9 total` on
+`e9154ea2`.
+
+**Coverage, and why there were two runs.** The first full run on `e9154ea2` (slot 09:02:31, exit 0, 09:36:42) printed
+`Tests: 8857 passed` but `All files 99.33 / 97.44 / 98.17 / 99.73`. Statements were below the w0 baseline of 99.34
+because the three guard lines are reached only by the compiled-CLI suite, which coverage does not count.
+`6d6e7eaf` adds `test/core/workflow-console-dry-run-render.test.ts` (3 tests) and the include-twice edge.
+
+**T4.** `git log --first-parent --no-merges --format=%h ad578d75..HEAD -- <the files of ad578d75 and 95e864c9>`
+printed only `95e864c9`, qa's red-after-review commit that added its two files. No commit of mine touches a red file.
+
+**Gates on `6d6e7eaf`**, with the `spec-017` and `spec-008` edits uncommitted in the tree:
+
+| Gate | Command | Result |
+|---|---|---|
+| tests and coverage | slot 09:38:22, `npm run -s test:coverage -- --maxWorkers=2` (exit 0, 10:00:46) | `Test Suites: 504 passed, 504 total`, `Tests: 8863 passed, 8863 total`; `All files 99.37 / 97.49 / 98.17 / 99.73` (statements 11082/11152, branches 6784/6958, functions 2157/2197, lines 9268/9293), each column at or above the w0 baseline `99.34 / 97.39 / 98.03 / 99.71`; `workflow-rekey.ts 100 / 98 / 100 / 100` (uncovered: the `?.` arm of line 147, a start commit with no history, which the walk never yields); `workflow-adopt.ts` and `workflow-finalize.ts` 100 in every column |
+| typecheck | same slot, `npm run -s typecheck` | exit 0 (10:01:12) |
+| lint | `npm run -s lint` | exit 0 |
+| API docs | `npm run -s docs:api` | exit 0 |
+| governance | `npm run -s check:governance -- --base release/0.3` | exit 0, `gated: 0 findings`, `history: 0 findings` |
+| MCP | `npm run -s check:mcp` | exit 0, the three known `bug-414` failures of the pinned 0.3.0 |
+
+`release/0.3` is still `546d1384` (`git rev-parse --short release/0.3`).
+
+**Pending amendments (replace the `--reason` above).** Both are uncommitted.
+- `spec-017-workflow-commands-and-state-deduction` (§7.12, the §10 row, the Revision note):
+  `Record in spec-017 §7.12 and §10 the readings the approver ruled for task-295 at its design gate on 2026-10-24 and its review on 2026-10-26: the refusal order with approver authority before the instance (D1); --from and --to as two [a-z][a-z0-9-]* names joined by one dot (D2); --to a step of the instance's workflow or of a workflow it includes, directly or indirectly, refused otherwise with a new §10 row (review ruling C (a)); remapped counting the entries remapped (D4); and the no-op answering remapped 0 with next at HEAD only while no record of the instance still names <from>, a new record being written otherwise (D5, review ruling B (a)).`
+- `spec-008-cli-grammar` (§12's `workflow rekey` row, a Revision note):
+  `Record in spec-008 §12 the name class of workflow rekey's --from and --to, as the approver ruled for task-295 at its design gate on 2026-10-24 (D2) and its review on 2026-10-26 (finding 3): each is two spec-003 names joined by one dot with no @<scope> suffix, and the usage refusal names the option it refuses; no other row changes.`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -634,3 +710,7 @@ uncommitted `spec-017` edit untouched. No file of the red `ad578d75` is edited, 
   inventories, the second task's red should leave them to its green, as D7 did.
 - Candidate finding (not filed): `rekey` cannot follow a renamed *workflow*. The plan's `workflow:` frontmatter still
   names the old name, so the instance stays `W_INSTANCE_WORKFLOW_UNKNOWN` with an empty frontier (design, Risks).
+- The console `--dry-run` defect was in three renderers (`rekey`, `adopt`, `finalize`, the last released in 0.3.0)
+  and none of their suites caught it. Every dry-run test passed `--format json`, which skips the renderer, so
+  `test/cli/dry-run.integration.test.ts` never ran the console path. Proposal: that table also runs each row's dry run
+  without `--format` (candidate finding, not filed).
