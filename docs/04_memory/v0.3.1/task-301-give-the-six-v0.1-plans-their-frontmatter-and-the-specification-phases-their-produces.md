@@ -181,6 +181,17 @@ included by both mains).
 (W2-1), so its rows are unaffected. `task-302`: with `parent` set the six never become instances or `<ref>`s, so its
 `workflow status` list is the same three open instances (probe).
 
+#### Design gate (approver, 2026-10-26)
+
+Rulings on the design decisions above:
+- D1 accepted: the six plans gain their `plan` frontmatter through three Memory operations — a hand
+  `wf(plan): add` of the six files at `draft`, one `memory submit` each (`draft → active`), and one hand
+  `wf(plan): finalize <six ids> [active → done]` — the only form `check:governance` accepts.
+- D2 accepted: `release-implementation-rel-v0.1-plan` declares `workflow: "dev-loop"` with
+  `parent: "release-cycle.implementation"`.
+- D3 accepted: `vision-change`'s optional downcasts complete at once when their directories exist; the consequence is
+  stated in the pending `spec-017` §12 amendment and held as follow-up F38 for the ingest after the `v0.3.1` tag.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
