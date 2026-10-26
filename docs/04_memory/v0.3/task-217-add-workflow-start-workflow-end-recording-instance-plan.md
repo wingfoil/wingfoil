@@ -11,6 +11,7 @@ ref: "spec-017"
 bug: []
 depends_on: ["task-126-declare-closed-wf-operation-grammar-bracket-set-state", "task-128-allocate-element-ids-highest-number-ref-across-folder", "task-129-refuse-operand-beyond-command-declares-exit-2-before", "task-203-read-instance-history-walk-step-linkage-created-elements"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description
