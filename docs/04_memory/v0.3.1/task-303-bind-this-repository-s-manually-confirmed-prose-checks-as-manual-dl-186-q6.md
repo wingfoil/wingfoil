@@ -354,6 +354,36 @@ conformance comment and one unrelated hit in `test/dna/edit.test.ts`. All are fi
   `--reason "Record the re-measure of §12 after task-303 binds manual: true the 17 prose checks whose condition no program can decide (dl-186 Q6, dl-172 (a), design gate D1 (a)): 27 workflows, 105 phases, 0 errors and 65 W_WORKFLOW_UNBOUND_TOKEN warnings over 44 check names, 86 before; 21 occurrences bound manual, 22 with demo.rendered; 17 checkpoints unchanged."`
   Merge order: this amendment comes before any `spec-017` amendment `task-302` prepares.
 
+### independent review (2026-10-26) and fixes (developer)
+
+The independent review's verdict is **APPROVE**. The approver ruled that finding 1 is fixed in this task (option (a)),
+and that findings 2–4 become follow-ups F45 (the `proposals.disposed` reason, and splitting half-decidable checks)
+and F46 (no diagnostic for an orphan `bindings.yaml` key; this also covers this task's retrospective line on prose keys).
+
+- **Finding 1, fixed in `2383cdbb`.** In `release-publishing.yaml`, the comment on the unbound
+  `phase-branch-merged-to-integration-branch` gave "a reading" as its reason, which under D1 (a) is the reason for
+  manual. It now says a command (`git merge-base --is-ancestor`) decides it once the phase branches are declared
+  (`task-288` D3, D2 (a)). `version:` 1.9 → 2.0 (`git show release/0.3:… | grep -m1 ^version` → 1.9), with the
+  history segment `2.0 task-303 (dl-186 Q6, review finding 1), comment only: …`. The change is comment-only:
+  js-yaml loads of the file at `HEAD~` and after the edit give the same document except `version` (1.9 → 2), so
+  "equal except version: true".
+- **Same-class check.** I ran `git grep -n -i "a reading\|judgement\|no command asserts\|no command" --
+  .wingfoil/workflows/custom/`. The other hits do not justify an unbound check by a reading:
+  - `dev-loop.yaml:91-92` and the three `retrospective.yaml` comments describe checks bound manual.
+  - `release-health.yaml:45` is a description about a metric reading.
+  - `release-planning.yaml:109` ("unbound — no command asserts it yet") already gives the D1 (a) reason, "yet".
+  - `release-health.yaml:37` is F43 and was left alone.
+- **Checks after `2383cdbb`:**
+  - `npx jest --maxWorkers=2` on the 15 suites the reviewer ran (`workflow-manual-prose-checks`, `dev-loop-v1-6`,
+    `dev-loop-v1-5`, `workflow-manual-check`, `presentation`, `workflow-repository-conformance`,
+    `workflow-integration-branch`, `lint/version-bump`, `docs/workflow-md`, `bindings`, `cli/mcp-registration`,
+    `retrospective-*` ×4) → `Test Suites: 15 passed`, `Tests: 304 passed`.
+  - `npm run -s check:mcp` → exit 0, only the three `bug-414 (task-298)` known failures.
+  - `node scripts/check-governance.cjs --root "$PWD" --base release/0.3` → exit 0, "gated: 0 findings on 0 commits",
+    "history: 0 findings on 0 commits".
+  - `node dist/cli.js workflow status`, with the `spec-017` amendment stashed and then restored → "65 diagnostic(s)".
+- **The `spec-017` amendment is unchanged:** the fix moves no figure (65 warnings, 44 names, 17 checkpoints).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
