@@ -590,9 +590,12 @@ dl-153): a check to a `run` argument vector (`npm test`, `npm run lint`, `npm ru
 an action to a command (`release-health.measure` / `.compare`, `node scripts/release-health/… --any-node --max-workers 2`) or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
 `approver.execute`), and a check a person confirms on purpose is `manual: true` too (`demo.rendered`,
 dl-172 (a)). Token arguments are `key: value` pairs, substituted as whole argv elements, never
-through a shell. The prose checks no command asserts yet (`frontmatter.required: […]`,
-`spec-review.passed`, the specification-phase quality criteria, …) stay unbound: `workflow list` reports
-each as a `W_WORKFLOW_UNBOUND_TOKEN` warning, which fails closed once the engine runs checks (v1.0).
+through a shell. The prose checks a person confirms on purpose — a reading or a judgement no program can
+decide (`spec-review.passed`, the specification-phase quality criteria, the reviewer's re-checks, the
+retrospective's dispositions, …) — are bound `manual: true` by their prose (dl-186 Q6). The prose checks a
+command could decide but none does yet (`frontmatter.required: […]`, the Memory state queries, …) stay
+unbound: `workflow list` reports each as a `W_WORKFLOW_UNBOUND_TOKEN` warning, which fails closed once the
+engine runs checks (v1.0).
 
 ---
 
