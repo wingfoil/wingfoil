@@ -556,6 +556,70 @@ change: the scenario "Rekey the records of a renamed step" was already in `P4.21
   nothing). It is left uncommitted. Proposed `--reason`:
   `Record in spec-017 §7.12 the readings the approver ruled for task-295 at its design gate on 2026-10-24: the refusal order with approver authority before the instance (D1), --from and --to as two [a-z][a-z0-9-]* names joined by one dot (D2), --to any declared <workflow>.<phase> (D3), remapped counting the entries remapped (D4), and the no-op answering remapped 0 with next at HEAD (D5); no other section changes.`
 
+### red after review (qa, 2026-10-26)
+
+The independent review returned APPROVE WITH FIXES. Under the approver's rulings A (a), B (a) and C (a) of
+2026-10-26, the task stays `in-review`. **Red-after-review commit `95e864c9`** adds two new files and no other:
+`git show --stat --format= 95e864c9` printed 2 files, `241 insertions(+)`. The `--only` commit leaves the
+uncommitted `spec-017` edit untouched. No file of the red `ad578d75` is edited, and T4 is measured from
+`95e864c9` for these two files. Every run used the dist at `dbe233a9`: `node dist/cli.js --version` printed
+`0.3.0 (dbe233a98c570f45cfa15b2e8656643e01e20fbf)`, before and after jest.
+
+**Files and rulings.**
+- **A (a), `test/cli/workflow-console-dry-run.integration.test.ts`.** A console dry run (no `--format`) of
+  `workflow rekey`, `adopt` and `finalize` must print the plan the way `workflow start` and `create` print one today.
+  - The shape was observed on scratch `task-295-qa/c1`, built with the review's `setup.sh`. Both
+    `workflow start life --dry-run` and `workflow create newflow --startable --dry-run` printed the plan as JSON
+    indented by two spaces, ending with one `\n` (`od -c` tail `}  \n`).
+  - The same scratch reproduced the defect: `workflow finalize life-1-plan --dry-run`,
+    `workflow adopt … --dry-run` and `workflow rekey … --dry-run` each printed
+    `error: Cannot read properties of undefined (reading 'workflow')` and exited 1.
+  - Each case first requires the `--format json` dry run to exit 0, which shows the command is not refused. It then
+    pins the console run: exit 0, empty stderr, and `stdout === JSON.stringify(plan, null, 2) + '\n'`.
+  - The printed plan must equal the JSON plan: `dryRun: true`, the exact subject, `paths: []`, `diff: ''`. Nothing
+    may be written (`assertPersistenceUnchanged`).
+  - The `start` case is the characterization reference and passes today.
+  - Fixture: `buildRekeyRepo({ secondInstance: true })`. `adopt` and `finalize` run on `life-2-plan`, which no
+    adoption names.
+- **B (a), `test/core/workflow-rekey-review.test.ts`.** Two cases:
+  - Scratch r3's shape. A `side` branch adds the linkage `wf(release-line): add rl-v2` (`WingFoil-Step: life.seed`)
+    before the rename. The first rekey gives `remapped: 1`, then `git merge --no-ff side`; the precondition is one
+    `W_PROVENANCE_ORPHAN`. A second identical rekey must then write a NEW record: `commit` = `HEAD` (not null),
+    `remapped: 1`, one more commit with the rekey subject, and no orphan left.
+  - The plain repeated rekey with no orphan left stays the no-op (`commit: null`, `remapped: 0`, nothing written).
+    This one is characterization and passes today.
+- **C (a), same file.** The fixture adds a phase `nest` (`include: sub`) to `life`. `sub` includes `deep`; `other` is
+  declared and includable but is reachable from nothing in `life`.
+  - `--to other.moved` must be refused with `CONFLICT`, exit 1, nothing written.
+  - `--to sub.moved` (direct include) and `--to deep.inner` (indirect include) must be accepted with `remapped: 1`.
+    These two pass today, because D3 accepts any declared step; they guard the new refusal against over-reaching.
+  - **Proposed message (for the developer and the approver).** `spec-017` §10 has no text for this refusal, so the
+    test pins qa's proposal, in §10's style:
+    `` `<to>` is not a step of `<workflow>` or of a workflow it includes `` (`CONFLICT`, exit 1). Here that is
+    `other.moved is not a step of life or of a workflow it includes`. `<workflow>` is the instance's workflow.
+  - Its place in the D1 order is not pinned. A natural reading puts it right after `unknown step: <to>`, since the
+    step must be declared first.
+- **Finding for the developer.** Ruling C contradicts the uncommitted `spec-017` §7.12 edit, which reads "`--to`
+  must name one it declares, in the instance's workflow or in another one". The edit's Revision note also says D3:
+  "`--to` may name any declared `<workflow>.<phase>`". Both need rewording before the approver's amend, and §10
+  needs the new refusal row. The reading for ruling B ("no orphan still has `<from>` as its base") also belongs in
+  §7.12.
+
+**Run.** `npx jest test/core/workflow-rekey-review.test.ts test/cli/workflow-console-dry-run.integration.test.ts
+--maxWorkers=2 --verbose` printed `Tests: 5 failed, 4 passed, 9 total` (both suites FAIL).
+- Failing, with the first failure lines:
+  - B r3: `expect(received).not.toBeNull()` / `Received: null` on `second.commit`. Today it is the no-op.
+  - C `other.moved`: `expect(result.ok).toBe(false)` / `Received: true`. Today it is accepted.
+  - A rekey, adopt and finalize: `[status, stderr]` expected `[0, ""]`, received
+    `[1, "error: Cannot read properties of undefined (reading 'workflow')\n"]`.
+- Passing:
+  - the A `start` reference;
+  - the B no-op with no orphan left;
+  - C `sub.moved` and `deep.inner`.
+
+**tsc and lint.** `npx tsc --noEmit -p tsconfig.json` exited 0, since the green code is on the branch.
+`npx eslint` on the two files exited 0.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
