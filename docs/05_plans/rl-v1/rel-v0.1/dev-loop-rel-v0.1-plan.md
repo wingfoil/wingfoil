@@ -2,7 +2,7 @@
 id: "dev-loop-rel-v0.1-plan"
 type: plan
 title: "Dev-loop — v0.1 (generic per-task plan)"
-status: active
+status: done
 workflow: "dev-loop"
 phase: "rel-v0.1"
 element: "minor-v0.1"

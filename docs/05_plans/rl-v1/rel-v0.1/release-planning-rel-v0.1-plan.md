@@ -2,7 +2,7 @@
 id: "release-planning-rel-v0.1-plan"
 type: plan
 title: "Release-planning — v0.1 (Project Memory + Project DNA)"
-status: active
+status: done
 workflow: "release-planning"
 phase: "rel-v0.1"
 element: "minor-v0.1"

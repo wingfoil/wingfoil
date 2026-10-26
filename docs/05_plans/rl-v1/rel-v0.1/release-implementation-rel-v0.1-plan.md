@@ -2,7 +2,7 @@
 id: "release-implementation-rel-v0.1-plan"
 type: plan
 title: "Release implementation — v0.1 (orchestration of the 33 dev-loop runs)"
-status: active
+status: done
 workflow: "dev-loop"
 phase: "rel-v0.1"
 element: "minor-v0.1"

@@ -2,7 +2,7 @@
 id: "retrospective-and-config-bootstrap-plan"
 type: plan
 title: "Retrospective — v0.1, with the config bootstrap for v0.2"
-status: active
+status: done
 workflow: "retrospective"
 phase: "rel-v0.1"
 element: "minor-v0.1"
