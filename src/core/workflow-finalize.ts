@@ -160,8 +160,16 @@ export function workflowFinalizeAtHead(root: string, request: FinalizeRequest): 
   return coreOk({ baseline: deduction.baseline, instance, finalized, next, commit: sha }, { sha, message });
 }
 
+/** Whether a renderer was handed a `--dry-run` plan (`{ dryRun: true, … }`) rather than its result. */
+function isDryRunPlan(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && (value as { dryRun?: unknown }).dryRun === true;
+}
+
 /** `workflow finalize`'s `--format console` rendering (`spec-017` §8). Pure. */
 export function renderFinalizeConsole(result: FinalizeResult): string {
+  // A console dry run hands the renderer the commit plan, not a result: print it as `workflow start` does (task-295
+  // review ruling A (a)).
+  if (isDryRunPlan(result)) return `${JSON.stringify(result, null, 2)}\n`;
   const lines = [`workflow: ${result.instance.workflow} (${result.instance.id})`, `finalized: ${result.finalized.key} (${result.commit})`];
   if (result.next === null) lines.push('no next step');
   else lines.push(...stepLines(result.next, 'next step'));

@@ -1640,11 +1640,12 @@ selects the open instance, as for `workflow next`.
 | Option | Description |
 |---|---|
 | `--from <key>` | The old step key, `<workflow>.<phase>` with no `@<scope>`. The workflows must no longer declare it, and a record of the instance must still name it (after the rekeys already recorded). |
-| `--to <key>` | The new step key, `<workflow>.<phase>`: any step the workflows declare, in the same workflow or another one. |
+| `--to <key>` | The new step key, `<workflow>.<phase>`: a step the workflows declare, in the instance's workflow or in a workflow it includes, directly or through another one. |
 | `--reason <text>` | Why. Required; recorded with an `Approver:` line. Same shape rules as every `--reason`. |
 
 Only a member with the `approver` role may run it; the check comes first, before the workflow is read. Run again
-with the same `--from` and `--to`, it writes nothing and exits `0` (`commit: null`). Rekeys chain: after
+with the same `--from` and `--to`, it writes nothing and exits `0` (`commit: null`) — unless a record naming `--from`
+has appeared since (a branch merged in after the first rekey), which it then remaps with a new record. Rekeys chain: after
 `a → b`, a later rename `b → c` is rekeyed `--from …b --to …c`.
 
 The record:
@@ -1679,7 +1680,8 @@ adoption).
 
 - **Errors, exit `1`:** without the `approver` role → `user not authorized to rekey`; a `--from` the workflows
   still declare → `cannot rekey <from>: it is still declared`; a `--to` they do not declare →
-  `unknown step: <to>`; no record of the instance names `--from` → `no record of <instance> names <from>`; a
+  `unknown step: <to>`; a `--to` outside the instance's workflow and the workflows it includes →
+  `<to> is not a step of <workflow> or of a workflow it includes`; no record of the instance names `--from` → `no record of <instance> names <from>`; a
   `<ref>` that selects no open instance → `workflow is not open: <ref>` / `unknown workflow: <ref>`; staged
   changes in the index; no git identity.
 - **Errors, exit `2`:** no `<ref>`; a missing `--from` or `--to` → `missing required argument: --from` / `--to`;

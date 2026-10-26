@@ -23,9 +23,12 @@
  * **Refusal order** (design D1): the usage refusals (exit 2, before any read: `--from`, `--to`, their shape — D2,
  * two `[a-z][a-z0-9-]*` segments joined by one dot — and `--reason`) → the git identity (REQ-SEC-01) → approver
  * authority (rule 7, REQ-SEC-03; before the instance, so the answer does not depend on the state) → the instance →
- * `<from>` still declared → `<to>` not declared (any declared `<workflow>.<phase>`, D3) → the same mapping already
- * in the instance's walk: nothing written, exit 0 (D5; before the next check, §7.12) → `<from>` named by no record of
- * the instance after earlier rekeys → a clean index (`dl-106`) → the commit.
+ * `<from>` still declared → `<to>` not declared → `<to>` not a step of the instance's workflow or of a workflow it
+ * includes, directly or indirectly (review ruling C (a), 2026-10-26) → the same mapping already in the instance's
+ * walk with no orphan still naming `<from>`: nothing written, exit 0 (D5, review ruling B (a); before the next check,
+ * §7.12) → `<from>` named by no record of the instance after earlier rekeys → a clean index (`dl-106`) → the commit.
+ * A mapping already recorded while an orphan still names `<from>` (a linkage merged in after the first rekey, which
+ * that rekey does not descend from) writes a new record; the reader counts each commit once.
  *
  * `remapped` (D4) counts the instance's entries the commit remaps: one per element a linkage names, one per record,
  * one per adoption — the instance's orphans whose key, before any `@<scope>`, is `<from>`.
@@ -82,6 +85,20 @@ function stepKeyOption(name: 'from' | 'to', value: string | undefined): string {
   return value;
 }
 
+/** The workflows reachable from `name` through phase `include:`s, `name` included (review ruling C (a)). */
+function reachableWorkflows(workflows: DeductionSnapshot['workflows'], name: string): Set<string> {
+  const reached = new Set<string>();
+  const pending = [name];
+  while (pending.length > 0) {
+    const next = pending.pop()!;
+    const workflow = workflows.find((entry) => entry.name === next);
+    if (reached.has(next) || workflow === undefined) continue;
+    reached.add(next);
+    for (const phase of workflow.phases) if (phase.include !== undefined) pending.push(phase.include);
+  }
+  return reached;
+}
+
 /** The instance's next step in `deduction`, as `workflow next` reports it, or `null`. */
 function nextOf(root: string, snapshot: DeductionSnapshot, deduction: Deduction, instance: string): Step | null {
   const step = deduction.instances.find((entry) => entry.instance.id === instance)?.frontier[0];
@@ -119,16 +136,18 @@ export function workflowRekeyAtHead(root: string, request: RekeyRequest): CoreRe
   for (const workflow of snapshot.workflows) for (const phase of workflow.phases) declared.add(`${workflow.name}.${phase.name}`);
   if (declared.has(from)) return coreErr({ code: 'CONFLICT', message: `cannot rekey ${from}: it is still declared` });
   if (!declared.has(to)) return coreErr({ code: 'CONFLICT', message: `unknown step: ${to}` });
-
-  const rekeys = snapshot.history.get(instance.startCommit)?.rekeys ?? [];
-  if (rekeys.some((entry) => entry.instance === instance.id && entry.from === from && entry.to === to)) {
-    return coreOk({ baseline: deduction.baseline, instance, from, to, remapped: 0, commit: null, next: nextOf(root, snapshot, deduction, instance.id) });
+  if (!reachableWorkflows(snapshot.workflows, instance.workflow).has(to.slice(0, to.indexOf('.')))) {
+    return coreErr({ code: 'CONFLICT', message: `${to} is not a step of ${instance.workflow} or of a workflow it includes` });
   }
 
   // `<from>` is not declared (above), so every entry still naming it after earlier rekeys is an orphan.
   const remapped = resolveProvenance(snapshot, [{ id: instance.id, startCommit: instance.startCommit }]).orphans.filter(
     (orphan) => orphan.instance === instance.id && orphan.key.split('@')[0] === from,
   ).length;
+  const rekeys = snapshot.history.get(instance.startCommit)?.rekeys ?? [];
+  if (remapped === 0 && rekeys.some((entry) => entry.instance === instance.id && entry.from === from && entry.to === to)) {
+    return coreOk({ baseline: deduction.baseline, instance, from, to, remapped: 0, commit: null, next: nextOf(root, snapshot, deduction, instance.id) });
+  }
   if (remapped === 0) return coreErr({ code: 'CONFLICT', message: `no record of ${instance.id} names ${from}` });
 
   const written = writeProvenanceRecord(root, identity.value, {
@@ -144,8 +163,15 @@ export function workflowRekeyAtHead(root: string, request: RekeyRequest): CoreRe
   return coreOk({ baseline: deduction.baseline, instance, from, to, remapped, commit: written.value, next });
 }
 
+/** Whether a renderer was handed a `--dry-run` plan (`{ dryRun: true, … }`) rather than its result. */
+function isDryRunPlan(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && (value as { dryRun?: unknown }).dryRun === true;
+}
+
 /** `workflow rekey`'s `--format console` rendering (design D6). Pure. */
 export function renderRekeyConsole(value: unknown): string {
+  // A console dry run hands the renderer the commit plan, not a result: print it as `workflow start` does (ruling A (a)).
+  if (isDryRunPlan(value)) return `${JSON.stringify(value, null, 2)}\n`;
   const result = value as RekeyResult;
   const lines = [`workflow: ${result.instance.workflow} (${result.instance.id})`];
   if (result.commit === null) lines.push(`already rekeyed: ${result.from} -> ${result.to}, nothing written`);
