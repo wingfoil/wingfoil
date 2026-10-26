@@ -260,8 +260,16 @@ export function workflowAdoptAtHead(root: string, request: AdoptRequest): CoreRe
 /** `<type>:<id>`. */
 const refText = (ref: { readonly type: string; readonly id: string }): string => `${ref.type}:${ref.id}`;
 
+/** Whether a renderer was handed a `--dry-run` plan (`{ dryRun: true, … }`) rather than its result. */
+function isDryRunPlan(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && (value as { dryRun?: unknown }).dryRun === true;
+}
+
 /** `workflow adopt`'s `--format console` rendering, both forms (design "Output"). Pure. */
 export function renderAdoptConsole(value: unknown): string {
+  // A console dry run hands the renderer the commit plan, not a result: print it as `workflow start` does (task-295
+  // review ruling A (a)).
+  if (isDryRunPlan(value)) return `${JSON.stringify(value, null, 2)}\n`;
   const result = value as AdoptResult | AdoptPlanResult;
   const lines = [`workflow: ${result.instance.workflow} (${result.instance.id})`];
   if (!('steps' in result)) {

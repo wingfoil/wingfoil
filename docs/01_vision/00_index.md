@@ -45,7 +45,7 @@ line count (`awk 'END{print NR}'`).
 | [`06_features.md`](06_features.md)                     | 1.17 | 2026-10-18 | Approved | 549   | 66 features (by pillar + by release) and the data-model / implementation notes                                          |
 | [`07_sequencer.md`](07_sequencer.md)                   | 2.1 | 2026-10-18 | Approved | 480   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
 | [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.13 | 2026-10-18 | Approved | 221   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
-| [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.8 | 2026-10-25 | Approved | 492   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
+| [`X_cli-cmds.md`](X_cli-cmds.md)                       | 1.9 | 2026-10-25 | Approved | 499   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
 | [`X_lean-inception-plan.md`](X_lean-inception-plan.md) | —   | 2026-06-11 | —        | 42    | Workshop plan: sessions, key decisions, output list                                                                     |
 
 ---
@@ -175,14 +175,14 @@ line count (`awk 'END{print NR}'`).
 - Pillar 1 — Memory commands + parameters (params L40) — L17–58
 - Pillar 2 — DNA commands + parameters (params L91) — L59–105
 - Pillar 3 — Directives commands + parameters (params L129) — L106–139
-- Pillar 4 — Workflow commands + parameters (params L183) — L140–197
-- Pillar 5 — Initialization commands + parameters (params L215) — L198–224
-- Agent Execution commands + parameters (params L233) — L225–246
-- Global Options — L247–262
-- Command-Line Syntax Conventions — L263–302
-- Release Timeline by Command — L303–341
-- Command Reference by Persona (Alex L344, Morgan L353, Casey L363, Jordan L372, Sam L381) — L342–390
-- Revision history — L391–492
+- Pillar 4 — Workflow commands + parameters (params L184) — L140–199
+- Pillar 5 — Initialization commands + parameters (params L217) — L200–226
+- Agent Execution commands + parameters (params L235) — L227–248
+- Global Options — L249–264
+- Command-Line Syntax Conventions — L265–304
+- Release Timeline by Command — L305–343
+- Command Reference by Persona (Alex L346, Morgan L355, Casey L365, Jordan L374, Sam L383) — L344–392
+- Revision history — L393–499
 
 ### `X_lean-inception-plan.md`
 

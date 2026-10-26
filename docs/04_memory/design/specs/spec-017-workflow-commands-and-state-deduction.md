@@ -835,11 +835,20 @@ element counts as created by, without changing the element or rewriting history.
 
 **7.12 `rekey`** (P4.21, `dl-187` C5; from `patch-v0.3.1`). Remaps an instance's records from a renamed step key.
 `--from` must name a `<workflow>.<phase>` the registry no longer declares and that a linkage, record or adoption of
-the instance names (after earlier rekeys); `--to` must name one it declares. A rekey with the same `<from>` and `<to>` already in the instance's walk writes
-nothing and exits `0` (`commit: null`); that check comes before the refusal of a `<from>` no record names. Needs the
-approver role and a `--reason` (rule 7). One commit
-with no file change: subject `workflow: rekey <instance-id> <from> <to>`, the trailers of §4.8, `Approver:` and
-`Reason:` as on a bulk adoption. Output: the records remapped and the instance's new next step.
+the instance names (after earlier rekeys); `--to` must name one it declares, in the instance's workflow or in a
+workflow it includes, directly or through another one. Both are two names of `spec-003`'s name class joined by one
+`.`, with no `@<scope>` (`spec-008` §12). A rekey with the same `<from>` and `<to>` already in the instance's walk,
+while no linkage, record or adoption of the instance still names `<from>` after the rekeys, writes nothing and exits
+`0` (`commit: null`, `remapped: 0`, `next` at `HEAD`); that check comes before the refusal of a `<from>` no record
+names. When one still does (a branch merged in after the first rekey, which that rekey does not descend from), a new
+rekey record is written; the reader counts each commit once. Needs the approver role and a `--reason` (rule 7). The
+refusals run in this order, each before any write: the usage errors (`--from`, `--to`, their shape, `--reason`), the
+git identity, approver authority (before the instance, so the answer does not depend on the state), the instance,
+`<from>` still declared, `<to>` not declared, `<to>` outside the instance's workflow and the workflows it includes,
+the mapping already recorded (exit `0`), `<from>` named by no record, a staged index. One commit with no file change:
+subject `workflow: rekey <instance-id> <from> <to>`, the trailers of §4.8, `Approver:` and `Reason:` as on a bulk
+adoption. Output: `remapped`, the number of the instance's entries the commit remaps (one per element a linkage
+names, one per record, one per adoption), and the instance's new next step.
 
 ### 8. Output shapes
 
@@ -1012,6 +1021,7 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | `--plan --apply` without approver authority | `user not authorized to apply adoptions in bulk` | as `memory approve`'s refusal | 1 |
 | `rekey` without approver authority | `user not authorized to rekey` | as `memory approve`'s refusal | 1 |
 | `--from` still declared, or named by no record of the instance; `--to` not declared (`rekey`) | `cannot rekey <from>: it is still declared` / `no record of <instance> names <from>` / `unknown step: <to>` | `CONFLICT` | 1 |
+| `--to` is not a step of the instance's workflow or of a workflow it includes, directly or indirectly (`rekey`) | `<to> is not a step of <workflow> or of a workflow it includes` | `CONFLICT` | 1 |
 | dirty write target, missing git identity | the existing messages of `write-guard.ts` and REQ-SEC-01 | as today | 1 |
 | missing `<name>`; malformed `--element` (`spec-008` §7); a `--set` name other than `phase` / `scope` on `start`; invalid `<name>` syntax; `--kind` with `--startable`/`--includable`; `create` with neither; unknown flag; on `adopt`, `--apply` without `--plan`, `--plan` with `--step` or `--element`, a missing or blank `--reason` (`dl-067`) where one is required; on `rekey`, a missing `--from`, `--to` or `--reason` | `spec-008` §2/§5/§12 messages | — | 2 |
 
@@ -1607,3 +1617,12 @@ deduces again after each simulated adoption (D1 re-ruled, review finding 2); the
 no `iterate_over` filter (D2); `--plan` lists the instance's recorded adoptions first, `recorded: true` (D3);
 `--plan`'s `W_UNCOMMITTED_INPUTS` are success warnings (D5). Edited in place without a supersede or a state change
 (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-10-26, `task-295-add-workflow-rekey-p4.21`) — §7.12, §10.** As the approver ruled at `task-295`'s
+design gate (2026-10-24) and review (2026-10-26): the refusal order, with approver authority before the instance (D1);
+`--from` and `--to` are two `[a-z][a-z0-9-]*` names joined by one `.` (D2); `--to` must be a step of the instance's
+workflow or of a workflow it includes, directly or indirectly, with a new §10 row for the refusal (review ruling
+C (a)); `remapped` counts the entries remapped, not the commits (D4); the no-op returns `remapped: 0` and `next` at
+`HEAD` (D5), and holds only while no record of the instance still names `<from>`, else a new record is written (review
+ruling B (a)). Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend`.

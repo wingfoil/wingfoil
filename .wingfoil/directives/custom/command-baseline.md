@@ -6,12 +6,12 @@ kind: custom
 title: "Which baseline a command reads and writes"
 tags: [custom, determinism, git, baseline]
 ref: [REQ-SEC-02, REQ-STATE-02, REQ-SYS-07]
-version: "1.6"
+version: "1.7"
 ---
 
 # Directive — Which baseline a command reads and writes
 
-**Date:** 2026-10-10
+**Date:** 2026-10-25
 
 Custom WingFoil rule. Applies to anyone adding or changing a command, a `src/core` operation, or an
 MCP Tool — every surface, because both surfaces run the same core function (REQ-SYS-05,
@@ -170,7 +170,10 @@ This is an exception to `dl-084` (A)'s default for read-only verbs, not to the r
 these reads decides from the working tree. `workflow next` is not in the table because it needs no
 exception: it refuses an unresolvable `<ref>` and its first step is what `agent execute --next`
 launches, so it gates and resolves at `HEAD` under the read half (`spec-017` §1.1); R15 and
-`spec-006` §6 item 6 name it only for completeness. The shipped `wingfoil://workflows` and
+`spec-006` §6 item 6 name it only for completeness. `workflow rekey` is not in the table either: it
+gates — on the registry, the deduction and approver authority in the committed `dna.yaml`
+(`spec-017` §11) — and so reads `HEAD` under the read half; it writes no file, and its only
+working-tree read is the index (`requireCleanIndex`). The shipped `wingfoil://workflows` and
 `wingfoil://workflows/{name}` Resources keep the working tree in v0.3 (`spec-017` §9).
 
 ## Declared baselines — a read wider than `HEAD`, by name
@@ -259,3 +262,7 @@ command; the row says so. `reject` and `park` no longer take the check
 answers from the deduction at `HEAD`, and reports a working tree that differs as `W_UNCOMMITTED_INPUTS` warnings. The
 writing forms — the single `workflow adopt` and `--plan --apply` — gate on `HEAD` like `workflow finalize` and write
 empty commits. The rule text is unchanged.
+
+**Revision 1.7 (2026-10-25, `task-295-add-workflow-rekey-p4.21`).** `workflow rekey` is named after the declared
+`HEAD` reads table, beside `workflow next`: it gates on `HEAD` (`spec-017` §11) and writes an empty commit, so it
+needs no declared exception. The rule text is unchanged.

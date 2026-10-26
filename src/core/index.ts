@@ -89,6 +89,7 @@ import {
 } from './workflow-start-end';
 import { renderFinalizeConsole, workflowFinalizeAtHead, type FinalizeResult } from './workflow-finalize';
 import { renderAdoptConsole, workflowAdoptAtHead, type AdoptPlanResult, type AdoptResult } from './workflow-adopt';
+import { renderRekeyConsole, workflowRekeyAtHead, type RekeyResult } from './workflow-rekey';
 import { renderStatusConsole, workflowStatusAtHead, type StatusResult } from './workflow-status';
 import {
   renderCreateConsole,
@@ -176,8 +177,12 @@ export type { FinalizeRequest, FinalizeResult } from './workflow-finalize';
 // `workflowAdopt`. The provenance-record writer is shared with `workflow rekey` (task-295, plan ruling W1-3).
 export { BULK_ADOPT_UNAUTHORIZED, renderAdoptConsole, workflowAdoptAtHead } from './workflow-adopt';
 export type { AdoptPlanResult, AdoptRequest, AdoptResult, Adoption } from './workflow-adopt';
-export { adoptionSubject, adoptionTrailers, provenanceMessage, writeProvenanceRecord } from './provenance-record';
+export { adoptionSubject, adoptionTrailers, provenanceMessage, rekeySubject, rekeyTrailers, writeProvenanceRecord } from './provenance-record';
 export type { ProvenanceRecord } from './provenance-record';
+// task-295: `workflow rekey` (`spec-017` §7.12, §8 `RekeyResult`); the operation is `CORE_MODULES`' `workflowRekey`. It
+// writes through the shared provenance-record writer, with `rekeySubject` / `rekeyTrailers` (above).
+export { REKEY_UNAUTHORIZED, renderRekeyConsole, workflowRekeyAtHead } from './workflow-rekey';
+export type { RekeyRequest, RekeyResult } from './workflow-rekey';
 export { planAdoptions } from '../workflow/adopt';
 export type { AdoptionPlan, PlannedStep } from '../workflow/adopt';
 export type { ActionView, Awaiting, CadenceView, CheckView, Member, NextInputs, NextOptions, NextResult, Step, StepBinding } from './workflow-next';
@@ -2385,6 +2390,33 @@ const workflowAdoptFn: CoreFn<unknown, AdoptResult | AdoptPlanResult> = async (p
   return result.ok ? result.value : result;
 };
 
+/** `wingfoil workflow rekey <ref> --from <key> --to <key> --reason <text>` params (task-295): `<ref>` rides the bare positional. */
+export interface WorkflowRekeyParams {
+  readonly root: string;
+  readonly positional?: string;
+  readonly options?: Readonly<Record<string, string>>;
+}
+
+/**
+ * `workflowRekey` `CoreOperation.fn` (`spec-017` §7.12, §10): {@link workflowRekeyAtHead}, its refusals returned
+ * (`CONFLICT`, `NOT_FOUND`, `VALIDATION`: exit 1) or thrown as a `UsageError` (exit 2); a `spec-003` error at `HEAD`
+ * is `VALIDATION`, exit 1.
+ */
+const workflowRekeyFn: CoreFn<unknown, RekeyResult> = async (params) => {
+  const { root, positional, options } = params as WorkflowRekeyParams;
+  const from = options?.['from'];
+  const to = options?.['to'];
+  const result = loadOrError(() =>
+    workflowRekeyAtHead(root, {
+      ...(positional === undefined ? {} : { ref: positional }),
+      ...(from === undefined ? {} : { from }),
+      ...(to === undefined ? {} : { to }),
+      ...(options === undefined ? {} : { options }),
+    }),
+  );
+  return result.ok ? result.value : result;
+};
+
 /**
  * `workflowStart` / `workflowEnd` `CoreOperation.fn`s (P4.2, P4.3; `spec-017` §7.1–§7.2; task-217): the two
  * operations of `./workflow-start-end`, with `start` writing through this registry's own `memoryAdd` and
@@ -2885,6 +2917,24 @@ export const CORE_MODULES: readonly CoreModule[] = [
         example: 'wingfoil workflow adopt sw-life-cycle-1-plan --plan',
         fn: workflowAdoptFn,
         renderConsole: renderAdoptConsole,
+      },
+      // task-295 (`spec-017` §7.12, P4.21, `dl-187` C5): remaps an open instance's records from a renamed step key, as one
+      // commit with no file change, `workflow: rekey <instance> <from> <to>`, carrying the rekey trailers; needs the
+      // approver. Gates on the registry, the deduction and `dna.yaml` at `HEAD` (§11). The MCP Tool `workflow.rekey` is
+      // v0.4 (P5.2.3, §9).
+      workflowRekey: {
+        name: 'workflowRekey',
+        mutates: true,
+        description: 'remap the records of an open workflow from a renamed step key to its new one, as an empty commit (approver only)',
+        positional: { name: 'ref', required: true, description: 'a workflow name or an open workflow instance id' },
+        options: [
+          { name: 'from', valueName: 'key', description: 'the renamed step key, <workflow>.<phase>, that the registry no longer declares' },
+          { name: 'to', valueName: 'key', description: 'the step key it was renamed to, <workflow>.<phase>, declared by the registry' },
+          { name: 'reason', valueName: 'text', description: 'why; required, recorded with an Approver: line' },
+        ],
+        example: 'wingfoil workflow rekey sw-life-cycle-1-plan --from sw-life-cycle.seed-first-release-line --to sw-life-cycle.seed-release-line --reason "phase renamed"',
+        fn: workflowRekeyFn,
+        renderConsole: renderRekeyConsole,
       },
       // task-225 (`spec-017` §7.4, §5.1–§5.4): reads `HEAD`, declared (§1.1, ruling R15), from the deduction `next`
       // answers from. Every open instance with its phases, frontier and late elements, the pending approvals routed

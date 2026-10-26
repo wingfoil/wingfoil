@@ -23,7 +23,7 @@
  * message, paths: [], diff: ''}`.
  */
 import { commitEmpty } from '../storage';
-import { ADOPT_SUBJECT_PREFIX, ADOPTED_TRAILER, INSTANCE_TRAILER, STEP_TRAILER } from '../workflow/provenance';
+import { ADOPT_SUBJECT_PREFIX, ADOPTED_TRAILER, INSTANCE_TRAILER, REKEY_FROM_TRAILER, REKEY_SUBJECT_PREFIX, REKEY_TO_TRAILER, STEP_TRAILER } from '../workflow/provenance';
 
 import { APPROVER_ROLE } from './approval-authority';
 import type { GitIdentity } from './git-identity';
@@ -68,4 +68,14 @@ export function adoptionSubject(instance: string, step: string, element: { reado
 /** An adoption's trailers, in this order: `WingFoil-Instance`, `WingFoil-Step`, `WingFoil-Adopted` (`spec-017` §4.8). */
 export function adoptionTrailers(instance: string, step: string, element: { readonly type: string; readonly id: string }): string[] {
   return [`${INSTANCE_TRAILER}: ${instance}`, `${STEP_TRAILER}: ${step}`, `${ADOPTED_TRAILER}: ${element.type}:${element.id}`];
+}
+
+/** A rekey's subject: `workflow: rekey <instance> <from> <to>` (`spec-017` §4.8, §7.12; task-295). */
+export function rekeySubject(instance: string, from: string, to: string): string {
+  return `${REKEY_SUBJECT_PREFIX}${instance} ${from} ${to}`;
+}
+
+/** A rekey's trailers, in this order: `WingFoil-Instance`, `WingFoil-Rekey-From`, `WingFoil-Rekey-To` (`spec-017` §4.8). */
+export function rekeyTrailers(instance: string, from: string, to: string): string[] {
+  return [`${INSTANCE_TRAILER}: ${instance}`, `${REKEY_FROM_TRAILER}: ${from}`, `${REKEY_TO_TRAILER}: ${to}`];
 }
