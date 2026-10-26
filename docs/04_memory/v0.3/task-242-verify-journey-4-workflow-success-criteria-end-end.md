@@ -11,6 +11,7 @@ ref: "spec-017"
 bug: ["bug-327-no-bdd-scenario-covers-workflow-finalize-or-the-phase-record-it-writes", "bug-328-the-e2e-smoke-drives-no-workflow-start-end-finalize-or-status"]
 depends_on: ["task-199-align-wingfoil-workflows-custom-v0-3-schema-commands", "task-205-rewrite-dev-loop-yaml-v1-5-red", "task-211-add-workflow-create-workflow-remove-req-sec", "task-217-add-workflow-start-workflow-end-recording-instance-plan", "task-226-add-workflow-finalize-which-records-checkpoint-or-uncarried", "task-227-link-added-element-workflow-step-memory-add-workflow", "task-235-agent-execute-next-workflow-ref-step-key-take", "task-239-serve-wingfoil-workflows-next-wingfoil-workflows-status-production"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description
