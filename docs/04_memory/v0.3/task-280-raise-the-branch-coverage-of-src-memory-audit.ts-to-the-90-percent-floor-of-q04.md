@@ -13,7 +13,7 @@ bug: ["bug-343-src-memory-audit.ts-branch-coverage-is-86.3-percent-below-the-90-
                        # task already owns the ground. `bug.sync_state` iterates this list; a bug with no task naming it
                        # here never advances past `triaged` (only a reject to `closed`, dl-123). A single string is still accepted for documents predating dl-045.
                        # dev-loop keeps the source bug's state in sync with this task via bug.sync_state
-wave: ""               # optional — the release wave this task runs in, one of its release's `waves:` keys (dl-100 §1 (a)); set at build-backlog or when the task is admitted
+wave: "w3"               # optional — the release wave this task runs in, one of its release's `waves:` keys (dl-100 §1 (a)); set at build-backlog or when the task is admitted
 depends_on: ["task-278-take-the-governance-state-rule-s-from-state-from-the-commit-s-parent", "task-232-measure-build-test-coverage-example-latency-install-metrics"]         # optional — ids of tasks whose Execution Notes constrain this one (dl-015); authored at planning time, may be appended during design
 tmpl_version: 261012   # Original template version
 ---
