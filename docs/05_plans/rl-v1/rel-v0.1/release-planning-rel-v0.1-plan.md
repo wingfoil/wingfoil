@@ -1,3 +1,16 @@
+---
+id: "release-planning-rel-v0.1-plan"
+type: plan
+title: "Release-planning — v0.1 (Project Memory + Project DNA)"
+status: draft
+workflow: "release-planning"
+phase: "rel-v0.1"
+element: "minor-v0.1"
+parent: "release-cycle.planning"
+release: "v0.1"
+tmpl_version: 261010
+---
+
 # Release Planning — v0.1 (Project Memory + Project DNA)
 
 ## Context

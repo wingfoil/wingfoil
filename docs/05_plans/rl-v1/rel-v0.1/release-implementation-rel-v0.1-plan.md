@@ -1,3 +1,16 @@
+---
+id: "release-implementation-rel-v0.1-plan"
+type: plan
+title: "Release implementation — v0.1 (orchestration of the 33 dev-loop runs)"
+status: draft
+workflow: "dev-loop"
+phase: "rel-v0.1"
+element: "minor-v0.1"
+parent: "release-cycle.implementation"
+release: "v0.1"
+tmpl_version: 261010
+---
+
 # Release Implementation — v0.1 Orchestration Plan
 
 ## Context

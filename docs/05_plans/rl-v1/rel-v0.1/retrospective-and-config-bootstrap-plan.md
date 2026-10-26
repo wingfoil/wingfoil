@@ -1,3 +1,16 @@
+---
+id: "retrospective-and-config-bootstrap-plan"
+type: plan
+title: "Retrospective — v0.1, with the config bootstrap for v0.2"
+status: draft
+workflow: "retrospective"
+phase: "rel-v0.1"
+element: "minor-v0.1"
+parent: "release-cycle.retrospective"
+release: "v0.1"
+tmpl_version: 261010
+---
+
 # Plan — v0.1 Retrospective + exceptional config-bootstrap → resume at v0.2 release-planning
 
 **Audience:** the agent that will run the v0.1 `retrospective` and every step up to (and enabling) the
