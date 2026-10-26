@@ -11,6 +11,7 @@ ref: "spec-017"
 bug: []
 depends_on: ["task-202-deduce-iterate-over-over-memory-types-collections-live", "task-203-read-instance-history-walk-step-linkage-created-elements", "task-204-reshape-workflow-list-add-workflow-show-both-answering"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description
