@@ -5,10 +5,12 @@
  *
  * - the pure parts in-process: the notes rule (only `## Implementation Notes`, the separators the real files use),
  *   the mapping and batches derived from this repository's HEAD, the argument parser, the printed commands;
- * - `main` on fixture repositories built from REAL files of this repository's HEAD (`.wingfoil/`, `minor-v0.3.md`
+ * - `main` on fixture repositories built from REAL files of this repository (`.wingfoil/`, `minor-v0.3.md`
  *   and five v0.3 tasks covering every shape: no `wave:` line, `wave: ""`, `deprecated`, `none`, the label repeated
  *   in Execution Notes), with the committed `dna.yaml`'s approver as the fixture's local identity, because
- *   `memory amend` needs the approver role — in temp repositories only: `--run` never touches this repository.
+ *   `memory amend` needs the approver role — in temp repositories only: `--run` never touches this repository. The
+ *   files are read at the commit before the approver's first amend once the batches are on the branch (else `HEAD`),
+ *   so the fixtures start from the pre-amend shape either way.
  *
  * Deterministic: fixtures under the OS temp dir (`fixtureDirPrefix`); no clock, no network.
  */
@@ -19,6 +21,7 @@ import { join } from 'node:path';
 import {
   BATCH_SIZE,
   batches,
+  commitSubject,
   deriveMapping,
   implementationNotes,
   isApplied,
@@ -38,7 +41,21 @@ const RELEASE_PATH = 'docs/04_memory/planning/rl-v1/minor-v0.3.md';
 /** Five real tasks: 126 (w0, no `wave:` line), 223 (w3, deprecated), 230 (w3, label repeated outside the notes), 252 (none), 288 (w3, `wave: ""`). */
 const FIXTURE_TASKS = ['task-126-', 'task-223-', 'task-230-', 'task-252-', 'task-288-'];
 
-const atHead = (path: string): string => execFileSync('git', ['show', `HEAD:${path}`], { cwd: REPO_ROOT, encoding: 'utf-8', maxBuffer: 1 << 26 });
+const atHead = (path: string): string => atRev('HEAD', path);
+function atRev(rev: string, path: string): string {
+  return execFileSync('git', ['show', `${rev}:${path}`], { cwd: REPO_ROOT, encoding: 'utf-8', maxBuffer: 1 << 26 });
+}
+/**
+ * The revision the fixtures copy: the parent of the approver's `minor-v0.3` amend once the batches are on this
+ * branch (the files as they were before any amend), else `HEAD` (before the batches). Real files either way.
+ */
+const SOURCE_REV = ((): string => {
+  const amend = execFileSync('git', ['rev-list', '-1', '--fixed-strings', '--grep=wf(release): amend minor-v0.3 [released → released]', 'HEAD'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf-8',
+  }).trim();
+  return amend === '' ? 'HEAD' : `${amend}^`;
+})();
 const headTaskPaths = (): string[] =>
   execFileSync('git', ['ls-tree', '-r', '--name-only', 'HEAD', '--', `${TASK_DIR}/`], { cwd: REPO_ROOT, encoding: 'utf-8' })
     .split('\n')
@@ -74,13 +91,13 @@ function makeFixture(identity: { name: string; email: string }): { repo: string;
   git(repo, ['config', 'gc.auto', '0']);
   git(repo, ['config', 'user.name', identity.name]);
   git(repo, ['config', 'user.email', identity.email]);
-  const config = execFileSync('git', ['ls-tree', '-r', '--name-only', 'HEAD', '--', '.wingfoil/'], { cwd: REPO_ROOT, encoding: 'utf-8' })
+  const config = execFileSync('git', ['ls-tree', '-r', '--name-only', SOURCE_REV, '--', '.wingfoil/'], { cwd: REPO_ROOT, encoding: 'utf-8' })
     .split('\n')
     .filter(Boolean);
-  for (const path of config) writeFixtureFile(repo, path, atHead(path));
-  writeFixtureFile(repo, RELEASE_PATH, atHead(RELEASE_PATH));
+  for (const path of config) writeFixtureFile(repo, path, atRev(SOURCE_REV, path));
+  writeFixtureFile(repo, RELEASE_PATH, atRev(SOURCE_REV, RELEASE_PATH));
   const tasks = headTaskPaths().filter((path) => FIXTURE_TASKS.some((prefix) => path.includes(`/${prefix}`)));
-  for (const path of tasks) writeFixtureFile(repo, path, atHead(path));
+  for (const path of tasks) writeFixtureFile(repo, path, atRev(SOURCE_REV, path));
   git(repo, ['add', '-A']);
   git(repo, ['commit', '--quiet', '-m', 'fixture: real files from HEAD']);
   return { repo, tasks };
@@ -162,6 +179,13 @@ describe('task-302 — arguments, applied state and printed commands (pure)', ()
     [['--nope'], 'unknown argument "--nope"'],
   ])('%p is a usage error', (argv, message) => {
     expect(parseArgs(argv)).toEqual({ ok: false, message });
+  });
+
+  it('commitSubject reads the first message line after the headers, a multi-line signature header included', () => {
+    expect(commitSubject('tree t\nparent p\ngpgsig -----BEGIN-----\n x\n -----END-----\n\nwf(task): amend x [done → done]\n\nApprover: A\n')).toBe(
+      'wf(task): amend x [done → done]',
+    );
+    expect(commitSubject('tree t')).toBe('');
   });
 
   it('isApplied compares the parsed frontmatter value', () => {

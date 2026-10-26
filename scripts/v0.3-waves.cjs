@@ -192,9 +192,21 @@ function gitOut(root, args) {
   return result.stdout;
 }
 
+/**
+ * The subject of a raw commit object (`git cat-file commit`): the first line after the header block. Read this
+ * way rather than through `git log`, which `log.showSignature` would interleave with a signature (bug-291).
+ * @param {string} raw
+ * @returns {string}
+ */
+function commitSubject(raw) {
+  const blank = raw.indexOf('\n\n');
+  return blank < 0 ? '' : raw.slice(blank + 2).split('\n')[0].trim();
+}
+
 /** The text of `path` at HEAD, or `null` when HEAD holds none. */
 function readAtHead(root, path) {
-  const result = gitRun(root, ['show', `HEAD:${path}`]);
+  const rev = 'HEAD';
+  const result = gitRun(root, ['show', `${rev}:${path}`]);
   return result.status === 0 ? result.stdout : null;
 }
 
@@ -256,7 +268,7 @@ function runItem(root, item, out) {
   }
   const commits = gitOut(root, ['rev-list', '--count', `${before}..HEAD`]).trim();
   const paths = gitOut(root, ['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD']).split('\n').filter(Boolean);
-  const subject = gitOut(root, ['log', '-1', '--format=%s']).trim();
+  const subject = commitSubject(gitOut(root, ['cat-file', 'commit', 'HEAD']));
   const type = item.kind === 'release' ? 'release' : 'task';
   if (commits !== '1' || paths.length !== 1 || paths[0] !== item.path || !subject.startsWith(`wf(${type}): amend ${item.id} [`)) {
     return {
@@ -394,6 +406,7 @@ module.exports = {
   RELEASE_PATH,
   WAVE_KEYS,
   batches,
+  commitSubject,
   deriveMapping,
   frontmatterOf,
   implementationNotes,

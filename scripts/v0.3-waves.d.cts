@@ -46,6 +46,9 @@ export function taskReason(wave: string): string;
 /** The amend `--reason` of an item. Pure. */
 export function reasonFor(item: Pick<BatchItem, 'kind' | 'wave'>): string;
 
+/** The subject of a raw commit object (`git cat-file commit`): the first line after the headers. Pure. */
+export function commitSubject(raw: string): string;
+
 /** POSIX-shell quoting. Pure. */
 export function shellQuote(value: string): string;
 
