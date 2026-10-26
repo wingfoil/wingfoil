@@ -11,6 +11,7 @@ ref: "dl-128"
 bug: []
 depends_on: ["task-214-add-community-health-files-shaped-ingestion"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

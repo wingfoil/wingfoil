@@ -11,6 +11,7 @@ ref: "dl-038"
 bug: ["bug-031", "bug-164", "bug-188", "bug-189", "bug-201"]
 depends_on: ["task-130-show-coreerror-details-surface-give-refusal-shape-under"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

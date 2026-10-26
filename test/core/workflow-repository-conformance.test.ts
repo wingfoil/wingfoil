@@ -16,6 +16,10 @@
  * - AC 4 (red-first): spec-017 §12's deduction consequences re-measured — the checkpoint phases and the
  *   approvals recorded by `workflow finalize`, and the `{ type, path }` owner of each rewritten `produces`.
  * - AC 6 (red-first): `release-line-cycle` runs the same `align-agent-docs` phase as `user-docs` (`dl-025`).
+ * - task-303 (`dl-186` Q6): the prose checks a human confirms on purpose are bound `manual: true`, so the warning set
+ *   keeps only the checks a command could decide (86 → 65).
+ * - task-301 AC 2 / AC 3 (red-first, `bug-389`): the eleven phases of the four specification sub-workflows declare
+ *   their module's output directory as `produces`, so they leave the checkpoint list (28 → 17).
  * - `dl-153` (A): the first `workflows/bindings.yaml` carries `format: 1`; `tests.coverage(min: N)` restates
  *   `jest.config.js`'s threshold, which its binding cannot pass.
  *
@@ -60,6 +64,8 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
     const { diagnostics } = registry();
     expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     expect(diagnostics.every((d) => d.severity === 'warning')).toBe(true);
+    // task-303 (dl-186 Q6, dl-172 (a)): the 17 prose checks a human confirms on purpose (21 occurrences) are bound
+    // `manual: true` in bindings.yaml 2.6; the 65 left are the checks a command could decide (spec-017 §12).
     expect(rows(diagnostics)).toEqual([
       ["sw-life-cycle", "phases[3].checks.post[0]", "frontmatter.required"],
       ["bug-ingest", "phases[0].checks.post[0]", "frontmatter.required"],
@@ -70,42 +76,28 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       // task-212 (dl-132): vision-change's capture mirrors the change-proposal template; its vision-index.current checks are bound.
       ["vision-change", "phases[0].checks.post[0]", "frontmatter.required"],
       ["vision-change", "phases[6].checks.pre[0]", "change-proposal.target_release is not empty"],
-      ["specification-downcast", "phases[0].checks.post[0]", "100% of MVP Canvas features covered; edge-case stories present"],
-      ["specification-downcast", "phases[1].checks.post[0]", "each scenario atomic + testable; zero ambiguous adjectives/adverbs"],
-      ["specification-downcast", "phases[2].checks.post[0]", "every REQ has a numeric/percentage/boolean Fit Criterion"],
       ["specification-downcast", "phases[3].checks.post[0]", "valid JSON; no duplicate IDs; no circular dependencies"],
-      ["user-story-mapping", "phases[2].checks.post[0]", "100% of MVP Canvas features included; edge-case stories generated"],
-      ["specification-by-examples", "phases[1].checks.post[0]", "each story has >=1 happy path and >=1 edge/error path"],
-      ["specification-by-examples", "phases[1].checks.post[1]", "no ambiguous adjectives/adverbs"],
-      ["specification-by-examples", "phases[1].checks.post[2]", "each scenario atomic and testable"],
-      ["volere-requirements", "phases[2].checks.post[0]", "every REQ has a clearly numeric, percentage-based, or boolean Fit Criterion"],
       ["backlog-export", "phases[2].checks.post[0]", "valid JSON parse"],
       ["backlog-export", "phases[2].checks.post[1]", "no duplicate IDs"],
       ["backlog-export", "phases[2].checks.post[2]", "no circular dependencies"],
       ["initial-design", "phases[0].checks.post[0]", "frontmatter.required"],
-      ["initial-design", "phases[1].checks.pre[0]", "spec-review.passed"],
       ["initial-design", "phases[1].checks.post[0]", "frontmatter.required"],
       ["initial-design", "phases[2].checks.post[0]", "frontmatter.required"],
-      ["initial-design", "phases[3].checks.pre[0]", "spec-review.passed"],
       ["initial-design", "phases[3].checks.post[0]", "frontmatter.required"],
       ["release-line-cycle", "phases[4].checks.pre[0]", "all releases where release-line={release-line.version} are status"],
       ["release-line-cycle", "phases[4].checks.post[0]", "frontmatter.required"],
       ["release-planning", "phases[0].checks.pre[0]", "`npm run -s wingfoil -- --version` == the version package.json pins"],
       ["release-planning", "phases[0].checks.post[0]", "new pin >= old pin, and `npm view wingfoil versions` lists it"],
       ["release-planning", "phases[0].checks.post[1]", "the switch commit changes only package.json and package-lock.json"],
-      ["release-planning", "phases[0].checks.post[2]", "the wingfoil-cli directive re-checked against the new pin"],
       ["release-planning", "phases[1].checks.post[0]", "frontmatter.required"],
       // task-277 (approver ruling 2026-10-12 D1 (c)): define-scope's sweep of the scheduled change-proposals, bound later under dl-166 Q2 (ii).
       ["release-planning", "phases[1].checks.post[1]", "change-proposals.swept"],
       // task-230 (dl-100 §1, approver ruling 2026-10-12 D2): the coverage of the ready decision-logs, read by the product-owner.
       ["release-planning", "phases[3].checks.post[0]", "ready-decision-logs.covered"],
-      ["release-planning", "phases[4].checks.pre[0]", "spec-review.passed"],
       ["release-planning", "phases[4].checks.post[0]", "frontmatter.required"],
-      ["release-planning", "phases[5].checks.pre[0]", "spec-review.passed"],
       ["release-planning", "phases[5].checks.post[0]", "frontmatter.required"],
       ["release-planning", "phases[6].checks.post[0]", "frontmatter.required"],
-      // task-230 (dl-102 §2): build-backlog's criteria check; (dl-100 §2) commit-backlog's backlog_committed.
-      ["release-planning", "phases[6].checks.post[1]", "acceptance-criteria.consistent"],
+      // task-230 (dl-102 §2): build-backlog's criteria check is bound manual (task-303); (dl-100 §2) commit-backlog's backlog_committed.
       // task-230 review F1: each task's wave is listed; commit-backlog's waves is a non-empty list.
       ["release-planning", "phases[6].checks.post[2]", "task.wave.declared"],
       ["release-planning", "phases[7].checks.pre[0]", "frontmatter.required"],
@@ -119,22 +111,17 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["dev-loop", "phases[1].checks.post[0]", "frontmatter.required"],
       ["dev-loop", "phases[1].checks.post[1]", "tech-spec.approved"],
       ["dev-loop", "phases[1].checks.post[2]", "depends_on.acknowledged"],
-      // task-221 (dl-102 §4): a reading of each criterion, no command.
-      ["dev-loop", "phases[1].checks.post[3]", "acceptance-criteria.consistent"],
       ["dev-loop", "phases[2].checks.post[0]", "tests.exist"],
       ["dev-loop", "phases[2].checks.post[1]", "tests.failing"],
       // task-205 (dl-134 §2): declared on green and refactor, evaluated from v1.0 (P4.12); no command asserts it yet.
       ["dev-loop", "phases[3].checks.post[1]", "tests.unchanged"],
       ["dev-loop", "phases[4].checks.post[5]", "tests.unchanged"],
-      // task-221 (dl-097 (a), dl-098): the reviewer's re-runs; (dl-115 Q2 (a)): the file is the task's path,
-      // which no binding placeholder carries. `typecheck.clean` and `docs.parity` are bound.
-      ["dev-loop", "phases[5].checks.pre[1]", "claims.rerun"],
-      ["dev-loop", "phases[5].checks.pre[2]", "rereview.previous-reject"],
+      // task-221 (dl-115 Q2 (a)): the file is the task's path, which no binding placeholder carries. `typecheck.clean`
+      // and `docs.parity` are bound; claims.rerun and rereview.previous-reject are bound manual (task-303).
       ["dev-loop", "phases[6].checks.post[0]", "retrospective.present"],
       ["user-docs", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
-      ["user-docs", "phases[1].checks.post[0]", "user-facing docs aligned with the release's shipped CLI/feature surface"],
       // task-298 (dl-172 (a)): demo.rendered (task-224's manual re-render, approver ruling 2026-10-10) is bound
-      // `manual: true` in bindings.yaml 2.5, so it is no longer unbound (86 warnings, spec-017 §12).
+      // `manual: true` in bindings.yaml 2.5, so it is no longer unbound (86 warnings at task-298, spec-017 §12).
       // task-252 (dl-137 Q1 (b)): the agent file is AGENTS.md; the fifth check reads CLAUDE.md, its pointer.
       ["agent-docs", "phases[0].checks.post[0]", "AGENTS.md project status matches the shipped command surface"],
       ["agent-docs", "phases[0].checks.post[1]", "AGENTS.md element/state tables match memory.yaml"],
@@ -161,10 +148,6 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-health", "phases[0].checks.post[0]", "every catalogue metric has a value or an explicit not-measurable reason"],
       ["release-health", "phases[1].checks.post[0]", "every regressed metric and every breached floor has a finding"],
       ["release-health", "phases[2].checks.post[0]", "every finding is tracked by an element or carries an RH proposal in the report's Proposals section"],
-      ["retrospective", "phases[0].checks.post[0]", "secondary-sources.listed"],
-      // task-272 (dl-163 S3d): collect-feedback's read record is checked by the facilitator; no command asserts it yet.
-      ["retrospective", "phases[1].checks.post[0]", "feedback-notes.recorded"],
-      ["retrospective", "phases[2].checks.pre[0]", "proposals.disposed"],
       ["retrospective", "phases[3].checks.post[0]", "frontmatter.required"],
       ["end-of-life", "phases[0].checks.post[0]", "frontmatter.required"],
       ["end-of-life", "phases[1].checks.post[0]", "deprecated content excluded from agent context and default search"],
@@ -290,20 +273,9 @@ function measure(workflows: readonly Workflow[]): { checkpoints: string[]; final
 }
 
 describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => {
-  it('28 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 27 again from task-219: release-publishing.release-commit, while staging-rehearsal produces its transcript; 28 from task-222: release-health.propose writes into the report compare produced; 29 from task-212: vision-change.update-vision; 30 from task-230: wave.re-plan, the re-plan checkpoint of dl-100 §2; 28 from task-244: release-submit.pre-release-checks produces the candidate’s test-results summary and release-publishing.publish the tag run’s, dl-136)', () => {
+  it('17 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 27 again from task-219: release-publishing.release-commit, while staging-rehearsal produces its transcript; 28 from task-222: release-health.propose writes into the report compare produced; 29 from task-212: vision-change.update-vision; 30 from task-230: wave.re-plan, the re-plan checkpoint of dl-100 §2; 28 from task-244: release-submit.pre-release-checks produces the candidate’s test-results summary and release-publishing.publish the tag run’s, dl-136; 17 from task-301: the eleven phases of user-story-mapping, specification-by-examples, volere-requirements and backlog-export produce their module’s output directory, bug-389)', () => {
     expect(measure(registry().workflows).checkpoints).toEqual([
       'vision-change.update-vision',
-      'user-story-mapping.backbone',
-      'user-story-mapping.vertical-explosion',
-      'user-story-mapping.mvp-cut',
-      'specification-by-examples.isolate-mvp',
-      'specification-by-examples.write-scenarios',
-      'volere-requirements.extract-requirements',
-      'volere-requirements.apply-volere-shell',
-      'volere-requirements.group-by-macro-area',
-      'backlog-export.generate-records',
-      'backlog-export.map-dependencies',
-      'backlog-export.validate',
       'release-planning.advance-pinned-build',
       'wave.re-plan',
       'dev-loop.red',
@@ -320,6 +292,28 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'retrospective.additional-points',
       'retrospective.approve',
       'end-of-life.archive',
+    ]);
+  });
+
+  it('the eleven specification sub-workflow phases produce their module\'s output directory (task-301, bug-389, dl-186 S3-b)', () => {
+    const downcast = ['user-story-mapping', 'specification-by-examples', 'volere-requirements', 'backlog-export'];
+    const declared: [string, unknown][] = [];
+    for (const name of downcast) {
+      const workflow = registry().workflows.find((w) => w.name === name)!;
+      for (const phase of workflow.phases) declared.push([`${name}.${phase.name}`, phase.produces]);
+    }
+    expect(declared).toEqual([
+      ['user-story-mapping.backbone', ['docs/02_requirements/01_user_story_map/']],
+      ['user-story-mapping.vertical-explosion', ['docs/02_requirements/01_user_story_map/']],
+      ['user-story-mapping.mvp-cut', ['docs/02_requirements/01_user_story_map/']],
+      ['specification-by-examples.isolate-mvp', ['docs/02_requirements/02_bdd/features/']],
+      ['specification-by-examples.write-scenarios', ['docs/02_requirements/02_bdd/features/']],
+      ['volere-requirements.extract-requirements', ['docs/02_requirements/03_sard/']],
+      ['volere-requirements.apply-volere-shell', ['docs/02_requirements/03_sard/']],
+      ['volere-requirements.group-by-macro-area', ['docs/02_requirements/03_sard/']],
+      ['backlog-export.generate-records', ['docs/03_backlog/04_backlog/']],
+      ['backlog-export.map-dependencies', ['docs/03_backlog/04_backlog/']],
+      ['backlog-export.validate', ['docs/03_backlog/04_backlog/']],
     ]);
   });
 

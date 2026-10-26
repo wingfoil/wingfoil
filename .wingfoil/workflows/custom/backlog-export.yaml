@@ -6,17 +6,23 @@ kind: sub
 description: >-
   Consolidate the documentary chain (USM + BDD + SARD) into a single structured backlog,
   ready to sync into dev tools; partition tasks by release wave.
-version: 1.0
+version: 1.1                     # 1.1 bug-389 (task-301): every phase produces its module's output directory, so it completes by produces evidence instead of a workflow finalize
 
 phases:
   - name: generate-records
     description: "One JSON record per MVP user story; Gherkin -> acceptance_criteria; one Technical Task per REQ."
     role: product-owner
+    produces:
+      - "docs/03_backlog/04_backlog/"
   - name: map-dependencies
     description: "Link technical-task IDs into the dependencies[] of affected user stories."
     role: product-owner
+    produces:
+      - "docs/03_backlog/04_backlog/"
   - name: validate
     description: "JSON Schema validation + partition by-release."
     role: product-owner
+    produces:
+      - "docs/03_backlog/04_backlog/"
     checks:
       post: ["valid JSON parse", "no duplicate IDs", "no circular dependencies"]

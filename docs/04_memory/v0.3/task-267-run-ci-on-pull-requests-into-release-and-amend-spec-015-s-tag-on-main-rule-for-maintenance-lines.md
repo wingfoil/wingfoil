@@ -11,6 +11,7 @@ ref: "dl-159"
 bug: []
 depends_on: ["task-207-drive-e2e-smoke-through-fresh-project-use-scenario", "task-265-accept-a-release-tag-on-origin-release-x.y-matching-the-tag-s-major.minor-in-the-publish-gate"]
 tmpl_version: 261006   # Orignal template version
+wave: "w3"
 ---
 
 ## Description

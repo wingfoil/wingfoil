@@ -11,6 +11,7 @@ ref: "dl-110"
 bug: ["bug-214"]
 depends_on: ["task-126-declare-closed-wf-operation-grammar-bracket-set-state", "task-132-read-approver-identity-once-use-authority-check-approver"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

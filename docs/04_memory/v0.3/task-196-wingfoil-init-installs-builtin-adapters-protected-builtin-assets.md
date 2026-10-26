@@ -11,6 +11,7 @@ ref: "spec-016"
 bug: ["bug-183"]
 depends_on: ["task-135-make-init-scan-builtin-templates-secrets-refuse-reinitialize", "task-177-adapter-manifests-load-validate-wingfoil-agents-builtin-custom", "task-188-correct-spec-011-bindings-id-stale-builtin-templates"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

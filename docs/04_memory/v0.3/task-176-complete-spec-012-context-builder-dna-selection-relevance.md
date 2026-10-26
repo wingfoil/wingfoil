@@ -11,6 +11,7 @@ ref: "spec-012"
 bug: []
 depends_on: ["task-137-read-pillar-configuration-memory-documents-any-commit-not"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

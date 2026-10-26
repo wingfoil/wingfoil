@@ -11,6 +11,7 @@ ref: "dl-097"
 bug: []
 depends_on: ["task-139-extend-documentation-doc-versioning-testing-directives-ratified-clauses", "task-141-reposition-brief-governance-layer-make-determinism-index-composite", "task-161-revise-command-baseline-which-verbs-read-head-filesystem"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

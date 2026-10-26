@@ -11,6 +11,7 @@ ref: "spec-002"
 bug: ["bug-019", "bug-126"]
 depends_on: ["task-169-make-directive-assign-refuse-whole-file-rewrite-unless"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

@@ -11,6 +11,7 @@ ref: "dl-119"
 bug: []
 depends_on: ["task-133-bind-builtin-security-directive-role-stop-tests-pinning"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

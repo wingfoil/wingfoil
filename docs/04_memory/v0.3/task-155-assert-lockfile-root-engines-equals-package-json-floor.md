@@ -11,6 +11,7 @@ ref: "spec-015"
 bug: ["bug-046", "bug-047"]
 depends_on: []
 tmpl_version: 260703
+wave: "w1"
 ---
 
 ## Description

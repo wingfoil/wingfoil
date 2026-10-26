@@ -60,6 +60,14 @@ frontier also showed `release-planning.advance-pinned-build` for `minor-v0.4` an
 once (iterations deduce in parallel, `dl-175`), and a `late` list of open bugs and `ready`
 decision-logs (`dl-160`).
 
+*Correction (2026-10-26, `task-302`).* Those three iterations did not complete: `delivery` ignores them.
+`released` is outside its entry filter (`[draft, planning, in-development]`), and no phase of their
+`release-cycle` is complete, since its first step (`release-planning.advance-pinned-build`) is a checkpoint with
+no record, so each is neither eligible nor entered and leaves the frontier unread (`src/workflow/deduce.ts`
+`iterate`; an instrumented trace in `task-302`'s notes prints `ignored` for each). `minor-v0.3` is ignored the
+same way since its release, with or without its `waves:`. E3's heading and the Rationale's "the past releases
+close by their state" read "are ignored"; the conclusion that the past releases owe no record stands.
+
 **E4. The template packs do not exist yet, and replacing workflows orphans open instances.**
 WingFoil-Templates (`github.com/wingfoil/wingfoil-templates`) publishes no pack: its catalog lists none,
 and `base`, `software` and `governance/wingfoil-dogfood` are its milestone M2, which waits for v0.3's

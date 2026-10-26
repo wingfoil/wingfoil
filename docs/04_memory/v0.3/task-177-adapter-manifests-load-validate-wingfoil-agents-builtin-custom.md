@@ -11,6 +11,7 @@ ref: "adr-012"
 bug: []
 depends_on: ["task-138-dna-yaml-declares-team-agents-adapter-runs-paths"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

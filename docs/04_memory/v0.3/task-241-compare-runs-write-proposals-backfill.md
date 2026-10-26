@@ -11,6 +11,7 @@ ref: "dl-089"
 bug: ["bug-344-the-release-health.measure-binding-passes-neither-any-node-nor-max-workers-to-measure.cjs", "bug-332-a-test-imports-ajv-which-package.json-does-not-declare"]
 depends_on: ["task-231-measure-git-history-process-conformance-external-metrics", "task-232-measure-build-test-coverage-example-latency-install-metrics", "task-233-measure-static-memory-metrics-including-fix-share"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

@@ -11,6 +11,7 @@ ref: "spec-017"
 bug: []
 depends_on: ["task-137-read-pillar-configuration-memory-documents-any-commit-not", "task-171-make-memory-scan-primitives-fail-closed-archived-elements", "task-175-declare-phase-evidence-produces-ownership-selections-awaits-collections", "task-194-check-workflows-against-memory-yaml-dna-yaml-state"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

@@ -1,3 +1,16 @@
+---
+id: "initial-design-rl-v1-plan"
+type: plan
+title: "Initial design — rl-v1"
+status: done
+workflow: "initial-design"
+phase: "rl-v1"
+element: "rl-v1"
+parent: "release-line-cycle.initial-design"
+release: ""
+tmpl_version: 261010
+---
+
 # Initial Design — rl-v1 Execution Plan
 
 **Date:** 2026-07-03

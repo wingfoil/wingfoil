@@ -11,6 +11,7 @@ ref: "dl-114"
 bug: []
 depends_on: ["task-127-add-memory-amend-id-reason-approver-gated-verb", "task-131-make-dirty-target-guard-refuse-path-cannot-inspect", "task-138-dna-yaml-declares-team-agents-adapter-runs-paths", "task-192-stamp-wingfoil-commit-wingfoil-version-semver-sha-pin"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

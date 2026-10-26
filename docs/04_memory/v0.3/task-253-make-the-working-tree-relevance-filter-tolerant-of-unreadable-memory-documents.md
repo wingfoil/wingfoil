@@ -15,6 +15,7 @@ bug: ["bug-230"]                # optional — LIST of bug ids this task closes 
                        # dev-loop keeps the source bug's state in sync with this task via bug.sync_state
 depends_on: []         # optional — ids of tasks whose Execution Notes constrain this one (dl-015); authored at planning time, may be appended during design
 tmpl_version: 260703   # Orignal template version
+wave: "w2"
 ---
 
 ## Description
