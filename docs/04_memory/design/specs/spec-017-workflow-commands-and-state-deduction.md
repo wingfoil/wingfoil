@@ -1204,6 +1204,16 @@ sub-workflows, so once `update-vision` is complete they complete at once, by the
 the frontier no longer offers the delta downcast beside `schedule` (approver ruling D3, 2026-10-26, at `task-301`'s
 design gate; the evidence of a delta downcast is follow-up F38).
 
+**Re-measured at `task-303`** (2026-10-26, `dl-186` Q6, on `release/0.3` at `98fccec0` plus the task's commits, through
+`loadWorkflowRegistryAtHead`): 27 workflows, 105 phases, **0 errors and 65 warnings**, every one a
+`W_WORKFLOW_UNBOUND_TOKEN` on a check, over 44 check names — 86 before. `workflows/bindings.yaml` 2.6 binds
+`manual: true` the 17 prose checks whose condition is a reading or a judgement no program can decide (21
+occurrences: the specification quality criteria, `spec-review.passed`, `acceptance-criteria.consistent`, the
+reviewer's two re-checks, the user-docs alignment reading, the `wingfoil-cli` re-check and the retrospective's three
+dispositions), keyed by their prose (`dl-172` (a)); with `demo.rendered`, 22 check occurrences are manual. The 65 left
+are checks a command could decide but none does yet, so they still fail closed at v1.0 until a `run` binding names
+their command. The checkpoint phases stay 17. `test/core/workflow-repository-conformance.test.ts` lists the 65.
+
 ### 13. Open questions
 
 **Settled at this revision** (review recommendation or approver ruling):
@@ -1649,3 +1659,9 @@ plans now carry the `plan` frontmatter; §12 is re-measured — 86 warnings unch
 specification phases declare `produces`, `bug-389`), workflow reads without `W_MEMORY_UNREADABLE`, and the
 `vision-change` downcast consequence (D3). Edited in place without a supersede or a state change (`dl-047`), pending
 the approver's `memory amend`.
+
+**Revision (2026-10-26, `task-303-bind-this-repository-s-manually-confirmed-prose-checks-as-manual-dl-186-q6`) —
+§12 re-measured.** As the approver ruled at `task-303`'s design gate (D1 (a)): a check is bound `manual: true` only
+when no program can decide its condition. §12 records 65 warnings over 44 check names (86 before), 17 prose checks
+bound manual (21 occurrences), 17 checkpoints unchanged. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend`.

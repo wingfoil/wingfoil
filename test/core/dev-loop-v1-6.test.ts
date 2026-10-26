@@ -18,7 +18,9 @@
  * sources and `package.json` are read from the working tree, as the other live-configuration suites do.
  *
  * What is NOT asserted here: that any of these checks is evaluated — no check runs before P4.12 (v1.0,
- * `dl-090` Q2 (c)); the unbound ones are `W_WORKFLOW_UNBOUND_TOKEN` warnings until then.
+ * `dl-090` Q2 (c)); the unbound ones are `W_WORKFLOW_UNBOUND_TOKEN` warnings until then. The readings a human
+ * confirms on purpose — `acceptance-criteria.consistent`, `claims.rerun`, `rereview.previous-reject` — are bound
+ * `manual: true` (task-303, `dl-186` Q6, `dl-172` (a)) and raise no warning.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -206,10 +208,10 @@ describe('AC 2 — workflow show dev-loop lists each new check with its binding,
 
   it.each([
     ['start:stop-the-line.clear', 'unbound'],
-    ['design:acceptance-criteria.consistent', 'unbound'],
+    ['design:acceptance-criteria.consistent', 'manual'],
     ['refactor:typecheck.clean', 'run'],
-    ['review:claims.rerun', 'unbound'],
-    ['review:rereview.previous-reject', 'unbound'],
+    ['review:claims.rerun', 'manual'],
+    ['review:rereview.previous-reject', 'manual'],
     ['review:docs.parity', 'run'],
     ['done:retrospective.present', 'unbound'],
   ])('%s is shown with binding kind %s, never evaluated', (key, kind) => {
