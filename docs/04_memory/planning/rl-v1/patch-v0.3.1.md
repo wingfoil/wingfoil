@@ -104,6 +104,16 @@ WingFoil-Templates R6 (coordinator's answer, 2026-10-26): the `software` pack is
 `base@1.0.0`, `base` still 1.0.0 for exactly 0.3.0, adoption by hand); the pack adoption does not enter `w2` and Q3
 stands (approver ruling of `w0`: wait for `software`).
 
+Checkpoint `wave.re-plan` of `w2` (2026-10-26): no task admitted since `commit-backlog`; the release counts 14 tasks
+against `backlog_committed: 14` (+0 %), below the growth threshold; no element raised in the wave (its candidate
+findings are held for the ingest after the `v0.3.1` tag); `w2` is the backlog's last wave, so no `w3` is appended and
+the implementation phase closes. WingFoil-Templates R6 (coordinator's answer, 2026-10-26, read on the Templates
+repository's `origin/main` `2dde864`): the `software` pack is not published (only the tag `base@1.0.0`, `base` still
+1.0.0 for exactly 0.3.0); no pack adoption enters this patch and Q3 stands (approver ruling of `w0`: wait for
+`software`).
+Approver ruling at this checkpoint (2026-10-26): a bug-fix patch `v0.3.2` follows this one on `release/0.3`
+and precedes v0.4; its scope is decided at its release-planning; `dl-186` S4's pin becomes `0.3.2`.
+
 ## Execution Notes
 
 <!-- Running log of what actually happened during this release's workflow — filled in
