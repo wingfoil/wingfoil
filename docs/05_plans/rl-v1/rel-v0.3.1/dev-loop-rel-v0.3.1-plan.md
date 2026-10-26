@@ -94,8 +94,9 @@ share no file. `task-296` and `task-294` meet in `scripts/e2e-smoke.cjs`; `task-
   `task-298` (298 re-measures `spec-017` §12's warning count after its sync); `task-296` before `task-294` (the smoke
   probes the new scaffold); `task-294` before `task-295`. Re-bumps (`doc-versioning`, against `release/0.3`):
   `git-conventions.md` "2.1" → "2.2" (294) → "2.3" (295 at its sync); `command-baseline.md` "1.5" → "1.6" (294) →
-  "1.7" (295 at its sync); one bump each for `doc-versioning.md` (299), `bindings.yaml` 2.4 → 2.5 (298),
-  `retrospective.yaml` 1.6 → 1.7 (300). Elements past their first state (`spec-017` §12 for 298, `dl-089`/`dl-092`
+  "1.7" (295 at its sync); one bump each for `bindings.yaml` 2.4 → 2.5 (298),
+  `retrospective.yaml` 1.6 → 1.7 (300); `doc-versioning.md` declares no `version:` and takes none (299, design
+  gate D1). Elements past their first state (`spec-017` §12 for 298, `dl-089`/`dl-092`
   for 300) are prepared uncommitted for the approver's `memory amend`.
 - **W1-3 — `task-294` owns the shared provenance module** (record writer, `--dry-run` shape, authority check);
   `task-295`'s design reads `task-294`'s design notes and appends `depends_on: [task-293, task-294]` (`dl-015`); its
@@ -263,6 +264,43 @@ instruction.
   `task-297`, `task-301` — of 11 open tasks = 27.3 %, threshold 30 %); growth clear (14 vs `backlog_committed` 14).
   Hand starts `[backlog → in-progress]`: `task-293` `baafa0e8`, `task-296` `e26eb5c4` (`bug-400` sync `e5e76ac7`),
   `task-297` `7a0e7df0` (`bug-408` sync `55bc31f7`), `task-300` `215212a7`.
+- 2026-10-24, batch A design gate (approver, all recommendations): `task-293` D1–D4 (W1-3 made precise: `task-293`
+  creates `src/workflow/provenance.ts`, `task-294` owns the writing side), `task-296` D1–D8, `task-297` D1–D5,
+  `task-300` D1–D3; rulings in each task's notes (`4bd1f9a6`, `52572a68`, `2700ed68`, `24b333e5`). `task-297`'s red
+  pinned `reported_by:` in a new `COLLABORATION.md` section that an older test and `dl-163` S3c forbid: sent back to
+  qa on the approver's ruling (`bbae3471`).
+- Done and merged `--no-ff` into `release/0.3` in the order of W1-2: `task-297` (approve `abd7d0c3`, finalize
+  `36a60e45`, `bug-408` closed `ae541f8b`, merge `f5e52670`); `task-300` (approve `3a33dc52`, finalize `581d0bfb`, merge
+  `f0175b80`); `task-296` (approve `8e01105e`, finalize `07dad37e`, `bug-400` closed `06fa48ef`, merge `35acda40`);
+  `task-293` (review ruling (ii): all-linkage claims never conflict; approve `e7452e11`, finalize `3a1f6b21`, merge
+  `59baac94`). Batch B started after `task-297` and `task-300` were done (stop-the-line 1 of 8 = 12.5 %), batch C after
+  `task-293`'s merge (1 of 7 = 14.3 %).
+- Batch B/C design gates (approver): `task-298` D1–D4, `task-299` D1–D4 (no bump of `doc-versioning.md`, which declares
+  no `version:` — W1-2 corrected below), `task-294` D1–D10 plus the generalised inventory tests, `task-295` D1–D9.
+  `task-299` (approve `a5204f5b`, finalize `e82e385a`, merge `8ecd3890`) merged before `task-298` on the approver's
+  ruling (no shared file). `task-298` stopped on the pinned build: 0.3.0 refuses the `{ manual: true }` check binding;
+  approver ruling (a) — three `KNOWN_READ_FAILURES` for 0.3.0, workflow reads on the code build until the pin reaches
+  0.3.1, recorded by `bug-414` (`pinned-build`, filed on the task branch through `bug-ingest-rel-v0.3.1-pinned-manual-check-plan`,
+  triaged `a2db4016`, `release` empty); approve `e748758f`, finalize `1b317484`, merge `80ea2ddd`. `task-294` was
+  rejected at review (`2f581d78`; `--plan` skipped a step whose string `produces` uses the created element's `{id}`,
+  and a walk without re-deduction): D1 re-ruled for `--plan` (simulate the single candidate's adoption), red after
+  review `bc82e297`, approve `48326b6f`, finalize `dd9a23ac`, merge `546d1384`. `task-295`: review rulings A (console
+  `--dry-run` of rekey, adopt and finalize fixed here), B (no-op only with nothing left to remap), C (`--to` within the
+  instance's workflows); approve `bb47dcc5`, finalize `fd9ed0a9`, merge `90ae17d7`. Spec amendments by the approver:
+  `spec-017` `1fbf5cbc`, `be5fded4`, `21f49c65`, `96354893`; `spec-006` `83d229ba`; `spec-008` `7e81fb0b`; `dl-089`
+  `0903069f`, `dl-092` `2a22eef3`. W1.1: 8 of 8 tasks done. `release/0.3` pushed `546d1384` on 2026-10-25 (approver).
+- 2026-10-26, W1.2 wave-checks on this branch after merging `release/0.3` (`53282345`): e2e smoke `--candidate` PASS
+  82/82 (report `docs/07_gates/rl-v1/rel-v0.3.1-w1-e2e-smoke.md`, `ddd552f0`), incl. the new `adopt --plan` probe;
+  `docs/examples` 6/6 OK with `WINGFOIL="node dist/cli.js"`; `docs.parity` 10 suites, 65 tests passed. No bug opened.
+- W1.3 re-sweep: the selection on `release/0.3` returns the 21 decision-logs `release-planning` R1 assigned `v0.4` on
+  `main` (no action, W0.3 ruling) and `bug-414` (`triaged`, `release` empty by the approver's triage ruling); nothing
+  else.
+- W1.4 re-plan (approver amend of `patch-v0.3.1`): no task admitted since `commit-backlog` (14 of 14); `w2` appended to
+  `waves:`. Candidate findings of the wave held in the coordinator's register (F20–F37) for the ingest after the
+  `v0.3.1` tag.
+- WingFoil-Templates R6 at the `w1` re-plan (coordinator's answer, 2026-10-26, read on the Templates repository's
+  `origin/main` `7d75e81`): `software` not published, `base` still 1.0.0 (exactly 0.3.0); no pack adoption in `w2`, Q3
+  stands; the coordinator reports the `software` tag when it lands.
 
 ### Retrospective
 
@@ -281,3 +319,16 @@ instruction.
   take no slot and `--base` is always passed.
 - The review findings fixed in the task (`task-290` F1, `task-291` F12/F13) cost one extra red and one focused
   re-review each; none would have been rescheduled once the task was done.
+- `w1`: two designs fixed red pins that an older test forbade or that the pinned build could not load (`task-297`'s
+  `reported_by:` pin against `test/docs/reported-by.test.ts`; `task-298`'s `{ manual: true }` binding against the
+  pinned 0.3.0, bug-414): a design step that runs the existing tests on the target files, and loads a changed
+  `.wingfoil/` file with the pinned build (`npm run check:mcp`), would have caught both before red.
+- `w1`: two agents corrupted their own Execution Notes by splicing at a substring or an offset (`task-296` lost its
+  design gate and red sections; `task-297` duplicated a fragment); the kit prompts now require insert-only edits
+  before the final `### Retrospective` and a `git diff` that only adds lines.
+- `w1`: `task-294`'s red pinned D1 only on fixtures whose phases had `memory.add` alone, not on this repository's
+  workflow shapes (string `produces` with `{id}`); the review, reproducing on a copy of the real config, found it.
+- `w1`: every console `--dry-run` of `workflow finalize` (released 0.3.0), `adopt` and `rekey` crashed, unseen because
+  the dry-run table test runs `--format json` only; fixed in `task-295`.
+- `w1`: concurrent design/qa agents shared the session scratchpad and overwrote each other's draft; each agent now
+  gets its own subfolder.
