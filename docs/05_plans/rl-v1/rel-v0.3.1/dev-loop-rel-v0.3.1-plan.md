@@ -380,6 +380,60 @@ instruction.
   diagnostics (86 `W_WORKFLOW_UNBOUND_TOKEN`, 6 `W_MEMORY_UNREADABLE` — the six v0.1 plans of `task-301`); `workflow
   next` → `decision-log-ingest.approve` of `dl-188`; no `release-cycle`, `wave` or `dev-loop` instance.
 
+- 2026-10-26, W2.1 — start pre-checks and starts: `task-301` (`fix`, never blocked; stop-the-line 1 `fix` of 3 open =
+  33.3 %, firing for the two `feature` tasks only; growth 14 vs 14) started `9fe50965`, `bug-389` synced `46c543eb`, cut
+  from `release/0.3` `ae9da384`. Design gate (approver): D1 (the six v0.1 plans gain their frontmatter through a hand
+  `wf(plan): add`, six `memory submit`, one hand `wf(plan): finalize`), D2 (`release-implementation-rel-v0.1-plan` is
+  `dev-loop`), D3 (`vision-change`'s downcasts complete at once — F38); rulings `6d497820`. Red `428af6c4`; review
+  APPROVE (one vacuous assertion → F40); approver amend `spec-017` `951d1122`, approve `a77e5176`, finalize `5a69e4ae`,
+  `bug-389` closed `b4f39c9a`, merge `98fccec0`.
+- `task-302` and `task-303` started after `task-301`'s merge (stop-the-line 0 `fix` of 2 open; growth 14 vs 14), cut
+  from `98fccec0`: starts `fd368160`, `1298c2a5`. `task-303` design gate D1 (a) (`manual: true` only for a condition
+  no program can decide), D2 (a), D3 (a) (stale comments fixed in the task: `retrospective.yaml` 1.8, `dev-loop.yaml`
+  2.2), D4, D5; rulings `4d6051c9`; red `c6326603`; review APPROVE, finding 1 fixed in the task
+  (`release-publishing.yaml` 2.0, `2383cdbb`), findings 2–4 → F45, F46; approver amend `spec-017` `efc43f34`, approve
+  `84227366`, finalize `11b10372`, merge `5a464682`. W2 ruling correction: of the eight unbound checks of the four
+  specification sub-workflows, five are bound manual, with three of `specification-downcast`; the deterministic
+  checks of `backlog-export` stay unbound (D1 (a)). Warnings 86 → 65.
+- `task-302` design gate D1–D4 (252/289 no wave; 223 `w3`; AC2 red-first on the data, the deduction's behaviour
+  recorded by command — a `released` release is ignored by `delivery`'s entry filter; the three ingest instances stay
+  open); rulings `4a68cc4c`; red `4839bf7c`; green: the one-shot migration script; the approver's 163 `memory amend`
+  commits in ten batches (`75f80de6` … `4bea21ff`, about 7 minutes); review APPROVE WITH FIXES (the `dl-186` Correction
+  completed; F51; the script and its test removed in the task, `6e66ffc8`); approver amend `dl-186` `294dc0f1`, approve
+  `7d37ce41`, finalize `4a97cc09`, merge `eb5d62cd`. W2.1: 3 of 3 tasks done.
+- 2026-10-26, W2.2 wave-checks on this branch after merging `release/0.3` (`b6cdb3fb`): e2e smoke `--candidate` PASS
+  82/82 (report `docs/07_gates/rl-v1/rel-v0.3.1-w2-e2e-smoke.md`, `e8630041`); `docs/examples` 6/6 OK with
+  `WINGFOIL="node $(pwd)/dist/cli.js"`; `docs.parity` 10 suites, 65 tests passed. No bug opened. Engine (code build):
+  3 open workflows, all ingest, 1 pending approval (`dl-188`), 33 ungated, 65 `W_WORKFLOW_UNBOUND_TOKEN`.
+- W2.3 re-sweep: the selection on `release/0.3` returns the 21 decision-logs stamped `v0.4` on `main` (checked one by
+  one) and `bug-414` (`triaged`, `release` empty) — no action; `cp-001` (`in-analysis`, `release` empty) is outside
+  the selection (a change-proposal's `release` is stamped by `vision-change`'s `schedule`) and predates the patch.
+  Candidate findings of the wave held in the coordinator's register (F38–F51) for the ingest after the `v0.3.1` tag.
+
+- W2.4 re-plan (approver amend of `patch-v0.3.1`): no task admitted since `commit-backlog` (14 of 14); no `w3`:
+  `w2` is the backlog's last wave and the implementation phase closes. WingFoil-Templates R6 (coordinator's answer,
+  2026-10-26, Templates `origin/main` `2dde864`): `software` not published, `base` still 1.0.0 (exactly 0.3.0); Q3
+  stands. The coordinator also reported two 0.3.0 engine behaviours Templates recorded (its dl-026: completing a later
+  phase closes earlier `iterate_over` phases; its dl-027: a release iterated with `[in-development]` stalls after
+  `enter-releasing`), to reach this repository as feedback note F-037 through the Templates feedback inbox.
+
+- 2026-10-26, approver ruling at the `w2` re-plan: a bug-fix patch `v0.3.2` runs on `release/0.3` after `v0.3.1`
+  and before v0.4, delaying v0.4 by the patch's length; `dl-186` S4's pin becomes `0.3.2` (revision paragraph,
+  approver amend); the analysis of the bugs assigned v0.4 (141 open on `main`: 123 low, 18 medium) is done at
+  `v0.3.2`'s release-planning, where `dl-191` is the natural place to rule how much of the low backlog it takes.
+  What happens at each step:
+  - **`v0.3.1`'s remaining phases** (user-docs, e2e-smoke, release-submit, release-publishing): unchanged;
+    `align-agent-docs` updates AGENTS.md's command count (33 → 35).
+  - **At the `v0.3.1` tag:** the first merge forward `release/0.3` → `main` (`git-conventions` §1, `dl-185` C1);
+    the coordinator's candidate findings (F1–F52) are filed as elements, for `v0.3.2`'s triage.
+  - **`v0.3.2`'s release-planning:** `advance-pinned-build` moves the pin `0.3.0` → `0.3.1`, which ends `bug-414`
+    (the three `KNOWN_READ_FAILURES` of `scripts/check-mcp-registration.cjs` and the exceptions in AGENTS.md §3 and
+    the `wingfoil-cli` directive §1 removed); `triage-bugs` takes the bug analysis; the `patch-v0.3.2` release
+    element is created there or before, on `release/0.3`.
+  - **At the `v0.3.2` tag:** the second merge forward into `main`.
+  - **v0.4's release-planning:** `advance-pinned-build` moves the pin to `0.3.2`, then S4's state adoption, then
+    `define-scope` on the engine; the packs' adoption is ruled once `software` is published (Q3).
+
 ### Retrospective
 
 - `npm run -s wingfoil -- --version` in the main working tree prints `0.2.2` while `release/0.3` pins `0.3.0`: the
@@ -410,3 +464,13 @@ instruction.
   the dry-run table test runs `--format json` only; fixed in `task-295`.
 - `w1`: concurrent design/qa agents shared the session scratchpad and overwrote each other's draft; each agent now
   gets its own subfolder.
+- `w2`: backfilling frontmatter on six existing plans took eight commits (`add`, six `submit`, `finalize`): the
+  governance check refuses a `docs()` commit that sets a status and `add` refuses a later state (`task-301`'s
+  Retrospective).
+- `w2`: the approver's 163 one-id amends ran in about 7 minutes through a task-written script (2.5 minutes in the
+  rehearsal); a one-shot migration's own tests must read the revision before the migration, not HEAD, and the script
+  was removed once its batches ran (`task-302`).
+- `w2`: the session scratchpad was emptied between agent sessions, losing a design's probe clones; the qa agent
+  rebuilt the amended state. Probe artefacts a later session needs belong in the kit, not the scratchpad.
+- `w2`: `check-governance`'s console line "gated: 0 findings on 0 commits" counts commits with findings, not commits
+  checked (`--json`: 165 checked) — F50.
