@@ -143,8 +143,9 @@ deduction and reported as a diagnostic, never as a crash (`W_MEMORY_INVALID_STAT
 `invalid state '<status>' for type '<type>' in <file>`, P4.13; `W_MEMORY_UNREADABLE`:
 `unreadable frontmatter in <file>: <reason>`). The reasons are the parser's first line, `no frontmatter`,
 `no 'type' field`, `type '<type>' is not declared in memory.yaml`, `no 'id' field` and `no 'status' field`.
-The six pre-`dl-019` plan files that carry no frontmatter (for example
-`docs/05_plans/rl-v1/initial-design-rl-v1-plan.md`) are reported this way. A file with no frontmatter whose
+The six pre-`dl-019` plan files that carried no frontmatter (for example
+`docs/05_plans/rl-v1/initial-design-rl-v1-plan.md`) were reported this way until `task-301` (`bug-389`) gave them
+the `plan` frontmatter (`status: done`, `parent` set, so none is an instance, §3.2). A file with no frontmatter whose
 path matches no type's `path` pattern is not a Memory document and is left out silently: the top-level
 `docs/05_plans/X_*.md` plans `dl-019` grandfathers (`.wingfoil/memory.yaml` `plan.path`). In a `path` pattern a
 token in the file name stands for one name, a token in a directory for one or more directories (the plan's
@@ -1188,6 +1189,21 @@ The pinned 0.3.0 again does not load the workflow files, because it refuses the 
 figures are the code build's, and `npm run check:mcp` declares the three `wingfoil://workflows` Resources known
 failures of 0.3.0 until the pin reaches 0.3.1.
 
+**Re-measured at `task-301`** (2026-10-26, `bug-389`, on `release/0.3` at `ae9da384` plus the task's commits, through
+`loadWorkflowRegistryAtHead`): 27 workflows, 105 phases, **0 errors and 86 warnings**, unchanged — every one a
+`W_WORKFLOW_UNBOUND_TOKEN` on a check. The eleven phases of `user-story-mapping`, `specification-by-examples`,
+`volere-requirements` and `backlog-export` (each file 1.1) declare their module's output directory as `produces`
+(`docs/02_requirements/01_user_story_map/`, `docs/02_requirements/02_bdd/features/`, `docs/02_requirements/03_sard/`,
+`docs/03_backlog/04_backlog/`), so they are no longer checkpoints: **17 checkpoint phases** (28 before), and a
+`sw-life-cycle` instance completes `specification` by `produces` evidence at `HEAD`. The six v0.1 plans carry their
+frontmatter (§1.4), so a workflow read reports 86 diagnostics, none `W_MEMORY_UNREADABLE` (92 before).
+`test/core/workflow-repository-conformance.test.ts` lists the 17. Two consequences: the four directories are
+`produces` patterns, so an uncommitted edit under them is `W_UNCOMMITTED_INPUTS` on every read (§1.2); and
+`vision-change`'s optional `downcast-stories`, `downcast-scenarios` and `downcast-requirements` include the same
+sub-workflows, so once `update-vision` is complete they complete at once, by the existence of those directories, and
+the frontier no longer offers the delta downcast beside `schedule` (approver ruling D3, 2026-10-26, at `task-301`'s
+design gate; the evidence of a delta downcast is follow-up F38).
+
 ### 13. Open questions
 
 **Settled at this revision** (review recommendation or approver ruling):
@@ -1626,3 +1642,10 @@ C (a)); `remapped` counts the entries remapped, not the commits (D4); the no-op 
 `HEAD` (D5), and holds only while no record of the instance still names `<from>`, else a new record is written (review
 ruling B (a)). Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend`.
+
+**Revision (2026-10-26, `task-301-give-the-six-v0.1-plans-their-frontmatter-and-the-specification-phases-their-produces`)
+— §1.4, §12.** As the approver ruled at `task-301`'s design gate (D1–D3): §1.4 records that the six pre-`dl-019`
+plans now carry the `plan` frontmatter; §12 is re-measured — 86 warnings unchanged, 17 checkpoints (the eleven
+specification phases declare `produces`, `bug-389`), workflow reads without `W_MEMORY_UNREADABLE`, and the
+`vision-change` downcast consequence (D3). Edited in place without a supersede or a state change (`dl-047`), pending
+the approver's `memory amend`.
