@@ -11,6 +11,7 @@ ref: "dl-135"
 bug: []
 depends_on: ["task-206-agent-execute-records-run-json-lines-line-under"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description
