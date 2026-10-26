@@ -230,6 +230,38 @@ Rulings on the design decisions above:
 - Sequence: red → green (the script and its own tests, then STOP) → the approver runs the batches on `task/task-302`
   → refactor and submit → review.
 
+### red (qa, 2026-10-26)
+
+Red commit `4839bf7c` (T4 baseline), branch `task/task-302`. One file: `test/core/minor-v0.3-waves.test.ts`. Every read
+is of `HEAD` (`readPathAtRev`, `listMemoryDocumentPathsAtRev`, `loadMemoryYamlAtHead`), real files only, so no
+working-tree edit can make it pass. No script interface is pinned: the design leaves `scripts/v0.3-waves.cjs` and its
+tests to the developer at green.
+
+| AC | Class | Tests | At red |
+|---|---|---|---|
+| — | guard | `reads the v0.3 task files at HEAD` (164) | pass |
+| 1 | characterization | `AC 1: every v0.3 task has exactly one **wave:** line in its Implementation Notes, valued 0–3 or none`; `AC 1: the notes place 4 / 42 / 34 / 82 tasks in waves 0–3 and 2 in none`; `AC 1: the tasks with no wave are exactly task-252 and task-289 (run in user-docs, D1)` | pass |
+| 1 + 2 | red-first (D3 (a)) | `AC 1/2: minor-v0.3 declares waves [w0, w1, w2, w3]` | fail, `expect(frontmatter['waves']).toEqual(WAVE_KEYS)` (line 132): received `undefined` |
+| 1 + 2 | red-first (D2) | `AC 1/2: every v0.3 task whose notes say wave N carries frontmatter wave "wN" (task-223 included, D2)` | fail, `expect(mismatches).toEqual([])` (line 142): 162 mismatches |
+| 1 + 2 | red-first (D2) | `AC 1/2: task-223 (deprecated) carries wave "w3" (D2)` | fail, `toBe('w3')` (line 148): received `undefined` |
+| 1 + 2 | red-first (D1) | `AC 1/2: task-252 and task-289 carry no wave (absent or "", D1)` | pass (a guard: true today, must stay true after the amends) |
+| 1 + 2 | red-first | `AC 1/2: every non-archived task with release "v0.3" and a non-empty wave names a key of minor-v0.3 waves` | fail, `expect(waved.length).toBe(161)` (line 171): received `0` |
+| 2 (deduction), 3, 4 | recorded command | none (D3 (a), design table) | the developer's green notes |
+
+- The notes' real form is `**wave:** N` followed by a separator (`0 ·`, `2,`, `none —`); the test reads the word after
+  the label, only inside `## Implementation Notes` (`task-230` repeats `**wave:** 3` in its Execution Notes:
+  `grep -c '\*\*wave:\*\*'` → 2 on that file, 1 inside the section on all 164).
+- Run: `npx jest test/core/minor-v0.3-waves.test.ts --maxWorkers=2` → 1 suite failed, 9 tests: 4 failed, 5 passed; every
+  failure is an assertion, none a crash. `npx tsc --noEmit -p tsconfig.json` → exit 0.
+- Expected and ruled: the four red tests still fail after green (the developer's script changes no data) and pass once
+  the approver's batches 0–9 are committed on this branch.
+- Validated on an amended state: a scratch clone of this branch at `4839bf7c` with `wave: "wN"` set on the 162 tasks
+  (from their notes) and `waves: [w0, w1, w2, w3]` on `minor-v0.3`, committed (one commit, 163 Memory files) →
+  `npx jest test/core/minor-v0.3-waves.test.ts test/core/task-kind.test.ts --maxWorkers=2` → 2 suites, 17 tests
+  passed, test file untouched. The clone edited frontmatter directly, not through `memory amend`; the test reads parsed
+  values, so the shared setter's placement of the field does not matter. The developer's amended probe clone named in
+  the brief was not on disk (`ls …/scratchpad/` → only `task-303-dev`), hence the reproduction.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
