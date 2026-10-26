@@ -10,6 +10,7 @@ requirements: "docs/03_backlog/04_backlog/by-release/v0.3.json"
 release-line: "v1"
 backlog_committed: 121   # release-planning-rel-v0.3-plan Appendix E (task-126 … task-246), fixed here by amendment on 2026-10-12 (task-230 D4)
 tmpl_version: 260703
+waves: [w0, w1, w2, w3]
 ---
 
 ## Scope
