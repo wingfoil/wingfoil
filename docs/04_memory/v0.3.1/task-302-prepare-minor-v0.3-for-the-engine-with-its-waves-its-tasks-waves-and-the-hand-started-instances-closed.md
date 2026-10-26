@@ -262,6 +262,85 @@ tests to the developer at green.
   values, so the shared setter's placement of the field does not matter. The developer's amended probe clone named in
   the brief was not on disk (`ls …/scratchpad/` → only `task-303-dev`), hence the reproduction.
 
+### green (developer, 2026-10-26)
+
+Green commit `ab1f668c` on top of red `4839bf7c` / notes `7719f700`; `release/0.3` not merged yet (it merges at the end
+of refactor, after the batches). Files: `scripts/v0.3-waves.cjs`, `scripts/v0.3-waves.d.cts` (for the TS test's
+import, as `scripts/integration-branch.d.cts`), `test/cli/v0.3-waves.test.ts` (the developer's own). The red test file
+is untouched: `git log --format=%h 4839bf7c..HEAD -- test/core/minor-v0.3-waves.test.ts` → empty.
+
+**The script** (as designed, rulings D1–D4):
+- The mapping is read at `HEAD` (`git ls-tree` + `git show`), from the one `**wave:** N` line of each
+  `docs/04_memory/v0.3/task-*.md`'s `## Implementation Notes` (task-230's second label, in its Execution Notes, is not
+  read). `N` gives `wN`; `none` gives no amend (task-252, task-289, D1); task-223 (deprecated) gets `w3` (D2).
+- Batch 0 is `minor-v0.3` (`waves: [w0, w1, w2, w3]`); batches 1–9 are the 162 waved tasks in task-number order, 20
+  each (the last 2).
+- `--batch N --run`, per id: refuse a file with uncommitted changes; skip one `HEAD` already holds (so a batch can be
+  re-run); write the value through the code build's `setFrontmatterEntry` (`dist/memory/frontmatter-edit.js`; tasks get
+  `wave: "wN"`, replacing `wave: ""` in place or appended at the end of the frontmatter); run
+  `node dist/cli.js memory amend <id> --reason "…"`; check that exactly one commit was added, holding exactly that path,
+  subject `wf(<type>): amend <id> [`; stop at the first failure. A refused amend leaves no edit behind (the file is
+  restored). The amend writes `Approver:`; the script adds no trailer.
+- Reasons: tasks — "Record the wave this task ran in, wN, from its Implementation Notes and dev-loop-rel-v0.3-plan
+  (task-302, dl-175 (a), dl-186 S3-b)."; release — "Declare the four waves v0.3 ran in, w0 to w3, from
+  dev-loop-rel-v0.3-plan section 3, so the implementation phase of release-cycle can iterate them (task-302, dl-175 (a),
+  dl-186 S3-b and E3)." Both start with a verb, one line, no reserved key, no apostrophe (safe in the printed shell form).
+- Also `--plan` (default, writes nothing), `--batch N --print` (the shell lines: `--edit <id> && memory amend …`),
+  `--edit <id>`, `--check [--batch N]` (exit 0 only when `HEAD` holds them). Exits 0 / 1 / 2 (usage).
+
+**Console, on this repository (print and read modes only; nothing was run or amended here):**
+- `node scripts/v0.3-waves.cjs --plan` → exit 0, first line `minor-v0.3: waves [w0, w1, w2, w3]; 164 tasks: w0 4, w1 42,
+  w2 34, w3 82, none 2`; `none` = task-252, task-289; `w3` includes task-223; batches `0: 1`, `1`–`8: 20`, `9: 2`
+  (batch 1 starts at task-126, batch 9 is task-287, task-288).
+- `--batch 0 --print` → exit 0, the comment line and the two lines for `minor-v0.3`; `--batch 1 --print | wc -l` → 41
+  (comment + 20 × 2).
+- `--check` → exit 1, `163 of 163 not at HEAD (batch 0 1, batch 1 20, …, batch 9 2); first: minor-v0.3, task-126-…,
+  task-127-…`; `--batch 0 --check` → exit 1, `1 of 1 …`; `--batch 10 --print` → exit 2 `no batch 10: batches are 0–9`;
+  `--run` alone, `--bogus` → exit 2 with the usage line; `--batch 1 --print | head -2` → exit 0 (a closed pipe ends the
+  output quietly). `git status --short` afterwards → only the new, then committed, files.
+
+**Rehearsal of the whole procedure** (a scratch clone of this branch with the script and this `dist/`, identity the
+committed `dna.yaml`'s approver, in the agent's scratch folder): batches 0–9 with `--run` then `--batch N --check` →
+each exit 0, commits per batch 1, 20, 20, 20, 20, 20, 20, 20, 20, 2 = **163**, 2–17 s per batch (≈ 2.5 minutes in all);
+`--check` → `all 163 at HEAD`, exit 0; `git status` clean. There: `npx jest test/core/minor-v0.3-waves.test.ts
+test/core/task-kind.test.ts --maxWorkers=2` → 2 suites, 17 tests passed (qa's 9 included, unedited);
+`node scripts/check-governance.cjs --base 7719f700` → "163 wf() commits … 0 other commits", 0 findings, exit 0; the last
+commit's body: `Approver: Roberto Pompermaier <…> (approver)`, the `Reason:` above, `WingFoil-Version:`, no
+`Co-Authored-By` or `AI-Model`.
+
+**Tests** (in this worktree):
+- `npx jest test/cli/v0.3-waves.test.ts --maxWorkers=2` → 1 suite, 29 tests passed: the notes rule (the four separator
+  forms of the real files, task-230's repeated label read at `HEAD`, four refusals); the mapping of this repository's
+  `HEAD` (164 entries, 252/289 none, 223 `w3`, batch sizes `[1, 20 × 8, 2]`); the argument parser (4 forms, 6 usage
+  errors); `isApplied`; the printed lines; and `main` on fixture repositories built from real `HEAD` files
+  (`.wingfoil/`, `minor-v0.3.md`, task-126 / 223 / 230 / 252 / 288), identity read from the committed `dna.yaml`'s
+  approver: `--plan` writes nothing; `--run` batches 0 and 1 → 1 + 4 commits, one path each, `Approver:` and no AI
+  trailer, re-run skips, `--check` passes; a dirty file refused before any write; an identity without the approver role
+  → the amend's refusal, the edit undone, no commit; `--edit`, `--print`, `--check`, an out-of-range batch.
+- `npx jest test/core/minor-v0.3-waves.test.ts --maxWorkers=2` → 4 failed, 5 passed: unchanged from red, as ruled (the
+  data arrives with the approver's batches).
+- `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx eslint scripts/v0.3-waves.cjs scripts/v0.3-waves.d.cts
+  test/cli/v0.3-waves.test.ts` → exit 0.
+
+**Approver procedure** (from this worktree, `/home/robypomper/Workspaces/.wf2-wt/task-302`, on `task/task-302`, as the
+approver's git identity):
+1. `git branch --show-current` → `task/task-302`; `git status --short` → clean; `npm run build`.
+2. Optionally `node scripts/v0.3-waves.cjs --plan` and `node scripts/v0.3-waves.cjs --batch N --print` to read a batch.
+3. For N = 0 … 9: `node scripts/v0.3-waves.cjs --batch N --run`, then `node scripts/v0.3-waves.cjs --batch N --check`
+   (exit 0, `all K at HEAD`). Expected new commits: batch 0 → 1, batches 1–8 → 20 each, batch 9 → 2; total 163
+   (`git rev-list --count 7719f700..HEAD` grows by those numbers beyond this task's own commits; or count
+   `git log --oneline --grep='^wf(task): amend\|^wf(release): amend minor-v0.3' 7719f700..HEAD`).
+4. Finally `node scripts/v0.3-waves.cjs --check` → `all 163 at HEAD`, exit 0, and
+   `npx jest test/core/minor-v0.3-waves.test.ts --maxWorkers=2` → 9 passed.
+On a failure the batch stops with the id and the cause on stderr, and `stopped after K amend(s)`; nothing is left
+dirty (a dirty file is refused before the edit; a refused amend restores the file). Fix the cause and run the same
+batch again: the ids already at `HEAD` print `skip … HEAD already holds it`. Time: about 15–20 s per batch of 20 at the
+rehearsal's load.
+
+**Candidate finding (not filed).** `check-governance.cjs`'s console says "gated: 0 findings on 0 commits" while its own
+JSON reports `"checked": 163, "gatedCommits": 163, "findings": 0` for the same range (rehearsal clone,
+`--base 7719f700`): the console's "on N commits" seems to count commits with findings, not commits checked.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
