@@ -6,7 +6,7 @@ breaking its rules. It covers the same ground as the WingFoil MCP server, so it 
 when MCP is not connected and as a reinforcement when it is.
 
 - **Developing WingFoil itself?** This is the wrong file: read `AGENTS.md` at the repository root.
-- **Version:** this file describes the `main` branch, currently release **0.3**. Run
+- **Version:** this file describes release **0.3** (0.3.1). Run
   `wingfoil --version` in the project; if it reports a different version, read this file at the matching
   git tag instead. Where this file and the installed CLI disagree, the CLI is right.
 - **Humans:** the [user guide](user-guide.md) and the [CLI reference](cli-reference.md) cover the same
@@ -65,7 +65,8 @@ Run every `wingfoil` command **from the repository root**. Use `--format json` t
 ## 4. Rules you must follow
 
 1. **Change state only through the CLI verbs** (`memory submit|park|deprecate`, `workflow
-   start|finalize|end`; `memory approve|reject|amend` are the approver's). Never edit a `status:` field
+   start|finalize|end|adopt`; `memory approve|reject|amend`, `workflow rekey` and `workflow adopt --plan --apply`
+   are the approver's). Never edit a `status:` field
    by hand, and never write a `wf(...)` commit yourself. When `wingfoil agent execute` launched you, its
    first prompt asks you to end the commits you co-author with your `Co-Authored-By:` and `AI-Model:`
    trailers: add them to a commit `wingfoil` wrote with `git commit --amend --no-edit --trailer …`, never
@@ -78,7 +79,7 @@ Run every `wingfoil` command **from the repository root**. Use `--format json` t
    with the same `id` as one in `directives/built-in/` overrides it.
 4. **Read before you write.** Check `dna show`, `paths` and existing Memory before creating anything;
    do not invent paths, types or roles that the configuration does not declare.
-5. **`--reason` text** (approve, reject, deprecate, park, amend, workflow finalize): never blank; no line
+5. **`--reason` text** (approve, reject, deprecate, park, amend, workflow finalize, adopt, rekey): never blank; no line
    may begin with `Approver:` or `Reason:`; do not end it with a paragraph made only of `Key: value`
    lines. From v0.3, no line may begin with `WingFoil-Version:`, and no control character other than tab and newline
    (DEL, the C1 controls U+0080–U+009F and the separators U+2028/U+2029 count as control characters).

@@ -19,8 +19,8 @@ unchanged; to get the guided workflows, see *Upgrading from 0.3.0* below.
 
 - `wingfoil workflow adopt <ref> [--step <key>] [--element <type:id>] --reason <text>` records that an existing
   element, added without `memory add --workflow`, counts as created by a step of an open workflow: one commit that
-  changes no file. `--plan` proposes every adoption the workflow needs and writes nothing; `--plan --apply`
-  (approver only) writes them, one commit per step. (task-294, task-293)
+  changes no file. `--plan` writes nothing and proposes the adoptions of the steps that wait only for the element they
+  create; `--plan --apply` (approver only) writes them, one commit per step. (task-294, task-293)
 - `wingfoil workflow rekey <ref> --from <workflow>.<phase> --to <workflow>.<phase> --reason <text>` (approver only)
   remaps an open workflow's records from a renamed phase to its new name, so the renamed step does not wait again
   for work already done: one commit that changes no file. (task-295, task-293)
@@ -48,9 +48,9 @@ unchanged; to get the guided workflows, see *Upgrading from 0.3.0* below.
 
 ### Upgrading from 0.3.0
 
-- Nothing breaks. To get the guided workflows (§7 of the user guide) in a project initialised by 0.3.0 or earlier,
+- Nothing breaks. To get the guided workflows (described in §7 of the user guide) in a project initialised by 0.3.0 or earlier,
   copy the files under `.wingfoil/workflows/custom/` from a project `wingfoil init` creates in an empty repository
-  (with the same template), then commit.
+  (with the same template), then commit (§12 of the user guide).
 
 ### For contributors
 

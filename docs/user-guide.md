@@ -422,26 +422,31 @@ no file:
 ```console
 $ wingfoil workflow adopt bug-ingest-1-plan --element bug:bug-001-login-fails --reason "adopt the bug filed before the run"
 workflow: bug-ingest (bug-ingest-1-plan)
-adopted: bug:bug-001-login-fails into bug-ingest.capture (26bb962f…)
+adopted: bug:bug-001-login-fails into bug-ingest.capture (9fef5a44…)
 next step: bug-ingest.capture@bug:bug-001-login-fails
+…
 ```
 
 From then on the step works on that element as if `memory add --workflow` had created it. `workflow adopt <ref>
---plan` lists the adoptions an open workflow needs and writes nothing; an approver can write them all with
-`--plan --apply`.
+--plan` writes nothing and lists the steps that wait only for the element they create, each with its candidates;
+a step that also waits on other evidence, such as `bug-ingest.capture` and its `produces:`, is not listed (here
+`--plan` prints `nothing to adopt`), so name the element with `--element`. An approver can write the listed
+adoptions with `--plan --apply`.
 
 **Renaming a phase** (new in 0.3.1). The records an open workflow holds name its steps by
 `<workflow>.<phase>`. After a phase is renamed in its workflow file, an approver maps them to the new name, so the
 renamed step does not wait again for work already done:
 
 ```console
-$ wingfoil workflow rekey bug-ingest-1-2-plan --from bug-ingest.capture --to bug-ingest.report --reason "follow the renamed capture phase"
-workflow: bug-ingest (bug-ingest-1-2-plan)
-rekeyed: bug-ingest.capture -> bug-ingest.report, 1 record(s) remapped (bb4b328d…)
+$ wingfoil workflow rekey bug-ingest-1-plan --from bug-ingest.capture --to bug-ingest.report --reason "follow the renamed capture phase"
+workflow: bug-ingest (bug-ingest-1-plan)
+rekeyed: bug-ingest.capture -> bug-ingest.report, 1 record(s) remapped (0990711e…)
+next step: bug-ingest.report@bug:bug-001-login-fails
+…
 ```
 
 **Checks a person confirms** (new in 0.3.1). A phase's `checks:` are prose or tokens. `workflow list` warns
-(`W_WORKFLOW_UNBOUND_TOKEN`) about each check that `.wingfoil/workflows/bindings.yaml` does not bind. A check that
+(`W_WORKFLOW_UNBOUND_TOKEN`) about each check that is neither a built-in token nor bound in `.wingfoil/workflows/bindings.yaml`. A check that
 a person confirms on purpose is bound `manual: true`, and the warning goes away:
 
 ```yaml
@@ -707,7 +712,7 @@ initialising a project with 0.2.2 and running both versions on it.
   plan element`); `agent execute` needs `paths.runs` and an adapter. Copy the `plan` entry of
   `memory.yaml`, `memory/templates/plan.md`, `paths.runs: [docs/runs/]` and `.wingfoil/agents/` from a
   project `wingfoil init` creates in an empty repository, then commit.
-- **Workflows the engine can drive (a project initialised by 0.3.0 too).** 0.2.x and 0.3.0's `init` scaffolded workflows whose phases named no
+- **Workflows the engine can drive (a project initialised by 0.3.0 too, when you upgrade to 0.3.1).** 0.2.x and 0.3.0's `init` scaffolded workflows whose phases named no
   role and declared no action, so `workflow next` printed `role: (none)` and `workflow finalize` alone
   completed `sw-life-cycle`. To get the roles, actions and evidence of §7, copy the five files under
   `.wingfoil/workflows/custom/` from a project `wingfoil init` creates in an empty repository (with the same
