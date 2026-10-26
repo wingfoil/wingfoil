@@ -11,6 +11,7 @@ ref: "spec-017"
 bug: []
 depends_on: ["task-216-add-workflow-next-naming-next-step-verb-role"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description
