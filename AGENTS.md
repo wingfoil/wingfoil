@@ -247,7 +247,9 @@ the same kind (`workflow: adopt <instance-id> <step-key> <type>:<id>`, `workflow
 **Every commit `wingfoil` writes ends with a trailer paragraph** carrying `WingFoil-Version: <semver> (<sha>)`
 (`dl-111`), plus the other `WingFoil-*` trailers a workflow step adds: `WingFoil-Instance:` / `WingFoil-Step:`
 on a `memory add --workflow … --step …`, and `WingFoil-Phase:`, `WingFoil-Instance:` and `WingFoil-Element:` or
-`WingFoil-Item:` on a `workflow finalize` record. To add a trailer to such a commit,
+`WingFoil-Item:` on a `workflow finalize` record, `WingFoil-Instance:`, `WingFoil-Step:` and `WingFoil-Adopted:` on a
+`workflow adopt` record, and `WingFoil-Instance:`, `WingFoil-Rekey-From:` and `WingFoil-Rekey-To:` on a
+`workflow rekey` record. To add a trailer to such a commit,
 amend with `git commit --amend --no-edit --trailer "…"`, which joins that paragraph; never add a new paragraph
 after it, or a reader takes `WingFoil-Version:` into the `Reason:` block and the workflow deduction, which reads
 only the final paragraph, loses the step link or the phase record (`git-conventions` §8, `bug-236`). Only a commit not yet pushed may be amended.
@@ -533,7 +535,9 @@ When executing under a role, **auto-load and obey that role's directives** (P3.6
 - **Traceability**: maintain feature → US → BDD → REQ → task; every ADR cites its SARD requirement(s).
 - **Documentation versioning** (`doc-versioning`): bump a doc's `version` once per branch, on its first edit
   against the version on the branch's integration branch (`main`, or `release/X.Y` for a patch); update the
-  date when bumping. `test/lint/version-bump.test.ts` enforces it for the four configuration files.
+  date when bumping. `test/lint/version-bump.test.ts` enforces it for the four configuration files. A `wingfoil`
+  write of `dna.yaml`, `memory.yaml`, `workflows.yaml` or `roles.yaml` raises its `version:` by 0.1 in its own
+  commit, so the once-per-branch rule applies to hand edits (`dl-174`, `task-299`).
 - **Security**: never commit credentials/secrets (everything in the config is git-versioned); MCP
   Resources are read-only — mutations only via validated MCP Tools.
 - **Commits**: every state change is a git commit with author + timestamp; bring a branch up to date with
