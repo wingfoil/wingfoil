@@ -101,6 +101,13 @@ before it.
 | S4 | v0.4, first two phases | `advance-pinned-build` moves the pin to `0.3.1`; the state adoption then runs with the pinned build, before `define-scope`, so the rest of v0.4's planning runs on the engine. |
 | S5 | v0.4 scope, then after | Template installation (`dl-138`, P4.18–P4.20), `transfer` (`dl-187`), the run token counts (`dl-188`). Once the pin reaches 0.4, the packs adopted by hand at S3 move to the lock and the `remote` class; their files already match the packs, so the three-way merge has a trivial base. |
 
+**Revision (2026-10-26, approver ruling at `patch-v0.3.1`'s `w2` re-plan).** A bug-fix patch `v0.3.2` runs on
+`release/0.3` after `v0.3.1` and before v0.4, so v0.4's planning starts after the `v0.3.2` tag. S4 changes with it:
+v0.4's `advance-pinned-build` moves the pin to `0.3.2`, not `0.3.1`, and the state adoption runs with that pinned
+build. `v0.3.2`'s own `advance-pinned-build` moves the pin from `0.3.0` to `0.3.1`. `v0.3.2`'s scope, which of the
+bugs assigned v0.4 it takes, is decided at its release-planning. Q3 stands: the packs' hand adoption waits for
+`software`, and where it goes is ruled once `software` is published.
+
 - **S2-a, the request to WingFoil-Templates, and its outcome** (cross-repository process
   `2026-10-18-engine-adoption-packs`; WingFoil-Templates' answer of 2026-10-18, which the approver
   accepted the same day, replacing the first ruling "one convention, no per-project parameters").
