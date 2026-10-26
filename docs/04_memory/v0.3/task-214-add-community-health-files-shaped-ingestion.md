@@ -11,6 +11,7 @@ ref: "dl-127"
 bug: []
 depends_on: ["task-199-align-wingfoil-workflows-custom-v0-3-schema-commands"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description
