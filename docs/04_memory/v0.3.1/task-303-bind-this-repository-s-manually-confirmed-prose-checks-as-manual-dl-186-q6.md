@@ -47,6 +47,178 @@ not bound yet.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (developer, 2026-10-26)
+
+**Inputs read.** `depends_on: [task-298]` (dl-015 gate): `task-298` is `done` (`grep -m1 '^status:'`); its notes
+fix the form this task reuses — `CheckBinding` `{ manual: true }`, exactly one of `run` / `manual`, no `severity` /
+`args`, resolving `{ kind: 'manual', source: 'project' }` and raising no `W_WORKFLOW_UNBOUND_TOKEN`
+(`src/workflow/bindings.ts` `resolveToken`, `src/core/workflow-diagnostics.ts` `unbound()`, keyed on
+`kind === 'unbound'`); its D1 (a) (the conformance row edit lands with `bindings.yaml` in green); its lesson that a
+changed `.wingfoil/` must be loaded with the pinned build. `grep -m1 '^status:'` → `spec-003` and `spec-017`
+`approved`; `dl-186`, `dl-172`, `dl-090` `ready`; `bug-414` `triaged`. `spec-003` Layer 3 (`sed -n 636,640p`)
+already states this task: "the prose checks no command asserts stay unbound … until, from `patch-v0.3.1`, those a
+human confirms on purpose are bound `manual: true` (`dl-172` (a), `dl-186` Q6)", and its Layer 3 example binds
+`spec-review.passed: { manual: true }`. `dl-172` Rationale: a deliberate manual check "inflates the number that is
+meant to shrink"; `dl-090` Q2 (c): an unbound check fails closed at v1.0, Q6: a check an agent asserts about its
+own work is not a gate and `depends_on.acknowledged` "needs a non-agent binding, such as a command". No AC
+contradicts a ratified spec or decision-log. No BDD scenario covers bindings (`grep -rln -i "unbound\|manual:
+true" docs/02_requirements/02_bdd/features` → no output).
+
+**Baseline** (`1298c2a5`, `release/0.3` `98fccec0` + the start commit; `npm run build` under the slot, then
+`node dist/cli.js workflow status --format json`) → exit 0, 86 diagnostics, all `W_WORKFLOW_UNBOUND_TOKEN`:
+68 `checks.post`, 18 `checks.pre` — the coordinator's figures. Grouped by token name (`tokenName`, the key a
+binding uses; a throwaway script over `loadWorkflowRegistryAtHead` from `dist/core`, scratch only) → **61 distinct
+names, 86 occurrences, 27 workflows**. Existing tests on every file this task changes, before any pin: `npx jest
+--maxWorkers=2` on `workflow-repository-conformance`, `dev-loop-v1-6`, `dev-loop-v1-5`, `workflow-manual-check`,
+`presentation`, `bindings`, `workflow-evidence`, `retrospective-patch-health`, `retrospective-collect-feedback`,
+`retrospective-notes`, `release-waves-config`, `test/directives/wingfoil-cli`, `test/lint/version-bump`,
+`workflow-md`, `workflow-integration-branch`, `test/cli/mcp-registration` → `Test Suites: 16 passed`, `Tests: 337
+passed`.
+
+**Rule of classification** (decision D1). A check is **manual (i)** when its condition is a reading or a judgement
+no program can decide from the repository, the registry or a registry API — the class `dl-172` calls "manual on
+purpose", and the one that stays manual at v1.0. A check whose condition a deterministic command can decide is
+**(ii)**, whether or not the command exists yet: it stays unbound, so its warning keeps listing the commands still
+to write (`dl-172` Rationale), and it fails closed at v1.0 until bound to `run` (`dl-090` Q2 (c)). **(iii)** goes
+to the approver. No `run` binding is added here (D4).
+
+**Classification** — 61 names; key = the name `tokenName` cuts (text before the first `(` or `:`).
+
+| # | Check (name) | Occurrences (workflow.phase pre/post) | Class | Reason a human confirms it / the command that can assert it |
+|---|--------------|---------------------------------------|-------|--------------------------------------------------------------|
+| 1 | `frontmatter.required` | 19: sw-life-cycle.seed-first-release-line, bug-ingest.capture, decision-log-ingest.capture, adr-ingest.capture, service-ingest.capture, vision-change.capture, initial-design.seed-releases/.seed-adrs/.seed-dls/.seed-specs, release-line-cycle.plan-next-release-line, release-planning.define-scope/.record-adrs/.identify-specs/.build-backlog (post), .commit-backlog (pre), dev-loop.design, retrospective.capture, end-of-life.announce | ii | `memory submit` refuses a missing required field (`template.frontmatter.required`); a field-presence read of one file |
+| 2 | `secret-scan.clean` | service-ingest.capture | ii | spec-007 `scanText` over the element (the library `measure.cjs` already calls) |
+| 3 | `change-proposal.target_release is not empty` | vision-change.schedule pre | ii | a frontmatter read |
+| 4 | `100% of MVP Canvas features covered; edge-case stories present` | specification-downcast.user-story-mapping | **i** | whether the edge cases a story map needs are present is a reader's judgement |
+| 5 | `each scenario atomic + testable; zero ambiguous adjectives/adverbs` | specification-downcast.specification-by-examples | **i** | atomicity and ambiguity of a scenario are judged by reading it |
+| 6 | `every REQ has a numeric/percentage/boolean Fit Criterion` | specification-downcast.volere-requirements | **i** | whether a Fit Criterion is objectively measurable is a reading |
+| 7 | `valid JSON; no duplicate IDs; no circular dependencies` | specification-downcast.backlog-export | ii | JSON parse, id uniqueness and a cycle test over `backlog.json` |
+| 8 | `100% of MVP Canvas features included; edge-case stories generated` | user-story-mapping.mvp-cut | **i** | as 4 |
+| 9 | `each story has >=1 happy path and >=1 edge/error path` | specification-by-examples.write-scenarios | **i** | the `.feature` files tag no edge/happy kind (`grep -rhoE "@[a-z-]+"` → only `@v`, `@task`, `@release`): classifying a scenario is a reading |
+| 10 | `no ambiguous adjectives/adverbs` | specification-by-examples.write-scenarios | **i** | as 5 |
+| 11 | `each scenario atomic and testable` | specification-by-examples.write-scenarios | **i** | as 5 |
+| 12 | `every REQ has a clearly numeric, percentage-based, or boolean Fit Criterion` | volere-requirements.group-by-macro-area | **i** | as 6 |
+| 13–15 | `valid JSON parse`, `no duplicate IDs`, `no circular dependencies` | backlog-export.validate (×3) | ii | as 7 |
+| 16 | `spec-review.passed` | 4 pre: initial-design.seed-adrs/.seed-specs, release-planning.record-adrs/.identify-specs | **i** | the `dl-022` review is a reviewer's judgement (`dl-090` Q6); `spec-003` Layer 3's own example binds it manual |
+| 17 | `all releases where release-line={release-line.version} are status` | release-line-cycle.plan-next-release-line pre | ii | a Memory state query (`memory search` exits 0 regardless today: a query with an exit status) |
+| 18 | `` `npm run -s wingfoil -- --version` == the version package.json pins `` | release-planning.advance-pinned-build pre | ii | compare the command's output with `package.json` |
+| 19 | `` new pin >= old pin, and `npm view wingfoil versions` lists it `` | advance-pinned-build post | ii | semver compare + `npm view` |
+| 20 | `the switch commit changes only package.json and package-lock.json` | advance-pinned-build post | ii | `git diff --name-only` |
+| 21 | `the wingfoil-cli directive re-checked against the new pin` | advance-pinned-build post | **i** | reading the directive's build table and its `pinned-build` bugs against the new pin |
+| 22 | `change-proposals.swept` | release-planning.define-scope post | ii | frontmatter query (its comment: "Unbound until dl-166 Q2 (ii) binds it") |
+| 23 | `ready-decision-logs.covered` | release-planning.reconcile-governance post | ii | frontmatter query: ready DLs of the release vs the tasks' `ref:` |
+| 24 | `acceptance-criteria.consistent` | release-planning.build-backlog post, dev-loop.design post | **i** | each criterion read against directives, specs and DLs (`dl-102` §4) |
+| 25 | `task.wave.declared` | release-planning.build-backlog post | ii | frontmatter query |
+| 26 | `waves.declared` | release-planning.commit-backlog pre | ii | frontmatter query |
+| 27 | `docs.examples.passing` | wave.wave-checks post | ii | each `docs/examples/*/run.sh` ends `OK` (no single command yet) |
+| 28 | `stop-the-line.clear` | dev-loop.start pre | ii | arithmetic over `memory.yaml` `task.stop_the_line` and the tasks' frontmatter |
+| 29 | `growth.clear` | dev-loop.start pre | ii | arithmetic over `release.growth_threshold` and `backlog_committed` |
+| 30 | `tech-spec.approved` | dev-loop.design post | ii | status query of the specs the phase adds |
+| 31 | `depends_on.acknowledged` | dev-loop.design post | ii | `dl-090` Q6 asks a command reading the acknowledgement from the Execution Notes |
+| 32 | `tests.exist` | dev-loop.red post | ii | the red commit adds or changes a test file (`git diff`) |
+| 33 | `tests.failing` | dev-loop.red post | ii | run the red commit's tests at the red sha |
+| 34 | `tests.unchanged` | dev-loop.green post, .refactor post | ii | `git log <red>..HEAD -- <red's test files>` (the brief's T4 command) |
+| 35 | `claims.rerun` | dev-loop.review pre | **i** | the reviewer re-runs the claims of a prose summary (`dl-097` (a)) |
+| 36 | `rereview.previous-reject` | dev-loop.review pre | **i** | the reviewer re-verifies each item of a prose `Reason:` (`dl-098`) |
+| 37 | `retrospective.present` | dev-loop.done post | ii | existence of a heading (its comment: "existence only; … no binding placeholder carries yet") |
+| 38 | `all tasks where tags=[{release.version}] are status` | user-docs.check-implementation-complete pre, release-submit.pre-release-checks pre | ii | as 17 |
+| 39 | `user-facing docs aligned with the release's shipped CLI/feature surface` | user-docs.align-user-docs post | **i** | reading prose documents against the release (`dl-013`); what a command can assert is `presentation.current` and `docs.parity`, already bound |
+| 40–43 | `AGENTS.md project status matches the shipped command surface`, `… element/state tables match memory.yaml`, `… workflow list matches workflows.yaml`, `… role-directive bindings match roles.yaml` | agent-docs.align-agent-docs post (×4) | ii | table-vs-configuration parity, the kind `workflow-md.complete` (bug-170) made a bound test |
+| 44 | `CLAUDE.md is a pointer that imports AGENTS.md` | agent-docs.align-agent-docs post | ii | a content check of one file |
+| 45 | `exit-code-zero` | e2e-smoke.fresh-init post, .mcp-registration post | ii | the step's exit status; `scripts/e2e-smoke.cjs` (bound `e2e-smoke-passed` at `gate`) and `npm run check:mcp` (the step's own `cli.run`) assert it |
+| 46–49 | `scaffolded dna.yaml/memory.yaml/directives round-trip their own loaders`, `every step exits with the code it declares, per spec-005-cli-command-contract`, `every artifact a command wrote re-loads …`, `the working tree is clean after every step` | e2e-smoke.fresh-init, .drive-cli (×3) | ii | `scripts/e2e-smoke.cjs` asserts them as a whole |
+| 50–51 | `registered server version == package.json pin`, `advertised channel set == EXPECTED_CHANNELS, …` | e2e-smoke.mcp-registration post (×2) | ii | `npm run check:mcp` (bound as `mcp.registered`) |
+| 52 | `all bugs where tags=[{release.version}] are status` | release-submit.pre-release-checks pre | ii | as 17 |
+| 53 | `phase-branch-merged-to-integration-branch` | release-publishing.tag pre | **iii** | `git merge-base --is-ancestor` decides it once the phase branches are known; which they are is declared nowhere (no `branch:` in the plan template). Recommend ii (D2) |
+| 54 | `staged version approved on npm, live on the npm registry, its GitHub Release created …` | release-publishing.publish post | ii | `npm view`, `gh release view`, the registry API (`scripts/wait-npm-version.cjs` polls the first) |
+| 55–57 | `every catalogue metric has a value or an explicit not-measurable reason`, `every regressed metric and every breached floor has a finding`, `every finding is tracked by an element or carries an RH proposal …` | release-health.measure/.compare/.propose post | ii | structural reads of the report against `docs/08_health/` (no report check exists yet) |
+| 58 | `secondary-sources.listed` | retrospective.explore post | **i** | the sources the phase was given are not in the repository; "the facilitator checks it" (its comment) |
+| 59 | `feedback-notes.recorded` | retrospective.collect-feedback post | **i** | each note restated in WingFoil's words, none holding a consumer's prose: a reading; "the facilitator checks it" |
+| 60 | `proposals.disposed` | retrospective.additional-points pre | **i** | the approver's disposition of every proposal |
+| 61 | `deprecated content excluded from agent context and default search` | end-of-life.deprecate post | ii | `memory search` / the context builder over the deprecated ids (REQ-STATE-06) |
+
+**Result: 17 names bound manual (i), 21 occurrences; 44 names stay unbound (ii, plus 53 under D2), 65 occurrences.**
+Probe (scratch clone of this branch, the 17 entries appended to `bindings.yaml` with `version: 2.6`, committed
+there only): `loadWorkflowRegistryAtHead` → `{"W_WORKFLOW_UNBOUND_TOKEN warning":65}`, no error, 44 distinct
+names, 27 workflows; `node dist/cli.js workflow status` (console) → exit 0, "65 diagnostic(s): --format json lists
+them"; `node dist/cli.js workflow list` → exit 0, 65 `W_WORKFLOW_UNBOUND_TOKEN`; `node dist/cli.js workflow show
+dev-loop --format json` → `acceptance-criteria.consistent`, `claims.rerun`, `rereview.previous-reject` kind
+`manual`, the other unbound ones `unbound`, the run ones `run`. Manual check occurrences at the probe's `HEAD`: 22
+(the 21 + `demo.rendered`).
+
+**Pinned build.** `npm run -s check:mcp` in the probe clone → exit 0, the three `bug-414 (task-298)` known failures
+(`wingfoil://workflows`, `-/next`, `-/status`) and "the build under development (dist/cli.js) … every listed Resource
+read and Prompt get answered": the new entries add no failure (0.3.0 already refuses the first manual check). Its
+reason text names `demo.rendered` as the example and stays true; `test/cli/mcp-registration.test.ts` pins
+`/^bug-414 \(task-298\).*manual: true.*0\.3\.1/`, unaffected.
+
+**Existing pins the change breaks** (the same 16 suites in the probe clone → `2 failed, 14 passed`, `4 failed, 333
+passed`): `test/core/workflow-repository-conformance.test.ts` (the warning list: green, with `bindings.yaml`, as
+`task-298` D1 (a)), and `test/core/dev-loop-v1-6.test.ts:209,211,212` — `design:acceptance-criteria.consistent`,
+`review:claims.rerun`, `review:rereview.previous-reject` pinned `'unbound'` (red changes them to `'manual'`).
+`version-bump`, `workflow-md`, `presentation`, `workflow-manual-check`, `retrospective-*`, `wingfoil-cli` pass.
+
+**AC classification and what qa must pin.** No new export and no `src/` behaviour: `npx tsc --noEmit` passes at
+red; every red is a jest assertion failure on `HEAD`.
+
+| AC | Class | Test file | Interface | Observable to pin |
+|----|-------|-----------|-----------|-------------------|
+| 1 | characterization | NEW `test/core/workflow-manual-prose-checks.test.ts`, reading this repository at `HEAD` as `test/core/workflow-manual-check.test.ts`'s second describe (`ROOT = join(__dirname, '..', '..')`, `loadWorkflowRegistryAtHead`, `resolveToken`, `tokenName`) | `resolveToken(name, 'check', loaded.bindings)` | `it.each` over the 44 names of the table's ii/iii rows (exact strings, as `tokenName` cuts them — the probe's list) → `toEqual({ kind: 'unbound', source: 'none' })`. Passes at red and after green. The reason per manual check is reviewed, not tested: the table above and one comment per group in `bindings.yaml`. |
+| 2 | red-first | same NEW file | `loadWorkflowRegistryAtHead(ROOT)` | (a) every check occurrence (pre and post, every workflow in registry order, phases in declared order) whose binding resolves `manual` → `[workflow, path, tokenName]` rows `toEqual` exactly the 22 rows the probe printed (the 21 + `["user-docs","phases[1].checks.post[2]","demo.rendered"]`); (b) `diagnostics` → 65 entries, every one `W_WORKFLOW_UNBOUND_TOKEN`, severity `warning`, and none whose message names one of the 17 manual names; (c) `version:` of `.wingfoil/workflows/bindings.yaml` (working tree, as `workflow-manual-check`'s version test) `>= 2.6`, with a `;`-segment numbered `>= 2.6` naming `task-303` (bug-314: "at least" plus the history entry). |
+| 2 | red-first | `test/core/dev-loop-v1-6.test.ts` (existing `it.each`, `workflowShowAtHead`) | `workflow show dev-loop` | rows `design:acceptance-criteria.consistent`, `review:claims.rerun`, `review:rereview.previous-reject` → `'manual'`; the other four rows unchanged; the docblock's "the unbound ones are … warnings" sentence also names the manual ones. |
+| 2 | red-first (green edits) | `test/core/workflow-repository-conformance.test.ts` | — | NOT edited by red (D1 (a) of `task-298`, which the AC repeats: "the conformance test updated in the same commit"): green removes the 21 rows and their now-stale comments in the commit of `bindings.yaml`, leaving 65. |
+| 3 | characterization | existing `test/docs/presentation.test.ts` (`demo.rendered` `toEqual({ manual: true })`) and `test/core/workflow-manual-check.test.ts` (AC 3: resolves manual at `HEAD`, no diagnostic names it) | — | No new test: qa records that both pass at red and after green; AC 2 (a)'s 22 rows include `demo.rendered` at its path. |
+
+**Files to touch.** Green (one commit): `.wingfoil/workflows/bindings.yaml` 2.5 → **2.6** (baseline `git show
+release/0.3:… | grep -m1 ^version` → 2.5): the 17 entries after `demo.rendered`, each group under a comment with its
+reason; prose names double-quoted; the "Deliberately unbound" header paragraph rewritten (what is left: the checks a
+command can assert, e.g. `frontmatter.required`, the state queries, the e2e-smoke prose, `tests.unchanged`); history
+segment appended in the file's style, `; 2.6 task-303 (dl-186 Q6, dl-172 (a)): the 17 prose checks a human confirms
+on purpose (21 occurrences) bound manual: true, each group with its reason; the checks a command can assert stay
+unbound (86 → 65 warnings)`; plus `test/core/workflow-repository-conformance.test.ts` (65 rows). Refactor (D3):
+`.wingfoil/WORKFLOW.md` ~:592-595 (no `version:`), `.wingfoil/workflows/custom/retrospective.yaml` 1.7 → 1.8 (the
+three "(unbound, a warning in v0.3)" comments, lines 45, 73, 96), `.wingfoil/workflows/custom/dev-loop.yaml` 2.1 →
+2.2 (header lines 90-92 "the others are readings no command asserts and stay W_WORKFLOW_UNBOUND_TOKEN warnings"),
+both header-comment-only with the history kept (`dev-loop-v1-6`/`-v1-5`, `workflow-integration-branch`,
+`retrospective-*` pin "at least" and earlier segments); `src/workflow/bindings.ts:154` `tokenName` TSDoc ("A prose
+check keeps its prose, which no binding key names, so it stays unbound" becomes false). Session 3, uncommitted:
+`spec-017` §12 "Re-measured at `task-303`" paragraph + Revision note (65 warnings, 44 names; 17 checkpoints
+unchanged — the probe's conformance checkpoint test passed). `spec-003`: no edit (Layer 3 lines 636-640 already
+say it; its 61/90 figures are labelled `task-199`'s/`997e8998`'s). Not touched: the specification sub-workflow files
+`task-301` bumped, AGENTS.md (§3's bindings row stays true), `scripts/check-mcp-registration.cjs`.
+
+**Decisions for the approver.**
+- **D1 — the rule.** (a) manual = a condition no program can decide (judgement or reading), stays manual at v1.0;
+  a decidable condition stays unbound even with no command yet; (b) manual = every check no command asserts
+  *today*. **Recommend (a)**: (b) would bind ~80 of 86 and empty the list `dl-172` wants to shrink. Consequence:
+  the plan's W2 note "the eight unbound checks of the four specification sub-workflows are bound" holds for five
+  (user-story-mapping 1, specification-by-examples 3, volere 1) plus three of `specification-downcast`; the three
+  `backlog-export.validate` checks and `specification-downcast`'s fourth stay unbound (JSON, ids, cycles).
+- **D2 — `phase-branch-merged-to-integration-branch`** (iii). (a) stays unbound — `task-288`'s D3 left it unbound
+  before the manual form existed, and once the phase branches are declared the merge test is a command;
+  (b) manual, since nothing declares the branches. **Recommend (a).**
+- **D3 — same-class stale comments.** (a) fix them in this task with header-only bumps (`retrospective.yaml`
+  1.7 → 1.8, `dev-loop.yaml` 2.1 → 2.2), `WORKFLOW.md`, the `tokenName` TSDoc; (b) only `bindings.yaml` (the
+  plan's "one bump each"), the stale text filed as a finding. **Recommend (a)**: neither file is `task-301`'s or
+  `task-302`'s, and leaving "(unbound, a warning in v0.3)" next to a manual binding is the drift the brief asks to fix.
+- **D4 — no `run` binding here.** The AC allows it; none of the 44 has a command that exits 0/1 on exactly that
+  condition alone (`check:mcp` asserts 50–51 together with more, under a prose key duplicating `mcp.registered`).
+  **Recommend: none; candidate findings below.**
+- **D5 — prose keys.** The key is the prose `tokenName` cuts, double-quoted in `bindings.yaml`, rather than
+  renaming the prose to dotted tokens in nine workflow files (four are `task-301`'s). A reworded prose check comes
+  back as a warning, which the conformance list catches. **Recommend: prose keys.**
+
+**Risks for the batch.** `task-302` merges after this task: it does not edit `bindings.yaml`, the conformance
+warning list, `dev-loop.yaml` or `retrospective.yaml` (plan W2), but it may amend `spec-017` §12 — two uncommitted
+edits of one spec, applied in merge order; `task.wave.declared` / `waves.declared` (its ground) stay unbound here.
+If `task-302` changes a workflow check, the 65 moves: it re-measures after syncing.
+
+**Candidate findings, not filed.** (F-a) `e2e-smoke.mcp-registration`'s three prose checks restate what its own
+`cli.run("npm run check:mcp")` asserts: rewrite them as `mcp.registered` (already bound). (F-b) An `AGENTS.md`
+parity suite would bind 40–44 as `workflow-md.complete` did for WORKFLOW.md. (F-c) `release-health.yaml:37`'s
+comment "Unbound until scripts/release-health/ ships its report check (task-231, task-241)": those tasks are done
+and no report check exists. (F-d) A Memory query with an exit status would bind rows 17, 22, 23, 25, 26, 38, 52.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
