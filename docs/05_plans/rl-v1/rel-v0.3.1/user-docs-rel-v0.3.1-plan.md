@@ -188,6 +188,57 @@ loaded), and an independent reviewer agent with no authoring context reviews bot
 plan's add, which changes no source); P6 only this plan modified, on `docs/user-docs-v0.3.1`,
 `git rev-list --left-right --count origin/release/0.3...release/0.3` → `0 0`. **PASS.**
 
+**S2 — survey** (2026-10-26, code build at `f40e93ee` against the pinned `0.3.0`):
+- **Command surface.** The `--help` of every group and subcommand, dumped for both builds and diffed: the only
+  difference is `workflow adopt` and `workflow rekey` (new); 32 group subcommands plus `init`, `mcp`, `paths` = **35
+  commands** (0.3.0: 33). `docs/cli-reference.md` already has both entries ("New in 0.3.1", tasks 294/295) and the
+  configuration `version:` raises (task-299); `grep -c 'workflow adopt\|workflow rekey'` → 14 in cli-reference, 0 in
+  README, user-guide, `docs/agents.md`, AGENTS.md, `.wingfoil/README.md`.
+- **Behaviour, re-run in a throwaway project** (`init --template Scrum`, code build): `workflow adopt
+  bug-ingest-1-plan --element bug:… --reason …` → `adopted: … into bug-ingest.capture`, the record's trailers as
+  documented; `--plan` after it → `(recorded)`; after renaming `capture` → `report`, `workflow rekey … --from
+  bug-ingest.capture --to bug-ingest.report` → `1 record(s) remapped`, again → `already rekeyed …, nothing written`;
+  `dna set` → `dna.yaml` `version: 1` → `1.1`; `workflow finalize --dry-run` (console) → 0.3.0 prints
+  `error: Cannot read properties of undefined (reading 'workflow')`, the code build prints the plan; a
+  `workflows/bindings.yaml` binding a check `{ manual: true }` → 0.3.0 exits `1` with `E_VALIDATION checks.<check>.run
+  … expected array`, the code build lists no diagnostic (the same check unbound →
+  `has no built-in or bindings.yaml binding`). A project initialised by 0.3.0 (`init --template Kanban`, pinned
+  build): `workflow list`, `status`, `dna show team`, `directives list`, `paths`, `dna add` on the code build exit `0`;
+  `memory add --workflow sw-life-cycle` is refused identically by both builds (`no step of … adds a task`): nothing
+  breaks, the guided workflows need the copy the user guide's §12 already describes.
+- **Verdicts on `produces:`.** Stale: CHANGELOG (no `[0.3.1]`), README (CLI table without adopt/rekey; no 0.3.1
+  row), user-guide (no adopt/rekey, no `manual` binding, no `version:` raise), `docs/case-study.md` (only the v0.1/v0.2
+  reports though `release-health-v0.3` is committed; a false "pinned build runs these operations" bullet; "v0.3 is
+  expected to be measured"), `docs/comparison.md` (sources due for the per-release re-read). Aligned: cli-reference,
+  COLLABORATION.md (task-297), CONTRIBUTING, CODE_OF_CONDUCT, SECURITY (`0.3.x` supported), `.github/` templates,
+  `docs/site.yaml`, `llms.txt` (`node scripts/build-site.cjs llms && git diff --exit-code llms.txt` → 0), the tape and
+  the GIF (S7). `docs/agents.md`: no adopt/rekey row.
+
+**Approver rulings, 2026-10-26** (in chat, all three "as recommended"): **R1** case study — fix only the false
+sentences, the v0.3 column is a finding (F53 in the kit register); **R2** `demo.rendered` — confirmed without
+re-recording, on S7's evidence; **R3** comparison — an agent re-reads the sources, differences go to the approver
+before the page changes.
+
+**S3 — examples.** `WINGFOIL="node $PWD/dist/cli.js" bash docs/examples/0*/run.sh` → `01`–`06` exit `0`.
+
+**S4–S6** — `1367d56b` CHANGELOG `[0.3.1] - Unreleased` (Added: adopt, rekey, manual check; Changed: version raise;
+Fixed: finalize console dry run, the drivable `init` scaffold, COLLABORATION.md; Upgrading from 0.3.0; For
+contributors), ids `task-290`…`task-303`, `bug-389`, `bug-400`, `bug-408`, all `done`/`closed` (S1); `a449de27`
+README (CLI table, 0.3.1 row "Being released") and user-guide (§4 version raise; §7 adopt, rekey and manual checks,
+transcripts from the throwaway project above); `db272a55` case study (R1); `62242017` `docs/agents.md` adopt row
+(approver to confirm). `npx jest test/docs` → 28 suites, 305 tests passed.
+
+**S6 — comparison (R3).** Two read-only agents re-read S1–S7 and S8–S16 on 2026-10-26 (WebFetch, with the GitHub
+history where a page moved): every URL answers 200 (S15 redirects to the dated MCP specification on the same host and
+stays undated); 47 of 49 facts hold; the two that changed are S1 quotes, gone from Spec Kit's README rewritten on
+2026-10-19, whose content still holds. The approver approved the rewording and the new dates in chat; `bfeac471`
+rewords lines 51 and 57 and dates S1–S16 `read 2026-10-26`; `npx jest test/docs/presentation.test.ts` → 49 passed.
+
+**S7 — `demo.rendered`.** Example 01 run with the pinned `0.3.0` and with the code build: the two transcripts,
+normalised for shas, dates and temporary paths, are identical (`diff` empty), and
+`git log cc31d7a8..HEAD -- docs/examples/ docs/assets/` is empty. Confirmed without re-recording (R2): the GIF of
+`1fb2c457` stands.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
