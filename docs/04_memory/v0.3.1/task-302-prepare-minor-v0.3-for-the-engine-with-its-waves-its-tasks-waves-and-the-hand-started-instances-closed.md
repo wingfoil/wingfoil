@@ -216,6 +216,20 @@ of the two hand-started ones stays wrong (frontier `capture`, "missing: produces
   E1's wrong `capture` instructions before v0.4; committed by the developer on the approver's instruction, or by the
   approver.
 
+#### Design gate (approver, 2026-10-26)
+
+Rulings on the design decisions above:
+- D1 accepted: `task-252` and `task-289` (run in `user-docs`) take no wave.
+- D2 accepted: the deprecated `task-223` is amended to `w3` too (uniform data).
+- D3 (a) accepted: AC2 stays red-first on the data (`minor-v0.3` declares `waves: [w0, w1, w2, w3]`, each task its
+  `wave:`, each wave a key of the release); the deduction's behaviour — a `released` release ignored by `delivery`'s
+  entry filter, and on a hypothetical `in-development` copy four records per done task — is recorded by command in
+  these notes, not pinned by a test.
+- D4 (a) accepted: the three hand-started ingest instances stay open (none has its work done).
+- Candidate findings F-a…F-c held as follow-ups F47–F49 for the ingest after the `v0.3.1` tag; F-d is `bug-413`.
+- Sequence: red → green (the script and its own tests, then STOP) → the approver runs the batches on `task/task-302`
+  → refactor and submit → review.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
