@@ -124,6 +124,7 @@ line — do not retry blindly) · `2` your command line is wrong (fix the argume
 | Retire a document | `wingfoil memory deprecate <id> --reason "<why>"` | any state → `deprecated`; the document must have no uncommitted edits |
 | Start / end a workflow | `wingfoil workflow start <name> [--element <type>:<id>]`, `wingfoil workflow end` | records the run as a `plan` document; `end` only once its steps are complete |
 | Record a step nothing else shows done | `wingfoil workflow finalize [--step <key>] [--reason "<why>"]` | a checkpoint; on a phase with `approval:` it needs the approver — not yours |
+| Link an element added without `--workflow` to its step | `wingfoil workflow adopt <ref> --element <type>:<id> --reason "<why>"` | one empty commit; `--plan` only proposes; `--plan --apply` and `workflow rekey` (a renamed phase) need the approver — not yours |
 | Audit a document | `wingfoil memory history <id>` | read-only |
 | Set a DNA scalar | `wingfoil dna set <path> --value <v>` | e.g. `project.description` |
 | Add / change / remove a DNA entry | `wingfoil dna add\|update\|remove <path> …` | see the [CLI reference](cli-reference.md#wingfoil-dna-add) for `--entry-<field>` |
