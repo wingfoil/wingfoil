@@ -11,6 +11,7 @@ ref: "dl-134"
 bug: ["bug-248", "bug-250"]
 depends_on: ["task-133-bind-builtin-security-directive-role-stop-tests-pinning", "task-180-add-memory-park-declared-returns-edge-optional-per", "task-199-align-wingfoil-workflows-custom-v0-3-schema-commands"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description
