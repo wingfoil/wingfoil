@@ -1,6 +1,6 @@
 # Contributing to WingFoil — through Memory, not (only) code
 
-**Version:** 1.6 · **Date:** 2026-10-17
+**Version:** 1.7 · **Date:** 2026-10-24
 
 WingFoil is a harness for **AI-assisted software development**, built to make it deterministic. It manages its own
 development the same way it asks other projects to (dogfooding): every change flows through
@@ -146,7 +146,8 @@ it, and it never rewrites git history):
   `test/docs/reported-by.test.ts` checks against the registered services. It is provenance only: the
   artifact restates the defect or request in its own words and reads on its own, a defect is reproduced
   in this repository before it is filed, and the note's text is never copied. The `bug`,
-  `decision-log`, `adr`, `tech-spec` and `change-proposal` templates carry the field.
+  `decision-log`, `adr`, `tech-spec` and `change-proposal` templates carry the field. How a consumer
+  keeps its inbox, writes a note and reads WingFoil's answer is in *Consumer feedback*, below.
 - **A consumer's feature request** is filed as a `change-proposal` through `vision-change`
   ([`dl-132`](docs/04_memory/design/dls/dl-132-vision-change-and-feature-ingest.md)); a `decision-log`
   is for input about the process or a decision.
@@ -159,6 +160,117 @@ it, and it never rewrites git history):
 
 This keeps credit **machine-visible and git-versioned**, consistent with WingFoil’s single-source-of-
 truth model — no external contributor database, no commit rewriting.
+
+## Consumer feedback — notes from projects that use WingFoil
+
+A project that uses WingFoil to govern its own development (a *consumer*) meets WingFoil's defects,
+gaps and missing features while it works. It writes them down in its own repository, WingFoil reads
+them at its retrospective, and WingFoil publishes its answer in this repository, where the consumer
+reads it. WingFoil never commits into a consumer's repository, and the consumer's notes stay in its
+own repository
+([`dl-163`](docs/04_memory/design/dls/dl-163-consumer-projects-feedback-sources-and-the-feedback-loop.md)
+R1–R6).
+
+### The feedback inbox
+
+- **Where.** A consumer keeps its notes in `docs/wingfoil-feedback/` in its own repository, committed
+  on its `main`, one file per note (*The note format*, below). The folder holds a `README.md` too: it
+  must exist on `main`, because the registration's `verify` reads it; its content is the consumer's
+  (for example, a pointer to this section). Notes that are not committed on `main` are not read.
+- **Registration.** WingFoil reads the inbox of a consumer repository only once it is registered here
+  as an `active` `service` of kind `repository` whose `feedback_inbox` names that folder
+  (`docs/04_memory/services/`; `dl-163` S3b). A maintainer registers it through the `service-ingest`
+  workflow, after the inbox is committed; the approver runs the service's `verify`
+  (`git ls-remote <url> refs/heads/main`, plus a read of `<feedback_inbox>README.md` on that
+  repository) before approving it. The service's full id is the source key every cite of a note uses.
+- **Asking to be registered.** A project asks through the **Proposal** issue form (*How to contribute*,
+  above), naming its repository and its inbox. Until it is registered, its feedback goes through the
+  issue forms like anyone else's: it is credited as `contributor` with the issue URL, not by a cite
+  of a note (*Credit*, above).
+
+### The note format
+
+One Markdown file per note, named `F-<nnn>-<slug>.md`: `F-` and a number of three digits or more,
+unique in that inbox, then a slug. A note has one identifier, one status and one history (`dl-163`
+R4). Its frontmatter has six fields:
+
+| Field | Value |
+|---|---|
+| `id` | `F-<nnn>`, the number of the file name, without the slug |
+| `title` | what the note is about |
+| `kind` | `defect`, `gap` or `request` |
+| `status` | one of the six below |
+| `wingfoil_version` | the WingFoil build the note was observed on |
+| `answered_by` | the ids of the WingFoil elements that answer the note; empty until the consumer fills it at a sync |
+
+The body states what was observed and what was expected. The statuses:
+
+- `open` — written, not yet answered by WingFoil;
+- `needs-info` — WingFoil asked for what a reproduction needs; the consumer answers in the note;
+- `captured` — WingFoil filed or named an element that answers it (`answered_by`);
+- `resolved` — every element in `answered_by` has shipped in a release the consumer reads, or the build
+  already behaves as the note asks;
+- `declined` — WingFoil does not take it up;
+- `duplicate` — the consumer's own status for a note that repeats another note of the same inbox.
+
+A WingFoil element that answers a note cites it, in the provenance field *Credit* describes, as
+`<service id>/F-<nnn>@<sha>`: the full id of the consumer's `service`, the note's `id`, and the full
+sha of the consumer commit WingFoil read (the form
+[`spec-010`](docs/04_memory/design/specs/spec-010-memory-frontmatter-schema.md) owns). The cite is
+provenance only: the element restates the note in its own words, a defect is reproduced in this
+repository first, and the note's text is never copied (*Credit*, above). A later edit of the note does
+not change a cite, which names the commit read.
+
+### The sync points
+
+A consumer syncs at two points (`dl-163` R5):
+
+- at its own release-planning, before it fixes its scope;
+- at every pin bump, whenever it moves the WingFoil build it uses to another published version.
+
+What it reads, all of it published by this repository:
+
+- the pushed `origin/main`, where the retrospectives and the elements live;
+- the release tags: `vX.Y.Z` on `main` for a minor, and a patch's tag on its maintenance branch
+  `release/X.Y`;
+- the npm dist-tags of the `wingfoil` package: `latest` for the newest version, and `latest-X.Y` for a
+  patch of an older line published after a newer minor, so that patch does not take `latest`.
+
+WingFoil reads every registered inbox at each minor release's retrospective; a patch release has none.
+Between two retrospectives, a note answered by a patch appears only in that patch's release document
+(`dl-163` R6).
+
+### The sync procedure
+
+At a sync point the consumer runs, in its own repository and at its own pace:
+
+1. Fetch this repository (`git fetch origin --tags`) and read at `origin/main` (or at the tag of the
+   version it moves to).
+2. Read the newest retrospective's record: the `## Consumer feedback` table of `retro-<version>`
+   (`docs/04_memory/design/dls/`), one row per note with WingFoil's decision, the element and the target
+   release, and the read record beside it,
+   `docs/09_retrospectives/rl-<release-line>/rel-<version>-feedback-triage.md`, which restates each note
+   and says which commit of the inbox was read. A patch released since then lists the notes it took up
+   in its release document's `## Scope changes`
+   (`docs/04_memory/planning/rl-<release-line>/`).
+3. Find every element that cites one of its notes, with its own service's full id:
+   `git grep -n "<service id>/F-" origin/main -- docs/04_memory`.
+4. Update each note's `status` and `answered_by` from WingFoil's decision:
+
+   | Decision in the record | The note becomes |
+   |---|---|
+   | `needs-info` | `needs-info`, and the consumer adds what is asked |
+   | `declined` | `declined` |
+   | `covered`, `element` or `restated`, with an element named | `captured`, with the element's id in `answered_by` |
+   | `restated`, with no element named | stays `open`: the next retrospective reads it again |
+   | `superseded` (the build already changed it) | `resolved` |
+
+   A `captured` note becomes `resolved` once every element in its `answered_by` has shipped in a
+   release tag the consumer reads.
+5. Commit the updated notes on its own `main`, so the next retrospective reads them.
+
+WingFoil never commits into a consumer's repository: the answer is published here, and only the
+consumer changes its notes (`dl-163` R3).
 
 ## Ground rules
 

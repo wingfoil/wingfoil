@@ -9,6 +9,9 @@
  * difference: a downgrade (`2.5 -> 2.4`) is no bump, nor is a re-quoting that reads as the same number
  * (`1.0 -> "1.0"`). A dotted string with more than two parts (`"1.2.3"`) is compared part by part as
  * integers. Pure (REQ-SYS-07).
+ *
+ * {@link raiseConfigVersion} is the writers' side of the same rule (`dl-174` (a), task-299): the next
+ * revision a tool write commits, which this comparison then reads as a bump.
  */
 
 /** A numeric reading of `value`: a finite number, or a string of digits with at most one dot. */
@@ -43,4 +46,46 @@ export function isVersionIncrease(before: unknown, after: unknown): boolean {
     if (r !== l) return r > l;
   }
   return false;
+}
+
+/**
+ * The first line starting `version:` at column 0, then its value as a plain token, a one-line `"…"` or a
+ * one-line `'…'` scalar. A nested `version:` (indented) or a commented one is not matched. It is a text match,
+ * not a YAML parse: a quoted `"version"` key or a value on the next line is not matched, and a column-0
+ * `version:` inside a multi-line scalar would be.
+ */
+const VERSION_LINE_RE = /^(version:[ \t]*)("(?:[^"\\\n]|\\.)*"|'(?:[^'\n]|'')*'|[^\s#'"]+)/m;
+
+/**
+ * The `version:` a tool writes into a versioned config file it writes whole for the first time
+ * (`spec-006` §6 item 7, `dl-174` (a)): `directive assign` with no `roles.yaml` (`spec-011`), `workflow create`
+ * with no `workflows.yaml` (`spec-017` §7.7). Written as text, so it reads `1.0`, not YAML's `1`.
+ */
+export const INITIAL_CONFIG_VERSION = '1.0';
+
+/**
+ * `text` with its `version:` raised to the next content revision (`dl-047`), the rule every tool write of a
+ * versioned config file applies in its own commit (`spec-006` §6 item 7, `dl-174` (a), task-299): the value
+ * on the first line starting `version:` at column 0, plain or quoted, read as digits with at most one dot (`1.10` is
+ * `1.1`, as YAML reads it; a quoted digit string as its number) plus 0.1, rounded at 1e-6 so
+ * `1.2 → 1.3` carries no float noise, printed with at least one decimal (`1.9 → 2.0`, `1 → 1.1`), in the
+ * value's own quotes. Every other byte — the spacing after the colon, the trailing comment, every other line —
+ * is kept, and no history entry is added: the `wf()` commit is the record.
+ *
+ * A text with no such line, or whose value is not digits with at most one dot, is returned unchanged: a file
+ * without `version:` gains none, and other spellings YAML reads as numbers (`1e1`, `.5`, `1.`, `+1.2`) are left
+ * as they are. The four files' schemas declare `version` a number, so the writers never reach a non-numeric
+ * value; the other numeric spellings, which those schemas accept, are left unchanged. Pure (REQ-SYS-07).
+ */
+export function raiseConfigVersion(text: string): string {
+  const match = VERSION_LINE_RE.exec(text);
+  if (match === null) return text;
+  const token = match[2] as string;
+  const quote = token.startsWith('"') || token.startsWith("'") ? (token[0] as string) : '';
+  const current = asNumber(quote === '' ? token : token.slice(1, -1));
+  if (current === null) return text;
+  const raised = Math.round((current + 0.1) * 1e6) / 1e6;
+  const next = Number.isInteger(raised) ? raised.toFixed(1) : String(raised);
+  const start = match.index + (match[1] as string).length;
+  return `${text.slice(0, start)}${quote}${next}${quote}${text.slice(start + token.length)}`;
 }

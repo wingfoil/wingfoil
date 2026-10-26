@@ -83,7 +83,8 @@ function buildFixture(): string {
   writeFileSync(memoryPath, memoryYaml.replace(commented, uncommented));
   // `agent execute` (task-218): an agent with the fake adapter (task-200), the script it launches, and
   // the scaffold's `paths.runs`.
-  const dna = readFileSync(dnaPath, 'utf-8');
+  // The scaffold's own `agents: []` (task-296, design D4) is dropped: the fixture declares the key below.
+  const dna = readFileSync(dnaPath, 'utf-8').replace(/^ {2}agents: \[\]\n/m, '');
   if (!dna.includes('    - name: approver\n')) throw new Error('fixture bug: the scaffolded role list moved');
   writeFileSync(
     dnaPath,
@@ -103,7 +104,7 @@ function buildFixture(): string {
   const workflowsPath = join(repo, '.wingfoil', 'workflows.yaml');
   writeFileSync(
     workflowsPath,
-    `${readFileSync(workflowsPath, 'utf-8')}  - workflows/custom/quick.yaml\n  - workflows/custom/finished.yaml\n  - workflows/custom/checkpoint.yaml\n  - workflows/custom/retired.yaml\n`,
+    `${readFileSync(workflowsPath, 'utf-8')}  - workflows/custom/quick.yaml\n  - workflows/custom/finished.yaml\n  - workflows/custom/checkpoint.yaml\n  - workflows/custom/retired.yaml\n  - workflows/custom/adoptable.yaml\n  - workflows/custom/renamed.yaml\n`,
   );
   // `workflow remove` (task-211): a custom workflow nothing includes and no instance runs.
   writeFileSync(join(repo, '.wingfoil', 'workflows', 'custom', 'retired.yaml'), 'name: retired\nstartable: true\nphases:\n  - name: one\n    role: developer\n');
@@ -119,8 +120,33 @@ function buildFixture(): string {
     join(repo, 'docs', 'memory', 'plan', 'checkpoint', 'checkpoint-1-plan.md'),
     '---\nid: "checkpoint-1-plan"\ntype: plan\ntitle: "checkpoint — 1"\nstatus: active\nworkflow: "checkpoint"\nphase: "1"\nelement: ""\nparent: ""\n---\n\n## Body\n',
   );
+  // `workflow adopt` (task-294, `spec-017` §7.11): a workflow whose first phase adds an adr, one open instance of
+  // it, and an adr committed with no step linkage — a type and an instance no other row reads.
+  writeFileSync(
+    join(repo, '.wingfoil', 'workflows', 'custom', 'adoptable.yaml'),
+    "name: adoptable\nstartable: true\nphases:\n  - name: seed\n    role: approver\n    actions:\n      - 'memory.add(type: adr)'\n  - name: close\n    role: approver\n",
+  );
+  mkdirSync(join(repo, 'docs', 'memory', 'plan', 'adoptable'), { recursive: true });
+  writeFileSync(
+    join(repo, 'docs', 'memory', 'plan', 'adoptable', 'adoptable-1-plan.md'),
+    '---\nid: "adoptable-1-plan"\ntype: plan\ntitle: "adoptable — 1"\nstatus: active\nworkflow: "adoptable"\nphase: "1"\nelement: ""\nparent: ""\n---\n\n## Body\n',
+  );
+  mkdirSync(join(repo, 'docs', 'memory', 'adr'), { recursive: true });
+  writeFileSync(join(repo, 'docs', 'memory', 'adr', 'adr-001-adopt-me.md'), '---\nid: "adr-001-adopt-me"\ntype: adr\ntitle: "Adopt me"\nstatus: draft\n---\n\n## Body\n');
+  // `workflow rekey` (task-295, `spec-017` §7.12): a workflow whose phase was renamed `old-name` → `new-name`, one open
+  // instance of it, and (below) a phase record of that instance naming the old key — an instance no other row reads.
+  writeFileSync(
+    join(repo, '.wingfoil', 'workflows', 'custom', 'renamed.yaml'),
+    'name: renamed\nstartable: true\nphases:\n  - name: new-name\n    role: approver\n  - name: close\n    role: approver\n',
+  );
+  mkdirSync(join(repo, 'docs', 'memory', 'plan', 'renamed'), { recursive: true });
+  writeFileSync(
+    join(repo, 'docs', 'memory', 'plan', 'renamed', 'renamed-1-plan.md'),
+    '---\nid: "renamed-1-plan"\ntype: plan\ntitle: "renamed — 1"\nstatus: active\nworkflow: "renamed"\nphase: "1"\nelement: ""\nparent: ""\n---\n\n## Body\n',
+  );
   git(repo, ['add', '-A']);
-  git(repo, ['commit', '--quiet', '-am', 'configure approver, the bug machine, the fake agent, two workflows and a checkpoint workflow']);
+  git(repo, ['commit', '--quiet', '-am', 'configure approver, the bug machine, the fake agent, two workflows, a checkpoint workflow, an adoptable adr and a renamed workflow']);
+  git(repo, ['commit', '--quiet', '--allow-empty', '-m', 'workflow: finalize renamed-1-plan renamed.old-name', '-m', 'WingFoil-Phase: renamed.old-name completed\nWingFoil-Instance: renamed-1-plan']);
 
   step(repo, 'memory', 'add', '--type', 'task', '--title', 'Submit me');
   step(repo, 'memory', 'add', '--type', 'task', '--title', 'Approve me');
@@ -147,10 +173,11 @@ interface Row {
   /** An edit the operation needs on disk before it runs (`memory amend` records an uncommitted correction). */
   readonly prepare?: (repo: string) => void;
   /**
-   * `workflow finalize` (task-226, `spec-017` §7.9): its commit is a phase record with no file change, so
-   * its plan has no paths and no diff, and the real commit records no path.
+   * An operation whose commit changes no file — `workflow finalize`'s phase record (task-226, `spec-017` §7.9),
+   * `workflow adopt`'s provenance record (task-294, §7.11) — with the subject its plan and its commit carry: the
+   * plan has no paths and no diff, and the real commit records no path.
    */
-  readonly empty?: true;
+  readonly empty?: { readonly subject: string };
   /**
    * `agent execute` (task-218): its commit records a run, so it follows the agent's exit and cannot be
    * planned as bytes. Its dry run runs every pre-launch check and prints the launch plan — the record
@@ -183,7 +210,15 @@ const ROWS: Readonly<Record<string, Row>> = {
   directiveRemove: { args: ['directive', 'remove', 'remove-me'] },
   workflowStart: { args: ['workflow', 'start', 'quick'], commits: 2 },
   workflowEnd: { args: ['workflow', 'end', 'finished'] },
-  workflowFinalize: { args: ['workflow', 'finalize', 'checkpoint-1-plan'], empty: true },
+  workflowFinalize: { args: ['workflow', 'finalize', 'checkpoint-1-plan'], empty: { subject: 'workflow: finalize checkpoint-1-plan checkpoint.review-notes' } },
+  workflowAdopt: {
+    args: ['workflow', 'adopt', 'adoptable-1-plan', '--step', 'adoptable.seed', '--element', 'adr:adr-001-adopt-me', '--reason', 'Created before the engine.'],
+    empty: { subject: 'workflow: adopt adoptable-1-plan adoptable.seed adr:adr-001-adopt-me' },
+  },
+  workflowRekey: {
+    args: ['workflow', 'rekey', 'renamed-1-plan', '--from', 'renamed.old-name', '--to', 'renamed.new-name', '--reason', 'Phase renamed.'],
+    empty: { subject: 'workflow: rekey renamed-1-plan renamed.old-name renamed.new-name' },
+  },
   workflowCreate: { args: ['workflow', 'create', 'dry-flow', '--kind', 'main'] },
   workflowRemove: { args: ['workflow', 'remove', 'retired'] },
   // Last: its preparation leaves a modified document in the tree for the rows after it.
@@ -238,9 +273,10 @@ describe('--dry-run on every mutating operation of the registry (task-210, dl-10
 
   it('the table names exactly the operations the registry declares mutates: true', () => {
     // Measured, not assumed: the task's "28" and the batch notes' "34" both counted
-    // `grep -c "mutates: true" src/core/index.ts`, which also matches comment lines.
+    // `grep -c "mutates: true" src/core/index.ts`, which also matches comment lines. The roster is ROWS itself
+    // (task-294: no literal count to edit when an operation is added — a row is the whole change).
     expect(Object.keys(ROWS).sort()).toEqual(mutatingOperations());
-    expect(mutatingOperations()).toHaveLength(20);
+    expect(mutatingOperations()).toHaveLength(Object.keys(ROWS).length);
   });
 
   it.each(Object.entries(ROWS))('%s: plans the commit, writes nothing, and the real run makes that commit', (_name, row) => {
@@ -255,8 +291,8 @@ describe('--dry-run on every mutating operation of the registry (task-210, dl-10
     expect(plan.dryRun).toBe(true);
     expect(typeof plan.subject).toBe('string');
     expect(Array.isArray(plan.paths)).toBe(true);
-    if (row.empty === true) {
-      expect(plan.subject).toBe('workflow: finalize checkpoint-1-plan checkpoint.review-notes');
+    if (row.empty !== undefined) {
+      expect(plan.subject).toBe(row.empty.subject);
       expect(plan.paths).toEqual([]);
       expect(plan.diff).toBe('');
       const head = gitOut(repo, ['rev-parse', 'HEAD']);

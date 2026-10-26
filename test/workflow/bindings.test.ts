@@ -108,3 +108,12 @@ describe('project bindings and unbound tokens', () => {
     expect(resolveToken('all releases are status: released', 'check', bindings)).toEqual({ kind: 'unbound', source: 'none' });
   });
 });
+
+describe('task-298 AC 2 — a check bound manual: true resolves to kind manual (dl-172 (a), spec-003 Layer 3)', () => {
+  it('a manual check resolves to { kind: manual, source: project }, with or without arguments; it serves no action', () => {
+    const bindings = BindingsYaml.parse({ checks: { 'demo.ok': { manual: true } } });
+    expect(resolveToken('demo.ok', 'check', bindings)).toEqual({ kind: 'manual', source: 'project' });
+    expect(resolveToken('demo.ok(note: x)', 'check', bindings)).toEqual({ kind: 'manual', source: 'project' });
+    expect(resolveToken('demo.ok', 'action', bindings)).toEqual({ kind: 'unbound', source: 'none' });
+  });
+});

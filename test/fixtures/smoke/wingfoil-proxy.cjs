@@ -10,7 +10,9 @@
  * - `SMOKE_PROXY_CLI` — the `cli.js` to forward to; default `<repository>/dist/cli.js`.
  * - `SMOKE_STAMP` — when set, `--version` prints it instead of forwarding (the staging stamp checks).
  * - `SMOKE_FAULT` — `<kind>@<argv prefix>`: the fault applies to every invocation whose space-joined argv
- *   starts with the prefix. Kinds:
+ *   starts with the prefix; `<kind>@=<argv>` (task-294) applies it only to an invocation whose space-joined argv is
+ *   exactly `<argv>`, so a fault can aim at one invocation (a bare `workflow finalize`) that other invocations share
+ *   a prefix with. Kinds:
  *   - `exit=<n>` — forward, then exit `<n>` instead of the CLI's own code (a wrong exit code);
  *   - `mute` — forward, but drop the CLI's stderr (a non-zero exit with no spec-005 §3 error);
  *   - `dirty` — forward, then leave an untracked file in the working directory (an uncommitted write);
@@ -33,7 +35,7 @@ if (args[0] === '--version' && process.env.SMOKE_STAMP !== undefined) {
 }
 
 const fault = /^([a-z]+)(?:=(\d+))?@(.+)$/.exec(process.env.SMOKE_FAULT ?? '');
-const hit = fault !== null && args.join(' ').startsWith(fault[3]);
+const hit = fault !== null && (fault[3].startsWith('=') ? args.join(' ') === fault[3].slice(1) : args.join(' ').startsWith(fault[3]));
 const kind = hit ? fault[1] : 'none';
 
 if (kind === 'noop') process.exit(0);

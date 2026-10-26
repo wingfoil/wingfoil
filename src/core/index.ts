@@ -15,7 +15,7 @@ import { join, relative, sep } from 'path';
 
 import { dump } from 'js-yaml';
 
-import { type Diagnostic, DiagnosticsError, formatDiagnostic, generateId, isNewerFormatError, parseYaml, patternTokens, toValidationError, ValidationError } from '../validation';
+import { type Diagnostic, DiagnosticsError, formatDiagnostic, generateId, isNewerFormatError, parseYaml, patternTokens, raiseConfigVersion, toValidationError, ValidationError } from '../validation';
 import type { Paths } from '../dna/schema';
 import { DnaYaml } from '../dna/schema';
 import { applyDnaEditInText } from '../dna/edit';
@@ -88,6 +88,8 @@ import {
   type WorkflowStartParams,
 } from './workflow-start-end';
 import { renderFinalizeConsole, workflowFinalizeAtHead, type FinalizeResult } from './workflow-finalize';
+import { renderAdoptConsole, workflowAdoptAtHead, type AdoptPlanResult, type AdoptResult } from './workflow-adopt';
+import { renderRekeyConsole, workflowRekeyAtHead, type RekeyResult } from './workflow-rekey';
 import { renderStatusConsole, workflowStatusAtHead, type StatusResult } from './workflow-status';
 import {
   renderCreateConsole,
@@ -171,6 +173,18 @@ export { buildStep, nextWorkflow, renderNextConsole, workflowNextAtHead } from '
 // `workflowFinalize`.
 export { NO_ACTIVE_WORKFLOW_TO_FINALIZE, phaseRecordTrailers, renderFinalizeConsole, workflowFinalizeAtHead } from './workflow-finalize';
 export type { FinalizeRequest, FinalizeResult } from './workflow-finalize';
+// task-294: `workflow adopt` (`spec-017` §7.11, §8 `AdoptResult` / `AdoptPlanResult`); the operation is `CORE_MODULES`'
+// `workflowAdopt`. The provenance-record writer is shared with `workflow rekey` (task-295, plan ruling W1-3).
+export { BULK_ADOPT_UNAUTHORIZED, renderAdoptConsole, workflowAdoptAtHead } from './workflow-adopt';
+export type { AdoptPlanResult, AdoptRequest, AdoptResult, Adoption } from './workflow-adopt';
+export { adoptionSubject, adoptionTrailers, provenanceMessage, rekeySubject, rekeyTrailers, writeProvenanceRecord } from './provenance-record';
+export type { ProvenanceRecord } from './provenance-record';
+// task-295: `workflow rekey` (`spec-017` §7.12, §8 `RekeyResult`); the operation is `CORE_MODULES`' `workflowRekey`. It
+// writes through the shared provenance-record writer, with `rekeySubject` / `rekeyTrailers` (above).
+export { REKEY_UNAUTHORIZED, renderRekeyConsole, workflowRekeyAtHead } from './workflow-rekey';
+export type { RekeyRequest, RekeyResult } from './workflow-rekey';
+export { planAdoptions } from '../workflow/adopt';
+export type { AdoptionPlan, PlannedStep } from '../workflow/adopt';
 export type { ActionView, Awaiting, CadenceView, CheckView, Member, NextInputs, NextOptions, NextResult, Step, StepBinding } from './workflow-next';
 // task-217: `CORE_MODULES`' `workflowStart` / `workflowEnd` (`spec-017` §7.1–§7.2) and their values.
 export { NO_ACTIVE_WORKFLOW_MESSAGE, NO_PLAN_TYPE_MESSAGE, renderEndConsole, renderStartConsole } from './workflow-start-end';
@@ -211,8 +225,26 @@ export type {
   ProducesView,
   ScopeRef,
   StartCommit,
+  StepAddition,
   TrailEntry,
 } from '../workflow/deduce';
+// task-293: element provenance in the deduction (P4.21, `spec-017` §2, §4.8) — the record constants `workflow adopt` /
+// `workflow rekey` write (task-294, task-295), the two diagnostics and the resolver of ownership and orphans.
+export {
+  ADOPT_SUBJECT_PREFIX,
+  ADOPTED_TRAILER,
+  INSTANCE_TRAILER,
+  readAdoption,
+  readRekey,
+  REKEY_FROM_TRAILER,
+  REKEY_SUBJECT_PREFIX,
+  REKEY_TO_TRAILER,
+  resolveProvenance,
+  STEP_TRAILER,
+  W_PROVENANCE_CONFLICT,
+  W_PROVENANCE_ORPHAN,
+} from '../workflow/provenance';
+export type { AdoptionRecord, ProvenanceClaim, ProvenanceConflict, ProvenanceOrphan, ProvenanceRef, RekeyRecord, ResolvedProvenance } from '../workflow/provenance';
 
 export { malformedElementRefMessage, parseElementRef } from './element-ref';
 export type { DirectiveFile, WorkflowsLoadResult } from './loaders';
@@ -547,6 +579,9 @@ export const DNA_REWRITE_PLANNED_WARNING = DNA_REWRITE_WARNING.replace('dna.yaml
  *    fresh `init --template scrum` repository, task-184, bug-096). It is also what enforces the
  *    cross-field rules the verbs do not duplicate: a member naming a role absent from `team.roles` fails here (REQ-SYS-08,
  *    `Team.superRefine`), which is why `dl-081` records that referential integrity needs no new check.
+ * 7a. **Raise the content revision** (`dl-174` (a), `spec-006` §6 item 7, task-299): bytes that differ
+ *    from the file get `version:` + 0.1 through `raiseConfigVersion`, in place or forced, before step 7's
+ *    re-validation, so the dry-run plan, the commit and step 9 all see the raised text.
  * 8. **Persist + commit** through the single storage primitives (task-018) — `writeDocument` then
  *    `commitPaths` on the ONE scoped path `.wingfoil/dna.yaml`; the returned sha rides
  *    `CoreResult.commit`. Writing the bytes already on disk is an idempotent no-op: no write, no
@@ -594,7 +629,10 @@ async function runDnaMutation(
   const dnaPath = join(root, DNA_YAML_PATH);
   const current = readDocument(dnaPath);
   const inPlace = applyDnaEditInText(current, applied.edit, applied.dna);
-  const serialized = inPlace ?? dump(applied.dna, { lineWidth: -1 });
+  const produced = inPlace ?? dump(applied.dna, { lineWidth: -1 });
+  // dl-174 (a), spec-006 §6 item 7 (task-299): a write raises dna.yaml's `version:` in its own commit; a write
+  // that changes nothing stays no write, so it is not raised either.
+  const serialized = current === produced ? produced : raiseConfigVersion(produced);
 
   // Labelled repository-relative, as every working-tree loader labels it (task-179, `bug-245`).
   const parsed = DnaYaml.safeParse(parseYaml(serialized, DNA_YAML_PATH));
@@ -2317,6 +2355,69 @@ const workflowFinalizeFn: CoreFn<unknown, FinalizeResult> = async (params) => {
 };
 
 /**
+ * `wingfoil workflow adopt <ref> [--step <key>] [--element <type>:<id>] [--plan [--apply]] [--reason <text>]` params
+ * (task-294): `<ref>` rides the bare positional; the CLI spreads the flags `plan` / `apply` into the params, an
+ * in-process caller may pass them under `flags`.
+ */
+export interface WorkflowAdoptParams {
+  readonly root: string;
+  readonly positional?: string;
+  readonly options?: Readonly<Record<string, string>>;
+  readonly plan?: boolean;
+  readonly apply?: boolean;
+  readonly flags?: { readonly plan?: boolean; readonly apply?: boolean };
+}
+
+/**
+ * `workflowAdopt` `CoreOperation.fn` (`spec-017` §7.11, §10): {@link workflowAdoptAtHead}, its refusals returned
+ * (`CONFLICT`, `NOT_FOUND`, `VALIDATION`: exit 1) or thrown as a `UsageError` (exit 2); a `spec-003` error at `HEAD`
+ * is `VALIDATION`, exit 1.
+ */
+const workflowAdoptFn: CoreFn<unknown, AdoptResult | AdoptPlanResult> = async (params) => {
+  const { root, positional, options, plan, apply, flags } = params as WorkflowAdoptParams;
+  const step = options?.['step'];
+  const element = options?.['element'];
+  const result = loadOrError(() =>
+    workflowAdoptAtHead(root, {
+      ...(positional === undefined ? {} : { ref: positional }),
+      ...(step === undefined ? {} : { step }),
+      ...(element === undefined ? {} : { element }),
+      plan: plan === true || flags?.plan === true,
+      apply: apply === true || flags?.apply === true,
+      ...(options === undefined ? {} : { options }),
+    }),
+  );
+  return result.ok ? result.value : result;
+};
+
+/** `wingfoil workflow rekey <ref> --from <key> --to <key> --reason <text>` params (task-295): `<ref>` rides the bare positional. */
+export interface WorkflowRekeyParams {
+  readonly root: string;
+  readonly positional?: string;
+  readonly options?: Readonly<Record<string, string>>;
+}
+
+/**
+ * `workflowRekey` `CoreOperation.fn` (`spec-017` §7.12, §10): {@link workflowRekeyAtHead}, its refusals returned
+ * (`CONFLICT`, `NOT_FOUND`, `VALIDATION`: exit 1) or thrown as a `UsageError` (exit 2); a `spec-003` error at `HEAD`
+ * is `VALIDATION`, exit 1.
+ */
+const workflowRekeyFn: CoreFn<unknown, RekeyResult> = async (params) => {
+  const { root, positional, options } = params as WorkflowRekeyParams;
+  const from = options?.['from'];
+  const to = options?.['to'];
+  const result = loadOrError(() =>
+    workflowRekeyAtHead(root, {
+      ...(positional === undefined ? {} : { ref: positional }),
+      ...(from === undefined ? {} : { from }),
+      ...(to === undefined ? {} : { to }),
+      ...(options === undefined ? {} : { options }),
+    }),
+  );
+  return result.ok ? result.value : result;
+};
+
+/**
  * `workflowStart` / `workflowEnd` `CoreOperation.fn`s (P4.2, P4.3; `spec-017` §7.1–§7.2; task-217): the two
  * operations of `./workflow-start-end`, with `start` writing through this registry's own `memoryAdd` and
  * `memorySubmit`. A `spec-003` error at `HEAD` (or a token value outside the id class) is `VALIDATION`,
@@ -2794,6 +2895,46 @@ export const CORE_MODULES: readonly CoreModule[] = [
         example: 'wingfoil workflow finalize --step dev-loop.red@task:task-130',
         fn: workflowFinalizeFn,
         renderConsole: renderFinalizeConsole as (value: unknown) => string,
+      },
+      // task-294 (`spec-017` §7.11, P4.21, `dl-187`): records which step an existing element counts as created by, as
+      // one commit with no file change, `workflow: adopt <instance> <key> <type>:<id>`, carrying the provenance trailers;
+      // `--plan` proposes the adoptions and writes nothing, `--plan --apply` writes them and needs the approver. Gates on
+      // the deduction and `dna.yaml` at `HEAD` (§11). The MCP Tool `workflow.adopt` is v0.4 (P5.2.3, §9).
+      workflowAdopt: {
+        name: 'workflowAdopt',
+        mutates: true,
+        description: 'record which step of an open workflow an existing element counts as created by, as an empty commit (--plan proposes every adoption, --plan --apply writes them)',
+        positional: { name: 'ref', required: true, description: 'a workflow name or an open workflow instance id' },
+        options: [
+          { name: 'step', valueName: 'key', description: 'the frontier step the element counts as created by (default: the one frontier step that adds its type)' },
+          { name: 'element', valueName: 'type:id', description: "the existing element to adopt (default: the step's one candidate)" },
+          { name: 'reason', valueName: 'text', description: 'why; required except with --plan alone, recorded in the commit' },
+        ],
+        flags: [
+          { name: 'plan', description: 'propose the adoptions every step blocked on a creation needs, and write nothing' },
+          { name: 'apply', description: 'with --plan: write the proposed adoptions, one commit per step (needs the approver role)' },
+        ],
+        example: 'wingfoil workflow adopt sw-life-cycle-1-plan --plan',
+        fn: workflowAdoptFn,
+        renderConsole: renderAdoptConsole,
+      },
+      // task-295 (`spec-017` §7.12, P4.21, `dl-187` C5): remaps an open instance's records from a renamed step key, as one
+      // commit with no file change, `workflow: rekey <instance> <from> <to>`, carrying the rekey trailers; needs the
+      // approver. Gates on the registry, the deduction and `dna.yaml` at `HEAD` (§11). The MCP Tool `workflow.rekey` is
+      // v0.4 (P5.2.3, §9).
+      workflowRekey: {
+        name: 'workflowRekey',
+        mutates: true,
+        description: 'remap the records of an open workflow from a renamed step key to its new one, as an empty commit (approver only)',
+        positional: { name: 'ref', required: true, description: 'a workflow name or an open workflow instance id' },
+        options: [
+          { name: 'from', valueName: 'key', description: 'the renamed step key, <workflow>.<phase>, that the registry no longer declares' },
+          { name: 'to', valueName: 'key', description: 'the step key it was renamed to, <workflow>.<phase>, declared by the registry' },
+          { name: 'reason', valueName: 'text', description: 'why; required, recorded with an Approver: line' },
+        ],
+        example: 'wingfoil workflow rekey sw-life-cycle-1-plan --from sw-life-cycle.seed-first-release-line --to sw-life-cycle.seed-release-line --reason "phase renamed"',
+        fn: workflowRekeyFn,
+        renderConsole: renderRekeyConsole,
       },
       // task-225 (`spec-017` §7.4, §5.1–§5.4): reads `HEAD`, declared (§1.1, ruling R15), from the deduction `next`
       // answers from. Every open instance with its phases, frontier and late elements, the pending approvals routed

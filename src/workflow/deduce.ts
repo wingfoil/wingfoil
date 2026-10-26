@@ -26,6 +26,10 @@
  *   evidence. `created` (a `memory.add`) is satisfied when, for each type the phase adds, the step
  *   created an element at or after the state the phase leaves it in, with each `{ type, path }` entry
  *   committed for it; a step that created nothing leaves the kind to its other evidence, or to a record.
+ * - **Provenance** (§4.8, P4.21, task-293): adoption and rekey records are resolved first, over every walk at once
+ *   (`resolveProvenance`, `./provenance`): rekeys remap the records of a renamed step key, an adoption counts as a
+ *   linkage for `created` evidence only, an orphan (a key the registry does not declare) is evidence of nothing,
+ *   and an element has one owner; `W_PROVENANCE_ORPHAN` / `W_PROVENANCE_CONFLICT` report the rest.
  * - **Re-entries** (§4.8, §5.2): after a `reject`/`park` that moved the pass's element back, the
  *   `record` and `state` evidence of the phases from the `fallback.step` of the phase whose gate state
  *   was `<from>` onward counts only if newer than the re-entry; those steps report `reentered: true`.
@@ -58,6 +62,7 @@ import { iterationStartState, workflowExitStates, type ExitStart, type PhaseExit
 import type { DnaYaml } from '../dna/schema';
 
 import { collectionEntryKey, collectionKeyIssues, memoryAddType, tokenName, typedStateType, type BindingsYaml, type CollectionEntry } from './bindings';
+import { resolveProvenance, W_PROVENANCE_CONFLICT, W_PROVENANCE_ORPHAN, type AdoptionRecord, type RekeyRecord } from './provenance';
 import { workflowFacts, type Phase, type Workflow } from './schema';
 
 /** `W_UNCOMMITTED_INPUTS` (`spec-017` §1.2): a deduction input differs from `HEAD`; the answer is `HEAD`'s. */
@@ -171,6 +176,10 @@ export interface InstanceHistory {
   readonly links: readonly StepLink[];
   /** Its re-entries, newest first. */
   readonly reentries: readonly Reentry[];
+  /** Its adoption records (§4.8, P4.21), newest first; absent: none. */
+  readonly adoptions?: readonly AdoptionRecord[];
+  /** Its rekey records (§4.8, P4.21), newest first; absent: none. */
+  readonly rekeys?: readonly RekeyRecord[];
 }
 
 /**
@@ -196,7 +205,7 @@ export interface DeductionSnapshot {
   readonly tree: readonly string[];
   /** The start commit of each candidate plan, by its path. */
   readonly starts: ReadonlyMap<string, StartCommit>;
-  /** What each instance's walk holds (§4.8) — records, linkages, re-entries — by the instance's start commit. */
+  /** What each instance's walk holds (§4.8) — records, linkages, re-entries, adoptions, rekeys — by the instance's start commit. */
   readonly history: ReadonlyMap<string, InstanceHistory>;
   /** The transition commits in the walk that name a re-entered element, newest first. */
   readonly transitions: readonly TransitionCommit[];
@@ -316,6 +325,22 @@ export interface DeducedAction {
   };
 }
 
+/**
+ * One type a step's phase adds (`dl-187` rule 2: a `memory.add(type: T)` action or a `{ type: T, path }` produces
+ * entry), with what the step created of it and, when it created none, the elements `workflow adopt` may adopt into
+ * it (`spec-017` §7.11 "Candidates", rule 5; task-294 design D2).
+ */
+export interface StepAddition {
+  readonly type: string;
+  /** The step's created elements of `type` (§4.8 linkage or adoption), ascending `(type, id)`. */
+  readonly created: readonly ElementRef[];
+  /**
+   * `[]` unless `created` is empty: the elements of `type` at `HEAD`, not archived (§4.11), neither owned nor in a
+   * conflict (§4.8), matching the declared rules, ascending `(type, id)`.
+   */
+  readonly candidates: readonly ElementRef[];
+}
+
 /** A leaf step on an instance's frontier (`spec-017` §4.9; the part of §8's `Step` deduction decides). */
 export interface DeducedStep {
   /** `<workflow>.<phase>`, then `@<type>:<id>` or `@<collection>#<key>` when the step runs on a scope. */
@@ -357,6 +382,12 @@ export interface DeducedStep {
   readonly approval: { readonly elements: readonly ElementRef[]; readonly recordNeeded: boolean } | null;
   /** The phase's actions, resolved (§4.1, §4.2), in declared order (task-216). */
   readonly actions: readonly DeducedAction[];
+  /**
+   * The types the phase adds — `memory.add(type: T)` actions, then `{ type: T, path }` entries, deduplicated, in
+   * declared order — each with its created elements and adoption candidates (`spec-017` §7.11, task-294); `[]` when
+   * the phase adds nothing. Internal to `workflow adopt`: `workflow next` does not report it.
+   */
+  readonly additions: readonly StepAddition[];
 }
 
 /** How an `iterate_over` phase's candidates stand (`spec-017` §4.6, §4.7, §8). */
@@ -705,6 +736,52 @@ function matches(field: unknown, wanted: readonly string[]): boolean {
   return have.some((value) => wanted.includes(value));
 }
 
+/**
+ * The `key: value` arguments of a token's parenthesised list, split at top-level commas, in order (quotes and brackets
+ * kept). Called on `memory.add(type: T, …)` tokens, which always carry the list; a part with no `:` is no argument.
+ */
+function tokenArguments(token: string): [string, string][] {
+  const parts: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let current = '';
+  for (const char of token.slice(token.indexOf('(') + 1, token.lastIndexOf(')'))) {
+    if (quote !== null) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") quote = char;
+    else if (char === '[' || char === '{') depth += 1;
+    else if (char === ']' || char === '}') depth -= 1;
+    else if (char === ',' && depth === 0) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  parts.push(current);
+  return parts.flatMap((part): [string, string][] => {
+    const colon = part.indexOf(':');
+    return colon === -1 ? [] : [[part.slice(0, colon).trim(), part.slice(colon + 1).trim()]];
+  });
+}
+
+/** The arguments `workflow adopt` never matches on: the type itself, and the title (`dl-187` rule 5). */
+const UNMATCHED_ARGUMENTS: readonly string[] = ['type', 'title'];
+
+/**
+ * The declared rules of one `memory.add(type: T, …)` action (task-294 design D2): each scalar argument but `type`
+ * and `title`, unquoted, with its tokens resolved in `frames`, as `[field, value]`. A list argument, and one whose
+ * tokens do not all resolve, is no rule.
+ */
+function declaredRules(token: string, frames: readonly Frame[]): [string, string][] {
+  return tokenArguments(token).flatMap(([field, raw]): [string, string][] => {
+    if (UNMATCHED_ARGUMENTS.includes(field) || raw.startsWith('[')) return [];
+    const unquoted = /^(["'])(.*)\1$/s.exec(raw)?.[2] ?? raw;
+    const value = resolveTokens(unquoted, frames).value;
+    return value === null ? [] : [[field, value]];
+  });
+}
+
 // --- The walk ----------------------------------------------------------------------------------------
 
 /** What one evaluation of a workflow on a scope yields. */
@@ -792,6 +869,10 @@ class Deducer {
   constructor(
     private readonly snapshot: DeductionSnapshot,
     elements: readonly Element[],
+    /** Each walk as deduction reads it, provenance resolved (§4.8): records remapped, linkages and adoptions owned. */
+    private readonly histories: ReadonlyMap<string, InstanceHistory>,
+    /** The elements, by `<type>:<id>`, that have an owner or are in a conflict (§4.8): never adoption candidates. */
+    private readonly owned: ReadonlySet<string>,
   ) {
     // Names are unique: the registry refuses a duplicate at load time (`spec-003`), so no entry is overwritten.
     snapshot.workflows.forEach((workflow, i) => {
@@ -816,10 +897,6 @@ class Deducer {
     return this.elements.find((element) => element.id === id) ?? null;
   }
 
-  plans(): readonly Element[] {
-    return this.elements.filter((element) => element.type === PLAN_TYPE);
-  }
-
   private exists(path: string): boolean {
     if (!path.endsWith('/')) return this.tree.has(path);
     return this.snapshot.tree.some((file) => file.startsWith(path));
@@ -836,13 +913,13 @@ class Deducer {
 
   /** What the walk of the instance started at `startCommit` holds (§4.8). */
   private history(startCommit: string): InstanceHistory {
-    return this.snapshot.history.get(startCommit) ?? EMPTY_HISTORY;
+    return this.histories.get(startCommit) ?? EMPTY_HISTORY;
   }
 
   /**
-   * The elements an instance's steps created (§4.8 linkage): the add commits of its walk whose
-   * `WingFoil-Instance` is the instance and whose `WingFoil-Step` is one of `steps` (every step when
-   * `null`), each element once, ascending `(type, id)`. An element `HEAD` does not hold is left out.
+   * The elements an instance's steps created (§4.8 linkage and adoption): the owning claims of its walk — an add
+   * commit's `WingFoil-Step`, or an adoption — whose instance is the instance and whose step key is one of `steps`
+   * (every step when `null`), each element once, ascending `(type, id)`. An element `HEAD` does not hold is left out.
    */
   createdBy(instanceId: string, startCommit: string, steps: readonly string[] | null): Element[] {
     const found = new Map<string, Element>();
@@ -1335,14 +1412,18 @@ class Deducer {
 
     // record — a checkpoint, an `awaits` (always, §4.3 `awaits` row, §5.4), a `created` step that created nothing
     // and has no other evidence (§4.3), or an approval whose phase holds no gate: `workflow finalize` records it (§5.1).
+    // A checkpoint needs its record whatever its step key owns: a linkage or an adoption naming a step that adds
+    // nothing is never `record` evidence (§4.8, `dl-187` rule 4; task-293).
     const approvalRecord = phase.approval !== undefined && exit.held.length === 0;
-    const recordNeeded = phase.awaits !== undefined || approvalRecord || (created.length === 0 && !kinds.some((kind) => kind !== 'created'));
+    const checkpoint = kinds.length === 0;
+    const recordNeeded = phase.awaits !== undefined || approvalRecord || checkpoint || (created.length === 0 && !kinds.some((kind) => kind !== 'created'));
     if (recordNeeded) {
       kinds.push('record');
       if (!this.hasRecord(instanceId, startCommit, stepName, scope, frame?.selfBound === true, reentries)) missing.push('record');
     }
 
     const actions = this.actionsOf(instanceId, startCommit, workflow, p, frames, exit, scope, created, selected, report);
+    const additions = this.additionsOf(phase, frames, created);
     const reentry = newest(reentries);
 
     return {
@@ -1363,10 +1444,39 @@ class Deducer {
         reentryFallback: reentry?.fallback ?? null,
         approval: phase.approval === undefined ? null : { elements: awaitingElements(actions, exit), recordNeeded: approvalRecord },
         actions,
+        additions,
       },
       diagnostics,
       selected,
     };
+  }
+
+  /**
+   * The types `phase` adds, each with the step's created elements of it and, when it created none, its adoption
+   * candidates (`spec-017` §7.11 "Candidates", rule 5; task-294 design D2): an element of `T` at `HEAD`, not archived,
+   * not in {@link Deducer.owned}, that meets the rules of at least one `memory.add(type: T, …)` action of the phase
+   * (every scalar argument but `type` and `title`, literal or with every token resolved in `frames`; a list argument
+   * or one whose tokens do not resolve is no rule) and, for each `{ type: T, path }` entry, whose path is the entry's
+   * path resolved with it as the `T` frame. Never by title or similarity.
+   */
+  private additionsOf(phase: Phase, frames: readonly Frame[], created: readonly Element[]): StepAddition[] {
+    const adds = (phase.actions ?? []).filter((action) => tokenName(action) === 'memory.add');
+    const paths = (phase.produces ?? []).filter((entry): entry is { type: string; path: string } => typeof entry !== 'string');
+    const types: string[] = [];
+    for (const type of [...adds.map(memoryAddType), ...paths.map((entry) => entry.type)]) if (type !== null && !types.includes(type)) types.push(type);
+    return types.map((type) => {
+      const own = created.filter((element) => element.type === type).map(refOf);
+      if (own.length > 0) return { type, created: own, candidates: [] };
+      const ruleSets = adds.filter((action) => memoryAddType(action) === type).map((action) => declaredRules(action, frames));
+      const typed = paths.filter((entry) => entry.type === type);
+      const candidates = this.elements
+        .filter((element) => element.type === type && !isArchivedStatus(element.status) && !this.owned.has(keyOf(element)))
+        .filter((element) => ruleSets.length === 0 || ruleSets.some((rules) => rules.every(([field, value]) => matches(element.frontmatter[field], [value]))))
+        .filter((element) => typed.every((entry) => resolveTokens(entry.path, [...frames, { kind: 'element', type, element, pending: false }]).value === element.path))
+        .map(refOf)
+        .sort(compareRefs);
+      return { type, created: [], candidates };
+    });
   }
 
   /**
@@ -1571,20 +1681,28 @@ function progress(phase: string, state: PhaseProgress['state'], vacuous: boolean
  */
 export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
   const { elements, diagnostics: memoryDiagnostics } = readElements(snapshot);
-  const deducer = new Deducer(snapshot, elements);
+  const plans = elements.filter((element) => element.type === PLAN_TYPE);
 
-  const open = deducer
-    .plans()
+  const open = plans
     .filter((plan) => OPEN_PLAN_STATUSES.includes(plan.status) && scalarText(plan.frontmatter['parent']) === null)
     .map((plan) => {
       const start = snapshot.starts.get(plan.path);
       return { plan, workflowName: scalarText(plan.frontmatter['workflow']) ?? '', start, position: start?.position ?? Number.MAX_SAFE_INTEGER };
     })
     .filter(({ workflowName }) => {
-      const workflow = deducer.workflow(workflowName);
+      const workflow = snapshot.workflows.find((candidate) => candidate.name === workflowName);
       return workflow === undefined || workflowFacts(workflow).startable;
     })
     .sort((a, b) => a.position - b.position || compareText(a.plan.id, b.plan.id));
+
+  // Provenance (§4.8, P4.21): rekeys, orphans and one owner per element, over every walk at once.
+  const provenance = resolveProvenance(
+    snapshot,
+    open.flatMap(({ plan, start }) => (start === undefined ? [] : [{ id: plan.id, startCommit: start.commit }])),
+  );
+  const owned = new Set([...provenance.owners.keys(), ...provenance.conflicts.map((conflict) => keyOf(conflict.element))]);
+  const deducer = new Deducer(snapshot, elements, provenance.history, owned);
+  const provenanceDiagnostics = provenanceDiagnosticsOf(provenance, open, (name) => deducer.workflow(name) !== undefined, plans);
 
   const unknownDiagnostics: Diagnostic[] = [];
   const stepDiagnostics: Diagnostic[] = [];
@@ -1646,9 +1764,51 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
     baseline: { rev: 'HEAD', commit: snapshot.commit },
     active: instances[0]?.instance.id ?? null,
     instances,
-    diagnostics: [...snapshot.registryDiagnostics, ...uncommitted, ...memoryDiagnostics, ...unknownDiagnostics, ...stepDiagnostics],
+    diagnostics: [...snapshot.registryDiagnostics, ...uncommitted, ...memoryDiagnostics, ...unknownDiagnostics, ...provenanceDiagnostics, ...stepDiagnostics],
     gated,
   };
+}
+
+/**
+ * The provenance diagnostics (`spec-017` §2, §4.8; design D3 (a), D4): one `W_PROVENANCE_ORPHAN` per orphan of an
+ * open instance whose workflow the registry loads — an instance of an unknown workflow is already reported by
+ * `W_INSTANCE_WORKFLOW_UNKNOWN` — then one `W_PROVENANCE_CONFLICT` per conflict, in the orders
+ * {@link resolveProvenance} gives. `file` is the instance's plan (for a conflict, the first claim's instance; empty
+ * when no plan of that id is at `HEAD`).
+ */
+function provenanceDiagnosticsOf(
+  provenance: ReturnType<typeof resolveProvenance>,
+  open: readonly { readonly plan: Element; readonly workflowName: string }[],
+  loaded: (workflow: string) => boolean,
+  plans: readonly Element[],
+): Diagnostic[] {
+  const planPath = (id: string): string => (open.find(({ plan }) => plan.id === id)?.plan ?? plans.find((plan) => plan.id === id))?.path ?? '';
+  const reported = new Set(open.filter(({ workflowName }) => loaded(workflowName)).map(({ plan }) => plan.id));
+  const orphans = provenance.orphans
+    .filter((orphan) => reported.has(orphan.instance))
+    .map(
+      (orphan): Diagnostic => ({
+        code: W_PROVENANCE_ORPHAN,
+        severity: 'warning',
+        file: planPath(orphan.instance),
+        path: orphan.commit,
+        message:
+          `${orphan.kind} ${orphan.commit} of ${orphan.instance} names ${orphan.key}, which the registry does not declare: it is evidence of nothing` +
+          (orphan.element === null ? '' : ` and owns nothing (${orphan.element.type}:${orphan.element.id})`),
+      }),
+    );
+  const conflicts = provenance.conflicts.map(
+    (conflict): Diagnostic => ({
+      code: W_PROVENANCE_CONFLICT,
+      severity: 'warning',
+      file: planPath(conflict.claims[0]!.instance),
+      path: `${conflict.element.type}:${conflict.element.id}`,
+      message: `${conflict.element.type}:${conflict.element.id} is claimed on unrelated branches by ${conflict.claims
+        .map((claim) => `${claim.instance} ${claim.step} (${claim.commit})`)
+        .join(', ')}: it counts as created by neither`,
+    }),
+  );
+  return [...orphans, ...conflicts];
 }
 
 /**

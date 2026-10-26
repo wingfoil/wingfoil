@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 1.7
-**Date:** 2026-10-15  
+**Version:** 1.9
+**Date:** 2026-10-25  
 **Status:** Approved
 
 ---
@@ -178,17 +178,20 @@ instance and makes the previous one active. The Memory verbs take a document `<i
 | `wingfoil workflow show <ref>` | Display details of a workflow (phases, steps, directives, Memory structure) | All | 0a, 0b | Shows the workflow resolved: phases, roles and their directives, actions, checks, `produces`, approvals, included workflows nested under their phases |
 | `wingfoil workflow create <name> (--kind main\|sub \| [--startable] [--includable]) [--element <type>] [--description <text>]` | Create new custom workflow file | Morgan, Alex | 2, 4, 6 | Creates `.wingfoil/workflows/custom/<name>.yaml` with one phase and includes it in `workflows.yaml`. Flag-based; interactive creation is post-v0.3 (P4.8). Not auto-removed on DNA change |
 | `wingfoil workflow remove <ref>` | Remove custom workflow after verifying it's not included elsewhere | Morgan, Alex | 2, 4, 6 | Only removes custom workflows (built-in ones cannot be removed). The check always runs: refused while another workflow includes it or an open instance runs it (`spec-017` §7.8) |
+| `wingfoil workflow adopt <ref> [--step <key>] [--element <type:id>] [--plan] [--apply] [--reason <text>]` | Record which step an existing element counts as created by (`--plan` proposes every adoption, `--plan --apply` writes them) | Morgan | 2, 4 | One empty commit per adoption with the provenance trailers; the single form needs `--reason` and any role, `--plan --apply` needs the approver role (`spec-017` §7.11, `dl-187`; new in 0.3.1) |
+| `wingfoil workflow rekey <ref> --from <key> --to <key> --reason <text>` | Remap an open workflow's records from a renamed step key to its new one | Morgan | 2, 4, 6 | One empty commit with the rekey trailers (`WingFoil-Rekey-From`/`-To`); needs the approver role and `--reason`; the same mapping again writes nothing while no record still names the old key (`spec-017` §7.12; new in 0.3.1) |
 
 ### Parameters for Pillar 4 Commands
 
 | Parameter | Type | Description | Where Found | How Managed | Where Saved |
 |-----------|------|-------------|-------------|-------------|-------------|
 | `<name>` | string | Positional on `start` and `create`: workflow name | Listed via `workflow list` or defined in YAML | Matches `[a-z][a-z0-9-]*` | Filename `.wingfoil/workflows/[built-in or custom]/<name>.yaml` |
-| `<ref>` | string | Positional on `end`, `next`, `status`, `finalize`, `show`, `remove`: a workflow name (its most recently started open instance) or an open instance id (`spec-017` §3.3) | `workflow status` output | Required on `show` and `remove`; on `status` the default is every open instance, elsewhere the active instance | N/A (selector) |
+| `<ref>` | string | Positional on `end`, `next`, `status`, `finalize`, `show`, `remove`, `adopt`, `rekey`: a workflow name (its most recently started open instance) or an open instance id (`spec-017` §3.3) | `workflow status` output | Required on `show`, `remove`, `adopt` and `rekey`; on `status` the default is every open instance, elsewhere the active instance | N/A (selector) |
 | `--assigned-to` | string | On `workflow next`: `me`, a member name or email, or a role name | User specifies via flag | Matched against DNA team members and roles | N/A (query parameter only) |
 | `--element` | `<type>:<id>` / `<type>` | On `start`: the element the workflow runs on; on `create`: the Memory type it runs on | User specifies via flag | `spec-008` §7 element-ref | The plan's `element`; the workflow's `element:` |
 | `--title`, `--set` | string | On `start`: the plan's title, and `phase=<v>` / `scope=<v>` overriding a derived plan token | User specifies via flag | `spec-017` §7.1 | The plan element |
 | `--step`, `--reason` | string | On `finalize`: the frontier step to record, by its key, and the reason (required on an approval phase) | `workflow next` output | `spec-017` §7.9 | The finalize commit |
+| `--from`, `--to` | `<workflow>.<phase>` | On `rekey`: the renamed step key, no longer declared, and the key it was renamed to, a declared step of the instance's workflow or of a workflow it includes | The workflow file's history; `W_PROVENANCE_ORPHAN` names the old key | `spec-008` §12, `spec-017` §7.12 | The rekey commit's trailers |
 | `--kind`, `--startable`, `--includable`, `--description` | enum / flag / string | On `create`: the declaration (`--kind main\|sub`, or one or both of the two flags) and the description | User specifies via flag | `spec-008` §12 | `.wingfoil/workflows/custom/<name>.yaml` |
 | `--all` | flag | On `workflow list`; shows every defined workflow instead of only executable-now | User specifies via flag | If set, lists all defined workflows; otherwise only executable-now | N/A (affects query scope only) |
 
@@ -255,7 +258,7 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 | `--verbose` | flag | Show detailed execution logs on stderr (useful for debugging) |
 | `--no-color` | flag | Disable ANSI colours (accepted; no output is coloured yet) |
 | `--no-interactive` | flag | Fail on a missing argument instead of prompting for it (only init prompts) |
-| `--dry-run` | flag | Simulate the command without making changes: print the commit it would make (`{dryRun: true, subject, message, paths, diff}`) and write nothing. Taken by the twenty commands whose operation writes — `memory add`, `memory submit`, `memory approve`, `memory reject`, `memory deprecate`, `memory park`, `memory amend`, `dna set`, `dna add`, `dna update`, `dna remove`, `directive create`, `directive assign`, `directive remove`, `workflow start`, `workflow end`, `workflow finalize`, `workflow create`, `workflow remove`, `agent execute` — and placed after the verb, like the command's own options. It is not a root flag: the read commands, init and mcp refuse it as an unknown option, exit `2` (`spec-008` §2, `task-210`). A refused command is refused the same way in a dry run; agent execute prints the launch plan instead of a commit |
+| `--dry-run` | flag | Simulate the command without making changes: print the commit it would make (`{dryRun: true, subject, message, paths, diff}`) and write nothing. Taken by the twenty-two commands whose operation writes — `memory add`, `memory submit`, `memory approve`, `memory reject`, `memory deprecate`, `memory park`, `memory amend`, `dna set`, `dna add`, `dna update`, `dna remove`, `directive create`, `directive assign`, `directive remove`, `workflow start`, `workflow end`, `workflow finalize`, `workflow create`, `workflow remove`, `workflow adopt`, `workflow rekey`, `agent execute` — and placed after the verb, like the command's own options. It is not a root flag: the read commands, init and mcp refuse it as an unknown option, exit `2` (`spec-008` §2, `task-210`). A refused command is refused the same way in a dry run; agent execute prints the launch plan instead of a commit |
 
 ---
 
@@ -320,6 +323,7 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 - Pillar 4: `workflow list`, `workflow show`, `workflow start`, `workflow end`, `workflow next`, `workflow status`,
   `workflow finalize`, `workflow create`, `workflow remove`
 - Agent: `agent execute`, `agent list`, `agent show`
+- v0.3.1: `workflow adopt`, `workflow rekey` (P4.21, `cp-002`)
 - Pillar 1: `memory park`, `memory amend`, `memory add --workflow`
 - Every writing command: `--dry-run`; `directive assign` and the `dna` write verbs: `--force`
 - *(Note: v0.3 integrates the v0.2 Memory lifecycle verbs into workflow steps — fallback, approval routing — but does
@@ -387,6 +391,15 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 1.9 (2026-10-25) — `workflow rekey` gets its row, per `task-295` (P4.21, `cp-002`, `dl-187` C5).** The row is
+written from `node dist/cli.js workflow rekey --help` on the task's build; `--from` / `--to` get a parameter row and
+`<ref>`'s positional list names `adopt` and `rekey`; the `--dry-run` row names it among the writing commands, now
+twenty-two, and the v0.3 release list notes it under `v0.3.1`.
+
+**Version 1.8 (2026-10-25) — `workflow adopt` gets its row, per `task-294` (P4.21, `cp-002`, `dl-187`).** The row is
+written from `node dist/cli.js workflow adopt --help` on the task's build; the `--dry-run` row names it among the
+writing commands, now twenty-one, and the v0.3 release list notes it under `v0.3.1`.
 
 **Version 1.7 (2026-10-15) — every row states the shipped grammar in one notation, the v0.3 commands get their rows,
 and the stale claims go, per `task-245` (`bug-099`, `bug-100`, `bug-274`, `bug-275`).** Each command row was rewritten
