@@ -24,26 +24,28 @@ Layer (CLI + MCP)**.
 - **License:** MIT · **Distribution:** npm (public) · **Tech:** TypeScript / Node.js 22.12+.
 
 > **Project status: implementation under way.** The release line `rl-v1` is `active`; `minor-v0.1`,
-> `minor-v0.2` and the patch `patch-v0.2.2` are `released` (`wingfoil@0.2.2` on npm), and **`minor-v0.3`
-> is `in-development`** (`docs/04_memory/planning/`). The repository carries a real implementation under
+> `minor-v0.2`, the patch `patch-v0.2.2` and `minor-v0.3` are `released` (`wingfoil@0.3.0` on npm), and **the
+> patch `patch-v0.3.1` is `in-development`** on the maintenance line `release/0.3`, while `main` carries `v0.4`
+> (`docs/04_memory/planning/`). A bug-fix patch `v0.3.2` follows on the same line before `v0.4` (approver
+> ruling of 2026-10-26, recorded in `dl-186`). The repository carries a real implementation under
 > `src/` — ten modules: `core, validation, storage, memory, dna, directives, workflow, cli, mcp, agent` — a
 > packaged `wingfoil` CLI (`package.json` `bin` → `dist/cli.js`) and an MCP server (`wingfoil mcp`), all
 > covered by a full Jest suite (`npm test`). Read, run, test and reason about `src/` as you would in any
 > other codebase.
 >
-> **The command surface** is derived mechanically from `CORE_MODULES` (`src/core/index.ts`) — 33 commands,
+> **The command surface** is derived mechanically from `CORE_MODULES` (`src/core/index.ts`) — 35 commands,
 > each with an entry in `docs/cli-reference.md`:
 > - top level: `init`, `mcp`, `paths`;
 > - `dna`: `show`, `set`, `add`, `update`, `remove`;
 > - `memory`: `add` (with `--set <name>=<value>` for `id_pattern` tokens), `submit`, `approve`, `reject`,
 >   `deprecate`, `amend`, `park`, `history`, `search`;
 > - `directive`: `create`, `assign`, `remove`; `directives`: `list`;
-> - `workflow`: `list`, `show`, `start`, `next`, `status`, `finalize`, `end`, `create`, `remove`;
+> - `workflow`: `list`, `show`, `start`, `next`, `status`, `finalize`, `end`, `adopt`, `rekey`, `create`, `remove`;
 > - `agent`: `execute`, `list`, `show`.
 >
 > **What is not built yet is a subset of what the specs describe (§6):** the workflow commands track a
-> workflow's state — they deduce it, start and end a run, print the next step and record what nothing else
-> completes — but **no step is executed** and **no `checks` runner** evaluates a check (P4.10/P4.12, v1.0).
+> workflow's state — they deduce it, start and end a run, print the next step, record what nothing else
+> completes, adopt an element created outside the run and follow a renamed phase — but **no step is executed** and **no `checks` runner** evaluates a check (P4.10/P4.12, v1.0).
 > Run `node dist/cli.js --help` rather than trusting this list, and where the code and the specs in
 > `docs/01_vision/` / `docs/02_requirements/` disagree about *what should be built*, the specs win (§10.1).
 
@@ -98,8 +100,8 @@ the move. Start from `.wingfoil/README.md`.
 
 | Job | Build | How, from the repository root |
 |-----|-------|-------------------------------|
-| **Memory operations** — every verb that writes a `wf()` commit (`memory add`, `submit`, `approve`, `reject`, `deprecate`, `amend`, `park`), and the workflow commands that write a commit (`workflow start`, `finalize`, `end`, `create`, `remove`) | the **code build**, compiled from your worktree | `npm run build`, then `node dist/cli.js <command>` |
-| **Read commands** — `dna show`, `paths`, `directives list`, `memory search`, `memory history`, `workflow list`, `show`, `next`, `status` — and **MCP** | the **pinned build**, the devDependency `wingfoil-released` (`dl-095`) | `npm run -s wingfoil -- <command>`; the MCP server `.mcp.json` registers (`npm run check:mcp`) |
+| **Memory operations** — every verb that writes a `wf()` commit (`memory add`, `submit`, `approve`, `reject`, `deprecate`, `amend`, `park`), and the workflow commands that write a commit (`workflow start`, `finalize`, `end`, `adopt`, `rekey`, `create`, `remove`) | the **code build**, compiled from your worktree | `npm run build`, then `node dist/cli.js <command>` |
+| **Read commands** — `dna show`, `paths`, `directives list`, `memory search`, `memory history`, `workflow list`, `show`, `next`, `status` (on the code build while the pin is 0.3.0, below) — and **MCP** | the **pinned build**, the devDependency `wingfoil-released` (`dl-095`) | `npm run -s wingfoil -- <command>`; the MCP server `.mcp.json` registers (`npm run check:mcp`) |
 
 - The pinned version is what `package.json` declares for `wingfoil-released`; `npm run -s wingfoil --
   --version` prints it. It moves forward only, to published builds, through `release-planning`'s
@@ -227,7 +229,9 @@ complete, as an empty commit with the subject `workflow: finalize <instance-id> 
 the trailer paragraph `WingFoil-Phase: <workflow>.<phase> completed`, `WingFoil-Instance: <instance-id>`,
 `WingFoil-Element: <type>:<id>` or `WingFoil-Item: <collection>#<key>` (none when unscoped) and
 `WingFoil-Version:` (`src/core/workflow-finalize.ts`, `spec-017` §7.9). `memory history` does not read it as a
-Memory operation; the workflow deduction reads its trailers.
+Memory operation; the workflow deduction reads its trailers. `workflow adopt` and `workflow rekey` write records of
+the same kind (`workflow: adopt <instance-id> <step-key> <type>:<id>`, `workflow: rekey <instance-id> <from> <to>`,
+`git-conventions` §4/§8), which the deduction reads too (P4.21).
 
 **One operation, one commit — two declared exceptions:**
 - **The supersede pair.** Approving an `adr` or `tech-spec` whose `supersedes:` names an element of its
@@ -453,7 +457,8 @@ non-blank (`--reason` itself stays optional, `dl-027`).
             - `e2e-smoke` *(dl-023: `fresh-init` → `drive-cli` → `mcp-registration` → `gate`)* →
               `release-submit` (`pre-release-checks` → `enter-releasing` → `approve-release`) →
               `release-publishing` (`release-commit` → `staging-rehearsal` → `tag` on the integration branch →
-              `publish` → `mark-released`) → `release-health` *(dl-089: `measure` → `compare` → `propose`
+              `publish` → `mark-released`; a patch's `release/X.Y` is then merged forward into `main` by hand, no phase declares it yet, `git-conventions` §1) →
+              `release-health` *(dl-089: `measure` → `compare` → `propose`
               against `docs/08_health/metrics.yaml`; not a gate)* → `retrospective` (`explore` →
               `collect-feedback` → `additional-points` → `capture` → `approve`, → decision-logs).
     - `sunset` → `end-of-life`.
@@ -468,12 +473,14 @@ non-blank (`--reason` itself stays optional, `dl-027`).
 
 Phase completion is **deduced** (no stored `status:`, `spec-017`): Memory-backed phases from element
 status at a commit and the commit history reachable from it, spec/doc phases from the existence of their
-`produces:` artifacts, and a step nothing else completes from the record `workflow finalize` commits.
+`produces:` artifacts, and a step nothing else completes from the record `workflow finalize` commits; an adoption counts as a step's
+created element, and a rekey maps an old step key to its renamed one (P4.21).
 
 > **The workflow commands track; they do not execute.** `workflow start <name>` records a run as an active
 > `plan` element and prints its first step; `workflow next` prints the next step (its verb, role, element,
 > directives and bindings); `workflow status` lists the open runs and pending approvals; `workflow finalize` records a step no
-> Memory or file evidence can complete; `workflow end` moves the plan to `done`; `workflow list` / `show` read
+> Memory or file evidence can complete; `workflow end` moves the plan to `done`; `workflow adopt` links an element added without `--workflow` to its step and
+> `workflow rekey` (approver) follows a renamed phase; `workflow list` / `show` read
 > the definitions. **No step is executed and no check is evaluated** (P4.10/P4.12, v1.0): the work of each step
 > is done by you, by hand or with the verbs of §5.1. So whenever you are asked to **start a workflow** (main
 > *or* sub), open its `plan` (`workflow start`, or `memory add --type plan` for a phase run by hand) and write
