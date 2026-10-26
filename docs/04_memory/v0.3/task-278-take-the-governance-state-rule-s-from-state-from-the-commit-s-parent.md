@@ -15,6 +15,7 @@ bug: ["bug-308-the-governance-state-rule-takes-a-transition-s-from-state-from-th
                        # dev-loop keeps the source bug's state in sync with this task via bug.sync_state
 depends_on: ["task-208-enforce-governance-check-ci-hooks-branch-protection-advisory"]   # optional — ids of tasks whose Execution Notes constrain this one (dl-015); authored at planning time, may be appended during design
 tmpl_version: 261007   # Orignal template version
+wave: "w3"
 ---
 
 ## Description
