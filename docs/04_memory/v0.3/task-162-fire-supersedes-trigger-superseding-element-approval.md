@@ -11,6 +11,7 @@ ref: "dl-065"
 bug: []
 depends_on: ["task-126-declare-closed-wf-operation-grammar-bracket-set-state"]
 tmpl_version: 260703
+wave: "w1"
 ---
 
 ## Description
