@@ -2,7 +2,7 @@
 id: "release-submit-rel-v0.1-plan"
 type: plan
 title: "Release-submit — v0.1 (Project Memory + Project DNA)"
-status: draft
+status: active
 workflow: "release-submit"
 phase: "rel-v0.1"
 element: "minor-v0.1"
