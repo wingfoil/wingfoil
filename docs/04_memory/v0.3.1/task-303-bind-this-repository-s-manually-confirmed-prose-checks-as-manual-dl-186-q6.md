@@ -269,6 +269,91 @@ passed`, `Tests: 122 passed`. A correct implementation passes the red tests with
 matches (`dev-loop-v1-5`, `-v1-6`, `-v2-0`, `workflow-integration-branch`, `retrospective-collect-feedback`,
 `-notes`, `-patch-health`).
 
+### green (developer, 2026-10-26)
+
+**Green commit `0458b003`**: `.wingfoil/workflows/bindings.yaml` (2.5 → 2.6) and
+`test/core/workflow-repository-conformance.test.ts`, the warning list, in one commit (`task-298` D1 (a); red did not
+touch the file).
+- `bindings.yaml`: the 17 entries come after `demo.rendered` in six commented groups, each with the reason a human
+  confirms it. The prose names are double-quoted keys (D5). The header's "Deliberately unbound" paragraph now has two
+  parts: the manual-on-purpose checks, and the checks a command could decide, which stay unbound (D1 (a)). The
+  history segment `2.6 task-303 (dl-186 Q6, dl-172 (a)): …` opens with its number, as red's AC 2 (c) reads it.
+- Conformance test: the 21 rows are removed (`grep -c '^      \["'` → 65), and so are their comments that said these
+  checks had no command (`acceptance-criteria.consistent`, `feedback-notes.recorded`). The `claims.rerun` /
+  `retrospective.present` comment and the build-backlog one now say what is bound manual. The array and the docblock
+  each gain a `task-303` line.
+
+**red → green.** I ran `npx jest --maxWorkers=2 test/core/workflow-manual-prose-checks.test.ts
+test/core/dev-loop-v1-6.test.ts test/core/workflow-manual-check.test.ts test/docs/presentation.test.ts
+test/core/workflow-repository-conformance.test.ts` after `0458b003` → `Test Suites: 5 passed`, `Tests: 138 passed`.
+At red, the first four of these files gave 6 failed and 116 passed.
+
+### refactor (developer, 2026-10-26)
+
+**Refactor commit `7a61b963`** (D3 (a)), comments only:
+- `retrospective.yaml` 1.7 → 1.8: the three "(unbound, a warning in v0.3)" comments (explore, collect-feedback,
+  additional-points) now say the check is bound `manual: true`. The history segment
+  `1.8 task-303 … comments only` is appended.
+- `dev-loop.yaml` 2.1 → 2.2: the header now says the criteria reading and the reviewer's two re-checks are bound
+  manual, and the rest stay warnings. The history follows the file's `2.2 … (prev 2.1 …)` nesting. The version line
+  is one `(` short both before and after (`39 38` at HEAD, `42 41` after); that imbalance was already there.
+  Baselines: `git show release/0.3:<file> | grep -m1 ^version` → 1.7 and 2.1.
+- `.wingfoil/WORKFLOW.md` (it has no `version:`): the prose-checks sentence names the manual form and what stays
+  unbound.
+- `src/workflow/bindings.ts` `tokenName` TSDoc: a binding key equal to the prose binds it. Comment only; no
+  behaviour change.
+- Conformance test: the `task-298` comment "(86 warnings …)" now reads "(86 warnings at task-298 …)".
+
+**Same-class check.** `git grep -n "unbound, a warning\|86 warnings\|no binding key names\|which no$"` outside
+Memory, plans and retrospectives, run before these edits → the three `retrospective.yaml` lines, the TSDoc, the
+conformance comment and one unrelated hit in `test/dna/edit.test.ts`. All are fixed except the unrelated hit.
+`release-health.yaml:37` is left alone: that check stays unbound, and its stale reference is follow-up F43.
+
+**Gates** (worktree with the `spec-017` amendment uncommitted):
+- `npx jest` on the 12 suites that read the touched workflow files (`dev-loop-v1-5`, `-v1-6`, `-v2*`,
+  `workflow-integration-branch`, `retrospective-*` ×3, `workflow-md`, conformance, `bindings`,
+  `workflow-manual-prose-checks`, `version-bump`) → `Test Suites: 12 passed`, `Tests: 223 passed`.
+- Full suite with coverage, run after `waitslot.sh` with `npx jest --coverage --maxWorkers=2` (tracked in the
+  background) → exit 0. `Test Suites: 505 passed, 505 total`, `Tests: 8917 passed, 8917 total`.
+  `All files | 99.37 | 97.51 | 98.17 | 99.73` is at or above every column of the w0 baseline (99.34 / 97.39 / 98.03 /
+  99.71) and equal to `task-301`'s 99.37 / 97.51 / 98.17 / 99.73.
+- `npm run -s lint` → exit 0. `npm run -s docs:api` → exit 0. `npm run -s typecheck` (both configs, under the
+  slot) → exit 0.
+- `npm run -s check:mcp` → exit 0. It shows only the three `bug-414 (task-298)` known failures (`wingfoil://workflows`,
+  `-/next`, `-/status`), and "the build under development (dist/cli.js) … every listed Resource read and Prompt get
+  answered".
+- `node scripts/check-governance.cjs --root "$PWD" --base release/0.3` → exit 0, "gated: 0 findings on 0 commits",
+  "history: 0 findings on 0 commits".
+- Re-measure on the code build:
+  - `node dist/cli.js workflow status` in the console → "66 diagnostic(s)". `--format json` gives 65
+    `W_WORKFLOW_UNBOUND_TOKEN` plus one `W_UNCOMMITTED_INPUTS`, which names the uncommitted `spec-017` amendment.
+  - With the amendment stashed, `workflow status` → "65 diagnostic(s)", and the amendment was restored with
+    `git stash pop`.
+- `git rev-parse --short release/0.3` → `98fccec0`: no sync needed.
+
+### self-review (developer, 2026-10-26)
+
+- **AC 1:** red's 44 `it.each` rows give `unbound` at `HEAD`. Each manual binding carries its reason as a group
+  comment in `bindings.yaml`, and the full table is in the design. No check that a command could decide is bound
+  manual (design gate D1 (a), D2 (a)). No `run` binding was added (D4).
+- **AC 2:** 86 → 65 warnings at `HEAD`. The conformance list was updated in the same commit as `bindings.yaml`
+  (`0458b003`). `bindings.yaml` was bumped once, 2.5 → 2.6, against `release/0.3`. The `spec-017` §12 re-measure is
+  the pending amendment below.
+- **AC 3:** `git diff 98fccec0 HEAD -- .wingfoil/workflows/bindings.yaml | grep demo.rendered` shows only context
+  lines; the entry is unchanged. `presentation.test.ts` and `workflow-manual-check.test.ts` pass in the full run.
+- **Positive cases:** red's AC 2 (b) also checks that 65 warnings remain, and AC 1's unbound list is the positive
+  side of AC 2 (a)'s manual list.
+- **T4:** `git log --first-parent --no-merges --format=%h c6326603..HEAD -- test/core/workflow-manual-prose-checks.test.ts
+  test/core/dev-loop-v1-6.test.ts` → empty, and `git diff --stat c6326603 HEAD` on the same two files → empty.
+- No linked bugs (`bug: []`).
+
+### Pending amendments (approver)
+
+- `spec-017-workflow-commands-and-state-deduction`: adds a §12 paragraph "Re-measured at `task-303`" and a dated
+  Revision note. Additions only: `git diff --stat` on the spec → 16 insertions, 0 deletions. Proposed:
+  `--reason "Record the re-measure of §12 after task-303 binds manual: true the 17 prose checks whose condition no program can decide (dl-186 Q6, dl-172 (a), design gate D1 (a)): 27 workflows, 105 phases, 0 errors and 65 W_WORKFLOW_UNBOUND_TOKEN warnings over 44 check names, 86 before; 21 occurrences bound manual, 22 with demo.rendered; 17 checkpoints unchanged."`
+  Merge order: this amendment comes before any `spec-017` amendment `task-302` prepares.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -276,3 +361,12 @@ matches (`dev-loop-v1-5`, `-v1-6`, `-v2-0`, `workflow-integration-branch`, `retr
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The plan's W2 note ("the eight unbound checks of the four specification sub-workflows are bound") was written
+  before the classification rule existed. Under D1 (a), five of those eight and three of `specification-downcast`'s
+  checks are bound, and `backlog-export`'s three stay unbound (design gate, `4d6051c9`). Proposal: a planning note
+  that predicts a binding should name the rule it assumes.
+- A prose binding key repeats the check's prose in two files: rewording a check unbinds it silently, and only the
+  conformance list catches it (D5). Follow-ups F41–F44 (held from design F-a…F-d) would bind more of the 65 as named,
+  `run`-bound tokens.
+
