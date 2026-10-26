@@ -6,15 +6,19 @@ kind: sub
 description: >-
   Translate MVP user stories into deterministic Gherkin scenarios (Given-When-Then),
   eliminating interpretive ambiguity. One happy path + one edge/error path per story.
-version: 1.0
+version: 1.1                     # 1.1 bug-389 (task-301): every phase produces its module's output directory, so it completes by produces evidence instead of a workflow finalize
 
 phases:
   - name: isolate-mvp
     description: "Select only [MVP] user stories."
     role: qa
+    produces:
+      - "docs/02_requirements/02_bdd/features/"
   - name: write-scenarios
     description: "For each story write Gherkin scenarios with concrete examples."
     role: qa
+    produces:
+      - "docs/02_requirements/02_bdd/features/"
     checks:
       post:
         - "each story has >=1 happy path and >=1 edge/error path"

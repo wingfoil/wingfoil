@@ -16,6 +16,8 @@
  * - AC 4 (red-first): spec-017 §12's deduction consequences re-measured — the checkpoint phases and the
  *   approvals recorded by `workflow finalize`, and the `{ type, path }` owner of each rewritten `produces`.
  * - AC 6 (red-first): `release-line-cycle` runs the same `align-agent-docs` phase as `user-docs` (`dl-025`).
+ * - task-301 AC 2 / AC 3 (red-first, `bug-389`): the eleven phases of the four specification sub-workflows declare
+ *   their module's output directory as `produces`, so they leave the checkpoint list (28 → 17).
  * - `dl-153` (A): the first `workflows/bindings.yaml` carries `format: 1`; `tests.coverage(min: N)` restates
  *   `jest.config.js`'s threshold, which its binding cannot pass.
  *
@@ -290,20 +292,9 @@ function measure(workflows: readonly Workflow[]): { checkpoints: string[]; final
 }
 
 describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => {
-  it('28 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 27 again from task-219: release-publishing.release-commit, while staging-rehearsal produces its transcript; 28 from task-222: release-health.propose writes into the report compare produced; 29 from task-212: vision-change.update-vision; 30 from task-230: wave.re-plan, the re-plan checkpoint of dl-100 §2; 28 from task-244: release-submit.pre-release-checks produces the candidate’s test-results summary and release-publishing.publish the tag run’s, dl-136)', () => {
+  it('17 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 27 again from task-219: release-publishing.release-commit, while staging-rehearsal produces its transcript; 28 from task-222: release-health.propose writes into the report compare produced; 29 from task-212: vision-change.update-vision; 30 from task-230: wave.re-plan, the re-plan checkpoint of dl-100 §2; 28 from task-244: release-submit.pre-release-checks produces the candidate’s test-results summary and release-publishing.publish the tag run’s, dl-136; 17 from task-301: the eleven phases of user-story-mapping, specification-by-examples, volere-requirements and backlog-export produce their module’s output directory, bug-389)', () => {
     expect(measure(registry().workflows).checkpoints).toEqual([
       'vision-change.update-vision',
-      'user-story-mapping.backbone',
-      'user-story-mapping.vertical-explosion',
-      'user-story-mapping.mvp-cut',
-      'specification-by-examples.isolate-mvp',
-      'specification-by-examples.write-scenarios',
-      'volere-requirements.extract-requirements',
-      'volere-requirements.apply-volere-shell',
-      'volere-requirements.group-by-macro-area',
-      'backlog-export.generate-records',
-      'backlog-export.map-dependencies',
-      'backlog-export.validate',
       'release-planning.advance-pinned-build',
       'wave.re-plan',
       'dev-loop.red',
@@ -320,6 +311,28 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'retrospective.additional-points',
       'retrospective.approve',
       'end-of-life.archive',
+    ]);
+  });
+
+  it('the eleven specification sub-workflow phases produce their module\'s output directory (task-301, bug-389, dl-186 S3-b)', () => {
+    const downcast = ['user-story-mapping', 'specification-by-examples', 'volere-requirements', 'backlog-export'];
+    const declared: [string, unknown][] = [];
+    for (const name of downcast) {
+      const workflow = registry().workflows.find((w) => w.name === name)!;
+      for (const phase of workflow.phases) declared.push([`${name}.${phase.name}`, phase.produces]);
+    }
+    expect(declared).toEqual([
+      ['user-story-mapping.backbone', ['docs/02_requirements/01_user_story_map/']],
+      ['user-story-mapping.vertical-explosion', ['docs/02_requirements/01_user_story_map/']],
+      ['user-story-mapping.mvp-cut', ['docs/02_requirements/01_user_story_map/']],
+      ['specification-by-examples.isolate-mvp', ['docs/02_requirements/02_bdd/features/']],
+      ['specification-by-examples.write-scenarios', ['docs/02_requirements/02_bdd/features/']],
+      ['volere-requirements.extract-requirements', ['docs/02_requirements/03_sard/']],
+      ['volere-requirements.apply-volere-shell', ['docs/02_requirements/03_sard/']],
+      ['volere-requirements.group-by-macro-area', ['docs/02_requirements/03_sard/']],
+      ['backlog-export.generate-records', ['docs/03_backlog/04_backlog/']],
+      ['backlog-export.map-dependencies', ['docs/03_backlog/04_backlog/']],
+      ['backlog-export.validate', ['docs/03_backlog/04_backlog/']],
     ]);
   });
 
