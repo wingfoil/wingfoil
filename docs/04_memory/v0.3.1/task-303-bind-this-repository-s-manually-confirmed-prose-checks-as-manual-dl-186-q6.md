@@ -232,6 +232,43 @@ Rulings on the design decisions above:
 - D5 accepted: the prose check text is the binding key in `bindings.yaml`; no check is renamed in the workflow files.
 - Candidate findings F-a…F-d held as follow-ups F41–F44 for the ingest after the `v0.3.1` tag.
 
+### red (qa, 2026-10-26)
+
+**Red commit `c6326603`** (T4 is measured from it). Files: NEW `test/core/workflow-manual-prose-checks.test.ts`;
+`test/core/dev-loop-v1-6.test.ts` (three `it.each` rows `'unbound'` → `'manual'`, and the docblock sentence on
+unbound checks now names the three bound manual). `test/core/workflow-repository-conformance.test.ts` is NOT
+touched: green edits its warning list in the commit of `bindings.yaml` (`task-298` D1 (a)), so it fails after
+`bindings.yaml` changes until that edit.
+
+**Baseline** (before any edit, `4d6051c9`): `npx jest test/core/dev-loop-v1-6.test.ts
+test/core/workflow-manual-check.test.ts test/docs/presentation.test.ts
+test/core/workflow-repository-conformance.test.ts --maxWorkers=2` → `Test Suites: 4 passed`, `Tests: 90 passed`.
+
+| AC | Class | Test(s) | At red |
+|----|-------|---------|--------|
+| 1 | characterization | `workflow-manual-prose-checks` "task-303 AC 1": the list holds 44 distinct names, none of the 17; `it.each` over the 44 names (the design's ii/iii rows, as `tokenName` cuts them) → `resolveToken(name, 'check', bindings)` `toEqual({ kind: 'unbound', source: 'none' })` | 45 pass (and after green, below) |
+| 2 (a) | red-first | "the manual check occurrences at HEAD are exactly the 21 this task binds plus demo.rendered": every `checks.pre`/`post` occurrence resolving `manual`, `[workflow, path, tokenName]`, registry order → the design's 22 rows | fails at `:142` `expect(manualCheckRows()).toEqual([` — received only `["user-docs","phases[1].checks.post[2]","demo.rendered"]` |
+| 2 (b) | red-first | "the registry warns 65 times (86 → 65) …": length 65; every diagnostic a `W_WORKFLOW_UNBOUND_TOKEN` warning; no token naming one of the 17 (compared by `tokenName` equality, not substring: "no duplicate IDs" is a substring of row 7) | fails at `:170` `expect(diagnostics.length).toBe(65)` — Received: 86 |
+| 2 (c) | red-first | "bindings.yaml is bumped to at least 2.6, with a task-303 history entry numbered at least 2.6 (bug-314)": working-tree `version:` ≥ 2.6; the `;`-segments of its comment opening with a number and naming `task-303`, max ≥ 2.6 | fails at `:178` `toBeGreaterThanOrEqual(2.6)` — Received: 2.5 |
+| 2 | red-first | `dev-loop-v1-6` "design:acceptance-criteria.consistent / review:claims.rerun / review:rereview.previous-reject is shown with binding kind manual, never evaluated" | each fails at `:220` `expect(entry!.binding.kind).toBe(kind)` — Expected "manual", Received "unbound" |
+| 3 | characterization | no new test: `test/docs/presentation.test.ts` (`demo.rendered` `toEqual({ manual: true })`) and `test/core/workflow-manual-check.test.ts` AC 3; AC 2 (a)'s rows include `demo.rendered` at `user-docs` `phases[1].checks.post[2]` | pass (49 and 4) |
+
+**Run at red:** `npx jest test/core/workflow-manual-prose-checks.test.ts test/core/dev-loop-v1-6.test.ts
+test/core/workflow-manual-check.test.ts test/docs/presentation.test.ts --maxWorkers=2 --json` → per file:
+`workflow-manual-prose-checks` 3 failed / 45 passed; `dev-loop-v1-6` 3 failed / 18 passed; `workflow-manual-check`
+4 passed; `presentation` 49 passed — 6 failed, 116 passed. Every failure is an assertion, none a crash.
+`npx tsc --noEmit -p tsconfig.json` → exit 0 (no new export); `npx eslint` on both files → exit 0.
+
+**Validation against the design's probe.** A scratch clone of the developer's probe clone (`HEAD` = the probe's
+17 entries, `version: 2.6`), plus one committed history segment `2.6 task-303 (dl-186 Q6, dl-172 (a)): …` on the
+version line (the probe had none), with the two red files copied in: the same four files → `Test Suites: 4
+passed`, `Tests: 122 passed`. A correct implementation passes the red tests without edits.
+
+**Versions pinned by equality.** None for the files green/refactor bump: `grep -rn` over `test/` for
+`dev-loop.yaml` / `retrospective.yaml` version pins finds only "at least" comparisons and history-segment
+matches (`dev-loop-v1-5`, `-v1-6`, `-v2-0`, `workflow-integration-branch`, `retrospective-collect-feedback`,
+`-notes`, `-patch-health`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
