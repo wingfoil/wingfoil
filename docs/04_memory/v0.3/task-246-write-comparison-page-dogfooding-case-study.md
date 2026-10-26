@@ -11,6 +11,7 @@ ref: "dl-128"
 bug: []
 depends_on: ["task-141-reposition-brief-governance-layer-make-determinism-index-composite", "task-234-publish-documentation-site-api-reference-llms-txt-index", "task-241-compare-runs-write-proposals-backfill"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description
