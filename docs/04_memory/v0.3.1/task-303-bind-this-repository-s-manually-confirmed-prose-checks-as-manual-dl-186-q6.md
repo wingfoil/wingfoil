@@ -219,6 +219,19 @@ parity suite would bind 40–44 as `workflow-md.complete` did for WORKFLOW.md. (
 comment "Unbound until scripts/release-health/ ships its report check (task-231, task-241)": those tasks are done
 and no report check exists. (F-d) A Memory query with an exit status would bind rows 17, 22, 23, 25, 26, 38, 52.
 
+#### Design gate (approver, 2026-10-26)
+
+Rulings on the design decisions above:
+- D1 (a) accepted: `manual: true` only for a condition no program can decide (a reading or a judgement); a check a
+  deterministic command could decide stays unbound, even when that command does not exist yet. 17 names (21
+  occurrences) bound manual, 44 names (65 occurrences) unbound; 86 → 65 warnings.
+- D2 (a) accepted: `phase-branch-merged-to-integration-branch` stays unbound (`task-288` D3).
+- D3 (a) accepted: the stale comments are fixed in this task — `retrospective.yaml` 1.7 → 1.8 and `dev-loop.yaml`
+  2.1 → 2.2 (header-only bumps), `.wingfoil/WORKFLOW.md`, the `tokenName` TSDoc in `src/workflow/bindings.ts`.
+- D4 accepted: no `run` binding in this task.
+- D5 accepted: the prose check text is the binding key in `bindings.yaml`; no check is renamed in the workflow files.
+- Candidate findings F-a…F-d held as follow-ups F41–F44 for the ingest after the `v0.3.1` tag.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
