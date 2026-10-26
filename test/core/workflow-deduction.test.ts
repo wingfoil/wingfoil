@@ -12,6 +12,8 @@
  *   `test/workflow/deduce-determinism.test.ts`.
  * - AC 6: BDD P4.13 sc. 1–2, derived from Memory alone (no `.wingfoil/state/`).
  * - AC 7: BDD P4.11 — the deduction reuses `validateFrontmatterState` (characterization).
+ * - task-301 AC 1 (`bug-389`): this repository's six v0.1 plans carry their `plan` frontmatter, so no
+ *   `W_MEMORY_UNREADABLE` is left; AC 2: the real specification sub-workflows complete by `produces`.
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -19,6 +21,7 @@ import { join } from 'path';
 import { deduceWorkflowStateAtHead, loadWorkflowRegistryAtHead, readDeductionSnapshotAtHead, selectWorkflowInstance, W_UNCOMMITTED_INPUTS, type Deduction, type InstanceDeduction } from '../../src/core';
 import { resolveStateMachine, validateFrontmatterState } from '../../src/memory/state-machine';
 import { MemoryYaml } from '../../src/memory/schema';
+import { splitFrontmatter } from '../../src/storage';
 import { parseYaml, ValidationError } from '../../src/validation';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
@@ -557,20 +560,121 @@ describe('task-198 AC 7 — BDD P4.11 sc. 1–3 still hold; deduction reuses val
   });
 });
 
-describe('task-198 review F3 — this repository: the six pre-dl-019 plans without frontmatter (spec-017 §1.4)', () => {
-  it('reports exactly the six, not the grandfathered top-level X_* plans', () => {
-    const root = join(__dirname, '../..');
-    const noFrontmatter = deduceWorkflowStateAtHead(root)
-      .diagnostics.filter((d) => d.code === 'W_MEMORY_UNREADABLE' && d.message.endsWith(': no frontmatter'))
-      .map((d) => d.file);
-    expect(noFrontmatter).toEqual([
-      'docs/05_plans/rl-v1/initial-design-rl-v1-plan.md',
-      'docs/05_plans/rl-v1/rel-v0.1/dev-loop-rel-v0.1-plan.md',
-      'docs/05_plans/rl-v1/rel-v0.1/release-implementation-rel-v0.1-plan.md',
-      'docs/05_plans/rl-v1/rel-v0.1/release-planning-rel-v0.1-plan.md',
-      'docs/05_plans/rl-v1/rel-v0.1/release-submit-rel-v0.1-plan.md',
-      'docs/05_plans/rl-v1/rel-v0.1/retrospective-and-config-bootstrap-plan.md',
-    ]);
+describe('task-198 review F3, task-301 AC 1 — this repository: the six pre-dl-019 plans carry their plan frontmatter (spec-017 §1.4, bug-389, dl-186 S3-b)', () => {
+  const root = join(__dirname, '../..');
+  /** The design's table (task-301 Execution Notes, approver rulings D1–D2): `[path, workflow, phase, element, parent, release]`. */
+  const SIX: [string, string, string, string, string, string][] = [
+    ['docs/05_plans/rl-v1/initial-design-rl-v1-plan.md', 'initial-design', 'rl-v1', 'rl-v1', 'release-line-cycle.initial-design', ''],
+    ['docs/05_plans/rl-v1/rel-v0.1/dev-loop-rel-v0.1-plan.md', 'dev-loop', 'rel-v0.1', 'minor-v0.1', 'release-cycle.implementation', 'v0.1'],
+    ['docs/05_plans/rl-v1/rel-v0.1/release-implementation-rel-v0.1-plan.md', 'dev-loop', 'rel-v0.1', 'minor-v0.1', 'release-cycle.implementation', 'v0.1'],
+    ['docs/05_plans/rl-v1/rel-v0.1/release-planning-rel-v0.1-plan.md', 'release-planning', 'rel-v0.1', 'minor-v0.1', 'release-cycle.planning', 'v0.1'],
+    ['docs/05_plans/rl-v1/rel-v0.1/release-submit-rel-v0.1-plan.md', 'release-submit', 'rel-v0.1', 'minor-v0.1', 'release-cycle.submit', 'v0.1'],
+    ['docs/05_plans/rl-v1/rel-v0.1/retrospective-and-config-bootstrap-plan.md', 'retrospective', 'rel-v0.1', 'minor-v0.1', 'release-cycle.retrospective', 'v0.1'],
+  ];
+  const stem = (path: string): string => path.replace(/^.*\//, '').replace(/\.md$/, '');
+
+  it('reports no W_MEMORY_UNREADABLE at all, and none of the six ids is a deduced instance', () => {
+    const deduction = deduceWorkflowStateAtHead(root);
+    expect(deduction.diagnostics.filter((d) => d.code === 'W_MEMORY_UNREADABLE').map((d) => [d.file, d.message])).toEqual([]);
+    const ids = deduction.instances.map((entry) => entry.instance.id);
+    for (const [path] of SIX) expect(ids).not.toContain(stem(path));
+  });
+
+  it('each of the six carries, at HEAD, the plan frontmatter of the design table (type plan, status done, a title)', () => {
+    const actual = SIX.map(([path]) => {
+      const { frontmatter } = splitFrontmatter(git(root, ['show', `HEAD:${path}`]));
+      const fields = (frontmatter === null ? {} : parseYaml(frontmatter, path)) as Record<string, unknown>;
+      return {
+        path,
+        id: fields['id'],
+        type: fields['type'],
+        status: fields['status'],
+        workflow: fields['workflow'],
+        phase: fields['phase'],
+        element: fields['element'],
+        parent: fields['parent'],
+        release: fields['release'],
+        titled: typeof fields['title'] === 'string' && (fields['title'] as string).trim() !== '',
+      };
+    });
+    expect(actual).toEqual(
+      SIX.map(([path, workflow, phase, element, parent, release]) => ({ path, id: stem(path), type: 'plan', status: 'done', workflow, phase, element, parent, release, titled: true })),
+    );
+  });
+});
+
+describe('task-301 AC 2 — the real specification sub-workflows complete by produces (spec-017 §4.3, §4.5, bug-389)', () => {
+  const root = join(__dirname, '../..');
+  /** The real files (with `.wingfoil/memory.yaml` and `.wingfoil/dna.yaml`), as this repository's HEAD holds them — not hand-written shapes. */
+  const REAL = [
+    'workflows/custom/specification-downcast.yaml',
+    'workflows/custom/user-story-mapping.yaml',
+    'workflows/custom/specification-by-examples.yaml',
+    'workflows/custom/volere-requirements.yaml',
+    'workflows/custom/backlog-export.yaml',
+  ];
+  /** A minimal main that includes specification-downcast, then a checkpoint. */
+  const SPEC_FLOW = `name: spec-flow
+kind: main
+phases:
+  - name: specification
+    include: specification-downcast
+  - name: wrap-up
+`;
+  /** One committed file under each of the four modules' output directories. */
+  const ARTEFACTS: Record<string, string> = {
+    'docs/02_requirements/01_user_story_map/00_index.md': '# story map\n',
+    'docs/02_requirements/02_bdd/features/p1-memory/add.feature': 'Feature: add\n',
+    'docs/02_requirements/03_sard/01_architecture.md': '# SARD\n',
+    'docs/03_backlog/04_backlog/backlog.json': '[]\n',
+  };
+
+  function realProject(withArtefacts: boolean): string {
+    const repo = makeTempGitRepo();
+    const files = ['workflows/custom/spec-flow.yaml', ...REAL];
+    writeFixtureFile(repo, '.wingfoil/workflows.yaml', `version: 1.0\ninclude:\n${files.map((file) => `  - ${file}\n`).join('')}`);
+    writeFixtureFile(repo, '.wingfoil/workflows/custom/spec-flow.yaml', SPEC_FLOW);
+    for (const file of REAL) writeFixtureFile(repo, `.wingfoil/${file}`, git(root, ['show', `HEAD:.wingfoil/${file}`]));
+    writeFixtureFile(repo, '.wingfoil/memory.yaml', git(root, ['show', 'HEAD:.wingfoil/memory.yaml']));
+    // The real dna.yaml: it declares the roles (product-owner, qa, architect) the real sub-workflows name.
+    writeFixtureFile(repo, '.wingfoil/dna.yaml', git(root, ['show', 'HEAD:.wingfoil/dna.yaml']));
+    writeFixtureFile(repo, 'README.md', '# fixture\n');
+    commitAll(repo, 'fixture configuration (real specification sub-workflows, memory.yaml and dna.yaml)');
+    if (withArtefacts) commitFiles(repo, ARTEFACTS, 'the four modules\' output');
+    commitFiles(repo, { 'docs/05_plans/rl-x/spec-flow-x-plan.md': plan('spec-flow-x-plan', 'spec-flow', 'active') }, 'start spec-flow');
+    return repo;
+  }
+
+  it('with a committed file under each of the four directories, the include phase is complete and the frontier moves past it', () => {
+    const repo = realProject(true);
+    try {
+      const instance = only(deduceWorkflowStateAtHead(repo), 'spec-flow-x-plan');
+      expect(instance.phases).toEqual([
+        { phase: 'specification', state: 'complete' },
+        { phase: 'wrap-up', state: 'current' },
+      ]);
+      expect(keys(instance)).toEqual(['spec-flow.wrap-up']);
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+
+  it('without them, the frontier is user-story-mapping.backbone, missing its produces (control)', () => {
+    const repo = realProject(false);
+    try {
+      const instance = only(deduceWorkflowStateAtHead(repo), 'spec-flow-x-plan');
+      expect(keys(instance)).toEqual(['user-story-mapping.backbone']);
+      const step = instance.frontier[0]!;
+      expect(step.trail).toEqual([
+        { workflow: 'spec-flow', phase: 'specification', scope: null },
+        { workflow: 'specification-downcast', phase: 'user-story-mapping', scope: null },
+        { workflow: 'user-story-mapping', phase: 'backbone', scope: null },
+      ]);
+      expect(step.evidence).toEqual({ kinds: ['produces'], missing: ['produces'], finalizable: false });
+      expect(step.produces.map((entry) => [entry.pattern, entry.exists, entry.evidence])).toEqual([['docs/02_requirements/01_user_story_map/', false, true]]);
+    } finally {
+      removeTempDir(repo);
+    }
   });
 });
 
