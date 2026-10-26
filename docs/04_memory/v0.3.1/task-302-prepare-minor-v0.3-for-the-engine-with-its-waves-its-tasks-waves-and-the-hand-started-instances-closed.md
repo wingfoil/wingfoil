@@ -341,6 +341,111 @@ rehearsal's load.
 JSON reports `"checked": 163, "gatedCommits": 163, "findings": 0` for the same range (rehearsal clone,
 `--base 7719f700`): the console's "on N commits" seems to count commits with findings, not commits checked.
 
+### refactor (developer, 2026-10-26)
+
+**The approver's batches.** 163 commits `75f80de6` … `4bea21ff` on `task/task-302` (`git rev-list --count
+04d46efd..4bea21ff` → 163), run with `node scripts/v0.3-waves.cjs --batch N --run` then `--batch N --check` for N = 0…9,
+17:07:26 → 17:14:29 (about 7 minutes; the rehearsal took about 2.5): `git log --format=%s 04d46efd..4bea21ff | awk
+'{print $1}' | sort | uniq -c` → 1 `wf(release):`, 162 `wf(task):`; each commit holds one path (`git diff-tree
+--name-only` per commit → 163 × 1); `grep -c '^Approver: '` on their bodies → 163, `grep -c 'Co-Authored-By\|AI-Model'`
+→ 0. `node scripts/v0.3-waves.cjs --check` → `all 163 at HEAD`. None of the 163 was rewritten afterwards.
+
+**Merge of `release/0.3`** (`5a464682`, task-301 and task-303): `git merge --no-edit release/0.3` → `3ea525f7` (§7
+trailers added by `git commit --amend --no-edit --trailer …` before anything else), no conflict.
+
+**Fix found by the full suite** (first run, slot 17:16:59): `npx jest --coverage --maxWorkers=2` → 2 suites failed, 5
+tests: `test/lint/git-log-readers.test.ts` (2: the script's `git log -1 --format=%s` was a new `git log` reader and its
+`git show HEAD:<path>` not the guarded blob form, task-268 / `bug-291`), and 3 of the script's own fixture tests, which
+copied `HEAD`'s files and, with the batches on the branch, found every element already applied. Commit `83f5df4c`: the
+amend check reads the subject with `git cat-file commit HEAD` (`commitSubject`, unit-tested with a multi-line `gpgsig`
+header), the `HEAD` reads use `` `${rev}:${path}` ``, and the fixtures copy the real files from the parent of the
+`minor-v0.3` amend (`git rev-list -1 --fixed-strings --grep='wf(release): amend minor-v0.3 [released → released]'
+HEAD`, else `HEAD`). `npx jest test/cli/v0.3-waves.test.ts test/lint/git-log-readers.test.ts
+test/core/minor-v0.3-waves.test.ts --maxWorkers=2` → 3 suites, 42 tests passed.
+
+**Gates** (worktree at `83f5df4c` plus the uncommitted `dl-186` amendment below; heavy ones after `waitslot.sh`,
+`--maxWorkers=2`, foreground in one tracked background command):
+- `npx jest --coverage --maxWorkers=2` → 507 suites, 8960 tests passed; All files **99.37 / 97.51 / 98.17 / 99.73**
+  (W3 B9 baseline 99.34 / 97.39 / 98.03 / 99.71: none lower).
+- `npm test -- --maxWorkers=2` → 507 suites, 8960 tests passed.
+- `npm run typecheck` (both tsc configs) → exit 0; `npm run lint` → exit 0; `npm run docs:api` → exit 0.
+- `npm run check:mcp` → exit 0, only the three `bug-414` known failures (`wingfoil://workflows`, `…/-/next`, `…/-/status`).
+- `node scripts/check-governance.cjs --root "$PWD" --base release/0.3` → "164 wf() commits in 5a464682…..HEAD … and 6
+  other commits", 0 findings, exit 0; `--json` → `"checked": 164, "gatedCommits": 164, "otherCommits": 6, "findings": 0`
+  (the console's "gated: 0 findings on 0 commits" is F50). 164 = the 163 amends + the task's `start`.
+- `node dist/cli.js workflow status --format json` → 65 diagnostics, all `W_WORKFLOW_UNBOUND_TOKEN` (task-303's
+  count), nothing new.
+- A note: the first `npm run build` after the merge ran outside the slot (≈ 20 s), before the gates; every later heavy
+  command took the slot.
+
+**AC 2 — what the deduction does with `minor-v0.3`, by command** (D3 (a)). Scratch clones of `3ea525f7` (batches and
+merge included) in the agent's scratch folder `task-302-dev2/`, identity the committed `dna.yaml`'s approver, a copy of
+this worktree's code build; nothing started on this repository.
+- *Real state (clone A).* `workflow start sw-life-cycle` → instance `sw-life-cycle-dl-188-…-plan` (the context naming of
+  `bug-413`), next `sw-life-cycle.seed-first-release-line`; `workflow adopt sw-life-cycle --step
+  sw-life-cycle.seed-first-release-line --element release-line:rl-v1 --reason …` (clone only) → adopted; four
+  `workflow finalize` of `initial-design.seed-releases|seed-adrs|seed-dls|seed-specs@release-line:rl-v1`. Then
+  `workflow status sw-life-cycle` → phases "… release-line-cycle current (entered 1) …", frontier
+  `release-planning.advance-pinned-build@release:minor-v0.4`, `…@release:minor-v1.0`, `…@release:patch-v0.3.1`
+  (missing `record`); `--format json` → `release-line-cycle` iterations `{"eligible":0,"entered":1,"complete":0}`,
+  **0** frontier keys naming `minor-v0.3`, `minor-v0.3` not in `late`. An instrumented copy of `dist/` (scratch only,
+  logging each `iterate_over` candidate's class) → `delivery release:minor-v0.3 ignored
+  planning=current,implementation=pending,…`, and the same `ignored` for `minor-v0.1`, `minor-v0.2`, `patch-v0.2.2`;
+  `minor-v0.4`, `minor-v1.0`, `patch-v0.3.1` `eligible`. A `released` release is outside `delivery`'s entry filter
+  `[draft, planning, in-development]` and none of its `release-cycle` phases is complete, so its waves are not read.
+- *Hypothetical `in-development` copy (clone B: clone A plus one probe commit setting `minor-v0.3` to
+  `in-development`).* A driver finalizing every finalizable frontier step in `minor-v0.3`'s scope (17:19:18 → 17:57:07):
+  round 0–1 → `release-planning.advance-pinned-build` and `identify-specs@release:minor-v0.3`; then `workflow status
+  sw-life-cycle` → frontier `dev-loop.design@task:task-126-…` … (console), `--format json` → **161** `minor-v0.3` steps,
+  by wave `{"w0":4,"w1":42,"w2":34,"w3":81}`, all `dev-loop.design missing=record finalizable=true`, trail
+  `release-cycle.implementation@minor-v0.3 → wave.tasks@{collection: release:minor-v0.3/waves, key: w0} →
+  dev-loop.design@task:task-126-…`. Rounds 2–5 → 161 finalizes each; `git log b-start..HEAD
+  --format='%(trailers:key=WingFoil-Phase,valueonly)'` counted → `dev-loop.design` 161, `red` 161, `green` 161,
+  `refactor` 161, plus the two planning records: **646** `workflow finalize` commits (`grep -c '^workflow: finalize'`).
+  `start`, `review` and `done` completed from each task's `done`. Final frontier:
+  `wave.wave-checks@release:minor-v0.3/waves#w0` … `#w3`, `missing=[produces] finalizable=false` (no
+  `docs/07_gates/rl-v1/rel-v0.3-wN-e2e-smoke.md`).
+- *Control (clone C: clone A with `minor-v0.3` `in-development` and no `waves:`).* After the same two planning records:
+  `release-cycle.implementation@release:minor-v0.3 missing=[include] finalizable=false` and `W_UNRESOLVED_TOKEN
+  phases[1].iterate_over: collection 'element:waves' of release:minor-v0.3 has no field 'waves'` (E3's stop).
+
+**AC 3** (D4 (a)). `node dist/cli.js workflow status` on `3ea525f7` (code build) → `open workflows: 3`, each with work
+left:
+- `decision-log-ingest-rel-v0.3-run-token-counts-plan` — `approve` of `dl-188` (`in-discussion`), the one pending
+  approval;
+- `decision-log-ingest-rel-v0.3-market-decisions-plan` — `dl-140`'s ratification (`in-discussion`, deferred by the
+  approver to v0.4 planning); frontier `capture` (missing `produces`, `dl-186` E1);
+- `service-ingest-rel-v0.3-listings-plan` — `svc-012`'s approval once mcp.so publishes the listing (`pending`);
+  frontier `capture` (missing `produces`).
+"pending approvals: 1", "ungated elements: 33". None closed (D4 (a)).
+
+**AC 4.** `grep -n '^ref:' docs/04_memory/v0.3.1/task-302-*.md` → `ref: "dl-175"`; `dl-175` `status: ready`,
+`release: "v0.3.1"`; the release's amend reason cites "dl-175 (a)" (`git log -1 --format=%B 75f80de6`).
+
+### self-review (developer, 2026-10-26)
+
+- AC 1: the mapping (the notes' `**wave:**` lines), the script and the 163 amends; qa's test 9/9 passed
+  (`npx jest test/core/minor-v0.3-waves.test.ts`). AC 2: red-first on the data, green after the batches; the
+  deduction's behaviour recorded above (D3 (a)). AC 3: three instances, each named with its work (D4 (a)). AC 4: above.
+- T4: `git log --first-parent --no-merges --format=%h 4839bf7c..HEAD -- test/core/minor-v0.3-waves.test.ts` → empty
+  (and without `--first-parent` → empty).
+- Same class: the only other `git` readers I added are `ls-tree`, `cat-file`, `rev-parse`, `rev-list`, `diff-tree`,
+  `status` (none reads `log.showSignature`); `git grep -n "'log'" scripts/v0.3-waves.cjs` → none.
+- The design's figures (4 waves, 161 dev-loops, 4 records each, wave-checks not finalizable) re-measured after the
+  merge, unchanged.
+
+### Pending amendments (approver)
+
+- `dl-186-wingfoil-s-own-development-moves-onto-the-v0.3-workflow-engine-in-a-fixed-order-pin-templates-then-state-adoption-before-v0.4-s-planning`
+  — a dated correction paragraph after E3 (uncommitted in this worktree): E3's "The iterations of `minor-v0.1`,
+  `minor-v0.2` and `patch-v0.2.2` completed from their `released` state" is false in the engine's terms; they are
+  ignored, which AC 2's trace shows. Proposed `--reason`: "Correct E3: the iterations of minor-v0.1, minor-v0.2 and
+  patch-v0.2.2 are ignored by delivery's entry filter, not completed; task-302's instrumented trace shows it, and
+  minor-v0.3 is ignored the same way since its release."
+- `spec-017`: none. §12's "Instances started mid-release" names `red|green|refactor` and "unless the task's state
+  evidence completes the sub": incomplete (`design` needs a record too, and the state never completes it: F47), not
+  false; the `released`-release behaviour is F48 and the wave-checks gap F49, follow-ups as ruled.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -348,3 +453,15 @@ JSON reports `"checked": 163, "gatedCommits": 163, "findings": 0` for the same r
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The approver's 163 amends ran in about 7 minutes in ten batches with no failure (`75f80de6` … `4bea21ff`, 17:07:26 →
+  17:14:29); the scratch rehearsal had predicted the count and the per-batch commits exactly. One amend per element
+  is cheap with a script that edits and amends per id; the cost is the 163 commits of history it adds.
+- The script's own fixture tests copied `HEAD`'s files, so they broke the moment the approver's amends landed (3
+  failures in the first full suite after the batches): a test of a one-shot migration must read the pre-migration
+  revision, not `HEAD`. Fixed in `83f5df4c`.
+- `test/lint/git-log-readers.test.ts` caught a new `git log` reader in `scripts/` that the targeted runs of green had
+  not: the lint gates that scan `scripts/` belong in a script task's targeted run.
+- AC 2 as first written ("each done task completes its dev-loop sub by its state evidence") was contradicted by the
+  code twice; the design's probe in a throwaway clone found it before red. Probing the deduction with a started
+  instance costs about 40 minutes for 646 records on this machine.
