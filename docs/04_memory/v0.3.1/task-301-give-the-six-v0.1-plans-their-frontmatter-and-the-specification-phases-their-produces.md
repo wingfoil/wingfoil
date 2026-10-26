@@ -192,6 +192,37 @@ Rulings on the design decisions above:
 - D3 accepted: `vision-change`'s optional downcasts complete at once when their directories exist; the consequence is
   stated in the pending `spec-017` §12 amendment and held as follow-up F38 for the ingest after the `v0.3.1` tag.
 
+### red (qa, 2026-10-26)
+
+Red commit `428af6c4` on `task/task-301` (parent `6d497820`); T4 is measured from it. Files:
+`test/core/workflow-deduction.test.ts`, `test/core/workflow-repository-conformance.test.ts`. Baseline before the edits:
+`npx jest test/core/workflow-repository-conformance.test.ts test/core/workflow-deduction.test.ts --maxWorkers=2` →
+2 suites, 36 passed.
+
+| AC | Class | Test (file › `it`) | First failing assertion today |
+|---|---|---|---|
+| 1 | red-first | deduction › "task-198 review F3, task-301 AC 1 …" › "reports no W_MEMORY_UNREADABLE at all, and none of the six ids is a deduced instance" (replaces the `it` that pinned the six as unreadable) | `:578` `expect(…W_MEMORY_UNREADABLE…).toEqual([])` — received the six paths, "no frontmatter" |
+| 1 | red-first | same `describe` › "each of the six carries, at HEAD, the plan frontmatter of the design table …" (`git show HEAD:<path>`, `splitFrontmatter`, `parseYaml`; `id` = file stem, `type: plan`, `status: done`, `workflow`, `phase`, `element`, `parent`, `release` per the design table with D2's `dev-loop`, and a non-empty `title`) | `:600` `expect(actual).toEqual(…)` — every field `undefined` |
+| 2 | red-first | conformance › AC 4 › "the eleven specification sub-workflow phases produce their module's output directory …" (`[workflow.phase, produces]` of the four files via `loadWorkflowRegistryAtHead`) | `:324` `expect(declared).toEqual(…)` — `produces` `undefined` for all eleven |
+| 2 | red-first | deduction › "task-301 AC 2 …" › "with a committed file under each of the four directories, the include phase is complete and the frontier moves past it" — temp repo with `specification-downcast.yaml`, the four sub files, `memory.yaml` and `dna.yaml` copied from `HEAD:.wingfoil/…`, a minimal main `spec-flow` (`specification` include → `wrap-up` checkpoint), one file per directory, an `active` instance plan | `:652` `expect(instance.phases).toEqual(…)` — `specification: current`, `wrap-up: pending` |
+| 2 | red-first | same `describe` › "without them, the frontier is user-story-mapping.backbone, missing its produces (control)" — frontier key, trail, evidence, produces `[pattern, exists, evidence]` | `:673` `expect(step.evidence).toEqual({ kinds: ['produces'], … })` — received `kinds: ['record']`, `finalizable: true` |
+| 3 | red-first through AC 2 | conformance › AC 4 › "17 checkpoint phases (… 17 from task-301 …)" — the design's 17 entries, title history extended | `:296` `expect(…checkpoints).toEqual(…)` — the eleven still listed |
+
+The 86-row warning-set `it` is unchanged. AC 3's four `version: 1.1` bumps and the `spec-017` §1.4/§12 amendment have no
+test: `test/lint/version-bump.test.ts` covers only `VERSIONED_CONFIG_FILES` (`test/lint/helpers/version-bump.ts`:
+`dna.yaml`, `memory.yaml`, `workflows.yaml`, `roles.yaml`), not `workflows/custom/*.yaml`, so they are checked at review
+by command (`git diff release/0.3 -- .wingfoil/workflows/custom/ | grep '^[-+]version'`).
+
+Run after the red commit, one file at a time, `npx jest <file> --maxWorkers=2`: conformance → 2 failed, 14 passed (16);
+deduction → 4 failed, 20 passed (24). Every failure is an `expect` assertion (lines above). `npx tsc --noEmit -p
+tsconfig.json` → exit 0, no output; `npx eslint` of the two files → exit 0. Fixture note: the first draft used the
+fixture `DNA_YAML` and crashed with `E_PHASE_ROLE_UNKNOWN … unknown role 'product-owner'`; the real `dna.yaml` is now
+copied too, so the reds are assertions.
+
+Self-check that a correct green passes unedited (scratch clone of this branch, not committed here): the four files given
+one string `produces` per phase as the design's AC 2 table and the six plans the design's frontmatter, committed; the same
+two-file run → 2 suites, 40 passed.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
