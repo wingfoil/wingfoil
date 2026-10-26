@@ -2,7 +2,7 @@
 id: "initial-design-rl-v1-plan"
 type: plan
 title: "Initial design — rl-v1"
-status: draft
+status: active
 workflow: "initial-design"
 phase: "rl-v1"
 element: "rl-v1"
