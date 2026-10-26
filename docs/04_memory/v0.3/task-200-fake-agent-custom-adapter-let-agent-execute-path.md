@@ -11,6 +11,7 @@ ref: "adr-012"
 bug: ["bug-234", "bug-242"]
 depends_on: ["task-177-adapter-manifests-load-validate-wingfoil-agents-builtin-custom", "task-195-role-session-mcp-prompt-accepts-element-state-returns"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description
