@@ -446,6 +446,30 @@ left:
   evidence completes the sub": incomplete (`design` needs a record too, and the state never completes it: F47), not
   false; the `released`-release behaviour is F48 and the wave-checks gap F49, follow-ups as ruled.
 
+### independent review (2026-10-26) and fixes (developer)
+
+Verdict: **approve with fixes**. Approver rulings on the three findings:
+- **Finding 1 — fixed in the task.** The uncommitted `dl-186` Correction after E3 gains one sentence: "E3's heading and
+  the Rationale's "the past releases close by their state" read "are ignored"; the conclusion that the past releases owe
+  no record stands." The heading (line 49) and the Rationale bullet (line 188) are not edited; the amend stays the
+  Correction paragraph only, still uncommitted for the approver's `memory amend`. Proposed `--reason` (replaces the one
+  above): "Correct E3: the iterations of minor-v0.1, minor-v0.2 and patch-v0.2.2 are ignored by delivery's entry filter,
+  not completed, which task-302's instrumented trace shows; minor-v0.3 is ignored the same way since its release, and
+  E3's heading and the Rationale's close-by-their-state read as ignored."
+- **Finding 2 — follow-up F51** (dated stale statements in the done v0.3 plans and `dl-186` E3's "11 of the 164 v0.3
+  task files carry `wave:`"); no fix now.
+- **Finding 3 — option (a): the one-shot migration removed.** Commit `6e66ffc8` deletes `scripts/v0.3-waves.cjs`,
+  `scripts/v0.3-waves.d.cts` and `test/cli/v0.3-waves.test.ts` (802 deletions); `test/core/minor-v0.3-waves.test.ts`
+  stays and pins the data. `git grep -n "v0.3-waves" -- . ':!docs/04_memory/v0.3.1/task-302-*'` → nothing (no
+  package.json, docs, eslint or test reference). The batch commands in the green notes above name the removed script:
+  they record the procedure as run, recoverable from `ab1f668c`…`83f5df4c`.
+- After the removal: `npx jest test/core/minor-v0.3-waves.test.ts test/core/task-kind.test.ts
+  test/core/release-waves-config.test.ts test/lint/git-log-readers.test.ts --maxWorkers=2` → 4 suites, 41 tests passed;
+  the suites that walk `scripts/` (`git grep -l "readdirSync(join(…, 'scripts'"` → `latency-budget-placement`,
+  `memory-store-location-text`, `name-resolvability`) → 3 suites, 1134 tests passed; `npx tsc --noEmit -p
+  tsconfig.json` → exit 0; `npm run lint` → exit 0; `node scripts/check-governance.cjs --root "$PWD" --base release/0.3
+  --json` → `checked 165, gatedCommits 165, otherCommits 9, findings []`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
