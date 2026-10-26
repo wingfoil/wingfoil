@@ -223,6 +223,61 @@ Self-check that a correct green passes unedited (scratch clone of this branch, n
 one string `produces` per phase as the design's AC 2 table and the six plans the design's frontmatter, committed; the same
 two-file run → 2 suites, 40 passed.
 
+### green (developer, 2026-10-26)
+
+Red → green, `npx jest test/core/workflow-repository-conformance.test.ts test/core/workflow-deduction.test.ts --maxWorkers=2`:
+red (`428af6c4`, qa's notes) 6 failed / 34 passed → after `ba919420` 2 suites, **40 passed**. Commits (D1, D2 as ruled):
+- `fde98c4f` hand `wf(plan): add <the six ids>` — only the six plan files, frontmatter prepended at `status: draft`
+  (`git show --stat fde98c4f` → 6 files, 78 insertions, 0 deletions: the bodies are unchanged).
+- `d4a93a65`, `d6464c07`, `9a3a5187`, `4ca1d024`, `6500c060`, `d41bd1b5`: `npm run build && node dist/cli.js memory
+  submit <id>` once per plan, §7 trailers added by `git commit --amend --no-edit --trailer …` into the
+  `WingFoil-Version:` paragraph. Each touches only its plan and changes `-status: draft` / `+status: active`
+  (`git show --name-only` and `git show | grep '^[-+]status'` per commit). The submit asked for nothing more: the
+  frontmatter carried `title`, `workflow`, `phase` (`--dry-run` first, console output: subject, one path, the status diff).
+- `d320d863` hand `wf(plan): finalize <the six ids> [active → done]` — only the six files, one line each.
+- `ba919420` `fix(workflow): task-301 — …`: the eleven `produces` of the design's AC 2 table, the four files
+  `version: 1.0` → `1.1` (`git diff release/0.3 -- .wingfoil/workflows/custom/ | grep '^[-+]version'` → four `-1.0`/`+1.1` pairs).
+
+`node scripts/check-governance.cjs --root "$PWD" --base release/0.3` → exit 0: "10 wf() commits … and 5 other commits",
+"gated: 0 findings on 0 commits", "history: 0 findings". `node dist/cli.js workflow status --format json` at `ba919420`
+(clean tree) → 86 diagnostics, all `W_WORKFLOW_UNBOUND_TOKEN`, none `W_MEMORY_UNREADABLE`; open instances the same three
+(`decision-log-ingest-rel-v0.3-run-token-counts-plan`, `…-market-decisions-plan`, `service-ingest-rel-v0.3-listings-plan`).
+Scratch clone of `ba919420`: `node <worktree>/dist/cli.js workflow start sw-life-cycle` → "next step:
+sw-life-cycle.seed-first-release-line" (specification passed by `produces`). `node dist/cli.js workflow show
+backlog-export` lists `"pattern": "docs/03_backlog/04_backlog/"` on its phases.
+
+### refactor (developer, 2026-10-26)
+
+No code to refactor (configuration and Memory only). Gates at `ba919420`, heavy ones after `waitslot.sh`, `--maxWorkers=2`:
+- `npm test -- --maxWorkers=2` → 504 suites, **8867 tests passed**.
+- `npm run test:coverage -- --maxWorkers=2` → 504 suites, 8867 passed; All files **99.37 / 97.51 / 98.17 / 99.73**
+  (statements / branches / functions / lines), each ≥ the batch baseline 99.34 / 97.39 / 98.03 / 99.71 (dev-loop plan, w0).
+- `npm run lint` → exit 0; `npm run typecheck` (both configs) → exit 0; `npm run docs:api` → exit 0.
+- `npm run check:mcp` → exit 0, only the three `bug-414` known failures (`wingfoil://workflows`, `…/-/next`, `…/-/status`).
+- With the `spec-017` amendment in the working tree: `npx jest test/core/workflow-repository-conformance.test.ts
+  test/core/workflow-deduction.test.ts test/docs --maxWorkers=2` → 30 suites, 345 passed; `workflow status --format json`
+  → 87 = 86 unbound + 1 `W_UNCOMMITTED_INPUTS` (the uncommitted spec, expected, §1.2).
+- `release/0.3` did not move: `git rev-parse release/0.3` → `ae9da384`, an ancestor of `HEAD`; no merge needed.
+
+### self-review (developer, 2026-10-26)
+
+- AC 1 met: no `W_MEMORY_UNREADABLE` (status run above; deduction `it`s green), the six carry the D2 frontmatter, none is an
+  instance (same three open). Positive case of the absence: before `fde98c4f` the same command printed the six.
+- AC 2 met: eleven `produces`, conformance `it` green; `sw-life-cycle` passes `specification` (scratch clone above), and
+  the control (`specification: current`, frontier `user-story-mapping.backbone`) is the qa deduction `it` that passes.
+- AC 3 met: checkpoint `it` (17) green with the four files bumped once; the 86-row warning set unchanged (green
+  untouched `it`); `spec-017` §1.4 and §12 re-measured as a pending amendment (below), figures from
+  `node -e '…loadWorkflowRegistryAtHead…'` → `27 105 0 86` (workflows, phases, errors, diagnostics).
+- T4: `git log --first-parent --no-merges --format=%h 428af6c4..HEAD -- test/core/workflow-deduction.test.ts
+  test/core/workflow-repository-conformance.test.ts` → empty.
+- Same class: no other Memory document under a type's path lacks frontmatter (the status run reports none). `spec-017`
+  declares no `version:` (`grep -n '^version:'` → nothing), so it takes only the Revision note.
+
+### Pending amendments (approver)
+
+- `spec-017-workflow-commands-and-state-deduction` (uncommitted in this worktree: §1.4 sentence, §12 "Re-measured at
+  `task-301`", a Revision note) — `--reason "Record task-301's re-measure: the six pre-dl-019 plans carry their plan frontmatter (§1.4), and §12 counts 86 warnings unchanged, 17 checkpoints now that the eleven specification phases declare produces (bug-389), workflow reads without W_MEMORY_UNREADABLE, and the vision-change downcast consequence of ruling D3."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -230,3 +285,6 @@ two-file run → 2 suites, 40 passed.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The six plans could not take their frontmatter in one commit: `check:governance` refuses a `docs()` commit (dl-139 `status-outside-wf`) and an `add` at `done`, so D1 took eight commits (add, six `memory submit`, finalize) for one backfill; a backfill verb (or `workflow adopt`-like record for plan state) would make it one (design probe, `fde98c4f`..`d320d863`).
+- Full suite and coverage each took over 10 minutes under the slot (the first `npm test` outlived the 600 s tool timeout and finished tracked in the background: 504 suites, 8867 passed).
