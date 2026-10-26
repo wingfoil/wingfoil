@@ -104,7 +104,7 @@ real-time tracking of project state.
 | DNA | `wingfoil dna show [section]` · `dna set <path> --value <v>` · `dna add` · `dna update` · `dna remove` · `wingfoil paths [category]` |
 | Memory | `wingfoil memory add --type <t> --title <t> [--set <name>=<value>]` · `submit <id>` · `approve <id> --reason <r>` · `reject <id> --reason <r>` · `amend <id> --reason <r>` · `park <id> --reason <r>` · `deprecate <id>` · `history <id>` · `search [keyword]` |
 | Directives | `wingfoil directive create --name <n>` · `directive assign --directive <n> --role <r>` · `directive remove <n>` · `wingfoil directives list [--role <r>]` |
-| Workflow | `wingfoil workflow list` · `show <name>` · `start <name>` · `next` · `status` · `finalize` · `end` · `create <name>` · `remove <name>` |
+| Workflow | `wingfoil workflow list` · `show <name>` · `start <name>` · `next` · `status` · `finalize` · `end` · `adopt <ref>` · `rekey <ref>` · `create <name>` · `remove <name>` |
 | Agent | `wingfoil agent execute --element <type:id> \| --next` · `agent list` · `agent show <run-id>` |
 
 Every command accepts `--format console|json|yaml` and ends with exit code `0` (success), `1` (refused)
@@ -274,6 +274,7 @@ WingFoil is built one pillar per release until all five are integrated in 1.0.
 | **0.2** | + Project Directives, Memory approvals, DNA editing, MCP role Prompts | ✓ Released (`wingfoil@0.2.1` on npm) |
 | **0.2.2** | Patch: configuration at the repository root, staged npm publishing, first-use fixes | ✓ Released (`wingfoil@0.2.2` on npm) |
 | **0.3** | + Project Workflow: workflow state, approval routing, agent execution | ✓ Released (`wingfoil@0.3.0` on npm) |
+| **0.3.1** | Patch: adopt existing elements into a workflow, follow a renamed phase, manual checks, guided `init` workflows | 🔄 Being released |
 | **0.4** | + Interaction Layer polish | Planned |
 | **1.0** | MVP complete | Planned |
 
