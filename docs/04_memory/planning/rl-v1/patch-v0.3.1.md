@@ -11,7 +11,7 @@ features: [P4.21]              # REQUIRED — feature IDs covered by this releas
 requirements: "docs/04_memory/design/dls/retro-v0.3.md"       # REQUIRED — path to per-release backlog JSON, e.g. "docs/03_backlog/04_backlog/by-release/v0.1.json"
 release-line: "v1"       # REQUIRED — version of the parent release-line, e.g. "v1"; the file sits under the release-line's id, planning/rl-v1/ (memory.yaml `release` path)
 backlog_committed: 14     # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
-waves: [w0, w1]          # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
+waves: [w0, w1, w2]      # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
 tmpl_version: 261012   # Original template version
 ---
 
@@ -95,6 +95,14 @@ engine (`dl-186` S4).
 Checkpoint `wave.re-plan` of `w0` (2026-10-24): no task admitted since `commit-backlog`; the release counts 14 tasks
 against `backlog_committed: 14` (+0 %), below the growth threshold; `w1` opened by appending it to `waves:`
 (`task-293`…`task-300` already carry `wave: "w1"` from `build-backlog`).
+
+Checkpoint `wave.re-plan` of `w1` (2026-10-26): no task admitted since `commit-backlog`; the release counts 14 tasks
+against `backlog_committed: 14` (+0 %), below the growth threshold; one element raised in the wave, `bug-414` (a
+`pinned-build` bug, triaged with an empty `release` — its fix is the pin's advance, not a task of this patch);
+`w2` opened by appending it to `waves:` (`task-301`…`task-303` already carry `wave: "w2"` from `build-backlog`).
+WingFoil-Templates R6 (coordinator's answer, 2026-10-26): the `software` pack is not published (only the tag
+`base@1.0.0`, `base` still 1.0.0 for exactly 0.3.0, adoption by hand); the pack adoption does not enter `w2` and Q3
+stands (approver ruling of `w0`: wait for `software`).
 
 ## Execution Notes
 
