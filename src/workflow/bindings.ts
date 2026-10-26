@@ -151,8 +151,9 @@ export type BindingsYaml = z.infer<typeof BindingsYaml>;
 /**
  * The name of an action or check token: the text before its first `(` or `:`, trimmed
  * (`memory.add(type: adr)` → `memory.add`; `tests.coverage(min: 80)` → `tests.coverage`;
- * `frontmatter.required: [title]` → `frontmatter.required`). A prose check keeps its prose, which no
- * binding key names, so it stays unbound.
+ * `frontmatter.required: [title]` → `frontmatter.required`). A prose check keeps its prose as its name: a
+ * binding key equal to that prose binds it (a check a human confirms on purpose is bound `manual: true` this
+ * way, `dl-172` (a)), and a prose no key names stays unbound.
  */
 export function tokenName(token: string): string {
   const cut = token.search(/[(:]/);

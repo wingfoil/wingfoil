@@ -121,7 +121,7 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["dev-loop", "phases[6].checks.post[0]", "retrospective.present"],
       ["user-docs", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
       // task-298 (dl-172 (a)): demo.rendered (task-224's manual re-render, approver ruling 2026-10-10) is bound
-      // `manual: true` in bindings.yaml 2.5, so it is no longer unbound (86 warnings, spec-017 §12).
+      // `manual: true` in bindings.yaml 2.5, so it is no longer unbound (86 warnings at task-298, spec-017 §12).
       // task-252 (dl-137 Q1 (b)): the agent file is AGENTS.md; the fifth check reads CLAUDE.md, its pointer.
       ["agent-docs", "phases[0].checks.post[0]", "AGENTS.md project status matches the shipped command surface"],
       ["agent-docs", "phases[0].checks.post[1]", "AGENTS.md element/state tables match memory.yaml"],
