@@ -239,6 +239,52 @@ normalised for shas, dates and temporary paths, are identical (`diff` empty), an
 `git log cc31d7a8..HEAD -- docs/examples/ docs/assets/` is empty. Confirmed without re-recording (R2): the GIF of
 `1fb2c457` stands.
 
+**S8 — independent review** (a reviewer agent with no authoring context, 2026-10-26). First pass on align-user-docs:
+APPROVE WITH FIXES, no blocker. Fixed in `a4fbf1ad`: (1) `workflow adopt --plan` lists only the steps that wait for
+nothing but the element they create (the user guide and the CHANGELOG said "every adoption"; on `bug-ingest`, whose
+`capture` also declares `produces:`, `--plan` prints `nothing to adopt` while the single form adopts); (2) both
+transcripts re-run on one instance (`bug-ingest-1-plan`) and cut with `…`; (3) the CHANGELOG points to the user
+guide's §12; (4) built-in tokens raise no unbound warning; (5) `docs/agents.md` rules 1 and 5 and its version line.
+Second pass on align-agent-docs (`b93578bc`) and on the fixes: APPROVE WITH FIXES; fixed in `14cb9c8d`: the adopt and
+rekey trailers in AGENTS.md §5.1, the tool's own `version:` raise in §8, the three `wingfoil://workflows` Resources in
+`.wingfoil/README.md`. Every other claim re-run by the reviewer held. Tool findings F54 (`--plan` gives no hint of a
+candidate the single form accepts) and F55 (`workflow next` keeps offering `memory add` for an adopted or linked draft)
+are in the kit register, for the ingest after the `v0.3.1` tag.
+
+**S9 — gate** on `b93578bc` (2026-10-26 21:28–21:58, `devloop-kit/gate-userdocs-v0.3.1.sh`, one heavy step at a time
+behind `waitslot.sh`, log `devloop-kit/gate-ud031.log`): build, `check-governance --root "$PWD" --base
+origin/release/0.3` (also `--json`: 2 gated commits, 0 findings), `lint-claims --base origin/release/0.3`, typecheck,
+lint, `docs:api` → exit `0`; `npx jest --coverage --maxWorkers=2` → 506 suites, 8928 tests passed, All files
+**99.37 / 97.49 / 98.17 / 99.73**; `npx jest test/docs test/core/workflow-repository-conformance.test.ts` → 29 suites,
+321 tests; `node scripts/build-site.cjs llms && git diff --exit-code llms.txt` → 0; examples 01–06 with the absolute
+code-build path → 0; `npm run check:mcp` → 0, only the three `bug-414` known failures; `workflow list --all` → 65
+`W_WORKFLOW_UNBOUND_TOKEN` (task-303's figure); `npm pack --dry-run` → 565 files; `package.json`/`package-lock.json`
+unchanged; tree clean. The smoke was not run: the phase changes no file it reads.
+**Coverage deviation, explained:** branches 97.49 against the w2 baseline 97.51. The phase changes only Markdown
+(`git diff --name-only origin/release/0.3 HEAD | grep -v '\.md$'` → empty), so these are `release/0.3`'s own figures.
+The 97.51 was measured by `task-302` before its commit `6e66ffc8` removed the one-shot migration and its suite
+(`test/cli/v0.3-waves.test.ts`, 315 lines; 507 suites / 8960 tests then, 506 / 8928 now); no coverage run followed
+that commit. After the review fixes (`14cb9c8d`, Markdown only): `npx jest test/docs
+test/core/workflow-repository-conformance.test.ts` → 29 suites, 321 tests; governance and claims → 0 findings.
+
+**S11 — `align-agent-docs`** (role architect; `b93578bc`, review fixes `14cb9c8d`). The six checks of
+`agent-docs.yaml` 1.1, each run as a command:
+1. **Status and command surface vs `CORE_MODULES`.** The `--help` dump (S2) → 35 commands; AGENTS.md §1 said 33 and
+   `minor-v0.3` `in-development` → **fixed**: 35, `adopt` and `rekey` listed, `minor-v0.3` released, `patch-v0.3.1`
+   `in-development` on `release/0.3`, the v0.3.2 patch before v0.4 (`dl-186` Revision, amend `554ef481`).
+2. **Element/state tables vs `memory.yaml`** (3.5, unchanged since `cc31d7a8`): a `js-yaml` dump of every type's path,
+   `sequence`, `gates`, `returns`, `amendable`, compared row by row with §5 → **aligned**.
+3. **Workflow list vs `workflows.yaml`** (1.6): `git diff cc31d7a8 HEAD -- .wingfoil/workflows/ | grep -E
+   '^[-+]\s*- name:|include|iterate_over'` → empty, no phase renamed or added → **aligned**; the merge forward after a
+   patch tag (`git-conventions` §1 rule 6, by hand) added to §6 and to `WORKFLOW.md`'s release-publishing section.
+4. **Role bindings vs `roles.yaml`** (1.8): `assignments` and `global` compared with §7 → **aligned**.
+5. **`workflow-md.complete`**: `npx jest test/docs` (includes `test/docs/workflow-md.test.ts`) → passed.
+6. **`CLAUDE.md` is the `@AGENTS.md` pointer**: `cat CLAUDE.md` → the import and one sentence → **aligned**.
+Also fixed: §3's build table (the workflow reads on the code build while the pin is 0.3.0 — the `bug-414` exception
+stays until v0.3.2 moves the pin), §5.1 (the `workflow: adopt` / `workflow: rekey` records and their trailers), §6
+(adopt and rekey in the deduction and the command paragraph), §8 (the tool's own `version:` raise);
+`.wingfoil/README.md` likewise (build lines, the three Resources, the command paragraph).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
