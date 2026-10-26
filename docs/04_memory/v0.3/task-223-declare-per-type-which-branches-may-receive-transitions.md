@@ -11,6 +11,7 @@ ref: "dl-106"
 bug: []
 depends_on: ["task-210-add-dry-run-mutating-verb-through-commit-primitive"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description
