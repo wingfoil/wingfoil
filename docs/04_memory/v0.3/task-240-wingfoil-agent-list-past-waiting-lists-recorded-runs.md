@@ -11,6 +11,7 @@ ref: "dl-135"
 bug: []
 depends_on: ["task-161-revise-command-baseline-which-verbs-read-head-filesystem", "task-206-agent-execute-records-run-json-lines-line-under", "task-225-add-workflow-status-pending-approvals-role-routing-fallback"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

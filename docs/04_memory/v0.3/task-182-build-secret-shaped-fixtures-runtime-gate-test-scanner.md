@@ -11,6 +11,7 @@ ref: "dl-122"
 bug: ["bug-055", "bug-190", "bug-228"]
 depends_on: ["task-135-make-init-scan-builtin-templates-secrets-refuse-reinitialize"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

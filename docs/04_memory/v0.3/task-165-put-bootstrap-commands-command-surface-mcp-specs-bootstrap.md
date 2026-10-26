@@ -11,6 +11,7 @@ ref: "dl-046"
 bug: ["bug-028", "bug-179", "bug-204"]
 depends_on: ["task-129-refuse-operand-beyond-command-declares-exit-2-before"]
 tmpl_version: 260703
+wave: "w1"
 ---
 
 ## Description

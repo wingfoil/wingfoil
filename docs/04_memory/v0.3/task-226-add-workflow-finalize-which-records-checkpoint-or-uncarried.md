@@ -11,6 +11,7 @@ ref: "spec-017"
 bug: []
 depends_on: ["task-126-declare-closed-wf-operation-grammar-bracket-set-state", "task-132-read-approver-identity-once-use-authority-check-approver", "task-192-stamp-wingfoil-commit-wingfoil-version-semver-sha-pin", "task-216-add-workflow-next-naming-next-step-verb-role"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

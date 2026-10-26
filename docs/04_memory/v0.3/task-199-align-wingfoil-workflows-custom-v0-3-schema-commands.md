@@ -11,6 +11,7 @@ ref: "spec-003"
 bug: ["bug-224"]
 depends_on: ["task-126-declare-closed-wf-operation-grammar-bracket-set-state", "task-175-declare-phase-evidence-produces-ownership-selections-awaits-collections", "task-185-accept-validate-executor-attributes-mode-distinct-phase-cadence", "task-194-check-workflows-against-memory-yaml-dna-yaml-state"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

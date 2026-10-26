@@ -11,6 +11,7 @@ ref: "dl-118"
 bug: ["bug-186"]
 depends_on: ["task-178-add-git-conventions-directive-id-allocation-hand-rule"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

@@ -11,6 +11,7 @@ ref: "dl-100"
 bug: []
 depends_on: ["task-199-align-wingfoil-workflows-custom-v0-3-schema-commands", "task-219-define-release-candidate-staging-rehearsal-phase-recut-reentry", "task-222-declare-release-health-catalogue-v2-report-schema-release"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

@@ -11,6 +11,7 @@ ref: "dl-097"
 bug: []
 depends_on: ["task-150-declare-task-kind-stop-line-threshold", "task-173-add-whole-project-typecheck-clean-gate-control-character", "task-201-add-claim-rerun-rereview-items-code-review-task", "task-205-rewrite-dev-loop-yaml-v1-5-red", "task-213-write-retrospective-notes-during-release-templates-retrospective-workflow"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

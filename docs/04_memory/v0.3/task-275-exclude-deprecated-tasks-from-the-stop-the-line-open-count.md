@@ -15,6 +15,7 @@ bug: []                # optional — LIST of bug ids this task closes (dl-045).
                        # dev-loop keeps the source bug's state in sync with this task via bug.sync_state
 depends_on: ["task-150-declare-task-kind-stop-line-threshold", "task-221-declare-v0-3-dev-loop-gates-revision-dev"]   # optional — ids of tasks whose Execution Notes constrain this one (dl-015); authored at planning time, may be appended during design
 tmpl_version: 261007   # Orignal template version
+wave: "w3"
 ---
 
 ## Description

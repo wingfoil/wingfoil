@@ -11,6 +11,7 @@ ref: "dl-060"
 bug: ["bug-040", "bug-191", "bug-213"]
 depends_on: ["task-153-reconcile-req-state-08-p1-13-scenario-memory"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

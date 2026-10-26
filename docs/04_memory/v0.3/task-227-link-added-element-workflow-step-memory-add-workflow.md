@@ -11,6 +11,7 @@ ref: "spec-017"
 bug: []
 depends_on: ["task-128-allocate-element-ids-highest-number-ref-across-folder", "task-163-implement-date-author-id-tokens-edit-frontmatter-through", "task-216-add-workflow-next-naming-next-step-verb-role"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

@@ -11,6 +11,7 @@ ref: "dl-089"
 bug: ["bug-299"]
 depends_on: ["task-199-align-wingfoil-workflows-custom-v0-3-schema-commands", "task-213-write-retrospective-notes-during-release-templates-retrospective-workflow"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

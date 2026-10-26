@@ -11,6 +11,7 @@ ref: "dl-088"
 bug: ["bug-166"]
 depends_on: ["task-127-add-memory-amend-id-reason-approver-gated-verb"]
 tmpl_version: 260703
+wave: "w1"
 ---
 
 ## Description

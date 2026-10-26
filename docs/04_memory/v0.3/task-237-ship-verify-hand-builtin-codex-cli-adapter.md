@@ -11,6 +11,7 @@ ref: "adr-012"
 bug: []
 depends_on: ["task-196-wingfoil-init-installs-builtin-adapters-protected-builtin-assets", "task-228-agent-execute-launches-agent-forwards-right-signals-records"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

@@ -11,6 +11,7 @@ ref: "dl-113"
 bug: ["bug-212"]
 depends_on: ["task-141-reposition-brief-governance-layer-make-determinism-index-composite"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

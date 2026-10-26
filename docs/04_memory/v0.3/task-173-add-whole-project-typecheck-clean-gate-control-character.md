@@ -11,6 +11,7 @@ ref: "dl-044"
 bug: ["bug-073", "bug-185"]
 depends_on: ["task-140-run-packaging-gate-push-pull-request-separate"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

@@ -11,6 +11,7 @@ ref: "dl-136"
 bug: []
 depends_on: ["task-134-report-source-file-coverage-so-untested-file-counts", "task-146-make-suite-result-independent-concurrent-runs-machine-load", "task-207-drive-e2e-smoke-through-fresh-project-use-scenario", "task-238-publish-mcp-registry-github-actions-bound-publish-job"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

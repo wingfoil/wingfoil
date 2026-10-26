@@ -11,6 +11,7 @@ ref: "dl-089"
 bug: ["bug-331"]
 depends_on: ["task-150-declare-task-kind-stop-line-threshold", "task-222-declare-release-health-catalogue-v2-report-schema-release"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

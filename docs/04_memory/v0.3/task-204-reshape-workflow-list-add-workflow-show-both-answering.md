@@ -11,6 +11,7 @@ ref: "spec-017"
 bug: ["bug-281"]
 depends_on: ["task-129-refuse-operand-beyond-command-declares-exit-2-before", "task-145-replace-cli-test-helpers-fabricated-stderr-child-real", "task-161-revise-command-baseline-which-verbs-read-head-filesystem", "task-194-check-workflows-against-memory-yaml-dna-yaml-state", "task-198-deduce-workflow-instances-phase-evidence-frontier-memory-head"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

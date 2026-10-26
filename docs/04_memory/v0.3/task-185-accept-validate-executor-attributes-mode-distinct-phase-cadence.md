@@ -11,6 +11,7 @@ ref: "spec-003"
 bug: []
 depends_on: ["task-136-validate-workflows-startable-includable-resolve-phase-include-name"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

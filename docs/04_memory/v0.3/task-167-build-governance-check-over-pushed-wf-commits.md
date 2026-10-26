@@ -11,6 +11,7 @@ ref: "dl-103"
 bug: []
 depends_on: ["task-126-declare-closed-wf-operation-grammar-bracket-set-state", "task-127-add-memory-amend-id-reason-approver-gated-verb"]
 tmpl_version: 260703
+wave: "w1"
 ---
 
 ## Description
