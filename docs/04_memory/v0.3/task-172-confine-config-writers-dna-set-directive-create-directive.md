@@ -11,6 +11,7 @@ ref: "spec-011"
 bug: ["bug-121"]
 depends_on: ["task-131-make-dirty-target-guard-refuse-path-cannot-inspect"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description
