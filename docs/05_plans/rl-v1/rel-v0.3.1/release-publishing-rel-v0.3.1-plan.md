@@ -336,10 +336,27 @@ e2e-smoke run.
   <tmp>` → `docs/07_gates/rl-v1/rel-v0.3.1-test-results.md` (commit `870bd440…`, run 40543882451, build `0.3.1
   (870bd440…)`, passed) and `docs/07_gates/rl-v1/rel-v0.3.1-coverage-summary.json`.
 
+### 2026-10-27 — S8 (mark-released) and close
+
+- **S8 — mark-released** on the approver's instruction: `5c713af7` `wf(release): finalize patch-v0.3.1 [releasing →
+  released]`, one file, `status:` only (spec-008 §2). `node scripts/check-governance.cjs --base origin/release/0.3` →
+  1 `wf()` commit since `00a996a9`, gated 0 findings.
+- **WFCoord** told 0.3.1 is live (npm, Release, MCP Registry, Pages links).
+- **Follow-ups:** none new from this phase beyond the notes above (registry `devloop-kit/w3-devloop-v0.3.1-followups.md`
+  stays at F63).
+- **Pending after this phase:** S10, the merge forward `release/0.3` → `main` (ruling D5 (a), D6), on the approver's
+  instruction, its evidence in its merge commit; then the ingest of F1–F63, release-health, retrospective, v0.3.2
+  planning (pin → 0.3.1, which closes bug-414).
+
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
-     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
-     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
-     An item met by the phase as a whole goes here; one met on a single task or bug goes in that
-     element's own subsection. The retrospective's `explore` reads this subsection first. -->
+- The first patch of a maintenance line went from release commit to npm in one pass (no re-tag): run 40543882451
+  `success`, one tag object `bd27f62a`; the gate's ancestor check named `origin/release/0.3` (dl-159) at its first
+  real use.
+- D1 (A) again: `test:no-identity` on the candidate (506 / 8928) before the tag; CI matched it exactly, coverage
+  included (F61 did not recur on the tag run). Proposal unchanged from v0.3: `release-cycle.yaml` states that
+  `publish`'s `tests.passing` is the run on the release commit, so the ruling need not be asked again.
+- npm served the tarball ~4 min after `npm stage approve` (`E404` on `…/wingfoil-0.3.1.tgz` until 18:36:59), while
+  `npm view` already answered `0.3.1`: proposal — the S7 install check waits for the tarball URL (`curl` 200), not
+  for `npm view`.
+- The publish approval and this plan's finalize are again hand commits (F63).
