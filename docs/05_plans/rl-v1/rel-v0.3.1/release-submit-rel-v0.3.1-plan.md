@@ -233,6 +233,17 @@ WFCoord, update the auto-memory, write the next phase's prompt in the kit.
   `advance-pinned-build`). **C7:** DLs with `release: v0.3.1`: 6, all `ready` (`dl-167`, `dl-172`, `dl-174`, `dl-175`,
   `dl-186`, `dl-187`). **Carry-over (read, unchanged):** `package.json` `0.3.0`; `server.json` `0.3.0` at lines 10 and
   15; CHANGELOG line 11 `## [0.3.1] - Unreleased`.
+- 2026-10-27 — **The approver accepts the C2′ waiver** (Roberto Pompermaier, in chat: "waiver accettato, procedi con
+  S3 enter-releasing"): the 140 bugs not `closed` and outside v0.3.1 do not hold the release, following the v0.1 …
+  v0.3 precedent; and **instructs S3**.
+- 2026-10-27 — **S3 — `enter-releasing` performed by the agent on the approver's instruction:** `release/0.3`
+  unmoved (`git rev-parse --short release/0.3` and `origin/release/0.3` → `035ee7a2`, ancestor of the branch); commit
+  **`e6b5f170`** `wf(release): start patch-v0.3.1 [in-development → releasing]` (§7 trailers, no `Approver:`).
+  `git show --stat HEAD` → one file, `docs/04_memory/planning/rl-v1/patch-v0.3.1.md`, the one line
+  `status: in-development` → `status: releasing`; `awk '/^status:/{print $2; exit}'` → `releasing`;
+  `node scripts/check-governance.cjs --base origin/release/0.3` → 0 gated, 0 history findings, exit 0;
+  `node dist/cli.js memory history patch-v0.3.1` reads the commit as operation `start`, `in-development → releasing`,
+  `approver: null`. Next: S4 `approve-release` (approver).
 
 ### Retrospective
 
