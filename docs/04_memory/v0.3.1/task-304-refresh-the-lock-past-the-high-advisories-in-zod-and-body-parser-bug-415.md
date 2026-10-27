@@ -51,6 +51,43 @@ because the lock pins `zod` 4.4.3 and `body-parser` 2.3.0 (high advisories) and 
 
 ## Execution Notes
 
+Run in one session with an independent reviewer subagent (approver ruling T2, 2026-10-27,
+`bug-ingest-rel-v0.3.1-audit-advisories-plan`); branch `task/task-304-…`, cut from `release/0.3` `499d7fb2` (T1).
+
+- **start** — `7227bca5` `[backlog → in-progress]`; `bug-415` synced `506a6d6d` `[triaged → planned]`, `a3bd6aae`
+  `[planned → in-progress]`.
+- **design** (architect) — no tech-spec needed: the fix is a lock refresh inside the declared ranges. Rule held: no
+  `npm audit fix --force`, `package.json` untouched. AC classification: all four characterization (a registry advisory
+  cannot be pinned by a unit test; the checks themselves are the test).
+- **red** (qa) — on `a3bd6aae` before the change: `npm run -s check:audit` exit 1, `npm run -s check:audit:all` exit 1
+  (also `handlebars` 4.7.9 critical, dev-only via `ts-jest`), `npm run -s check:lockfile` exit 0.
+- **green** (developer) — `npm audit fix` (whole tree, no `--force`; the scratch dry run with `--omit=dev` changed the
+  same production entries) → `package-lock.json` only, 8 entries: `zod` 4.4.3→4.6.7, `body-parser` 2.3.0→2.4.0,
+  `content-type` 2.0.0→2.1.0, `fast-uri` 3.1.8→3.1.9, `ip-address` 10.7.3→10.7.5, `qs` 6.16.0→6.17.0, dev `handlebars`
+  4.7.9→4.7.10, dev `markdown-it` 14.3.2→14.3.3. Then `check:audit` 0, `check:audit:all` 0, `check:lockfile` 0 ("2
+  overrides pin(s), 1 npm alias(es)").
+- **Scope surprise (a genuine red):** the first full gate (`devloop-kit/gate-t304-run1.log`) failed 2 of 8928 tests —
+  the two "review F1" cases of `test/core/workflow-executor-cadence.test.ts`: on zod 4.6.7 an unknown key in a phase
+  `cadence` got zod's `Unrecognized key: "x"` (at `phases.0.cadence.recurring` for an inner key) instead of
+  `CADENCE_SHAPE_MESSAGE (unknown key '…')` at `phases.0.cadence`. From zod 4.6 a union whose only object branch fails
+  reports that branch's issue rather than the union's `error`. Published users already meet it: `npm view
+  wingfoil@0.3.0 dependencies.zod` → `^4.4.3`, which resolves `4.6.7`. Fix in `src/workflow/schema.ts`: `Cadence` checks
+  for an unknown key first (`hasUnknownCadenceKey`, reusing `cadenceShapeMessage`) and pipes into the unchanged union.
+  `npx tsc --noEmit` 0; `npx jest test/core/workflow-executor-cadence.test.ts test/workflow` → 21 suites / 227 tests
+  pass. Commits: red `850e9ea2` (the lock; the two tests fail), green `7d618918` (the schema fix + two `CHANGELOG`
+  `[0.3.1]` lines: *Fixed* for the cadence message, *For contributors* for the lock).
+- **refactor** (gate `devloop-kit/gate-task304.sh`, log `gate-t304.log`, under `waitslot.sh`, 10:44–11:11, on the tree
+  committed as `7d618918`): `npm ci` 0; `check:lockfile`, `check:audit`, `check:audit:all` 0; build 0; `typecheck` 0;
+  `lint` 0; `docs:api` 0; `npx jest --coverage --maxWorkers=2` 0 — **506 suites / 8928 tests**, coverage **99.37 / 97.50
+  / 98.18 / 99.73** (`src/workflow/schema.ts` branches 96.42 → 96.87; the −0.01 overall is
+  `src/core/memory-transition.ts:560`, uncovered on some runs with no change — the user-docs gate on `b93578bc` had the
+  same 98.43 — registered as F61 in the kit); `test/docs` + conformance 29 / 321; the e2e smoke on the code build
+  **82 ok / 0 not ok**; examples 01–06 exit 0; `check:mcp` 0; `check-governance.cjs --base origin/release/0.3` 0 (and
+  `--json`); `lint-claims` 0 warnings; `llms.txt` unchanged; `npm pack --dry-run` `total files: 552`.
+
 ### Retrospective
 
-- None yet.
+- A lock refresh for an advisory changed a user-facing message: the minor `zod` bump altered union error reporting,
+  and only the pinned message test caught it. Evidence: `gate-t304-run1.log` (2 failed), `7d618918`. Proposal: the
+  release audits (`ci.yml`) see advisories, but nothing exercises the tree a fresh install resolves; a scheduled
+  `npm install` (no lock) + suite would have shown it before 0.3.0's users met it.
