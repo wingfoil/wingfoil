@@ -230,6 +230,73 @@ the approver's word.
   numbers go into these notes and into a hand-written section appended under the generated report in S8; **D3** the
   smoke is not widened in this phase, its gaps on v0.3.1 surfaces are registered as findings from F56.
 
+- 2026-10-27 — **S0:** submit `6fd62599` (`draft → active`, §7 trailers by amend). `git diff --name-only 499d7fb2
+  HEAD` → only this plan; `git status --porcelain` empty.
+- 2026-10-27 — **P0–P5 PASS:** `npm run -s wingfoil -- --version` → `0.3.0 (cc31d7a8…)` (= `npm:wingfoil@0.3.0`);
+  user-docs plan `done`; `patch-v0.3.1` `in-development`; v0.3.1 tasks `14 done`; bugs with `release: v0.3.1` `3
+  closed`; `origin/release/0.3...release/0.3` → `0 0`; `npm ci`, `npm run build` exit 0.
+- 2026-10-27 — **S1–S5** by `devloop-kit/gate-e2esmoke-v0.3.1.sh` on `6fd62599` (log `devloop-kit/gate-e2e031.log`,
+  09:38–10:01, one heavy step at a time under `waitslot.sh`, load 6.3 at the start):
+  - **S1–S2 PASS:** `node scripts/e2e-smoke.cjs --expect-version 0.3.0 -- node "$PWD/dist/cli.js"` exit 0, **82 ok / 0
+    not ok** (= the `w2` reference): both templates, the `workflow adopt sw-life-cycle-1-plan --plan` probe, the agent
+    run and Journey 4.
+  - **S2b PASS:** examples 01–06 each exit 0 with its `OK:` line (06: "OK: Journey 4: a rule, a workflow, a submitted
+    deliverable, a routed approval, a checkpoint, the workflow ended").
+  - **S3 PASS:** `npm run -s check:mcp` exit 0 — the pinned `0.3.0` with the three declared known failures
+    (`wingfoil://workflows`, `…/-/next`, `…/-/status`, `bug-414`) still applying; the build under development serves
+    `[prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)`, every Resource read and Prompt get answered.
+  - **S4 PASS (D2):** `node dist/cli.js workflow list --all --format json` exit 0 — **27 workflows, 65 diagnostics, 0
+    errors** (`warning W_WORKFLOW_UNBOUND_TOKEN` 65, = the `task-303` reference). `workflow show <name> --format json`
+    on each of the 27: all exit 0, 0 errors. `workflow status` exit 0 and `--format json` exit 0: **open 3** (the
+    inherited ingest instances, active `decision-log-ingest-rel-v0.3-run-token-counts-plan` on `dl-188`).
+  - **S5:** `npm run -s typecheck` 0; `npm run -s lint` 0; `npm run -s docs:api` 0; `npx jest --coverage
+    --maxWorkers=2` 0 — **506 suites / 8928 tests**, coverage **99.37 / 97.51 / 98.17 / 99.73** (branches above the
+    97.49 reference); `npx jest test/docs test/core/workflow-repository-conformance.test.ts --maxWorkers=2` 0 — 29
+    suites / 321 tests; `check-governance.cjs --root "$PWD" --base origin/release/0.3` 0 (and `--json` 0: 0 findings);
+    `lint-claims.cjs --base origin/release/0.3` 0 warnings; `build-site.cjs llms` + `git diff --exit-code llms.txt` 0;
+    `npm pack --dry-run` 0, **`total files: 552`** (= the user-docs log's `total files: 552`; the handed-over "565" was
+    its count of `npm notice` lines, F60); tree clean afterwards. **`npm run -s check:audit` exit 1** — 4 advisories in
+    the production tree, 2 high (`zod` <4.6.6, direct; `body-parser` 2.0.0–2.3.0 via `@modelcontextprotocol/sdk` →
+    `express`), 2 moderate (`fast-uri`, `ip-address`), each "fix available via `npm audit fix`" (F56). Not the gate's
+    check; reported to the approver before S7.
+
+- 2026-10-27 — **Approver ruling (a) on `check:audit`** (in chat: "(a) come raccomandi, procedi"): fix before the gate,
+  so the gate runs once, on the final tree. `bug-ingest-rel-v0.3.1-audit-advisories-plan` filed `bug-415` (high; triage
+  `ecde7179`, `release: v0.3.1`) and the fix task `task-304` (`kind: fix`, no wave; backlog `33c9aba6`); rulings T1
+  (the ingest branch renamed `task/task-304-…`) and T2 (one-session dev-loop, independent reviewer subagent). `task-304`:
+  the lock refreshed by `npm audit fix` (8 entries, `package.json` unchanged) and, a genuine red found by the full suite
+  (2 of 8928 tests), `src/workflow/schema.ts` `Cadence` refusing an unknown key before the union, since zod 4.6.7
+  changed union error reporting; review APPROVE WITH FIXES (finding 1 fixed; F62 registered by the approver's ruling);
+  the approver's approve `01385d6a`; finalize `798cfdc2`; `bug-415` closed `a9b5cce7`. Merged `--no-ff` into
+  `release/0.3` `41556c3c` (local, not pushed), on the approver's instruction; the task branch and worktree removed on
+  the approver's word. **The candidate is re-cut**: `release/0.3` merged into this branch, `05d34a98`.
+- 2026-10-27 — **S1–S5 re-run** on `05d34a98` (`devloop-kit/gate-e2esmoke-v0.3.1.sh`, log `gate-e2e031.log`,
+  13:17–13:39, load 2.7; the first run's log kept as `gate-e2e031-run1.log`). `git diff --name-only 41556c3c HEAD` →
+  this plan only; `npm ci` exit 0.
+  - **S1–S2 PASS:** smoke on the code build exit 0, **82 ok / 0 not ok**.
+  - **S2b PASS:** examples 01–06 each exit 0 with its `OK:` line.
+  - **S3 PASS:** `npm run -s check:mcp` exit 0 (the three `bug-414` known failures on the pinned 0.3.0, the code build
+    with none).
+  - **S4 PASS (D2):** `workflow list --all --format json` exit 0 — 27 workflows, 66 diagnostics, **0 errors**
+    (`W_WORKFLOW_UNBOUND_TOKEN` 65; `W_UNCOMMITTED_INPUTS` 1, these notes being uncommitted during the run — measured
+    again on the committed candidate, below). `workflow show` on each of the 27: exit 0, 0 errors. `workflow status`
+    exit 0 and `--format json` exit 0: **open 3** (`dl-188`'s, the market-decisions and the listings ingest
+    instances), **pending approvals 1**, **ungated 33** (routed to 1 person).
+  - **S5 PASS:** `typecheck` 0; `lint` 0; `docs:api` 0; `npx jest --coverage --maxWorkers=2` 0 — **506 suites / 8928
+    tests**, coverage **99.37 / 97.51 / 98.18 / 99.73** (`memory-transition.ts` at 99.21 this time: F61, the flaky
+    branch); `test/docs` + conformance 29 / 321; `check-governance.cjs --root "$PWD" --base origin/release/0.3` 0 (and
+    `--json`); **`check:audit` 0**; `lint-claims.cjs --base origin/release/0.3` 0 errors, 1 warn-only line
+    (`task-304` line 100, "unchanged" in a sentence whose evidence sits in the next one; the task is `done`, left as
+    is); `llms.txt` unchanged; `npm pack --dry-run` `total files: 552`; tree: only this plan modified.
+  - **Findings registered in the kit** (`w3-devloop-v0.3.1-followups.md`, for the ingest after the tag): F56 (the
+    audit, now `bug-415`, closed), F57–F59 (v0.3.1 surfaces the smoke does not drive, D3), F60 (the "565" pack
+    baseline was a count of notice lines), F61 (flaky branch coverage of `memory-transition.ts:560`), F62 (same-class
+    zod 4.6 default messages in `Produces` / `approval`).
+
 ### Retrospective
 
-- None yet.
+- A registry advisory turned the line red between two runs with no repository change, and its lock fix changed a
+  user-facing message through a minor `zod` bump (bug-415, task-304). The gate's S5 caught the first, the full suite
+  the second; the e2e smoke itself caught neither. Evidence: `gate-e2e031-run1.log` (`audit 1`), `gate-t304-run1.log`
+  (2 failed).
+- The re-cut cost one fix task and a second S1–S5 run (~22 min), not a second gate: S7 runs once.
