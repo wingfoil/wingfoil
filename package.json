@@ -1,6 +1,6 @@
 {
   "name": "wingfoil",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "WingFoil — the repo-native intent layer for AI-native software engineering",
   "license": "MIT",
   "author": "Roberto Pompermaier <robypomper@gmail.com>",
