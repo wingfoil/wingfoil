@@ -11,6 +11,7 @@ ref: "dl-106"
 bug: ["bug-217"]
 depends_on: ["task-129-refuse-operand-beyond-command-declares-exit-2-before", "task-192-stamp-wingfoil-commit-wingfoil-version-semver-sha-pin"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

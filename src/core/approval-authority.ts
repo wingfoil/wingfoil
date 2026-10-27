@@ -112,6 +112,18 @@ function workingTreeWouldGrant(root: string, email: string): boolean {
  * unconfigured identity surfaces as REQ-SEC-01's own message, not this one.
  */
 export function requireApprovalAuthority(root: string, typeName: string, identity: GitIdentity): CoreResult<void> {
+  return requireApproverAuthority(root, identity, `user not authorized to approve type '${typeName}'`);
+}
+
+/**
+ * The check {@link requireApprovalAuthority} makes — the `approver` role of `identity` as the committed `dna.yaml`
+ * records it, the same three fail-closed refusals, `VALIDATION`, exit 1 — refusing a non-approver with `refusal`
+ * (plus the uncommitted-grant sentence when only the working tree would grant it) instead of the approve message.
+ * For the operations that need the approver without approving a Memory type (task-294, plan ruling W1-3; REQ-SEC-03,
+ * `dl-187` rule 7): `workflow adopt --plan --apply` (`user not authorized to apply adoptions in bulk`) and `workflow
+ * rekey` (`user not authorized to rekey`).
+ */
+export function requireApproverAuthority(root: string, identity: GitIdentity, refusal: string): CoreResult<void> {
   const { email } = identity;
 
   let committed: DnaYaml | null;
@@ -145,5 +157,5 @@ export function requireApprovalAuthority(root: string, typeName: string, identit
     ? ` — the working tree's '${DNA_YAML_PATH}' grants it, but that change is not committed, and approval authority ` +
       `is read from the committed configuration (adr-006); commit '${DNA_YAML_PATH}' first, then retry`
     : '';
-  return coreErr({ code: 'VALIDATION', message: `user not authorized to approve type '${typeName}'${uncommittedGrant}` });
+  return coreErr({ code: 'VALIDATION', message: `${refusal}${uncommittedGrant}` });
 }

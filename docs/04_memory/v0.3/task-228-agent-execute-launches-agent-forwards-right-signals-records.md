@@ -11,6 +11,7 @@ ref: "adr-012"
 bug: ["bug-288"]
 depends_on: ["task-178-add-git-conventions-directive-id-allocation-hand-rule", "task-206-agent-execute-records-run-json-lines-line-under", "task-218-agent-execute-element-resolves-role-agent-adapter-assembles"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

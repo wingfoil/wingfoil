@@ -52,6 +52,8 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memorySearch',
       'memory.memorySubmit',
       'paths.paths',
+      // task-294 (`spec-017` §7.11): mutating — empty provenance-record commits (`--plan` alone writes nothing).
+      'workflow.workflowAdopt',
       // task-211 (`spec-017` §7.7): mutating — the workflow file and `workflows.yaml`.
       'workflow.workflowCreate',
       // task-217 (`spec-017` §7.2): mutating.
@@ -61,6 +63,8 @@ describe('CORE_MODULES — production registry', () => {
       'workflow.workflowList',
       // task-216 (`spec-017` §7.3): read-only.
       'workflow.workflowNext',
+      // task-295 (`spec-017` §7.12): mutating — an empty provenance-record commit.
+      'workflow.workflowRekey',
       // task-211 (`spec-017` §7.8): mutating — deletes the file and its `include` entry.
       'workflow.workflowRemove',
       // task-204 (`spec-017` §7.6): read-only.
@@ -92,9 +96,13 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memorySubmit',
       // task-217 (`spec-017` §7.1–§7.2): a Tool only through the mechanical registrar (v0.4, P5.2.3).
       // task-211 (`spec-017` §7.7–§7.8): `workflowCreate` / `workflowRemove`, likewise.
+      // task-294 (`spec-017` §7.11): `workflowAdopt`, likewise.
+      // task-295 (`spec-017` §7.12): `workflowRekey`, likewise.
+      'workflow.workflowAdopt',
       'workflow.workflowCreate',
       'workflow.workflowEnd',
       'workflow.workflowFinalize',
+      'workflow.workflowRekey',
       'workflow.workflowRemove',
       'workflow.workflowStart',
     ]);

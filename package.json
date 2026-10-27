@@ -1,6 +1,6 @@
 {
   "name": "wingfoil",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "WingFoil — the repo-native intent layer for AI-native software engineering",
   "license": "MIT",
   "author": "Roberto Pompermaier <robypomper@gmail.com>",
@@ -84,7 +84,7 @@
     "typedoc": "^0.28.20",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.1",
-    "wingfoil-released": "npm:wingfoil@0.2.2"
+    "wingfoil-released": "npm:wingfoil@0.3.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.0",

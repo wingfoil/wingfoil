@@ -304,7 +304,8 @@ export function taskStatuses(repoRoot: string): Map<string, string> {
   for (const file of trackedFiles(repoRoot)) {
     const id = /^docs\/04_memory\/.*\/(task-\d{3})-[^/]*\.md$/.exec(file)?.[1];
     if (id === undefined) continue;
-    const status = /^status:\s*"?([a-z-]+)"?\s*$/m.exec(readFileSync(join(repoRoot, file), 'utf8'))?.[1];
+    // The template writes a trailing comment after the value (`status: pending   # auto-set by wingfoil`).
+    const status = /^status:\s*"?([a-z-]+)"?\s*(?:#.*)?$/m.exec(readFileSync(join(repoRoot, file), 'utf8'))?.[1];
     if (status !== undefined) entries.push([id, status]);
   }
   return new Map(entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));

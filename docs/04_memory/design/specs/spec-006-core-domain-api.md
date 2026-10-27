@@ -206,12 +206,17 @@ for cell):
 | `workflowShow`     | `workflow`               | false   | `wingfoil workflow show`      | the shipped `wingfoil://workflows/{name}` keeps its payload in v0.3 | P4.7    |
 | `workflowCreate`   | `workflow`               | true    | `wingfoil workflow create`    | Tool `workflow.create` *(v0.4)*               | P4.8    |
 | `workflowRemove`   | `workflow`               | true    | `wingfoil workflow remove`    | Tool `workflow.remove` *(v0.4)*               | P4.9    |
+| `workflowAdopt`    | `workflow`               | true    | `wingfoil workflow adopt`     | Tool `workflow.adopt` *(v0.4)*                | P4.21 (`dl-187`, `patch-v0.3.1`) |
+| `workflowRekey`    | `workflow`               | true    | `wingfoil workflow rekey`     | Tool `workflow.rekey` *(v0.4)*                | P4.21 (`dl-187`, `patch-v0.3.1`) |
 
 - **Why each `mutates` value.** `workflowStart` / `workflowEnd` open and close a startable workflow
   instance and set or clear the active context (P4.2, P4.3, REQ-STATE-03); `workflowFinalize` writes
   the phase-record commit of a phase that has no Memory or file evidence (ruling R11, `dl-104` D1);
   `workflowCreate` writes a workflow file and its manifest entry (P4.8); `workflowRemove` deletes a
-  custom workflow after the REQ-SEC-07 referrer check (P4.9). `workflowNext`, `workflowStatus`,
+  custom workflow after the REQ-SEC-07 referrer check (P4.9); `workflowAdopt` and `workflowRekey` write the
+  provenance records of `spec-017` §4.8 — empty commits that change which step an element counts as created by,
+  hence the instance's deduced progress (P4.21) — and `workflowAdopt`'s `--plan` alone writes nothing but is the
+  same operation. `workflowNext`, `workflowStatus`,
   `workflowList` and `workflowShow` only read: in v0.3 `workflow next` **names** the next step, its
   element, its role and its verb and does not advance it, because step execution (P4.10) is v1.0
   (plan R3); state is deduced from Memory and commit history, never stored (P4.13, REQ-SYS-03).
@@ -389,6 +394,18 @@ Normatively, for every `CoreOperation`:
    `spec-017` §1.1, `spec-016` §5.1). When the working tree differs under the paths the deduction
    reads, they still answer from `HEAD` and emit `W_UNCOMMITTED_INPUTS` naming those paths
    (`spec-017` §1.2).
+7. **A write to a versioned configuration file raises its `version:`** (`dl-174` (a), from `patch-v0.3.1`). The
+   versioned configuration files are `.wingfoil/dna.yaml`, `.wingfoil/memory.yaml`, `.wingfoil/workflows.yaml` and
+   `.wingfoil/roles.yaml` (`VERSIONED_CONFIG_FILES`, `scripts/check-governance.cjs`); an operation whose commit
+   changes one of them sets its `version:` to the next content revision (`dl-047`) in the same commit: the value
+   plus 0.1, read as a number (`1.2 → 1.3`, `1.9 → 2.0`, `dl-174` (a)), the value written in the file's existing quoting, and the line's trailing comment kept as it is — the tool adds no
+   history entry, the `wf()` commit is the record (approver ruling 2026-10-21, `release-planning-rel-v0.3.1-plan`).
+   A file with no `version:` gains none. Each tool write is a revision of its own: `doc-versioning`'s
+   one-bump-per-branch rule applies to hand edits, and the task implementing this item states that in the
+   directive. The operations: `dnaSet`, `dnaAdd`, `dnaUpdate`, `dnaRemove` (`spec-002`, `--force` included),
+   `directiveAssign` (`spec-011`, the one writer of an existing `roles.yaml`), `workflowCreate` and `workflowRemove` (`workflows.yaml`, `spec-017` §7.7–§7.8). A file the operation writes
+   whole for the first time (`spec-011`'s missing `roles.yaml`, and `spec-017` §7.7's missing `workflows.yaml`) is written
+   with `version: 1.0` and is not raised. No operation writes `memory.yaml`.
 
 Which shipped and v0.3 operation reads which baseline, by the items above (the per-command form for
 users is `spec-008-cli-grammar` §11):
@@ -896,3 +913,14 @@ bullet on the two workflow Resources of v0.3 names where they are registered.** 
 bullet cited `src/mcp/index.ts:79-83`, which the new call moves; it now names the two functions and their
 files instead of a line range (`dl-075`). The rows, the payloads and §6 item 6 are unchanged. Edited in place
 without a supersede or a state change (`dl-047`); pending the approver's `memory amend` at `task-239`'s review.
+
+**Revision (2026-10-21, `release-planning-rel-v0.3.1-plan`, identify-specs) — `workflowAdopt`, `workflowRekey`
+and the configuration writers' version rule.** For `patch-v0.3.1`: §3 gains the two P4.21 rows and their `mutates`
+reason (`spec-017` §7.11–§7.12, `dl-187`); §6 gains item 7, the one statement of `dl-174` (a) that `spec-002`,
+`spec-011` and `spec-017` cite. Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.
+
+**Revision (2026-10-24, `task-299-raise-a-configuration-file-s-version-on-every-tool-write-dl-174`) — §6 item 7's
+first-time file.** A file written whole for the first time also names `workflowCreate`'s missing `workflows.yaml`
+(`spec-017` §7.7), which `withIncludeAdded` already writes as `version: 1.0`; the behaviour is unchanged (design gate
+D3, 2026-10-24).

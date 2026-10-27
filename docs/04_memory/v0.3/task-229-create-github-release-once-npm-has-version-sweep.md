@@ -11,6 +11,7 @@ ref: "dl-130"
 bug: []
 depends_on: ["task-219-define-release-candidate-staging-rehearsal-phase-recut-reentry"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

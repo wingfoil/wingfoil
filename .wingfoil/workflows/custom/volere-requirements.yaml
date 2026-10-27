@@ -6,19 +6,25 @@ kind: sub
 description: >-
   Extract and formalize infrastructure, business rules, and NFRs into the SARD using the Volere
   Requirement Shell (Description, Rationale, Traceability, Fit Criterion), grouped by macro-area.
-version: 1.0
+version: 1.1                     # 1.1 bug-389 (task-301): every phase produces its module's output directory, so it completes by produces evidence instead of a workflow finalize
 
 phases:
   - name: extract-requirements
     description: "From BDD scenarios, extract the infrastructural requirements that support them."
     role: architect
+    produces:
+      - "docs/02_requirements/03_sard/"
   - name: apply-volere-shell
     description: "Structure each REQ: Description, Rationale, Traceability, Fit Criterion."
     role: architect
+    produces:
+      - "docs/02_requirements/03_sard/"
   - name: group-by-macro-area
     description: >-
       Organize into: Architectural Constraints; Performance & Latency; State & Context;
       Integrations & Interfaces; Security, Roles & Governance.
     role: architect
+    produces:
+      - "docs/02_requirements/03_sard/"
     checks:
       post: ["every REQ has a clearly numeric, percentage-based, or boolean Fit Criterion"]

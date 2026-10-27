@@ -13,7 +13,7 @@ bug: ["bug-378-the-req-perf-02-latency-report-never-prints-when-test-latency-run
                        # task already owns the ground. `bug.sync_state` iterates this list; a bug with no task naming it
                        # here never advances past `triaged` (only a reject to `closed`, dl-123). A single string is still accepted for documents predating dl-045.
                        # dev-loop keeps the source bug's state in sync with this task via bug.sync_state
-wave: ""               # optional — the release wave this task runs in, one of its release's `waves:` keys (dl-100 §1 (a)); set at build-backlog or when the task is admitted
+wave: "w3"               # optional — the release wave this task runs in, one of its release's `waves:` keys (dl-100 §1 (a)); set at build-backlog or when the task is admitted
 depends_on: ["task-154-give-latency-budgets-statistical-shape-guard-says-what", "task-283-cut-the-git-spawns-of-workflow-next-so-its-p95-is-back-under-req-perf-03-s-budget-with-margin"]       # optional — ids of tasks whose Execution Notes constrain this one (dl-015); authored at planning time, may be appended during design
 tmpl_version: 261012   # Original template version
 ---

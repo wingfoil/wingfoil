@@ -11,6 +11,7 @@ ref: "spec-016"
 bug: []
 depends_on: ["task-196-wingfoil-init-installs-builtin-adapters-protected-builtin-assets", "task-207-drive-e2e-smoke-through-fresh-project-use-scenario", "task-220-wingfoil-agent-show-run-id-prints-recorded-run", "task-228-agent-execute-launches-agent-forwards-right-signals-records", "task-240-wingfoil-agent-list-past-waiting-lists-recorded-runs"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

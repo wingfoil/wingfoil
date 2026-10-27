@@ -208,3 +208,110 @@ describe('git-conventions §1–§3, §6 — dl-159 (task-286)', () => {
     expect((date?.[1] ?? '') >= '2026-10-16').toBe(true);
   });
 });
+
+/**
+ * task-291 (`dl-185` C3 (i)) — §9 documents the pre-push hook's base rule (the line the branch was cut from) and
+ * says the hook is a local convenience while CI stays the enforcing check. Prose pinned as substrings of
+ * whitespace-flattened text (task-276), the absence beside its positive; the version pin is "≥ 2.0" plus the
+ * version line naming task-291 (bug-314), robust to the re-bump after task-290's merge (design D-B).
+ * Red-first: the base rule, the `dl-185` citation and "CI stays the enforcing check"; characterization: the two
+ * sentences §9 already carries ("local convenience", "CI is the enforcement point").
+ */
+describe('git-conventions §9 — dl-185 C3 (task-291)', () => {
+  const flat = (s: string): string => s.replace(/\s+/g, ' ');
+  const f9 = flat(section('9. Checks on pushed commits'));
+  const header = TEXT.slice(0, TEXT.indexOf('\n---', 4));
+
+  it('AC 2 (characterization): the hook is a local convenience and CI is the enforcement point', () => {
+    expect(f9).toContain('The pre-push hook is a local convenience');
+    expect(f9).toContain('CI is the enforcement point');
+  });
+
+  it('AC 2 (red-first): §9 states the base rule — the line the branch was cut from — citing dl-185 C3 (i)', () => {
+    expect(f9).toContain('`dl-185` C3 (i)');
+    expect(f9).toContain('the line the branch was cut from');
+    expect(f9).toContain(
+      '`origin/main` for a branch of `main`, `origin/release/X.Y` for a branch of a patch line, and `origin/main` for a new `release/X.Y` itself',
+    );
+    expect(f9).not.toContain('merge-base HEAD origin/main');
+  });
+
+  it('AC 2 (red-first): §9 says CI stays the enforcing check', () => {
+    expect(f9).toContain('CI stays the enforcing check');
+  });
+
+  it('AC 2: the version is 2.0 or later and its line names task-291', () => {
+    const version = /^version: "(\d+)\.(\d+)"(.*)$/m.exec(header);
+    expect(version).not.toBeNull();
+    expect(Number(version![1]) * 1000 + Number(version![2])).toBeGreaterThanOrEqual(2000);
+    expect(version![3]).toContain('task-291');
+  });
+});
+
+/**
+ * task-290 — `git-conventions` §1 states `dl-185` C1 (a)–(d), the merge forward of a release line: rule 5's two
+ * classes of colliding file and the bump in the merge commit (C1 (a) (i)); who runs it, when and where (C1 (b) (i),
+ * "a detached worktree at `main`'s head" per the approver's design-gate ruling D3 (b), no command text pinned);
+ * `dl-152`'s direct-commit list gains its `release/X.Y` counterpart (C1 (c) (i), no capture sentence: D4 not taken);
+ * the merge commit's bump satisfies the version-bump gate with no tool change (C1 (d) (ii)). All red-first (design
+ * D1, approver-accepted); AC 4's gate behaviour is the characterization case (11) in `test/lint/version-bump.test.ts`.
+ *
+ * Pins are substrings of whitespace-flattened §1 (task-276); each absence check sits in the same `it` as its
+ * positive. Version pins are "≥" plus the version line naming the task (bug-314: task-291 re-bumps).
+ */
+describe('git-conventions §1 — dl-185 C1 (task-290)', () => {
+  const flat = (s: string): string => s.replace(/\s+/g, ' ');
+  const s1 = section('1. Branches');
+  const f1 = flat(s1);
+  const header = TEXT.slice(0, TEXT.indexOf('\n---', 4));
+
+  it("AC 1: rule 5 states C1 (a) (i) — two kinds of colliding file, every versioned file both lines changed resolves to main's version: and Date: and is bumped once more in the merge commit", () => {
+    expect(f1).toContain('`dl-185` C1 (a)');
+    expect(f1).toContain('conflicts on two kinds of file');
+    expect(f1).toContain('every versioned file both lines changed');
+    expect(f1).toContain("the `version:` and `**Date:**` resolve to `main`'s");
+    expect(f1).toContain('is bumped once more on `main`, in the merge commit itself');
+    for (const p of ['`package.json` `version`', '`server.json`', '`CHANGELOG.md`', 'the `dl-095` pin']) expect(f1).toContain(p);
+    expect(f1).toContain("keeps `main`'s values");
+    expect(f1).toContain('recorded in the merge commit');
+    expect(f1).not.toContain('conflicts on the version-bearing files —');
+  });
+
+  it("AC 2: §1 states C1 (b) (i) — once per patch, by the coordinator of the patch's release-publishing, its last step after the patch tag, in a detached worktree at main's head; a non-trivial conflict goes to a developer", () => {
+    expect(f1).toContain('`dl-185` C1 (b)');
+    expect(f1).toContain('once per patch');
+    expect(f1).toContain("by the coordinator of the patch's `release-publishing`");
+    expect(f1).toContain("as that phase's last step, after the patch tag");
+    expect(f1).toContain('in a worktree of its own on `main`');
+    expect(f1).toContain("a detached worktree at `main`'s head");
+    expect(f1).toContain('resolved by a developer, as §2 does for syncs');
+  });
+
+  it('AC 3: §1 states C1 (c) (i) — the release/X.Y counterpart of the direct-commit list, never on main for those elements; the owning-line triage on an ingest/ or backlog/ branch cut from that line', () => {
+    expect(f1).toContain('`dl-185` C1 (c)');
+    expect(f1).toContain('The counterpart on `release/X.Y`');
+    expect(f1).toContain('for the elements that line owns');
+    expect(f1).toContain('never committed on `main` for them');
+    expect(f1).toContain(
+      "triage that decides an element's owning line is made on an `ingest/` or `backlog/` branch cut from that line",
+    );
+    expect(f1).toContain('Commits made directly on `main`');
+    for (const op of ['`approve`', '`reject`', '`assign`', '`sync`', '`amend`', '`docs(plans)`']) expect(f1).toContain(op);
+  });
+
+  it('AC 4: §1 states C1 (d) (ii) — the merge commit bump satisfies the version-bump gate with no change; heading cites dl-185; version ≥ 1.10-equivalent naming task-290 and dl-185; Date ≥ the edit date', () => {
+    expect(f1).toContain('`test/lint/version-bump.test.ts`');
+    expect(f1).toContain('with no change to either');
+    expect(f1).toContain('`dl-185` C1 (d) (ii)');
+    expect(s1.split('\n')[1]).toContain('`dl-185`');
+    expect(s1.split('\n')[1]).toContain('`dl-159`');
+    const version = /^version: "(\d+)\.(\d+)"(.*)$/m.exec(header);
+    expect(version).not.toBeNull();
+    expect(Number(version![1]) * 1000 + Number(version![2])).toBeGreaterThanOrEqual(1010);
+    expect(version![3]).toContain('task-290');
+    expect(version![3]).toContain('dl-185');
+    const date = /\*\*Date:\*\* (\d{4}-\d\d-\d\d)/.exec(TEXT);
+    expect(date).not.toBeNull();
+    expect((date?.[1] ?? '') >= '2026-10-22').toBe(true);
+  });
+});

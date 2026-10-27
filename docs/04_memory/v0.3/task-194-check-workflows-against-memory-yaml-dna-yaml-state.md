@@ -11,6 +11,7 @@ ref: "spec-003"
 bug: ["bug-150"]
 depends_on: ["task-175-declare-phase-evidence-produces-ownership-selections-awaits-collections", "task-185-accept-validate-executor-attributes-mode-distinct-phase-cadence"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

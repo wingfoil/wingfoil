@@ -11,6 +11,7 @@ ref: "dl-047"
 bug: ["bug-143"]
 depends_on: ["task-139-extend-documentation-doc-versioning-testing-directives-ratified-clauses"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

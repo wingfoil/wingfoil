@@ -21,6 +21,9 @@
  *   content asserted, not only its exit: `dna show` (the `dna set` value, the bound approver),
  *   `memory search` and `memory history` per task, `directives list`, then `paths` and `workflow list`
  *   (`bug-133`);
+ * - then `workflow start sw-life-cycle`, its two checkpoints recorded with `workflow finalize`, and the
+ *   `workflow adopt <instance> --plan` probe (task-294, design D9): exit 0 and an empty plan, since the scaffold's
+ *   delivery `plan` step completes through its `produces`;
  * - the working tree must be clean after EVERY step: each mutation is its own commit, and a refusal
  *   writes nothing.
  *
@@ -221,6 +224,18 @@ function smokeSteps(template) {
     { args: ['directives', 'list', ...JSON_FORMAT], exit: 0, json: true, expect: { 'entries.length': 10 } },
     { args: ['paths', 'config', '--list', ...JSON_FORMAT], exit: 0, json: true },
     { args: ['workflow', 'list', ...JSON_FORMAT], exit: 0, json: true },
+    // `workflow adopt --plan` (task-294, design D9): the scaffold's `sw-life-cycle`, past its two checkpoints, stops on
+    // `<slug>-delivery.plan`, which the tasks above already complete through its `produces` — so no step is blocked
+    // on a creation, and the plan is empty. The probe writes nothing (the tree stays clean).
+    { args: ['workflow', 'start', 'sw-life-cycle', ...JSON_FORMAT], exit: 0, json: true, capture: 'life' },
+    { args: ['workflow', 'finalize', '{life.instance.id}', ...JSON_FORMAT], exit: 0, json: true },
+    { args: ['workflow', 'finalize', '{life.instance.id}', ...JSON_FORMAT], exit: 0, json: true },
+    {
+      args: ['workflow', 'adopt', '{life.instance.id}', '--plan', ...JSON_FORMAT],
+      exit: 0,
+      json: true,
+      expect: { 'steps.length': 0, 'orphans.length': 0, 'applied.length': 0 },
+    },
   ];
 }
 
@@ -315,13 +330,14 @@ function valueAt(value, path) {
 }
 
 /**
- * Replace a whole `'{<name>.<field>}'` string with that field of the JSON captured under `<name>`. Returns
- * `{ value }`, or `{ unresolved }` naming the placeholder when the capture or the field is missing.
+ * Replace a `'{<name>.<field>}'` placeholder with that field of the JSON captured under `<name>`; `<field>` may be a
+ * dotted path (`{life.instance.id}`, task-294). Returns `{ value }`, or `{ unresolved }` naming the placeholder when
+ * the capture or the field is missing.
  */
 function resolveValue(value, captured) {
-  const ref = typeof value === 'string' ? /^(.*)\{(\w+)\.(\w+)\}(.*)$/.exec(value) : null;
+  const ref = typeof value === 'string' ? /^(.*)\{(\w+)\.([\w.]+)\}(.*)$/.exec(value) : null;
   if (!ref) return { value };
-  const field = captured.get(ref[2])?.[ref[3]];
+  const field = valueAt(captured.get(ref[2]), ref[3]);
   if (typeof field !== 'string' || field === '') return { unresolved: `{${ref[2]}.${ref[3]}}` };
   return { value: `${ref[1]}${field}${ref[4]}` };
 }

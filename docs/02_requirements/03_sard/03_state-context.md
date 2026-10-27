@@ -178,6 +178,6 @@
   exit `1` and 0 commits; a step held at a gate stays held after its element is adopted (adoption is never `record` or
   `state` evidence).
 * **Traceability:** Feature P4.21 (US-0B-07, US-6-13, US-6-E3; BDD `p4-workflow/P4.21-element-provenance.feature`);
-  extends P4.13 (state deduction) and P1.10 (`memory history` shows provenance records). Decision `dl-187`; change
+  extends P4.13 (state deduction) and, from v0.4, P1.10 (`memory history` shows provenance records; approver ruling 2026-10-21). Decision `dl-187`; change
   `cp-002`. Related: `REQ-STATE-01` (a provenance record is not a transition), `REQ-SEC-03` (the bulk operations need the
   approver), `REQ-PERF-03` (one record per adopted element in the instance's walk), `REQ-SYS-07` (determinism).

@@ -35,3 +35,19 @@ Feature: P5.1.1 (US-0A-06) - wingfoil init
       | defect                                         | message                                                                          |
       | has a key the manifest schema does not declare | built-in adapter template integrity check failed: claude-code                    |
       | carries a private-key header                   | built-in adapter template secret scan failed: claude-code (private-key-pem, line |
+
+  # task-296 (bug-400): the scaffold init writes is a configuration the 0.3 workflow engine can drive — every
+  # phase names a role, and the phases that add Memory declare it, so a workflow is not completed by
+  # `wingfoil workflow finalize` records alone.
+  Scenario Outline: The scaffold's workflows can be driven by the workflow commands
+    Given I ran "wingfoil init --template <template>"
+    When I run "wingfoil workflow start sw-life-cycle" and then "wingfoil workflow next"
+    Then the next step names the role "product-owner"
+    When I record every step with "wingfoil workflow finalize" while "wingfoil workflow next" names one
+    Then the finalize of "<template-slug>-delivery.plan" exits with code 1 and message "phase '<template-slug>-delivery.plan' completes from its evidence: produces"
+    And the workflow is not complete until a task is added with "wingfoil memory add --type task --workflow sw-life-cycle-1-plan"
+
+    Examples:
+      | template | template-slug |
+      | Scrum    | scrum         |
+      | Kanban   | kanban        |

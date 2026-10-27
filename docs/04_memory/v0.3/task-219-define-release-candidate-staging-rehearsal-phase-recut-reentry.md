@@ -11,6 +11,7 @@ ref: "dl-099"
 bug: []
 depends_on: ["task-207-drive-e2e-smoke-through-fresh-project-use-scenario"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

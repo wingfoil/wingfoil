@@ -11,6 +11,7 @@ ref: "spec-005"
 bug: ["bug-104", "bug-168", "bug-180", "bug-198", "bug-226", "bug-245"]
 depends_on: ["task-129-refuse-operand-beyond-command-declares-exit-2-before", "task-130-show-coreerror-details-surface-give-refusal-shape-under"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

@@ -11,6 +11,7 @@ ref: "dl-159"
 bug: []
 depends_on: ["task-244-publish-release-test-results-coverage", "task-238-publish-mcp-registry-github-actions-bound-publish-job", "task-229-create-github-release-once-npm-has-version-sweep"]
 tmpl_version: 261006   # Orignal template version
+wave: "w3"
 ---
 
 ## Description

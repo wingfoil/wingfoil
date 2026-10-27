@@ -6,17 +6,23 @@ kind: sub
 description: >-
   Explode the macro-flows of Lean Inception into atomic, value-oriented user stories;
   build the backbone (horizontal axis), vertically explode functionalities, apply the MVP cut.
-version: 1.0
+version: 1.1                     # 1.1 bug-389 (task-301): every phase produces its module's output directory, so it completes by produces evidence instead of a workflow finalize
 
 phases:
   - name: backbone
     description: "Extract sequential user tasks from journeys to form the spine."
     role: product-owner
+    produces:
+      - "docs/02_requirements/01_user_story_map/"
   - name: vertical-explosion
     description: "Under each backbone step, write `As <persona>, I want <action> so that <benefit>`."
     role: product-owner
+    produces:
+      - "docs/02_requirements/01_user_story_map/"
   - name: mvp-cut
     description: "Tag stories [MVP · vX] / [Future] using the sequencer."
     role: product-owner
+    produces:
+      - "docs/02_requirements/01_user_story_map/"
     checks:
       post: ["100% of MVP Canvas features included; edge-case stories generated"]

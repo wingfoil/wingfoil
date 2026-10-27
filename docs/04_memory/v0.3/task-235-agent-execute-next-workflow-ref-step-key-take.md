@@ -11,6 +11,7 @@ ref: "spec-016"
 bug: []
 depends_on: ["task-185-accept-validate-executor-attributes-mode-distinct-phase-cadence", "task-216-add-workflow-next-naming-next-step-verb-role", "task-228-agent-execute-launches-agent-forwards-right-signals-records"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

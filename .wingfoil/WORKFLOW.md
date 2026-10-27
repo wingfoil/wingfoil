@@ -185,7 +185,8 @@ Eight phases in sequence, each including one sub-workflow: `planning` (`release-
 `implementation` (`wave`, once per entry of the release's `waves:`), `user-docs` (`user-docs`, dl-013/dl-025), `e2e-smoke` (`e2e-smoke`,
 dl-023), `submit` (`release-submit`), `publishing` (`release-publishing`), `release-health`
 (`release-health`, dl-089) and `retrospective` (`retrospective`). A patch runs every phase except
-`retrospective` (dl-092); its release-health run reports D01 as not-comparable.
+`retrospective` (dl-092); its release-health run reports D01 as not-comparable,
+and its proposals are disposed of by the next minor's retrospective (dl-167).
 
 ```mermaid
 flowchart TD
@@ -201,7 +202,7 @@ flowchart TD
 
     RP2["**publishing** → `release-publishing`\nrelease-commit → staging-rehearsal → tag → publish → mark-released\nrelease commit = the candidate · staging rehearsal on it · git tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released\n(see sub-diagram below)"]
 
-    RT["**retrospective** → `retrospective`\nexplore → collect-feedback → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115), the release-health report among them\ncollect-feedback (read-only, dl-163) reads every active repository service's feedback_inbox at its main, one row per note with a proposed outcome: `docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md`\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
+    RT["**retrospective** → `retrospective`\nexplore → collect-feedback → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115), the release-health report among them, and those of the patches released since the previous retrospective (dl-167)\ncollect-feedback (read-only, dl-163) reads every active repository service's feedback_inbox at its main, one row per note with a proposed outcome: `docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md`\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
 
     RH["**release-health** → `release-health`\nmeasure → compare → propose\ncatalogue `docs/08_health/metrics.yaml` · report `docs/08_health/release-health-{version}.md`\nnot a gate (dl-089 §5)"]
 
@@ -412,7 +413,9 @@ point 4, `git-conventions` §3); its pre-check `on-integration-branch` (task-288
 `node scripts/integration-branch.cjs --check-head` with the release's `kind` and `version`, and refuses a
 HEAD on any other branch. Before the tag, `evidence-only-since-candidate` (task-282) runs `git diff --name-only
 <candidate>..<tip>` and passes only when the candidate is an ancestor of the tip and every changed path is
-an evidence path its binding declares; otherwise the candidate is re-cut.
+an evidence path its binding declares; otherwise the candidate is re-cut. After a patch's tag, its
+`release/X.Y` line is merged forward into `main` with `--no-ff` (`git-conventions` §1, `dl-185` C1), never the
+other way: the phase's last step, run by hand until a workflow declares it.
 
 ```mermaid
 flowchart TD
@@ -587,10 +590,14 @@ built in (`agent.*` is `wingfoil agent execute` under the phase's role; the inst
 dl-153): a check to a `run` argument vector (`npm test`, `npm run lint`, `npm run docs:api`,
 `npm run typecheck`, `npm run check:lockfile`, `npm run check:mcp`, `node scripts/e2e-smoke.cjs`, …),
 an action to a command (`release-health.measure` / `.compare`, `node scripts/release-health/… --any-node --max-workers 2`) or `manual: true` (the `git.*` steps, `npm.pin_advance`, `cli.run`,
-`approver.execute`). Token arguments are `key: value` pairs, substituted as whole argv elements, never
-through a shell. The prose checks no command asserts yet (`frontmatter.required: […]`,
-`spec-review.passed`, the specification-phase quality criteria, …) stay unbound: `workflow list` reports
-each as a `W_WORKFLOW_UNBOUND_TOKEN` warning, which fails closed once the engine runs checks (v1.0).
+`approver.execute`), and a check a person confirms on purpose is `manual: true` too (`demo.rendered`,
+dl-172 (a)). Token arguments are `key: value` pairs, substituted as whole argv elements, never
+through a shell. The prose checks a person confirms on purpose — a reading or a judgement no program can
+decide (`spec-review.passed`, the specification-phase quality criteria, the reviewer's re-checks, the
+retrospective's dispositions, …) — are bound `manual: true` by their prose (dl-186 Q6). The prose checks a
+command could decide but none does yet (`frontmatter.required: […]`, the Memory state queries, …) stay
+unbound: `workflow list` reports each as a `W_WORKFLOW_UNBOUND_TOKEN` warning, which fails closed once the
+engine runs checks (v1.0).
 
 ---
 

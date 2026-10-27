@@ -11,6 +11,7 @@ ref: "dl-089"
 bug: []
 depends_on: ["task-192-stamp-wingfoil-commit-wingfoil-version-semver-sha-pin", "task-222-declare-release-health-catalogue-v2-report-schema-release"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

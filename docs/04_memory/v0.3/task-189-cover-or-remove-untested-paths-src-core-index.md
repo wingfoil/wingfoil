@@ -11,6 +11,7 @@ ref: ""
 bug: ["bug-161"]
 depends_on: ["task-132-read-approver-identity-once-use-authority-check-approver", "task-134-report-source-file-coverage-so-untested-file-counts"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

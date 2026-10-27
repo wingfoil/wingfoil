@@ -3,7 +3,7 @@ id: spec-017-workflow-commands-and-state-deduction
 type: tech-spec
 title: "Workflow commands and state deduction"
 status: approved
-scope: "src/workflow — `wingfoil workflow start|end|next|status|finalize|list|show|create|remove`, the active-workflow context and the deduction of workflow state from Memory"
+scope: "src/workflow — `wingfoil workflow start|end|next|status|finalize|list|show|create|remove|adopt|rekey`, the active-workflow context and the deduction of workflow state from Memory"
 supersedes: ""
 release: "v0.3"
 contributor: ""
@@ -23,6 +23,15 @@ errors". The identify-specs rulings of the same plan (R11–R14, 2026-09-30) add
 `workflow finalize` (R11), serve the `next` and `status` MCP Resources in v0.3 (R12), move git-hook
 notifications to v0.4 (R13), and fold `dl-104` into the `spec-003` revision reviewed with this spec
 (R14).
+
+**Element provenance (`patch-v0.3.1`).** P4.21 (`cp-002`, `REQ-STATE-11`, BDD
+`docs/02_requirements/02_bdd/features/p4-workflow/P4.21-element-provenance.feature`) adds two commands decided by
+`dl-187`: `workflow adopt`, which records that an element added without linkage counts as created by a step, and
+`workflow rekey`, which remaps the records of a renamed step key (§4.8, §7.11, §7.12). They ship in `patch-v0.3.1`
+(`rekey` unconditionally: WingFoil-Templates' `software` charter renames step keys, approver ruling R6 of
+2026-10-21, `release-planning-rel-v0.3.1-plan`, settling `dl-187`'s "if the packs rename");
+`transfer`, the provenance shown by `memory history` and the warning of `memory add` without `--workflow` are v0.4
+(`dl-187` "What changes elsewhere"; approver ruling 2026-10-21, `release-planning-rel-v0.3.1-plan`).
 
 **What ships today.** One workflow operation, `workflowList`, registered under the `workflow` module
 (`src/core/index.ts:1840-1851`). It returns `loadWorkflowsYaml`'s result verbatim
@@ -69,6 +78,7 @@ baseline rules are `spec-006` §6's.
 | Collections in `iterate_over` (`dl-104` D2 (b)) | deduced (§4.6) | — | — |
 | MCP Resources `next`, `status` | served (§9, ruling R12) | URI unification (`dl-040`) | — |
 | MCP Tools for the mutating ops | declared `mutates: true`; not served (§9) | P5.2.3 | — |
+| Element provenance (P4.21, `dl-187`) | `adopt`, `rekey` from `patch-v0.3.1` (§4.8, §7.11, §7.12) | `transfer`; `memory history` shows provenance; `memory add` without `--workflow` warns | — |
 
 ### 1. Inputs, baseline and determinism
 
@@ -133,8 +143,9 @@ deduction and reported as a diagnostic, never as a crash (`W_MEMORY_INVALID_STAT
 `invalid state '<status>' for type '<type>' in <file>`, P4.13; `W_MEMORY_UNREADABLE`:
 `unreadable frontmatter in <file>: <reason>`). The reasons are the parser's first line, `no frontmatter`,
 `no 'type' field`, `type '<type>' is not declared in memory.yaml`, `no 'id' field` and `no 'status' field`.
-The six pre-`dl-019` plan files that carry no frontmatter (for example
-`docs/05_plans/rl-v1/initial-design-rl-v1-plan.md`) are reported this way. A file with no frontmatter whose
+The six pre-`dl-019` plan files that carried no frontmatter (for example
+`docs/05_plans/rl-v1/initial-design-rl-v1-plan.md`) were reported this way until `task-301` (`bug-389`) gave them
+the `plan` frontmatter (`status: done`, `parent` set, so none is an instance, §3.2). A file with no frontmatter whose
 path matches no type's `path` pattern is not a Memory document and is left out silently: the top-level
 `docs/05_plans/X_*.md` plans `dl-019` grandfathers (`.wingfoil/memory.yaml` `plan.path`). In a `path` pattern a
 token in the file name stands for one name, a token in a directory for one or more directories (the plan's
@@ -158,6 +169,8 @@ message }`, one array named `diagnostics`; for these codes `file` is repository-
 | `W_UNRESOLVED_TOKEN` | warning | a token of a `where`, `produces` or action argument has no value on the element it resolves against (§4.1) — the element lacks the field, or the field is blank |
 | `W_INSTANCE_WORKFLOW_UNKNOWN` | warning | an open plan names a workflow the registry does not load; the instance is listed with an empty frontier |
 | `W_APPROVAL_ROLE_WITHOUT_AUTHORITY` | warning | a member an approval is routed to does not hold the `approver` role (§5.1) |
+| `W_PROVENANCE_ORPHAN` | warning | a linkage, record or adoption in an instance's walk names a `<workflow>.<phase>` the registry does not declare and no `rekey` maps (§4.8); it is evidence of nothing. Not raised for an instance whose workflow the registry does not load: `W_INSTANCE_WORKFLOW_UNKNOWN` reports it |
+| `W_PROVENANCE_CONFLICT` | warning | two or more claims on one element in the walks — linkages and adoptions, at least one of them an adoption — none descending from another (§4.8); the element counts as created by none of them |
 
 An error among `spec-003`'s diagnostics makes every workflow operation exit `1` (`VALIDATION`, §10).
 "Startable" and "includable" are `dl-109` K1 (a)'s two booleans; `kind: main` reads as startable-only
@@ -264,7 +277,7 @@ kind of evidence it declares is satisfied:
 | Kind | Satisfied when |
 |---|---|
 | `state` | the bound element's status is at or after the phase's exit state (§4.4) in its type's `sequence` |
-| `created` | for each type `T` the phase adds: the step created at least one element of `T`, each of them is at or after the state the phase's later actions leave it in (§4.4 applied to it), and each `{ type: T, path }` entry resolves to a committed path for each of them. A step that created **no** element leaves this kind satisfied when the phase declares other evidence, and otherwise **missing**, completed only by a `record` |
+| `created` | for each type `T` the phase adds: the step created at least one element of `T` — through its add commit's linkage or an adoption record (§4.8; an adoption is `created` evidence only, never `record` or `state`, `dl-187` rule 4) — each of them is at or after the state the phase's later actions leave it in (§4.4 applied to it), and each `{ type: T, path }` entry resolves to a committed path for each of them. A step that created **no** element leaves this kind satisfied when the phase declares other evidence, and otherwise **missing**, completed only by a `record` |
 | `produces` | every string entry, resolved (§4.1), matches at least one path in `HEAD`'s tree (a pattern ending in `/` matches when a committed file lies under it). An entry `spec-003` flags `W_PHASE_PRODUCES_OWNER_IMPLICIT` is shown but is **not evidence** until it is rewritten in the `{ type, path }` form: under `dl-104` D3's default it would name a file of the workflow's element that the phase never writes (a task-named spec), or one that exists from the start (the release-line's own file) |
 | `selection` | no Memory document at `HEAD` matches the phase's `where`; an archived document (`deprecated`, or `superseded`, §4.11) never matches |
 | `include` | the included workflow is complete for the element(s) or entries it runs on (§4.5, §4.6) |
@@ -365,7 +378,7 @@ from undoing finished work:
 **4.8 The history walk: records, linkage and re-entry.** Deduction reads commit history once per
 invocation, per open instance, over a bounded **walk**: the commits reachable from `HEAD` and not
 reachable from the parents of the instance's start commit, read with their subject and trailers.
-Three things are found there.
+Four things are found there.
 
 - **Linkage.** An add commit (`wf(<type>): add <id>`) whose trailers carry
   `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <step key>` makes the element it adds
@@ -376,6 +389,37 @@ Three things are found there.
   `WingFoil-Phase: <workflow>.<phase> completed`, `WingFoil-Instance: <instance-id>` and the step's
   `WingFoil-Element: <type>:<id>` or `WingFoil-Item: <collection>#<key>` is the phase record of that
   step. In v0.3 it is written by `workflow finalize` (§7.9).
+- **Provenance records** (`dl-187`, P4.21, REQ-STATE-11; from `patch-v0.3.1`). Empty commits outside the `wf()`
+  grammar, in the `workflow finalize` family:
+  - an **adoption**, subject `workflow: adopt <instance-id> <step key> <type>:<id>`, trailers
+    `WingFoil-Instance: <instance-id>`, `WingFoil-Step: <step key>` and `WingFoil-Adopted: <type>:<id>`, makes
+    the element **created by** that step exactly as linkage does, for `created` evidence only (§4.3). It is never
+    a `record` and never `state` evidence, so it cannot pass a gate, and since `created` evidence is not cut by a
+    re-entry, it neither cuts nor is cut by a reject or a park (`dl-187` rule 4);
+  - a **rekey**, subject `workflow: rekey <instance-id> <from> <to>`, trailers `WingFoil-Instance`,
+    `WingFoil-Rekey-From: <workflow>.<phase>` and `WingFoil-Rekey-To: <workflow>.<phase>`: every linkage, record
+    and adoption of that instance that the rekey commit descends from and that names `<from>` (with any `@<scope>`
+    suffix, which is kept) is read as naming `<to>`. Rekeys apply in walk order, so a chain `a → b`, `b → c`
+    maps `a` to `c`; the mapping stays in the commit, so a reader comparing phases across releases can follow it
+    (`dl-187` "Constraints on every reader").
+
+  **One owner** (`dl-187` rule 3). An element is owned by the step whose linkage its add commit carries, or by
+  the step an adoption names. When two adoptions of one element are found in the open instances' walks, the one
+  the other descends from is superseded by it; when neither descends from the other (two branches merged), the
+  element counts as created by neither and `W_PROVENANCE_CONFLICT` names both, until v0.4's `transfer` resolves
+  it — `dl-187` rule 3's "refused until one is withdrawn", read for deduction: neither counts, and the withdrawal is
+  v0.4's `transfer`. A new `adopt` of such an element is refused as already owned, naming the first of its owners in
+  instance-id then step-key order. **Orphans:** after rekeys, a linkage, record or adoption naming a
+  `<workflow>.<phase>` the registry does not declare is evidence of nothing and owns nothing, so its element can be
+  adopted again; `W_PROVENANCE_ORPHAN` names it, and `adopt --plan` lists it (§7.11). A later rekey that maps an
+  orphaned adoption onto a step that already holds an adoption of the same element resolves the two by the
+  descends-from rule above. When an element's claims include an adoption, a linkage and an adoption are claims
+  alike under that rule: the claim that descends from every other claim of the element owns it, and two or more
+  claims none descends from are a conflict (`task-293` design D2 (a)). When an element's claims are all linkages —
+  two add commits naming it, as a cherry-picked add that keeps its trailers gives — every one of them counts and
+  none conflicts, as before provenance records existed (approver ruling (ii), 2026-10-24, `task-293` review). The
+  orphans of an instance whose workflow the registry does not load own nothing and raise no `W_PROVENANCE_ORPHAN`:
+  `W_INSTANCE_WORKFLOW_UNKNOWN` already reports that instance (`task-293` design D3 (a)).
 - **Re-entries.** A commit that moved an element to an earlier position of its `sequence` — a
   `reject` (`wf(<type>): reject <ids> [<from> → <to>]`) or a `park` (`dl-110`) naming it. After a
   re-entry of the element a workflow pass runs on, the `record` and `state` evidence of the phases
@@ -393,7 +437,7 @@ Three things are found there.
   reaches no phase's cutoff: the element's state alone decides, and the first phase whose `state`
   evidence the returned state no longer meets (`dev-loop`'s `start`) is current again. A `park` whose
   `<from>` is a held gate re-enters at that phase's `fallback.step`, like a reject.
-  **Newer** means *descends from*: a commit is newer than the re-entry commit when the re-entry commit
+  **Newer** means *descends from* (for re-entries, adoptions and rekeys alike): a commit is newer than the re-entry commit when the re-entry commit
   is a strict ancestor of it, decided through the parent links the walk reads. Neither the commit date
   nor the position in `--topo-order` decides it. A record made on a branch that had not seen the reject
   does not count once that branch is merged, whichever parent order the merge has. When several
@@ -527,7 +571,9 @@ role (`dl-090` Q6 (a), `spec-016` §3.1), so that each frontier step's binding l
 and not on the instance's first (approver ruling R16, 2026-09-30, `release-planning-rel-v0.3-plan`); a `manual` binding (`dl-090` Q2 (c)) carries the commit subject
 `spec-003`'s verb rule prescribes, e.g. `wf(task): start task-130 [backlog → in-progress]`. Checks and
 `awaits.evidence` are listed with their binding and `evaluated: false`; an unbound check is reported
-`unbound`, never passed (`dl-090` Q2 (c)). Nothing is executed.
+`unbound`, never passed (`dl-090` Q2 (c)); a check bound `manual: true` (`spec-003` Layer 3, `dl-172` (a), from
+`patch-v0.3.1`) is reported with binding kind `manual` and `evaluated: false`, and raises no
+`W_WORKFLOW_UNBOUND_TOKEN`: it is a deliberate human confirmation, not a missing binding. Nothing is executed.
 
 A printed `wingfoil` argv is a whole command: what only the user can give is a placeholder — `<id>` for a
 target not known yet, `--title <title>` on `memory add`, `--reason <reason>` on `approve` / `reject`.
@@ -579,6 +625,9 @@ wingfoil workflow list     [--all]
 wingfoil workflow show     <ref>
 wingfoil workflow create   <name> (--kind main|sub | [--startable] [--includable]) [--element <type>] [--description <t>]
 wingfoil workflow remove   <ref>
+wingfoil workflow adopt    <ref> [--step <key>] [--element <type>:<id>] --reason <text>
+wingfoil workflow adopt    <ref> --plan [--apply --reason <text>]
+wingfoil workflow rekey    <ref> --from <workflow>.<phase> --to <workflow>.<phase> --reason <text>
 ```
 
 `create` requires `--kind` or at least one of `--startable` / `--includable` (`spec-003`
@@ -661,7 +710,8 @@ recursively (P4.7 sc. 2; `spec-003`'s `E_WORKFLOW_INCLUDE_CYCLE` bounds the recu
 (REQ-SEC-07's structural discriminator) — with `name`, the startable/includable declaration (`--kind`
 maps through `dl-109`'s alias), optional `element` and `description`, `version: 1.0`, and one phase
 `name: step-1` (Layer 2 requires one); and appends `workflows/custom/<name>.yaml` to `workflows.yaml`
-`include`. One commit with both files, subject `wf(workflow): create <name>`, on the precedent of
+`include`, raising `workflows.yaml`'s `version:` in the same commit (`spec-006` §6, the configuration writers'
+version rule, `dl-174` (a), from `patch-v0.3.1`). One commit with both files, subject `wf(workflow): create <name>`, on the precedent of
 `wf(directive): create <name>` (`src/core/index.ts:1378`). Refused when a workflow of that name is
 loaded at `HEAD`, or when the target file exists on disk (`dl-086`):
 `workflow already exists: <name>` (P4.8 sc. 3); the write guard refuses a modified `workflows.yaml`.
@@ -691,7 +741,7 @@ come in that order — built-in, included, open instance — then the write guar
 `workflows.yaml`. As `create` does, `remove` loads the registry the commit would leave before
 writing and refuses on any `spec-003` error (`VALIDATION`): removing the last startable workflow
 (`E_NO_MAIN_WORKFLOW`) or the last entry would leave a registry no command can read. Otherwise deletes the file and its `include` line in one commit,
-`wf(workflow): remove <name>` (P4.9 sc. 1).
+`wf(workflow): remove <name>` (P4.9 sc. 1), raising `workflows.yaml`'s `version:` in it (`spec-006` §6, `dl-174` (a)).
 
 **7.9 `finalize`** (ruling R11; `dl-104` D1 (b)–(c)). Records a phase's completion where the phase
 has no Memory or file evidence to deduce it from.
@@ -731,7 +781,75 @@ element it adds to a step (§4.8), which is explicit and survives concurrent ins
 - The add commit carries the trailers `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>`, in
   its final paragraph with the `WingFoil-Version:` build signature (`dl-111`), which stays its last line:
   git reads trailers from that paragraph only, and so does the walk (§4.8).
-- Without `--workflow`, `memory add` is unchanged and links nothing.
+- Without `--workflow`, `memory add` is unchanged and links nothing; an element added this way can be linked later
+  only by `workflow adopt` (§7.11).
+
+**7.11 `adopt`** (P4.21, `dl-187` rules 1–7, REQ-STATE-11; from `patch-v0.3.1`). Records which step an existing
+element counts as created by, without changing the element or rewriting history.
+- **Single form** (`--step`, `--element`, `--reason`; at least one of `--step` and `--element`, else a usage error,
+  `spec-008` §12). Resolves the instance (§3.3) and the step: `--step <key>`, which must be on the frontier at `HEAD`
+  (as `finalize` requires, §7.9), else the one frontier step whose phase adds the `--element`'s type (as
+  `memory add --workflow` chooses, §7.10). The step's phase must add a type (`memory.add(type: T)` or a
+  `{ type: T, path }` produces entry, `dl-187` rule 2) and its `created` evidence must be missing: the step created no
+  element of `T` (§4.3 never reports `created` missing for a step that created nothing, so it is read off what the
+  step created, `task-294` design D1). The element: `--element <type>:<id>`, which must exist at `HEAD` (rule 1) and
+  be of type `T`; without `--element`, the one **candidate** the declared rules find (below), else refused, naming the
+  candidates. An element already owned (§4.8, rule 3) is refused. `--reason` is required, non-blank and shaped as
+  `dl-067`'s `Reason:` block; any role may run it (rule 7, `dl-187` D3).
+- **Candidates** (rule 5, no heuristics). The elements of type `T` at `HEAD`, not archived (§4.11), not owned, that
+  match the step's declared rules: the field values the phase's `memory.add(type: T, …)` action declares — every
+  scalar argument other than `type` and `title`, literal (`sw-life-cycle.seed-first-release-line`'s `version: "v1"`)
+  or with each `{…}` token resolved in the step's scope, which is how the scope of the iteration the step runs in
+  reaches them (`seed-releases`' `release-line: "{release-line.version}"`); an argument whose tokens do not resolve,
+  or whose value is a list, is no rule, and with several such actions a candidate meets the rules of one of them; and
+  the `{ type: T, path }` entry's resolved path, when the phase declares one. The enclosing `iterate_over`'s `where`
+  describes the iterated type, not `T`, and is not applied (`task-294` design D2). Never by title or similarity.
+  Listed in id order.
+- **`--plan`** (rule 6). Writes nothing. First lists the instance's adoptions that own their element (not orphaned,
+  not in a conflict), oldest first, `recorded: true`, the element as the one candidate (`task-294` design D3). Then
+  walks the instance from its frontier: every step blocked on a creation is listed with its candidates — its phase
+  adds `T`, it created no element of `T`, and adopting a candidate empties its missing evidence other than `record`,
+  which a `produces` path naming the created element meets (approver ruling 2026-10-25 on `task-294`'s review, D1
+  re-ruled); a step with no candidate is listed when `created` is its only declared evidence besides `record`. This is
+  stricter than the single form, which only needs `created` missing: the plan proposes what an adoption alone
+  completes, while a named adoption may precede the step's other work. When a step has exactly one candidate, the walk
+  counts that adoption and deduces again, one adoption per deduction, so two frontier steps sharing a candidate never
+  both get it; it stops when no listed step has a single candidate or the frontier stops on other evidence (an
+  adoption proves creation only, so a gate, a `state` or a `record` stops the walk there). Steps with zero or several
+  candidates are listed and stop their branch. The orphans of §4.8 are listed with their unknown key. The output is
+  byte-identical when run twice on one commit (REQ-STATE-11 fit criterion). §8 gives the result no `diagnostics`: the
+  `W_UNCOMMITTED_INPUTS` of §11's working-tree read go out as success warnings (`spec-008` §6), in the active
+  `--format`'s shape (`task-294` design D5).
+- **`--plan --apply`** writes one adoption commit per listed step that has a single candidate, in the order the
+  walk listed them, each as the single form would write it at its own `HEAD` (so its step is on the frontier then);
+  a pair already recorded writes nothing (re-running is a no-op). Bulk application needs the approver role (rule 7,
+  REQ-SEC-03, the check `memory approve` makes), checked even when nothing is left to write, so the result does not
+  depend on the state, and a `--reason`, which every commit carries.
+- **The commit** (`dl-187` "The commit", D4). No file change: subject `workflow: adopt <instance-id> <key>
+  <type>:<id>`, outside the `wf({type})` grammar like `finalize`'s; body `Reason: …` (and `Approver: <name>
+  <email> (approver)` on a bulk application); the trailers of §4.8 in the final paragraph with `WingFoil-Version:`
+  last (`spec-008` §2). Made with `git commit --only --allow-empty`, refused while the index holds staged changes
+  (`dl-106`); a git identity is required (REQ-SEC-01).
+- **Readers.** Dates and authorship of an adopted element come from its own commits, never from the adoption; an
+  adopted instance stays distinguishable from a created one (`dl-187` "Constraints on every reader").
+- Output: the adoptions written (or proposed) and the instance's new next step.
+
+**7.12 `rekey`** (P4.21, `dl-187` C5; from `patch-v0.3.1`). Remaps an instance's records from a renamed step key.
+`--from` must name a `<workflow>.<phase>` the registry no longer declares and that a linkage, record or adoption of
+the instance names (after earlier rekeys); `--to` must name one it declares, in the instance's workflow or in a
+workflow it includes, directly or through another one. Both are two names of `spec-003`'s name class joined by one
+`.`, with no `@<scope>` (`spec-008` §12). A rekey with the same `<from>` and `<to>` already in the instance's walk,
+while no linkage, record or adoption of the instance still names `<from>` after the rekeys, writes nothing and exits
+`0` (`commit: null`, `remapped: 0`, `next` at `HEAD`); that check comes before the refusal of a `<from>` no record
+names. When one still does (a branch merged in after the first rekey, which that rekey does not descend from), a new
+rekey record is written; the reader counts each commit once. Needs the approver role and a `--reason` (rule 7). The
+refusals run in this order, each before any write: the usage errors (`--from`, `--to`, their shape, `--reason`), the
+git identity, approver authority (before the instance, so the answer does not depend on the state), the instance,
+`<from>` still declared, `<to>` not declared, `<to>` outside the instance's workflow and the workflows it includes,
+the mapping already recorded (exit `0`), `<from>` named by no record, a staged index. One commit with no file change:
+subject `workflow: rekey <instance-id> <from> <to>`, the trailers of §4.8, `Approver:` and `Reason:` as on a bulk
+adoption. Output: `remapped`, the number of the instance's entries the commit remaps (one per element a linkage
+names, one per record, one per adoption), and the instance's new next step.
 
 ### 8. Output shapes
 
@@ -792,6 +910,14 @@ interface EndResult      { baseline: Baseline; ended: Instance; active: Instance
 interface FinalizeResult { baseline: Baseline; instance: Instance; finalized: Step; next: Step | null; commit: string }
 interface CreateResult   { baseline: Baseline; name: string; file: string; startable: boolean; includable: boolean; commit: string }
 interface RemoveResult   { baseline: Baseline; name: string; file: string; commit: string }
+interface Adoption       { step: string; element: ElementRef; commit: string | null }   // null: proposed, or already recorded
+interface AdoptResult    { baseline: Baseline; instance: Instance; adopted: Adoption[]; next: Step | null }
+interface AdoptPlanResult { baseline: Baseline; instance: Instance;
+                           steps: { step: string; type: string; candidates: ElementRef[]; recorded: boolean }[];
+                           orphans: { commit: string; key: string; element: ElementRef | null }[];
+                           applied: Adoption[] }          // empty without --apply
+interface RekeyResult    { baseline: Baseline; instance: Instance; from: string; to: string; remapped: number;
+                           commit: string | null; next: Step | null }
 interface ListResult     { baseline: Baseline; workflows: { name: string; startable: boolean; includable: boolean;
                            description: string | null; executableNow: boolean }[]; message?: string; diagnostics: Diagnostic[] }
 type TokenBinding = { kind: "wingfoil" | "manual" | "agent" | "run" | "unbound"; source: "built-in" | "project" | "none";
@@ -840,6 +966,8 @@ reconcile `workflowList` in place.
 | `workflowShow` | `workflow` | false | `wingfoil workflow show` | the shipped `wingfoil://workflows/{name}` keeps its payload in v0.3 (below) |
 | `workflowCreate` | `workflow` | true | `wingfoil workflow create` | Tool `workflow.create` *(v0.4)* |
 | `workflowRemove` | `workflow` | true | `wingfoil workflow remove` | Tool `workflow.remove` *(v0.4)* |
+| `workflowAdopt` | `workflow` | true | `wingfoil workflow adopt` (`--plan` alone writes nothing) | Tool `workflow.adopt` *(v0.4)* — from `patch-v0.3.1` |
+| `workflowRekey` | `workflow` | true | `wingfoil workflow rekey` | Tool `workflow.rekey` *(v0.4)* — from `patch-v0.3.1` |
 
 **The two v0.3 Resources** (ruling R12) extend the already-shipping `wingfoil://workflows…` family
 (`src/mcp/workflow-resource.ts:34-37`) without colliding with `wingfoil://workflows/{name}`: their
@@ -874,9 +1002,9 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | `<ref>` names a loaded workflow with no open instance, or an instance plan (`plan`, `parent` empty) at `HEAD` that is not open — `next`, `status`, `finalize`, `end` and `memory add --workflow <ref>` alike | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
 | plan in `draft` at `end` | `workflow '<name>' was not submitted: run wingfoil memory submit <id>` | `INVALID_TRANSITION` | 1 |
 | incomplete at `end` | `workflow '<name>' is not complete: current step <key>` — with an empty frontier, `…: it is abandoned: its element <type>:<id> is <status>` or `…: workflow '<name>' is not loaded`; the hint `wingfoil memory deprecate <id> abandons it` | `CONFLICT` | 1 |
-| step not on the frontier (`finalize`, `memory add --step`) | `step '<key>' is not on the frontier of <instance>` | `CONFLICT` | 1 |
-| no frontier step adds the type (`memory add --workflow`, §7.10) | `no step of <instance> adds a <type>` | `CONFLICT` | 1 |
-| several frontier steps add the type, no `--step` (`memory add --workflow`) | `no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>` (the keys in frontier order, also in `details.steps`) | `CONFLICT` | 1 |
+| step not on the frontier (`finalize`, `memory add --step`, `adopt --step`) | `step '<key>' is not on the frontier of <instance>` | `CONFLICT` | 1 |
+| no frontier step adds the type (`memory add --workflow`, §7.10; `adopt` without `--step`, §7.11) | `no step of <instance> adds a <type>` | `CONFLICT` | 1 |
+| several frontier steps add the type, no `--step` (`memory add --workflow`, `adopt`) | `no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>` (the keys in frontier order, also in `details.steps`) | `CONFLICT` | 1 |
 | step has deducible evidence (`finalize`) | `phase '<workflow>.<phase>' completes from its evidence: <kinds>` | `CONFLICT` | 1 |
 | approval phase without authority (`finalize`) | the message `memory approve` gives (REQ-SEC-03) | as today | 1 |
 | approval phase without `--reason`, or a blank or malformed one (`finalize`) | `spec-008` / `dl-067` reason messages | — | 2 |
@@ -886,8 +1014,17 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | open instance (`remove`) | `cannot remove '<name>': open instance <id>` | `CONFLICT` | 1 |
 | the registry the commit would leave has a `spec-003` error (`create`, `remove`) | `workflow '<name>' would not load: <first error>` / `cannot remove '<name>': the workflows would not load: <first error>`; every diagnostic in `details` | `VALIDATION` | 1 |
 | `workflows.yaml` cannot be edited in place (`create`, `remove`) | `workflows.yaml cannot be edited in place: <reason>` | `CONFLICT` | 1 |
+| element already owned (`adopt`, §4.8) | `<type>:<id> is already owned by <instance> <key>; move it with workflow transfer` | `CONFLICT` | 1 |
+| element of another type than the step adds (`adopt`) | `<key> adds a <T>, not a <type>` | `VALIDATION` | 1 |
+| the step adds no element, or its `created` evidence is not missing (`adopt`) | `<key> adds no element to adopt` / `<key> already has its created element` | `CONFLICT` | 1 |
+| several candidates, no `--element` (`adopt`) | `<n> candidates for <key> (<type>:<id>, …); name one with --element` (ids ascending, also in `details.candidates`) | `CONFLICT` | 1 |
+| no candidate, no `--element` (`adopt`) | `no candidate for <key>; name one with --element` | `CONFLICT` | 1 |
+| `--plan --apply` without approver authority | `user not authorized to apply adoptions in bulk` | as `memory approve`'s refusal | 1 |
+| `rekey` without approver authority | `user not authorized to rekey` | as `memory approve`'s refusal | 1 |
+| `--from` still declared, or named by no record of the instance; `--to` not declared (`rekey`) | `cannot rekey <from>: it is still declared` / `no record of <instance> names <from>` / `unknown step: <to>` | `CONFLICT` | 1 |
+| `--to` is not a step of the instance's workflow or of a workflow it includes, directly or indirectly (`rekey`) | `<to> is not a step of <workflow> or of a workflow it includes` | `CONFLICT` | 1 |
 | dirty write target, missing git identity | the existing messages of `write-guard.ts` and REQ-SEC-01 | as today | 1 |
-| missing `<name>`; malformed `--element` (`spec-008` §7); a `--set` name other than `phase` / `scope` on `start`; invalid `<name>` syntax; `--kind` with `--startable`/`--includable`; `create` with neither; unknown flag | `spec-008` §2/§5 messages | — | 2 |
+| missing `<name>`; malformed `--element` (`spec-008` §7); a `--set` name other than `phase` / `scope` on `start`; invalid `<name>` syntax; `--kind` with `--startable`/`--includable`; `create` with neither; unknown flag; on `adopt`, `--apply` without `--plan`, `--plan` with `--step` or `--element`, a missing or blank `--reason` (`dl-067`) where one is required; on `rekey`, a missing `--from`, `--to` or `--reason` | `spec-008` §2/§5/§12 messages | — | 2 |
 
 `next`, `status`, `list` and `show` exit `0` for every deduced outcome and `1` only for a `spec-003`
 error or an unresolvable `<ref>`/name (`spec-005` §1's read-only rule).
@@ -902,6 +1039,9 @@ error or an unresolvable `<ref>`/name (`spec-005` §1's read-only rule).
 | `create` | registry (name uniqueness) | target file existence (`dl-086`) | the new file, `workflows.yaml` |
 | `remove` | registry, referrers, open instances | — | the removed file, `workflows.yaml` |
 | `memory add --workflow` (§7.10) | deduction of the named instance | — | as `memory add` |
+| `adopt`, `adopt --plan --apply` (§7.11) | registry, deduction, the candidates' frontmatter; `dna.yaml` (authority) on `--plan --apply` only | — | nothing (empty commits) |
+| `adopt --plan` | registry, deduction, the candidates' frontmatter | working-tree diff, for `W_UNCOMMITTED_INPUTS` only | — |
+| `rekey` (§7.12) | registry, deduction, `dna.yaml` (authority) | — | nothing (an empty commit) |
 | `next` | everything, at `HEAD` (§1.1, gating) | working-tree diff, for `W_UNCOMMITTED_INPUTS` only | — |
 | `status`, `list`, `show`, the two Resources | everything, at `HEAD` (§1.1, declared exception, ruling R15) | working-tree diff, for `W_UNCOMMITTED_INPUTS` only | — |
 
@@ -923,7 +1063,7 @@ list --format json` with the pinned build 0.2.2 loads the same 23 workflows and 
   (`.wingfoil/workflows/custom/retrospective.yaml:23`, "retrospective friction inventory
   (source-cited, grouped by theme)"). **The criterion fails at `997e8998`** until the
   workflow-alignment task gives the phase a path (`dl-104` Action 2).
-- `W_WORKFLOW_UNBOUND_TOKEN` × 90: 17 action occurrences of 13 distinct tokens (`npm.pin_advance`,
+- `W_WORKFLOW_UNBOUND_TOKEN` × 90: 17 action occurrences (the list names 10 distinct tokens and 13 of the occurrences; the measurement at `997e8998` is historical and is not re-run here) (`npm.pin_advance`,
   `git.create_branch`, `git.create_worktree`, `tests.bdd.run`, `git.merge`, `git.remove_worktree`,
   `cli.run` in three `e2e-smoke` phases, `git.commit` in two phases, `git.tag`,
   `approver.execute`) and 73 check entries — no `bindings.yaml` exists.
@@ -1007,8 +1147,11 @@ before `plan-next-release-line`.
   decision-log leave the selection.
 - *Instances started mid-release:* records before an instance's start commit do not count (§4.8), so an
   instance started after some tasks are done puts each done task's record checkpoints (`dev-loop.red|green|
-  refactor`) back on the frontier (§4.9) unless the task's state evidence completes the sub.
-- *Checkpoints:* 27 phases — the 28 above less `end-of-life.deprecate`, whose selection (the closing
+  refactor`) back on the frontier (§4.9) unless the task's state evidence completes the sub. An adoption
+  (§7.11) does not change this: it is `created` evidence only, and `red`/`green`/`refactor` are checkpoints, so each
+  still completes by `workflow finalize` (`dl-187` rule 4; approver ruling 2026-10-21,
+  `release-planning-rel-v0.3.1-plan`, settling `dl-187`'s item "to verify while specifying").
+- *Checkpoints:* 27 phases — the 28 of the list above as it stood before `task-212` added `vision-change.update-vision`, less `end-of-life.deprecate`, whose selection (the closing
   release-line's releases not yet released) is evidence.
   `retrospective.approve` stays one: its `decision-log.set_state(ready)` acts on the decision-log
   `capture` created (§4.2), which none of §4.3's kinds observes, so it completes by `workflow
@@ -1022,7 +1165,8 @@ before `plan-next-release-line`.
   task, whose `release` field the template declares (`{task.release}`); `seed-releases` files under
   `rl-{release-line.version}/` (`bug-224`).
 
-The pinned build 0.2.2 no longer loads the workflow files: its schema reads a `produces` entry as a
+The pinned build 0.2.2 did not load the workflow files (the pin reached 0.3.0, which loads them, at
+`release-planning-rel-v0.3.1-plan`'s `advance-pinned-build`): its schema reads a `produces` entry as a
 string only, so `workflow list` exits `1` on the four `{ type, path }` entries of `initial-design.yaml`
 (`E_VALIDATION`), and the `.mcp.json` server of the same build fails `wingfoil://workflows`; the
 measurement above is the code build's, and the pinned build reads the workflows again once
@@ -1031,6 +1175,44 @@ measurement above is the code build's, and the pinned build reads the workflows 
 `test/core/workflow-repository-conformance.test.ts` pins these figures against the committed
 configuration (zero errors, the exact warning set, the two phase lists, the `{ type, path }` owners),
 so a regression in either the files or the loader is caught.
+
+**To re-measure in `patch-v0.3.1`.** Three of its tasks change these figures, and each re-measures them and updates
+the conformance test in the same commit: the specification sub-workflows gain `produces` (`bug-389`), so their 11
+phases stop being checkpoints; a check may be bound `manual: true` (`dl-172` (a)), and the prose checks this
+repository confirms by hand are declared so (`dl-186` Q6), which removes their `W_WORKFLOW_UNBOUND_TOKEN`.
+
+**Re-measured at `task-298`** (2026-10-25, on `release/0.3` with `task-293` and `task-299` merged, through
+`loadWorkflowRegistryAtHead`): 27 workflows, 105 phases, **0 errors and 86 warnings**, every one a
+`W_WORKFLOW_UNBOUND_TOKEN` on a check — 87 before `demo.rendered` was bound `manual: true` in
+`workflows/bindings.yaml` 2.5 (`dl-172` (a)). `test/core/workflow-repository-conformance.test.ts` lists the 86.
+The pinned 0.3.0 again does not load the workflow files, because it refuses the `manual: true` check binding: the
+figures are the code build's, and `npm run check:mcp` declares the three `wingfoil://workflows` Resources known
+failures of 0.3.0 until the pin reaches 0.3.1.
+
+**Re-measured at `task-301`** (2026-10-26, `bug-389`, on `release/0.3` at `ae9da384` plus the task's commits, through
+`loadWorkflowRegistryAtHead`): 27 workflows, 105 phases, **0 errors and 86 warnings**, unchanged — every one a
+`W_WORKFLOW_UNBOUND_TOKEN` on a check. The eleven phases of `user-story-mapping`, `specification-by-examples`,
+`volere-requirements` and `backlog-export` (each file 1.1) declare their module's output directory as `produces`
+(`docs/02_requirements/01_user_story_map/`, `docs/02_requirements/02_bdd/features/`, `docs/02_requirements/03_sard/`,
+`docs/03_backlog/04_backlog/`), so they are no longer checkpoints: **17 checkpoint phases** (28 before), and a
+`sw-life-cycle` instance completes `specification` by `produces` evidence at `HEAD`. The six v0.1 plans carry their
+frontmatter (§1.4), so a workflow read reports 86 diagnostics, none `W_MEMORY_UNREADABLE` (92 before).
+`test/core/workflow-repository-conformance.test.ts` lists the 17. Two consequences: the four directories are
+`produces` patterns, so an uncommitted edit under them is `W_UNCOMMITTED_INPUTS` on every read (§1.2); and
+`vision-change`'s optional `downcast-stories`, `downcast-scenarios` and `downcast-requirements` include the same
+sub-workflows, so once `update-vision` is complete they complete at once, by the existence of those directories, and
+the frontier no longer offers the delta downcast beside `schedule` (approver ruling D3, 2026-10-26, at `task-301`'s
+design gate; the evidence of a delta downcast is follow-up F38).
+
+**Re-measured at `task-303`** (2026-10-26, `dl-186` Q6, on `release/0.3` at `98fccec0` plus the task's commits, through
+`loadWorkflowRegistryAtHead`): 27 workflows, 105 phases, **0 errors and 65 warnings**, every one a
+`W_WORKFLOW_UNBOUND_TOKEN` on a check, over 44 check names — 86 before. `workflows/bindings.yaml` 2.6 binds
+`manual: true` the 17 prose checks whose condition is a reading or a judgement no program can decide (21
+occurrences: the specification quality criteria, `spec-review.passed`, `acceptance-criteria.consistent`, the
+reviewer's two re-checks, the user-docs alignment reading, the `wingfoil-cli` re-check and the retrospective's three
+dispositions), keyed by their prose (`dl-172` (a)); with `demo.rendered`, 22 check occurrences are manual. The 65 left
+are checks a command could decide but none does yet, so they still fail closed at v1.0 until a `run` binding names
+their command. The checkpoint phases stay 17. `test/core/workflow-repository-conformance.test.ts` lists the 65.
 
 ### 13. Open questions
 
@@ -1421,3 +1603,65 @@ output or diagnostic changes. The core checks read every template `memory.yaml` 
 is not a regular file reads as absent at a commit and in the working tree alike (the working-tree registry, which no
 command reads, threw on a directory there). Edited in place without a supersede or a state change (`dl-047`), pending the
 approver's `memory amend`.
+
+**Revision (2026-10-21, `release-planning-rel-v0.3.1-plan`, identify-specs) — element provenance, manual checks,
+version-raising writers.** For `patch-v0.3.1`: `workflow adopt` and `workflow rekey` (P4.21, `cp-002`, `dl-187`,
+REQ-STATE-11): the Context, §0's row, two deduction diagnostics (§2), `created` evidence met by an adoption (§4.3),
+provenance records in the walk with the one-owner and orphan rules (§4.8), the grammar (§7), §7.11, §7.12, the
+output shapes (§8), the core rows (§9), the errors (§10) and the baseline rows (§11); `transfer` stays v0.4.
+Approver rulings of 2026-10-21: an adoption does not complete `dev-loop`'s record checkpoints (§12); `memory
+history`'s provenance and the `memory add` warning are v0.4; the BDD's "document not found" becomes `element not
+found: <type>:<id>`, the message this spec and `src/core/workflow-start-end.ts` already give; `--plan` proposes and
+`--plan --apply` writes (`spec-008` §12). A check bound `manual: true` is reported `manual`, unwarned (§6.1,
+`dl-172` (a)); `create` and `remove` raise `workflows.yaml`'s `version:` (§7.7, §7.8, `dl-174` (a), rule in
+`spec-006` §6). §12: the token list names 10 distinct tokens (the text said 13) and 13 of the 17 occurrences, now said so; the "28 above" names
+the list before `task-212`; the pinned build loads the workflows again from 0.3.0; the figures `patch-v0.3.1`'s
+tasks change are named. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend`.
+
+**Revision (2026-10-24, `task-293-read-adoption-and-rekey-records-in-the-workflow-deduction-p4.21`) — §2 and §4.8
+"One owner".** As the approver ruled at `task-293`'s design gate and review (2026-10-24): §4.8 "One owner" gains three
+sentences — a linkage and an adoption are claims under one descends-from rule when the element's claims include an
+adoption (D2 (a)); claims that are all linkages all count and never conflict (ruling (ii)); an instance of a workflow
+the registry does not load raises no `W_PROVENANCE_ORPHAN` (D3 (a)). §2's `W_PROVENANCE_ORPHAN` row gains the D3 (a)
+exception, and its `W_PROVENANCE_CONFLICT` row reads "two or more claims, at least one of them an adoption" instead
+of "two adoptions". Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend`.
+
+**Revision (2026-10-25, `task-298-let-a-workflow-check-be-bound-manual-dl-172`) — §12 re-measured.** After `task-298`
+binds `demo.rendered` `manual: true` (`dl-172` (a)), §12 records the load-time figures on `release/0.3` with
+`task-293` and `task-299` merged: 27 workflows, 105 phases, 0 errors, 86 warnings (87 before), all `W_WORKFLOW_UNBOUND_TOKEN` on
+checks; the pinned 0.3.0 refuses that binding, so the figures are the code build's and `check:mcp` declares the
+three workflow Resources known failures of 0.3.0 until the pin reaches 0.3.1. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-10-25, `task-294-add-workflow-adopt-with-its-single-plan-and-apply-forms-p4.21`) — §7.11.** As the
+approver ruled at `task-294`'s design gate (2026-10-24) and review (2026-10-25): the single form's "`created` evidence
+missing" is read as "the step created no element of `T`" (D1); `--plan` lists a step when adopting a candidate empties
+its missing evidence other than `record`, or, with no candidate, when `created` is its only declared evidence, and
+deduces again after each simulated adoption (D1 re-ruled, review finding 2); the declared rules are the scalar
+`memory.add` arguments other than `type` and `title`, literal or token-resolved, and the `{ type, path }` path, with
+no `iterate_over` filter (D2); `--plan` lists the instance's recorded adoptions first, `recorded: true` (D3);
+`--plan`'s `W_UNCOMMITTED_INPUTS` are success warnings (D5). Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-10-26, `task-295-add-workflow-rekey-p4.21`) — §7.12, §10.** As the approver ruled at `task-295`'s
+design gate (2026-10-24) and review (2026-10-26): the refusal order, with approver authority before the instance (D1);
+`--from` and `--to` are two `[a-z][a-z0-9-]*` names joined by one `.` (D2); `--to` must be a step of the instance's
+workflow or of a workflow it includes, directly or indirectly, with a new §10 row for the refusal (review ruling
+C (a)); `remapped` counts the entries remapped, not the commits (D4); the no-op returns `remapped: 0` and `next` at
+`HEAD` (D5), and holds only while no record of the instance still names `<from>`, else a new record is written (review
+ruling B (a)). Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend`.
+
+**Revision (2026-10-26, `task-301-give-the-six-v0.1-plans-their-frontmatter-and-the-specification-phases-their-produces`)
+— §1.4, §12.** As the approver ruled at `task-301`'s design gate (D1–D3): §1.4 records that the six pre-`dl-019`
+plans now carry the `plan` frontmatter; §12 is re-measured — 86 warnings unchanged, 17 checkpoints (the eleven
+specification phases declare `produces`, `bug-389`), workflow reads without `W_MEMORY_UNREADABLE`, and the
+`vision-change` downcast consequence (D3). Edited in place without a supersede or a state change (`dl-047`), pending
+the approver's `memory amend`.
+
+**Revision (2026-10-26, `task-303-bind-this-repository-s-manually-confirmed-prose-checks-as-manual-dl-186-q6`) —
+§12 re-measured.** As the approver ruled at `task-303`'s design gate (D1 (a)): a check is bound `manual: true` only
+when no program can decide its condition. §12 records 65 warnings over 44 check names (86 before), 17 prose checks
+bound manual (21 occurrences), 17 checkpoints unchanged. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend`.

@@ -11,6 +11,7 @@ ref: "spec-016"
 bug: ["bug-231", "bug-263"]
 depends_on: ["task-174-settle-mcp-prompts-contract-server-preflight-answer-tools", "task-176-complete-spec-012-context-builder-dna-selection-relevance"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

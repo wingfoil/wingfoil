@@ -23,7 +23,7 @@ Feature: P4.21 - Element provenance (workflow adopt, rekey, transfer)
 
   Scenario: Propose the adoptions of an instance without writing
     When I run "wingfoil workflow adopt sw-life-cycle-1-plan --plan"
-    Then the output lists, in id order, every step blocked on a creation and the candidate elements its declared rules match
+    Then the output lists, in walk order, every step blocked on a creation and, in id order, the candidate elements its declared rules match
     And "sw-life-cycle.seed-first-release-line" is listed with the single candidate "release-line:rl-v1"
     And no commit is written
     And the command exits with code 0
@@ -75,7 +75,7 @@ Feature: P4.21 - Element provenance (workflow adopt, rekey, transfer)
 
   Scenario: Error - an element that does not exist
     When I run "wingfoil workflow adopt sw-life-cycle-1-plan --step sw-life-cycle.seed-first-release-line --element release-line:rl-v9 --reason 'x'"
-    Then the command exits with code 1 and message "document not found: rl-v9"
+    Then the command exits with code 1 and message "element not found: release-line:rl-v9"
     And no commit is written
 
   Scenario: Error - the bulk operations need the approver

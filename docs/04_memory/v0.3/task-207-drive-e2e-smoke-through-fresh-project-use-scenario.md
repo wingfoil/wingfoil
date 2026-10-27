@@ -11,6 +11,7 @@ ref: "dl-099"
 bug: ["bug-132", "bug-133", "bug-134"]
 depends_on: ["task-140-run-packaging-gate-push-pull-request-separate", "task-199-align-wingfoil-workflows-custom-v0-3-schema-commands"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

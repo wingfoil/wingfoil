@@ -255,7 +255,7 @@ const ASSIGN_SUBJECT_RE = /^wf\([^)]*\):\s*assign release \S+ to [^[\]\s][^[\]]*
 
 /**
  * The Memory operation a commit subject declares, or `null` — for a subject outside the `wf()`
- * grammar (`workflow: finalize …`, `agent: record …`, `docs(…): …`), a configuration scope
+ * grammar (`workflow: finalize …`, `workflow: adopt …`, `workflow: rekey …`, `agent: record …`, `docs(…): …`), a configuration scope
  * ({@link CONFIGURATION_SCOPES}), or a verb outside {@link MEMORY_OPERATIONS}. The practised verbs the
  * declared list leaves out (`start-fix`, `schedule`, `plan`, `enter-releasing`, `mark-released`,
  * `deferred`, and the early verbless `wf(task): {id} [a → b]`), and an `assign` subject outside its

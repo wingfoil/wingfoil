@@ -11,6 +11,7 @@ ref: "spec-017"
 bug: []
 depends_on: ["task-142-run-memory-git-read-through-helper-captures-stderr", "task-198-deduce-workflow-instances-phase-evidence-frontier-memory-head"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

@@ -465,3 +465,12 @@ baselines (`docs/08_health/release-health-v0.1.json`, `-v0.2.json`) were measure
 this note on 2026-10-13 (`task-241`'s rulings, item I). For ratification with the next amendment of this decision:
 §6 keeps the pinned Node as the rule and names `--any-node` as a recorded exception, or the binding runs the step
 under the pin. The Decision above is unchanged.
+
+**Note (2026-10-24, dl-167 Action 3; task-300).** §1 and §4 name "the retrospective" as the disposer of a run's
+`RH-{release.version}-NN` proposals, but a patch skips the retrospective (`dl-092` Q2 (ii)). `dl-167` ruled option
+(a) (approve `94a5a2c3`): the next minor's retrospective disposes of them. Its `explore` reads, beside the release's
+own report, the report `docs/08_health/release-health-<patch version>.md` of every patch released since the previous
+retrospective, read once (a report of a `kind: patch` release absent from the tree at the commit that approved the
+previous `retro-<version>`), and `additional-points` presents every report `explore` read (`retrospective.yaml` 1.7,
+`task-300`). Each such proposal takes one of the four outcomes of `proposals.disposed` (covered, element, restated,
+superseded); six apply only to a consumer feedback note. The Decision above is unchanged.

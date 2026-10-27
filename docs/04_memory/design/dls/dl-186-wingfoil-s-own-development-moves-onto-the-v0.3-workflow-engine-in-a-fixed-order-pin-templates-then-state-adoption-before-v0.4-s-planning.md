@@ -4,7 +4,7 @@ type: decision-log
 title: "WingFoil's own development moves onto the v0.3 workflow engine in a fixed order: pin, templates, then state adoption, before v0.4's planning"              # REQUIRED — e.g. "Retrospective v0.1" or "Use Jest for unit testing"
 status: ready          # auto-set by wingfoil
 context: "ad-hoc"            # optional — short label for the context, e.g. "retrospective", "planning", "ad-hoc"
-release: ""            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
+release: "v0.3.1"            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
 reported_by: []        # optional — LIST of consumer feedback notes this element answers, as provenance only (dl-163 S3c), each "<service id>/F-<nnn>@<sha>": the full id of an active kind: repository service with a feedback_inbox, the note's id in that inbox, and the full sha of the consumer commit read; restate the note in this element, never copy it; a GitHub issue gets contributor + credit instead (COLLABORATION.md)
@@ -60,6 +60,14 @@ frontier also showed `release-planning.advance-pinned-build` for `minor-v0.4` an
 once (iterations deduce in parallel, `dl-175`), and a `late` list of open bugs and `ready`
 decision-logs (`dl-160`).
 
+*Correction (2026-10-26, `task-302`).* Those three iterations did not complete: `delivery` ignores them.
+`released` is outside its entry filter (`[draft, planning, in-development]`), and no phase of their
+`release-cycle` is complete, since its first step (`release-planning.advance-pinned-build`) is a checkpoint with
+no record, so each is neither eligible nor entered and leaves the frontier unread (`src/workflow/deduce.ts`
+`iterate`; an instrumented trace in `task-302`'s notes prints `ignored` for each). `minor-v0.3` is ignored the
+same way since its release, with or without its `waves:`. E3's heading and the Rationale's "the past releases
+close by their state" read "are ignored"; the conclusion that the past releases owe no record stands.
+
 **E4. The template packs do not exist yet, and replacing workflows orphans open instances.**
 WingFoil-Templates (`github.com/wingfoil/wingfoil-templates`) publishes no pack: its catalog lists none,
 and `base`, `software` and `governance/wingfoil-dogfood` are its milestone M2, which waits for v0.3's
@@ -92,6 +100,13 @@ before it.
 | S3 | `patch-v0.3.1` | The pin moves to `0.3.0` (`advance-pinned-build`). The published packs are adopted by hand: workflow names and shapes, with the tests, scripts and living documents that read them. The Memory is prepared (S3-b). The state-adoption mechanism (`dl-187`) is built and released; it is not run on this repository with the `0.3.0` pin. |
 | S4 | v0.4, first two phases | `advance-pinned-build` moves the pin to `0.3.1`; the state adoption then runs with the pinned build, before `define-scope`, so the rest of v0.4's planning runs on the engine. |
 | S5 | v0.4 scope, then after | Template installation (`dl-138`, P4.18–P4.20), `transfer` (`dl-187`), the run token counts (`dl-188`). Once the pin reaches 0.4, the packs adopted by hand at S3 move to the lock and the `remote` class; their files already match the packs, so the three-way merge has a trivial base. |
+
+**Revision (2026-10-26, approver ruling at `patch-v0.3.1`'s `w2` re-plan).** A bug-fix patch `v0.3.2` runs on
+`release/0.3` after `v0.3.1` and before v0.4, so v0.4's planning starts after the `v0.3.2` tag. S4 changes with it:
+v0.4's `advance-pinned-build` moves the pin to `0.3.2`, not `0.3.1`, and the state adoption runs with that pinned
+build. `v0.3.2`'s own `advance-pinned-build` moves the pin from `0.3.0` to `0.3.1`. `v0.3.2`'s scope, which of the
+bugs assigned v0.4 it takes, is decided at its release-planning. Q3 stands: the packs' hand adoption waits for
+`software`, and where it goes is ruled once `software` is published.
 
 - **S2-a, the request to WingFoil-Templates, and its outcome** (cross-repository process
   `2026-10-18-engine-adoption-packs`; WingFoil-Templates' answer of 2026-10-18, which the approver

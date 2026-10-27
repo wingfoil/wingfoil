@@ -135,7 +135,8 @@ Two kinds of writes:
 - **Scalar fields** with `dna set <path> --value <v>`.
 - **Collections and lists** with `dna add`, `dna update`, `dna remove`.
 
-Each write is one commit (`wf(dna): …`). Paths are dotted; a name containing a dot is quoted:
+Each write is one commit (`wf(dna): …`), which raises `dna.yaml`'s `version:` by 0.1 (`1` → `1.1`; from 0.3.1,
+as `directive assign` does for `roles.yaml` and `workflow create`/`remove` for `workflows.yaml`). Paths are dotted; a name containing a dot is quoted:
 `'stacks.technologies."Node.js"'`.
 
 ### 4.1 Project
@@ -162,7 +163,8 @@ wingfoil dna add team.roles --value designer --entry-description "UI design"
 ```
 
 Declare the AI agents that work on the project and the roles they act in. `approval_authority: false`
-documents that they never approve:
+documents that they never approve. `init` writes `agents: []` under `team`, with a commented example
+above it to uncomment in its place, or run:
 
 ```bash
 wingfoil dna add team.agents --value claude --entry-executes_as developer,reviewer --entry-approval_authority false
@@ -362,9 +364,17 @@ Full script: [`examples/03-directives-per-role`](examples/03-directives-per-role
 |---|---|---|
 | `sw-life-cycle` | startable | inception → specification → delivery → sunset |
 | `scrum-delivery` / `kanban-delivery` | includable (by `delivery`) | plan → build → review → deliver |
-| `bug-ingest`, `decision-log-ingest`, `adr-ingest` | startable | capture |
+| `bug-ingest`, `decision-log-ingest`, `adr-ingest` | startable | capture → approve |
 
 A phase includes another workflow by its **name** (`include: scrum-delivery`), not by its file path.
+
+Every phase names the role that performs it (`delivery` only includes the delivery loop, whose phases name
+their own). The phases that write Memory declare it, so WingFoil reads their outcome from your documents:
+the delivery loop's `plan` adds and submits the tasks of the slice (`memory add --type task --workflow …`,
+then `memory submit`) and is not passed until a task exists under `docs/memory/task/`; its `review` waits for
+the approver to approve every submitted task; each ingest workflow's `capture` adds and submits one
+element, and its `approve` is the approver's decision on it. The other phases (`inception`,
+`specification`, `build`, `deliver`, `sunset`) are checkpoints, recorded with `wingfoil workflow finalize`.
 
 ```bash
 wingfoil workflow list                 # the workflows you can run now (--all: every one)
@@ -403,6 +413,50 @@ removed). See the [CLI reference](cli-reference.md#wingfoil-workflow-list).
 
 A workflow run from `workflow start` to `workflow end`, with a routed approval and a checkpoint recorded
 by `workflow finalize`: [`examples/06-workflow-approval`](examples/06-workflow-approval/run.sh).
+
+**Elements that existed before the workflow** (new in 0.3.1). A step that adds an element waits for one added with
+`memory add --workflow`. An element added without it — before the project used workflows, or by forgetting the
+option — can be counted as created by that step with `wingfoil workflow adopt`, which writes one commit that changes
+no file:
+
+```console
+$ wingfoil workflow adopt bug-ingest-1-plan --element bug:bug-001-login-fails --reason "adopt the bug filed before the run"
+workflow: bug-ingest (bug-ingest-1-plan)
+adopted: bug:bug-001-login-fails into bug-ingest.capture (9fef5a44…)
+next step: bug-ingest.capture@bug:bug-001-login-fails
+…
+```
+
+From then on the step works on that element as if `memory add --workflow` had created it. `workflow adopt <ref>
+--plan` writes nothing and lists the steps that wait only for the element they create, each with its candidates;
+a step that also waits on other evidence, such as `bug-ingest.capture` and its `produces:`, is not listed (here
+`--plan` prints `nothing to adopt`), so name the element with `--element`. An approver can write the listed
+adoptions with `--plan --apply`.
+
+**Renaming a phase** (new in 0.3.1). The records an open workflow holds name its steps by
+`<workflow>.<phase>`. After a phase is renamed in its workflow file, an approver maps them to the new name, so the
+renamed step does not wait again for work already done:
+
+```console
+$ wingfoil workflow rekey bug-ingest-1-plan --from bug-ingest.capture --to bug-ingest.report --reason "follow the renamed capture phase"
+workflow: bug-ingest (bug-ingest-1-plan)
+rekeyed: bug-ingest.capture -> bug-ingest.report, 1 record(s) remapped (0990711e…)
+next step: bug-ingest.report@bug:bug-001-login-fails
+…
+```
+
+**Checks a person confirms** (new in 0.3.1). A phase's `checks:` are prose or tokens. `workflow list` warns
+(`W_WORKFLOW_UNBOUND_TOKEN`) about each check that is neither a built-in token nor bound in `.wingfoil/workflows/bindings.yaml`. A check that
+a person confirms on purpose is bound `manual: true`, and the warning goes away:
+
+```yaml
+version: 1.0
+format: 1
+checks:
+  "design reviewed by a human": { manual: true }
+```
+
+See the [CLI reference](cli-reference.md#wingfoil-workflow-adopt) for every option and refusal.
 
 ## 8. Daily use: the life of a Memory document
 
@@ -658,6 +712,11 @@ initialising a project with 0.2.2 and running both versions on it.
   plan element`); `agent execute` needs `paths.runs` and an adapter. Copy the `plan` entry of
   `memory.yaml`, `memory/templates/plan.md`, `paths.runs: [docs/runs/]` and `.wingfoil/agents/` from a
   project `wingfoil init` creates in an empty repository, then commit.
+- **Workflows the engine can drive (a project initialised by 0.3.0 too, when you upgrade to 0.3.1).** 0.2.x and 0.3.0's `init` scaffolded workflows whose phases named no
+  role and declared no action, so `workflow next` printed `role: (none)` and `workflow finalize` alone
+  completed `sw-life-cycle`. To get the roles, actions and evidence of §7, copy the five files under
+  `.wingfoil/workflows/custom/` from a project `wingfoil init` creates in an empty repository (with the same
+  template), then commit.
 - **Create elements with `memory add`.** A Memory verb acts only on a document committed at `HEAD`. A
   document written by hand and not committed, which 0.2.2 submitted, is now refused with exit `1`:
   ``error: document not found: task-001-hand — docs/memory/task/task-001-hand.md is not committed at HEAD, though it carries that id in the working tree. …; register a new element with `memory add`, then retry.``

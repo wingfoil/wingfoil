@@ -11,6 +11,7 @@ ref: "dl-097"
 bug: []
 depends_on: ["task-191-add-absence-claim-falsifiability-clause-claim-evidence-reword"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

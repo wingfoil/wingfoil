@@ -11,6 +11,7 @@ ref: "dl-111"
 bug: ["bug-051"]
 depends_on: ["task-166-settle-reason-block-grammar-shape-rule-terminator"]
 tmpl_version: 260703
+wave: "w2"
 ---
 
 ## Description

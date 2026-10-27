@@ -11,6 +11,7 @@ ref: "dl-130"
 bug: ["bug-060", "bug-173", "bug-174"]
 depends_on: ["task-229-create-github-release-once-npm-has-version-sweep"]
 tmpl_version: 260703
+wave: "w3"
 ---
 
 ## Description

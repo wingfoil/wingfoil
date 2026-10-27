@@ -16,7 +16,7 @@
  *      (`"wingfoil-released": "npm:wingfoil@X.Y.Z"`);
  *   3. its channel set equals {@link EXPECTED_CHANNELS}, and every advertised channel answers its list
  *      request. This is `dl-026`'s re-verification: when a pin switch brings a build that advertises a
- *      new channel (P5.2.3 Tools, v0.4), this check fails until the constant is updated on purpose;
+ *      different channel set, this check fails until the constant is updated on purpose;
  *   4. every static Resource it lists answers a read, and every Prompt it lists answers a get with no
  *      arguments (task-239, `bug-292`: listing alone passed while one of two Resources failed every read).
  *      A failure the pinned build is known to have is declared in {@link KNOWN_READ_FAILURES}, by version
@@ -48,13 +48,17 @@ const PINNED_ALIAS = 'wingfoil-released';
 const MCP_CHANNELS = Object.freeze(['prompts', 'resources', 'tools']);
 
 /**
- * The channel set the pinned build is expected to advertise: Resources (P5.2.1, v0.1) and Prompts
- * (P5.2.2, v0.2). From the first build that carries `task-174` (`bug-151`), the server also declares an
- * empty `tools` channel (`tools/list` → `[]`), and Tools themselves (P5.2.3) land in v0.4 — update this
- * constant in the commit that moves the pin to a build that advertises `tools`, which is the
- * re-verification `dl-026` asks for.
+ * The channel set the pinned build is expected to advertise: Resources (P5.2.1, v0.1), Prompts
+ * (P5.2.2, v0.2) and, from 0.3.0 (`task-174`, `bug-151`), an empty `tools` channel (`tools/list` → `[]`);
+ * Tools themselves (P5.2.3) land in v0.4. The constant changes in the commit after a pin switch that
+ * brings a different channel set (the switch commit itself touches only package.json and
+ * package-lock.json, `release-planning`'s `advance-pinned-build`): the re-verification `dl-026` asks for.
  */
-const EXPECTED_CHANNELS = Object.freeze(['prompts', 'resources']);
+const EXPECTED_CHANNELS = Object.freeze(['prompts', 'resources', 'tools']);
+
+/** Why 0.3.0 cannot read this repository's workflows (`bug-414`; task-298, `dl-172` (a)): one reason for its three Resources. */
+const MANUAL_CHECK_ON_0_3_0 =
+  'bug-414 (task-298): 0.3.0 requires run on every check binding and refuses the { manual: true } check binding dl-172 (a) adds (demo.rendered in workflows/bindings.yaml); it ends when advance-pinned-build moves the pin to 0.3.1';
 
 /**
  * The reads the pinned build is known to fail, by its version (task-239, `bug-292`). Each entry applies only
@@ -65,10 +69,19 @@ const EXPECTED_CHANNELS = Object.freeze(['prompts', 'resources']);
  */
 const KNOWN_READ_FAILURES = Object.freeze([
   Object.freeze({
-    version: '0.2.2',
+    version: '0.3.0',
     uri: 'wingfoil://workflows',
-    reason:
-      "bug-292: 0.2.2 reads a workflow's produces entry as a string only and refuses the { type, path } entries task-199 wrote (dl-104 D3, spec-017 §12); it ends when advance-pinned-build moves the pin",
+    reason: MANUAL_CHECK_ON_0_3_0,
+  }),
+  Object.freeze({
+    version: '0.3.0',
+    uri: 'wingfoil://workflows/-/next',
+    reason: MANUAL_CHECK_ON_0_3_0,
+  }),
+  Object.freeze({
+    version: '0.3.0',
+    uri: 'wingfoil://workflows/-/status',
+    reason: MANUAL_CHECK_ON_0_3_0,
   }),
 ]);
 

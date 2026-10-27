@@ -56,8 +56,8 @@ const HEALTHY_CONFIG: McpConfig = { mcpServers: { wingfoil: { command: 'node', a
 const HEALTHY_MANIFEST = { devDependencies: { 'wingfoil-released': 'npm:wingfoil@0.2.1' } };
 const HEALTHY_OBSERVATION: McpServerObservation = {
   version: '0.2.1',
-  channels: ['prompts', 'resources'],
-  lists: { prompts: 8, resources: 2 },
+  channels: ['prompts', 'resources', 'tools'],
+  lists: { prompts: 8, resources: 2, tools: 0 },
   resourceReads: { 'wingfoil://dna': true, 'wingfoil://workflows': true },
   promptGets: { 'developer-session': true },
 };
@@ -78,7 +78,8 @@ describe('the committed declarations (task-112 AC 1, AC 2)', () => {
 
   it('the build `npm ci` installed under the alias reports the pinned version', () => {
     const run = spawnSync(process.execPath, [PINNED_BIN, '--version'], { cwd: REPO_ROOT, encoding: 'utf-8' });
-    expect({ status: run.status, stdout: run.stdout.trim() }).toEqual({ status: 0, stdout: pinFromPackageJson() });
+    // From 0.3.0 the version carries its build stamp, `X.Y.Z (<sha>)` (dl-111); the semver is the first word.
+    expect({ status: run.status, version: run.stdout.trim().split(' ')[0] }).toEqual({ status: 0, version: pinFromPackageJson() });
   });
 
   it('node_modules/.bin/wingfoil is the alias’s binary (dl-095: confirm before relying on it)', () => {
@@ -101,8 +102,8 @@ describe('scripts/check-mcp-registration.cjs — pure parts', () => {
     expect(channelSet(undefined)).toEqual([]);
   });
 
-  it('expects today’s channel set: Resources (P5.2.1) and Prompts (P5.2.2), no Tools until P5.2.3', () => {
-    expect(EXPECTED_CHANNELS).toEqual(['prompts', 'resources']);
+  it('expects today’s channel set: Resources (P5.2.1), Prompts (P5.2.2) and the empty tools channel of 0.3.0 (task-174)', () => {
+    expect(EXPECTED_CHANNELS).toEqual(['prompts', 'resources', 'tools']);
   });
 
   it('accepts a registration of the pinned build that answers as declared', () => {
@@ -135,10 +136,11 @@ describe('scripts/check-mcp-registration.cjs — pure parts', () => {
   });
 
   it('refuses a changed channel set, naming both sets — the dl-026 re-verification', () => {
-    const grown = { ...HEALTHY_OBSERVATION, channels: ['prompts', 'resources', 'tools'], lists: { prompts: 8, resources: 2, tools: 1 } };
-    const result = evaluateRegistration(HEALTHY_MANIFEST, HEALTHY_CONFIG, grown);
+    const shrunk = { ...HEALTHY_OBSERVATION, channels: ['prompts', 'resources'], lists: { prompts: 8, resources: 2 } };
+    const result = evaluateRegistration(HEALTHY_MANIFEST, HEALTHY_CONFIG, shrunk);
     expect(result.ok).toBe(false);
     expect(result.message).toContain('prompts, resources, tools');
+    expect(result.message).toContain('[prompts, resources]');
     expect(result.message).toContain('EXPECTED_CHANNELS');
   });
 
@@ -200,9 +202,14 @@ describe('scripts/check-mcp-registration.cjs — every Resource is read, every P
     expect(moved.message).toContain('0.2.0');
   });
 
-  it('declares the pinned 0.2.2 build’s one known failure: wingfoil://workflows (spec-017 §12)', () => {
-    expect(KNOWN_READ_FAILURES.map(({ version, uri }) => `${version} ${uri}`)).toEqual(['0.2.2 wingfoil://workflows']);
-    expect(KNOWN_READ_FAILURES[0]?.reason).toContain('bug-292');
+  it('declares the workflow Resources as known failures of the pinned 0.3.0 build: it refuses the manual check binding (task-298, dl-172 (a))', () => {
+    // The 0.2.2 entry ended with the pin advance (bug-292); these end when advance-pinned-build moves the pin to 0.3.1.
+    expect(KNOWN_READ_FAILURES.map(({ version, uri }) => [version, uri])).toEqual([
+      ['0.3.0', 'wingfoil://workflows'],
+      ['0.3.0', 'wingfoil://workflows/-/next'],
+      ['0.3.0', 'wingfoil://workflows/-/status'],
+    ]);
+    for (const entry of KNOWN_READ_FAILURES) expect(entry.reason).toMatch(/^bug-414 \(task-298\).*manual: true.*0\.3\.1/);
   });
 
   it('observes the build under development as `node dist/cli.js mcp`', () => {
@@ -244,6 +251,11 @@ describe('scripts/check-mcp-registration.cjs — against the real pinned build',
     const dir = mkdtempSync(join(tmpdir(), 'wf-mcpreg-'));
     try {
       expect(spawnSync('git', ['init', '-q', dir]).status).toBe(0);
+      // From 0.3.0 the server refuses a repository with no `.wingfoil/` (bug-154): scaffold one, so it starts and
+      // reports a version to compare with the pin.
+      expect(spawnSync('git', ['-C', dir, 'config', 'user.name', 'Check Mcp']).status).toBe(0);
+      expect(spawnSync('git', ['-C', dir, 'config', 'user.email', 'check-mcp@example.invalid']).status).toBe(0);
+      expect(spawnSync(process.execPath, [join(REPO_ROOT, PINNED_BIN), 'init', '--template', 'Scrum'], { cwd: dir, encoding: 'utf-8' }).status).toBe(0);
       writeFileSync(join(dir, 'package.json'), JSON.stringify({ devDependencies: { 'wingfoil-released': 'npm:wingfoil@9.9.9' } }));
       writeFileSync(
         join(dir, '.mcp.json'),
