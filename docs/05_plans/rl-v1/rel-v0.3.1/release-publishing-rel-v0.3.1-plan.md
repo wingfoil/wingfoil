@@ -239,6 +239,46 @@ reaches `main` by `git push origin HEAD:main` only on the approver's instruction
 - **Service sweep (P-time listing, `node scripts/service-verify-sweep.cjs` at `9c99fe31`):** 21 services; `svc-012`
   and `svc-014` `pending`; 1 deprecated not listed.
 
+### 2026-10-27 — S0–S2 and the candidate
+
+- **Rulings.** The approver approved this plan as proposed (D1 (A), D2–D4, D5 (a), D6) on 2026-10-27; submitted
+  `853440d7` `[draft → active]` (code build `0.3.0 (a85711bd…)`, §7 trailers in the `WingFoil-Version:` paragraph).
+- **S1 — secret sweep** (`node ../devloop-kit/secret-sweep.cjs` at `853440d7`): `blocking findings: 11`, the same 11
+  known false positives as release-submit (`devloop-kit/rs031-secret-sweep.log`); nothing stops the phase.
+- **S2.** WFCoord told at 2026-10-27 ~14:50 (+01:00) that `release/0.3` is frozen until the tag (SendMessage, before
+  the merge). Release commit **`b7e261b7`** `chore(release): release v0.3.1 …`, five files: `package.json`,
+  `package-lock.json` (×2), `server.json` (×2), `CHANGELOG.md` (`## [0.3.1] - 2026-10-27` + the asset link, ruling
+  F5), `README.md` row 0.3.1 (D3); `SECURITY.md` untouched (D4). `npm ci` exit 0; `npm run -s check:lockfile` exit 0;
+  `node scripts/check-release-tag.cjs v0.3.1` → `tag v0.3.1 matches package.json version 0.3.1, and so do server.json
+  and its packages`; `npx jest test/docs/community-health.test.ts test/cli/publish-metadata.test.ts
+  test/lint/version-bump.test.ts test/docs/llms-txt.test.ts` → 4 suites / 188 tests passed;
+  `node scripts/check-governance.cjs --base origin/release/0.3` → 2 `wf()` commits, gated 0 findings.
+- **The candidate.** `git merge --no-ff design/release_publishing_v0.3.1` in `../.wf2-wt/release-0.3` (branch
+  `release/0.3`) → **M = `870bd440`** (`870bd4406f3b9bba5ecde7a5f8198b80c2a98583`), local, not pushed;
+  `git diff --name-only a85711bd 870bd440` → the five release-commit files + this plan. Detached worktree
+  `../.wf2-wt/release-publishing-v0.3.1-candidate` at M.
+
+### 2026-10-27 — S3 and S4 on the candidate M = `870bd440`
+
+`devloop-kit/gate-releasepublishing-v0.3.1.sh` in the worktree detached at M, one heavy step at a time under
+`waitslot.sh`, started 14:55:24+01:00 (load 5.48), done 15:14:58 (`devloop-kit/gate-rp031.log`):
+
+| Step | Command | Result |
+|---|---|---|
+| tree | `git status --porcelain` | 0 dirty |
+| install | `npm ci` | exit 0 (4 s) |
+| build | `npm run -s build`; `dist/build-info.json` | exit 0; `{"version":"0.3.1","commit":"870bd4406f3b9bba5ecde7a5f8198b80c2a98583"}` |
+| typecheck | `npm run -s typecheck` | exit 0 (22 s) |
+| lint | `npm run -s lint` | exit 0 (14 s) |
+| tag/version | `node scripts/check-release-tag.cjs v0.3.1` | exit 0 |
+| **`tests.passing`** (D1) | `npm run -s test:no-identity -- --maxWorkers=2` | exit 0, **506 suites / 8928 tests passed** (991 s) |
+| **`staging-rehearsal`** | `npm run publish:staging -- --expect-commit 870bd4406f3b9bba5ecde7a5f8198b80c2a98583 --transcript docs/07_gates/rl-v1/rel-v0.3.1-staging-rehearsal.md` | exit 0 (85 s); 84 lines, 82 `ok`, 0 `not ok`; `wingfoil --version = 0.3.1 (870bd440…) — match`; closing line `staged wingfoil@0.3.1 and smoke passed`; port 4873 free afterwards (`ss -ltn`) |
+| **`staging-rehearsal-passed`** | `node scripts/publish-staging.cjs --check-transcript <transcript>` | exit 0, `staging rehearsal passed for wingfoil@0.3.1 on candidate 870bd4406f3b9bba5ecde7a5f8198b80c2a98583` |
+
+The candidate tree stayed clean but for the transcript (`?? docs/07_gates/rl-v1/rel-v0.3.1-staging-rehearsal.md`),
+copied to this branch and committed with these notes. Per `release-cycle.yaml` the rehearsal's smoke stands as M's
+e2e-smoke run.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
