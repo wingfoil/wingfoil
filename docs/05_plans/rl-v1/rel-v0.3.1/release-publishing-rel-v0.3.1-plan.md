@@ -279,6 +279,63 @@ The candidate tree stayed clean but for the transcript (`?? docs/07_gates/rl-v1/
 copied to this branch and committed with these notes. Per `release-cycle.yaml` the rehearsal's smoke stands as M's
 e2e-smoke run.
 
+### 2026-10-27 — tag pre-checks, S5 (handover), S6 (publish), S7 (verify)
+
+- **Merge of the evidence:** `0a73b580` (transcript + notes) merged `--no-ff` → `release/0.3` `00a996a9`. On
+  `release/0.3`: `staging-rehearsal-passed` exit 0 (candidate `870bd440…`); `evidence-only-since-candidate` → `only
+  evidence paths changed between the candidate 870bd440… and the tip 00a996a9…: 2 paths`, exit 0;
+  `phase-branch-merged-to-integration-branch` (`git merge-base --is-ancestor design/release_publishing_v0.3.1
+  release/0.3`) exit 0; governance `--base origin/release/0.3` → 2 `wf()` commits, gated 0 findings; secret sweep
+  11 known findings (the trees of `0a73b580` and `00a996a9` are identical: `git diff --stat` empty).
+- **S5.1 — push of `release/0.3`** on the approver's instruction: `a85711bd..00a996a9`; the remote printed `Required
+  status check "governance" is expected` (admin bypass); the push's `ci` and `governance` both `success` on
+  `00a996a9` before the tag. After the push `node scripts/integration-branch.cjs --check-head --kind patch --version
+  v0.3.1` → `HEAD is on release/0.3, the integration branch of v0.3.1 (dl-159)`.
+- **S5.2 — service verify sweep** (dl-130 step 4, warn), run by the approver on 2026-10-27 ~15:38 (+01:00) with
+  `devloop-kit/services-verify-v0.3.1.sh` (each listed `verify`, plus the `npm-publish` / trusted-publisher read-only
+  checks; log `devloop-kit/services-verify-v0.3.1.log`): all 24 commands exit 0 (svc-001…006, 008, 010, 012…022 —
+  svc-022 on both `main` and `release/0.3` — environment branch policies, environment secrets `0`, repository secrets
+  `[]`, `v0.3.1` free on the remote and on npm (`E404`)). Browser checks by the approver: svc-009, svc-011, svc-012,
+  svc-013, svc-014 all OK (approver, 2026-10-27).
+- **S5.3 — tag** on the approver's instruction: `git tag -a v0.3.1 -m "release v0.3.1"
+  870bd4406f3b9bba5ecde7a5f8198b80c2a98583` → tag object `bd27f62a`, `v0.3.1^{commit}` = `870bd440…`;
+  `git push origin v0.3.1`. WFCoord told the freeze is over.
+- **S6 — publish.yml run [40543882451](https://github.com/wingfoil/wingfoil/actions/runs/40543882451), `success`:**
+
+  | Job | Result | Time (UTC) |
+  |---|---|---|
+  | gate | success | 16:44:35 → 16:56:53 (**12 min 18 s**) |
+  | stage | success | 16:56:56 → 16:58:02 |
+  | promote | waited on `npm-publish`; deployment approved by the approver; success | 17:28:44 → 17:29:00 |
+  | release | success | 17:29:04 → 17:32:25 |
+  | mcp-registry | success | 17:29:04 → 17:32:25 |
+
+  Gate log (`gh api repos/wingfoil/wingfoil/actions/jobs/<gate>/logs`): `commit 870bd440… of tag v0.3.1 is on
+  origin/release/0.3; checked origin/main (not an ancestor), origin/release/0.3 (ancestor) (dl-024, dl-159)` — the
+  first tag of a patch line checked on its release branch; `tag v0.3.1 is an annotated tag`; `tag v0.3.1 matches
+  package.json version 0.3.1, and so do server.json and its packages`; 506 suites / 8928 tests passed; coverage
+  99.37 / **97.5** / 98.18 / 99.73 — **F61:** the same figures as the candidate `d3826aab` at release-submit.
+  Promote: `0.3.1 is above every published version (highest 0.3.0): dist-tag latest (dl-159)`, `+ wingfoil@0.3.1
+  (staged with id 800b8e14-c434-4efd-b226-acf79d572967)`, `staged with tag latest`, provenance signed (Sigstore log
+  index 3521948904). The approver approved the staged version on npm with 2FA (2026-10-27).
+- **S7 — verify (2026-10-27 ~18:37 +01:00):**
+
+  | Check | Command | Result |
+  |---|---|---|
+  | dist-tags | `npm view wingfoil dist-tags --json` | `{"latest": "0.3.1"}` |
+  | metadata | `npm view wingfoil@0.3.1 version mcpName repository.url homepage --json` | `0.3.1`, `io.github.wingfoil/wingfoil`, `git+https://github.com/wingfoil/wingfoil.git`, `https://wingfoil.github.io/wingfoil/` |
+  | provenance | `npm view wingfoil@0.3.1 dist --json` | attestations, `predicateType` `https://slsa.dev/provenance/v1` |
+  | dependencies | `npm view wingfoil@0.3.1 dependencies --json` | zod `^4.4.3`, js-yaml, commander, @modelcontextprotocol/sdk |
+  | install | isolated `npm install -g --prefix <tmp> --cache <tmp> wingfoil@0.3.1` (empty userconfig); `wingfoil --version`; fresh repo `init --template Scrum`, `workflow list`, `memory add --type task`, `memory submit` | first attempt at 18:33 `E404` on the tarball (`curl` on `…/wingfoil-0.3.1.tgz` → 404 until 18:36:59, then 200: registry propagation, ~4 min after the approve); retry exit 0; `0.3.1 (870bd4406f3b9bba5ecde7a5f8198b80c2a98583)`; init/list/add/submit exit 0, 3 commits, clean tree |
+  | Release | `gh release view v0.3.1 --json …`; `gh api repos/wingfoil/wingfoil/releases/latest --jq .tag_name` | published 17:32:22Z, not draft/prerelease, assets `coverage-summary.json`, `jest-results.json`, `lcov.info`, `test-results.md`; latest `v0.3.1` |
+  | CHANGELOG link (F5) | `curl -sIL -o /dev/null -w '%{http_code}' https://github.com/wingfoil/wingfoil/releases/download/v0.3.1/test-results.md` | `200` |
+  | MCP Registry | `curl -s 'https://registry.modelcontextprotocol.io/v0/servers?search=io.github.wingfoil/wingfoil'` | `io.github.wingfoil/wingfoil 0.3.1`, status `active`, `isLatest: true`, published 17:32:21Z (0.3.0 `isLatest: false`) |
+  | Pages | `gh run view 40543889934 --json jobs` | run of the tag `v0.3.1`: build 16:44:38 → 17:32:48 (waited for npm), deploy 17:32:53 → 17:33:40 `success` |
+
+- **`publish` produces:** `gh release download v0.3.1 --pattern test-results.md --pattern coverage-summary.json --dir
+  <tmp>` → `docs/07_gates/rl-v1/rel-v0.3.1-test-results.md` (commit `870bd440…`, run 40543882451, build `0.3.1
+  (870bd440…)`, passed) and `docs/07_gates/rl-v1/rel-v0.3.1-coverage-summary.json`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
