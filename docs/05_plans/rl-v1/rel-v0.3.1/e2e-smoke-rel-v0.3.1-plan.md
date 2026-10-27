@@ -293,6 +293,24 @@ the approver's word.
     baseline was a count of notice lines), F61 (flaky branch coverage of `memory-transition.ts:560`), F62 (same-class
     zod 4.6 default messages in `Produces` / `approval`).
 
+- 2026-10-27 — **S6:** pre-gate notes committed; **the candidate is `d3826aab5a392429f7c6f8423752277e380cb098`**
+  (`git diff --name-only 41556c3c d3826aab` → this plan only; `git status --porcelain` empty). On it, code build:
+  `workflow list --all --format json` exit 0, 27 workflows, 65 diagnostics, 0 errors (`W_WORKFLOW_UNBOUND_TOKEN` 65);
+  `workflow status --format json` open 3, pending 1, ungated 33; `check-governance.cjs --base origin/release/0.3` 0;
+  `lint-claims` 0 errors (the same warn-only line of `task-304`).
+- 2026-10-27 — **S7 gate: PASS.** `node scripts/e2e-smoke.cjs --candidate --report
+  docs/07_gates/rl-v1/rel-v0.3.1-e2e-smoke.md` (under the slot, foreground) exit 0 in 76 s: the packed candidate
+  installed into a throwaway prefix, stamp `0.3.0 (d3826aab…)` matched, **82/82 checks ok** — both templates, the
+  `workflow adopt --plan` probe, the agent run and Journey 4 per template (log `devloop-kit/gate-e2e031-candidate.log`).
+  `check e2e-smoke-passed`: passed (severity reject). `npm run build` restored `dist/` (`0.3.0 (d3826aab…)`). After
+  the run, `workflow show` on each of the 27: exit 0, 0 errors (65 warnings + 1 `W_UNCOMMITTED_INPUTS` naming the
+  untracked report).
+- 2026-10-27 — **S8:** the report committed with the hand-written section "Repository checks on the candidate
+  (workflow reads)" appended (D2); the report and this plan are evidence paths, so the commit does not re-cut the
+  candidate.
+- 2026-10-27 — **S9:** findings F56–F62 in the kit register (above); F56 became `bug-415`, closed by `task-304` in this
+  phase; the rest wait for the ingest after the `v0.3.1` tag.
+
 ### Retrospective
 
 - A registry advisory turned the line red between two runs with no repository change, and its lock fix changed a
