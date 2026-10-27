@@ -8,12 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Every entry ends with the WingFoil Memory element(s) it comes from: a `done` task (`task-NNN`) or a
 `closed` bug (`bug-NNN`).
 
-## [0.3.1] - Unreleased
+## [0.3.1] - 2026-10-27
 
 A patch of the 0.3 line. Elements created before a project used workflows can now be counted as created by a
 workflow step, and an open workflow follows a renamed phase. A check a person confirms can be declared as such.
 Projects initialised by 0.3.1 get workflows the engine can guide. A project initialised by 0.3.0 keeps working
 unchanged; to get the guided workflows, see *Upgrading from 0.3.0* below.
+
+The test results of the published build — the suites by kind, their counts and the coverage totals — are
+attached to the release as
+[`test-results.md`](https://github.com/wingfoil/wingfoil/releases/download/v0.3.1/test-results.md).
 
 ### Added
 
