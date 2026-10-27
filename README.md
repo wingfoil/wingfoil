@@ -8,6 +8,7 @@
 [![licence](https://img.shields.io/npm/l/wingfoil)](https://github.com/wingfoil/wingfoil/blob/main/LICENSE)
 [![node](https://img.shields.io/node/v/wingfoil)](https://www.npmjs.com/package/wingfoil)
 [![publish](https://github.com/wingfoil/wingfoil/actions/workflows/publish.yml/badge.svg)](https://github.com/wingfoil/wingfoil/actions/workflows/publish.yml)
+[![M8ven Score](https://m8ven.ai/badge/mcp/wingfoil-wingfoil-1cpwbm?v=f42618dfa506b7e4d8d7093ce402c58e)](https://m8ven.ai/mcp/wingfoil-wingfoil-1cpwbm?s=readme)
 
 **A structured harness for AI-assisted software development, built to make it deterministic.**
 
