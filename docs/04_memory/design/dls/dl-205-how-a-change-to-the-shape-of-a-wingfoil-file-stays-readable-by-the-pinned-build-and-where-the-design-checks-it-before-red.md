@@ -4,7 +4,7 @@ type: decision-log
 title: "How a change to the shape of a .wingfoil/ file stays readable by the pinned build, and where the design checks it before red"              # REQUIRED — e.g. "Retrospective v0.1" or "Use Jest for unit testing"
 status: in-discussion          # auto-set by wingfoil
 context: "dev-loop"            # optional — short label for the context, e.g. "retrospective", "planning", "ad-hoc"
-release: ""            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
+release: "v0.4"            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
 reported_by: []        # optional — LIST of consumer feedback notes this element answers, as provenance only (dl-163 S3c), each "<service id>/F-<nnn>@<sha>": the full id of an active kind: repository service with a feedback_inbox, the note's id in that inbox, and the full sha of the consumer commit read; restate the note in this element, never copy it; a GitHub issue gets contributor + credit instead (COLLABORATION.md)
