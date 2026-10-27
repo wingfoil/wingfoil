@@ -311,6 +311,12 @@ the approver's word.
 - 2026-10-27 — **S9:** findings F56–F62 in the kit register (above); F56 became `bug-415`, closed by `task-304` in this
   phase; the rest wait for the ingest after the `v0.3.1` tag.
 
+- 2026-10-27 — **`gate` approved** by Roberto Pompermaier (approver), in chat ("gate approvato, procedi con finalize e
+  merge"), on the report `docs/07_gates/rl-v1/rel-v0.3.1-e2e-smoke.md` (`52c9495b`): PASS 82/82 on the candidate
+  `d3826aab`, in hard-reject. A phase approval has no Memory verb; this note records it. **S10:** `release/0.3` has not
+  moved since `41556c3c` (merged into this branch), so no re-cut; this branch is merged into `release/0.3` with `--no-ff`
+  after the hand finalize of this plan. Next phase: `release-submit`.
+
 ### Retrospective
 
 - A registry advisory turned the line red between two runs with no repository change, and its lock fix changed a
