@@ -285,10 +285,22 @@ stays until v0.3.2 moves the pin), §5.1 (the `workflow: adopt` / `workflow: rek
 (adopt and rekey in the deduction and the command paragraph), §8 (the tool's own `version:` raise);
 `.wingfoil/README.md` likewise (build lines, the three Resources, the command paragraph).
 
+**S10 — `align-user-docs` APPROVED** and **S12 — `align-agent-docs` APPROVED** by the approver (Roberto Pompermaier,
+`approver`) in chat on 2026-10-27, at `e17e86e3`, on the evidence above (S2–S9, S11), with the coverage deviation
+accepted as explained; the approver also confirmed the changes to `docs/agents.md` (the adopt row, rules 1 and 5, the
+version line), which is in no phase's `produces:`. No Memory element transitions: a phase approval is recorded in its
+plan until `dl-125` gives documents an approval verb. This plan moves `active → done` by hand (`finalize`), and the
+phase branch merges into `release/0.3` with `--no-ff` on the approver's instruction. Next phase: `e2e-smoke`.
+
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
-     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
-     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
-     An item met by the phase as a whole goes here; one met on a single task or bug goes in that
-     element's own subsection. The retrospective's `explore` reads this subsection first. -->
+- A patch-sized user-docs run still found a stale public page: `docs/case-study.md` had claimed the pinned build runs
+  the repository's operations since the v0.3 dev-loop moved them to the code build, and still called the v0.3
+  measurement an expectation five days after `release-health-v0.3` was committed (`db272a55`, F53). Proposal: make
+  release-health's `propose` (or this phase's S2) list the `produces:` pages that cite a report or a build rule.
+- The per-release source re-read of `docs/comparison.md` caught two quotes gone from a rewritten upstream README
+  within eleven days of the last read (S1 lines 51 and 57, `bfeac471`): the rule earns its cost even for a patch.
+- The coverage baseline handed over (97.51) predated a suite removal in the same task (`6e66ffc8`): a baseline should
+  name the commit it was measured on, so the next gate compares like with like (S9).
+- An independent reviewer caught a sentence written from the reference rather than from the run (`--plan` "every
+  adoption", `a4fbf1ad`): the scenario in the guide had already printed `nothing to adopt` in the author's own survey.
