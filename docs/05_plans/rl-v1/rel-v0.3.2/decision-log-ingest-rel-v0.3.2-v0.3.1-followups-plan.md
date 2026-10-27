@@ -36,6 +36,11 @@ The approver rules on the decision-log at v0.3.2 planning; the plan is finalized
 ## Execution Notes
 
 - 2026-10-27: plan added `760f521f`.
+- 2026-10-27: plan submitted `f1c962d4`. `dl-206` (where an element filed or triaged on `main` is captured and
+  triaged when a patch takes its fix) added `09a73c2d`, submitted `427c5fd3` (`draft → in-discussion`), assigned
+  v0.3.2 `8364a44e`. Narrowed while drafting: `git-conventions` §1 already states `dl-185` C1 (c) (i)'s counterpart
+  (written by `task-290`); the open questions are an element that exists only on `main` (Q1) and `dl-152` item 1
+  against that counterpart (Q2).
 
 ### Retrospective
 

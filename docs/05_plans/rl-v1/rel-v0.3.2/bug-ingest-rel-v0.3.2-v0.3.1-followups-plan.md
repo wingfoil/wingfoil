@@ -44,6 +44,21 @@ reaches `main` with v0.3.2's merge forward.
 ## Execution Notes
 
 - 2026-10-27: plan added `c5e53963`.
+- 2026-10-27: plan submitted `88f9a905`. Each bug drafted against the tree at `8e7fc43b` (every finding re-checked
+  by the command its body names), then added, submitted (`draft → open`), approved `open → triaged` on the approver's
+  table approval and assigned (add / submit / approve / assign):
+  - `bug-428` (medium, release-publishing has no merge-forward step) — `81576556` / `57e65721` / `300fb75b` / `c7fd3f50`, v0.3.2.
+  - `bug-429` (medium, advance-pinned-build on a patch line) — `b8838533` / `0692ffa7` / `d4909bd4` / `30ade9b6`, v0.3.2.
+  - `bug-430` (medium, console `finalize --dry-run` crash on 0.3.0) — `c3634a84` / `bca1cdf9` / `0db920e7` / `d27ade4e`,
+    v0.3.1; synced `[triaged → … → closed]` with `task-295` in `38f66c8e`. Narrowed while drafting: 0.3.0 ships no
+    `workflow adopt` or `rekey` (both first ship in v0.3.1), so only `finalize` is a released defect.
+  - `bug-431` (low, dry-run table runs no console renderer) — `4491f351` / `e173d693` / `0cf57225` / `01f76d32`, v0.3.2.
+    Narrowed: `task-295` added console plan checks for `start`, `rekey`, `adopt` and `finalize`; 15 of the 22 rows
+    never run in the console format.
+  - `bug-432` (low, case study shows two of the committed reports) — `f000515d` / `c9e48dcb` / `b637b2b3` / `e6484399`, v0.3.2.
+  - `bug-433` (low, the post-publish wait reads `npm view`, not the tarball) — `78158c83` / `61b0b58f` / `fafd1bc2` /
+    `c2298be8`, v0.3.2. Widened: `scripts/wait-npm-version.cjs` gates the Release, MCP Registry and Pages jobs too.
+- 2026-10-27: `node scripts/check-governance.cjs --base release/0.3` → 32 wf() commits, 0 findings.
 
 ### Retrospective
 
