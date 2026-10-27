@@ -60,7 +60,7 @@ Run in one session with an independent reviewer subagent (approver ruling T2, 20
   `npm audit fix --force`, `package.json` untouched. AC classification: all four characterization (a registry advisory
   cannot be pinned by a unit test; the checks themselves are the test).
 - **red** (qa) — on `a3bd6aae` before the change: `npm run -s check:audit` exit 1, `npm run -s check:audit:all` exit 1
-  (also `handlebars` 4.7.9 critical, dev-only via `ts-jest`), `npm run -s check:lockfile` exit 0.
+  (also the dev-only `handlebars` 4.7.9, critical, via `ts-jest`, and `markdown-it` ≤14.3.2, high), `npm run -s check:lockfile` exit 0.
 - **green** (developer) — `npm audit fix` (whole tree, no `--force`; the scratch dry run with `--omit=dev` changed the
   same production entries) → `package-lock.json` only, 8 entries: `zod` 4.4.3→4.6.7, `body-parser` 2.3.0→2.4.0,
   `content-type` 2.0.0→2.1.0, `fast-uri` 3.1.8→3.1.9, `ip-address` 10.7.3→10.7.5, `qs` 6.16.0→6.17.0, dev `handlebars`
@@ -84,6 +84,23 @@ Run in one session with an independent reviewer subagent (approver ruling T2, 20
   same 98.43 — registered as F61 in the kit); `test/docs` + conformance 29 / 321; the e2e smoke on the code build
   **82 ok / 0 not ok**; examples 01–06 exit 0; `check:mcp` 0; `check-governance.cjs --base origin/release/0.3` 0 (and
   `--json`); `lint-claims` 0 warnings; `llms.txt` unchanged; `npm pack --dry-run` `total files: 552`.
+
+- **review** (independent reviewer subagent, T2; diff `release/0.3...HEAD`) — **APPROVE WITH FIXES**:
+  1. (should-fix-in-task) the *For contributors* `CHANGELOG` line and the red bullet above omitted the dev-only
+     `markdown-it` ≤14.3.2 (high) advisory (`npm audit --package-lock-only` on `release/0.3`'s lock: 6 vulnerable
+     packages) — fixed in this commit.
+  2. (note) the `wf(task): submit` commit `3e30e5b6` carries `WingFoil-Version: 0.3.0 (a3bd6aae…-dirty)`: the CLI ran
+     from the `dist/` the gate built on the uncommitted tree, not from a clean rebuild (v0.3.1 overrides). Format and
+     transition are correct; not rewritten (`git-conventions` §2, no rebase over `wf()` commits).
+  3. (follow-up) same class, not a contract: `Produces` (`src/workflow/schema.ts:181`) and `approval` (`:228`) are
+     unions with `.strict()` object branches and no `error:` option; on zod 4.6.7 an unknown key reports zod's
+     `Unrecognized key: "x"` instead of 4.4.3's `Invalid input`, at the same path. No spec, test, doc or `CHANGELOG`
+     pins either default message. Registered as F62 in the kit, pending the approver's ruling.
+  Re-checked by the reviewer: valid and invalid cadences parse identically on zod 4.4.3 and 4.6.7 (19 inputs), the
+  inferred `Cadence` type is unchanged (a type-equality check compiles, its negative control fails),
+  `check:audit`/`check:audit:all`/`check:lockfile` exit 0, the targeted suites 21 / 227 pass,
+  `check-governance.cjs --base release/0.3` exit 0 (15 `wf()` commits, 0 findings), the approve commits carry no AI
+  trailers.
 
 ### Retrospective
 

@@ -69,8 +69,8 @@ These change how WingFoil itself is developed, not how it behaves in your projec
   frontmatter, the specification phases declare `produces:`, `minor-v0.3` declares its waves and its tasks their
   wave, and 17 prose checks a person confirms are bound `manual: true`. (task-301, bug-389, task-302, task-303)
 - The repository's lock moved past the advisories `npm audit` reports in `zod`, `body-parser`, `fast-uri`,
-  `ip-address` and the dev-only `handlebars`, so CI's dependency audit passes again; `package.json`'s ranges are
-  unchanged and already admit the fixed versions. (task-304, bug-415)
+  `ip-address` and the dev-only `handlebars` and `markdown-it`, so CI's dependency audits pass again;
+  `package.json`'s ranges are unchanged and already admit the fixed versions. (task-304, bug-415)
 
 ## [0.3.0] - 2026-10-19
 
