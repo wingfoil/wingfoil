@@ -69,6 +69,14 @@ The finding and its release are unchanged.
   in `test/storage/read-paths-at-rev.test.ts`, passes either way. The B8 gate's coverage run reached it; other runs
   did not.
 
+**Note (2026-10-27, the v0.3.1 follow-ups ingest, `bug-ingest-rel-v0.4-v0.3.1-followups-plan`).** Seen again on
+full-suite runs of `patch-v0.3.1` over the same code: the branch coverage of `src/core/memory-transition.ts` was
+99.21 (uncovered 468) on the e2e-smoke S5 run and 98.43 (uncovered 468 and 560) on the user-docs gate and on
+`task-304`'s run, so the repository-wide branch figure moved by about 0.02 with no change (97.49 / 97.51 / 97.50,
+`e2e-smoke-rel-v0.3.1-plan` and `user-docs-rel-v0.3.1-plan`). The user-docs explanation of its 97.49 (a suite removed
+by `task-302`) is better explained by this bug. The fix is unchanged: make the test that covers line 560 independent
+of the order of `moved`.
+
 ### Retrospective
 
 None.
