@@ -45,6 +45,9 @@ unchanged; to get the guided workflows, see *Upgrading from 0.3.0* below.
   `workflow finalize` alone completed `sw-life-cycle`. (task-296, bug-400)
 - `COLLABORATION.md` documents the consumer feedback notes: their format, the feedback inbox a repository declares,
   and the sync points. (task-297, bug-408)
+- A workflow file whose phase `cadence` holds an unknown key is refused at `cadence` with the message naming its
+  shape and the key again; with `zod` 4.6, which a fresh install of 0.3.0 resolves, it got zod's bare
+  `Unrecognized key` message instead. (task-304, bug-415)
 
 ### Upgrading from 0.3.0
 
@@ -65,6 +68,9 @@ These change how WingFoil itself is developed, not how it behaves in your projec
 - This repository's own records were made readable by the engine: the six v0.1 phase plans gained their
   frontmatter, the specification phases declare `produces:`, `minor-v0.3` declares its waves and its tasks their
   wave, and 17 prose checks a person confirms are bound `manual: true`. (task-301, bug-389, task-302, task-303)
+- The repository's lock moved past the advisories `npm audit` reports in `zod`, `body-parser`, `fast-uri`,
+  `ip-address` and the dev-only `handlebars` and `markdown-it`, so CI's dependency audits pass again;
+  `package.json`'s ranges are unchanged and already admit the fixed versions. (task-304, bug-415)
 
 ## [0.3.0] - 2026-10-19
 

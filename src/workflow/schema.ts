@@ -147,12 +147,25 @@ export function cadenceShapeMessage(input: unknown): string {
   return inner === undefined ? CADENCE_SHAPE_MESSAGE : `${CADENCE_SHAPE_MESSAGE} (unknown key 'recurring.${inner}')`;
 }
 
+/** Whether a map `cadence` holds a key outside `{ recurring: { cron, on } }`, at either level. */
+function hasUnknownCadenceKey(input: unknown): boolean {
+  return isMap(input) && cadenceShapeMessage(input) !== CADENCE_SHAPE_MESSAGE;
+}
+
 /**
  * A phase's cadence (`dl-105` R1): `once` (the default) or recurring on one trigger. A value that
  * matches neither branch is refused at the `cadence` path with {@link cadenceShapeMessage}; a bad
  * `cron` / `on` value or a trigger count other than one keeps its own, deeper path and message.
+ * An unknown key is refused before the union (task-304, bug-415): from zod 4.6 a union whose only
+ * object branch fails on an unknown key reports that branch's issue, at its own path, instead of the
+ * union's error, so the shape message would depend on the zod release the lock resolves.
  */
-export const Cadence = z.union([z.literal('once'), RecurringCadence], { error: (issue) => cadenceShapeMessage(issue.input) });
+export const Cadence = z
+  .unknown()
+  .superRefine((input, ctx) => {
+    if (hasUnknownCadenceKey(input)) ctx.addIssue({ code: 'custom', message: cadenceShapeMessage(input) });
+  })
+  .pipe(z.union([z.literal('once'), RecurringCadence], { error: (issue) => cadenceShapeMessage(issue.input) }));
 /** Parsed shape of the {@link Cadence} schema. */
 export type Cadence = z.infer<typeof Cadence>;
 // ---- end task-185 -----------------------------------------------------------------------------------
