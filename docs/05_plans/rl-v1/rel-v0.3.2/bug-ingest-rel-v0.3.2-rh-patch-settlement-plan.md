@@ -34,7 +34,9 @@ The approver's instruction (2026-10-27, "sì, procedi") covers filing and the v0
 
 ## Execution Notes
 
-- 2026-10-27: plan added.
+- 2026-10-27: plan added `b8ba3c48`, submitted `9d0848fd`. `bug-443` (low) added `76fdcd43`, submitted `0c2b098d`
+  (`draft → open`), approved `[open → triaged]` 67576d27 on the approver's instruction, assigned v0.3.2
+  66e67c2b. Every claim in it re-checked by the `sed`/`grep` commands its body names.
 
 ### Retrospective
 
