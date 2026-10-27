@@ -31,6 +31,16 @@ two of the five exist in prose only (W3 B4 follow-up log, `task-212`'s review: "
 
 Whether these become checks, and which, is a choice: each option costs a different amount of machinery.
 
+**Note (2026-10-27, the v0.3.1 follow-ups ingest, `bug-ingest-rel-v0.4-v0.3.1-followups-plan`; `task-301` design D3,
+approver ruling 2026-10-26).** Since `task-301`, the three specification sub-workflows declare their module
+directories as `produces` (`grep -n -A1 "produces:" .wingfoil/workflows/custom/user-story-mapping.yaml
+specification-by-examples.yaml volere-requirements.yaml`), and those directories already exist. By spec-017 §4.3,
+§4.5 and §4.10, `vision-change`'s optional downcasts (`downcast-stories`, `downcast-scenarios`,
+`downcast-requirements`) are then complete as soon as `update-vision` is, so the frontier no longer offers a delta
+downcast beside `schedule`. This is derived, not probed: a probe needs an approved change-proposal. Whichever option
+Q1 takes needs evidence of a delta downcast, such as commits after the `update-vision` record or a
+per-change-proposal path, not the existence of the directory.
+
 ## Decision
 
 **Q1 — element 3, scoped downcast:**
