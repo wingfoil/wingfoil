@@ -20,9 +20,11 @@ they were measured.
 - **One commit per state change.** Each change of state is a commit whose subject names the type, the verb, the ids
   and the transition, such as `wf(task): approve <id> [in-review → approved]`; approvals and rejections also carry an
   `Approver:` line and a `Reason:` block. `wingfoil memory history <id>` reads them back.
-- **A pinned build** of WingFoil runs these operations: the published package, installed as the devDependency
-  `wingfoil-released` in [`package.json`](../package.json) (`dl-095`), so the repository is governed by a released
-  WingFoil, not by the code under development.
+- **Two builds, each with its job.** The operations that write a `wf()` commit run on the build compiled from the
+  checkout (`npm run build`, then `node dist/cli.js <command>`); the read commands and the MCP server run on a
+  published, pinned build, installed as the devDependency `wingfoil-released` in [`package.json`](../package.json)
+  (`dl-095`), so they answer as the version users have. The
+  [`wingfoil-cli`](../.wingfoil/directives/custom/wingfoil-cli.md) directive says which build runs which command.
 - **The approver is a human.** The AI agents work as `developer`, `qa`, `reviewer` and `architect`, and never hold
   approval authority: every gate is crossed by the `approver` role.
 - **Separate sessions for separate duties.** In the [`dev-loop`](../.wingfoil/workflows/custom/dev-loop.yaml)
@@ -159,8 +161,10 @@ The causes, grouped:
 - **The Determinism Index outcome.** D01 and P06 need two independent benchmark runs with the build just published;
   the benchmark is the `service` element `svc-020`, and no release has run it yet.
 
-v0.3 is expected to be the first release measured with its configuration at the root (0.2.2, the first built that way, has no report), so most of this table should
-become measurable at its release-health run. That is an expectation, not a measurement.
+v0.3 is the first release measured with its configuration at the root (0.2.2, the first built that way, has no
+report). Its report, [`release-health-v0.3.md`](08_health/release-health-v0.3.md) and
+[`release-health-v0.3.json`](08_health/release-health-v0.3.json), measures most of the metrics this table lists; this
+page does not show its figures yet.
 
 ## Reproduce
 

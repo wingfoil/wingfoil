@@ -413,7 +413,9 @@ point 4, `git-conventions` §3); its pre-check `on-integration-branch` (task-288
 `node scripts/integration-branch.cjs --check-head` with the release's `kind` and `version`, and refuses a
 HEAD on any other branch. Before the tag, `evidence-only-since-candidate` (task-282) runs `git diff --name-only
 <candidate>..<tip>` and passes only when the candidate is an ancestor of the tip and every changed path is
-an evidence path its binding declares; otherwise the candidate is re-cut.
+an evidence path its binding declares; otherwise the candidate is re-cut. After a patch's tag, its
+`release/X.Y` line is merged forward into `main` with `--no-ff` (`git-conventions` §1, `dl-185` C1), never the
+other way: the phase's last step, run by hand until a workflow declares it.
 
 ```mermaid
 flowchart TD

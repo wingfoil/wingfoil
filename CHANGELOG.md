@@ -8,6 +8,64 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Every entry ends with the WingFoil Memory element(s) it comes from: a `done` task (`task-NNN`) or a
 `closed` bug (`bug-NNN`).
 
+## [0.3.1] - Unreleased
+
+A patch of the 0.3 line. Elements created before a project used workflows can now be counted as created by a
+workflow step, and an open workflow follows a renamed phase. A check a person confirms can be declared as such.
+Projects initialised by 0.3.1 get workflows the engine can guide. A project initialised by 0.3.0 keeps working
+unchanged; to get the guided workflows, see *Upgrading from 0.3.0* below.
+
+### Added
+
+- `wingfoil workflow adopt <ref> [--step <key>] [--element <type:id>] --reason <text>` records that an existing
+  element, added without `memory add --workflow`, counts as created by a step of an open workflow: one commit that
+  changes no file. `--plan` writes nothing and proposes the adoptions of the steps that wait only for the element they
+  create; `--plan --apply` (approver only) writes them, one commit per step. (task-294, task-293)
+- `wingfoil workflow rekey <ref> --from <workflow>.<phase> --to <workflow>.<phase> --reason <text>` (approver only)
+  remaps an open workflow's records from a renamed phase to its new name, so the renamed step does not wait again
+  for work already done: one commit that changes no file. (task-295, task-293)
+- A check in a workflow file may be bound `manual: true` in `workflows/bindings.yaml`, for a condition a person
+  confirms: it raises no `W_WORKFLOW_UNBOUND_TOKEN` warning. 0.3.0 refused such a file with
+  `E_VALIDATION … expected array`. (task-298)
+
+### Changed
+
+- Every command that writes a configuration file raises its `version:` by 0.1, read as a number (`1.9` → `2.0`):
+  `dna set`, `add`, `update` and `remove` raise `dna.yaml`'s, `directive assign` raises `roles.yaml`'s, and
+  `workflow create` and `remove` raise `workflows.yaml`'s. A write that changes nothing makes no commit. (task-299)
+
+### Fixed
+
+- `wingfoil workflow finalize --dry-run` without `--format` printed
+  `error: Cannot read properties of undefined (reading 'workflow')`; it now prints the commit it would make, as
+  every other `--dry-run` does. (task-295)
+- `wingfoil init` scaffolds workflows the engine can guide: their phases name the role that performs them, the
+  ingest and delivery phases declare the Memory actions and the evidence that completes them, and `dna.yaml` shows
+  a commented `team.agents` example. With 0.3.0's scaffold, `workflow next` printed `role: (none)`, and
+  `workflow finalize` alone completed `sw-life-cycle`. (task-296, bug-400)
+- `COLLABORATION.md` documents the consumer feedback notes: their format, the feedback inbox a repository declares,
+  and the sync points. (task-297, bug-408)
+
+### Upgrading from 0.3.0
+
+- Nothing breaks. To get the guided workflows (described in §7 of the user guide) in a project initialised by 0.3.0 or earlier,
+  copy the files under `.wingfoil/workflows/custom/` from a project `wingfoil init` creates in an empty repository
+  (with the same template), then commit (§12 of the user guide).
+
+### For contributors
+
+These change how WingFoil itself is developed, not how it behaves in your project.
+
+- Git conventions: the merge forward of a release line into `main` after its tag (§1), and a pre-push hook that
+  bases a new branch on the line it was cut from (§9); release-health and release-planning name the release's
+  integration branch. (task-290, task-291)
+- The Claude agent may also run as `facilitator`. (task-292)
+- The retrospective's `explore` reads the release-health reports of the patches released since the previous
+  retrospective. (task-300)
+- This repository's own records were made readable by the engine: the six v0.1 phase plans gained their
+  frontmatter, the specification phases declare `produces:`, `minor-v0.3` declares its waves and its tasks their
+  wave, and 17 prose checks a person confirms are bound `manual: true`. (task-301, bug-389, task-302, task-303)
+
 ## [0.3.0] - 2026-10-19
 
 The Project Workflow release. WingFoil now deduces where every started workflow stands from the Memory

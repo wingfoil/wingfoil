@@ -135,7 +135,8 @@ Two kinds of writes:
 - **Scalar fields** with `dna set <path> --value <v>`.
 - **Collections and lists** with `dna add`, `dna update`, `dna remove`.
 
-Each write is one commit (`wf(dna): …`). Paths are dotted; a name containing a dot is quoted:
+Each write is one commit (`wf(dna): …`), which raises `dna.yaml`'s `version:` by 0.1 (`1` → `1.1`; from 0.3.1,
+as `directive assign` does for `roles.yaml` and `workflow create`/`remove` for `workflows.yaml`). Paths are dotted; a name containing a dot is quoted:
 `'stacks.technologies."Node.js"'`.
 
 ### 4.1 Project
@@ -413,6 +414,50 @@ removed). See the [CLI reference](cli-reference.md#wingfoil-workflow-list).
 A workflow run from `workflow start` to `workflow end`, with a routed approval and a checkpoint recorded
 by `workflow finalize`: [`examples/06-workflow-approval`](examples/06-workflow-approval/run.sh).
 
+**Elements that existed before the workflow** (new in 0.3.1). A step that adds an element waits for one added with
+`memory add --workflow`. An element added without it — before the project used workflows, or by forgetting the
+option — can be counted as created by that step with `wingfoil workflow adopt`, which writes one commit that changes
+no file:
+
+```console
+$ wingfoil workflow adopt bug-ingest-1-plan --element bug:bug-001-login-fails --reason "adopt the bug filed before the run"
+workflow: bug-ingest (bug-ingest-1-plan)
+adopted: bug:bug-001-login-fails into bug-ingest.capture (9fef5a44…)
+next step: bug-ingest.capture@bug:bug-001-login-fails
+…
+```
+
+From then on the step works on that element as if `memory add --workflow` had created it. `workflow adopt <ref>
+--plan` writes nothing and lists the steps that wait only for the element they create, each with its candidates;
+a step that also waits on other evidence, such as `bug-ingest.capture` and its `produces:`, is not listed (here
+`--plan` prints `nothing to adopt`), so name the element with `--element`. An approver can write the listed
+adoptions with `--plan --apply`.
+
+**Renaming a phase** (new in 0.3.1). The records an open workflow holds name its steps by
+`<workflow>.<phase>`. After a phase is renamed in its workflow file, an approver maps them to the new name, so the
+renamed step does not wait again for work already done:
+
+```console
+$ wingfoil workflow rekey bug-ingest-1-plan --from bug-ingest.capture --to bug-ingest.report --reason "follow the renamed capture phase"
+workflow: bug-ingest (bug-ingest-1-plan)
+rekeyed: bug-ingest.capture -> bug-ingest.report, 1 record(s) remapped (0990711e…)
+next step: bug-ingest.report@bug:bug-001-login-fails
+…
+```
+
+**Checks a person confirms** (new in 0.3.1). A phase's `checks:` are prose or tokens. `workflow list` warns
+(`W_WORKFLOW_UNBOUND_TOKEN`) about each check that is neither a built-in token nor bound in `.wingfoil/workflows/bindings.yaml`. A check that
+a person confirms on purpose is bound `manual: true`, and the warning goes away:
+
+```yaml
+version: 1.0
+format: 1
+checks:
+  "design reviewed by a human": { manual: true }
+```
+
+See the [CLI reference](cli-reference.md#wingfoil-workflow-adopt) for every option and refusal.
+
 ## 8. Daily use: the life of a Memory document
 
 ### 8.1 Create
@@ -667,7 +712,7 @@ initialising a project with 0.2.2 and running both versions on it.
   plan element`); `agent execute` needs `paths.runs` and an adapter. Copy the `plan` entry of
   `memory.yaml`, `memory/templates/plan.md`, `paths.runs: [docs/runs/]` and `.wingfoil/agents/` from a
   project `wingfoil init` creates in an empty repository, then commit.
-- **Workflows the engine can drive (a project initialised by 0.3.0 too).** 0.2.x and 0.3.0's `init` scaffolded workflows whose phases named no
+- **Workflows the engine can drive (a project initialised by 0.3.0 too, when you upgrade to 0.3.1).** 0.2.x and 0.3.0's `init` scaffolded workflows whose phases named no
   role and declared no action, so `workflow next` printed `role: (none)` and `workflow finalize` alone
   completed `sw-life-cycle`. To get the roles, actions and evidence of §7, copy the five files under
   `.wingfoil/workflows/custom/` from a project `wingfoil init` creates in an empty repository (with the same

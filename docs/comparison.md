@@ -48,13 +48,13 @@ These tools turn a specification into plans, tasks and code. WingFoil governs th
 
 | Axis | WingFoil | GitHub Spec Kit | Kiro | OpenSpec |
 |---|---|---|---|---|
-| What it produces | No specification, plan or code: the record of the decisions, rules, roles and states around them. | A specification, a technical plan and actionable tasks, then implementation against them: "Constitution once per project; specify → plan → tasks → implement → converge per feature" [S1]. | A spec of three files: `requirements.md` (user stories and acceptance criteria, in EARS notation), `design.md` and `tasks.md` [S3] [S4]. | For each change, a proposal, its requirements and scenarios, a `design.md` and a `tasks.md` checklist [S6]. |
+| What it produces | No specification, plan or code: the record of the decisions, rules, roles and states around them. | A specification, a technical plan and actionable tasks, then implementation against them: a constitution "once per project", then specify, plan, tasks, implement and converge "for each feature" [S1]. | A spec of three files: `requirements.md` (user stories and acceptance criteria, in EARS notation), `design.md` and `tasks.md` [S3] [S4]. | For each change, a proposal, its requirements and scenarios, a `design.md` and a `tasks.md` checklist [S6]. |
 | Where its artefacts live | In the project's git repository, at the paths `.wingfoil/memory.yaml` declares. | Feature specifications under `specs/<branch-name>/`, on a git branch created per feature; the constitution in `memory/constitution.md` [S2]. | Under `.kiro/specs/<name>/` [S3]. | An `openspec/` folder holding `specs/` and `changes/`, the second tracking in-flight and archived changes [S6]. |
 | Phases and gates | Workflow phases, each with its role, the files it produces and its checks; a phase with `approval: { by_role: approver }` waits for the human approver. | "Phase -1: Pre-Implementation Gates" in the implementation plan (Simplicity, Anti-Abstraction, Integration-First): “The LLM cannot proceed without either passing the gates or documenting justified exceptions in the "Complexity Tracking" section.” [S2]. | Requirements, design and tasks in sequence; Quick Spec runs the three phases "without approval gates between them" [S4]. | Propose, apply, archive; planning is where "human and AI align on specs before code gets written" [S6]. |
 | Record of who approved what, when and why | Every approve and reject is one git commit, `wf(<type>): approve <id> [<from> → <to>]`, carrying an `Approver:` line and a `Reason:` block; `wingfoil memory history <id>` reads them back. | not stated in the sources read | not stated in the sources read | not stated in the sources read |
 | State of each artefact | A state machine per type in `.wingfoil/memory.yaml`; an illegal transition is refused. | not stated in the sources read | A task execution interface for `tasks.md` with real-time status updates [S3]. | Each change is in flight or archived [S6]. |
 | Rules for the agent | Directives bound to roles (`.wingfoil/roles.yaml`). | A constitution of principles, written by `/speckit-constitution` [S1] [S2]. | Steering files in `.kiro/steering/`, included always, by file pattern, manually or automatically, and `AGENTS.md` [S5]. | not stated in the sources read |
-| Agent interface | The `wingfoil` CLI and an MCP server over stdio (`wingfoil mcp`). | `/speckit-*` skills invoked in the agent's chat — "agent skills, not terminal commands" — plus the `specify` CLI that installs and initializes a project [S1]. | An IDE, a CLI, Web and, in preview, Mobile [S3]. | Slash commands such as `/opsx:propose`, `/opsx:apply` and `/opsx:archive` [S6]. |
+| Agent interface | The `wingfoil` CLI and an MCP server over stdio (`wingfoil mcp`). | `/speckit-*` skills run "in your agent's chat, not your terminal", plus the `specify` CLI that installs and initializes a project [S1]. | An IDE, a CLI, Web and, in preview, Mobile [S3]. | Slash commands such as `/opsx:propose`, `/opsx:apply` and `/opsx:archive` [S6]. |
 | Agents it works with | Any MCP client; adapters for Claude Code and Codex CLI ship with `wingfoil init` (0.3). | GitHub Copilot in its examples, other agents through an integration key [S1]. | Kiro's own agent, in its IDE, CLI and Web surfaces [S3]. | "30+ tools", GitHub Copilot, Cursor and Amazon Q among them [S6]. |
 | Licence and distribution | MIT; the npm package `wingfoil`, Node.js 22.12 or later. | MIT; installed with `uv tool install specify-cli`, needing Python 3.11+ [S1]. | not stated in the sources read | MIT; the npm package `@fission-ai/openspec` [S6]. |
 
@@ -126,19 +126,19 @@ The first process-conformance figures, and what is not measurable yet, are in th
 
 ## Sources
 
-- [S1] GitHub Spec Kit, repository README — <https://github.com/github/spec-kit> — read 2026-10-15.
-- [S2] GitHub Spec Kit, "Specification-Driven Development" (`spec-driven.md`) — <https://github.com/github/spec-kit/blob/main/spec-driven.md> — read 2026-10-15.
-- [S3] Kiro documentation, "Specs" — <https://kiro.dev/docs/specs/> — read 2026-10-15.
-- [S4] Kiro documentation, "Feature Specs" — <https://kiro.dev/docs/specs/feature-specs/> — read 2026-10-15.
-- [S5] Kiro documentation, "Steering" — <https://kiro.dev/docs/steering/> — read 2026-10-15.
-- [S6] OpenSpec, repository README — <https://github.com/Fission-AI/OpenSpec> — read 2026-10-15.
-- [S7] "AGENTS.md", the format's home page — <https://agents.md/> — read 2026-10-15.
-- [S8] Claude Code documentation, "How Claude remembers your project" — <https://code.claude.com/docs/en/memory> — read 2026-10-17.
-- [S9] Cursor Docs, "Rules" — <https://cursor.com/docs/rules> — read 2026-10-15.
-- [S10] GitHub Docs, "Adding repository custom instructions for GitHub Copilot" — <https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions> — read 2026-10-15.
-- [S11] Claude Code documentation, "Connect Claude Code to tools via MCP" — <https://code.claude.com/docs/en/mcp> — read 2026-10-15.
-- [S12] Codex CLI, repository README — <https://github.com/openai/codex> — read 2026-10-15.
-- [S13] ChatGPT Learn, "Model Context Protocol" (Codex CLI) — <https://learn.chatgpt.com/docs/extend/mcp?surface=cli> — read 2026-10-15.
-- [S14] ChatGPT Learn, "Custom instructions with AGENTS.md" — <https://learn.chatgpt.com/docs/agent-configuration/agents-md> — read 2026-10-15.
-- [S15] Model Context Protocol, "Specification" — <https://modelcontextprotocol.io/specification> — read 2026-10-15.
-- [S16] VS Code documentation, "Add and manage MCP servers in VS Code" — <https://code.visualstudio.com/docs/agent-customization/mcp-servers> — read 2026-10-15.
+- [S1] GitHub Spec Kit, repository README — <https://github.com/github/spec-kit> — read 2026-10-26.
+- [S2] GitHub Spec Kit, "Specification-Driven Development" (`spec-driven.md`) — <https://github.com/github/spec-kit/blob/main/spec-driven.md> — read 2026-10-26.
+- [S3] Kiro documentation, "Specs" — <https://kiro.dev/docs/specs/> — read 2026-10-26.
+- [S4] Kiro documentation, "Feature Specs" — <https://kiro.dev/docs/specs/feature-specs/> — read 2026-10-26.
+- [S5] Kiro documentation, "Steering" — <https://kiro.dev/docs/steering/> — read 2026-10-26.
+- [S6] OpenSpec, repository README — <https://github.com/Fission-AI/OpenSpec> — read 2026-10-26.
+- [S7] "AGENTS.md", the format's home page — <https://agents.md/> — read 2026-10-26.
+- [S8] Claude Code documentation, "How Claude remembers your project" — <https://code.claude.com/docs/en/memory> — read 2026-10-26.
+- [S9] Cursor Docs, "Rules" — <https://cursor.com/docs/rules> — read 2026-10-26.
+- [S10] GitHub Docs, "Adding repository custom instructions for GitHub Copilot" — <https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions> — read 2026-10-26.
+- [S11] Claude Code documentation, "Connect Claude Code to tools via MCP" — <https://code.claude.com/docs/en/mcp> — read 2026-10-26.
+- [S12] Codex CLI, repository README — <https://github.com/openai/codex> — read 2026-10-26.
+- [S13] ChatGPT Learn, "Model Context Protocol" (Codex CLI) — <https://learn.chatgpt.com/docs/extend/mcp?surface=cli> — read 2026-10-26.
+- [S14] ChatGPT Learn, "Custom instructions with AGENTS.md" — <https://learn.chatgpt.com/docs/agent-configuration/agents-md> — read 2026-10-26.
+- [S15] Model Context Protocol, "Specification" — <https://modelcontextprotocol.io/specification> — read 2026-10-26.
+- [S16] VS Code documentation, "Add and manage MCP servers in VS Code" — <https://code.visualstudio.com/docs/agent-customization/mcp-servers> — read 2026-10-26.
