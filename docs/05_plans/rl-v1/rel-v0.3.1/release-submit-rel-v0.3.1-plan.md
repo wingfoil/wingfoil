@@ -244,7 +244,23 @@ WFCoord, update the auto-memory, write the next phase's prompt in the kit.
   `node scripts/check-governance.cjs --base origin/release/0.3` → 0 gated, 0 history findings, exit 0;
   `node dist/cli.js memory history patch-v0.3.1` reads the commit as operation `start`, `in-development → releasing`,
   `approver: null`. Next: S4 `approve-release` (approver).
+- 2026-10-27 — **S4 — `approve-release` approved** by Roberto Pompermaier (approver), recorded per D3 by this plan's
+  **`db6e8b44`** `wf(plan): finalize release-submit-rel-v0.3.1-plan [active → done]` with `Approver:` and `Reason:`,
+  committed by the approver from the command the agent prepared (`git show --stat db6e8b44` → one file, the `status:`
+  line; `node scripts/check-governance.cjs --base origin/release/0.3` → 0 gated, 0 history findings).
+  `patch-v0.3.1` stays `releasing`; `releasing → released` is `release-publishing`'s `mark-released`. This note is
+  committed after the `done` on the approver's instruction ("nota dopo il done"): it touches the body only, not
+  `status:`. No wingfoil verb could record the approval (F63, Retrospective). Next: S5, the merge into `release/0.3`
+  on the approver's instruction.
 
 ### Retrospective
 
-- None yet.
+- **No verb records an `approval:` step of a sub workflow run by a hand-opened phase plan.** On the code build, dry-run:
+  `workflow end release-submit-rel-v0.3.1-plan` and `workflow finalize release-submit-rel-v0.3.1-plan --step
+  release-submit.approve-release` → `unknown workflow`; `workflow finalize release-submit` → `workflow is not open`;
+  `workflow start release-submit` and `workflow start release-cycle --element release:patch-v0.3.1` → `cannot start a
+  sub workflow directly`; a plan's machine has no gate, so `memory approve` is illegal. Only an instance of
+  `sw-life-cycle` would reach `workflow finalize --step release-submit.approve-release@…`. Hence the hand commit
+  `db6e8b44`, as v0.3's `bab1e0f4`. Proposal: with `dl-203`, let `workflow finalize` address a phase plan (`parent:`
+  set) — kit registry F63, for the ingest after the v0.3.1 tag.
+- The S1 branch coverage 97.5 vs e2e-smoke's 97.51 on the same tree is the known F61 oscillation; nothing filed.
