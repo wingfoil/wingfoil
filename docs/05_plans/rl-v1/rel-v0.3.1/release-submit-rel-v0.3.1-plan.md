@@ -200,7 +200,39 @@ WFCoord, update the auto-memory, write the next phase's prompt in the kit.
   phase `node dist/cli.js --version` → `0.3.0 (035ee7a2…)`; candidate `dist/build-info.json` →
   `{"version":"0.3.0","commit":"d3826aab5a392429f7c6f8423752277e380cb098"}` (no `-dirty`), `git status --porcelain`
   empty. `memory add --type plan …` (code build) → `release-submit-rel-v0.3.1-plan`, commit `3c52a401` (§7 trailers by
+  amend). Before the submit the phase build was re-run on the clean tree at `3c52a401` (`git stash`, build under the
+  slot, `git stash pop`), so the stamp is not `-dirty`; `memory submit` → `89cfe75c` (`draft → active`, §7 trailers by
   amend).
+- 2026-10-27 — **S1 — `pre-release-checks`: ALL PASS** — `devloop-kit/gate-releasesubmit-v0.3.1.sh` on the candidate
+  worktree, HEAD `d3826aab` (log `devloop-kit/gate-rs031.log`, 13:56–14:19 +01:00, one heavy step at a time under
+  `waitslot.sh`; load 1.45 at the start):
+
+  | Check | Command | Result |
+  |---|---|---|
+  | C1 | frontmatter `status:` of `docs/04_memory/v0.3.1/*.md` | **15 `done`** (`task-290` … `task-304`), no other |
+  | C2 | frontmatter `status:` of bugs with frontmatter `release: v0.3.1` | **4 `closed`**: `bug-389`, `bug-400`, `bug-408`, `bug-415` |
+  | C5 `typecheck.clean` | `npm run -s typecheck` | exit 0, no output (7 s) |
+  | C3+C4 `tests.passing`, `tests.coverage(min: 80)` | `npm run -s test:report -- --maxWorkers=2` | exit 0 (726 s); **506 suites / 8928 tests passed**; statements 99.37, branches 97.5, functions 98.18, lines 99.73 |
+  | produces | `node scripts/test-report.cjs … --build-info dist/build-info.json --commit d3826aab --out …` | exit 0; Commit `d3826aab…`, Build `0.3.0 (d3826aab…)`, Result **passed**; unit 395/7200, integration 45/547, BDD 63/1109, smoke 1/70, API-docs 1/1, lint.clean 1/1, total 506/8928, 0 failed, 0 skipped |
+  | C6 `tests.no-identity` | `npm run -s test:no-identity -- --maxWorkers=2` | exit 0 (600 s); **506 suites / 8928 tests passed** |
+
+  Against the e2e-smoke baseline (506 / 8928, 99.37 / 97.51 / 98.18 / 99.73): the same counts; branches 97.5 here
+  (`coverage/coverage-summary.json` → 6788 / 6962) vs 97.51 there — inside the known F61 oscillation
+  (`src/core/memory-transition.ts:560`), far above the 80 floor; recorded, not filed. The summary is committed at
+  `b2d0f1bf` as `docs/07_gates/rl-v1/rel-v0.3.1-test-results-candidate.md`.
+
+  Standing set (informative), same tree: `npm run -s lint` 0; `npm run -s docs:api` 0; `npm run -s check:lockfile` 0;
+  `npm run -s check:mcp` 0 (the pinned 0.3.0: prompts 8 / resources 4 / tools 0, with the three known `bug-414` read
+  failures of `wingfoil://workflows`, `…/-/next`, `…/-/status`; the code build: every read answered);
+  `npm run -s check:audit` 0 (`found 0 vulnerabilities`); `git status --porcelain` empty afterwards, `dist/build-info.json`
+  still `d3826aab`. On the phase branch: `node scripts/check-governance.cjs --base origin/release/0.3` exit 0 (2 `wf()`
+  commits, 0 gated, 0 history findings).
+
+  **C2′ (for the approver; not waived by the agent):** 140 bugs not `closed`, none with `release: v0.3.1` — 139
+  `triaged` `v0.4`, and `bug-414` `triaged` with an empty `release:` (closed by the pin moving to 0.3.1 at v0.3.2's
+  `advance-pinned-build`). **C7:** DLs with `release: v0.3.1`: 6, all `ready` (`dl-167`, `dl-172`, `dl-174`, `dl-175`,
+  `dl-186`, `dl-187`). **Carry-over (read, unchanged):** `package.json` `0.3.0`; `server.json` `0.3.0` at lines 10 and
+  15; CHANGELOG line 11 `## [0.3.1] - Unreleased`.
 
 ### Retrospective
 
