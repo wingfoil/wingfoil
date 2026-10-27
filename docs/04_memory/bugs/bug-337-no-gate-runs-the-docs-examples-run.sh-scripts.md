@@ -54,6 +54,13 @@ examples package.json` → no script entry. A small script (or `npm run` entry) 
 `docs/examples/*/run.sh` against a given build would bind that check and serve the `e2e-smoke` gate this bug asks
 for (`task-230`'s developer notes and independent review).
 
+**Note (2026-10-27, the v0.3.1 follow-ups ingest, `bug-ingest-rel-v0.4-v0.3.1-followups-plan`).** A runner of the
+examples needs the build under test, not whatever `wingfoil` is on `PATH`: the scripts default to `wingfoil`
+(`grep -n 'WINGFOIL:-wingfoil' docs/examples/lib.sh` → `WINGFOIL="${WINGFOIL:-wingfoil}"`, the helper every `run.sh` sources), so on a machine whose global `wingfoil` is an older
+release, a first run of the six examples during the v0.3.1 wave checks reported `04` and `06` failing until
+`WINGFOIL="node dist/cli.js"` was set. The script or `npm run` entry this bug asks for, and the binding of
+`docs.examples.passing`, set `WINGFOIL` to the build under test.
+
 ### Retrospective
 
 None.
