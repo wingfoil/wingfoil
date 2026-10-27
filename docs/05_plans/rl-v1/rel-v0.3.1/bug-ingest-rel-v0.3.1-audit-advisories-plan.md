@@ -47,6 +47,12 @@ re-runs S1–S7 on it.
   --omit=dev --json` (four packages, `fixAvailable: true` each) in the e2e-smoke worktree on `6fd62599` (packed tree
   = `499d7fb2`'s).
 
+- 2026-10-27: triage — the approver's `ecde7179` approve of `bug-415` `[open → triaged]` and `33c9aba6` approve of
+  `task-304` `[pending → backlog]`; `2c131297` `wf(bug): assign` stamps `release: v0.3.1`. Approver rulings in chat
+  ("approvati entrambi, T1 e T2 come raccomandi, procedi"): **T1** the branch renamed
+  `task/task-304-refresh-the-lock-past-the-high-advisories-in-zod-and-body-parser-bug-415` and `task-304`'s dev-loop run
+  there; **T2** the dev-loop in one session (lock-only change), with an independent reviewer subagent. Plan finalized.
+
 ### Retrospective
 
 - None yet.
