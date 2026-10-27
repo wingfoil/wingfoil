@@ -71,13 +71,11 @@ with an exit status for state checks → `bug-296` / `dl-200`; spec-017 §12's r
 meaning the release-commit run → `bug-405` (to be weighed for v0.3.2 at its planning, it recurred).
 
 **Nothing to file**: maintenance-kit-only items (four); rulings already recorded or a withdrawn note (three); inputs to
-the v0.3.1 retrospective (a patch line's pinned-build reads need that line's own `npm ci`; dev-loop `design` does not
+the next minor's retrospective, v0.4's (a patch skips the retrospective, `dl-092` Q2 (ii)) (a patch line's pinned-build reads need that line's own `npm ci`; dev-loop `design` does not
 read the existing tests on a target file before fixing pins; a new smoke probe must check the fault-injection prefixes
 of existing journey tests); inputs to v0.4 planning for `dl-186` S4 (a `released` release is ignored by `delivery`'s
 entry filter rather than completed, as `dl-186` E3 reads; dated statements in three plans/elements made stale by the
-minor-v0.3 wave amends, true when written); `dl-202`'s line-number citations (for its discussion); the
-release-health `compare` against a missing previous retrospective (re-checked at the v0.3.1 retrospective, which
-produces one); `dl-167` (a)'s "six outcomes" wording (optional amend); a downstream adopter's note on `iterate_over`
+minor-v0.3 wave amends, true when written); `dl-202`'s line-number citations (for its discussion); `dl-167` (a)'s "six outcomes" wording (optional amend); a downstream adopter's note on `iterate_over`
 phases, awaited through its feedback inbox.
 
 ## Handoff
@@ -119,6 +117,11 @@ approver's instruction; the branch merges into `main` on instruction.
   record's `Approver:` line (`grep -rn Approver src/workflow/` prints nothing); `bug-424` records an observed workaround
   (edit the plan's `workflow:` field and `memory amend` it); `bug-442` notes that `scripts/check-governance.cjs` checks
   the authority of such a hand record after the fact.
+- 2026-10-27 — correction, after the v0.3.1 `release-health` run: the disposition table first set aside the
+  release-health `compare` against a missing previous retrospective, expecting a v0.3.1 retrospective; a patch skips
+  the retrospective (`retrospective.yaml` `explore`, `dl-092` Q2 (ii)), so it is filed on `release/0.3` as `bug-443`
+  (triaged v0.3.2, `bug-ingest-rel-v0.3.2-rh-patch-settlement-plan`), and the retrospective inputs above go to v0.4's
+  retrospective.
 - 2026-10-27: the patch-line half is `bug-ingest-rel-v0.3.2-v0.3.1-followups-plan` (`bug-428`…`bug-433`, `bug-430`
   `closed` with `task-295`), and the decision-logs are `dl-204`, `dl-205` (v0.4) and `dl-206` (v0.3.2).
 
