@@ -133,7 +133,31 @@ worktrees removed. Push only on instruction.
 ## Execution Notes
 
 - 2026-10-27: S0 and S1 done as stated above; plan added `72a4e5fc`.
+- 2026-10-27: plan submitted `3f8e612b` (`draft → active`). Before S2: `ls -d /tmp/.git` → no such file (the
+  `bug-406` hazard absent); load 5.7.
+- 2026-10-27 — **S2** (21:37:57 → 22:18:39, 41 min wall, exit 0) at `v0.3.1` = `870bd440`, Node `v22.12.0`, npm
+  `10.9.0` (the kit's `n-prefix`, D1). 49 metrics: 45 measured; **Q10** not-measurable (the patch scope named by
+  `retro-v0.3` names no REQ id at the point), **Q17** not-measurable (`docs/user-guide.md` states no bold version for
+  its install command, as at v0.3.0); **D01**, **P06** not-comparable (a patch). Q02 8928 tests, 0 failing; Q03
+  99.37 / 97.51 / 98.18 / 99.73; Q12 p95 479 ms (measured, not judged loaded). Post-check: every catalogue id present,
+  each with a value or a reason (`node -e` over the report). Report `7bf53a55`.
+- 2026-10-27 — **S3** `compare.cjs --release v0.3.1 --any-node --max-workers 2`, exit 0, no re-measurement (same
+  catalogue). Improved 13, stable 15, regressed 6, not-comparable 3; floors held 15, breached 8; 10 findings, one
+  immediate (G14). The previous run's `RH-v0.3-01..09` were settled against `retro-v0.3`: six adopted and effective,
+  one not adopted (`RH-v0.3-03`), two superseded.
+- 2026-10-27 — **S4/S5.** G14's 12 blocking matches were each read in their commit with `scanText`
+  (`dist/validation/secret-scan.js`): all are `generic-api-key-assignment` hits in prose that quotes the constructs
+  `bug-402` describes (two v0.3 plans, `bug-402`'s own file, `release-health-v0.3.md`); none is a secret. `bug-402`
+  (`triaged`, v0.4) is confirmed as the tracker, so **no bug is filed** (`dl-089` §5). Confirmed trackers: G08
+  `dl-190`, G14 `bug-402`, Q07 `bug-345`, Q09 and P03 `dl-173`, Q20 `dl-191`, P04 `bug-403`. Proposals
+  `RH-v0.3.1-01` (G05, one-off `6cedee44`), `RH-v0.3.1-02` (Q05, the functions `adopt`/`rekey` added or grew),
+  `RH-v0.3.1-03` (Q14, the deferred v0.4 planning). Post-check: 10 findings, each tracked or with an RH proposal.
+  The report passes `scanText` with 0 blocking (it quotes no flagged construct). Proposals and summary `811b905f`.
 
 ### Retrospective
 
-- None yet.
+- The measure took 41 min at load ~4–6, against v0.3's run 2 of 53 min idle and run 1 of 4 h 23 min loaded; evidence:
+  the kit's `rh-v0.3.1-measure.start` and the background run's exit line (`22:18:39`).
+- G14 counts quotations of a scanner false positive in documents as secrets in diffs: every document that discusses
+  `bug-402` adds to G14 until `bug-402` is fixed; evidence: the 12 hits, all in prose. Proposal: record it on
+  `bug-402` (an approver amend) so its fix covers documents too.
