@@ -57,6 +57,13 @@ Steps 1–2: the body says 24/87/61, the latest Revision note 26/100/76, the con
 Captured on 2026-10-10 by `bug-ingest-rel-v0.3-w3b4-review-findings-plan` (item C2), measured on `main` at
 `02800955`.
 
+**Note (2026-10-27, the v0.3.1 follow-ups ingest, `bug-ingest-rel-v0.4-v0.3.1-followups-plan`).** A second §12
+statement that drifted from the configuration, found by `task-302`'s design: the paragraph "Instances started
+mid-release" names the record checkpoints `dev-loop.red|green|refactor` only (`grep -n "started mid-release"
+docs/04_memory/design/specs/spec-017-*.md`), but dev-loop's `design` phase is an approval that creates no element, so
+an instance started mid-release also needs an approver-authority record for each done task's `design` — four records,
+not three. The same `memory amend` of `spec-017` that settles the figures fixes it.
+
 ### Retrospective
 
 None.
