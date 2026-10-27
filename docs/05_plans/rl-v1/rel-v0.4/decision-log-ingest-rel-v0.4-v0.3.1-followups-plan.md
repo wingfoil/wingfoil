@@ -37,6 +37,10 @@ The approver rules on each decision-log later; the plan is finalized once both a
 ## Execution Notes
 
 - 2026-10-27: plan added `a8a2e93a`.
+- 2026-10-27: plan submitted `4bf6e38d`. Added, submitted (`draft → in-discussion`) and assigned v0.4 (add / submit /
+  assign):
+  - `dl-204` (v0.4) — Whether two adoptions of one element into the same instance and step, written on sibling branches, agree and merge instead of conflicting — 863915c8 / 30c9e7bc / 2dbaf917.
+  - `dl-205` (v0.4) — How a change to the shape of a .wingfoil/ file stays readable by the pinned build, and where the design checks it before red — ba613e95 / 77762b7f / cc4f4e9b.
 
 ### Retrospective
 

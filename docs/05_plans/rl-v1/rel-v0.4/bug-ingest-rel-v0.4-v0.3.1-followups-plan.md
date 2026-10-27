@@ -89,6 +89,38 @@ approver's instruction; the branch merges into `main` on instruction.
 ## Execution Notes
 
 - 2026-10-27: plan added `915a3e96`.
+- 2026-10-27: plan submitted `5f2a66b0`. Each bug drafted against the tree at `3d8faa79` (every finding re-checked
+  by the command its body names), then added, submitted (`draft → open`), approved `open → triaged` on the approver's
+  table approval and assigned v0.4 (add / submit / approve / assign):
+  - `bug-416` (low, v0.4) — docs/08_health/metrics.yaml names the commit on main as the fallback measurement point, wrong for a patch released on release/X.Y — 43e89a29 / 426424ad / 032d6a55 / af89a717.
+  - `bug-417` (low, v0.4) — The pre-push hook takes its base candidates from the remote named origin whatever remote is pushed to, and no test pins a local branch named origin/main — 7e743f0c / 16ad30af / 6df5975b / 4f601b93.
+  - `bug-418` (low, v0.4) — agent execute --next refuses an unscoped step that agent list --waiting lists, so the init scaffold's first step cannot be run by an agent — 70725df8 / 50f666e2 / ab53dffe / 23c133c4.
+  - `bug-419` (low, v0.4) — retrospective.yaml explore picks the patch reports to read by the commit that approved the previous retrospective, undefined when there is none — 876a5569 / fa83b574 / 6fa042b2 / 5ceb5cf5.
+  - `bug-420` (low, v0.4) — COLLABORATION.md routes a feedback-inbox registration request through the Proposal form, which declares it is captured as a decision-log, not a service — e91638bc / 8faeb312 / b65e27cc / 700c6956.
+  - `bug-421` (low, v0.4) — An action binding accepts args together with manual: true, which a check binding refuses and spec-003 Layer 3 leaves open for actions — f53801fe / 78eabc27 / 7fef5fbc / ef11bb73.
+  - `bug-422` (low, v0.4) — dna set of an unchanged but re-quoted value is not a no-op: an empty project.name on the init scaffold commits a rewrite and a version raise — b0c1c84e / 8fd77b32 / a1867812 / 1a63c46f.
+  - `bug-423` (medium, v0.4) — The governance check does not verify the authority of an Approver: line on a workflow: record, so a forged finalize, adopt or rekey passes — 83393985 / efe67570 / 78f045bd / ee1eb91f.
+  - `bug-424` (medium, v0.4) — workflow rekey cannot follow a renamed workflow: the plan's workflow: field keeps the old name and the instance stays unknown with no frontier — 6fb56c37 / 3ad450bf / aed9399d / 793c0a8a.
+  - `bug-425` (low, v0.4) — raiseConfigVersion leaves unraised the numeric version: spellings its regex misses, so a tool write commits no bump and fails config-version — 45c252b4 / 3013eeac / ec20c2c6 / 85e4ea6c.
+  - `bug-426` (low, v0.4) — workflow adopt --plan hides existing candidates: a zero-candidate step with a string produces, and a bug added without --workflow — ad023e87 / 98093c8a / 5cb28272 / 56cb556b.
+  - `bug-427` (low, v0.4) — The version-bump gate covers only the four config files, so no automated check enforces the bump on the workflow definitions and bindings.yaml — 17df7e88 / 9b72e26e / cb3af127 / 7103fbfc.
+  - `bug-434` (low, v0.4) — The task-301 test that none of the six v0.1 plans is a deduced instance cannot fail, since done plans are never deduced instances — 4a07faf0 / 9cdc7d53 / 90cda1e4 / 54af5081.
+  - `bug-435` (low, v0.4) — Four workflow-check leftovers after task-303: duplicated MCP prose checks, unbindable AGENTS.md checks, a stale release-health comment, mixed checks — ebd10b49 / ce92b281 / 31fd558c / 5670df1e.
+  - `bug-436` (low, v0.4) — A bindings.yaml key that names no workflow token raises no diagnostic, so rewording a prose check leaves a dead binding nobody sees — a6af9cf2 / 2c6d4db1 / bcb8e1fb / 8eb64e1b.
+  - `bug-437` (medium, v0.4) — wave.wave-checks can never complete for a wave run before task-230, because its gate report does not exist and finalize refuses a produces step — 1ce7aa8d / 3b6adbf2 / 71d36ed1 / d8de4d25.
+  - `bug-438` (low, v0.4) — check-governance's console summary says "on N commits" for the commits with findings, so a clean gate log reads "0 findings on 0 commits" — ef16d939 / da961c6e / cf8d85ed / 30c39eb8.
+  - `bug-439` (low, v0.4) — workflow next still offers a memory add command and "evidence missing: created" once the step's element exists but is still a draft — 2efb98a7 / 1867b0ec / ae9be7e2 / abb11848.
+  - `bug-440` (low, v0.4) — The e2e smoke does not hold three v0.3.1 guarantees: adopt beyond --plan and rekey, workflow next on the scaffold, the version raise of dna writes — 1a2b083b / 2750c63d / 423fd916 / ae2dc587.
+  - `bug-441` (low, v0.4) — An unknown key in a produces entry or an approval reports zod's own text, which changed between zod 4.4.3 and 4.6.x — 24898e94 / c5830818 / 7afd0575 / f65c7675.
+  - `bug-442` (medium, v0.4) — An approval step of a sub workflow run by a hand-opened phase plan can be recorded only by a hand commit: no verb addresses the phase plan — 9ebc2502 / de1e87fd / a78d4d96 / d8ebb794.
+- Scope changes found while drafting, written into the bodies: `bug-417` covers only the hard-coded `origin` and
+  the untested local `origin/main` branch — the short-refname skip and the two unpinned cases were already fixed and
+  tested by `f9fd7447` (`test/cli/git-hooks.test.ts`); `bug-423` adds that the workflow deduction never reads a
+  record's `Approver:` line (`grep -rn Approver src/workflow/` prints nothing); `bug-424` records an observed workaround
+  (edit the plan's `workflow:` field and `memory amend` it); `bug-442` notes that `scripts/check-governance.cjs` checks
+  the authority of such a hand record after the fact.
+- 2026-10-27: the patch-line half is `bug-ingest-rel-v0.3.2-v0.3.1-followups-plan` (`bug-428`…`bug-433`, `bug-430`
+  `closed` with `task-295`), and the decision-logs are `dl-204`, `dl-205` (v0.4) and `dl-206` (v0.3.2).
 
 ### Retrospective
 
