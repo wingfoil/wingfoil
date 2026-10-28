@@ -149,6 +149,47 @@ Approved at 2026-10-28T15:09:34+01:00 (approval queue Q-08, the approver in the 
 - D2 — yes: the note text stays "disposed of by the next minor's retrospective (dl-167 (a))".
 - D3 — no element: the out-of-scope gap (compare reads only the immediate previous report) is covered by `dl-167` (a), `retrospective.yaml`'s `explore` reading the patches' reports.
 
+### red (qa, 2026-10-28)
+
+**Red commit `19fe0a08`** (T4 is measured from it). Files: `test/release-health/compare.test.ts`,
+`test/release-health/helpers/compare-api.ts` (`Settled.settled` gains `'pending'`, `settle` an optional
+`previousKind?: 'major' | 'minor' | 'patch'`; no new export). Synced first: `git merge --no-edit release/0.3` →
+`c11f0040`, then `git rev-list --count HEAD..release/0.3` → `0`.
+
+**Fixtures.** `PATCH_PREVIOUS_MD` mirrors the `## Proposals` of `docs/08_health/release-health-v0.3.1.md`
+(`### RH-v0.3.1-01 — G05 …`, `-02 — Q05 …`, `-03 — Q14 …`, each with Finding / Evidence / Proposed element /
+Proposed target release, then its `## Previous proposals` table). `patchReport()` derives `release-health-v0.3.1.json`
+and `-v0.3.2.json` from `fixtureReport('v0.3')`: `release: { id: 'patch-vX', version, kind: 'patch' }`, previous →
+the report before, D01/P06 the real `not-comparable` entries of `release-health-v0.3.1.json`. Both validate against
+the schema (test "the derived patch reports (v0.3.1, v0.3.2) validate", and again inside the CLI test). `PATCH_RETRO`
+(element / element / declined) is the decoy `retro-v0.3.1` the CLI root holds.
+
+| AC | Test (`compare.test.ts`) | Status today | Why |
+|---|---|---|---|
+| 1 | `settle — a patch previous run (bug-443)` › "a patch's proposals settle as pending, …" | red | received `settled: "adopted, no effect yet"`, `outcome: "element"`: the 4th argument is ignored |
+| 1 | same describe › "a patch with no retrospective settles as pending too" | red | received `["not adopted" ×3]` |
+| 1 | same describe › "the same inputs with previousKind minor / undefined keep the existing mapping" (2) | pass | characterization: minor unchanged |
+| 1 | same describe › "a minor with no retrospective is still not adopted, no disposition recorded" | pass | characterization |
+| 1 | `compare.cjs — the command line` › "a patch previous run — every RH-v0.3.1-NN is pending …, the decoy retro-v0.3.1 never read" | red | the row reads `\| RH-v0.3.1-01 \| dl-901-x \| adopted, no effect yet \|`: the decoy retrospective is looked up today |
+| 1 | same block › "a minor previous run with no retrospective still settles as not adopted (no retrospective)" | pass | characterization (`--release v0.3`, previous v0.2 with a `.md`, no `retro-v0.2`) |
+| 2 | `renderReport — report-layout.md` › "the Previous proposals placeholder lists pending beside the four dl-089 §4 labels" | red | `Expected substring: "pending"`: the placeholder lists the four labels only |
+| 2 | same describe › "a settle paragraph says pending applies when the previous release is kind: patch, naming dl-167" | red | `Expected length: 1, Received length: 0`: no prose paragraph after the last fence names `pending`, `kind: patch` and `dl-167` |
+
+AC 2 is a characterization of a document that lands red, as the design foresaw (`grep -n pending
+docs/08_health/report-layout.md` → only the metric verdicts). The paragraph test reads the prose after the last
+code fence, split on blank lines, backticks dropped: green's sentence must hold `pending`, `kind: patch` and `dl-167`
+in ONE paragraph there.
+
+**Runs.** `npx jest test/release-health/compare.test.ts --maxWorkers=2` → `Tests: 5 failed, 75 passed, 80 total`
+(the 75 include the 70 pre-existing tests, all passing). `npx jest test/release-health/compare.test.ts --maxWorkers=2 -t
+"task-307|bug-443"` → `Tests: 5 failed, 70 skipped, 5 passed, 80 total`. `npx jest test/release-health/propose.test.ts
+test/release-health/catalogue.test.ts --maxWorkers=2` → `Tests: 42 passed, 42 total`. `npx tsc --noEmit -p
+tsconfig.json` → exit 0 (the red is assertion failures only).
+
+**For the developer.** The CLI pin expects the exact row `| RH-v0.3.1-0N | — | pending (disposed of by the next
+minor's retrospective (dl-167 (a))) |` and no `adopted` anywhere in `## Previous proposals`, and the unit pin
+`{ settled: 'pending', outcome: null, element: null, note: <that text> }` for both a retro text and `null`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
