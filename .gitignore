@@ -8,6 +8,9 @@ coverage/
 .idea
 .npmrc
 .jest-dist.lock*
+# task-308 (bug-336): the staged build and the previous dist/ the test setup swaps (test/dist-lock.cjs)
+.jest-dist.next/
+.jest-dist.prev/
 
 # task-234: the documentation site assembled locally (node scripts/build-site.cjs site --out _site-src …)
 _site-src/

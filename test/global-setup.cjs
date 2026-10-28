@@ -15,12 +15,21 @@
  * until `test/global-teardown.cjs`. A second run waits for it, or refuses naming the holder; it never
  * deletes the `dist/` another run is using.
  *
- * Deterministic by construction: a clean removal + a single `npm run build` (`tsc`, then the build
- * record, which carries no timestamp), no wall-clock or ordering dependence in what is built.
+ * The build never leaves the worktree without a `dist/` (bug-336, task-308): `prepareDist` hands it a
+ * staging directory, and swaps the finished build onto `dist/` by rename. So the setup composes the two
+ * steps of `package.json`'s `build` script (`tsc -p tsconfig.build.json && node
+ * scripts/write-build-info.cjs`) itself, with the staging directory as their output:
+ * `test/lint/dist-lock.test.ts` pins that script, so a change to it fails there instead of drifting
+ * from this file.
+ *
+ * Deterministic by construction: a fresh output directory, `tsc`, then the build record (which carries
+ * no timestamp), no wall-clock or ordering dependence in what is built.
  */
-const { execSync } = require('node:child_process');
+const { execFileSync } = require('node:child_process');
+const { writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
+const { computeBuildInfo, serializeBuildInfo } = require('../scripts/write-build-info.cjs');
 const { prepareDist } = require('./dist-lock.cjs');
 
 // Tag this run's fixture directories (bug-064, task-152). Set here, in jest's main process before
@@ -32,8 +41,17 @@ module.exports = async () => {
   const repoRoot = join(__dirname, '..');
   await prepareDist({
     repoRoot,
-    // `npm run build`, not `tsc` alone: the build also writes `dist/build-info.json` (task-192,
-    // `dl-111` Q2 (a)), which the compiled CLI stamps on `--version` and on every commit it writes.
-    build: () => execSync('npm run -s build', { cwd: repoRoot, stdio: 'pipe' }),
+    // `npm run build` into `outDir`: `tsc`, then the build record `dist/build-info.json` (task-192,
+    // `dl-111` Q2 (a)), which the compiled CLI stamps on `--version` and on every commit it writes. The
+    // record is computed before anything is written, as `scripts/write-build-info.cjs` does.
+    build: (outDir) => {
+      const info = computeBuildInfo(repoRoot);
+      execFileSync(
+        process.execPath,
+        [require.resolve('typescript/bin/tsc'), '-p', 'tsconfig.build.json', '--outDir', outDir],
+        { cwd: repoRoot, stdio: 'pipe' },
+      );
+      writeFileSync(join(outDir, 'build-info.json'), serializeBuildInfo(info), 'utf-8');
+    },
   });
 };
