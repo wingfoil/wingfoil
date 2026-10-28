@@ -50,6 +50,140 @@ and every pin advance also updates the project-status sentence of `AGENTS.md` §
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-28)
+
+Read on `task/task-305-…` at `0fcb59ee` (cut from `release/0.3` `a9124a3c`): `dl-206` (`ready`, `63bec4df`, Q1 (i),
+Q2 (i)), `dl-159` (`ready`) A2, `bug-429`, `release-planning-rel-v0.3.2-plan` R1, R2, R4, R8, `task-290` design D4,
+`task-291` D2. `depends_on: []`: no Execution Notes to read under dl-015.
+
+**Eligibility of the files this task edits** (`dl-206` Q2 (i), with `--no-merges` per R8): `git log --oneline
+--no-merges release/0.3..main -- .wingfoil/directives/custom/git-conventions.md
+.wingfoil/workflows/custom/release-planning.yaml AGENTS.md docs/04_memory/design/dls/dl-159-*.md` → nothing (141
+non-merge commits on `main` since the cut, none on these files). The edits reach `main` by the merge forward; only
+rule 5's `version:`/`**Date:**` resolution can apply there.
+
+**D1 — AC classification (corrected; decision for the approver, recommendation: accept).** The task file marks all
+four ACs characterization. AC 1 and AC 2 are text not yet written (`grep -c "dl-206" .wingfoil/directives/custom/git-conventions.md
+.wingfoil/workflows/custom/release-planning.yaml` → `0`, `0`; `grep -c "no-merges" …` → `0`, `0`), so their pins fail at
+red: they are **red-first**, the `task-286`/`task-288`/`task-291` precedent (`task-291` D2). The sentences that already
+exist and must survive are pinned beside them as characterization. AC 3 is characterization (the suites pass today,
+below). AC 4 is characterization checked by command, not by a jest test (the amend is uncommitted until the approver
+runs it, and a test pinning a decision-log's prose would freeze a Memory element).
+
+| AC | Class | What qa pins (substrings of whitespace-flattened text unless said; each absence in the same `it` as its positive) |
+|----|-------|------|
+| 1 — `git-conventions` §1 (`dl-206` Q1 (i), Q2 (i)) | red-first | File `test/directives/git-conventions.test.ts`, new `describe('git-conventions §1 — dl-206 Q1 (i), Q2 (i) (task-305)')` after the task-290 one, reusing `section('1. Branches')` and a local `flat`. Item 1 (the raw regex of `dev-loop-practice.test.ts`, `/\n {2}1\. ([\s\S]*?)\n {2}2\. /`, flattened): `` whose `release` is a `main` release (a minor, or none yet) `` and `` `dl-206` Q2 (i) ``. Counterpart paragraph: `` `dl-206` Q2 (i) ``; `` a triage whose `release` is a patch of `X.Y` is committed on `release/X.Y` ``; `` directly or on an `ingest/` or `backlog/` branch cut from that line ``; `` `git log --no-merges release/X.Y..main -- <file>` ``; `prints nothing`; `` `dl-206` Q1 (i) ``; `is captured again on the line`; `` on an `ingest/` branch cut from `release/X.Y` ``; `citing its id`; `` the copy on `main` is deprecated ``; `` on a branch of `main` ``; `names the new id`; D4 (a): `is captured on a branch cut from it too`. Absent: `` triage that decides an element's owning line is made on an `ingest/` or `backlog/` branch cut from that line `` (replaced, D2). Heading line (`s1.split('\n')[1]`) contains `` `dl-206` `` and still `` `dl-185` ``; the sources list carries the full id `dl-206-where-an-element-filed-or-triaged-on-main-is-captured-and-triaged-when-a-patch-on-release-x.y-takes-its-fix`. Version: `/^version: "(\d+)\.(\d+)"(.*)$/m` → `major*1000+minor ≥ 2004`, rest contains `task-305` and `dl-206`; `**Date:**` ≥ `2026-10-28`. |
+| 2 — `release-planning.yaml` (`dl-206` Q2 (i), `dl-159` A2 item 5, `bug-429`) | red-first | File `test/core/workflow-patch-line-texts.test.ts` (reads at `HEAD` through `loadWorkflowRegistryAtHead`; reuse `flat`, `workflow`, `phaseOf`, `versionLine`, `atHead`; `historyEntry` hard-codes `task-291`, so add a local variant taking the task id). `triage-bugs` and `define-scope` descriptions each: `` `kind: patch` ``, `` `git log --no-merges release/X.Y..main -- <file>` ``, `dl-206 Q2 (i)`, `dl-206 Q1 (i)`. `advance-pinned-build` description: `dl-159 A2 item 5`; `` a patch line pins only published versions of its own X.Y ``; `` the merge forward keeps `main`'s pin ``; `git-conventions §1 rule 5`; `` the project-status sentence of `AGENTS.md` §1, and only that sentence ``; absent: `not ruled`. Kept (characterization, same `it`s or beside): `` merges the patch's line forward after the patch's tag ``, `` `release/X.Y` into `main`, never back ``, `dl-185 C4 (i)`, `` re-checks the `wingfoil-cli` directive (dl-163 S3e) ``. `checks` of the three phases unchanged: `toEqual` the arrays read at `0fcb59ee` (the conformance suite's token list depends on them). Version: `versionLine(atHead(RELEASE_PLANNING_FILE)).value ≥ 2.4`, its `2.4` entry (`;`-delimited) names `task-305`, and the `2.3` entry still names `task-291`. |
+| 3 — existing suites | characterization | No new test. qa updates the one pin this task's text replaces: in `git-conventions.test.ts`, task-290 AC 3's `` triage that decides an element's owning line is made on … `` becomes the new counterpart phrase (D2). Every other existing pin passes unchanged (checked below). |
+| 4 — the `dl-159` amend prepared | characterization (by command) | No jest test. At green the developer records `git diff -- docs/04_memory/design/dls/dl-159-*.md` (only added lines, plus the item 5 line extended) and `git status --short` showing it uncommitted. |
+
+**D2 — the counterpart sentence is replaced, not kept (recommendation: replace).** `dl-206` Q2 (i) puts a patch triage
+"on `release/X.Y`: directly, under the counterpart paragraph, or on its `ingest/` / `backlog/` branch". The present
+sentence ("A triage that decides an element's owning line is made on an `ingest/` or `backlog/` branch cut from that
+line", `grep -n "owning line is made on" .wingfoil/directives/custom/git-conventions.md` → line 101) forbids the direct
+commit Q2 (i) allows, so keeping it verbatim leaves the overlap `dl-206` was opened to remove. Its pin
+(`test/directives/git-conventions.test.ts` lines 295–297) is updated in red, which AC 3 provides for.
+
+**D3 — what a merge forward does to `main`'s pin (recommendation (a)).** R8: "a merge forward keeps `main`'s pin";
+`advance-pinned-build` (2.3) says the rule "applies after every published patch, when the in-flight release's integration
+branch merges the patch's line forward"; `bug-429` step 3 shows the v0.3.1 merge forward `22d72ab0` moved `main`'s pin
+(`0.2.2` → `0.3.0`, plan D5 (a)); `dl-186`'s revision has v0.4's own `advance-pinned-build` move `main` to `0.3.2`.
+(a) The merge commit keeps `main`'s pin; `main`'s pin moves only by a switch commit of its own on `main` (the
+in-flight release's `advance-pinned-build`), never inside the merge. (b) As (a), but the switch must follow the merge
+at once. (a) reads all four sources together and needs no timing rule.
+
+**D4 — `AGENTS.md` beyond §1 (recommendation (a)).** R8: the phase updates the §1 project-status sentence "and only
+that sentence". At this release's S1 the pin advance also edited `AGENTS.md` §3 and `.wingfoil/README.md` (`git show
+--stat d5f11bef` → `AGENTS.md`, `.wingfoil/README.md`) under the `wingfoil-cli` re-check. (a) The phase says the rest
+of `AGENTS.md` stays `align-agent-docs`' (dl-025); a drift the re-check finds there is noted in the active phase plan
+for that phase. (b) Allow the §3 build table too. (a) is R8's text.
+
+**D5 — `dl-206` and `--no-merges` (recommendation (a)).** `dl-206` Q2 (i) writes the test without `--no-merges`; R8
+rules it with, and says this task writes it so. (a) The directive cites `release-planning-rel-v0.3.2-plan` R8 beside
+`dl-206`; no amend of `dl-206`. (b) A second pending amend of `dl-206` recording R8's refinement.
+
+**The text green writes** (pinned phrases verbatim; surrounding prose may vary; line wraps must not split
+`` `[open → triaged]` `` nor `` that are not part of a `dev-loop` task's run ``, which `dev-loop-practice.test.ts`
+pins on raw text):
+- `git-conventions.md` §1 heading: `… `dl-159`, `dl-185` and `dl-206`; `dl-014` G2–G3)`. Sources list: a full-id
+  `dl-206-…` entry "— where an element filed or triaged on `main` is captured and triaged when a patch takes its fix
+  (§1)". Closing *Source* note gains `dl-206` (Q1 (i), Q2 (i), §1).
+- Item 1: "… — triage (`[open → triaged]`) whose `release` is a `main` release (a minor, or none yet) (`dl-206` Q2
+  (i)), a task's `[pending → backlog]`, a decision-log's ratification;".
+- Counterpart paragraph: heading cites `` (`dl-185` C1 (c) (i), `dl-206` Q2 (i)) ``; its first sentence kept; the last
+  replaced by: "The triage decides an element's owning line by the `release` it gives: a triage whose `release` is a
+  patch of `X.Y` is committed on `release/X.Y`, directly or on an `ingest/` or `backlog/` branch cut from that line.
+  An element is eligible for it only if its file has not changed on `main` since the line was cut: `git log
+  --no-merges release/X.Y..main -- <file>` prints nothing (`--no-merges`, because a merge forward is otherwise listed
+  for a file it does not change; `release-planning-rel-v0.3.2-plan` R8). An element that exists only on `main`, or
+  changed there since the cut, is captured again on the line (`dl-206` Q1 (i)): a new element is added on an `ingest/`
+  branch cut from `release/X.Y`, restating the original and citing its id, and the copy on `main` is deprecated, on a
+  branch of `main`, with a `Reason:` that names the new id; the new element reaches `main` by the merge forward. An
+  element that line will own is captured on a branch cut from it too, since `main` is never merged into
+  `release/X.Y` (`task-290` D4 (a))."
+- `version: "2.4"   # 2.4 §1: a triage's line is keyed on the release it gives, the eligibility test git log
+  --no-merges release/X.Y..main, the re-capture of an element that exists only on main (task-305, dl-206 Q1 (i), Q2
+  (i)) (prev 2.3 …)` — the whole previous comment kept inside `(prev …)`, one `)` added; `**Date:**` the green date.
+- `release-planning.yaml`, `triage-bugs`: one sentence — "For a `kind: patch` release a bug is eligible only if its
+  file has not changed on `main` since its line was cut, `git log --no-merges release/X.Y..main -- <file>` empty
+  (dl-206 Q2 (i)); any other is captured again on the line first (dl-206 Q1 (i), git-conventions §1)." `define-scope`:
+  the same sentence for "an element of the scope". No `where`, `actions`, `checks` or `produces` change (the
+  conformance and prose-check suites list the tokens: `test/core/workflow-repository-conformance.test.ts:90`,
+  `test/core/workflow-manual-prose-checks.test.ts:63`).
+- `advance-pinned-build`: the switch is committed on the release's integration branch; "The pin is per line (dl-159
+  A2 item 5, bug-429, release-planning-rel-v0.3.2-plan R8): a patch line pins only published versions of its own X.Y
+  (on `release/0.3` a `0.3.z`, never a `0.4.z`), a minor on `main` the newest published version of the release-line";
+  the after-a-patch clause keeps its pinned words and replaces "the pin per line is dl-159 A2 item 5, not ruled" with
+  "the merge forward keeps `main`'s pin (git-conventions §1 rule 5)" + D3 (a); a closing sentence "With every pin
+  advance the phase also updates the project-status sentence of `AGENTS.md` §1, and only that sentence, in its own
+  commit after the switch; the rest of `AGENTS.md` stays align-agent-docs' (dl-025)" (D4 (a)). `version: 2.4` (kept
+  unquoted), history `; 2.4 task-305 (dl-206 Q2 (i), dl-159 A2 item 5, bug-429; release-planning v0.3.2 R8): …`
+  appended after the 2.3 entry.
+
+**The `dl-159` amend green prepares** (uncommitted, `### Pending amendments (approver)`): after the paragraph
+"*(Amended 2026-10-16, approver ruling (b).)* …" (`grep -n "Amended 2026-10-16" docs/04_memory/design/dls/dl-159-*.md`
+→ line 175), a new paragraph "*(Amended 2026-10-28, approver ruling R8 of `release-planning-rel-v0.3.2-plan`.)* Item
+5 is ruled and leaves the deferred part: a patch line pins only published versions of its own `X.Y`; a merge forward
+keeps `main`'s pin (`git-conventions` §1 rule 5); with every pin advance `advance-pinned-build` also updates the
+project-status sentence of `AGENTS.md` §1, and only that sentence. Owner: `task-305` (`bug-429`), on `release/0.3`,
+merged forward." Item 5 (line 200) gains " *(Ruled 2026-10-28, see the amendment above.)*". The A2 heading (line 171)
+and the 2026-10-16 paragraph keep their text, as history. Proposed reason: `--reason "Record the ruling of
+release-planning v0.3.2 R8 on A2 item 5: a patch line pins only published versions of its own X.Y, a merge forward
+keeps main's pin, and every pin advance updates only the project-status sentence of AGENTS.md section 1; written into
+release-planning.yaml by task-305 for bug-429."`
+
+**Files green touches:** `.wingfoil/directives/custom/git-conventions.md` (heading, sources list, item 1, the
+counterpart paragraph, closing Source note, `version:` 2.3 → 2.4, `**Date:**`), `.wingfoil/workflows/custom/release-planning.yaml`
+(three descriptions, `version:` 2.3 → 2.4), and, uncommitted, `dl-159`. No `src/`, script, `AGENTS.md`, `.wingfoil/WORKFLOW.md`.
+Baseline versions on `release/0.3`: `git show release/0.3:.wingfoil/directives/custom/git-conventions.md | grep '^version'`
+→ `"2.3"`; `release-planning.yaml` → `2.3`. Existing pins stay satisfied: `≥ 2.0`/`/2\.0 [^;]*task-277/`
+(`define-scope-sweep`), `≥ 1.9` (`release-waves-config`), `≥ 1.8` (`wingfoil-cli`), the `2.3`/`task-291` entry
+(`workflow-patch-line-texts`), the git-conventions `≥ 1002/1007/1010/2000` pins.
+
+**Baselines (unchanged tree, `0fcb59ee`).**
+- `npx jest --maxWorkers=2` over the 17 suites that read the two files (`test/directives/{git-conventions,wingfoil-cli,integration-branch-baseline,traceability,schema}`,
+  `test/core/{workflow-patch-line-texts,define-scope-sweep,release-waves-config,workflow-repository-conformance,workflow-manual-prose-checks,reconcile-governance-role-directives,memory-amend-release-kind-exemption}`,
+  `test/workflow/release-kind-rule`, `test/docs/{name-resolvability,dl-086-citations,workflow-md}`, `test/lint/version-bump`)
+  → 16 passed, 1 failed (272/273 tests): `release-kind-rule` "every release document carries every field" → `patch-v0.3.2:
+  features`. Pre-existing, not this task's: `bug-445` (`planned`, v0.3.2, `task-331`).
+- AC 3's set, under the slot: `npx jest --maxWorkers=2 test/core test/docs test/lint` → 224 suites, 4425 tests passed (377 s).
+  `test/directives` (where the two pinning suites live) is outside that set: green and refactor run it too.
+- `npm run check:mcp` → exit 0, "runs the pinned wingfoil 0.3.1 … (prompts: 8, resources: 4, tools: 0)", and the code
+  build "every listed Resource read and Prompt get answered".
+- Pinned `npm run -s wingfoil -- workflow list` / `workflow show release-planning`, `--format json` and `--format
+  console`: all exit 0, empty stderr; console prints indented JSON whose parsed value equals the json output (help:
+  "console prints indented JSON for now"); 65 `W_WORKFLOW_UNBOUND_TOKEN` each, the count green must find unchanged.
+
+**Constraints for later tasks (dl-015).** `task-306` (`depends_on: [task-305]`, §1 rule 6) and `task-328` (§9): cut
+after this task merges, or `git merge --no-edit release/0.3` before green; bump `git-conventions` once more over
+`"2.4"` (`"2.5"`), keeping `(prev 2.4 …` and the whole chain; pin version as `≥` plus the history entry (bug-314), never
+exact; leave the counterpart paragraph's phrases this task pins. Rule 6 is not touched here.
+
+**Candidate findings (not filed).** F1: `.wingfoil/WORKFLOW.md` §"Release Planning" (lines 309–318) does not name the
+per-line pin or the eligibility test; owner `align-agent-docs` at v0.3.2's user-docs. F2: `bug-429`'s note that
+`advance-pinned-build`'s pre-check needs the line's own `node_modules` (`npm ci` in the release worktree) is in no AC;
+left to the approver whether the phase states it.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
