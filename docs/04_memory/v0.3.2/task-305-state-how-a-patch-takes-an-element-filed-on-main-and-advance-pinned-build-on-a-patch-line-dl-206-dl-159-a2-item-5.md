@@ -194,6 +194,28 @@ Approved at 2026-10-28T15:09:34+01:00 (approval queue Q-09, the approver in the 
 - D5 — (a): `--no-merges` cites release-planning v0.3.2 R8; no amend of `dl-206`.
 - D6 — yes: F1 (`.wingfoil/WORKFLOW.md` Release Planning paragraph) goes to v0.3.2's user-docs, no element; F2 (bug-429's note that the check needs the line's own `node_modules`) is added to task-305, one sentence in `advance-pinned-build`'s text in `release-planning.yaml`.
 
+### red (qa, 2026-10-28)
+
+Synced first: `git merge --no-edit release/0.3` → `e4c8f5d9` (one bug file); `git rev-list --count HEAD..release/0.3`
+→ `0`. **Red commit `85bac716`** (test files only; T4 is measured from it): `test/directives/git-conventions.test.ts`,
+`test/core/workflow-patch-line-texts.test.ts`. `npx tsc --noEmit` → exit 0.
+
+| AC | Class | Tests | Status at `85bac716` |
+|----|-------|-------|------|
+| 1 | red-first | `git-conventions.test.ts`, `describe('git-conventions §1 — dl-206 Q1 (i), Q2 (i) (task-305)')`: item 1 (raw regex of `dev-loop-practice.test.ts`) keyed on a `main` release + `` `dl-206` Q2 (i) `` (keeps `` `[open → triaged]` ``); counterpart paragraph: patch triage on the line, `directly or on an ingest/ or backlog/ branch cut from that line`, old owning-line sentence absent; `--no-merges` test + `prints nothing`, the form without `--no-merges` absent; Q1 (i) re-capture phrases + D4 (a) `is captured on a branch cut from it too`; heading `dl-206` beside `dl-185`, full `dl-206-…` id before §1; version ≥ 2.4 (`*1000+minor ≥ 2004`) naming `task-305` and `dl-206`, `**Date:**` ≥ `2026-10-28` | 6 fail, all on missing text: first assertions `Expected substring: "whose \`release\` is a \`main\` release (a minor, or none yet)"`, `"a triage whose \`release\` is a patch of \`X.Y\` is committed on \`release/X.Y\`"`, `"\`git log --no-merges release/X.Y..main -- <file>\`"`, `"\`dl-206\` Q1 (i)"`, `"\`dl-206\`"` (heading), `Expected: >= 2004 Received: 2003` |
+| 2 | red-first (+ characterization beside) | `workflow-patch-line-texts.test.ts`, `describe('task-305 AC 2 — …')`: `triage-bugs` and `define-scope` each `` `kind: patch` ``, the `--no-merges` test, `dl-206 Q2 (i)`, `dl-206 Q1 (i)`; `advance-pinned-build`: `dl-159 A2 item 5`, `a patch line pins only published versions of its own X.Y`, `` the merge forward keeps `main`'s pin ``, `git-conventions §1 rule 5`, `not ruled` absent; the `AGENTS.md` §1 sentence; D6 F2: `node_modules`, `npm ci`, `release worktree`; version ≥ 2.4 with a 2.4 entry naming `task-305` and the 2.3 entry naming `task-291`. Characterization: task-291's merge-forward sentence and the `wingfoil-cli` re-check kept; the three phases' `checks` `toEqual` those at `0fcb59ee` (`loadWorkflowRegistryAtRev`) | 6 fail on missing text (`Expected substring: "\`kind: patch\`"` ×2, `"a patch line pins only published versions of its own X.Y"`, `"the project-status sentence of \`AGENTS.md\` §1, and only that sentence"`, `"node_modules"`, `Expected: >= 2.4 Received: 2.3`); the 2 characterization tests pass |
+| 3 | characterization | task-290 AC 3's owning-line pin replaced by `` a triage whose `release` is a patch of `X.Y` is committed on `release/X.Y` `` (design D2) | 1 fail (that pin), red until green writes the sentence; every other existing test in both files passes |
+| 4 | characterization (by command) | none (design D1) | green records the `dl-159` diff and `git status --short` |
+
+Commands (one at a time, `--maxWorkers=2`): `npx jest test/directives/git-conventions.test.ts --maxWorkers=2` →
+`Tests: 7 failed, 31 passed, 38 total`; `npx jest test/core/workflow-patch-line-texts.test.ts --maxWorkers=2` →
+`Tests: 6 failed, 7 passed, 13 total`. `grep -rln "owning line is made\|not ruled\|pin per line" test/` → only the two
+red files (their absence checks): no other suite pins the replaced sentences.
+
+For green: the D6 F2 sentence must contain `node_modules`, `npm ci` and `release worktree` (no other wording pinned).
+Item 1 must stay between `\n  1. ` and `\n  2. ` (the raw regex). The counterpart paragraph is read from its bold
+heading to the next blank line: keep the new sentences in that one paragraph.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
