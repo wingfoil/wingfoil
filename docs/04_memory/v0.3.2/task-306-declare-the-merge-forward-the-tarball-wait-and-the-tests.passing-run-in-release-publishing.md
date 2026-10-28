@@ -314,6 +314,21 @@ contains `scripts/wait-npm-version.cjs`, `tarball` and `HTTP 200`. The `git.merg
 occurrence (`worktree add` < `merge --no-ff` < `push` < `merge --ff-only`). The AC 1/3/4 workflow and bindings pins read
 `HEAD`: they pass only after green's commit.
 
+### red amendment (qa, 2026-10-28)
+
+Defect in red `eff2e910`: the bug-070 gate `test/lint/no-fabricated-stderr.test.ts` failed with
+`"cli/wait-npm-version.test.ts:62: stderr: ''"`. The red helper `listed()` returned `{ status: 0, stdout, stderr: '' }`,
+which is a returned spawn-result literal with a fixed `stderr`. Ruling Q-16 D2 (approver, 2026-10-28): red amends its
+own file. Commit `fe45c34a` changes only `test/cli/wait-npm-version.test.ts`. The listed answers are now declared
+`const` answers of the fake npm (`LISTED_030`, `LISTED_031`, the form of `NOT_FOUND`), which the gate's header exempts
+by design (an object a variable is initialised to and that is not returned). They are built from `listedJson()`, which
+yields only the stdout text, and the CLI case uses that text too. The intent is unchanged: a listed version, npm quiet
+on stderr. Same class in the other red files: none of them returns a literal carrying `status`. Their answers are
+`const`s, `it.each` rows or harness arguments, and the gate's run below flags no file.
+Runs on `fe45c34a`: `npx jest test/lint/no-fabricated-stderr.test.ts test/cli/wait-npm-version.test.ts
+test/cli/wait-npm-version-failures.test.ts test/cli/wait-npm-version-tarball.test.ts --maxWorkers=2` → `Test Suites:
+4 passed, 4 total`, `Tests: 55 passed, 55 total`; `npx tsc --noEmit` → exit 0, no output; `npm run -s lint` → exit 0.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
