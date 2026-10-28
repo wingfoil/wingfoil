@@ -474,3 +474,11 @@ retrospective, read once (a report of a `kind: patch` release absent from the tr
 previous `retro-<version>`), and `additional-points` presents every report `explore` read (`retrospective.yaml` 1.7,
 `task-300`). Each such proposal takes one of the four outcomes of `proposals.disposed` (covered, element, restated,
 superseded); six apply only to a consumer feedback note. The Decision above is unchanged.
+
+**Note (2026-10-28, release-planning v0.3.2 ruling R8; task-307, bug-443).** §4 names four outcomes the next run
+settles a previous proposal as, and presumes a retrospective that disposed of it. A patch runs none (`dl-092` Q2
+(ii)), so when the previous release is `kind: patch` (its JSON report's `release.kind`), `compare` reads no
+`retro-<patch version>` and settles every proposal as a fifth label, `pending`, noted "disposed of by the next
+minor's retrospective (dl-167 (a))", with no linked element (`scripts/release-health/compare.cjs`, `settle`;
+`docs/08_health/report-layout.md`). How that minor's run then settles them is left to `dl-167`. The Decision above
+is unchanged.
