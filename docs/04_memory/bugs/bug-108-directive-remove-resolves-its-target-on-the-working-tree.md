@@ -2,7 +2,7 @@
 id: "bug-108-directive-remove-resolves-its-target-on-the-working-tree"
 type: bug
 title: "`directive remove` resolves which directive it is removing from the working tree, so a file committed at `HEAD` but deleted on disk is answered `unknown directive` — the one shipped deviation from the baseline rule"
-status: triaged
+status: planned
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3.2"
