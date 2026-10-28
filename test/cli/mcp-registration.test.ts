@@ -202,14 +202,9 @@ describe('scripts/check-mcp-registration.cjs — every Resource is read, every P
     expect(moved.message).toContain('0.2.0');
   });
 
-  it('declares the workflow Resources as known failures of the pinned 0.3.0 build: it refuses the manual check binding (task-298, dl-172 (a))', () => {
-    // The 0.2.2 entry ended with the pin advance (bug-292); these end when advance-pinned-build moves the pin to 0.3.1.
-    expect(KNOWN_READ_FAILURES.map(({ version, uri }) => [version, uri])).toEqual([
-      ['0.3.0', 'wingfoil://workflows'],
-      ['0.3.0', 'wingfoil://workflows/-/next'],
-      ['0.3.0', 'wingfoil://workflows/-/status'],
-    ]);
-    for (const entry of KNOWN_READ_FAILURES) expect(entry.reason).toMatch(/^bug-414 \(task-298\).*manual: true.*0\.3\.1/);
+  it('declares no known failure for the pinned 0.3.1 build: the 0.3.0 entries ended with the pin advance (bug-414)', () => {
+    // 0.3.0 refused the manual check binding (task-298, dl-172 (a)); 0.3.1 reads it, so its three workflow entries went.
+    expect(KNOWN_READ_FAILURES).toEqual([]);
   });
 
   it('observes the build under development as `node dist/cli.js mcp`', () => {

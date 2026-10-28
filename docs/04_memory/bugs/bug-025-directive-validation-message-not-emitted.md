@@ -2,10 +2,10 @@
 id: "bug-025-directive-validation-message-not-emitted"
 type: bug
 title: "Directive validation reports the file as invalid but never emits P3.5's required message"
-status: triaged
+status: planned
 severity: "low"
 release-origin: "v0.2"
-release: "v0.4"
+release: "v0.3.2"
 feature: "P3.5"
 contributor: ""
 credit: ""

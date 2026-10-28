@@ -2,10 +2,10 @@
 id: "bug-066-global-setup-cannot-recover-from-root-owned-dist"
 type: bug
 title: "A root-owned `dist/` left by a container run makes every later host test run die with `EACCES` in `globalSetup`, before any test executes and with nothing naming the cause"
-status: triaged
+status: planned
 severity: "low"
 release-origin: "v0.2"
-release: "v0.4"
+release: "v0.3.2"
 feature: ""
 contributor: ""
 credit: ""

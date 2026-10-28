@@ -2,10 +2,10 @@
 id: "bug-115-the-closest-match-suggestion-never-fires-on-the-help-path"
 type: bug
 title: "`wingfoil memroy` suggests `memory`; `wingfoil help memroy` suggests nothing — the same typo gets help or no help depending on how it is reached"
-status: triaged
+status: planned
 severity: "low"
 release-origin: "v0.2"
-release: "v0.4"
+release: "v0.3.2"
 feature: "P5.1"
 contributor: ""
 credit: ""

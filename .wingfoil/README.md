@@ -27,10 +27,8 @@ repository; which build runs which is the `wingfoil-cli` directive's rule (§1):
   list`, `show`, `next`, `status`) and the MCP server run on the **pinned build**, the published version
   `package.json` pins as `wingfoil-released` (`dl-095`): `npm run -s wingfoil -- <command>`. The workflow
   reads came back to it when the pin reached a build that reads the `{ type, path }` form of a `produces`
-  entry (`dl-104` D3), and leave it again while the pin is 0.3.0: that build refuses the `manual: true` check
-  binding (`dl-172` (a)), so `workflow list`, `show`, `next` and `status` run on the code build until the pin
-  reaches 0.3.1 (`bug-414`), and `npm run check:mcp` declares the three `wingfoil://workflows` Resources known
-  failures of 0.3.0.
+  entry (`dl-104` D3). They left it while the pin was 0.3.0, which refuses the `manual: true` check binding
+  (`dl-172` (a), `bug-414`), and are back on it since the pin reached 0.3.1.
 
 The workflow commands track a workflow — they deduce its state, open and close a run as a `plan` element
 (`dl-019`), print the next step, record what nothing else completes, adopt an element created outside the run and

@@ -2,10 +2,10 @@
 id: "bug-116-help-help-reports-unknown-command-for-a-command-that-exists"
 type: bug
 title: "`wingfoil help help` reports `unknown command 'help'` at exit 2 — the exit code is right and the sentence is false, because Commander's built-in help command is not in its own command list"
-status: triaged
+status: planned
 severity: "low"
 release-origin: "v0.2"
-release: "v0.4"
+release: "v0.3.2"
 feature: "P5.1"
 contributor: ""
 credit: ""
