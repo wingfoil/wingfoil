@@ -342,6 +342,33 @@ AC4 — the dead-run pins (injected and real pids) pass; untagged and legacy nam
 
 None.
 
+### review fixes (developer, 2026-10-28)
+
+Independent review at `47f2a1dd`: 0 blockers, R1–R4 to fix in the task. Approver rulings (queue Q-02): D3, AC5 accepted
+except the one failure that was there before this task, `test/workflow/release-kind-rule.test.ts` (`bug-445`, fixed by `task-331`, file not touched here); D4,
+`test/cli/build-info.test.ts` allowed for R1. Fix commit `93571978` (`git show --stat --format= 93571978` → the four files
+below, `20 insertions(+), 9 deletions(-)`); no red file touched.
+- R1 — `test/cli/build-info.test.ts` header: `grep -n "jest-dist.next" test/cli/build-info.test.ts` → line 11, "composes
+  the two steps of the `build` script (`tsc`, then the record) into `.jest-dist.next` and then swaps the result in".
+- R2 — `test/storage/helpers/git-fixture.ts`: `grep -n "runs no longer alive" test/storage/helpers/git-fixture.ts` → line
+  42, "counts what this run, and runs no longer alive, left behind; a live run's fixtures are never touched (bug-064,
+  bug-208)".
+- R3 (a) — a failed rollback now adds `dist/ is absent: the previous build is at <root>/.jest-dist.prev.` to the
+  diagnostic. Probe (scratch, `renameSync` patched before `require` to fail from the second call) → `jest globalSetup:
+  cannot replace <root>/dist (EXDEV: simulated, …). dist/ is absent: the previous build is at <tmp>/.jest-dist.prev.`
+- R3 (b) — `sed -n 6p test/dist-lock.cjs` → "rebuilds `dist/` (staged, then swapped in, below) before the worker pool
+  starts".
+- R3 (c) — the code is printed once when the message already starts with it. Probe (a leftover `.jest-dist.prev/cli/` at
+  0555, uid 1000) → `jest globalSetup: cannot remove <root>/.jest-dist.prev (EACCES: permission denied, unlink …)`, a single
+  `EACCES`.
+- R4 — `grep -n "pid namespace" test/global-teardown.cjs` → the Scope paragraph: liveness is `process.kill(pid, 0)`, own pid
+  namespace only, other namespaces out of scope, as for the dist lock since task-146.
+
+Runs: `npx jest test/lint/dist-lock.test.ts test/storage/fixture-run-sweep.test.ts test/storage/git-fixture-*.test.ts
+test/cli/build-info.test.ts --maxWorkers=2` → `Test Suites: 6 passed, 6 total`, `Tests: 86 passed, 86 total`; `npm run
+lint` → exit 0; `npm run typecheck` → exit 0. Only message text and comments changed, so no full suite. Status stays
+`in-review`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
