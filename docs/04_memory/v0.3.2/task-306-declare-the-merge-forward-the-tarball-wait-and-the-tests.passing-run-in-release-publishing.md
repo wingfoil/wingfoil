@@ -249,6 +249,71 @@ Approved at 2026-10-28T20:37:21+01:00 (approval queue Q-14, the approver in the 
 - D5 — yes: no amend of spec-017 §12.
 - D6 — F2 is in this task: the header of `.github/workflows/pages.yml` (line 24) gains the tarball wait, one comment line, same class as `publish.yml` line 27; F1 (publish's `tests.passing` versus the `tests.no-identity` token) is filed as a bug for v0.4 by the orchestrator, not fixed here.
 
+### red (qa, 2026-10-28)
+
+Red commit `eff2e910` on `task/task-306-…` (from `9d2d6a94`; `git rev-list --count HEAD..release/0.3` → `0`, no
+merge). Test files only (`git show --stat eff2e910`: 11 files under `test/`); the files under test are untouched.
+`.d.cts` not edited: the design names `scripts/wait-npm-version.d.cts` as green's, and the expected reds are its
+missing exports.
+
+**Files.** New: `test/core/release-publishing-merge-forward.test.ts` (AC 2–4 texts),
+`test/cli/wait-npm-version-tarball.test.ts` (AC 3 script), `test/core/workflow-optional-last-phase.test.ts` (AC 6).
+Old contract updated, intent kept: `test/cli/staging-rehearsal.test.ts` and `test/core/workflow-integration-branch.test.ts`
+(phase list + `merge-forward`; a new `describe('task-306 AC 1 …')` in the latter),
+`test/core/workflow-repository-conformance.test.ts` (checkpoints 18 with `release-publishing.merge-forward` after
+`.tag`, finalize approvals 8 after `.publish`, the `phases[3].checks.post[0]` row, the two `it` titles),
+`test/core/workflow-manual-prose-checks.test.ts` (`UNBOUND_NAMES`), `test/cli/publish-pipeline.test.ts` (post check),
+`test/directives/git-conventions.test.ts` (new `describe('git-conventions §1 rule 6 — the merge-forward phase
+(task-306)')`), `test/cli/wait-npm-version.test.ts` and `-failures.test.ts` (JSON answer + a probe answering 200;
+the CLI success case on an async `spawn` and an in-process server).
+
+**Per AC** (each file run alone, `npx jest <file> --maxWorkers=2`):
+- AC 1 (red-first): `workflow-integration-branch` → 3 failed, 25 passed (phase list `Received + 0` the
+  `merge-forward` row; last phase `Expected: "merge-forward" Received: "mark-released"`; version `Expected: >= 2.1
+  Received: 2`); the registry/65-warnings and `git.merge(from: integration_branch, ff: false)` → `manual` cases pass
+  today and stay pinned. `staging-rehearsal` → 1 failed, 19 passed (phase list). `workflow-repository-conformance` →
+  3 failed, 13 passed (warning rows: the post-check prose; checkpoints `- Expected - 1`; finalize approvals
+  `- Expected - 1`).
+- AC 2 (red-first, D1): `git-conventions` → 2 failed, 38 passed (`Expected substring: "`release-publishing`'s
+  `merge-forward` phase"`; version `Expected: >= 2005 Received: 2004`); `release-publishing-merge-forward` AC 2 → 3
+  failed (AGENTS.md `` `mark-released` → `merge-forward` ``, WORKFLOW.md `**merge-forward**`, the RP2 node).
+- AC 3 (red-first): `wait-npm-version-tarball` → 13 failed, 4 passed (`npmViewArgs` `- Expected - 2`;
+  `TARBALL_TIMEOUT_MS` `Received has value: undefined`; `probeTarball` `TypeError: … probeTarball is not a
+  function`; the poll cases: the old code takes the JSON as not live, `Last answer: npm view exit 0: {`; CLI 200 → `Expected:
+  0 Received: 1`, CLI 404 lacks `HTTP 404`); the 4 passing are the not-listed cases (E404, another version, no or an
+  empty `dist.tarball`: probe never called). `wait-npm-version` → 4 failed, 15 passed; `-failures` → 1 failed, 14
+  passed (the JSON success answer). `publish-pipeline` → 1 failed, 81 passed (post check).
+  `release-publishing-merge-forward` AC 3 → 4 failed (post check, description `dist.tarball`, publish.yml header,
+  pages.yml header — D6). `workflow-manual-prose-checks` → 48 passed: an unbound name resolves unbound whether or
+  not the prose exists, so its edited row does not go red; the count stays 65 (AC 1 pin).
+- AC 4 (red-first, D1): `release-publishing-merge-forward` AC 4 → 4 failed (description `` `tests.passing` is the
+  run on the release commit ``; the comment above `tests.passing:` lacks `release-publishing.publish`; the
+  `git.merge` comment lacks `git.merge(from: integration_branch, ff: false)` (D3); `version` `Expected: >= 2.7
+  Received: 2.6`). Total for the file: 11 failed, 11 total.
+- AC 5 (characterization by command): no jest pin, as designed; green and review run `git diff --
+  docs/04_memory/design/specs/spec-015-packaging-publishing.md` and `grep -c "dist.tarball"` on it.
+- AC 6 (characterization): `workflow-optional-last-phase` → 5 passed, 5 total on the unchanged tree: `releasing` →
+  frontier `publishing-tail.mark-released@release:rel-1`; `released` → the one step
+  `publishing-tail.merge-forward@release:rel-1`, `optional: true`, `missing: ['record']`, `finalizable: true`,
+  phases `[publishing current, health pending]`; finalize as the fixture's non-approver → `VALIDATION` /
+  `not authorized to approve`, HEAD unchanged; as Morgan with a `--reason` → `workflow: finalize plan-cycle …` with
+  `Approver: Morgan …`, then the frontier `cycle.health@release:rel-1`, `publishing complete`.
+
+**Typecheck.** `npx tsc --noEmit` → 9 errors, all in the red files and all intended: TS2305 ×3
+(`TARBALL_TIMEOUT_MS`, `probeTarball`, `TarballAnswer` not exported, `wait-npm-version-tarball.test.ts:28–29`) and
+TS2353 ×6 (`probe` not in `WaitForNpmVersionOptions`, `wait-npm-version.test.ts`); nothing else.
+
+**For green.** Strings pinned verbatim: the post check `staged version approved on npm, installable from the npm
+registry once its tarball answers HTTP 200, its GitHub Release created with the test reports attached and its MCP
+Registry listing published`; the last answer `npm lists it, its tarball <url> answers HTTP <code>`, `the tarball
+request was killed after <TARBALL_TIMEOUT_MS/1000> s`, `failed: <error>`; publish.yml's header (flattened, `#`
+removed) contains `` `npm view wingfoil@<version> version dist.tarball --json` `` and `HTTP 200` — and the raw header
+must still hold `npm view wingfoil@<version> version` on one line (`publish-pipeline.test.ts:494`); pages.yml's header
+contains `scripts/wait-npm-version.cjs`, `tarball` and `HTTP 200`. The `git.merge` comment must not say `on main`
+(`task-288 AC 5`'s block from `tests.bdd.run:` to `git.tag:`). Rule 6's four commands are checked in order by first
+occurrence (`worktree add` < `merge --no-ff` < `push` < `merge --ff-only`). The AC 1/3/4 workflow and bindings pins read
+`HEAD`: they pass only after green's commit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
