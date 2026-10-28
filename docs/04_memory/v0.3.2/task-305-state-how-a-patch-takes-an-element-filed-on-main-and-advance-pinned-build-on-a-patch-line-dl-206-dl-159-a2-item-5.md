@@ -36,7 +36,7 @@ and every pin advance also updates the project-status sentence of `AGENTS.md` §
 ## Implementation Notes
 
 - **wave:** w0 · Size: S. **Files:** `.wingfoil/directives/custom/git-conventions.md` (§1, version line), `.wingfoil/workflows/custom/release-planning.yaml` (`triage-bugs`, `define-scope`, `advance-pinned-build`, version line), the suites quoting them. **Bug:** `bug-429`.
-- Merges first in `w0`: `merge-forward` and `governance-approver` edit `git-conventions.md` after it (one bump per branch).
+- Merges first in `w0`: `task-306` and `task-328` edit `git-conventions.md` after it (one bump per branch).
 - Source: `release-planning-rel-v0.3.2-plan` (R5 survey, R8 rulings, S6). Run under the autonomy rules R3 of that plan.
 
 ## Execution Notes
