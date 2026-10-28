@@ -216,6 +216,64 @@ For green: the D6 F2 sentence must contain `node_modules`, `npm ci` and `release
 Item 1 must stay between `\n  1. ` and `\n  2. ` (the raw regex). The counterpart paragraph is read from its bold
 heading to the next blank line: keep the new sentences in that one paragraph.
 
+### green (developer, 2026-10-28)
+
+Green commit `f2b4cc9e` (`git show --stat --format= f2b4cc9e` → `.wingfoil/directives/custom/git-conventions.md`
+31 lines, `.wingfoil/workflows/custom/release-planning.yaml` 29 lines; nothing else). Written as designed, with the
+gate's rulings D2 (owning-line sentence replaced), D3 (a) (`main` moves its pin only by its own switch commit, never
+inside the merge), D4 (a) (only the `AGENTS.md` §1 status sentence; a drift elsewhere noted in the phase plan), D5 (a)
+(`--no-merges` cites `release-planning-rel-v0.3.2-plan` R8) and D6 F2 (`advance-pinned-build`: the pre-check needs the
+line's own node_modules, `npm ci` in the release worktree).
+- `git-conventions.md`: §1 heading cites `dl-206`; sources list gains the full `dl-206-…` id; item 1 keyed on a `main`
+  release (`dl-206` Q2 (i)); the counterpart paragraph (one paragraph) states the patch triage on the line, the
+  eligibility test `git log --no-merges release/X.Y..main -- <file>`, the Q1 (i) re-capture and `task-290` D4 (a);
+  closing Source note gains `dl-206`. `grep -n '^version' …` → `version: "2.4"   # 2.4 §1: …` (whole `(prev 2.3 …` chain
+  kept); `**Date:** 2026-10-28`.
+- `release-planning.yaml`: `triage-bugs` and `define-scope` name the `kind: patch` eligibility test and the re-capture;
+  `advance-pinned-build` states the pin per line, that the merge forward keeps `main`'s pin (rule 5), the `AGENTS.md`
+  §1 sentence and the node_modules pre-condition; `checks`, `where`, `actions`, `produces` unchanged. `version: 2.4`,
+  its history entry `; 2.4 task-305 (…)` appended after the 2.3 entry.
+
+Red → green (both suites read `HEAD`, run after the commit, one at a time): `npx jest --maxWorkers=2
+test/directives/git-conventions.test.ts` → `Tests: 38 passed, 38 total` (red: 7 failed, 31 passed);
+`npx jest --maxWorkers=2 test/core/workflow-patch-line-texts.test.ts` → `Tests: 13 passed, 13 total` (red: 6 failed,
+7 passed). T4: `git log --first-parent --no-merges --format=%h 85bac716..HEAD -- test/directives/git-conventions.test.ts
+test/core/workflow-patch-line-texts.test.ts` → empty.
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| 1 | met | `git-conventions.test.ts` task-305 describe, 6 cases pass (38/38 above) |
+| 2 | met | `workflow-patch-line-texts.test.ts` task-305 describe, 7 cases pass (13/13 above) |
+| 3 | met | task-290's updated pin passes; full suite below: the only failure is bug-445's |
+| 4 | met | `git status --short` → ` M docs/04_memory/design/dls/dl-159-…md` (only file modified, uncommitted); `git diff --stat` → 9 insertions, 1 deletion: one new paragraph "*(Amended 2026-10-28, approver ruling R8 of `release-planning-rel-v0.3.2-plan`.)*" after the 2026-10-16 paragraph, and item 5 extended with "*(Ruled 2026-10-28, see the amendment above.)*" (its original words kept) |
+
+### refactor (developer, 2026-10-28)
+
+Run with the `dl-159` amend in the working tree. `git rev-list --count HEAD..release/0.3` → `0` (no sync needed).
+- `npm run check:mcp` → exit 0: pinned wingfoil 0.3.1 "(prompts: 8, resources: 4, tools: 0)"; the code build "every
+  listed Resource read and Prompt get answered".
+- Pinned `npm run -s wingfoil -- workflow list` and `workflow show release-planning`, `--format json` and `--format
+  console`: four exits 0, empty stderr, `W_WORKFLOW_UNBOUND_TOKEN` 65 in each (65 at design); console's parsed value
+  equals json's.
+- Under the slot, `npm test -- --maxWorkers=2 --coverage` → `Test Suites: 1 failed, 506 passed, 507 total`, `Tests: 1
+  failed, 8967 passed, 8968 total` (1572 s). The one failure is the accepted pre-existing one:
+  `test/workflow/release-kind-rule.test.ts` → `["patch-v0.3.2: features"]` (bug-445, task-331). Coverage `All files`
+  99.37 statements, 97.5 branches, 98.18 functions, 99.73 lines.
+- `npm run lint` exit 0; `npm run docs:api` exit 0, no warning; `npm run typecheck` exit 0, no output.
+- `npm run check:governance -- --base origin/release/0.3` → exit 1, 2 findings, both on commits of the local
+  `release/0.3` not yet on `origin/release/0.3` (`7ce9d88d`), not this task's: `9cdea2e3` and `8d6c005f`, `wf(bug):
+  assign bug-445-…` / `assign bug-446-…` without `release {version} to` (`git merge-base --is-ancestor <sha>
+  release/0.3` → true for both). `npm run check:governance -- --base release/0.3` → `gated: 0 findings on 0 commits`,
+  exit 0. Reported to the orchestrator as a candidate finding.
+- Self-review against `code-review`: every AC met above; no file outside the design's list; the same-class sentence
+  ("the pin per line is … not ruled") had no other instance (`grep -rn "not ruled" .wingfoil` → nothing).
+
+### Pending amendments (approver)
+
+- `dl-159-patch-a-released-minor-on-a-release-x.y-branch-merged-forward-into-main-alongside-the-next-minor-on-main`
+  (`ready`, edited in this worktree, uncommitted): A2 item 5 ruled. Command, from the worktree after `npm run build`:
+  `node "$(pwd)/dist/cli.js" memory amend dl-159-patch-a-released-minor-on-a-release-x.y-branch-merged-forward-into-main-alongside-the-next-minor-on-main --reason "Record the ruling of release-planning v0.3.2 R8 on A2 item 5: a patch line pins only published versions of its own X.Y, a merge forward keeps main's pin, and every pin advance updates only the project-status sentence of AGENTS.md section 1; written into release-planning.yaml by task-305 for bug-429."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -223,3 +281,7 @@ heading to the next blank line: keep the new sentences in that one paragraph.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The governance check against `origin/release/0.3` reports commits of the unpushed local `release/0.3`, not the task's
+  (`9cdea2e3`, `8d6c005f`); `--base release/0.3` isolates the task. Proposal: the dev-loop brief names the local base
+  while the line has unpushed commits.
