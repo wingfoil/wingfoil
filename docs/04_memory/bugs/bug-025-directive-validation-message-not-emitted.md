@@ -5,7 +5,7 @@ title: "Directive validation reports the file as invalid but never emits P3.5's 
 status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: "v0.4"
+release: "v0.3.2"
 feature: "P3.5"
 contributor: ""
 credit: ""
