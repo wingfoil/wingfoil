@@ -47,6 +47,101 @@ settles them later stays with `dl-167`.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-28)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate). `bug-443` (`in-progress`), `dl-089`, `dl-092`, `dl-167`:
+`grep -n "^status:"` on the three DL files printed `ready` each. Ruling: release-planning v0.3.2 R8, `bug-443`: "only
+the `pending` label for a patch's proposals; how a minor settles them stays with `dl-167`" (`grep -n bug-443
+docs/05_plans/rl-v1/rel-v0.3.2/release-planning-rel-v0.3.2-plan.md` → line 129).
+
+**Where the previous release's kind is read.** From the previous JSON report itself, `previous.release.kind`, which
+`compareRelease` already loads and validates against `release-health.schema.json` (`compare.cjs` lines 687–697). The
+schema requires it: `release.required: ["id", "version", "kind"]`, `kind: enum [major, minor, patch]` (`grep -n
+'"release"' -A10 docs/08_health/release-health.schema.json`). measure.cjs writes it from the release document's
+`kind` frontmatter (`findRelease`, `sed -n 2241,2251p scripts/release-health/measure.cjs`). The committed reports carry
+it: a `node -e` print of `release` for each `docs/08_health/release-health-v*.json` → v0.1, v0.2, v0.3
+`"kind":"minor"`, v0.3.1 `{"id":"patch-v0.3.1","version":"v0.3.1","kind":"patch"}`; `grep -n "^kind:"
+docs/04_memory/planning/rl-v1/*.md` → `patch-v0.3.1.md` and `patch-v0.3.2.md` `kind: "patch"`. So no read of the
+release Memory document and no guess from the version's shape; v0.3.2's run (previous `release-health-v0.3.1.json`)
+is the first one the change reaches.
+
+**Design.**
+- `settle(previousProposals, retroText, comparison, previousKind)` gains an optional fourth argument. With
+  `previousKind === 'patch'` every proposal is `{ id, metric, settled: 'pending', outcome: null, element: null,
+  note: "disposed of by the next minor's retrospective (dl-167 (a))" }` and `retroText` is ignored; any other value
+  (`'minor'`, `'major'`, `undefined`) keeps today's rule, so every existing caller keeps its result.
+- `compareRelease`: when `previous.release.kind === 'patch'` it neither builds nor `existsSync`s the
+  `retro-<previous version>` path (no lookup) and calls `settle(…, null, comparison, 'patch')`; the minor path is
+  untouched. `renderReport` needs no change: the row prints `pending (<note>)` through the existing `s.note` branch
+  (line 601), and `Improvements` keeps filtering on `startsWith('adopted')`.
+- `compare.cjs` header (the **Settle** paragraph, lines 47–51) states the patch rule; `compare.d.cts`
+  `Settled.settled` gains `'pending'` and `settle` its optional `previousKind` parameter.
+- `docs/08_health/report-layout.md`: the "Previous proposals" placeholder lists `pending`, and the settle paragraph
+  after the disposition example says: when the previous release is `kind: patch`, every proposal is `pending`, no
+  retrospective is read, the next minor's retrospective disposes of it (`dl-167` (a)); how that minor's run then
+  settles them is left to `dl-167` (ruling R8).
+
+**AC classification and what qa pins** (T1; fixtures mirror the real shapes in `docs/08_health/`).
+
+| AC | Class | Why |
+|---|---|---|
+| 1 `compare.cjs` patch → `pending` | red-first | new: `settle` takes no kind and returns `not adopted` with no retrospective (`sed -n 483,488p scripts/release-health/compare.cjs`) |
+| 2 `report-layout.md` lists `pending` | characterization (a document) | the pin may land red: `grep -n pending docs/08_health/report-layout.md` → only line 35, the metric verdicts |
+
+- (a) **Unit, `test/release-health/compare.test.ts`** (new `describe('settle — a patch previous run (bug-443)')`): a
+  previous Markdown shaped as `docs/08_health/release-health-v0.3.1.md` `## Proposals` (lines 138–205: `### RH-v0.3.1-01
+  — G05 Code commits citing an id`, `-02 — Q05 Complexity`, `-03 — Q14 Open decision-logs`, each with `- Finding:`,
+  `- Evidence:`, `- Proposed element:`, `- Proposed target release: v0.4`), and a retro text WITH a `## Release health`
+  table holding `element` / `declined` rows for the three ids. `settle(parseProposals(md), retro, comparison,
+  'patch')` → three entries `settled: 'pending'`, `outcome: null`, `element: null`, `note` matching `/next minor's
+  retrospective/` and containing `dl-167`. The same inputs with `'minor'` → the existing mapping (adopted / not
+  adopted): the minor case unchanged.
+- (b) **CLI, the `compare.cjs — the command line` block**: a root as `root()` builds, plus a previous patch report
+  `release-health-v0.3.1.json` derived from `fixtureReport('v0.3')` with `release: { id: 'patch-v0.3.1', version:
+  'v0.3.1', kind: 'patch' }`, `previous` → `docs/08_health/release-health-v0.3.json` (copy that fixture too), and
+  D01/P06 set with `withEntry` to the real `not-comparable` entries of `release-health-v0.3.1.json` (reasons "a patch
+  release: D01 is measured on major and minor releases only (dl-089 §2)" and "a patch release: P06 is measured with
+  D01, on major and minor releases only"); its `.md` as in (a); the current `release-health-v0.3.2.json` built the
+  same way (`patch-v0.3.2`, previous → v0.3.1); and a decoy `docs/04_memory/design/dls/retro-v0.3.1.md` whose
+  `## Release health` table marks `| RH-v0.3.1-01 | element | dl-901-x |`. `--release v0.3.2 --root <dir>` → exit 0,
+  and the `## Previous proposals` section (helper `section`) holds `| RH-v0.3.1-0N | — | pending (disposed of by the
+  next minor's retrospective (dl-167 (a))) |` for N = 1..3, none `adopted`: the decoy proves no lookup. Every report
+  written must validate against the schema (reuse the Ajv check of the `fixture reports` describe).
+- (c) **Minor unchanged, CLI** (characterization inside AC 1): previous a minor with its `.md` (`### RH-v0.2-01 — …`)
+  and no `retro-v0.2.md` → the row reads `not adopted (no disposition recorded (no retrospective))`; passes today.
+- (d) **`report-layout.md`**, in `compare.test.ts` beside `renderReport — report-layout.md`: the `## Previous
+  proposals` placeholder lists `pending` with the four labels it has, and the settle paragraph names `kind: patch` and
+  `dl-167`.
+- `test/release-health/helpers/compare-api.ts` (the tests' own view, red's file): `Settled.settled` gains `'pending'`,
+  `settle` gains `previousKind?: 'major' | 'minor' | 'patch'`. No new export, so no TS2305: the expected red is jest
+  assertion failures on (a), (b), (d) only, with `npx tsc --noEmit` clean.
+
+**Files and versions.** Green: `scripts/release-health/compare.cjs`, `scripts/release-health/compare.d.cts`,
+`docs/08_health/report-layout.md`. Red: `test/release-health/compare.test.ts`,
+`test/release-health/helpers/compare-api.ts`. No `version:` bump: none declares one (`grep -c "^version:"
+docs/08_health/report-layout.md` → `0`; doc-versioning: "a document that declares no version is not given one").
+No `.wingfoil/` change (`grep -rn settle .wingfoil/workflows/custom/release-health.yaml .wingfoil/WORKFLOW.md` → two
+generic "previous proposals settled" lines, no vocabulary), so `npm run check:mcp` is not needed. `grep -rln "not
+adopted"` outside Memory and plans finds no other copy of the settle vocabulary (`docs/comparison.md` and
+`test/docs/presentation.test.ts` match an unrelated heading, "Ideas seen elsewhere, not adopted").
+
+**Existing tests run (this worktree, before any change).**
+`npx jest test/release-health/compare.test.ts test/release-health/propose.test.ts test/release-health/compare-remeasure.test.ts --maxWorkers=2`
+→ `Test Suites: 3 passed, 3 total`, `Tests: 87 passed, 87 total`. `npx jest test/release-health/catalogue.test.ts
+--maxWorkers=2` (it pins `report-layout.md`'s seven `##` headings, which the change keeps) → `Tests: 26 passed, 26
+total`. `npx tsc --noEmit -p .` → exit 0. compare.cjs has no `--format` option: no console variant applies.
+
+**Decisions for the approver.**
+1. `dl-089` §4 names four settle outcomes; `pending` is a fifth. Not a contradiction (§4 presumes a disposer that has
+   run; R8 rules the label), but recommended: a dated Note on `dl-089`, prepared uncommitted at green as a pending
+   amendment, `--reason "Record the pending settle label a patch's proposals take (task-307, bug-443, release-planning
+   v0.3.2 R8)."` Non-blocking.
+2. The note text `disposed of by the next minor's retrospective (dl-167 (a))`: recommended, it names the disposer as
+   `bug-443` Expected Behavior suggests.
+3. For `dl-167`'s owner, out of scope (R8): v0.4's run will show v0.3.2's proposals `pending` (right: `retro-v0.4` is
+   written after compare), but v0.3.1's, `pending` in v0.3.2's report, are never read again: `parseProposals` reads
+   only the `### RH-` headings of the immediate previous `.md` (`sed -n 455,463p scripts/release-health/compare.cjs`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
