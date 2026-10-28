@@ -221,6 +221,37 @@ coordinator told; nothing pushed without instruction.
   `npx jest test/directives test/docs test/lint` and the workflow-text suites: 719 passed.
 - S0 (2026-10-28): the approver approved `dl-206` (`63bec4df`, `in-discussion → ready`, Q1 (i), Q2 (i)) and closed
   `bug-414` (`079ae55b`, `triaged → closed`).
+- S2 (2026-10-28): `patch-v0.3.2` added `217b35ae`, submitted `b7604e8b` (`draft → planning`). Post-checks: the required
+  fields present (`memory submit` checks them); `change-proposals.swept` holds vacuously (no change-proposal is
+  `scheduled` with `release: "v0.3.2"`). The `AGENTS.md` §1 status sentence updated with the pin advance `db79230a` (R8).
+- R5 survey (four read-only sub-agents, 2026-10-28, at `d5f11bef`): of the 49 pre-classified includes 42 stayed, five
+  moved to maybe (`bug-289`, `bug-340`, `bug-371`, `bug-399`, `bug-406`); none is fixed on the line
+  (`git log --oneline 8e7fc43b..HEAD -- src scripts test .githooks` → only `65887b0d`); `bug-393` and `bug-411` narrowed;
+  `bug-358` fixed, not removed; `bug-303`/`bug-355` duplicates; of the 22 `main`-only bugs only `bug-423` re-captured.
+  The eligibility test needs `--no-merges` (R8).
+- S3 (2026-10-28): selection `open` empty. Re-capture on `ingest/recapture-bug-423-v0.3.2` (plan
+  `bug-ingest-rel-v0.3.2-recapture-bug-423-plan`, done `1593f08c`): `bug-444` triaged `d29c52e5`, assigned v0.3.2
+  `f149ff96`; merged into `release/0.3` `e502a812`. On `ingest/recapture-bug-423-main`: `bug-423` deprecated `28fbafed`,
+  `bug-355` closed `a5b07771`; merged into `main` `c756b31d`. `release/0.3` merged into this branch `d8a3eac1`.
+- S4 (2026-10-28): `npm run check:role-directives` → 8 roles checked, 0 with warnings. The twenty-one decision-logs with
+  `release: ""` here and `"v0.4"` on `main` not selected (ruling R1 of v0.3.1, restated in S4); `dl-206` (`ready`,
+  v0.3.2) is named by `task-305`'s `ref:` (`ready-decision-logs.covered`). No open instance carries `patch-v0.3.2`
+  (`node dist/cli.js workflow status`), so no `workflow finalize` was needed for S4 or S5.
+- S5: skipped (no architectural decision in a bug-fix patch).
+- S6 (2026-10-28, read-only sub-agent at `b7604e8b`): all 17 tech-specs `approved`, every decision-log an in-scope bug
+  cites `ready` (`dl-176`, related to `bug-339`, is `in-discussion` and cited by no task). No new tech-spec; ten in-place
+  amends owed by the tasks (approver ruling 2026-10-28: amends in the tasks, recorded at review, `dl-047`): spec-001
+  (`path` rule, format paragraph: `task-313`), spec-004 §2.2 (`task-314`), spec-005 §3.1 (`task-315`), spec-008 §6
+  (`task-324`) and §11 (`task-311`), spec-012 §5.1 (`task-310`), spec-015 §3 (`task-306`, `task-326`), spec-016 §3.3,
+  §3.7, §4.5 and spec-017 §10 (`task-330`). Design risk carried into `task-306`'s criteria: spec-017 §4.10 never skips
+  an optional last phase. `spec-review.passed` (`dl-022`): the survey's coverage table read each fix against its spec,
+  BDD and decision-log.
+- S7 (2026-10-28): 26 fix tasks `task-305`…`task-330` added and submitted (`pending`), each with `kind: fix`, `wave`,
+  `bug:`, acceptance criteria classified red-first or characterization, and `depends_on` for shared files; 48 bugs
+  re-assigned `v0.4 → v0.3.2`, all 55 synced `triaged → planned`. Post-checks: `frontmatter.required` (`memory submit`
+  checks `title`, `release`, `kind`); `task.wave.declared` (waves `w0`–`w3`; `w0` listed at S8, the others appended at
+  re-plan); `acceptance-criteria.consistent` stated in each approval's reason. `npm run -s check:governance -- --base
+  release/0.3` → 0 findings. `task-305`'s note named two draft keys; the approver's amend corrects it.
 
 ### Retrospective
 
