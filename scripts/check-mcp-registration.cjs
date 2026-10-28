@@ -56,10 +56,6 @@ const MCP_CHANNELS = Object.freeze(['prompts', 'resources', 'tools']);
  */
 const EXPECTED_CHANNELS = Object.freeze(['prompts', 'resources', 'tools']);
 
-/** Why 0.3.0 cannot read this repository's workflows (`bug-414`; task-298, `dl-172` (a)): one reason for its three Resources. */
-const MANUAL_CHECK_ON_0_3_0 =
-  'bug-414 (task-298): 0.3.0 requires run on every check binding and refuses the { manual: true } check binding dl-172 (a) adds (demo.rendered in workflows/bindings.yaml); it ends when advance-pinned-build moves the pin to 0.3.1';
-
 /**
  * The reads the pinned build is known to fail, by its version (task-239, `bug-292`). Each entry applies only
  * while `package.json` pins that version, and only while the read still fails: otherwise the check fails
@@ -67,23 +63,7 @@ const MANUAL_CHECK_ON_0_3_0 =
  *
  * @type {readonly import('./check-mcp-registration.cjs').KnownReadFailure[]}
  */
-const KNOWN_READ_FAILURES = Object.freeze([
-  Object.freeze({
-    version: '0.3.0',
-    uri: 'wingfoil://workflows',
-    reason: MANUAL_CHECK_ON_0_3_0,
-  }),
-  Object.freeze({
-    version: '0.3.0',
-    uri: 'wingfoil://workflows/-/next',
-    reason: MANUAL_CHECK_ON_0_3_0,
-  }),
-  Object.freeze({
-    version: '0.3.0',
-    uri: 'wingfoil://workflows/-/status',
-    reason: MANUAL_CHECK_ON_0_3_0,
-  }),
-]);
+const KNOWN_READ_FAILURES = Object.freeze([]);
 
 /** The build under development, started from the project directory (task-239, `bug-292`). */
 const DEV_BUILD_ENTRY = Object.freeze({ command: 'node', args: Object.freeze(['dist/cli.js', 'mcp']) });
