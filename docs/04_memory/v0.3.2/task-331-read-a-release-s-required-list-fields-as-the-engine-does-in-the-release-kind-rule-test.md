@@ -241,6 +241,22 @@ re-implements the empty-list reading. Files touched: the two green files and thi
 
 None.
 
+### review fixes (developer, 2026-10-28)
+
+The independent review at `b0f66ccf` approved with 0 blockers, 0 should-fix and 2 follow-up nits. Under W0-R6 (1), R1 is fixed in the task.
+- **R1** (`test/workflow/helpers/release-required-check.ts`, the doc comment of `missingCheckFields`): it said "Missing
+  fields in check order", but the engine's `requiredFieldOrder` (`src/memory/submit.ts` l. 77–78, `[...new Set(['title',
+  ...required])]`) puts `title` first and always checks it. Fixed in `8d6242c3`
+  (`fix(workflow): task-331 — review finding R1 (comment)`), comment only: it now reads "Missing fields in the engine's
+  order (`title` first, then the check's fields)". `git show --stat 8d6242c3` → `1 file changed, 1 insertion(+), 1 deletion(-)`.
+- **R2**: no action. The exemption filter has to read the define-scope check's own `except` ids, because that check is what
+  the documents test exercises. That those ids equal memory.yaml's release `template.frontmatter.exempt` is already pinned by
+  the existing test "task-279 (bug-342, D1 (a)): both checks' `except kind for [...]` equal memory.yaml's release
+  `template.frontmatter.exempt`" in `test/workflow/release-kind-rule.test.ts`.
+- Re-run at `8d6242c3`: `npx jest test/workflow/release-kind-rule.test.ts test/workflow/release-required-check.test.ts
+  --maxWorkers=2` → `Tests: 14 passed, 14 total`; `npm run lint` → exit 0; `npm run typecheck` → exit 0;
+  `npm run check:governance -- --base release/0.3` → `gated: 0 findings on 0 commits`, exit 0.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
