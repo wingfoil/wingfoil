@@ -101,7 +101,7 @@ the move. Start from `.wingfoil/README.md`.
 | Job | Build | How, from the repository root |
 |-----|-------|-------------------------------|
 | **Memory operations** — every verb that writes a `wf()` commit (`memory add`, `submit`, `approve`, `reject`, `deprecate`, `amend`, `park`), and the workflow commands that write a commit (`workflow start`, `finalize`, `end`, `adopt`, `rekey`, `create`, `remove`) | the **code build**, compiled from your worktree | `npm run build`, then `node dist/cli.js <command>` |
-| **Read commands** — `dna show`, `paths`, `directives list`, `memory search`, `memory history`, `workflow list`, `show`, `next`, `status` (on the code build while the pin is 0.3.0, below) — and **MCP** | the **pinned build**, the devDependency `wingfoil-released` (`dl-095`) | `npm run -s wingfoil -- <command>`; the MCP server `.mcp.json` registers (`npm run check:mcp`) |
+| **Read commands** — `dna show`, `paths`, `directives list`, `memory search`, `memory history`, `workflow list`, `show`, `next`, `status` — and **MCP** | the **pinned build**, the devDependency `wingfoil-released` (`dl-095`) | `npm run -s wingfoil -- <command>`; the MCP server `.mcp.json` registers (`npm run check:mcp`) |
 
 - The pinned version is what `package.json` declares for `wingfoil-released`; `npm run -s wingfoil --
   --version` prints it. It moves forward only, to published builds, through `release-planning`'s
@@ -112,10 +112,8 @@ the move. Start from `.wingfoil/README.md`.
 - The workflow reads (`workflow list`, `show`, `next`, `status`, the MCP resource `wingfoil://workflows`) run on
   the pinned build since the pin reached a build that reads the `{ type, path }` form of a `produces` entry
   (`dl-104` D3); the workflow commands that write a commit stay on the code build with the Memory operations.
-  The same holds for the `manual: true` check binding (`dl-172` (a), `task-298`): the pinned 0.3.0 refuses it, so
-  until the pin reaches 0.3.1 the workflow reads run on the code build (`node dist/cli.js workflow …`), and
-  `npm run check:mcp` declares the three `wingfoil://workflows` Resources known failures of 0.3.0 — the
-  `pinned-build` bug `bug-414` records it.
+  They left it while the pin was 0.3.0, which refuses the `manual: true` check binding (`dl-172` (a), `task-298`,
+  the `pinned-build` bug `bug-414`), and are back on it since the pin reached 0.3.1.
 
 | File                                                       | Pillar                 | What it holds                                                                                                                                                                                        |
 |------------------------------------------------------------|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
