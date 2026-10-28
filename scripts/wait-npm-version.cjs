@@ -97,7 +97,7 @@ function listedTarball(stdout, version) {
  */
 async function probeTarball(url, options) {
   try {
-    const response = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: AbortSignal.timeout(options.timeoutMs) });
+    const response = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: globalThis.AbortSignal.timeout(options.timeoutMs) });
     return { status: response.status };
   } catch (error) {
     // Read by shape, not `instanceof`: fetch's errors may come from another realm (a DOMException, a test VM).
