@@ -6,13 +6,13 @@ kind: custom
 title: "Git conventions: branches, sync, tags, subjects, identity, id allocation, attribution"
 tags: [custom, git, process, security]
 scope: global
-version: "2.3"   # 2.3 §4, §8: the `workflow: rekey <instance-id> <from> <to>` record subject and its `WingFoil-Rekey-From:` / `WingFoil-Rekey-To:` trailers (task-295, dl-187 C5) (prev 2.2 §4, §8: the non-Memory record subjects `workflow: finalize`, `workflow: adopt`, `agent: record`, and the `WingFoil-Adopted:` trailer of an adoption (task-294, dl-187) (prev 2.1 §9: the pre-push hook takes a new remote ref's base from the line the branch was cut from, the nearest merge-base among `origin/main` and each `origin/release/X.Y`, and CI stays the enforcing check (task-291, dl-185 C3 (i)) (prev 2.0 §1: the merge forward of a release line — rule 5's two kinds of colliding file and the bump in the merge commit, who runs it, when and where, the release/X.Y counterpart of the direct-commit list (task-290, dl-185 C1 (a)–(d); approver design-gate rulings 2026-10-22) (prev 1.9 §8: the trailer paragraph also carries the workflow `WingFoil-*` trailers (`-Instance`, `-Step`, `-Phase`, `-Element`, `-Item`), which a separate paragraph would unlink from their step (task-252, bug-236 amendment of 2026-10-11) (prev 1.8 §1: the quotation of `dev-loop.yaml`'s `done` merges into the task's integration branch, `git.merge(to: integration_branch, ff: false)`, which carries the on-branch commits into it (task-288, dl-159 A1.8, approver ruling D6) (prev 1.7 §1–§3, §6, §9: the release/X.Y maintenance line, the integration branch, the merge forward, a tag per line, push the add on both lines, the release worktree (task-286, dl-159 A1.6, dl-092 Action 3) (prev 1.6 §1: `dev-loop.yaml`'s `done` declares the on-branch order, approve, finalize and the bugs' sync before the merge (task-281, bug-313, approver ruling 2026-10-12 D6) (prev 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260)))))))))
+version: "2.4"   # 2.4 §1: a triage's line is keyed on the release it gives, the eligibility test `git log --no-merges release/X.Y..main`, the re-capture on the line of an element that exists only on main (task-305, dl-206 Q1 (i), Q2 (i); release-planning v0.3.2 R8) (prev 2.3 §4, §8: the `workflow: rekey <instance-id> <from> <to>` record subject and its `WingFoil-Rekey-From:` / `WingFoil-Rekey-To:` trailers (task-295, dl-187 C5) (prev 2.2 §4, §8: the non-Memory record subjects `workflow: finalize`, `workflow: adopt`, `agent: record`, and the `WingFoil-Adopted:` trailer of an adoption (task-294, dl-187) (prev 2.1 §9: the pre-push hook takes a new remote ref's base from the line the branch was cut from, the nearest merge-base among `origin/main` and each `origin/release/X.Y`, and CI stays the enforcing check (task-291, dl-185 C3 (i)) (prev 2.0 §1: the merge forward of a release line — rule 5's two kinds of colliding file and the bump in the merge commit, who runs it, when and where, the release/X.Y counterpart of the direct-commit list (task-290, dl-185 C1 (a)–(d); approver design-gate rulings 2026-10-22) (prev 1.9 §8: the trailer paragraph also carries the workflow `WingFoil-*` trailers (`-Instance`, `-Step`, `-Phase`, `-Element`, `-Item`), which a separate paragraph would unlink from their step (task-252, bug-236 amendment of 2026-10-11) (prev 1.8 §1: the quotation of `dev-loop.yaml`'s `done` merges into the task's integration branch, `git.merge(to: integration_branch, ff: false)`, which carries the on-branch commits into it (task-288, dl-159 A1.8, approver ruling D6) (prev 1.7 §1–§3, §6, §9: the release/X.Y maintenance line, the integration branch, the merge forward, a tag per line, push the add on both lines, the release worktree (task-286, dl-159 A1.6, dl-092 Action 3) (prev 1.6 §1: `dev-loop.yaml`'s `done` declares the on-branch order, approve, finalize and the bugs' sync before the merge (task-281, bug-313, approver ruling 2026-10-12 D6) (prev 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260))))))))))
 ref: [P3.5, P3.7, REQ-SEC-01, REQ-SYS-08]
 ---
 
 # Directive — Git conventions
 
-**Date:** 2026-10-23
+**Date:** 2026-10-28
 
 Custom WingFoil rule. Applies to **every role**: whoever writes a commit or names a branch in this
 repository — a `developer` on a task branch, the `approver` whose `approve` commit an agent types, a
@@ -31,6 +31,9 @@ directive is where they are met; each decision-log is where its rule is argued, 
 - `dl-185-settle-the-undecided-parts-of-the-merge-forward-from-release-x.y-into-main-and-the-checks-of-a-release-x.y-line-before-its-first-push`
   — the merge forward's colliding files, its owner and timing, and the `release/X.Y` counterpart of the
   direct-commit list (§1);
+- `dl-206-where-an-element-filed-or-triaged-on-main-is-captured-and-triaged-when-a-patch-on-release-x.y-takes-its-fix`
+  — which line a triage is committed on, the eligibility test of a patch, and the re-capture on the line of an
+  element that exists only on `main` (§1);
 - `dl-035-task-branch-sync-with-main` — staying current with `main` (§2);
 - `dl-054-submit-commit-subject-bracket` — the `wf()` subject bracket (§4);
 - `dl-094-one-author-identity-per-act` — whose identity an act carries (§5);
@@ -46,7 +49,7 @@ Do not re-open a choice here — if you believe a rule is wrong for your case, f
 do not deviate. The general commit bullet of `code-quality` (conventional messages, one state change
 per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules on top of it.
 
-## 1. Branches (`dl-024` rule 1, as amended by `dl-119` Q1 (b), `dl-152`, `dl-159` and `dl-185`; `dl-014` G2–G3)
+## 1. Branches (`dl-024` rule 1, as amended by `dl-119` Q1 (b), `dl-152`, `dl-159`, `dl-185` and `dl-206`; `dl-014` G2–G3)
 
 - **The integration branch** (`dl-159` Decision 1). `main` and `release/X.Y` are the two lines: each is
   the integration branch of the work done for it, and a line is never brought up to date from the other
@@ -87,7 +90,8 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
   whose subject, `Approver:` and `Reason:` already are the record (P1.7, P1.10); each may equally be
   committed on the branch of the run that makes it (an `ingest/` or `backlog/` triage):
   1. the approver's `approve` and `reject` commits that are not part of a `dev-loop` task's run — triage
-     (`[open → triaged]`), a task's `[pending → backlog]`, a decision-log's ratification;
+     (`[open → triaged]`) whose `release` is a `main` release (a minor, or none yet) (`dl-206` Q2 (i)), a
+     task's `[pending → backlog]`, a decision-log's ratification;
   2. the triage mechanics that follow them: `assign`, `sync`, and the `amend` of the tasks that
      absorb an approved change;
   3. the `dev-loop` coordinator's `docs(plans)` bookkeeping of a plan already merged.
@@ -95,10 +99,19 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
   Everything else — captures, new elements, content, code — goes through a branch. A commit on
   `main` outside this list is a deviation to fix, not a new convention.
 
-  **The counterpart on `release/X.Y`** (`dl-185` C1 (c) (i)). The same closed list may be committed
-  directly on `release/X.Y` for the elements that line owns, and those operations are never committed on
-  `main` for them: they reach `main` by the merge forward (rule 4 below). A triage that decides an
-  element's owning line is made on an `ingest/` or `backlog/` branch cut from that line.
+  **The counterpart on `release/X.Y`** (`dl-185` C1 (c) (i), `dl-206` Q2 (i)). The same closed list may be
+  committed directly on `release/X.Y` for the elements that line owns, and those operations are never
+  committed on `main` for them: they reach `main` by the merge forward (rule 4 below). The triage decides an
+  element's owning line by the `release` it gives: a triage whose `release` is a patch of `X.Y` is committed
+  on `release/X.Y`, directly or on an `ingest/` or `backlog/` branch cut from that line. An element is
+  eligible for it only if its file has not changed on `main` since the line was cut:
+  `git log --no-merges release/X.Y..main -- <file>` prints nothing (`--no-merges`, because a merge forward is
+  otherwise listed for a file it does not change; `release-planning-rel-v0.3.2-plan` R8). An element that
+  exists only on `main`, or changed there since the cut, is captured again on the line (`dl-206` Q1 (i)): a
+  new element is added on an `ingest/` branch cut from `release/X.Y`, restating the original and citing its
+  id, and the copy on `main` is deprecated, on a branch of `main`, with a `Reason:` that names the new id;
+  the new element reaches `main` by the merge forward. An element that line will own is captured on a branch
+  cut from it too, since `main` is never merged into `release/X.Y` (`task-290` D4 (a)).
 
   A `dev-loop` task's `approve`, `reject` and `finalize` are committed on `task/<task-id>`, before
   the merge, so the merge carries them into its integration branch with the rest of the task
@@ -313,7 +326,7 @@ limits:
   difference is accepted, because the hook is a convenience and CI stays the enforcing check.
 
 > Source: `dl-119-a-git-conventions-directive` (Actions 2–4), `dl-117-ai-attribution-policy` (Action 2),
-> `dl-158` (Action 2), `dl-159` (Action A1.6, §1–§3, §6), `dl-185` (C1, §1),
+> `dl-158` (Action 2), `dl-159` (Action A1.6, §1–§3, §6), `dl-185` (C1, §1), `dl-206` (Q1 (i), Q2 (i), §1),
 > `dl-101-id-allocation-across-refs` (Action 2),
 > `dl-103-governance-enforced-outside-the-agent` §1 (§9), `dl-185` C3 (i) (§9, the hook's base). Features P3.5, P3.7; REQ-SEC-01 (every state change
 > carries a git identity), REQ-SYS-08 (bindings by role).
