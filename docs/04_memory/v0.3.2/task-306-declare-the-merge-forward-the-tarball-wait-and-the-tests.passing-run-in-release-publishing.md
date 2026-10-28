@@ -394,6 +394,42 @@ pins read `HEAD`, so they ran after the commit; the `version:` value bump, first
 - `spec-015-packaging-publishing` (`approved`), §3 stage 5 and one appended Revision, edited in the worktree and left
   uncommitted: `node "$(pwd)/dist/cli.js" memory amend spec-015-packaging-publishing --reason "Record that the post-publish poll of section 3 stage 5, reused by stage 6, waits until the version's dist.tarball answers HTTP 200 and not only until npm view lists the version, as task-306 implements in scripts/wait-npm-version.cjs for bug-433."`
 
+### red amendment 2 (qa, 2026-10-28)
+
+Review finding R1 (independent review at `b1c351af`, should-fix-in-task). Under `--json`, npm 11.6.2 writes a failed
+`npm view` as a JSON object on stdout, `{"error":{"code","summary","detail"}}`, and also prints its `npm error` lines on
+stderr. `describeAnswer` takes the first non-empty line of stdout before stderr, so the last answer reads
+`npm view exit 1: {`. Red's E404/E401/E403 fixtures had `stdout: ''`, which is not the real shape (W0-R9). Following
+the pattern of ruling Q-16 D2, qa amends red's files.
+
+The shape was captured with npm 11.6.2 against an in-process registry on 127.0.0.1, in this agent's scratch (no real
+registry). The command was `npm view wingfoil@0.3.1 version dist.tarball --json --registry http://127.0.0.1:<port>`,
+run once per answer:
+- a 404 package;
+- a 401;
+- a 403;
+- a package that lists 0.3.0 but not 0.3.1, which answers E404 `No match found for version 0.3.1`.
+
+Each exits 1 with the JSON on stdout and the `npm error code EXXX` lines on stderr.
+
+Commit `a8a5d34c` (`test/cli/wait-npm-version.test.ts`, `-failures.test.ts`, `-tarball.test.ts`):
+- The fixtures carry both streams in that shape. E404 takes the shape of the unlisted version (a staged one).
+- The fake `npm` also writes `FAKE_NPM_STDERR`.
+- New pins: the last answer names the code and does not contain `exit 1: {`.
+- The CLI E404 case asserts `E404` on stderr.
+
+Run: `npx jest test/lint/no-fabricated-stderr.test.ts test/cli/wait-npm-version.test.ts
+test/cli/wait-npm-version-failures.test.ts test/cli/wait-npm-version-tarball.test.ts --maxWorkers=2` → `Tests: 6
+failed, 50 passed, 56 total`. The bug-070 gate passes. The 6 reds:
+- `gives up after the timeout …` and `not listed (E404) …`: `Expected substring: "E404"`, received `… Last answer:
+  npm view exit 1: {. …`.
+- The CLI `exits 1 … naming E404 …`: the same text on stderr.
+- `fails at once on a permanent npm answer` E401 and E403: `Expected substring: not "exit 1: {"`. The code is still
+  named by `npm answered EXXX`.
+- `E404 until the deadline …`: `Expected substring: "E404"`.
+
+`npx tsc --noEmit` → exit 0, no output. `npm run -s lint` → exit 0.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
