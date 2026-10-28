@@ -188,6 +188,15 @@ coordinator told; nothing pushed without instruction.
 
 - 2026-10-27: phase worktree and code build made; plan added (`54718a30`).
 - 2026-10-28: the approver approved R1–R7 and ruled to proceed without the `software` pack (`dl-186` Q3 stands).
+  The coordinator confirmed it the same day: WingFoil-Templates `origin/main` at `b468a76` carries the tags
+  `base@1.0.0` and `base@2.0.0` only, and its catalog lists only `base`.
+- S1 (2026-10-28): switch `cf8ef04c` (`wingfoil-released` 0.3.0 → 0.3.1); `KNOWN_READ_FAILURES` of 0.3.0 removed
+  `65887b0d`; `wingfoil-cli` 1.4 `202c5b89`; AGENTS.md §3 and `.wingfoil/README.md` `d5f11bef`. Checks: `npm run
+  check:lockfile` exit 0; `npm run check:mcp` exit 0 (pinned 0.3.1, prompts 8, resources 4, tools 0); the pinned
+  `workflow list`, `show release-planning`, `status`, `next` exit 0, `status` and `list` identical to the code build;
+  `npx jest test/directives test/docs test/lint` and the workflow-text suites: 719 passed.
+- S0 (2026-10-28): the approver approved `dl-206` (`63bec4df`, `in-discussion → ready`, Q1 (i), Q2 (i)) and closed
+  `bug-414` (`079ae55b`, `triaged → closed`).
 
 ### Retrospective
 
