@@ -152,6 +152,41 @@ Approved at 2026-10-28T15:09:34+01:00 (approval queue Q-07, the approver in the 
 - D1 — (a): the file list widens to three test files: the new helper `test/workflow/helpers/release-required-check.ts` (green), the new test `test/workflow/release-required-check.test.ts` (red), and `test/workflow/release-kind-rule.test.ts` (green), so red and green stay separate under T4.
 - D2 — (a): the check also applies `notApplicableRefusals`, so a malformed or undeclared "n/a" fails as `memory submit` refuses it.
 
+### red (qa, 2026-10-28)
+
+**Sync.** `git merge --no-edit release/0.3` → merge `fa199fd0` (the bug-278 amend); `git rev-list --count HEAD..release/0.3` → `0`.
+
+**Red commit `84e9546b`** — one file, `test/workflow/release-required-check.test.ts` (new), describe
+`task-331 (bug-445): a release's required fields read as the engine reads them`. T4 is measured from this sha. The
+helper `test/workflow/helpers/release-required-check.ts` and `test/workflow/release-kind-rule.test.ts` are not
+touched (green's, D1 (a)). Inputs: `check = { fields: required, exempt }` and `reading = template.frontmatter`, all from
+`loadMemoryYaml(repoRoot).types['release']`; fixture `PATCH_V032`, an in-memory copy of every frontmatter field of
+`docs/04_memory/planning/rl-v1/patch-v0.3.2.md` (nothing under `docs/04_memory` is read or written).
+
+| AC | Class | Test → expected `missingCheckFields(...)` |
+|----|-------|-------------------------------------------|
+| AC1 | red-first | "the inputs are the real memory.yaml declarations" — non-empty `fields` containing `features`, exempt keys `['kind']` (guards against vacuous inputs) |
+| AC1 | red-first | "a list field declared in memory.yaml lists is filled by []" — `reading.lists` contains `features`; base → `[]` |
+| AC1 | red-first (same module) | "a required non-list field left empty is still missing" — `version: ''` / `'  '` → `['version']`; `release-line` absent → `['release-line']` |
+| AC1 | red-first (same module) | "an empty list on a non-list field is missing, a null list field is missing" — `requirements: []` → `['requirements']`; `features: null` → `['features']` |
+| AC1 | red-first (same module) | "the check's exemption reads by id" — no `kind`, id `minor-v0.3` → `[]`; no `kind`, id `patch-v0.3.2` → `['kind']` |
+| AC1 (D2) | red-first | "a not-applicable value stands only where memory.yaml allows it, with a reason" — `pillar: 'n/a — patch release'` → `[]`; `'n/a'` → `['pillar (n/a: no-reason)']`; `'n/a - x'` → `['pillar (n/a: bad-form)']`; `version: 'n/a — x'` → `['version (n/a: undeclared)']` |
+| AC1 | red-first | "the verdict agrees with the engine's submit check" — on 12 fixtures `missingCheckFields(...).length === 0` equals `requireRequiredFields(memoryYaml, 'release', data, 'submit').ok`, and both verdicts occur |
+| AC2 | characterization | no new test (design): `release-kind-rule.test.ts` 7/7 and the full suite after green |
+
+**Status at red.**
+- `npx tsc --noEmit` → one error only: `test/workflow/release-required-check.test.ts(18,78): error TS2307: Cannot find
+  module './helpers/release-required-check' or its corresponding type declarations.` (the intended red).
+- `npx jest test/workflow/release-required-check.test.ts --maxWorkers=2` → `Test Suites: 1 failed`, `Tests: 0 total`:
+  `Cannot find module './helpers/release-required-check' from 'test/workflow/release-required-check.test.ts'` — the
+  missing helper, every AC1 test red by it.
+- `npx jest test/workflow/release-kind-rule.test.ts --maxWorkers=2` → `Tests: 1 failed, 6 passed, 7 total`, the failing
+  one "every release document carries every field the check requires of it" — bug-445, unchanged through red.
+- Passability (not committed): with a temporary helper written to the design's signature and body (engine
+  `missingRequiredFields` then `notApplicableRefusals` mapped to `<field> (n/a: <problem>)`, own-property exemption),
+  `npx tsc --noEmit` → no output and the new suite → `Tests: 7 passed, 7 total`; the temporary file was removed
+  (`git status --short` → only the new test file before the commit).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
