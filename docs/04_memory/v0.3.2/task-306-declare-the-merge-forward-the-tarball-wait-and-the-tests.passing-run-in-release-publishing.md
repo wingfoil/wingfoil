@@ -329,6 +329,71 @@ Runs on `fe45c34a`: `npx jest test/lint/no-fabricated-stderr.test.ts test/cli/wa
 test/cli/wait-npm-version-failures.test.ts test/cli/wait-npm-version-tarball.test.ts --maxWorkers=2` → `Test Suites:
 4 passed, 4 total`, `Tests: 55 passed, 55 total`; `npx tsc --noEmit` → exit 0, no output; `npm run -s lint` → exit 0.
 
+### green (developer, 2026-10-28)
+
+Green commit `16bcf659` on `task/task-306-…` (from red's notes `abadd659`), the files the design names and no other:
+`.wingfoil/workflows/custom/release-publishing.yaml` 2.0 → 2.1 (a last phase `merge-forward`: `optional: true`, role
+`tech-lead`, actions `git.merge(from: integration_branch, ff: false)` and `agent.execute`, `approval: { by_role:
+approver }`, no checks or produces; `publish`'s description gains the tarball wait and the `tests.passing` sentence,
+`bug-405`; its post check is the AC 3 prose), `.wingfoil/directives/custom/git-conventions.md` "2.4" → "2.5" (§1 rule 6
+names the phase and its sequence, the "run by hand" sentence removed; `(prev 2.4` and the whole chain kept, Date
+2026-10-28), `.wingfoil/workflows/bindings.yaml` 2.6 → 2.7 (comments only, D3: the `git.merge` comment names the
+merge-forward form, the comment above `tests.passing:` names `release-publishing.publish`, the run on the release
+commit; the binding stays `{ run: [npm, test] }`), `.wingfoil/WORKFLOW.md` (the paragraph, an `MF` node with `MR --> MF`,
+the `RP2` chain), `AGENTS.md` §6, `scripts/wait-npm-version.cjs` and `.d.cts` (`npmViewArgs` → `view <name>@<version>
+version dist.tarball --json`; `TARBALL_TIMEOUT_MS` = 30 000; `probeTarball` = one `HEAD` fetch, `redirect: 'follow'`,
+aborted by `AbortSignal.timeout`, the error read by its shape rather than `instanceof`, since under jest fetch's errors
+come from another realm; `probe` injected; listed = exit 0 and a JSON object with the awaited `version` and a non-empty
+`dist.tarball`, live = the probe answers 200), `.github/workflows/publish.yml` header (the `release →` entry; the raw
+`npm view wingfoil@<version> version` stays on one line) and `.github/workflows/pages.yml` header (D6).
+
+Red → green, each red file alone (`npx jest <file> --maxWorkers=2`) after the green commit: publish-pipeline 82/82,
+staging-rehearsal 20/20, wait-npm-version-failures 15/15, wait-npm-version-tarball 17/17, wait-npm-version 19/19,
+release-publishing-merge-forward 11/11, workflow-integration-branch 28/28, workflow-manual-prose-checks 48/48,
+workflow-optional-last-phase 5/5, workflow-repository-conformance 16/16, git-conventions 40/40 (301 passed). The AC 1/3/4
+pins read `HEAD`, so they ran after the commit; the `version:` value bump, first forgotten
+(`workflow-integration-branch` → `Expected: >= 2.1 Received: 2`), was amended into `16bcf659` before anything else ran.
+
+### refactor (developer, 2026-10-28)
+
+- **First full suite** (`npm test -- --maxWorkers=2` under the slot, on `16bcf659` with spec-015 dirty): `Tests: 3
+  failed, 9036 passed, 9039 total`. (1) `test/core/workflow-status.test.ts` task-225 AC 5: the approval phases holding no
+  element gained `release-publishing.merge-forward`, which the design's pin list did not name; fixed in refactor
+  `8c9fe2b6` (the list and the title, "eight … (seven until task-306 …)"), accepted into the task's files by the
+  approver's ruling Q-16 D1 (a). (2) `test/docs/name-resolvability.test.ts`: the full task id in the spec-015 Revision
+  heading reads as a config name (`tests.passing`); the heading now says `task-306` (uncommitted, with the amend).
+  (3) `test/lint/no-fabricated-stderr.test.ts` flagged red's `test/cli/wait-npm-version.test.ts:62` (`stderr: ''` in a
+  returned literal carrying `status`): a red defect, reported and not touched (T4); by ruling Q-16 D2 the qa agent
+  amended its file in `fe45c34a` (`### red amendment (qa, 2026-10-28)` above).
+- `8c9fe2b6` also writes `globalThis.AbortSignal` (`npm run -s lint` printed `'AbortSignal' is not defined  no-undef`
+  in `scripts/`).
+- `git merge --no-edit release/0.3` (5 commits, the `bug-447` ingest, docs only) → `43315c17`.
+- **Gates on `43315c17`, spec-015 dirty.** `npm run test:coverage -- --maxWorkers=2` under the slot (the full parallel
+  suite, `jest --coverage`, the run `npm test` makes without the latency pass) → `Test Suites: 512 passed, 512 total`,
+  `Tests: 9039 passed, 9039 total`, All files 99.37 % statements, 97.51 % branches, 98.18 % functions, 99.73 % lines.
+  `npm run -s lint` → 0; `npm run -s docs:api` → 0; `npm run -s typecheck` (both configs, under the slot) → 0;
+  `npm run -s check:mcp` → 0 (pin 0.3.1, prompts 8, resources 4, tools 0; the dev build answers every Resource and
+  Prompt). Pinned `npm run -s wingfoil -- workflow show release-publishing --format json` and `--format console` → exit
+  0, empty stderr, 65 `W_WORKFLOW_UNBOUND_TOKEN` each, 6 phases ending with `merge-forward` (optional), the console
+  output parsing equal to the json; the codes are `W_WORKFLOW_UNBOUND_TOKEN` and `W_UNCOMMITTED_INPUTS`, the latter from
+  the uncommitted spec-015 alone. `workflow list` json and console on `16bcf659` → exit 0, 65 each.
+  `npm run -s check:governance -- --base release/0.3` → `gated: 0 findings on 0 commits`.
+- T4: `git log --first-parent --no-merges --format=%h eff2e910..HEAD -- <red's 11 files>` → `fe45c34a` only, the qa
+  agent's red amendment after the send-back (Q-16 D2); no commit of mine touches a red file.
+- **Per AC.** AC 1 met (workflow-integration-branch, staging-rehearsal, conformance green; `workflow show` above).
+  AC 2 met (git-conventions 40/40, release-publishing-merge-forward AC 2). AC 3 met (the three wait suites,
+  release-publishing-merge-forward AC 3). AC 4 met (release-publishing-merge-forward AC 4). AC 5 by command:
+  `git diff --numstat -- docs/04_memory/design/specs/spec-015-packaging-publishing.md` → `19 3`, `grep -c "dist.tarball"`
+  → `3`: stage 5 replaced and one Revision appended, left uncommitted (below). AC 6 met (workflow-optional-last-phase
+  5/5; the design's reading kept: the phase is last and every release records it with `workflow finalize`).
+- Self-review: `publish`'s description names no branch (the `\bmain\b` pin is green); rule 6 cites rule 5's pin
+  resolution without restating it; `task-290`'s seven rule-6 phrases are present (same `it`).
+
+### Pending amendments (approver)
+
+- `spec-015-packaging-publishing` (`approved`), §3 stage 5 and one appended Revision, edited in the worktree and left
+  uncommitted: `node "$(pwd)/dist/cli.js" memory amend spec-015-packaging-publishing --reason "Record that the post-publish poll of section 3 stage 5, reused by stage 6, waits until the version's dist.tarball answers HTTP 200 and not only until npm view lists the version, as task-306 implements in scripts/wait-npm-version.cjs for bug-433."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -336,3 +401,5 @@ test/cli/wait-npm-version-failures.test.ts test/cli/wait-npm-version-tarball.tes
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design's pin list missed `test/core/workflow-status.test.ts` task-225 AC 5 (an eighth approval phase with no element); only the full suite found it (`Tests: 3 failed, 9036 passed` on `16bcf659`). Proposal: design greps `test/` for every list of a workflow's phases or approval phases it extends.
