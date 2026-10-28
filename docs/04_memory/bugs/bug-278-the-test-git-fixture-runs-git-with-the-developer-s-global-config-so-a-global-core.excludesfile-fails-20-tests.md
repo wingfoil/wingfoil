@@ -81,3 +81,14 @@ Captured on 2026-10-07 by `bug-ingest-rel-v0.3-w3b1-review-findings-plan`, from 
   the script with `env: process.env` in `test/cli/check-governance-show-signature.test.ts`; the fix of this bug
   covers the script's spawns as well as the fixture's (`task-268`'s Execution Notes, *Isolation of spawned
   children*).
+
+### Retrospective
+
+- The fix of `task-308` (merged into `release/0.3` at `854d0cad`) isolates the test fixture's own git from the global
+  and system config (AC3, `test/storage/git-fixture-isolation.test.ts`), and gives both spawns of
+  `scripts/check-governance.cjs` `env: process.env` (design gate D1 (a)). It does not isolate the code under test: its
+  git spawns still inherit the worker's environment, so with a hostile global `core.excludesFile` 11 tests stay red
+  (`test/core/memory-approve.test.ts`, `test/core/init.test.ts`; 20 before the fix). That remainder is `bug-446`,
+  triaged `v0.4` (found by `task-308`'s review, R5).
+- Lesson: a bug whose Steps to Reproduce set the variable for the whole jest process measures the code under test and
+  the fixture together; closing it by fixing one of the two needs the split stated in the bug before it closes.
