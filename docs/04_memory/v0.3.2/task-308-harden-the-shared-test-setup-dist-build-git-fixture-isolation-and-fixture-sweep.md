@@ -210,6 +210,13 @@ bump: none of these files carries one (`grep -n '^version' .gitignore eslint.con
 - D3 — "not a raw stack": the diagnostic's `stack` is set to its message, so jest prints the diagnostic alone; the
   original error stays in `cause`. **Recommend yes.**
 
+### design gate (approver, 2026-10-28)
+
+Approved at 2026-10-28T11:36:09+01:00 (approval queue Q-01, given by the approver through the supervision session):
+- D1 — (a): `scripts/check-governance.cjs` is in scope; both git spawns get `env: process.env`.
+- D2 — yes: global setup fails when the previous build cannot be removed, even after a successful swap.
+- D3 — yes: the diagnostic's `stack` is its message; the original error is kept in `cause`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
