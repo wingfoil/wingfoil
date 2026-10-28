@@ -50,8 +50,9 @@
  * row or no retrospective → not adopted (the last two: no disposition recorded); any other outcome → not adopted,
  * noted `unrecognised outcome "<x>"` (review F2). When the previous release is `kind: patch` (its report's
  * `release.kind`), no retrospective is read — a patch runs none (`dl-092` Q2 (ii)) — and every proposal settles as
- * `pending`, noted `disposed of by the next minor's retrospective (dl-167 (a))` (`bug-443`). A metric's own `tolerance` that is neither `<N>pp` nor `<N>%`, or
- * is in a unit none of its parts uses, is refused, exit 2 (review F4).
+ * `pending`, noted `disposed of by the next minor's retrospective (dl-167 (a))` (`bug-443`). A metric's own
+ * `tolerance` that is neither `<N>pp` nor `<N>%`, or is in a unit none of its parts uses, is refused, exit 2
+ * (review F4).
  *
  * Deterministic (REQ-SYS-07): no clock, no randomness; every list in catalogue order or sorted. It runs no git itself.
  *
@@ -731,7 +732,7 @@ async function compareRelease(root, options) {
   const memoryYamlPath = join(root, '.wingfoil', 'memory.yaml');
   const memoryYaml = existsSync(memoryYamlPath) ? yaml.load(readFileSync(memoryYamlPath, 'utf-8')) : {};
 
-  // The previous run's proposals, settled against its retrospective (dl-089 §4).
+  // The previous run's proposals, settled against its retrospective (dl-089 §4), or pending for a patch (bug-443).
   let previousNote = null;
   let settled = [];
   if (previousMd !== null && existsSync(previousMd) && previous.release.kind === 'patch') {
