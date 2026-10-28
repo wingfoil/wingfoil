@@ -41,7 +41,13 @@ The approver: the triage of step 2, the deprecation and the close of step 3, the
 
 ## Execution Notes
 
-- 2026-10-28: plan added `adcad142`.
+- 2026-10-28: plan added `adcad142`., submitted `b362bbec`. Reproduction of `bug-423` re-run on this line's code build in a scratch repository:
+  the forged `workflow: finalize` record → `check-governance.cjs` exit 0; the same body on a `wf(task): approve`
+  subject → exit 1. `bug-444` (medium) added `1afd8233` (with `--workflow`/`--step`), submitted `e360031e`
+  (`draft → open`), triaged by the approver `d29c52e5` (`open → triaged`), assigned v0.3.2 `f149ff96`.
+- On `ingest/recapture-bug-423-main` (from `main` `5896b7d3`): the approver deprecated `bug-423` `28fbafed`
+  (`triaged → deprecated`, the reason naming `bug-444`) and closed `bug-355` as a duplicate of `bug-303` `a5b07771`
+  (`triaged → closed`).
 
 ### Retrospective
 
