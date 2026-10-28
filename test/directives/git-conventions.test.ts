@@ -292,9 +292,8 @@ describe('git-conventions §1 — dl-185 C1 (task-290)', () => {
     expect(f1).toContain('The counterpart on `release/X.Y`');
     expect(f1).toContain('for the elements that line owns');
     expect(f1).toContain('never committed on `main` for them');
-    expect(f1).toContain(
-      "triage that decides an element's owning line is made on an `ingest/` or `backlog/` branch cut from that line",
-    );
+    // task-305 (design D2, approver-accepted): the owning-line sentence is replaced by dl-206 Q2 (i)'s triage rule.
+    expect(f1).toContain('a triage whose `release` is a patch of `X.Y` is committed on `release/X.Y`');
     expect(f1).toContain('Commits made directly on `main`');
     for (const op of ['`approve`', '`reject`', '`assign`', '`sync`', '`amend`', '`docs(plans)`']) expect(f1).toContain(op);
   });
@@ -313,5 +312,80 @@ describe('git-conventions §1 — dl-185 C1 (task-290)', () => {
     const date = /\*\*Date:\*\* (\d{4}-\d\d-\d\d)/.exec(TEXT);
     expect(date).not.toBeNull();
     expect((date?.[1] ?? '') >= '2026-10-22').toBe(true);
+  });
+});
+
+/**
+ * task-305 — `git-conventions` §1 states `dl-206` Q1 (i) and Q2 (i): item 1 of the direct-on-`main` list covers only
+ * triages whose `release` is a `main` release; the `release/X.Y` counterpart says a triage whose `release` is a
+ * patch of `X.Y` is committed on the line (directly or on an `ingest/`/`backlog/` branch cut from it), states the
+ * eligibility test `git log --no-merges release/X.Y..main -- <file>` (`--no-merges` per release-planning v0.3.2 R8,
+ * design D5 (a)), the re-capture of an element that exists only on `main`, and `task-290` D4 (a)'s sentence for new
+ * captures; the owning-line sentence it replaces is gone (design D2). Red-first (design D1, approver-accepted).
+ *
+ * Pins are substrings of whitespace-flattened text (task-276), each absence in the same `it` as its positive; item 1
+ * is read with `test/directives/dev-loop-practice.test.ts`'s raw regex. Version pins are "≥" plus the version line
+ * naming the task (bug-314: task-306 and task-328 re-bump after this task).
+ */
+describe('git-conventions §1 — dl-206 Q1 (i), Q2 (i) (task-305)', () => {
+  const flat = (s: string): string => s.replace(/\s+/g, ' ');
+  const s1 = section('1. Branches');
+  const header = TEXT.slice(0, TEXT.indexOf('\n---', 4));
+  const list = s1.slice(s1.indexOf('**Commits made directly on `main`**'));
+  const counterpartAt = s1.indexOf('**The counterpart on `release/X.Y`**');
+  const counterpart = flat(counterpartAt < 0 ? '' : s1.slice(counterpartAt, s1.indexOf('\n\n', counterpartAt)));
+
+  it("AC 1: item 1 of the direct-on-main list covers only triages whose release is a main release (a minor, or none yet)", () => {
+    const item1 = /\n {2}1\. ([\s\S]*?)\n {2}2\. /.exec(list);
+    expect(item1).not.toBeNull();
+    const text = flat(item1![1] ?? '');
+    expect(text).toContain("whose `release` is a `main` release (a minor, or none yet)");
+    expect(text).toContain('`dl-206` Q2 (i)');
+    expect(text).toContain('`[open → triaged]`');
+  });
+
+  it('AC 1: the counterpart paragraph keys a patch triage on the line, directly or on an ingest/ or backlog/ branch of it (dl-206 Q2 (i))', () => {
+    expect(counterpart).toContain('`dl-206` Q2 (i)');
+    expect(counterpart).toContain('a triage whose `release` is a patch of `X.Y` is committed on `release/X.Y`');
+    expect(counterpart).toContain('directly or on an `ingest/` or `backlog/` branch cut from that line');
+    expect(counterpart).not.toContain(
+      "triage that decides an element's owning line is made on an `ingest/` or `backlog/` branch cut from that line",
+    );
+  });
+
+  it('AC 1: the counterpart paragraph states the eligibility test with --no-merges', () => {
+    expect(counterpart).toContain('`git log --no-merges release/X.Y..main -- <file>`');
+    expect(counterpart).toContain('prints nothing');
+    expect(counterpart).not.toContain('`git log release/X.Y..main -- <file>`');
+  });
+
+  it("AC 1: the counterpart paragraph states the Q1 (i) re-capture and task-290's D4 (a) sentence for new captures", () => {
+    expect(counterpart).toContain('`dl-206` Q1 (i)');
+    expect(counterpart).toContain('is captured again on the line');
+    expect(counterpart).toContain('on an `ingest/` branch cut from `release/X.Y`');
+    expect(counterpart).toContain('citing its id');
+    expect(counterpart).toContain('the copy on `main` is deprecated');
+    expect(counterpart).toContain('on a branch of `main`');
+    expect(counterpart).toContain('names the new id');
+    expect(counterpart).toContain('is captured on a branch cut from it too');
+  });
+
+  it('AC 1: the §1 heading cites dl-206 beside dl-185; the sources list carries the full dl-206 id', () => {
+    expect(s1.split('\n')[1]).toContain('`dl-206`');
+    expect(s1.split('\n')[1]).toContain('`dl-185`');
+    expect(TEXT.slice(0, TEXT.indexOf('\n## 1. Branches'))).toContain(
+      'dl-206-where-an-element-filed-or-triaged-on-main-is-captured-and-triaged-when-a-patch-on-release-x.y-takes-its-fix',
+    );
+  });
+
+  it('AC 1: the version is 2.4 or later, its line names task-305 and dl-206, the Date is the edit date or later', () => {
+    const version = /^version: "(\d+)\.(\d+)"(.*)$/m.exec(header);
+    expect(version).not.toBeNull();
+    expect(Number(version![1]) * 1000 + Number(version![2])).toBeGreaterThanOrEqual(2004);
+    expect(version![3]).toContain('task-305');
+    expect(version![3]).toContain('dl-206');
+    const date = /\*\*Date:\*\* (\d{4}-\d\d-\d\d)/.exec(TEXT);
+    expect(date).not.toBeNull();
+    expect((date?.[1] ?? '') >= '2026-10-28').toBe(true);
   });
 });
