@@ -252,6 +252,13 @@ coordinator told; nothing pushed without instruction.
   checks `title`, `release`, `kind`); `task.wave.declared` (waves `w0`–`w3`; `w0` listed at S8, the others appended at
   re-plan); `acceptance-criteria.consistent` stated in each approval's reason. `npm run -s check:governance -- --base
   release/0.3` → 0 findings. `task-305`'s note named two draft keys; the approver's amend corrects it.
+- S8 (2026-10-28, approver): `task-305` amended `b878b094` (the note's task ids); `patch-v0.3.2` amended `7f4bc165`
+  (`backlog_committed: 26`, `waves: [w0]`, planning notes); the 26 tasks approved `pending → backlog`
+  (`b135c8fc`…`beb65d57`, each reason stating the `acceptance-criteria.consistent` check); the release approved by hand
+  `25f46152` (`planning → in-development`; `planning` is a waiting state, so `memory approve` answers `illegal
+  transition planning -> (none)`, as at v0.3.1).
+- S9: this plan ended with `workflow end`; build on a clean tree, secret sweep over the branch's diff and
+  `check:governance --base release/0.3` before the merge (results below the finalize, in the merge message).
 
 ### Retrospective
 
