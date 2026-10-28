@@ -274,6 +274,35 @@ Run with the `dl-159` amend in the working tree. `git rev-list --count HEAD..rel
   (`ready`, edited in this worktree, uncommitted): A2 item 5 ruled. Command, from the worktree after `npm run build`:
   `node "$(pwd)/dist/cli.js" memory amend dl-159-patch-a-released-minor-on-a-release-x.y-branch-merged-forward-into-main-alongside-the-next-minor-on-main --reason "Record the ruling of release-planning v0.3.2 R8 on A2 item 5: a patch line pins only published versions of its own X.Y, a merge forward keeps main's pin, and every pin advance updates only the project-status sentence of AGENTS.md section 1; written into release-planning.yaml by task-305 for bug-429."`
 
+### review fixes (developer, 2026-10-28)
+
+Independent review at `f4be5a39`: 0 blockers, 2 should-fix-in-task. Fix commit `416e1518` (`git-conventions.md`,
+`release-planning.yaml`, new review-fix test `test/directives/git-conventions-pin-merge-forward.test.ts`; red's two
+files untouched, `git log --first-parent --no-merges --format=%h 85bac716..HEAD -- test/directives/git-conventions.test.ts
+test/core/workflow-patch-line-texts.test.ts` → empty). No second `version:` bump: both files are already at 2.4 on
+this branch; the git-conventions 2.4 history entry gains "rule 5: the dl-095 pin keeps main's value in a merge forward
+with no conflict too".
+- R1 (rule 5 covered only a conflicting merge forward): rule 5 now says the `dl-095` pin (`package.json`,
+  `package-lock.json`) keeps `main`'s value even when the merge brings no conflict on it, restored in the merge commit
+  and recorded there; `advance-pinned-build` cites rule 5 "with or without a conflict on it". `grep -c "even when the
+  merge brings no conflict" .wingfoil/directives/custom/git-conventions.md` → `1`; `npx jest --maxWorkers=2
+  test/directives/git-conventions-pin-merge-forward.test.ts` → `Tests: 3 passed, 3 total`. The `dl-159` amend text says
+  "with or without a conflict on it" too (uncommitted).
+- R2 (the switch is not committed on the integration branch itself): `advance-pinned-build` now says the switch
+  belongs to the release's integration branch, committed on the phase branch cut from it and merged into it.
+  `grep -c "the switch is committed on the release's integration branch" .wingfoil/workflows/custom/release-planning.yaml`
+  → `0`; pinned by the same review-fix test.
+- The pending amend's `--reason` is extended with the D3 (a) clause; it **replaces** the one under `### Pending
+  amendments (approver)` above:
+  `node "$(pwd)/dist/cli.js" memory amend dl-159-patch-a-released-minor-on-a-release-x.y-branch-merged-forward-into-main-alongside-the-next-minor-on-main --reason "Record the ruling of release-planning v0.3.2 R8 on A2 item 5: a patch line pins only published versions of its own X.Y, a merge forward keeps main's pin with or without a conflict, main moves its pin only by a switch commit of its own, and every pin advance updates only the project-status sentence of AGENTS.md section 1; written into release-planning.yaml by task-305 for bug-429."`
+
+Checks after the fix: `npx jest --maxWorkers=2 test/directives/git-conventions.test.ts` → 38/38;
+`test/core/workflow-patch-line-texts.test.ts` → 13/13; `npx jest --maxWorkers=2 test/directives test/workflow test/docs
+test/lint` + six `test/core` suites reading `release-planning.yaml` → `Tests: 1 failed, 922 passed, 923 total`, the one
+failure bug-445's `release-kind-rule` (`patch-v0.3.2: features`); `npm run check:mcp` exit 0; pinned `workflow show
+release-planning` json and console exit 0, 65 `W_WORKFLOW_UNBOUND_TOKEN` each; `npm run lint` exit 0; `npm run
+typecheck` exit 0; `npm run check:governance -- --base release/0.3` → `gated: 0 findings on 0 commits`, exit 0.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
