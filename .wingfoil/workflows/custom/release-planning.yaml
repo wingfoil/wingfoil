@@ -23,13 +23,14 @@ phases:
       and only to a published build; every switch is its own commit changing only package.json and
       package-lock.json (`npm install --save-dev --save-exact wingfoil-released@npm:wingfoil@X.Y.Z`),
       noted in the active phase plan. The pin is per line (dl-159 A2 item 5, bug-429,
-      release-planning-rel-v0.3.2-plan R8): the switch is committed on the release's integration branch —
-      `main` for a minor, `release/X.Y` for a patch — and a patch line pins only published versions of its own X.Y
+      release-planning-rel-v0.3.2-plan R8): the switch belongs to the release's integration branch —
+      `main` for a minor, `release/X.Y` for a patch — committed on the phase branch cut from it and merged
+      into it, and a patch line pins only published versions of its own X.Y
       (on `release/0.3` a `0.3.z`, never a `0.4.z`), a minor on `main` the newest published version of the
       release-line. The same rule applies after every published patch, when the
       in-flight release's integration branch merges the patch's line forward after the patch's tag —
       `release/X.Y` into `main`, never back (Q3 (B), dl-159 Decision 2, dl-185 C4 (i)); the merge forward keeps
-      `main`'s pin (git-conventions §1 rule 5), and `main` moves its pin only by a switch commit of its own,
+      `main`'s pin, with or without a conflict on it (git-conventions §1 rule 5), and `main` moves its pin only by a switch commit of its own,
       never inside the merge — and on a defect that blocks a step
       (move to a published fix; if none exists, work by hand, record it, file a bug for the next patch).
       The pre-check reads the build installed in the worktree the phase runs in, so on a patch line it needs
