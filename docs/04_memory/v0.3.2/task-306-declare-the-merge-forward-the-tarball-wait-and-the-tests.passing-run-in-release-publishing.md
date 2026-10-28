@@ -52,6 +52,193 @@ the push under `approval: { by_role: approver }`, its commands recorded in `git-
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-28)
+
+Read on `task/task-306-…` at `04639ed2` (cut from `release/0.3` `70dd3779`, which carries `task-305`'s merge
+`6957efd6`; `git merge-base --is-ancestor release/0.3 HEAD` → true). Read: `bug-428`, `bug-433`, `bug-405`;
+`release-publishing.yaml` 2.0, `release-cycle.yaml` 1.6, `release-line-cycle.yaml`'s `delivery`; `bindings.yaml` 2.6;
+`git-conventions` 2.4 §1; `spec-015` §3 (`approved`), `spec-017` §4.3, §4.5, §4.7, §4.10, §12 (`approved`); `dl-159`,
+`dl-185` C1 (b), `dl-206`, `dl-047` (all `ready`, `grep -m1 '^status'`); `release-planning-rel-v0.3.2-plan` R5, R8,
+S6; `release-publishing-rel-v0.3-plan` D1; `release-publishing-rel-v0.3.1-plan` D5, D6, S10; `src/workflow/deduce.ts`
+`run()` and the leaf's `record` evidence; `src/core/workflow-finalize.ts`.
+
+**dl-015 — `task-305`'s Execution Notes (`depends_on: [task-305]`, `done`).** Read its design "Constraints for later
+tasks" and its review fixes. What binds this task: (1) bump `git-conventions` once more over `"2.4"` to `"2.5"`, keeping
+`(prev 2.4 …` and the whole chain; (2) version pins are `≥` plus the history entry (bug-314), never exact; (3) the
+counterpart paragraph's phrases `task-305` pins stay, and item 1 (raw-text pins in
+`test/directives/dev-loop-practice.test.ts`) is not touched; (4) rule 5 after review fix R1 already says the `dl-095`
+pin keeps `main`'s value "even when the merge brings no conflict on it" (`grep -c` → `1`): rule 6's sequence cites it
+and does not restate it differently; (5) `advance-pinned-build` names where a pin switch is committed (R2): not
+touched here. `task-290`'s seven rule-6 phrases (`test/directives/git-conventions.test.ts` "AC 2: §1 states C1 (b)
+(i)") stay verbatim.
+
+**Eligibility** (`dl-206` Q2 (i), `--no-merges` per R8): `git log --oneline --no-merges release/0.3..main -- <f>` → 0
+lines for each file below; the edits reach `main` by the merge forward.
+
+**§4.10 reading (AC 6; decision D2 for the order).** `spec-017` §4.10 skips an optional phase only "when a later phase
+of the same workflow is complete other than vacuously"; `deduce.ts` `closedFrom(p)` looks only at `q > p` in the same
+workflow, and §4.5 makes a plain `include` complete only when every phase of the sub is complete or skipped. So a
+`merge-forward` placed last in `release-publishing` is never skipped: after `mark-released` it is the current step
+(reported `optional: true`), `release-cycle.publishing` is not complete, and `release-health` waits for it. Its leaf has
+no state, produces or selection evidence and declares `approval:`, so its evidence is `record`
+(`deduce.ts` `checkpoint`/`approvalRecord`) and it is finalizable; `workflow finalize` on it needs approver authority.
+The placement before `mark-released` (the AC's other branch) is rejected: AC 1 and `bug-428` ask for the last phase,
+after the tag and `mark-released`, and a `mark-released` recorded first would skip a patch's merge forward silently.
+**Reading taken: the phase is last; every release records it with `workflow finalize` by the approver — a patch as the
+go-ahead of its merge forward, a minor with a `--reason` saying it has nothing to merge forward.** `optional: true` then
+only declares that a minor does no work in it. No spec amend: this is §4.10 as written.
+
+**D1 — AC classification (corrected; decision for the approver, recommendation: accept).** The task marks AC 2 and AC 4
+characterization, but their text is not written yet (`grep -c "merge-forward"` → `0` in `.wingfoil/WORKFLOW.md`,
+`AGENTS.md`, `release-publishing.yaml`; `grep -c "git merge --ff-only origin/main" git-conventions.md` → `0`; `grep -n
+"run on the release commit" release-publishing.yaml bindings.yaml` → nothing): their pins fail at red, so they are
+**red-first**, the `task-305` D1 / `task-291` D2 precedent. AC 5 is characterization **by command** (the spec edit stays
+uncommitted until the approver's amend). AC 6 is **characterization**: a deduction test of the shape passes today.
+
+| AC | Class | What qa pins (file) |
+|----|-------|---------------------|
+| 1 | red-first | `test/cli/staging-rehearsal.test.ts` line 123 and `test/core/workflow-integration-branch.test.ts` line 158: the phase list `['release-commit', 'staging-rehearsal', 'tag', 'publish', 'mark-released', 'merge-forward']`. In the latter, a new `describe('task-306 AC 1 …')` on `workflow('release-publishing')` (HEAD): `merge-forward` has `optional: true`, `role: 'tech-lead'`, `approval: { by_role: 'approver' }`, `actions` exactly `['git.merge(from: integration_branch, ff: false)', 'agent.execute']`, no `checks`, no `produces`; `loadWorkflowRegistryAtHead(ROOT).diagnostics` has no `E_*` code and only `W_WORKFLOW_UNBOUND_TOKEN`, 65 of them; `resolveToken('git.merge(from: integration_branch, ff: false)', 'action', bindings).kind` → `manual`; `version:` ≥ 2.1 with `/2\.1 [^;]*task-306/` and its entry naming `bug-428`. The existing `it.each` "no token names `main`" covers the new tokens. `test/core/workflow-repository-conformance.test.ts`: `checkpoints` gains `'release-publishing.merge-forward'` after `'release-publishing.tag'` (18), `finalizeApprovals` gains it after `'release-publishing.publish'` (8); the two `it` titles say so |
+| 2 | red-first (D1) | `test/directives/git-conventions.test.ts`, new `describe('git-conventions §1 rule 6 — the merge-forward phase (task-306)')` on flattened §1: contains `` `release-publishing`'s `merge-forward` phase ``, `` `git worktree add --detach <path> origin/main` ``, `` `git merge --no-ff --no-commit origin/release/X.Y` ``, `` `npx jest test/lint/version-bump.test.ts` ``, `` `node scripts/check-governance.cjs --base origin/main` ``, `` `git push origin HEAD:main` ``, `` `git merge --ff-only origin/main` ``, `A minor has no merge forward`, `` `workflow finalize` ``, in that order for the four commands (`indexOf` ascending: worktree add < merge --no-ff < push < ff-only); not `Until a workflow declares the step`; the seven `task-290` rule-6 phrases still present (same `it`); `version` ≥ 2005 (`"2.5"`), the 2.5 entry names `task-306` and `bug-428`, `(prev 2.4` present; `**Date:**` ≥ 2026-10-28. New file `test/core/release-publishing-merge-forward.test.ts`: `AGENTS.md` contains ``` `mark-released` → `merge-forward` ``` and not `no phase declares it yet`; `.wingfoil/WORKFLOW.md`'s `### Release Publishing` section (to the next `### `) contains `**merge-forward**` and `` `merge-forward` `` and not `run by hand until a workflow declares it`; its `RP2` node line contains `mark-released → merge-forward`. `test/docs/workflow-md.test.ts` covers the phase by itself once it exists (characterization) |
+| 3 | red-first | Script, below. Plus, in `test/core/release-publishing-merge-forward.test.ts`: `publish` `checks.post` equals `['staged version approved on npm, installable from the npm registry once its tarball answers HTTP 200, its GitHub Release created with the test reports attached and its MCP Registry listing published']` (no `(` or `:`, so `tokenName` keeps it whole), its description contains `dist.tarball` and `HTTP 200` and still not `/\bmain\b/`. The same prose replaces the old one in `test/cli/publish-pipeline.test.ts` line 1014, the `phases[3].checks.post[0]` row of `workflow-repository-conformance.test.ts` and `UNBOUND_NAMES` of `test/core/workflow-manual-prose-checks.test.ts` (the warning count stays 65) |
+| 4 | red-first (D1) | `test/core/release-publishing-merge-forward.test.ts`: `publish`'s flattened description contains `` `tests.passing` is the run on the release commit `` and `test:no-identity` and `bug-405`; `bindings.yaml` raw text: the comment block directly above `tests.passing:` contains `release-publishing.publish` and `the run on the release commit`; `bindings.yaml` `version` ≥ 2.7, `/2\.7 [^;]*task-306/`. `tests.passing`'s binding stays `{ run: [npm, test] }` |
+| 5 | characterization by command | No jest pin (no test reads spec-015 §3 stage 5: `grep -rn "npm view wingfoil@<version>" test` → only `publish-pipeline.test.ts:411,494`, which read `publish.yml`). Green and review run `git diff -- docs/04_memory/design/specs/spec-015-packaging-publishing.md` (one sentence of stage 5 replaced, one Revision paragraph appended) and `grep -c "dist.tarball" …` → ≥ 2 |
+| 6 | characterization | New `test/core/workflow-optional-last-phase.test.ts`, fixture on `test/storage/helpers/git-fixture` as `test/core/workflow-finalize.test.ts` builds it (its `MEMORY_YAML`/`DNA_YAML`/`ROLES_YAML` shape, Morgan as approver, `asApprover`): a sub `publishing-tail` with element `release` and two phases copied in shape from the real file — `mark-released` (`actions: [element.set_state(released)]`, role tech-lead) and `merge-forward` exactly as AC 1 declares it — included by a main `cycle` (element `release`) as `publishing` followed by a non-optional `health` checkpoint. Pins: release `releasing` → frontier key is `mark-released`'s; release `released` → frontier is the one `merge-forward` step, `optional: true`, `evidence.missing` `['record']`, `finalizable: true`, the sub's phase state `current` (not `skipped`), `cycle`'s `publishing` not complete; `workflow finalize` without approver identity refused (authority), with it and a `--reason` → a record commit with `Approver:`; after it the frontier is `health`'s step. Inline YAML, so it passes at red |
+
+**The script (AC 3), interface green implements and qa pins.** `scripts/wait-npm-version.cjs` and `.d.cts`:
+- `npmViewArgs(name, version)` → `['view', `${name}@${version}`, 'version', 'dist.tarball', '--json']` (npm 11.6.2 here:
+  `npm view wingfoil@0.3.1 version dist.tarball --json` → `{"version": "0.3.1", "dist.tarball": "https://registry.npmjs.org/wingfoil/-/wingfoil-0.3.1.tgz"}`,
+  exit 0; for `@9.9.9` exit 1 with `npm error code E404` on stderr, so `npmErrorCode` still classifies it).
+- New export `TARBALL_TIMEOUT_MS` (30 000; qa pins `> 0` and `≤ 120 000`) and `probeTarball(url, { timeoutMs })` →
+  `Promise<TarballAnswer>`, `TarballAnswer = { status: number | null; timedOut?: boolean; error?: string }`: a `fetch`
+  with `method: 'HEAD'`, `redirect: 'follow'`, `AbortSignal.timeout(timeoutMs)`; an abort → `{ status: null, timedOut:
+  true }`, another failure → `{ status: null, error }` (`curl -s -o /dev/null -w '%{http_code}' -I
+  https://registry.npmjs.org/wingfoil/-/wingfoil-0.3.1.tgz` → `200`: the registry answers `HEAD`).
+- `WaitForNpmVersionOptions` gains the required `probe: (url, { timeoutMs }) => Promise<TarballAnswer>`; `main` passes
+  `probeTarball`. Listed = view exit 0 and stdout parsing as an object whose `version` is the one awaited and whose
+  `dist.tarball` is a non-empty string; only then `probe(url, { timeoutMs: TARBALL_TIMEOUT_MS })`. Live = probe status
+  200. Any other probe answer is "not live yet" (no permanent class for the tarball; the deadline bounds it). Unparsable
+  stdout is "not live yet". Messages keep their prefixes: `<spec> is live on npm (<n> attempts)`, `<spec> is not live on
+  npm after <s> s (<n> attempts). Last answer: …`, where the last answer of a listed version reads `npm lists it, its
+  tarball <url> answers HTTP <code>` (or `… the tarball request was killed after 30 s` / `… failed: <error>`). The
+  command line, exit codes and the `publish.yml` / `pages.yml` steps are unchanged.
+- New red cases (`test/cli/wait-npm-version-tarball.test.ts`): `npmViewArgs` returns the five arguments; a registry
+  that lists the version before serving it (view always the JSON; probe 404, 404, 200 → `ok`, 3 attempts, slept
+  `[10000, 10000]`, probe called 3× with the URL and `{ timeoutMs: TARBALL_TIMEOUT_MS }`); listed, never served →
+  not ok, message `/is not live on npm after 30 s/` and `HTTP 404`; not listed (E404) → probe never called; probe
+  `timedOut`/`error` → keeps polling; `probeTarball` against an in-process `http.createServer` on `127.0.0.1:0`
+  (200 → `{ status: 200 }`, 404 → `{ status: 404 }`, the request method recorded `HEAD`, a server that never answers
+  with `timeoutMs: 300` → `timedOut: true` inside a 10 s test bound); the command line with a fake `npm` printing
+  the JSON whose tarball is that server: 200 → exit 0, `is live on npm`; 404 with `--timeout-minutes 0` → exit 1,
+  stderr `HTTP 404`; the fake's argv `view <name>@<version> version dist.tarball --json`. The CLI cases must use an
+  async `spawn`, not `spawnSync`, which blocks the event loop the server answers on.
+- Existing tests that encode the old contract, updated in red with their intent kept: `test/cli/wait-npm-version.test.ts`
+  (`npmViewArgs`; success answers become the JSON plus a probe answering 200; the CLI success test as above) and
+  `test/cli/wait-npm-version-failures.test.ts` (the harness gains `probe`; "a transient answer followed by the
+  version succeeds" answers the JSON then 200).
+- Expected reds at the red commit: `npx tsc --noEmit` TS2305 (`probeTarball`, `TARBALL_TIMEOUT_MS`, `TarballAnswer`
+  not exported) and TS2353 (`probe` not in `WaitForNpmVersionOptions`) in the test files; jest (isolatedModules)
+  TypeError `probeTarball is not a function` and assertion failures.
+
+**The phase green writes** (`release-publishing.yaml`, appended after `mark-released`): `name: merge-forward`; description:
+a patch only, its `release/X.Y` merged forward with `--no-ff` after the tag and `mark-released`; the approver records
+the phase with `workflow finalize` first and the run's plan is ended and merged into `release/X.Y`, pushed (D2 (a));
+then in a detached worktree at `origin/main`'s head the commands of `git-conventions` §1 rule 6; a non-trivial conflict
+aborted, recorded, resolved by a developer; a minor records the phase with `workflow finalize` and a `--reason` saying
+it has nothing to merge forward (`spec-017` §4.10). `role: tech-lead`, `optional: true`, the two actions above (comments:
+the merge in the detached worktree; the checks, the push and the fast-forward of the shared working tree, as rule 6
+lists them), `approval: { by_role: approver }`. `version: 2.1` appended to the chain: `; 2.1 task-306 (bug-428, bug-433,
+bug-405; release-planning v0.3.2 R8): + merge-forward, the last phase …; publish waits for the tarball and says
+tests.passing is the run on the release commit`. `publish`: the description gains the `tests.passing` sentence (the run
+on the release commit, the candidate the tag names, before the tag is pushed: `npm run test:no-identity --
+--maxWorkers=2`, the CI gate job's environment; `bug-405`, `release-publishing-rel-v0.3-plan` D1) and the tarball
+sentence (`release`/`mcp-registry` wait with `scripts/wait-npm-version.cjs` until the version's `dist.tarball` answers
+HTTP 200; `bug-433`); the post check as in AC 3.
+
+**Rule 6 green writes** (`git-conventions` §1; the first two sentences unchanged; "Until a workflow declares the step, it
+is run by hand." removed): "The step is `release-publishing`'s `merge-forward` phase (`optional: true`, role
+`tech-lead`, `approval: { by_role: approver }`; `bug-428`, `release-planning-rel-v0.3.2-plan` R8). After
+`mark-released` the approver records it with `workflow finalize`, the go-ahead, and the run's plan is ended and merged
+into `release/X.Y`, which is pushed, so `main` receives the `done` plan (`release-publishing-rel-v0.3.1-plan` D6). Then,
+with the shared working tree's `main` at `origin/main`: (1) `git fetch origin`, `git worktree add --detach <path>
+origin/main`, `npm ci` there; (2) there `git merge --no-ff --no-commit origin/release/X.Y`, rule 5's resolutions (the
+`dl-095` pin restored to `main`'s), the merge commit with both written in its message; (3) there `npx jest
+test/lint/version-bump.test.ts` and `node scripts/check-governance.cjs --base origin/main`; (4) there `git push origin
+HEAD:main`; (5) back in the shared working tree `git merge --ff-only origin/main`, so the local `main` is the merge
+commit and the next merge into it does not diverge from `origin/main`, then `git worktree remove <path>`. A minor has
+no merge forward: its integration branch is `main`, and the approver records the phase with `workflow finalize`, the
+`--reason` saying so (`spec-017` §4.10: an optional last phase is never skipped)." Commands from the v0.3.1 plan's S10
+(`sed -n '/^### S10/,/^### Hazards/p'`) and `bug-428`'s reflog reading for step (5).
+
+**Files green touches, with bumps vs `release/0.3`** (`git show release/0.3:<f> | grep -m1 '^version'`):
+`.wingfoil/workflows/custom/release-publishing.yaml` 2.0 → 2.1; `.wingfoil/directives/custom/git-conventions.md` "2.4" →
+"2.5" (chain kept, Date 2026-10-28); `.wingfoil/workflows/bindings.yaml` 2.6 → 2.7, comments only (D3);
+`.wingfoil/WORKFLOW.md` (the paragraph's last sentence, a `MF` node and `MR --> MF`, the `RP2` chain; no `version:`);
+`AGENTS.md` §6 line 460 (no `version:`); `scripts/wait-npm-version.cjs`, `scripts/wait-npm-version.d.cts`;
+`.github/workflows/publish.yml` header line 27, comment only ("once `npm view wingfoil@<version> version dist.tarball
+--json` answers exactly that version and its tarball answers HTTP 200"; still contains the substring
+`publish-pipeline.test.ts:494` pins): the change makes the current line false, so it is fixed here (W0-R6). Uncommitted:
+spec-015. `release-planning.yaml`, rule 5, item 1 and the counterpart paragraph are not touched.
+
+**Spec-015 §3 amend (AC 5, prepared by green, left uncommitted, `dl-047`).** (1) Stage 5: "then polls `npm view
+wingfoil@<version> version` until npm answers exactly that version (`scripts/wait-npm-version.cjs`; npm that cannot be
+run, or answers E401/E403, fails at once, and each call is bounded)" becomes "then polls `npm view wingfoil@<version>
+version dist.tarball --json` until npm answers exactly that version and the tarball URL it names answers HTTP 200 to a
+`HEAD` request (`scripts/wait-npm-version.cjs`; npm that cannot be run, or answers E401/E403, fails at once; any other
+answer, a tarball answering anything but 200 among them, is not live yet; each npm call and each tarball request is
+bounded): npm lists a version minutes before its registry serves the tarball (`bug-433`)". Stage 6 ("stage 5's bounded
+poll") is unchanged and inherits it. (2) Appended after the last Revision: "**Revision (2026-10-28, `task-306-…`) — §3
+stage 5, reused by stage 6: the poll waits for the tarball (`bug-433`).**" — the 0.3.1 observation (`npm view` about
+four minutes ahead of the tarball, the Release, the listing and the Pages deploy announced before `npm install` could
+fetch it), the new condition, the unchanged command line, exit codes, jobs and bound, the pins
+(`test/cli/wait-npm-version.test.ts`, `-failures.test.ts`, `-tarball.test.ts`), and "Edited in place: no supersede, no
+state change, no `version:` bump (`dl-047`), as in the revisions above." Command for `### Pending amendments
+(approver)`: `node "$(pwd)/dist/cli.js" memory amend spec-015-packaging-publishing --reason "Record that the post-publish
+poll of section 3 stage 5, reused by stage 6, waits until the version's dist.tarball answers HTTP 200 and not only until
+npm view lists the version, as task-306 implements in scripts/wait-npm-version.cjs for bug-433."`
+
+**Decisions for the approver.**
+- **D1** — AC 2 and AC 4 red-first (above). Recommendation: accept.
+- **D2** — order of the record and the merge. (a) the approver's `workflow finalize` of `merge-forward` and `workflow
+  end` are committed on the line before the merge, so the merge brings `main` the `done` plan (v0.3.1 D6 kept;
+  `dl-185` C1 (b): the merge comes "when the patch line's state is final"); a conflict aborted afterwards is recorded
+  per rule 6. (b) record after the push, on the line: `main` gets the `done` plan only at the next merge forward.
+  Recommendation: (a).
+- **D3** — `bindings.yaml` comments only: the `git.merge` comment gains the form `git.merge(from: integration_branch, ff:
+  false)` (merge-forward: `git merge --no-ff --no-commit` of the integration branch in the detached worktree), and,
+  since the file is then touched, the `tests.passing` comment names `release-publishing.publish`, the run on the release
+  commit (AC 4's conditional). Alternative: no bindings change, the new form undocumented. Recommendation: comments.
+- **D4** — no new check tokens in `merge-forward`: the version-bump test and the governance check are commands in rule 6
+  and the description, so the 65 unbound warnings stay 65. Alternative: two `run`-bound checks (`npm test --
+  test/lint/version-bump.test.ts`; `node scripts/check-governance.cjs --base origin/main`). Recommendation: none now.
+- **D5** — `spec-017` §12's counts ("105 phases", "the checkpoint phases stay 17", 7 finalize approvals) are dated
+  "Re-measured at `task-303`"; the live lists are `workflow-repository-conformance.test.ts`'s. Recommendation: no
+  `spec-017` amend here (its §10 amend is `task-330`'s); alternative: a "Re-measured at `task-306`" paragraph as a
+  second pending amend.
+
+**Baselines (unchanged tree, `04639ed2`).**
+- `npm run check:mcp` → exit 0: ".mcp.json "wingfoil" runs the pinned wingfoil 0.3.1 … (prompts: 8, resources: 4,
+  tools: 0)"; "the build under development (dist/cli.js) … every listed Resource read and Prompt get answered".
+- Pinned `npm run -s wingfoil -- workflow list` and `workflow show release-publishing`, `--format json` and `--format
+  console`: all exit 0, empty stderr, 65 `W_WORKFLOW_UNBOUND_TOKEN` each; `show`'s console output parses equal to its
+  json (`JSON.stringify` equal → true); phases `release-commit, staging-rehearsal, tag, publish, mark-released`, none
+  optional; diagnostic codes `[W_WORKFLOW_UNBOUND_TOKEN]` only. Green expects 65 again, six phases, `merge-forward`
+  `optional: true`.
+- Existing tests of every file touched, one process under the slot: `npx jest --maxWorkers=2` over
+  `test/cli/{evidence-only-tag,integration-branch,publish-pipeline,service-verify-sweep,staging-rehearsal,test-no-identity,wait-npm-version,wait-npm-version-failures,publish-release-scripts-edges,pages-workflow}`,
+  `test/core/{workflow-integration-branch,workflow-repository-conformance,workflow-manual-prose-checks,workflow-status,workflow-patch-line-texts,workflow-manual-check,dev-loop-v1-6}`,
+  `test/directives/{git-conventions,dev-loop-practice,git-conventions-pin-merge-forward,integration-branch-baseline,schema,traceability,dev-loop-done-order,wingfoil-cli}`,
+  `test/docs/{workflow-md,name-resolvability,dl-086-citations,community-health}`, `test/lint/version-bump`,
+  `test/memory/reason-trailer`, `test/workflow/bindings` → `Test Suites: 32 passed, 32 total`, `Tests: 671 passed, 671
+  total` (18 s).
+- Note for green: the AC 1/3/4 pins read the registry and files at `HEAD` (`loadWorkflowRegistryAtHead`, `git show
+  HEAD:`), so they pass only after green's commit.
+
+**Candidate findings (not filed).** F1: `tests.passing` binds `npm test` (`bindings.yaml` line 30, shared with
+`dev-loop.refactor`), while `publish`'s practice since v0.3 D1 runs `npm run test:no-identity`, which the token
+`tests.no-identity` already binds (`release-submit`); `publish` could name `tests.no-identity` instead (severity low,
+v0.4). F2: `.github/workflows/pages.yml` header line 24 "waits until npm serves exactly that version" stays true after
+the change but does not name the tarball (low; `align-user-docs`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
