@@ -23,7 +23,7 @@ export interface RequiredReading {
   readonly not_applicable_allowed?: readonly string[];
 }
 
-/** Missing fields in check order, then refused n/a values as `<field> (n/a: <problem>)`; [] when the release passes. */
+/** Missing fields in the engine's order (`title` first, then the check's fields), then refused n/a values as `<field> (n/a: <problem>)`; [] when the release passes. */
 export function missingCheckFields(
   id: string,
   data: Readonly<Record<string, unknown>>,
