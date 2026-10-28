@@ -187,6 +187,60 @@ touched (green's, D1 (a)). Inputs: `check = { fields: required, exempt }` and `r
   `npx tsc --noEmit` → no output and the new suite → `Tests: 7 passed, 7 total`; the temporary file was removed
   (`git status --short` → only the new test file before the commit).
 
+### green (developer, 2026-10-28)
+
+**Green commit `b868d44c`** (`fix(workflow): task-331 — read a release's required fields as the engine does (bug-445)`),
+two files, the design's (D1 (a)): `test/workflow/helpers/release-required-check.ts` (new) and
+`test/workflow/release-kind-rule.test.ts`. `git show --stat b868d44c` → `2 files changed, 49 insertions(+), 17 deletions(-)`.
+- The helper exports `RequiredCheck`, `RequiredReading` and `missingCheckFields(id, data, check, reading)` to the design's
+  signature: the check's fields minus those whose own-property `check.exempt[field]` includes `id`, then the engine's
+  `missingRequiredFields(data, fields, reading.lists ?? [])` and `notApplicableRefusals(data, fields,
+  reading.not_applicable_allowed ?? [])` mapped to `<field> (n/a: <problem>)` (both imported from `src/memory`).
+- `release-kind-rule.test.ts`: the local `RequiredCheck` interface and `missingFields` are deleted, the helper's are
+  imported; `reading` is the release type's `template.frontmatter` from `loadMemoryYaml(repoRoot)`, passed in the
+  `minor-v0.3` test and the every-document test. No assertion changed (`git show b868d44c -- test/workflow/release-kind-rule.test.ts`:
+  only the import, the deleted helper, the `reading` declaration and the two call sites).
+- **Red → green.** `npx jest test/workflow/release-required-check.test.ts --maxWorkers=2` → `Tests: 7 passed, 7 total`
+  (at red: suite failed, `Tests: 0 total`, Cannot find module). `npx jest test/workflow/release-kind-rule.test.ts
+  --maxWorkers=2` → `Tests: 7 passed, 7 total` (at red: `1 failed, 6 passed`, `patch-v0.3.2: features`).
+  `npx tsc --noEmit` → no output (at red: TS2307).
+- **T4.** `git log --first-parent --no-merges --format=%h 84e9546b..HEAD -- test/workflow/release-required-check.test.ts`
+  → empty: red's file is untouched.
+
+| AC | Class | Evidence |
+|----|-------|----------|
+| AC1 | red-first | `npx jest test/workflow/release-required-check.test.ts --maxWorkers=2` → `Tests: 7 passed, 7 total`: `features: []` filled, empty non-list fields missing, exemption by id, n/a refusals, verdict equal to `requireRequiredFields` on 12 fixtures |
+| AC2 | characterization | `npx jest test/workflow/release-kind-rule.test.ts --maxWorkers=2` → `Tests: 7 passed, 7 total` (every release document, `patch-v0.3.2` included); full suite below |
+
+### refactor (developer, 2026-10-28)
+
+**Sync.** `git rev-list --count HEAD..release/0.3` → `0`: no merge.
+
+**Gates** (task worktree, head `b868d44c`; heavy ones after `waitslot.sh`, `--maxWorkers=2`, foreground or tracked):
+- `npm test -- --maxWorkers=2` → `Test Suites: 508 passed, 508 total`, `Tests: 8965 passed, 8965 total`, exit 0 — the
+  full suite is green with no failure (AC2; bug-445's failure was the only known one).
+- `npm run test:coverage -- --maxWorkers=2` → `All files | 99.37 | 97.51 | 98.18 | 99.73` (statements, branches,
+  functions, lines), `Tests: 8965 passed, 8965 total`, exit 0. The change is test-only, so `src/` coverage is unchanged by it.
+- `npm run lint` → exit 0, no output past the script header.
+- `npm run docs:api` → exit 0.
+- `npm run typecheck` (both `tsc --noEmit` configs) → exit 0; `npx tsc -p tsconfig.build.json` → exit 0, no output.
+- `npm run check:governance -- --base origin/release/0.3` → exit 1, `gated: 2 findings on 2 commits (subject 2)`: the
+  subjects of `9cdea2e3` (`wf(bug): assign bug-445-…`) and `8d6c005f` (`wf(bug): assign bug-446-…`), "an assign subject
+  must be `wf({type}): assign release {version} to {ids}`". Neither is a commit of this task: both reached the branch
+  with `release/0.3` (`git merge-base --is-ancestor 9cdea2e3 release/0.3` → true), which is ahead of `origin/release/0.3`
+  (`7ce9d88d`). Against the local integration branch, `npm run -s check:governance -- --base release/0.3` → `gated: 0
+  findings on 0 commits`, exit 0. Reported to the coordinator as a candidate finding, not fixed here (W0-R6).
+
+**Self-review (code-review).** Every AC has its command above. The helper has no logic of its own beyond the exemption
+filter and the n/a message format: "filled" is decided only by the engine, so the drift bug-445 shows cannot recur.
+Same-class search: `grep -rn "Array.isArray(value) && value.length === 0" test/` → no other match, so no other test
+re-implements the empty-list reading. Files touched: the two green files and this task file
+(`git diff --stat release/0.3...HEAD` lists, besides them, only red's test file and the bug-445 status line of the start).
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -194,3 +248,4 @@ touched (green's, D1 (a)). Inputs: `check = { fields: required, exempt }` and `r
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- (developer, green/refactor) `npm run check:governance -- --base origin/release/0.3` fails on two `wf(bug): assign` subjects (`9cdea2e3`, `8d6c005f`) that came with the local `release/0.3`, ahead of `origin/release/0.3`; against `--base release/0.3` it passes (`gated: 0 findings`). The prescribed base reports the integration branch's own unpushed commits as the task's. Proposal: run the gate with the base the task branch was synced from, or push/settle those subjects before the wave's gates.
