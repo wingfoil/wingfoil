@@ -190,6 +190,59 @@ tsconfig.json` → exit 0 (the red is assertion failures only).
 minor's retrospective (dl-167 (a))) |` and no `adopted` anywhere in `## Previous proposals`, and the unit pin
 `{ settled: 'pending', outcome: null, element: null, note: <that text> }` for both a retro text and `null`.
 
+### green (developer, 2026-10-28)
+
+**Green commit `3bc390ad`** (`fix(release-health): task-307 — a patch's previous proposals settle as pending (bug-443)`).
+Files: `scripts/release-health/compare.cjs`, `scripts/release-health/compare.d.cts`, `docs/08_health/report-layout.md`
+(`git show --stat --format= 3bc390ad` → `3 files changed, 28 insertions(+), 7 deletions(-)`). As the design:
+- `settle(previousProposals, retroText, comparison, previousKind)`: with `previousKind === 'patch'` every proposal is
+  `{ id, metric, settled: 'pending', outcome: null, element: null, note: PATCH_PENDING_NOTE }`, the note
+  "disposed of by the next minor's retrospective (dl-167 (a))" (D2); any other value keeps the existing mapping.
+- `compareRelease`: a new first branch, taken when `previous.release.kind === 'patch'`, settles with `retroText`
+  `null` and `'patch'`, before the branch that builds and `existsSync`s the `retro-<previous version>` path: no lookup.
+  The minor path is the old branch, unchanged. The header's **Settle** paragraph states the patch rule.
+- `compare.d.cts`: `Settled.settled` gains `'pending'`, `settle` the optional `previousKind?: 'major' | 'minor' | 'patch'`.
+- `report-layout.md`: the `## Previous proposals` placeholder lists `pending`; a closing paragraph says when it applies
+  (`kind: patch`, no retrospective read, `dl-092` Q2 (ii)) and leaves the minor's settle to `dl-167` (R8).
+
+**Red → green.** `npx jest test/release-health/compare.test.ts --maxWorkers=2` → red `Tests: 5 failed, 75 passed, 80
+total` (red notes), green `Tests: 80 passed, 80 total`; `-t "task-307|bug-443"` → `Tests: 70 skipped, 10 passed, 80
+total`. T4: `git log --first-parent --no-merges --format=%h 19fe0a08..HEAD -- test/release-health/compare.test.ts
+test/release-health/helpers/compare-api.ts` → empty.
+
+| AC | Status | Evidence |
+|---|---|---|
+| 1 patch → `pending`, no `retro-<patch>` lookup; minor unchanged | met | the unit tests of `settle — a patch previous run (bug-443)` and the 2 CLI tests (the decoy `retro-v0.3.1` row `element dl-901-x` is not read: every `RH-v0.3.1-0N` row reads `pending (…)`) pass in the green run above |
+| 2 `report-layout.md` lists `pending` and when it applies | met | the 2 AC 2 tests of `renderReport — report-layout.md` pass in the same run |
+
+### refactor (developer, 2026-10-28)
+
+- Sync: `git rev-list --count HEAD..release/0.3` → `0` and `HEAD..origin/release/0.3` → `0`: no merge.
+- `npm run test:coverage -- --maxWorkers=2` (under `waitslot.sh`; the run is also the full suite, with the dl-089 edit
+  in the tree) → `Test Suites: 1 failed, 506 passed, 507 total`, `Tests: 1 failed, 8963 passed, 8964 total`; the one
+  failure is the accepted pre-existing one, `test/workflow/release-kind-rule.test.ts` "every release document carries
+  every field the check requires of it" → `"patch-v0.3.2: features"` (`bug-445`, ruling Q-02 D3). The doc-parity
+  suites under `test/docs/` run in it and pass. Coverage `All files | 99.37 | 97.5 | 98.18 | 99.73`.
+- `npm run lint` → exit 0; `npm run typecheck` → exit 0; `npx tsc -p tsconfig.build.json --noEmit` (under the slot) →
+  exit 0; `npm run docs:api` → exit 0.
+- `npm run check:governance -- --base origin/release/0.3` → exit 1, `gated: 2 findings on 2 commits (subject 2)`:
+  `9cdea2e3` and `8d6c005f`, the `wf(bug): assign bug-445…` / `bug-446…` commits of local `release/0.3` not yet on
+  `origin/release/0.3` (`git merge-base --is-ancestor 9cdea2e3 origin/release/0.3` → false), which this branch carries
+  through the merge `c11f0040`; not this task's (reported to the orchestrator). Against the local integration branch,
+  `npm run check:governance -- --base release/0.3` → exit 0, `gated: 0 findings on 0 commits`.
+- Self-review (code-review): the patch branch is the only new path; no clock, no randomness (REQ-SYS-07); `renderReport`
+  prints the row through its existing `s.note` branch and `Improvements` still filters on `startsWith('adopted')`, so a
+  `pending` proposal is never named as followed. `grep -n "not adopted" scripts/release-health/compare.cjs` → the
+  header (line 50) and the three minor branches of `settle` (lines 499, 507, 509): no other copy of the vocabulary.
+
+### Pending amendments (approver)
+
+- `dl-089-release-health-analyses-before-retrospective` (`ready`): a dated Note (2026-10-28) appended after the Note of
+  2026-10-24, recording the fifth settle label `pending` a patch's proposals take (D1), left uncommitted in this
+  worktree (`git status --short` → ` M docs/04_memory/design/dls/dl-089-…md`). Command, from the worktree after
+  `npm run build`:
+  `node "$(pwd)/dist/cli.js" memory amend dl-089-release-health-analyses-before-retrospective --reason "Record the pending settle label a patch's proposals take (task-307, bug-443, release-planning v0.3.2 R8)."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -197,3 +250,5 @@ minor's retrospective (dl-167 (a))) |` and no `adopted` anywhere in `## Previous
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The governance gate against `origin/release/0.3` flags two unpushed `wf(bug): assign` commits of the integration branch (`9cdea2e3`, `8d6c005f`), not this task's: until the integration branch is pushed, every task branch merged from it reports them (see refactor).
