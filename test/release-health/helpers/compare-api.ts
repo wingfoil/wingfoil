@@ -85,10 +85,13 @@ export interface ParsedProposal {
   readonly [key: string]: unknown;
 }
 
-/** How one previous proposal was settled (`dl-089` §4). */
+/**
+ * How one previous proposal was settled (`dl-089` §4); `pending` when the previous release is a patch, whose
+ * proposals the next minor's retrospective disposes of (task-307, `bug-443`, `dl-167` (a)).
+ */
 export interface Settled {
   readonly id: string;
-  readonly settled: 'adopted and effective' | 'adopted, no effect yet' | 'not adopted' | 'superseded';
+  readonly settled: 'adopted and effective' | 'adopted, no effect yet' | 'not adopted' | 'superseded' | 'pending';
   readonly [key: string]: unknown;
 }
 
@@ -107,7 +110,7 @@ export interface CompareApi {
   compareReports(input: CompareInput): Promise<Comparison>;
   propose(comparison: Comparison, options: { search: (keyword: string) => SearchResult | Promise<SearchResult>; memoryYaml: unknown }): Comparison | Promise<Comparison>;
   parseProposals(markdown: string): readonly ParsedProposal[];
-  settle(previousProposals: readonly ParsedProposal[], retroText: string | null, comparison: Comparison): readonly Settled[];
+  settle(previousProposals: readonly ParsedProposal[], retroText: string | null, comparison: Comparison, previousKind?: 'major' | 'minor' | 'patch'): readonly Settled[];
   renderReport(comparison: Comparison): string;
   readonly FLOORS: Readonly<Record<string, unknown>>;
   readonly COMPONENTS: Readonly<Record<string, unknown>>;
