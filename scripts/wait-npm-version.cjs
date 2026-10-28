@@ -120,10 +120,32 @@ function describeTarball(url, answer) {
   return `npm lists it, the tarball request to ${url} failed: ${answer.error ?? 'no error text'}`;
 }
 
+/**
+ * The error npm 11 prints on stdout under `--json` (`{"error":{"code","summary","detail"}}`), as `<code>: <summary>`
+ * (task-306 review R1), or `undefined` when stdout is not that object.
+ *
+ * @param {string} stdout
+ * @returns {string | undefined}
+ */
+function jsonError(stdout) {
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    return undefined;
+  }
+  const error = parsed !== null && typeof parsed === 'object' ? parsed.error : undefined;
+  if (error === null || typeof error !== 'object') return undefined;
+  const parts = [error.code, error.summary].filter((part) => typeof part === 'string' && part.trim() !== '');
+  return parts.length > 0 ? parts.map((part) => part.trim().split('\n')[0]).join(': ') : undefined;
+}
+
 /** @param {{ status: number | null, stdout: string, stderr: string, timedOut?: boolean }} answer */
 function describeAnswer(answer) {
-  const said = `${answer.stdout}\n${answer.stderr}`.split('\n').map((l) => l.trim()).filter((l) => l !== '');
   if (answer.timedOut === true) return `npm view killed after ${Math.round(NPM_VIEW_TIMEOUT_MS / 1000)} s`;
+  const fromJson = jsonError(answer.stdout);
+  if (fromJson !== undefined) return `npm view exit ${answer.status}: ${fromJson}`;
+  const said = `${answer.stdout}\n${answer.stderr}`.split('\n').map((l) => l.trim()).filter((l) => l !== '');
   return `npm view exit ${answer.status}${said.length > 0 ? `: ${said[0]}` : ''}`;
 }
 
