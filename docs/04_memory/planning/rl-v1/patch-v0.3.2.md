@@ -10,8 +10,8 @@ pillar: "P4"             # REQUIRED — primary feature pillar, e.g. "P1"
 features: []              # REQUIRED — feature IDs covered by this release, e.g. [P1.1, P1.2, P1.13]; [] if none. Left empty so an untouched scaffold fails submit (bug-147)
 requirements: "docs/04_memory/design/dls/dl-186-wingfoil-s-own-development-moves-onto-the-v0.3-workflow-engine-in-a-fixed-order-pin-templates-then-state-adoption-before-v0.4-s-planning.md"       # REQUIRED — path to per-release backlog JSON, e.g. "docs/03_backlog/04_backlog/by-release/v0.1.json"
 release-line: "v1"       # REQUIRED — version of the parent release-line, e.g. "v1"; the file sits under the release-line's id, planning/rl-v1/ (memory.yaml `release` path)
-backlog_committed:     # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
-waves: []              # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
+backlog_committed: 26     # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
+waves: [w0]              # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
 tmpl_version: 261012   # Original template version
 ---
 
@@ -98,6 +98,12 @@ v0.3 left, taken while it is cheap and before v0.4 changes the engine.
 - Pin advanced `0.3.0 → 0.3.1` (`cf8ef04c`), `bug-414` closed (`079ae55b`); `dl-206` approved (`63bec4df`).
 - Bug selection re-verified read-only on `release/0.3` (plan R5): of the 49 pre-classified includes, 42 stayed, five
   moved to maybe; the 22 bugs filed on `main` after the cut need re-capture, and only `bug-423` was taken.
+- `bug-423` re-captured on the line as `bug-444` (`ingest/recapture-bug-423-v0.3.2`, merged `e502a812`); the `main`
+  copy deprecated and `bug-355` closed as a duplicate of `bug-303` (merged into `main` `c756b31d`).
+- identify-specs: no new tech-spec; ten in-place amends (spec-001, 004, 005, 008, 012, 015, 016, 017) are owed by the
+  tasks whose fixes change those contracts, each prepared in its task and recorded by the approver at review.
+- build-backlog: 26 fix tasks `task-305`…`task-330` (`w0` 4, `w1` 13, `w2` 8, `w3` 1) closing 55 bugs; 48 bugs
+  re-assigned `v0.4 → v0.3.2`, all 55 synced `triaged → planned`.
 
 ### Implementation (dev-loop, per task)
 
