@@ -40,7 +40,30 @@ function listedJson(version: string, tarball: string): string {
 }
 
 const LISTED: NpmViewAnswer = { status: 0, stdout: listedJson('0.3.0', URL_030), stderr: '' };
-const NOT_FOUND: NpmViewAnswer = { status: 1, stdout: '', stderr: 'npm error code E404\nnpm error 404 No match found for version 0.3.0' };
+/**
+ * npm 11's answer to `npm view … --json` when it fails (task-306 review R1, captured with npm 11.6.2 against an
+ * in-process registry): exit 1, the error as a JSON object on stdout, and the same error as `npm error` lines on
+ * stderr. E404 is the shape of a version the package does not list yet (a staged, unapproved one).
+ */
+const npmJsonError = (code: string, summary: string, detail: string): string =>
+  `${JSON.stringify({ error: { code, summary, detail } }, null, 2)}\n`;
+const E404_DETAIL = (version: string): string =>
+  `The requested resource 'undefined@${version}' could not be found or you do not have permission to access it.\n\nNote that you can also install from a\ntarball, folder, http url, or git url.`;
+const e404Stdout = (version: string): string => npmJsonError('E404', `No match found for version ${version}`, E404_DETAIL(version));
+const e404Stderr = (version: string): string =>
+  [
+    'npm error code E404',
+    `npm error 404 No match found for version ${version}`,
+    'npm error 404',
+    `npm error 404  The requested resource 'undefined@${version}' could not be found or you do not have permission to access it.`,
+    'npm error 404',
+    'npm error 404 Note that you can also install from a',
+    'npm error 404 tarball, folder, http url, or git url.',
+    'npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-10-28T21_24_25_855Z-debug-0.log',
+    '',
+  ].join('\n');
+
+const NOT_FOUND: NpmViewAnswer = { status: 1, stdout: e404Stdout('0.3.0'), stderr: e404Stderr('0.3.0') };
 
 interface ProbeCall {
   readonly url: string;
@@ -122,7 +145,9 @@ describe('waitForNpmVersion (task-306) — listed is not live until the tarball 
     const result = await waitForNpmVersion(h.options);
     expect(result).toMatchObject({ ok: false, attempts: 4 });
     expect(h.probeCalls).toEqual([]);
+    // review R1: the last answer names npm's error code, not the `{` that opens its --json error on stdout.
     expect(result.message).toContain('E404');
+    expect(result.message).not.toContain('exit 1: {');
   });
 
   it.each([

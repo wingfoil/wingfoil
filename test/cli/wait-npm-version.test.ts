@@ -53,7 +53,30 @@ function answers(...list: NpmViewAnswer[]): { view: (args: readonly string[]) =>
   };
 }
 
-const NOT_FOUND: NpmViewAnswer = { status: 1, stdout: '', stderr: 'npm error code E404' };
+/**
+ * npm 11's answer to `npm view … --json` when it fails (task-306 review R1, captured with npm 11.6.2 against an
+ * in-process registry): exit 1, the error as a JSON object on stdout, and the same error as `npm error` lines on
+ * stderr. E404 is the shape of a version the package does not list yet (a staged, unapproved one).
+ */
+const npmJsonError = (code: string, summary: string, detail: string): string =>
+  `${JSON.stringify({ error: { code, summary, detail } }, null, 2)}\n`;
+const E404_DETAIL = (version: string): string =>
+  `The requested resource 'undefined@${version}' could not be found or you do not have permission to access it.\n\nNote that you can also install from a\ntarball, folder, http url, or git url.`;
+const e404Stdout = (version: string): string => npmJsonError('E404', `No match found for version ${version}`, E404_DETAIL(version));
+const e404Stderr = (version: string): string =>
+  [
+    'npm error code E404',
+    `npm error 404 No match found for version ${version}`,
+    'npm error 404',
+    `npm error 404  The requested resource 'undefined@${version}' could not be found or you do not have permission to access it.`,
+    'npm error 404',
+    'npm error 404 Note that you can also install from a',
+    'npm error 404 tarball, folder, http url, or git url.',
+    'npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-10-28T21_24_25_855Z-debug-0.log',
+    '',
+  ].join('\n');
+
+const NOT_FOUND: NpmViewAnswer = { status: 1, stdout: e404Stdout('0.3.0'), stderr: e404Stderr('0.3.0') };
 
 /** What `npm view <name>@<version> version dist.tarball --json` prints on stdout for a listed version (task-306). */
 const listedJson = (version: string, tarball = `https://registry.npmjs.org/wingfoil/-/wingfoil-${version}.tgz`): string =>
@@ -111,7 +134,9 @@ describe('waitForNpmVersion (task-229) — a bounded poll', () => {
     expect(result.attempts).toBe(4);
     expect(c.slept.reduce((a, b) => a + b, 0)).toBe(30_000);
     expect(result.message).toMatch(/wingfoil@0\.3\.0 is not live on npm after 30 s \(4 attempts\)/);
+    // review R1: the last answer names npm's error code, not the `{` that opens its --json error on stdout.
     expect(result.message).toContain('E404');
+    expect(result.message).not.toContain('exit 1: {');
   });
 
   it('never sleeps past the deadline: the last wait is shortened to it', async () => {
@@ -137,14 +162,14 @@ describe('wait-npm-version command line (task-229)', () => {
   });
   afterEach(() => rmSync(work, { recursive: true, force: true }));
 
-  /** A fake `npm` that records its argv and answers per FAKE_NPM_STDOUT / FAKE_NPM_EXIT. */
+  /** A fake `npm` that records its argv and answers per FAKE_NPM_STDOUT / FAKE_NPM_STDERR / FAKE_NPM_EXIT. */
   function fakeNpm(): string {
     const bin = join(work, 'bin');
     spawnSync('mkdir', ['-p', bin]);
     const file = join(bin, 'npm');
     writeFileSync(
       file,
-      `#!/bin/sh\nprintf '%s\\n' "$*" >> "${join(work, 'argv')}"\nprintf '%s' "$FAKE_NPM_STDOUT"\nexit "\${FAKE_NPM_EXIT:-0}"\n`,
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> "${join(work, 'argv')}"\nprintf '%s' "$FAKE_NPM_STDOUT"\nprintf '%s' "$FAKE_NPM_STDERR" >&2\nexit "\${FAKE_NPM_EXIT:-0}"\n`,
     );
     chmodSync(file, 0o755);
     return bin;
@@ -186,10 +211,16 @@ describe('wait-npm-version command line (task-229)', () => {
     }
   }, 30_000);
 
-  it('exits 1 with an `error:` line when the timeout passes and npm never served it', () => {
-    const result = run([tag, '--timeout-minutes', '0', '--interval-seconds', '1'], { FAKE_NPM_EXIT: '1' });
+  it('exits 1 with an `error:` line naming E404 when the timeout passes and npm never served it (review R1: npm --json shape)', () => {
+    const result = run([tag, '--timeout-minutes', '0', '--interval-seconds', '1'], {
+      FAKE_NPM_EXIT: '1',
+      FAKE_NPM_STDOUT: e404Stdout(pkg.version),
+      FAKE_NPM_STDERR: e404Stderr(pkg.version),
+    });
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/^error: .*is not live on npm after 0 s \(1 attempt/m);
+    expect(result.stderr).toContain('E404');
+    expect(result.stderr).not.toContain('exit 1: {');
   });
 
   it.each([
