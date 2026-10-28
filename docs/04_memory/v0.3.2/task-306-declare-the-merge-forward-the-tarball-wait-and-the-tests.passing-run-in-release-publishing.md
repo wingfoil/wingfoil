@@ -430,6 +430,33 @@ failed, 50 passed, 56 total`. The bug-070 gate passes. The 6 reds:
 
 `npx tsc --noEmit` → exit 0, no output. `npm run -s lint` → exit 0.
 
+### review fixes (developer, 2026-10-28)
+
+Independent review at `b1c351af`: approve with fixes. Fix commit `5390f78a` (`scripts/wait-npm-version.cjs`,
+`.wingfoil/WORKFLOW.md`); red's files untouched (T4: the only commits on them since red are the qa agent's `fe45c34a`
+and `a8a5d34c`).
+- **R1 (should-fix).** Under `--json` npm writes its error as `{"error":{"code","summary","detail"}}` on stdout, so the
+  last answer read `npm view exit 1: {`. A new `jsonError()` reads `error.code` and `error.summary` when stdout parses as
+  that object, and `describeAnswer` gives `npm view exit <n>: <code>: <summary>`; otherwise the old first-line reading.
+  `npmErrorCode` (stderr) and the exit codes are unchanged. Red amendment `a8a5d34c` (fixtures in the real shape):
+  `npx jest test/lint/no-fabricated-stderr.test.ts test/cli/wait-npm-version.test.ts
+  test/cli/wait-npm-version-failures.test.ts test/cli/wait-npm-version-tarball.test.ts --maxWorkers=2` → 6 failed of 52
+  before the fix, `Tests: 56 passed, 56 total` after. A direct call with npm's E404 JSON prints `Last answer: npm view
+  exit 1: E404: No match found for version 9.9.9`.
+- **R2 (nit).** Done in the uncommitted spec-015 amend: the Revision heading is one line (`grep -n "^\*\*Revision
+  (2026-10-28"` → line 852, the whole bold heading).
+- **R3.** The approver's (rule 6 step 3's governance check against the Q-10 commits): no change.
+- **R4 (pre-existing, same class, W0-R6 (1)).** `.wingfoil/WORKFLOW.md`'s `PB` node now lists `✔ pre: tests.passing —
+  the run on the release commit, npm run test:no-identity (bug-405)` before `services.verify-sweep`.
+
+Gates on `5390f78a`, spec-015 dirty: `test/docs/workflow-md` 6/6, `test/docs/name-resolvability` 11/11,
+`test/directives/dev-loop-practice` 16/16, `release-publishing-merge-forward` 11/11, `workflow-integration-branch` 28/28;
+full suite `npm test -- --maxWorkers=2` under the slot → `Test Suites: 512 passed, 512 total`, `Tests: 9040 passed, 9040
+total`; `npm run -s lint` → 0; `npm run -s typecheck` → 0; `npm run -s check:mcp` → 0; pinned `workflow show
+release-publishing` json and console → exit 0, empty stderr, 65 `W_WORKFLOW_UNBOUND_TOKEN` each, 6 phases ending with
+`merge-forward`, the console output parsing equal to the json; `npm run -s check:governance -- --base release/0.3` →
+`gated: 0 findings on 0 commits`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
