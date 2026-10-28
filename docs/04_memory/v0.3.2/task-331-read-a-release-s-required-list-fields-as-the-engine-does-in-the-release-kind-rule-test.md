@@ -146,6 +146,12 @@ restating it in the define-scope prose would add a second declaration to drift. 
 
 **Risks.** None for other w0 tasks: test-only, no `src/` or `.wingfoil/` change; it unblocks their full-suite gate once merged.
 
+### design gate (approver, 2026-10-28)
+
+Approved at 2026-10-28T15:09:34+01:00 (approval queue Q-07, the approver in the orchestrator's chat):
+- D1 — (a): the file list widens to three test files: the new helper `test/workflow/helpers/release-required-check.ts` (green), the new test `test/workflow/release-required-check.test.ts` (red), and `test/workflow/release-kind-rule.test.ts` (green), so red and green stay separate under T4.
+- D2 — (a): the check also applies `notApplicableRefusals`, so a malformed or undeclared "n/a" fails as `memory submit` refuses it.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
