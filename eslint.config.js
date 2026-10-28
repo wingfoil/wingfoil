@@ -4,7 +4,7 @@ const tseslint = require('typescript-eslint');
 
 module.exports = tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
+    ignores: ['dist/**', '.jest-dist.next/**', '.jest-dist.prev/**', 'node_modules/**', 'coverage/**'],
   },
   // Root-level tooling config files: plain CommonJS Node scripts, not part of the TS project.
   {

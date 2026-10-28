@@ -20,8 +20,19 @@
  *   same time cannot both end up holding it.
  * - A release removes the lock only if it holds the releaser's own pid, so a nested jest (as
  *   `test/lint/coverage-parity.test.ts` spawns) or a refused run cannot free the holder's lock.
+ *
+ * Under the lock the build never deletes `dist/` before it has a replacement (bug-336, task-308): it
+ * writes into the staging directory `.jest-dist.next`, and only a finished build is swapped onto
+ * `dist/` by two renames (`dist/` → `.jest-dist.prev`, `.jest-dist.next` → `dist/`), after which the
+ * previous build is removed. A build that throws, writes nothing or is killed leaves the previous
+ * `dist/` in place; the next run discards the leftovers before building. Both directories are direct
+ * children of the worktree root, on the filesystem and at the depth of `dist/`, so the renames are
+ * atomic and the emitted `../src/…` source-map paths stay valid. A directory that cannot be moved or
+ * removed (EACCES: a `dist/` left owned by root by a container run, bug-066) fails the setup with a
+ * diagnostic naming the path, the cause and the remedy, its stack reduced to that message and the
+ * original error kept as its `cause`.
  */
-const { linkSync, readFileSync, rmSync, unlinkSync, writeFileSync } = require('node:fs');
+const { existsSync, linkSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 /** How long a second run waits for the lock by default: longer than a full coverage run under load. */
@@ -32,7 +43,17 @@ function distLockPath(repoRoot) {
   return join(repoRoot, '.jest-dist.lock');
 }
 
-function defaultIsAlive(pid) {
+/** The staging directory a build writes into before it is renamed onto `dist/`. */
+function distStagingPath(repoRoot) {
+  return join(repoRoot, '.jest-dist.next');
+}
+
+/** Where the previous `dist/` is moved while the staged build takes its place, then removed. */
+function distPreviousPath(repoRoot) {
+  return join(repoRoot, '.jest-dist.prev');
+}
+
+function isPidAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
@@ -118,7 +139,7 @@ async function acquireDistLock({
   waitMs = DEFAULT_WAIT_MS,
   pollMs = DEFAULT_POLL_MS,
   log = defaultLog,
-  isAlive = defaultIsAlive,
+  isAlive = isPidAlive,
 }) {
   let waited = 0;
   let announced = false;
@@ -168,11 +189,100 @@ function releaseDistLock({ lockPath, pid = process.pid }) {
   }
 }
 
-/** Take the lock, then delete `dist/` and rebuild it with `build`. The lock stays held. */
-async function prepareDist({ repoRoot, build, ...lockOptions }) {
-  await acquireDistLock({ lockPath: distLockPath(repoRoot), ...lockOptions });
-  rmSync(join(repoRoot, 'dist'), { recursive: true, force: true });
-  build();
+/**
+ * The error a setup fails with when `path` cannot be removed or replaced (`action`): the path, the
+ * code and the original message, and, for a permission error, the likely cause and the remedy
+ * (bug-066). Its `stack` is the message alone, so jest prints the diagnostic and not a raw trace;
+ * the original error is its `cause`.
+ */
+function fsDiagnostic(action, path, cause) {
+  const code = cause && cause.code ? cause.code : 'error';
+  const original = cause && cause.message ? cause.message : String(cause);
+  let message = `jest globalSetup: cannot ${action} ${path} (${code}: ${original}).`;
+  if (code === 'EACCES' || code === 'EPERM') {
+    message +=
+      ' It is probably owned by another user: a container run as root leaves it so (bug-066).' +
+      ` Remove it (sudo rm -rf ${path}) or take it back (sudo chown -R "$(id -u):$(id -g)" ${path}), then re-run.`;
+  }
+  const err = new Error(message, { cause });
+  err.stack = message;
+  return err;
 }
 
-module.exports = { acquireDistLock, distLockPath, prepareDist, releaseDistLock };
+/** Remove `path` recursively, failing with {@link fsDiagnostic} rather than a raw fs error. */
+function removeOrFail(path) {
+  try {
+    rmSync(path, { recursive: true, force: true });
+  } catch (err) {
+    throw fsDiagnostic('remove', path, err);
+  }
+}
+
+/**
+ * Take the lock, build into the staging directory, then swap the finished build onto `dist/` and
+ * remove the previous one. The lock stays held.
+ *
+ * @param {{ repoRoot: string, build: (outDir: string) => void }} options - `build` writes the whole
+ *   build into `outDir`, which does not exist on entry; the remaining options go to {@link acquireDistLock}.
+ */
+async function prepareDist({ repoRoot, build, ...lockOptions }) {
+  await acquireDistLock({ lockPath: distLockPath(repoRoot), ...lockOptions });
+  const dist = join(repoRoot, 'dist');
+  const staging = distStagingPath(repoRoot);
+  const previous = distPreviousPath(repoRoot);
+
+  // (1) The leftovers of a run killed before it finished.
+  removeOrFail(staging);
+  removeOrFail(previous);
+
+  // (2) The build, into the staging directory; dist/ is untouched whatever happens here.
+  try {
+    build(staging);
+  } catch (err) {
+    try {
+      rmSync(staging, { recursive: true, force: true });
+    } catch {
+      // Best effort: the next run removes it in step (1), and the build's own error is what matters.
+    }
+    throw err;
+  }
+  if (!existsSync(staging)) {
+    throw new Error(`jest globalSetup: the build wrote nothing to ${staging}; dist/ is left as it was.`);
+  }
+
+  // (3) The swap: dist/ is absent only between the two renames.
+  const hadDist = existsSync(dist);
+  if (hadDist) {
+    try {
+      renameSync(dist, previous);
+    } catch (err) {
+      throw fsDiagnostic('replace', dist, err);
+    }
+  }
+  try {
+    renameSync(staging, dist);
+  } catch (err) {
+    if (hadDist) {
+      try {
+        renameSync(previous, dist);
+      } catch {
+        // dist/ stays at the previous path; the diagnostic below names the directory to act on.
+      }
+    }
+    throw fsDiagnostic('replace', dist, err);
+  }
+
+  // (4) The previous build. Failing here fails the setup although dist/ is fresh (design gate D2):
+  // the leftover would block the next run's step (1) with the same message anyway.
+  if (hadDist) removeOrFail(previous);
+}
+
+module.exports = {
+  acquireDistLock,
+  distLockPath,
+  distPreviousPath,
+  distStagingPath,
+  isPidAlive,
+  prepareDist,
+  releaseDistLock,
+};

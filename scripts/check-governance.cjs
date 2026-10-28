@@ -186,6 +186,8 @@ function git(root, args, input) {
     input,
     maxBuffer: 1024 * 1024 * 1024,
     stdio: ['pipe', 'pipe', 'pipe'],
+    // Explicit, so the environment a caller (a test) set on `process.env` is the one git sees (bug-278).
+    env: process.env,
   });
 }
 
@@ -292,6 +294,7 @@ function readBlobTexts(root, requests) {
     input: requests.join('\n') + '\n',
     maxBuffer: 1024 * 1024 * 1024,
     stdio: ['pipe', 'pipe', 'pipe'],
+    env: process.env,
   });
   const texts = [];
   let offset = 0;

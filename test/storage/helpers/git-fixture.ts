@@ -6,12 +6,34 @@
  */
 import { execFileSync } from 'child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
+import { devNull, tmpdir } from 'os';
 import { dirname, join } from 'path';
 
-/** Run `git` with a clean, throwaway identity/signing config — never touches global git config. */
+/**
+ * The environment every fixture git command runs with (bug-278, task-308): this process's environment
+ * without any `GIT_*` variable, plus `GIT_CONFIG_GLOBAL` pointed at the null device and
+ * `GIT_CONFIG_NOSYSTEM=1`, plus `extra`. So a fixture reads neither the developer's global nor the
+ * system configuration (a global `core.excludesFile`, `core.hooksPath` or `init.defaultBranch` cannot
+ * change what a fixture repository holds), and an outer `GIT_DIR` or identity — a hook's, or one a suite
+ * set — cannot redirect it.
+ *
+ * @param extra - Variables to add, e.g. the `GIT_AUTHOR_*` of one commit.
+ */
+export function fixtureGitEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!key.startsWith('GIT_')) env[key] = value;
+  }
+  return { ...env, GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: '1', ...extra };
+}
+
+/**
+ * Run `git` in `cwd` with {@link fixtureGitEnv}: it reads no global or system configuration and ignores
+ * the caller's `GIT_*` variables, so what it sees is the repository's local configuration and the
+ * command line. The fixture's identity and settings are written to that local configuration only.
+ */
 export function git(cwd: string, args: string[]): string {
-  return execFileSync('git', args, { cwd, encoding: 'utf-8' });
+  return execFileSync('git', args, { cwd, encoding: 'utf-8', env: fixtureGitEnv() });
 }
 
 /**
@@ -102,13 +124,12 @@ export function commitAllAs(root: string, message: string, author: { name: strin
   execFileSync('git', ['commit', '--quiet', '-m', message], {
     cwd: root,
     encoding: 'utf-8',
-    env: {
-      ...process.env,
+    env: fixtureGitEnv({
       GIT_AUTHOR_NAME: author.name,
       GIT_AUTHOR_EMAIL: author.email,
       GIT_COMMITTER_NAME: author.name,
       GIT_COMMITTER_EMAIL: author.email,
-    },
+    }),
   });
 }
 
