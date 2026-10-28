@@ -111,6 +111,30 @@ takes (`dl-191`). Its implementation is the trial of a more autonomous dev-loop 
 - **R7 — spec and vision amends.** The amends some maybe bugs need (`bug-264`, `bug-304`, `bug-380`, `bug-397`) enter
   only if the approver takes them; none is assumed.
 
+- **R8 — scope (approver, 2026-10-28, on the R5 survey).**
+  - The backlog is 26 tasks over four waves: `w0` (4 tasks: `dl-206` + `bug-429`; `bug-428` + `bug-433` + `bug-405`;
+    `bug-443`; test infrastructure `bug-066`, `bug-278`, `bug-208`, `bug-336`), `w1` (13), `w2` (8), `w3` (the agent
+    driver alone: `bug-339`, `bug-354`, `bug-340`). The full list is S7's table.
+  - Maybes taken, riding on existing tasks with the survey's one-line rulings: `bug-116` (true message at exit 2),
+    `bug-208` (count and sweep the dead pids' tags only), `bug-336` (build in a temporary directory, atomic rename),
+    `bug-338`, `bug-350` (pure alignment of the `init` scaffold), `bug-340` (`details.frontier` as `adopt` has, the
+    message unchanged). Every other maybe stays `v0.4`, among them those needing a spec or vision amend (R7).
+  - `bug-428`: a phase `merge-forward`, `optional: true`, role `tech-lead`, the push under `approval: { by_role:
+    approver }`, its commands recorded in `git-conventions` §1 rule 6.
+  - `bug-429` and `dl-159` A2 item 5, ruled now: a patch line pins only published versions of its own `X.Y`; a merge
+    forward keeps `main`'s pin (`git-conventions` §1 rule 5). With every pin advance `advance-pinned-build` also
+    updates the project-status sentence of `AGENTS.md` §1, and only that sentence (the rest of `AGENTS.md` stays
+    `align-agent-docs`'); applied by hand to this pin advance (`db79230a`), declared in `release-planning.yaml` by
+    the task of `bug-429`.
+  - `bug-443`: only the `pending` label for a patch's proposals; how a minor settles them stays with `dl-167`.
+  - `bug-432`: the case study shows the v0.3.1 patch report too.
+  - `bug-358`: fixed, not removed (`selectWorkflowInstance` is exported by the package's `main`,
+    `dist/core/index.js`).
+  - Eligibility (`dl-206` Q2 (i)) is read with `--no-merges`: `git log release/0.3..main -- <file>` lists the merge
+    forward `22d72ab0` for files it does not change (`git diff release/0.3 main -- <file>` empty); `dl-206`'s task
+    writes the test as `git log --no-merges release/X.Y..main -- <file>`.
+  - Re-capture (R2): only `bug-423`. `bug-355` is closed by the approver as a duplicate of `bug-303`.
+
 ## Phases / Steps
 
 ### S0 — `dl-206` (anticipated act of `reconcile-governance`) · approver gate
