@@ -24,10 +24,10 @@ Layer (CLI + MCP)**.
 - **License:** MIT · **Distribution:** npm (public) · **Tech:** TypeScript / Node.js 22.12+.
 
 > **Project status: implementation under way.** The release line `rl-v1` is `active`; `minor-v0.1`,
-> `minor-v0.2`, the patch `patch-v0.2.2` and `minor-v0.3` are `released` (`wingfoil@0.3.0` on npm), and **the
-> patch `patch-v0.3.1` is `in-development`** on the maintenance line `release/0.3`, while `main` carries `v0.4`
-> (`docs/04_memory/planning/`). A bug-fix patch `v0.3.2` follows on the same line before `v0.4` (approver
-> ruling of 2026-10-26, recorded in `dl-186`). The repository carries a real implementation under
+> `minor-v0.2`, the patches `patch-v0.2.2` and `patch-v0.3.1` and `minor-v0.3` are `released` (`wingfoil@0.3.1`
+> on npm, the pinned build), and **the bug-fix patch `patch-v0.3.2` is in `release-planning`** on the maintenance
+> line `release/0.3`, before `v0.4` (approver ruling of 2026-10-26, recorded in `dl-186`), while `main` carries
+> `v0.4` (`docs/04_memory/planning/`). The repository carries a real implementation under
 > `src/` — ten modules: `core, validation, storage, memory, dna, directives, workflow, cli, mcp, agent` — a
 > packaged `wingfoil` CLI (`package.json` `bin` → `dist/cli.js`) and an MCP server (`wingfoil mcp`), all
 > covered by a full Jest suite (`npm test`). Read, run, test and reason about `src/` as you would in any
