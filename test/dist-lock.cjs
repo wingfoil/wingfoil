@@ -3,7 +3,7 @@
  * One jest run at a time owns a worktree's `dist/`
  * (task-146-make-suite-result-independent-concurrent-runs-machine-load, `bug-095`).
  *
- * `test/global-setup.cjs` deletes and rebuilds `dist/` before the worker pool starts (`bug-003`). A
+ * `test/global-setup.cjs` rebuilds `dist/` (staged, then swapped in, below) before the worker pool starts (`bug-003`). A
  * second jest run in the same worktree used to do the same while the first was still spawning
  * `node dist/cli.js`, and the first then reported failures indistinguishable from a regression. The
  * setup now takes `<worktree>/.jest-dist.lock` first and keeps it for the whole run;
@@ -192,13 +192,16 @@ function releaseDistLock({ lockPath, pid = process.pid }) {
 /**
  * The error a setup fails with when `path` cannot be removed or replaced (`action`): the path, the
  * code and the original message, and, for a permission error, the likely cause and the remedy
- * (bug-066). Its `stack` is the message alone, so jest prints the diagnostic and not a raw trace;
+ * (bug-066), after an optional `note`. Its `stack` is the message alone, so jest prints the diagnostic and not a raw trace;
  * the original error is its `cause`.
  */
-function fsDiagnostic(action, path, cause) {
+function fsDiagnostic(action, path, cause, note) {
   const code = cause && cause.code ? cause.code : 'error';
   const original = cause && cause.message ? cause.message : String(cause);
-  let message = `jest globalSetup: cannot ${action} ${path} (${code}: ${original}).`;
+  // An fs error's message already starts with its code (`EACCES: permission denied, …`): say it once.
+  const detail = original.startsWith(`${code}:`) ? original : `${code}: ${original}`;
+  let message = `jest globalSetup: cannot ${action} ${path} (${detail}).`;
+  if (note) message += ` ${note}`;
   if (code === 'EACCES' || code === 'EPERM') {
     message +=
       ' It is probably owned by another user: a container run as root leaves it so (bug-066).' +
@@ -262,14 +265,17 @@ async function prepareDist({ repoRoot, build, ...lockOptions }) {
   try {
     renameSync(staging, dist);
   } catch (err) {
+    let note;
     if (hadDist) {
       try {
         renameSync(previous, dist);
       } catch {
-        // dist/ stays at the previous path; the diagnostic below names the directory to act on.
+        // The rollback failed too: dist/ is absent and the previous build is still at its moved-aside
+        // path, so the diagnostic names that directory as the one to act on.
+        note = `dist/ is absent: the previous build is at ${previous}.`;
       }
     }
-    throw fsDiagnostic('replace', dist, err);
+    throw fsDiagnostic('replace', dist, err, note);
   }
 
   // (4) The previous build. Failing here fails the setup although dist/ is fresh (design gate D2):

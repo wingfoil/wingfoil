@@ -21,7 +21,10 @@
  * (`bug-208`), the ones whose tag names a pid that is no longer a live process: a run killed before
  * its own teardown left them, and nothing else ever would remove them. Other live runs sharing the
  * temp dir — parallel worktrees — keep their fixtures; untagged names and legacy prefixes
- * (`wf-storage-clone-…`, `wf-storage-cwd-…`, a bare `mkdtemp` suffix) are never touched (R8). Each
+ * (`wf-storage-clone-…`, `wf-storage-cwd-…`, a bare `mkdtemp` suffix) are never touched (R8). Liveness
+ * is `process.kill(pid, 0)`, which judges pids in the teardown's own pid namespace: runs in another
+ * namespace sharing the temp dir are out of scope (the dist lock makes the same assumption since
+ * task-146). Each
  * group is reported in its own line; leftovers are reported, never fatal: whether a leak should fail
  * the run is not decided (bug-064 Notes).
  */

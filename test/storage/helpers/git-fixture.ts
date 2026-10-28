@@ -39,7 +39,8 @@ export function git(cwd: string, args: string[]): string {
 /**
  * Environment variable naming the jest run a fixture belongs to. `test/global-setup.cjs` sets it in
  * jest's main process before any worker is forked, so every worker inherits the same value, and
- * `test/global-teardown.cjs` counts what this run — and only this run — left behind (bug-064).
+ * `test/global-teardown.cjs` counts what this run, and runs no longer alive, left behind; a live run's
+ * fixtures are never touched (bug-064, bug-208).
  * Several runs share one temp dir when agents work in parallel worktrees, so a sweep keyed on the
  * bare prefix would count, and remove, another run's live fixtures.
  */

@@ -7,7 +7,8 @@
  * record carries no timestamp, so two builds of one clean commit are byte-identical; a tree with
  * changes to a build input (approver ruling D4 (c)) is stamped `<sha>-dirty`.
  *
- * The second half drives `dist/` — built once by `test/global-setup.cjs` through `npm run build`, so
+ * The second half drives `dist/` — built once by `test/global-setup.cjs`, which composes the two steps
+ * of the `build` script (`tsc`, then the record) into `.jest-dist.next` and then swaps the result in, so
  * with the record — and checks that the compiled CLI stamps that record: `--version`, the trailer of
  * a commit it writes, and the `wingfoil` field `memory history` reads back from it.
  */
