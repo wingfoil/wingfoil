@@ -243,6 +243,19 @@ test/release-health/helpers/compare-api.ts` → empty.
   `npm run build`:
   `node "$(pwd)/dist/cli.js" memory amend dl-089-release-health-analyses-before-retrospective --reason "Record the pending settle label a patch's proposals take (task-307, bug-443, release-planning v0.3.2 R8)."`
 
+### review fixes (developer, 2026-10-28)
+
+The independent review at `e51d4785` approved with two cosmetic follow-ups, fixed in `7a102b56`
+(`fix(release-health): task-307 — review findings R1, R2 (comments)`, `scripts/release-health/compare.cjs` only):
+- R1: the header's Settle paragraph is re-wrapped; `awk 'NR>=47&&NR<=56&&length>120' scripts/release-health/compare.cjs
+  | wc -l` → `0` (was line 53, 159 characters).
+- R2: the comment above the settle in `compareRelease` now reads "settled against its retrospective (dl-089 §4), or
+  pending for a patch (bug-443)" (`grep -n "or pending for a patch" scripts/release-health/compare.cjs` → line 735).
+- Scope note: the second sentence of `bug-443`'s Expected Behavior (a minor's run settling the patches' proposals) is
+  outside this task by ruling R8 and design-gate D3: `dl-167` (a), read by `retrospective.yaml`'s `explore`.
+- Runs: `npx jest test/release-health --maxWorkers=2` → `Tests: 246 passed, 246 total`; `npm run lint` → exit 0;
+  `npm run typecheck` → exit 0; `npm run check:governance -- --base release/0.3` → exit 0, `gated: 0 findings on 0 commits`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
