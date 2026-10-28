@@ -9,8 +9,8 @@ owner_role: "approver"         # REQUIRED — the dna.yaml role that manages it:
 verify: "curl -s -o /dev/null -w '%{http_code}' https://m8ven.ai/mcp/wingfoil/wingfoil (200), then open the page: grade, commit read, claimed or not"             # REQUIRED — the read-only command or URL that establishes its current state (claim-evidence)
 url: "https://m8ven.ai/mcp/wingfoil/wingfoil"                # optional — its public URL, if any
 account: ""            # optional — the public identifier used (a login, an org name); never a secret
-renews: ""             # optional — ISO date on which it expires or must be renewed; "" if never
-repo_refs: []          # optional — repository paths that depend on it, e.g. [".github/workflows/publish.yml"]
+renews: "2026-11-14"             # optional — ISO date on which it expires or must be renewed; "" if never
+repo_refs: ["README.md"]          # optional — repository paths that depend on it, e.g. [".github/workflows/publish.yml"]
 decision: "dl-130-visibility-steps-in-the-release-flow"           # optional — the decision-log or ADR that motivated it
 set_up_in: "v0.3"          # optional — the release in which it was set up, e.g. "v0.2"; not `release`, and never stamped by build-backlog (bug-166)
 tmpl_version: 261001   # Original template version
@@ -47,13 +47,22 @@ State read by the agent on 2026-10-05 (`https://m8ven.ai/mcp/wingfoil/wingfoil`,
   (`npm ls js-yaml --omit=dev`), which `npm audit --omit=dev` also reports in the vulnerable range
   4.0.0–4.3.1. Both advisories are already tracked by `bug-223` and `task-250`.
 
-The email offers three optional, free steps. **None has been taken**; each is the approver's decision:
+The email offers three optional, free steps, each the approver's decision. **Claim and badge are taken (2026-10-27);
+Live is not**:
 - **claim** the listing, with an email that appears in the repository's history, on the npm package or
   on the public GitHub profile — confirms the publisher and unlocks the full audit trail;
 - add the **M8ven badge** to the README — the proof that turns a claimed listing into "Verified
   Publisher";
 - connect **Live**, a read-only GitHub App on chosen repositories that re-checks the server on every
   push.
+
+**State after the claim, read by the agent on 2026-10-28** (`https://m8ven.ai/mcp/wingfoil/wingfoil`, HTTP 200): the
+page states that the publisher has proved control of what it scores (**Verified Publisher**); **grade C, 74/100**, still
+capped at C for a new project; code read at commit `5896b7d` on 28 Oct 2026; Live monitoring not connected. The claim was
+made by the approver on 2026-10-27 and verified by the approver on 2026-10-28; the page does not show the claiming
+identity, so `account` stays empty. The badge is in `README.md` (`git log -S'm8ven.ai/badge' -- README.md` →
+`3eb79ff6`, 2026-10-27); its image answers HTTP 200 (`image/svg+xml`). Its URL carries a `v=` parameter that M8ven gave
+as valid until 2026-11-14, recorded as `renews`: re-read the badge then and replace the URL if M8ven issues a new one.
 
 ## Verification
 
@@ -64,6 +73,8 @@ The email offers three optional, free steps. **None has been taken**; each is th
 
 - **State:** `pending` until the approver runs `verify`; approval (`active`) records that the listing
   exists, claimed or not.
+- **Claimed (2026-10-27):** the listing shows Verified Publisher; the badge in `README.md` is its proof. Before
+  `renews` (2026-11-14) re-read the badge URL's `v=` parameter.
 - **Claim, badge, Live:** if the approver takes any of them, record it here (`account` gets the claiming
   identity; `repo_refs` gets `README.md` for the badge). Live is a GitHub App grant on the organisation:
   record it on `svc-001-github-organisation-wingfoil` too.
