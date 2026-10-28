@@ -56,6 +56,96 @@ Q-02, 2026-10-28: D1 `v0.3.2`, D2 a new `w0` task; dev-loop plan ruling W0-R6 (5
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-28)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate). Cited elements: `dl-124` `ready`, `dl-134` `ready`, `bug-147`
+`closed`, `bug-342` `closed`, `task-168` `done` (`grep -H "^status:"` on each file). `.wingfoil/memory.yaml` `release`
+`template.frontmatter`: `required: [ title, kind, version, pillar, features, requirements, release-line ]`,
+`not_applicable_allowed: [ pillar, requirements ]`, `lists: [ features ]`, `exempt: { kind: [ minor-v0.1 … minor-v1.0 ] }`.
+The engine's reading is `requireRequiredFields` (`src/core/required-fields.ts`): `required` minus the `exempt` ids, then
+`missingRequiredFields(frontmatter, required, lists)` and `notApplicableRefusals(frontmatter, required,
+not_applicable_allowed)` (`src/memory/submit.ts`, both exported from `src/memory`). The test's own `missingFields`
+(`test/workflow/release-kind-rule.test.ts` l. 82–88) re-implements the first half and drops `lists`: `[]` is missing on
+every field. It also differs elsewhere: a blank-but-whitespace string and a mapping are filled for it, missing for the
+engine; an `n/a` value is never refused.
+
+**Baseline.** `npx jest test/workflow/release-kind-rule.test.ts --maxWorkers=2` (task worktree, a9124a3c + 2 Memory
+commits) → `Tests: 1 failed, 6 passed, 7 total`, received `["patch-v0.3.2: features"]` — the bug-445 failure, nothing
+else. The engine's reading applied to every release document (scratch script calling `dist/memory/submit.js`
+`missingRequiredFields` + `notApplicableRefusals` with memory.yaml's `required` minus `exempt`, `lists`,
+`not_applicable_allowed`) → `[] []` for all eight: `minor-v0.1`, `minor-v0.2`, `minor-v0.3`, `minor-v0.4`, `minor-v1.0`,
+`patch-v0.2.2`, `patch-v0.3.1`, `patch-v0.3.2`. So the engine reading, n/a refusals included, turns the suite green with
+no data change.
+
+**Decision: reuse the engine, do not re-implement.** The test calls `missingRequiredFields` and `notApplicableRefusals`
+with the check's fields (minus the check's `except` ids) and memory.yaml's `lists` / `not_applicable_allowed`. Calling
+`requireRequiredFields` directly was considered and rejected: it reads `required`/`exempt` from memory.yaml, not from the
+define-scope check, so the documents test would stop testing the check (the check's equality with memory.yaml is pinned
+separately, l. 94 and l. 121). Using the two exported pure functions keeps the check's own field list and exemption as
+the input and the engine as the only definition of "filled" — the drift bug-445 shows cannot recur.
+
+**Where the fix lives (T4).** The task names one file, but red (qa) and green (developer) cannot both change it: T4
+forbids green to edit a file the red commit changed. Design: the reading moves to a test helper green owns; red pins it
+in a new test file; green rewires the existing file, which red does not touch.
+- `test/workflow/helpers/release-required-check.ts` (NEW, developer, green) — precedent `test/workflow/helpers/adopt-snapshot.ts`:
+  ```ts
+  export interface RequiredCheck { readonly fields: readonly string[]; readonly exempt: Readonly<Record<string, readonly string[]>>; }
+  export interface RequiredReading { readonly lists?: readonly string[]; readonly not_applicable_allowed?: readonly string[]; }
+  /** Missing fields in check order, then refused n/a values as `<field> (n/a: <problem>)`; [] when the release passes. */
+  export function missingCheckFields(id: string, data: Readonly<Record<string, unknown>>, check: RequiredCheck, reading: RequiredReading): string[];
+  ```
+  Body: `fields = check.fields` minus those whose `check.exempt[field]` (own property) includes `id`;
+  `missingRequiredFields(data, fields, reading.lists ?? [])`, then `notApplicableRefusals(data, fields,
+  reading.not_applicable_allowed ?? []).map(r => \`${r.field} (n/a: ${r.problem})\`)`. Note `missingRequiredFields` always
+  puts `title` first; the check lists `title` too, so the order is the check's.
+- `test/workflow/release-kind-rule.test.ts` (developer, green): delete the local `missingFields`, import `RequiredCheck`
+  and `missingCheckFields` from the helper, pass `loadMemoryYaml(repoRoot).types['release']?.template?.frontmatter`
+  as `reading` in the `minor-v0.3` test and the every-document test. No assertion of the file changes.
+- `test/workflow/release-required-check.test.ts` (NEW, qa, red).
+
+**Per-AC classification and what qa pins** (file `test/workflow/release-required-check.test.ts`, describe
+`task-331 (bug-445): a release's required fields read as the engine reads them`). Inputs, never a file under
+`docs/04_memory`: `check = { fields: <memory.yaml release required>, exempt: <memory.yaml release exempt> }` and
+`reading = <memory.yaml release template.frontmatter>`, both from `loadMemoryYaml(repoRoot)` (real declarations, not
+literals); base fixture = an in-memory object with `patch-v0.3.2`'s real frontmatter values (`id: patch-v0.3.2`, its
+`title`, `kind: patch`, `version: v0.3.2`, `pillar: P4`, `features: []`, its `requirements` path, `release-line: v1`),
+each test spreading one change over it. Import `missingCheckFields` from `./helpers/release-required-check`.
+
+| AC | Class | Test (name) → expected `missingCheckFields(...)` |
+|----|-------|-----------|
+| AC1 | red-first | "a list field declared in memory.yaml lists is filled by []" — base fixture → `[]`; plus `expect(reading.lists).toContain('features')` |
+| AC1 | red-first (same module) | "a required non-list field left empty is still missing" — `version: ''` → `['version']`; `version: '  '` → `['version']`; `release-line` absent → `['release-line']` |
+| AC1 | red-first (same module) | "an empty list on a non-list field is missing, a null list field is missing" — `requirements: []` → `['requirements']`; `features: null` → `['features']` |
+| AC1 | red-first (same module) | "the check's exemption reads by id" — `kind` removed, `id: minor-v0.3` → `[]`; `kind` removed, `id: patch-v0.3.2` → `['kind']` |
+| AC1 (D2) | red-first | "a not-applicable value stands only where memory.yaml allows it, with a reason" — `pillar: 'n/a — patch release'` → `[]`; `pillar: 'n/a'` → `['pillar (n/a: no-reason)']`; `pillar: 'n/a - x'` → `['pillar (n/a: bad-form)']`; `version: 'n/a — x'` → `['version (n/a: undeclared)']` |
+| AC1 | red-first | "the verdict agrees with the engine's submit check" — for every fixture above: `missingCheckFields(...).length === 0` equals `requireRequiredFields(memoryYaml, 'release', fixture, 'submit').ok` (`src/core/required-fields.ts`) |
+| AC2 | characterization | no new test: `npx jest test/workflow/release-kind-rule.test.ts` 7/7 after green (today 6/7), and the full suite under `--maxWorkers=2` |
+
+Expected red, both stated (B9 lesson): `npx tsc --noEmit` fails with TS2307 (cannot find module
+`./helpers/release-required-check`), and jest fails the new suite with "Cannot find module". The red is genuine against
+the old reading too: the test's current `missingFields` returns `['features']` on the base fixture and accepts every
+`n/a` string. The existing `release-kind-rule.test.ts` stays at 6/7 through red (qa does not touch it). The rows
+"non-list field empty" and "exempt by id" would pass on the old reading: they pin that the meaningful check survives —
+same module, so red by the missing module, not by a fabricated assertion.
+
+**Files and versions.** `test/workflow/helpers/release-required-check.ts` (new), `test/workflow/release-required-check.test.ts`
+(new), `test/workflow/release-kind-rule.test.ts`, this task file. No `version:` to bump (no configuration or versioned doc).
+**No `.wingfoil/` change:** the define-scope token `frontmatter.required: [...]` names the engine's check, whose reading of
+`lists` is already stated where it matters (release-planning.yaml `commit-backlog` comment, task-230 review F1:
+"frontmatter.required counts a list value as missing outside memory.yaml's `lists:`") and declared once in memory.yaml;
+restating it in the define-scope prose would add a second declaration to drift. So `npm run check:mcp` is not needed.
+
+**Decisions for the approver.**
+- D1 — the file list widens from one to three files (helper + new test file), to keep T4 with red and green in separate
+  agents. Recommendation: (a) accept. Alternative (b): one file, with a T4 waiver letting green change only the body of
+  `missingFields` in a file red changed — weaker separation, not recommended.
+- D2 — the test also applies `notApplicableRefusals` (a malformed or undeclared `n/a` fails, as `memory submit` refuses
+  it). Not in the AC's letter ("the way `missingRequiredFields` does"), within its intent ("can no longer drift from
+  memory.yaml"); every current release passes it (baseline above). Recommendation: (a) include. (b) drop the n/a row and
+  the n/a half of the helper.
+
+**Risks.** None for other w0 tasks: test-only, no `src/` or `.wingfoil/` change; it unblocks their full-suite gate once merged.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
