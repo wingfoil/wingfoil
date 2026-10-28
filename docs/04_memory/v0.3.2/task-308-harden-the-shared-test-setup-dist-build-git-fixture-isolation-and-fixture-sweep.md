@@ -280,6 +280,68 @@ four test files → clean.
 diagnostic's `cause` must keep the original `EACCES` error and its `stack` carry no `at` line; the build's own error is
 rethrown by identity (`toBe`); the "writes nothing" message must contain the staging path.
 
+### green (developer, 2026-10-28)
+
+**Green commit `83b458da`** (`git log --oneline -1` → `83b458da1 fix(harness): task-308 — staged dist/ build, EACCES
+diagnostic, git fixture isolation, dead-run sweep (bug-336, bug-066, bug-278, bug-208)`), exactly the files the design
+declared for the developer: `git show --stat 83b458da` → `.gitignore`, `eslint.config.js`, `scripts/check-governance.cjs`,
+`test/dist-lock.cjs`, `test/global-setup.cjs`, `test/global-teardown.cjs`, `test/storage/helpers/git-fixture.ts`. No red
+file touched; no file outside the design's list.
+
+- `test/dist-lock.cjs`: `distStagingPath`, `distPreviousPath`, `isPidAlive` (the former `defaultIsAlive`) exported;
+  `prepareDist` as designed — leftovers removed, `build(staging)`, a throw removes the staging (best effort) and rethrows
+  the build's own error, "wrote nothing" refused naming the staging path, then `dist → .jest-dist.prev`,
+  `.jest-dist.next → dist` (rolled back on failure of the second rename), then the previous build removed (D2: a failure
+  there fails the setup). `fsDiagnostic` builds the `cannot remove|replace <path> (<code>: <message>).` error, with the
+  bug-066 remedy for `EACCES`/`EPERM`, `stack` = message, `cause` = the original error (D3).
+- `test/global-setup.cjs`: `build: (outDir) => …` = `computeBuildInfo(repoRoot)`, then `tsc -p tsconfig.build.json
+  --outDir <outDir>` (`process.execPath` + `require.resolve('typescript/bin/tsc')`), then `serializeBuildInfo` into
+  `<outDir>/build-info.json`; header comment rewritten.
+- `test/global-teardown.cjs`: `sweepDeadRunDirs(tmpRoot, { ownTag, isAlive })` (names `^wf-storage-r([1-9][0-9]*)-`, not the
+  own tag, pid not alive), `formatDeadRunReport`; `teardownRun` takes `isAlive` (default `isPidAlive`), same guard, own
+  line then dead-run line; the shared removal and formatting factored into `removeAll` / `formatReport`. Header rewritten.
+- `test/storage/helpers/git-fixture.ts`: `fixtureGitEnv(extra?)` (no `GIT_*` of the caller, `GIT_CONFIG_GLOBAL=os.devNull`,
+  `GIT_CONFIG_NOSYSTEM=1`, then `extra`); `git()` and `commitAllAs` use it; the `git()` doc comment now states what holds.
+- `scripts/check-governance.cjs` (D1 (a)): `env: process.env` on the `git()` and `readBlobTexts` spawns.
+- `.gitignore`, `eslint.config.js`: `.jest-dist.next/`, `.jest-dist.prev/` ignored.
+
+**red → green.** `npx jest test/lint/dist-lock.test.ts test/storage/fixture-run-sweep.test.ts
+test/storage/git-fixture-isolation.test.ts test/storage/git-fixture-hooks-path.test.ts --maxWorkers=2` → red: `Tests: 21
+failed, 30 passed, 51 total` (red notes); green: `Test Suites: 4 passed, 4 total`, `Tests: 51 passed, 51 total`.
+Neighbours: `npx jest` on the five `test/cli/check-governance*.test.ts`, `test/storage/git-fixture-teardown.test.ts`,
+`test/cli/build-info.test.ts --maxWorkers=2` → `Test Suites: 7 passed`, `Tests: 116 passed`.
+
+### refactor (developer, 2026-10-28)
+
+Base: `git rev-list --count HEAD..release/0.3` → `0`, no merge. T4: `git log --first-parent --no-merges --format=%h
+f6a02a60..HEAD -- test/lint/dist-lock.test.ts test/dist-lock.d.cts test/storage/git-fixture-isolation.test.ts
+test/storage/fixture-run-sweep.test.ts test/storage/git-fixture-hooks-path.test.ts` → no output.
+
+Gates (heavy ones after `waitslot.sh`, `--maxWorkers=2`, foreground or tracked, one jest at a time):
+- `npm run lint` → exit 0. `npm run docs:api` → exit 0. `npm run typecheck` (both `tsc --noEmit` configs) → exit 0;
+  `npx tsc -p tsconfig.build.json` → exit 0.
+- **AC5 (characterization)**, `npm test -- --maxWorkers=2` twice in a row: run 1 → `Test Suites: 1 failed, 506 passed, 507
+  total`, `Tests: 1 failed, 8953 passed, 8954 total` (1152 s); run 2 → the same counts (903 s). The one failure, both runs:
+  `test/workflow/release-kind-rule.test.ts` "every release document carries every field the check requires of it" →
+  received `["patch-v0.3.2: features"]`. It is not this task's: the test reads the release documents, and `git diff --stat
+  release/0.3...HEAD -- docs/04_memory/planning .wingfoil test/workflow` → no output; alone (`npx jest
+  test/workflow/release-kind-rule.test.ts`) → `Tests: 1 failed, 6 passed, 7 total`. Reported as a candidate finding, not
+  fixed (W0-R6). Every harness suite passed in both runs; neither run printed a `fixture teardown:` line
+  (`grep -c "fixture teardown"` on both logs → `0`), and `ls -a | grep jest-dist` after the runs → no output (no lock,
+  staging or previous directory left).
+- Coverage: `npm run test:coverage -- --maxWorkers=2` → `All files | 99.37 | 97.51 | 98.18 | 99.73` (statements, branches, functions, lines; > 80 % on every column; the harness files are not under `src/`, so they are outside the measured set); the same single failure as AC5, `Tests: 1 failed, 8953 passed, 8954 total`.
+- Document parity: the `test/docs/` suites ran in both full runs and passed (only the failure above was reported).
+  No CLI or help change, so `docs/cli-reference.md` unchanged.
+
+Self-review against code-review: AC1 — the interruption pin (SIGKILL mid-build) and the throw / empty-build pins pass;
+`dist/` is absent only between the two renames. AC2 — the three EACCES pins pass as uid 1000 (`id -u`). AC3 — the two
+child-process probes print `{"commit":"ok",…}`; the `git()` comment is now true (it reads no global/system config).
+AC4 — the dead-run pins (injected and real pids) pass; untagged and legacy names stay. AC5 — above.
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -287,3 +349,5 @@ rethrown by identity (`toBe`); the "writes nothing" message must contain the sta
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- Both full runs (AC5) failed one suite outside this task, `test/workflow/release-kind-rule.test.ts` on the `patch-v0.3.2` release document (`features`), so AC5 holds for every suite but that one; a full run takes 15–19 min under the slot (`Time: 1152.558 s`, `902.864 s`). Proposal: settle the release document or the check before the next task's gate.
