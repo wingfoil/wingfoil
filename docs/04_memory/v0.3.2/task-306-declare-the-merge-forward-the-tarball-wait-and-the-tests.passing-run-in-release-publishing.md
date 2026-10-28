@@ -239,6 +239,16 @@ npm view lists the version, as task-306 implements in scripts/wait-npm-version.c
 v0.4). F2: `.github/workflows/pages.yml` header line 24 "waits until npm serves exactly that version" stays true after
 the change but does not name the tarball (low; `align-user-docs`).
 
+### design gate (approver, 2026-10-28)
+
+Approved at 2026-10-28T20:37:21+01:00 (approval queue Q-14, the approver in the orchestrator's chat):
+- D1 — yes: AC2 and AC4 are red-first.
+- D2 — (a): the approver's `workflow finalize` of `merge-forward` and the `workflow end` are committed on the line and pushed before the merge forward, so `main` receives the done plan.
+- D3 — yes: `bindings.yaml` changes comments only.
+- D4 — yes: no new check tokens in `merge-forward`.
+- D5 — yes: no amend of spec-017 §12.
+- D6 — F2 is in this task: the header of `.github/workflows/pages.yml` (line 24) gains the tarball wait, one comment line, same class as `publish.yml` line 27; F1 (publish's `tests.passing` versus the `tests.no-identity` token) is filed as a bug for v0.4 by the orchestrator, not fixed here.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
