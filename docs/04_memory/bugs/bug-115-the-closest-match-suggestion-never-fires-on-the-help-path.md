@@ -5,7 +5,7 @@ title: "`wingfoil memroy` suggests `memory`; `wingfoil help memroy` suggests not
 status: triaged
 severity: "low"
 release-origin: "v0.2"
-release: "v0.4"
+release: "v0.3.2"
 feature: "P5.1"
 contributor: ""
 credit: ""
