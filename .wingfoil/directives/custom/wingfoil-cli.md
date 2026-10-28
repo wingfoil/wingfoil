@@ -6,13 +6,13 @@ kind: custom
 title: "Which WingFoil build runs which command in this repository"
 tags: [custom, process, cli, determinism]
 scope: global
-version: "1.3"   # 1.3 §1: while the pin is 0.3.0 the workflow reads run on the code build, because 0.3.0 refuses the `manual: true` check binding (`dl-172` (a), task-298), until the pin reaches 0.3.1 (prev 1.2 §1: the workflow reads (`workflow list`, `show`, `next`, `status`) return to the pinned build, which reads this repository's `{ type, path }` produces from 0.3.0; the workflow commands that write a commit (`start`, `finalize`, `end`, `create`, `remove`) stay on the code build with the Memory operations (release-planning v0.3.1, advance-pinned-build to 0.3.0) (prev 1.1 §1: the workflow commands, `workflow list` included, run on the code build (the pinned 0.2.2 refuses this repository's `{ type, path }` produces); a fix reaches the code build of its integration branch, `main` or `release/X.Y` (task-252, dl-159; approver ruling 2026-10-17)))
+version: "1.4"   # 1.4 §1: the pin is 0.3.1, which reads the `manual: true` check binding, so the workflow reads and the `wingfoil://workflows` Resources are back on the pinned build; `workflow adopt` and `rekey` named with the workflow commands that write a commit (release-planning v0.3.2, advance-pinned-build to 0.3.1) (prev 1.3 §1: while the pin is 0.3.0 the workflow reads run on the code build, because 0.3.0 refuses the `manual: true` check binding (`dl-172` (a), task-298), until the pin reaches 0.3.1 (prev 1.2 §1: the workflow reads (`workflow list`, `show`, `next`, `status`) return to the pinned build, which reads this repository's `{ type, path }` produces from 0.3.0; the workflow commands that write a commit (`start`, `finalize`, `end`, `create`, `remove`) stay on the code build with the Memory operations (release-planning v0.3.1, advance-pinned-build to 0.3.0) (prev 1.1 §1: the workflow commands, `workflow list` included, run on the code build (the pinned 0.2.2 refuses this repository's `{ type, path }` produces); a fix reaches the code build of its integration branch, `main` or `release/X.Y` (task-252, dl-159; approver ruling 2026-10-17))))
 ref: [P3.5, P3.7, REQ-SYS-08]
 ---
 
 # Directive — Which WingFoil build runs which command in this repository
 
-**Date:** 2026-10-21
+**Date:** 2026-10-28
 
 Custom WingFoil rule. Applies to **every role**: whoever runs a `wingfoil` command in this repository —
 a `developer` submitting a task, the `approver` whose approve commit is written by a verb, a
@@ -37,8 +37,8 @@ run WingFoil from its own source, so the rule has no meaning in a project scaffo
 
 | Job | Build | How it is run, from the repository root |
 |-----|-------|------------------------------------------|
-| **Memory operations** — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `amend`, `park`, and every other verb that writes a `wf()` commit — and the **workflow commands that write a commit** (`workflow start`, `finalize`, `end`, `create`, `remove`) | the **code build**, compiled from this checkout | `npm run build`, then `node dist/cli.js <command>` |
-| **Read commands** — `dna show`, `paths`, `directives list`, `memory search`, `memory history`, `workflow list`, `show`, `next`, `status` (the code build while the pin is 0.3.0, see below) — and **MCP** (its `wingfoil://workflows` Resources: the code build while the pin is 0.3.0, see below) | the **pinned build**, the devDependency `wingfoil-released` | `npm run -s wingfoil -- <command>`; the MCP server `.mcp.json` registers (`npm run check:mcp`) |
+| **Memory operations** — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `amend`, `park`, and every other verb that writes a `wf()` commit — and the **workflow commands that write a commit** (`workflow start`, `finalize`, `end`, `adopt`, `rekey`, `create`, `remove`) | the **code build**, compiled from this checkout | `npm run build`, then `node dist/cli.js <command>` |
+| **Read commands** — `dna show`, `paths`, `directives list`, `memory search`, `memory history`, `workflow list`, `show`, `next`, `status` — and **MCP** | the **pinned build**, the devDependency `wingfoil-released` | `npm run -s wingfoil -- <command>`; the MCP server `.mcp.json` registers (`npm run check:mcp`) |
 
 - **Why the code build for Memory operations.** This repository is the only one that can run WingFoil
   from its own source, so a fix merged into the integration branch (`main`, or `release/X.Y` on a
@@ -46,14 +46,13 @@ run WingFoil from its own source, so the rule has no meaning in a project scaffo
   Run it from the worktree you are working in, after `npm run build`, so the build is the code of that
   worktree.
 - **The workflow commands split as the Memory operations do.** Those that write a commit (`start`,
-  `finalize`, `end`, and `create` / `remove`, which write `wf(workflow)` configuration commits) run on the
+  `finalize`, `end`, `adopt`, `rekey`, and `create` / `remove`, which write `wf(workflow)` configuration commits) run on the
   code build, for the reason above; those that only read (`list`, `show`, `next`, `status`) run on the
   pinned build, for the reason below. Until the pin reached 0.3.0 every workflow command ran on the code
   build, because the pinned build could not load this repository's `{ type, path }` produces (`dl-104` D3);
-  the `pinned-build` search of §3 lists the closed bug that recorded it. The same exception holds again while
-  the pin is 0.3.0: it refuses the `manual: true` check binding (`dl-172` (a)), so until the pin reaches 0.3.1
-  the reads run on the code build (`node dist/cli.js workflow …`), and `npm run check:mcp` declares the three
-  `wingfoil://workflows` Resources known failures of 0.3.0. The `pinned-build` bug of §3 records it, as §2 requires.
+  the `pinned-build` search of §3 lists the closed bug that recorded it. The same exception held while the pin
+  was 0.3.0, which refuses the `manual: true` check binding (`dl-172` (a)); from 0.3.1 the reads are
+  back on the pinned build and `npm run check:mcp` declares no known read failure.
 - **Why the pinned build for the reads and MCP.** They answer as the build WingFoil's users have
   (`dl-095` Q1 (a), Q2 (i)), so the pinned build's surprises surface here, where they can be filed.
 - **Which version is pinned** is what `package.json` declares for `wingfoil-released`
