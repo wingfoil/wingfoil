@@ -52,6 +52,164 @@ jest runs are neither counted nor removed. Rulings (R8): `bug-336` builds in a t
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-28)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. Base: `release/0.3` `7ce9d88d` + the start commit
+`f3436f62` and the four bug syncs (`git log --oneline release/0.3..HEAD` → five commits, head `b89f4664`). Rulings:
+`release-planning-rel-v0.3.2-plan` R8 (`sed -n 114,121p`): `bug-208` "count and sweep the dead pids' tags only",
+`bug-336` "build in a temporary directory, atomic rename"; the task's Description adds `bug-066` "the diagnostic half
+only". No approved tech-spec or BDD scenario covers the test harness (`grep -rln -i "global-setup\|globalSetup\|fixture
+director\|dist-lock" docs/04_memory/design/specs docs/02_requirements .wingfoil/directives` → no output), so no spec or
+`.feature` change. `dl-076` is `ready` and says nothing about a container `--user` (`grep -n -i "\-\-user\|root\|bug-066"`
+on it → no output): the other half of `bug-066` stays out, as the bug's Notes say. No AC contradicts a ratified DL.
+
+**The defects, reproduced on this base** (scratch `../devloop-kit/scratch/task-308-design/`, not committed):
+- `bug-336`: `prepareDist({ repoRoot, build: () => { throw new Error('build interrupted') } })` on a root whose
+  `dist/cli.js` holds `prev` → `rejected: build interrupted | dist exists: false`.
+- `bug-208`: a temp root with `wf-storage-r999999-aaa` (dead pid), `wf-storage-r<dead shell pid>-bbb` and the caller's
+  own `wf-storage-r<pid>-own`, then `teardownRun({ tag: 'r'+pid, pid, tmpRoot })` → `"fixture teardown: this run left
+  1 fixture directory behind; removed 1"`, and both dead-pid directories survive.
+- `bug-278`: the helper transpiled with `ts.transpileModule` (CommonJS) into scratch, then, in a child `node` with
+  `GIT_CONFIG_GLOBAL=<file with core.excludesFile = <file holding '*'>>`: `makeTempGitRepo` + `writeFixtureFile` +
+  `commitAll` → `{"commit":"FAIL","tracked":""}`.
+- `bug-066`: as uid 1000 (`id -u`), a `dist/cli/` at mode 0555 holding a file: `renameSync(dist, .jest-dist.prev)` →
+  `OK` (same parent: Linux checks write on the parent only), then `rmSync(.jest-dist.prev, { recursive, force })` →
+  `EACCES unlink …/.jest-dist.prev/cli/a.js`; with the repo root at 0555, `renameSync(dist, …)` → `EACCES rename`.
+  These are the two shapes a root-owned `dist/` takes once the build swaps directories instead of deleting `dist/`.
+
+**Existing tests on every file this task changes**, before any pin (one jest process each, `--maxWorkers=2`, no slot):
+- `npx jest test/lint/dist-lock.test.ts test/storage/fixture-run-sweep.test.ts test/storage/git-fixture-hooks-path.test.ts
+  test/storage/git-fixture-teardown.test.ts test/cli/build-info.test.ts --maxWorkers=2` → `Test Suites: 5 passed`,
+  `Tests: 62 passed`.
+- For D1 (`scripts/check-governance.cjs`): `npx jest test/cli/check-governance.test.ts
+  test/cli/check-governance-enforcement.test.ts test/cli/check-governance-parent-state.test.ts
+  test/cli/check-governance-provenance.test.ts test/cli/check-governance-show-signature.test.ts --maxWorkers=2` →
+  `Test Suites: 5 passed`, `Tests: 81 passed`.
+- One existing pin collides with AC1 and must change in red (qa): `test/lint/dist-lock.test.ts` "with the lock free,
+  removes the previous dist/, builds, and keeps holding the lock" asserts `build (dist present: false, …)`; under AC1
+  the previous `dist/` is present during the build.
+- Nothing under `.wingfoil/` changes, so `npm run check:mcp` is not required.
+
+**Design.**
+- *`test/dist-lock.cjs` (AC1, AC2).* New exports `distStagingPath(repoRoot)` → `<repoRoot>/.jest-dist.next` and
+  `distPreviousPath(repoRoot)` → `<repoRoot>/.jest-dist.prev` (direct children of the root, on the filesystem of
+  `dist/`, at its depth so the emitted `../src/…` source-map paths stay valid), and `isPidAlive(pid)` (today's
+  `defaultIsAlive`, exported for the teardown). `prepareDist({ repoRoot, build, ...lockOptions })` keeps its signature;
+  `build` becomes `(outDir: string) => void`. Under the lock: (1) remove leftover `.jest-dist.next` and `.jest-dist.prev`
+  (a run killed earlier); (2) `build(outDir)` with `outDir` = the staging path, which does not exist on entry; a throw
+  removes the staging directory (best effort) and rethrows the build's error unchanged, `dist/` untouched; (3) if the
+  staging directory does not exist after `build`, reject (`jest globalSetup: the build wrote nothing to <outDir>`),
+  `dist/` untouched; (4) `rename(dist → .jest-dist.prev)` when `dist/` exists, `rename(.jest-dist.next → dist)` — on
+  failure of the second, `rename(.jest-dist.prev → dist)` back — then `rmSync(.jest-dist.prev)`. `dist/` is absent only
+  between the two renames (two system calls), instead of for the whole build. An fs failure of steps (1) and (4) is
+  rethrown as `Error` with the message `jest globalSetup: cannot <remove|replace> <path> (<code>: <original
+  message>).` followed, for `EACCES`/`EPERM`, by `It is probably owned by another user: a container run as root leaves
+  it so (bug-066). Remove it (sudo rm -rf <path>) or take it back (sudo chown -R "$(id -u):$(id -g)" <path>), then
+  re-run.`; `cause` = the original error; `stack` = the message (D3). The path named is the directory to act on:
+  `<root>/dist` when it cannot be moved, `<root>/.jest-dist.prev` or `.jest-dist.next` when it cannot be removed.
+  `test/dist-lock.d.cts` gains the three exports and the new `build` type.
+- *`test/global-setup.cjs`.* `build: (outDir) => …` composes the two steps of `package.json` `build`
+  (`tsc -p tsconfig.build.json && node scripts/write-build-info.cjs`, `grep -n '"build"' package.json` line 33) into
+  `outDir`: `computeBuildInfo(repoRoot)` first (`scripts/write-build-info.cjs` export), then `tsc` (`process.execPath`
+  + `require.resolve('typescript/bin/tsc')`, `-p tsconfig.build.json --outDir <outDir>`, cwd the root, `stdio: 'pipe'`),
+  then `serializeBuildInfo(info)` written to `<outDir>/build-info.json`. `scripts/write-build-info.cjs` is not changed;
+  a characterization pin on the `build` script catches a drift between the two. Header comment rewritten ("a clean
+  removal" is no longer what happens).
+- *`.gitignore`, `eslint.config.js`.* `.jest-dist.next/` and `.jest-dist.prev/` ignored by git and by ESLint, so a
+  killed run's leftover is neither untracked noise nor linted (today: `git check-ignore -q .jest-dist.next/cli.js` →
+  exit 1, `new ESLint().isPathIgnored('.jest-dist.next/cli.js')` → `false`, same for `.jest-dist.prev`).
+- *`test/global-teardown.cjs` (AC4).* New export `sweepDeadRunDirs(tmpRoot, { ownTag, isAlive })` →
+  `{ found, unremoved }`: entries whose name matches `^wf-storage-r([1-9][0-9]*)-`, whose tag `r<pid>` is not `ownTag`,
+  and for which `isAlive(pid)` is false, sorted, removed as `sweepFixtureDirs` does. New export
+  `formatDeadRunReport(result)` → `null` when nothing was found, else `fixture teardown: runs no longer alive left
+  <n> fixture director(y|ies) behind; removed <n - k>` plus `, could not remove <k>: <paths joined by ', '>`.
+  `teardownRun({ tag, pid, tmpRoot, isAlive = isPidAlive })`: unchanged guard (returns `null` unless `tag === r<pid>`),
+  then the own line and the dead-run line joined by `\n` (own first), `null` when both are `null`. Untagged and legacy
+  names (`wf-storage-clone-…`, `wf-storage-cwd-…`, `wf-storage-<6 mkdtemp chars>`) are never touched (R8). Header
+  comment ("Scope is this run only") rewritten.
+- *`test/storage/helpers/git-fixture.ts` (AC3).* One exported `fixtureGitEnv(extra?)`: `process.env` without any
+  `GIT_*` key, plus `GIT_CONFIG_GLOBAL = os.devNull`, `GIT_CONFIG_NOSYSTEM = '1'`, plus `extra`. `git()` passes it as
+  `env`; `commitAllAs` passes `fixtureGitEnv({ GIT_AUTHOR_NAME, … })`. Dropping every `GIT_*` keeps today's behaviour
+  towards suites (25 suites assign `process.env.GIT_CONFIG_*`, 16 `GIT_AUTHOR_NAME`, 3 `GIT_AUTHOR_DATE`: `grep -rhoE
+  "process\.env(\.|\[')GIT_[A-Z_]+…"` over `test`; none reaches the fixture today, jest's sandboxed `process.env`) and
+  stops an outer `GIT_DIR` (a hook) from redirecting fixture git. The `git()` doc comment states what holds: reads no
+  global or system config, ignores the caller's `GIT_*`, writes only local config. Same-class, in the task: the
+  docblock of `test/storage/git-fixture-hooks-path.test.ts` lines 13-14 (`grep -n "spawn git with no"` → line 14) ("The fixture helpers … spawn git with no
+  `env`, so they still read it") becomes false and is corrected (by qa if red touches the file, else the developer).
+  Commits in clones: `scripts/test-no-identity.cjs` already runs the suite without a global identity (CI gate), so no
+  fixture commit can depend on a global `user.*`.
+
+**AC classification and what qa must pin.**
+- **AC1 — red-first** (reproduced above). File `test/lint/dist-lock.test.ts`, temp roots only (`mkdtempSync(join(tmpdir(),
+  'wf-dist-lock-'))`), never the suite's `dist/`; reuse `deadPid()`, `holder()`, `log`. Pins: (a) replace the colliding
+  test: `build` receives `distStagingPath(root)`, `!existsSync(outDir)` on entry, `dist/stale.js` still present during
+  the build, afterwards `dist/` holds only what `build` wrote, lock still held by `process.pid`, `readdirSync(root)` =
+  `['.jest-dist.lock', 'dist']`; (b) a throwing `build` (after writing `outDir/cli.js`) → rejects with the build's own
+  message, `dist/cli.js` = previous content, no `.jest-dist.next`; (c) a `build` that writes nothing → rejects matching
+  `/wrote nothing/`, `dist/cli.js` = previous; (d) the interruption: spawn (async `spawn`, not `spawnSync`)
+  `process.execPath -e <script>` that requires the absolute `test/dist-lock.cjs` and runs `prepareDist` on the temp root
+  with a `build` that writes `outDir/cli.js` = `partial`, creates a marker file, then blocks
+  (`Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60_000)`); the parent polls for the marker (bounded
+  count), sends `SIGKILL`, awaits `exit` → `dist/cli.js` = `previous build\n`; then an in-process `prepareDist` on the
+  same root (dead holder's lock, leftover staging) → `build` sees no `outDir` on entry, `dist/cli.js` = the new
+  content, `readdirSync(root).sort()` = `['.jest-dist.lock', 'dist']`. No status coalescing (`no-signal-as-exit`). (e)
+  wiring describe: `git check-ignore -q` exit 0 for `.jest-dist.next/cli.js` and `.jest-dist.prev/cli.js` (red), ESLint
+  `isPathIgnored` true for both (red), and (characterization) `package.json` `scripts.build` =
+  `'tsc -p tsconfig.build.json && node scripts/write-build-info.cjs'`, plus `.jest-dist.next` / `.jest-dist.prev`
+  absent from the repository root while the suite runs. Expected reds: `npx tsc --noEmit` TS2305 on the new
+  `dist-lock.cjs` imports (until green adds them to `dist-lock.d.cts`), jest `TypeError: … is not a function`.
+- **AC2 — red-first** (today `rmSync` throws a raw `EACCES`). Same file, `describe` run only when
+  `process.getuid?.() !== 0` (`it.skip` as root: modes do not bind root), every `chmod` restored in `finally`. Pins: (a)
+  *cannot remove*: `dist/cli/` 0555 holding `a.js` → `prepareDist` rejects; `message` starts `jest globalSetup: cannot
+  remove `, contains `join(root, '.jest-dist.prev')`, `EACCES`, `bug-066`, `sudo rm -rf`; `(err as Error).cause` has
+  `code === 'EACCES'`; `stack` has no line matching `/^\s+at /m`; the `build` writes `outDir/new.js`, and `dist/new.js` exists afterwards
+  (the swap happened, only the removal failed); (b) *cannot replace*: the `build` callback writes `outDir/cli.js`, then `chmodSync(root, 0o555)` → rejects with
+  a message starting `jest globalSetup: cannot replace `, containing `join(root, 'dist')` and `EACCES`; `dist/cli.js` =
+  previous; (c) *a leftover*: `.jest-dist.prev/cli/a.js` with `cli/` 0555 planted before the call → rejects naming
+  `join(root, '.jest-dist.prev')`, `build` never called, `dist/` untouched.
+- **AC3 — red-first** (reproduced above). File `test/storage/git-fixture-hooks-path.test.ts` or a new
+  `test/storage/git-fixture-isolation.test.ts` (recommended). Pins: (a) the probe above: `ts.transpileModule` of
+  `test/storage/helpers/git-fixture.ts` (CommonJS, ES2022; it imports only node built-ins) into a `mkdtemp` scratch,
+  a child `node` with `env: { ...process.env, GIT_CONFIG_GLOBAL: <hostile file>, GIT_CONFIG_NOSYSTEM: '1' }` running
+  `makeTempGitRepo` + `writeFixtureFile(r, 'a.txt', …)` + `commitAll` + `git(r, ['ls-files'])` and printing JSON →
+  `{"commit":"ok","tracked":"a.txt"}` (today `FAIL` / `""`); the same with `cloneTempRepo` + `commitAllAs`; (b)
+  in-process: `git(repo, ['config', '--list', '--show-scope'])` has no line starting `global` or `system`; (c)
+  `fixtureGitEnv()` has `GIT_CONFIG_GLOBAL === os.devNull`, `GIT_CONFIG_NOSYSTEM === '1'`, and after the test sets
+  `process.env.GIT_AUTHOR_NAME = 'X'` no `GIT_AUTHOR_NAME` (restore in `finally`). Expected reds: TS2305 for
+  `fixtureGitEnv`, and the probe's JSON. "Its comment is true" is read by the reviewer, not pinned.
+- **AC4 — red-first** (reproduced above). File `test/storage/fixture-run-sweep.test.ts`, reusing its temp-root
+  `beforeEach`. Pins with an injected `isAlive` (deterministic): root with `wf-storage-r1-own`, `wf-storage-r2-dead-a`,
+  `wf-storage-r2-dead-b`, `wf-storage-r3-live`, `wf-storage-r4abcd` (mkdtemp-shaped, untagged), `wf-storage-clone-x`,
+  `wf-storage-cwd-y`, `other`; `teardownRun({ tag: 'r1', pid: 1, tmpRoot, isAlive: (p) => p === 3 })` →
+  `'fixture teardown: this run left 1 fixture directory behind; removed 1\nfixture teardown: runs no longer alive left
+  2 fixture directories behind; removed 2'`, remaining `['other', 'wf-storage-clone-x', 'wf-storage-cwd-y',
+  'wf-storage-r3-live', 'wf-storage-r4abcd']`; only dead ones → the dead line alone; an inherited tag
+  (`tag: 'r100', pid: 200`) → `null`, nothing removed; `formatDeadRunReport` singular, plural, `could not remove`, and
+  `null`. One real-pid case mirroring `bug-208` step 2: `deadPid()` (as in `dist-lock.test.ts`) and `process.ppid`
+  (live), default `isAlive` → dead removed, live kept. Expected red: jest `TypeError` (the module is `require`d with a
+  cast, so no tsc red).
+- **AC5 — characterization**, at refactor: `npm test -- --maxWorkers=2` twice in a row under the slot, both green.
+
+**Files to touch.** `test/dist-lock.cjs`, `test/dist-lock.d.cts`, `test/global-setup.cjs`, `test/global-teardown.cjs`,
+`test/storage/helpers/git-fixture.ts`, `.gitignore`, `eslint.config.js`; tests `test/lint/dist-lock.test.ts`,
+`test/storage/fixture-run-sweep.test.ts`, `test/storage/git-fixture-isolation.test.ts` (new),
+`test/storage/git-fixture-hooks-path.test.ts` (docblock); with D1 (a) `scripts/check-governance.cjs`. No `version:`
+bump: none of these files carries one (`grep -n '^version' .gitignore eslint.config.js` → no output). Nothing under
+`.wingfoil/`.
+
+**Decisions for the approver.**
+- D1 — `bug-278`'s Note (2026-10-09) says "the fix of this bug covers the script's spawns as well"
+  (`scripts/check-governance.cjs` `git()` and `readBlobTexts`, lines 184 and 291, no `env`), which the AC and the
+  Implementation Notes' file list do not name. (a) add `env: process.env` to both spawns — identical outside jest,
+  lets a test's `process.env` reach them, no global-config isolation (the script runs on the operator's repository);
+  (b) leave it, and amend `bug-278` to say so. **Recommend (a)**: one line per spawn, its 81 tests green above; declared
+  here so it is not a stop-the-line "more files than designed".
+- D2 — when the swap succeeded and only the previous build cannot be removed (`bug-066`'s real shape, see above),
+  setup fails although `dist/` is fresh. **Recommend fail** (the AC's words; the leftover would otherwise block the
+  next run's step (1) anyway, with the same message).
+- D3 — "not a raw stack": the diagnostic's `stack` is set to its message, so jest prints the diagnostic alone; the
+  original error stays in `cause`. **Recommend yes.**
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
