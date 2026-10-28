@@ -184,6 +184,16 @@ per-line pin or the eligibility test; owner `align-agent-docs` at v0.3.2's user-
 `advance-pinned-build`'s pre-check needs the line's own `node_modules` (`npm ci` in the release worktree) is in no AC;
 left to the approver whether the phase states it.
 
+### design gate (approver, 2026-10-28)
+
+Approved at 2026-10-28T15:09:34+01:00 (approval queue Q-09, the approver in the orchestrator's chat):
+- D1 — yes: AC1 and AC2 are red-first; the three-agent schema of ruling W0-R4 is kept (red a separate qa agent, the design agent resumed for green).
+- D2 — yes: git-conventions' owning-line sentence is replaced, and task-290's pin of it is updated in red.
+- D3 — (a): the merge forward keeps `main`'s pin; `main` moves its pin only by its own switch commit.
+- D4 — (a): a pin advance updates only the project-status sentence of AGENTS.md §1.
+- D5 — (a): `--no-merges` cites release-planning v0.3.2 R8; no amend of `dl-206`.
+- D6 — yes: F1 (`.wingfoil/WORKFLOW.md` Release Planning paragraph) goes to v0.3.2's user-docs, no element; F2 (bug-429's note that the check needs the line's own `node_modules`) is added to task-305, one sentence in `advance-pinned-build`'s text in `release-planning.yaml`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
