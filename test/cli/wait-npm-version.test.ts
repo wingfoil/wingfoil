@@ -6,11 +6,17 @@
  * dl-159 handover) and succeeds only when npm answers that version; it gives up after a declared timeout with
  * a readable failure.
  *
- * The poll is tested with an injected clock, sleep and npm, so no test waits or reaches a registry; the
- * command line is driven with a fake `npm` first on PATH.
+ * The poll is tested with an injected clock, sleep, npm and tarball probe, so no test waits or reaches a registry;
+ * the command line is driven with a fake `npm` first on PATH.
+ *
+ * task-306 (`bug-433`): npm is asked for the version and its tarball URL as JSON (`view <name>@<version> version
+ * dist.tarball --json`), and a listed version is live only once its tarball answers HTTP 200; a success below is
+ * that JSON plus a probe answering 200 (`test/cli/wait-npm-version-tarball.test.ts` pins the tarball cases).
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
@@ -49,27 +55,37 @@ function answers(...list: NpmViewAnswer[]): { view: (args: readonly string[]) =>
 
 const NOT_FOUND: NpmViewAnswer = { status: 1, stdout: '', stderr: 'npm error code E404' };
 
+/** What `npm view <name>@<version> version dist.tarball --json` prints for a listed version (task-306). */
+const listed = (version: string, tarball = `https://registry.npmjs.org/wingfoil/-/wingfoil-${version}.tgz`): NpmViewAnswer => ({
+  status: 0,
+  stdout: `${JSON.stringify({ version, 'dist.tarball': tarball }, null, 2)}\n`,
+  stderr: '',
+});
+
+/** A tarball probe that always answers 200 (task-306): the tarball is served once npm lists the version. */
+const served = async (): Promise<{ status: number }> => ({ status: 200 });
+
 describe('npmViewArgs (task-229) — the exact version, never a dist-tag', () => {
-  it('asks for `<name>@<version> version`', () => {
-    expect(npmViewArgs('wingfoil', '0.3.0')).toEqual(['view', 'wingfoil@0.3.0', 'version']);
+  it('asks for `<name>@<version> version dist.tarball --json` (task-306)', () => {
+    expect(npmViewArgs('wingfoil', '0.3.0')).toEqual(['view', 'wingfoil@0.3.0', 'version', 'dist.tarball', '--json']);
   });
 });
 
 describe('waitForNpmVersion (task-229) — a bounded poll', () => {
   it('succeeds at once when npm already serves the version', async () => {
     const c = clock();
-    const npm = answers({ status: 0, stdout: '0.3.0\n', stderr: '' });
-    const result = await waitForNpmVersion({ name: 'wingfoil', version: '0.3.0', timeoutMs: 60_000, intervalMs: 10_000, view: npm.view, now: c.now, sleep: c.sleep, log: () => undefined });
+    const npm = answers(listed('0.3.0'));
+    const result = await waitForNpmVersion({ name: 'wingfoil', version: '0.3.0', timeoutMs: 60_000, intervalMs: 10_000, view: npm.view, probe: served, now: c.now, sleep: c.sleep, log: () => undefined });
     expect(result).toMatchObject({ ok: true, attempts: 1 });
     expect(c.slept).toEqual([]);
-    expect(npm.calls).toEqual([['view', 'wingfoil@0.3.0', 'version']]);
+    expect(npm.calls).toEqual([['view', 'wingfoil@0.3.0', 'version', 'dist.tarball', '--json']]);
   });
 
   it('keeps polling, one interval apart, until npm answers the version', async () => {
     const c = clock();
-    const npm = answers(NOT_FOUND, NOT_FOUND, { status: 0, stdout: '0.3.0\n', stderr: '' });
+    const npm = answers(NOT_FOUND, NOT_FOUND, listed('0.3.0'));
     const lines: string[] = [];
-    const result = await waitForNpmVersion({ name: 'wingfoil', version: '0.3.0', timeoutMs: 60_000, intervalMs: 10_000, view: npm.view, now: c.now, sleep: c.sleep, log: (l) => lines.push(l) });
+    const result = await waitForNpmVersion({ name: 'wingfoil', version: '0.3.0', timeoutMs: 60_000, intervalMs: 10_000, view: npm.view, probe: served, now: c.now, sleep: c.sleep, log: (l) => lines.push(l) });
     expect(result).toMatchObject({ ok: true, attempts: 3 });
     expect(c.slept).toEqual([10_000, 10_000]);
     expect(lines).toHaveLength(3);
@@ -78,15 +94,15 @@ describe('waitForNpmVersion (task-229) — a bounded poll', () => {
 
   it('does not take another version for the one awaited (an exit 0 that answers something else)', async () => {
     const c = clock();
-    const npm = answers({ status: 0, stdout: '0.3.1\n', stderr: '' });
-    const result = await waitForNpmVersion({ name: 'wingfoil', version: '0.3.0', timeoutMs: 20_000, intervalMs: 10_000, view: npm.view, now: c.now, sleep: c.sleep, log: () => undefined });
+    const npm = answers(listed('0.3.1'));
+    const result = await waitForNpmVersion({ name: 'wingfoil', version: '0.3.0', timeoutMs: 20_000, intervalMs: 10_000, view: npm.view, probe: served, now: c.now, sleep: c.sleep, log: () => undefined });
     expect(result.ok).toBe(false);
   });
 
   it('gives up after the timeout with a message naming the version, the wait and the last answer', async () => {
     const c = clock();
     const npm = answers(NOT_FOUND);
-    const result = await waitForNpmVersion({ name: 'wingfoil', version: '0.3.0', timeoutMs: 30_000, intervalMs: 10_000, view: npm.view, now: c.now, sleep: c.sleep, log: () => undefined });
+    const result = await waitForNpmVersion({ name: 'wingfoil', version: '0.3.0', timeoutMs: 30_000, intervalMs: 10_000, view: npm.view, probe: served, now: c.now, sleep: c.sleep, log: () => undefined });
     expect(result.ok).toBe(false);
     expect(result.attempts).toBe(4);
     expect(c.slept.reduce((a, b) => a + b, 0)).toBe(30_000);
@@ -97,14 +113,14 @@ describe('waitForNpmVersion (task-229) — a bounded poll', () => {
   it('never sleeps past the deadline: the last wait is shortened to it', async () => {
     const c = clock();
     const npm = answers(NOT_FOUND);
-    await waitForNpmVersion({ name: 'wingfoil', version: '0.3.0', timeoutMs: 25_000, intervalMs: 10_000, view: npm.view, now: c.now, sleep: c.sleep, log: () => undefined });
+    await waitForNpmVersion({ name: 'wingfoil', version: '0.3.0', timeoutMs: 25_000, intervalMs: 10_000, view: npm.view, probe: served, now: c.now, sleep: c.sleep, log: () => undefined });
     expect(c.slept).toEqual([10_000, 10_000, 5_000]);
   });
 
   it('a timeout of 0 means exactly one attempt', async () => {
     const c = clock();
     const npm = answers(NOT_FOUND);
-    const result = await waitForNpmVersion({ name: 'wingfoil', version: '0.3.0', timeoutMs: 0, intervalMs: 10_000, view: npm.view, now: c.now, sleep: c.sleep, log: () => undefined });
+    const result = await waitForNpmVersion({ name: 'wingfoil', version: '0.3.0', timeoutMs: 0, intervalMs: 10_000, view: npm.view, probe: served, now: c.now, sleep: c.sleep, log: () => undefined });
     expect(result).toMatchObject({ ok: false, attempts: 1 });
     expect(c.slept).toEqual([]);
   });
@@ -138,12 +154,33 @@ describe('wait-npm-version command line (task-229)', () => {
 
   const tag = `v${pkg.version}`;
 
-  it('exits 0 when npm serves the version of the tag, asking for that exact package version', () => {
-    const result = run([tag, '--timeout-minutes', '0', '--interval-seconds', '1'], { FAKE_NPM_STDOUT: `${pkg.version}\n` });
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain(`${pkg.name}@${pkg.version} is live on npm`);
-    expect(readFileSync(join(work, 'argv'), 'utf-8')).toBe(`view ${pkg.name}@${pkg.version} version\n`);
-  });
+  // task-306: npm lists the version with its tarball URL, an in-process server on 127.0.0.1 serves it; an async
+  // spawn, since spawnSync would block the event loop the server answers on.
+  it('exits 0 when npm serves the version of the tag, asking for that exact package version', async () => {
+    const server = createServer((_req, res) => {
+      res.writeHead(200);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const tarball = `http://127.0.0.1:${(server.address() as AddressInfo).port}/${pkg.name}/-/${pkg.name}-${pkg.version}.tgz`;
+    try {
+      const result = await new Promise<{ status: number | null; stdout: string }>((resolve) => {
+        const child = spawn(process.execPath, [SCRIPT, tag, '--timeout-minutes', '0', '--interval-seconds', '1'], {
+          env: { ...process.env, PATH: `${fakeNpm()}${delimiter}${process.env.PATH ?? ''}`, FAKE_NPM_STDOUT: listed(pkg.version, tarball).stdout },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let stdout = '';
+        child.stdout.on('data', (chunk) => (stdout += chunk));
+        child.on('close', (status) => resolve({ status, stdout }));
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(`${pkg.name}@${pkg.version} is live on npm`);
+      expect(readFileSync(join(work, 'argv'), 'utf-8')).toBe(`view ${pkg.name}@${pkg.version} version dist.tarball --json\n`);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 30_000);
 
   it('exits 1 with an `error:` line when the timeout passes and npm never served it', () => {
     const result = run([tag, '--timeout-minutes', '0', '--interval-seconds', '1'], { FAKE_NPM_EXIT: '1' });

@@ -48,6 +48,8 @@ function harness(...list: NpmViewAnswer[]) {
         calls.push({ args, timeoutMs: options?.timeoutMs });
         return list[Math.min(calls.length - 1, list.length - 1)] as NpmViewAnswer;
       },
+      // task-306 (bug-433): a listed version is live once its tarball answers 200; here it always does.
+      probe: async () => ({ status: 200 }),
     },
   };
 }
@@ -89,7 +91,11 @@ describe('waitForNpmVersion failure classes (task-229 F3)', () => {
   });
 
   it('a transient answer followed by the version succeeds', async () => {
-    const h = harness({ status: null, stdout: '', stderr: '', timedOut: true }, { status: 0, stdout: '0.3.0\n', stderr: '' });
+    // task-306: the version's answer is npm's JSON (`version dist.tarball --json`), then the tarball answers 200.
+    const h = harness(
+      { status: null, stdout: '', stderr: '', timedOut: true },
+      { status: 0, stdout: `${JSON.stringify({ version: '0.3.0', 'dist.tarball': 'https://registry.npmjs.org/wingfoil/-/wingfoil-0.3.0.tgz' }, null, 2)}\n`, stderr: '' },
+    );
     expect(await waitForNpmVersion(h.options)).toMatchObject({ ok: true, attempts: 2 });
   });
 

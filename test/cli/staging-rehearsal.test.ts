@@ -119,9 +119,9 @@ describe('task-219 AC 1 — release-publishing declares the rehearsal on the can
   };
   const phase = (name: string) => workflow.phases.find((p) => p.name === name);
 
-  it('is past 1.3, and the rehearsal sits between the release commit and the tag', () => {
+  it('is past 1.3, and the rehearsal sits between the release commit and the tag (task-306: merge-forward appended last)', () => {
     expect(workflow.version).toBeGreaterThan(1.3);
-    expect(workflow.phases.map((p) => p.name)).toEqual(['release-commit', 'staging-rehearsal', 'tag', 'publish', 'mark-released']);
+    expect(workflow.phases.map((p) => p.name)).toEqual(['release-commit', 'staging-rehearsal', 'tag', 'publish', 'mark-released', 'merge-forward']);
     expect(phase('release-commit')?.actions).toEqual(['git.commit(message: "release {release.version}")']);
     // task-288 (dl-159 A1.8): the tag goes on the release's integration branch, not `main` by name.
     expect(phase('tag')?.actions).toEqual(['git.tag(name: "{release.version}", on: integration_branch)']);
