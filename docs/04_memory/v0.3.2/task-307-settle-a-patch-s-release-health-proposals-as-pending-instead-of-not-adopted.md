@@ -142,6 +142,13 @@ total`. `npx tsc --noEmit -p .` → exit 0. compare.cjs has no `--format` option
    written after compare), but v0.3.1's, `pending` in v0.3.2's report, are never read again: `parseProposals` reads
    only the `### RH-` headings of the immediate previous `.md` (`sed -n 455,463p scripts/release-health/compare.cjs`).
 
+### design gate (approver, 2026-10-28)
+
+Approved at 2026-10-28T15:09:34+01:00 (approval queue Q-08, the approver in the orchestrator's chat):
+- D1 — yes: a dated Note on `dl-089` recording the `pending` settle label is prepared at green as a pending amendment (reason as in the design).
+- D2 — yes: the note text stays "disposed of by the next minor's retrospective (dl-167 (a))".
+- D3 — no element: the out-of-scope gap (compare reads only the immediate previous report) is covered by `dl-167` (a), `retrospective.yaml`'s `explore` reading the patches' reports.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
