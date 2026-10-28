@@ -217,6 +217,69 @@ Approved at 2026-10-28T11:36:09+01:00 (approval queue Q-01, given by the approve
 - D2 — yes: global setup fails when the previous build cannot be removed, even after a successful swap.
 - D3 — yes: the diagnostic's `stack` is its message; the original error is kept in `cause`.
 
+### red (qa, 2026-10-28)
+
+**Red commit `f6a02a60`** (`git log --oneline -1` → `f6a02a602 test(harness): task-308 — failing test: …`), test files
+only: `test/lint/dist-lock.test.ts`, `test/dist-lock.d.cts` (the three new exports and `build: (outDir: string) => void`,
+written by qa so the declarations are covered by T4), `test/storage/git-fixture-isolation.test.ts` (new),
+`test/storage/fixture-run-sweep.test.ts`, `test/storage/git-fixture-hooks-path.test.ts` (docblock lines 13-14 only, now
+stating the isolated helper, as the design asked). Base unchanged: `git rev-list --count HEAD..release/0.3` → `0`, no merge.
+
+**Run.** `npx jest test/lint/dist-lock.test.ts test/storage/fixture-run-sweep.test.ts
+test/storage/git-fixture-isolation.test.ts test/storage/git-fixture-hooks-path.test.ts --maxWorkers=2` → `Test Suites: 3
+failed, 1 passed, 4 total`, `Tests: 21 failed, 30 passed, 51 total` (dist-lock 12 failed / 26, fixture-run-sweep 5 / 14,
+git-fixture-isolation 4 / 5, git-fixture-hooks-path 0 / 6). `npx tsc --noEmit -p tsconfig.json` → only
+`git-fixture-isolation.test.ts(22,10): error TS2305: … no exported member 'fixtureGitEnv'` (intended). `npx eslint` on the
+four test files → clean.
+
+**Per AC** (first failing assertion of each test):
+- **AC1 (red-first)**, `test/lint/dist-lock.test.ts`:
+  - "with the lock free, builds into the staging directory while the previous dist/ stays, then swaps it in" (replaces
+    the `dist present: false` pin) → `TypeError: The "path" argument must be of type string … Received undefined` at
+    `mkdirSync(outDir)`: `build` is called with no staging directory.
+  - "builds dist/ in a fresh worktree that has none yet" → the same `TypeError`.
+  - "places the staging and previous directories in the worktree root" → `distStagingPath is not a function`.
+  - "a build that throws leaves the previous dist/ intact …" → `expect(err).toBe(failure)`: received a `TypeError
+    {code: ERR_INVALID_ARG_TYPE}`, not the build's own error.
+  - "a build that writes nothing is refused …" → received `null`: `prepareDist` resolves.
+  - "a run killed in the middle of its build …" (child `node`, async `spawn`, `SIGKILL` after the build's marker) →
+    `dist/cli.js` expected `previous build\n`, received `<missing>`: the `bug-336` shape.
+  - wiring: "… git-ignored (task-308 AC1)" → `[".jest-dist.next/cli.js", 1]` for `0`; "… ignored by ESLint" →
+    `false` for both paths.
+  - characterization, pass: "the build the setup composes still mirrors package.json's build script", "this run's setup
+    left a complete dist/ and no staging or previous directory".
+- **AC2 (red-first)**, same file, `describe` skipped when `process.getuid() === 0` (uid here: `id -u` → `1000`):
+  - "a previous build that cannot be removed …" → message `/^jest globalSetup: cannot remove /` expected, received
+    `"EACCES: permission denied, unlink '<root>/dist/cli/a.js'"`: the raw error.
+  - "a dist/ that cannot be moved aside …" → `/^jest globalSetup: cannot replace /` expected, received the `TypeError`
+    above (today `dist/` is deleted before the build, which gets no `outDir`).
+  - "a leftover previous build that cannot be removed is refused before building" → no rejection: `prepareDist`
+    resolves and calls `build`.
+  - Rejections are checked by shape (`typeof message === 'string'`), not `toBeInstanceOf(Error)`: an `fs` error comes
+    from another realm than jest's sandbox (first run: `Expected constructor: Error / Received constructor: Error`).
+- **AC3 (red-first)**, `test/storage/git-fixture-isolation.test.ts`:
+  - "makeTempGitRepo + commitAll commit and track the file under a global excludesFile ignoring everything" (helper
+    transpiled with `ts.transpileModule` into a scratch dir, run in a child `node` with `GIT_CONFIG_GLOBAL` = hostile
+    file) → received `{"commit":"FAIL","tracked":""}`.
+  - "cloneTempRepo + commitAllAs …" → `commit: "FAIL"`, `tracked: ["seed.txt"]` (no `b.txt`).
+  - "a fixture repository sees only its local (and command) configuration" → `["global","global","global"]`; this one
+    depends on the machine having a global config (`git config --global --list --show-scope` → three `global` lines
+    here); the child-process probes are the deterministic red.
+  - "fixtureGitEnv points the global config at the null device …" → `TypeError: fixtureGitEnv is not a function`
+    (and TS2305 above).
+  - control, pass: "the hostile global config is in effect for the probe's own git".
+- **AC4 (red-first)**, `test/storage/fixture-run-sweep.test.ts` (injected `isAlive`, plus one real-pid case):
+  - "reports its own leftovers, then the dead runs' ones …" → the received report has only the own line.
+  - "reports the dead runs' line alone …" and "with real pids and the default liveness check …" → received `null`.
+  - "sweepDeadRunDirs returns …" / "formatDeadRunReport says …" → `is not a function`.
+  - pass (characterization of the unchanged guard): "an inherited tag sweeps nothing, not even the dead runs' fixtures".
+  - `test/lint/dist-lock.test.ts` "exports the liveness check the teardown reuses" → `isPidAlive is not a function`.
+- **AC5 (characterization)**: not pinned in red; the developer runs `npm test -- --maxWorkers=2` twice at refactor.
+
+**For the developer.** `fixtureGitEnv(extra?)` must be exported from `test/storage/helpers/git-fixture.ts`; the
+diagnostic's `cause` must keep the original `EACCES` error and its `stack` carry no `at` line; the build's own error is
+rethrown by identity (`toBe`); the "writes nothing" message must contain the staging path.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
