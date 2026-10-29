@@ -170,6 +170,51 @@ Design gate approved by the approver on 2026-10-29T10:59:09+01:00, in the orches
 - D5 — yes: no `spec-012` §7 amendment; the new golden is not normative.
 - D6 — yes: `task-321` does not start before this task is merged; its design is told to list this suite and golden among its files.
 
+### red (qa, 2026-10-29)
+
+**Red commit `8f80df07`** (`git log --oneline -1` → `8f80df071 test(core): task-318 — failing test: context payload of
+documents made from the shipped Memory templates`), test files only: `test/core/context-shipped-templates.test.ts` (new)
+and `test/fixtures/context/golden-payload-shipped-templates.md` (new, 223 lines, 7381 bytes). No new export, so no
+`.d.cts`. Base unchanged: `git rev-list --count HEAD..release/0.3` → `0`, no merge. `git diff release/0.3 -- src/` and
+`git diff release/0.3 -- test/fixtures/context/golden-payload.md test/core/context-payload-format.test.ts` → empty (the
+`spec-012` §7 normative pair and `src/core/context.ts` untouched).
+
+**Where the golden comes from** (design gate D4 (a): the test has no write path). A scratch script outside the
+worktree, the design's prototype with only its output step changed, run with `node` against `dist/` built from
+`c3027988` (the same `src/` as this branch: `git diff c3027988 HEAD --stat -- src` → nothing): it seeds a fresh git
+repository exactly as the suite does (the Memory entries of `templateScaffold(resolveTemplate('scrum'))`, the same
+`dna.yaml`, `roles.yaml` and `testing` directive), runs the same `memory.memoryAdd` / `memory.memorySubmit` sequence
+through `CORE_MODULES`, calls `assembleExecutionContext(repo, { role: 'developer', element: { type: 'task', id:
+'task-001-golden-task' }, stateRef: 'HEAD' })`, checks that line 2 of the returned `payload` matches the header pattern
+with the sha equal to `git rev-parse HEAD` and to `context.stateRef` (printed `sha ok true 2c0dbaff… 2c0dbaff…`), and
+writes `payload` with that one sha replaced by `0123456789abcdef0123456789abcdef01234567`. Two runs: `cmp` of the two
+outputs silent (second run's sha `9cbb3a9b…`, so only the header sha differs between runs); the output is also
+byte-identical to the design's prototype payload (`cmp` silent); the file was copied into the fixture unchanged (`cmp`
+silent). It returned `notes []`, `warnings undefined`. `grep -nP '[^\x00-\x7F]'` on the golden → nothing; no temp path in
+it (`grep -n "tmp\|wf-storage"` → nothing).
+
+**Run.** `npx jest test/core/context-shipped-templates.test.ts --maxWorkers=2` → `Test Suites: 1 passed, 1 total`,
+`Tests: 2 passed, 2 total`. Binding check (then reverted, `git status --short` clean of it): with the golden's task
+`status: draft` edited to `pending`, the same run → `Tests: 1 failed, 1 passed`, `- Expected - 1` / `+ Received + 1`.
+`npx tsc --noEmit -p tsconfig.json` → exit 0, no error. `npx jest test/lint --maxWorkers=2` with both files in place →
+`Test Suites: 11 passed, 11 total`, `Tests: 116 passed, 116 total`. The invisible-character `grep -nP` on both files →
+no hit.
+
+**Per AC.**
+- **AC (characterization)** — passes on first run, `test/core/context-shipped-templates.test.ts`:
+  - "builds the golden payload from one document per shipped template, byte for byte": `makeTempGitRepo()`; the
+    scaffold's `.wingfoil/memory.yaml` and eight `.wingfoil/memory/templates/*.md` written as generated, plus the fixed
+    pillars (D1 (b)); one `commitAll`; `memoryAdd` for `adr, bug, decision-log, release, release-line, task, tech-spec`
+    (`title: "Golden <type>"`), then `plan` with `set: ['workflow=sw-life-cycle', 'phase=inception', 'scope=rl-001']`;
+    the task id asserted `task-001-golden-task`; `memorySubmit` once on every element but the task (D2); assertions:
+    `notes` → `[]`, `warnings` → `undefined`, line 2 matches the header pattern, its sha equals `git rev-parse HEAD`
+    and `context.stateRef` (D3), then, with that sha replaced, the payload `toBe` the golden file.
+  - "the scrum and kanban scaffolds ship the same Memory part, so the golden speaks for both": the Memory entries of
+    the two scaffolds `toEqual`, and they include `.wingfoil/memory.yaml`.
+
+No red-first AC, so no red to evidence. The suite's header comment states what a failure means and that the golden is
+rewritten by hand from the failing diff, reviewed by the approver (`dl-150` (B)).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
