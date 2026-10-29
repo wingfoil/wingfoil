@@ -391,6 +391,24 @@ Left uncommitted in the worktree; the gates above ran with them in place.
 - `bug-271-the-writes-nothing-tests-in-test-memory-still-use-the-narrow-check-bug-194-replaced-in-core-and-cli-a-commit-count-and-git-status-or-head-alone`:
   adds `### Retrospective`. `--reason "Add the Retrospective of the bug closed by task-316 (dl-115 Q2 (a))."`
 
+### red amendment (qa, 2026-10-29)
+
+**Commit `fe2026cf`** (`git log --oneline -1` → `fe2026cf6 test(lint): task-316 — red amendment (review): the guards'
+docblocks name what they do not detect`). The independent review asked for it. It changes the docblocks of the two
+guards only: no assertion, no regex, no other file (`git diff --numstat` → `7 0 test/lint/cli-spawn-helper.test.ts`,
+`5 0 test/lint/npm-caller-config.test.ts`). Under `dl-121` T1 the docblock must say exactly what each guard checks,
+and that includes what it misses:
+- Review finding 1, `test/lint/cli-spawn-helper.test.ts`. A mutation probe showed which shapes the guard does not detect.
+  The docblock now says the guard reads the call text only and names those shapes: an entry passed through a variable
+  (`const argv = [CLI_ENTRY]; spawnSync(process.execPath, argv)`), a node flag before the entry
+  (`['--no-warnings', CLI_ENTRY]`), and an entry built as one path string (`join(REPO_ROOT, 'dist/cli.js')`).
+- Review finding 2, `test/lint/npm-caller-config.test.ts`. A call passes when its text contains
+  `withoutCallerNpmConfig(` anywhere. The docblock now says so, with the contrived
+  `env: withoutCallerNpmConfig(process.env) ? process.env : process.env` as an example that passes.
+
+**Run.** `npx tsc --noEmit -p tsconfig.json` → exit 0, no diagnostics. `npx jest test/lint --maxWorkers=2` → `Test Suites: 13
+passed, 13 total`, `Tests: 153 passed, 153 total` (on the green head, the guards pass).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
