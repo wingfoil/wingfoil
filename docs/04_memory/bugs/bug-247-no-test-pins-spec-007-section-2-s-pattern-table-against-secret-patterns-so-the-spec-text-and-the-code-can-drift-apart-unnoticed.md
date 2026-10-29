@@ -67,3 +67,11 @@ reviewer.
 
 Captured on 2026-10-05 by `bug-ingest-rel-v0.3-w2b2-review-findings-plan`, from the independent reviews of wave 2
 batch B2 (`dev-loop-rel-v0.3-plan`: `task-182` review F3), re-checked against `main` at `d3724884`.
+
+### Retrospective
+
+- A pattern table copied into code with its source quoted in comments drifts silently; the comments read as a
+  check and are none. Fixed by `task-317` with the exact comparison (the first option above):
+  `test/validation/secret-patterns-spec.test.ts` reads §2's YAML and compares sources and flags after the
+  translation `secret-scan.ts` declares, and fails on a modifier the translation does not model. Writing it
+  showed §2's own sentence on case sensitivity contradicted its table; `spec-007` was revised in the same task.
