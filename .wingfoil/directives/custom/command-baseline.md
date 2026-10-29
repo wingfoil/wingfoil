@@ -117,8 +117,10 @@ refusal, so a gate. Since `task-311` step 3 resolves the directive at `HEAD`
 (`loadDirectiveInventoryAtHead`, `src/core/loaders.ts`): a directive committed at `HEAD` but deleted in
 the working tree resolves and meets `requireUnmodifiedTarget`, which refuses it naming its `git status`
 code, and a directive no commit records is `unknown directive: <name>`, the working tree only wording
-why (it resolves outside the project root, `HEAD` records its path as a symbolic link, or no commit
-records it — commit it first). It was never a filesystem-effect read: the confinement guard that follows
+why: it resolves outside the project root; it resolves through a symlinked directory inside the root;
+`HEAD` records its path as a symbolic link; the path is itself an uncommitted symbolic link, which a commit
+would record as a link; git ignores the path; or no commit records it — commit it first. Only the last
+advises a commit, because only there would one resolve it. It was never a filesystem-effect read: the confinement guard that follows
 it is, and the two sit a few lines apart under different baselines on purpose.
 
 **The working tree may be read to *explain* a refusal, never to decide one.** When resolving at
