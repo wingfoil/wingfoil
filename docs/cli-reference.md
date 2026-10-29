@@ -166,8 +166,9 @@ The Memory transition verbs (`submit`, `approve`, `reject`, `deprecate`, `park`,
 their `<id>` names, and read its current status, as committed at `HEAD`; what `submit` and `amend`
 commit is the file in your working tree. A document you created by hand and never committed is
 refused (exit `1`) with a message naming `memory add`, and editing `status` by hand does not change
-which transition runs. One known defect breaks this rule today: `directive remove` looks up the
-directive to delete in the working tree (`bug-108`).
+which transition runs. `directive remove` likewise looks up the directive to delete as committed at
+`HEAD`: a directive file you never committed is unknown to it, and one you deleted without committing is
+still found, and refused because your working tree differs.
 
 ### Git identity
 
@@ -1094,8 +1095,16 @@ A directive still assigned to a role is refused
 in 0.3: delete the name from `roles.yaml`, **commit** that change, then run `directive remove`.
 Built-in directives are refused (`error: built-in directives cannot be removed`).
 
+The directive is looked up as committed at `HEAD`. A directive file no commit records is unknown, and
+the message says what your working tree holds
+(`error: unknown directive: api-style — the working tree's '.wingfoil/directives/custom/api-style.md'
+defines it [git status '??'], but no commit of this repository records it, …; commit '…' first, then
+retry`). A committed directive you deleted or edited without committing is refused naming its
+`git status` code.
+
 - **Commit:** `wf(directive): remove <name>`
-- **Errors:** still assigned, built-in, or unknown → exit `1`.
+- **Errors:** still assigned, built-in, unknown (including a directive no commit records), or a
+  directive file with uncommitted changes → exit `1`.
 
 ---
 
