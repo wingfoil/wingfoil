@@ -507,6 +507,62 @@ Left uncommitted in the worktree (dl-047; `git diff -- <path>` shows each):
   (pointing to this task, and to the D5 wording that replaces "carries uncommitted modifications") and its `###
   Retrospective`. `--reason "Add the fix pointer to task-311 and the bug's retrospective (dl-115 Q2 (a))."`
 
+### independent review (2026-10-29) and fixes (developer)
+
+Review verdict: approve with fixes (0 blockers, 2 should-fix, 2 follow-ups), at `32efd7c19`. Before fixing:
+`git rev-list --count HEAD..release/0.3` → `32`, so I ran `git merge --no-edit release/0.3` → `61f1fa4e3`. There was
+no conflict, and none of the merged files is one this task changes.
+
+- **Should-fix 1: two explanations gave false advice** (fixed in `6327820eb`). An untracked directive file that is
+  itself a symbolic link was told "commit it first". Once committed, `HEAD` records the link and skips it (D1 (a)), so
+  committing does not help. An ignored directive file got the same advice, with no status bracket, and a plain
+  `git add` refuses it. `explainWorkingTreeDirective` now checks two more cases before W-uncommitted:
+  - The leaf is a link (`targetIsSymlink`, `src/storage/confinement.ts`). The message is: ` — the working tree's '<P>'
+    defines it, but that path is a symbolic link, which a commit records as a link and not as a directive, so the
+    directive cannot be resolved from the committed repository (dl-080)`.
+  - `git status --porcelain` reports nothing for the path. Every case where `HEAD` would resolve the file has been
+    excluded by then, so this means git ignores it. The message is: ` — the working tree's '<P>' defines it, but git
+    ignores that path (git status reports nothing for it), so no commit of this repository records it and a plain
+    git add would not stage it (dl-080)`.
+  - No storage function was added: `pathPorcelainStatus` already returns `''` for an ignored path, and it throws when
+    git cannot answer (then no bracket).
+  - Pinned in my new `test/core/directive-remove-explanation.test.ts` (2 tests, verbatim `toBe`). The ignored test
+    first asserts its premise from git: `git check-ignore` prints the path, and `git status --porcelain` prints nothing.
+  - The reviewer's scenarios, re-run on a copy of the review script in my scratch directory with this build:
+    - A prints the link sentence. After committing the link it prints W-link and the HEAD skip warning; both exit 1.
+    - G prints the ignored sentence, exit 1.
+- **Should-fix 2: the full list of explanations.** The `directiveRemoveFn` TSDoc step 3 now lists all six
+  explanations, including the in-root symlinked directory (`6327820eb`). So does `command-baseline`'s *Where the
+  shipped code still deviates* paragraph (`d44356c6d`), which adds that only the last explanation advises a commit.
+  `version: "1.8"` is unchanged, since it was already bumped on this branch. The Revision 1.8 line lists no cases and
+  is unchanged. `npm run -s check:mcp` after the edit → exit 0: pinned `0.3.1` (prompts 8, resources 4, tools 0), and
+  the build under development "every listed Resource read and Prompt get answered".
+- **Follow-up 3: bug-449.** It gets a paragraph under *Expected Behavior* for a directive committed as a symlink
+  (`directive assign` now says only `unknown directive: <id>`, D6 (a)), and a dated note naming this review with the
+  reproduction. In scenario A above, after the link is committed, `directive assign --directive lnk --role qa` →
+  `error: unknown directive: lnk`, exit 1. This amendment is left uncommitted (below).
+- **Follow-up 4: spec-006 §6.** In the pending amendment, the "Symbols in this section read at …" line now names
+  `77749a0b2` for `directiveRemove`'s directive read. `git show 77749a0b2:src/core/loaders.ts | grep -c "export
+  function loadDirectiveInventoryAtHead"` → `1`. Its Revision note says so.
+
+**Gates** (with the four pending amendments in the tree):
+- Targeted run: the 9 directive suites, including the new one → `Test Suites: 9 passed`, `Tests: 208 passed, 208
+  total`.
+- `npx jest test/lint test/docs --maxWorkers=2` → `Test Suites: 42 passed`, `Tests: 462 passed, 462 total`.
+- `npm run -s lint` → exit 0.
+- Under the slot: `npm test -- --maxWorkers=2` → `Test Suites: 519 passed, 519 total`, `Tests: 9151 passed, 9151
+  total`. `npm run -s typecheck` → exit 0.
+- `npx tsc --noEmit -p tsconfig.json` → no error.
+- T4: `git log --first-parent --no-merges --format=%h fd0f16c9d..HEAD -- <the 5 red files>` → empty.
+- `git rev-list --count HEAD..release/0.3` → `0` after the gates.
+
+**Pending amendments, added to the list above:**
+- `bug-449-directive-assign-of-an-untracked-directive-…`, *Expected Behavior* and *Notes*.
+  `--reason "Extend the Expected Behavior to a directive committed as a symbolic link, which directive assign now
+  answers with a bare unknown directive since task-311 (its independent review, 2026-10-29)."`
+- `spec-006-core-domain-api` §6: the same `--reason` as listed above. It now also covers the "Symbols … read at"
+  line.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
