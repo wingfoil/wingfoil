@@ -390,6 +390,28 @@ foreground in one tracked command:
 - `bug-247-…` — a `### Retrospective` (the bug had none). `--reason "Add the Retrospective of bug-247, fixed by task-317."`
 - `bug-330` already carries `### Retrospective` (`None.`): no amendment.
 
+### red amendment (qa, 2026-10-29)
+
+Asked by the independent review of the submit at `68c7be61` (standing approval for review-requested red amendments,
+plan ruling W1-R5). **Commit `e1329b64`** (`git log --oneline -1` → `e1329b64c test(cli): task-317 — red amendment
+(review): singular warning in the claim-lint summary; a dash in a comment`), two lines changed (`git show --numstat
+e1329b64` → `1 1` on each file):
+- Review finding 1 (cosmetic): `test/lint/control-characters.test.ts` line 120, the block comment wrote the dash as a
+  `\u` escape, which a comment reads literally; now a plain ` - `.
+- Review finding 2: `test/cli/lint-claims.test.ts` line 90, the `--base` summary pin now agrees in number:
+  `claim lint: 1 warning in 1 file (warn-only), 1 file read, 1 of 2 items checked`. The plural pins of lines 52, 60, 102
+  and 121 (`5 warnings`, `0 warnings`) are kept as they were (`grep -n "warnings in" test/cli/lint-claims.test.ts` lists
+  those four).
+- A pin of `1 of 1 item checked` is not added: no existing case reads a total of one item (the fixtures' item counts are
+  6, 4 and 2, from the red section above), and the review asked for it only without a new fixture.
+
+**Run.** `npx jest test/cli/lint-claims.test.ts --maxWorkers=2` → `Tests: 1 failed, 10 passed, 11 total`; the failure is
+"with --base: lints only the Memory documents …" → `Expected: "claim lint: 1 warning in 1 file (warn-only), 1 file read,
+1 of 2 items checked"`, `Received: "claim lint: 1 warnings in 1 file (warn-only), 1 file read, 1 of 2 items checked"`:
+red until `scripts/lint-claims.cjs` writes the singular. `npx jest test/lint --maxWorkers=2` → `Test Suites: 11 passed,
+11 total`, `Tests: 143 passed, 143 total`. `npx tsc --noEmit -p tsconfig.json` → exit 0. The invisible-character
+`grep -nP` over the two files → exit 1.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
