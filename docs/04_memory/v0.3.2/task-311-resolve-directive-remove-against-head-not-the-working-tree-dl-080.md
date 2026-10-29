@@ -288,6 +288,91 @@ Design gate approved by the approver on 2026-10-29T10:59:09+01:00, in the orches
 - D7 — (a): candidate finding F2 (`directive assign` of an untracked directive gives no working-tree explanation) is filed as a bug by the orchestrator, proposed for v0.4.
 - D8 — yes: `task-309`, `task-310` and `task-313`, which also change `src/core/loaders.ts`, start only after this task is merged.
 
+### red (qa, 2026-10-29)
+
+**Red commit `fd0f16c9`** (`git log --oneline -1` → `fd0f16c9d test(core): task-311 — failing test: directive remove
+resolves its directive at HEAD (bug-108)`), test files only: `test/core/directive-inventory-baseline.test.ts`,
+`test/core/core-index-arms.test.ts`, `test/core/directive-remove-confinement.test.ts`,
+`test/cli/directive-inventory-at-head.integration.test.ts`, `test/docs/directive-remove-baseline-docs.test.ts` (new). No
+new export is imported, so no `.d.cts`. Base unchanged: `git rev-list --count HEAD..release/0.3` → `0`, no merge.
+
+**Run.** `npx jest --maxWorkers=2 test/core/directive-inventory-baseline.test.ts test/core/core-index-arms.test.ts
+test/core/directive-remove-confinement.test.ts test/cli/directive-inventory-at-head.integration.test.ts
+test/docs/directive-remove-baseline-docs.test.ts` → `Test Suites: 5 failed, 5 total`, `Tests: 24 failed, 40 passed, 64
+total` (per file, from `--json`: directive-inventory-baseline 7 failed / 26 passed, directive-remove-confinement 3 / 4,
+core-index-arms 2 / 5, directive-remove-baseline-docs 4 / 0, directive-inventory-at-head 8 / 5). Every pin that was not
+rewritten still passes. `npx tsc --noEmit -p tsconfig.json` → exit 0, no error. `npx jest test/lint --maxWorkers=2` with
+the files in place → `Test Suites: 11 passed, 11 total`, `Tests: 116 passed, 116 total`; `npx jest --maxWorkers=2
+test/docs/dl-086-citations.test.ts test/docs/presentation.test.ts` (the docs gates that read `test/`) → `Tests: 51
+passed, 51 total`. The invisible-character `grep -nP` over the five files → no hit.
+
+**Fixture texts and their source.** The write guard's wording (`refusing to commit <path>: … [git status ' D'] — the
+file is not in the working tree`, and `[git status 'D '] — the file is not in the index, the file is not in the working
+tree` after `git rm --cached`) is copied from a real run on this base, in a scratch `node <worktree>/dist/cli.js init
+--template scrum` project with a committed `custom/spare.md` (`determinism.md` with `id: spare`): `rm` of the file, then
+`directive create --name spare` → that text on stderr, exit 1. The same project gave today's outputs the reds fail
+against: `directive remove spare` with the file deleted → `error: unknown directive: spare`, exit 1, on stderr, also
+`{"error":"unknown directive: spare"}` under `--format json` and the same under `--dry-run` (stdout empty in all four);
+an untracked `ghost.md` → `error: refusing to commit .wingfoil/directives/custom/ghost.md: … [git status '??'] — the file
+is not in the index, the file is not tracked at HEAD. …`, exit 1, on all four surfaces; a committed symlink
+`custom/benign-rule.md` (`git ls-tree HEAD` → mode `120000`) → `directive assign --directive spare --role qa` refused
+with `E_MISSING_FRONTMATTER (HEAD:.wingfoil/directives/custom/benign-rule.md)`, exit 1, and `directive remove
+benign-rule` → exit 0. The W-uncommitted, W-link and W-out sentences and the symlink skip warning are this task's
+design contract (the `### design` subsection above, approved verbatim at the design gate, D5), not an existing output.
+
+**Per AC** (first failing assertion of each red test):
+- **AC1 (red-first)**, `test/core/directive-inventory-baseline.test.ts`:
+  - rewritten pin "AC4 (task-311 AC1 (b)): an UNTRACKED directive file is unknown at HEAD — NOT_FOUND, explained, and
+    the file survives" (was "AC4: an UNTRACKED directive file is not removable — the write guard refuses") →
+    `expect(result.error.code).toBe('NOT_FOUND')`: received `"VALIDATION"`.
+  - new describe "directive remove resolves the directive it deletes at HEAD (task-311, bug-108)":
+    "AC1 (a): a directive committed at HEAD but DELETED on disk …" and "AC1 (a): the same after a `git rm` …" →
+    `toBe('VALIDATION')`: received `"NOT_FOUND"`; "AC1 (c): a STAGED, never-committed directive file …" and "AC1 (d): an
+    id that exists only in the working-tree copy …" → `toBe('NOT_FOUND')`: received `"VALIDATION"`; "AC1 (d): the
+    COMMITTED id of that file still resolves …" → `toBe('VALIDATION')`: received `"NOT_FOUND"`; "AC1 (e): an untracked
+    custom file shadowing a committed built-in …" → `toContain('built-in directives cannot be removed')`: received
+    `"cannot remove 'documentation': still assigned to every role via roles.yaml 'global'"`.
+  - (f) the still-referenced, unknown and built-in pins are unchanged and pass.
+- **AC1**, `test/core/core-index-arms.test.ts` (rewritten pin, plus one new):
+  - "directive remove: a COMMITTED invalid directive file is the HEAD inventory loader's VALIDATION refusal" →
+    `toContain('HEAD:.wingfoil/directives/custom/broken.md')`: received `"E_MISSING_FRONTMATTER
+    (.wingfoil/directives/custom/broken.md): directive file has no frontmatter block"`.
+  - "directive remove: an UNCOMMITTED invalid directive file no longer decides …" → `toBe('NOT_FOUND')`: received
+    `"VALIDATION"`.
+- **AC1, D1 (a), D5, D6 (a)**, `test/core/directive-remove-confinement.test.ts`:
+  - rewritten pin "refuses a symlinked directive FILE committed inside a real custom/ directory as unknown at HEAD
+    (task-311 D1 (a)), leaving link and target intact" (was "still removes a symlinked directive FILE …"; the fixture's
+    id is `benign-rule`, the design's scratch run used `benign`) → `expect(result.ok).toBe(false)`: received `true`.
+  - new "decides the refusal at HEAD as NOT_FOUND, explaining the out-of-root working-tree file verbatim (task-311)"
+    (W-out; the three existing out-of-root pins are unchanged and pass) → `toBe('NOT_FOUND')`: received `"VALIDATION"`.
+  - new D6 (a) "directive assign still binds a committed directive in a repository committing a symlinked directive
+    file" → `expect(() => loadDirectivesAtHead(repo)).not.toThrow()`: thrown `ValidationError` `E_MISSING_FRONTMATTER
+    (HEAD:.wingfoil/directives/custom/benign-rule.md)`.
+- **AC1 CLI**, `test/cli/directive-inventory-at-head.integration.test.ts`, new describe "the CLI resolves the directive
+  `directive remove` deletes at HEAD (task-311, bug-108)", each case on console, `--format json`, `--dry-run`, `--dry-run
+  --format json` (`it.each`), the JSON refusal read as `JSON.parse(stderr).error`:
+  - "a directive committed at HEAD but deleted on disk is refused by the write guard, not unknown" → console and
+    `--dry-run`: `expect(run.stderr.startsWith('error: refusing to commit .wingfoil/directives/custom/spare.md'))
+    .toBe(true)`: received `false`; JSON surfaces: the same `startsWith` on `.error`, received `false`.
+  - "an untracked directive file is unknown at HEAD, and the message says the working tree holds it" → console and
+    `--dry-run`: `expect(run.stderr.trim()).toBe('error: unknown directive: ghost — …')`: received `"error: refusing to
+    commit .wingfoil/directives/custom/ghost.md: … [git status '??'] …"`; JSON surfaces: `toBe` on `.error`, received the
+    same refusal without `error: `.
+- **AC2 (characterization)**: no test (spec text; review reads `git diff` of the uncommitted spec amendments).
+- **AC3 (red-first text pin)**, `test/docs/directive-remove-baseline-docs.test.ts`:
+  - "command-baseline is at version 1.8 or later, with the Revision 1.8 history line of task-311" →
+    `toBeGreaterThanOrEqual(1.8)`: received `1.7`.
+  - "its \"Where the shipped code still deviates\" paragraph no longer keeps the read on the working tree" →
+    `not.toContain('This read stays on the **working tree**')`.
+  - "… no longer names bug-108 as filed and open" → `not.toMatch(/filed as\s+\*\*`bug-108-[^`]*`\*\*\s+\(`open`\)/i)`.
+  - "docs/cli-reference.md no longer warns of the known `directive remove` defect" → `not.toContain('One known defect
+    breaks this rule today')`.
+
+**For the developer.** The NOT_FOUND refusals pin `message` with `toBe`, so the W-* sentences must match the design
+character for character (`—` is U+2014). The symlink pin reads `result.error.details.issues` as `{ detail }` objects
+(the existing `task-143` shape). The D6 pin calls `loadDirectivesAtHead` directly and `directiveAssign` through
+`CORE_MODULES`; how the skipped link is reported on `assign` is not pinned.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
