@@ -215,6 +215,63 @@ no hit.
 No red-first AC, so no red to evidence. The suite's header comment states what a failure means and that the golden is
 rewritten by hand from the failing diff, reviewed by the approver (`dl-150` (B)).
 
+### green (developer, 2026-10-29)
+
+Base: `git rev-list --count HEAD..release/0.3` → `5` at the start (the five `bug-449` ingest commits of
+`release/0.3`, one new bug file: `git diff --stat HEAD...release/0.3` → `1 file changed, 59 insertions(+)`), so
+`git merge --no-edit release/0.3` → merge commit `f7c249e8`, no conflict; then `git rev-list --count
+HEAD..release/0.3` → `0`.
+
+No production code: the only AC is characterization and its suite passes as the red commit left it.
+`npx jest test/core/context-shipped-templates.test.ts --maxWorkers=2` → `Test Suites: 1 passed, 1 total`,
+`Tests: 2 passed, 2 total`. `git diff release/0.3 --stat -- src/` → no output (`src/core/context.ts` untouched, as
+the AC requires). No green commit, since nothing is to be implemented.
+
+### refactor (developer, 2026-10-29)
+
+Nothing to refactor (no `src/` change, the red files are not mine to edit). Gates, run in the worktree with the
+`bug-266` amendment below in the working tree; heavy ones after `waitslot.sh`, `--maxWorkers=2`, one jest at a time:
+- `npm test -- --maxWorkers=2` → `Test Suites: 513 passed, 513 total`, `Tests: 9044 passed, 9044 total`.
+- `npm run test:coverage -- --maxWorkers=2` → `All files | 99.37 | 97.51 | 98.18 | 99.73` (statements, branches,
+  functions, lines; > 80 % on every column, equal to the w0 baseline the earlier v0.3.2 tasks record);
+  `Tests: 9044 passed, 9044 total`.
+- `npm run lint` → exit 0. `npm run docs:api` → exit 0 (`git status --short` afterwards: only the pending
+  amendment). `npm run typecheck` (both `tsc --noEmit` configs) → exit 0.
+- `docs.parity` (the ten suites `.wingfoil/workflows/bindings.yaml` names, `test/docs/cli-reference.test.ts` among
+  them) → `Test Suites: 10 passed, 10 total`, `Tests: 65 passed, 65 total`. No CLI, help or docs change.
+- At the end: `git rev-list --count HEAD..release/0.3` → `0`, no second merge.
+
+T4: `git log --first-parent --no-merges --format=%h 8f80df071..HEAD -- test/core/context-shipped-templates.test.ts
+test/fixtures/context/golden-payload-shipped-templates.md` → no output.
+
+### self-review (developer, 2026-10-29)
+
+Against `code-review`:
+- **AC (characterization)** — met: the suite builds the payload from one element per shipped template and compares
+  it with a second golden byte for byte (above); `git diff release/0.3 --stat -- src/` → no output.
+- **Design gate rulings** — D1 (b): the suite writes only the scaffold's `.wingfoil/memory.yaml` and
+  `.wingfoil/memory/templates/*` plus fixed pillars (`memoryEntries` in the suite). D2: the task is never submitted
+  (the submit loop lists the seven other types). D3: only line 2's sha is replaced, after `toBe(head)` and
+  `context.stateRef`. D4 (a): no write path (`grep -n "writeFileSync\|WF_UPDATE" test/core/context-shipped-templates.test.ts`
+  → no output). D5: `git diff release/0.3 --stat -- docs/04_memory/design/specs/` → no output; the normative pair
+  untouched (`git diff release/0.3 --stat -- test/fixtures/context/golden-payload.md
+  test/core/context-payload-format.test.ts` → no output).
+- **`bug-266` Expected Behavior** ("one test builds the payload of an element created by `memory add` from each
+  shipped template") — met in full: the golden carries one document per template, the task as `## 1. Task` and the
+  seven others under `## 4. Relevant Memory (7 documents)` (`grep -n '^### ' test/fixtures/context/golden-payload-shipped-templates.md`
+  → `adr:adr-001-golden-adr`, `bug:bug-001-golden-bug`, `decision-log:dl-001-golden-decision-log`,
+  `plan:sw-life-cycle-inception-plan`, `release:release-001`, `release-line:rl-001`,
+  `tech-spec:spec-001-golden-tech-spec`), and `grep -c '^format: 1'` on it → `8`, the field the hand-built golden
+  never had. Its missing `### Retrospective` is prepared below.
+- Scope: `git diff release/0.3...HEAD --stat` → the task file, the `bug-266` status sync, and the two red files.
+- No same-class instance: no file of mine other than this task file changed.
+
+### Pending amendments (approver)
+
+- `bug-266-no-test-ties-the-context-payload-s-golden-fixture-to-the-memory-templates-wingfoil-ships-so-the-format-1-byte-pin-never-sees-the-frontmatter-memory-add-actually-writes`
+  (`### Retrospective` appended, uncommitted): `--reason "Add the bug's Retrospective, naming the task-318 suite and
+  golden that close it."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -222,3 +279,6 @@ rewritten by hand from the failing diff, reviewed by the approver (`dl-150` (B))
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+None: the task ran as designed; the only friction was the wait for the shared gate slot (each full jest run
+about 21 minutes, `Time: 1278.402 s`), which is no defect of the task.
