@@ -11,19 +11,12 @@
  *
  * The MCP Resource half of `bug-245` is `test/mcp/config-missing-refusal.test.ts`.
  */
-import { spawnSync } from 'node:child_process';
 import { existsSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { WINGFOIL_NOT_INITIALIZED } from '../../src/core';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
-
-const CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
-
-function runCli(cwd: string, args: readonly string[]): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf-8', input: '' });
-  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
-}
+import { CLI_ENTRY, runCliEntry } from './helpers/spawn-cli';
 
 /** Neither spelling of the repository's absolute path may appear in what the user is shown. */
 function expectNoHostPath(repo: string, text: string): void {
@@ -40,13 +33,13 @@ describe('a read on an absent, incomplete or invalid configuration names no host
     return repo;
   };
 
-  beforeAll(() => expect(existsSync(CLI)).toBe(true));
+  beforeAll(() => expect(existsSync(CLI_ENTRY)).toBe(true));
   afterAll(() => repos.forEach(removeTempDir));
 
   describe('AC 6 — no .wingfoil/ (bug-198)', () => {
     it.each([[['dna', 'show']], [['paths']], [['memory', 'search', 'x']]] as const)('`wingfoil %j`', (args) => {
       const repo = freshRepo();
-      const result = runCli(repo, ['--format', 'json', ...args]);
+      const result = runCliEntry(repo, ['--format', 'json', ...args]);
       expect(result.status).toBe(1);
       expect(JSON.parse(result.stderr)).toEqual({ error: WINGFOIL_NOT_INITIALIZED });
       expectNoHostPath(repo, result.stderr);
@@ -59,7 +52,7 @@ describe('a read on an absent, incomplete or invalid configuration names no host
       writeFixtureFile(repo, '.wingfoil/.gitkeep', '');
       commitAll(repo, 'empty configuration');
 
-      const result = runCli(repo, [...args]);
+      const result = runCliEntry(repo, [...args]);
 
       expect(result.status).toBe(1);
       expect(result.stderr.split('\n')[0]).toMatch(/^error: \.wingfoil\/dna\.yaml is missing/);
@@ -71,7 +64,7 @@ describe('a read on an absent, incomplete or invalid configuration names no host
       writeFixtureFile(repo, '.wingfoil/dna.yaml', 'version: 1\nproject:\n  name: x\nmodules: 5\n');
       commitAll(repo, 'invalid configuration');
 
-      const result = runCli(repo, [...args]);
+      const result = runCliEntry(repo, [...args]);
 
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('E_VALIDATION modules (.wingfoil/dna.yaml)');
@@ -80,12 +73,12 @@ describe('a read on an absent, incomplete or invalid configuration names no host
 
     it('a scaffolded project with memory.yaml removed: `memory search x` names `.wingfoil/memory.yaml`', () => {
       const repo = freshRepo();
-      const init = runCli(repo, ['init', '--template', 'scrum']);
+      const init = runCliEntry(repo, ['init', '--template', 'scrum']);
       if (init.status !== 0) throw new Error(`fixture bug: wingfoil init failed — ${init.stderr}`);
       rmSync(join(repo, '.wingfoil', 'memory.yaml'));
       git(repo, ['commit', '--quiet', '-am', 'drop memory.yaml']);
 
-      const result = runCli(repo, ['memory', 'search', 'x']);
+      const result = runCliEntry(repo, ['memory', 'search', 'x']);
 
       expect(result.status).toBe(1);
       expect(result.stderr.split('\n')[0]).toMatch(/^error: \.wingfoil\/memory\.yaml is missing/);
@@ -94,11 +87,11 @@ describe('a read on an absent, incomplete or invalid configuration names no host
 
     it('an invalid dna.yaml in the working tree only: `paths` labels it relative too', () => {
       const repo = freshRepo();
-      const init = runCli(repo, ['init', '--template', 'scrum']);
+      const init = runCliEntry(repo, ['init', '--template', 'scrum']);
       if (init.status !== 0) throw new Error(`fixture bug: wingfoil init failed — ${init.stderr}`);
       writeFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'version: 1\nproject: 7\n', 'utf-8');
 
-      const result = runCli(repo, ['paths']);
+      const result = runCliEntry(repo, ['paths']);
 
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('(.wingfoil/dna.yaml)');

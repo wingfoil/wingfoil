@@ -24,7 +24,6 @@
  *   run's one commit holds only the run log (`spec-016` §3.6). The rule itself is `workflow next`'s
  *   reporting (`spec-017` §6.1), Execution Notes decision 3.
  */
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -33,7 +32,7 @@ import { git, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fix
 import { TASK_ID } from '../agent/helpers/agent-execute-fixture';
 import { BUG_ID } from '../agent/helpers/agent-execute-fixture';
 import { elementWithStatus, GHOSTLY, GHOSTLY_FILE, headOf, RELEASE_ID, seedStep, SIBLING_ID, startInstance, STEP_WORKFLOWS } from '../agent/helpers/agent-execute-step-fixture';
-import { CLI_ENTRY } from './helpers/spawn-cli';
+import { CLI_ENTRY, spawnCapture } from './helpers/spawn-cli';
 
 const scratch: string[] = [];
 const repos: string[] = [];
@@ -55,7 +54,7 @@ function scratchDir(prefix: string): string {
 }
 
 interface Run {
-  readonly status: number | null;
+  readonly status: number;
   readonly stdout: string;
   readonly stderr: string;
   /** The argv of every fake invocation (the launch first, then the post-run lookups). */
@@ -67,12 +66,10 @@ function cli(repo: string, args: readonly string[]): Run {
   const tmp = scratchDir('wf-step-tmp-');
   const recordFile = join(scratchDir('wf-step-rec-'), 'fake.jsonl');
   const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(GIT_(AUTHOR|COMMITTER)_|WINGFOIL_FAKE_AGENT_)/.test(name)));
-  const run = spawnSync(process.execPath, [CLI_ENTRY, ...args], {
+  const run = spawnCapture(process.execPath, [CLI_ENTRY, ...args], {
     cwd: repo,
-    encoding: 'utf-8',
     env: { ...inherited, TMPDIR: tmp, TMP: tmp, TEMP: tmp, WINGFOIL_FAKE_AGENT_RECORD: recordFile },
   });
-  if (run.error) throw run.error;
   const fake = existsSync(recordFile)
     ? readFileSync(recordFile, 'utf-8')
         .split('\n')

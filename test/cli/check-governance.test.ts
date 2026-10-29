@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { checkGovernance, exitCodeFor } from '../../scripts/check-governance.cjs';
 import type { GovernanceReport, GovernanceRule } from '../../scripts/check-governance.cjs';
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { withoutCallerNpmConfig } from './helpers/npm-env';
 import { spawnCapture } from './helpers/spawn-cli';
 
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -549,7 +550,7 @@ describe('packaging — the check is not shipped (spec-015)', () => {
   });
 
   it('`npm pack --dry-run` lists nothing under scripts/', () => {
-    const raw = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: REPO_ROOT, encoding: 'utf-8' });
+    const raw = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: REPO_ROOT, encoding: 'utf-8', env: withoutCallerNpmConfig(process.env) });
     const [result] = JSON.parse(raw) as { files: { path: string }[] }[];
     expect((result?.files ?? []).some((file) => file.path.startsWith('scripts/'))).toBe(false);
   });

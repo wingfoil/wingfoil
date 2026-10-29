@@ -38,6 +38,7 @@ import { existsSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { distBuildStamp } from './helpers/dist-stamp';
+import { withoutCallerNpmConfig } from './helpers/npm-env';
 import { CLI_ENTRY, runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
 
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -103,6 +104,7 @@ describe('npm distribution (task-007) — bin entrypoint + package contents', ()
     const raw = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
       cwd: REPO_ROOT,
       encoding: 'utf-8',
+      env: withoutCallerNpmConfig(process.env),
     });
     const [result] = JSON.parse(raw) as PackResult[];
     const paths = (result?.files ?? []).map((f) => f.path);
@@ -118,7 +120,11 @@ describe('npm distribution (task-007) — bin entrypoint + package contents', ()
   // task-192 AC6 (characterization): `build` writes the record into `dist/`, which `files` already
   // ships, so the `--ignore-scripts` pack `publish.yml` runs carries it — no `prepack` step is needed.
   it('`npm pack --dry-run --ignore-scripts` includes dist/build-info.json, the build record (dl-111 Q2 (a))', () => {
-    const raw = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: REPO_ROOT, encoding: 'utf-8' });
+    const raw = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+      cwd: REPO_ROOT,
+      encoding: 'utf-8',
+      env: withoutCallerNpmConfig(process.env),
+    });
     const [result] = JSON.parse(raw) as PackResult[];
     expect((result?.files ?? []).map((f) => f.path)).toContain('dist/build-info.json');
   });

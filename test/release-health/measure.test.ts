@@ -24,6 +24,7 @@ import Ajv2020 from 'ajv/dist/2020';
 import { formatReportJson, httpDay, main, measureRelease, measureToolchain, parseHttp, processConformance, resolveMeasurementPoint } from '../../scripts/release-health/measure.cjs';
 import type { ExternalReader, MetricEntry, Report, ToolCall, ToolResult, ToolRunner } from '../../scripts/release-health/measure.cjs';
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { withoutCallerNpmConfig } from '../cli/helpers/npm-env';
 import { FAKE_AWS_ACCESS_KEY_ID } from '../validation/helpers/secret-fixtures';
 
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -520,7 +521,12 @@ describe('the toolchain record (AC 4)', () => {
   });
 
   it('the release-health scripts are not in the npm tarball (characterization)', () => {
-    const raw = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: REPO_ROOT, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const raw = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+      cwd: REPO_ROOT,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      env: withoutCallerNpmConfig(process.env),
+    });
     const files = (JSON.parse(raw) as { files: { path: string }[] }[])[0]!.files.map((f) => f.path);
     expect(files.filter((path) => path.startsWith('scripts/'))).toEqual([]);
   });
