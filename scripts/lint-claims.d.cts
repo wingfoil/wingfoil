@@ -21,6 +21,8 @@ export function lintMarkdown(text: string, lines?: ReadonlySet<number>): Markdow
 export interface ClaimLintReport {
   readonly files: readonly string[];
   readonly warnings: readonly ClaimWarning[];
+  /** The items of the files read (`total`) and those linted (`checked`): all of a file given whole, under `base` only those holding an added line (`bug-330`). */
+  readonly items: { readonly checked: number; readonly total: number };
 }
 
 /** Options of {@link lintClaims}: `base` lints the Memory documents `base...HEAD` changed; `files` lints those files whole. */
