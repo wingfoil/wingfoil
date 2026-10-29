@@ -39,3 +39,7 @@ Five of six npm spawns inherit the caller's npm configuration; correctness depen
 
 Captured on 2026-10-02 by `bug-ingest-rel-v0.3-w1b4-review-findings-plan`, from the independent reviews of wave 1
 batch B4 (`dev-loop-rel-v0.3-plan`), against `main` at `243f8f05` (B4 merges up to `ea637c43`).
+
+### Retrospective
+
+Closed by task-316: the eight `npm pack` sites pass `env: withoutCallerNpmConfig(process.env)`, and `test/lint/npm-caller-config.test.ts` fails a direct `npm` spawn that does not strip the caller's `npm_config_*` (npm inside a shell string is named in its docblock as outside the scan). Lesson: the strip helper existed since `bug-181`; only a guard makes every new site use it.
