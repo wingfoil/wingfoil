@@ -212,6 +212,15 @@ files are not touched.
 - D4 — the npm guard reads `<helper>('npm', …)` calls only; npm inside a shell string (`publish-secrets.test.ts:386`,
   already clean) is named outside it in the docblock. **Recommend yes**: a shell string has no reliable textual shape.
 
+### design gate (approver, 2026-10-29)
+
+Design gate approved by the approver on 2026-10-29T10:59:09+01:00, in the orchestrator's chat:
+- D1 — (a): a new guard `test/lint/cli-spawn-helper.test.ts` makes AC1 red-first.
+- D2 — (a): all 21 sites in 15 suites, with the four named exceptions.
+- D3 — (a): `timeout?` is added to `SpawnCaptureOptions`; a timeout throws like any other signal.
+- D4 — yes: the npm guard reads direct `('npm', …)` calls only; npm inside a shell string is named in its docblock as outside the scan.
+- D5 — (a): no new element for `test/storage/helpers/persistence-snapshot.ts` running git with no `env`; `bug-446` (triaged, v0.4) states the Expected Behavior that covers it, and the developer names the helper here as covered by it.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
