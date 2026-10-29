@@ -17,10 +17,14 @@ import { join } from 'node:path';
 
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import {
+  ALLOWED_INVISIBLE_CHARACTERS,
   BINARY_EXTENSIONS,
   controlCharacterOffsets,
   formatFindings,
+  formatInvisibleCharacterFindings,
+  invisibleCharacterPositions,
   scanTrackedFiles,
+  scanTrackedFilesForInvisibleCharacters,
 } from './helpers/control-characters';
 
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -107,6 +111,136 @@ describe('control characters in tracked text files (bug-073, task-173)', () => {
       git(repo, ['add', 'gone.txt']);
       rmSync(join(repo, 'gone.txt'));
       expect(scanTrackedFiles(repo)).toEqual([]);
+    });
+  });
+});
+
+/*
+ * task-317 (`bug-246`, design gate D1 (a), D2): the gate widened to the Unicode format and separator
+ * characters a byte scan below 0x80 cannot see \u2014 category Cf (bidi controls, zero-width characters,
+ * U+FEFF, U+00AD), Zl (U+2028), Zp (U+2029), Zs other than U+0020, and the C1 controls U+0080-U+009F.
+ * Every such character below is written as a `\u` escape, never raw: the gate reads this file too.
+ */
+describe('invisible format and separator characters in tracked text files (bug-246, task-317)', () => {
+  it('finds no invisible format or separator character in this repository', () => {
+    const findings = scanTrackedFilesForInvisibleCharacters(REPO_ROOT);
+    if (findings.length > 0) {
+      throw new Error(`invisible-character gate failed:\n${formatInvisibleCharacterFindings(findings)}`);
+    }
+    expect(findings).toEqual([]);
+  });
+
+  it('declares an allow-list, empty today', () => {
+    expect(ALLOWED_INVISIBLE_CHARACTERS).toEqual([]);
+  });
+
+  describe('the character rule', () => {
+    it.each([
+      ['LEFT-TO-RIGHT EMBEDDING (bidi, Cf)', 0x202a],
+      ['RIGHT-TO-LEFT OVERRIDE (bidi, Cf)', 0x202e],
+      ['LEFT-TO-RIGHT ISOLATE (bidi, Cf)', 0x2066],
+      ['POP DIRECTIONAL ISOLATE (bidi, Cf)', 0x2069],
+      ['LINE SEPARATOR (Zl)', 0x2028],
+      ['PARAGRAPH SEPARATOR (Zp)', 0x2029],
+      ['the first C1 control', 0x0080],
+      ['NEXT LINE (C1)', 0x0085],
+      ['the last C1 control', 0x009f],
+      ['NO-BREAK SPACE (Zs)', 0x00a0],
+      ['SOFT HYPHEN (Cf)', 0x00ad],
+      ['ZERO WIDTH SPACE (Cf)', 0x200b],
+      ['ZERO WIDTH JOINER (Cf)', 0x200d],
+      ['ZERO WIDTH NO-BREAK SPACE / BOM (Cf)', 0xfeff],
+    ])('flags %s at its line and column', (_label, codePoint) => {
+      expect(invisibleCharacterPositions(`a${String.fromCodePoint(codePoint)}b`)).toEqual([
+        { line: 1, column: 2, codePoint },
+      ]);
+    });
+
+    it('accepts the ASCII space and tab', () => {
+      expect(invisibleCharacterPositions('a b\tc')).toEqual([]);
+    });
+
+    it('accepts visible non-ASCII text', () => {
+      expect(invisibleCharacterPositions('caf\u00E9 \u2014 \u2713')).toEqual([]);
+    });
+
+    it('accepts U+2027 HYPHENATION POINT, visible punctuation (Po) next to U+2028', () => {
+      expect(invisibleCharacterPositions('a\u2027b')).toEqual([]);
+    });
+
+    it('counts lines by LF only: U+2028 does not start a line', () => {
+      expect(invisibleCharacterPositions('one\ntwo \u2028x')).toEqual([{ line: 2, column: 5, codePoint: 0x2028 }]);
+    });
+
+    it('counts columns in code points: an astral character is one column', () => {
+      expect(invisibleCharacterPositions('\u{1F600}\u202E')).toEqual([{ line: 1, column: 2, codePoint: 0x202e }]);
+    });
+  });
+
+  describe('the scan over a git index', () => {
+    let repo: string;
+
+    beforeEach(() => {
+      repo = makeTempGitRepo();
+    });
+
+    afterEach(() => removeTempDir(repo));
+
+    it('fails on a tracked text file holding a planted bidi override, naming the file, line and column', () => {
+      writeFixtureFile(repo, 'src/clean.ts', 'export const a = 1;\n');
+      writeFixtureFile(repo, 'src/planted.ts', 'export const b = "x\u202Ey";\n');
+      git(repo, ['add', '.']);
+      const findings = scanTrackedFilesForInvisibleCharacters(repo);
+      expect(findings).toEqual([{ path: 'src/planted.ts', line: 1, column: 20, codePoint: 0x202e }]);
+      expect(formatInvisibleCharacterFindings(findings)).toBe('src/planted.ts: U+202E at line 1, column 20');
+    });
+
+    it('reports a leading U+FEFF at line 1, column 1: the decode keeps the BOM', () => {
+      writeFixtureFile(repo, 'notes.md', '\uFEFFtitle\n');
+      git(repo, ['add', '.']);
+      expect(scanTrackedFilesForInvisibleCharacters(repo)).toEqual([
+        { path: 'notes.md', line: 1, column: 1, codePoint: 0xfeff },
+      ]);
+    });
+
+    it('sorts findings by path, then line and column, one formatted line each', () => {
+      writeFixtureFile(repo, 'b.md', 'x\u00A0y\n\u2029\n');
+      writeFixtureFile(repo, 'a.md', 'ok\nz\u200Bz\n');
+      git(repo, ['add', '.']);
+      const findings = scanTrackedFilesForInvisibleCharacters(repo);
+      expect(findings).toEqual([
+        { path: 'a.md', line: 2, column: 2, codePoint: 0x200b },
+        { path: 'b.md', line: 1, column: 2, codePoint: 0x00a0 },
+        { path: 'b.md', line: 2, column: 1, codePoint: 0x2029 },
+      ]);
+      expect(formatInvisibleCharacterFindings(findings)).toBe(
+        'a.md: U+200B at line 2, column 2\nb.md: U+00A0 at line 1, column 2\nb.md: U+2029 at line 2, column 1',
+      );
+    });
+
+    it('skips files on the binary list', () => {
+      writeFixtureFile(repo, 'docs/image.png', 'PNG\u2028');
+      git(repo, ['add', '.']);
+      expect(scanTrackedFilesForInvisibleCharacters(repo)).toEqual([]);
+    });
+
+    it('reads only tracked files', () => {
+      writeFixtureFile(repo, 'tracked.txt', 'clean\n');
+      git(repo, ['add', 'tracked.txt']);
+      writeFixtureFile(repo, 'untracked.txt', 'x\u2028');
+      expect(scanTrackedFilesForInvisibleCharacters(repo)).toEqual([]);
+    });
+
+    it('drops a finding whose path and code point are on the allow-list, and only that one', () => {
+      writeFixtureFile(repo, 'src/planted.ts', 'export const b = "x\u202Ey";\n');
+      git(repo, ['add', '.']);
+      const allowed = [{ path: 'src/planted.ts', codePoint: 0x202e }];
+      expect(scanTrackedFilesForInvisibleCharacters(repo, allowed)).toEqual([]);
+      writeFixtureFile(repo, 'src/planted.ts', 'export const b = "x\u202Ey";\nconst c = "\u2028";\n');
+      git(repo, ['add', '.']);
+      expect(scanTrackedFilesForInvisibleCharacters(repo, allowed)).toEqual([
+        { path: 'src/planted.ts', line: 2, column: 12, codePoint: 0x2028 },
+      ]);
     });
   });
 });
