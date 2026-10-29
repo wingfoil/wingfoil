@@ -39,6 +39,7 @@ import { commitFailureSummary, documentExists, pathPorcelainStatus, readDocument
 // (same as `src/memory/entry.ts`): `memory add` needs the CONFINED target path before it writes, to
 // run task-092's absence guard on it.
 import { resolveConfinedMemoryPath } from '../storage/memory-path';
+import { targetIsSymlink } from '../storage/confinement';
 import { E_PATH_ESCAPES_ROOT, E_PATH_OUTSIDE_TYPE_FOLDER, E_TARGET_IS_SYMLINK } from '../storage/errors';
 import {
   expandFieldTokens,
@@ -2175,6 +2176,8 @@ function workingTreeDirectiveInventory(root: string): DirectiveInventory | undef
  * - it resolves through a symlinked directory inside the root (`bug-124`'s shape) — git records the link,
  *   so no commit records the file beyond it as a directive;
  * - `HEAD` records `P` as a symbolic link, whose target no commit holds;
+ * - `P` is itself an uncommitted symbolic link — a commit would record the link, not a directive;
+ * - git ignores `P` (`git status` reports nothing for it) — a plain `git add` would not stage it;
  * - otherwise no commit records it: the file's `git status` code, and the step that makes it resolvable.
  *
  * The working tree words the refusal and never decides it (`command-baseline`), so this never throws: a
@@ -2214,8 +2217,27 @@ function explainWorkingTreeDirective(
         'no commit holds, so the directive cannot be resolved from the committed repository (dl-080)'
       );
     }
+    // An uncommitted LEAF link (task-311 review): committing it would not help — `HEAD` would record a link
+    // and skip it, as above — so it gets its own sentence, never "commit it first".
+    if (targetIsSymlink(resolved.absolute)) {
+      return (
+        ` — the working tree's '${path}' defines it, but that path is a symbolic link, which a commit records as ` +
+        'a link and not as a directive, so the directive cannot be resolved from the committed repository (dl-080)'
+      );
+    }
+    const status = porcelainStatusOrUndefined(root, path);
+    // `git status --porcelain` is silent for a path that exists here, differs from what `HEAD` resolves, and
+    // is not a link: git ignores it (`.gitignore`, an exclude file). A plain `git add` refuses such a path,
+    // so "commit it first" would be false advice too (task-311 review).
+    if (status === '') {
+      return (
+        ` — the working tree's '${path}' defines it, but git ignores that path (git status reports nothing for ` +
+        'it), so no commit of this repository records it and a plain git add would not stage it (dl-080)'
+      );
+    }
+    const bracket = status === undefined ? '' : ` [git status '${status}']`;
     return (
-      ` — the working tree's '${path}' defines it${porcelainBracket(root, path)}, but no commit of this repository ` +
+      ` — the working tree's '${path}' defines it${bracket}, but no commit of this repository ` +
       `records it, and a directive is resolved from the committed repository (dl-080); commit '${path}' first, ` +
       'then retry'
     );
@@ -2224,13 +2246,12 @@ function explainWorkingTreeDirective(
   }
 }
 
-/** ` [git status '<XY>']` for `path`, or `''` when git cannot answer or reports the path clean. */
-function porcelainBracket(root: string, path: string): string {
+/** `path`'s two-letter `git status --porcelain` code (`''` when git reports nothing), or `undefined` when git cannot answer. */
+function porcelainStatusOrUndefined(root: string, path: string): string | undefined {
   try {
-    const status = pathPorcelainStatus(root, path);
-    return status === '' ? '' : ` [git status '${status}']`;
+    return pathPorcelainStatus(root, path);
   } catch {
-    return '';
+    return undefined;
   }
 }
 
@@ -2258,9 +2279,10 @@ function porcelainBracket(root: string, path: string): string {
  *    `details.issues` the `HEAD` inventory's skip warnings and then the working tree's. The working
  *    tree **words** that refusal and never decides it (`command-baseline`): when a file on disk
  *    defines `<name>`, {@link explainWorkingTreeDirective} appends why it does not count — it
- *    resolves outside the project root, `HEAD` records its path as a symbolic link, or no commit
- *    records it (an untracked or staged file, or a committed one edited on disk to a new id), with
- *    its `git status` code. Until task-311 this read stayed on the working tree, so a directive
+ *    resolves outside the project root, it resolves through a symlinked directory inside the root,
+ *    `HEAD` records its path as a symbolic link, the path is itself an uncommitted symbolic link, git
+ *    ignores the path, or no commit records it (an untracked or staged file, or a committed one edited
+ *    on disk to a new id), with its `git status` code. Until task-311 this read stayed on the working tree, so a directive
  *    committed and then deleted on disk was `unknown directive: <name>` although `HEAD` held it, and
  *    an untracked one reached the write guard; now the first resolves and meets step 7's guard
  *    (`[git status ' D']`), and the second is unknown, with the reason on the same line.
