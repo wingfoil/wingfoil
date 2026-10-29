@@ -217,6 +217,88 @@ Design gate approved by the approver on 2026-10-29T10:59:09+01:00, in the orches
 - D3 — (a): the rest of `bug-330`'s Expected Behavior (the summary tells files read from items checked) is done in this task.
 - D4 — (a): the developer prepares the `spec-007` §2 amendment (the "case-insensitive unless noted" sentence and a revision note), uncommitted, for the approver's `memory amend` (dl-047).
 
+### red (qa, 2026-10-29)
+
+**Red commit `27f93d95`** (`git log --oneline -1` → `27f93d95b test(lint): task-317 — failing test: invisible-character
+gate, spec-007 parity, lint-claims usage line and items summary`), test files only: `test/lint/control-characters.test.ts`
+(134 lines added, none removed: `git diff --numstat` → `134 0`), `test/cli/lint-claims.test.ts` (`48 0`), and the new
+`test/validation/secret-patterns-spec.test.ts`. No `.d.cts` written: the four AC1 exports belong to the `.ts` helper
+`test/lint/helpers/control-characters.ts`, which green writes, and `ClaimLintReport.items` is read through
+`toMatchObject` and the printed summary, so `scripts/lint-claims.d.cts` stays green's (design, Files to touch). Base:
+`git rev-list --count HEAD..release/0.3` → `0`, no merge. `test/memory/submit-commit-body.test.ts` line 102 is left raw
+for green, as the design rules.
+
+**Run.** `npx jest test/lint/control-characters.test.ts test/validation/secret-patterns-spec.test.ts
+test/cli/lint-claims.test.ts --maxWorkers=2` → `Test Suites: 2 failed, 1 passed, 3 total`, `Tests: 32 failed, 51 passed,
+83 total` (control-characters 27 failed / 46, lint-claims 5 / 11, secret-patterns-spec 0 / 26). `npx tsc --noEmit -p
+tsconfig.json` → only four `error TS2305` lines, `test/lint/control-characters.test.ts(20,3)`, `(24,3)`, `(25,3)`,
+`(27,3)`: no exported member `ALLOWED_INVISIBLE_CHARACTERS`, `formatInvisibleCharacterFindings`,
+`invisibleCharacterPositions`, `scanTrackedFilesForInvisibleCharacters` (intended). `npx jest test/lint --maxWorkers=2` →
+`Test Suites: 2 failed, 9 passed, 11 total`, `Tests: 28 failed, 115 passed, 143 total`: the 27 reds above plus
+`typecheck-clean.test.ts` "tsconfig.json typechecks with zero diagnostics", which prints the same four TS2305 lines and
+turns green with the helper; every other gate passes (`no-fabricated-stderr` included). `npx eslint` on the three files →
+exit 0. The invisible-character `grep -nP` of the prompt's class over the three files → exit 1; its positive case is the
+same grep on `test/memory/submit-commit-body.test.ts`, which hits line 102.
+
+**Per AC** (first failing assertion of each test):
+- **AC1 (red-first)**, `test/lint/control-characters.test.ts`, new `describe` "invisible format and separator characters
+  in tracked text files (bug-246, task-317)"; every such character in the source is a `\u` escape (`grep -nP '[^\x00-\x7F]'`
+  on the file → lines 7 and 60 only, both pre-existing and visible):
+  - "finds no invisible format or separator character in this repository" → `TypeError: (0 ,
+    control_characters_1.scanTrackedFilesForInvisibleCharacters) is not a function`. After green adds the helper and
+    before the line-102 escape it must fail on that line (design, AC1 pin 6).
+  - "declares an allow-list, empty today" → `expect(received).toEqual(expected)`, `Expected: []`, `Received: undefined`.
+  - "the character rule": `it.each` "flags %s at its line and column" over U+202A, U+202E, U+2066, U+2069, U+2028,
+    U+2029, U+0080, U+0085, U+009F, U+00A0, U+00AD, U+200B, U+200D, U+FEFF (14 cases); "accepts the ASCII space and
+    tab"; "accepts visible non-ASCII text"; "accepts U+2027 HYPHENATION POINT …"; "counts lines by LF only: U+2028 does
+    not start a line" (`'one\ntwo \u2028x'` → line 2, column 5); "counts columns in code points: an astral character is
+    one column" → each `TypeError: … invisibleCharacterPositions is not a function`.
+  - "the scan over a git index" (temp repo, `makeTempGitRepo` / `writeFixtureFile` / `git add .`): "fails on a tracked
+    text file holding a planted bidi override, naming the file, line and column" (`src/planted.ts`, line 1, column 20,
+    formatted `src/planted.ts: U+202E at line 1, column 20`); "reports a leading U+FEFF at line 1, column 1: the decode
+    keeps the BOM"; "sorts findings by path, then line and column, one formatted line each" (three findings over `a.md`
+    and `b.md`, joined by `\n`); "skips files on the binary list"; "reads only tracked files"; "drops a finding whose
+    path and code point are on the allow-list, and only that one" (the same file with a U+2028 on line 2, column 12
+    still reports it) → each `TypeError: … scanTrackedFilesForInvisibleCharacters is not a function`.
+- **AC2 (characterization)**, `test/validation/secret-patterns-spec.test.ts`: reads the real spec-007, the first `yaml`
+  fence between `### 2. Pattern set` and `### 3.`, through `js-yaml`; `translate` models the three rules of the design
+  (leading `(?i)`/`(?im)` → flag `i`; `(?-i:X)` inlined with the letters outside it and outside classes case-folded, no
+  flag; any other inline modifier, or `(?-i:` without `(?i)`, throws `unmodelled inline modifier`), sources compared with
+  `\/` normalized to `/`. Tests: "lists the same pattern ids, in the same order"; per id (`describe.each`) "is in spec-007
+  §2 with the same description and severity" and "compiles the spec's regex: equal source and flags after the declared
+  translation"; four translator cases ("moves a leading (?i) …", "… (?im) …, dropping the m", "inlines a (?-i:...) group
+  …", "throws on an inline modifier it does not model"); "can fail: a one-character drift of a spec string is not equal
+  to its pattern" (`{16,}` → `{15,}` on `generic-api-key-assignment`, made from the loaded value). Passes on first run:
+  26 / 26. **Deliberate drift, not committed:** `sed -i 's/_\[A-Za-z0-9_\]{36,}/_[A-Za-z0-9_]{35,}/'` on the spec in this
+  worktree, then `npx jest test/validation/secret-patterns-spec.test.ts --maxWorkers=2` → `Tests: 1 failed, 25 passed, 26
+  total`, the failure "github-token › compiles the spec's regex: …" (`- Expected - 1`, `+ Received + 1`); `git checkout
+  --` on the spec, then `git status --short` lists only the three test files.
+- **AC3 (red-first)**, `test/cli/lint-claims.test.ts`, new `describe` "with no --base and no file (bug-330, task-317)",
+  through the file's `spawnCapture`:
+  - "prints one usage line on stderr naming what it would read, and keeps exit 0" → `expect(received).toBe(expected)`
+    on `run.stderr`, `Received: ""` (the design's line, `<file>` followed by U+2026, written as `…`). Today's
+    answer, from the real command: `node scripts/lint-claims.cjs` → stdout `claim lint: 0 warnings in 0 files
+    (warn-only), 0 files read`, `echo $?` → `0`; `node scripts/lint-claims.cjs 2>&1 >/dev/null | wc -c` → `0`.
+  - "prints the same line with --format github", "prints the same line with --root alone" → the same `Received: ""`.
+  - "prints nothing on stderr when a file is given" (`flagged.md`) → passes today, as it must after green (the `''` is
+    this spawn's own stderr, not a fixture; its positive case is the no-argument spawn above, whose stderr green fills).
+- **D3 (a), bug-330's second half (red-first)**, same file:
+  - "as a command: the summary tells the files read from the items checked (bug-330, task-317 D3)" (`flagged.md` +
+    `clean.md`) → `Expected: "claim lint: 5 warnings in 1 file (warn-only), 2 files read, 10 of 10 items checked"`,
+    `Received: "claim lint: 5 warnings in 1 file (warn-only), 2 files read"`. The counts come from the script's own
+    `splitItems` run on a scratch copy outside the worktree: `flagged.md` items at lines `[ 9, 10, 11, 13, 16, 18 ]`,
+    `clean.md` at `[ 9, 10, 12, 13 ]`, the `--base` fixture's `t-1.md` at `[ 5, 6 ]`.
+  - the existing "with --base: …" test gains `expect(report).toMatchObject({ files: ['docs/memory/t-1.md'], items: {
+    checked: 1, total: 2 } })` → fails with `- "items": Object { "checked": 1, "total": 2 }` missing from the received
+    report; then a spawn with `--root <temp repo> --base <sha>` expecting stderr `''` and the last stdout line
+    `claim lint: 1 warnings in 1 file (warn-only), 1 file read, 1 of 2 items checked` (`warnings` stays plural: the
+    script writes `${n} warnings` for every count today, `grep -n 'warnings in' scripts/lint-claims.cjs`).
+
+**For the developer.** The no-argument stdout is pinned as D3's summary applied to zero files:
+`claim lint: 0 warnings in 0 files (warn-only), 0 files read, 0 of 0 items checked` — the design's AC3 text, written before
+the gate ruled D3 (a), kept today's line; the ruling makes the summary carry the items clause for every run. The orchestrator
+is told of this reading in the qa report. `items` is not pluralized by count in these pins (no run here has a total of 1).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
