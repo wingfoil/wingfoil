@@ -34,7 +34,7 @@ import {
   renderCustomDirective,
 } from '../directives/create';
 import { parseDirectiveIds, withAssignedDirectives } from '../directives/roles-edit';
-import { commitFailureSummary, documentExists, readDocument, readPathAtRev, storesAsBlob, StorageError, writeAndCommit, writeDocument } from '../storage';
+import { commitFailureSummary, documentExists, pathPorcelainStatus, readDocument, readPathAtRev, resolveRealPathInRoot, storesAsBlob, StorageError, writeAndCommit, writeDocument } from '../storage';
 // Not re-exported by the `../storage` barrel, imported directly per that module's own convention
 // (same as `src/memory/entry.ts`): `memory add` needs the CONFINED target path before it writes, to
 // run task-092's absence guard on it.
@@ -70,8 +70,12 @@ import {
 } from '../memory';
 
 import {
+  type DirectiveInventory,
+  DIRECTIVES_DIR_PATH,
   DNA_YAML_PATH,
+  type HeadDirectiveInventory,
   loadDirectiveInventory,
+  loadDirectiveInventoryAtHead,
   loadDnaYaml,
   loadMemoryYaml,
 } from './loaders';
@@ -2152,6 +2156,73 @@ export interface DirectiveRemoveResult {
   readonly path: string;
 }
 
+/** The working-tree directive inventory, or `undefined` when it cannot be read: a refusal's wording only. */
+function workingTreeDirectiveInventory(root: string): DirectiveInventory | undefined {
+  try {
+    return loadDirectiveInventory(root);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Why a directive `directive remove` could not resolve at `HEAD` is nonetheless on the operator's screen
+ * (task-311, `bug-108`, `dl-080` (B)): the clause appended to `unknown directive: <name>` when a
+ * working-tree file defines `<name>`, or `''` when none does. The first that applies, for the file's
+ * root-relative path `P`:
+ *
+ * - it resolves outside the project root (a symlinked directory on its path) — no commit records it;
+ * - `HEAD` records `P` as a symbolic link, whose target no commit holds;
+ * - otherwise no commit records it: the file's `git status` code, and the step that makes it resolvable.
+ *
+ * The working tree words the refusal and never decides it (`command-baseline`), so this never throws: a
+ * read that fails here leaves the bare message. The shape mirrors `checkAssignable`'s unknown-role
+ * sentence (`./directive-assign.ts`): P3.2's `unknown directive: <id>` stays the first sentence.
+ */
+function explainWorkingTreeDirective(
+  root: string,
+  name: string,
+  workingTree: DirectiveInventory | undefined,
+  headSymlinks: readonly string[],
+): string {
+  if (workingTree === undefined) return '';
+  try {
+    const match = selectDirectivesById(workingTree.files, new Set([name])).byId.get(name);
+    if (match === undefined) return '';
+    const path = ['.wingfoil', ...match.path.split(/[\\/]/)].join('/');
+    const resolved = resolveRealPathInRoot(root, path);
+    if (!resolved.within) {
+      return (
+        ` — the working tree's '${path}' defines it, but it resolves to '${resolved.real}', outside the project ` +
+        'root, and no commit of this repository records it (dl-080)'
+      );
+    }
+    if (headSymlinks.includes(path)) {
+      return (
+        ` — the working tree's '${path}' defines it, but HEAD records that path as a symbolic link, whose target ` +
+        'no commit holds, so the directive cannot be resolved from the committed repository (dl-080)'
+      );
+    }
+    return (
+      ` — the working tree's '${path}' defines it${porcelainBracket(root, path)}, but no commit of this repository ` +
+      `records it, and a directive is resolved from the committed repository (dl-080); commit '${path}' first, ` +
+      'then retry'
+    );
+  } catch {
+    return '';
+  }
+}
+
+/** ` [git status '<XY>']` for `path`, or `''` when git cannot answer or reports the path clean. */
+function porcelainBracket(root: string, path: string): string {
+  try {
+    const status = pathPorcelainStatus(root, path);
+    return status === '' ? '' : ` [git status '${status}']`;
+  } catch {
+    return '';
+  }
+}
+
 /**
  * `directive remove` `CoreOperation.fn` (P3.3, `mutates: true`; spec-006 §3 row `directiveRemove`,
  * module `directive` per dl-041 B). The first operation in the system that DELETES a file, and the
@@ -2163,22 +2234,25 @@ export interface DirectiveRemoveResult {
  * 1. `<name>` presence — a missing or blank positional is a `UsageError` → exit **2**
  *    (`missing required argument: <name>`, the one missing-operand wording, task-179).
  * 2. `requireGitIdentity` pre-flight (REQ-SEC-01), after the usage check (task-125, `bug-172`).
- * 3. **Resolve the name to a real file**, never to a constructed path. `loadDirectives` reads every
- *    installed directive and {@link selectDirectivesById} picks the winner for that id under
+ * 3. **Resolve the name to a committed file**, never to a constructed path, and **at `HEAD`**
+ *    (task-311, `bug-108`, `dl-080` (B)): {@link loadDirectiveInventoryAtHead} reads every directive
+ *    the repository records and {@link selectDirectivesById} picks the winner for that id under
  *    `dl-037`'s custom-wins precedence (`src/core/context.ts` — the same primitive `directives list`
- *    and context assembly use, so the rule is implemented once). No match is a domain `NOT_FOUND`
- *    with P3.2's wording, reused: `unknown directive: <name>`. Because the path comes from a file
- *    that was just read, a traversal-shaped argument can never reach the filesystem — it simply
- *    resolves to nothing.
+ *    and context assembly use, so the rule is implemented once). Because the path comes from a file
+ *    git has just listed, a traversal-shaped argument can never reach the filesystem — it simply
+ *    resolves to nothing. A committed file that does not parse is `VALIDATION`, naming it at `HEAD`,
+ *    the shape of `checkAssignable`'s refusal.
  *
- *    This read stays on the **working tree**, deliberately (task-096 AC4). It answers *which file on
- *    disk am I being asked to delete* — the asset itself, not a gate on it — and step 7's write guard
- *    (`requireUnmodifiedTarget`, task-092) then decides whether that file may be deleted at all. Resolving it at `HEAD` instead would
- *    answer an **untracked** directive file with `unknown directive: <id>`, which is false to the
- *    user's screen, where the file plainly is; the refusal they need is the write guard's, which
- *    names the file and its `git status` code. Deleting a file that exists in no commit is not this
- *    verb's act anyway: its contract is to produce one commit that *records* the deletion, and there
- *    is nothing there to record.
+ *    No match is a domain `NOT_FOUND` with P3.2's wording, reused: `unknown directive: <name>`, its
+ *    `details.issues` the `HEAD` inventory's skip warnings and then the working tree's. The working
+ *    tree **words** that refusal and never decides it (`command-baseline`): when a file on disk
+ *    defines `<name>`, {@link explainWorkingTreeDirective} appends why it does not count — it
+ *    resolves outside the project root, `HEAD` records its path as a symbolic link, or no commit
+ *    records it (an untracked or staged file, or a committed one edited on disk to a new id), with
+ *    its `git status` code. Until task-311 this read stayed on the working tree, so a directive
+ *    committed and then deleted on disk was `unknown directive: <name>` although `HEAD` held it, and
+ *    an untracked one reached the write guard; now the first resolves and meets step 7's guard
+ *    (`[git status ' D']`), and the second is unknown, with the reason on the same line.
  * 4. **REQ-SEC-07 clause (a)** — `requireCustomAsset('directive', <that file's path>)`. Passing the
  *    RESOLVED path rather than the bare name is what makes P3.3's pinned
  *    `built-in directives cannot be removed` fire instead of the primitive's generic refusal; task-042's
@@ -2218,17 +2292,32 @@ const directiveRemoveFn: CoreFn<unknown, DirectiveRemoveResult> = async (params)
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
 
-  const inventory = loadOrError(() => loadDirectiveInventory(root));
-  if (!inventory.ok) return inventory;
-  const target = selectDirectivesById(inventory.value.files, new Set([name])).byId.get(name);
+  let atHead: HeadDirectiveInventory;
+  try {
+    atHead = loadDirectiveInventoryAtHead(root);
+  } catch (error) {
+    if (!(error instanceof ValidationError)) throw error;
+    return coreErr({
+      code: 'VALIDATION',
+      message:
+        `cannot resolve the directive inventory: a file committed under '${DIRECTIVES_DIR_PATH}' (at HEAD) is not ` +
+        `readable as a directive: ${error.message}. A directive is resolved from the directives the repository ` +
+        'records (dl-080), so the committed files must be valid; fix it and commit the fix, then retry.',
+      details: { issues: error.issues },
+    });
+  }
+  const target = selectDirectivesById(atHead.files, new Set([name])).byId.get(name);
   if (target === undefined) {
-    // task-143: the entry asked for may be one the loader skipped (a dangling link, an unreadable
-    // file), so its warnings ride this refusal's `details` — the channel both surfaces render
-    // (task-130) — rather than a stderr line from core, which `--format json` cannot carry.
-    const { warnings } = inventory.value;
+    // task-143: the entry asked for may be one a loader skipped (a committed link, a dangling link, an
+    // unreadable file), so the warnings ride this refusal's `details` — the channel both surfaces render
+    // (task-130) — rather than a stderr line from core, which `--format json` cannot carry. The working
+    // tree is read here only to WORD the refusal (task-311, `command-baseline`); a failure to read it
+    // leaves the bare message.
+    const workingTree = workingTreeDirectiveInventory(root);
+    const warnings = [...atHead.warnings, ...(workingTree?.warnings ?? [])];
     return coreErr({
       code: 'NOT_FOUND',
-      message: `unknown directive: ${name}`,
+      message: `unknown directive: ${name}${explainWorkingTreeDirective(root, name, workingTree, atHead.symlinks)}`,
       ...(warnings.length > 0 ? { details: { issues: warnings.map((detail) => ({ detail })) } } : {}),
     });
   }
