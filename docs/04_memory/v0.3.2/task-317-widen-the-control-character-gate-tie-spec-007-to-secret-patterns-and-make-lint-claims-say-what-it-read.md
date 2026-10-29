@@ -412,6 +412,33 @@ red until `scripts/lint-claims.cjs` writes the singular. `npx jest test/lint --m
 11 total`, `Tests: 143 passed, 143 total`. `npx tsc --noEmit -p tsconfig.json` → exit 0. The invisible-character
 `grep -nP` over the two files → exit 1.
 
+### independent review (2026-10-29) and fixes (developer)
+
+The independent review of the submit at `68c7be61` approved with two findings; the qa amended red for both under the
+standing approval for review-requested red amendments (plan ruling W1-R5), commit `e1329b64` (`### red amendment (qa,
+2026-10-29)` above).
+- **Finding 1 (cosmetic), the escaped dash in a comment of `test/lint/control-characters.test.ts`:** fixed by the qa
+  in `e1329b64`; no developer change.
+- **Finding 2, the summary wrote `1 warnings`:** the qa's pin at `test/cli/lint-claims.test.ts:90` now expects `claim
+  lint: 1 warning in 1 file (warn-only), 1 file read, 1 of 2 items checked`. Commit `556f00af` (`fix(lint): task-317 —
+  the claim-lint summary agrees in number (review)`) pluralises the warnings count by the count, as the files and items
+  counts already were: `1 warning`, `0 warnings`, `5 warnings`. Same class in the touched files: `git grep -n "1
+  warnings\|warnings in [0-9]"` outside `docs/04_memory`, `docs/05_plans` and `docs/08_health` lists only the plural
+  pins of `test/cli/lint-claims.test.ts` (lines 52, 60, 102, 121) and an unrelated test name; no other reader of the
+  summary (`git grep -ln "claim lint:"` → the script and its test).
+
+**Runs.** `npx jest test/cli/lint-claims.test.ts --maxWorkers=2` → `Tests: 11 passed, 11 total` (the qa's run on the
+amended red: `1 failed, 10 passed`). Under the heavy-gate slot (granted 14:10), `--maxWorkers=2`, with the three
+pending amendments in the tree: `npm test` → exit 0, `Test Suites: 513 passed, 513 total`, `Tests: 9100 passed, 9100
+total`; `npm run typecheck` → exit 0; `npm run lint` → exit 0; `npx jest test/lint test/docs --maxWorkers=2` (the lint
+gates and the 28 parity suites) → `Test Suites: 39 passed, 39 total`, `Tests: 448 passed, 448 total`.
+`node scripts/lint-claims.cjs --base release/0.3` → `claim lint: 0 warnings in 0 files (warn-only), 4 files read, 94 of
+137 items checked`. The prompt's invisible-character `grep -nP` on `scripts/lint-claims.cjs` before the commit → exit 1.
+
+**T4.** `git log --first-parent --no-merges --format=%h e1329b64c..HEAD -- test/lint/control-characters.test.ts
+test/cli/lint-claims.test.ts test/validation/secret-patterns-spec.test.ts` → no line. The same command from
+`27f93d95b` lists one sha, `e1329b64c`: the qa's own red amendment, not a developer commit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
