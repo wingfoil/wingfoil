@@ -117,7 +117,7 @@ describe('control characters in tracked text files (bug-073, task-173)', () => {
 
 /*
  * task-317 (`bug-246`, design gate D1 (a), D2): the gate widened to the Unicode format and separator
- * characters a byte scan below 0x80 cannot see \u2014 category Cf (bidi controls, zero-width characters,
+ * characters a byte scan below 0x80 cannot see - category Cf (bidi controls, zero-width characters,
  * U+FEFF, U+00AD), Zl (U+2028), Zp (U+2029), Zs other than U+0020, and the C1 controls U+0080-U+009F.
  * Every such character below is written as a `\u` escape, never raw: the gate reads this file too.
  */

@@ -87,7 +87,7 @@ describe('claim lint (dl-097 (b))', () => {
     expect(run.status).toBe(0);
     expect(run.stderr).toBe('');
     expect(run.stdout.trimEnd().split('\n').pop()).toBe(
-      'claim lint: 1 warnings in 1 file (warn-only), 1 file read, 1 of 2 items checked',
+      'claim lint: 1 warning in 1 file (warn-only), 1 file read, 1 of 2 items checked',
     );
   });
 
