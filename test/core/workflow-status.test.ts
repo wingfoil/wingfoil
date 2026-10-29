@@ -724,7 +724,7 @@ describe('task-225 handover (W3 B4) — the sync_state aggregate rule: a bug mov
   });
 });
 
-describe('task-225 AC 5 (characterization) — on this repository, seven approval phases (six until task-230) carry no element through a gate (spec-017 §5.1, §12)', () => {
+describe('task-225 AC 5 (characterization) — on this repository, eight approval phases (seven until task-306, six until task-230) carry no element through a gate (spec-017 §5.1, §12)', () => {
   it("the approval phases whose actions hold no gate are §5.1's list (seven before task-199; the AC's count is that older one)", () => {
     const root = join(__dirname, '..', '..');
     const { workflows } = loadWorkflowRegistryAtHead(root);
@@ -749,6 +749,7 @@ describe('task-225 AC 5 (characterization) — on this repository, seven approva
       'e2e-smoke.gate',
       'release-submit.approve-release',
       'release-publishing.publish',
+      'release-publishing.merge-forward', // task-306 (bug-428): the go-ahead of a patch's merge forward carries no element; workflow finalize records it
       'retrospective.additional-points',
     ]);
   });

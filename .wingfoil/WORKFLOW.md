@@ -200,7 +200,7 @@ flowchart TD
 
     RS["**submit** → `release-submit`\npre-release-checks → enter-releasing → approve-release\n✔ tests.no-identity: the suite with no git identity\nnpm run test:report → the candidate's test-results summary (dl-136)\n🔑 Approval gate — *approver*\nrelease: in-development → releasing\n↩ REJECT → pre-release-checks"]
 
-    RP2["**publishing** → `release-publishing`\nrelease-commit → staging-rehearsal → tag → publish → mark-released\nrelease commit = the candidate · staging rehearsal on it · git tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released\n(see sub-diagram below)"]
+    RP2["**publishing** → `release-publishing`\nrelease-commit → staging-rehearsal → tag → publish → mark-released → merge-forward\nrelease commit = the candidate · staging rehearsal on it · git tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released\n(see sub-diagram below)"]
 
     RT["**retrospective** → `retrospective`\nexplore → collect-feedback → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115), the release-health report among them, and those of the patches released since the previous retrospective (dl-167)\ncollect-feedback (read-only, dl-163) reads every active repository service's feedback_inbox at its main, one row per note with a proposed outcome: `docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md`\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
 
@@ -415,17 +415,25 @@ HEAD on any other branch. Before the tag, `evidence-only-since-candidate` (task-
 <candidate>..<tip>` and passes only when the candidate is an ancestor of the tip and every changed path is
 an evidence path its binding declares; otherwise the candidate is re-cut. After a patch's tag, its
 `release/X.Y` line is merged forward into `main` with `--no-ff` (`git-conventions` §1, `dl-185` C1), never the
-other way: the phase's last step, run by hand until a workflow declares it.
+other way: the last phase, `merge-forward` (`optional: true`, role `tech-lead`, under the approver's
+approval; `bug-428`, task-306). The approver records it with `workflow finalize` first, the run's plan is
+ended and pushed on `release/X.Y`, and then the merge runs in a detached worktree at `origin/main`, with the
+commands `git-conventions` §1 rule 6 lists. A minor has nothing to merge forward and records the phase with
+`workflow finalize` and a `--reason` saying so: an optional last phase is never skipped (`spec-017` §4.10).
+`publish`'s `release` and `mcp-registry` jobs wait until the version's `dist.tarball` answers HTTP 200, not
+only until `npm view` lists it (`bug-433`), and its pre-check `tests.passing` is the run on the release
+commit, `npm run test:no-identity` (`bug-405`).
 
 ```mermaid
 flowchart TD
     RC["**release-commit** *(tech-lead)*\ngit.commit: the version bump (package.json, package-lock.json,\nserver.json, CHANGELOG.md, SECURITY.md) → merged: the candidate"]
     SR["**staging-rehearsal** *(qa)*\nnpm run publish:staging -- --expect-commit <candidate> --transcript …\n✔ staging-rehearsal-passed: closing line + the stamp's commit\n`docs/07_gates/rl-{release-line}/rel-{version}-staging-rehearsal.md`"]
     TG["**tag** *(tech-lead)*\n✔ pre: on-integration-branch: HEAD on main (minor) or release/X.Y (patch)\n✔ pre: staging-rehearsal-passed (again)\n✔ pre: evidence-only-since-candidate: only evidence paths changed since the candidate\ngit.tag on the candidate the transcript names, on the pushed integration branch"]
-    PB["**publish** *(tech-lead)*\n✔ pre: services.verify-sweep (warn) — the approver runs each service's verify\npush the tag → publish.yml: gate → stage → promote (npm stage publish) → release + mcp-registry\n🔑 Approval gate — *approver* (npm stage approve, 2FA)\nrelease: GitHub Release + the tag run's four test reports · mcp-registry: MCP Registry listing (GitHub OIDC) — once npm serves the version\nthe summary + coverage-summary.json committed under `docs/07_gates/rl-{release-line}/rel-{version}-…` (dl-136)"]
+    PB["**publish** *(tech-lead)*\n✔ pre: tests.passing — the run on the release commit, npm run test:no-identity (bug-405)\n✔ pre: services.verify-sweep (warn) — the approver runs each service's verify\npush the tag → publish.yml: gate → stage → promote (npm stage publish) → release + mcp-registry\n🔑 Approval gate — *approver* (npm stage approve, 2FA)\nrelease: GitHub Release + the tag run's four test reports · mcp-registry: MCP Registry listing (GitHub OIDC) — once npm serves the version\nthe summary + coverage-summary.json committed under `docs/07_gates/rl-{release-line}/rel-{version}-…` (dl-136)"]
     MR["**mark-released** *(tech-lead)*\nrelease: releasing → released"]
+    MF["**merge-forward** *(tech-lead, optional)*\n🔑 Approval gate — *approver* (workflow finalize, before the merge)\na patch: release/X.Y merged into main --no-ff in a detached worktree, git push origin HEAD:main, git merge --ff-only origin/main\na minor: workflow finalize --reason, nothing to merge forward"]
 
-    RC --> SR --> TG --> PB --> MR
+    RC --> SR --> TG --> PB --> MR --> MF
 ```
 
 ### Release Health — `release-health`

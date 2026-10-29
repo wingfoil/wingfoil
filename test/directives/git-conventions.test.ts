@@ -389,3 +389,64 @@ describe('git-conventions §1 — dl-206 Q1 (i), Q2 (i) (task-305)', () => {
     expect((date?.[1] ?? '') >= '2026-10-28').toBe(true);
   });
 });
+
+/**
+ * task-306 — `git-conventions` §1 rule 6 names the phase that runs the merge forward, `release-publishing`'s
+ * `merge-forward` (`bug-428`, `release-planning-rel-v0.3.2-plan` R8), and the sequence it runs: the merge in a
+ * detached worktree at `origin/main`, the version-bump test and the governance check there, `git push origin
+ * HEAD:main`, then `git merge --ff-only origin/main` in the shared working tree; a minor records the phase with
+ * `workflow finalize`. "Until a workflow declares the step" is gone. Red-first (design D1, approver-accepted).
+ *
+ * Pins are substrings of whitespace-flattened §1 (task-276), each absence in the same `it` as its positive; the
+ * seven `task-290` rule-6 phrases are re-asserted beside the new text. Version pins are "≥" plus the version line
+ * naming the task (bug-314).
+ */
+describe('git-conventions §1 rule 6 — the merge-forward phase (task-306)', () => {
+  const flat = (s: string): string => s.replace(/\s+/g, ' ');
+  const f1 = flat(section('1. Branches'));
+  const header = TEXT.slice(0, TEXT.indexOf('\n---', 4));
+
+  it("AC 2: rule 6 names release-publishing's merge-forward phase and its commands in order, no longer 'run by hand'; task-290's rule-6 phrases stay", () => {
+    expect(f1).toContain("`release-publishing`'s `merge-forward` phase");
+    const commands = [
+      '`git worktree add --detach <path> origin/main`',
+      '`git merge --no-ff --no-commit origin/release/X.Y`',
+      '`npx jest test/lint/version-bump.test.ts`',
+      '`node scripts/check-governance.cjs --base origin/main`',
+      '`git push origin HEAD:main`',
+      '`git merge --ff-only origin/main`',
+    ];
+    for (const command of commands) expect([command, f1.includes(command)]).toEqual([command, true]);
+    const at = (s: string): number => f1.indexOf(s);
+    expect(at('`git worktree add --detach <path> origin/main`')).toBeLessThan(at('`git merge --no-ff --no-commit origin/release/X.Y`'));
+    expect(at('`git merge --no-ff --no-commit origin/release/X.Y`')).toBeLessThan(at('`git push origin HEAD:main`'));
+    expect(at('`git push origin HEAD:main`')).toBeLessThan(at('`git merge --ff-only origin/main`'));
+    expect(f1).toContain('A minor has no merge forward');
+    expect(f1).toContain('`workflow finalize`');
+    expect(f1).not.toContain('Until a workflow declares the step');
+    // task-290 AC 2's phrases (C1 (b) (i)), kept verbatim.
+    expect(f1).toContain('`dl-185` C1 (b)');
+    expect(f1).toContain('once per patch');
+    expect(f1).toContain("by the coordinator of the patch's `release-publishing`");
+    expect(f1).toContain("as that phase's last step, after the patch tag");
+    expect(f1).toContain('in a worktree of its own on `main`');
+    expect(f1).toContain("a detached worktree at `main`'s head");
+    expect(f1).toContain('resolved by a developer, as §2 does for syncs');
+  });
+
+  it('AC 2: the version is 2.5 or later, its 2.5 entry names task-306 and bug-428 and keeps (prev 2.4; the Date is the edit date or later', () => {
+    const version = /^version: "(\d+)\.(\d+)"(.*)$/m.exec(header);
+    expect(version).not.toBeNull();
+    expect(Number(version![1]) * 1000 + Number(version![2])).toBeGreaterThanOrEqual(2005);
+    const rest = version![3] ?? '';
+    const prev24 = rest.indexOf('(prev 2.4');
+    expect(prev24).toBeGreaterThan(0);
+    const entry = rest.slice(0, prev24);
+    expect(entry).toContain('2.5');
+    expect(entry).toContain('task-306');
+    expect(entry).toContain('bug-428');
+    const date = /\*\*Date:\*\* (\d{4}-\d\d-\d\d)/.exec(TEXT);
+    expect(date).not.toBeNull();
+    expect((date?.[1] ?? '') >= '2026-10-28').toBe(true);
+  });
+});
