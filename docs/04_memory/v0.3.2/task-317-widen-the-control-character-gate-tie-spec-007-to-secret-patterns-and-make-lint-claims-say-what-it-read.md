@@ -299,6 +299,97 @@ same grep on `test/memory/submit-commit-body.test.ts`, which hits line 102.
 the gate ruled D3 (a), kept today's line; the ruling makes the summary carry the items clause for every run. The orchestrator
 is told of this reading in the qa report. `items` is not pluralized by count in these pins (no run here has a total of 1).
 
+### green (developer, 2026-10-29)
+
+**Base.** `git rev-list --count HEAD..release/0.3` → `5` at the start of this session (bug-449's ingest, one new bug
+file); merged with `git merge --no-edit release/0.3` → merge commit `efc289f5`, no conflict, one file added
+(`docs/04_memory/bugs/bug-449-…`; the invisible-character `grep -cP` of the prompt's class on it → `0`).
+
+**Commit `8af51a8f`** (`fix(lint): task-317 — invisible-character gate, lint-claims usage line and items summary
+(bug-246, bug-330)`), four files, none of them the red commit's:
+- `test/lint/helpers/control-characters.ts` — the four exports the design names: `invisibleCharacterPositions`,
+  `ALLOWED_INVISIBLE_CHARACTERS` (`[]`), `scanTrackedFilesForInvisibleCharacters` (default `allowed` = the constant),
+  `formatInvisibleCharacterFindings`, plus the types `InvisibleCharacterPosition` / `InvisibleCharacterFinding`. The
+  rule (design gate D1 (a)): `/^[\p{Cf}\p{Zl}\p{Zp}\p{Zs}]$/u` on the code point, U+0020 excluded, the C1 range
+  U+0080–U+009F by numeric comparison. Positions iterate the string by code point (`for … of`), LF alone starts a
+  line. Both scans share one private generator `trackedTextFiles` (tracked, regular, not on `BINARY_EXTENSIONS`), so
+  the walk is written once; `scanTrackedFiles` keeps its output byte for byte (its 19 existing tests pass, below).
+- `test/memory/submit-commit-body.test.ts:102` — the raw U+2028 written as `\u2028` (`git diff` → one line changed,
+  the asserted message unchanged).
+- `scripts/lint-claims.cjs` — `lintMarkdownItems` returns `{ warnings, checked, total }` (`lintMarkdown` keeps its
+  signature and returns its `.warnings`); `lintClaims` adds `items: { checked, total }` to the report; the summary
+  gains `, <C> of <T> item(s) checked`; `main` writes the design's usage line to stderr when `options.base` is
+  undefined and no file is given, after the report; the exit status stays 0. The header comment states both.
+- `scripts/lint-claims.d.cts` — `ClaimLintReport.items`.
+
+**red → green.** `npx jest test/lint/control-characters.test.ts test/validation/secret-patterns-spec.test.ts
+test/cli/lint-claims.test.ts test/memory/submit-commit-body.test.ts --maxWorkers=2` → `Test Suites: 4 passed, 4
+total`, `Tests: 97 passed, 97 total` (red: `Tests: 32 failed, 51 passed, 83 total` over its three files). Pin 6 fails
+on the defect itself before the escape, as the design predicted: with the escape stashed (`git stash push
+test/memory/submit-commit-body.test.ts`), `npx jest test/lint/control-characters.test.ts -t 'finds no invisible'
+--maxWorkers=2` → `invisible-character gate failed:` / `test/memory/submit-commit-body.test.ts: U+2028 at line 102,
+column 99`, `Tests: 1 failed, 45 skipped, 46 total`; `git stash pop` restored it. The real command:
+`node scripts/lint-claims.cjs` → stdout `claim lint: 0 warnings in 0 files (warn-only), 0 files read, 0 of 0 items
+checked`, stderr the usage line, `exit 0`. Before the commit: `npx tsc --noEmit -p tsconfig.json` → exit 0, `npx
+eslint` on the four files → exit 0, the prompt's invisible-character `grep -nP` on them → exit 1 (no hit; its
+positive case is the same grep on the pre-escape line 102, which the gate run above reports).
+
+**Plural of "items".** The summary pluralizes `item` by the total, as it does `file`: a total of 1 prints `1 of 1
+item checked`. No pin has a total of 1 (red notes); the choice follows the line's own convention.
+
+### refactor (developer, 2026-10-29)
+
+No code change in refactor: the helper's walk was already factored in green. Gates on head `efc289f5` with the three
+pending amendments in the working tree, under the heavy-gate slot (`waitslot.sh`, granted 12:16), `--maxWorkers=2`,
+foreground in one tracked command:
+- `npm run test:coverage -- --maxWorkers=2` → exit 0, `Test Suites: 513 passed, 513 total`, `Tests: 9100 passed, 9100
+  total`, `All files | 99.37 | 97.51 | 98.18 | 99.73` (statements, branches, functions, lines): > 80 % on every
+  column and equal to the batch baseline `task-308` and `task-306` record. The helper and the script are outside the
+  measured `src/` set.
+- `npm test -- --maxWorkers=2` → exit 0, `Test Suites: 513 passed, 513 total`, `Tests: 9100 passed, 9100 total`. The
+  document-parity suites run in it: `npx jest --listTests | grep -c "/test/docs/"` → `28`, `test/docs/cli-reference.test.ts`
+  among them (`grep -c` → `1`); no CLI command or help text changed (`scripts/lint-claims.cjs` is not a `wingfoil`
+  command), so `docs/cli-reference.md` is untouched.
+- `npm run typecheck` (both tsconfigs) → exit 0. `npm run lint` (`eslint .`) → exit 0. `npm run docs:api` (`typedoc`)
+  → exit 0.
+- `node scripts/lint-claims.cjs --base release/0.3` → `claim lint: 0 warnings in 0 files (warn-only), 4 files read,
+  62 of 105 items checked` (the new summary on this branch).
+- `git rev-list --count HEAD..release/0.3` at the end of refactor → `0`.
+
+### self-review (developer, 2026-10-29)
+
+- **AC1 (red-first) — met.** The gate flags Cf, Zl, Zp, Zs other than U+0020 and U+0080–U+009F (the 14 `it.each`
+  cases pass; U+0020, tab, visible non-ASCII and U+2027 are accepted); the raw U+2028 is escaped in the same change
+  (green above). `bug-246`'s Expected Behavior in full: file, line and code point are named (and the column); the
+  allow-list is declared and versioned with the helper (`ALLOWED_INVISIBLE_CHARACTERS`, pinned `[]`); tests write
+  such characters as escapes.
+- **AC2 (characterization) — met.** `test/validation/secret-patterns-spec.test.ts` passes, 26 / 26 in the run above;
+  `bug-247`'s first option (exact comparison) in full. D4 (a): `spec-007` §2's sentence now says a regex is
+  case-sensitive unless it opens with `(?i)`/`(?im)`, with a Revision note (pending amendment below); the test reads
+  only the YAML fence, so the prose change cannot move it (`npx jest test/validation/secret-patterns-spec.test.ts` is
+  in the 9100 above, run with the edit in the tree).
+- **AC3 (red-first) — met**, and D3 (a): the usage line on stderr with exit 0, the summary tells files read from
+  items checked. `bug-330`'s Expected Behavior in full: the no-argument run says so on stderr; the summary separates
+  the two counts; the gates' invocation passes `--base` (`grep -n "lint-claims" .github/workflows/governance.yml` →
+  line 108, `node scripts/lint-claims.cjs --base "$BASE" --format github`). `npm run lint:claims` still runs with no
+  argument and now prints the usage line.
+- **T4.** `git log --first-parent --no-merges --format=%h 27f93d95b..HEAD -- test/lint/control-characters.test.ts
+  test/cli/lint-claims.test.ts test/validation/secret-patterns-spec.test.ts` → no line (exit 0); its positive case is
+  the same command from `27f93d95b^`, which lists `27f93d95`.
+- **Scope.** `git diff release/0.3...HEAD --stat` lists the design's files only: the three red test files, the
+  helper, `submit-commit-body.test.ts`, `scripts/lint-claims.cjs` and `.d.cts`, this task file and the three bug
+  syncs; uncommitted, `spec-007` and the bug-246 / bug-247 retrospectives. Same-class instances in the touched files:
+  the prompt's invisible-character `grep -nP` over every changed and amended file → exit 1.
+- **Determinism.** Findings follow `git ls-files` sorted order and string order; no clock or randomness is read.
+
+### Pending amendments (approver)
+
+- `spec-007-secret-hygiene-patterns` — §2's case-sensitivity sentence and a Revision (2026-10-29) note. `--reason
+  "Correct spec-007 §2's case-sensitivity sentence to match its table and SECRET_PATTERNS, and record the parity test task-317 adds (bug-247, design gate D4 (a))."`
+- `bug-246-…` — a `### Retrospective` (the bug had none). `--reason "Add the Retrospective of bug-246, fixed by task-317."`
+- `bug-247-…` — a `### Retrospective` (the bug had none). `--reason "Add the Retrospective of bug-247, fixed by task-317."`
+- `bug-330` already carries `### Retrospective` (`None.`): no amendment.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -306,3 +397,13 @@ is told of this reading in the qa report. `items` is not pluralized by count in 
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The red commit's no-argument summary and the design's AC3 text disagreed (the design kept today's line, the gate's
+  D3 (a) made the items clause part of every run); the qa pinned the gate's reading and said so, and green followed
+  the pin. Evidence: the `### red (qa)` subsection, "For the developer". Proposal: a design gate ruling that changes
+  an output re-states the affected pins of the design.
+- The start-of-session base check printed `5` (release/0.3 had moved) and was noticed only before the gates; the merge
+  was clean. Evidence: `git rev-list --count HEAD..release/0.3` → `5`, merge `efc289f5`.
+- The editing tool turned a typed escape into the raw U+2028 again, in this subsection's own green notes; the
+  prompt's `grep -nP` before the commit caught it (one hit, line 317) and it was rewritten as an escape. After this
+  task the gate itself catches it: `npx jest test/lint/control-characters.test.ts`.
