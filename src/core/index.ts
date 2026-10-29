@@ -2172,6 +2172,8 @@ function workingTreeDirectiveInventory(root: string): DirectiveInventory | undef
  * root-relative path `P`:
  *
  * - it resolves outside the project root (a symlinked directory on its path) — no commit records it;
+ * - it resolves through a symlinked directory inside the root (`bug-124`'s shape) — git records the link,
+ *   so no commit records the file beyond it as a directive;
  * - `HEAD` records `P` as a symbolic link, whose target no commit holds;
  * - otherwise no commit records it: the file's `git status` code, and the step that makes it resolvable.
  *
@@ -2195,6 +2197,15 @@ function explainWorkingTreeDirective(
       return (
         ` — the working tree's '${path}' defines it, but it resolves to '${resolved.real}', outside the project ` +
         'root, and no commit of this repository records it (dl-080)'
+      );
+    }
+    // A symlinked directory on the path, inside the root (`bug-124`'s shape): git records the link, and
+    // the file beyond it is not a directive at `HEAD` whatever is committed, so "commit it first" would
+    // be false advice.
+    if (resolved.real !== resolved.absolute) {
+      return (
+        ` — the working tree's '${path}' defines it, but it resolves through a symbolic link to '${resolved.real}', ` +
+        'which no commit of this repository records as a directive (dl-080)'
       );
     }
     if (headSymlinks.includes(path)) {
