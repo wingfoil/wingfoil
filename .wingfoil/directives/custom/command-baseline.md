@@ -6,12 +6,12 @@ kind: custom
 title: "Which baseline a command reads and writes"
 tags: [custom, determinism, git, baseline]
 ref: [REQ-SEC-02, REQ-STATE-02, REQ-SYS-07]
-version: "1.7"
+version: "1.8"
 ---
 
 # Directive — Which baseline a command reads and writes
 
-**Date:** 2026-10-25
+**Date:** 2026-10-29
 
 Custom WingFoil rule. Applies to anyone adding or changing a command, a `src/core` operation, or an
 MCP Tool — every surface, because both surfaces run the same core function (REQ-SYS-05,
@@ -77,7 +77,7 @@ What that category does **not** license:
 
 - **Not a name resolution next to a mutation.** The test is the read's *purpose* — predicting the
   syscall's target — not its proximity to one. `directiveRemoveFn`'s step 3 resolves a directive
-  **name**, which is `dl-080`'s subject, and stays owed to `HEAD` (`bug-108`, below).
+  **name**, which is `dl-080`'s subject, and resolves at `HEAD` since `task-311` (`bug-108`, below).
 - **Not option (C) under another name.** (C) sorted reads by what they *produce*; this sorts by what
   the guarded *effect* touches, and permits one shape only.
 - **Not an adversarial defence.** Between the read (`realpathSync`, `lstatSync`) and the syscall
@@ -104,25 +104,22 @@ The test in (B) is mechanical — *can this read change whether the command refu
 writes?* — and that is its whole value. If it can, the read resolves at `HEAD`, unless its purpose
 is to predict an imminent filesystem effect.
 
-**Where the shipped code still deviates — and it has an owner.** The Memory transition verbs used to
-find the document their `<id>` names by scanning the working tree and to take the current `status`
-from the working-tree frontmatter (`bug-187`); since `task-247`, `prepareMemoryTransition` resolves
-`HEAD` once and reads both there (`findMemoryDocumentByIdAtRev`). The working tree supplies the
-content to commit, is checked to be the same element `HEAD` records (present, same `id` and `type`),
-and is otherwise read only to word a refusal — the pattern the paragraph after next prescribes. The case left, argued in full here, is `directive remove`. `directiveRemoveFn`
-(`src/core/index.ts`, step 3 of its TSDoc: "This read stays on the **working tree**, deliberately")
-resolves the directive it is asked to delete from the working tree, on exactly the "this read only
-resolves a name" argument refused above — and that read returns a domain `NOT_FOUND` at exit `1`,
-which is a refusal, which is a gate. It is **not** a filesystem-effect read: the confinement guard
-that follows it is, and the two sit a few lines apart under different baselines on purpose. Nothing
-can be destroyed by step 3: `requireUnmodifiedTarget` still decides whether the file may be deleted,
-after it. So the deviation costs a message, not data — which is why it is a defect to be repaired
-under this rule rather than an exception written into it. The measured trade runs both ways (an
-untracked file gets a better message today; a directive committed at `HEAD` but deleted in the
-working tree gets a false `unknown directive`), and that symmetry is the argument for deciding it
-once, here, instead of per command. Filed as
-**`bug-108-directive-remove-resolves-its-target-on-the-working-tree`** (`open`), still owed to `HEAD`
-after `dl-086`; its repair is the paragraph below rather than a plain move to `HEAD`.
+**Where the shipped code still deviates — no case is known, and the last one is recorded here.** The
+Memory transition verbs used to find the document their `<id>` names by scanning the working tree and to
+take the current `status` from the working-tree frontmatter (`bug-187`); since `task-247`,
+`prepareMemoryTransition` resolves `HEAD` once and reads both there (`findMemoryDocumentByIdAtRev`). The
+working tree supplies the content to commit, is checked to be the same element `HEAD` records (present,
+same `id` and `type`), and is otherwise read only to word a refusal — the pattern the next paragraph
+prescribes. The last case was `directive remove` (`bug-108`): `directiveRemoveFn` (`src/core/index.ts`)
+resolved the directive it is asked to delete from the working tree, on exactly the "this read only
+resolves a name" argument refused above, and that read returned a domain `NOT_FOUND` at exit `1` — a
+refusal, so a gate. Since `task-311` step 3 resolves the directive at `HEAD`
+(`loadDirectiveInventoryAtHead`, `src/core/loaders.ts`): a directive committed at `HEAD` but deleted in
+the working tree resolves and meets `requireUnmodifiedTarget`, which refuses it naming its `git status`
+code, and a directive no commit records is `unknown directive: <name>`, the working tree only wording
+why (it resolves outside the project root, `HEAD` records its path as a symbolic link, or no commit
+records it — commit it first). It was never a filesystem-effect read: the confinement guard that follows
+it is, and the two sit a few lines apart under different baselines on purpose.
 
 **The working tree may be read to *explain* a refusal, never to decide one.** When resolving at
 `HEAD` would produce a true refusal with a poor message — a file that exists on the author's screen
@@ -214,8 +211,8 @@ Four tasks — `task-091`, `task-092`, `task-093`, `task-096` — each implement
 restated it in its own TSDoc, because it lived only in a decision-log. `dl-080`'s own rationale calls
 that a **determinism** finding before a security one: two agents given the same defect class produced
 two different architectures. This is not a retrospective rule: two instances of the class were open
-when it was written (`bug-087`, `bug-088`, both `release: v0.3`), and so is the deviation this
-directive names (`bug-108`). `bug-087` is fixed by `task-128`, whose read is the first entry under
+when it was written (`bug-087`, `bug-088`, both `release: v0.3`), and so was the deviation this
+directive named (`bug-108`, repaired by `task-311`). `bug-087` is fixed by `task-128`, whose read is the first entry under
 *Declared baselines*.
 
 > Rationale: what the tool treats as authoritative must be what the repository records. A commit that
@@ -266,3 +263,8 @@ empty commits. The rule text is unchanged.
 **Revision 1.7 (2026-10-25, `task-295-add-workflow-rekey-p4.21`).** `workflow rekey` is named after the declared
 `HEAD` reads table, beside `workflow next`: it gates on `HEAD` (`spec-017` §11) and writes an empty commit, so it
 needs no declared exception. The rule text is unchanged.
+
+**Revision 1.8 (2026-10-29, `task-311-resolve-directive-remove-against-head-not-the-working-tree-dl-080`).**
+*Where the shipped code still deviates* no longer lists `directive remove`: its step 3 resolves the directive
+at `HEAD`, and the working tree only words its refusal (`bug-108`). The `dl-086` bullet and *Why this is written
+here at all* say so. The rule text is unchanged.
