@@ -383,6 +383,130 @@ the orchestrator's chat:
   `test/core/loaders-at-rev.test.ts:356` (`listBlobEntriesAtRev`) and the expected `details` of
   `test/cli/program.integration.test.ts:1235` (the HEAD skip warning first); both join the task's file list.
 
+### green (developer, 2026-10-29)
+
+**Base.** `git rev-list --count HEAD..release/0.3` → `5` at the start (the `bug-449` ingest): `git merge --no-edit
+release/0.3` → `705701cea`, no conflict (W0-R3). The red files are unchanged (T4, below).
+
+**Implementation** (the design's, as ruled at its gate):
+- `77749a0b2` `fix(core)`. `src/core/loaders.ts` adds `loadDirectiveInventoryAtHead(root): HeadDirectiveInventory`
+  (`{ files, warnings, symlinks }`, the empty inventory when there is no commit, through `atHeadOr`). It shares a new
+  private `directiveEntriesAt` with `directivesAt`, which lists with `listBlobEntriesAtCommit` and skips a `.md`
+  entry recorded as a symbolic link: never parsed, named in `symlinks` and as the warning `directive entry '<path>'
+  skipped at HEAD: it is a symbolic link, whose target no commit records` (D1 (a), D6 (a)). `loadDirectivesAtHead`
+  and `loadDirectivesAtCommit` keep their signatures; their reads now skip the link. Not added to the `src/core`
+  barrel. `src/core/index.ts` `directiveRemoveFn` step 3 resolves at `HEAD` (TSDoc rewritten). A committed invalid
+  file → `VALIDATION`, `cannot resolve the directive inventory: a file committed under '.wingfoil/directives' (at
+  HEAD) …`, `details: { issues }`. No match → `NOT_FOUND`, `unknown directive: <name>` plus
+  `explainWorkingTreeDirective`. That helper never throws, and its text is W-out, W-link or W-uncommitted, verbatim
+  per D5. `details.issues` holds the HEAD warnings, then the working tree's. `loadDirectiveInventory`'s TSDoc is
+  reworded to its new role (it only words a refusal).
+- `b0730fb5b` `docs(directive)` (D4 (a)): `command-baseline` `1.7` → `1.8`, `**Date:** 2026-10-29`. The *Where the
+  shipped code still deviates* paragraph is rewritten (no case left; `directive remove` resolves at `HEAD` since this
+  task), and so are the `dl-086` bullet and *Why this is written here at all*. *Revision 1.8* records it ("The rule
+  text is unchanged").
+- `c7c1adeab` `docs(cli)`: `docs/cli-reference.md` drops "One known defect breaks this rule today …" and states
+  the `HEAD` lookup. The `directive remove` entry describes the unknown-at-`HEAD` message, and its *Errors* line adds
+  "a directive no commit records" and "a directive file with uncommitted changes".
+- `023acd796` `test(core)`: my own `test/core/directive-inventory-at-head-loader.test.ts` (3 tests: no commit → the
+  empty inventory; two committed symlinks skipped, sorted and warned, the regular file read, and
+  `loadDirectivesAtCommit` skipping them too; an uncommitted file not read).
+
+**Red → green.** `npx jest --maxWorkers=2 test/core/directive-inventory-baseline.test.ts
+test/core/core-index-arms.test.ts test/core/directive-remove-confinement.test.ts
+test/cli/directive-inventory-at-head.integration.test.ts test/docs/directive-remove-baseline-docs.test.ts` →
+red at `571ac437`: `Tests: 24 failed, 40 passed, 64 total` (the qa's run). After `77749a0b2`: `Test Suites: 1 failed,
+4 passed`, `Tests: 4 failed, 60 passed, 64 total`, the 4 being the AC3 text pins. After `b0730fb5b` and `c7c1adeab`:
+`npx jest --maxWorkers=2 test/docs/directive-remove-baseline-docs.test.ts test/docs/cli-reference.test.ts
+test/directives/schema.test.ts test/docs/dl-086-citations.test.ts` → `Test Suites: 4 passed`, `Tests: 36 passed, 36
+total`. `npm run -s check:mcp` after the directive edit → pinned `0.3.1` `(prompts: 8, resources: 4, tools: 0)` and
+the build under development "every listed Resource read and Prompt get answered", exit 0.
+
+### refactor (developer, 2026-10-29)
+
+**Stop-the-line and its ruling.** The first `npm run test:coverage -- --maxWorkers=2` (under the slot, at
+`023acd796`) → `Test Suites: 3 failed, 511 passed, 514 total`, `Tests: 3 failed, 9065 passed, 9068 total`. Three
+existing pins the design had not listed collide with the change:
+- `test/core/write-guard-uninspectable-target.test.ts` "directive remove — an in-root symlinked custom/ refuses
+  BEFORE unlinking … (bug-124)". The alias is committed, so `HEAD` does not record the directive, and W-uncommitted
+  answered "commit … first, then retry". That is false advice, because git records the link. I fixed this in the
+  task as a defect of the change (`a9127326f`) with a fourth variant: ` — the working tree's '<P>' defines it, but it
+  resolves through a symbolic link to '<real>', which no commit of this repository records as a directive (dl-080)`.
+  It is chosen when the resolved path differs from the literal one inside the root, and the pin passes with no edit to it (`npx jest --maxWorkers=2 test/core/write-guard-uninspectable-target.test.ts` and the directive suites → `Tests: 101 passed, 101 total`).
+- `test/core/loaders-at-rev.test.ts:356` spied on `storage.listPathsAtRev`, which `directivesAt` no longer calls (D6
+  (a)).
+- `test/cli/program.integration.test.ts:1235` expected only the working tree's warning for a committed dangling link.
+  The HEAD skip warning now comes first, as designed.
+I stopped (W0-R7). The approver ruled (`### stop-the-line ruling` above): D1 (a) accepts the fourth variant as
+written; D2 (a) has the developer edit the two tests, which join this task's file list. `b58670f6e`: the spy moves to
+`listBlobEntriesAtRev`, and the expected `details` gain the HEAD warning first. `npx jest --maxWorkers=2
+test/core/loaders-at-rev.test.ts test/cli/program.integration.test.ts` → `Tests: 105 passed, 105 total`.
+
+**Files changed against the design's list:** the design's own files plus my new test file, and the two tests the
+ruling added. `src/core/directive-assign.ts` and `src/storage/commit.ts` are unchanged (`git diff --stat
+fd0f16c9d..HEAD -- src/core/directive-assign.ts src/storage` → nothing).
+
+**Gates** (heavy ones after `waitslot.sh`, `--maxWorkers=2`, foreground or a tracked background command, with the
+three pending amendments in the working tree), at `b58670f6e`:
+- `npm run test:coverage -- --maxWorkers=2` → `Test Suites: 514 passed, 514 total`, `Tests: 9068 passed, 9068 total`;
+  `All files` Stmts `99.32` · Branch `97.44` · Funcs `98.18` · Lines `99.69` (all > 80 %).
+- `npm test -- --maxWorkers=2` → `Test Suites: 514 passed, 514 total`, `Tests: 9068 passed, 9068 total`. This
+  includes every `test/docs/` parity suite (`docs.parity`) and `test/docs/cli-reference.test.ts`.
+- `npm run -s lint` → exit 0, no output. `npm run -s docs:api` → exit 0, no output. `npm run -s typecheck` (both
+  tsc configs) → exit 0.
+- `npm run -s check:mcp` → exit 0, the two lines above.
+- End of refactor: `git rev-list --count HEAD..release/0.3` → `49` (task-317, task-318 and the task-332 ingest
+  merged meanwhile). `git merge --no-edit release/0.3` → `ee86febb8`, no conflict. None of the 17 files it brought is
+  one this task changes (`git diff --name-only HEAD...release/0.3` before the merge). Re-run of the suites the merge
+  touched plus this task's: `npx jest --maxWorkers=2 test/lint test/validation/secret-patterns-spec.test.ts
+  test/core/context-shipped-templates.test.ts test/cli/lint-claims.test.ts test/memory/submit-commit-body.test.ts`
+  plus the 8 directive suites → `Test Suites: 23 passed, 23 total`, `Tests: 330 passed, 330 total`. This includes
+  task-317's widened invisible-character gate over this task's files.
+
+### self-review (developer, 2026-10-29)
+
+- **AC1 — met.** Each case has its pin: committed + deleted → write guard `' D'` / `'D '`; untracked → `'??'` and
+  staged → `'A '`, both W-uncommitted; renamed on disk → W-uncommitted `' M'`, while the committed id still meets the
+  guard; an untracked custom file does not shadow the committed built-in; a committed invalid file → `VALIDATION`
+  naming `HEAD:`; an uncommitted invalid file no longer decides; a symlinked file → W-link plus the HEAD warning; an
+  out-of-root `custom/` → W-out; and the CLI on four surfaces. All pass in the runs above. The working tree never
+  decides: `explainWorkingTreeDirective` runs only after `selectDirectivesById` over the HEAD files returned nothing
+  (`src/core/index.ts`, `directiveRemoveFn`), and it returns a string, never a refusal.
+- **AC2 — met** as a pending amendment (spec-008 §11, below). D3 (a): spec-006 §6 likewise.
+- **AC3 — met:** `test/docs/directive-remove-baseline-docs.test.ts` 4/4 passed; `test/directives/schema.test.ts`
+  (version `≥ 1.4` and its line) still passes.
+- **bug-108's Expected Behavior.** "The resolution read resolves at `HEAD`, and the working tree is consulted only
+  to word the message": met. A deleted-but-committed file now gets "a message saying so" (`[git status ' D'] — the
+  file is not in the working tree`). An untracked file is refused with the D5 sentence naming its `git status` code,
+  not the write guard's "carries uncommitted modifications" wording the bug imagined. That deviation was approved at
+  the design gate (D5) and is stated in the bug's pending amendment.
+- **Same class in files I touched.** `grep -n "loadDirectiveInventory(" src/core/index.ts` → only in
+  `workingTreeDirectiveInventory` (the wording read). `grep -n "listPathsAtCommit" src/core/loaders.ts` → nothing; no
+  other directive read at a commit parses a link. The design left `checkAssignable`'s untracked-directive wording out
+  of scope (`bug-449`, v0.4).
+- **Determinism.** No clock or randomness. The HEAD warnings follow `listBlobEntriesAtRev`'s sorted order, and the
+  working-tree warnings its sorted traversal.
+- **T4.** `git log --first-parent --no-merges --format=%h fd0f16c9d..HEAD -- test/core/directive-inventory-baseline.test.ts
+  test/core/core-index-arms.test.ts test/core/directive-remove-confinement.test.ts
+  test/cli/directive-inventory-at-head.integration.test.ts test/docs/directive-remove-baseline-docs.test.ts` → empty.
+- **Invisible characters.** The `grep -nP` of the prompt's class over every file of each commit → no hit (exit 1)
+  each time.
+
+### Pending amendments (approver)
+
+Left uncommitted in the worktree (dl-047; `git diff -- <path>` shows each):
+- `spec-008-cli-grammar` §11. `directive remove` joins the committed-at-`HEAD` row (its directive and its referrer
+  check; the working tree only words a refusal), the "working tree, a defect" row is removed, and a Revision
+  (2026-10-29) is added. `--reason "Record task-311's change to §11: directive remove resolves the directive it deletes
+  at HEAD (bug-108), so the working-tree defect row is removed."`
+- `spec-006-core-domain-api` §6 (D3 (a)). Item 5 says the name read resolves at `HEAD` (repaired by `task-311`), the
+  `HEAD`, gating row lists `directiveRemove`'s directive read, the "working tree, deviating" row is removed, and a
+  Revision (2026-10-29) is added. `--reason "Record task-311's change to §6: directiveRemove resolves its directive at
+  HEAD (bug-108), so no deviating read is left."`
+- `bug-108-directive-remove-resolves-its-target-on-the-working-tree`: a fix line under *Triage & Execution Notes*
+  (pointing to this task, and to the D5 wording that replaces "carries uncommitted modifications") and its `###
+  Retrospective`. `--reason "Add the fix pointer to task-311 and the bug's retrospective (dl-115 Q2 (a))."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -390,3 +514,10 @@ the orchestrator's chat:
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- Three existing pins outside the design's list (the bug-124 alias, the `loaders-at-rev` spy, the `program.integration`
+  dangling-link details) surfaced only in the full suite, after green, and stopped the line once (approver ruling
+  2026-10-29, D1 (a), D2 (a)). The design's sweep (`grep -rnc "'directive', 'remove'\|directiveRemove\|directive remove"
+  test/`) found every suite calling the verb but not one that pins an implementation detail by name (a spied
+  storage function) or a committed alias. Proposal: a design that changes a reader also greps `test/` for
+  `spyOn(storage, '<every storage function the reader stops or starts calling>')`.
