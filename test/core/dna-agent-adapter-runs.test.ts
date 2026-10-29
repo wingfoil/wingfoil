@@ -10,7 +10,7 @@
  * scenario "Query the run-log category of a freshly initialized project"
  * (`docs/02_requirements/02_bdd/features/p2-dna/P2.5-paths.feature`).
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -19,8 +19,7 @@ import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
-
-const CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
+import { runCliEntry, type SpawnedRun } from '../cli/helpers/spawn-cli';
 
 const DNA_FIXTURE = `version: 1.1
 modules:
@@ -162,9 +161,8 @@ describe('task-138 — the DNA declarations spec-016 needs', () => {
 describe('task-138 — end to end: a freshly initialized project answers `wingfoil paths runs` (AC3, AC4)', () => {
   let repo: string;
 
-  function runCli(args: readonly string[]): { status: number | null; stdout: string; stderr: string } {
-    const result = spawnSync(process.execPath, [CLI, ...args], { cwd: repo, encoding: 'utf-8' });
-    return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+  function runCli(args: readonly string[]): SpawnedRun {
+    return runCliEntry(repo, args);
   }
 
   beforeEach(() => {

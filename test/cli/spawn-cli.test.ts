@@ -51,6 +51,10 @@ describe('spawnCapture reports the child process’s real stderr on every path',
   it('throws, rather than reporting a status, when the child is killed by a signal', () => {
     expect(() => node("process.kill(process.pid, 'SIGTERM')")).toThrow(/SIGTERM/);
   });
+
+  it('a child that outlives the given timeout is killed, and that throws like any other signal (task-316)', () => {
+    expect(() => spawnCapture('node', ['-e', 'setTimeout(() => {}, 5000)'], { timeout: 200 })).toThrow(/ended on signal SIGTERM/);
+  });
 });
 
 describe('the CLI entry points the suites spawn through the helper', () => {
