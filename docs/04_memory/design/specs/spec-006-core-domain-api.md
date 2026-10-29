@@ -380,8 +380,8 @@ Normatively, for every `CoreOperation`:
    consult no commit, so a confinement or symlink guard in front of them (`requireConfinedTarget`,
    `resolveConfinedMemoryPath`, `requireInspectableTarget`) asks the filesystem. The category is
    decided by the read's purpose, not by its nearness to a mutation: resolving a directive **name**
-   before deleting it is a read about what the project declares and is owed to `HEAD`
-   (`bug-108-directive-remove-resolves-its-target-on-the-working-tree`, open). The guard leaves a
+   before deleting it is a read about what the project declares and resolves at `HEAD`
+   (`bug-108-directive-remove-resolves-its-target-on-the-working-tree`, repaired by `task-311`). The guard leaves a
    time-of-check-to-time-of-use window that no path-based API closes; it turns a self-inflicted loss
    into a refusal and is not an adversarial defence. There is no further category of gating read.
 6. **Declared `HEAD` reads.** `workflowStatus`, `workflowList`, `workflowShow`, `agentList`,
@@ -412,13 +412,13 @@ users is `spec-008-cli-grammar` §11):
 
 | Baseline | Operations |
 |----------|------------|
-| `HEAD`, gating (item 1) | `memoryAdd` (type registry and scaffold; its `{n}` counter reads the wider baseline `command-baseline` declares, which can only raise the id), `memorySubmit`, `memoryApprove`, `memoryReject`, `memoryDeprecate`, `memoryAmend` (the WIP-limit holder count of `memoryAdd`, `memorySubmit` and `memoryApprove` reads the decided commit plus every local and remote-tracking branch tip and its merge-base with that commit, the second baseline `command-baseline` declares, `dl-156` Q1 (a); state machine, the document their `<id>` names and its committed `status` — `findMemoryDocumentByIdAtRev` at the one sha `prepareMemoryTransition` resolves — and approver authority on the gated verbs; the working tree supplies the content `memorySubmit` and `memoryAmend` commit and is checked to be the element `HEAD` records); `dnaSet`, `dnaAdd`, `dnaUpdate`, `dnaRemove` (`dna.yaml`, read only after item 2 has refused any difference from `HEAD`); `directiveAssign` (role catalogue, directive inventory, bindings); `directiveRemove`'s referrer check (`roles.yaml`, `loadRolesYamlAtHead`); `workflowNext`, from the task that ships it in v0.3 |
+| `HEAD`, gating (item 1) | `memoryAdd` (type registry and scaffold; its `{n}` counter reads the wider baseline `command-baseline` declares, which can only raise the id), `memorySubmit`, `memoryApprove`, `memoryReject`, `memoryDeprecate`, `memoryAmend` (the WIP-limit holder count of `memoryAdd`, `memorySubmit` and `memoryApprove` reads the decided commit plus every local and remote-tracking branch tip and its merge-base with that commit, the second baseline `command-baseline` declares, `dl-156` Q1 (a); state machine, the document their `<id>` names and its committed `status` — `findMemoryDocumentByIdAtRev` at the one sha `prepareMemoryTransition` resolves — and approver authority on the gated verbs; the working tree supplies the content `memorySubmit` and `memoryAmend` commit and is checked to be the element `HEAD` records); `dnaSet`, `dnaAdd`, `dnaUpdate`, `dnaRemove` (`dna.yaml`, read only after item 2 has refused any difference from `HEAD`); `directiveAssign` (role catalogue, directive inventory, bindings); `directiveRemove` (the directive its `<name>` names, `loadDirectiveInventoryAtHead`, the working tree only wording a refusal; and its referrer check, `roles.yaml`, `loadRolesYamlAtHead`); `workflowNext`, from the task that ships it in v0.3 |
 | `HEAD`, declared (item 6) | `workflowStatus`, `workflowList`, `workflowShow`, `agentList`, `agentShow`, the two v0.3 workflow Resources — each from the task that ships it in v0.3 |
 | working tree, gating nothing (item 4) | `dnaShow`, `paths`, `directivesList`, `memorySearch`, `memoryHistory` (its log is git's, its `memory.yaml` the working tree's), the shipped MCP Resources and the role Prompts |
 | filesystem, predicting an effect (item 5) | the confinement and symlink guards of every writing or deleting operation, and `directiveCreate`'s check that its target file does not exist |
-| working tree, deviating | `directiveRemove`'s name resolution (`bug-108`) — owed to `HEAD` |
 
-Symbols in this section read at `9642ab5f`; items 4–6 and the table at `e942e8e9`.
+Symbols in this section read at `9642ab5f`; items 4–6 and the table at `e942e8e9`, except `directiveRemove`'s directive
+read (item 5 and the table's `HEAD`, gating row, `loadDirectiveInventoryAtHead`), read at `77749a0b2` (`task-311`).
 
 ### 7. Pre-flight of the memory transition verbs, and the one identity they use
 
@@ -924,3 +924,11 @@ approver's `memory amend`.
 first-time file.** A file written whole for the first time also names `workflowCreate`'s missing `workflows.yaml`
 (`spec-017` §7.7), which `withIncludeAdded` already writes as `version: 1.0`; the behaviour is unchanged (design gate
 D3, 2026-10-24).
+
+**Revision (2026-10-29, `task-311-resolve-directive-remove-against-head-not-the-working-tree-dl-080`) — §6 no
+longer names a deviation.** `directiveRemove` resolves the directive its `<name>` names at `HEAD`
+(`loadDirectiveInventoryAtHead`, `bug-108`, `dl-080` (B)): item 5 says so, the table's `HEAD`, gating row lists it
+beside its referrer check, the "working tree, deviating" row is removed, and the line naming the commit the symbols
+are read at names `77749a0b2` for this read. The working tree only words its
+refusal (the `command-baseline` directive's rule: the working tree may explain a refusal, never decide it). Edited in place without
+a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
